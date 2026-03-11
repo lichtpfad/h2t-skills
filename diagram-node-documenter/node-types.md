@@ -1,0 +1,141 @@
+# Node Type Templates
+
+Reference for Step 4 (DRAFT) of the diagram-node-documenter skill.
+
+---
+
+## TYPE_SOURCE — API / Data Source
+
+```html
+<b>[API Name] — [Short Description]</b><br/>
+Plan: [tier] [price] | [credits/mo] | [req/min] | [N endpoints]<br/>
+Data: [key data categories]<br/>
+Freq: [update frequency per data type]<br/>
+⚠️  [what's unavailable and why → alternative]<br/>
+→ Page 9: endpoints &amp; metrics table
+```
+
+**Validated example (CMC):**
+```html
+<b>CMC — CoinMarketCap API</b><br/>
+Plan: Hobbyist $35/mo | 110k credits | 30 req/min | 21 endpoints<br/>
+Data: listings, metadata, categories, exchange map<br/>
+Freq: listings real-time; metadata/categories 1d; history 12mo<br/>
+⚠️  OHLCV unavailable on Hobbyist → use CCXT<br/>
+→ Page 9: endpoints &amp; metrics table
+```
+
+---
+
+## TYPE_ML — ML Model / Algorithm
+
+```html
+<b>[Node Name] — [Purpose]</b><br/>
+Algorithm: [name + library], [N states/params]<br/>
+Input:&nbsp; [feature vector / context]<br/>
+Output: [classification / weights / reward] → [downstream]<br/>
+Train:&nbsp; [cadence + window + init method]<br/>
+⚠️  [key known risk] → [mitigation]
+```
+
+**Validated example (HMM):**
+```html
+<b>HMM Classifier — Regime Detection</b><br/>
+Algorithm: Gaussian HMM, 4 states (hmmlearn), EM-trained<br/>
+Input:&nbsp; feature_matrix_1d [ADX, MA_slope, Hurst, TAIL, funding_z]<br/>
+Output: regime_label + state_probs[4] → G1 Gate<br/>
+Train:&nbsp; monthly refit, 730d window, rule-based warm-start<br/>
+⚠️  label-swap on refit → centroid-matching required
+```
+
+---
+
+## TYPE_PROCESS — Transformation / ETL
+
+```html
+<b>[Node Name]</b><br/>
+Input:&nbsp; [data type / source]<br/>
+Output: [data type / consumer]<br/>
+Logic:&nbsp; [key rules / formula / threshold]<br/>
+Stack:&nbsp; [Python / Prefect / pandas / etc.]<br/>
+Phase:&nbsp; MVP
+```
+
+---
+
+## TYPE_GATE — FSM / Filter / Safeguard
+
+```html
+<b>[Gate Name]</b><br/>
+States: [A] → [B] → [C]<br/>
+Trigger: [formula / threshold]<br/>
+Action:&nbsp; [what it blocks / activates]<br/>
+Recovery: [how to exit state]<br/>
+See: ADR-XXX
+```
+
+---
+
+## TYPE_SCHEMA — Database Table
+
+```html
+<b>[table_name]</b> ([db: TimescaleDB | ClickHouse])<br/>
+Layer:&nbsp; [Bronze | Entity DB | Silver | Gold]<br/>
+Key:&nbsp;&nbsp;&nbsp; [primary key / hypertable column]<br/>
+Writers: [ingestor / process]<br/>
+Readers: [downstream process]<br/>
+See: docs/schema/sources/[source].md
+```
+
+---
+
+## TYPE_CONTRACT — Data Contract
+
+```html
+<b>[Contract Name]</b><br/>
+Fields: [key fields with types]<br/>
+Invariants: [что всегда true]<br/>
+Writers: [who produces]<br/>
+Readers: [who consumes]<br/>
+Idempotency: [client_order_id / request_id]
+```
+
+---
+
+## TYPE_STORAGE — Storage / DB / Queue
+
+```html
+<b>[Storage Name]</b><br/>
+Tech:&nbsp;&nbsp;&nbsp;&nbsp; [S3 | ClickHouse | Redis | TimescaleDB]<br/>
+Schema:&nbsp;&nbsp; [key fields summary]<br/>
+Pattern: [append-only | ReplacingMergeTree | SCD]<br/>
+Retention: [7d hot | 2yr cold | forever]<br/>
+Phase:&nbsp;&nbsp;&nbsp; MVP
+```
+
+---
+
+## TYPE_PIPELINE — Complex Internal Pipeline
+
+```html
+<b>[Pipeline Name]</b><br/>
+Contains: [N sub-modules]<br/>
+Input:&nbsp; [data in]<br/>
+Output: [data out]<br/>
+→ Page [N]: [full pipeline detail]
+```
+
+---
+
+## Annotation Size Reference
+
+| TYPE | Width | Height |
+|---|---|---|
+| TYPE_SOURCE | 190 | 95 |
+| TYPE_ML | 200 | 115 |
+| TYPE_PROCESS | 170 | 90 |
+| TYPE_GATE | 170 | 90 |
+| TYPE_SCHEMA | 170 | 85 |
+| TYPE_CONTRACT | 170 | 90 |
+| TYPE_STORAGE | 170 | 85 |
+| TYPE_PIPELINE | 170 | 80 |
