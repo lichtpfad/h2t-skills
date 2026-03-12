@@ -2,6 +2,17 @@
 
 Reference for Step 4 (DRAFT) of the diagram-node-documenter skill.
 
+## Annotation Rules (enforced)
+
+1. **One annotation per node** — never group multiple nodes into one annotation cell
+2. **6 lines max** — каждая строка = одна смысловая единица
+3. **Narrative first** — Line 1 = `<b>Name — What it does</b>` (declarative, not imperative)
+4. **Source citations** — ссылаться на spec/config если есть числа (thresholds, timeouts)
+5. **⚠️ flags** — использовать для gotchas, известных рисков, MVP ограничений
+6. **Line 6 = research doc + Page N** — для complex нод оба: `→ docs/research/layers/X.md | Page N: detail`
+   - Simple ноды: Line 6 = `Phase: MVP` или `See: ADR-XXX`
+   - Complex ноды (ML, pipelines): Line 6 = и research doc, и Page ссылка
+
 ---
 
 ## TYPE_SOURCE — API / Data Source
@@ -53,25 +64,27 @@ Train:&nbsp; monthly refit, 730d window, rule-based warm-start<br/>
 ## TYPE_PROCESS — Transformation / ETL
 
 ```html
-<b>[Node Name]</b><br/>
-Input:&nbsp; [data type / source]<br/>
-Output: [data type / consumer]<br/>
+<b>[Node Name] — [Short technical title]</b><br/>
+[Plain-language sentence: what this node does and why it exists in the system.]<br/>
+Input/Output: [data in] → [data out / consumer]<br/>
 Logic:&nbsp; [key rules / formula / threshold]<br/>
-Stack:&nbsp; [Python / Prefect / pandas / etc.]<br/>
-Phase:&nbsp; MVP
+⚠️  [gotcha or key constraint, if any]<br/>
+Phase: MVP  [→ docs/research/layers/X.md if complex]
 ```
+
+**Note:** Line 2 must be readable by someone unfamiliar with the system — no abbreviations, no arrow notation. Explain the *role*, not just the data flow.
 
 ---
 
 ## TYPE_GATE — FSM / Filter / Safeguard
 
 ```html
-<b>[Gate Name]</b><br/>
+<b>[Gate Name] — [What it guards]</b><br/>
 States: [A] → [B] → [C]<br/>
 Trigger: [formula / threshold]<br/>
 Action:&nbsp; [what it blocks / activates]<br/>
 Recovery: [how to exit state]<br/>
-See: ADR-XXX
+See: ADR-XXX  [→ docs/research/layers/X.md if complex]
 ```
 
 ---
