@@ -1,0 +1,7 @@
+{
+  "name": "claude-agent-skills",
+  "description": "Custom skills for lichtpfad: HOU2TOUCH dev workflow, DrawIO, DocGraph, NLM, and project management tools.",
+  "author": {
+    "name": "lichtpfad"
+  }
+}
