@@ -119,6 +119,33 @@ If context ran out (not end of work), note in comment:
 Status: Context limit reached. Work continues in next session.
 ```
 
+### Step 4.5: Close Session in Registry
+
+If `$DOR_SESSION_ID` is available, close the session in the registry:
+
+```bash
+CONFIG_ROOT="${DOR_CONFIG_ROOT:-$HOME/config}"
+[ ! -d "$CONFIG_ROOT" ] && [ -d "/c/dev/config" ] && CONFIG_ROOT="/c/dev/config"
+REGISTRY_PY="$CONFIG_ROOT/registry/registry.py"
+
+if [ -f "$REGISTRY_PY" ] && [ -n "${DOR_SESSION_ID:-}" ]; then
+  python3 "$REGISTRY_PY" update \
+    --id "$DOR_SESSION_ID" \
+    --status "done" \
+    --summary "{one-line summary of what was accomplished}"
+fi
+```
+
+For interrupted sessions (context limit, not end of work):
+```bash
+  python3 "$REGISTRY_PY" update \
+    --id "$DOR_SESSION_ID" \
+    --status "interrupted" \
+    --summary "{what remains}"
+```
+
+If `$DOR_SESSION_ID` is not set, skip this step silently.
+
 ## Session ID Extraction
 
 ```bash
