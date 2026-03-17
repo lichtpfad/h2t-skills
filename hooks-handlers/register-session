@@ -1,14 +1,26 @@
 #!/usr/bin/env bash
 # Register Claude Code session in Session Registry (DOR #12)
 # Called by SessionStart hook. Reads JSON from stdin.
-set -euo pipefail
 
-# Read JSON from stdin
-INPUT=$(cat)
+# Detect python command (Windows: python, Unix: python3)
+PYTHON="python3"
+if ! command -v python3 &>/dev/null || [[ "$(uname -s)" == MINGW* ]] || [[ "$(uname -s)" == MSYS* ]]; then
+  PYTHON="python"
+fi
 
-# Parse fields using python (available on both machines)
-SESSION_ID=$(echo "$INPUT" | python3 -c "import sys,json; print(json.load(sys.stdin).get('session_id',''))" 2>/dev/null || echo "")
-CWD=$(echo "$INPUT" | python3 -c "import sys,json; print(json.load(sys.stdin).get('cwd',''))" 2>/dev/null || echo "")
+# Read stdin and parse all fields in one python call (avoids echo/pipe escaping issues)
+eval "$($PYTHON -c "
+import sys, json
+try:
+    data = json.load(sys.stdin)
+    sid = data.get('session_id', '')
+    cwd = data.get('cwd', '')
+    print(f'SESSION_ID=\"{sid}\"')
+    print(f'CWD=\"{cwd}\"')
+except:
+    print('SESSION_ID=\"\"')
+    print('CWD=\"\"')
+" 2>/dev/null || echo 'SESSION_ID="" CWD=""')"
 
 # Skip if no session ID
 [ -z "$SESSION_ID" ] && exit 0
@@ -30,7 +42,7 @@ REGISTRY_PY="$CONFIG_ROOT/registry/registry.py"
 [ ! -f "$REGISTRY_PY" ] && exit 0
 
 # Register session
-python3 "$REGISTRY_PY" append \
+$PYTHON "$REGISTRY_PY" append \
   --id "$SESSION_ID" \
   --cwd "$CWD" \
   --host "$(hostname -s 2>/dev/null || hostname)" 2>/dev/null || true
