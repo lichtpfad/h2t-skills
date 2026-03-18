@@ -26,14 +26,15 @@ except:
 [ -z "$SESSION_ID" ] && exit 0
 
 # Find registry.py in config repo
-CONFIG_ROOT="${DOR_CONFIG_ROOT:-$HOME/config}"
-# Windows fallback paths
-if [ ! -d "$CONFIG_ROOT" ]; then
-  for candidate in "/c/dev/config" "$HOME/dev/config" "/mnt/c/dev/config"; do
-    if [ -d "$candidate" ]; then
-      CONFIG_ROOT="$candidate"
-      break
-    fi
+# Resolve CONFIG_ROOT
+CONFIG_ROOT="${DOR_CONFIG_ROOT:-}"
+if [ -z "$CONFIG_ROOT" ]; then
+  for candidate in \
+    "$HOME/.h2t/config" \
+    "$HOME/config" \
+    "/c/dev/config" \
+    "/c/Users/$USERNAME/.h2t/config"; do
+    [ -d "$candidate" ] && CONFIG_ROOT="$candidate" && break
   done
 fi
 REGISTRY_PY="$CONFIG_ROOT/registry/registry.py"
