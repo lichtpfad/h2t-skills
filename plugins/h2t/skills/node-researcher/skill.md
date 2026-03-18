@@ -2,6 +2,10 @@
 name: node-researcher
 description: Deep research a crypto-regime-orchestrator diagram node using Exa API. Produces research doc + draw.io annotation. Use when researching any L5-L10 node.
 trigger: "research node", "исследуй ноду", "/node-researcher", "изучи алгоритм", "research L7", "research L8", "research L9"
+compatibility: "Claude Code"
+metadata:
+  author: lichtpfad
+  version: 1.0.0
 ---
 
 # Node Researcher — Deep Research Workflow
@@ -54,8 +58,8 @@ Before searching, define 4-5 specific questions. Always include:
 
 Each agent runs:
 ```bash
-python3 /Users/stanislav_glazov/Projects/crypto-regime-orchestrator/scripts/research.py \
-  "<query>" --n 6 --type auto
+python3 ${PROJECT_ROOT}/scripts/research.py "<query>" --n 6 --type auto
+# where PROJECT_ROOT = root of the target project being researched
 ```
 
 Standard query set per node (adapt from research-execution-plan.md):
