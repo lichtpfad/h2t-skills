@@ -1,19 +1,19 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "lichtpfad",
-  "description": "Personal Claude Code plugins for lichtpfad — HOU2TOUCH, DrawIO, DocGraph, NLM workflows",
+  "description": "Personal Claude Code plugins for lichtpfad \u2014 HOU2TOUCH, DrawIO, DocGraph, NLM workflows",
   "owner": {
     "name": "lichtpfad"
   },
   "plugins": [
     {
-      "name": "claude-agent-skills",
-      "description": "Custom skills: HOU2TOUCH dev workflow (h2t-*), DrawIO, DocGraph, NLM, node-researcher",
+      "name": "h2t",
+      "description": "h2t skill suite: integration skills (gmail, calendar, drive, notion, telegram, daily-brief), dev workflow (session, handoff, pre-merge), DrawIO, NLM",
       "version": "1.0.0",
       "author": {
         "name": "lichtpfad"
       },
-      "source": "./plugins/claude-agent-skills",
+      "source": "./plugins/h2t",
       "category": "productivity",
       "strict": false
     }
