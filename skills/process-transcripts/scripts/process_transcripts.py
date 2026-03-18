@@ -29,7 +29,8 @@ except ImportError:
 
 try:
     from dotenv import load_dotenv
-    load_dotenv()
+    load_dotenv(Path.home() / '.dor' / 'secrets.env', override=False)
+    load_dotenv(override=False)  # fallback: .env in cwd
 except ImportError:
     pass  # python-dotenv optional — можно передать GEMINI_API_KEY вручную
 
@@ -537,7 +538,9 @@ def main():
     if args.file:
         fp = Path(args.file)
         if not fp.is_absolute():
-            fp = MEETINGS_DIR / args.file
+            # Try relative to cwd first (e.g. eval fixtures), fall back to MEETINGS_DIR
+            fp_cwd = Path.cwd() / args.file
+            fp = fp_cwd if fp_cwd.exists() else MEETINGS_DIR / args.file
         process_file(fp, projects_context, args.dry_run, args.force,
                      dump_json=args.dump_json, backend=args.backend, model=args.model)
         processed_any = True
