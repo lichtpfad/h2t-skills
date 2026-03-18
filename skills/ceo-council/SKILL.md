@@ -1,10 +1,10 @@
 ---
 name: ceo-council
-description: "Strategic council of AI advisors — real people or abstract roles, with persona profiles and confidence scores. Modes: strategic, brainstorm, critic, realism. Triggers: 'ceo council', 'council', 'стратегический анализ', 'совет', 'build-persona'."
+description: "Strategic council of AI advisors — real people or abstract roles, with persona profiles and confidence scores. Modes: strategic, brainstorm, critic, realism. Triggers: 'ceo council', 'council', 'стратегический анализ', 'совет', 'build-persona', 'council research'."
 compatibility: "Claude Code"
 metadata:
   author: lichtpfad
-  version: 2.0.0
+  version: 2.1.0
 ---
 
 # CEO Council — Strategic Advisory System
@@ -59,6 +59,65 @@ Display format: `Lex Fridman (72% — 8 sources)`
 
 ---
 
+## Command: council research
+
+When user says `council research <topic>`, `найди экспертов по <теме>`, `research experts`:
+
+### Step 1: Web Search
+Run **parallel** WebSearch queries:
+- `"<topic> leading experts thinkers 2024 2025"`
+- `"<topic> best practitioners interviews"`
+- `"<topic> contrarian views critics"`
+- `"<topic> emerging voices researchers"`
+
+Goal: find 8-12 candidate names across different schools of thought.
+
+### Step 2: Enrich Candidates
+For each candidate (parallel WebFetch / WebSearch):
+- Find their key positions on the topic
+- Find available sources: interviews, articles, talks, podcasts
+- Note their stance: mainstream / contrarian / practitioner / theorist
+
+### Step 3: Rank and Present
+Present candidates ranked by:
+1. **Relevance** — depth of expertise on the topic
+2. **Diversity** — different viewpoints represented
+3. **Source availability** — how much material exists to build a persona
+
+Output format:
+```
+Found 9 experts on "<topic>":
+
+1. Kate Crawford (contrarian, AI critic) — 12 sources available
+   Known for: algorithmic bias, power structures in AI, Atlas of AI
+   → build persona?
+
+2. Andrej Karpathy (practitioner, optimist) — 8 sources available
+   Known for: LLM internals, scaling laws, practical AI education
+   → build persona?
+
+3. Gary Marcus (skeptic) — 6 sources available
+   Known for: critiques of deep learning hype, neurosymbolic AI
+   → build persona?
+...
+```
+
+### Step 4: Offer Actions
+After presenting the list, ask (multiSelect):
+- Which experts to add to council immediately (without full persona)
+- Which to build full persona profiles for (triggers `build-persona` flow)
+- Whether to proceed to council session now or build personas first
+
+### Step 5: Auto-enrich Selected Personas
+For each expert selected for persona building:
+1. WebFetch their most cited/relevant article or interview
+2. Extract: key positions, communication style, notable quotes
+3. Create or update `~/.h2t/config/personas/{slug}.md`
+4. Set `confidence` based on source count and depth
+5. Report: `Persona created: Kate Crawford — confidence 42% (3 sources)`
+
+---
+
 ## Command: build-persona
 
 When user says `build-persona`, `create persona`, `добавить персону`:
@@ -104,6 +163,11 @@ Mix of:
   - Prioritize diverse viewpoints — include at least one contrarian per domain
 
 Minimum 2 advisors. Recommended 4-6. Allow up to 10.
+
+**Option: Research mode**
+If the topic is niche or user wants to discover new experts — offer:
+> "Run `council research` to find and enrich experts on this topic before composing the council?"
+This triggers the `council research` flow, then returns to council composition with enriched candidates.
 
 ### Step 4: Gather Data
 Collect strategy docs, metrics, recent decisions.
