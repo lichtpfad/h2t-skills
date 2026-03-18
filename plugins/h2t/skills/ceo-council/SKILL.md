@@ -4,7 +4,7 @@ description: "Strategic council of AI advisors — real people or abstract roles
 compatibility: "Claude Code"
 metadata:
   author: lichtpfad
-  version: 2.1.0
+  version: 2.2.0
 ---
 
 # CEO Council — Strategic Advisory System
@@ -134,17 +134,28 @@ When user says `build-persona`, `create persona`, `добавить персон
 
 ## Main Council Flow
 
-### Step 0: Choose Launch Mode
-**First thing after invocation** — ask with `AskUserQuestion` (type: select):
+### Step 0: Choose Launch Mode and Scope
 
-> **How do you want to run the council?**
-> - `quick` — minimal setup: state the topic, pick advisors from suggestions, launch immediately
-> - `guided` — step-by-step: choose analysis mode, optionally run expert research, compose council, review data before launch
+**First thing after invocation** — ask TWO questions with `AskUserQuestion`:
 
-**Quick mode** skips: mode selection (defaults to `strategic`), research step, data review.
-Asks only: topic + advisor selection → launches immediately.
+**Question 1 — Launch mode:**
+- `quick` — minimal setup: topic + advisors → launch immediately (defaults to `strategic`)
+- `guided` — step-by-step: mode → scope → research → compose → data review → launch
 
-**Guided mode** runs all steps below in sequence with explicit user confirmation at each stage.
+**Question 2 — Scope** (CRITICAL — determines what goes into data block):
+- `personal` — advice is for the user themselves; inject user profile from `~/.h2t/config/about-me/` if it exists (psychology, thinking style, ADHD patterns, working context). Advisors adapt how they communicate, not just what they advise.
+- `work/client` — advice is for a specific project or client; inject project context only, NOT user personal profile
+- `generic` — universal question not tied to anyone; no personal or project context injected
+
+**If scope is ambiguous from the request, always ask. Do not assume.**
+
+Examples:
+- "как мне выстроить систему" → probably personal, confirm
+- "как построить систему для художника" → generic or work/client, confirm
+- "помоги с маркетингом для проекта X" → work/client, confirm
+
+**Quick mode** skips mode selection (defaults to `strategic`) but still asks scope.
+**Guided mode** runs all steps below with explicit confirmation at each stage.
 
 ---
 
@@ -184,8 +195,19 @@ If the topic is niche or user wants to discover new experts — offer:
 This triggers the `council research` flow, then returns to council composition with enriched candidates.
 
 ### Step 4: Gather Data
-Collect strategy docs, metrics, recent decisions.
+
 Prepare ONE identical data block for all experts — avoid vanity metrics.
+
+**What goes into the data block depends on scope:**
+
+| Scope | Data block contents |
+|-------|-------------------|
+| `personal` | Topic + user profile from `~/.h2t/config/about-me/` (psychology, ADHD, thinking style, working context) + project context if relevant |
+| `work/client` | Topic + project/client context only. No user personal profile. |
+| `generic` | Topic only. No user profile, no specific project. |
+
+**User profile location:** `~/.h2t/config/about-me/core.md` (and `psychology.md` for deeper profile).
+If these files don't exist, skip personal profile — do not make assumptions about the user.
 
 ### Step 5: Build Expert Prompts
 
