@@ -1,5 +1,5 @@
 # h2t plugin — Python dependencies for ~/.h2t/venv
-# Install with: bash setup.sh
+# Install with: /h2t:setup
 
 # Google APIs
 google-api-python-client>=2.190
@@ -24,5 +24,5 @@ python-dotenv>=1.2
 requests>=2.32
 pyyaml>=6.0
 
-# Note: youtube-transcript-api intentionally excluded — uses system python
-# Install separately: pip3 install youtube-transcript-api
+# YouTube
+youtube-transcript-api>=0.6
