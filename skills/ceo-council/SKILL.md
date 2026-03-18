@@ -134,11 +134,25 @@ When user says `build-persona`, `create persona`, `добавить персон
 
 ## Main Council Flow
 
+### Step 0: Choose Launch Mode
+**First thing after invocation** — ask with `AskUserQuestion` (type: select):
+
+> **How do you want to run the council?**
+> - `quick` — minimal setup: state the topic, pick advisors from suggestions, launch immediately
+> - `guided` — step-by-step: choose analysis mode, optionally run expert research, compose council, review data before launch
+
+**Quick mode** skips: mode selection (defaults to `strategic`), research step, data review.
+Asks only: topic + advisor selection → launches immediately.
+
+**Guided mode** runs all steps below in sequence with explicit user confirmation at each stage.
+
+---
+
 ### Step 1: Understand Context
 Scan `CLAUDE.md`, `.claude/rules/`, recent decisions, and strategy docs.
 Identify domain (art, dev, education, business, etc.) to suggest relevant experts.
 
-### Step 2: Ask Mode
+### Step 2: Ask Mode *(guided only)*
 Use `AskUserQuestion` with `type: select`:
 - `strategic` — balanced analysis, find consensus and disagreements
 - `brainstorm` — pure idea generation, no critique, each expert adds without shooting down
