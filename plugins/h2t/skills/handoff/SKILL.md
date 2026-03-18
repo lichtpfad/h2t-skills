@@ -62,9 +62,16 @@ Format: `{task-slug}-{YYYY-MM-DD}` (e.g., `phase5-blocktype-2026-03-11`)
 
 ### Step 3: Write Session File
 
-**Location:** `<memory_dir>/sessions/{session-name}.md`
+**Location:** `~/.dor/sessions/{machine}/{repo}/{session-name}.md`
 
-Create `sessions/` directory if it doesn't exist.
+Determine path:
+
+```bash
+MACHINE="${DOR_MACHINE_NAME:-$(hostname | tr '[:upper:]' '[:lower:]' | cut -d. -f1)}"
+REPO=$(basename "$(git remote get-url origin 2>/dev/null)" .git 2>/dev/null || basename "$(pwd)")
+SESSION_DIR="$HOME/.dor/sessions/$MACHINE/$REPO"
+mkdir -p "$SESSION_DIR"
+```
 
 ```markdown
 # Session: {session-name}
@@ -114,7 +121,7 @@ SESSION_ID=$(basename $(ls -t "$PROJECT_DIR"/*.jsonl 2>/dev/null | head -1) .jso
 
 gh issue comment {NUMBER} --body "🤖 Handoff: {session-name}
 Resume: claude --resume ${SESSION_ID}
-File: memory/sessions/{session-name}.md
+File: ~/.dor/sessions/$MACHINE/$REPO/{session-name}.md
 Status: {brief — what's done, what remains}"
 ```
 
@@ -160,11 +167,15 @@ SESSION_ID=$(basename $(ls -t "$PROJECT_DIR"/*.jsonl 2>/dev/null | head -1) .jso
 
 ## Migration from Legacy
 
-If `<memory_dir>/handoff.md` exists from old format:
+If `<memory_dir>/sessions/*.md` exists (old repo-local format):
+1. Determine new path: `~/.dor/sessions/$MACHINE/$REPO/`
+2. Move files there
+3. Remove `<memory_dir>/sessions/` if empty
+
+If `<memory_dir>/handoff.md` exists (very old format):
 1. Read it
-2. Create `sessions/` directory
-3. Move content to `sessions/{derived-name}.md`
-4. Delete `handoff.md`
+2. Move content to `~/.dor/sessions/$MACHINE/$REPO/{derived-name}.md`
+3. Delete `handoff.md`
 
 ## Common Mistakes
 

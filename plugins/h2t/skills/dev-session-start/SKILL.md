@@ -59,20 +59,23 @@ Extract `owner/repo` from remote URL for `gh` commands.
 
 ### Step 2: Load Session History
 
-Read ALL files in `<memory_dir>/sessions/`:
+Determine repo name, then read ALL session files for this repo across ALL machines:
 
 ```bash
-ls <memory_dir>/sessions/*.md 2>/dev/null
+REPO=$(basename "$(git remote get-url origin 2>/dev/null)" .git 2>/dev/null || basename "$(pwd)")
+ls ~/.dor/sessions/*/"$REPO"/*.md 2>/dev/null
 ```
 
-For each file: extract task name, date, branch, "What Remains".
-Build a **session map**: which tasks are active, which branches have in-flight work.
+For each file: extract machine name (parent dir), task name, date, branch, "What Remains".
+Build a **session map**: which tasks are active, which machines have in-flight work.
 
 Also read `<memory_dir>/MEMORY.md` for stable lessons.
 
-If no `sessions/` dir exists, check legacy `<memory_dir>/handoff.md`.
+Legacy fallback (in order):
+1. `<memory_dir>/sessions/*.md` — old repo-local format, migrate on next handoff
+2. `<memory_dir>/handoff.md` — very old single-file format
 
-If neither exists (first session ever), skip to Step 3 — there's no history yet.
+If none exist (first session ever), skip to Step 3 — there's no history yet.
 
 ### Step 3: Check GitHub State
 
