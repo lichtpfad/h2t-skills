@@ -1,6 +1,6 @@
 ---
 name: milestone-closure
-description: Use when all issues in a GitHub milestone are closed and the phase is complete. Triggers on "close milestone", "milestone done", "phase complete", "закрыть milestone", or when the last issue in a milestone is closed.
+description: Use when all issues in a GitHub milestone are closed and the phase is complete. Triggers on "close milestone", "milestone done", "phase complete", "закрыть milestone", or when the last issue in a milestone is closed., 'h2t:milestone-closure'
 compatibility: "Claude Code"
 metadata:
   author: lichtpfad

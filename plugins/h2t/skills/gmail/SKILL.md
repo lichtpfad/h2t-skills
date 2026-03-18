@@ -1,6 +1,6 @@
 ---
 name: gmail
-description: "Reads and sends Gmail via OAuth. Use when user asks to check email, read messages, search inbox, send mail, or create drafts. Triggers: 'check email', 'show inbox', 'send message', 'draft', 'gmail'."
+description: "Reads and sends Gmail via OAuth. Use when user asks to check email, read messages, search inbox, send mail, or create drafts. Triggers: 'check email', 'show inbox', 'send message', 'draft', 'gmail'., 'h2t:gmail'"
 compatibility: "Requires Google OAuth token at ~/.config/google-calendar-mcp/tokens.json"
 metadata:
   author: lichtpfad

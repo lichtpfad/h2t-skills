@@ -1,6 +1,6 @@
 ---
 name: youtube-transcript
-description: "Extracts YouTube video transcripts with chapters and saves to vault. Triggers: 'youtube', 'video transcript', 'youtube transcript', 'сохрани видео'."
+description: "Extracts YouTube video transcripts with chapters and saves to vault. Triggers: 'youtube', 'video transcript', 'youtube transcript', 'сохрани видео'., 'h2t:youtube-transcript'"
 compatibility: "Requires youtube-transcript-api installed in system python. DOR_ROOT env var optional."
 metadata:
   author: lichtpfad

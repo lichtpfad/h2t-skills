@@ -1,6 +1,6 @@
 ---
 name: drive
-description: "Google Drive file browser and MeetGeek transcript sync. Use to search files, download transcripts, sync meeting recordings from MeetGeek to context/meetings/. Triggers: 'drive', 'google drive', 'sync meetings', 'meetgeek', 'транскрипты'."
+description: "Google Drive file browser and MeetGeek transcript sync. Use to search files, download transcripts, sync meeting recordings from MeetGeek to context/meetings/. Triggers: 'drive', 'google drive', 'sync meetings', 'meetgeek', 'транскрипты'., 'h2t:drive'"
 compatibility: "Requires Google OAuth token at ~/.config/google-calendar-mcp/tokens.json. DOR_ROOT env var for meeting sync."
 metadata:
   author: lichtpfad

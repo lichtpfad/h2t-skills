@@ -1,6 +1,6 @@
 ---
 name: deck
-description: "HTML presentation generator. Two styles: terminal (dark, monospace, scanlines) and editorial (light, serif, book-like). Single-file HTML, keyboard navigation, zero dependencies. Triggers: 'create presentation', 'make slides', 'deck', 'презентация'."
+description: "HTML presentation generator. Two styles: terminal (dark, monospace, scanlines) and editorial (light, serif, book-like). Single-file HTML, keyboard navigation, zero dependencies. Triggers: 'create presentation', 'make slides', 'deck', 'презентация'., 'h2t:deck'"
 compatibility: "Claude Code"
 metadata:
   author: lichtpfad

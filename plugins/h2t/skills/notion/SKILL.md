@@ -1,6 +1,6 @@
 ---
 name: notion
-description: "Reads and writes Notion pages and databases via API. Use for GTD tasks, creating pages, querying databases, updating properties. Triggers: 'notion', 'tasks', 'GTD', 'create page', 'query database'."
+description: "Reads and writes Notion pages and databases via API. Use for GTD tasks, creating pages, querying databases, updating properties. Triggers: 'notion', 'tasks', 'GTD', 'create page', 'query database'., 'h2t:notion'"
 compatibility: "Requires NOTION_API_TOKEN in ~/.dor/secrets.env"
 metadata:
   author: lichtpfad
