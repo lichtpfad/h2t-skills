@@ -1,0 +1,28 @@
+# h2t plugin — Python dependencies for ~/.h2t/venv
+# Install with: bash setup.sh
+
+# Google APIs
+google-api-python-client>=2.190
+google-auth>=2.48
+google-auth-oauthlib>=1.2
+google-auth-httplib2>=0.3
+
+# Google AI
+google-genai>=1.64
+
+# Notion
+notion-client>=3.0
+
+# Telegram
+Telethon>=1.42
+
+# Documents
+python-docx>=1.2
+
+# Utilities
+python-dotenv>=1.2
+requests>=2.32
+pyyaml>=6.0
+
+# Note: youtube-transcript-api intentionally excluded — uses system python
+# Install separately: pip3 install youtube-transcript-api
