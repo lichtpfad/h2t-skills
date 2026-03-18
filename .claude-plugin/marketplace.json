@@ -9,7 +9,7 @@
     {
       "name": "h2t",
       "description": "h2t skill suite: integration skills (gmail, calendar, drive, notion, telegram, daily-brief), dev workflow (session, handoff, pre-merge), DrawIO, NLM",
-      "version": "1.0.0",
+      "version": "1.2.0",
       "author": {
         "name": "lichtpfad"
       },
