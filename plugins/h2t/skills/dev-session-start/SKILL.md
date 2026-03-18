@@ -181,18 +181,23 @@ Handoff: memory/sessions/{SESSION_NAME}-{DATE}.md"
 
 Create TodoWrite tasks from chosen work items.
 
-### Step 7.5: Update Session Registry
+### Step 7.5: Register Session in Registry
 
-If `$DOR_SESSION_ID` is available (set by SessionStart hook), update the registry with session context:
+Extract session ID from current .jsonl file, then append + update registry:
 
 ```bash
-CONFIG_ROOT="${DOR_CONFIG_ROOT:-$HOME/config}"
-[ ! -d "$CONFIG_ROOT" ] && [ -d "/c/dev/config" ] && CONFIG_ROOT="/c/dev/config"
-REGISTRY_PY="$CONFIG_ROOT/registry/registry.py"
+REGISTRY_PY="$HOME/.h2t/config/registry/registry.py"
+[ ! -f "$REGISTRY_PY" ] && REGISTRY_PY="/c/dev/config/registry/registry.py"
 
-if [ -f "$REGISTRY_PY" ] && [ -n "${DOR_SESSION_ID:-}" ]; then
+MEMORY_DIR="<memory_dir>"
+PROJECT_DIR=$(dirname "$MEMORY_DIR")
+SESSION_ID=$(basename $(ls -t "$PROJECT_DIR"/*.jsonl 2>/dev/null | head -1) .jsonl 2>/dev/null)
+MACHINE="${DOR_MACHINE_NAME:-$(hostname | tr '[:upper:]' '[:lower:]' | cut -d. -f1)}"
+
+if [ -f "$REGISTRY_PY" ] && [ -n "$SESSION_ID" ]; then
+  python3 "$REGISTRY_PY" append --id "$SESSION_ID" --cwd "$(pwd)" --host "$MACHINE"
   python3 "$REGISTRY_PY" update \
-    --id "$DOR_SESSION_ID" \
+    --id "$SESSION_ID" \
     --status "active" \
     --session-name "{SESSION_NAME}" \
     --topic "{user-provided topic}" \
@@ -201,7 +206,7 @@ if [ -f "$REGISTRY_PY" ] && [ -n "${DOR_SESSION_ID:-}" ]; then
 fi
 ```
 
-If `$DOR_SESSION_ID` is not set, skip this step silently. The session was already registered by the hook — this step enriches it.
+If registry.py not found or no .jsonl exists, skip silently.
 
 ## Session ID Extraction
 

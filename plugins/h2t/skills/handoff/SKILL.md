@@ -132,16 +132,19 @@ Status: Context limit reached. Work continues in next session.
 
 ### Step 4.5: Close Session in Registry
 
-If `$DOR_SESSION_ID` is available, close the session in the registry:
+Extract session ID from current .jsonl file, then close registry entry:
 
 ```bash
-CONFIG_ROOT="${DOR_CONFIG_ROOT:-$HOME/config}"
-[ ! -d "$CONFIG_ROOT" ] && [ -d "/c/dev/config" ] && CONFIG_ROOT="/c/dev/config"
-REGISTRY_PY="$CONFIG_ROOT/registry/registry.py"
+REGISTRY_PY="$HOME/.h2t/config/registry/registry.py"
+[ ! -f "$REGISTRY_PY" ] && REGISTRY_PY="/c/dev/config/registry/registry.py"
 
-if [ -f "$REGISTRY_PY" ] && [ -n "${DOR_SESSION_ID:-}" ]; then
+MEMORY_DIR="<memory_dir>"
+PROJECT_DIR=$(dirname "$MEMORY_DIR")
+SESSION_ID=$(basename $(ls -t "$PROJECT_DIR"/*.jsonl 2>/dev/null | head -1) .jsonl 2>/dev/null)
+
+if [ -f "$REGISTRY_PY" ] && [ -n "$SESSION_ID" ]; then
   python3 "$REGISTRY_PY" update \
-    --id "$DOR_SESSION_ID" \
+    --id "$SESSION_ID" \
     --status "done" \
     --summary "{one-line summary of what was accomplished}"
 fi
@@ -150,12 +153,12 @@ fi
 For interrupted sessions (context limit, not end of work):
 ```bash
   python3 "$REGISTRY_PY" update \
-    --id "$DOR_SESSION_ID" \
+    --id "$SESSION_ID" \
     --status "interrupted" \
     --summary "{what remains}"
 ```
 
-If `$DOR_SESSION_ID` is not set, skip this step silently.
+If registry.py not found or no .jsonl exists, skip silently.
 
 ## Session ID Extraction
 
