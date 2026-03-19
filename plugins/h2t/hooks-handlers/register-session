@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+# Register Claude Code session in Session Registry (DOR #12)
+# Called by SessionStart hook. Reads JSON from stdin.
+
+# Detect python command (Windows: python, Unix: python3)
+PYTHON="python3"
+if ! command -v python3 &>/dev/null || [[ "$(uname -s)" == MINGW* ]] || [[ "$(uname -s)" == MSYS* ]]; then
+  PYTHON="python"
+fi
+
+# Read stdin and parse all fields in one python call (avoids echo/pipe escaping issues)
+eval "$($PYTHON -c "
+import sys, json
+try:
+    data = json.load(sys.stdin)
+    sid = data.get('session_id', '')
+    cwd = data.get('cwd', '')
+    print(f'SESSION_ID=\"{sid}\"')
+    print(f'CWD=\"{cwd}\"')
+except:
+    print('SESSION_ID=\"\"')
+    print('CWD=\"\"')
+" 2>/dev/null || echo 'SESSION_ID="" CWD=""')"
+
+# Skip if no session ID
+[ -z "$SESSION_ID" ] && exit 0
+
+# Find registry.py in config repo
+# Resolve CONFIG_ROOT
+CONFIG_ROOT="${DOR_CONFIG_ROOT:-}"
+if [ -z "$CONFIG_ROOT" ]; then
+  for candidate in \
+    "$HOME/.h2t/config" \
+    "$HOME/config" \
+    "/c/dev/config" \
+    "/c/Users/$USERNAME/.h2t/config"; do
+    [ -d "$candidate" ] && CONFIG_ROOT="$candidate" && break
+  done
+fi
+REGISTRY_PY="$CONFIG_ROOT/registry/registry.py"
+
+# Skip silently if config repo not cloned
+[ ! -f "$REGISTRY_PY" ] && exit 0
+
+# Register session
+$PYTHON "$REGISTRY_PY" append \
+  --id "$SESSION_ID" \
+  --cwd "$CWD" \
+  --host "$(hostname -s 2>/dev/null || hostname)" 2>/dev/null || true
+
+# Persist SESSION_ID for skills to use later (/session-start, /handoff)
+if [ -n "${CLAUDE_ENV_FILE:-}" ]; then
+  echo "export DOR_SESSION_ID=$SESSION_ID" >> "$CLAUDE_ENV_FILE"
+fi
+
+exit 0
