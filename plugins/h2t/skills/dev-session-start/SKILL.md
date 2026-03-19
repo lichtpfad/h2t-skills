@@ -85,19 +85,36 @@ If none exist (first session ever), skip to Step 3 — there's no history yet.
 
 ### Step 3: Check GitHub State
 
-Extract `{owner}/{repo}` from Step 1 remote URL. Run in parallel:
+Extract `{owner}/{repo}` from Step 1 remote URL.
+
+**Project filter:** if `.claude/project-id` exists in current directory, filter issues by that project label:
+
+```bash
+PROJECT_LABEL=""
+if [ -f ".claude/project-id" ]; then
+  PID=$(tr -d '[:space:]' < .claude/project-id)
+  [ -n "$PID" ] && PROJECT_LABEL="--label project:$PID"
+fi
+```
+
+Run in parallel:
 
 ```bash
 gh api repos/{owner}/{repo}/milestones --jq '.[] | select(.state=="open") | {title, open_issues}'
-gh issue list --state open --label "priority:P0" --json number,title,labels --limit 20
-gh issue list --state open --label "bug" --json number,title --limit 10
+gh issue list --state open $PROJECT_LABEL --json number,title,labels --limit 20
+gh issue list --state open --label "bug" $PROJECT_LABEL --json number,title --limit 10
 gh pr list --state open --json number,title,headRefName
 ```
+
+If `PROJECT_LABEL` is set — show only project-scoped issues. Mention scope in summary header:
+`## 🔧 Project: {repo-name}/{project-id} ({branch})`
+
+If no `.claude/project-id` — show all open issues (repo-wide scope).
 
 Pick the milestone with most open issues as "current". Then load its tasks:
 
 ```bash
-gh issue list --milestone "<current milestone title>" --state open --json number,title,labels
+gh issue list --milestone "<current milestone title>" --state open $PROJECT_LABEL --json number,title,labels
 ```
 
 ### Step 4: Detect Stack
