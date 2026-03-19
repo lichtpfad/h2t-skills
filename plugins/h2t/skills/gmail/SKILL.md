@@ -11,17 +11,25 @@ metadata:
 
 Когда skill вызывается, выполни соответствующую команду используя Python CLI:
 
-## Базовый путь к скрипту
+## Переменные
 
 ```bash
-CLI="${CLAUDE_SKILL_DIR}/scripts/gmail_cli.py"
+# Cross-platform h2t venv detection
+H2T_PYTHON="${H2T_PYTHON:-}"
+if [ -z "$H2T_PYTHON" ]; then
+  [ -f "$HOME/.h2t/venv/bin/python" ] && H2T_PYTHON="$HOME/.h2t/venv/bin/python"
+  [ -f "$HOME/.h2t/venv/Scripts/python.exe" ] && H2T_PYTHON="$HOME/.h2t/venv/Scripts/python.exe"
+fi
+[ -z "$H2T_PYTHON" ] && echo "ERROR: h2t venv not found. Run /h2t:setup" && exit 1
+
+CLI="$H2T_PYTHON ${CLAUDE_SKILL_DIR}/scripts/gmail_cli.py"
 ```
 
 ## Команды
 
 ### 1. Список писем
 ```bash
-python3 $CLI list [--max N] [--unread] [--query "search"]
+$CLI list [--max N] [--unread] [--query "search"]
 ```
 
 Примеры:
@@ -32,12 +40,12 @@ python3 $CLI list [--max N] [--unread] [--query "search"]
 
 ### 2. Чтение письма
 ```bash
-python3 $CLI read <message-id> [--format plain|json]
+$CLI read <message-id> [--format plain|json]
 ```
 
 ### 3. Поиск писем
 ```bash
-python3 $CLI search "<query>" [--max N]
+$CLI search "<query>" [--max N]
 ```
 
 Gmail search operators:
@@ -52,27 +60,27 @@ Gmail search operators:
 
 ### 4. Отправка письма
 ```bash
-python3 $CLI send <to> "<subject>" "<body>" [--attach file1 file2 ...]
+$CLI send <to> "<subject>" "<body>" [--attach file1 file2 ...]
 ```
 
 Или с текстом из файла:
 ```bash
-python3 $CLI send <to> "<subject>" --file message.txt [--attach files...]
+$CLI send <to> "<subject>" --file message.txt [--attach files...]
 ```
 
 ### 5. Создание черновика
 ```bash
-python3 $CLI draft <to> "<subject>" "<body>" [--attach files...]
+$CLI draft <to> "<subject>" "<body>" [--attach files...]
 ```
 
 ### 6. Просмотр labels
 ```bash
-python3 $CLI labels
+$CLI labels
 ```
 
 ### 7. Управление labels
 ```bash
-python3 $CLI label <message-id> [--add LABEL1 LABEL2] [--remove LABEL3]
+$CLI label <message-id> [--add LABEL1 LABEL2] [--remove LABEL3]
 ```
 
 Системные labels: INBOX, UNREAD, STARRED, IMPORTANT, TRASH, SPAM

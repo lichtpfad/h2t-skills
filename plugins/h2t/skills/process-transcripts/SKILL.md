@@ -17,9 +17,17 @@ metadata:
 
 ## Переменные
 
-```
-SKILL_DIR="/Users/stanislav_glazov/Projects/DOR/.claude/skills/process-transcripts"
-PYTHON="/Users/stanislav_glazov/Projects/DOR/.venv/bin/python3"
+```bash
+# Cross-platform h2t venv detection
+H2T_PYTHON="${H2T_PYTHON:-}"
+if [ -z "$H2T_PYTHON" ]; then
+  [ -f "$HOME/.h2t/venv/bin/python" ] && H2T_PYTHON="$HOME/.h2t/venv/bin/python"
+  [ -f "$HOME/.h2t/venv/Scripts/python.exe" ] && H2T_PYTHON="$HOME/.h2t/venv/Scripts/python.exe"
+fi
+[ -z "$H2T_PYTHON" ] && echo "ERROR: h2t venv not found. Run /h2t:setup" && exit 1
+
+SKILL_DIR="${CLAUDE_SKILL_DIR}"
+PYTHON="$H2T_PYTHON"
 ```
 
 ## Команды
@@ -55,8 +63,7 @@ $PYTHON $SKILL_DIR/process_transcripts.py --all --no-index
 Диагностика (тип, дата, прогресс) идёт в stderr — не мешает пайпу.
 
 ```bash
-PYTHON="/Users/stanislav_glazov/Projects/DOR/.venv/bin/python3"
-SKILL_DIR="/Users/stanislav_glazov/Projects/DOR/.claude/skills/process-transcripts"
+# Используй те же переменные из секции выше (H2T_PYTHON, SKILL_DIR)
 
 # Полный JSON от LLM — посмотреть всё сразу
 $PYTHON $SKILL_DIR/process_transcripts.py "Meeting Notes- Название.md" --dump-json | jq .
@@ -117,7 +124,7 @@ head -20 context/meetings/INDEX.md
 ## Зависимости
 
 - `pyyaml` в `.venv` (установлен)
-- `claude` CLI (уже есть: `/Users/stanislav_glazov/.local/bin/claude`)
+- `google-genai` (Gemini SDK, в h2t venv)
 - Проекты: `.claude/projects.yaml`
 
 ## Выходной формат файла

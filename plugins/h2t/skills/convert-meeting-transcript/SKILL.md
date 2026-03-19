@@ -11,22 +11,30 @@ metadata:
 
 This skill converts DOCX meeting transcripts to Markdown format with automatic speaker name replacement.
 
-## Базовый путь к скрипту
+## Переменные
 
 ```bash
-CLI="${CLAUDE_SKILL_DIR}/scripts/convert_docx_to_md.py"
+# Cross-platform h2t venv detection
+H2T_PYTHON="${H2T_PYTHON:-}"
+if [ -z "$H2T_PYTHON" ]; then
+  [ -f "$HOME/.h2t/venv/bin/python" ] && H2T_PYTHON="$HOME/.h2t/venv/bin/python"
+  [ -f "$HOME/.h2t/venv/Scripts/python.exe" ] && H2T_PYTHON="$HOME/.h2t/venv/Scripts/python.exe"
+fi
+[ -z "$H2T_PYTHON" ] && echo "ERROR: h2t venv not found. Run /h2t:setup" && exit 1
+
+CLI="$H2T_PYTHON ${CLAUDE_SKILL_DIR}/scripts/convert_docx_to_md.py"
 ```
 
 ## Usage
 
 ### With speaker mappings:
 ```bash
-python3 $CLI transcript.docx --speakers "Speaker_00=Alice" "Speaker_01=Bob"
+$CLI transcript.docx --speakers "Speaker_00=Alice" "Speaker_01=Bob"
 ```
 
 ### Without speaker mappings (conversion without name replacement):
 ```bash
-python3 $CLI transcript.docx
+$CLI transcript.docx
 ```
 
 ## How it works

@@ -12,7 +12,15 @@ metadata:
 ## Переменные
 
 ```bash
-CLI="${CLAUDE_SKILL_DIR}/scripts/drive_cli.py"
+# Cross-platform h2t venv detection
+H2T_PYTHON="${H2T_PYTHON:-}"
+if [ -z "$H2T_PYTHON" ]; then
+  [ -f "$HOME/.h2t/venv/bin/python" ] && H2T_PYTHON="$HOME/.h2t/venv/bin/python"
+  [ -f "$HOME/.h2t/venv/Scripts/python.exe" ] && H2T_PYTHON="$HOME/.h2t/venv/Scripts/python.exe"
+fi
+[ -z "$H2T_PYTHON" ] && echo "ERROR: h2t venv not found. Run /h2t:setup" && exit 1
+
+CLI="$H2T_PYTHON ${CLAUDE_SKILL_DIR}/scripts/drive_cli.py"
 ```
 
 ## Команды
@@ -20,28 +28,28 @@ CLI="${CLAUDE_SKILL_DIR}/scripts/drive_cli.py"
 ### Список файлов
 
 ```bash
-python3 $CLI list [folder-name]
+$CLI list [folder-name]
 # Примеры:
-python3 $CLI list
-python3 $CLI list "MeetGeek Files"
+$CLI list
+$CLI list "MeetGeek Files"
 ```
 
 ### Поиск
 
 ```bash
-python3 $CLI search "query" [--type docx|folder]
+$CLI search "query" [--type docx|folder]
 ```
 
 ### Скачать файл
 
 ```bash
-python3 $CLI download <file-id> [destination-path]
+$CLI download <file-id> [destination-path]
 ```
 
 ### Синхронизация транскриптов (главная команда)
 
 ```bash
-python3 $CLI sync-meetings [--dry-run] [--folder "MeetGeek Files"]
+$CLI sync-meetings [--dry-run] [--folder "MeetGeek Files"]
 ```
 
 Pipeline: Drive/MeetGeek Files/*/Meeting Notes (Google Doc) → export DOCX → context/meetings/*.docx → context/meetings/*.md

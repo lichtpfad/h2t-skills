@@ -11,10 +11,16 @@ metadata:
 
 ## Переменные
 
-```
-SKILL_DIR="/Users/stanislav_glazov/Projects/DOR/.claude/skills/telegram"
-PYTHON="/Users/stanislav_glazov/Projects/DOR/.venv/bin/python3"
-CLI="$PYTHON $SKILL_DIR/telegram_cli.py"
+```bash
+# Cross-platform h2t venv detection
+H2T_PYTHON="${H2T_PYTHON:-}"
+if [ -z "$H2T_PYTHON" ]; then
+  [ -f "$HOME/.h2t/venv/bin/python" ] && H2T_PYTHON="$HOME/.h2t/venv/bin/python"
+  [ -f "$HOME/.h2t/venv/Scripts/python.exe" ] && H2T_PYTHON="$HOME/.h2t/venv/Scripts/python.exe"
+fi
+[ -z "$H2T_PYTHON" ] && echo "ERROR: h2t venv not found. Run /h2t:setup" && exit 1
+
+CLI="$H2T_PYTHON ${CLAUDE_SKILL_DIR}/scripts/telegram_cli.py"
 ```
 
 ## Команды

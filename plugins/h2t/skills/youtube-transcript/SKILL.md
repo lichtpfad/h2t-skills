@@ -1,7 +1,7 @@
 ---
 name: youtube-transcript
 description: "Extracts YouTube video transcripts with chapters and saves to vault. Triggers: 'youtube', 'video transcript', 'youtube transcript', 'сохрани видео'., 'h2t:youtube-transcript'"
-compatibility: "Requires youtube-transcript-api installed in system python. DOR_ROOT env var optional."
+compatibility: "Requires h2t venv (~/.h2t/venv) with youtube-transcript-api. DOR_ROOT env var optional."
 metadata:
   author: lichtpfad
   version: 1.0.0
@@ -12,7 +12,15 @@ metadata:
 ## Переменные
 
 ```bash
-CLI="${CLAUDE_SKILL_DIR}/scripts/youtube_transcript_cli.py"
+# Cross-platform h2t venv detection
+H2T_PYTHON="${H2T_PYTHON:-}"
+if [ -z "$H2T_PYTHON" ]; then
+  [ -f "$HOME/.h2t/venv/bin/python" ] && H2T_PYTHON="$HOME/.h2t/venv/bin/python"
+  [ -f "$HOME/.h2t/venv/Scripts/python.exe" ] && H2T_PYTHON="$HOME/.h2t/venv/Scripts/python.exe"
+fi
+[ -z "$H2T_PYTHON" ] && echo "ERROR: h2t venv not found. Run /h2t:setup" && exit 1
+
+CLI="$H2T_PYTHON ${CLAUDE_SKILL_DIR}/scripts/youtube_transcript_cli.py"
 ```
 
 ## Команды
@@ -20,25 +28,25 @@ CLI="${CLAUDE_SKILL_DIR}/scripts/youtube_transcript_cli.py"
 ### Сохранить транскрипт (в context/youtube/)
 
 ```bash
-python3 $CLI <youtube-url-or-id>
+$CLI <youtube-url-or-id>
 ```
 
 ### Сохранить в проект (в vault/100 Inbox/ с project-id)
 
 ```bash
-python3 $CLI <url> --project <project-id>
+$CLI <url> --project <project-id>
 ```
 
 ### Только вывод в stdout (не сохранять)
 
 ```bash
-python3 $CLI <url> --print
+$CLI <url> --print
 ```
 
 ### Указать язык
 
 ```bash
-python3 $CLI <url> --lang ru
+$CLI <url> --lang ru
 ```
 
 ## Routing
@@ -66,5 +74,5 @@ Frontmatter: `source`, `video_id`, `title`, `author`, `url`, `date`, опцио�
 
 ## Зависимости
 
-- `youtube-transcript-api` (pip install youtube-transcript-api) — системный python3, не .venv
+- `youtube-transcript-api` (в h2t venv, установится через /h2t:setup)
 - `python-dotenv` (pip install python-dotenv)

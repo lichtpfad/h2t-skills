@@ -11,51 +11,59 @@ metadata:
 
 Этот skill позволяет работать с Notion API - получать, создавать и управлять страницами и базами данных.
 
-## Базовый путь к скрипту
+## Переменные
 
 ```bash
-CLI="${CLAUDE_SKILL_DIR}/scripts/notion_cli.py"
+# Cross-platform h2t venv detection
+H2T_PYTHON="${H2T_PYTHON:-}"
+if [ -z "$H2T_PYTHON" ]; then
+  [ -f "$HOME/.h2t/venv/bin/python" ] && H2T_PYTHON="$HOME/.h2t/venv/bin/python"
+  [ -f "$HOME/.h2t/venv/Scripts/python.exe" ] && H2T_PYTHON="$HOME/.h2t/venv/Scripts/python.exe"
+fi
+[ -z "$H2T_PYTHON" ] && echo "ERROR: h2t venv not found. Run /h2t:setup" && exit 1
+
+CLI="$H2T_PYTHON ${CLAUDE_SKILL_DIR}/scripts/notion_cli.py"
 ```
 
 ## Использование
 
 ### Получение содержимого страницы:
 ```bash
-python3 $CLI get <page-id>
-python3 $CLI get <page-id> --format markdown
+$CLI get <page-id>
+$CLI get <page-id> --format markdown
 ```
 
 ### Получение блоков страницы:
 ```bash
-python3 $CLI blocks <page-id>
+$CLI blocks <page-id>
 ```
 
 ### Поиск в базе данных:
 ```bash
-python3 $CLI search <database-id>
-python3 $CLI search <database-id> --filter "Status=Done"
-python3 $CLI search <database-id> --filter-json '{"property":"Status","status":{"equals":"Done"}}'
+$CLI search <database-id>
+$CLI search <database-id> --filter "Status=Done"
+$CLI search <database-id> --filter-json '{"property":"Status","status":{"equals":"Done"}}'
 ```
 
 ### Найти задачи проекта:
 ```bash
-python3 $CLI find-project-tasks <project-page-id>
-python3 $CLI find-project-tasks <project-page-id> --database-id <tasks-db-id>
+$CLI find-project-tasks <project-page-id>
+$CLI find-project-tasks <project-page-id> --database-id <tasks-db-id>
 ```
 
 ### Создание страницы:
 ```bash
-python3 $CLI create <parent-id> "Название страницы" --content "Текст содержимого"
+$CLI create <parent-id> "Название страницы" --content "Текст содержимого"
 ```
 
 ### Обновление страницы:
 ```bash
-python3 $CLI update <page-id> --title "Новое название"
+$CLI update <page-id> --title "Новое название"
 ```
 
 ### Синхронизация Notion в Markdown:
 ```bash
-python3 $CLI sync <page-id> <output-file.md>
+$CLI sync <page-id> <output-file.md>
 ```
 
 ## Требования

@@ -216,14 +216,22 @@ Extract session ID from current .jsonl file, then append + update registry:
 REGISTRY_PY="$HOME/.h2t/config/registry/registry.py"
 [ ! -f "$REGISTRY_PY" ] && REGISTRY_PY="/c/dev/config/registry/registry.py"
 
+# Cross-platform h2t venv detection
+H2T_PYTHON="${H2T_PYTHON:-}"
+if [ -z "$H2T_PYTHON" ]; then
+  [ -f "$HOME/.h2t/venv/bin/python" ] && H2T_PYTHON="$HOME/.h2t/venv/bin/python"
+  [ -f "$HOME/.h2t/venv/Scripts/python.exe" ] && H2T_PYTHON="$HOME/.h2t/venv/Scripts/python.exe"
+fi
+[ -z "$H2T_PYTHON" ] && H2T_PYTHON="python3"
+
 MEMORY_DIR="<memory_dir>"
 PROJECT_DIR=$(dirname "$MEMORY_DIR")
 SESSION_ID=$(basename $(ls -t "$PROJECT_DIR"/*.jsonl 2>/dev/null | head -1) .jsonl 2>/dev/null)
 MACHINE="${DOR_MACHINE_NAME:-$(hostname | tr '[:upper:]' '[:lower:]' | cut -d. -f1)}"
 
 if [ -f "$REGISTRY_PY" ] && [ -n "$SESSION_ID" ]; then
-  python3 "$REGISTRY_PY" append --id "$SESSION_ID" --cwd "$(pwd)" --host "$MACHINE"
-  python3 "$REGISTRY_PY" update \
+  $H2T_PYTHON "$REGISTRY_PY" append --id "$SESSION_ID" --cwd "$(pwd)" --host "$MACHINE"
+  $H2T_PYTHON "$REGISTRY_PY" update \
     --id "$SESSION_ID" \
     --status "active" \
     --session-name "{SESSION_NAME}" \

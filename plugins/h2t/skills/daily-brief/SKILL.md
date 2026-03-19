@@ -13,9 +13,17 @@ metadata:
 
 ### Интерактивный режим (по умолчанию)
 
-1. Запусти скрипт с флагами `--json --save` для получения данных и автосохранения:
+1. Определи Python и запусти скрипт:
    ```bash
-   ~/.h2t/venv/bin/python ${CLAUDE_SKILL_DIR}/scripts/daily_brief_cli.py --json --save
+   # Cross-platform h2t venv detection
+   H2T_PYTHON="${H2T_PYTHON:-}"
+   if [ -z "$H2T_PYTHON" ]; then
+     [ -f "$HOME/.h2t/venv/bin/python" ] && H2T_PYTHON="$HOME/.h2t/venv/bin/python"
+     [ -f "$HOME/.h2t/venv/Scripts/python.exe" ] && H2T_PYTHON="$HOME/.h2t/venv/Scripts/python.exe"
+   fi
+   [ -z "$H2T_PYTHON" ] && echo "ERROR: h2t venv not found. Run /h2t:setup" && exit 1
+
+   $H2T_PYTHON ${CLAUDE_SKILL_DIR}/scripts/daily_brief_cli.py --json --save
    ```
 
 2. Получив JSON, сформируй брифинг по доменам:
