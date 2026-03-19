@@ -57,17 +57,23 @@ git status --short                      # → uncommitted work
 
 Extract `owner/repo` from remote URL for `gh` commands.
 
-### Step 2: Load Session History
+### Step 2: Load Session Context (NOT task list)
 
-Determine repo name, then read ALL session files for this repo across ALL machines:
+Determine repo name, then read session files for this repo across ALL machines:
 
 ```bash
 REPO=$(basename "$(git remote get-url origin 2>/dev/null)" .git 2>/dev/null || basename "$(pwd)")
 ls ~/.dor/sessions/*/"$REPO"/*.md 2>/dev/null
 ```
 
-For each file: extract machine name (parent dir), task name, date, branch, "What Remains".
-Build a **session map**: which tasks are active, which machines have in-flight work.
+**Extract from handoff files — CONTEXT ONLY:**
+- Key Decisions and rationale
+- Critical Context / подводные камни
+- Uncommitted work (modified files not yet committed)
+- Which machine last worked on what branch
+
+**Do NOT use from handoff files:**
+- "What Remains" task lists — these are stale snapshots. GitHub issues are the truth.
 
 Also read `<memory_dir>/MEMORY.md` for stable lessons.
 
@@ -109,7 +115,7 @@ Check CLAUDE.md for `## Stack Config` override section. If present, use those co
 
 ### Step 5: Present Summary
 
-Show the user a structured overview:
+GitHub is the source of truth for tasks. Handoff provides supplementary context only.
 
 ```markdown
 ## 🔧 Project: {repo-name} ({branch})
@@ -117,22 +123,26 @@ Show the user a structured overview:
 **Stack:** {detected stack}
 **Milestone:** {current milestone} — {open}/{total} issues
 
-### Active Sessions
-| Session | Branch | Last Date | Status |
-|---------|--------|-----------|--------|
-| {task-slug} | {branch} | {date} | {remains count} tasks left |
-
-### Priority Tasks (current milestone)
+### Open Tasks (from GitHub)
 - P0: #38 Add blockType field, #39 technology field...
 - P1: #41 Markdown preview...
 - Bugs: #43 selection lost, #44 glow lost
 
 ### Uncommitted Work
-{git status output if any}
+{git status output if any — from Step 1}
 
 ### Open PRs
 {pr list if any}
+
+### ⚠️ Context from last session
+{key decisions, approaches tried, critical gotchas — from handoff files ONLY}
+{machine: {machine-name}, branch: {branch}, date: {date}}
 ```
+
+**Rules:**
+- Task list = open GitHub issues only. Never copy "What Remains" from handoff as tasks.
+- If handoff mentions an issue that is now CLOSED → omit it entirely.
+- Context section is optional — only include if there are non-obvious decisions or gotchas.
 
 Ask: **"Продолжить с задачей X, или другое направление?"**
 
@@ -242,7 +252,9 @@ Skill reads this section and uses these commands for pre-merge checks and verifi
 
 | Mistake | Fix |
 |---------|-----|
-| Skip reading session history | ALWAYS read `sessions/` dir — other sessions may have context |
+| Skip reading session history | ALWAYS read `sessions/` dir — for context, not for task lists |
+| Trust handoff "What Remains" as task list | Use GitHub open issues — handoff is a stale snapshot |
+| Show closed issues as tasks | Cross-check handoff mentions against GitHub — closed = omit |
 | Forget to post GitHub comment | Traceability is lost — always post session start comment |
 | Assume single active session | User may have 2-3 parallel sessions — show ALL active work |
 | Hardcode JS commands for Python project | Auto-detect stack first, or read Stack Config |
