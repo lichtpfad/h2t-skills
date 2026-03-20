@@ -4,7 +4,7 @@ description: "Extracts YouTube video transcripts with chapters and saves to vaul
 compatibility: "Requires h2t venv (~/.h2t/venv) with youtube-transcript-api. DOR_ROOT env var optional."
 metadata:
   author: lichtpfad
-  version: 1.0.0
+  version: 1.1.0
 ---
 
 # Инструкции
@@ -49,6 +49,18 @@ $CLI <url> --print
 $CLI <url> --lang ru
 ```
 
+### Извлечь кадры по чаптерам (1 кадр на чаптер)
+
+```bash
+$CLI <url> --frames
+```
+
+### Извлечь кадры чаще (каждые N секунд внутри чаптера)
+
+```bash
+$CLI <url> --frames --frames-interval 30
+```
+
 ## Routing
 
 | Режим | Директория | Имя файла |
@@ -72,7 +84,18 @@ Frontmatter: `source`, `video_id`, `title`, `author`, `url`, `date`, опцио�
 - Нет чаптеров → транскрипт разбивается по 2-минутным блокам с временными метками
 - Нет метаданных → title/author = "Unknown", файл всё равно создаётся
 
+## Frames
+
+- `--frames` извлекает PNG кадры по таймстампам чаптеров (1 кадр = начало чаптера)
+- `--frames-interval N` — кадр каждые N секунд внутри каждого чаптера (например, 30 = кадр каждые 30 сек)
+- Кадры сохраняются в `frames/` рядом с транскриптом
+- Именование: `{video_id}-{chapter}-{timestamp}.png`
+- Требует `yt-dlp` и `ffmpeg` на PATH
+- **On-demand only** — кадры не извлекаются по умолчанию
+
 ## Зависимости
 
 - `youtube-transcript-api` (в h2t venv, установится через /h2t:setup)
+- `yt-dlp` (в h2t venv, установится через /h2t:setup)
+- `ffmpeg` (должен быть на PATH)
 - `python-dotenv` (pip install python-dotenv)

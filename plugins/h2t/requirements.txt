@@ -26,3 +26,4 @@ pyyaml>=6.0
 
 # YouTube
 youtube-transcript-api>=0.6
+yt-dlp>=2024.0
