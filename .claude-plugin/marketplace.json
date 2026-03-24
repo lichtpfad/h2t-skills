@@ -16,6 +16,17 @@
       "source": "./plugins/h2t",
       "category": "productivity",
       "strict": false
+    },
+    {
+      "name": "creative-thinking",
+      "description": "Creative problem-solving using frameworks from Dmitriy Chernyshov's course. 57 frameworks, 310 cases, 153 principles.",
+      "version": "0.1.0",
+      "author": {
+        "name": "lichtpfad"
+      },
+      "source": "./plugins/creative-thinking",
+      "category": "productivity",
+      "strict": false
     }
   ]
 }
