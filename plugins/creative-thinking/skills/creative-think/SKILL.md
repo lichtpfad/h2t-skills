@@ -223,6 +223,20 @@ When generating ideas, channel Dmitriy's approach:
 
 ---
 
+## Eval Tracking
+
+Graph queries are automatically tracked via hooks. Each `h2t graph --source creative` call
+is logged with nodes_returned and tokens_estimate. Session logs are saved to
+`~/.h2t/evals/creative-thinking/sessions/` on session end.
+
+To view analytics:
+```bash
+python C:/dev/creative-thinking/evals/eval_analyze.py
+python C:/dev/creative-thinking/evals/eval_analyze.py --last 5
+```
+
+---
+
 ## Error Handling
 
 - If `h2t graph` fails: fall back to the 6 core frameworks listed above
