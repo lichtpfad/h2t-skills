@@ -37,8 +37,8 @@ Need full page content from search results?
        → WebFetch failed? → firecrawl scrape (last resort)
   NO ↓
 
-Semantic/conceptual search?
-  YES → exa-ai (if available, else WebSearch)
+Semantic/conceptual search (not keyword-friendly)?
+  YES → exa-ai (neural search, API credits)
   NO ↓
 
 Nothing found?
@@ -72,9 +72,30 @@ firecrawl scrape "<url>" -o .firecrawl/research.md
 **Try WebFetch first.** It's free and works for most pages.
 **Do NOT use `firecrawl search`.** Use WebSearch instead — it's free.
 
-#### exa-ai (when available)
-Semantic search API. Better than keyword search for conceptual queries.
-Currently not configured — skip this adapter until API key is set up.
+#### exa-ai (API credits)
+Semantic search — finds conceptually similar content, not just keyword matches.
+API key is set via `$EXA_API_KEY` environment variable.
+
+Use when:
+- Conceptual/semantic queries ("approaches to reducing cognitive load in education")
+- WebSearch returns too many irrelevant keyword matches
+- You need academic or deep technical sources
+
+```bash
+curl -s "https://api.exa.ai/search" \
+  -H "x-api-key: $EXA_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"query": "<semantic query>", "numResults": 5, "type": "neural"}' | python -c "
+import sys, json
+data = json.load(sys.stdin)
+for r in data.get('results', []):
+    print(f\"[{r.get('title','')}]({r.get('url','')})  score={r.get('score',0):.2f}\")
+    print(f\"  {r.get('text','')[:200]}\")
+    print()
+"
+```
+
+Priority: WebSearch (free) → exa-ai (when semantic needed) → WebFetch → firecrawl (last resort).
 
 #### manual (ask user)
 When no tool can answer, output a clear question:
