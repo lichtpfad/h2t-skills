@@ -123,9 +123,71 @@ Return structured research results:
 - Credits used: 0 (WebSearch) / N (firecrawl)
 ```
 
+## Persisting Research
+
+**ALWAYS save research results to disk.** Re-running the same search wastes tokens and credits.
+
+### Storage location
+
+```
+.research/
+├── {topic-slug}-{date}.md          ← full research report
+├── {topic-slug}-{date}.sources.json ← structured source data
+└── ...
+```
+
+### Naming convention
+
+```
+{topic-slug}-{YYYY-MM-DD}.md
+```
+
+- `topic-slug`: lowercase, hyphens, max 50 chars, derived from the research topic
+- Examples:
+  - `teachable-agent-mvp-2026-03-25.md`
+  - `edtech-dropout-rates-2026-03-25.md`
+  - `ai-tutoring-competitors-2026-03-25.md`
+
+### What to save
+
+The `.md` file contains the full output format (see above): sources, key findings, adapter used.
+
+The `.sources.json` file contains structured data for programmatic access:
+
+```json
+{
+  "topic": "teachable agent MVP",
+  "date": "2026-03-25",
+  "adapter": "WebSearch",
+  "queries": ["teachable agent education", "protégé effect AI"],
+  "credits_used": 0,
+  "sources": [
+    {"title": "...", "url": "...", "summary": "..."}
+  ]
+}
+```
+
+### Before searching
+
+**Check if research already exists:**
+```bash
+ls .research/*{keyword}* 2>/dev/null
+```
+
+If a recent (< 7 days) research file matches the topic, **read it instead of re-searching**. Tell the caller: "Found existing research from [date], using cached results."
+
+### Adding .research/ to .gitignore
+
+If `.research/` is not in `.gitignore`, add it:
+```bash
+echo ".research/" >> .gitignore 2>/dev/null
+```
+
 ## Rules
 
 - **NEVER run research without the calling skill confirming user consent**
+- **ALWAYS persist results to `.research/`** — never discard findings
+- **CHECK for existing research** before making new queries
 - Start cheap: WebSearch first, escalate only if insufficient
 - For `depth: quick` — 1-2 sources, stop early
 - For `depth: deep` — 3-5 sources, cross-reference findings
