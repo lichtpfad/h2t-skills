@@ -83,11 +83,17 @@ Use `--format json` when you need structured data. Default is human-readable.
 
 Parse the user's problem. Identify:
 - **Domain:** what area is this about?
+- **Problem type:** `strategic` (business model, positioning, go-to-market) / `technical` (how to build a feature) / `creative` (what should this be)
 - **Constraint:** what limits exist?
 - **Goal:** what does success look like?
 - **Keywords:** 2-5 terms for graph search
 
-If the problem is vague, ask ONE clarifying question before proceeding.
+**Problem type matters for framework application:**
+- `strategic` → frameworks apply to the BUSINESS (e.g., Вычитание = what's the most expensive part of your business model to remove?)
+- `technical` → frameworks apply to the PRODUCT (e.g., Декомпозиция = break the feature into atoms)
+- `creative` → frameworks apply to the CONCEPT (e.g., Инверсия = what if the opposite were true?)
+
+If the problem is vague, ask ONE clarifying question before proceeding. If unsure about problem type, default to `strategic` — users usually want business insight, not implementation advice.
 
 ### [2] LOOKUP — Graph Query
 

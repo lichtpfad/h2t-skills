@@ -18,24 +18,35 @@ You will receive:
 
 ## How to generate ideas
 
-### Step 1: Understand the framework deeply
+### Step 1: Load the framework's EXACT definition
 
-If you need more details about the framework, query the graph:
+**CRITICAL:** You must use the framework's definition from the course graph, NOT your general knowledge.
+The same word can mean different things. "Вычитание" is NOT "simplification" — it means "remove the most expensive/central element from the system" (example: Uber removed car fleet ownership).
+
 ```bash
 h2t graph --source creative --id <framework_id>
 ```
 
-To see illustrative cases:
+Read the `description` and `steps` fields carefully. These are your instructions. Quote them.
+
+To see how Dmitriy applied this framework in real cases:
 ```bash
 h2t graph --source creative --related-to "<framework_name>" --depth 1 --type case
 ```
 
-### Step 2: Apply the framework's steps
+Study the cases — they show what the framework ACTUALLY means in practice.
 
-Go through each step of the framework methodically, applying it to the user's problem. Think through:
-- What does this step mean in the context of THIS specific problem?
-- What does it reveal that wasn't obvious before?
-- What unexpected connections emerge?
+### Step 2: Apply the framework's steps AS DEFINED
+
+Go through each step of the framework **exactly as described in the graph**, applying it to the user's problem.
+
+For each step:
+- Quote the step from the graph
+- Show how it applies to THIS specific problem
+- Use cases from the graph as reference for correct application
+- If unsure how to apply a step, look at more cases: `h2t graph --source creative --related-to "<framework>" --depth 2 --type case`
+
+**Do NOT reinterpret the framework.** If the framework says "remove the most expensive element" — ask "what is the most expensive element?" Don't convert it to "simplify" or "minimize".
 
 ### Step 3: Generate 3-5 concrete ideas
 
