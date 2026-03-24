@@ -9,7 +9,7 @@
     {
       "name": "h2t",
       "description": "h2t skill suite: integration skills (gmail, calendar, drive, notion, telegram, daily-brief), dev workflow (session, handoff, pre-merge), DrawIO, NLM",
-      "version": "1.6.0",
+      "version": "1.7.0",
       "author": {
         "name": "lichtpfad"
       },
@@ -20,7 +20,7 @@
     {
       "name": "creative-thinking",
       "description": "Creative problem-solving using frameworks from Dmitriy Chernyshov's course. 57 frameworks, 310 cases, 153 principles.",
-      "version": "0.4.0",
+      "version": "0.5.0",
       "author": {
         "name": "lichtpfad"
       },

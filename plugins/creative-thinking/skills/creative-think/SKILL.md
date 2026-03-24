@@ -120,7 +120,11 @@ If search returns no results, try synonym keywords. If still nothing, fall back 
 
 Ask the user: "Хочешь, я поищу дополнительный контекст по [topic]? (web search / пропустить)"
 
-If yes, use available search tools (firecrawl, web search) to gather context.
+If yes, dispatch to the `research-agent` (h2t plugin) with:
+- **topic:** the specific aspect that needs external context
+- **depth:** `quick` for background, `deep` for competitive analysis or technical details
+- **context:** the problem statement and selected frameworks
+
 If no or no response in context, proceed without research.
 
 **NEVER run research without user confirmation.**
