@@ -23,26 +23,27 @@ If the user provides just a problem description without flags, use defaults.
 
 ---
 
-## Tool: h2t graph
+## Tool: h2t graph --source creative
 
-The context graph is accessed via the `h2t` CLI:
+The creative thinking context graph is accessed via the `h2t` CLI.
+**IMPORTANT:** Always include `--source creative` — without it, the default is TouchDesigner operators.
 
 ```bash
-h2t graph <args>
+h2t graph --source creative <args>
 ```
 
 ### Decision guide
 
 | Goal | Command |
 |------|---------|
-| Find what graph knows about a topic | `h2t graph --search "<keywords>"` |
-| Find frameworks for a problem (MAIN) | `h2t graph --related-to "<topic>" --depth 2 --type framework` |
-| Get direct neighbors of a node | `h2t graph --related-to "<topic>" --depth 1` |
-| List all nodes of a type | `h2t graph --type framework` |
-| Get frameworks from a specific lesson | `h2t graph --lesson lesson_03 --type framework` |
-| Get full node details | `h2t graph --id <node_id>` |
-| Get cases for a framework | `h2t graph --related-to "<framework>" --depth 1 --type case` |
-| Full decision guide | `h2t graph --agent-guide` |
+| Find what graph knows about a topic | `h2t graph --source creative --search "<keywords>"` |
+| Find frameworks for a problem (MAIN) | `h2t graph --source creative --related-to "<topic>" --depth 2 --type framework` |
+| Get direct neighbors of a node | `h2t graph --source creative --related-to "<topic>" --depth 1` |
+| List all nodes of a type | `h2t graph --source creative --type framework` |
+| Get frameworks from a specific lesson | `h2t graph --source creative --lesson lesson_03 --type framework` |
+| Get full node details | `h2t graph --source creative --id <node_id>` |
+| Get cases for a framework | `h2t graph --source creative --related-to "<framework>" --depth 1 --type case` |
+| Full decision guide | `h2t graph --agent-guide  # shows guide for ALL graph sources` |
 
 Use `--format json` when you need structured data. Default is human-readable.
 
@@ -97,10 +98,10 @@ Run graph queries to find relevant frameworks:
 h2t graph --search "<keyword>"
 
 # Step 2: Find frameworks (the main query)
-h2t graph --related-to "<best concept>" --depth 2 --type framework
+h2t graph --source creative --related-to "<best concept>" --depth 2 --type framework
 
 # Step 3: Get full details for selected frameworks
-h2t graph --id <framework_id>
+h2t graph --source creative --id <framework_id>
 ```
 
 Select **3-5 frameworks** that best match the problem. If `--frameworks` was specified, use those instead.
@@ -142,7 +143,7 @@ For each selected framework, generate ideas through its lens.
 
 For each framework, think through:
 1. Apply the framework's steps to the user's problem
-2. Use related cases from the graph as inspiration (run `h2t graph --related-to "<framework>" --depth 1 --type case` if needed)
+2. Use related cases from the graph as inspiration (run `h2t graph --source creative --related-to "<framework>" --depth 1 --type case` if needed)
 3. Generate concrete, actionable ideas — not abstract advice
 4. Each idea must be specific enough to act on tomorrow
 
