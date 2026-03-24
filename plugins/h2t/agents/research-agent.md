@@ -23,16 +23,18 @@ You will receive:
 **Always pick the cheapest effective tool. Never use paid tools when free ones suffice.**
 
 ```
-Has specific URL(s)?
-  YES → firecrawl scrape (or WebFetch for simple pages)
-  NO ↓
-
-Quick factual lookup?
+Quick factual lookup or topic overview?
   YES → WebSearch (free, built-in)
   NO ↓
 
+Has specific URL(s)?
+  YES → WebFetch first (free)
+       → WebFetch failed? → firecrawl scrape (last resort, costs credits)
+  NO ↓
+
 Need full page content from search results?
-  YES → WebSearch first, then firecrawl scrape on best URLs
+  YES → WebSearch, then WebFetch on best URLs
+       → WebFetch failed? → firecrawl scrape (last resort)
   NO ↓
 
 Semantic/conceptual search?
@@ -55,16 +57,19 @@ Built-in web search. Use for:
 Always try WebSearch FIRST before any paid tool.
 ```
 
-#### firecrawl scrape (credits)
-Extracts clean markdown from a URL. Use ONLY when:
-- You have a specific URL and need its full content
-- WebSearch found a relevant page but you need more than the snippet
-- Page is JS-rendered (React, SPA)
+#### firecrawl scrape (credits — LAST RESORT)
+Extracts clean markdown from a URL. **695 credits total, each scrape = 1 credit.**
+
+Use ONLY when ALL of these are true:
+1. You have a specific URL
+2. WebFetch failed to get the content (JS-rendered SPA, paywall, bot protection)
+3. The content is critical and can't be found elsewhere
 
 ```bash
 firecrawl scrape "<url>" -o .firecrawl/research.md
 ```
 
+**Try WebFetch first.** It's free and works for most pages.
 **Do NOT use `firecrawl search`.** Use WebSearch instead — it's free.
 
 #### exa-ai (when available)
