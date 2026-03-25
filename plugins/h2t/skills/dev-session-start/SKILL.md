@@ -4,12 +4,12 @@ description: Use when starting a coding or product development session. Triggers
 compatibility: "Claude Code"
 metadata:
   author: lichtpfad
-  version: 2.7.0
+  version: 2.8.0
 ---
 
 # Instructions
 
-When this skill is invoked, dispatch a subagent to gather context, show the briefing, name the session, post a GitHub comment.
+When this skill is invoked, the PreToolUse hook has already run gather.py. Use the gathered data to build and show a session briefing, name the session, post a GitHub comment.
 
 **Paired with:** `h2t:handoff` (SAVE at end) — this skill is LOAD at start.
 
@@ -18,36 +18,59 @@ When this skill is invoked, dispatch a subagent to gather context, show the brie
 ## Variables
 
 ```bash
-# Cross-platform h2t venv detection
 H2T_PYTHON="${H2T_PYTHON:-}"
 if [ -z "$H2T_PYTHON" ]; then
   [ -f "$HOME/.h2t/venv/bin/python" ] && H2T_PYTHON="$HOME/.h2t/venv/bin/python"
   [ -f "$HOME/.h2t/venv/Scripts/python.exe" ] && H2T_PYTHON="$HOME/.h2t/venv/Scripts/python.exe"
 fi
-[ -z "$H2T_PYTHON" ] && echo "ERROR: h2t venv not found. Run /h2t:setup" && exit 1
-
-GATHER="$H2T_PYTHON ${CLAUDE_SKILL_DIR}/scripts/gather.py"
 ```
 
 ## Procedure
 
-### Step 1: Gather Context (via subagent)
+### Step 1: Use Gathered Data
 
-Dispatch agent:
-- subagent_type: `h2t:session-gatherer`
-- model: haiku
-- prompt: include the resolved values of GATHER and cwd:
+The PreToolUse hook already ran gather.py before this skill loaded. Look for `GATHER_DATA:` in the hook output or system messages from this conversation. It contains a JSON object with:
+- `project.id`, `project.domain`, `git.branch`, `git.status`, `git.log`
+- `github.issues`, `github.milestones`, `github.current_milestone`, `github.prs`, `github.bugs`
+- `stack.name`, `sessions`, `machine`
 
-"Gather project context and return formatted session briefing.
-gather_cmd: {resolved GATHER value}
-cwd: {resolved pwd value}"
+If you see `GATHER_ERROR:` instead — show the error to the user and stop.
+
+**Do NOT run git, gh, or any other gather commands manually.** All data is already collected.
+
+Also read:
+- Session handoff files listed in `sessions[]` (max 2 most recent, key decisions only)
+- User context from `user.core_path` if present
+- `<memory_dir>/MEMORY.md` for stable lessons
 
 ### Step 2: Show Briefing
 
-Display the agent's response verbatim to the user.
-The agent's response IS the briefing — no reformatting needed.
-If response starts with "ERROR:" — show the error and stop.
-Do NOT ask questions in this step.
+Format and display the briefing. Do NOT ask questions in this step.
+
+```markdown
+## Project: {project.id} ({git.branch})
+
+**Stack:** {stack.name}
+**Milestone:** {github.current_milestone.title} — {open}/{total} issues
+
+### Open Tasks (from GitHub)
+- P0: #{N} {title}...
+- Bugs: #{N} {title}...
+
+### Uncommitted Work
+{git.status or "clean"}
+
+### Open PRs
+{github.prs or "none"}
+
+### Context from last session
+{key decisions from handoff files — omit if none}
+```
+
+**Rules:**
+- GitHub issues are source of truth. Never copy "What Remains" from handoff as tasks.
+- If handoff mentions a now-closed issue — omit it.
+- Context section is optional — only include if non-obvious decisions exist.
 
 ### Step 3: Name Session + Choose Direction
 
@@ -116,8 +139,9 @@ Create TodoWrite tasks from chosen work items.
 
 | Mistake | Fix |
 |---------|-----|
-| Running git/gh manually instead of dispatching agent | Step 1 is agent dispatch ONLY |
-| Reformatting agent response | Show verbatim — agent already formatted it |
+| Running git/gh/gather manually | Hook already collected all data. Use GATHER_DATA from system messages |
+| Ignoring GATHER_DATA in system messages | The hook output IS the data source. Parse and use it |
 | Asking questions before naming | Step 2 is data-only. Questions go in Step 3 GATE |
 | Start coding without naming session | Name first — handoff path depends on it |
 | Guess session ID | Extract from actual jsonl file path in Step 4 |
+| Trust handoff "What Remains" as task list | Use GitHub open issues — handoff is a stale snapshot |

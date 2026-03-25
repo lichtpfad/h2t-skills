@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+# PreToolUse hook: run gather.py when dev-session-start skill is invoked.
+# Returns gather JSON as systemMessage so Claude has data before processing the skill.
+set -euo pipefail
+
+input=$(cat)
+skill=$(echo "$input" | jq -r '.tool_input.skill // ""')
+cwd=$(echo "$input" | jq -r '.cwd // "."')
+
+# Only fire for dev-session-start
+[[ "$skill" != *"dev-session-start"* ]] && exit 0
+
+# Detect python (same logic as other hooks)
+H2T_PYTHON="${H2T_PYTHON:-}"
+if [ -z "$H2T_PYTHON" ]; then
+  if [ -f "$HOME/.h2t/venv/Scripts/python.exe" ]; then
+    H2T_PYTHON="$HOME/.h2t/venv/Scripts/python.exe"
+  elif [ -f "$HOME/.h2t/venv/bin/python" ]; then
+    H2T_PYTHON="$HOME/.h2t/venv/bin/python"
+  fi
+fi
+
+if [ -z "$H2T_PYTHON" ]; then
+  echo '{"systemMessage": "GATHER_ERROR: h2t venv not found. Run /h2t:setup"}'
+  exit 0
+fi
+
+# Find gather.py relative to plugin root
+GATHER_PY="${CLAUDE_PLUGIN_ROOT}/skills/dev-session-start/scripts/gather.py"
+if [ ! -f "$GATHER_PY" ]; then
+  echo '{"systemMessage": "GATHER_ERROR: gather.py not found at '"$GATHER_PY"'"}'
+  exit 0
+fi
+
+# Run gather.py and capture output
+RESULT=$("$H2T_PYTHON" "$GATHER_PY" --cwd "$cwd" 2>/dev/null) || true
+
+if [ -z "$RESULT" ]; then
+  echo '{"systemMessage": "GATHER_ERROR: gather.py returned empty output"}'
+  exit 0
+fi
+
+# Validate it's JSON
+echo "$RESULT" | jq . >/dev/null 2>&1 || {
+  echo '{"systemMessage": "GATHER_ERROR: gather.py returned invalid JSON"}'
+  exit 0
+}
+
+# Build final output via python for reliable JSON-in-JSON escaping
+"$H2T_PYTHON" -c "
+import sys, json
+raw = sys.stdin.read().strip()
+output = {'systemMessage': 'GATHER_DATA: ' + raw}
+print(json.dumps(output))
+" <<< "$RESULT"
+exit 0
