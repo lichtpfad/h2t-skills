@@ -131,22 +131,23 @@ Return structured research results:
 
 ```
 .research/
-├── {topic-slug}-{date}.md          ← full research report
-├── {topic-slug}-{date}.sources.json ← structured source data
+├── {project}-{topic-slug}-{date}.md          ← full research report
+├── {project}-{topic-slug}-{date}.sources.json ← structured source data
 └── ...
 ```
 
 ### Naming convention
 
 ```
-{topic-slug}-{YYYY-MM-DD}.md
+{project}-{topic-slug}-{YYYY-MM-DD}.md
 ```
 
+- `project`: current project/repo name (e.g., `nexus`, `hou2touch`, `creative-thinking`)
 - `topic-slug`: lowercase, hyphens, max 50 chars, derived from the research topic
 - Examples:
-  - `teachable-agent-mvp-2026-03-25.md`
-  - `edtech-dropout-rates-2026-03-25.md`
-  - `ai-tutoring-competitors-2026-03-25.md`
+  - `nexus-teachable-agent-mvp-2026-03-25.md`
+  - `nexus-edtech-dropout-rates-2026-03-25.md`
+  - `hou2touch-ai-tutoring-competitors-2026-03-25.md`
 
 ### What to save
 
