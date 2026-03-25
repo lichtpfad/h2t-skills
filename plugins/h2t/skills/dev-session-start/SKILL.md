@@ -40,27 +40,13 @@ digraph session_start {
 }
 ```
 
-### Steps 1–4: Gather Context (single call)
+### Steps 1–4: Gather Context (auto-collected)
 
-⛔ **MANDATORY:** Run gather.py as the FIRST and ONLY command for context collection. Do NOT run individual git/gh commands — gather.py collects everything in parallel in ~1 second.
+**Gathered context:**
 
-All project context is collected in one command:
+!`H2T_PYTHON="${H2T_PYTHON:-}"; [ -z "$H2T_PYTHON" ] && [ -f "$HOME/.h2t/venv/Scripts/python.exe" ] && H2T_PYTHON="$HOME/.h2t/venv/Scripts/python.exe"; [ -z "$H2T_PYTHON" ] && [ -f "$HOME/.h2t/venv/bin/python" ] && H2T_PYTHON="$HOME/.h2t/venv/bin/python"; [ -z "$H2T_PYTHON" ] && H2T_PYTHON="python3"; $H2T_PYTHON "${CLAUDE_PLUGIN_ROOT}/skills/dev-session-start/gather.py" --cwd "$(pwd)" 2>/dev/null || echo '{"error": "gather.py failed"}'`
 
-```bash
-# Cross-platform h2t venv detection
-H2T_PYTHON="${H2T_PYTHON:-}"
-if [ -z "$H2T_PYTHON" ]; then
-  [ -f "$HOME/.h2t/venv/bin/python" ] && H2T_PYTHON="$HOME/.h2t/venv/bin/python"
-  [ -f "$HOME/.h2t/venv/Scripts/python.exe" ] && H2T_PYTHON="$HOME/.h2t/venv/Scripts/python.exe"
-fi
-[ -z "$H2T_PYTHON" ] && H2T_PYTHON="python3"
-
-$H2T_PYTHON "${CLAUDE_PLUGIN_ROOT}/skills/dev-session-start/gather.py" \
-  --memory-dir "<memory_dir>" \
-  --cwd "$(pwd)"
-```
-
-This returns JSON with all context in ~1 second:
+The JSON above contains all project context:
 - `project` — identity (domain, type, github remote) from any directory
 - `user` — about-me context paths (core.md + domain-dependent deep paths)
 - `git` — branch, status, log, stash (if git repo)
@@ -70,7 +56,7 @@ This returns JSON with all context in ~1 second:
 - `session_id` — Claude session ID for resume
 - `machine` — hostname
 
-Parse the JSON and use it for Step 5 presentation.
+Use this data for Step 5 presentation. Do NOT run git/gh commands to re-collect it.
 
 **After gather, also:**
 - Read session handoff files listed in `result.sessions[]` — extract Key Decisions and Critical Context only (NOT task lists)

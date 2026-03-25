@@ -38,22 +38,11 @@ digraph handoff_save {
 
 **CRITICAL: Only write what you can verify.**
 
-⛔ **MANDATORY:** Run gather.py as the FIRST and ONLY command for context collection. Do NOT run individual git/gh commands — gather.py collects everything in parallel in ~200ms.
+**Gathered context (auto-collected):**
 
-```bash
-H2T_PYTHON="${H2T_PYTHON:-}"
-if [ -z "$H2T_PYTHON" ]; then
-  [ -f "$HOME/.h2t/venv/bin/python" ] && H2T_PYTHON="$HOME/.h2t/venv/bin/python"
-  [ -f "$HOME/.h2t/venv/Scripts/python.exe" ] && H2T_PYTHON="$HOME/.h2t/venv/Scripts/python.exe"
-fi
-[ -z "$H2T_PYTHON" ] && H2T_PYTHON="python3"
+!`H2T_PYTHON="${H2T_PYTHON:-}"; [ -z "$H2T_PYTHON" ] && [ -f "$HOME/.h2t/venv/Scripts/python.exe" ] && H2T_PYTHON="$HOME/.h2t/venv/Scripts/python.exe"; [ -z "$H2T_PYTHON" ] && [ -f "$HOME/.h2t/venv/bin/python" ] && H2T_PYTHON="$HOME/.h2t/venv/bin/python"; [ -z "$H2T_PYTHON" ] && H2T_PYTHON="python3"; $H2T_PYTHON "${CLAUDE_PLUGIN_ROOT}/skills/handoff/gather.py" --cwd "$(pwd)" 2>/dev/null || echo '{"error": "gather.py failed"}'`
 
-$H2T_PYTHON "${CLAUDE_PLUGIN_ROOT}/skills/handoff/gather.py" \
-  --memory-dir "<memory_dir>" \
-  --cwd "$(pwd)"
-```
-
-This returns JSON with all needed context: `project` (identity, domain), `git` (branch, status, log), `session_id`, `machine`. Parse and use — do NOT re-run git commands separately.
+The JSON above contains all project context: `project` (identity, domain), `git` (branch, status, log), `session_id`, `machine`. Use this data — do NOT run git/gh commands to re-collect it.
 
 **Scope:** "What Was Done" describes THIS SESSION only. Use conversation context, not `git diff HEAD~N`.
 
