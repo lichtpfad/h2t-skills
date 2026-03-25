@@ -23,6 +23,39 @@ If the user provides just a problem description without flags, use defaults.
 
 ---
 
+## Step [0]: BRIEF (before pipeline)
+
+**Before running the pipeline**, offer the user a choice:
+
+> "Хочешь уточнить запрос перед запуском? Это поможет точнее подобрать фреймворки и сэкономить токены.
+> - **brief** — я задам 3-5 вопросов, потом запущу pipeline
+> - **skip** — запускаю сразу с тем, что есть"
+
+If the user says "brief" (or similar), ask these questions **one at a time**:
+
+1. **Тип задачи:** "Это стратегический вопрос (бизнес-модель, позиционирование), технический (как построить) или креативный (что это должно быть)?"
+2. **Scope:** "Это привязано к конкретному проекту/продукту или domain-agnostic размышление?"
+3. **Ограничения:** "Какие жёсткие ограничения? (бюджет, время, команда, технологии)"
+4. **Что уже пробовали:** "Какие подходы уже рассматривали или отвергли?"
+5. **Критерий успеха:** "По какому признаку ты поймёшь, что идея хорошая?"
+
+After collecting answers, **reformulate the problem** as a structured brief and show it:
+
+> "Вот как я понял задачу:
+> - Тип: [strategic/technical/creative]
+> - Scope: [specific project / domain-agnostic]
+> - Проблема: [reformulated in 1-2 sentences]
+> - Ограничения: [list]
+> - Критерий: [what success looks like]
+>
+> Запускаю? (да / поправить)"
+
+Only then proceed to the pipeline.
+
+If the user says "skip" — proceed directly to [1] UNDERSTAND.
+
+---
+
 ## Tool: h2t graph --source creative
 
 The creative thinking context graph is accessed via the `h2t` CLI.
