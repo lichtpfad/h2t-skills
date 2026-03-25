@@ -130,11 +130,13 @@ Return structured research results:
 ### Storage location
 
 ```
-.research/
+~/.h2t/research/
 ├── {project}-{topic-slug}-{date}.md          ← full research report
 ├── {project}-{topic-slug}-{date}.sources.json ← structured source data
 └── ...
 ```
+
+Create if missing: `mkdir -p ~/.h2t/research`
 
 ### Naming convention
 
@@ -172,7 +174,7 @@ The `.sources.json` file contains structured data for programmatic access:
 
 **Check if research already exists:**
 ```bash
-ls .research/*{keyword}* 2>/dev/null
+ls ~/.h2t/research/*{keyword}* 2>/dev/null
 ```
 
 If a recent (< 7 days) research file matches the topic, **read it instead of re-searching**. Tell the caller: "Found existing research from [date], using cached results."
@@ -181,7 +183,7 @@ If a recent (< 7 days) research file matches the topic, **read it instead of re-
 
 If `.research/` is not in `.gitignore`, add it:
 ```bash
-echo ".research/" >> .gitignore 2>/dev/null
+# No .gitignore needed — storage is in ~/.h2t/research/, not in repo
 ```
 
 ## Rules
