@@ -72,6 +72,16 @@ Format and display the briefing. Do NOT ask questions in this step.
 - If handoff mentions a now-closed issue — omit it.
 - Context section is optional — only include if non-obvious decisions exist.
 
+**Actionable hints for missing data** — append to briefing when applicable:
+
+| Condition | Hint |
+|-----------|------|
+| `project.id == "unknown"` | "Repo not registered. Add to `~/.h2t/config/repo-mapping.yaml` for project identity." |
+| `github.issues == []` and repo has GitHub | "No open issues. Create with `/h2t:github-issues` or `gh issue create`." |
+| `sessions == []` | "No previous sessions found. This is a fresh start." |
+| `stack.name == "none"` | "Stack not detected. Add `pyproject.toml`, `package.json`, or `Cargo.toml` if applicable." |
+| No CLAUDE.md in project root | "No CLAUDE.md found. Run `/init` to set up project instructions." |
+
 ### Step 3: Name Session + Choose Direction
 
 ⛔ **MANDATORY GATE** — Do NOT skip. Handoff file paths depend on session name.
