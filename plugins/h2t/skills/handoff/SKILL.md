@@ -36,31 +36,14 @@ digraph handoff_save {
 
 ### Step 1: Gather Facts (DO NOT HALLUCINATE)
 
-**CRITICAL: Only write what you can verify.**
-
-## CLI
+**CRITICAL: Only write what you can verify.** Run these commands:
 
 ```bash
-# Cross-platform h2t venv detection
-H2T_PYTHON="${H2T_PYTHON:-}"
-if [ -z "$H2T_PYTHON" ]; then
-  [ -f "$HOME/.h2t/venv/bin/python" ] && H2T_PYTHON="$HOME/.h2t/venv/bin/python"
-  [ -f "$HOME/.h2t/venv/Scripts/python.exe" ] && H2T_PYTHON="$HOME/.h2t/venv/Scripts/python.exe"
-fi
-[ -z "$H2T_PYTHON" ] && echo "ERROR: h2t venv not found. Run /h2t:setup" && exit 1
-
-GATHER="$H2T_PYTHON ${CLAUDE_SKILL_DIR}/scripts/gather.py"
+git remote get-url origin 2>/dev/null   # repo
+git branch --show-current               # branch
+git log --oneline -1                    # last commit
+git status --short                      # uncommitted changes
 ```
-
-Collect all project context in one call:
-
-```bash
-$GATHER --cwd "$(pwd)"
-```
-
-This returns JSON with: `project` (identity, domain), `git` (branch, status, log, stash), `session_id`, `machine`.
-
-Use the JSON output for all subsequent steps. Extract `git.branch`, `git.status`, `git.log`, `project.domain`, `machine` from the result.
 
 **Scope:** "What Was Done" describes THIS SESSION only. Use conversation context, not `git diff HEAD~N`.
 

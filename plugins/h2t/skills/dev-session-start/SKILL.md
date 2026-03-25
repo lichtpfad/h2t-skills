@@ -42,44 +42,66 @@ digraph session_start {
 
 ### Steps 1–4: Gather Context
 
-## CLI
+```bash
+git remote get-url origin 2>/dev/null   # → repo name
+git branch --show-current               # → current branch
+git log --oneline -5                    # → recent commits
+git status --short                      # → uncommitted work
+```
+
+Extract `owner/repo` from remote URL for `gh` commands.
+
+**Project filter:** if `.claude/project-id` exists in current directory, filter issues by that project label:
 
 ```bash
-# Cross-platform h2t venv detection
-H2T_PYTHON="${H2T_PYTHON:-}"
-if [ -z "$H2T_PYTHON" ]; then
-  [ -f "$HOME/.h2t/venv/bin/python" ] && H2T_PYTHON="$HOME/.h2t/venv/bin/python"
-  [ -f "$HOME/.h2t/venv/Scripts/python.exe" ] && H2T_PYTHON="$HOME/.h2t/venv/Scripts/python.exe"
+PROJECT_LABEL=""
+if [ -f ".claude/project-id" ]; then
+  PID=$(tr -d '[:space:]' < .claude/project-id)
+  [ -n "$PID" ] && PROJECT_LABEL="--label project:$PID"
 fi
-[ -z "$H2T_PYTHON" ] && echo "ERROR: h2t venv not found. Run /h2t:setup" && exit 1
-
-GATHER="$H2T_PYTHON ${CLAUDE_SKILL_DIR}/scripts/gather.py"
 ```
 
-Collect all project context in one call:
+Run in parallel:
 
 ```bash
-$GATHER --cwd "$(pwd)"
+gh api repos/{owner}/{repo}/milestones --jq '.[] | select(.state=="open") | {title, open_issues}'
+gh issue list --state open $PROJECT_LABEL --json number,title,labels --limit 20
+gh issue list --state open --label "bug" $PROJECT_LABEL --json number,title --limit 10
+gh pr list --state open --json number,title,headRefName
 ```
 
-This returns JSON with all context:
-- `project` — identity (domain, type, github remote) from any directory
-- `user` — about-me context paths (core.md + domain-dependent deep paths)
-- `git` — branch, status, log, stash (if git repo)
-- `github` — issues, milestones, PRs, bugs (if github remote exists)
-- `stack` — detected stack and commands
-- `sessions` — handoff file paths across all machines
-- `session_id` — Claude session ID for resume
-- `machine` — hostname
+Pick the milestone with most open issues as "current". Then load its tasks:
 
-Use the JSON output for Step 5 presentation. Extract fields from the result.
+```bash
+gh issue list --milestone "<current milestone title>" --state open $PROJECT_LABEL --json number,title,labels
+```
 
-**After gather, also:**
-- Read session handoff files listed in `result.sessions[]` — extract Key Decisions and Critical Context only (NOT task lists)
-- Read `<memory_dir>/MEMORY.md` for stable lessons
-- Read `result.user.core_path` if it exists — user context for the session
+Auto-detect stack from project files:
 
-Check CLAUDE.md for `## Stack Config` override section. If present, use those commands instead of `result.stack.commands`.
+| File | Stack |
+|------|-------|
+| `package.json` | JS/TS → `npm test`, `npm audit`, `npm run build` |
+| `pyproject.toml` | Python → `pytest`, `pip-audit`, `ruff check` |
+| `Cargo.toml` | Rust → `cargo test`, `cargo audit`, `cargo clippy` |
+| `go.mod` | Go → `go test`, `govulncheck` |
+
+Check CLAUDE.md for `## Stack Config` override section. If present, use those commands instead.
+
+Also read `<memory_dir>/MEMORY.md` for stable lessons.
+
+Determine repo name, then read session files for this repo across ALL machines:
+
+```bash
+REPO=$(basename "$(git remote get-url origin 2>/dev/null)" .git 2>/dev/null || basename "$(pwd)")
+ls ~/.dor/sessions/*/"$REPO"/*.md 2>/dev/null
+```
+
+**Extract from handoff files — CONTEXT ONLY:**
+- Key Decisions and rationale
+- Critical Context / подводные камни
+
+**Do NOT use from handoff files:**
+- "What Remains" task lists — these are stale snapshots. GitHub issues are the truth.
 
 ### Step 5: Present Summary
 
