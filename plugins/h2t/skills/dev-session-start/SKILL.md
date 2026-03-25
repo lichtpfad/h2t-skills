@@ -36,7 +36,7 @@ The PreToolUse hook already ran gather.py before this skill loaded. Look for `GA
 
 If you see `GATHER_ERROR:` instead — show the error to the user and stop.
 
-**Do NOT run git, gh, or any other gather commands manually.** All data is already collected.
+**Do NOT run git, gh, or any other gather commands manually.** All data is already collected. Empty fields (`[]`, `""`, `null`) mean no data exists for that category — this is normal for small or new repos. Do NOT attempt to fill empty fields with manual commands.
 
 Also read:
 - Session handoff files listed in `sessions[]` (max 2 most recent, key decisions only)
