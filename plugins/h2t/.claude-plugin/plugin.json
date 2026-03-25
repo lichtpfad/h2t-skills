@@ -1,7 +1,7 @@
 {
   "name": "h2t",
   "description": "h2t skill suite for lichtpfad: dev workflow (session start, handoff, pre-merge, milestone), DrawIO, diagram annotation, NLM, node research, and GitHub issue management.",
-  "version": "2.6.3",
+  "version": "2.7.0",
   "author": {
     "name": "lichtpfad"
   },
