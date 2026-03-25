@@ -53,7 +53,7 @@ if [ -z "$H2T_PYTHON" ]; then
 fi
 [ -z "$H2T_PYTHON" ] && echo "ERROR: h2t venv not found. Run /h2t:setup" && exit 1
 
-GATHER="$H2T_PYTHON ${CLAUDE_SKILL_DIR}/gather.py"
+GATHER="$H2T_PYTHON ${CLAUDE_SKILL_DIR}/scripts/gather.py"
 ```
 
 Collect all project context in one call:
