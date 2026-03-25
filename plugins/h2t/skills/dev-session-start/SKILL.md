@@ -4,18 +4,18 @@ description: Use when starting a coding or product development session. Triggers
 compatibility: "Claude Code"
 metadata:
   author: lichtpfad
-  version: 2.1.0
+  version: 2.7.0
 ---
 
-# Инструкции
+# Instructions
 
-Когда skill вызывается, собери контекст проекта через gather CLI, покажи summary, назови сессию.
+When this skill is invoked, dispatch a subagent to gather context, show the briefing, name the session, post a GitHub comment.
 
 **Paired with:** `h2t:handoff` (SAVE at end) — this skill is LOAD at start.
 
 **NOT for:** personal OS, management, psychology, non-dev conversations.
 
-## Переменные
+## Variables
 
 ```bash
 # Cross-platform h2t venv detection
@@ -29,108 +29,31 @@ fi
 GATHER="$H2T_PYTHON ${CLAUDE_SKILL_DIR}/scripts/gather.py"
 ```
 
-## Команды
+## Procedure
 
-### 1. Собрать полный контекст проекта
+### Step 1: Gather Context (via subagent)
 
-```bash
-$GATHER --cwd "$(pwd)"
-```
+Dispatch agent:
+- subagent_type: `h2t:session-gatherer`
+- model: haiku
+- prompt: include the resolved values of GATHER and cwd:
 
-Возвращает JSON:
-- `project.domain` — домен (personal-os, dev, hou2touch, crypto, art)
-- `project.id` — ID проекта
-- `project.type` — git или directory
-- `project.github` — owner/repo
-- `user.core_path` — путь к about-me/core.md
-- `user.deep_paths` — дополнительные контексты (psychology.md и др.)
-- `git.branch` — текущая ветка
-- `git.status` — uncommitted changes
-- `git.log` — последние 5 коммитов
-- `git.stash` — stash list
-- `github.issues` — open issues
-- `github.milestones` — open milestones
-- `github.current_milestone` — milestone с наибольшим числом issues
-- `github.prs` — open PRs
-- `github.bugs` — issues с label "bug"
-- `stack.name` — detected stack (js, python, rust, go, none)
-- `sessions` — пути к handoff-файлам across all machines
-- `machine` — hostname
-- `session_id` — Claude session ID
+"Gather project context and return formatted session briefing.
+gather_cmd: {resolved GATHER value}
+cwd: {resolved pwd value}"
 
-## Процедура
+### Step 2: Show Briefing
 
-```dot
-digraph session_start {
-  "Trigger: /session-start" [shape=doublecircle];
-  "1-4. Gather context" [shape=box];
-  "5. Present summary" [shape=box];
-  "6. Name session + direction ⛔GATE" [shape=box, style=bold];
-  "7. Post GitHub comment" [shape=box];
-  "Ready to work" [shape=doublecircle];
+Display the agent's response verbatim to the user.
+The agent's response IS the briefing — no reformatting needed.
+If response starts with "ERROR:" — show the error and stop.
+Do NOT ask questions in this step.
 
-  "Trigger: /session-start" -> "1-4. Gather context";
-  "1-4. Gather context" -> "5. Present summary";
-  "5. Present summary" -> "6. Name session + direction ⛔GATE";
-  "6. Name session + direction ⛔GATE" -> "7. Post GitHub comment";
-  "7. Post GitHub comment" -> "Ready to work";
-}
-```
+### Step 3: Name Session + Choose Direction
 
-### Steps 1–4: Gather Context
-
-Run `$GATHER --cwd "$(pwd)"` and parse the JSON result.
-
-**After gather, also:**
-- Read session handoff files listed in `result.sessions[]` — extract Key Decisions and Critical Context only (NOT task lists)
-- Read `<memory_dir>/MEMORY.md` for stable lessons
-- Read `result.user.core_path` if it exists — user context for the session
-
-Check CLAUDE.md for `## Stack Config` override section. If present, use those commands instead of `result.stack.commands`.
-
-**Do NOT use from handoff files:**
-- "What Remains" task lists — these are stale snapshots. GitHub issues are the truth.
-
-### Step 5: Present Summary
-
-GitHub is the source of truth for tasks. Handoff provides supplementary context only.
-
-Use gather output fields to build the summary:
-
-```markdown
-## 🔧 Project: {project.id} ({git.branch})
-
-**Stack:** {stack.name}
-**Milestone:** {github.current_milestone.title} — {open}/{total} issues
-
-### Open Tasks (from GitHub)
-- P0: #{N} {title}...
-- Bugs: #{N} {title}...
-
-### Uncommitted Work
-{git.status}
-
-### Open PRs
-{github.prs}
-
-### ⚠️ Context from last session
-{key decisions, critical gotchas — from handoff files ONLY}
-{machine: {machine}, date: {date}}
-```
-
-**Rules:**
-- Task list = open GitHub issues only. Never copy "What Remains" from handoff as tasks.
-- If handoff mentions an issue that is now CLOSED → omit it entirely.
-- Context section is optional — only include if there are non-obvious decisions or gotchas.
-
-**Do NOT ask the user any questions in Step 5.** Step 5 is pure data presentation. All user interaction happens in Step 6.
-
-### Step 6: Name Session + Choose Direction
-
-⛔ **MANDATORY GATE** — Do NOT skip this step. Do NOT ask "what to work on?" before completing session naming. Handoff file paths depend on the session name.
+⛔ **MANDATORY GATE** — Do NOT skip. Handoff file paths depend on session name.
 
 Session slug template:
-
 ```
 {project}-{milestone}-{layer-task}-{date}-{starttime}
 ```
@@ -143,12 +66,9 @@ Session slug template:
 | `date` | YYYY-MM-DD | `2026-03-13` |
 | `starttime` | HHMM (24h local) | `1430` |
 
-Full example: `crypto-m4-l10-annotations-2026-03-13-1430`
+If no milestone applies, omit it: `crypto-annotation-fix-l7-l9-2026-03-13-1015`
 
-If no milestone applies (e.g. cross-cutting fix), omit it:
-`crypto-annotation-fix-l7-l9-2026-03-13-1015`
-
-**Output format — propose BOTH name and direction in one message:**
+**Output — propose BOTH name and direction in one message:**
 
 ```
 Предлагаю имя сессии: `{slug}` (из issue #{N})
@@ -157,34 +77,25 @@ If no milestone applies (e.g. cross-cutting fix), omit it:
 Продолжить с задачей #{N} ({title}), или другое направление?
 ```
 
-Wait for user response. User confirms or edits name AND chooses direction.
-Store confirmed name as `SESSION_NAME` for this conversation.
+Wait for user response. Store confirmed name as `SESSION_NAME`.
 
-### Step 7: Post GitHub Comment + Record Session
-
-If working on a specific issue:
+### Step 4: Post GitHub Comment + Register Session
 
 ```bash
 SESSION_ID=$(basename $(ls -t ~/.claude/projects/*/$(basename $(pwd))/*.jsonl 2>/dev/null | head -1) .jsonl 2>/dev/null)
 
-gh issue comment {NUMBER} --body "🤖 Session: {SESSION_NAME}-{DATE}
+gh issue comment {NUMBER} --body "Session: {SESSION_NAME}
 Resume: claude --resume ${SESSION_ID}
 Handoff: ~/.dor/sessions/{machine}/{repo}/{SESSION_NAME}.md"
 ```
-
-Create TodoWrite tasks from chosen work items.
-
-### Step 7.5: Register Session in Registry
 
 ```bash
 REGISTRY_PY="$HOME/.h2t/config/registry/registry.py"
 [ ! -f "$REGISTRY_PY" ] && REGISTRY_PY="/c/dev/config/registry/registry.py"
 
-MEMORY_DIR="<memory_dir>"
-PROJECT_DIR=$(dirname "$MEMORY_DIR")
-SESSION_ID=$(basename $(ls -t "$PROJECT_DIR"/*.jsonl 2>/dev/null | head -1) .jsonl 2>/dev/null)
 MACHINE="${DOR_MACHINE_NAME:-$(hostname | tr '[:upper:]' '[:lower:]' | cut -d. -f1)}"
 
+# SESSION_ID already extracted above — reuse the same value
 if [ -f "$REGISTRY_PY" ] && [ -n "$SESSION_ID" ]; then
   $H2T_PYTHON "$REGISTRY_PY" append --id "$SESSION_ID" --cwd "$(pwd)" --host "$MACHINE"
   $H2T_PYTHON "$REGISTRY_PY" update \
@@ -199,17 +110,14 @@ fi
 
 If registry.py not found or no .jsonl exists, skip silently.
 
+Create TodoWrite tasks from chosen work items.
+
 ## Common Mistakes
 
 | Mistake | Fix |
 |---------|-----|
-| Skip reading session history | ALWAYS read `sessions/` dir — for context, not for task lists |
-| Trust handoff "What Remains" as task list | Use GitHub open issues — handoff is a stale snapshot |
-| Show closed issues as tasks | Cross-check handoff mentions against GitHub — closed = omit |
-| Forget to post GitHub comment | Traceability is lost — always post session start comment |
-| Assume single active session | User may have 2-3 parallel sessions — show ALL active work |
-| Hardcode JS commands for Python project | Auto-detect stack first, or read Stack Config |
-| Start coding without naming session | Name first — handoff file path depends on it |
-| Guess session ID | Extract from actual jsonl file path, never fabricate |
-| Ask "what to work on?" in Step 5 | Step 5 is data only. Naming + direction question go in Step 6 GATE |
-| Writing to project root | Session files go to `~/.dor/sessions/` — NEVER to project directory |
+| Running git/gh manually instead of dispatching agent | Step 1 is agent dispatch ONLY |
+| Reformatting agent response | Show verbatim — agent already formatted it |
+| Asking questions before naming | Step 2 is data-only. Questions go in Step 3 GATE |
+| Start coding without naming session | Name first — handoff path depends on it |
+| Guess session ID | Extract from actual jsonl file path in Step 4 |
