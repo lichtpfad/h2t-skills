@@ -4,7 +4,7 @@ description: Use when starting a coding or product development session. Triggers
 compatibility: "Claude Code"
 metadata:
   author: lichtpfad
-  version: 1.0.0
+  version: 2.0.0
 ---
 
 # Dev Session Start
@@ -26,109 +26,59 @@ Load project context, show active work across sessions, and prepare for focused 
 ```dot
 digraph session_start {
   "Trigger: /session-start" [shape=doublecircle];
-  "1. Identify project" [shape=box];
-  "2. Load session history" [shape=box];
-  "3. Check GitHub state" [shape=box];
-  "4. Detect stack" [shape=box];
+  "1-4. Gather context" [shape=box];
   "5. Present summary" [shape=box];
-  "6. Name session" [shape=box];
+  "6. Name session + direction ⛔GATE" [shape=box, style=bold];
   "7. Post GitHub comment" [shape=box];
   "Ready to work" [shape=doublecircle];
 
-  "Trigger: /session-start" -> "1. Identify project";
-  "1. Identify project" -> "2. Load session history";
-  "2. Load session history" -> "3. Check GitHub state";
-  "3. Check GitHub state" -> "4. Detect stack";
-  "4. Detect stack" -> "5. Present summary";
-  "5. Present summary" -> "6. Name session";
-  "6. Name session" -> "7. Post GitHub comment";
+  "Trigger: /session-start" -> "1-4. Gather context";
+  "1-4. Gather context" -> "5. Present summary";
+  "5. Present summary" -> "6. Name session + direction ⛔GATE";
+  "6. Name session + direction ⛔GATE" -> "7. Post GitHub comment";
   "7. Post GitHub comment" -> "Ready to work";
 }
 ```
 
-### Step 1: Identify Project
+### Steps 1–4: Gather Context (single call)
+
+All project context is collected in one command:
 
 ```bash
-git remote get-url origin 2>/dev/null   # → repo name
-git branch --show-current               # → current branch
-git log --oneline -5                    # → recent commits
-git status --short                      # → uncommitted work
-```
-
-Extract `owner/repo` from remote URL for `gh` commands.
-
-### Step 2: Load Session Context (NOT task list)
-
-Determine repo name, then read session files for this repo across ALL machines:
-
-```bash
-REPO=$(basename "$(git remote get-url origin 2>/dev/null)" .git 2>/dev/null || basename "$(pwd)")
-ls ~/.dor/sessions/*/"$REPO"/*.md 2>/dev/null
-```
-
-**Extract from handoff files — CONTEXT ONLY:**
-- Key Decisions and rationale
-- Critical Context / подводные камни
-- Uncommitted work (modified files not yet committed)
-- Which machine last worked on what branch
-
-**Do NOT use from handoff files:**
-- "What Remains" task lists — these are stale snapshots. GitHub issues are the truth.
-
-Also read `<memory_dir>/MEMORY.md` for stable lessons.
-
-Legacy fallback (in order):
-1. `<memory_dir>/sessions/*.md` — old repo-local format, migrate on next handoff
-2. `<memory_dir>/handoff.md` — very old single-file format
-
-If none exist (first session ever), skip to Step 3 — there's no history yet.
-
-### Step 3: Check GitHub State
-
-Extract `{owner}/{repo}` from Step 1 remote URL.
-
-**Project filter:** if `.claude/project-id` exists in current directory, filter issues by that project label:
-
-```bash
-PROJECT_LABEL=""
-if [ -f ".claude/project-id" ]; then
-  PID=$(tr -d '[:space:]' < .claude/project-id)
-  [ -n "$PID" ] && PROJECT_LABEL="--label project:$PID"
+# Cross-platform h2t venv detection
+H2T_PYTHON="${H2T_PYTHON:-}"
+if [ -z "$H2T_PYTHON" ]; then
+  [ -f "$HOME/.h2t/venv/bin/python" ] && H2T_PYTHON="$HOME/.h2t/venv/bin/python"
+  [ -f "$HOME/.h2t/venv/Scripts/python.exe" ] && H2T_PYTHON="$HOME/.h2t/venv/Scripts/python.exe"
 fi
+[ -z "$H2T_PYTHON" ] && H2T_PYTHON="python3"
+
+$H2T_PYTHON "${CLAUDE_PLUGIN_ROOT}/skills/dev-session-start/gather.py" \
+  --memory-dir "<memory_dir>" \
+  --cwd "$(pwd)"
 ```
 
-Run in parallel:
+This returns JSON with all context in ~1 second:
+- `project` — identity (domain, type, github remote) from any directory
+- `user` — about-me context paths (core.md + domain-dependent deep paths)
+- `git` — branch, status, log, stash (if git repo)
+- `github` — issues, milestones, PRs, bugs (if github remote exists)
+- `stack` — detected stack and commands
+- `sessions` — handoff file paths across all machines
+- `session_id` — Claude session ID for resume
+- `machine` — hostname
 
-```bash
-gh api repos/{owner}/{repo}/milestones --jq '.[] | select(.state=="open") | {title, open_issues}'
-gh issue list --state open $PROJECT_LABEL --json number,title,labels --limit 20
-gh issue list --state open --label "bug" $PROJECT_LABEL --json number,title --limit 10
-gh pr list --state open --json number,title,headRefName
-```
+Parse the JSON and use it for Step 5 presentation.
 
-If `PROJECT_LABEL` is set — show only project-scoped issues. Mention scope in summary header:
-`## 🔧 Project: {repo-name}/{project-id} ({branch})`
+**After gather, also:**
+- Read session handoff files listed in `result.sessions[]` — extract Key Decisions and Critical Context only (NOT task lists)
+- Read `<memory_dir>/MEMORY.md` for stable lessons
+- Read `result.user.core_path` if it exists — user context for the session
 
-If no `.claude/project-id` — show all open issues (repo-wide scope).
+**Legacy fallback** (if gather.py is unavailable):
+Fall back to individual git/gh commands as separate tool calls.
 
-Pick the milestone with most open issues as "current". Then load its tasks:
-
-```bash
-gh issue list --milestone "<current milestone title>" --state open $PROJECT_LABEL --json number,title,labels
-```
-
-### Step 4: Detect Stack
-
-Auto-detect from project files:
-
-| File | Stack |
-|------|-------|
-| `package.json` | JS/TS → `npm test`, `npm audit`, `npm run build` |
-| `pyproject.toml` | Python → `pytest`, `pip-audit`, `ruff check` |
-| `Cargo.toml` | Rust → `cargo test`, `cargo audit`, `cargo clippy` |
-| `go.mod` | Go → `go test`, `govulncheck` |
-
-Check CLAUDE.md for `## Stack Config` override section. If present, use those commands instead.
+Check CLAUDE.md for `## Stack Config` override section. If present, use those commands instead of `result.stack.commands`.
 
 ### Step 5: Present Summary
 
@@ -161,9 +111,11 @@ GitHub is the source of truth for tasks. Handoff provides supplementary context 
 - If handoff mentions an issue that is now CLOSED → omit it entirely.
 - Context section is optional — only include if there are non-obvious decisions or gotchas.
 
-Ask: **"Продолжить с задачей X, или другое направление?"**
+**Do NOT ask the user any questions in Step 5.** Step 5 is pure data presentation. All user interaction happens in Step 6.
 
-### Step 6: Name Session
+### Step 6: Name Session + Choose Direction
+
+⛔ **MANDATORY GATE** — Do NOT skip this step. Do NOT ask "what to work on?" before completing session naming. Handoff file paths depend on the session name.
 
 Session slug template:
 
@@ -184,14 +136,17 @@ Full example: `crypto-m4-l10-annotations-2026-03-13-1430`
 If no milestone applies (e.g. cross-cutting fix), omit it:
 `crypto-annotation-fix-l7-l9-2026-03-13-1015`
 
-Propose to user:
+**Output format — propose BOTH name and direction in one message:**
 
 ```
-Предлагаю имя сессии: `crypto-m4-l10-annotations-2026-03-13-1430` (из issue #21)
+Предлагаю имя сессии: `{slug}` (из issue #{N})
 Корректируй если нужно.
+
+Продолжить с задачей #{N} ({title}), или другое направление?
 ```
 
-User confirms or edits. Store as `SESSION_NAME` for this conversation.
+Wait for user response. User confirms or edits name AND chooses direction.
+Store confirmed name as `SESSION_NAME` for this conversation.
 
 ### Step 7: Post GitHub Comment + Record Session
 
@@ -285,3 +240,5 @@ Skill reads this section and uses these commands for pre-merge checks and verifi
 | Hardcode JS commands for Python project | Auto-detect stack first, or read Stack Config |
 | Start coding without naming session | Name first — handoff file path depends on it |
 | Guess session ID | Extract from actual jsonl file path, never fabricate |
+| Ask "what to work on?" in Step 5 | Step 5 is data only. Naming + direction question go in Step 6 GATE |
+| Run 10+ separate bash commands for context | Use gather.py — one call, ~1 second, all context in JSON |
