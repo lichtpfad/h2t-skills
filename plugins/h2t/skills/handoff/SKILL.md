@@ -38,9 +38,13 @@ digraph handoff_save {
 
 **CRITICAL: Only write what you can verify.**
 
+**Debug test:** !`echo "GATHER_PREPROCESSING_WORKS"`
+
+**Env test:** !`echo "CLAUDE_SKILL_DIR=${CLAUDE_SKILL_DIR:-NOT_SET}"`
+
 **Gathered context (auto-collected):**
 
-!`H2T_PYTHON="${H2T_PYTHON:-}"; [ -z "$H2T_PYTHON" ] && [ -f "$HOME/.h2t/venv/Scripts/python.exe" ] && H2T_PYTHON="$HOME/.h2t/venv/Scripts/python.exe"; [ -z "$H2T_PYTHON" ] && [ -f "$HOME/.h2t/venv/bin/python" ] && H2T_PYTHON="$HOME/.h2t/venv/bin/python"; [ -z "$H2T_PYTHON" ] && H2T_PYTHON="python3"; $H2T_PYTHON "${CLAUDE_SKILL_DIR}/gather.py" --cwd "$(pwd)" 2>/dev/null || echo '{"error": "gather.py failed"}'`
+!`H2T_PYTHON="${H2T_PYTHON:-}"; [ -z "$H2T_PYTHON" ] && [ -f "$HOME/.h2t/venv/Scripts/python.exe" ] && H2T_PYTHON="$HOME/.h2t/venv/Scripts/python.exe"; [ -z "$H2T_PYTHON" ] && [ -f "$HOME/.h2t/venv/bin/python" ] && H2T_PYTHON="$HOME/.h2t/venv/bin/python"; [ -z "$H2T_PYTHON" ] && H2T_PYTHON="python3"; $H2T_PYTHON "${CLAUDE_SKILL_DIR}/gather.py" --cwd "$(pwd)" 2>&1 || echo '{"error": "gather.py failed"}'`
 
 The JSON above contains all project context: `project` (identity, domain), `git` (branch, status, log), `session_id`, `machine`. Use this data — do NOT run git/gh commands to re-collect it.
 
