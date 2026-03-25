@@ -77,6 +77,8 @@ else:
     repo = os.path.basename(os.path.abspath(data.get('project', {}).get('id', 'unknown')))
 
 session_dir = os.path.expanduser(f'~/.dor/sessions/{machine}/{repo}')
+# Normalize to forward slashes for cross-platform consistency
+session_dir = session_dir.replace(os.sep, '/')
 
 # Add computed paths to the data
 data['_handoff'] = {
