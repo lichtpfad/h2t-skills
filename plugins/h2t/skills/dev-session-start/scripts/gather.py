@@ -10,7 +10,7 @@ import sys
 import time
 from pathlib import Path
 
-PLUGIN_ROOT = Path(__file__).resolve().parent.parent.parent
+PLUGIN_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(PLUGIN_ROOT / "lib"))
 
 from gather import output_json
