@@ -76,6 +76,7 @@ Format and display the briefing. Do NOT ask questions in this step.
 
 | Condition | Hint |
 |-----------|------|
+| `project.type == "workspace"` | Show child projects list from `project.children[]` and ask: "Workspace с {N} проектами. Какой проект сегодня?" Do NOT gather from all children — wait for user choice. |
 | `project.id == "unknown"` | "Repo not registered. Add to `~/.h2t/config/repo-mapping.yaml` for project identity." |
 | `github.issues == []` and repo has GitHub | "No open issues. Create with `/h2t:github-issues` or `gh issue create`." |
 | `sessions == []` | "No previous sessions found. This is a fresh start." |

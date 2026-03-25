@@ -81,7 +81,30 @@ def identify_project(cwd: str = ".") -> dict:
                 "config_root": str(config_root),
             }
 
-    # 3. Default
+    # 3. Check if cwd is a workspace (parent of known repos)
+    cwd_path = Path(cwd_abs)
+    child_projects = []
+    if cwd_path.is_dir():
+        for subdir in cwd_path.iterdir():
+            if subdir.is_dir() and subdir.name in mappings:
+                dp = mappings[subdir.name]
+                d, p = _split_domain_project(dp)
+                child_projects.append({
+                    "id": p, "domain": d, "path": str(subdir),
+                    "label": _find_label(domains, d, p),
+                })
+
+    if child_projects:
+        return {
+            "id": "workspace", "domain": "dev",
+            "label": f"Workspace ({len(child_projects)} projects)",
+            "type": "workspace",
+            "github": None,
+            "config_root": str(config_root),
+            "children": child_projects,
+        }
+
+    # 4. Default
     domain, project_id = _split_domain_project(default)
     return {
         "id": project_id, "domain": domain, "label": project_id,
