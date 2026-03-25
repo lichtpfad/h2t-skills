@@ -38,15 +38,29 @@ digraph handoff_save {
 
 **CRITICAL: Only write what you can verify.**
 
-**Debug test:** !`echo "GATHER_PREPROCESSING_WORKS"`
+## CLI
 
-**Env test:** !`echo "CLAUDE_SKILL_DIR=${CLAUDE_SKILL_DIR:-NOT_SET}"`
+```bash
+# Cross-platform h2t venv detection
+H2T_PYTHON="${H2T_PYTHON:-}"
+if [ -z "$H2T_PYTHON" ]; then
+  [ -f "$HOME/.h2t/venv/bin/python" ] && H2T_PYTHON="$HOME/.h2t/venv/bin/python"
+  [ -f "$HOME/.h2t/venv/Scripts/python.exe" ] && H2T_PYTHON="$HOME/.h2t/venv/Scripts/python.exe"
+fi
+[ -z "$H2T_PYTHON" ] && echo "ERROR: h2t venv not found. Run /h2t:setup" && exit 1
 
-**Gathered context (auto-collected):**
+GATHER="$H2T_PYTHON ${CLAUDE_SKILL_DIR}/gather.py"
+```
 
-!`H2T_PYTHON="${H2T_PYTHON:-}"; [ -z "$H2T_PYTHON" ] && [ -f "$HOME/.h2t/venv/Scripts/python.exe" ] && H2T_PYTHON="$HOME/.h2t/venv/Scripts/python.exe"; [ -z "$H2T_PYTHON" ] && [ -f "$HOME/.h2t/venv/bin/python" ] && H2T_PYTHON="$HOME/.h2t/venv/bin/python"; [ -z "$H2T_PYTHON" ] && H2T_PYTHON="python3"; $H2T_PYTHON "${CLAUDE_SKILL_DIR}/gather.py" --cwd "$(pwd)" 2>&1 || echo '{"error": "gather.py failed"}'`
+Collect all project context in one call:
 
-The JSON above contains all project context: `project` (identity, domain), `git` (branch, status, log), `session_id`, `machine`. Use this data — do NOT run git/gh commands to re-collect it.
+```bash
+$GATHER --cwd "$(pwd)"
+```
+
+This returns JSON with: `project` (identity, domain), `git` (branch, status, log, stash), `session_id`, `machine`.
+
+Use the JSON output for all subsequent steps. Extract `git.branch`, `git.status`, `git.log`, `project.domain`, `machine` from the result.
 
 **Scope:** "What Was Done" describes THIS SESSION only. Use conversation context, not `git diff HEAD~N`.
 

@@ -40,13 +40,29 @@ digraph session_start {
 }
 ```
 
-### Steps 1–4: Gather Context (auto-collected)
+### Steps 1–4: Gather Context
 
-**Gathered context:**
+## CLI
 
-!`H2T_PYTHON="${H2T_PYTHON:-}"; [ -z "$H2T_PYTHON" ] && [ -f "$HOME/.h2t/venv/Scripts/python.exe" ] && H2T_PYTHON="$HOME/.h2t/venv/Scripts/python.exe"; [ -z "$H2T_PYTHON" ] && [ -f "$HOME/.h2t/venv/bin/python" ] && H2T_PYTHON="$HOME/.h2t/venv/bin/python"; [ -z "$H2T_PYTHON" ] && H2T_PYTHON="python3"; $H2T_PYTHON "${CLAUDE_SKILL_DIR}/gather.py" --cwd "$(pwd)" 2>/dev/null || echo '{"error": "gather.py failed"}'`
+```bash
+# Cross-platform h2t venv detection
+H2T_PYTHON="${H2T_PYTHON:-}"
+if [ -z "$H2T_PYTHON" ]; then
+  [ -f "$HOME/.h2t/venv/bin/python" ] && H2T_PYTHON="$HOME/.h2t/venv/bin/python"
+  [ -f "$HOME/.h2t/venv/Scripts/python.exe" ] && H2T_PYTHON="$HOME/.h2t/venv/Scripts/python.exe"
+fi
+[ -z "$H2T_PYTHON" ] && echo "ERROR: h2t venv not found. Run /h2t:setup" && exit 1
 
-The JSON above contains all project context:
+GATHER="$H2T_PYTHON ${CLAUDE_SKILL_DIR}/gather.py"
+```
+
+Collect all project context in one call:
+
+```bash
+$GATHER --cwd "$(pwd)"
+```
+
+This returns JSON with all context:
 - `project` — identity (domain, type, github remote) from any directory
 - `user` — about-me context paths (core.md + domain-dependent deep paths)
 - `git` — branch, status, log, stash (if git repo)
@@ -56,7 +72,7 @@ The JSON above contains all project context:
 - `session_id` — Claude session ID for resume
 - `machine` — hostname
 
-Use this data for Step 5 presentation. Do NOT run git/gh commands to re-collect it.
+Use the JSON output for Step 5 presentation. Extract fields from the result.
 
 **After gather, also:**
 - Read session handoff files listed in `result.sessions[]` — extract Key Decisions and Critical Context only (NOT task lists)
