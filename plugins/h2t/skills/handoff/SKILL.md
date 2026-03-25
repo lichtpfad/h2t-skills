@@ -36,14 +36,24 @@ digraph handoff_save {
 
 ### Step 1: Gather Facts (DO NOT HALLUCINATE)
 
-**CRITICAL: Only write what you can verify.** Run these commands:
+**CRITICAL: Only write what you can verify.**
 
 ```bash
-git remote get-url origin 2>/dev/null   # repo
-git branch --show-current               # branch
-git log --oneline -1                    # last commit
-git status --short                      # uncommitted changes
+H2T_PYTHON="${H2T_PYTHON:-}"
+if [ -z "$H2T_PYTHON" ]; then
+  [ -f "$HOME/.h2t/venv/bin/python" ] && H2T_PYTHON="$HOME/.h2t/venv/bin/python"
+  [ -f "$HOME/.h2t/venv/Scripts/python.exe" ] && H2T_PYTHON="$HOME/.h2t/venv/Scripts/python.exe"
+fi
+[ -z "$H2T_PYTHON" ] && H2T_PYTHON="python3"
+
+$H2T_PYTHON "${CLAUDE_PLUGIN_ROOT}/skills/handoff/gather.py" \
+  --memory-dir "<memory_dir>" \
+  --cwd "$(pwd)"
 ```
+
+Returns JSON with: `project` (identity), `git` (branch, status, log), `session_id`, `machine`.
+
+**Fallback** (if gather.py unavailable): run individual git commands.
 
 **Scope:** "What Was Done" describes THIS SESSION only. Use conversation context, not `git diff HEAD~N`.
 
