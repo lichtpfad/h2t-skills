@@ -42,6 +42,8 @@ digraph session_start {
 
 ### Steps 1–4: Gather Context (single call)
 
+⛔ **MANDATORY:** Run gather.py as the FIRST and ONLY command for context collection. Do NOT run individual git/gh commands — gather.py collects everything in parallel in ~1 second.
+
 All project context is collected in one command:
 
 ```bash
@@ -74,9 +76,6 @@ Parse the JSON and use it for Step 5 presentation.
 - Read session handoff files listed in `result.sessions[]` — extract Key Decisions and Critical Context only (NOT task lists)
 - Read `<memory_dir>/MEMORY.md` for stable lessons
 - Read `result.user.core_path` if it exists — user context for the session
-
-**Legacy fallback** (if gather.py is unavailable):
-Fall back to individual git/gh commands as separate tool calls.
 
 Check CLAUDE.md for `## Stack Config` override section. If present, use those commands instead of `result.stack.commands`.
 

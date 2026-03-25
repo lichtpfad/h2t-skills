@@ -38,6 +38,8 @@ digraph handoff_save {
 
 **CRITICAL: Only write what you can verify.**
 
+⛔ **MANDATORY:** Run gather.py as the FIRST and ONLY command for context collection. Do NOT run individual git/gh commands — gather.py collects everything in parallel in ~200ms.
+
 ```bash
 H2T_PYTHON="${H2T_PYTHON:-}"
 if [ -z "$H2T_PYTHON" ]; then
@@ -51,9 +53,7 @@ $H2T_PYTHON "${CLAUDE_PLUGIN_ROOT}/skills/handoff/gather.py" \
   --cwd "$(pwd)"
 ```
 
-Returns JSON with: `project` (identity), `git` (branch, status, log), `session_id`, `machine`.
-
-**Fallback** (if gather.py unavailable): run individual git commands.
+This returns JSON with all needed context: `project` (identity, domain), `git` (branch, status, log), `session_id`, `machine`. Parse and use — do NOT re-run git commands separately.
 
 **Scope:** "What Was Done" describes THIS SESSION only. Use conversation context, not `git diff HEAD~N`.
 
