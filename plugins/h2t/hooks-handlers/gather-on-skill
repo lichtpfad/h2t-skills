@@ -1,16 +1,24 @@
 #!/usr/bin/env bash
-# PreToolUse hook: run gather.py when dev-session-start skill is invoked.
-# Returns gather JSON as systemMessage so Claude has data before processing the skill.
+# PreToolUse hook: run gather.py when dev-session-start or handoff skill is invoked.
+# Returns gather JSON + computed paths as systemMessage.
 set -euo pipefail
 
 input=$(cat)
 skill=$(echo "$input" | jq -r '.tool_input.skill // ""')
 cwd=$(echo "$input" | jq -r '.cwd // "."')
 
-# Only fire for dev-session-start
-[[ "$skill" != *"dev-session-start"* ]] && exit 0
+# Determine which skill triggered and which gather.py to use
+SKILL_NAME=""
+if [[ "$skill" == *"dev-session-start"* ]]; then
+  SKILL_NAME="dev-session-start"
+elif [[ "$skill" == *"handoff"* ]]; then
+  SKILL_NAME="handoff"
+fi
 
-# Detect python (same logic as other hooks)
+# Exit silently for other skills
+[ -z "$SKILL_NAME" ] && exit 0
+
+# Detect python
 H2T_PYTHON="${H2T_PYTHON:-}"
 if [ -z "$H2T_PYTHON" ]; then
   if [ -f "$HOME/.h2t/venv/Scripts/python.exe" ]; then
@@ -25,14 +33,14 @@ if [ -z "$H2T_PYTHON" ]; then
   exit 0
 fi
 
-# Find gather.py relative to plugin root
-GATHER_PY="${CLAUDE_PLUGIN_ROOT}/skills/dev-session-start/scripts/gather.py"
+# Find skill-specific gather.py
+GATHER_PY="${CLAUDE_PLUGIN_ROOT}/skills/${SKILL_NAME}/scripts/gather.py"
 if [ ! -f "$GATHER_PY" ]; then
   echo '{"systemMessage": "GATHER_ERROR: gather.py not found at '"$GATHER_PY"'"}'
   exit 0
 fi
 
-# Run gather.py and capture output
+# Run gather.py
 RESULT=$("$H2T_PYTHON" "$GATHER_PY" --cwd "$cwd" 2>/dev/null) || true
 
 if [ -z "$RESULT" ]; then
@@ -40,17 +48,52 @@ if [ -z "$RESULT" ]; then
   exit 0
 fi
 
-# Validate it's JSON
+# Validate JSON
 echo "$RESULT" | jq . >/dev/null 2>&1 || {
   echo '{"systemMessage": "GATHER_ERROR: gather.py returned invalid JSON"}'
   exit 0
 }
 
-# Build final output via python for reliable JSON-in-JSON escaping
-"$H2T_PYTHON" -c "
+# For handoff: compute correct session file path and inject it
+if [ "$SKILL_NAME" = "handoff" ]; then
+  "$H2T_PYTHON" -c "
+import sys, json, os
+
+raw = sys.stdin.read().strip()
+data = json.loads(raw)
+
+machine = data.get('machine', 'unknown').lower()
+git = data.get('git', {})
+remote = git.get('remote', '')
+owner_repo = git.get('owner_repo', '')
+
+# Extract repo name from remote
+repo = ''
+if owner_repo:
+    repo = owner_repo.split('/')[-1] if '/' in owner_repo else owner_repo
+elif remote:
+    repo = remote.rstrip('/').split('/')[-1].replace('.git', '')
+else:
+    repo = os.path.basename(os.path.abspath(data.get('project', {}).get('id', 'unknown')))
+
+session_dir = os.path.expanduser(f'~/.dor/sessions/{machine}/{repo}')
+
+# Add computed paths to the data
+data['_handoff'] = {
+    'session_dir': session_dir,
+    'session_dir_cmd': f'mkdir -p \"{session_dir}\"',
+}
+
+output = {'systemMessage': 'GATHER_DATA: ' + json.dumps(data)}
+print(json.dumps(output))
+" <<< "$RESULT"
+else
+  # dev-session-start: return raw gather data
+  "$H2T_PYTHON" -c "
 import sys, json
 raw = sys.stdin.read().strip()
 output = {'systemMessage': 'GATHER_DATA: ' + raw}
 print(json.dumps(output))
 " <<< "$RESULT"
+fi
 exit 0

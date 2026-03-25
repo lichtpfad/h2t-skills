@@ -4,52 +4,38 @@ description: Use when ending a session, saving work status, or when context wind
 compatibility: "Claude Code"
 metadata:
   author: lichtpfad
-  version: 2.0.0
+  version: 2.1.0
 ---
 
 # Инструкции
 
-Когда skill вызывается, собери факты через gather CLI, затем напиши session file и GitHub comment.
+Когда skill вызывается, PreToolUse hook уже собрал факты через gather.py. Используй данные из hook, напиши session file в правильную директорию, пост GitHub comment.
 
 ## Переменные
 
 ```bash
-# Cross-platform h2t venv detection
 H2T_PYTHON="${H2T_PYTHON:-}"
 if [ -z "$H2T_PYTHON" ]; then
   [ -f "$HOME/.h2t/venv/bin/python" ] && H2T_PYTHON="$HOME/.h2t/venv/bin/python"
   [ -f "$HOME/.h2t/venv/Scripts/python.exe" ] && H2T_PYTHON="$HOME/.h2t/venv/Scripts/python.exe"
 fi
-[ -z "$H2T_PYTHON" ] && echo "ERROR: h2t venv not found. Run /h2t:setup" && exit 1
-
-GATHER="$H2T_PYTHON ${CLAUDE_SKILL_DIR}/scripts/gather.py"
 ```
-
-## Команды
-
-### 1. Собрать факты проекта
-
-```bash
-$GATHER --cwd "$(pwd)"
-```
-
-Возвращает JSON:
-- `project.domain` — домен проекта (personal-os, dev, hou2touch, etc.)
-- `project.id` — ID проекта
-- `git.branch` — текущая ветка
-- `git.status` — uncommitted changes
-- `git.log` — последние коммиты
-- `git.remote` — remote URL
-- `machine` — hostname
-- `session_id` — Claude session ID
 
 ## Процедура
 
-### Step 1: Gather Facts (DO NOT HALLUCINATE)
+### Step 1: Use Gathered Data (DO NOT HALLUCINATE)
 
 **CRITICAL: Only write what you can verify.**
 
-Run `$GATHER --cwd "$(pwd)"` and parse the JSON result. Extract `git.branch`, `git.status`, `git.log`, `project.domain`, `machine` from the output.
+The PreToolUse hook already ran gather.py. Look for `GATHER_DATA:` in the hook output or system messages. It contains JSON with:
+- `project.domain`, `project.id` — project identity
+- `git.branch`, `git.status`, `git.log` — repo state
+- `machine` — hostname
+- `_handoff.session_dir` — **the correct directory for the session file**
+
+If you see `GATHER_ERROR:` — show the error and stop.
+
+**Do NOT run git, gh, or gather commands manually.** All data is already collected. Empty fields mean no data exists.
 
 **Scope:** "What Was Done" describes THIS SESSION only. Use conversation context, not `git diff HEAD~N`.
 
@@ -68,16 +54,15 @@ Format: `{task-slug}-{YYYY-MM-DD}` (e.g., `phase5-blocktype-2026-03-11`)
 
 ### Step 3: Write Session File
 
-**Location:** `~/.dor/sessions/{machine}/{repo}/{session-name}.md`
-
-Determine path using `machine` from gather output and repo from `git.remote`:
+**Location:** Use `_handoff.session_dir` from GATHER_DATA — this is the pre-computed correct path.
 
 ```bash
-MACHINE="{machine from gather output}"
-REPO="{repo name from git.remote}"
-SESSION_DIR="$HOME/.dor/sessions/$MACHINE/$REPO"
+# _handoff.session_dir from hook, e.g. ~/.dor/sessions/automata/h2t-ai
+SESSION_DIR="{_handoff.session_dir from GATHER_DATA}"
 mkdir -p "$SESSION_DIR"
 ```
+
+**NEVER write to the project directory.** The path MUST start with `~/.dor/sessions/`.
 
 ```markdown
 # Session: {session-name}
@@ -171,7 +156,8 @@ SESSION_ID=$(basename $(ls -t "$PROJECT_DIR"/*.jsonl 2>/dev/null | head -1) .jso
 
 | Mistake | Fix |
 |---------|-----|
-| Writing values from memory | Run `$GATHER` first — verify everything |
+| Writing values from memory | Use GATHER_DATA from hook — verify everything |
+| Running git/gh/gather manually | Hook already collected all data |
 | 100+ line handoff | Cut to 60 max. Reference docs, don't repeat |
 | Vague remaining tasks | Be specific: "Implement blockType field (#38)" not "continue work" |
 | Missing issue numbers | Every task and decision links to an issue |
