@@ -4,14 +4,14 @@ import re
 from .runner import run_parallel
 
 
-def gather_git() -> dict:
+def gather_git(cwd: str = ".") -> dict:
     """Gather git repo info: remote, branch, log, status, owner/repo."""
     raw = run_parallel({
-        "remote": ["git", "remote", "get-url", "origin"],
-        "branch": ["git", "branch", "--show-current"],
-        "log":    ["git", "log", "--oneline", "-5"],
-        "status": ["git", "status", "--short"],
-        "stash":  ["git", "stash", "list"],
+        "remote": ["git", "-C", cwd, "remote", "get-url", "origin"],
+        "branch": ["git", "-C", cwd, "branch", "--show-current"],
+        "log":    ["git", "-C", cwd, "log", "--oneline", "-5"],
+        "status": ["git", "-C", cwd, "status", "--short"],
+        "stash":  ["git", "-C", cwd, "stash", "list"],
     })
     remote = raw["remote"].strip()
     return {

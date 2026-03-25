@@ -23,7 +23,7 @@ def main():
     start = time.monotonic()
 
     project = identify_project(args.cwd)
-    git = gather_git() if project["type"] == "git" else {}
+    git = gather_git(args.cwd) if project["type"] == "git" else {}
     session_id = extract_session_id(args.memory_dir) if args.memory_dir else ""
     machine = get_machine_name()
 

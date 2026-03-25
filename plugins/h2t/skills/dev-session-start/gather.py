@@ -53,7 +53,7 @@ def main():
     # Layer 1 — State (conditional on project type)
     git = {}
     if project["type"] == "git":
-        git = gather_git()
+        git = gather_git(args.cwd)
         sources_used.append("git")
         if not git.get("branch"):
             sources_failed.append("git")
