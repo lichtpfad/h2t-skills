@@ -4,46 +4,52 @@ description: Use when ending a session, saving work status, or when context wind
 compatibility: "Claude Code"
 metadata:
   author: lichtpfad
-  version: 1.0.0
+  version: 2.0.0
 ---
 
-# Session Handoff (SAVE)
+# Инструкции
 
-Save development session state for later resumption. Write session file, post GitHub comment, preserve traceability.
+Когда skill вызывается, собери факты через gather CLI, затем напиши session file и GitHub comment.
 
-**Paired with:** `h2t:dev-session-start` (LOAD at start) — this skill is SAVE at end.
+## Переменные
 
-**When to SAVE:** End of work session, context window nearing limits, switching to different task.
+```bash
+# Cross-platform h2t venv detection
+H2T_PYTHON="${H2T_PYTHON:-}"
+if [ -z "$H2T_PYTHON" ]; then
+  [ -f "$HOME/.h2t/venv/bin/python" ] && H2T_PYTHON="$HOME/.h2t/venv/bin/python"
+  [ -f "$HOME/.h2t/venv/Scripts/python.exe" ] && H2T_PYTHON="$HOME/.h2t/venv/Scripts/python.exe"
+fi
+[ -z "$H2T_PYTHON" ] && echo "ERROR: h2t venv not found. Run /h2t:setup" && exit 1
 
-## Procedure
-
-```dot
-digraph handoff_save {
-  "Trigger: /handoff" [shape=doublecircle];
-  "1. Gather facts" [shape=box];
-  "2. Determine session name" [shape=box];
-  "3. Write session file" [shape=box];
-  "4. Post GitHub comment" [shape=box];
-  "Done" [shape=doublecircle];
-
-  "Trigger: /handoff" -> "1. Gather facts";
-  "1. Gather facts" -> "2. Determine session name";
-  "2. Determine session name" -> "3. Write session file";
-  "3. Write session file" -> "4. Post GitHub comment";
-  "4. Post GitHub comment" -> "Done";
-}
+GATHER="$H2T_PYTHON ${CLAUDE_SKILL_DIR}/scripts/gather.py"
 ```
+
+## Команды
+
+### 1. Собрать факты проекта
+
+```bash
+$GATHER --cwd "$(pwd)"
+```
+
+Возвращает JSON:
+- `project.domain` — домен проекта (personal-os, dev, hou2touch, etc.)
+- `project.id` — ID проекта
+- `git.branch` — текущая ветка
+- `git.status` — uncommitted changes
+- `git.log` — последние коммиты
+- `git.remote` — remote URL
+- `machine` — hostname
+- `session_id` — Claude session ID
+
+## Процедура
 
 ### Step 1: Gather Facts (DO NOT HALLUCINATE)
 
-**CRITICAL: Only write what you can verify.** Run these commands:
+**CRITICAL: Only write what you can verify.**
 
-```bash
-git remote get-url origin 2>/dev/null   # repo
-git branch --show-current               # branch
-git log --oneline -1                    # last commit
-git status --short                      # uncommitted changes
-```
+Run `$GATHER --cwd "$(pwd)"` and parse the JSON result. Extract `git.branch`, `git.status`, `git.log`, `project.domain`, `machine` from the output.
 
 **Scope:** "What Was Done" describes THIS SESSION only. Use conversation context, not `git diff HEAD~N`.
 
@@ -64,11 +70,11 @@ Format: `{task-slug}-{YYYY-MM-DD}` (e.g., `phase5-blocktype-2026-03-11`)
 
 **Location:** `~/.dor/sessions/{machine}/{repo}/{session-name}.md`
 
-Determine path:
+Determine path using `machine` from gather output and repo from `git.remote`:
 
 ```bash
-MACHINE="${DOR_MACHINE_NAME:-$(hostname | tr '[:upper:]' '[:lower:]' | cut -d. -f1)}"
-REPO=$(basename "$(git remote get-url origin 2>/dev/null)" .git 2>/dev/null || basename "$(pwd)")
+MACHINE="{machine from gather output}"
+REPO="{repo name from git.remote}"
 SESSION_DIR="$HOME/.dor/sessions/$MACHINE/$REPO"
 mkdir -p "$SESSION_DIR"
 ```
@@ -104,8 +110,8 @@ mkdir -p "$SESSION_DIR"
 
 - **Max 60 lines.** Handoff is a summary, not a journal.
 - **No duplication.** Don't repeat CLAUDE.md or MEMORY.md. Reference them.
-- **Verify before writing.** Every path, hash, value must come from a tool call.
-- **Uncommitted work is critical.** List every modified file from `git status`.
+- **Verify before writing.** Every path, hash, value must come from gather output or a tool call.
+- **Uncommitted work is critical.** List every modified file from `git.status`.
 - **Remaining tasks are actionable.** Specific enough to start immediately.
 - **Include issue numbers.** Every task links to a GitHub issue.
 
@@ -114,7 +120,6 @@ mkdir -p "$SESSION_DIR"
 For each issue worked on in this session:
 
 ```bash
-# Extract session ID
 MEMORY_DIR="<memory_dir>"
 PROJECT_DIR=$(dirname "$MEMORY_DIR")
 SESSION_ID=$(basename $(ls -t "$PROJECT_DIR"/*.jsonl 2>/dev/null | head -1) .jsonl 2>/dev/null)
@@ -132,23 +137,9 @@ Status: Context limit reached. Work continues in next session.
 
 ### Step 4.5: Close Session in Registry
 
-Extract session ID from current .jsonl file, then close registry entry:
-
 ```bash
 REGISTRY_PY="$HOME/.h2t/config/registry/registry.py"
 [ ! -f "$REGISTRY_PY" ] && REGISTRY_PY="/c/dev/config/registry/registry.py"
-
-# Cross-platform h2t venv detection
-H2T_PYTHON="${H2T_PYTHON:-}"
-if [ -z "$H2T_PYTHON" ]; then
-  [ -f "$HOME/.h2t/venv/bin/python" ] && H2T_PYTHON="$HOME/.h2t/venv/bin/python"
-  [ -f "$HOME/.h2t/venv/Scripts/python.exe" ] && H2T_PYTHON="$HOME/.h2t/venv/Scripts/python.exe"
-fi
-[ -z "$H2T_PYTHON" ] && H2T_PYTHON="python3"
-
-MEMORY_DIR="<memory_dir>"
-PROJECT_DIR=$(dirname "$MEMORY_DIR")
-SESSION_ID=$(basename $(ls -t "$PROJECT_DIR"/*.jsonl 2>/dev/null | head -1) .jsonl 2>/dev/null)
 
 if [ -f "$REGISTRY_PY" ] && [ -n "$SESSION_ID" ]; then
   $H2T_PYTHON "$REGISTRY_PY" update \
@@ -176,26 +167,15 @@ PROJECT_DIR=$(dirname "$MEMORY_DIR")
 SESSION_ID=$(basename $(ls -t "$PROJECT_DIR"/*.jsonl 2>/dev/null | head -1) .jsonl 2>/dev/null)
 ```
 
-## Migration from Legacy
-
-If `<memory_dir>/sessions/*.md` exists (old repo-local format):
-1. Determine new path: `~/.dor/sessions/$MACHINE/$REPO/`
-2. Move files there
-3. Remove `<memory_dir>/sessions/` if empty
-
-If `<memory_dir>/handoff.md` exists (very old format):
-1. Read it
-2. Move content to `~/.dor/sessions/$MACHINE/$REPO/{derived-name}.md`
-3. Delete `handoff.md`
-
 ## Common Mistakes
 
 | Mistake | Fix |
 |---------|-----|
-| Writing values from memory | Run `git status`, `git log` first — verify everything |
+| Writing values from memory | Run `$GATHER` first — verify everything |
 | 100+ line handoff | Cut to 60 max. Reference docs, don't repeat |
 | Vague remaining tasks | Be specific: "Implement blockType field (#38)" not "continue work" |
 | Missing issue numbers | Every task and decision links to an issue |
 | Forgetting GitHub comment | Traceability is lost — always post handoff comment |
 | Overwriting existing session file | Check if file exists, append date suffix if needed |
 | Including previous session work | "What Was Done" = THIS session only |
+| Writing to project root | Session files go to `~/.dor/sessions/` — NEVER to project directory |
