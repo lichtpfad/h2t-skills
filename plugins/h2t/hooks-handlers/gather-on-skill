@@ -40,8 +40,12 @@ if [ ! -f "$GATHER_PY" ]; then
   exit 0
 fi
 
-# Run gather.py
-RESULT=$("$H2T_PYTHON" "$GATHER_PY" --cwd "$cwd" 2>/dev/null) || true
+# Build gather args — format-briefing only for dev-session-start
+GATHER_ARGS="--cwd $cwd"
+if [ "$SKILL_NAME" = "dev-session-start" ]; then
+  GATHER_ARGS="$GATHER_ARGS --format-briefing"
+fi
+RESULT=$("$H2T_PYTHON" "$GATHER_PY" $GATHER_ARGS 2>/dev/null) || true
 
 if [ -z "$RESULT" ]; then
   echo '{"systemMessage": "GATHER_ERROR: gather.py returned empty output"}'
@@ -90,12 +94,19 @@ output = {'systemMessage': 'GATHER_DATA: ' + json.dumps(data)}
 print(json.dumps(output))
 " <<< "$RESULT"
 else
-  # dev-session-start: return raw gather data
+  # dev-session-start: return pre-formatted briefing + meta
   "$H2T_PYTHON" -c "
 import sys, json
 raw = sys.stdin.read().strip()
-output = {'systemMessage': 'GATHER_DATA: ' + raw}
-print(json.dumps(output))
+data = json.loads(raw)
+briefing = data.pop('_briefing', '')
+meta = data.pop('_meta', {})
+if briefing:
+    msg = 'BRIEFING:\n' + briefing + '\nGATHER_META: ' + json.dumps(meta, ensure_ascii=False)
+    output = {'systemMessage': msg}
+else:
+    output = {'systemMessage': 'GATHER_DATA: ' + raw}
+print(json.dumps(output, ensure_ascii=False))
 " <<< "$RESULT"
 fi
 exit 0

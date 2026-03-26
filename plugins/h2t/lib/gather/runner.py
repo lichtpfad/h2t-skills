@@ -40,6 +40,10 @@ def run_parallel(
 
 
 def output_json(data: Any) -> None:
-    """Write data as JSON to stdout."""
-    json.dump(data, sys.stdout, ensure_ascii=False, indent=2)
-    sys.stdout.write("\n")
+    """Write data as JSON to stdout (UTF-8 safe on Windows)."""
+    import io, os
+    out = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", newline="")
+    json.dump(data, out, ensure_ascii=False, indent=2)
+    out.write("\n")
+    out.flush()
+    out.detach()  # don't close underlying buffer
