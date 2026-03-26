@@ -34,6 +34,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--memory-dir", default="")
     parser.add_argument("--cwd", default=".")
+    parser.add_argument("--format-briefing", action="store_true")
     args = parser.parse_args()
 
     start = time.monotonic()
@@ -90,6 +91,12 @@ def main():
         "session_id": session_id,
         "machine": machine,
     }
+
+    if args.format_briefing:
+        from gather.briefing import format_briefing as fmt_briefing
+        briefing_md, briefing_meta = fmt_briefing(result)
+        result["_briefing"] = briefing_md
+        result["_meta"] = briefing_meta
 
     duration_ms = int((time.monotonic() - start) * 1000)
 
