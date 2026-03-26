@@ -4,12 +4,12 @@ description: Use when starting a coding or product development session. Triggers
 compatibility: "Claude Code"
 metadata:
   author: lichtpfad
-  version: 2.8.0
+  version: 2.10.0
 ---
 
 # Instructions
 
-When this skill is invoked, the PreToolUse hook has already run gather.py. Use the gathered data to build and show a session briefing, name the session, post a GitHub comment.
+When this skill is invoked, the PreToolUse hook has already run gather.py and formatted a briefing. Show it, name the session, post a GitHub comment.
 
 **Paired with:** `h2t:handoff` (SAVE at end) — this skill is LOAD at start.
 
@@ -27,93 +27,50 @@ fi
 
 ## Procedure
 
-### Step 1: Use Gathered Data
+### Step 1: Show Briefing
 
-The PreToolUse hook already ran gather.py before this skill loaded. Look for `GATHER_DATA:` in the hook output or system messages from this conversation. It contains a JSON object with:
-- `project.id`, `project.domain`, `git.branch`, `git.status`, `git.log`
-- `github.issues`, `github.milestones`, `github.current_milestone`, `github.prs`, `github.bugs`
-- `stack.name`, `sessions`, `machine`
+The PreToolUse hook already formatted the briefing. Look for `BRIEFING:` in hook output or system messages.
 
-If you see `GATHER_ERROR:` instead — show the error to the user and stop.
+**Show it VERBATIM.** Do not modify, supplement, or re-gather any data. Do not run git, gh, or any other commands.
 
-**Do NOT run git, gh, or any other gather commands manually.** All data is already collected. Empty fields (`[]`, `""`, `null`) mean no data exists for that category — this is normal for small or new repos. Do NOT attempt to fill empty fields with manual commands.
+If `BRIEFING:` is missing, look for `GATHER_DATA:` (fallback) and format manually.
+If `GATHER_ERROR:` — show the error and stop.
 
-Also read:
-- Session handoff files listed in `sessions[]` (max 2 most recent, key decisions only)
-- User context from `user.core_path` if present
+Also read (if paths are present in `GATHER_META`):
+- Session handoff files from `sessions[]` (max 2 most recent, key decisions only)
+- User context from `user.core_path`
 - `<memory_dir>/MEMORY.md` for stable lessons
 
-### Step 2: Show Briefing
-
-Format and display the briefing. Do NOT ask questions in this step.
-
-```markdown
-## Project: {project.id} ({git.branch})
-
-**Stack:** {stack.name}
-**Milestone:** {github.current_milestone.title} — {open}/{total} issues
-
-### Open Tasks (from GitHub)
-- P0: #{N} {title}...
-- Bugs: #{N} {title}...
-
-### Uncommitted Work
-{git.status or "clean"}
-
-### Open PRs
-{github.prs or "none"}
-
-### Context from last session
-{key decisions from handoff files — omit if none}
-```
+Append context from handoff/memory after the briefing under "### Контекст прошлых сессий".
+Do NOT show this section if there is nothing relevant.
 
 **Rules:**
 - GitHub issues are source of truth. Never copy "What Remains" from handoff as tasks.
 - If handoff mentions a now-closed issue — omit it.
-- Context section is optional — only include if non-obvious decisions exist.
 
-**Actionable hints for missing data** — append to briefing when applicable:
+### Step 2: Name Session + Choose Direction
 
-| Condition | Hint |
-|-----------|------|
-| `project.type == "workspace"` | Show child projects list from `project.children[]` and ask: "Workspace с {N} проектами. Какой проект сегодня?" Do NOT gather from all children — wait for user choice. |
-| `project.id == "unknown"` | "Repo not registered. Add to `~/.h2t/config/repo-mapping.yaml` for project identity." |
-| `github.issues == []` and repo has GitHub | "No open issues. Create with `/h2t:github-issues` or `gh issue create`." |
-| `sessions == []` | "No previous sessions found. This is a fresh start." |
-| `stack.name == "none"` | "Stack not detected. Add `pyproject.toml`, `package.json`, or `Cargo.toml` if applicable." |
-| No CLAUDE.md in project root | "No CLAUDE.md found. Run `/init` to set up project instructions." |
+⛔ **MANDATORY GATE** — You MUST complete this step. Do NOT ask "Что хочешь делать?" without proposing a session name. Do NOT proceed to coding without a confirmed name.
 
-### Step 3: Name Session + Choose Direction
-
-⛔ **MANDATORY GATE** — Do NOT skip. Handoff file paths depend on session name.
-
-Session slug template:
+The hook provided `slug_template` in `GATHER_META` with deterministic parts pre-filled:
 ```
-{project}-{milestone}-{layer-task}-{date}-{starttime}
+{slug_template}   ← project, milestone, date, time already set
 ```
 
-| Segment | Format | Example |
-|---------|--------|---------|
-| `project` | short repo name | `crypto` |
-| `milestone` | milestone prefix | `m4` |
-| `layer-task` | layer + task type | `l10-annotations` |
-| `date` | YYYY-MM-DD | `2026-03-13` |
-| `starttime` | HHMM (24h local) | `1430` |
+You fill `{task}` based on the top-priority issue or user's stated direction. Use 2-4 words, kebab-case.
 
-If no milestone applies, omit it: `crypto-annotation-fix-l7-l9-2026-03-13-1015`
+Examples:
+- `agent-skills-{task}-2026-03-26-1430` → `agent-skills-briefing-in-hook-2026-03-26-1430`
+- `crypto-p5-{task}-2026-03-26-1015` → `crypto-p5-annotation-layer-2026-03-26-1015`
 
-**Output — propose BOTH name and direction in one message:**
-
-```
-Предлагаю имя сессии: `{slug}` (из issue #{N})
-Корректируй если нужно.
-
-Продолжить с задачей #{N} ({title}), или другое направление?
-```
+**Your message MUST contain:**
+1. Proposed session name (slug_template with `{task}` filled in)
+2. Which issue(s) you suggest working on and why
+3. "Корректируй если нужно."
 
 Wait for user response. Store confirmed name as `SESSION_NAME`.
 
-### Step 4: Post GitHub Comment + Register Session
+### Step 3: Post GitHub Comment + Register Session
 
 ```bash
 SESSION_ID=$(basename $(ls -t ~/.claude/projects/*/$(basename $(pwd))/*.jsonl 2>/dev/null | head -1) .jsonl 2>/dev/null)
@@ -150,9 +107,8 @@ Create TodoWrite tasks from chosen work items.
 
 | Mistake | Fix |
 |---------|-----|
-| Running git/gh/gather manually | Hook already collected all data. Use GATHER_DATA from system messages |
-| Ignoring GATHER_DATA in system messages | The hook output IS the data source. Parse and use it |
-| Asking questions before naming | Step 2 is data-only. Questions go in Step 3 GATE |
+| Modifying or supplementing the BRIEFING | Show it verbatim. All data is pre-formatted by the hook |
+| Asking "Что хочешь делать?" without session name | Step 2 is a GATE — always propose name first |
+| Ignoring slug_template from GATHER_META | Use it — only fill `{task}`, don't rebuild the slug |
 | Start coding without naming session | Name first — handoff path depends on it |
-| Guess session ID | Extract from actual jsonl file path in Step 4 |
 | Trust handoff "What Remains" as task list | Use GitHub open issues — handoff is a stale snapshot |
