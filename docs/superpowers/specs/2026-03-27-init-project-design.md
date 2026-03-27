@@ -53,14 +53,23 @@ When `confidence != "high"` → `needs_input: true` for domain.
 
 **Task tracker:**
 
+Tracker depends on domain (for `notion_db_id` check), so it can only be fully resolved AFTER domain is known.
+
+**Two-pass logic:**
+1. If domain is known (high confidence) → resolve tracker now
+2. If domain needs user input → defer tracker resolution. Set `task_tracker: null, tracker_confidence: "deferred"`. After user picks domain, SKILL.md re-evaluates tracker (or asks if ambiguous).
+
+When domain IS known:
+
 | Condition | Suggested tracker | Confidence |
 |-----------|------------------|------------|
-| GitHub remote exists + `gh` accessible | github | high |
-| Domain has `notion_db_id` in domains.yaml AND no GitHub remote | notion | high |
+| GitHub remote exists + `gh` accessible, domain has NO `notion_db_id` | github | high |
+| Domain has `notion_db_id` AND no GitHub remote | notion | high |
 | Domain has `notion_db_id` AND GitHub remote exists | ambiguous | low → ask |
-| Neither | none | high |
+| No GitHub, domain has no `notion_db_id` | none | high |
 
 When tracker confidence is low → `needs_input: true` for tracker.
+When tracker confidence is "deferred" → resolved after domain selection in SKILL.md Step 2.
 
 **Label:**
 - From existing `domains.yaml` entry if project id matches → use stored label
@@ -75,7 +84,7 @@ When tracker confidence is low → `needs_input: true` for tracker.
     "type": "git",
     "github": "lichtpfad/h2t-vision",
     "stack": "python",
-    "domain": "dev",
+    "domain": "hou2touch",
     "domain_confidence": "high",
     "domain_reason": "path C:/dev/h2t-* matches hou2touch pattern",
     "label": "H2T Vision",
@@ -109,7 +118,7 @@ When input needed:
   },
   "needs_input": true,
   "input_fields": ["domain"],
-  "confirm_message": "Регистрирую проект:\n\n- **ID:** steuer-docs\n- **Label:** Steuer Docs\n- **Тип:** directory (не git)\n- **Task tracker:** none\n\nНе могу определить домен. Варианты:\n1. admin\n2. personal-os\n3. hou2touch\n4. dev\n5. другой\n\nКакой домен?"
+  "confirm_message": "Регистрирую проект:\n\n- **ID:** steuer-docs\n- **Label:** Steuer Docs\n- **Тип:** directory (не git)\n- **Task tracker:** определится после выбора домена\n\nНе могу определить домен. Варианты:\n1. admin\n2. personal-os\n3. hou2touch\n4. dev\n5. другой\n\nКакой домен?"
 }
 ```
 
@@ -127,13 +136,22 @@ When already registered:
 }
 ```
 
+### Already-registered check
+
+`identify_project()` always returns a result (falls back to `id: "unknown"` with `type: "default"`). To reliably detect "already registered":
+
+- Check `repo-mapping.yaml` directly for an explicit mapping entry matching the cwd or repo name
+- If found → `already_registered: true`, populate `current` from the mapping + domains.yaml entry
+- If not found (even if `identify_project()` returns something) → `already_registered: false`
+
+Do NOT rely on `identify_project()` return value for this — its fallback makes it impossible to distinguish "registered" from "default guess".
+
 ### Dependencies
 
 - `gather.stack.detect_stack()` — reuse for stack detection
-- `gather.project.identify_project()` — reuse for "already registered" check
-- `domains.yaml` — read for domain list and notion_db_id
-- `repo-mapping.yaml` — read for existing mappings
-- `gh` CLI — optional, for GitHub check
+- `repo-mapping.yaml` — read directly for already-registered check + existing mappings
+- `domains.yaml` — read for domain list, notion_db_id, and existing project entries
+- `gh` CLI — optional, for GitHub existence check
 
 ---
 
@@ -148,6 +166,9 @@ Step 1: Read INIT_DATA from system messages (injected by PreToolUse hook)
 Step 2: Show confirm_message VERBATIM
         If needs_input — collect missing fields from user
         If already_registered — ask if user wants to update
+        If tracker_confidence == "deferred" — after user picks domain,
+          check if domain has notion_db_id AND github exists → ask tracker
+          otherwise resolve automatically (github/notion/none)
         Otherwise — wait for "ок" or corrections
 
 Step 3: Call apply_registration.py with confirmed parameters
@@ -220,8 +241,8 @@ apply_registration.py \
 
 ### YAML safety
 
-- Use `ruamel.yaml` (preserves comments, formatting, order) if available
-- Fallback to `pyyaml` (may lose comments)
+- **`ruamel.yaml` is required** — these are shared SSOT configs with comments, ordering, and style that must be preserved. `pyyaml` would silently destroy them.
+- If `ruamel.yaml` is not installed → abort with error: `"ruamel.yaml required. Install: pip install ruamel.yaml into ~/.h2t/venv"`
 - Always read → modify → write (never append raw text)
 - Backup original file before writing (`.bak`)
 
@@ -229,14 +250,34 @@ apply_registration.py \
 
 ## Hook Integration
 
-Modify `plugins/h2t/hooks-handlers/gather-on-skill` to handle `init-project`:
+The current `gather-on-skill` hook hardcodes the path `skills/${SKILL_NAME}/scripts/gather.py`. For init-project the entry script is `detect_project.py`, not `gather.py`.
+
+**Solution:** Generalize the hook to support per-skill script names. Add a lookup:
 
 ```bash
-elif [[ "$skill" == *"init-project"* ]]; then
-  SKILL_NAME="init-project"
+# Resolve entry script per skill
+case "$SKILL_NAME" in
+  init-project)  SCRIPT_NAME="detect_project.py" ;;
+  *)             SCRIPT_NAME="gather.py" ;;
+esac
+
+GATHER_PY="${CLAUDE_PLUGIN_ROOT}/skills/${SKILL_NAME}/scripts/${SCRIPT_NAME}"
 ```
 
-The hook runs `detect_project.py` and returns `INIT_DATA: {json}` as systemMessage (same pattern as `GATHER_DATA:`/`BRIEFING:`).
+The hook also needs a new output branch for init-project:
+
+```bash
+elif [ "$SKILL_NAME" = "init-project" ]; then
+  # Return as INIT_DATA: (not GATHER_DATA: or BRIEFING:)
+  "$H2T_PYTHON" -c "
+import sys, json
+raw = sys.stdin.read().strip()
+output = {'systemMessage': 'INIT_DATA: ' + raw}
+print(json.dumps(output, ensure_ascii=False))
+" <<< "$RESULT"
+```
+
+This keeps each skill's message prefix distinct: `BRIEFING:` for session-start, `GATHER_DATA:` for handoff, `INIT_DATA:` for init-project.
 
 ---
 
@@ -272,7 +313,7 @@ The hook runs `detect_project.py` and returns `INIT_DATA: {json}` as systemMessa
 | No git, no markers at all | Register as `directory` type with `task_tracker: none` |
 | GitHub remote exists but `gh` not authenticated | Detect as git, set `github: null`, warn in confirm |
 | Domain has notion_db_id AND GitHub exists | Ask user which tracker to use |
-| ruamel.yaml not installed | Fallback to pyyaml with warning about lost comments |
+| ruamel.yaml not installed | Abort with error, require install into ~/.h2t/venv |
 
 ---
 
