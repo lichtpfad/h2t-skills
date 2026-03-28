@@ -12,9 +12,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-# Ensure stdout is UTF-8 on Windows (avoid cp1252 encoding errors)
-if hasattr(sys.stdout, "buffer"):
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
 
 PLUGIN_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(PLUGIN_ROOT / "lib"))
@@ -346,8 +343,12 @@ def main():
     args = parser.parse_args()
 
     result = detect_project(args.cwd)
-    json.dump(result, sys.stdout, ensure_ascii=False, indent=2)
-    sys.stdout.write("\n")
+    # UTF-8 output on Windows (avoid cp1252 encoding errors)
+    out = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", newline="")
+    json.dump(result, out, ensure_ascii=False, indent=2)
+    out.write("\n")
+    out.flush()
+    out.detach()
 
 
 if __name__ == "__main__":
