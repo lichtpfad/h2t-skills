@@ -95,7 +95,7 @@ When tracker confidence is "deferred" → resolved after domain selection in SKI
   "already_registered": false,
   "needs_input": false,
   "input_fields": [],
-  "confirm_message": "Регистрирую проект:\n\n- **ID:** h2t-vision\n- **Label:** H2T Vision\n- **Домен:** dev\n- **Тип:** git (GitHub: lichtpfad/h2t-vision)\n- **Stack:** python\n- **Task tracker:** github\n\nФайлы:\n- `~/.h2t/config/repo-mapping.yaml` → добавлю mapping\n- `~/.h2t/config/domains.yaml` → добавлю project entry\n\nВсё верно?"
+  "confirm_message": "Регистрирую проект:\n\n- **ID:** h2t-vision\n- **Label:** H2T Vision\n- **Домен:** hou2touch\n- **Тип:** git (GitHub: lichtpfad/h2t-vision)\n- **Stack:** python\n- **Task tracker:** github\n\nФайлы:\n- `~/.h2t/config/repo-mapping.yaml` → добавлю mapping\n- `~/.h2t/config/domains.yaml` → добавлю project entry\n\nВсё верно?"
 }
 ```
 
@@ -112,9 +112,9 @@ When input needed:
     "domain_confidence": "low",
     "domain_reason": "path E:/DROPBOX/Steuer/ — no pattern match",
     "label": "Steuer Docs",
-    "task_tracker": "none",
-    "tracker_confidence": "high",
-    "tracker_reason": "no git, no notion_db_id for domain"
+    "task_tracker": null,
+    "tracker_confidence": "deferred",
+    "tracker_reason": "domain unknown — tracker will be resolved after domain selection"
   },
   "needs_input": true,
   "input_fields": ["domain"],
