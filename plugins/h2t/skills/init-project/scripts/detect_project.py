@@ -5,11 +5,16 @@ Usage: $H2T_PYTHON detect_project.py --cwd <path>
 Outputs JSON to stdout.
 """
 import argparse
+import io
 import json
 import re
 import subprocess
 import sys
 from pathlib import Path
+
+# Ensure stdout is UTF-8 on Windows (avoid cp1252 encoding errors)
+if hasattr(sys.stdout, "buffer"):
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
 
 PLUGIN_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(PLUGIN_ROOT / "lib"))

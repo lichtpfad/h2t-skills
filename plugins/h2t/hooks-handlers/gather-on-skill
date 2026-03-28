@@ -13,6 +13,8 @@ if [[ "$skill" == *"dev-session-start"* ]]; then
   SKILL_NAME="dev-session-start"
 elif [[ "$skill" == *"handoff"* ]]; then
   SKILL_NAME="handoff"
+elif [[ "$skill" == *"init-project"* ]]; then
+  SKILL_NAME="init-project"
 fi
 
 # Exit silently for other skills
@@ -34,9 +36,13 @@ if [ -z "$H2T_PYTHON" ]; then
 fi
 
 # Find skill-specific gather.py
-GATHER_PY="${CLAUDE_PLUGIN_ROOT}/skills/${SKILL_NAME}/scripts/gather.py"
+case "$SKILL_NAME" in
+  init-project)  SCRIPT_NAME="detect_project.py" ;;
+  *)             SCRIPT_NAME="gather.py" ;;
+esac
+GATHER_PY="${CLAUDE_PLUGIN_ROOT}/skills/${SKILL_NAME}/scripts/${SCRIPT_NAME}"
 if [ ! -f "$GATHER_PY" ]; then
-  echo '{"systemMessage": "GATHER_ERROR: gather.py not found at '"$GATHER_PY"'"}'
+  echo '{"systemMessage": "GATHER_ERROR: '"$SCRIPT_NAME"' not found at '"$GATHER_PY"'"}'
   exit 0
 fi
 
@@ -92,6 +98,13 @@ data['_handoff'] = {
 
 output = {'systemMessage': 'GATHER_DATA: ' + json.dumps(data)}
 print(json.dumps(output))
+" <<< "$RESULT"
+elif [ "$SKILL_NAME" = "init-project" ]; then
+  "$H2T_PYTHON" -c "
+import sys, json
+raw = sys.stdin.read().strip()
+output = {'systemMessage': 'INIT_DATA: ' + raw}
+print(json.dumps(output, ensure_ascii=False))
 " <<< "$RESULT"
 else
   # dev-session-start: return pre-formatted briefing + meta
