@@ -107,18 +107,52 @@ output = {'systemMessage': 'INIT_DATA: ' + raw}
 print(json.dumps(output, ensure_ascii=False))
 " <<< "$RESULT"
 else
-  # dev-session-start: return pre-formatted briefing + meta
+  # dev-session-start: return briefing + full instructions in systemMessage
   "$H2T_PYTHON" -c "
-import sys, json
+import sys, json, io
+sys.stdin = io.TextIOWrapper(sys.stdin.buffer, encoding='utf-8', errors='replace')
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
 raw = sys.stdin.read().strip()
 data = json.loads(raw)
 briefing = data.pop('_briefing', '')
 meta = data.pop('_meta', {})
-if briefing:
-    msg = 'BRIEFING:\n' + briefing + '\nGATHER_META: ' + json.dumps(meta, ensure_ascii=False)
-    output = {'systemMessage': msg}
-else:
+
+if not briefing:
     output = {'systemMessage': 'GATHER_DATA: ' + raw}
+    print(json.dumps(output, ensure_ascii=False))
+    sys.exit(0)
+
+slug = meta.get('slug_template', '')
+sessions = meta.get('sessions', [])
+user = meta.get('user', {})
+core_path = user.get('core_path', '')
+
+instructions = '''=== DEV-SESSION-START: ОБЯЗАТЕЛЬНЫЕ ИНСТРУКЦИИ ===
+
+ДАННЫЕ УЖЕ СОБРАНЫ. НЕ запускай git, gh, или другие команды для сбора контекста.
+
+ШАГ 1: Покажи этот брифинг пользователю AS-IS:
+
+''' + briefing + '''
+
+ШАГ 2 (ОБЯЗАТЕЛЬНЫЙ GATE): Предложи имя сессии.
+Шаблон slug: ''' + slug + '''
+Заполни {task} на основе top-priority issue (2-4 слова, kebab-case).
+Предложи направление работы. Завершение сообщения: «Корректируй если нужно.»
+Жди ответа пользователя.
+
+ШАГ 3: После подтверждения — запости GitHub comment и вызови registry.
+
+ЗАПРЕЩЕНО: запускать git log, git status, gh issue list, или любые другие gather-команды.
+Все данные уже в брифинге выше.'''
+
+# Add session/context hints
+if sessions:
+    instructions += '\\n\\nHandoff-файлы для чтения (max 2 newest): ' + json.dumps(sessions[:2], ensure_ascii=False)
+if core_path:
+    instructions += '\\n\\nUser context: ' + core_path
+
+output = {'systemMessage': instructions}
 print(json.dumps(output, ensure_ascii=False))
 " <<< "$RESULT"
 fi
