@@ -37,8 +37,9 @@ def main():
     record_eval("handoff", {
         "duration_ms": int((time.monotonic() - start) * 1000),
         "sources_used": ["project", "git", "sessions"],
+        "sources_failed": [],
         "context_tokens_estimate": estimate_tokens(result),
-    })
+    }, plugin_version="2.12.1")
 
     output_json(result)
 

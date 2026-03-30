@@ -109,7 +109,7 @@ def main():
         "context_tokens_estimate": estimate_tokens(result),
         "project_type": project["type"],
         "project_domain": project.get("domain", ""),
-    })
+    }, plugin_version="2.12.1")
 
     output_json(result)
 
