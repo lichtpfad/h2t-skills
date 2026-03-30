@@ -58,8 +58,10 @@ if [ "$PUSH" = true ]; then
   git -C "$REPO_DIR" push origin main 2>/dev/null
 fi
 
-# Step 2: Pull marketplace
+# Step 2: Pull marketplace (reset local changes first)
 if [ -d "$MARKETPLACE_DIR/.git" ]; then
+  git -C "$MARKETPLACE_DIR" checkout -- . 2>/dev/null || true
+  git -C "$MARKETPLACE_DIR" clean -fd 2>/dev/null || true
   git -C "$MARKETPLACE_DIR" pull origin main --ff-only 2>/dev/null || true
 fi
 
