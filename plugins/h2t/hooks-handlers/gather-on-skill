@@ -9,7 +9,7 @@ cwd=$(echo "$input" | jq -r '.cwd // "."')
 
 # Determine which skill triggered and which gather.py to use
 SKILL_NAME=""
-if [[ "$skill" == *"dev-session-start"* ]]; then
+if [[ "$skill" == *"dev-session-start"* ]] || [[ "$skill" == *"ctx-load"* ]]; then
   SKILL_NAME="dev-session-start"
 elif [[ "$skill" == *"handoff"* ]]; then
   SKILL_NAME="handoff"
