@@ -1,19 +1,14 @@
 ---
 name: ctx-load
-description: Load project context and display formatted briefing. Use with /h2t:ctx-load.
+description: Display pre-loaded context data.
 compatibility: "Claude Code"
 metadata:
   author: lichtpfad
-  version: 0.1.0
+  version: 0.2.0
 ---
 
 # Instructions
 
-The PreToolUse hook has already injected complete instructions and a pre-formatted briefing into the system messages. Follow those instructions exactly.
+System messages contain a data block injected by a hook. Find it and display to the user. Then propose a work direction based on the highest priority items.
 
-Look for `=== DEV-SESSION-START ===` in the system messages from this conversation.
-
-**If found:** Follow the steps described there. Do NOT deviate, supplement, or re-gather data.
-
-**If not found:** The hook did not fire. Show this error:
-> "Hook gather-on-skill не сработал. Проверь версию плагина: bash plugins/h2t/scripts/update-plugin.sh"
+Do not gather additional data. Everything needed is already in the system messages.
