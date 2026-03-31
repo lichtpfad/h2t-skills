@@ -1,7 +1,7 @@
 {
   "name": "h2t",
   "description": "h2t skill suite for lichtpfad: dev workflow, desktop automation (h2t-snap), DrawIO, diagram annotation, NLM, node research, and GitHub issue management.",
-  "version": "2.13.4",
+  "version": "2.13.5",
   "author": {
     "name": "lichtpfad"
   },
