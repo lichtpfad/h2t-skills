@@ -20,6 +20,12 @@ fi
 # Exit silently for other skills
 [ -z "$SKILL_NAME" ] && exit 0
 
+# Set marker for block-gather hook (ctx-load/dev-session-start)
+if [ "$SKILL_NAME" = "dev-session-start" ]; then
+  mkdir -p "$HOME/.h2t"
+  echo "skill=$skill cwd=$cwd ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$HOME/.h2t/.ctx-load-active"
+fi
+
 # Detect python
 H2T_PYTHON="${H2T_PYTHON:-}"
 if [ -z "$H2T_PYTHON" ]; then

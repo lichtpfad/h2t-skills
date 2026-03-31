@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# PreToolUse hook: block manual gather commands when ctx-load data is available.
+# Checks for marker file created by gather-on-skill hook.
+set -euo pipefail
+
+input=$(cat)
+tool=$(echo "$input" | jq -r '.tool_name // ""')
+
+# Only intercept Bash tool
+[ "$tool" != "Bash" ] && exit 0
+
+# Check if ctx-load/dev-session-start marker exists (set by gather-on-skill)
+MARKER="$HOME/.h2t/.ctx-load-active"
+[ ! -f "$MARKER" ] && exit 0
+
+# Check if marker is fresh (less than 5 minutes old)
+if [ -f "$MARKER" ]; then
+  MARKER_AGE=$(( $(date +%s) - $(date -r "$MARKER" +%s 2>/dev/null || echo 0) ))
+  [ "$MARKER_AGE" -gt 300 ] && rm -f "$MARKER" && exit 0
+fi
+
+# Get the command being executed
+command=$(echo "$input" | jq -r '.tool_input.command // ""')
+
+# Block git/gh gather commands
+if echo "$command" | grep -qE '^\s*(git log|git status|git branch|git diff|git stash|gh issue|gh pr |gh milestone|gh api)'; then
+  echo '{"decision": "block", "reason": "Данные уже собраны hook. Используй BRIEFING из system messages. Не нужно запускать git/gh команды вручную."}'
+  exit 0
+fi
+
+# Allow everything else
+exit 0
