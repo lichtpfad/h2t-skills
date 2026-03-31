@@ -258,3 +258,30 @@ Claude следует конкретным шагам без импровиза�
 | v2.13.3 — neutral desc | Neutral command description | ❌ manual | ❌ | Description not the trigger |
 | v2.13.4 — gmail pattern | Concrete bash commands | ✅ hook data | ❌ | Suppresses gather, not GATE |
 | v2.13.5 — PostToolUse | Reminder after skill load | ✅ hook data | ❌ | Reminder seen but ignored |
+| v2.13.7 — hookify block | Block git/gh via hookify rule | ✅ hook data | ❌ | **WORKS.** Claude forced to use hook data. First success in git repo. |
+
+## Эксперимент 7: Hookify block (harness-level)
+
+**Гипотеза:** Если заблокировать git/gh команды на уровне harness (hookify rule с `action: block`), Claude будет вынужден использовать данные из hook.
+
+**Действие:** Добавлен `.claude/hookify.block-gather.local.md`:
+```yaml
+name: block-gather-during-ctx-load
+enabled: true
+event: bash
+action: block
+pattern: ^(git log|git status|git branch|git diff|git stash|gh issue|gh pr |gh milestone|gh api)
+```
+
+**Результат:**
+1. Claude попробовал `git log` → hookify вернул `PreToolUse:Bash hook returned blocking error`
+2. Параллельный `git branch` отменён каскадно
+3. Claude **взял данные из hook BRIEFING** — коммиты, статус, контекст сессии
+4. Ни одного manual gather call
+
+**Нюансы:**
+- Claude всё ещё вызвал `date` через Bash (не git/gh → не заблокировано) — дата должна быть в briefing
+- Блокирующие error messages выглядят некрасиво в UI
+- Block действует **постоянно** в проекте, не только при ctx-load — нужен механизм временного включения
+
+**Вывод:** Hook (данные) + hookify block (запрет альтернативы) = единственная комбинация где Claude полностью использует pre-loaded контекст в git repo. Это harness-level enforcement — Claude не может обойти block, в отличие от instructions.
