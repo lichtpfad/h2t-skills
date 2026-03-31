@@ -1,5 +1,5 @@
 ---
-description: "Load project context and display formatted briefing."
+description: "Process and display data from system messages."
 ---
 
 Use the h2t:ctx-load skill.
