@@ -189,6 +189,25 @@ RUBRIC — score each area 0-3:
 - 2: Clear modules, defined API surface, reasonable deps
 - 3: Clean API, modular, minimal deps, easy to extend
 
+PART 2 — POSITIONING QUALITY EVAL
+
+Also evaluate the POSITIONING document quality. Score each section 1-5:
+
+### Positioning Sections (1-5 each):
+
+| Section | What 5/5 looks like |
+|---------|---------------------|
+| Audience | Named persona with role, pain, context. Can find on LinkedIn in 30 sec |
+| Problem | Described in user's language, not technical jargon. Specific pain, not abstract gap |
+| Messaging | One-liner lands in 3 seconds. Clear benefit, not feature |
+| Competitive | Named alternatives with specific gaps. Honest about own weaknesses |
+| MVP Scope | Concrete, matches actual releases. In/Out is a real decision, not obvious |
+
+If ANY positioning section scores below 3/5, list it in a `positioning_weaknesses` block with:
+- Which section failed
+- Why it failed (specific critique)
+- What would make it pass (actionable fix instruction for COUNCIL)
+
 OUTPUT FORMAT (exactly):
 
 ## Readiness Score: {total}/12
@@ -199,6 +218,20 @@ OUTPUT FORMAT (exactly):
 | Documentation | {n}/3 | {one-line justification} |
 | Product Readiness | {n}/3 | {one-line justification} |
 | Architecture | {n}/3 | {one-line justification} |
+
+## Positioning Quality
+
+| Section | Score | Note |
+|---------|-------|------|
+| Audience | {n}/5 | {one-line} |
+| Problem | {n}/5 | {one-line} |
+| Messaging | {n}/5 | {one-line} |
+| Competitive | {n}/5 | {one-line} |
+| MVP Scope | {n}/5 | {one-line} |
+
+{IF any section < 3/5:}
+### Positioning Weaknesses (for COUNCIL retry)
+- **{section}**: {why it failed}. FIX: {what to do differently}
 
 ### Strengths
 - {2-3 bullet points, be specific}
@@ -212,15 +245,48 @@ OUTPUT FORMAT (exactly):
 3. {third}
 ```
 
-Save agent's output as `eval_report`. Show to user:
+Save agent's output as `eval_report`.
+
+### Stage 3b: COUNCIL RETRY (conditional, max 1 retry)
+
+**Check eval_report for `Positioning Weaknesses` section.**
+
+If **no weaknesses** (all positioning sections ≥ 3/5): proceed to Stage 4.
+
+If **weaknesses found** AND this is the **first pass** (no retry yet):
+
+1. Show the JUDGE evaluation to the user:
+```
+## JUDGE — Positioning needs improvement
+
+{eval_report positioning quality table + weaknesses}
+
+Retrying COUNCIL with JUDGE feedback (1 of 1 allowed retries)...
+```
+
+2. **Re-launch COUNCIL Agent** (model: sonnet) with the ORIGINAL prompt PLUS this addition:
+```
+JUDGE FEEDBACK — fix these specific issues:
+{paste Positioning Weaknesses section from eval_report}
+
+Keep sections that scored ≥ 3/5 unchanged. Only rewrite the weak sections.
+```
+
+3. **Re-launch JUDGE Agent** (model: opus) with the new positioning.
+
+If **weaknesses found** AND this is already a **retry** (second pass):
+- Show results to user: "Positioning still has weak spots after retry. Proceeding with current version."
+- Continue to Stage 4.
+
+Show final eval to user:
 
 ```
-## JUDGE — Readiness Evaluation
+## JUDGE — Readiness Evaluation {" (after retry)" if retried}
 
 {eval_report}
 ```
 
-**Do NOT stop here.** Proceed to Stage 4.
+**Proceed to Stage 4.**
 
 ## Stage 4: DOCS (LLM — use model: sonnet)
 
