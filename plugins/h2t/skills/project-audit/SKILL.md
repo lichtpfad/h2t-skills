@@ -71,40 +71,49 @@ Issues: {open_issue_count} open
 | License      | {yes/no} |
 | Landing      | {yes/no} |
 | CI           | {yes/no} |
+| Releases     | {count, latest tag + asset names} |
 
 Recent: {last 3 commit messages}
+File tree: {top-level dirs and key files from file_tree}
 ```
 
 If `existing_card` is present in scan result, also show the current projects.yaml card fields.
+If `releases` is non-empty, show release tags and asset names (important for platform support detection).
+If `landing_head` is non-empty, note that landing content is available for JUDGE analysis.
 
 **Do NOT stop here.** Proceed immediately to Stage 2.
 
-## Stage 2: COUNCIL (LLM — use model: haiku)
+## Stage 2: COUNCIL (LLM — use model: sonnet)
 
-Generate lightweight positioning from scan data. This is NOT an interactive workshop — it's automated positioning from facts.
+Generate product positioning from scan data. This is NOT an interactive workshop — it's automated positioning from facts. But it must be MARKETING positioning, not a tech spec.
 
-**Launch an Agent** with `model: haiku`:
+**Launch an Agent** with `model: sonnet`:
 
 ```
 Prompt for the agent:
 
-You are a product positioning analyst. Based on the scan data below, generate a positioning document.
+You are a product marketing strategist (not a technical writer). Based on the scan data below, generate a MARKETING positioning document.
 
 SCAN DATA:
-{paste full scan_result JSON}
+{paste full scan_result JSON — includes readme_head, releases, landing_head, file_tree, existing_card}
 
 TEMPLATE (fill every section):
 {read and paste contents of $TEMPLATES_DIR/positioning.md.template}
 
 RULES:
-- One-Liner: max 10 words, must be concrete (not "AI-powered tool for X")
-- For Whom: specific role + context, not "developers"
-- Problem/Solution: grounded in what the repo ACTUALLY does (check README head, commits)
-- If existing_card has product_vision, use it as guidance
-- If existing_card has one_liner, improve it or keep if already good
-- Competitive Landscape: if you don't know real competitors, say "No direct competitors identified — niche/internal tool"
-- MVP Scope: derive from open issues and recent commits
-- Definition of Done: 3-5 concrete criteria
+- This is MARKETING positioning, not a tech spec. Write for someone deciding whether to use/buy this.
+- One-Liner: max 10 words. Lead with the user benefit, not the technology.
+- For Whom: specific role + pain point + context. Not "developers" — who exactly, in what situation?
+- Problem: the PAIN the user feels, not the technical gap. Use their language.
+- Solution: lead with the outcome, then explain the mechanism briefly.
+- Why Now: market timing, competitive window, technology readiness. Be specific.
+- Competitive Landscape: name real alternatives if known. If niche/internal, explain WHY no competitors exist (market gap or too early?)
+- Key Metrics: business metrics (adoption, retention, time saved), not just technical metrics
+- Use releases data to understand platform support (e.g. if .exe AND .dmg exist → cross-platform)
+- Use landing_head to understand current messaging — improve on it, don't just repeat
+- If existing_card has product_vision, use it but make it sharper
+- MVP Scope: what's shipped (from releases) vs what's planned (from issues/commits)
+- Definition of Done: 3-5 criteria mixing product AND marketing readiness
 - Total output: under 400 words
 ```
 
@@ -132,10 +141,16 @@ You are a senior engineering manager evaluating project readiness for public rel
 Be calibrated and honest. A score of 3/3 means genuinely excellent, not "has the file."
 
 SCAN DATA:
-{paste full scan_result JSON}
+{paste full scan_result JSON — includes releases, landing_head, file_tree}
 
 POSITIONING:
 {positioning_draft}
+
+IMPORTANT: Use ALL scan data fields for evidence:
+- releases: check what platforms are supported (asset names like .exe, .dmg, .AppImage)
+- landing_head: read and evaluate the landing page quality (messaging, CTA, design intent)
+- file_tree: understand actual project structure
+- Do NOT assume facts not in the data. If releases show only .exe, it's Windows-only.
 
 RUBRIC — score each area 0-3:
 
@@ -156,6 +171,7 @@ RUBRIC — score each area 0-3:
 - 1: Has one of: positioning, landing, clear README pitch
 - 2: Has positioning + landing OR very clear product narrative
 - 3: Positioning + landing + marketing docs + clear onboarding
+- NOTE: If landing page exists, evaluate its quality: is the messaging clear? Is there a CTA? Does it convey value proposition in 5 seconds?
 
 ### Architecture (0-3)
 - 0: Monolith, no clear API, tangled dependencies

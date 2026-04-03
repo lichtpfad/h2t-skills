@@ -93,6 +93,92 @@ def read_head(path: Path, max_lines: int = 30) -> str:
         return ""
 
 
+def gh_repo_slug(repo: Path) -> str:
+    """Extract owner/repo from git remote."""
+    out = run(["git", "remote", "get-url", "origin"], cwd=str(repo))
+    if not out:
+        return ""
+    # Handle both HTTPS and SSH URLs
+    for prefix in ["https://github.com/", "git@github.com:"]:
+        if out.startswith(prefix):
+            slug = out[len(prefix):]
+            return slug.removesuffix(".git")
+    return ""
+
+
+def gh_releases(repo: Path) -> list[dict]:
+    """Get GitHub releases with asset names."""
+    slug = gh_repo_slug(repo)
+    cmd = ["gh", "release", "list", "--limit", "5", "--json", "tagName,name,publishedAt,isLatest"]
+    if slug:
+        cmd.extend(["--repo", slug])
+    out = run(cmd, cwd=str(repo), timeout=15)
+    if not out:
+        return []
+    try:
+        releases = json.loads(out)
+    except json.JSONDecodeError:
+        return []
+
+    # Fetch assets for each release
+    for r in releases:
+        tag = r.get("tagName", "")
+        if not tag:
+            continue
+        view_cmd = ["gh", "release", "view", tag, "--json", "assets"]
+        if slug:
+            view_cmd.extend(["--repo", slug])
+        assets_out = run(view_cmd, cwd=str(repo), timeout=15)
+        if assets_out:
+            try:
+                assets_data = json.loads(assets_out)
+                r["asset_names"] = [a.get("name", "") for a in assets_data.get("assets", [])]
+            except json.JSONDecodeError:
+                r["asset_names"] = []
+        else:
+            r["asset_names"] = []
+    return releases
+
+
+def landing_content(repo: Path) -> str:
+    """Read landing page HTML (first 80 lines) for analysis."""
+    candidates = [
+        repo / "landing" / "index.html",
+        repo / "index.html",
+    ]
+    for p in candidates:
+        if p.exists():
+            return read_head(p, max_lines=80)
+    return ""
+
+
+def file_tree(repo: Path, max_depth: int = 2) -> list[str]:
+    """Shallow file tree, excluding noise dirs."""
+    skip = {".git", "__pycache__", ".venv", "venv", "node_modules", "dist",
+            "build", ".egg-info", ".mypy_cache", ".pytest_cache", ".ruff_cache"}
+    result = []
+
+    def _walk(path: Path, depth: int, prefix: str = ""):
+        if depth > max_depth:
+            return
+        try:
+            entries = sorted(path.iterdir(), key=lambda e: (not e.is_dir(), e.name.lower()))
+        except PermissionError:
+            return
+        for entry in entries:
+            if entry.name in skip or entry.name.endswith(".egg-info"):
+                continue
+            rel = str(entry.relative_to(repo))
+            if entry.is_dir():
+                result.append(f"{rel}/")
+                _walk(entry, depth + 1)
+            else:
+                result.append(rel)
+
+    _walk(repo, 0)
+    return result[:60]  # cap to avoid huge output
+
+
 def load_project_card(projects_yaml: Path, repo_id: str) -> dict | None:
     """Load project card from projects.yaml without PyYAML (stdlib only)."""
     if not projects_yaml.exists():
@@ -144,6 +230,9 @@ def scan(repo_path: str, projects_yaml: str | None = None) -> dict:
         "open_issue_count": 0,
         "readme_head": read_head(repo / "README.md"),
         "claude_md_head": read_head(repo / "CLAUDE.md"),
+        "landing_head": landing_content(repo),
+        "releases": gh_releases(repo),
+        "file_tree": file_tree(repo),
         "existing_card": card,
     }
 
