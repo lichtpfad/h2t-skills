@@ -1,0 +1,32 @@
+repo = "claude-agent-skills"
+framework = "h2t-skills"
+default_source = "h2t-core:v3"
+default_eval_set_id = "skills-session-baseline-v1"
+
+[thresholds.unit]
+core_tool_call_success_rate = 0.90
+
+[thresholds.integration]
+core_task_success = 0.80
+core_time_to_first_valid_ms = 60000
+
+[custom_metrics.skills_checklist_compliance]
+key = "skills.checklist_compliance"
+level = "integration"
+type = "num"
+aggregation = "avg"
+description = "Fraction of SKILL.md pipeline steps completed (including session naming GATE)"
+
+[custom_metrics.skills_token_consumption]
+key = "skills.token_consumption"
+level = "unit"
+type = "num"
+aggregation = "avg"
+description = "Estimated tokens consumed during skill gather phase"
+
+[custom_metrics.skills_gather_source_success_rate]
+key = "skills.gather_source_success_rate"
+level = "unit"
+type = "num"
+aggregation = "avg"
+description = "Fraction of data sources that responded without error"

@@ -1,0 +1,53 @@
+name: h2t-evals gate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  unit-tests:
+    name: lib/ unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install test deps
+        run: pip install pytest
+
+      - name: Run lib/ unit tests
+        run: python -m pytest lib/ -v --tb=short
+
+  eval-gate:
+    name: h2t-evals validate-repo
+    runs-on: ubuntu-latest
+    needs: unit-tests
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Validate evals/repo.toml parses
+        run: python -c "import tomllib; tomllib.load(open('evals/repo.toml','rb')); print('evals/repo.toml: valid TOML')"
+
+      - name: h2t-evals validate-repo (requires service token)
+        env:
+          H2T_EVALS_ENABLED: ${{ secrets.H2T_EVALS_ENABLED || '0' }}
+          H2T_EVALS_SERVICE_URL: ${{ secrets.H2T_EVALS_SERVICE_URL || '' }}
+          H2T_EVALS_TOKEN: ${{ secrets.H2T_EVALS_TOKEN || '' }}
+        run: |
+          if [ "$H2T_EVALS_ENABLED" = "1" ] && [ -n "$H2T_EVALS_SERVICE_URL" ]; then
+            pip install -e . 2>/dev/null || true
+            h2t-evals validate-repo --repo claude-agent-skills --repo-config evals/repo.toml
+          else
+            echo "BLOCKED: H2T_EVALS_TOKEN not provisioned for this repo."
+            echo "Service token must be added as GitHub secret H2T_EVALS_TOKEN by platform team."
+            echo "Unit tests (above) are the hard gate until token is provisioned."
+          fi
