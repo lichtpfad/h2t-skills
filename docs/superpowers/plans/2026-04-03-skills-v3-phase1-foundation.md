@@ -669,7 +669,7 @@ jobs:
         run: |
           if [ "$H2T_EVALS_ENABLED" = "1" ] && [ -n "$H2T_EVALS_SERVICE_URL" ]; then
             pip install -e . 2>/dev/null || true
-            h2t-evals validate-repo --repo-toml evals/repo.toml
+            h2t-evals validate-repo --repo claude-agent-skills --repo-config evals/repo.toml
           else
             echo "BLOCKED: H2T_EVALS_TOKEN not provisioned for this repo."
             echo "Service token must be added as GitHub secret H2T_EVALS_TOKEN by platform team."
@@ -1536,8 +1536,9 @@ Expected: 28 (30 - ctx-load - session-name)
 
 ```bash
 git add plugins/h2t/skills/dev-session-start/SKILL.md
+git add plugins/h2t/hooks-handlers/gather-on-skill   # critical: hook fix from Step 8.1b
 git add -u plugins/h2t/skills/  # picks up deletions
-git commit -m "feat(migration): alias dev-session-start → shim, delete ctx-load/session-name"
+git commit -m "feat(migration): alias dev-session-start → shim, strip hook routing, delete ctx-load/session-name"
 ```
 
 ---
@@ -1597,7 +1598,7 @@ Expected: JSON with `action: "session.start"`, correct `domain` and `project`.
 
 - [ ] **Step 9.7: Report in h2t-evals tracker issues**
 
-Post BLOCKED comment in h2t-evals#44 (M3) — evals/repo.toml is ready but CI not yet wired (Phase 1 scope):
+Post BLOCKED comment in h2t-evals#44 (M3). Use the CI pass URL from the merged PR (unit-tests job passes; eval-gate job prints BLOCKED message, does not fail CI):
 
 ```
 Repo:
@@ -1606,17 +1607,27 @@ Repo:
 Scope completed:
 - evals/repo.toml added with thresholds and custom metrics
 - lib/eval/session.py (SkillEval context manager) wired into session-start and handoff
+- .github/workflows/evals.yml CI gate wired (unit-tests job: hard gate; eval-gate job: BLOCKED pending token)
 - Local spool writing verified
 
 Evidence:
 - PR: (link when merged)
-- CI pass: (deferred — CI gate is Phase 2 task)
+- CI pass: (unit-tests job URL — green on merge)
+- CI fail (intentional): eval-gate job prints BLOCKED, exits 0; will fail hard once H2T_EVALS_TOKEN provisioned
 - validate-repo snippet: pending (service token needed from platform)
+- session_ids: (from Step 9.5 manual run)
+
+Acceptance checklist:
+- [x] Required metadata emitted (evals/repo.toml)
+- [x] Required core metrics registered (thresholds.unit + thresholds.integration)
+- [x] Custom metrics registered before use (skills.*)
+- [ ] Deterministic eval_set behavior confirmed — deferred (no unit_cases.jsonl yet)
+- [x] CI gate blocks non-compliant runs (unit tests hard gate active)
 
 Result:
 BLOCKED
-Reason: h2t-evals service token not yet provisioned for this repo
-Next dependency: platform team to provision H2T_EVALS_TOKEN for claude-agent-skills
+Reason: H2T_EVALS_TOKEN not provisioned; validate-repo and deterministic eval_set deferred
+Next dependency: platform team to provision H2T_EVALS_TOKEN secret for lichtpfad/claude-agent-skills
 ```
 
 - [ ] **Step 9.8: Final commit + push**
