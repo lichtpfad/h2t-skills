@@ -1,0 +1,138 @@
+"""SkillEval — context manager for skill evaluation.
+
+Dual-write: local JSON (always) + h2t-evals SDK (when H2T_EVALS_ENABLED=1).
+
+Usage:
+    with SkillEval("session-start", domain="dev", project="h2t-ai") as ev:
+        ev.metric("skills.gather_source_success_rate", value_num=0.95)
+    # local JSON written + SDK sent on __exit__
+
+Promoted from plugins/h2t/lib/gather/eval.py to shared lib/.
+"""
+
+import json
+import os
+import platform
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Optional
+
+
+class SkillEval:
+    def __init__(
+        self,
+        skill: str,
+        domain: str,
+        project: str,
+        plugin_version: str = "",
+        evals_root: Optional[str] = None,
+    ) -> None:
+        self.skill = skill
+        self.domain = domain
+        self.project = project
+        self.plugin_version = plugin_version
+        self.evals_root = evals_root
+        self._metrics: list[dict] = []
+        self._started_at: Optional[str] = None
+
+    def __enter__(self) -> "SkillEval":
+        self._started_at = datetime.now(timezone.utc).isoformat()
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb) -> bool:
+        status = "failure" if exc_type else "success"
+        ended_at = datetime.now(timezone.utc).isoformat()
+        self._write_local(status, ended_at)
+        if os.environ.get("H2T_EVALS_ENABLED") == "1":
+            self._send_central(status)
+        return False  # do not suppress exceptions
+
+    def metric(
+        self,
+        key: str,
+        value_num: Optional[float] = None,
+        value_bool: Optional[bool] = None,
+        value_text: Optional[str] = None,
+    ) -> None:
+        """Record a metric to be written on context exit."""
+        entry: dict = {"key": key}
+        if value_num is not None:
+            entry["value_num"] = value_num
+        if value_bool is not None:
+            entry["value_bool"] = value_bool
+        if value_text is not None:
+            entry["value_text"] = value_text
+        self._metrics.append(entry)
+
+    def _write_local(self, status: str, ended_at: str) -> None:
+        root = Path(self.evals_root) if self.evals_root else Path.home() / ".h2t" / "evals"
+        sessions_dir = root / self.skill / "sessions"
+        try:
+            sessions_dir.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            return
+
+        now_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        existing = list(sessions_dir.glob(f"{self.skill[:2]}-{now_str}-*.json"))
+        seq = len(existing) + 1
+        prefix = self.skill[:2]
+        filepath = sessions_dir / f"{prefix}-{now_str}-{seq:03d}.json"
+
+        record = {
+            "skill": self.skill,
+            "domain": self.domain,
+            "project": self.project,
+            "status": status,
+            "started_at": self._started_at,
+            "ended_at": ended_at,
+            "metrics": self._metrics,
+        }
+        try:
+            with open(filepath, "w", encoding="utf-8") as f:
+                json.dump(record, f, ensure_ascii=False, indent=2)
+        except OSError:
+            pass
+
+    def _send_central(self, status: str) -> None:
+        """Send to h2t-evals SDK. Silent on any failure."""
+        try:
+            from h2t_evals.sdk import EvalClient, EvalSession
+        except ImportError:
+            return
+
+        service_url = os.environ.get("H2T_EVALS_SERVICE_URL", "http://127.0.0.1:8088")
+        token = os.environ.get("H2T_EVALS_TOKEN", "")
+        spool = os.environ.get(
+            "H2T_EVALS_SPOOL",
+            str(Path.home() / ".h2t" / "evals" / ".h2t_evals_spool.db"),
+        )
+        try:
+            client = EvalClient(service_url=service_url, token=token, spool_path=spool)
+            source = f"{self.skill}:v{self.plugin_version}" if self.plugin_version else self.skill
+            s = EvalSession(
+                client=client,
+                repo=self.project,
+                framework="h2t-skill",
+                source=source,
+                eval_set_id="skills-session-baseline-v1",
+                host=platform.node().lower().split(".")[0],
+                run_env=os.environ.get("H2T_EVALS_RUN_ENV", "agent"),
+            )
+            s.start()
+
+            task_success = status == "success"
+            s.metric("core.task_success", level="integration", value_bool=task_success)
+            s.metric("core.time_to_first_valid_ms", level="integration", value_num=0.0, unit="ms")
+            s.metric("core.tool_call_success_rate", level="unit", value_num=1.0 if task_success else 0.0)
+            s.metric("core.op_type_correct_rate", level="unit", value_num=1.0)
+            s.metric("core.deflection_rate", level="business", value_num=1.0 if task_success else 0.0)
+
+            for m in self._metrics:
+                kwargs = {k: v for k, v in m.items() if k != "key"}
+                kwargs.setdefault("level", "unit")
+                s.metric(m["key"], **kwargs)
+
+            s.finish(status=status)
+            client.flush(limit=200)
+        except Exception:
+            pass  # never crash a skill for eval failure
