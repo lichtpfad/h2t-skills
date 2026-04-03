@@ -35,7 +35,8 @@ jobs:
           python-version: "3.11"
 
       - name: Validate evals/repo.toml parses
-        run: python -c "import tomllib; tomllib.load(open('evals/repo.toml','rb')); print('evals/repo.toml: valid TOML')"
+        run: |
+          python -c "import tomllib; tomllib.load(open('evals/repo.toml','rb')); print('evals/repo.toml: valid TOML')"
 
       - name: h2t-evals validate-repo (requires service token)
         env:
