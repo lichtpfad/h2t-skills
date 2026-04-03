@@ -8,10 +8,11 @@ skill=$(echo "$input" | jq -r '.tool_input.skill // ""')
 cwd=$(echo "$input" | jq -r '.cwd // "."')
 
 # Determine which skill triggered and which gather.py to use
+# NOTE: dev-session-start is no longer routed here — it's a transparent redirect
+# to h2t-core:session-start which has its own hook. Routing it here would cause
+# double-hook execution.
 SKILL_NAME=""
-if [[ "$skill" == *"dev-session-start"* ]] || [[ "$skill" == *"ctx-load"* ]]; then
-  SKILL_NAME="dev-session-start"
-elif [[ "$skill" == *"handoff"* ]]; then
+if [[ "$skill" == *"handoff"* ]]; then
   SKILL_NAME="handoff"
 elif [[ "$skill" == *"init-project"* ]]; then
   SKILL_NAME="init-project"
@@ -19,12 +20,6 @@ fi
 
 # Exit silently for other skills
 [ -z "$SKILL_NAME" ] && exit 0
-
-# Set marker for block-gather hook (ctx-load/dev-session-start)
-if [ "$SKILL_NAME" = "dev-session-start" ]; then
-  mkdir -p "$HOME/.h2t"
-  echo "skill=$skill cwd=$cwd ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$HOME/.h2t/.ctx-load-active"
-fi
 
 # Detect python
 H2T_PYTHON="${H2T_PYTHON:-}"
@@ -52,11 +47,8 @@ if [ ! -f "$GATHER_PY" ]; then
   exit 0
 fi
 
-# Build gather args — format-briefing only for dev-session-start
+# Build gather args
 GATHER_ARGS="--cwd $cwd"
-if [ "$SKILL_NAME" = "dev-session-start" ]; then
-  GATHER_ARGS="$GATHER_ARGS --format-briefing"
-fi
 RESULT=$("$H2T_PYTHON" "$GATHER_PY" $GATHER_ARGS 2>/dev/null) || true
 
 if [ -z "$RESULT" ]; then
@@ -110,58 +102,6 @@ elif [ "$SKILL_NAME" = "init-project" ]; then
 import sys, json
 raw = sys.stdin.read().strip()
 output = {'systemMessage': 'INIT_DATA: ' + raw}
-print(json.dumps(output, ensure_ascii=False))
-" <<< "$RESULT"
-else
-  # dev-session-start: return briefing + full instructions in systemMessage
-  "$H2T_PYTHON" -c "
-import sys, json, io
-sys.stdin = io.TextIOWrapper(sys.stdin.buffer, encoding='utf-8', errors='replace')
-sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
-raw = sys.stdin.read().strip()
-data = json.loads(raw)
-briefing = data.pop('_briefing', '')
-meta = data.pop('_meta', {})
-
-if not briefing:
-    output = {'systemMessage': 'GATHER_DATA: ' + raw}
-    print(json.dumps(output, ensure_ascii=False))
-    sys.exit(0)
-
-slug = meta.get('slug_template', '')
-sessions = meta.get('sessions', [])
-user = meta.get('user', {})
-core_path = user.get('core_path', '')
-
-instructions = '''=== DEV-SESSION-START ===
-
-Все данные уже собраны. Твой ответ должен содержать ДВЕ части в ОДНОМ сообщении:
-
-ЧАСТЬ 1 — покажи этот брифинг:
-
-''' + briefing + '''
-
-ЧАСТЬ 2 — предложи имя сессии и направление (в том же сообщении, сразу после брифинга):
-
-Шаблон slug: ''' + slug + '''
-Заполни {task} на основе top-priority issue (2-4 слова, kebab-case).
-
-Формат ЧАСТИ 2:
----
-Предлагаю имя сессии: `{заполненный slug}`
-Направление: #{номер} {title} — {почему это приоритет}
-Корректируй если нужно.
-
-НЕ заканчивай ответ только брифингом. НЕ спрашивай "Что делаем?" — предложи сам.
-НЕ запускай git, gh, или другие команды. Данные уже в брифинге.'''
-
-# Add session/context hints
-if sessions:
-    instructions += '\\n\\nHandoff-файлы для чтения (max 2 newest): ' + json.dumps(sessions[:2], ensure_ascii=False)
-if core_path:
-    instructions += '\\n\\nUser context: ' + core_path
-
-output = {'systemMessage': instructions}
 print(json.dumps(output, ensure_ascii=False))
 " <<< "$RESULT"
 fi
