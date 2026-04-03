@@ -81,6 +81,16 @@ If `existing_card` is present in scan result, also show the current projects.yam
 If `releases` is non-empty, show release tags and asset names (important for platform support detection).
 If `landing_head` is non-empty, note that landing content is available for JUDGE analysis.
 
+**Remote branches alert:** If any `remote_branches` entry has `ahead_of_local > 0`, this means **work was done on another machine** that hasn't been merged locally. Show a warning:
+
+```
+⚠ REMOTE WORK DETECTED:
+  {branch_name}: {ahead_count} commits ahead (last: {date} — {message})
+  This work is NOT reflected in local files. Pipeline will use remote data where possible.
+```
+
+This is critical for accurate assessment — the project may be more complete than local state suggests.
+
 **Do NOT stop here.** Proceed immediately to Stage 2.
 
 ## Stage 2: COUNCIL (LLM — use model: sonnet)

@@ -69,6 +69,48 @@ def recent_commits(repo: Path, n: int = 20) -> list[dict]:
     return commits
 
 
+def remote_branches(repo: Path) -> list[dict]:
+    """Fetch and analyze remote branches — detects work on other machines."""
+    # Fetch latest
+    run(["git", "fetch", "--all", "--quiet"], cwd=str(repo), timeout=30)
+
+    out = run(
+        ["git", "branch", "-r", "--format=%(refname:short)|%(committerdate:short)|%(subject)"],
+        cwd=str(repo),
+    )
+    if not out:
+        return []
+
+    local_branch = run(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=str(repo)) or "main"
+    branches = []
+    for line in out.splitlines():
+        parts = line.split("|", 2)
+        if len(parts) < 3:
+            continue
+        name = parts[0].strip()
+        # Skip HEAD pointer, gh-pages, and bare remote name without branch
+        if "/HEAD" in name or "gh-pages" in name or "/" not in name:
+            continue
+        date = parts[1].strip()
+        message = parts[2].strip()
+
+        # Check if this branch has commits not in local branch
+        ahead = run(
+            ["git", "rev-list", "--count", f"HEAD..{name}"],
+            cwd=str(repo),
+        )
+        ahead_count = int(ahead) if ahead.isdigit() else 0
+
+        branches.append({
+            "name": name,
+            "last_commit_date": date,
+            "last_commit_message": message,
+            "ahead_of_local": ahead_count,
+        })
+
+    return branches
+
+
 def open_issues(repo: Path) -> list[dict]:
     out = run(
         ["gh", "issue", "list", "--state", "open", "--limit", "10", "--json", "number,title,labels"],
@@ -232,6 +274,7 @@ def scan(repo_path: str, projects_yaml: str | None = None) -> dict:
         "claude_md_head": read_head(repo / "CLAUDE.md"),
         "landing_head": landing_content(repo),
         "releases": gh_releases(repo),
+        "remote_branches": remote_branches(repo),
         "file_tree": file_tree(repo),
         "existing_card": card,
     }
