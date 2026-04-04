@@ -21,28 +21,35 @@ H2T_PYTHON="${H2T_PYTHON:-$HOME/.h2t/venv/Scripts/python.exe}"
 
 ### Step 1: Confirm session name
 
-Ask if not already known:
+If SESSION_NAME is already known from this conversation — use it directly.
+
+Otherwise propose auto-name and wait for confirmation:
 ```
-Имя сессии этой работы? (или нажми Enter для auto: `{domain}-{project}-YYYY-MM-DD`)
+Имя сессии: `{domain}-{project}-{topic}-YYYY-MM-DD`
+(y/ok/. — принять, или введи своё)
 ```
 
 Store as SESSION_NAME.
 
-### Step 2: Collect what was done
+### Step 2: Auto-generate what was done
 
-Ask the user:
-```
-Что было сделано? (bullet points или свободный текст)
-```
+DO NOT ask the user. Reconstruct from:
+1. Conversation history — what was implemented, fixed, discussed
+2. `git log --oneline -20` for current repo — recent commits this session
+3. Files created or modified visible in context
+
+Write 3–7 bullet points in Russian. Be specific: what changed, not process.
 
 Store as WHAT_DONE.
 
-### Step 3: Collect what remains
+### Step 3: Auto-generate what remains
 
-Ask the user:
-```
-Что остаётся? (следующие шаги или "ничего")
-```
+DO NOT ask the user. Infer from:
+1. Open issues mentioned in this conversation
+2. TODOs or next steps discussed but not completed
+3. Known blockers or pending decisions from conversation
+
+Write 2–5 bullet points. If nothing clear — write "Нет явных следующих шагов."
 
 Store as WHAT_REMAINS.
 
