@@ -8,11 +8,10 @@ skill=$(echo "$input" | jq -r '.tool_input.skill // ""')
 cwd=$(echo "$input" | jq -r '.cwd // "."')
 
 # Determine which skill triggered and which gather.py to use
-# NOTE: dev-session-start is no longer routed here — it's a transparent redirect
-# to h2t-core:session-start which has its own hook. Routing it here would cause
-# double-hook execution.
 SKILL_NAME=""
-if [[ "$skill" == *"handoff"* ]]; then
+if [[ "$skill" == *"dev-session-start"* || "$skill" == *"session-start"* ]]; then
+  SKILL_NAME="session-start"
+elif [[ "$skill" == *"handoff"* ]]; then
   SKILL_NAME="handoff"
 elif [[ "$skill" == *"init-project"* ]]; then
   SKILL_NAME="init-project"
@@ -62,8 +61,15 @@ echo "$RESULT" | jq . >/dev/null 2>&1 || {
   exit 0
 }
 
-# For handoff: compute correct session file path and inject it
-if [ "$SKILL_NAME" = "handoff" ]; then
+# Output gather data as systemMessage
+if [ "$SKILL_NAME" = "session-start" ]; then
+  "$H2T_PYTHON" -c "
+import sys, json
+raw = sys.stdin.read().strip()
+output = {'systemMessage': 'GATHER_DATA: ' + raw}
+print(json.dumps(output))
+" <<< "$RESULT"
+elif [ "$SKILL_NAME" = "handoff" ]; then
   "$H2T_PYTHON" -c "
 import sys, json, os
 

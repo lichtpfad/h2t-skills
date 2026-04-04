@@ -78,6 +78,22 @@ if [ ! -d "$CACHE_DIR/.claude-plugin" ]; then
   cp -r "$PLUGIN_DIR/.claude-plugin" "$CACHE_DIR/.claude-plugin"
 fi
 
+# Step 3b: Copy h2t-core skills into h2t cache (h2t-core = source of truth, h2t = delivery)
+H2T_CORE_DIR="$REPO_DIR/plugins/h2t-core"
+if [ -d "$H2T_CORE_DIR/skills" ]; then
+  for skill_dir in "$H2T_CORE_DIR"/skills/*/; do
+    skill_name=$(basename "$skill_dir")
+    target="$CACHE_DIR/skills/$skill_name"
+    mkdir -p "$target"
+    cp -r "$skill_dir"/* "$target"/ 2>/dev/null || true
+  done
+fi
+
+# Step 3c: Merge repo-root lib/ into h2t cache (for activity writer, gather, etc.)
+if [ -d "$REPO_DIR/lib" ]; then
+  cp -rT "$REPO_DIR/lib" "$CACHE_DIR/lib"
+fi
+
 # Step 4: Update installed_plugins.json
 NOW=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
 CACHE_DIR_WIN=$(echo "$CACHE_DIR" | sed 's|/c/|C:\\|; s|/|\\|g')
