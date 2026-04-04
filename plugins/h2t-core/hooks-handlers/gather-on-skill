@@ -18,7 +18,8 @@ LOCK_FILE="${TMPDIR:-/tmp}/h2t_gather_${LOCK_KEY}.lock"
 NOW=$(date +%s)
 if [ -f "$LOCK_FILE" ]; then
   LOCK_TIME=$(cat "$LOCK_FILE" 2>/dev/null || echo 0)
-  if (( NOW - LOCK_TIME < 30 )); then
+  AGE=$(( NOW - LOCK_TIME )) || AGE=99
+  if [ "$AGE" -lt 30 ]; then
     exit 0
   fi
 fi
