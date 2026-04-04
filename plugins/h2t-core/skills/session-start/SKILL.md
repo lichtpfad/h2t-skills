@@ -22,11 +22,17 @@ H2T_PYTHON="${H2T_PYTHON:-$HOME/.h2t/venv/Scripts/python.exe}"
 
 ### Step 1: Collect context
 
+The hook injects BRIEFING + GATHER_META into the system context before this skill loads.
+Check if `BRIEFING:` is present in the injected system message:
+
+- **If BRIEFING is present:** parse GATHER_META JSON as GATHER_RESULT. Skip the Bash call.
+- **If BRIEFING is missing (hook failed):** run the fallback:
+
 ```bash
-$H2T_PYTHON "$GATHER" --cwd "$(pwd)" --format-briefing
+$H2T_PYTHON "$GATHER" --format-briefing
 ```
 
-Store the complete JSON output in memory as GATHER_RESULT. Do NOT paraphrase or summarize at this step.
+Store the complete JSON output as GATHER_RESULT. Do NOT paraphrase or summarize at this step.
 
 ### Step 2: Show briefing verbatim
 
