@@ -1,0 +1,117 @@
+# User-level CLAUDE.md
+
+## Центральный контекст
+
+Перед началом работы прочитай `C:/Users/stani/.h2t/config/about-me/core.md` — минимальный контекст о пользователе (ADHD, стиль работы, тон коммуникации).
+
+Для стратегических сессий также: `C:/Users/stani/.h2t/config/docs/strategy-summary.md`.
+Для личных/DOR сессий: `C:/Users/stani/.h2t/config/about-me/psychology.md`.
+
+Полная структура: `C:/Users/stani/.h2t/config/CLAUDE.md`.
+
+## h2t-graphs API
+
+При работе с knowledge graph (поиск операторов, frameworks, курсов) — читай `C:/Users/stani/.h2t/config/rules/graphs-api.md`. Использовать HTTP API, не Python import.
+
+## Versioning (semver)
+
+- **Patch** (x.x.N) — все итерации и фиксы до подтверждения фичи в live
+- **Minor** (x.N.0) — только после live-подтверждения что фича работает
+- Не бампить minor на непроверенные изменения
+
+## Python
+
+- **НИКОГДА** не ставить Python-пакеты в системный Python — `pip install` без активного venv запрещён
+- Перед установкой зависимостей — **спросить**, где создать `.venv` (если его ещё нет)
+- Всегда использовать `source .venv/Scripts/activate` (Windows) перед `pip`, `python`, `pytest`
+
+## TouchDesigner / Houdini — DCC автоматизация
+
+При работе с TouchDesigner из **любой директории** — используй CLI `h2t`:
+
+```bash
+h2t td eval "op('/project1').children"    # auto-prefix _result =
+h2t td status                              # проверить project_path
+h2t td ping                                # daemon жив?
+h2t td reconnect                           # переподключить к TD
+h2t td batch '[{"code": "op(...).create(...)"}]'  # массовые операции (21x быстрее)
+h2t registry search --dcc td --task "noise"        # поиск оператора
+h2t registry card noiseTOP                          # параметры оператора
+```
+
+- **Не нужен** `source`, `cd`, `_result =` — CLI делает всё сам
+- **Перед работой** всегда `h2t td status` — проверь что daemon подключен к правильному проекту
+- **Не угадывай параметры** — `h2t registry card <opType>` перед `op_set_par`
+- Полная документация: `C:/dev/h2t-ai/docs/TOOLKIT_FOR_EXTERNAL_AGENTS.md`
+
+## h2t-snap — Desktop Capture & Interact
+
+Для скриншотов и кликов в десктопных приложениях — `h2t-snap.exe` (или `python -m snap`), подробнее skill `h2t:snap`.
+
+```bash
+h2t-snap list --filter "TouchDesigner"                    # найти окна
+h2t-snap capture --hwnd 12345 --json                      # скриншот
+h2t-snap click --hwnd 12345 --x 450 --y 320               # кликнуть
+h2t-snap type --hwnd 12345 --x 450 --y 320 --text "test"  # ввод текста
+```
+
+- Репо: `C:/dev/h2t-snap`, exe: `C:/dev/h2t-snap/dist/h2t-snap.exe`
+- Скриншоты в `%TEMP%/h2t-snap/`, автоклинап через 30 мин
+
+## h2t-transcription — Pipeline CLI
+
+При работе с транскрипцией, enrichment, pipeline — используй unified CLI:
+
+```bash
+cd C:/dev/h2t-transcription/transcription
+source .venv/Scripts/activate
+
+python cli.py scan                              # Discover videos, register in DB
+python cli.py run correction --all              # Run stage for all ready videos
+python cli.py run enrichment --video VID        # Single video
+python cli.py run enrichment --course 101_Basic # By course
+python cli.py status                            # Pipeline progress table
+python cli.py status --video VIDEO_ID           # Video stage details
+python cli.py studio --port 8090               # Web dashboard (FastAPI)
+python cli.py migrate                           # Filesystem → DB migration
+```
+
+- **Не использовать** старые `transcribe.py`, `enrich.py`, `visual_analyze.py` — они deprecated
+- Pipeline state в `C:/dev/h2t-content/pipeline.db` (SQLite)
+- 619 видео, 9 stages, 28 курсов
+- Архитектура: `core/` (contracts, config, DB, orchestrator) + `stages/` (thin adapters) + `studio/` (FastAPI)
+
+## H2T инструменты для анализа видео-курсов
+
+При запросах связанных с **h2t-vision**, **h2t-transcription**, анализом видео, транскрипцией, chapter detection, enrichment — читай соответствующие инструкции:
+
+| Документ | Путь | Когда читать |
+|----------|------|-------------|
+| h2t-transcription README | `C:/dev/h2t-transcription/README.md` | Pipeline architecture, CLI, API, stages |
+| h2t-vision Toolkit | `C:/dev/h2t-vision/docs/TOOLKIT_FOR_EXTERNAL_AGENTS.md` | Видео-анализ, keyframes, CLIP transitions, chapter detection |
+| h2t-vision Agent Guide | `C:/dev/h2t-vision/docs/EXTERNAL_AGENT_GUIDE.md` | Генерация visual hints (eval_report.json) |
+| h2t-ai Toolkit | `C:/dev/h2t-ai/docs/TOOLKIT_FOR_EXTERNAL_AGENTS.md` | DCC автоматизация (TD daemon, registry, eval), Houdini API |
+| Платформа CLAUDE.md | `C:/dev/CLAUDE.md` | Контекст всей платформы, домены, мастер-план |
+
+**Ключевой принцип:** Vision предоставляет anchor timestamps (CLIP transitions), LLM классифицирует. LLM не может самостоятельно сегментировать длинные транскрипты — он галлюцинирует таймкоды.
+
+## VPS — Production Server
+
+| Параметр | Значение |
+|----------|----------|
+| Provider | Hetzner Cloud CX23 |
+| Name | h2t-prod |
+| IP | 178.104.15.8 |
+| SSH | `ssh root@178.104.15.8` (key: stanislav@h2t) |
+| OS | Ubuntu 24.04 LTS |
+| Docker | 29.3.1 + Compose |
+| Location | Nuremberg (nbg1-dc3) |
+| Deploy path | /opt/h2t/ |
+
+SSH из Claude Code bash **работает** — ключ доступен. Можно напрямую: `ssh root@178.104.15.8 "command"`.
+
+## Старт сессии
+
+- **Реальное состояние** (gh issues, git log, код на диске) **всегда** имеет приоритет над handoff-файлами и session memory
+- Handoff — снимок момента записи, устаревает когда issues закрываются в параллельных сессиях
+- В брифинге показывать только то, что подтверждено реальным состоянием (открытые issues, незамерженные ветки)
