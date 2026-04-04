@@ -57,14 +57,20 @@ def _build_markdown(
     if stack_name and stack_name != "none":
         lines.append(f"**Stack:** {stack_name}")
 
-    # Milestone
+    # Milestone with progress bar
     ms = github.get("current_milestone")
     if ms:
         title = ms.get("title", "")
         open_c = ms.get("open", 0)
         closed_c = ms.get("closed", 0)
         total = open_c + closed_c
-        lines.append(f"**Milestone:** {title} \u2014 {open_c}/{total} issues open")
+        pct = int(closed_c / total * 100) if total else 0
+        filled = pct // 5  # 20 chars wide
+        bar = "\u2593" * filled + "\u2591" * (20 - filled)
+        deadline = ms.get("dueOn") or ms.get("due_on", "")
+        deadline_str = f" \u2014 due {deadline[:10]}" if deadline else ""
+        lines.append(f"**Milestone:** {title}{deadline_str}")
+        lines.append(f"`[{bar}]` {pct}% ({closed_c}/{total})")
 
     lines.append("")
 
@@ -106,7 +112,7 @@ def _build_markdown(
 
 
 def _build_tasks_section(github: dict) -> str:
-    """Build tasks section from milestone_issues or issues."""
+    """Build tasks section as table from milestone_issues or issues."""
     mi = github.get("milestone_issues", [])
     issues = mi if mi else github.get("issues", [])
     bugs_set = {b.get("number") for b in github.get("bugs", [])}
@@ -114,19 +120,27 @@ def _build_tasks_section(github: dict) -> str:
     if not issues:
         return ""
 
-    lines = ["### Задачи"]
+    lines = ["### Задачи", ""]
+    lines.append("| # | Title | Tags |")
+    lines.append("|---|-------|------|")
     for iss in issues:
         num = iss.get("number", "")
         title = iss.get("title", "")
         labels = {l.get("name", "") if isinstance(l, dict) else l for l in iss.get("labels", [])}
-        prefix = ""
+        tags = []
         if num in bugs_set or "bug" in labels:
-            prefix = "BUG "
-        elif "priority:p0" in labels:
-            prefix = "P0 "
+            tags.append("\U0001f41b BUG")
+        if "priority:p0" in labels:
+            tags.append("\U0001f534 P0")
         elif "priority:p1" in labels:
-            prefix = "P1 "
-        lines.append(f"- {prefix}#{num} {title}")
+            tags.append("\U0001f7e1 P1")
+        for l in sorted(labels):
+            if l.startswith("domain:"):
+                tags.append(l.replace("domain:", ""))
+            elif l.startswith("phase:"):
+                tags.append(l.replace("phase:", ""))
+        tag_str = ", ".join(tags) if tags else ""
+        lines.append(f"| #{num} | {title} | {tag_str} |")
     return "\n".join(lines)
 
 

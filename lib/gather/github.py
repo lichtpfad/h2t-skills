@@ -15,7 +15,7 @@ def gather_github(
     raw = run_parallel({
         "milestones": [
             "gh", "api", f"repos/{owner_repo}/milestones",
-            "--jq", '.[] | select(.state=="open") | {title, open: .open_issues, closed: .closed_issues}',
+            "--jq", '.[] | select(.state=="open") | {title, open: .open_issues, closed: .closed_issues, due_on}',
         ],
         "issues": [
             "gh", "issue", "list", "--repo", owner_repo, "--state", "open",
