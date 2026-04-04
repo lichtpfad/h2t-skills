@@ -33,6 +33,7 @@ for arg in "$@"; do [[ "$arg" == "--push" ]] && git -C "$REPO_DIR" push origin m
 CACHE_DIR="$CACHE_BASE/$VERSION"
 mkdir -p "$CACHE_DIR"
 rm -rf "$CACHE_DIR"/*
+rm -f "$CACHE_DIR/.orphaned_at"
 
 # Copy plugin content
 cp -r "$PLUGIN_DIR/." "$CACHE_DIR/"
