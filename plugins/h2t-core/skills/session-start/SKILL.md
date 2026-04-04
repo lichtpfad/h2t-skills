@@ -34,6 +34,16 @@ Extract `_briefing` from GATHER_RESULT. Display it exactly as-is — do not refo
 
 If `_briefing` is missing: show `GATHER_ERROR — no briefing in output. Check plugin version.`
 
+### Step 2.5: Read last handoff
+
+If `GATHER_RESULT.sessions` is non-empty:
+- Take `GATHER_RESULT.sessions[0]` (most recent)
+- Read the file with the Read tool
+- Show section **"## What Remains"** (or equivalent) verbatim under header `### Продолжение предыдущей сессии`
+- If no "What Remains" section found: show first 40 lines of the file
+
+If `GATHER_RESULT.sessions` is empty: skip this step silently.
+
 ### Step 3: Analyze top issues
 
 From `GATHER_RESULT.github.issues` (if present): select up to 3 issues by priority (P1 > open > recent).
@@ -59,7 +69,13 @@ Propose session name in this exact format:
 ```
 
 Replace `{topic}` with 1-2 word summary of most likely work direction from context.
-Wait for user input. Accept confirmation or alternative name.
+
+Wait for user input. Accept:
+- The proposed name verbatim → use it
+- An alternative name → use that instead
+- `y` / `да` / `ok` / `.` → use the proposed name as-is
+
+**Note:** In Claude Code terminal, blank Enter is not possible — user must type something.
 
 ### Step 5: Log session start
 
