@@ -43,7 +43,7 @@ DO NOT ask the user. Infer from:
 2. TODOs or next steps discussed but not completed
 3. Known blockers or pending decisions from conversation
 
-Write 2–5 bullet points. If nothing clear — write "Нет явных следующих шагов."
+Write 2–5 items as **checkboxes** (`- [ ] ...`). If nothing clear — write `- [ ] Нет явных следующих шагов.`
 Store as WHAT_REMAINS.
 
 ### Step 4: Collect artifacts

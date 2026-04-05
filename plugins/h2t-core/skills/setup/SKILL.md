@@ -4,7 +4,7 @@ description: "Install h2t Python dependencies into ~/.h2t/venv. Cross-platform: 
 compatibility: "Claude Code"
 metadata:
   author: lichtpfad
-  version: 1.1.0
+  version: 1.2.0
 ---
 
 # h2t Setup
@@ -64,8 +64,31 @@ fi
 ### Step 4: Install dependencies
 
 ```bash
-"$VENV_PIP" install --upgrade pip
+"$VENV_PIP" install --upgrade pip uv
 "$VENV_PIP" install -r "$REQ"
+```
+
+### Step 4b: Install h2t CLI (enables `h2t gather` command)
+
+Find the plugin cache root and install in editable mode:
+
+```bash
+# Find latest h2t-core cache
+H2T_CACHE=$(ls -d "$HOME/.claude/plugins/cache/lichtpfad/h2t-core"/*/  2>/dev/null | sort -V | tail -1)
+[ -z "$H2T_CACHE" ] && H2T_CACHE=$(ls -d "$LOCALAPPDATA/.claude/plugins/cache/lichtpfad/h2t-core"/*/ 2>/dev/null | sort -V | tail -1)
+
+if [ -n "$H2T_CACHE" ] && [ -f "${H2T_CACHE}pyproject.toml" ]; then
+  "$VENV_DIR/bin/uv" pip install -e "${H2T_CACHE}" --quiet 2>/dev/null \
+    || "$VENV_PIP" install -e "${H2T_CACHE}" --quiet
+  echo "h2t CLI installed from $H2T_CACHE"
+else
+  echo "WARN: pyproject.toml not found in cache — skipping h2t CLI install"
+fi
+```
+
+After install, verify:
+```bash
+"$VENV_PYTHON" -m lib.cli.main gather --help 2>/dev/null && echo "h2t gather OK" || echo "h2t gather NOT available"
 ```
 
 ### Step 5: Set DOR_MACHINE_NAME (if not set)
