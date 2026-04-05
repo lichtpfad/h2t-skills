@@ -105,7 +105,7 @@ def _build_markdown(
     # Sessions context
     if sessions:
         lines.append("### Контекст")
-        lines.append(f"Handoff-файлы: {len(sessions)} (последние будут прочитаны)")
+        lines.append(f"Handoff-файлы: {len(sessions)}")
         lines.append("")
 
     return "\n".join(lines)
