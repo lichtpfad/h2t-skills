@@ -25,35 +25,30 @@ if [ -f "$LOCK_FILE" ]; then
 fi
 echo "$NOW" > "$LOCK_FILE"
 
+# Find Python
 H2T_PYTHON="${H2T_PYTHON:-}"
 [ -z "$H2T_PYTHON" ] && [ -f "$HOME/.h2t/venv/Scripts/python.exe" ] && H2T_PYTHON="$HOME/.h2t/venv/Scripts/python.exe"
 [ -z "$H2T_PYTHON" ] && [ -f "$HOME/.h2t/venv/bin/python" ] && H2T_PYTHON="$HOME/.h2t/venv/bin/python"
 
 if [ -z "$H2T_PYTHON" ]; then
-  echo '{"systemMessage": "GATHER_ERROR: h2t venv not found. Run /h2t:setup"}'
+  echo '{"systemMessage": "GATHER_ERROR: h2t venv not found. Run /h2t-core:setup"}'
   exit 0
 fi
 
-case "$skill" in
-  *init-project*) SCRIPT="${CLAUDE_PLUGIN_ROOT}/skills/init-project/scripts/detect_project.py" ;;
-  *)              SCRIPT="${CLAUDE_PLUGIN_ROOT}/skills/session-start/scripts/gather.py" ;;
-esac
-
-if [ ! -f "$SCRIPT" ]; then
-  echo '{"systemMessage": "GATHER_ERROR: script not found at '"$SCRIPT"'"}'
-  exit 0
-fi
-
-ARGS="--cwd $cwd"
+# Build args
+ARGS="$skill --cwd $cwd"
 [[ "$skill" == *session-start* ]] && ARGS="$ARGS --format-briefing"
 
-RESULT=$("$H2T_PYTHON" "$SCRIPT" $ARGS 2>/dev/null) || true
+# Run gather CLI (must run from repo root so lib.cli.main is importable)
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+RESULT=$(cd "$REPO_ROOT" && "$H2T_PYTHON" -m lib.cli.main gather $ARGS 2>/dev/null) || true
 
 if [ -z "$RESULT" ]; then
-  echo '{"systemMessage": "GATHER_ERROR: script returned no output"}'
+  echo '{"systemMessage": "GATHER_ERROR: h2t gather returned no output. Run /h2t-core:setup to reinstall."}'
   exit 0
 fi
 
+# Format output for Claude systemMessage injection
 BRIEFING=$("$H2T_PYTHON" -c "
 import json, sys
 data = json.load(sys.stdin)
@@ -62,4 +57,10 @@ m = json.dumps(data.get('_meta', {}))
 print(f'BRIEFING:\n{b}\n\nGATHER_META: {m}')
 " <<< "$RESULT" 2>/dev/null) || BRIEFING="GATHER_DATA: $RESULT"
 
-printf '{"systemMessage": "%s"}' "$("$H2T_PYTHON" -c "import sys; print(sys.stdin.read().replace('\\\\', '\\\\\\\\').replace('\"', '\\\\\"').replace(chr(10), '\\\\n'))" <<< "$BRIEFING")"
+printf '{"systemMessage": "%s"}' "$("$H2T_PYTHON" -c "
+import sys
+print(sys.stdin.read()
+  .replace('\\\\', '\\\\\\\\')
+  .replace('\"', '\\\\\"')
+  .replace(chr(10), '\\\\n')
+)" <<< "$BRIEFING")"
