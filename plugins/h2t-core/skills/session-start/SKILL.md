@@ -9,6 +9,12 @@ metadata:
 
 # Session Start v3
 
+## ⛔ Execution Guard
+
+You are now executing this skill. **DO NOT call `Skill(h2t-core:session-start)` again** at any point.
+Follow the steps below directly without re-invoking the skill.
+If this skill has already been executed in this conversation (BRIEFING is visible above), skip to the step where you left off.
+
 ## Setup
 
 ```bash
