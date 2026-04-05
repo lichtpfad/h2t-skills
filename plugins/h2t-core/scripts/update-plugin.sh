@@ -42,6 +42,9 @@ cp -r "$PLUGIN_DIR/." "$CACHE_DIR/"
 # This makes activity, eval, gather importable from scripts/ via sys.path.insert
 cp -r "$REPO_DIR/lib" "$CACHE_DIR/lib"
 
+# Copy pyproject.toml so `uv pip install -e <cache_dir>` works
+cp "$REPO_DIR/pyproject.toml" "$CACHE_DIR/pyproject.toml"
+
 # Update installed_plugins.json if it exists
 if [ -f "$INSTALLED_JSON" ]; then
   NOW=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
