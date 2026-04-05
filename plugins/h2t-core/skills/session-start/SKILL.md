@@ -1,17 +1,13 @@
 ---
 name: session-start
-description: Use at the start of any working session (dev, creative, personal). Triggers on "start session", "session start", "начинаем", "новая сессия", or at the beginning of any work conversation.
+description: Session lifecycle skill. Invoked via /h2t-core:session-start only. Do not auto-trigger.
 compatibility: "Claude Code"
 metadata:
   author: lichtpfad
-  version: 3.0.6
+  version: 3.0.7
 ---
 
 # Session Start v3
-
-## ⛔ Execution Guard
-
-**DO NOT re-invoke this skill** at any point during execution.
 
 ## Setup
 
