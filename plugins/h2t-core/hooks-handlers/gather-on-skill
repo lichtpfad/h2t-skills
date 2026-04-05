@@ -12,6 +12,19 @@ case "$skill" in
   *) exit 0 ;;
 esac
 
+# Deduplicate: skip if same skill was gathered in the last 30s
+LOCK_KEY=$(echo "$skill" | tr '/:' '__')
+LOCK_FILE="${TMPDIR:-/tmp}/h2t_gather_${LOCK_KEY}.lock"
+NOW=$(date +%s)
+if [ -f "$LOCK_FILE" ]; then
+  LOCK_TIME=$(cat "$LOCK_FILE" 2>/dev/null || echo 0)
+  AGE=$(( NOW - LOCK_TIME )) || AGE=99
+  if [ "$AGE" -lt 30 ]; then
+    exit 0
+  fi
+fi
+echo "$NOW" > "$LOCK_FILE"
+
 H2T_PYTHON="${H2T_PYTHON:-}"
 [ -z "$H2T_PYTHON" ] && [ -f "$HOME/.h2t/venv/Scripts/python.exe" ] && H2T_PYTHON="$HOME/.h2t/venv/Scripts/python.exe"
 [ -z "$H2T_PYTHON" ] && [ -f "$HOME/.h2t/venv/bin/python" ] && H2T_PYTHON="$HOME/.h2t/venv/bin/python"

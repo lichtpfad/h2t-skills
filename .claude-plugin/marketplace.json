@@ -9,7 +9,7 @@
     {
       "name": "h2t",
       "description": "h2t skill suite: integration skills (gmail, calendar, drive, notion, telegram, daily-brief), dev workflow (session, handoff, pre-merge), desktop automation (h2t-snap), DrawIO, NLM",
-      "version": "1.9.0",
+      "version": "2.14.1",
       "author": {
         "name": "lichtpfad"
       },
@@ -20,6 +20,7 @@
     {
       "name": "h2t-core",
       "description": "Session lifecycle: start, handoff, init-project, overview, setup.",
+      "version": "3.0.7",
       "author": {
         "name": "lichtpfad"
       },

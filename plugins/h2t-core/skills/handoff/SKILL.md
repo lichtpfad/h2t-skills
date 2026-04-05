@@ -21,21 +21,34 @@ H2T_PYTHON="${H2T_PYTHON:-$HOME/.h2t/venv/Scripts/python.exe}"
 
 ### Step 1: Confirm session name
 
-If SESSION_NAME is already known from this conversation — use it.
-Otherwise use auto: `{domain}-{project}-YYYY-MM-DD`.
+If SESSION_NAME is already known from this conversation — use it directly.
+
+Otherwise propose auto-name and wait for confirmation:
+```
+Имя сессии: `{domain}-{project}-{topic}-YYYY-MM-DD`
+(y/ok/. — принять, или введи своё)
+```
+
+Store as SESSION_NAME.
 
 ### Step 2: Auto-generate what was done
 
-```bash
-git log --oneline --since="$(date -d '1 day ago' +%Y-%m-%d)" 2>/dev/null || git log --oneline -10
-```
+DO NOT ask the user. Reconstruct from:
+1. Conversation history — what was implemented, fixed, discussed
+2. `git log --oneline -20` for current repo — recent commits this session
+3. Files created or modified visible in context
 
-From git log + conversation context, generate a bullet list of what was accomplished this session.
+Write 3–7 bullet points in Russian. Be specific: what changed, not process.
 Store as WHAT_DONE.
 
 ### Step 3: Auto-generate what remains
 
-From open GitHub issues (P1 first), unfinished topics from conversation context.
+DO NOT ask the user. Infer from:
+1. Open issues mentioned in this conversation
+2. TODOs or next steps discussed but not completed
+3. Known blockers or pending decisions from conversation
+
+Write 2–5 bullet points. If nothing clear — write "Нет явных следующих шагов."
 Store as WHAT_REMAINS.
 
 ### Step 4: Collect artifacts
