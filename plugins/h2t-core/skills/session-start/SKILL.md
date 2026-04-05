@@ -1,10 +1,10 @@
 ---
 name: session-start
-description: Session lifecycle skill. Invoked via /h2t-core:session-start only. Do not auto-trigger.
+description: This skill should be used at the start of any working session when the user says "начинаем", "новая сессия", "start session", "session start", or begins a new work conversation. Collects project context, shows briefing, proposes session name, logs session start.
 compatibility: "Claude Code"
 metadata:
   author: lichtpfad
-  version: 3.0.7
+  version: 3.0.8
 ---
 
 # Session Start v3
@@ -25,7 +25,7 @@ H2T_PYTHON="${H2T_PYTHON:-$HOME/.h2t/venv/Scripts/python.exe}"
 Run this command:
 
 ```bash
-$H2T_PYTHON "$GATHER" --format-briefing
+$H2T_PYTHON "$GATHER" --cwd "$(pwd)" --format-briefing
 ```
 
 Parse the full JSON output as GATHER_RESULT.
