@@ -38,8 +38,9 @@ rm -f "$CACHE_DIR/.orphaned_at"
 # Copy plugin content
 cp -r "$PLUGIN_DIR/." "$CACHE_DIR/"
 
-# KEY: copy repo-root lib/ into cache alongside skills/
-# This makes activity, eval, gather importable from scripts/ via sys.path.insert
+# KEY: copy repo-root lib/ into cache (overwrite plugin's own stale lib/)
+# plugins/h2t-core/lib/ is outdated — repo-root lib/ is canonical
+rm -rf "$CACHE_DIR/lib"
 cp -r "$REPO_DIR/lib" "$CACHE_DIR/lib"
 
 # Copy pyproject.toml so `uv pip install -e <cache_dir>` works
