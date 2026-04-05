@@ -22,17 +22,22 @@ H2T_PYTHON="${H2T_PYTHON:-$HOME/.h2t/venv/Scripts/python.exe}"
 
 ### Step 1: Collect context
 
-Look for `GATHER_META:` anywhere in this conversation (it may appear in a PreToolUse hook message before this skill loaded). If found:
-- Parse the JSON after `GATHER_META:` as GATHER_RESULT
+⛔ DO NOT use Search, Glob, or Read tools in this step.
+
+Check the messages already visible above you in this conversation. The hook injects a `PreToolUse:Skill says:` message containing `GATHER_META: {...}` before this skill loads.
+
+**If you can see `GATHER_META:` in a previous message in this conversation:**
+- Copy the JSON value after `GATHER_META:` as GATHER_RESULT (it is already in your context)
 - Skip the Bash call below
 
-If `GATHER_META:` is NOT found anywhere in this conversation, run:
+**If you cannot see `GATHER_META:` in any previous message:**
+- Run the fallback Bash command:
 
 ```bash
 $H2T_PYTHON "$GATHER" --format-briefing
 ```
 
-Parse the JSON output as GATHER_RESULT. Do NOT paraphrase or summarize.
+- Parse the JSON output as GATHER_RESULT
 
 ### Step 2: Show briefing verbatim
 
