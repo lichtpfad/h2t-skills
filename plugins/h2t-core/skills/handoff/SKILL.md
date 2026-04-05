@@ -1,10 +1,10 @@
 ---
 name: handoff
-description: Use at the end of any working session. Records what was done, what remains, and artifacts produced. Triggers on "handoff", "завершить сессию", "конец сессии", "wrap up".
+description: This skill should be used when the user says "handoff", "завершить сессию", "конец сессии", "wrap up", "закончим", "сохрани сессию", or asks to close/end the current working session. Reconstructs what was done and what remains from conversation context and git history, shows a summary for confirmation, then writes the session record.
 compatibility: "Claude Code"
 metadata:
   author: lichtpfad
-  version: 3.1.0
+  version: 3.1.1
 ---
 
 # Handoff v3.1
@@ -19,17 +19,12 @@ H2T_PYTHON="${H2T_PYTHON:-$HOME/.h2t/venv/Scripts/python.exe}"
 
 ## Pipeline
 
-### Step 1: Confirm session name
+### Step 1: Establish session context
 
-If SESSION_NAME is already known from this conversation — use it directly.
-
-Otherwise propose auto-name and wait for confirmation:
-```
-Имя сессии: `{domain}-{project}-{topic}-YYYY-MM-DD`
-(y/ok/. — принять, или введи своё)
-```
-
-Store as SESSION_NAME.
+Resolve these values from conversation context:
+- `SESSION_NAME` — from session-start confirmation if run this session, otherwise propose `{domain}-{project}-{topic}-YYYY-MM-DD` and wait for `y`/`ok`/`.`/alternative
+- `DOMAIN` — from GATHER_RESULT.project.domain (session-start output), fallback: `personal-os`
+- `PROJECT_ID` — from GATHER_RESULT.project.id (session-start output), fallback: current repo name
 
 ### Step 2: Auto-generate what was done
 
