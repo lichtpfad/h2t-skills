@@ -19,7 +19,11 @@ def format_briefing(data: dict) -> tuple[str, dict]:
     session_id = data.get("session_id", "")
 
     slug = _build_slug_template(project, github)
-    md = _build_markdown(project, git, github, stack, sessions)
+    core_content = user.get("core_content", "")
+    md = ""
+    if core_content:
+        md += f"## User Context\n\n{core_content}\n\n---\n\n"
+    md += _build_markdown(project, git, github, stack, sessions)
     hints = _build_hints(data)
     if hints:
         md += "\n### Hints\n"

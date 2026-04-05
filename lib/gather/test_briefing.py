@@ -18,7 +18,7 @@ def _minimal_data(**overrides):
         "stack": {"name": "python", "commands": {}},
         "sessions": [],
         "machine": "automata",
-        "user": {"name": "stan"},
+        "user": {"name": "stan", "core_content": ""},
         "session_id": "abc123",
     }
     base.update(overrides)
@@ -66,12 +66,12 @@ def test_full_briefing_with_github():
 
     # Milestone
     assert "**Milestone:** Phase 5" in md
-    assert "3/10 issues open" in md
+    assert "70% (7/10)" in md
 
-    # Tasks — uses milestone_issues, not plain issues
-    assert "- P0 #10 Add auth" in md
-    assert "- BUG #11 Fix crash" in md
-    assert "- #12 Refactor DB" in md
+    # Tasks — uses milestone_issues, not plain issues (table format)
+    assert "| #10 | Add auth |" in md
+    assert "| #11 | Fix crash |" in md
+    assert "| #12 | Refactor DB |" in md
     assert "#99" not in md  # plain issues skipped when milestone_issues present
 
     # Uncommitted
@@ -144,4 +144,25 @@ def test_empty_github_no_crash():
 
     assert "### Задачи" not in md
     assert "### Открытые PR" not in md
+    assert "## Сессия:" in md
+
+
+def test_briefing_with_core_content():
+    """core_content in user dict renders ## User Context section before session header."""
+    data = _minimal_data(user={"name": "stan", "core_content": "## Кто я\n\nТестовый контент."})
+    md, meta = format_briefing(data)
+
+    assert "## User Context" in md
+    assert "## Кто я" in md
+    assert "Тестовый контент." in md
+    # User Context should appear before Session header
+    assert md.index("## User Context") < md.index("## Сессия:")
+
+
+def test_briefing_without_core_content():
+    """Empty core_content — no User Context section."""
+    data = _minimal_data(user={"name": "stan", "core_content": ""})
+    md, meta = format_briefing(data)
+
+    assert "## User Context" not in md
     assert "## Сессия:" in md

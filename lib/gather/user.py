@@ -28,8 +28,16 @@ def gather_user_context(
     core_path = about_me / "core.md"
     available = [str(f) for f in about_me.glob("*.md")] if about_me.exists() else []
 
+    core_content = ""
+    if core_path.exists():
+        try:
+            core_content = core_path.read_text(encoding="utf-8")
+        except Exception:
+            pass
+
     result = {
         "core_path": str(core_path) if core_path.exists() else "",
+        "core_content": core_content,
         "language": "ru",
         "available_contexts": available,
         "deep_paths": [],
