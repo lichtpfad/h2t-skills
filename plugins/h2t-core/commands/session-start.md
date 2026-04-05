@@ -17,7 +17,21 @@ H2T_PYTHON="${H2T_PYTHON:-$HOME/.h2t/venv/Scripts/python.exe}"
 
 ### Step 1: Collect context
 
-Run this command:
+**Check your system context first.** The PreToolUse hook may have already run gather and injected data as:
+```
+BRIEFING:
+<briefing text>
+
+GATHER_META: <json>
+```
+
+If `BRIEFING:` is present in your system context:
+- Extract the text between `BRIEFING:\n` and `\n\nGATHER_META:` as `_briefing`
+- Parse `GATHER_META` JSON as `GATHER_RESULT._meta`
+- Parse `GATHER_META.project`, `GATHER_META.sessions`, `GATHER_META.machine` fields
+- **Skip running gather.py** — data is already collected
+
+If `BRIEFING:` is NOT in your context, run:
 
 ```bash
 $H2T_PYTHON "$GATHER" --cwd "$(pwd)" --format-briefing
@@ -27,7 +41,15 @@ Parse the full JSON output as GATHER_RESULT.
 
 ### Step 2: Show briefing
 
-Display `GATHER_RESULT._briefing` verbatim — no reformatting, no commentary.
+⛔ **STRICT: Copy the briefing text EXACTLY as-is. Zero additions.**
+
+- Do NOT add VPS status
+- Do NOT add blockers
+- Do NOT add memory from previous sessions
+- Do NOT reformat or restructure
+- Do NOT add commentary before or after
+
+Display `_briefing` verbatim.
 
 If `_briefing` is missing: show `GATHER_ERROR — no briefing in output. Check plugin version.`
 
