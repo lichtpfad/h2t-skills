@@ -120,7 +120,7 @@ Print:
 - Venv path and Python version (`"$VENV_PYTHON" --version`)
 - Installed packages count (`"$VENV_PIP" list | wc -l`)
 - DOR_MACHINE_NAME status
-- Next steps: "Run any h2t skill, e.g. /h2t:gmail or /h2t:calendar"
+- Next steps: "Run any h2t skill, e.g. /h2t:gmail or /h2t:calendar" (these are in the h2t plugin, not h2t-core)
 
 ## Common Mistakes
 

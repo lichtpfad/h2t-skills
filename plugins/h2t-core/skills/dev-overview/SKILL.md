@@ -10,7 +10,7 @@ metadata:
 # Dev Overview
 
 Cross-project dashboard showing progress toward goals and movement across all active repos.
-**Not a session tool** — use `h2t:dev-session-start` for that. This is a weekly/on-demand review.
+**Not a session tool** — use `h2t-core:session-start` for that. This is a weekly/on-demand review.
 
 ## Data Sources
 
@@ -138,7 +138,7 @@ After presenting dashboard, ask:
 ```
 Хочешь:
 1. Развернуть полный список issues по {repo}?
-2. Запустить /h2t:dev-session-start для {most-active-repo}?
+2. Запустить /h2t-core:session-start для {most-active-repo}?
 3. Посмотреть последний handoff по {stalled-repo}?
 ```
 
