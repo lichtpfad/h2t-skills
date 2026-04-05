@@ -20,7 +20,7 @@ H2T_PYTHON="${H2T_PYTHON:-$HOME/.h2t/venv/Scripts/python.exe}"
 Run this command:
 
 ```bash
-$H2T_PYTHON "$GATHER" --format-briefing
+$H2T_PYTHON "$GATHER" --cwd "$(pwd)" --format-briefing
 ```
 
 Parse the full JSON output as GATHER_RESULT.
