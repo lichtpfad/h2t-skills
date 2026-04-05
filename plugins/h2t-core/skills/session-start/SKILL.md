@@ -1,13 +1,15 @@
 ---
 name: session-start
-description: This skill should be used at the start of any working session when the user says "начинаем", "новая сессия", "start session", "session start", or begins a new work conversation. Collects project context, shows briefing, proposes session name, logs session start.
+description: "Session-start pipeline for h2t-core. Loaded automatically by /h2t-core:session-start slash command. DO NOT invoke via Skill tool while already executing session-start — causes duplicate execution loop."
 compatibility: "Claude Code"
 metadata:
   author: lichtpfad
-  version: 3.0.8
+  version: 3.0.9
 ---
 
 # Session Start v3
+
+> ⚠️ **If you are already executing the session-start pipeline, STOP. Do NOT invoke this skill again. Return to the pipeline you were following.**
 
 ## Setup
 
