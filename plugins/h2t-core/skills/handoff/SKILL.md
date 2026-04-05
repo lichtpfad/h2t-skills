@@ -4,10 +4,10 @@ description: Use at the end of any working session. Records what was done, what 
 compatibility: "Claude Code"
 metadata:
   author: lichtpfad
-  version: 3.0.0
+  version: 3.1.0
 ---
 
-# Handoff v3
+# Handoff v3.1
 
 ## Setup
 
@@ -21,44 +21,51 @@ H2T_PYTHON="${H2T_PYTHON:-$HOME/.h2t/venv/Scripts/python.exe}"
 
 ### Step 1: Confirm session name
 
-Ask if not already known:
-```
-Имя сессии этой работы? (или нажми Enter для auto: `{domain}-{project}-YYYY-MM-DD`)
-```
+If SESSION_NAME is already known from this conversation — use it.
+Otherwise use auto: `{domain}-{project}-YYYY-MM-DD`.
 
-Store as SESSION_NAME.
+### Step 2: Auto-generate what was done
 
-### Step 2: Collect what was done
-
-Ask the user:
-```
-Что было сделано? (bullet points или свободный текст)
+```bash
+git log --oneline --since="$(date -d '1 day ago' +%Y-%m-%d)" 2>/dev/null || git log --oneline -10
 ```
 
+From git log + conversation context, generate a bullet list of what was accomplished this session.
 Store as WHAT_DONE.
 
-### Step 3: Collect what remains
+### Step 3: Auto-generate what remains
 
-Ask the user:
-```
-Что остаётся? (следующие шаги или "ничего")
-```
-
+From open GitHub issues (P1 first), unfinished topics from conversation context.
 Store as WHAT_REMAINS.
 
 ### Step 4: Collect artifacts
 
-List artifacts produced this session. Format each as `type:ref`:
+Build ARTIFACT_LIST from session context:
 - Commits: `commit:{sha7}`
 - Issues closed: `issue:{number}`
 - Files created: `file:{path}`
 - PRs opened: `pr:{number}`
 
-Build ARTIFACT_LIST from session context (git log, closed issues, etc.).
+### Step 5: Show summary to user
 
-### Step 5: Write handoff
+Display before writing:
 
-Substitute SESSION_NAME, DOMAIN, PROJECT_ID, WHAT_DONE, WHAT_REMAINS, and artifact list:
+```
+## Handoff: {SESSION_NAME}
+
+### Что сделано
+{WHAT_DONE}
+
+### Что передаём в следующую сессию
+{WHAT_REMAINS}
+
+### Артефакты
+{ARTIFACT_LIST}
+```
+
+⛔ GATE — Do NOT proceed to Step 6 until user confirms or corrects.
+
+### Step 6: Write handoff
 
 ```bash
 $H2T_PYTHON "$WRITER" write \
@@ -70,11 +77,10 @@ $H2T_PYTHON "$WRITER" write \
   --artifacts <ARTIFACT_LIST>
 ```
 
-Replace all `<...>` placeholders with literal values from memory (not shell variables).
+Replace all `<...>` with literal values (not shell variables).
 
-### Step 6: Confirm
+### Step 7: Confirm
 
-Show result:
 ```
 ✓ Сессия <SESSION_NAME> сохранена
 ✓ Activity stream: {spool_path}
