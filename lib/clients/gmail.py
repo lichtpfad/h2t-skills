@@ -7,6 +7,7 @@ Write: send_message (send or draft), modify_labels
 import base64
 import json
 import re
+import sys
 from datetime import datetime
 from email import encoders
 from email.mime.base import MIMEBase
@@ -37,7 +38,6 @@ SCOPES = [
     "https://www.googleapis.com/auth/gmail.send",
     "https://www.googleapis.com/auth/gmail.modify",
     "https://www.googleapis.com/auth/gmail.labels",
-    "https://www.googleapis.com/auth/calendar",
 ]
 
 
@@ -86,7 +86,6 @@ class GmailClient:
                 effective_scopes = token_data.get("scopes") or SCOPES
                 creds = Credentials.from_authorized_user_info(token_data, effective_scopes)
             except Exception as e:
-                import sys
                 print(f"Warning: Could not load token: {e}", file=sys.stderr)
                 creds = None
 
