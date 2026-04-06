@@ -1,6 +1,9 @@
 # Skills v3 Architecture Design
 
-*Created: 2026-04-03 · Status: approved design · Author: Stanislav Glazov + Claude*
+*Created: 2026-04-03 · Updated: 2026-04-06 · Status: living document · Author: Stanislav Glazov + Claude*
+
+### Changelog
+- **2026-04-06** — Phase 1 marked complete; Phase 2 progress updated; lib/ structure corrected; h2t-graphs marked live; Skill Intelligence Graph added (Section 14)
 
 ---
 
@@ -47,15 +50,17 @@ Skills = agent interface layer. Not a standalone system — a layer through whic
                     ┌──────▼───────┐
                     │  Skills v3   │  ← SKILL.md + Python scripts
                     │  (plugins)   │
-                    └──┬───────┬───┘
-                       │       │
-              writes   │       │  writes
-                       │       │
-            ┌──────────▼──┐ ┌──▼──────────────┐
-            │  Activity   │ │  h2t-evals      │
-            │  Stream     │ │  (quality)      │
-            │  (POS DB)   │ │                 │
-            └─────────────┘ └─────────────────┘
+                    └──┬───────┬───┴──────────────┐
+                       │       │                  │
+              writes   │       │  writes    query/write
+                       │       │                  │
+            ┌──────────▼──┐ ┌──▼──────────────┐ ┌▼───────────────────┐
+            │  Activity   │ │  h2t-evals      │ │  h2t-graphs        │
+            │  Stream     │ │  (quality)      │ │  skill-patterns    │
+            │  (POS DB)   │ │                 │ │  skill-lessons     │
+            └─────────────┘ └────────┬────────┘ └────────────────────┘
+                                     │ eval findings
+                                     └──────────────► skill-lessons
 ```
 
 **Activity Stream** = time/task management. What was done, when, which artifacts, evidence of task completion. Each agent session = potential insights, generated artifacts, closed tasks. Part of knowledge graph.
@@ -64,7 +69,9 @@ Skills = agent interface layer. Not a standalone system — a layer through whic
 
 They communicate (eval references activity, activity can pull quality score), but they are separate entities with different purposes and storage.
 
-**Activity Stream storage:** PostgreSQL as primary (time-series, aggregations). h2t-graphs as projection in Phase 2+ when graph engine stabilizes.
+**Activity Stream storage:** PostgreSQL as primary (time-series, aggregations). h2t-graphs as projection Phase 2+.
+
+**h2t-graphs status:** Live at `graphs.lichtpfadstudio.com`. Existing sources: `creative`, `triz`, `design-thinking`, `td`, `courses-en`, `courses-ru`. New sources `skill-patterns` + `skill-lessons` added in Phase 3 (Skill Intelligence Graph — see Section 14).
 
 ---
 
@@ -236,11 +243,14 @@ claude-agent-skills/
 │   └── creative-thinking/     ← existing, stays separate
 │
 ├── lib/                       ← Shared Python (Phase 1 → future h2t-cli)
-│   ├── ingest/                ← ETL read adapters (refactored from existing scripts)
-│   ├── publish/               ← ETL write adapters
-│   ├── eval/                  ← h2t-evals SDK wrapper
-│   ├── activity/              ← Activity stream writer
-│   └── gather/                ← Current gather modules (migrates into ingest/)
+│   ├── activity/              ✅ Activity stream writer (writer.py)
+│   ├── eval/                  ✅ h2t-evals SDK wrapper (session.py)
+│   ├── gather/                ✅ Gather modules (git, github, project, user, stack...)
+│   ├── clients/               ✅ API clients (gmail, calendar, notion)
+│   ├── cli/                   ✅ CLI utilities
+│   ├── skill_graph/           ← h2t-graphs interface: query + write (Phase 3)
+│   ├── ingest/                ← ETL read adapters — refactor from clients/ (Phase 2)
+│   └── publish/               ← ETL write adapters (Phase 2)
 │
 │   NOTE — Packaging decision: Claude Code plugin installer copies only one
 │   plugin directory into cache. Repo-root lib/ is NOT automatically available
@@ -574,30 +584,28 @@ If backfill interrupted — restart from cursor, not from beginning.
 
 ### Principle: iterative, one department at a time, max ROI first
 
-### Phase 1: Foundation (h2t-core + lib/)
+### Phase 1: Foundation (h2t-core + lib/) ✅ COMPLETE
 
-| Step | Action | Result |
+| Step | Action | Status |
 |------|--------|--------|
-| 1.1 | Create `lib/activity/` — activity stream writer | Any skill can log |
-| 1.2 | Create `lib/eval/` — thin wrapper over h2t-evals SDK | Any skill can log metrics |
-| 1.3 | Extract `plugins/h2t-core/` from monolith | session-start, handoff, init-project, dev-overview, setup, snap |
-| 1.4 | Rewrite session-start v3 | Linear pipeline, modular gather, eval Level 1, auto-trigger init-project |
-| 1.5 | Rewrite handoff v3 | Writes activity stream + markdown fallback |
-| 1.6 | Delete ctx-load, session-name | Experimental, replaced |
-| 1.7 | Add `evals/repo.toml` + CI gate | h2t-evals integrated |
-| 1.8 | Report in h2t-evals#44 and #45 | M3/M5 compliance |
+| 1.1 | Create `lib/activity/` — activity stream writer | ✅ writer.py |
+| 1.2 | Create `lib/eval/` — thin wrapper over h2t-evals SDK | ✅ session.py |
+| 1.3 | Extract `plugins/h2t-core/` from monolith | ✅ v3.0.12 |
+| 1.4 | Rewrite session-start v3 | ✅ live |
+| 1.5 | Rewrite handoff v3 | ✅ live |
+| 1.6 | Delete ctx-load, session-name | ✅ removed |
+| 1.7 | Add `evals/repo.toml` + CI gate | ⬜ pending |
+| 1.8 | Report in h2t-evals#44 and #45 | ⬜ pending |
 
-Eval Level: session-start and handoff → Level 1 immediately.
+### Phase 2: Daily Drivers (h2t-ops + h2t-dev) 🔄 IN PROGRESS
 
-### Phase 2: Daily Drivers (h2t-ops + h2t-dev)
-
-| Step | Action | Result |
+| Step | Action | Status |
 |------|--------|--------|
-| 2.1 | Extract `plugins/h2t-ops/` | gmail, calendar, notion, telegram, daily-brief, drive |
-| 2.2 | Refactor existing ingest scripts → `lib/ingest/` | Standard interface, reuse existing code |
-| 2.3 | Add `lib/publish/` | Write adapters |
-| 2.4 | Extract `plugins/h2t-dev/` | pre-merge-check, github-issues, gh-memory, milestone-closure |
-| 2.5 | daily-brief: API-first + local fallback | Ready for VPS transition |
+| 2.1 | Extract `plugins/h2t-ops/` | 🔄 5/6 skills (drive missing — #37) |
+| 2.2 | Refactor existing ingest scripts → `lib/ingest/` | ⬜ clients/ exists, needs ingest/ refactor |
+| 2.3 | Add `lib/publish/` | ⬜ pending |
+| 2.4 | Extract `plugins/h2t-dev/` | ⬜ scaffold + 4 skills (#26–30) |
+| 2.5 | daily-brief: API-first + local fallback | ⬜ pending |
 
 Eval Level: ops → Level 1. Dev → Level 0.
 
@@ -669,6 +677,67 @@ lesson-parser, nlm (also 1 for h2t-thinking from h2t-arch node-researcher moves 
 | 8 | Three eval maturity levels: Activity → Automated → Judge | Natural growth path per skill |
 | 9 | Skills = agent interface to ETL ingestors, not standalone tools | Part of POS, not independent system |
 | 10 | DOR = pure knowledge vault, skills extracted | Historical accident corrected |
+| 11 | h2t-graphs is live — use directly, no PostgreSQL transit for skill knowledge | graphs.lichtpfadstudio.com is stable |
+| 12 | Two graph sources: skill-patterns (research) + skill-lessons (runtime) | Different provenance and update cadence |
+| 13 | LLM enrichment step between research and graph write | Raw research needs normalization before storage |
+| 14 | Developer review gate before GEPA patterns applied to SKILL.md | Prevent garbage-in-garbage-out loop |
+
+---
+
+---
+
+## 14. Skill Intelligence Graph (Phase 3)
+
+Skills are developed from base model memory without access to accumulated project knowledge.
+Errors repeat across sessions because there is no persistent record of what failed and why.
+
+**Solution:** Two h2t-graphs sources with cross-links — full spec in
+`docs/superpowers/specs/2026-04-06-skill-intelligence-graph-design.md`
+
+### Sources
+
+| Source | What | Updated by |
+|--------|------|------------|
+| `skill-patterns` | Best practices from research (hooks, ETL, pipeline, eval, marketplace) | Research subagents → LLM enrichment |
+| `skill-lessons` | Runtime lessons: bugs, anti-patterns, eval findings | SKILL.md explicit step + EvalSession.close() |
+
+### Integration in SKILL.md
+
+Every skill gets two optional steps:
+1. **Before unclear work:** `skill_graph query --context "<problem>" --skill "<name>"`
+2. **After debug resolution:** `skill_graph add-lesson --trigger "..." --resolution "..."`
+
+### Research pipeline (Phase 3.1)
+
+5 parallel subagents (haiku + exa-ai):
+
+| Agent | Source | Method |
+|-------|--------|--------|
+| gstack-researcher | github.com/anthropics/gstack | git codebase analysis |
+| superpowers-researcher | superpowers marketplace repo | SKILL.md pattern analysis |
+| plugin-dev-researcher | `.claude/plugins/cache/claude-plugins-official/plugin-dev/` | local files |
+| eval-researcher | GEPA, DSPy, agent eval papers | exa-ai search |
+| claude-docs-researcher | Claude Code hooks/skills API | context7 |
+
+Raw JSON → LLM enrichment (normalize, dedup, score) → batch write to `skill-patterns`.
+
+### GEPA loop (Phase 3.3)
+
+```
+EvalSession → skill-lessons (eval-finding) → LLM-as-judge → skill-patterns (eval-derived)
+                                                                      ↓
+                                                         Developer review gate
+                                                                      ↓
+                                                              Applied to SKILL.md
+```
+
+### lib/skill_graph/
+
+```python
+SkillGraphClient.query(context, skill_name, top_k) → list[dict]
+SkillGraphClient.add_lesson(skill_name, trigger, resolution, ...) → node_id
+SkillGraphClient.add_pattern(pattern_type, title, body, source, ...) → node_id
+```
 
 ---
 
