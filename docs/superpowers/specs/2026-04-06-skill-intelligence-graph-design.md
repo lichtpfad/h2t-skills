@@ -1,6 +1,9 @@
 # Skill Intelligence Graph — Design
 
-*Created: 2026-04-06 · Status: approved design · Author: Stanislav Glazov + Claude*
+*Created: 2026-04-06 · Updated: 2026-04-07 · Status: approved design · Author: Stanislav Glazov + Claude*
+
+### Changelog
+- **2026-04-07** — Fixed P1: EvalSession interface aligned with SkillEval context manager; P1: added source bootstrap step; P2: cross-link schema with typed edges; P2: dual-token policy; P2: renamed internal phases to Step 6.x
 
 ---
 
@@ -84,20 +87,28 @@ Node schema:
   "eval_score_after": "float (optional)",
   "session_id": "string",
   "date": "ISO 8601",
-  "crosslinks": ["pattern_id_1", "pattern_id_2"]
+  "crosslinks": [
+    {"to": "pattern_id_1", "relation": "caused_by"},
+    {"to": "pattern_id_2", "relation": "resolves_via"}
+  ]
 }
 ```
 
 ### 3.3 Cross-links
 
-Cross-links are bidirectional and stored in both nodes:
+Edge schema — each crosslink entry has two fields:
+```json
+{"to": "<node_id>", "relation": "<relation_type>"}
+```
 
-| Relation | Direction | Meaning |
-|----------|-----------|---------|
-| `caused_by` | lesson → pattern | Anti-pattern in skill-patterns caused this lesson |
-| `resolves_via` | lesson → pattern | Resolution matches a known pattern |
-| `confirms` | lesson → pattern | Eval finding confirms a pattern's value |
-| `contradicts` | lesson → pattern | Finding contradicts an assumed best practice |
+| Relation | Origin | Target | Meaning |
+|----------|--------|--------|---------|
+| `caused_by` | lesson | pattern | Anti-pattern in skill-patterns caused this lesson |
+| `resolves_via` | lesson | pattern | Resolution matches a known pattern |
+| `confirms` | lesson | pattern | Eval finding confirms a pattern's value |
+| `contradicts` | lesson | pattern | Finding contradicts an assumed best practice |
+
+**Transactional rule:** When `add_lesson()` is called with crosslinks, `SkillGraphClient` also patches each referenced pattern node to add a reverse edge (eventual consistency — patch failure is logged but does not roll back the lesson write).
 
 ---
 
@@ -129,10 +140,11 @@ class SkillGraphClient:
         session_id: str = None,
         eval_score_before: float = None,
         eval_score_after: float = None,
-        crosslinks: list[str] = None,
+        crosslinks: list[dict] = None,  # [{"to": node_id, "relation": relation_type}]
     ) -> str:
         """
-        Write a lesson learned. Called after debug resolution or from EvalSession.close().
+        Write a lesson learned. Called after debug resolution or from SkillEval.__exit__.
+        Patches referenced pattern nodes with reverse edges (eventual consistency).
         Returns node ID.
         """
         ...
@@ -155,7 +167,10 @@ class SkillGraphClient:
         ...
 ```
 
-Credentials: `H2T_GRAPHS_TOKEN_RW` from `~/.dor/secrets.env`
+**Token policy** (mirrors `graphs-api.md` rules):
+- `query()` → `H2T_GRAPHS_TOKEN_RO`
+- `add_lesson()`, `add_pattern()` → `H2T_GRAPHS_TOKEN_RW`
+- Both read from `~/.dor/secrets.env`; client selects token per operation.
 
 ---
 
@@ -189,23 +204,38 @@ $H2T_PYTHON "$SKILL_GRAPH" add-lesson \
   --session-id "<SESSION_NAME>"
 ```
 
-### 5.3 EvalSession — automatic lesson on close
+### 5.3 SkillEval — automatic lesson on failure
 
-`lib/eval/session.py` calls `add_lesson()` on session close if score delta is significant:
+`lib/eval/session.py` uses `SkillEval` context manager (no `close(score)` or `score_before`).
+Integration point is `__exit__` when `exc_type is not None` (skill raised an exception).
 
+**Interface change in `SkillEval.__init__`:**
 ```python
-def close(self, score: float):
-    if abs(score - self.score_before) > 0.1:
-        self.graph.add_lesson(
-            skill_name=self.source,
-            trigger="eval score change",
-            resolution=f"score {self.score_before:.2f} → {score:.2f}",
-            lesson_type="eval-finding",
-            session_id=self.session_id,
-            eval_score_before=self.score_before,
-            eval_score_after=score,
-        )
+def __init__(self, skill, domain, project, plugin_version="", evals_root=None,
+             skill_graph=None):   # ← add optional SkillGraphClient
+    ...
+    self._skill_graph = skill_graph
 ```
+
+**In `__exit__`:**
+```python
+def __exit__(self, exc_type, exc_val, exc_tb):
+    status = "failure" if exc_type else "success"
+    ...
+    if status == "failure" and self._skill_graph:
+        self._skill_graph.add_lesson(
+            skill_name=self.skill,
+            trigger=str(exc_val) if exc_val else "skill execution failure",
+            resolution="",   # filled manually via SKILL.md step 5.2 after debug
+            lesson_type="eval-finding",
+        )
+    return False
+```
+
+Note: `resolution` is empty at write time — it is a failure marker. The actual resolution
+is written separately via SKILL.md step 5.2 once the developer fixes the issue.
+Baseline score tracking is not applicable — `SkillEval` uses pass/fail status, not numeric scores.
+Numeric eval scores come from h2t-evals SDK (`s.metric(...)`) and are processed by GEPA batch (#60).
 
 ---
 
@@ -287,33 +317,59 @@ This closes the loop: eval → lesson → pattern → better skill → eval.
 
 ---
 
-## 8. Implementation Phases
+## 8. Implementation Steps (Phase 6 — skill-graph)
 
-### Phase 1: lib/skill_graph/ + research run
+Numbering matches GitHub milestone "Phase 6 — skill-graph". Skills-v3 architecture doc
+refers to this block as "Phase 3" in its own phase numbering — this spec uses Step 6.x
+to avoid collision.
 
-| Step | Action |
-|------|--------|
-| 1.1 | Implement `lib/skill_graph/client.py` |
-| 1.2 | Run 5 research subagents → raw JSON |
-| 1.3 | LLM enrichment pass → populate `skill-patterns` |
-| 1.4 | CLI wrapper: `skill_graph query` + `skill_graph add-lesson` |
+### Step 6.0: Bootstrap graph sources (#55)
 
-### Phase 2: SKILL.md integration
+Before any code runs, `skill-patterns` and `skill-lessons` sources must exist in h2t-graphs.
 
-| Step | Action |
-|------|--------|
-| 2.1 | Add query step to 3-5 highest-frequency skills (session-start, handoff, gmail, github-issues) |
-| 2.2 | Add lesson-write step to same skills |
-| 2.3 | Wire EvalSession → add_lesson on score delta |
+| Action | Detail |
+|--------|--------|
+| Check `/docs` endpoint | Confirm source creation API |
+| Create `skill-patterns` | Via h2t-graphs admin API or config |
+| Create `skill-lessons` | Via h2t-graphs admin API or config |
+| Smoke test | `curl .../api/query?source=skill-patterns&search=test` returns empty `[]`, not 404 |
 
-### Phase 3: GEPA loop
+If h2t-graphs has no self-serve source creation, coordinate with h2t-graphs repo directly.
+Sources must be queryable before Step 6.1.
 
-| Step | Action |
-|------|--------|
-| 3.1 | Implement batch GEPA job |
-| 3.2 | LLM-as-judge review of skill-lessons |
-| 3.3 | Auto-generate improvement patterns → skill-patterns |
-| 3.4 | Developer review gate before applying to SKILL.md |
+### Step 6.1: lib/skill_graph/ + CLI (#56)
+
+| Action | Detail |
+|--------|--------|
+| Implement `lib/skill_graph/client.py` | query (RO token), add_lesson, add_pattern (RW token) |
+| Implement `lib/skill_graph/cli.py` | argparse: `query`, `add-lesson`, `add-pattern` subcommands |
+| Tests | mock h2t-graphs API, test dual-token selection, crosslink patch logic |
+
+### Step 6.2: Research pipeline → skill-patterns (#57)
+
+| Action | Detail |
+|--------|--------|
+| Run 5 parallel subagents (haiku + exa-ai) | raw JSON per agent |
+| LLM enrichment pass | normalize, dedup, score confidence |
+| Batch write to `skill-patterns` | via `add_pattern()` |
+| Verify | ≥50 patterns, all `pattern_type` categories covered |
+
+### Step 6.3: SKILL.md integration (#58 + #59)
+
+| Action | Detail |
+|--------|--------|
+| Add query step to session-start, handoff, gmail, github-issues | optional, before unclear work |
+| Add lesson-write step to same skills | explicit, after debug resolution |
+| Patch `SkillEval.__init__` + `__exit__` | optional `skill_graph` param, failure → add_lesson |
+
+### Step 6.4: GEPA batch job (#60)
+
+| Action | Detail |
+|--------|--------|
+| Read skill-lessons where `lesson_type=eval-finding` | since last_gepa_run |
+| LLM-as-judge → improvement suggestions | structured output |
+| Staging list | human-readable, not auto-written to graph |
+| Developer review → approve → write to `skill-patterns` | `pattern_type=eval-derived` |
 
 ---
 
@@ -327,6 +383,10 @@ This closes the loop: eval → lesson → pattern → better skill → eval.
 | 4 | Haiku for all research subagents | Cost efficiency for bulk research |
 | 5 | GEPA as batch job, not real-time | Enough volume needed for meaningful patterns |
 | 6 | Developer review gate before GEPA patterns applied | Prevent garbage-in-garbage-out loop |
+| 7 | SkillEval writes empty-resolution lesson on failure, not on score delta | SkillEval has no numeric score; resolution filled separately via SKILL.md |
+| 8 | Source bootstrap is Step 6.0, blocking all other steps | Sources must exist before any read/write |
+| 9 | Cross-link edges typed: `{to, relation}`, patched on both nodes eventually | h2t-graphs has no native edge API; eventual consistency accepted |
+| 10 | Dual-token: RO for query, RW for write | Mirrors graphs-api.md security policy |
 
 ---
 
