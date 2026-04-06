@@ -1,15 +1,16 @@
 """Integration tests for `h2t ingest` subcommand."""
 
 import json
+import os
 import sys
 from io import StringIO
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 # Ensure lib/ is on sys.path
-_lib = Path(__file__).parent.parent.parent / "lib"
-if str(_lib) not in sys.path:
-    sys.path.insert(0, str(_lib))
+_lib = str(Path(__file__).resolve().parent.parent.parent / "lib")
+if _lib not in sys.path:
+    sys.path.insert(0, _lib)
 
 
 def run_cli(*args):
@@ -25,9 +26,10 @@ def run_cli(*args):
         except SystemExit:
             pass
     finally:
-        output = sys.stdout.getvalue()
+        captured_io = sys.stdout
         sys.stdout = old_stdout
         sys.argv = old_argv
+    output = captured_io.getvalue()
     return output
 
 
