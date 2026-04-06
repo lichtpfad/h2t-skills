@@ -29,6 +29,17 @@
       "strict": false
     },
     {
+      "name": "h2t-ops",
+      "description": "H2T Ops — personal OS adapters: gmail, calendar, notion, telegram, daily-brief.",
+      "version": "1.0.0",
+      "author": {
+        "name": "lichtpfad"
+      },
+      "source": "./plugins/h2t-ops",
+      "category": "productivity",
+      "strict": false
+    },
+    {
       "name": "creative-thinking",
       "description": "Creative problem-solving using frameworks from Dmitriy Chernyshov's course. 57 frameworks, 310 cases, 153 principles.",
       "version": "0.7.0",
