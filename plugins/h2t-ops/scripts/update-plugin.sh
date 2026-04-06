@@ -56,7 +56,7 @@ with open(path, 'r', encoding='utf-8') as f: data = json.load(f)
 key = 'h2t-ops@lichtpfad'
 entry = {'scope': 'user', 'installPath': r'$CACHE_DIR_WIN', 'version': '$VERSION',
          'installedAt': '$NOW', 'lastUpdated': '$NOW', 'gitCommitSha': '$SHA'}
-data[key] = [entry]
+data.setdefault('plugins', {})[key] = [entry]
 with open(path, 'w', encoding='utf-8') as f: json.dump(data, f, indent=2)
 " 2>/dev/null || true
 fi
