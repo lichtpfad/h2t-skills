@@ -9,6 +9,8 @@ from clients.notion import NotionClient
 
 @pytest.fixture
 def client():
+    # object.__new__ bypasses __init__ (skips OAuth) — safe here because
+    # all tested methods are pure converters that don't use self.client
     c = object.__new__(NotionClient)
     c.token = "fake"
     return c
@@ -80,6 +82,4 @@ def test_blocks_to_markdown_roundtrip(client):
     md = "# Heading\n\nSome text.\n\n- list item\n\n"
     blocks = client.markdown_to_blocks(md)
     result = client.blocks_to_markdown(blocks)
-    assert "# Heading" in result
-    assert "Some text." in result
-    assert "- list item" in result
+    assert result.strip() == md.strip()
