@@ -63,7 +63,7 @@ Research subagents                  Debug/Eval runtime
 Node schema:
 ```json
 {
-  "pattern_type": "hook | etl | pipeline | generation | eval | marketplace | trigger",
+  "pattern_type": "hook | etl | pipeline | generation | eval | marketplace | trigger | eval-derived",
   "applies_to": ["session-start", "etl-skills", "all"],
   "title": "string",
   "body": "string — actionable description of the pattern",
@@ -300,7 +300,7 @@ Subagents (parallel, haiku)
 GEPA is the auto-improvement loop:
 
 ```
-Skill runs → EvalSession records → eval-findings in skill-lessons
+Skill runs → SkillEval records → eval-findings in skill-lessons
                                            │
                          LLM-as-judge reviews skill-lessons
                                            │
