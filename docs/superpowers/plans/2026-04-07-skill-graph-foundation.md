@@ -157,24 +157,28 @@ from unittest.mock import patch, mock_open, MagicMock
 def test_load_secrets_from_env_file(tmp_path):
     secrets_file = tmp_path / "secrets.env"
     secrets_file.write_text(
-        "H2T_GRAPHS_TOKEN_RO=ro-test-token\n"
-        "H2T_GRAPHS_TOKEN_RW=rw-test-token\n"
+        "H2T_SKILL_GRAPH_TOKEN_RO=ro-test-token\n"
+        "H2T_SKILL_GRAPH_TOKEN_RW=rw-test-token\n"
+        "H2T_SKILL_GRAPH_PROJECT_ID=abc123\n"
         "H2T_GRAPHS_URL=https://test.example.com\n"
     )
     from skill_graph.client import _load_secrets
     secrets = _load_secrets(secrets_path=str(secrets_file))
-    assert secrets["H2T_GRAPHS_TOKEN_RO"] == "ro-test-token"
-    assert secrets["H2T_GRAPHS_TOKEN_RW"] == "rw-test-token"
+    assert secrets["H2T_SKILL_GRAPH_TOKEN_RO"] == "ro-test-token"
+    assert secrets["H2T_SKILL_GRAPH_TOKEN_RW"] == "rw-test-token"
+    assert secrets["H2T_SKILL_GRAPH_PROJECT_ID"] == "abc123"
     assert secrets["H2T_GRAPHS_URL"] == "https://test.example.com"
 
 
 def test_load_secrets_falls_back_to_env(tmp_path, monkeypatch):
-    monkeypatch.setenv("H2T_GRAPHS_TOKEN_RO", "env-ro")
-    monkeypatch.setenv("H2T_GRAPHS_TOKEN_RW", "env-rw")
+    monkeypatch.setenv("H2T_SKILL_GRAPH_TOKEN_RO", "env-ro")
+    monkeypatch.setenv("H2T_SKILL_GRAPH_TOKEN_RW", "env-rw")
+    monkeypatch.setenv("H2T_SKILL_GRAPH_PROJECT_ID", "proj-123")
     from skill_graph.client import _load_secrets
     secrets = _load_secrets(secrets_path=str(tmp_path / "nonexistent.env"))
-    assert secrets["H2T_GRAPHS_TOKEN_RO"] == "env-ro"
-    assert secrets["H2T_GRAPHS_TOKEN_RW"] == "env-rw"
+    assert secrets["H2T_SKILL_GRAPH_TOKEN_RO"] == "env-ro"
+    assert secrets["H2T_SKILL_GRAPH_TOKEN_RW"] == "env-rw"
+    assert secrets["H2T_SKILL_GRAPH_PROJECT_ID"] == "proj-123"
 ```
 
 - [ ] **Step 1.2: Run test to verify it fails**
@@ -215,8 +219,9 @@ import urllib.request
 from pathlib import Path
 from typing import Optional
 
-_ADD_INSIGHT_PATH = "/api/add_insight"  # verify from /llms.txt in Step 0.5
-_QUERY_PATH = "/api/query"
+_NODES_PATH = "/api/nodes"    # POST — add node (auto-embeds on write)
+_QUERY_PATH = "/api/query"    # GET  — keyword + semantic search
+_EDGES_PATH = "/api/edges"    # POST — add crosslink edges
 
 VALID_PATTERN_TYPES = frozenset({
     "hook", "etl", "pipeline", "generation",
@@ -235,7 +240,8 @@ def _load_secrets(secrets_path: Optional[str] = None) -> dict[str, str]:
                 key, _, val = line.partition("=")
                 result[key.strip()] = val.strip()
     # env vars override file values
-    for key in ("H2T_GRAPHS_TOKEN_RO", "H2T_GRAPHS_TOKEN_RW", "H2T_GRAPHS_URL"):
+    for key in ("H2T_GRAPHS_URL", "H2T_SKILL_GRAPH_PROJECT_ID",
+                "H2T_SKILL_GRAPH_TOKEN_RO", "H2T_SKILL_GRAPH_TOKEN_RW"):
         if os.environ.get(key):
             result[key] = os.environ[key]
     return result
@@ -249,14 +255,19 @@ class SkillGraphClient:
             or self._secrets.get("H2T_GRAPHS_URL")
             or "https://graphs.lichtpfadstudio.com"
         ).rstrip("/")
+        self._project_id = self._secrets.get("H2T_SKILL_GRAPH_PROJECT_ID", "")
+
+    def _source_id(self, alias: str) -> str:
+        """Returns project-scoped source ID: {project_id}-{alias}. See h2t-graphs#98."""
+        return f"{self._project_id}-{alias}" if self._project_id else alias
 
     @property
     def _ro_token(self) -> str:
-        return self._secrets.get("H2T_GRAPHS_TOKEN_RO", "")
+        return self._secrets.get("H2T_SKILL_GRAPH_TOKEN_RO", "")
 
     @property
     def _rw_token(self) -> str:
-        return self._secrets.get("H2T_GRAPHS_TOKEN_RW", "")
+        return self._secrets.get("H2T_SKILL_GRAPH_TOKEN_RW", "")
 
     def _get(self, path: str, params: dict, token: str) -> dict:
         query = urllib.parse.urlencode(params)
@@ -324,10 +335,15 @@ git commit -m "feat(skill-graph): add package skeleton + secrets loader"
 
 Append to `tests/skill_graph/test_client.py`:
 ```python
-def _make_client(url="https://test.example.com", ro="ro-tok", rw="rw-tok"):
+def _make_client(url="https://test.example.com", ro="ro-tok", rw="rw-tok", project_id="proj-test"):
     from skill_graph.client import SkillGraphClient
     client = SkillGraphClient(url=url, secrets_path="/nonexistent")
-    client._secrets = {"H2T_GRAPHS_TOKEN_RO": ro, "H2T_GRAPHS_TOKEN_RW": rw}
+    client._secrets = {
+        "H2T_SKILL_GRAPH_TOKEN_RO": ro,
+        "H2T_SKILL_GRAPH_TOKEN_RW": rw,
+        "H2T_SKILL_GRAPH_PROJECT_ID": project_id,
+    }
+    client._project_id = project_id
     return client
 
 
@@ -461,7 +477,7 @@ def test_add_lesson_payload_structure():
         )
     req = m.call_args[0][0]
     payload = json.loads(req.data.decode())
-    assert payload["source"] == "skill-lessons"
+    assert payload["source_id"] == "proj-test-skill-lessons"
     content = payload["content"]
     assert content["lesson_type"] == "bug"
     assert content["skill_name"] == "gmail"
@@ -492,7 +508,7 @@ def test_add_lesson_patches_crosslinks():
     assert m.call_count == 2
     patch_req = m.call_args_list[1][0][0]
     patch_payload = json.loads(patch_req.data.decode())
-    assert patch_payload["source"] == "skill-patterns"
+    assert patch_payload["source_id"] == "proj-test-skill-patterns"
     assert patch_payload["node_id"] == "pattern-99"
 
 
@@ -545,7 +561,7 @@ def add_lesson(self, skill_name: str, trigger: str, resolution: str,
     if crosslinks:
         content["crosslinks"] = crosslinks
 
-    result = self._post(_ADD_INSIGHT_PATH, {"source": "skill-lessons", "content": content},
+    result = self._post(_NODES_PATH, {"source_id": self._source_id("skill-lessons"), "content": content},
                         self._rw_token)
     node_id: str = result.get("id", "")
 
@@ -554,8 +570,8 @@ def add_lesson(self, skill_name: str, trigger: str, resolution: str,
         for link in crosslinks:
             try:
                 self._post(
-                    _ADD_INSIGHT_PATH,
-                    {"source": "skill-patterns", "node_id": link["to"],
+                    _NODES_PATH,
+                    {"source_id": self._source_id("skill-patterns"), "node_id": link["to"],
                      "patch": {"crosslinks": [{"to": node_id, "relation": link["relation"]}]}},
                     self._rw_token,
                 )
@@ -614,7 +630,7 @@ def test_add_pattern_payload_structure():
             tags=["hook", "injection"],
         )
     payload = json.loads(m.call_args[0][0].data.decode())
-    assert payload["source"] == "skill-patterns"
+    assert payload["source_id"] == "proj-test-skill-patterns"
     content = payload["content"]
     assert content["pattern_type"] == "hook"
     assert content["confidence"] == 0.9
@@ -678,7 +694,7 @@ def add_pattern(self, pattern_type: str, title: str, body: str, source: str,
     if source_url is not None:
         content["source_url"] = source_url
 
-    result = self._post(_ADD_INSIGHT_PATH, {"source": "skill-patterns", "content": content},
+    result = self._post(_NODES_PATH, {"source_id": self._source_id("skill-patterns"), "content": content},
                         self._rw_token)
     return result.get("id", "")
 ```
@@ -898,7 +914,18 @@ pytest tests/skill_graph/ -v
 
 Expected: all PASS
 
-- [ ] **Step 5.5: Integration smoke test (requires real tokens)**
+- [ ] **Step 5.5: Add project credentials to secrets.env**
+
+Append to `~/.dor/secrets.env` (values from h2t-graphs project `1e4acbb166edf03c`):
+```
+H2T_SKILL_GRAPH_PROJECT_ID=1e4acbb166edf03c
+H2T_SKILL_GRAPH_TOKEN_RO=cb0d9bf92446b98d5b1e359c45dfb24731958ab7e98cfbcc14504c6e27552f0a
+H2T_SKILL_GRAPH_TOKEN_RW=171ed93daf676f0bd2b5210625b3f1ed5a30102e52ccc452529c46baf5d9d5ea
+```
+
+⚠️ Skip actual query smoke test until h2t-graphs#99 lands (sources not queryable yet).
+
+- [ ] **Step 5.6: Integration smoke test (after h2t-graphs#99 is deployed)**
 
 ```bash
 source ~/.dor/secrets.env
@@ -1066,7 +1093,7 @@ git commit -m "feat(skill-graph): patch SkillEval to write lesson on failure via
 **Type consistency:**
 - `SkillGraphClient` → imported in `cli.py` as `from .client import SkillGraphClient` ✓
 - `crosslinks: list[dict]` — used consistently in client.py and test ✓
-- `_ADD_INSIGHT_PATH`, `_QUERY_PATH` — defined once in client.py, used in all methods ✓
+- `_NODES_PATH`, `_QUERY_PATH` — defined once in client.py, used in all methods ✓
 - `VALID_PATTERN_TYPES` — frozenset defined once, used in `add_pattern()` and test ✓
 
 ---
