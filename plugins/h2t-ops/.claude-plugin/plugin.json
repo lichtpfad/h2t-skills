@@ -1,0 +1,8 @@
+{
+  "name": "h2t-ops",
+  "description": "H2T Ops — personal OS adapters: gmail, calendar, notion, telegram, daily-brief",
+  "version": "1.0.0",
+  "author": {
+    "name": "lichtpfad"
+  }
+}
