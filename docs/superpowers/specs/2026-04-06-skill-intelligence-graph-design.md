@@ -167,10 +167,17 @@ class SkillGraphClient:
         ...
 ```
 
-**Token policy** (mirrors `graphs-api.md` rules):
-- `query()` → `H2T_GRAPHS_TOKEN_RO`
-- `add_lesson()`, `add_pattern()` → `H2T_GRAPHS_TOKEN_RW`
-- Both read from `~/.dor/secrets.env`; client selects token per operation.
+**Token policy** — project-scoped (h2t-graphs#98 diagnosis, fixed in #99):
+- `query()` → `H2T_SKILL_GRAPH_TOKEN_RO`
+- `add_lesson()`, `add_pattern()` → `H2T_SKILL_GRAPH_TOKEN_RW`
+- Project ID → `H2T_SKILL_GRAPH_PROJECT_ID`
+- All read from `~/.dor/secrets.env`; source IDs constructed as `{project_id}-{alias}`
+
+After h2t-graphs#99 lands, source access:
+```
+GET /api/query?source={project_id}-skill-patterns   + H2T_SKILL_GRAPH_TOKEN_RO
+POST /api/nodes  {"source_id": "{project_id}-skill-patterns", ...}  + H2T_SKILL_GRAPH_TOKEN_RW
+```
 
 ---
 
