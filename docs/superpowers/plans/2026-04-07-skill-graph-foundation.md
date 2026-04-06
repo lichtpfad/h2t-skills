@@ -203,12 +203,13 @@ Create `lib/skill_graph/client.py`:
 ```python
 """SkillGraphClient — thin HTTP wrapper over h2t-graphs API.
 
-Token policy:
-  query()       → H2T_GRAPHS_TOKEN_RO
-  add_lesson()  → H2T_GRAPHS_TOKEN_RW
-  add_pattern() → H2T_GRAPHS_TOKEN_RW
+Token policy (project-scoped, see h2t-graphs#98):
+  query()       → H2T_SKILL_GRAPH_TOKEN_RO
+  add_lesson()  → H2T_SKILL_GRAPH_TOKEN_RW
+  add_pattern() → H2T_SKILL_GRAPH_TOKEN_RW
 
-Both loaded from ~/.dor/secrets.env (falls back to env vars).
+Source IDs: {H2T_SKILL_GRAPH_PROJECT_ID}-{alias}
+All credentials loaded from ~/.dor/secrets.env (falls back to env vars).
 """
 from __future__ import annotations
 
