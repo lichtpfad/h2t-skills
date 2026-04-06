@@ -1,14 +1,14 @@
-# Skill Intelligence Graph — Foundation (Steps 6.0 + 6.1)
+# Skill Intelligence Graph — Foundation (Steps 6.0 + 6.1 + SkillEval patch)
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Bootstrap `skill-patterns` and `skill-lessons` sources in h2t-graphs, then implement `lib/skill_graph/` — a Python client + CLI that skills can call to query patterns and write lessons.
+**Goal:** Bootstrap `skill-patterns` and `skill-lessons` sources in h2t-graphs, implement `lib/skill_graph/` (Python client + CLI), and patch `SkillEval` to write failure lessons automatically.
 
 **Architecture:** `SkillGraphClient` wraps h2t-graphs HTTP API using stdlib `urllib` (no extra deps). Dual-token policy: RO for reads, RW for writes, both loaded from `~/.dor/secrets.env`. CLI wrapper (`cli.py`) exposes `query`, `add-lesson`, `add-pattern` subcommands for use in SKILL.md bash steps.
 
 **Tech Stack:** Python 3.11, stdlib only (`urllib`, `argparse`, `json`), pytest + `unittest.mock`
 
-**Scope:** Steps 6.0 and 6.1 only. Research pipeline (6.2), SKILL.md integration (6.3), GEPA (6.4) are separate plans.
+**Scope:** Steps 6.0, 6.1, and the `SkillEval` patch from Step 6.3 (small, self-contained, no research pipeline required). Research pipeline (6.2), SKILL.md integration (remaining 6.3), GEPA (6.4) are separate plans.
 
 **Spec:** `docs/superpowers/specs/2026-04-06-skill-intelligence-graph-design.md`
 
@@ -33,9 +33,14 @@
 
 This is a manual verification task — no code. Must be complete before Task 1.
 
+> **Shell note:** All commands in Task 0 use bash syntax (`source`, `$VAR`).
+> Run them in **Git Bash** (not PowerShell).
+> PowerShell equivalents at the end of this task if needed.
+
 - [ ] **Step 0.1: Read the API docs**
 
 ```bash
+# Git Bash
 source ~/.dor/secrets.env
 curl -s -H "X-H2T-Token: $H2T_GRAPHS_TOKEN_RO" \
   https://graphs.lichtpfadstudio.com/llms.txt
@@ -95,6 +100,30 @@ From /llms.txt output, note the exact path and payload format for writing a node
 Example (confirm actual): `POST /api/add_insight` with `{"source": "...", "content": {...}}`.
 
 Update `lib/skill_graph/client.py` constants in Task 1 if the path differs.
+
+- [ ] **Step 0.6 (PowerShell alternative — skip if using Git Bash)**
+
+If running in PowerShell instead of Git Bash, use these equivalents for Steps 0.1–0.4:
+
+```powershell
+# Load secrets
+$env = Get-Content "$HOME\.dor\secrets.env" | Where-Object { $_ -match "=" -and $_ -notmatch "^#" } |
+       ForEach-Object { $k,$v = $_ -split "=",2; [System.Environment]::SetEnvironmentVariable($k.Trim(), $v.Trim()) }
+
+# Read llms.txt
+Invoke-RestMethod -Uri "https://graphs.lichtpfadstudio.com/llms.txt" `
+  -Headers @{"X-H2T-Token" = $env:H2T_GRAPHS_TOKEN_RO}
+
+# Check source exists
+Invoke-RestMethod -Uri "https://graphs.lichtpfadstudio.com/api/query?source=skill-patterns&search=test" `
+  -Headers @{"X-H2T-Token" = $env:H2T_GRAPHS_TOKEN_RO}
+
+# Create source (if needed)
+Invoke-RestMethod -Uri "https://graphs.lichtpfadstudio.com/api/sources" `
+  -Method POST `
+  -Headers @{"X-H2T-Token" = $env:H2T_GRAPHS_TOKEN_RW; "Content-Type" = "application/json"} `
+  -Body '{"name":"skill-patterns","description":"Best practices for skill authoring"}'
+```
 
 ---
 
@@ -908,7 +937,7 @@ Append to `lib/eval/test_session.py`:
 ```python
 def test_skill_eval_calls_add_lesson_on_exception():
     from unittest.mock import MagicMock
-    from eval.session import SkillEval
+    from lib.eval.session import SkillEval
     mock_graph = MagicMock()
     mock_graph.add_lesson.return_value = "lesson-1"
 
@@ -929,7 +958,7 @@ def test_skill_eval_calls_add_lesson_on_exception():
 
 def test_skill_eval_does_not_call_add_lesson_on_success():
     from unittest.mock import MagicMock
-    from eval.session import SkillEval
+    from lib.eval.session import SkillEval
     mock_graph = MagicMock()
 
     with SkillEval("session-start", domain="dev", project="test",
@@ -940,7 +969,7 @@ def test_skill_eval_does_not_call_add_lesson_on_success():
 
 
 def test_skill_eval_works_without_skill_graph():
-    from eval.session import SkillEval
+    from lib.eval.session import SkillEval
     # no skill_graph — existing behaviour unchanged
     with SkillEval("session-start", domain="dev", project="test") as ev:
         ev.metric("test.metric", value_num=1.0)
