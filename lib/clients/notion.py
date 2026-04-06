@@ -22,6 +22,14 @@ except ImportError as e:
         "Install: pip install notion-client"
     ) from e
 
+try:
+    import httpx
+except ImportError as e:
+    raise ImportError(
+        f"httpx library not installed: {e}\n"
+        "Install: pip install httpx"
+    ) from e
+
 
 class NotionClient:
     """Notion API client — read and write pages and databases."""
@@ -78,8 +86,6 @@ class NotionClient:
         limit: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
         try:
-            import httpx
-
             results: List[Dict[str, Any]] = []
             start_cursor = None
             while True:

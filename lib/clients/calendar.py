@@ -56,6 +56,9 @@ def _get_service():
         )
 
     CALENDAR_SCOPE = ["https://www.googleapis.com/auth/calendar"]
+    # Normalize singular "scope" field (legacy google-calendar-mcp format)
+    if "scope" in token_data and "scopes" not in token_data:
+        token_data["scopes"] = token_data.pop("scope").split()
     effective_scopes = token_data.get("scopes") or CALENDAR_SCOPE
     if isinstance(effective_scopes, str):
         effective_scopes = effective_scopes.split()
