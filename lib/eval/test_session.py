@@ -56,3 +56,39 @@ def test_skill_eval_does_not_suppress_exceptions(tmp_path):
     with pytest.raises(RuntimeError, match="boom"):
         with SkillEval("session-start", domain="dev", project="p", evals_root=str(evals_root)):
             raise RuntimeError("boom")
+
+
+def test_skill_eval_calls_add_lesson_on_exception():
+    """SkillEval calls skill_graph.add_lesson() on exception."""
+    mock_graph = MagicMock()
+    mock_graph.add_lesson.return_value = "lesson-1"
+
+    with pytest.raises(RuntimeError):
+        with SkillEval("session-start", domain="dev", project="test",
+                       skill_graph=mock_graph):
+            raise RuntimeError("deliberate failure")
+
+    mock_graph.add_lesson.assert_called_once()
+    call_kwargs = mock_graph.add_lesson.call_args[1]
+    assert call_kwargs["skill_name"] == "session-start"
+    assert "deliberate failure" in call_kwargs["trigger"]
+    assert call_kwargs["lesson_type"] == "eval-finding"
+    assert call_kwargs["resolution"] == ""
+
+
+def test_skill_eval_does_not_call_add_lesson_on_success():
+    """SkillEval does not call add_lesson on successful execution."""
+    mock_graph = MagicMock()
+
+    with SkillEval("session-start", domain="dev", project="test",
+                   skill_graph=mock_graph) as ev:
+        ev.metric("test.metric", value_num=1.0)
+
+    mock_graph.add_lesson.assert_not_called()
+
+
+def test_skill_eval_works_without_skill_graph():
+    """SkillEval works without skill_graph parameter (backward compatibility)."""
+    with SkillEval("session-start", domain="dev", project="test") as ev:
+        ev.metric("test.metric", value_num=1.0)
+    # passes with no exception
