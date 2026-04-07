@@ -171,3 +171,57 @@ def test_add_lesson_crosslink_patch_failure_is_silent():
             crosslinks=[{"to": "pattern-99", "relation": "caused_by"}]
         )
     assert node_id == "lesson-1"
+
+
+def test_add_pattern_uses_rw_token():
+    client = _make_client()
+    with patch("urllib.request.urlopen", return_value=_mock_urlopen({"id": "p1"})) as m:
+        client.add_pattern("hook", "Inject via PreToolUse", "Always use hooks for data...", "gstack")
+    req = m.call_args[0][0]
+    assert req.headers.get("X-h2t-token") == "rw-tok"
+
+
+def test_add_pattern_payload_structure():
+    client = _make_client()
+    with patch("urllib.request.urlopen", return_value=_mock_urlopen({"id": "p1"})) as m:
+        client.add_pattern(
+            pattern_type="hook",
+            title="Inject via PreToolUse",
+            body="Always use PreToolUse hooks to inject external data.",
+            source="gstack",
+            applies_to=["etl-skills", "session-start"],
+            confidence=0.9,
+            source_url="https://github.com/anthropics/gstack/example",
+            tags=["hook", "injection"],
+        )
+    payload = json.loads(m.call_args[0][0].data.decode())
+    assert payload["source_id"] == "proj-test-skill-patterns"
+    content = payload["content"]
+    assert content["pattern_type"] == "hook"
+    assert content["confidence"] == 0.9
+    assert "etl-skills" in content["applies_to"]
+    assert content["source_url"] == "https://github.com/anthropics/gstack/example"
+
+
+def test_add_pattern_rejects_invalid_type():
+    client = _make_client()
+    with pytest.raises(ValueError, match="Invalid pattern_type"):
+        client.add_pattern("unknown-type", "title", "body", "gstack")
+
+
+def test_add_pattern_accepts_eval_derived():
+    client = _make_client()
+    with patch("urllib.request.urlopen", return_value=_mock_urlopen({"id": "p-eval"})):
+        node_id = client.add_pattern("eval-derived", "Lesson from GEPA", "body", "gepa-batch")
+    assert node_id == "p-eval"
+
+
+def test_add_pattern_defaults():
+    client = _make_client()
+    with patch("urllib.request.urlopen", return_value=_mock_urlopen({"id": "p1"})) as m:
+        client.add_pattern("etl", "title", "body", "plugin-dev")
+    content = json.loads(m.call_args[0][0].data.decode())["content"]
+    assert content["confidence"] == 0.7
+    assert content["applies_to"] == []
+    assert content["tags"] == []
+    assert "source_url" not in content
