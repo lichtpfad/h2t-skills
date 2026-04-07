@@ -108,7 +108,7 @@ def test_query_silent_on_http_error():
 
 def test_add_lesson_uses_rw_token():
     client = _make_client()
-    with patch("urllib.request.urlopen", return_value=_mock_urlopen({"id": "l1"})) as m:
+    with patch("urllib.request.urlopen", return_value=_mock_urlopen({"node_id": "l1"})) as m:
         client.add_lesson("session-start", "gate skipped", "added GATE step")
     req = m.call_args[0][0]
     assert req.headers.get("X-h2t-token") == "rw-tok"
@@ -116,7 +116,7 @@ def test_add_lesson_uses_rw_token():
 
 def test_add_lesson_payload_structure():
     client = _make_client()
-    with patch("urllib.request.urlopen", return_value=_mock_urlopen({"id": "l1"})) as m:
+    with patch("urllib.request.urlopen", return_value=_mock_urlopen({"node_id": "l1"})) as m:
         client.add_lesson(
             skill_name="gmail",
             trigger="script not found",
@@ -126,8 +126,8 @@ def test_add_lesson_payload_structure():
         )
     req = m.call_args[0][0]
     payload = json.loads(req.data.decode())
-    assert payload["source_id"] == "proj-test-skill-lessons"
-    content = payload["content"]
+    assert payload["source"] == "proj-test-skill-lessons"
+    content = payload["node"]
     assert content["lesson_type"] == "bug"
     assert content["skill_name"] == "gmail"
     assert content["trigger"] == "script not found"
@@ -138,7 +138,7 @@ def test_add_lesson_payload_structure():
 
 def test_add_lesson_returns_node_id():
     client = _make_client()
-    with patch("urllib.request.urlopen", return_value=_mock_urlopen({"id": "lesson-42"})):
+    with patch("urllib.request.urlopen", return_value=_mock_urlopen({"node_id": "lesson-42"})):
         node_id = client.add_lesson("session-start", "broke", "fixed")
     assert node_id == "lesson-42"
 
@@ -146,8 +146,8 @@ def test_add_lesson_returns_node_id():
 def test_add_lesson_patches_crosslinks():
     client = _make_client()
     responses = [
-        _mock_urlopen({"id": "lesson-1"}),   # add lesson
-        _mock_urlopen({"id": "pattern-99"}),  # patch pattern reverse edge
+        _mock_urlopen({"node_id": "lesson-1"}),   # add lesson
+        _mock_urlopen({"node_id": "pattern-99"}),  # patch pattern reverse edge
     ]
     with patch("urllib.request.urlopen", side_effect=responses) as m:
         client.add_lesson(
@@ -157,7 +157,7 @@ def test_add_lesson_patches_crosslinks():
     assert m.call_count == 2
     patch_req = m.call_args_list[1][0][0]
     patch_payload = json.loads(patch_req.data.decode())
-    assert patch_payload["source_id"] == "proj-test-skill-patterns"
+    assert patch_payload["source"] == "proj-test-skill-patterns"
     assert patch_payload["node_id"] == "pattern-99"
 
 
@@ -165,7 +165,7 @@ def test_add_lesson_crosslink_patch_failure_is_silent():
     client = _make_client()
     import urllib.error
     responses = [
-        _mock_urlopen({"id": "lesson-1"}),
+        _mock_urlopen({"node_id": "lesson-1"}),
         urllib.error.URLError("patch failed"),
     ]
     with patch("urllib.request.urlopen", side_effect=responses):
@@ -179,7 +179,7 @@ def test_add_lesson_crosslink_patch_failure_is_silent():
 
 def test_add_pattern_uses_rw_token():
     client = _make_client()
-    with patch("urllib.request.urlopen", return_value=_mock_urlopen({"id": "p1"})) as m:
+    with patch("urllib.request.urlopen", return_value=_mock_urlopen({"node_id": "p1"})) as m:
         client.add_pattern("hook", "Inject via PreToolUse", "Always use hooks for data...", "gstack")
     req = m.call_args[0][0]
     assert req.headers.get("X-h2t-token") == "rw-tok"
@@ -187,7 +187,7 @@ def test_add_pattern_uses_rw_token():
 
 def test_add_pattern_payload_structure():
     client = _make_client()
-    with patch("urllib.request.urlopen", return_value=_mock_urlopen({"id": "p1"})) as m:
+    with patch("urllib.request.urlopen", return_value=_mock_urlopen({"node_id": "p1"})) as m:
         client.add_pattern(
             pattern_type="hook",
             title="Inject via PreToolUse",
@@ -199,8 +199,8 @@ def test_add_pattern_payload_structure():
             tags=["hook", "injection"],
         )
     payload = json.loads(m.call_args[0][0].data.decode())
-    assert payload["source_id"] == "proj-test-skill-patterns"
-    content = payload["content"]
+    assert payload["source"] == "proj-test-skill-patterns"
+    content = payload["node"]
     assert content["pattern_type"] == "hook"
     assert content["confidence"] == 0.9
     assert "etl-skills" in content["applies_to"]
@@ -215,16 +215,16 @@ def test_add_pattern_rejects_invalid_type():
 
 def test_add_pattern_accepts_eval_derived():
     client = _make_client()
-    with patch("urllib.request.urlopen", return_value=_mock_urlopen({"id": "p-eval"})):
+    with patch("urllib.request.urlopen", return_value=_mock_urlopen({"node_id": "p-eval"})):
         node_id = client.add_pattern("eval-derived", "Lesson from GEPA", "body", "gepa-batch")
     assert node_id == "p-eval"
 
 
 def test_add_pattern_defaults():
     client = _make_client()
-    with patch("urllib.request.urlopen", return_value=_mock_urlopen({"id": "p1"})) as m:
+    with patch("urllib.request.urlopen", return_value=_mock_urlopen({"node_id": "p1"})) as m:
         client.add_pattern("etl", "title", "body", "plugin-dev")
-    content = json.loads(m.call_args[0][0].data.decode())["content"]
+    content = json.loads(m.call_args[0][0].data.decode())["node"]
     assert content["confidence"] == 0.7
     assert content["applies_to"] == []
     assert content["tags"] == []
