@@ -26,12 +26,14 @@ class SkillEval:
         project: str,
         plugin_version: str = "",
         evals_root: Optional[str] = None,
+        skill_graph=None,
     ) -> None:
         self.skill = skill
         self.domain = domain
         self.project = project
         self.plugin_version = plugin_version
         self.evals_root = evals_root
+        self._skill_graph = skill_graph
         self._metrics: list[dict] = []
         self._started_at: Optional[str] = None
 
@@ -45,6 +47,16 @@ class SkillEval:
         self._write_local(status, ended_at)
         if os.environ.get("H2T_EVALS_ENABLED") == "1":
             self._send_central(status)
+        if exc_type is not None and self._skill_graph is not None:
+            try:
+                self._skill_graph.add_lesson(
+                    skill_name=self.skill,
+                    trigger=str(exc_val) if exc_val else "skill execution failure",
+                    resolution="",
+                    lesson_type="eval-finding",
+                )
+            except Exception:
+                pass  # never crash a skill for graph failure
         return False  # do not suppress exceptions
 
     def metric(
