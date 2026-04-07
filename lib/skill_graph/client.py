@@ -107,7 +107,40 @@ class SkillGraphClient:
                    eval_score_before: Optional[float] = None,
                    eval_score_after: Optional[float] = None,
                    crosslinks: Optional[list[dict]] = None) -> str:
-        raise NotImplementedError
+        from datetime import datetime, timezone
+        content: dict = {
+            "lesson_type": lesson_type,
+            "skill_name": skill_name,
+            "trigger": trigger,
+            "resolution": resolution,
+            "session_id": session_id or "",
+            "date": datetime.now(timezone.utc).isoformat(),
+        }
+        if eval_score_before is not None:
+            content["eval_score_before"] = eval_score_before
+        if eval_score_after is not None:
+            content["eval_score_after"] = eval_score_after
+        if crosslinks:
+            content["crosslinks"] = crosslinks
+
+        result = self._post(_NODES_PATH, {"source_id": self._source_id("skill-lessons"), "content": content},
+                            self._rw_token)
+        node_id: str = result.get("id", "")
+
+        # patch reverse edges — eventual consistency, never raises
+        if crosslinks and node_id:
+            for link in crosslinks:
+                try:
+                    self._post(
+                        _NODES_PATH,
+                        {"source_id": self._source_id("skill-patterns"), "node_id": link["to"],
+                         "patch": {"crosslinks": [{"to": node_id, "relation": link["relation"]}]}},
+                        self._rw_token,
+                    )
+                except Exception:
+                    pass
+
+        return node_id
 
     def add_pattern(self, pattern_type: str, title: str, body: str, source: str,
                     applies_to: Optional[list[str]] = None, confidence: float = 0.7,

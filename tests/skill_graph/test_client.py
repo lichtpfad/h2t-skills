@@ -100,3 +100,74 @@ def test_query_silent_on_http_error():
     with patch("urllib.request.urlopen", side_effect=urllib.error.URLError("timeout")):
         results = client.query("test")  # must not raise
     assert results == []
+
+
+def test_add_lesson_uses_rw_token():
+    client = _make_client()
+    with patch("urllib.request.urlopen", return_value=_mock_urlopen({"id": "l1"})) as m:
+        client.add_lesson("session-start", "gate skipped", "added GATE step")
+    req = m.call_args[0][0]
+    assert req.headers.get("X-h2t-token") == "rw-tok"
+
+
+def test_add_lesson_payload_structure():
+    client = _make_client()
+    with patch("urllib.request.urlopen", return_value=_mock_urlopen({"id": "l1"})) as m:
+        client.add_lesson(
+            skill_name="gmail",
+            trigger="script not found",
+            resolution="added $SKILL_GRAPH env var",
+            lesson_type="bug",
+            session_id="dev-agent-skills-test-2026-04-07",
+        )
+    req = m.call_args[0][0]
+    payload = json.loads(req.data.decode())
+    assert payload["source_id"] == "proj-test-skill-lessons"
+    content = payload["content"]
+    assert content["lesson_type"] == "bug"
+    assert content["skill_name"] == "gmail"
+    assert content["trigger"] == "script not found"
+    assert content["resolution"] == "added $SKILL_GRAPH env var"
+    assert content["session_id"] == "dev-agent-skills-test-2026-04-07"
+    assert "date" in content
+
+
+def test_add_lesson_returns_node_id():
+    client = _make_client()
+    with patch("urllib.request.urlopen", return_value=_mock_urlopen({"id": "lesson-42"})):
+        node_id = client.add_lesson("session-start", "broke", "fixed")
+    assert node_id == "lesson-42"
+
+
+def test_add_lesson_patches_crosslinks():
+    client = _make_client()
+    responses = [
+        _mock_urlopen({"id": "lesson-1"}),   # add lesson
+        _mock_urlopen({"id": "pattern-99"}),  # patch pattern reverse edge
+    ]
+    with patch("urllib.request.urlopen", side_effect=responses) as m:
+        client.add_lesson(
+            "session-start", "broke", "fixed",
+            crosslinks=[{"to": "pattern-99", "relation": "caused_by"}]
+        )
+    assert m.call_count == 2
+    patch_req = m.call_args_list[1][0][0]
+    patch_payload = json.loads(patch_req.data.decode())
+    assert patch_payload["source_id"] == "proj-test-skill-patterns"
+    assert patch_payload["node_id"] == "pattern-99"
+
+
+def test_add_lesson_crosslink_patch_failure_is_silent():
+    client = _make_client()
+    import urllib.error
+    responses = [
+        _mock_urlopen({"id": "lesson-1"}),
+        urllib.error.URLError("patch failed"),
+    ]
+    with patch("urllib.request.urlopen", side_effect=responses):
+        # must not raise even if crosslink patch fails
+        node_id = client.add_lesson(
+            "session-start", "broke", "fixed",
+            crosslinks=[{"to": "pattern-99", "relation": "caused_by"}]
+        )
+    assert node_id == "lesson-1"
