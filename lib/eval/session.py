@@ -27,6 +27,7 @@ class SkillEval:
         plugin_version: str = "",
         evals_root: Optional[str] = None,
         skill_graph=None,
+        score_before: Optional[float] = None,
     ) -> None:
         self.skill = skill
         self.domain = domain
@@ -34,6 +35,8 @@ class SkillEval:
         self.plugin_version = plugin_version
         self.evals_root = evals_root
         self._skill_graph = skill_graph
+        self._score_before = score_before
+        self._score_after: Optional[float] = None
         self._metrics: list[dict] = []
         self._started_at: Optional[str] = None
 
@@ -58,6 +61,35 @@ class SkillEval:
             except Exception:
                 pass  # never crash a skill for graph failure
         return False  # do not suppress exceptions
+
+    def close(self, score: float) -> Optional[str]:
+        """Record final eval score. Writes eval-finding lesson if delta > 0.1.
+
+        Returns node_id if lesson was written, None otherwise.
+        Gracefully skips if skill_graph is absent or has no RW token.
+        """
+        self._score_after = score
+        if (
+            self._score_before is None
+            or self._skill_graph is None
+            or not getattr(self._skill_graph, "writable", True)
+        ):
+            return None
+        delta = abs(score - self._score_before)
+        if delta <= 0.1:
+            return None
+        try:
+            return self._skill_graph.add_lesson(
+                skill_name=self.skill,
+                trigger=f"eval score change",
+                resolution=f"score {self._score_before:.3f} → {score:.3f}",
+                lesson_type="eval-finding",
+                session_id=f"{self.skill}-{self._started_at or ''}",
+                eval_score_before=self._score_before,
+                eval_score_after=score,
+            )
+        except Exception:
+            return None  # never crash a skill for graph failure
 
     def metric(
         self,

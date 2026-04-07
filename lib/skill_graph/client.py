@@ -13,9 +13,11 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import urllib.error
 import urllib.parse
 import urllib.request
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -65,6 +67,11 @@ class SkillGraphClient:
         return f"{self._project_id}-{alias}" if self._project_id else alias
 
     @property
+    def writable(self) -> bool:
+        """True if RW token is configured — avoids HTTP attempts without credentials."""
+        return bool(self._rw_token)
+
+    @property
     def _ro_token(self) -> str:
         return self._secrets.get("H2T_SKILL_GRAPH_TOKEN_RO", "")
 
@@ -106,12 +113,23 @@ class SkillGraphClient:
         results.sort(key=lambda x: x.get("score", 0), reverse=True)
         return results[:top_k]
 
+    @staticmethod
+    def _slugify(text: str, max_len: int = 60) -> str:
+        """Convert text to a URL-safe slug for use as node ID."""
+        slug = re.sub(r"[^\w\s-]", "", text.lower())
+        slug = re.sub(r"[\s_-]+", "-", slug).strip("-")
+        return slug[:max_len]
+
     def add_lesson(self, skill_name: str, trigger: str, resolution: str,
                    lesson_type: str = "bug", session_id: Optional[str] = None,
                    eval_score_before: Optional[float] = None,
                    eval_score_after: Optional[float] = None,
                    crosslinks: Optional[list[dict]] = None) -> str:
+        node_id = f"lesson-{self._slugify(skill_name)}-{uuid.uuid4().hex[:8]}"
         content: dict = {
+            "id": node_id,
+            "node_type": "lesson",
+            "label": f"[{lesson_type}] {skill_name}: {trigger[:60]}",
             "lesson_type": lesson_type,
             "skill_name": skill_name,
             "trigger": trigger,
@@ -126,9 +144,9 @@ class SkillGraphClient:
         if crosslinks:
             content["crosslinks"] = crosslinks
 
-        result = self._post(_NODES_PATH, {"source_id": self._source_id("skill-lessons"), "content": content},
+        result = self._post(_NODES_PATH, {"source": self._source_id("skill-lessons"), "node": content},
                             self._rw_token)
-        node_id: str = result.get("id", "")
+        node_id = result.get("node_id", node_id)
 
         # patch reverse edges — eventual consistency, never raises
         if crosslinks and node_id:
@@ -136,7 +154,7 @@ class SkillGraphClient:
                 try:
                     self._post(
                         _NODES_PATH,
-                        {"source_id": self._source_id("skill-patterns"), "node_id": link["to"],
+                        {"source": self._source_id("skill-patterns"), "node_id": link["to"],
                          "patch": {"crosslinks": [{"to": node_id, "relation": link["relation"]}]}},
                         self._rw_token,
                     )
@@ -153,7 +171,11 @@ class SkillGraphClient:
             raise ValueError(
                 f"Invalid pattern_type: {pattern_type!r}. Must be one of {sorted(VALID_PATTERN_TYPES)}"
             )
+        node_id = f"pattern-{pattern_type}-{self._slugify(title)}-{uuid.uuid4().hex[:6]}"
         content: dict = {
+            "id": node_id,
+            "node_type": pattern_type,
+            "label": title,
             "pattern_type": pattern_type,
             "title": title,
             "body": body,
@@ -164,6 +186,6 @@ class SkillGraphClient:
         }
         if source_url is not None:
             content["source_url"] = source_url
-        result = self._post(_NODES_PATH, {"source_id": self._source_id("skill-patterns"), "content": content},
+        result = self._post(_NODES_PATH, {"source": self._source_id("skill-patterns"), "node": content},
                             self._rw_token)
-        return result.get("id", "")
+        return result.get("node_id", node_id)
