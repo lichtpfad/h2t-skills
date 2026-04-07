@@ -90,7 +90,16 @@ class SkillGraphClient:
     def query(self, context: str, skill_name: Optional[str] = None,
               sources: tuple = ("skill-patterns", "skill-lessons"),
               top_k: int = 5) -> list[dict]:
-        raise NotImplementedError
+        results: list[dict] = []
+        for source in sources:
+            params: dict = {"source": self._source_id(source), "semantic": context, "limit": top_k}
+            try:
+                data = self._get(_QUERY_PATH, params, self._ro_token)
+                results.extend(data.get("results", []))
+            except Exception:
+                pass  # never crash a skill for graph failure
+        results.sort(key=lambda x: x.get("score", 0), reverse=True)
+        return results[:top_k]
 
     def add_lesson(self, skill_name: str, trigger: str, resolution: str,
                    lesson_type: str = "bug", session_id: Optional[str] = None,
