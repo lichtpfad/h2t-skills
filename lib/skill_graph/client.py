@@ -149,4 +149,21 @@ class SkillGraphClient:
                     applies_to: Optional[list[str]] = None, confidence: float = 0.7,
                     source_url: Optional[str] = None,
                     tags: Optional[list[str]] = None) -> str:
-        raise NotImplementedError
+        if pattern_type not in VALID_PATTERN_TYPES:
+            raise ValueError(
+                f"Invalid pattern_type: {pattern_type!r}. Must be one of {sorted(VALID_PATTERN_TYPES)}"
+            )
+        content: dict = {
+            "pattern_type": pattern_type,
+            "title": title,
+            "body": body,
+            "source": source,
+            "confidence": confidence,
+            "applies_to": applies_to or [],
+            "tags": tags or [],
+        }
+        if source_url is not None:
+            content["source_url"] = source_url
+        result = self._post(_NODES_PATH, {"source_id": self._source_id("skill-patterns"), "content": content},
+                            self._rw_token)
+        return result.get("id", "")
