@@ -11,12 +11,16 @@ All credentials loaded from ~/.dor/secrets.env (falls back to env vars).
 from __future__ import annotations
 
 import json
+import logging
 import os
 import urllib.error
 import urllib.parse
 import urllib.request
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
+
+_log = logging.getLogger(__name__)
 
 _NODES_PATH = "/api/nodes"    # POST — add node (auto-embeds on write)
 _QUERY_PATH = "/api/query"    # GET  — keyword + semantic search
@@ -107,7 +111,6 @@ class SkillGraphClient:
                    eval_score_before: Optional[float] = None,
                    eval_score_after: Optional[float] = None,
                    crosslinks: Optional[list[dict]] = None) -> str:
-        from datetime import datetime, timezone
         content: dict = {
             "lesson_type": lesson_type,
             "skill_name": skill_name,
@@ -137,8 +140,8 @@ class SkillGraphClient:
                          "patch": {"crosslinks": [{"to": node_id, "relation": link["relation"]}]}},
                         self._rw_token,
                     )
-                except Exception:
-                    pass
+                except Exception as exc:
+                    _log.warning("crosslink patch failed for node %s: %s", link.get("to"), exc)
 
         return node_id
 
