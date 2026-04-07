@@ -92,3 +92,74 @@ def test_skill_eval_works_without_skill_graph():
     with SkillEval("session-start", domain="dev", project="test") as ev:
         ev.metric("test.metric", value_num=1.0)
     # passes with no exception
+
+
+def test_close_writes_lesson_on_significant_delta():
+    """close() calls add_lesson when score delta > 0.1."""
+    mock_graph = MagicMock()
+    mock_graph.writable = True
+    mock_graph.add_lesson.return_value = "lesson-123"
+
+    with SkillEval("session-start", domain="dev", project="test",
+                   skill_graph=mock_graph, score_before=0.5) as ev:
+        node_id = ev.close(0.8)
+
+    assert node_id == "lesson-123"
+    mock_graph.add_lesson.assert_called_once()
+    kw = mock_graph.add_lesson.call_args[1]
+    assert kw["lesson_type"] == "eval-finding"
+    assert kw["eval_score_before"] == 0.5
+    assert kw["eval_score_after"] == 0.8
+    assert kw["skill_name"] == "session-start"
+
+
+def test_close_skips_when_delta_too_small():
+    """close() does not write lesson when delta <= 0.1."""
+    mock_graph = MagicMock()
+    mock_graph.writable = True
+
+    with SkillEval("session-start", domain="dev", project="test",
+                   skill_graph=mock_graph, score_before=0.5) as ev:
+        node_id = ev.close(0.55)
+
+    assert node_id is None
+    mock_graph.add_lesson.assert_not_called()
+
+
+def test_close_skips_when_no_score_before():
+    """close() does nothing if score_before was not provided."""
+    mock_graph = MagicMock()
+    mock_graph.writable = True
+
+    with SkillEval("session-start", domain="dev", project="test",
+                   skill_graph=mock_graph) as ev:
+        node_id = ev.close(0.8)
+
+    assert node_id is None
+    mock_graph.add_lesson.assert_not_called()
+
+
+def test_close_skips_when_graph_not_writable():
+    """close() skips write if graph has no RW token."""
+    mock_graph = MagicMock()
+    mock_graph.writable = False
+
+    with SkillEval("session-start", domain="dev", project="test",
+                   skill_graph=mock_graph, score_before=0.3) as ev:
+        node_id = ev.close(0.9)
+
+    assert node_id is None
+    mock_graph.add_lesson.assert_not_called()
+
+
+def test_close_handles_graph_exception_gracefully():
+    """close() returns None if add_lesson raises."""
+    mock_graph = MagicMock()
+    mock_graph.writable = True
+    mock_graph.add_lesson.side_effect = ConnectionError("network down")
+
+    with SkillEval("session-start", domain="dev", project="test",
+                   skill_graph=mock_graph, score_before=0.2) as ev:
+        node_id = ev.close(0.9)
+
+    assert node_id is None
