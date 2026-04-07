@@ -9,7 +9,11 @@ import pytest
 from unittest.mock import patch, mock_open, MagicMock
 
 
-def test_load_secrets_from_env_file(tmp_path):
+def test_load_secrets_from_env_file(tmp_path, monkeypatch):
+    # Isolate from real env vars that might be set in the shell
+    for key in ("H2T_GRAPHS_URL", "H2T_SKILL_GRAPH_TOKEN_RO",
+                "H2T_SKILL_GRAPH_TOKEN_RW", "H2T_SKILL_GRAPH_PROJECT_ID"):
+        monkeypatch.delenv(key, raising=False)
     secrets_file = tmp_path / "secrets.env"
     secrets_file.write_text(
         "H2T_SKILL_GRAPH_TOKEN_RO=ro-test-token\n"
