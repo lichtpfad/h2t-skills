@@ -63,7 +63,7 @@ def test_query_uses_ro_token():
     with patch("urllib.request.urlopen", return_value=_mock_urlopen(fake_resp)) as mock_open:
         results = client.query("hook injection", sources=("skill-patterns",))
     call_args = mock_open.call_args[0][0]
-    assert call_args.get_header("X-h2t-token") == "ro-tok"
+    assert call_args.headers.get("X-h2t-token") == "ro-tok"
 
 
 def test_query_sends_semantic_param():
