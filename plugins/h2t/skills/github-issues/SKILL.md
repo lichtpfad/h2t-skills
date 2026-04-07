@@ -90,3 +90,26 @@ EOF
 - Forgetting `--milestone` for Phase 5/6/7 issues
 - Title too long or too vague
 - Creating duplicate of existing issue (always check `gh issue list` first)
+
+## Graph Integration
+
+### Query (optional — if issue structure, labels, or milestones are unclear)
+
+```bash
+SKILL_GRAPH_DIR="${SKILL_GRAPH_DIR:-C:/dev/claude-agent-skills/lib}"
+(cd "$SKILL_GRAPH_DIR" && $H2T_PYTHON -m skill_graph.cli query \
+  --context "github issues: structure, labels, milestones, gh cli usage" \
+  --skill "github-issues") 2>/dev/null || true
+```
+
+If results contain relevant patterns or lessons, apply them before proceeding.
+
+### Add Lesson (after resolving an error or unexpected behavior)
+
+```bash
+(cd "$SKILL_GRAPH_DIR" && $H2T_PYTHON -m skill_graph.cli add-lesson \
+  --skill "github-issues" \
+  --trigger "<what broke — e.g. label not found, milestone mismatch>" \
+  --resolution "<what fixed it>" \
+  --session-id "$SESSION_NAME") 2>/dev/null || true
+```
