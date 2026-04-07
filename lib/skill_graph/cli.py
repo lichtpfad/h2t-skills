@@ -85,6 +85,10 @@ def main(argv: Optional[list[str]] = None) -> None:
         )
         print(f"Pattern written: {node_id}")
 
+    else:
+        print(f"Unknown command: {args.command}", file=sys.stderr)
+        sys.exit(1)
+
 
 if __name__ == "__main__":
     main()
