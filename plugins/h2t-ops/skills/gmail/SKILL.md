@@ -73,3 +73,26 @@ $CLI label <message-id> [--add LABEL1 LABEL2] [--remove LABEL3]
 Если OAuth ошибка:
 1. Проверь `~/.config/google-calendar-mcp/credentials.json`
 2. Если токен истёк — удали `~/.config/google-calendar-mcp/tokens.json` и переавторизуйся
+
+## Graph Integration
+
+### Query (optional — if encountering OAuth errors or unexpected API behavior)
+
+```bash
+SKILL_GRAPH_DIR="${SKILL_GRAPH_DIR:-C:/dev/claude-agent-skills/lib}"
+(cd "$SKILL_GRAPH_DIR" && $H2T_PYTHON -m skill_graph.cli query \
+  --context "gmail: oauth error, api failure, unexpected behavior" \
+  --skill "gmail") 2>/dev/null || true
+```
+
+If results contain relevant patterns or lessons, apply them before proceeding.
+
+### Add Lesson (after resolving an error or unexpected behavior)
+
+```bash
+(cd "$SKILL_GRAPH_DIR" && $H2T_PYTHON -m skill_graph.cli add-lesson \
+  --skill "gmail" \
+  --trigger "<what broke — e.g. oauth token expired, api returned 403>" \
+  --resolution "<what fixed it>" \
+  --session-id "$SESSION_NAME") 2>/dev/null || true
+```
