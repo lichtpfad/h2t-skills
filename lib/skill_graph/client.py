@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import os
+import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
@@ -96,7 +97,7 @@ class SkillGraphClient:
             try:
                 data = self._get(_QUERY_PATH, params, self._ro_token)
                 results.extend(data.get("results", []))
-            except Exception:
+            except (urllib.error.URLError, OSError, json.JSONDecodeError):
                 pass  # never crash a skill for graph failure
         results.sort(key=lambda x: x.get("score", 0), reverse=True)
         return results[:top_k]
