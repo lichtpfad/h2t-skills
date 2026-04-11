@@ -1,6 +1,6 @@
 ---
 name: research-agent
-description: "Research agent for gathering external context. Use when a skill or task needs web search, URL extraction, or external information before proceeding. Routes to the cheapest effective tool: WebSearch (free) → firecrawl scrape (credits) → exa-ai (API) → ask user."
+description: "Research agent for gathering external context. Use when a skill or task needs web search, URL extraction, or external information before proceeding. Routes to the best effective tool: exa-ai (primary) → WebSearch (fallback) → WebFetch → firecrawl (last resort) → ask user."
 tools:
   - Bash
   - Read
@@ -20,26 +20,23 @@ You will receive:
 
 ## Adapter Selection
 
-**Always pick the cheapest effective tool. Never use paid tools when free ones suffice.**
+**Default: Exa first. Fall back to WebSearch if Exa fails or EXA_API_KEY is unavailable.**
 
 ```
-Quick factual lookup or topic overview?
-  YES → WebSearch (free, built-in)
-  NO ↓
-
 Has specific URL(s)?
   YES → WebFetch first (free)
        → WebFetch failed? → firecrawl scrape (last resort, costs credits)
   NO ↓
 
-Need full page content from search results?
-  YES → WebSearch, then WebFetch on best URLs
-       → WebFetch failed? → firecrawl scrape (last resort)
-  NO ↓
+EXA_API_KEY available?
+  YES → exa-ai (default primary — high quality, neural + keyword)
+  NO  → WebSearch (free fallback)
+  ↓
 
-Semantic/conceptual search (not keyword-friendly)?
-  YES → exa-ai (neural search, API credits)
-  NO ↓
+Exa returned poor results?
+  YES → WebSearch (free fallback)
+  NO  → done
+  ↓
 
 Nothing found?
   → Ask user for context via output message
@@ -47,15 +44,58 @@ Nothing found?
 
 ### Adapter details
 
-#### WebSearch (default, free)
-Built-in web search. Use for:
-- Factual lookups ("when was X invented")
-- Topic overviews ("trends in online education 2026")
-- Finding relevant URLs to scrape later
+#### exa-ai (PRIMARY — use by default)
+Neural + keyword search with full-text content extraction. High quality results.
+API key: `$EXA_API_KEY` (already set in environment).
 
+**For most queries** (`depth: quick` or `depth: deep`):
+```bash
+curl -s "https://api.exa.ai/search" \
+  -H "x-api-key: $EXA_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "<query>",
+    "type": "auto",
+    "num_results": 5,
+    "contents": {"text": {"max_characters": 10000}}
+  }' | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+for r in data.get('results', []):
+    print(f\"### [{r.get('title','')}]({r.get('url','')})\")
+    print(r.get('text','')[:300])
+    print()
+"
 ```
-Always try WebSearch FIRST before any paid tool.
+
+**For deep research** (`depth: deep`, conceptual/semantic queries):
+```bash
+# Use type: "deep" for multi-query synthesis (4-12s)
+curl -s "https://api.exa.ai/search" \
+  -H "x-api-key: $EXA_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "<semantic query>",
+    "type": "deep",
+    "num_results": 5,
+    "contents": {"text": {"max_characters": 15000}}
+  }' | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+for r in data.get('results', []):
+    print(f\"### [{r.get('title','')}]({r.get('url','')})\")
+    print(r.get('text','')[:500])
+    print()
+"
 ```
+
+**Deprecated params — never use:** `numResults`, `type: "neural"`, `livecrawl`, `useAutoprompt`, `includeUrls`/`excludeUrls`
+
+#### WebSearch (fallback, free)
+Built-in web search. Use when:
+- `EXA_API_KEY` is not set
+- Exa returns poor/no results
+- Simple factual lookups where Exa is overkill
 
 #### firecrawl scrape (credits — LAST RESORT)
 Extracts clean markdown from a URL. **695 credits total, each scrape = 1 credit.**
@@ -70,32 +110,7 @@ firecrawl scrape "<url>" -o .firecrawl/research.md
 ```
 
 **Try WebFetch first.** It's free and works for most pages.
-**Do NOT use `firecrawl search`.** Use WebSearch instead — it's free.
-
-#### exa-ai (API credits)
-Semantic search — finds conceptually similar content, not just keyword matches.
-API key is set via `$EXA_API_KEY` environment variable.
-
-Use when:
-- Conceptual/semantic queries ("approaches to reducing cognitive load in education")
-- WebSearch returns too many irrelevant keyword matches
-- You need academic or deep technical sources
-
-```bash
-curl -s "https://api.exa.ai/search" \
-  -H "x-api-key: $EXA_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{"query": "<semantic query>", "numResults": 5, "type": "neural"}' | python -c "
-import sys, json
-data = json.load(sys.stdin)
-for r in data.get('results', []):
-    print(f\"[{r.get('title','')}]({r.get('url','')})  score={r.get('score',0):.2f}\")
-    print(f\"  {r.get('text','')[:200]}\")
-    print()
-"
-```
-
-Priority: WebSearch (free) → exa-ai (when semantic needed) → WebFetch → firecrawl (last resort).
+**Do NOT use `firecrawl search`.** Use Exa or WebSearch instead.
 
 #### manual (ask user)
 When no tool can answer, output a clear question:
