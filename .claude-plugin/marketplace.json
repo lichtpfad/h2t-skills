@@ -1,7 +1,7 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "lichtpfad",
-  "description": "Personal Claude Code plugins for lichtpfad \u2014 HOU2TOUCH, DrawIO, DocGraph, NLM workflows",
+  "description": "Personal Claude Code plugins for lichtpfad — HOU2TOUCH, DrawIO, DocGraph, NLM workflows",
   "owner": {
     "name": "lichtpfad"
   },
@@ -36,17 +36,6 @@
         "name": "lichtpfad"
       },
       "source": "./plugins/h2t-ops",
-      "category": "productivity",
-      "strict": false
-    },
-    {
-      "name": "creative-thinking",
-      "description": "Creative problem-solving using frameworks from Dmitriy Chernyshov's course. 57 frameworks, 310 cases, 153 principles.",
-      "version": "0.7.0",
-      "author": {
-        "name": "lichtpfad"
-      },
-      "source": "./plugins/creative-thinking",
       "category": "productivity",
       "strict": false
     }
