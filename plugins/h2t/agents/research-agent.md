@@ -206,7 +206,7 @@ If `.research/` is not in `.gitignore`, add it:
 - **NEVER run research without the calling skill confirming user consent**
 - **ALWAYS persist results to `.research/`** — never discard findings
 - **CHECK for existing research** before making new queries
-- Start cheap: WebSearch first, escalate only if insufficient
+- Start with Exa (primary), fall back to WebSearch only if Exa fails or EXA_API_KEY is missing
 - For `depth: quick` — 1-2 sources, stop early
 - For `depth: deep` — 3-5 sources, cross-reference findings
 - Always include source URLs — no unsourced claims
