@@ -1,6 +1,6 @@
 ---
 name: milestone-closure
-description: Use when all issues in a GitHub milestone are closed and the phase is complete. Triggers on "close milestone", "milestone done", "phase complete", "закрыть milestone", or when the last issue in a milestone is closed., 'h2t:milestone-closure'
+description: This skill should be used when all issues in a GitHub milestone are closed and the phase is complete. Triggers on "close milestone", "milestone done", "phase complete", "закрыть milestone", or when the last issue in a milestone is closed.
 compatibility: "Claude Code"
 metadata:
   author: lichtpfad
@@ -29,7 +29,7 @@ gh api repos/{owner}/{repo}/milestones/{number} --jq '{title, open_issues, close
 
 ### Step 2: Run Pre-Merge Check
 
-Invoke `h2t:pre-merge-check` if not already run. All gates must pass.
+Invoke `h2t-dev:pre-merge-check` if not already run. All gates must pass.
 
 ### Step 3: Write Phase Report
 
@@ -59,7 +59,7 @@ gh api repos/{owner}/{repo}/milestones/{number} -X PATCH -f state=closed
 Post a summary comment on the milestone (if supported) or on the last closed issue:
 
 ```bash
-gh issue comment {last-issue-number} --body "🤖 Milestone closed: {milestone-title}
+gh issue comment {last-issue-number} --body "Milestone closed: {milestone-title}
 Report: docs/reports/{report-name}.md
 All {closed_issues} issues resolved."
 ```
@@ -67,7 +67,7 @@ All {closed_issues} issues resolved."
 ## Checklist Summary
 
 - [ ] All milestone issues = closed
-- [ ] `h2t:pre-merge-check` = all gates pass
+- [ ] `h2t-dev:pre-merge-check` = all gates pass
 - [ ] Phase report written to `docs/reports/`
 - [ ] `docs/roadmap.md` updated (phase → completed)
 - [ ] `CLAUDE.md` updated (completed phases table)

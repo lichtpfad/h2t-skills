@@ -1,6 +1,6 @@
 ---
 name: github-issues
-description: Use when creating or updating GitHub issues. Enforces consistent issue structure with Context/What/Why/Part-of sections, correct labels (domain, phase, priority), and milestone assignment. Triggers on "create issue", "add to backlog", "github issue"., 'h2t:github-issues'
+description: This skill should be used when creating or updating GitHub issues. It enforces consistent issue structure with Context/What/Why/Part-of sections, correct labels (domain, phase, priority), and milestone assignment. Triggers on "create issue", "add to backlog", "github issue".
 compatibility: "Claude Code"
 metadata:
   author: lichtpfad
