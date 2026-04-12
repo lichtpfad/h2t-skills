@@ -13,3 +13,6 @@ __pycache__/
 # Temp / test outputs
 /tmp/
 *.drawio.bak
+
+# Documentation artifacts (ephemeral)
+docs/.artifacts/

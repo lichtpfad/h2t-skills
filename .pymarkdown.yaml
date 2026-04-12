@@ -1,0 +1,9 @@
+# pymarkdownlnt configuration
+# Standards: C:/dev/docs/standards/linting.md
+plugins:
+  md013:
+    enabled: false        # Line length — let editor wrap
+  md033:
+    enabled: false        # Inline HTML — needed for diagrams
+  md041:
+    enabled: false        # First line h1 — frontmatter comes first
