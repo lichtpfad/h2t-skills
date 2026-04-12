@@ -1,6 +1,6 @@
 ---
 name: gh-memory
-description: "GitHub Issues as persistent agent memory. Use to create task issues, track progress across sessions, filter by domain/type, and restore session context. Triggers: 'gh-memory', 'create issue', 'agent task', 'track task'., 'h2t:gh-memory'"
+description: "This skill should be used when GitHub Issues are needed as persistent agent memory. It creates task issues, tracks progress across sessions, filters by domain/type, and restores session context. Triggers: 'gh-memory', 'create issue', 'agent task', 'track task'."
 compatibility: "Claude Code. Requires: gh CLI authenticated to lichtpfad account."
 metadata:
   author: lichtpfad
