@@ -38,6 +38,17 @@
       "source": "./plugins/h2t-ops",
       "category": "productivity",
       "strict": false
+    },
+    {
+      "name": "h2t-dev",
+      "description": "H2T Dev — documentation tools: docs-lint, docs-init, docs-cleanup, docs-sync-labels.",
+      "version": "1.0.1",
+      "author": {
+        "name": "lichtpfad"
+      },
+      "source": "./plugins/h2t-dev",
+      "category": "development",
+      "strict": false
     }
   ]
 }
