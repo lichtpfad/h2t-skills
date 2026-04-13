@@ -1,9 +1,6 @@
 ---
-name: docs-init
-description: >
-  This skill should be used when the user asks to "init docs", "setup docs structure",
-  "scaffold documentation", "initialize docs for repo", or wants to create the standard
-  docs/ layout in an h2t repo.
+name: h2t-dev:docs-init
+description: "This skill should be used when the user asks to \"init docs\", \"setup docs structure\", \"scaffold documentation\", \"initialize docs for repo\", or wants to create the standard docs/ layout in an h2t repo."
 compatibility: "Claude Code"
 metadata:
   author: lichtpfad
