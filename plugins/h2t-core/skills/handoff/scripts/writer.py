@@ -54,6 +54,10 @@ def write_handoff(
 ) -> dict:
     """Write session end to activity stream + markdown file."""
 
+    # Unescape literal \n sequences (bash double-quote strings don't expand \n)
+    what_done = what_done.replace("\\n", "\n")
+    what_remains = what_remains.replace("\\n", "\n")
+
     parsed_artifacts = []
     for a in artifacts:
         if ":" in a:
