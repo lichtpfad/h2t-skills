@@ -47,7 +47,7 @@ def repo_path(name: str) -> Path:
 
 def git_add_commit(repo: Path, paths: list[str], message: str) -> bool:
     for p in paths:
-        subprocess.run(["git", "-C", str(repo), "add", "-f", p], check=True)
+        subprocess.run(["git", "-C", str(repo), "add", p], check=True)
     result = subprocess.run(
         ["git", "-C", str(repo), "diff", "--cached", "--quiet"],
         capture_output=True,
@@ -83,10 +83,12 @@ def parse_frontmatter(text: str) -> dict | None:
         import yaml
         return yaml.safe_load(parts[1]) or {}
     except ImportError:
-        pass
-    fm = {}
-    for line in parts[1].strip().splitlines():
-        m = re.match(r"(\w+):\s*(.+)", line)
-        if m:
-            fm[m.group(1)] = m.group(2).strip().strip('"').strip("'")
-    return fm
+        # yaml not available — use basic regex for simple key: value pairs only
+        fm: dict = {}
+        for line in parts[1].strip().splitlines():
+            m = re.match(r"^(\w+):\s*([^[\n{]+)$", line)
+            if m:
+                fm[m.group(1)] = m.group(2).strip().strip('"').strip("'")
+        return fm if fm else None
+    except Exception:
+        return None
