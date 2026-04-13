@@ -1,6 +1,6 @@
 ---
 name: drive
-description: "Google Drive file browser and MeetGeek transcript sync. Use to search files, download transcripts, sync meeting recordings from MeetGeek to context/meetings/. Triggers: 'drive', 'google drive', 'sync meetings', 'meetgeek', 'транскрипты'., 'h2t:drive'"
+description: "Google Drive file browser and MeetGeek transcript sync. Use to search files, download transcripts, sync meeting recordings from MeetGeek to context/meetings/. Triggers: 'drive', 'google drive', 'sync meetings', 'meetgeek', 'транскрипты'., 'h2t-ops:drive'"
 compatibility: "Requires Google OAuth token at ~/.config/google-calendar-mcp/tokens.json. DOR_ROOT env var for meeting sync."
 metadata:
   author: lichtpfad
@@ -18,7 +18,7 @@ if [ -z "$H2T_PYTHON" ]; then
   [ -f "$HOME/.h2t/venv/bin/python" ] && H2T_PYTHON="$HOME/.h2t/venv/bin/python"
   [ -f "$HOME/.h2t/venv/Scripts/python.exe" ] && H2T_PYTHON="$HOME/.h2t/venv/Scripts/python.exe"
 fi
-[ -z "$H2T_PYTHON" ] && echo "ERROR: h2t venv not found. Run /h2t:setup" && exit 1
+[ -z "$H2T_PYTHON" ] && echo "ERROR: h2t venv not found. Run /h2t-ops:setup" && exit 1
 
 CLI="$H2T_PYTHON ${CLAUDE_SKILL_DIR}/scripts/drive_cli.py"
 ```
