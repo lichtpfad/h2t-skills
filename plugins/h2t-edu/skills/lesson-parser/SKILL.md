@@ -1,7 +1,7 @@
 ---
 name: lesson-parser
 description: "Parses procedural tutorial transcripts into structured topology (nodes, connections, params). 3-level: chapters -> actions -> synthesis. Triggers: 'lesson-parser', 'parse tutorial', 'parse transcript', 'extract topology'."
-compatibility: "Claude Code. Input: markdown transcript with chapters (from /h2t:youtube-transcript)."
+compatibility: "Claude Code. Input: markdown transcript with chapters (from /h2t-edu:youtube-transcript)."
 metadata:
   author: lichtpfad
   version: 0.1.0
@@ -20,7 +20,7 @@ metadata:
 
 ## Вход и выход
 
-**Вход:** markdown-файл от `/h2t:youtube-transcript` с форматом:
+**Вход:** markdown-файл от `/h2t-edu:youtube-transcript` с форматом:
 ```
 ---
 video_id: XXX

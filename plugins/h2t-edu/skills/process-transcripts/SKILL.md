@@ -1,6 +1,6 @@
 ---
 name: process-transcripts
-description: "LLM-enrichment of MeetGeek meeting transcripts. Extracts participants, summary, action items, decisions, routes personal/coaching sessions to SELFWORK. Triggers: 'process transcripts', 'обработай транскрипты', 'enrichment meetings'., 'h2t:process-transcripts'"
+description: "LLM-enrichment of MeetGeek meeting transcripts. Extracts participants, summary, action items, decisions, routes personal/coaching sessions to SELFWORK. Triggers: 'process transcripts', 'обработай транскрипты', 'enrichment meetings'., 'h2t-edu:process-transcripts'"
 compatibility: "Requires GEMINI_API_KEY in ~/.dor/secrets.env. DOR_ROOT env var for context/meetings input and output."
 context: fork
 agent: general-purpose
