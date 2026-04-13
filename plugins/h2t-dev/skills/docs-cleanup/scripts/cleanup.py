@@ -109,7 +109,7 @@ def main() -> None:
         print(f"\n  Stale plans (>{args.days} days): {len(stale)}")
         for f in stale:
             rel = f.relative_to(rp)
-            dest = archive_dir / rel.relative_to("docs")
+            dest = archive_dir / "plans" / f.name
             candidates.append((f, dest))
             print(f"    {rel}")
 
@@ -118,7 +118,7 @@ def main() -> None:
         print(f"\n  Implemented specs: {len(implemented)}")
         for f in implemented:
             rel = f.relative_to(rp)
-            dest = archive_dir / rel.relative_to("docs")
+            dest = archive_dir / "specs" / f.name
             candidates.append((f, dest))
             print(f"    {rel}")
 
