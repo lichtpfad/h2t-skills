@@ -37,6 +37,11 @@ rm -f "$CACHE_DIR/.orphaned_at"
 # Copy plugin content
 cp -r "$PLUGIN_DIR/." "$CACHE_DIR/"
 
+# Remove skills that duplicate h2t@lichtpfad (already shipped there)
+for dup in gh-memory github-issues milestone-closure pre-merge-check; do
+  rm -rf "$CACHE_DIR/skills/$dup"
+done
+
 # Update installed_plugins.json if it exists
 if [ -f "$INSTALLED_JSON" ]; then
   NOW=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
