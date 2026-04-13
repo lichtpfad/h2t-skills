@@ -1,6 +1,6 @@
 ---
 name: landing
-description: "HUD-style single-page landing generator. Dark tactical aesthetic with Mermaid diagrams, corner brackets, grid background, glow accents. Produces self-contained HTML. Triggers: 'landing', 'create landing', 'landing page', 'micro-presentation', 'showcase page', 'h2t:landing'"
+description: "This skill should be used when the user wants to create a single-page landing generator in HUD tactical aesthetic with Mermaid diagrams, corner brackets, grid background, and glow accents. Self-contained HTML with no external dependencies except Google Fonts CDN and Mermaid.js CDN. Triggers: 'landing', 'create landing', 'landing page', 'micro-presentation', 'showcase page', 'h2t-creative:landing'"
 compatibility: "Claude Code"
 metadata:
   author: lichtpfad
