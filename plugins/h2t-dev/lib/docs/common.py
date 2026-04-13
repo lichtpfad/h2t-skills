@@ -34,7 +34,8 @@ STANDARDS_FILES = [
 ]
 
 FRONTMATTER_RULES = {
-    "superpowers/specs": ["title", "status", "owner", "date"],
+    "superpowers/specs": ["title", "status", "owner", "date", "milestone"],
+    "superpowers/plans": ["title", "status", "date", "milestone"],
     "adr": ["title", "status", "date"],
 }
 

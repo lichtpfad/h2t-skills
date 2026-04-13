@@ -139,14 +139,105 @@ def fix_structure(rp: Path) -> list[str]:
     return fixes
 
 
+def _extract_title(text: str, filename: str) -> str:
+    for line in text.splitlines():
+        m = re.match(r"^#\s+(.+)", line)
+        if m:
+            return m.group(1).strip()
+    # fallback: strip date prefix and extension
+    name = re.sub(r"^\d{4}-\d{2}-\d{2}-?", "", filename)
+    return name.replace("-", " ").replace("_", " ").strip(".md")
+
+
+def _extract_date(filename: str) -> str:
+    m = re.match(r"(\d{4}-\d{2}-\d{2})", filename)
+    return m.group(1) if m else "unknown"
+
+
+def _extract_milestone(filename: str) -> str:
+    m = re.search(r"-(m\d+)-", filename, re.IGNORECASE)
+    return m.group(1).upper() if m else ""
+
+
+def _git_author(rp: Path, filepath: Path) -> str:
+    rel = str(filepath.relative_to(rp))
+    result = subprocess.run(
+        ["git", "-C", str(rp), "log", "--diff-filter=A", "--format=%an", "--", rel],
+        capture_output=True, text=True,
+    )
+    lines = [l.strip() for l in result.stdout.splitlines() if l.strip()]
+    return lines[0] if lines else "lichtpfad"
+
+
+def fix_frontmatter(rp: Path) -> list[str]:
+    fixes = []
+    docs_dir = rp / "docs"
+    if not docs_dir.exists():
+        return fixes
+    for md_file in docs_dir.rglob("*.md"):
+        rel = str(md_file.relative_to(rp)).replace("\\", "/")
+        matched_pattern = None
+        for dir_pattern, required_fields in FRONTMATTER_RULES.items():
+            if dir_pattern in rel and required_fields:
+                matched_pattern = dir_pattern
+                required_fields_for_pattern = required_fields
+                break
+        if not matched_pattern:
+            continue
+        text = md_file.read_text(encoding="utf-8", errors="replace")
+        fm = parse_frontmatter(text)
+        if fm is not None and all(f in fm for f in required_fields_for_pattern):
+            continue
+        # Build frontmatter
+        title = _extract_title(text, md_file.stem)
+        date = _extract_date(md_file.name)
+        milestone = _extract_milestone(md_file.name)
+        lines = ["---", f'title: "{title}"', 'status: "draft"']
+        if "owner" in required_fields_for_pattern:
+            owner = _git_author(rp, md_file)
+            lines.append(f'owner: "{owner}"')
+        lines.append(f'date: "{date}"')
+        if "milestone" in required_fields_for_pattern:
+            lines.append(f'milestone: "{milestone}"')
+        lines += ["---", ""]
+        header = "\n".join(lines)
+        # Strip existing frontmatter if partial
+        if text.startswith("---"):
+            parts = text.split("---", 2)
+            if len(parts) >= 3:
+                text = parts[2].lstrip("\n")
+        md_file.write_text(header + text, encoding="utf-8")
+        fixes.append(f"added frontmatter: {rel}")
+    return fixes
+
+
+def _detect_current_repo() -> str | None:
+    """Detect repo name from cwd if it matches a known h2t-* repo."""
+    cwd = Path.cwd()
+    for part in [cwd] + list(cwd.parents):
+        name = part.name
+        if name in REPO_MANIFEST:
+            return name
+    return None
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Lint documentation standards")
-    parser.add_argument("repos", nargs="*", help="Repos to check (default: all 16)")
+    parser.add_argument("repos", nargs="*", help="Repos to check (default: current repo)")
+    parser.add_argument("--all", action="store_true", help="Check all 16 repos")
     parser.add_argument("--fix", action="store_true", help="Create missing dirs")
+    parser.add_argument("--fix-frontmatter", action="store_true",
+                        help="Auto-add missing frontmatter (title from heading, date from filename)")
     parser.add_argument("--no-pymarkdown", action="store_true", help="Skip pymarkdownlnt")
     args = parser.parse_args()
 
-    targets = args.repos or REPO_MANIFEST
+    if args.repos:
+        targets = args.repos
+    elif args.all:
+        targets = REPO_MANIFEST
+    else:
+        detected = _detect_current_repo()
+        targets = [detected] if detected else REPO_MANIFEST
     print_header(f"docs-lint: checking {len(targets)} repos")
 
     projects = _load_projects_yaml()
@@ -172,6 +263,11 @@ def main() -> None:
 
         if args.fix:
             fixes = fix_structure(rp)
+            for f in fixes:
+                print(f"  FIX: {f}")
+
+        if args.fix_frontmatter:
+            fixes = fix_frontmatter(rp)
             for f in fixes:
                 print(f"  FIX: {f}")
 

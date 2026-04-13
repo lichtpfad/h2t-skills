@@ -21,7 +21,7 @@ LINT="${CLAUDE_PLUGIN_ROOT}/skills/docs-lint/scripts/lint.py"
 
 ## Usage
 
-Check all 16 repos:
+Check current repo (auto-detected from cwd):
 ```bash
 $H2T_PYTHON "$LINT"
 ```
@@ -31,9 +31,19 @@ Check specific repo(s):
 $H2T_PYTHON "$LINT" h2t-graphs h2t-skills
 ```
 
+Check all 16 repos:
+```bash
+$H2T_PYTHON "$LINT" --all
+```
+
 Fix missing dirs:
 ```bash
 $H2T_PYTHON "$LINT" --fix h2t-graphs
+```
+
+Fix missing frontmatter (auto-generates from heading/filename/git):
+```bash
+$H2T_PYTHON "$LINT" --fix-frontmatter
 ```
 
 Skip pymarkdownlnt:
