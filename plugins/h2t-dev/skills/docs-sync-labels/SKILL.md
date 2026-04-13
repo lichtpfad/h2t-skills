@@ -1,9 +1,6 @@
 ---
-name: docs-sync-labels
-description: >
-  This skill should be used when the user asks to "sync labels", "update github labels",
-  "add missing labels", "sync canonical labels", or wants to ensure all h2t repos have
-  the standard label set from labels.json.
+name: h2t-dev:docs-sync-labels
+description: "This skill should be used when the user asks to \"sync labels\", \"update github labels\", \"add missing labels\", \"sync canonical labels\", or wants to ensure all h2t repos have the standard label set from labels.json."
 compatibility: "Claude Code"
 metadata:
   author: lichtpfad

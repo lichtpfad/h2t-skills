@@ -1,9 +1,6 @@
 ---
-name: docs-lint
-description: >
-  This skill should be used when the user asks to "check docs", "lint documentation",
-  "verify standards", "docs compliance", "are docs up to standard", or wants to audit
-  documentation structure and frontmatter across h2t repos.
+name: h2t-dev:docs-lint
+description: "This skill should be used when the user asks to \"check docs\", \"lint documentation\", \"verify standards\", \"docs compliance\", \"are docs up to standard\", or wants to audit documentation structure and frontmatter across h2t repos."
 compatibility: "Claude Code"
 metadata:
   author: lichtpfad

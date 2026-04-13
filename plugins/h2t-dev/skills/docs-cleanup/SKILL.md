@@ -1,9 +1,6 @@
 ---
-name: docs-cleanup
-description: >
-  This skill should be used when the user asks to "archive docs", "cleanup docs",
-  "close milestone docs", "archive stale plans", or wants to move implemented specs
-  and old plans to archive after a milestone.
+name: h2t-dev:docs-cleanup
+description: "This skill should be used when the user asks to \"archive docs\", \"cleanup docs\", \"close milestone docs\", \"archive stale plans\", or wants to move implemented specs and old plans to archive after a milestone."
 compatibility: "Claude Code"
 metadata:
   author: lichtpfad
