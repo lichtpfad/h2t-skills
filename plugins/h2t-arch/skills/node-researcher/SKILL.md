@@ -1,6 +1,6 @@
 ---
 name: node-researcher
-description: Deep research a crypto-regime-orchestrator diagram node using Exa API. Produces research doc + draw.io annotation. Use when researching any L5-L10 node. Also triggers on: 'h2t:node-researcher'.
+description: Deep researches a crypto-regime-orchestrator diagram node using Exa API. Produces research doc + draw.io annotation. Use when researching any L5-L10 node. Also triggers on: 'h2t-arch:node-researcher'.
 trigger: "research node", "исследуй ноду", "/node-researcher", "изучи алгоритм", "research L7", "research L8", "research L9"
 compatibility: "Claude Code"
 metadata:
