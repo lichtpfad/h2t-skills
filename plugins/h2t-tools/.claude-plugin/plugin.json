@@ -1,0 +1,8 @@
+{
+  "name": "h2t-tools",
+  "description": "H2T Tools — standalone tool integrations: NotebookLM and similar",
+  "version": "1.0.0",
+  "author": {
+    "name": "lichtpfad"
+  }
+}
