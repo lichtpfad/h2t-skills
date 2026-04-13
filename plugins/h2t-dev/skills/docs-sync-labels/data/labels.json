@@ -1,0 +1,28 @@
+{
+  "type": [
+    {"name": "bug", "color": "d73a4a", "description": "Something is broken"},
+    {"name": "feature", "color": "0075ca", "description": "New functionality"},
+    {"name": "enhancement", "color": "a2eeef", "description": "Improvement to existing"},
+    {"name": "refactor", "color": "d4c5f9", "description": "Code without behavior change"},
+    {"name": "docs", "color": "0075ca", "description": "Documentation"},
+    {"name": "chore", "color": "ededed", "description": "CI, deps, config"}
+  ],
+  "priority": [
+    {"name": "P0-critical", "color": "b60205", "description": "Drop everything"},
+    {"name": "P1-high", "color": "d93f0b", "description": "Current sprint"},
+    {"name": "P2-medium", "color": "fbca04", "description": "Next sprint"},
+    {"name": "P3-low", "color": "0e8a16", "description": "Backlog"}
+  ],
+  "domain": [
+    {"name": "D1-methodology", "color": "c5def5", "description": "Specs, learning paths"},
+    {"name": "D2-workflow", "color": "bfdadc", "description": "Transcription, enrichment, tools"},
+    {"name": "D3-business", "color": "f9d0c4", "description": "Products, CRM, marketing"},
+    {"name": "D4-repo", "color": "e4e669", "description": "Core codebase"},
+    {"name": "D6-research", "color": "d4c5f9", "description": "Content marketing, newsengine"}
+  ],
+  "status": [
+    {"name": "triage", "color": "ffffff", "description": "New issue, not reviewed"},
+    {"name": "blocked", "color": "b60205", "description": "Waiting for dependency"},
+    {"name": "wontfix", "color": "ffffff", "description": "Declined"}
+  ]
+}
