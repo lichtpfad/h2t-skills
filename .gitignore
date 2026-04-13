@@ -16,3 +16,6 @@ __pycache__/
 
 # Documentation artifacts (ephemeral)
 docs/.artifacts/
+
+# Git worktrees
+.worktrees/
