@@ -61,7 +61,7 @@ docs/
   adr/                         # NNNN-kebab.md + index.md
   reports/                     # Milestone reports (immutable)
   archive/
-    plans/                     # Выполненные планы (git mv)
+    plans/                     # Выполненные планы (git mv из superpowers/plans/)
   # Conditional (только если применимо):
   product/                     # projects.yaml.docs.positioning = true
   client/                      # repo exposes public API
