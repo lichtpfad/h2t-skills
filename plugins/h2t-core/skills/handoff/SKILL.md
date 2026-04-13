@@ -56,7 +56,7 @@ Build ARTIFACT_LIST from session context:
 
 ### Step 5: Show summary to user
 
-Display before writing:
+Display before writing. **Follow the format from `references/handoff-example.md` exactly** — use `##` for session name, `###` for sections, bullet list for "Что сделано", checkboxes (`- [ ]`) for "Что передаём", dash list for "Артефакты".
 
 ```
 ## Handoff: {SESSION_NAME}
