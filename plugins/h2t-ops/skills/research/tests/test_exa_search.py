@@ -2,6 +2,7 @@
 import subprocess
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -80,3 +81,59 @@ def test_die_writes_stderr_and_exits_with_code(capsys):
     assert "EXA_ERROR:ENV" in captured.err
     assert "EXA_API_KEY missing" in captured.err
     assert captured.out == ""
+
+
+# --- validate_args helper & tests ---
+
+def _args(**kwargs):
+    defaults = dict(
+        mode="generic",
+        start_date=None, end_date=None,
+        include_domains=None, exclude_domains=None,
+        include_text=None, exclude_text=None,
+    )
+    defaults.update(kwargs)
+    return SimpleNamespace(**defaults)
+
+
+def test_validate_competitor_with_start_date_exits_1(capsys):
+    args = _args(mode="competitor", start_date="2025-01-01")
+    with pytest.raises(SystemExit) as excinfo:
+        exa_search.validate_args(args)
+    assert excinfo.value.code == 1
+    err = capsys.readouterr().err
+    assert "EXA_ERROR:ARGS" in err
+    assert "mode=competitor" in err
+    assert "category=company" in err
+    assert "--start-date" in err
+
+
+def test_validate_people_with_exclude_text_exits_1(capsys):
+    args = _args(mode="people", exclude_text=["foo"])
+    with pytest.raises(SystemExit) as excinfo:
+        exa_search.validate_args(args)
+    assert excinfo.value.code == 1
+    assert "EXA_ERROR:ARGS" in capsys.readouterr().err
+
+
+def test_validate_include_text_multi_item_exits_1(capsys):
+    args = _args(mode="generic", include_text=["foo", "bar"])
+    with pytest.raises(SystemExit) as excinfo:
+        exa_search.validate_args(args)
+    assert excinfo.value.code == 1
+    err = capsys.readouterr().err
+    assert "single-item" in err
+
+
+def test_validate_valid_combinations_pass():
+    # news + dates + domains — all allowed
+    exa_search.validate_args(_args(
+        mode="news",
+        start_date="2025-01-01",
+        end_date="2026-04-18",
+        include_domains=["techcrunch.com"],
+    ))
+    # competitor without restricted params — allowed
+    exa_search.validate_args(_args(mode="competitor"))
+    # single-item include_text — allowed
+    exa_search.validate_args(_args(mode="generic", include_text=["solo"]))
