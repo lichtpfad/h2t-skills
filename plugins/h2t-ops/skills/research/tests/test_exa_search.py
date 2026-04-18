@@ -3,6 +3,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 SCRIPT = Path(__file__).resolve().parent.parent / "scripts" / "exa_search.py"
 
 
@@ -68,3 +70,13 @@ def test_category_blocks_people_blocks_text_and_dates():
 
 def test_category_blocks_financial_report_blocks_exclude_text():
     assert "exclude_text" in exa_search.CATEGORY_BLOCKS["financial report"]
+
+
+def test_die_writes_stderr_and_exits_with_code(capsys):
+    with pytest.raises(SystemExit) as excinfo:
+        exa_search.die(4, "EXA_ERROR:ENV EXA_API_KEY missing")
+    assert excinfo.value.code == 4
+    captured = capsys.readouterr()
+    assert "EXA_ERROR:ENV" in captured.err
+    assert "EXA_API_KEY missing" in captured.err
+    assert captured.out == ""

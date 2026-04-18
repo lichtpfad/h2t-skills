@@ -32,6 +32,12 @@ CATEGORY_BLOCKS: dict[str, set[str]] = {
 }
 
 
+def die(code: int, stderr_msg: str) -> None:
+    """Write structured error to stderr and exit. Spec §5.4."""
+    print(stderr_msg, file=sys.stderr)
+    sys.exit(code)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="exa_search",
