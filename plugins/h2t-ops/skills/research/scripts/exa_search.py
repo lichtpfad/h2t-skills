@@ -10,6 +10,7 @@ __version__ = "0.1.0"
 import argparse
 import json
 import os
+import re
 import sys
 import time
 import urllib.error
@@ -210,6 +211,28 @@ def preflight() -> None:
     except urllib.error.URLError as e:
         die(4, f"EXA_ERROR:NETWORK cannot reach {EXA_API}: {e.reason}")
     print("OK")
+
+
+_SLUG_RE = re.compile(r"[^a-z0-9]+")
+
+
+def slugify(text: str, max_len: int = 50) -> str:
+    """Lowercase, collapse non-alnum → hyphen, trim, cap length."""
+    s = _SLUG_RE.sub("-", text.lower()).strip("-")
+    return s[:max_len]
+
+
+def output_paths(
+    output_dir: Path, project: str, topic: str, date: str
+) -> dict[str, Path]:
+    """Per spec §8: persistence filenames."""
+    output_dir.mkdir(parents=True, exist_ok=True)
+    base = f"{slugify(project)}-{slugify(topic)}-{date}"
+    return {
+        "partial_md": output_dir / f"{base}.partial.md",
+        "final_md": output_dir / f"{base}.md",
+        "sources_json": output_dir / f"{base}.sources.json",
+    }
 
 
 def main(argv: list[str] | None = None) -> int:
