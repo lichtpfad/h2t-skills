@@ -1140,12 +1140,15 @@ def _sample_exa_response():
     }
 
 
-def test_render_stdout_summary_includes_query_and_cost(capsys):
+def test_render_stdout_summary_includes_query_and_cost(capsys, tmp_path):
+    # Use tmp_path to stay platform-agnostic — hardcoded "/tmp/..." breaks on
+    # Windows because Path("/tmp/x") becomes WindowsPath("\\tmp\\x") when rendered.
+    partial = tmp_path / "x.partial.md"
+    sources = tmp_path / "x.sources.json"
     data = _sample_exa_response()
     exa_search.render_stdout_summary(
         data, query="Rejuve.bio competitors", mode="competitor",
-        latency_ms=2100, partial_path=Path("/tmp/x.partial.md"),
-        json_path=Path("/tmp/x.sources.json"),
+        latency_ms=2100, partial_path=partial, json_path=sources,
     )
     out = capsys.readouterr().out
     assert "Rejuve.bio competitors" in out
@@ -1153,7 +1156,9 @@ def test_render_stdout_summary_includes_query_and_cost(capsys):
     assert "$0.012" in out
     assert "2100ms" in out or "2.1s" in out
     assert "rejuve.bio/about" in out
-    assert "/tmp/x.partial.md" in out
+    # Filename is platform-agnostic; full path rendering differs on Windows.
+    assert partial.name in out
+    assert sources.name in out
 
 
 def test_write_sources_json(tmp_path):
