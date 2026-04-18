@@ -10,6 +10,9 @@ __version__ = "0.1.0"
 import argparse
 import json
 import sys
+import time
+import urllib.error
+import urllib.request
 from pathlib import Path
 from typing import Any
 
@@ -152,6 +155,48 @@ def build_body(
     if args.mode == "deep" and output_schema:
         body["contents"]["highlights"] = {"maxCharacters": 1}
     return body
+
+
+EXA_API = "https://api.exa.ai"
+
+
+def call_exa(
+    endpoint: str,
+    body: dict[str, Any],
+    api_key: str,
+    timeout: int = 60,
+) -> tuple[int, dict[str, Any], int]:
+    """POST to Exa. Returns (http_status, response_json_or_error_body, latency_ms).
+
+    Network errors (URLError) exit 3 via die() — these cannot be silently swallowed.
+    HTTP errors (4xx/5xx) return (status, error_body, latency) to caller for decision.
+    """
+    req = urllib.request.Request(
+        f"{EXA_API}{endpoint}",
+        data=json.dumps(body).encode("utf-8"),
+        headers={
+            "x-api-key": api_key,
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        },
+        method="POST",
+    )
+    start = time.monotonic()
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            latency = int((time.monotonic() - start) * 1000)
+            return resp.status, json.loads(resp.read().decode("utf-8")), latency
+    except urllib.error.HTTPError as e:
+        latency = int((time.monotonic() - start) * 1000)
+        try:
+            err_body = json.loads(e.read().decode("utf-8"))
+        except Exception:
+            err_body = {"error": "non_json_error_response"}
+        return e.code, err_body, latency
+    except urllib.error.URLError as e:
+        latency = int((time.monotonic() - start) * 1000)
+        die(3, f"EXA_ERROR:NETWORK {e.reason} after {latency}ms")
+        raise  # unreachable — satisfies type checker
 
 
 def main(argv: list[str] | None = None) -> int:

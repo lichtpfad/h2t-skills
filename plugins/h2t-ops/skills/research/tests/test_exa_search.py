@@ -1,10 +1,14 @@
 """Tests for exa_search.py CLI wrapper."""
+import io
+import json
 import subprocess
 import sys
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import MagicMock, patch
 
 import pytest
+import urllib.error
 
 SCRIPT = Path(__file__).resolve().parent.parent / "scripts" / "exa_search.py"
 
@@ -249,3 +253,52 @@ def test_build_body_with_schema_sets_structuredoutput():
 def test_build_body_num_results_override():
     body = exa_search.build_body(_full_args(mode="academic", num_results=25), "SP", {})
     assert body["numResults"] == 25
+
+
+# --- call_exa HTTP client & tests ---
+
+
+def _mock_urlopen_response(status, body):
+    resp = MagicMock()
+    resp.status = status
+    resp.read.return_value = json.dumps(body).encode("utf-8")
+    resp.__enter__ = lambda self: resp
+    resp.__exit__ = lambda self, *a: None
+    return resp
+
+
+def test_call_exa_success():
+    payload = {"results": [{"title": "T", "url": "https://x"}], "costDollars": {"total": 0.007}}
+    with patch("urllib.request.urlopen", return_value=_mock_urlopen_response(200, payload)):
+        status, data, latency_ms = exa_search.call_exa(
+            "/search", {"query": "q"}, api_key="testkey"
+        )
+    assert status == 200
+    assert data["results"][0]["url"] == "https://x"
+    assert latency_ms >= 0
+
+
+def test_call_exa_http_429_returns_error_body(capsys):
+    err = urllib.error.HTTPError(
+        url="https://api.exa.ai/search",
+        code=429,
+        msg="Too Many Requests",
+        hdrs=None,
+        fp=io.BytesIO(json.dumps({"error": "rate_limit_exceeded"}).encode("utf-8")),
+    )
+    with patch("urllib.request.urlopen", side_effect=err):
+        status, body, latency_ms = exa_search.call_exa(
+            "/search", {"query": "q"}, api_key="testkey"
+        )
+    assert status == 429
+    assert body["error"] == "rate_limit_exceeded"
+
+
+def test_call_exa_network_timeout_exits_3(capsys):
+    with patch("urllib.request.urlopen", side_effect=urllib.error.URLError("timed out")):
+        with pytest.raises(SystemExit) as excinfo:
+            exa_search.call_exa("/search", {"query": "q"}, api_key="testkey")
+    assert excinfo.value.code == 3
+    err = capsys.readouterr().err
+    assert "EXA_ERROR:NETWORK" in err
+    assert "timed out" in err
