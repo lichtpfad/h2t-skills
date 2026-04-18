@@ -111,6 +111,49 @@ def load_system_prompt(mode: str) -> tuple[str, dict[str, Any]]:
     return body.strip(), schema
 
 
+def build_body(
+    args: argparse.Namespace,
+    system_prompt: str,
+    output_schema: dict[str, Any],
+) -> dict[str, Any]:
+    """Compose Exa /search request body (spec §5.2 + §5.8)."""
+    cfg = MODE_CONFIG[args.mode]
+    body: dict[str, Any] = {
+        "query": args.query,
+        "type": cfg["type"],
+        "numResults": args.num_results or cfg["num_results"],
+        "contents": {"highlights": {"maxCharacters": cfg["highlight_chars"]}},
+    }
+    if cfg["category"]:
+        body["category"] = cfg["category"]
+    if system_prompt:
+        body["systemPrompt"] = system_prompt
+    if output_schema:
+        body["outputSchema"] = output_schema
+        body["structuredOutput"] = True
+    if args.additional_queries:
+        body["additionalQueries"] = list(args.additional_queries)
+    if args.start_date:
+        body["startPublishedDate"] = args.start_date
+    if args.end_date:
+        body["endPublishedDate"] = args.end_date
+    if args.include_domains:
+        body["includeDomains"] = list(args.include_domains)
+    if args.exclude_domains:
+        body["excludeDomains"] = list(args.exclude_domains)
+    if args.include_text:
+        body["includeText"] = list(args.include_text)
+    if args.exclude_text:
+        body["excludeText"] = list(args.exclude_text)
+    if args.country:
+        body["userLocation"] = args.country
+    if args.full_text:
+        body["contents"]["text"] = {"maxCharacters": 15000}
+    if args.mode == "deep" and output_schema:
+        body["contents"]["highlights"] = {"maxCharacters": 1}
+    return body
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="exa_search",
