@@ -48,3 +48,23 @@ def test_mode_config_fast_uses_fast_type():
     cfg = exa_search.MODE_CONFIG["fast"]
     assert cfg["type"] == "fast"
     assert cfg["num_results"] == 10
+
+
+def test_category_blocks_company_blocks_dates_and_domains():
+    blocks = exa_search.CATEGORY_BLOCKS["company"]
+    assert "start_date" in blocks
+    assert "end_date" in blocks
+    assert "include_domains" in blocks
+    assert "exclude_domains" in blocks
+
+
+def test_category_blocks_people_blocks_text_and_dates():
+    blocks = exa_search.CATEGORY_BLOCKS["people"]
+    assert "include_text" in blocks
+    assert "exclude_text" in blocks
+    assert "exclude_domains" in blocks
+    assert "start_date" in blocks
+
+
+def test_category_blocks_financial_report_blocks_exclude_text():
+    assert "exclude_text" in exa_search.CATEGORY_BLOCKS["financial report"]
