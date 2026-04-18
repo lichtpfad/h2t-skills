@@ -131,7 +131,7 @@ Input format (natural language ИЛИ structured):
 | Field | Type | Description |
 |---|---|---|
 | `topic` | string | research subject (required) |
-| `mode` | enum | `generic` / `news` / `academic` / `competitor` / `people` / `deep` |
+| `mode` | enum | `fast` / `generic` / `news` / `academic` / `competitor` / `people` / `deep` |
 | `depth` | enum | `shallow` / `standard` / `deep` |
 | `budget` | enum | `cheap` / `standard` / `premium` — soft hint for type selection |
 | `urls` | list | optional specific URLs to crawl |
@@ -155,21 +155,26 @@ ls ~/.h2t/research/*{slug}* 2>/dev/null
 
 ### Step 3: Execute Search (parallel где можно)
 
+**Query variation pattern (from Exa official skills):** для `depth=standard|deep` агент генерирует 2–3 phrasing variations и запускает параллельно. Exa returns different results for different phrasings → variation улучшает coverage.
+
 ```bash
 # depth=shallow: один вызов
 python scripts/exa_search.py search --query "..." --mode competitor --num-results 5
 
-# depth=deep: parallel discovery + crawl top-3 в одном message
-python scripts/exa_search.py search --query "..." --mode competitor --num-results 10
+# depth=standard/deep: 2-3 query variations в parallel + dedupe
+python scripts/exa_search.py search \
+  --query "Rejuve.bio competitors Switzerland biotech" \
+  --additional-queries "Swiss longevity startups 2026,DAO biotech companies CH" \
+  --mode competitor --num-results 10
 
-# Parent агент читает JSON output, выбирает top-3 URLs, делает parallel crawl:
+# depth=deep phase 2: parallel crawl top-3 URLs в одном message
 python scripts/exa_search.py crawl --url "URL_1" &
 python scripts/exa_search.py crawl --url "URL_2" &
 python scripts/exa_search.py crawl --url "URL_3" &
 wait
 ```
 
-**В SKILL.md явно:** *"Batch independent calls in single message. Never sequentialize parallel searches."* (Bayram pattern.)
+**В SKILL.md явно:** *"Batch independent calls in single message. Never sequentialize parallel searches."* (Bayram + Exa pattern.)
 
 ### Step 4: Fail-Loud Checks
 
@@ -234,14 +239,21 @@ python scripts/exa_search.py --version
 
 ### 5.2 Mode → Exa Params Mapping (hard-coded в script)
 
-| mode | type | category | highlights.maxChars | default numResults |
-|---|---|---|---|---|
-| `generic` | `auto` | — | 4000 | 10 |
-| `news` | `auto` | `news` | 3000 | 10 |
-| `academic` | `auto` | `research paper` | 4000 | 8 |
-| `competitor` | `auto` | `company` | 4000 | 10 |
-| `people` | `auto` | `people` | 3000 | 10 |
-| `deep` | `deep-reasoning` | — | 5000 | 5 |
+Updated per Exa evaluation methodology (docs.exa.ai) — types consolidated into 4: `fast` / `auto` / `deep` / `neural` (последний embedded в fast/auto).
+
+| mode | type | category | highlights.maxChars | default numResults | Expected latency |
+|---|---|---|---|---|---|
+| `fast` | `fast` | — | 2000 | 10 | ~500ms |
+| `generic` | `auto` | — | 4000 | 10 | ~1000ms |
+| `news` | `auto` | `news` | 3000 | 10 | ~1000ms |
+| `academic` | `auto` | `research paper` | 4000 | 8 | ~1000ms |
+| `competitor` | `auto` | `company` | 4000 | 10 | ~1000ms |
+| `people` | `auto` | `people` | 3000 | 10 | ~1000ms |
+| `deep` | `deep` | — | 5000 | 10 | ~5000ms |
+
+**Key Exa guidance:** **compare within latency classes only.** `fast` vs `deep` — разные use cases, not apples-to-apples. Agent не смешивает modes в одном report без явной пометки.
+
+**Deep mode requires query variations:** минимум 2-3 `additional_queries`. Если не переданы — Exa auto-generates (но hurt quality). Наш script passes 2-3 variations if provided, falls back to Exa auto-gen otherwise.
 
 ### 5.3 Exit Codes
 
@@ -284,6 +296,45 @@ JSON: ~/.h2t/research/rejuve-competitors-switzerland-2026-04-18.sources.json
 - **Stdlib only** для MVP: `urllib.request`, `json`, `argparse`, `pathlib`, `hashlib`, `datetime`, `sys`, `os`.
 - **exa-py добавляется в v0.2** если окажется нужен streaming / advanced retry / OpenAPI-drift resilience.
 
+### 5.7 Validation Rules (from Exa Official Skills)
+
+Script валидирует комбинации параметров **до** отправки HTTP запроса (fail-fast вместо HTTP 400). Category-specific restrictions из Exa official skills:
+
+**`category: "company"`** → ENTSPERREN (400 error если заданы):
+- `includeDomains` / `excludeDomains`
+- `startPublishedDate` / `endPublishedDate`
+- `startCrawlDate` / `endCrawlDate`
+
+**`category: "people"`** → ENTSPERREN:
+- `startPublishedDate` / `endPublishedDate`
+- `startCrawlDate` / `endCrawlDate`
+- `includeText` / `excludeText`
+- `excludeDomains`
+- `includeDomains` — **LinkedIn only** (e.g., `linkedin.com`)
+
+**`category: "financial report"`** → `excludeText` не поддерживается
+
+**Universal:** `includeText` / `excludeText` принимают только **single-item arrays**. Multi-item массивы вызывают 400.
+
+**outputSchema constraints** (при использовании `--output-schema-file`):
+- Max 10 properties total across all nesting levels (wrapper array + item fields)
+- Items в arrays — flat objects с primitive fields only (`string` / `integer` / `boolean` / `array` of strings)
+- Нет nested objects внутри array items
+- Must be `"type": "object"` at root
+- `null` silently ignored
+
+При violation — script exit code 1 + stderr: `EXA_ERROR:ARGS category=<x> incompatible with <param>`.
+
+### 5.8 Deep-mode Required Parameters
+
+Когда `--mode deep`, script автоматически сетит:
+- `type: "deep"` (не `auto`)
+- `structuredOutput: true`
+- `highlightMaxCharacters: 1` (минимизирует response когда есть outputSchema)
+- `numResults`: default 50 (caller может override)
+
+Если systemPrompt явно указывает число ("return exactly N companies"), `numResults` должен matchить — иначе inconsistent results. Script предупреждает (stderr warning) если obvious mismatch detected.
+
 ---
 
 ## 6. Exa API Surface — Explicit Scope
@@ -292,8 +343,8 @@ JSON: ~/.h2t/research/rejuve-competitors-switzerland-2026-04-18.sources.json
 |---|:---:|:---:|:---:|
 | `/search` endpoint | ✅ | | |
 | `/contents` (Content API, auto JS/PDF) | ✅ (subcommand `crawl`) | | |
-| Search types: `auto` / `fast` / `instant` | ✅ | | |
-| Search types: `deep-lite` / `deep` / `deep-reasoning` | ✅ (mode=deep) | | |
+| Search types: `fast` / `auto` / `deep` / `neural` (consolidated per eval docs) | ✅ | | |
+| Old types (`instant` / `deep-lite` / `deep-reasoning`) | ❌ (superseded) | | ❌ (not in current API) |
 | Categories (all 6) | ✅ | | |
 | `highlights` + `text` (full content) | ✅ (`--full-text`) | | |
 | `systemPrompt` + `outputSchema` | ✅ | | |
@@ -356,6 +407,8 @@ should be merged. Flag any information older than 12 months as `[stale: date]`.
 ```
 
 Script читает frontmatter → берёт `exa_type`, `exa_category`, `output_schema`; body → `systemPrompt`.
+
+**String Field Rule (из Exa official skills):** каждое string field в `output_schema` **обязано** содержать length constraint в description — `"in 12 words or less"`, `"under 15 words"`, `"one sentence max"`. Держит responses punchy, снижает token waste. Script не enforces (слишком сложно парсить), но reference.md объявляет это hard rule.
 
 ---
 
@@ -484,6 +537,10 @@ post_telemetry({
 - `sources_from_exa` — все ли ссылки из Exa results
 - `report_length_chars`
 - `depth_effective` — реально ли shallow/standard/deep был выполнен
+- `ground_truth_id` (optional) — линк к known dataset entry (для `/research --eval`, v0.2)
+- `grade` (optional) — `correct` / `partial` / `incorrect` при запуске в eval mode
+
+**Telemetry schema mirrors Exa's own evaluation methodology** (см. `docs/research/exa-official-skills/evaluation-methodology.md`) — это позволяет прямое сравнение с их published benchmarks (SimpleQA, FRAMES, MultiLoKo) в будущем.
 
 ### 9.2 Endpoint + Auth
 
@@ -501,8 +558,19 @@ post_telemetry({
 - Средний cost per mode
 - Distribution запросов per mode
 - Success rate (exit_code=0 / total)
-- Latency p50/p95 per type
+- Latency p50/p95 per type (compare к Exa published benchmarks: fast ~450ms, auto ~1000ms, deep ~5000ms)
 - Какие systemPrompts дают лучший engagement (сколько sources попадают в final reports)
+
+### 9.5 Future: Eval Mode (v0.2)
+
+Inspired by Exa's evaluation methodology — добавить `/research --eval <dataset>` subcommand:
+- Читает local dataset JSON (query + ground_truth pairs)
+- Запускает each query через выбранный mode
+- Собирает telemetry per query
+- Aggregate stats: accuracy %, partial-credit %, P50 latency, total cost
+- Output: `~/.h2t/research/evals/{dataset}-{mode}-{date}.json`
+
+Датасеты — curated locally (~20 queries per domain для старта). Ground truth validated manually once. Позже — интеграция с public benchmarks (SimpleQA subset, FRAMES subset).
 
 ---
 
@@ -560,6 +628,22 @@ Runner: `~/.h2t/venv/Scripts/python -m pytest plugins/h2t-ops/skills/research/te
 5. **Антипаттерны section** в конце SKILL.md.
 6. **Отдельный SPEC-файл для output format** (`REPORT-SPEC.md` ← `DASHBOARD-SPEC.md`).
 
+## 12a. Patterns from Official Exa Skills
+
+7 официальных Exa skills (company-research, exa-lead-gen, get-code-context-exa, people-research, web-search-advanced-{financial-report,research-paper,personal-site}) сохранены как reference в `docs/research/exa-official-skills/README.md`. Extracted patterns:
+
+1. **Tool Restriction section** — explicit "ONLY use X" в начале skill. Мы: *"ONLY use `scripts/exa_search.py`"*.
+2. **Query variation** для coverage (2-3 variations, parallel, dedupe) — в Step 3.
+3. **Category-specific filter restrictions** — documented в §5.7 + enforced script-side.
+4. **outputSchema constraints** (max 10 props, flat arrays, primitive fields) — documented в §5.7.
+5. **String Field Rule** — length constraint в каждом string description.
+6. **Deep-mode required params** — `structuredOutput: true`, `highlightMaxCharacters: 1`, `type: "deep"` (§5.8).
+7. **`context: fork` для token isolation** — Exa использует это в каждом skill. Мы: inline (default) для прозрачности, fork как v0.2 option (`/research-deep`).
+
+**Eval methodology** (`docs/research/exa-official-skills/evaluation-methodology.md`) — наш telemetry shape (§9) mirrors Exa's evaluation metrics для прямого сравнения с их published benchmarks.
+
+**Diverge:** транспорт (curl vs MCP), 1 skill / 6 modes (vs 7 separate skills), lead-gen через BayramAnnakov (vs own `exa-lead-gen`).
+
 ---
 
 ## 13. Antipatterns (в SKILL.md)
@@ -598,6 +682,9 @@ Runner: `~/.h2t/venv/Scripts/python -m pytest plugins/h2t-ops/skills/research/te
 - Related h2t-skills specs:
   - `docs/superpowers/specs/2026-04-03-skills-v3-architecture-design.md`
   - `docs/superpowers/specs/2026-04-14-m2-repo-docs-standards-design.md`
+- Exa reference material:
+  - `docs/research/exa-official-skills/README.md` — 7 official skill patterns
+  - `docs/research/exa-official-skills/evaluation-methodology.md` — Exa eval guide
 
 ---
 
