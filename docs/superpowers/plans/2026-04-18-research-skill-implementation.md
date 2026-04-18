@@ -8,6 +8,10 @@
 
 **Tech Stack:** Python 3.11+ (stdlib: `urllib.request`, `json`, `argparse`, `pathlib`, `hashlib`, `datetime`); pytest + `unittest.mock` for tests; Bash for SKILL.md runtime discovery (`H2T_PYTHON` + `${CLAUDE_PLUGIN_ROOT}` pattern); Exa HTTP API v1; Anysite HTTP MCP (user-scope install).
 
+**Execution shell — Git Bash (MINGW64) on Windows.** All shell commands in this plan — including `export`, conditional tests, `ls`, `grep`, path resolution, and smoke tests — assume a Git Bash terminal (the standard shell for the h2t-skills Windows workflow, matching the existing `plugins/h2t-ops/skills/gmail/SKILL.md` runtime pattern). PowerShell and `cmd.exe` are NOT supported as execution environments for this plan. If you need PowerShell variants, translate manually; do not run the verbatim blocks in PowerShell.
+
+Smoke-test artifact paths use `$HOME/...` rather than `/tmp/...` to avoid Git Bash's `/tmp` → `%TEMP%` mapping confusion and to keep the test surface under the user home (easy manual cleanup).
+
 ---
 
 ## File Structure
@@ -1316,8 +1320,21 @@ git commit -m "feat(h2t-ops:research): stdout summary + partial.md + sources.jso
 Append:
 
 ```python
-def test_post_telemetry_disabled_when_env_missing(monkeypatch, tmp_path):
+def test_post_telemetry_awaiting_endpoint_when_env_unset(monkeypatch, tmp_path):
+    # MVP default: endpoint not configured yet → 'awaiting_endpoint', not 'disabled'.
     monkeypatch.delenv("H2T_EVALS_URL", raising=False)
+    monkeypatch.delenv("H2T_EVALS_DISABLE", raising=False)
+    status = exa_search.post_telemetry(
+        event={"foo": "bar"}, buffer_path=tmp_path / "buf.jsonl"
+    )
+    assert status == "awaiting_endpoint"
+    assert not (tmp_path / "buf.jsonl").exists()
+
+
+def test_post_telemetry_disabled_when_explicit_opt_out(monkeypatch, tmp_path):
+    # User explicit opt-out takes precedence over URL presence.
+    monkeypatch.setenv("H2T_EVALS_DISABLE", "1")
+    monkeypatch.setenv("H2T_EVALS_URL", "https://evals.example.com")
     status = exa_search.post_telemetry(
         event={"foo": "bar"}, buffer_path=tmp_path / "buf.jsonl"
     )
@@ -1326,6 +1343,7 @@ def test_post_telemetry_disabled_when_env_missing(monkeypatch, tmp_path):
 
 
 def test_post_telemetry_buffers_on_network_failure(monkeypatch, tmp_path):
+    monkeypatch.delenv("H2T_EVALS_DISABLE", raising=False)
     monkeypatch.setenv("H2T_EVALS_URL", "https://evals.example.com")
     buf = tmp_path / "buf.jsonl"
     with patch("urllib.request.urlopen", side_effect=urllib.error.URLError("down")):
@@ -1337,6 +1355,7 @@ def test_post_telemetry_buffers_on_network_failure(monkeypatch, tmp_path):
 
 
 def test_post_telemetry_sent_on_success(monkeypatch, tmp_path):
+    monkeypatch.delenv("H2T_EVALS_DISABLE", raising=False)
     monkeypatch.setenv("H2T_EVALS_URL", "https://evals.example.com")
     buf = tmp_path / "buf.jsonl"
     with patch("urllib.request.urlopen", return_value=_mock_urlopen_response(202, {})):
@@ -1360,11 +1379,19 @@ Append to `exa_search.py`:
 ```python
 def post_telemetry(event: dict[str, Any], buffer_path: Path) -> str:
     """Fail-graceful telemetry (spec §9.2).
-    Returns one of: 'sent', 'buffered', 'disabled', 'awaiting_endpoint'.
+    Returns one of: 'sent', 'buffered', 'awaiting_endpoint', 'disabled'.
+
+    Contract:
+      - H2T_EVALS_DISABLE=1            -> 'disabled' (explicit opt-out)
+      - H2T_EVALS_URL unset            -> 'awaiting_endpoint' (MVP default)
+      - URL set, HTTP 2xx              -> 'sent'
+      - URL set, URLError/HTTPError    -> 'buffered' (local JSONL append)
     """
+    if os.environ.get("H2T_EVALS_DISABLE") == "1":
+        return "disabled"
     evals_url = os.environ.get("H2T_EVALS_URL")
     if not evals_url:
-        return "disabled"
+        return "awaiting_endpoint"
     token = os.environ.get("H2T_EVALS_TOKEN", "")
     req = urllib.request.Request(
         f"{evals_url.rstrip('/')}/api/telemetry/research",
@@ -2841,24 +2868,26 @@ If `EXA_ERROR:NETWORK` — check firewall/proxy; retry.
 - [ ] **Step 1: Run generic search**
 
 ```bash
+SMOKE_DIR="$HOME/h2t-research-smoke"
+mkdir -p "$SMOKE_DIR"
 $EXA_CLI search \
   --query "What is Exa AI and who founded it?" \
   --mode generic \
   --num-results 5 \
-  --output-dir /tmp/h2t-research-smoke \
+  --output-dir "$SMOKE_DIR" \
   --project smoke-test
 ```
 
 Expected:
 - Exit code 0
 - Stdout shows `## Exa Search: ...` with 5 numbered results, each with URL + highlight snippet
-- Stdout ends with `Saved:` and `JSON:` pointing to `/tmp/h2t-research-smoke/`
+- Stdout ends with `Saved:` and `JSON:` pointing to `$HOME/h2t-research-smoke/`
 
 - [ ] **Step 2: Verify files created**
 
 ```bash
-ls -la /tmp/h2t-research-smoke/
-cat /tmp/h2t-research-smoke/smoke-test-*.partial.md | head -40
+ls -la "$SMOKE_DIR"/
+cat "$SMOKE_DIR"/smoke-test-*.partial.md | head -40
 ```
 
 Expected: two files (`.partial.md` and `.sources.json`). The `.partial.md` has Meta + Telemetry tables with real cost/latency numbers and the `Integrity check: 1/1 calls used Exa API. 0 fallbacks to WebSearch.` row.
@@ -2873,26 +2902,34 @@ Expected: two files (`.partial.md` and `.sources.json`). The `.partial.md` has M
 
 - [ ] **Step 1: Run invalid combination**
 
+Redirect stdout/stderr to separate files and capture `$?` **before** any other command — do NOT pipe to `tee`, because `$?` after a pipe returns `tee`'s exit code (0), masking the script's exit. Git Bash supports `${PIPESTATUS[0]}` as an alternative, but direct redirect is clearer and more portable.
+
 ```bash
+SMOKE_DIR="$HOME/h2t-research-smoke"
+STDERR_LOG="$HOME/exa-invalid-stderr.log"
+STDOUT_LOG="$HOME/exa-invalid-stdout.log"
+
 $EXA_CLI search \
   --query "x" \
   --mode competitor \
   --start-date 2025-01-01 \
-  --output-dir /tmp/h2t-research-smoke \
+  --output-dir "$SMOKE_DIR" \
   --project smoke-test \
-  2>&1 | tee /tmp/exa-invalid.log
-echo "exit=$?"
+  > "$STDOUT_LOG" 2> "$STDERR_LOG"
+exit_code=$?
+echo "exit=$exit_code"
+cat "$STDERR_LOG"
 ```
 
 Expected:
-- Exit code 1
-- Stderr (captured in log): `EXA_ERROR:ARGS mode=competitor (category=company) incompatible with --start-date.`
-- Suggests switching to `--mode news` or `generic`
+- `exit=1` (actual script exit, not tee's)
+- `$STDERR_LOG` contains: `EXA_ERROR:ARGS mode=competitor (category=company) incompatible with --start-date.`
+- Message suggests switching to `--mode news` or `generic`
 
 - [ ] **Step 2: Verify no files written for this failed run**
 
 ```bash
-ls /tmp/h2t-research-smoke/ | wc -l
+ls "$SMOKE_DIR"/ | wc -l
 ```
 
 Expected: same file count as after Task 26 (no new files — fail-fast prevented output).
@@ -2900,7 +2937,7 @@ Expected: same file count as after Task 26 (no new files — fail-fast prevented
 - [ ] **Step 3: Cleanup smoke test artifacts**
 
 ```bash
-rm -rf /tmp/h2t-research-smoke /tmp/exa-invalid.log
+rm -rf "$SMOKE_DIR" "$STDERR_LOG" "$STDOUT_LOG"
 ```
 
 - [ ] **Step 4: No commit**
@@ -2948,7 +2985,7 @@ Verify:
 - **Integrity check row** reads `1/1 calls used Exa API. 0 fallbacks to WebSearch.`
 - Every **Key Finding** has a verbatim double-quoted excerpt AND a URL AND a confidence label
 - **Grounding Notes** shows `Sources from WebSearch / other: 0`
-- Footer shows `Telemetry: 🚧 awaiting endpoint` (if `$H2T_EVALS_URL` not set) OR `⏳ buffered locally` (if set but unreachable)
+- Footer shows one of: `🚧 awaiting endpoint` (MVP default — `$H2T_EVALS_URL` not set), `⏳ buffered locally` (URL set but unreachable), `✅ sent to h2t-evals` (URL set + HTTP 2xx), or `⊘ disabled` (only when `H2T_EVALS_DISABLE=1` is explicitly set)
 
 If any of these checks fail, the SKILL.md needs adjustment — refer to spec §4 Step 5 and REPORT-SPEC.md.
 
