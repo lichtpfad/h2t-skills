@@ -91,23 +91,40 @@ This agent is deprecated. For new tasks invoke:
 ## 3. File Layout
 
 ```
-plugins/h2t-ops/skills/research/
-├── SKILL.md                     # overview, architecture diagram, 7-step workflow (< 500 lines)
-├── REPORT-SPEC.md               # exact report template + integrity rules (аналог DASHBOARD-SPEC.md)
-├── reference.md                 # Exa API full parameter reference (lazy-loaded by agent)
-├── examples.md                  # sample invocations + sample outputs
-├── systemprompts/
-│   ├── generic.md
-│   ├── news.md
-│   ├── academic.md
-│   ├── competitor.md
-│   ├── people.md
-│   └── deep.md
-├── scripts/
-│   └── exa_search.py            # Python CLI wrapper (stdlib urllib, ~150 lines)
-└── tests/
-    └── test_exa_search.py       # pytest unit tests
+plugins/h2t-ops/
+├── commands/
+│   └── research.md              # slash-command entrypoint (thin wrapper → delegates to skill)
+└── skills/
+    └── research/
+        ├── SKILL.md             # overview, architecture diagram, 7-step workflow (< 500 lines)
+        ├── REPORT-SPEC.md       # exact report template + integrity rules (аналог DASHBOARD-SPEC.md)
+        ├── reference.md         # Exa API full parameter reference (lazy-loaded by agent)
+        ├── examples.md          # sample invocations + sample outputs
+        ├── systemprompts/
+        │   ├── fast.md
+        │   ├── generic.md
+        │   ├── news.md
+        │   ├── academic.md
+        │   ├── competitor.md
+        │   ├── people.md
+        │   └── deep.md
+        ├── scripts/
+        │   └── exa_search.py    # Python CLI wrapper (stdlib urllib, ~150 lines)
+        └── tests/
+            └── test_exa_search.py  # pytest unit tests
 ```
+
+**Content of `plugins/h2t-ops/commands/research.md`** (следует паттерну из `commands/gmail.md`):
+
+```markdown
+---
+description: "Semantic web research via Exa. Modes: fast/generic/news/academic/competitor/people/deep. Triggers: 'research', 'find out', 'look up', 'исследуй'."
+---
+
+Use the h2t-ops:research skill.
+```
+
+**Note on `/search-leads`:** не создаём вручную. BayramAnnakov `lead-search-plugin` автоматически регистрирует `/search-leads` command при marketplace install (`.claude-plugin/plugin.json` содержит command definition). Наш deprecation stub указывает на эту команду, валидную после установки плагина.
 
 Структура следует официальному Anthropic паттерну (code.claude.com/docs/en/skills):
 
@@ -119,10 +136,25 @@ plugins/h2t-ops/skills/research/
 
 ### Step 0: Preflight
 
+SKILL.md в самом начале определяет canonical runtime variables (копируя h2t-ops convention из `plugins/h2t-ops/skills/gmail/SKILL.md`):
+
+```bash
+H2T_PYTHON="${H2T_PYTHON:-}"
+[ -z "$H2T_PYTHON" ] && [ -f "$HOME/.h2t/venv/Scripts/python.exe" ] && H2T_PYTHON="$HOME/.h2t/venv/Scripts/python.exe"
+[ -z "$H2T_PYTHON" ] && [ -f "$HOME/.h2t/venv/bin/python" ] && H2T_PYTHON="$HOME/.h2t/venv/bin/python"
+[ -z "$H2T_PYTHON" ] && echo "ERROR: h2t venv not found. Run /h2t-core:setup" && exit 1
+
+EXA_CLI="$H2T_PYTHON ${CLAUDE_PLUGIN_ROOT}/skills/research/scripts/exa_search.py"
+```
+
+Затем Step 0 выполняет:
+
 - Проверить `$EXA_API_KEY` (env var). Missing → `STATUS: BLOCKED`, показать инструкцию как установить.
-- Проверить `~/.h2t/venv/Scripts/python` (Windows) или `~/.h2t/venv/bin/python` (Unix) существует.
-- Запустить `exa_search.py preflight` — probe connectivity к `api.exa.ai`.
+- Если `H2T_PYTHON` не найден — stop, suggest `/h2t-core:setup`.
+- Запустить `$EXA_CLI preflight` — probe connectivity к `api.exa.ai`.
 - **Никаких silent fallback.** Failed preflight = stop с точной причиной.
+
+`${CLAUDE_PLUGIN_ROOT}` обеспечивает работу из любого cwd — skill не привязан к текущей директории пользователя.
 
 ### Step 1: Parse Research Request
 
@@ -159,20 +191,26 @@ ls ~/.h2t/research/*{slug}* 2>/dev/null
 
 ```bash
 # depth=shallow: один вызов
-python scripts/exa_search.py search --query "..." --mode competitor --num-results 5
+$EXA_CLI search --query "..." --mode generic --num-results 5
 
 # depth=standard/deep: 2-3 query variations в parallel + dedupe
-python scripts/exa_search.py search \
-  --query "Rejuve.bio competitors Switzerland biotech" \
-  --additional-queries "Swiss longevity startups 2026,DAO biotech companies CH" \
-  --mode competitor --num-results 10
+# Example: news mode supports date filters + domain filters
+$EXA_CLI search \
+  --query "Rejuve.bio press coverage Switzerland 2026" \
+  --additional-queries "Swiss longevity startup news 2026,DAO biotech press" \
+  --mode news \
+  --start-date 2025-10-01 --end-date 2026-04-18 \
+  --include-domains "techcrunch.com,swissbiotech.ch" \
+  --num-results 10
 
 # depth=deep phase 2: parallel crawl top-3 URLs в одном message
-python scripts/exa_search.py crawl --url "URL_1" &
-python scripts/exa_search.py crawl --url "URL_2" &
-python scripts/exa_search.py crawl --url "URL_3" &
+$EXA_CLI crawl --url "URL_1" &
+$EXA_CLI crawl --url "URL_2" &
+$EXA_CLI crawl --url "URL_3" &
 wait
 ```
+
+Note: mode `competitor` (`category=company`) запрещает date/domain filters — см. §5.7. Для запроса с фильтрами по дате + домену используй `mode=news` или `mode=generic` (без category).
 
 **В SKILL.md явно:** *"Batch independent calls in single message. Never sequentialize parallel searches."* (Bayram + Exa pattern.)
 
@@ -189,11 +227,17 @@ wait
 
 Агент читает markdown output из `exa_search.py` (title + url + highlight).
 
-**Правило grounding:** для `depth=deep` каждый Key Finding **ДОЛЖЕН** иметь:
-- Прямая ссылка на источник
-- Цитата из highlight (quoted string)
+**Grounding rule — обязательно для ВСЕХ depth (не только `deep`):** каждый Key Finding **ДОЛЖЕН** содержать:
+- Прямая ссылка на источник (URL из Exa results)
+- Verbatim цитата из highlight — **quoted string**
+- Confidence label: `high` / `medium` / `low` с кратким обоснованием
 
-Findings без grounding не включаются. Если нечего groundить — пишем в Limitations.
+**Findings без grounding не включаются в Key Findings.** Варианты action'а для unsourced information:
+- Есть данные, но источник shaky / противоречивый → вынести в Limitations с пометкой
+- Нужно synthesize, но нечего цитировать → research incomplete, отражать как "No findings matched" + suggest follow-up mode
+- Никогда — **не писать от имени агента** без привязки к источнику
+
+**Исторический контекст:** root cause issue #69 — не только silent fallback на WebSearch, но и **authoritative unsourced synthesis** (агент писал выводы от себя без цитат, выдавая за факты). Grounding rule для всех depth — hard stop против этого паттерна.
 
 ### Step 6: Persist (auto by script)
 
@@ -214,32 +258,54 @@ Findings без grounding не включаются. Если нечего groun
 ### 5.1 CLI Contract
 
 ```bash
-python scripts/exa_search.py preflight
+# Discovery pattern (same as all h2t-ops skills):
+H2T_PYTHON="${H2T_PYTHON:-$HOME/.h2t/venv/Scripts/python.exe}"
+[ ! -f "$H2T_PYTHON" ] && H2T_PYTHON="$HOME/.h2t/venv/bin/python"
+EXA_CLI="$H2T_PYTHON ${CLAUDE_PLUGIN_ROOT}/skills/research/scripts/exa_search.py"
+
+# Preflight
+$EXA_CLI preflight
 # Exit 0 если env+connectivity OK. Exit 4 + stderr иначе.
 
-python scripts/exa_search.py search \
-  --query "Rejuve.bio competitors Switzerland 2026" \
+# VALID: competitor mode — без date/domain (category=company blocks those)
+$EXA_CLI search \
+  --query "Rejuve.bio competitors longevity biotech" \
   --mode competitor \
   --depth standard \
   --num-results 10 \
   --country CH \
-  --start-date 2025-01-01 --end-date 2026-04-18 \
-  --include-domains "example.com,swiss-biotech.ch" \
-  --full-text \
   --output-dir ~/.h2t/research \
   --project rejuve
 
-python scripts/exa_search.py crawl \
+# VALID: news mode — с date + domain filters
+$EXA_CLI search \
+  --query "Rejuve.bio Switzerland press 2026" \
+  --mode news \
+  --start-date 2025-01-01 --end-date 2026-04-18 \
+  --include-domains "techcrunch.com,swissbiotech.ch" \
+  --num-results 10 \
+  --output-dir ~/.h2t/research \
+  --project rejuve
+
+# INVALID: script exits 1 with EXA_ERROR:ARGS before HTTP call:
+# $EXA_CLI search --mode competitor --start-date 2025-01-01 ...
+# → stderr: "EXA_ERROR:ARGS mode=competitor (category=company) incompatible
+#           with --start-date. Remove date filter OR switch to --mode news."
+
+# Crawl single URL
+$EXA_CLI crawl \
   --url "https://example.com/article" \
   --output-dir ~/.h2t/research \
   --project rejuve
 
-python scripts/exa_search.py --version
+$EXA_CLI --version
 ```
 
 ### 5.2 Mode → Exa Params Mapping (hard-coded в script)
 
 Updated per Exa evaluation methodology (docs.exa.ai) — types consolidated into 4: `fast` / `auto` / `deep` / `neural` (последний embedded в fast/auto).
+
+**Core mapping:**
 
 | mode | type | category | highlights.maxChars | default numResults | Expected latency |
 |---|---|---|---|---|---|
@@ -250,6 +316,27 @@ Updated per Exa evaluation methodology (docs.exa.ai) — types consolidated into
 | `competitor` | `auto` | `company` | 4000 | 10 | ~1000ms |
 | `people` | `auto` | `people` | 3000 | 10 | ~1000ms |
 | `deep` | `deep` | — | 5000 | 10 | ~5000ms |
+
+**Supported filters per mode (critical — prevents 400 errors):**
+
+| mode | date filters | `include/excludeDomains` | `include/excludeText` | `country` (userLocation) |
+|---|:---:|:---:|:---:|:---:|
+| `fast` | ✅ | ✅ | ⚠ single-item | ✅ |
+| `generic` | ✅ | ✅ | ⚠ single-item | ✅ |
+| `news` | ✅ | ✅ | ⚠ single-item | ✅ |
+| `academic` | ✅ | ✅ | ⚠ single-item | ✅ |
+| `competitor` | ❌ | ❌ | ⚠ single-item | ✅ |
+| `people` | ❌ | ⚠ LinkedIn domains only | ❌ | ✅ |
+| `deep` | ✅ | ✅ | ⚠ single-item | ✅ |
+
+- ✅ fully supported
+- ❌ causes HTTP 400 — script blocks before API call, exit code 1 + `EXA_ERROR:ARGS`
+- ⚠ partial: `single-item` = массив только из одного элемента; LinkedIn-only = принимается только `linkedin.com`
+
+**Workarounds для blocked combinations:**
+- Нужны date filters при competitor research → switch to `mode=news` или `mode=generic` (теряется `category=company` boost, но date filters работают)
+- Нужны domain filters при people research → switch to `mode=generic` + задать `includeDomains: ["linkedin.com"]` (теряется `people` category boost)
+- Нужен multi-item `includeText` → сделать два отдельных вызова и merged результаты
 
 **Key Exa guidance:** **compare within latency classes only.** `fast` vs `deep` — разные use cases, not apples-to-apples. Agent не смешивает modes в одном report без явной пометки.
 
@@ -485,8 +572,19 @@ Script читает frontmatter → берёт `exa_type`, `exa_category`, `outp
 
 ---
 
-*Generated by `h2t-ops:research` skill v0.1.0 | Telemetry sent to h2t-evals: ✅*
+*Generated by `h2t-ops:research` skill v0.1.0 | Telemetry: {status}*
 ```
+
+**Telemetry status literal values** — точно отражают реальный результат, не hardcoded:
+
+| Status | Meaning | When |
+|---|---|---|
+| `✅ sent to h2t-evals` | HTTP 2xx response from evals endpoint | Normal path |
+| `⏳ buffered locally at ~/.h2t/research/.pending_telemetry.jsonl` | evals unreachable, retry queued | Network error / endpoint down |
+| `⊘ disabled` | `$H2T_EVALS_URL` env var not set | User opted out |
+| `🚧 awaiting endpoint` | MVP — endpoint schema not yet finalized | Pre-integration phase, всё буферизуется |
+
+**В MVP (v0.1):** пока h2t-evals endpoint/schema не подтверждён — default status `🚧 awaiting endpoint`, данные только в local JSONL. Status меняется на `✅` только когда endpoint реально доступен и returns 2xx.
 
 ### 8.2 Integrity Check Rule
 
@@ -598,10 +696,11 @@ Runner: `~/.h2t/venv/Scripts/python -m pytest plugins/h2t-ops/skills/research/te
 
 **Phase 1 — Build (1-2 дня):**
 
-1. Создать skill в `plugins/h2t-ops/skills/research/` со всеми файлами
-2. Установить `anysite` MCP: `claude mcp add --transport http --scope user anysite "https://mcp.anysite.io/mcp?api_key=..."`
-3. Установить Bayram plugin: `/plugin marketplace add BayramAnnakov/lead-search-plugin && /plugin install lead-search@lead-search-marketplace`
-4. Проверить h2t-evals endpoint availability + schema
+1. Создать skill в `plugins/h2t-ops/skills/research/` со всеми файлами (SKILL.md, REPORT-SPEC.md, reference.md, examples.md, systemprompts/*.md, scripts/exa_search.py, tests/test_exa_search.py)
+2. Создать slash-command wrapper в `plugins/h2t-ops/commands/research.md` (delegates to `h2t-ops:research` skill)
+3. Установить `anysite` MCP: `claude mcp add --transport http --scope user anysite "https://mcp.anysite.io/mcp?api_key=..."`
+4. Установить Bayram plugin: `/plugin marketplace add BayramAnnakov/lead-search-plugin && /plugin install lead-search@lead-search-marketplace` — автоматически регистрирует `/search-leads` command
+5. Проверить h2t-evals endpoint availability + schema (если не готов — telemetry status по умолчанию `🚧 awaiting endpoint`)
 
 **Phase 2 — Deprecate (0.5 дня):**
 
