@@ -302,3 +302,31 @@ def test_call_exa_network_timeout_exits_3(capsys):
     err = capsys.readouterr().err
     assert "EXA_ERROR:NETWORK" in err
     assert "timed out" in err
+
+
+# --- preflight tests ---
+
+
+def test_preflight_missing_env_exits_4(monkeypatch, capsys):
+    monkeypatch.delenv("EXA_API_KEY", raising=False)
+    with pytest.raises(SystemExit) as excinfo:
+        exa_search.preflight()
+    assert excinfo.value.code == 4
+    assert "EXA_ERROR:ENV" in capsys.readouterr().err
+
+
+def test_preflight_ok_prints_ok(monkeypatch, capsys):
+    monkeypatch.setenv("EXA_API_KEY", "stub")
+    mock_resp = _mock_urlopen_response(200, {})
+    with patch("urllib.request.urlopen", return_value=mock_resp):
+        exa_search.preflight()
+    assert "OK" in capsys.readouterr().out
+
+
+def test_preflight_network_failure_exits_4(monkeypatch, capsys):
+    monkeypatch.setenv("EXA_API_KEY", "stub")
+    with patch("urllib.request.urlopen", side_effect=urllib.error.URLError("no route")):
+        with pytest.raises(SystemExit) as excinfo:
+            exa_search.preflight()
+    assert excinfo.value.code == 4
+    assert "EXA_ERROR:NETWORK" in capsys.readouterr().err

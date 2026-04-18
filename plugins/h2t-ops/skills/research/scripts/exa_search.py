@@ -9,6 +9,7 @@ __version__ = "0.1.0"
 
 import argparse
 import json
+import os
 import sys
 import time
 import urllib.error
@@ -197,6 +198,18 @@ def call_exa(
         latency = int((time.monotonic() - start) * 1000)
         die(3, f"EXA_ERROR:NETWORK {e.reason} after {latency}ms")
         raise  # unreachable — satisfies type checker
+
+
+def preflight() -> None:
+    """Step 0: env + connectivity probe (spec §4 Step 0)."""
+    if not os.environ.get("EXA_API_KEY"):
+        die(4, "EXA_ERROR:ENV EXA_API_KEY missing; obtain at https://dashboard.exa.ai/api-keys")
+    req = urllib.request.Request(f"{EXA_API}/", method="GET")
+    try:
+        urllib.request.urlopen(req, timeout=5)
+    except urllib.error.URLError as e:
+        die(4, f"EXA_ERROR:NETWORK cannot reach {EXA_API}: {e.reason}")
+    print("OK")
 
 
 def main(argv: list[str] | None = None) -> int:
