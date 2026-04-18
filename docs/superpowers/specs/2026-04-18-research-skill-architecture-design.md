@@ -579,14 +579,16 @@ Script читает frontmatter → берёт `exa_type`, `exa_category`, `outp
 
 **Telemetry status literal values** — точно отражают реальный результат, не hardcoded:
 
-| Status | Meaning | When |
+| Status | When | Trigger |
 |---|---|---|
-| `✅ sent to h2t-evals` | HTTP 2xx response from evals endpoint | Normal path |
-| `⏳ buffered locally at ~/.h2t/research/.pending_telemetry.jsonl` | evals unreachable, retry queued | Network error / endpoint down |
-| `⊘ disabled` | `$H2T_EVALS_URL` env var not set | User opted out |
-| `🚧 awaiting endpoint` | MVP — endpoint schema not yet finalized | Pre-integration phase, всё буферизуется |
+| `✅ sent to h2t-evals` | `$H2T_EVALS_URL` set AND HTTP 2xx | Normal post-integration path |
+| `⏳ buffered locally at ~/.h2t/research/.pending_telemetry.jsonl` | `$H2T_EVALS_URL` set AND URLError/HTTPError | Network failure / endpoint down — retry queued |
+| `🚧 awaiting endpoint` | `$H2T_EVALS_URL` **unset** (MVP default) | Endpoint/schema not yet configured |
+| `⊘ disabled` | `$H2T_EVALS_DISABLE=1` explicitly set | User opt-out overrides URL presence |
 
-**В MVP (v0.1):** пока h2t-evals endpoint/schema не подтверждён — default status `🚧 awaiting endpoint`, данные только в local JSONL. Status меняется на `✅` только когда endpoint реально доступен и returns 2xx.
+**Precedence:** explicit opt-out (`H2T_EVALS_DISABLE=1`) wins over URL presence. Absence of URL is the MVP default state (`awaiting_endpoint`), **not** `disabled` — these are different signals: one says "not yet wired up", the other says "user refused".
+
+**В MVP (v0.1):** пока h2t-evals endpoint/schema не подтверждён — default status `🚧 awaiting endpoint`. Status меняется на `✅` / `⏳` только когда `$H2T_EVALS_URL` установлен и endpoint реально отвечает.
 
 ### 8.2 Integrity Check Rule
 
