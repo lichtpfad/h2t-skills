@@ -181,3 +181,71 @@ def test_load_system_prompt_missing_file_exits_1(tmp_path, monkeypatch, capsys):
         exa_search.load_system_prompt("nonexistent")
     assert excinfo.value.code == 1
     assert "EXA_ERROR:ARGS" in capsys.readouterr().err
+
+
+# --- build_body helper & tests ---
+
+def _full_args(**kwargs):
+    defaults = dict(
+        mode="generic",
+        query="Rejuve.bio Switzerland",
+        num_results=None,
+        additional_queries=None,
+        start_date=None, end_date=None,
+        include_domains=None, exclude_domains=None,
+        include_text=None, exclude_text=None,
+        country=None,
+        full_text=False,
+    )
+    defaults.update(kwargs)
+    return SimpleNamespace(**defaults)
+
+
+def test_build_body_generic_minimal():
+    body = exa_search.build_body(_full_args(mode="generic"), "SP", {})
+    assert body["query"] == "Rejuve.bio Switzerland"
+    assert body["type"] == "auto"
+    assert body["numResults"] == 10
+    assert body["systemPrompt"] == "SP"
+    assert body["contents"]["highlights"]["maxCharacters"] == 4000
+    assert "category" not in body
+
+
+def test_build_body_competitor_sets_category():
+    body = exa_search.build_body(_full_args(mode="competitor"), "SP", {})
+    assert body["category"] == "company"
+    assert body["type"] == "auto"
+
+
+def test_build_body_news_with_dates_and_domains():
+    body = exa_search.build_body(_full_args(
+        mode="news",
+        start_date="2025-01-01",
+        end_date="2026-04-18",
+        include_domains=["techcrunch.com"],
+    ), "SP", {})
+    assert body["category"] == "news"
+    assert body["startPublishedDate"] == "2025-01-01"
+    assert body["endPublishedDate"] == "2026-04-18"
+    assert body["includeDomains"] == ["techcrunch.com"]
+
+
+def test_build_body_deep_with_additional_queries():
+    body = exa_search.build_body(_full_args(
+        mode="deep",
+        additional_queries=["variation 1", "variation 2"],
+    ), "SP", {})
+    assert body["type"] == "deep"
+    assert body["additionalQueries"] == ["variation 1", "variation 2"]
+
+
+def test_build_body_with_schema_sets_structuredoutput():
+    schema = {"type": "object", "properties": {"name": {"type": "string"}}}
+    body = exa_search.build_body(_full_args(mode="generic"), "SP", schema)
+    assert body["outputSchema"] == schema
+    assert body["structuredOutput"] is True
+
+
+def test_build_body_num_results_override():
+    body = exa_search.build_body(_full_args(mode="academic", num_results=25), "SP", {})
+    assert body["numResults"] == 25
