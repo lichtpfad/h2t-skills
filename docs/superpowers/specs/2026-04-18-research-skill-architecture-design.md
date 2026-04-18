@@ -416,11 +416,13 @@ Script валидирует комбинации параметров **до** �
 
 Когда `--mode deep`, script автоматически сетит:
 - `type: "deep"` (не `auto`)
-- `structuredOutput: true`
+- `structuredOutput: true` (когда передан `--output-schema-file`)
 - `highlightMaxCharacters: 1` (минимизирует response когда есть outputSchema)
-- `numResults`: default 50 (caller может override)
+- `numResults`: default **10** (per §5.2 mapping table) — aligned с Exa evaluation methodology для fair comparison across modes
 
-Если systemPrompt явно указывает число ("return exactly N companies"), `numResults` должен matchить — иначе inconsistent results. Script предупреждает (stderr warning) если obvious mismatch detected.
+**Note on bulk/lead-gen paradigm:** Exa `exa-lead-gen` official skill использует `numResults: 50` для batch lead generation — там systemPrompt просит "return exactly 50 companies" и этот pattern оправдан. **Для нашего `/research --mode deep`** такой use case не поддерживается (bulk lead-gen делегирован BayramAnnakov plugin). Если caller explicitly передаст `--num-results 50` с matching systemPrompt (`"return exactly 50"`) — script не блокирует, но по умолчанию остаёмся на 10.
+
+Если systemPrompt явно указывает число ("return exactly N items"), `numResults` должен matchить — иначе inconsistent results. Script предупреждает (stderr warning) если obvious mismatch detected.
 
 ---
 
