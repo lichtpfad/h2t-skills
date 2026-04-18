@@ -330,3 +330,29 @@ def test_preflight_network_failure_exits_4(monkeypatch, capsys):
             exa_search.preflight()
     assert excinfo.value.code == 4
     assert "EXA_ERROR:NETWORK" in capsys.readouterr().err
+
+
+# --- slugify & output_paths tests ---
+
+
+def test_slugify_lowercases_and_hyphenates():
+    assert exa_search.slugify("Rejuve.bio Competitors Switzerland 2026") == "rejuve-bio-competitors-switzerland-2026"
+
+
+def test_slugify_strips_special_chars():
+    assert exa_search.slugify("AI & Biotech: Q4/2025!") == "ai-biotech-q4-2025"
+
+
+def test_slugify_truncates_to_50_chars():
+    long = "a" * 120
+    assert len(exa_search.slugify(long)) == 50
+
+
+def test_output_paths_structure(tmp_path):
+    paths = exa_search.output_paths(
+        output_dir=tmp_path, project="rejuve", topic="Competitors CH", date="2026-04-18"
+    )
+    assert paths["partial_md"].name == "rejuve-competitors-ch-2026-04-18.partial.md"
+    assert paths["final_md"].name == "rejuve-competitors-ch-2026-04-18.md"
+    assert paths["sources_json"].name == "rejuve-competitors-ch-2026-04-18.sources.json"
+    assert paths["partial_md"].parent == tmp_path
