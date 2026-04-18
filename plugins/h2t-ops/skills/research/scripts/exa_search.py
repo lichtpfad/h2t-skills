@@ -23,6 +23,14 @@ MODE_CONFIG: dict[str, dict[str, Any]] = {
     "deep":       {"type": "deep", "category": None,             "highlight_chars": 5000, "num_results": 10},
 }
 
+# Category-specific param incompatibilities (spec §5.7).
+# Each listed param causes HTTP 400 from Exa when combined with that category.
+CATEGORY_BLOCKS: dict[str, set[str]] = {
+    "company":          {"start_date", "end_date", "include_domains", "exclude_domains"},
+    "people":           {"start_date", "end_date", "include_text", "exclude_text", "exclude_domains"},
+    "financial report": {"exclude_text"},
+}
+
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
