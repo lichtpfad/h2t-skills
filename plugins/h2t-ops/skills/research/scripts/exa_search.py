@@ -38,6 +38,43 @@ def die(code: int, stderr_msg: str) -> None:
     sys.exit(code)
 
 
+def validate_args(args: argparse.Namespace) -> None:
+    """Fail-fast validation per spec §5.7 to prevent HTTP 400 from Exa."""
+    cfg = MODE_CONFIG[args.mode]
+    category = cfg["category"]
+
+    if category in CATEGORY_BLOCKS:
+        blocked = CATEGORY_BLOCKS[category]
+        attempted: dict[str, Any] = {
+            "start_date": args.start_date,
+            "end_date": args.end_date,
+            "include_domains": args.include_domains,
+            "exclude_domains": args.exclude_domains,
+            "include_text": args.include_text,
+            "exclude_text": args.exclude_text,
+        }
+        conflicts = [k for k in blocked if attempted.get(k)]
+        if conflicts:
+            first = conflicts[0].replace("_", "-")
+            die(
+                1,
+                f"EXA_ERROR:ARGS mode={args.mode} (category={category}) "
+                f"incompatible with --{first}. "
+                f"Blocked params for this category: {sorted(blocked)}. "
+                f"Switch to --mode news or generic to use these filters.",
+            )
+
+    # Universal: include_text / exclude_text are single-item only (spec §5.7).
+    for name in ("include_text", "exclude_text"):
+        val = getattr(args, name, None)
+        if isinstance(val, list) and len(val) > 1:
+            die(
+                1,
+                f"EXA_ERROR:ARGS --{name.replace('_', '-')} supports only "
+                f"single-item arrays; got {len(val)} items. Split into separate calls.",
+            )
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="exa_search",
