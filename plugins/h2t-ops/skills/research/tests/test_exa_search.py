@@ -137,3 +137,47 @@ def test_validate_valid_combinations_pass():
     exa_search.validate_args(_args(mode="competitor"))
     # single-item include_text — allowed
     exa_search.validate_args(_args(mode="generic", include_text=["solo"]))
+
+
+# --- load_system_prompt tests ---
+
+def test_load_system_prompt_parses_frontmatter_and_body(tmp_path, monkeypatch):
+    sp_dir = tmp_path / "systemprompts"
+    sp_dir.mkdir()
+    (sp_dir / "generic.md").write_text(
+        "---\n"
+        "mode: generic\n"
+        "exa_type: auto\n"
+        "---\n"
+        "You are a neutral research assistant. Cite sources.\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(exa_search, "SYSTEMPROMPTS_DIR", sp_dir)
+    body, schema = exa_search.load_system_prompt("generic")
+    assert "neutral research assistant" in body
+    assert schema == {}
+
+
+def test_load_system_prompt_parses_output_schema_json(tmp_path, monkeypatch):
+    sp_dir = tmp_path / "systemprompts"
+    sp_dir.mkdir()
+    (sp_dir / "competitor.md").write_text(
+        "---\n"
+        "mode: competitor\n"
+        'output_schema: {"type": "object", "properties": {"name": {"type": "string"}}}\n'
+        "---\n"
+        "Competitive intel researcher.\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(exa_search, "SYSTEMPROMPTS_DIR", sp_dir)
+    body, schema = exa_search.load_system_prompt("competitor")
+    assert "Competitive intel" in body
+    assert schema == {"type": "object", "properties": {"name": {"type": "string"}}}
+
+
+def test_load_system_prompt_missing_file_exits_1(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(exa_search, "SYSTEMPROMPTS_DIR", tmp_path)
+    with pytest.raises(SystemExit) as excinfo:
+        exa_search.load_system_prompt("nonexistent")
+    assert excinfo.value.code == 1
+    assert "EXA_ERROR:ARGS" in capsys.readouterr().err

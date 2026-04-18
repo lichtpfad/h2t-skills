@@ -8,8 +8,14 @@ from __future__ import annotations
 __version__ = "0.1.0"
 
 import argparse
+import json
 import sys
+from pathlib import Path
 from typing import Any
+
+# Module globals
+SCRIPT_DIR = Path(__file__).resolve().parent
+SYSTEMPROMPTS_DIR = SCRIPT_DIR.parent / "systemprompts"
 
 # Mode → Exa API params (spec §5.2).
 # highlight_chars = default maxCharacters for contents.highlights.
@@ -73,6 +79,36 @@ def validate_args(args: argparse.Namespace) -> None:
                 f"EXA_ERROR:ARGS --{name.replace('_', '-')} supports only "
                 f"single-item arrays; got {len(val)} items. Split into separate calls.",
             )
+
+
+def load_system_prompt(mode: str) -> tuple[str, dict[str, Any]]:
+    """Read systemprompts/{mode}.md. Returns (body_text, output_schema_or_empty).
+
+    YAML frontmatter recognised keys: mode, exa_type, exa_category, output_schema.
+    output_schema must be a single-line JSON object OR a JSON block quoted with `|`.
+    Body = systemPrompt for Exa API.
+    """
+    path = SYSTEMPROMPTS_DIR / f"{mode}.md"
+    if not path.is_file():
+        die(1, f"EXA_ERROR:ARGS systemprompt file missing: {path}")
+    raw = path.read_text(encoding="utf-8")
+    schema: dict[str, Any] = {}
+    body = raw
+    if raw.startswith("---\n"):
+        end = raw.find("\n---\n", 4)
+        if end > 0:
+            fm = raw[4:end]
+            body = raw[end + 5:].lstrip()
+            for line in fm.splitlines():
+                stripped = line.strip()
+                if stripped.startswith("output_schema:"):
+                    val = stripped.split(":", 1)[1].strip()
+                    if val.startswith("{"):
+                        try:
+                            schema = json.loads(val)
+                        except json.JSONDecodeError:
+                            pass
+    return body.strip(), schema
 
 
 def main(argv: list[str] | None = None) -> int:
