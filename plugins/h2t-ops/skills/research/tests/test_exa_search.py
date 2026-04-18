@@ -18,3 +18,33 @@ def test_version_flag():
     )
     assert result.returncode == 0, result.stderr
     assert "0.1.0" in result.stdout
+
+
+# --- MODE_CONFIG tests ---
+sys.path.insert(0, str(SCRIPT.parent))
+import exa_search  # noqa: E402
+
+
+def test_mode_config_has_all_seven_modes():
+    expected = {"fast", "generic", "news", "academic", "competitor", "people", "deep"}
+    assert set(exa_search.MODE_CONFIG.keys()) == expected
+
+
+def test_mode_config_competitor_uses_company_category():
+    cfg = exa_search.MODE_CONFIG["competitor"]
+    assert cfg["type"] == "auto"
+    assert cfg["category"] == "company"
+    assert cfg["num_results"] == 10
+
+
+def test_mode_config_deep_uses_deep_type_default_10():
+    cfg = exa_search.MODE_CONFIG["deep"]
+    assert cfg["type"] == "deep"
+    assert cfg["category"] is None
+    assert cfg["num_results"] == 10
+
+
+def test_mode_config_fast_uses_fast_type():
+    cfg = exa_search.MODE_CONFIG["fast"]
+    assert cfg["type"] == "fast"
+    assert cfg["num_results"] == 10
