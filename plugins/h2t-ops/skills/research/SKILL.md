@@ -99,6 +99,8 @@ Accept natural language OR structured input. Extract:
 | `num_results` | no | mode default | override |
 | `project` | no | `default` | for output filename prefix |
 
+**Preserve query language.** Exa neural search is multilingual. If user's request is in Russian (or any non-English language), pass `--query` **verbatim** in that language — do NOT translate to English. Translating destroys relevance ranking and loses localized sources (verified 2026-04-19: English-translated query missed 4 of top-10 results including direct marketing/agency playbooks).
+
 Ambiguous? Ask ONE clarifying question. Example: user says "research Rejuve.bio" → ask: "Company intel, press coverage, or team research? (competitor / news / people)"
 
 ### Step 1b: Check Cached Research
@@ -195,6 +197,7 @@ Write final report to `~/.h2t/research/{project}-{slug}-{date}.md` following REP
 - **Silent fallback to WebSearch** — script never does this; agent must not either.
 - **Parse HTML inline in agent** — script's job. Agent reads cleaned markdown only.
 - **Forget to delete `.partial.md`** — leaves stale files. Always `rm .partial.md` after writing final `.md`.
+- **Translate non-English query to English** — destroys Exa multilingual ranking. Russian query → keep Russian. Mixed language → keep as-is. Only translate on explicit user request.
 
 ## When to use this skill
 
