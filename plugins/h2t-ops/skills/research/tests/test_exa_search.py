@@ -571,3 +571,27 @@ def test_run_search_http_429_exits_2(monkeypatch, tmp_path, capsys):
             ])
     assert excinfo.value.code == 2
     assert "EXA_ERROR:API" in capsys.readouterr().err
+
+
+def test_run_crawl_writes_files(monkeypatch, tmp_path, capsys):
+    monkeypatch.setenv("EXA_API_KEY", "stub")
+    out_dir = tmp_path / "out"
+    response = {
+        "results": [{
+            "title": "About Rejuve",
+            "url": "https://rejuve.bio/about",
+            "text": "Rejuve.bio operates as a DAO ... (full content)",
+        }],
+        "costDollars": {"total": 0.002},
+    }
+    with patch("urllib.request.urlopen", return_value=_mock_urlopen_response(200, response)):
+        rc = exa_search.main([
+            "crawl", "--url", "https://rejuve.bio/about",
+            "--output-dir", str(out_dir),
+            "--project", "rejuve",
+        ])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "rejuve.bio/about" in out
+    files = list(out_dir.glob("rejuve-*"))
+    assert any(p.name.endswith(".sources.json") for p in files)
