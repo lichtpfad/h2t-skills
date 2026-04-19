@@ -429,3 +429,47 @@ def test_write_partial_md_includes_meta_and_telemetry_row(tmp_path):
     assert "exa_search.py search" in text
     assert "$0.012" in text
     assert "Integrity check:" in text
+
+
+def test_post_telemetry_awaiting_endpoint_when_env_unset(monkeypatch, tmp_path):
+    # MVP default: endpoint not configured yet → 'awaiting_endpoint', not 'disabled'.
+    monkeypatch.delenv("H2T_EVALS_URL", raising=False)
+    monkeypatch.delenv("H2T_EVALS_DISABLE", raising=False)
+    status = exa_search.post_telemetry(
+        event={"foo": "bar"}, buffer_path=tmp_path / "buf.jsonl"
+    )
+    assert status == "awaiting_endpoint"
+    assert not (tmp_path / "buf.jsonl").exists()
+
+
+def test_post_telemetry_disabled_when_explicit_opt_out(monkeypatch, tmp_path):
+    # User explicit opt-out takes precedence over URL presence.
+    monkeypatch.setenv("H2T_EVALS_DISABLE", "1")
+    monkeypatch.setenv("H2T_EVALS_URL", "https://evals.example.com")
+    status = exa_search.post_telemetry(
+        event={"foo": "bar"}, buffer_path=tmp_path / "buf.jsonl"
+    )
+    assert status == "disabled"
+    assert not (tmp_path / "buf.jsonl").exists()
+
+
+def test_post_telemetry_buffers_on_network_failure(monkeypatch, tmp_path):
+    monkeypatch.delenv("H2T_EVALS_DISABLE", raising=False)
+    monkeypatch.setenv("H2T_EVALS_URL", "https://evals.example.com")
+    buf = tmp_path / "buf.jsonl"
+    with patch("urllib.request.urlopen", side_effect=urllib.error.URLError("down")):
+        status = exa_search.post_telemetry(event={"a": 1}, buffer_path=buf)
+    assert status == "buffered"
+    assert buf.exists()
+    line = buf.read_text(encoding="utf-8").strip()
+    assert json.loads(line) == {"a": 1}
+
+
+def test_post_telemetry_sent_on_success(monkeypatch, tmp_path):
+    monkeypatch.delenv("H2T_EVALS_DISABLE", raising=False)
+    monkeypatch.setenv("H2T_EVALS_URL", "https://evals.example.com")
+    buf = tmp_path / "buf.jsonl"
+    with patch("urllib.request.urlopen", return_value=_mock_urlopen_response(202, {})):
+        status = exa_search.post_telemetry(event={"a": 1}, buffer_path=buf)
+    assert status == "sent"
+    assert not buf.exists()

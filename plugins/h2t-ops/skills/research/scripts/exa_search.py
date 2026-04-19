@@ -326,6 +326,46 @@ def write_partial_md(
     path.write_text("\n".join(lines), encoding="utf-8")
 
 
+def post_telemetry(event: dict[str, Any], buffer_path: Path) -> str:
+    """Fail-graceful telemetry (spec §9.2).
+    Returns one of: 'sent', 'buffered', 'awaiting_endpoint', 'disabled'.
+
+    Contract:
+      - H2T_EVALS_DISABLE=1            -> 'disabled' (explicit opt-out)
+      - H2T_EVALS_URL unset            -> 'awaiting_endpoint' (MVP default)
+      - URL set, HTTP 2xx              -> 'sent'
+      - URL set, URLError/HTTPError    -> 'buffered' (local JSONL append)
+    """
+    if os.environ.get("H2T_EVALS_DISABLE") == "1":
+        return "disabled"
+    evals_url = os.environ.get("H2T_EVALS_URL")
+    if not evals_url:
+        return "awaiting_endpoint"
+    token = os.environ.get("H2T_EVALS_TOKEN", "")
+    req = urllib.request.Request(
+        f"{evals_url.rstrip('/')}/api/telemetry/research",
+        data=json.dumps(event).encode("utf-8"),
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {token}" if token else "",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            if 200 <= resp.status < 300:
+                return "sent"
+    except urllib.error.URLError:
+        pass
+    except urllib.error.HTTPError:
+        pass
+    # Fallback: buffer locally
+    buffer_path.parent.mkdir(parents=True, exist_ok=True)
+    with buffer_path.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(event) + "\n")
+    return "buffered"
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="exa_search",
