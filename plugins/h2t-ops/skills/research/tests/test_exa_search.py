@@ -356,3 +356,76 @@ def test_output_paths_structure(tmp_path):
     assert paths["final_md"].name == "rejuve-competitors-ch-2026-04-18.md"
     assert paths["sources_json"].name == "rejuve-competitors-ch-2026-04-18.sources.json"
     assert paths["partial_md"].parent == tmp_path
+
+
+def _sample_exa_response():
+    return {
+        "results": [
+            {
+                "title": "Rejuve.bio — About",
+                "url": "https://rejuve.bio/about",
+                "highlights": ["Rejuve.bio operates as a DAO focused on longevity research."],
+                "publishedDate": "2026-02-14",
+            },
+            {
+                "title": "Swiss Longevity 2026",
+                "url": "https://swiss-longevity.ch/report",
+                "highlights": ["Three Swiss longevity startups raised $12M total in 2026 Q1."],
+                "publishedDate": "2026-01-20",
+            },
+        ],
+        "costDollars": {"total": 0.012},
+    }
+
+
+def test_render_stdout_summary_includes_query_and_cost(capsys, tmp_path):
+    # Use tmp_path to stay platform-agnostic — hardcoded "/tmp/..." breaks on
+    # Windows because Path("/tmp/x") becomes WindowsPath("\\tmp\\x") when rendered.
+    partial = tmp_path / "x.partial.md"
+    sources = tmp_path / "x.sources.json"
+    data = _sample_exa_response()
+    exa_search.render_stdout_summary(
+        data, query="Rejuve.bio competitors", mode="competitor",
+        latency_ms=2100, partial_path=partial, json_path=sources,
+    )
+    out = capsys.readouterr().out
+    assert "Rejuve.bio competitors" in out
+    assert "competitor" in out
+    assert "$0.012" in out
+    assert "2100ms" in out or "2.1s" in out
+    assert "rejuve.bio/about" in out
+    # Filename is platform-agnostic; full path rendering differs on Windows.
+    assert partial.name in out
+    assert sources.name in out
+
+
+def test_write_sources_json(tmp_path):
+    path = tmp_path / "x.sources.json"
+    meta = {"query": "q", "mode": "generic", "cost_usd": 0.01, "latency_ms": 1000}
+    exa_search.write_sources_json(path, meta, _sample_exa_response())
+    loaded = json.loads(path.read_text(encoding="utf-8"))
+    assert loaded["meta"]["query"] == "q"
+    assert loaded["response"]["costDollars"]["total"] == 0.012
+    assert len(loaded["response"]["results"]) == 2
+
+
+def test_write_partial_md_includes_meta_and_telemetry_row(tmp_path):
+    path = tmp_path / "x.partial.md"
+    exa_search.write_partial_md(
+        path,
+        meta=dict(
+            query="Rejuve competitors", mode="competitor", depth="standard",
+            project="rejuve", date="2026-04-18T12:00:00Z", status="completed",
+            cache_hit=False,
+        ),
+        telemetry_rows=[
+            {"num": 1, "tool": "exa_search.py search", "args": "type=auto,category=company",
+             "http": 200, "latency_ms": 2100, "cost_usd": 0.012, "results": 2},
+        ],
+    )
+    text = path.read_text(encoding="utf-8")
+    assert "# Research: Rejuve competitors" in text
+    assert "| **Mode** | competitor |" in text
+    assert "exa_search.py search" in text
+    assert "$0.012" in text
+    assert "Integrity check:" in text
