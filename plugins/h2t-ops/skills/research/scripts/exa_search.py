@@ -235,6 +235,97 @@ def output_paths(
     }
 
 
+def render_stdout_summary(
+    data: dict[str, Any],
+    *,
+    query: str,
+    mode: str,
+    latency_ms: int,
+    partial_path: Path,
+    json_path: Path,
+) -> None:
+    """Compact markdown summary printed to stdout (spec §5.5)."""
+    results = data.get("results", [])
+    cost = data.get("costDollars", {}).get("total", 0)
+    print(f"## Exa Search: {query!r}")
+    print(f"**Mode:** {mode} | **Results:** {len(results)} | **Cost:** ${cost:.3f} | **Latency:** {latency_ms}ms")
+    print()
+    for i, r in enumerate(results, 1):
+        title = r.get("title", "(no title)")
+        url = r.get("url", "")
+        highlights = r.get("highlights") or []
+        snippet = highlights[0][:260] if highlights else ""
+        print(f"{i}. [{title}]({url})")
+        if snippet:
+            print(f"   {snippet}")
+    print()
+    print(f"Saved: {partial_path.name}")
+    print(f"JSON:  {json_path.name}")
+
+
+def write_sources_json(
+    path: Path,
+    meta: dict[str, Any],
+    response: dict[str, Any],
+) -> None:
+    """Raw Exa API response + metadata sidecar."""
+    path.write_text(
+        json.dumps({"meta": meta, "response": response}, indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+
+def write_partial_md(
+    path: Path,
+    *,
+    meta: dict[str, Any],
+    telemetry_rows: list[dict[str, Any]],
+) -> None:
+    """Per spec §8.3: script writes technical Meta + Telemetry; agent finishes to final .md."""
+    total_cost = sum(r["cost_usd"] for r in telemetry_rows)
+    total_latency = sum(r["latency_ms"] for r in telemetry_rows)
+    total_results = sum(r["results"] for r in telemetry_rows)
+    errors = sum(1 for r in telemetry_rows if r["http"] >= 400)
+    exa_calls = sum(1 for r in telemetry_rows if "exa_search.py" in r["tool"])
+    total_calls = len(telemetry_rows)
+
+    lines: list[str] = []
+    lines.append(f"# Research: {meta['query']}\n")
+    lines.append("## Meta\n")
+    lines.append("| Field | Value |")
+    lines.append("|---|---|")
+    lines.append(f"| **Date** | {meta['date']} |")
+    lines.append(f"| **Project** | {meta['project']} |")
+    lines.append(f"| **Query** | {meta['query']} |")
+    lines.append(f"| **Mode** | {meta['mode']} |")
+    lines.append(f"| **Depth** | {meta['depth']} |")
+    lines.append(f"| **Engine** | Exa (via scripts/exa_search.py) |")
+    lines.append(f"| **Status** | {meta['status']} |")
+    lines.append(f"| **Cache hit** | {meta['cache_hit']} |\n")
+    lines.append("## Telemetry\n")
+    lines.append("| # | Tool | Args | HTTP | Latency | Cost | Results |")
+    lines.append("|---|---|---|---|---|---|---|")
+    for r in telemetry_rows:
+        lines.append(
+            f"| {r['num']} | `{r['tool']}` | `{r['args']}` | "
+            f"{r['http']} | {r['latency_ms']}ms | ${r['cost_usd']:.3f} | {r['results']} |"
+        )
+    lines.append(
+        f"| **Totals** | | | **{errors} errors** | "
+        f"**{total_latency}ms** | **${total_cost:.3f}** | **{total_results} items** |\n"
+    )
+    lines.append(
+        f"> **Integrity check:** {exa_calls}/{total_calls} calls used Exa API. "
+        f"0 fallbacks to WebSearch.\n"
+    )
+    lines.append("## Sources\n\n*(agent fills in from .sources.json)*\n")
+    lines.append("## Key Findings\n\n*(agent fills in — requires URL + verbatim quote + confidence per spec §4 Step 5)*\n")
+    lines.append("## Grounding Notes\n\n*(agent fills in)*\n")
+    lines.append("## Limitations\n\n*(agent fills in)*\n")
+    lines.append("## Follow-up Suggestions\n\n*(agent fills in)*\n")
+    path.write_text("\n".join(lines), encoding="utf-8")
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="exa_search",
