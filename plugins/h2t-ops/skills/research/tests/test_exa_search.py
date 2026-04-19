@@ -506,3 +506,68 @@ def test_cli_crawl_requires_url(capsys):
     with pytest.raises(SystemExit) as excinfo:
         exa_search.main(["crawl"])
     assert excinfo.value.code == 2
+
+
+def test_run_search_happy_path_exits_0(monkeypatch, tmp_path, capsys):
+    monkeypatch.setenv("EXA_API_KEY", "stub")
+    sp_dir = tmp_path / "systemprompts"
+    sp_dir.mkdir()
+    (sp_dir / "generic.md").write_text("---\n---\nYou are a researcher.\n", encoding="utf-8")
+    monkeypatch.setattr(exa_search, "SYSTEMPROMPTS_DIR", sp_dir)
+
+    out_dir = tmp_path / "out"
+    response = _sample_exa_response()
+    with patch("urllib.request.urlopen", return_value=_mock_urlopen_response(200, response)):
+        rc = exa_search.main([
+            "search", "--query", "Rejuve.bio Switzerland",
+            "--mode", "generic",
+            "--output-dir", str(out_dir),
+            "--project", "rejuve",
+        ])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "## Exa Search" in out
+    assert "rejuve.bio/about" in out
+    # Check files created
+    files = list(out_dir.glob("rejuve-rejuve-bio-switzerland-*"))
+    assert any(p.name.endswith(".partial.md") for p in files)
+    assert any(p.name.endswith(".sources.json") for p in files)
+
+
+def test_run_search_invalid_combo_exits_1(monkeypatch, tmp_path, capsys):
+    monkeypatch.setenv("EXA_API_KEY", "stub")
+    sp_dir = tmp_path / "systemprompts"
+    sp_dir.mkdir()
+    (sp_dir / "competitor.md").write_text("---\n---\nCompetitive researcher.\n", encoding="utf-8")
+    monkeypatch.setattr(exa_search, "SYSTEMPROMPTS_DIR", sp_dir)
+
+    with pytest.raises(SystemExit) as excinfo:
+        exa_search.main([
+            "search", "--query", "x",
+            "--mode", "competitor",
+            "--start-date", "2025-01-01",
+            "--output-dir", str(tmp_path),
+        ])
+    assert excinfo.value.code == 1
+    assert "EXA_ERROR:ARGS" in capsys.readouterr().err
+
+
+def test_run_search_http_429_exits_2(monkeypatch, tmp_path, capsys):
+    monkeypatch.setenv("EXA_API_KEY", "stub")
+    sp_dir = tmp_path / "systemprompts"
+    sp_dir.mkdir()
+    (sp_dir / "generic.md").write_text("---\n---\nsp\n", encoding="utf-8")
+    monkeypatch.setattr(exa_search, "SYSTEMPROMPTS_DIR", sp_dir)
+
+    err = urllib.error.HTTPError(
+        url="https://api.exa.ai/search", code=429, msg="Too Many",
+        hdrs=None, fp=io.BytesIO(b'{"error": "rate_limit_exceeded"}'),
+    )
+    with patch("urllib.request.urlopen", side_effect=err):
+        with pytest.raises(SystemExit) as excinfo:
+            exa_search.main([
+                "search", "--query", "q",
+                "--output-dir", str(tmp_path),
+            ])
+    assert excinfo.value.code == 2
+    assert "EXA_ERROR:API" in capsys.readouterr().err

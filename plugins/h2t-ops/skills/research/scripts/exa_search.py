@@ -15,6 +15,8 @@ import sys
 import time
 import urllib.error
 import urllib.request
+from datetime import datetime, timezone
+from hashlib import sha256
 from pathlib import Path
 from typing import Any
 
@@ -432,8 +434,82 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _run_search(args: argparse.Namespace) -> int:
-    """Wiring added in Task 14."""
-    raise NotImplementedError
+    validate_args(args)
+    api_key = os.environ.get("EXA_API_KEY")
+    if not api_key:
+        die(4, "EXA_ERROR:ENV EXA_API_KEY missing")
+    system_prompt, schema = load_system_prompt(args.mode)
+    body = build_body(args, system_prompt, schema)
+    status, data, latency_ms = call_exa("/search", body, api_key)
+    if status >= 400:
+        err_body = json.dumps(data)[:300]
+        die(2, f"EXA_ERROR:API http={status} body={err_body!r}")
+
+    # Persist + report
+    out_dir = Path(args.output_dir)
+    date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    timestamp = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    topic = args.query
+    paths = output_paths(out_dir, args.project, topic, date)
+
+    cost = float(data.get("costDollars", {}).get("total", 0))
+    n_results = len(data.get("results", []))
+    cat = MODE_CONFIG[args.mode]["category"]
+    tel_args = f"type={MODE_CONFIG[args.mode]['type']}"
+    if cat:
+        tel_args += f",category={cat}"
+    tel_args += f",numResults={body['numResults']}"
+
+    telemetry_rows = [{
+        "num": 1,
+        "tool": "exa_search.py search",
+        "args": tel_args,
+        "http": status,
+        "latency_ms": latency_ms,
+        "cost_usd": cost,
+        "results": n_results,
+    }]
+    meta = {
+        "query": args.query,
+        "mode": args.mode,
+        "depth": args.depth,
+        "project": args.project,
+        "date": timestamp,
+        "status": "completed" if n_results > 0 else "partial",
+        "cache_hit": False,
+    }
+    write_sources_json(paths["sources_json"], meta, data)
+    write_partial_md(paths["partial_md"], meta=meta, telemetry_rows=telemetry_rows)
+    render_stdout_summary(
+        data,
+        query=args.query,
+        mode=args.mode,
+        latency_ms=latency_ms,
+        partial_path=paths["partial_md"],
+        json_path=paths["sources_json"],
+    )
+
+    # Fire-and-forget telemetry
+    post_telemetry(
+        event={
+            "session_id": os.environ.get("H2T_SESSION_ID", ""),
+            "engine": "exa",
+            "endpoint": "/search",
+            "mode": args.mode,
+            "exa_type": body["type"],
+            "exa_category": body.get("category"),
+            "query_hash": sha256(args.query.encode("utf-8")).hexdigest()[:16],
+            "num_results_requested": body["numResults"],
+            "num_results_returned": n_results,
+            "cost_usd": cost,
+            "latency_ms": latency_ms,
+            "http_status": status,
+            "exit_code": 0,
+            "timestamp": timestamp,
+        },
+        buffer_path=out_dir / ".pending_telemetry.jsonl",
+    )
+    return 0
 
 
 def _run_crawl(args: argparse.Namespace) -> int:
