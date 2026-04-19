@@ -332,6 +332,22 @@ def test_preflight_network_failure_exits_4(monkeypatch, capsys):
     assert "EXA_ERROR:NETWORK" in capsys.readouterr().err
 
 
+def test_preflight_http_error_treated_as_reachable(monkeypatch, capsys):
+    """Regression: HTTPError (e.g. 403) means server is reachable, not a network failure."""
+    monkeypatch.setenv("EXA_API_KEY", "stub")
+    err = urllib.error.HTTPError(
+        url="https://api.exa.ai/",
+        code=403,
+        msg="Forbidden",
+        hdrs=None,
+        fp=io.BytesIO(b""),
+    )
+    with patch("urllib.request.urlopen", side_effect=err):
+        exa_search.preflight()
+    out = capsys.readouterr().out
+    assert "OK" in out
+
+
 # --- slugify & output_paths tests ---
 
 

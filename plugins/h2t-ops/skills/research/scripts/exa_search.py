@@ -204,12 +204,20 @@ def call_exa(
 
 
 def preflight() -> None:
-    """Step 0: env + connectivity probe (spec §4 Step 0)."""
+    """Step 0: env + connectivity probe (spec §4 Step 0).
+
+    Any HTTP response from api.exa.ai (even 4xx) means the server is reachable;
+    only URLError (DNS, TCP, timeout) counts as a network failure. Auth errors
+    are for the actual search call to surface, not preflight.
+    """
     if not os.environ.get("EXA_API_KEY"):
         die(4, "EXA_ERROR:ENV EXA_API_KEY missing; obtain at https://dashboard.exa.ai/api-keys")
     req = urllib.request.Request(f"{EXA_API}/", method="GET")
     try:
         urllib.request.urlopen(req, timeout=5)
+    except urllib.error.HTTPError:
+        # Server responded with 4xx/5xx — connectivity is fine, auth-only issue.
+        pass
     except urllib.error.URLError as e:
         die(4, f"EXA_ERROR:NETWORK cannot reach {EXA_API}: {e.reason}")
     print("OK")
