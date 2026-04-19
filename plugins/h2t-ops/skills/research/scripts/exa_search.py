@@ -429,6 +429,13 @@ def _split_csv(raw: str | None) -> list[str] | None:
 
 
 def main(argv: list[str] | None = None) -> int:
+    # Windows stdout defaults to cp1252; Exa highlights may contain emoji/CJK.
+    # Reconfigure to UTF-8 with lossy fallback so rendering never crashes.
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, OSError):
+            pass
     parser = _build_parser()
     args = parser.parse_args(argv)
     if args.cmd == "preflight":
