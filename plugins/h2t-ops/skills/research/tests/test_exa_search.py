@@ -473,3 +473,36 @@ def test_post_telemetry_sent_on_success(monkeypatch, tmp_path):
         status = exa_search.post_telemetry(event={"a": 1}, buffer_path=buf)
     assert status == "sent"
     assert not buf.exists()
+
+
+# --- main() argparse tests ---
+
+
+def test_cli_preflight_invokes_preflight(monkeypatch, capsys):
+    monkeypatch.setenv("EXA_API_KEY", "stub")
+    with patch("urllib.request.urlopen", return_value=_mock_urlopen_response(200, {})):
+        rc = exa_search.main(["preflight"])
+    assert rc == 0
+    assert "OK" in capsys.readouterr().out
+
+
+def test_cli_search_requires_query(capsys):
+    with pytest.raises(SystemExit) as excinfo:
+        exa_search.main(["search", "--mode", "generic"])
+    # argparse itself exits with code 2 on missing required arg
+    assert excinfo.value.code == 2
+    err = capsys.readouterr().err
+    assert "--query" in err or "required" in err
+
+
+def test_cli_search_unknown_mode_argparse_rejects(capsys):
+    with pytest.raises(SystemExit) as excinfo:
+        exa_search.main(["search", "--query", "x", "--mode", "notamode"])
+    assert excinfo.value.code == 2
+    assert "invalid choice" in capsys.readouterr().err.lower()
+
+
+def test_cli_crawl_requires_url(capsys):
+    with pytest.raises(SystemExit) as excinfo:
+        exa_search.main(["crawl"])
+    assert excinfo.value.code == 2
