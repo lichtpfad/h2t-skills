@@ -182,6 +182,7 @@ def call_exa(
             "x-api-key": api_key,
             "Content-Type": "application/json",
             "Accept": "application/json",
+            "User-Agent": f"exa_search.py/{__version__} (h2t-ops:research)",
         },
         method="POST",
     )
@@ -212,7 +213,11 @@ def preflight() -> None:
     """
     if not os.environ.get("EXA_API_KEY"):
         die(4, "EXA_ERROR:ENV EXA_API_KEY missing; obtain at https://dashboard.exa.ai/api-keys")
-    req = urllib.request.Request(f"{EXA_API}/", method="GET")
+    req = urllib.request.Request(
+        f"{EXA_API}/",
+        method="GET",
+        headers={"User-Agent": f"exa_search.py/{__version__} (h2t-ops:research)"},
+    )
     try:
         urllib.request.urlopen(req, timeout=5)
     except urllib.error.HTTPError:
@@ -358,6 +363,7 @@ def post_telemetry(event: dict[str, Any], buffer_path: Path) -> str:
         headers={
             "Content-Type": "application/json",
             "Authorization": f"Bearer {token}" if token else "",
+            "User-Agent": f"exa_search.py/{__version__} (h2t-ops:research)",
         },
         method="POST",
     )

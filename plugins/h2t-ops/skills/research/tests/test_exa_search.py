@@ -611,3 +611,29 @@ def test_run_crawl_writes_files(monkeypatch, tmp_path, capsys):
     assert "rejuve.bio/about" in out
     files = list(out_dir.glob("rejuve-*"))
     assert any(p.name.endswith(".sources.json") for p in files)
+
+
+def test_call_exa_sets_user_agent_header():
+    """Regression: Cloudflare 403s the default Python-urllib UA; we must set our own."""
+    captured = {}
+
+    class _Capture(MagicMock):
+        def __init__(self, *a, **kw):
+            super().__init__()
+
+        def __call__(self, req, timeout=None):
+            captured["headers"] = dict(req.header_items())
+            resp = MagicMock()
+            resp.status = 200
+            resp.read.return_value = b'{"results": []}'
+            resp.__enter__ = lambda self: resp
+            resp.__exit__ = lambda self, *a: None
+            return resp
+
+    cap = _Capture()
+    with patch("urllib.request.urlopen", side_effect=cap):
+        exa_search.call_exa("/search", {"query": "q"}, api_key="testkey")
+    # urllib capitalises header names as Title-Case
+    ua = captured["headers"].get("User-agent") or captured["headers"].get("User-Agent")
+    assert ua is not None, f"User-Agent missing; captured={captured['headers']}"
+    assert "exa_search.py" in ua
