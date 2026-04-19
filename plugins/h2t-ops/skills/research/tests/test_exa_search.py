@@ -589,6 +589,32 @@ def test_run_search_http_429_exits_2(monkeypatch, tmp_path, capsys):
     assert "EXA_ERROR:API" in capsys.readouterr().err
 
 
+def test_main_reconfigures_stdout_to_utf8(monkeypatch):
+    """Regression: cp1252 default on Windows crashes on emoji in Exa highlights."""
+    calls = []
+
+    class _Stream:
+        encoding = "cp1252"
+
+        def reconfigure(self, **kwargs):
+            calls.append(kwargs)
+
+        def write(self, *a, **kw):
+            pass
+
+        def flush(self):
+            pass
+
+    monkeypatch.setattr(sys, "stdout", _Stream())
+    monkeypatch.setattr(sys, "stderr", _Stream())
+    with pytest.raises(SystemExit):
+        exa_search.main(["--version"])
+    assert any(
+        c.get("encoding") == "utf-8" and c.get("errors") == "replace"
+        for c in calls
+    ), f"expected stdout.reconfigure(encoding='utf-8', errors='replace'); got {calls}"
+
+
 def test_run_crawl_writes_files(monkeypatch, tmp_path, capsys):
     monkeypatch.setenv("EXA_API_KEY", "stub")
     out_dir = tmp_path / "out"
