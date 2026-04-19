@@ -513,8 +513,56 @@ def _run_search(args: argparse.Namespace) -> int:
 
 
 def _run_crawl(args: argparse.Namespace) -> int:
-    """Wiring added in Task 15."""
-    raise NotImplementedError
+    api_key = os.environ.get("EXA_API_KEY")
+    if not api_key:
+        die(4, "EXA_ERROR:ENV EXA_API_KEY missing")
+    body = {"urls": [args.url], "text": {"maxCharacters": 15000}}
+    status, data, latency_ms = call_exa("/contents", body, api_key)
+    if status >= 400:
+        err_body = json.dumps(data)[:300]
+        die(2, f"EXA_ERROR:API http={status} body={err_body!r}")
+
+    out_dir = Path(args.output_dir)
+    date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    timestamp = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    topic = f"crawl-{args.url}"
+    paths = output_paths(out_dir, args.project, topic, date)
+
+    cost = float(data.get("costDollars", {}).get("total", 0))
+    n_results = len(data.get("results", []))
+    meta = {
+        "query": f"crawl({args.url})",
+        "mode": "crawl",
+        "depth": "n/a",
+        "project": args.project,
+        "date": timestamp,
+        "status": "completed" if n_results > 0 else "partial",
+        "cache_hit": False,
+    }
+    write_sources_json(paths["sources_json"], meta, data)
+    render_stdout_summary(
+        data,
+        query=f"crawl({args.url})",
+        mode="crawl",
+        latency_ms=latency_ms,
+        partial_path=paths["partial_md"],
+        json_path=paths["sources_json"],
+    )
+    post_telemetry(
+        event={
+            "session_id": os.environ.get("H2T_SESSION_ID", ""),
+            "engine": "exa",
+            "endpoint": "/contents",
+            "mode": "crawl",
+            "cost_usd": cost,
+            "latency_ms": latency_ms,
+            "http_status": status,
+            "exit_code": 0,
+            "timestamp": timestamp,
+        },
+        buffer_path=out_dir / ".pending_telemetry.jsonl",
+    )
+    return 0
 
 
 if __name__ == "__main__":
