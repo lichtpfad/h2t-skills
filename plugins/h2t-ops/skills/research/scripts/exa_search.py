@@ -366,20 +366,79 @@ def post_telemetry(event: dict[str, Any], buffer_path: Path) -> str:
     return "buffered"
 
 
-def main(argv: list[str] | None = None) -> int:
+MODES = list(MODE_CONFIG.keys())
+
+
+def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="exa_search",
-        description="Exa API wrapper (preflight / search / crawl subcommands).",
+        description="Exa API wrapper (preflight / search / crawl).",
     )
-    parser.add_argument(
-        "--version",
-        action="version",
-        version=f"exa_search {__version__}",
-    )
+    parser.add_argument("--version", action="version", version=f"exa_search {__version__}")
     sub = parser.add_subparsers(dest="cmd", required=False)
-    # subcommands added in later tasks
-    parser.parse_args(argv)
+
+    sub.add_parser("preflight", help="Check env + connectivity.")
+
+    s = sub.add_parser("search", help="Run Exa /search.")
+    s.add_argument("--query", required=True)
+    s.add_argument("--mode", choices=MODES, default="generic")
+    s.add_argument("--depth", choices=["shallow", "standard", "deep"], default="standard")
+    s.add_argument("--num-results", type=int, default=None, dest="num_results")
+    s.add_argument("--additional-queries", default=None,
+                   help="Comma-separated list (2-3 recommended for mode=deep).",
+                   dest="additional_queries_raw")
+    s.add_argument("--start-date", default=None, dest="start_date")
+    s.add_argument("--end-date", default=None, dest="end_date")
+    s.add_argument("--include-domains", default=None, dest="include_domains_raw")
+    s.add_argument("--exclude-domains", default=None, dest="exclude_domains_raw")
+    s.add_argument("--include-text", default=None, dest="include_text_raw")
+    s.add_argument("--exclude-text", default=None, dest="exclude_text_raw")
+    s.add_argument("--country", default=None)
+    s.add_argument("--full-text", action="store_true", dest="full_text")
+    s.add_argument("--output-dir", default=str(Path.home() / ".h2t" / "research"),
+                   dest="output_dir")
+    s.add_argument("--project", default="default")
+
+    c = sub.add_parser("crawl", help="Run Exa /contents on one URL.")
+    c.add_argument("--url", required=True)
+    c.add_argument("--output-dir", default=str(Path.home() / ".h2t" / "research"),
+                   dest="output_dir")
+    c.add_argument("--project", default="default")
+
+    return parser
+
+
+def _split_csv(raw: str | None) -> list[str] | None:
+    return [x.strip() for x in raw.split(",") if x.strip()] if raw else None
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = _build_parser()
+    args = parser.parse_args(argv)
+    if args.cmd == "preflight":
+        preflight()
+        return 0
+    if args.cmd == "search":
+        args.additional_queries = _split_csv(args.additional_queries_raw)
+        args.include_domains = _split_csv(args.include_domains_raw)
+        args.exclude_domains = _split_csv(args.exclude_domains_raw)
+        args.include_text = _split_csv(args.include_text_raw)
+        args.exclude_text = _split_csv(args.exclude_text_raw)
+        return _run_search(args)
+    if args.cmd == "crawl":
+        return _run_crawl(args)
+    parser.print_help()
     return 0
+
+
+def _run_search(args: argparse.Namespace) -> int:
+    """Wiring added in Task 14."""
+    raise NotImplementedError
+
+
+def _run_crawl(args: argparse.Namespace) -> int:
+    """Wiring added in Task 15."""
+    raise NotImplementedError
 
 
 if __name__ == "__main__":
