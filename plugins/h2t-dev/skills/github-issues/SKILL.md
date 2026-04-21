@@ -41,15 +41,22 @@ Product value. Why this matters for users or agents.
 
 ## Labels (required)
 
-Every issue MUST have exactly 3 label types:
+**Canonical source:** `C:/dev/docs/standards/labels.json` (namespaced-v1, lowercase).
 
-| Type | Options |
-|------|---------|
-| **domain:** | `domain:canvas`, `domain:knowledge`, `domain:context`, `domain:copilot`, `domain:subnetwork`, `domain:workspace`, `domain:validation` |
-| **phase:** | `phase:5` through `phase:10` |
-| **priority:** | `priority:P0` (Critical), `priority:P1` (High), `priority:P2` (Medium), `priority:P3` (Low/Future) |
+Every issue MUST carry labels from at least these namespaces:
 
-Additional labels: `enhancement`, `bug`, `infra`, `icebox`, `superseded`
+| Namespace | Required | Examples |
+|-----------|----------|----------|
+| `type:` | yes | `type:bug`, `type:feature`, `type:enhancement`, `type:refactor`, `type:docs`, `type:chore` |
+| `priority:` | yes | `priority:p0`, `priority:p1`, `priority:p2`, `priority:p3` |
+| `domain:` | yes | `domain:skills`, `domain:infra`, `domain:docs`, `domain:content`, `domain:research` |
+| `phase:` | optional | `phase:design`, `phase:implementation`, `phase:review` |
+| `status:` | optional | `status:triage`, `status:blocked`, `status:wontfix`, `status:superseded` |
+
+**Rules:**
+- Always lowercase (`priority:p1`, never `priority:P1`)
+- Check canonical `labels.json` for the full list before inventing new ones
+- Sync a new label to all repos via `/docs-sync-labels` after adding it to canonical
 
 ## Milestone Assignment
 
@@ -66,7 +73,7 @@ Issues without a matching milestone: omit `--milestone`.
 ```bash
 gh issue create \
   --title "Short imperative title (<70 chars)" \
-  --label "enhancement,phase:5,priority:P1,domain:context" \
+  --label "type:enhancement,priority:p1,domain:skills,phase:design" \
   --milestone "Phase 5: Knowledge Model + Context Engine" \
   --body "$(cat <<'EOF'
 ## Context
