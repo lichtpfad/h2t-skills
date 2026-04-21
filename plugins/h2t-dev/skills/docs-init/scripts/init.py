@@ -83,11 +83,11 @@ def _load_project(name: str) -> dict:
         return {}
 
 
-def init_repo(name: str, *, dry_run: bool = True, commit: bool = False) -> list[str]:
+def init_repo(name: str, *, dry_run: bool = True, commit: bool = False) -> list[str] | None:
     rp = repo_path(name)
     if not rp.exists():
         print(f"  ERROR: {rp} not found")
-        return []
+        return None
 
     project_data = _load_project(name)
     changes = []
@@ -181,6 +181,8 @@ def main() -> None:
     print_header(f"docs-init [{mode}]: {args.repo}")
     changes = init_repo(args.repo, dry_run=not args.apply, commit=args.commit)
 
+    if changes is None:
+        sys.exit(1)
     if not changes:
         print("\n  Nothing to do -- all files already exist")
     elif not args.apply:

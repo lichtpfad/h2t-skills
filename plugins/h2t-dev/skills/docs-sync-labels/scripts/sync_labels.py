@@ -13,9 +13,9 @@ for _lib in [_PLUGIN_ROOT / "lib", _PLUGIN_ROOT.parent.parent / "lib"]:
         sys.path.insert(0, str(_lib))
         break
 
-from docs.common import GH, REPO_MANIFEST, print_header
+from docs.common import DEV_ROOT, GH, REPO_MANIFEST, print_header
 
-LABELS_FILE = Path(__file__).resolve().parent.parent / "data" / "labels.json"
+LABELS_FILE = DEV_ROOT / "docs" / "standards" / "labels.json"
 ORG = "lichtpfad"
 
 
@@ -56,6 +56,7 @@ def main() -> None:
         print(f"ERROR: labels.json not found at {LABELS_FILE}", file=sys.stderr)
         sys.exit(1)
     labels = json.loads(LABELS_FILE.read_text(encoding="utf-8"))
+    labels = {k: v for k, v in labels.items() if not k.startswith("_")}
     if args.apply:
         from pathlib import Path as _Path
         if not _Path(GH).exists():
