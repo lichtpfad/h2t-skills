@@ -80,12 +80,11 @@ def get_drive_service():
     return build('drive', 'v3', credentials=creds)
 
 
-def list_files(folder_name=None, max_results=20):
-    """List files in a Drive folder (default: root)."""
+def list_files(folder_name=None, max_results=None):
+    """List files in a Drive folder (default: root). Paginates through all results."""
     service = get_drive_service()
 
     if folder_name:
-        # Find folder ID by name
         safe_name = folder_name.replace("'", "\\'")
         resp = service.files().list(
             q=f"name='{safe_name}' and mimeType='application/vnd.google-apps.folder' and trashed=false",
@@ -101,14 +100,24 @@ def list_files(folder_name=None, max_results=20):
     else:
         query = "'root' in parents and trashed=false"
 
-    resp = service.files().list(
-        q=query,
-        fields='files(id, name, mimeType, modifiedTime, size)',
-        pageSize=max_results,
-        orderBy='modifiedTime desc',
-    ).execute()
+    files = []
+    page_token = None
+    while True:
+        resp = service.files().list(
+            q=query,
+            fields='nextPageToken, files(id, name, mimeType, modifiedTime, size)',
+            pageSize=1000,
+            orderBy='modifiedTime desc',
+            pageToken=page_token,
+        ).execute()
+        files.extend(resp.get('files', []))
+        page_token = resp.get('nextPageToken')
+        if not page_token or (max_results and len(files) >= max_results):
+            break
 
-    files = resp.get('files', [])
+    if max_results:
+        files = files[:max_results]
+
     if not files:
         print("  (пусто)")
         return
@@ -123,8 +132,8 @@ def list_files(folder_name=None, max_results=20):
         print(f"  {f['name']:<48} {mime:<15} {modified}  [{f['id'][:12]}...]")
 
 
-def search_files(query_str, mime_filter=None, max_results=20):
-    """Full-text search across Drive."""
+def search_files(query_str, mime_filter=None, max_results=None):
+    """Full-text search across Drive. Paginates through all results."""
     service = get_drive_service()
 
     safe_query = query_str.replace("'", "\\'")
@@ -134,18 +143,28 @@ def search_files(query_str, mime_filter=None, max_results=20):
     elif mime_filter == 'folder':
         q += " and mimeType='application/vnd.google-apps.folder'"
 
-    try:
-        resp = service.files().list(
-            q=q,
-            fields='files(id, name, mimeType, modifiedTime, parents)',
-            pageSize=max_results,
-            orderBy='modifiedTime desc',
-        ).execute()
-    except Exception as e:
-        print(f"Drive API error: {e}", file=sys.stderr)
-        sys.exit(1)
+    files = []
+    page_token = None
+    while True:
+        try:
+            resp = service.files().list(
+                q=q,
+                fields='nextPageToken, files(id, name, mimeType, modifiedTime, parents)',
+                pageSize=1000,
+                orderBy='modifiedTime desc',
+                pageToken=page_token,
+            ).execute()
+        except Exception as e:
+            print(f"Drive API error: {e}", file=sys.stderr)
+            sys.exit(1)
+        files.extend(resp.get('files', []))
+        page_token = resp.get('nextPageToken')
+        if not page_token or (max_results and len(files) >= max_results):
+            break
 
-    files = resp.get('files', [])
+    if max_results:
+        files = files[:max_results]
+
     print(f"\nРезультаты для '{query_str}': {len(files)} файлов\n")
     for f in files:
         modified = f.get('modifiedTime', '')[:10]
@@ -606,13 +625,13 @@ def main():
     # list
     p_list = subparsers.add_parser('list', help='List files in folder')
     p_list.add_argument('folder', nargs='?', default=None, help='Folder name (default: root)')
-    p_list.add_argument('--max', type=int, default=20, help='Maximum number of results (default: 20)')
+    p_list.add_argument('--max', type=int, default=None, help='Maximum number of results (default: all)')
 
     # search
     p_search = subparsers.add_parser('search', help='Search files')
     p_search.add_argument('query', help='Search query')
     p_search.add_argument('--type', choices=['docx', 'folder'], dest='mime_filter')
-    p_search.add_argument('--max', type=int, default=20, help='Maximum number of results (default: 20)')
+    p_search.add_argument('--max', type=int, default=None, help='Maximum number of results (default: all)')
 
     # download
     p_dl = subparsers.add_parser('download', help='Download file by ID')
