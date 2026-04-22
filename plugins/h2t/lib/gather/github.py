@@ -15,7 +15,7 @@ def gather_github(
     raw = run_parallel({
         "milestones": [
             "gh", "api", f"repos/{owner_repo}/milestones",
-            "--jq", '.[] | select(.state=="open") | {title, open: .open_issues, closed: .closed_issues}',
+            "--jq", '.[] | select(.state=="open") | {title, open: .open_issues, closed: .closed_issues, due_on}',
         ],
         "issues": [
             "gh", "issue", "list", "--repo", owner_repo, "--state", "open",
@@ -56,8 +56,8 @@ def gather_github(
     }
 
 
-def _parse_json(raw: str) -> list:
-    if not raw.strip():
+def _parse_json(raw: str | None) -> list:
+    if not raw or not raw.strip():
         return []
     try:
         return _json.loads(raw)
@@ -65,8 +65,8 @@ def _parse_json(raw: str) -> list:
         return []
 
 
-def _parse_jsonl_or_json(raw: str) -> list:
-    stripped = raw.strip()
+def _parse_jsonl_or_json(raw: str | None) -> list:
+    stripped = (raw or "").strip()
     if not stripped:
         return []
     try:

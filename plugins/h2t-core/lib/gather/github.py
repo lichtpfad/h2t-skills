@@ -56,8 +56,8 @@ def gather_github(
     }
 
 
-def _parse_json(raw: str) -> list:
-    if not raw.strip():
+def _parse_json(raw: str | None) -> list:
+    if not raw or not raw.strip():
         return []
     try:
         return _json.loads(raw)
@@ -65,8 +65,8 @@ def _parse_json(raw: str) -> list:
         return []
 
 
-def _parse_jsonl_or_json(raw: str) -> list:
-    stripped = raw.strip()
+def _parse_jsonl_or_json(raw: str | None) -> list:
+    stripped = (raw or "").strip()
     if not stripped:
         return []
     try:
