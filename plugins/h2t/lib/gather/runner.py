@@ -11,7 +11,7 @@ def _run_one(cmd: list[str], timeout: int = 15) -> str:
     """Run a single command, return stdout or empty string on failure."""
     try:
         result = subprocess.run(
-            cmd, capture_output=True, text=True, timeout=timeout,
+            cmd, capture_output=True, text=True, encoding="utf-8", timeout=timeout,
         )
         return result.stdout if result.returncode == 0 else ""
     except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
