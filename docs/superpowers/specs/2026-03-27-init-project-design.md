@@ -1,3 +1,10 @@
+---
+title: "h2t:init-project — Design Spec"
+status: "draft"
+owner: "Stanislav Glazov"
+date: "2026-03-27"
+milestone: ""
+---
 # h2t:init-project — Design Spec
 
 **Goal:** Zero-wizard skill that registers any directory as a project in the h2t ecosystem. Auto-detects everything possible, confirms with user, applies deterministically.

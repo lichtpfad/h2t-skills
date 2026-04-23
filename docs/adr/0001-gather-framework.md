@@ -1,3 +1,8 @@
+---
+title: "ADR-001: Context Assembly Framework (lib/gather)"
+status: "draft"
+date: "unknown"
+---
 # ADR-001: Context Assembly Framework (lib/gather)
 
 **Status:** Accepted

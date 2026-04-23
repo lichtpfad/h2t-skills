@@ -1,3 +1,10 @@
+---
+title: "H2T Skill Architecture Vision"
+status: "draft"
+owner: "Stanislav Glazov"
+date: "2026-03-30"
+milestone: ""
+---
 # H2T Skill Architecture Vision
 
 ## Принцип

@@ -1,3 +1,10 @@
+---
+title: "Session Gatherer Agent — Design Spec"
+status: "draft"
+owner: "Stanislav Glazov"
+date: "2026-03-25"
+milestone: ""
+---
 # Session Gatherer Agent — Design Spec
 
 ## Problem

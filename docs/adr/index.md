@@ -1,3 +1,8 @@
+---
+title: "ADR Index"
+status: "draft"
+date: "unknown"
+---
 # ADR Index
 
 | # | Title | Status | Date |

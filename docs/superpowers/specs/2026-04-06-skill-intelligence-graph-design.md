@@ -1,3 +1,10 @@
+---
+title: "Skill Intelligence Graph — Design"
+status: "draft"
+owner: "Stanislav Glazov"
+date: "2026-04-06"
+milestone: ""
+---
 # Skill Intelligence Graph — Design
 
 *Created: 2026-04-06 · Updated: 2026-04-07 · Status: approved design · Author: Stanislav Glazov + Claude*

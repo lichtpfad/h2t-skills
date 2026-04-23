@@ -1,10 +1,10 @@
 ---
 title: "Docs & Repo Management Skills v2"
 status: "draft"
-owner: "lichtpfad"
-date: "2026-04-14"
+owner: "Stanislav Glazov"
+date: "unknown"
+milestone: ""
 ---
-
 # Docs & Repo Management Skills v2
 
 ## Context
