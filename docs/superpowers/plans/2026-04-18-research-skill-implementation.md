@@ -1,3 +1,9 @@
+---
+title: "h2t-ops:research Skill Implementation Plan"
+status: "draft"
+date: "2026-04-18"
+milestone: ""
+---
 # h2t-ops:research Skill Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.

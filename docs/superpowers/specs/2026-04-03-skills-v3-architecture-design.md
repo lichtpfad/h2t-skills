@@ -1,3 +1,10 @@
+---
+title: "Skills v3 Architecture Design"
+status: "draft"
+owner: "Stanislav Glazov"
+date: "2026-04-03"
+milestone: ""
+---
 # Skills v3 Architecture Design
 
 *Created: 2026-04-03 · Updated: 2026-04-06 · Status: living document · Author: Stanislav Glazov + Claude*

@@ -1,3 +1,9 @@
+---
+title: "Skill Intelligence Graph — Foundation (Steps 6.0 + 6.1 + SkillEval patch)"
+status: "draft"
+date: "2026-04-07"
+milestone: ""
+---
 # Skill Intelligence Graph — Foundation (Steps 6.0 + 6.1 + SkillEval patch)
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
