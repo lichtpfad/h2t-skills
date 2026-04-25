@@ -1,7 +1,7 @@
 {
   "name": "h2t-core",
   "description": "H2T Core — session lifecycle: start, handoff, init-project, overview",
-  "version": "3.0.18",
+  "version": "3.0.19",
   "author": {
     "name": "lichtpfad"
   }
