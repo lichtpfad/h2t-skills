@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# SessionStart: inject compact h2t skill index into every session context.
+set -euo pipefail
+
+escape_for_json() {
+    local s="$1"
+    s="${s//\\/\\\\}"
+    s="${s//\"/\\\"}"
+    s="${s//$'\n'/\\n}"
+    s="${s//$'\r'/\\r}"
+    s="${s//$'\t'/\\t}"
+    printf '%s' "$s"
+}
+
+INDEX="H2T SKILLS — invoke with the Skill tool when relevant:
+
+Session:   h2t-core:session-start | h2t-core:handoff | h2t-core:init-project | h2t-core:scaffold-project
+Research:  h2t-ops:research        (Exa semantic search — use for any web/news/paper lookup)
+Notion:    h2t-ops:notion          (token: ~/.config/notion/token)
+Google:    h2t-ops:gmail | h2t-ops:calendar | h2t-ops:drive | h2t-ops:daily-brief
+Telegram:  h2t-ops:telegram
+Docs:      h2t-dev:docs-lint | h2t-dev:docs-init | h2t-dev:docs-sync-labels
+Diagrams:  h2t-arch:drawio | h2t-arch:diagram-node
+
+Python:    ~/.h2t/venv/Scripts/python.exe  (Windows) | ~/.h2t/venv/bin/python  (Mac/Linux)
+Config:    ~/.h2t/config/  (domains.yaml, repo-mapping.yaml, secrets/)"
+
+CONTEXT="<h2t-context>\n$(escape_for_json "$INDEX")\n</h2t-context>"
+
+if [ -n "${CURSOR_PLUGIN_ROOT:-}" ]; then
+  printf '{"additional_context": "%s"}\n' "$CONTEXT"
+elif [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] && [ -z "${COPILOT_CLI:-}" ]; then
+  printf '{"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": "%s"}}\n' "$CONTEXT"
+else
+  printf '{"additionalContext": "%s"}\n' "$CONTEXT"
+fi
