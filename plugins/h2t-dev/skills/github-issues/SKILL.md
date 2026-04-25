@@ -41,7 +41,7 @@ Product value. Why this matters for users or agents.
 
 ## Labels (required)
 
-**Canonical source:** `C:/dev/docs/standards/labels.json` (namespaced-v1, lowercase).
+**Canonical source:** bundled in `h2t-dev:docs-sync-labels` — see `references/labels-schema.md` in that skill for the full table. Load on demand: `${CLAUDE_PLUGIN_ROOT}/../docs-sync-labels/references/labels-schema.md`
 
 Every issue MUST carry labels from at least these namespaces:
 
@@ -89,6 +89,12 @@ gh issue create \
 EOF
 )"
 ```
+
+## References
+
+Load on demand when you need full naming/commit conventions:
+
+- `${CLAUDE_PLUGIN_ROOT}/skills/github-issues/references/git-naming-conventions.md` — issue title format, commit types, branch naming, milestone format
 
 ## Common Mistakes
 
