@@ -24,7 +24,7 @@ Diagrams:  h2t-arch:drawio | h2t-arch:diagram-node
 
 Python:    ~/.h2t/venv/Scripts/python.exe  (Windows) | ~/.h2t/venv/bin/python  (Mac/Linux)
 Config:    ~/.h2t/config/  (domains.yaml, repo-mapping.yaml, secrets/)
-Standards: ~/.h2t/config/standards/  (naming, git, labels, docs-structure) — installed via /h2t-core:setup"
+Standards: bundled in h2t-dev skill references — load via Read when needed"
 
 CONTEXT="<h2t-context>\n$(escape_for_json "$INDEX")\n</h2t-context>"
 

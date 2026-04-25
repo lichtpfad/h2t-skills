@@ -20,7 +20,7 @@
     {
       "name": "h2t-core",
       "description": "Session lifecycle: start, handoff, init-project, scaffold-project, overview, setup.",
-      "version": "3.0.19",
+      "version": "3.0.20",
       "author": {
         "name": "lichtpfad"
       },
@@ -42,7 +42,7 @@
     {
       "name": "h2t-dev",
       "description": "H2T Dev — documentation tools: docs-lint, docs-init, docs-cleanup, docs-sync-labels.",
-      "version": "1.0.2",
+      "version": "1.0.3",
       "author": {
         "name": "lichtpfad"
       },

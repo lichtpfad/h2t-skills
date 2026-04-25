@@ -54,3 +54,11 @@ $H2T_PYTHON "$LINT" --no-pymarkdown h2t-graphs
 ## Output
 
 Show the full lint output to the user. If there are failures, summarize what needs fixing and suggest the `--fix` flag for missing dirs.
+
+## References
+
+Load on demand when you need the full standard details:
+
+- `${CLAUDE_PLUGIN_ROOT}/skills/docs-lint/references/documentation-structure.md` — required dirs, archive layout, per-repo exceptions
+- `${CLAUDE_PLUGIN_ROOT}/skills/docs-lint/references/naming-conventions.md` — file/dir naming rules, mN spec/plan format
+- `${CLAUDE_PLUGIN_ROOT}/skills/docs-lint/references/code-organization.md` — src/, tests/, scripts/ layout rules

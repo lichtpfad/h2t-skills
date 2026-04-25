@@ -38,6 +38,10 @@ $H2T_PYTHON "$SYNC" h2t-graphs --apply
 
 ## Notes
 
-- Uses bundled `data/labels.json` (canonical source, copy of C:/dev/docs/standards/labels.json)
+- Uses bundled `data/labels.json` — portable, works on any machine
 - Only additive sync — never deletes custom labels
 - Requires gh CLI authenticated (`gh auth status`)
+
+## References
+
+- `${CLAUDE_PLUGIN_ROOT}/skills/docs-sync-labels/references/labels-schema.md` — human-readable label taxonomy (type/priority/domain/phase/status namespaces)
