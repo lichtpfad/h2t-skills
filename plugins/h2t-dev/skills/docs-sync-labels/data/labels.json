@@ -1,0 +1,36 @@
+{
+  "_schema": "namespaced-v1",
+  "_note": "Canonical source of truth. Lowercase everywhere. Sync via h2t-dev:docs-sync-labels.",
+  "type": [
+    {"name": "type:bug", "color": "d73a4a", "description": "Something is broken"},
+    {"name": "type:feature", "color": "0075ca", "description": "New functionality"},
+    {"name": "type:enhancement", "color": "a2eeef", "description": "Improvement to existing"},
+    {"name": "type:refactor", "color": "d4c5f9", "description": "Code without behavior change"},
+    {"name": "type:docs", "color": "0075ca", "description": "Documentation"},
+    {"name": "type:chore", "color": "ededed", "description": "CI, deps, config"}
+  ],
+  "priority": [
+    {"name": "priority:p0", "color": "b60205", "description": "Critical / blocking"},
+    {"name": "priority:p1", "color": "d93f0b", "description": "Important"},
+    {"name": "priority:p2", "color": "fbca04", "description": "Next sprint"},
+    {"name": "priority:p3", "color": "0e8a16", "description": "Backlog"}
+  ],
+  "domain": [
+    {"name": "domain:skills", "color": "10b981", "description": "Skill development and fixes"},
+    {"name": "domain:infra", "color": "3b82f6", "description": "Infrastructure, frameworks, shared libs"},
+    {"name": "domain:docs", "color": "1d4ed8", "description": "Documentation standards and tooling"},
+    {"name": "domain:content", "color": "f97316", "description": "Content production, courses, assets"},
+    {"name": "domain:research", "color": "8b5cf6", "description": "Research, experiments, prototypes"}
+  ],
+  "phase": [
+    {"name": "phase:design", "color": "a855f7", "description": "Architecture and design phase"},
+    {"name": "phase:implementation", "color": "f97316", "description": "Implementation phase"},
+    {"name": "phase:review", "color": "fbca04", "description": "Review / verification phase"}
+  ],
+  "status": [
+    {"name": "status:triage", "color": "ffffff", "description": "New issue, not reviewed"},
+    {"name": "status:blocked", "color": "b60205", "description": "Waiting for dependency"},
+    {"name": "status:wontfix", "color": "cfd3d7", "description": "Declined, will not implement"},
+    {"name": "status:superseded", "color": "cfd3d7", "description": "Replaced by newer issue/ADR"}
+  ]
+}

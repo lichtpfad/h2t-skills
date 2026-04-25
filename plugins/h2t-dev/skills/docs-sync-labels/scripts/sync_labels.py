@@ -15,7 +15,11 @@ for _lib in [_PLUGIN_ROOT / "lib", _PLUGIN_ROOT.parent.parent / "lib"]:
 
 from docs.common import DEV_ROOT, GH, REPO_MANIFEST, print_header
 
-LABELS_FILE = DEV_ROOT / "docs" / "standards" / "labels.json"
+# Bundled copy takes priority — works on any machine (MacBook, AUTOMATA, CI).
+# Canonical source: C:/dev/docs/standards/labels.json (Windows/AUTOMATA only).
+_BUNDLED = _PLUGIN_ROOT / "skills" / "docs-sync-labels" / "data" / "labels.json"
+_CANONICAL = DEV_ROOT / "docs" / "standards" / "labels.json"
+LABELS_FILE = _BUNDLED if _BUNDLED.exists() else _CANONICAL
 ORG = "lichtpfad"
 
 
