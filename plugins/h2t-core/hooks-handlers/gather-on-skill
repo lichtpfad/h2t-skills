@@ -39,8 +39,14 @@ fi
 ARGS="$skill --cwd $cwd"
 [[ "$skill" == *session-start* ]] && ARGS="$ARGS --format-briefing"
 
-# Run gather CLI (must run from repo root so lib.cli.main is importable)
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+# Run gather CLI (must run from dir containing lib/ so lib.cli.main is importable)
+# Cache layout: lib/ is at plugin root (../); dev layout: lib/ is at repo root (../../..)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "$SCRIPT_DIR/../lib/cli/main.py" ]; then
+  REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+else
+  REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+fi
 RESULT=$(cd "$REPO_ROOT" && "$H2T_PYTHON" -m lib.cli.main gather $ARGS 2>/dev/null) || true
 
 if [ -z "$RESULT" ]; then
