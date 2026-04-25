@@ -12,6 +12,12 @@ metadata:
 ## Переменные
 
 ```bash
+# Notion API token — ищи в таком порядке:
+#   1. ~/.config/notion/token  (основное место на всех машинах)
+#   2. ~/.dor/secrets.env      (NOTION_API_TOKEN=...)
+NOTION_TOKEN="${NOTION_API_TOKEN:-$(cat "$HOME/.config/notion/token" 2>/dev/null || echo "")}"
+[ -z "$NOTION_TOKEN" ] && echo "ERROR: Notion token not found. Expected: ~/.config/notion/token" && exit 1
+
 H2T_PYTHON="${H2T_PYTHON:-}"
 [ -z "$H2T_PYTHON" ] && [ -f "$HOME/.h2t/venv/Scripts/python.exe" ] && H2T_PYTHON="$HOME/.h2t/venv/Scripts/python.exe"
 [ -z "$H2T_PYTHON" ] && [ -f "$HOME/.h2t/venv/bin/python" ] && H2T_PYTHON="$HOME/.h2t/venv/bin/python"

@@ -20,7 +20,7 @@
     {
       "name": "h2t-core",
       "description": "Session lifecycle: start, handoff, init-project, scaffold-project, overview, setup.",
-      "version": "3.0.17",
+      "version": "3.0.18",
       "author": {
         "name": "lichtpfad"
       },
@@ -31,7 +31,7 @@
     {
       "name": "h2t-ops",
       "description": "H2T Ops — personal OS adapters: gmail, calendar, drive, notion, telegram, daily-brief, research (Exa semantic search). L1/L2/L3 architecture.",
-      "version": "1.0.2",
+      "version": "1.0.3",
       "author": {
         "name": "lichtpfad"
       },
