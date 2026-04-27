@@ -63,8 +63,8 @@
     },
     {
       "name": "h2t-creative",
-      "description": "H2T Creative — content generation tools: presentations, HUD design, landing pages",
-      "version": "1.0.0",
+      "description": "H2T Creative v2 — modular landing pages and decks: Swiss grid base, swappable profiles, Python assembler, Playwright QA.",
+      "version": "1.0.1",
       "author": {
         "name": "lichtpfad"
       },
