@@ -1,7 +1,7 @@
 # h2t-creative v3 · Phase 1 — Profiles Design Spec
 
 **Date:** 2026-04-28
-**Status:** Approved
+**Status:** Under review
 **Scope:** Extraction and migration of 5 existing design systems into h2t-creative profile format. New styles are out of scope — they go through `h2t-creative:style-create` workflow.
 
 ---
@@ -39,23 +39,31 @@ profiles/{name}/
 
 ### Assembler changes
 
-New `--palette` flag:
+#### 1. Palette-aware `_build_profile_css` (replaces current implementation)
 
-```bash
-python assembler.py --profile h2t-pfad --palette blue --type landing --recipe recipe.yaml --out ./dist
-```
+Both `assemble_landing()` and `assemble_deck()` use this function — deck currently bypasses it and reads `tokens.css` directly. **This is fixed in Phase 1**: deck switches to `_build_profile_css` too, making both pipelines palette-aware simultaneously.
 
-`_build_profile_css` updated:
+Fallback rule: if `palettes/` directory does not exist in the profile, assembler falls back to reading colors from `tokens.css` directly. This makes the schema change **non-breaking** for existing profiles that haven't migrated yet.
 
 ```python
 def _build_profile_css(profile_dir, sections, palette="default"):
-    palette_path = profile_dir / "palettes" / f"{palette}.css"
-    if not palette_path.exists():
-        raise ValueError(f"Palette '{palette}' not found in profile {profile_dir.name}")
-    parts = [
-        (profile_dir / "tokens.css").read_text(encoding="utf-8"),   # fonts/spacing
-        palette_path.read_text(encoding="utf-8"),                    # colors
-    ]
+    palettes_dir = profile_dir / "palettes"
+    if palettes_dir.exists():
+        palette_path = palettes_dir / f"{palette}.css"
+        if not palette_path.exists():
+            raise ValueError(
+                f"Palette '{palette}' not found in profile '{profile_dir.name}'. "
+                f"Available: {[p.stem for p in palettes_dir.glob('*.css')]}"
+            )
+        color_css = palette_path.read_text(encoding="utf-8")
+    else:
+        # Legacy profile without palettes/ — read full tokens.css (colors included)
+        color_css = ""  # tokens.css already read below, contains colors
+
+    parts = [(profile_dir / "tokens.css").read_text(encoding="utf-8")]
+    if color_css:
+        parts.append(color_css)
+
     seen = set()
     for section in sections:
         name = section["component"]
@@ -67,15 +75,82 @@ def _build_profile_css(profile_dir, sections, palette="default"):
     return "\n".join(parts)
 ```
 
-### h2t-default migration
+#### 2. `--palette` CLI flag
 
-Existing `h2t-default/tokens.css` is split:
-- Colors extracted → `palettes/default.css`
-- Typography + spacing stays in `tokens.css`
+```bash
+python assembler.py --profile h2t-graphs --palette blue --type landing --recipe recipe.yaml --out ./dist
+```
+
+Default: `"default"`. Unknown palette → hard error with list of available palettes.
+
+#### 3. `palette` field in recipe.yaml (user-facing contract)
+
+Palette is declared in the recipe — not as a separate CLI argument passed by the user:
+
+```yaml
+type: landing
+profile: h2t-graphs
+palette: blue        # optional — omit to use profile's default palette
+title: "..."
+sections: [...]
+```
+
+Assembler reads `recipe.get("palette", "default")` and passes it to `_build_profile_css`.
+
+#### 4. Skill wizard update (`/landing`, `/deck`)
+
+Both skills add a palette selection step after profile is chosen:
+
+```
+Step 1: Choose profile  →  ls profiles/
+Step 1b: Choose palette →  ls profiles/<name>/palettes/  (skip if only "default")
+Step 2: Build recipe    →  includes palette: <name> field if non-default chosen
+```
+
+If only `palettes/default.css` exists, skip the palette question silently.
 
 ---
 
-## 2. Five Profiles
+### h2t-default migration
+
+`h2t-default` is migrated as part of Phase 1 (not a prerequisite — done as first profile task):
+
+- `tokens.css` → strip color vars, keep fonts/spacing/radii/z-index
+- Colors → `palettes/default.css`
+- Assembler fallback ensures `/landing` and `/deck` keep working during migration
+
+---
+
+## 2. Tool migration: style-create and style-validate
+
+Both tools are updated in Phase 1 to match the new schema. Without this, they become broken immediately after the first profile is created.
+
+### style-validate changes
+
+Current check (broken after refactor):
+> "tokens.css must define `--color-bg`, `--color-fg`, `--color-accent`"
+
+New check:
+```
+✓ tokens.css exists and defines font/spacing vars (NOT color vars)
+✓ palettes/default.css exists and defines --color-bg, --color-fg, --color-accent
+✓ No --color-* vars in tokens.css (warn if found)
+✓ All *.css files in palettes/ define the same set of --color-* vars as default.css
+```
+
+### style-create changes
+
+Current behaviour: generates colors into `tokens.css`.
+
+New behaviour:
+1. Ask color palette questions as before
+2. Write colors → `palettes/default.css`
+3. Write fonts/spacing/radii → `tokens.css`
+4. Offer to add more palettes immediately: "Want to add alternative color palettes now?"
+
+---
+
+## 3. Five Profiles
 
 ### h2t-pfad
 
@@ -91,7 +166,7 @@ Existing `h2t-default/tokens.css` is split:
 **Default palette (red):**
 - `--bg`: dark near-black
 - `--accent`: red (`#d63030` PFAD variant)
-- Additional palettes: TBD during implementation
+- Additional palettes: TBD during extraction
 
 **fx/ support:** Canvas2D micro-animations (oscilloscope, dot-field particle network, radar sweep, scanner). Implemented as `fx/background.js` following h2t-creative fx/ contract.
 
@@ -183,9 +258,7 @@ Existing `h2t-default/tokens.css` is split:
 
 ---
 
-## 3. DESIGN.md Schema (updated)
-
-All profiles follow this schema, now with `palettes` section:
+## 4. DESIGN.md Schema (updated)
 
 ```markdown
 # {Profile Name}
@@ -211,23 +284,25 @@ Listed per palette. Default:
 
 ---
 
-## 4. Migration Order
+## 5. Implementation Order
 
-Ordered by source completeness (most → least documented):
-
-1. **h2t-graphs** — full HTML source on disk, straightforward extraction
-2. **h2t-pfad** — full SKILL.md with tokens + components + fx recipes
-3. **h2t-terminal** — STYLE 1 from h2t:deck SKILL.md
-4. **h2t-editorial** — STYLE 2 from h2t:deck SKILL.md
-5. **h2t-mono** — extract from live site + specdesigner aesthetic
-
-Also: **h2t-default refactor** — split existing tokens.css into tokens.css + palettes/default.css (prerequisite for all profiles, done first).
+1. **Assembler update** — palette-aware `_build_profile_css`, `--palette` flag, `palette` field in recipe, deck pipeline fix
+2. **style-validate update** — new checks for palettes/default.css
+3. **style-create update** — generate palettes/ instead of colors in tokens.css
+4. **h2t-default migration** — split tokens.css → tokens.css + palettes/default.css; test landing + deck still work
+5. **h2t-graphs profile** — extract from `h2t-landings/graphs/index.html`
+6. **h2t-pfad profile** — extract from `h2t:design` SKILL.md
+7. **h2t-terminal profile** — extract from `h2t:deck` STYLE 1
+8. **h2t-editorial profile** — extract from `h2t:deck` STYLE 2
+9. **h2t-mono profile** — extract from specdesigner aesthetic
+10. **Skill wizard update** — `/landing` and `/deck` palette selection step
+11. **Tests** — update assembler tests for palette paths + fallback behaviour
 
 ---
 
-## 5. Out of Scope
+## 6. Out of Scope
 
-- New profiles not in the list above — use `h2t-creative:style-create` workflow
-- Three.js WebGL backgrounds — fx/ uses Canvas2D for now; Three.js is future
-- Deck-specific component variants — Phase 1 covers landing components only; deck gets profiles in Phase 2
+- New profiles beyond the 5 listed — use `h2t-creative:style-create` workflow
+- Three.js WebGL backgrounds — fx/ uses Canvas2D; Three.js is future
+- Deck-specific component variants — Phase 1 landing components only; deck components in Phase 2
 - Block library (10–20 blocks) — Phase 2 spec
