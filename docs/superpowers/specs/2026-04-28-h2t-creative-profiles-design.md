@@ -1,7 +1,7 @@
 # h2t-creative v3 · Phase 1 — Profiles Design Spec
 
 **Date:** 2026-04-28
-**Status:** Under review
+**Status:** Approved
 **Scope:** Extraction and migration of 5 existing design systems into h2t-creative profile format. New styles are out of scope — they go through `h2t-creative:style-create` workflow.
 
 ---
