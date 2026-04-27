@@ -75,17 +75,9 @@ def _build_profile_css(profile_dir, sections, palette="default"):
     return "\n".join(parts)
 ```
 
-#### 2. `--palette` CLI flag
+#### 2. Palette source of truth
 
-```bash
-python assembler.py --profile h2t-graphs --palette blue --type landing --recipe recipe.yaml --out ./dist
-```
-
-Default: `"default"`. Unknown palette → hard error with list of available palettes.
-
-#### 3. `palette` field in recipe.yaml (user-facing contract)
-
-Palette is declared in the recipe — not as a separate CLI argument passed by the user:
+**Canonical source: `recipe.yaml`** — the recipe is the single source of truth for palette selection in skill-driven use.
 
 ```yaml
 type: landing
@@ -95,7 +87,19 @@ title: "..."
 sections: [...]
 ```
 
-Assembler reads `recipe.get("palette", "default")` and passes it to `_build_profile_css`.
+**`--palette` CLI flag** — override for direct CLI use only. Takes precedence over `recipe.palette` if both are present. No error on conflict — CLI flag wins silently.
+
+```bash
+# skill-driven: palette from recipe
+python assembler.py --profile h2t-graphs --type landing --recipe recipe.yaml --out ./dist
+
+# CLI override: ignores recipe.palette if present
+python assembler.py --profile h2t-graphs --palette blue --type landing --recipe recipe.yaml --out ./dist
+```
+
+Assembler precedence: `--palette flag > recipe.get("palette") > "default"`.
+
+Unknown palette → hard error with list of available palettes.
 
 #### 4. Skill wizard update (`/landing`, `/deck`)
 
@@ -103,11 +107,19 @@ Both skills add a palette selection step after profile is chosen:
 
 ```
 Step 1: Choose profile  →  ls profiles/
-Step 1b: Choose palette →  ls profiles/<name>/palettes/  (skip if only "default")
-Step 2: Build recipe    →  includes palette: <name> field if non-default chosen
+Step 1b: Choose palette →  three states (see below)
+Step 2: Build recipe    →  includes palette: <name> field only if non-default chosen
 ```
 
-If only `palettes/default.css` exists, skip the palette question silently.
+**Three states for Step 1b:**
+
+| State | Condition | Action |
+|-------|-----------|--------|
+| No palettes | `palettes/` dir does not exist | Skip question. Do NOT write `palette:` field to recipe. |
+| Default only | Only `palettes/default.css` exists | Skip question silently. Do NOT write `palette:` field. |
+| Multiple palettes | Two or more `*.css` files in `palettes/` | Ask user to choose. Write `palette: <name>` only if non-default chosen. |
+
+If profile has no `palettes/` dir, assembler falls back to reading colors from `tokens.css` directly (legacy path).
 
 ---
 
