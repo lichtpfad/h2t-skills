@@ -133,7 +133,7 @@ def _build_profile_css(profile_dir: Path, sections: list) -> str:
 def _build_base_css(base_dir: Path) -> str:
     return "\n".join(
         (base_dir / f).read_text(encoding="utf-8")
-        for f in ["reset.css", "grid.css", "typography.css", "animations.css"]
+        for f in ["reset.css", "grid.css", "typography.css", "animations.css", "deck.css"]
         if (base_dir / f).exists()
     )
 
