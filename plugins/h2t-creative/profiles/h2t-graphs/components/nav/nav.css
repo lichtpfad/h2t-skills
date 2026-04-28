@@ -1,6 +1,6 @@
 .nav {
   position: sticky; top: 0; z-index: var(--z-nav);
-  background: rgba(6,6,9,0.92);
+  background: rgba(6,6,9,0.92); /* intentional: semi-transparent overlay for all h2t-graphs palettes (bg is always #060609) */
   backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--color-border);
   padding: var(--space-md) var(--space-xl);
