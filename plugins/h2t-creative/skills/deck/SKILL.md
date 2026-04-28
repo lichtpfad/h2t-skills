@@ -28,6 +28,19 @@ ls "$PLUGIN_ROOT/profiles/"
 
 Read `$PLUGIN_ROOT/profiles/<name>/DESIGN.md` as context.
 
+## Step 1b: Choose palette
+
+Check for palettes in selected profile:
+```bash
+ls "$PLUGIN_ROOT/profiles/<name>/palettes/" 2>/dev/null
+```
+
+Three states:
+- **No `palettes/` directory** (command fails): Skip. Do NOT add `palette:` to recipe.
+- **Only `default.css` exists**: Skip silently. Do NOT add `palette:` to recipe.
+- **Two or more `*.css` files**: List names and ask user: "Which palette? (Enter to use default)"
+  Write `palette: <name>` to recipe only if user chooses a non-default palette.
+
 ## Step 2: Build recipe.yaml
 
 Deck schema uses `slides:` key (NOT `sections:`):
