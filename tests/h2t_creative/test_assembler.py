@@ -269,3 +269,88 @@ def test_dry_run_prints_would_create(tmp_path, capsys):
     assert "index.html" in captured.out
     assert "base.css" in captured.out
     assert "profile.css" in captured.out
+
+
+# --- palette support ---
+
+def _make_palette_profile(tmp_path: Path):
+    """Profile with palettes/ directory — new schema."""
+    base_dir = tmp_path / "base"
+    base_dir.mkdir()
+    for f in ["reset.css", "grid.css", "typography.css", "animations.css"]:
+        (base_dir / f).write_text(f"/* {f} */")
+
+    profile_dir = tmp_path / "profiles" / "test-palette"
+    (profile_dir / "components" / "hero").mkdir(parents=True)
+    (profile_dir / "palettes").mkdir()
+    (profile_dir / "tokens.css").write_text(":root { --font-body: sans-serif; }")
+    (profile_dir / "palettes" / "default.css").write_text(
+        ":root { --color-bg: #fff; --color-fg: #000; --color-accent: #00f; }"
+    )
+    (profile_dir / "palettes" / "blue.css").write_text(
+        ":root { --color-bg: #001; --color-fg: #aaf; --color-accent: #44f; }"
+    )
+    (profile_dir / "components" / "hero" / "manifest.yaml").write_text(
+        "component: hero\nfields:\n  headline:\n    type: text\n    required: true\n"
+        "  subline:\n    type: text\n    required: false\n    default: ''\n"
+    )
+    (profile_dir / "components" / "hero" / "hero.html").write_text(
+        '<section class="hero"><h1>{{ headline }}</h1></section>'
+    )
+    (profile_dir / "components" / "hero" / "hero.css").write_text(
+        ".hero { color: var(--color-fg); }"
+    )
+    return profile_dir, base_dir
+
+
+def test_palette_default_loads_palette_file(tmp_path):
+    profile_dir, _ = _make_palette_profile(tmp_path)
+    css = assembler._build_profile_css(profile_dir, [], palette="default")
+    assert "--font-body" in css
+    assert "--color-bg: #fff" in css
+    assert "--color-bg: #001" not in css
+
+
+def test_palette_blue_loads_blue_file(tmp_path):
+    profile_dir, _ = _make_palette_profile(tmp_path)
+    css = assembler._build_profile_css(profile_dir, [], palette="blue")
+    assert "--color-bg: #001" in css
+    assert "--color-bg: #fff" not in css
+
+
+def test_palette_unknown_raises_with_available_list(tmp_path):
+    profile_dir, _ = _make_palette_profile(tmp_path)
+    with pytest.raises(ValueError, match="Palette 'purple' not found"):
+        assembler._build_profile_css(profile_dir, [], palette="purple")
+
+
+def test_legacy_profile_no_palettes_dir_falls_back(tmp_path):
+    profile_dir, _ = _make_minimal_profile(tmp_path)
+    # _make_minimal_profile has no palettes/ dir — legacy fallback
+    css = assembler._build_profile_css(profile_dir, [])
+    assert "--color-bg" in css
+
+
+def test_assemble_landing_with_blue_palette(tmp_path):
+    profile_dir, base_dir = _make_palette_profile(tmp_path)
+    recipe = {
+        "type": "landing", "title": "T", "palette": "blue",
+        "sections": [{"component": "hero", "content": {"headline": "Hi"}}],
+    }
+    out_dir = tmp_path / "dist"
+    assembler.assemble_landing(recipe, profile_dir, out_dir, base_dir=base_dir, palette="blue")
+    assert "--color-bg: #001" in (out_dir / "profile.css").read_text()
+
+
+def test_assemble_deck_uses_build_profile_css_not_raw_tokens(tmp_path):
+    """Deck must use _build_profile_css — not read tokens.css directly."""
+    profile_dir, base_dir = _make_palette_profile(tmp_path)
+    recipe = {
+        "type": "deck", "title": "D",
+        "slides": [{"title": "S", "layout": "title-only", "content": {"headline": "Hi"}}],
+    }
+    out_dir = tmp_path / "deck_dist"
+    assembler.assemble_deck(recipe, profile_dir, out_dir, base_dir=base_dir, palette="blue")
+    css = (out_dir / "profile.css").read_text()
+    assert "--color-bg: #001" in css
+    assert "--font-body" in css
