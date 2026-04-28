@@ -117,8 +117,23 @@ def _build_section_html(section: dict, profile_dir: Path) -> str:
     return interpolate(template, content)
 
 
-def _build_profile_css(profile_dir: Path, sections: list) -> str:
+def _build_profile_css(profile_dir: Path, sections: list, palette: str = "default") -> str:
+    palettes_dir = profile_dir / "palettes"
+    if palettes_dir.exists():
+        palette_path = palettes_dir / f"{palette}.css"
+        if not palette_path.exists():
+            raise ValueError(
+                f"Palette '{palette}' not found in profile '{profile_dir.name}'. "
+                f"Available: {[p.stem for p in palettes_dir.glob('*.css')]}"
+            )
+        color_css = palette_path.read_text(encoding="utf-8")
+    else:
+        color_css = ""
+
     parts = [(profile_dir / "tokens.css").read_text(encoding="utf-8")]
+    if color_css:
+        parts.append(color_css)
+
     seen: set = set()
     for section in sections:
         name = section["component"]
@@ -143,6 +158,7 @@ def assemble_landing(
     profile_dir: Path,
     out_dir: Path,
     base_dir: Path | None = None,
+    palette: str = "default",
 ) -> None:
     if base_dir is None:
         base_dir = BASE_DIR
@@ -160,7 +176,9 @@ def assemble_landing(
     )
     (out_dir / "index.html").write_text(index_html, encoding="utf-8")
     (out_dir / "base.css").write_text(_build_base_css(base_dir), encoding="utf-8")
-    (out_dir / "profile.css").write_text(_build_profile_css(profile_dir, sections), encoding="utf-8")
+    (out_dir / "profile.css").write_text(
+        _build_profile_css(profile_dir, sections, palette=palette), encoding="utf-8"
+    )
     if has_fx:
         shutil.copy(profile_dir / "fx" / "background.js", out_dir / "fx.js")
 
@@ -247,6 +265,7 @@ def assemble_deck(
     profile_dir: Path,
     out_dir: Path,
     base_dir: Path | None = None,
+    palette: str = "default",
 ) -> None:
     if base_dir is None:
         base_dir = BASE_DIR
@@ -275,7 +294,7 @@ def assemble_deck(
     (out_dir / "index.html").write_text(index_html, encoding="utf-8")
     (out_dir / "base.css").write_text(_build_base_css(base_dir), encoding="utf-8")
     (out_dir / "profile.css").write_text(
-        (profile_dir / "tokens.css").read_text(encoding="utf-8"), encoding="utf-8"
+        _build_profile_css(profile_dir, [], palette=palette), encoding="utf-8"
     )
     if has_fx:
         shutil.copy(profile_dir / "fx" / "background.js", out_dir / "fx.js")
@@ -289,6 +308,7 @@ def main_assemble(
     profile_dir: Path,
     out_dir: Path,
     base_dir: Path | None = None,
+    palette: str = "default",
 ) -> None:
     if output_type == "landing" and "slides" in recipe:
         print("ERROR: type=landing recipe must not contain 'slides:' key", file=sys.stderr)
@@ -297,9 +317,9 @@ def main_assemble(
         print("ERROR: type=deck recipe must not contain 'sections:' key", file=sys.stderr)
         sys.exit(1)
     if output_type == "landing":
-        assemble_landing(recipe, profile_dir, out_dir, base_dir=base_dir)
+        assemble_landing(recipe, profile_dir, out_dir, base_dir=base_dir, palette=palette)
     else:
-        assemble_deck(recipe, profile_dir, out_dir, base_dir=base_dir)
+        assemble_deck(recipe, profile_dir, out_dir, base_dir=base_dir, palette=palette)
 
 
 def dry_run(recipe: dict, output_type: str, profile_dir: Path, out_dir: Path) -> None:
@@ -322,6 +342,7 @@ def main() -> None:
     parser.add_argument("--recipe", required=True, help="Path to recipe.yaml")
     parser.add_argument("--out", required=True, help="Output directory")
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--palette", default=None, help="Palette override (flag > recipe.palette > 'default')")
     args = parser.parse_args()
 
     recipe = load_recipe(Path(args.recipe))
@@ -332,11 +353,12 @@ def main() -> None:
 
     out_dir = Path(args.out)
 
+    palette = args.palette if args.palette else recipe.get("palette", "default")
     if args.dry_run:
         dry_run(recipe, args.type, profile_dir, out_dir)
         return
 
-    main_assemble(args.type, recipe, profile_dir, out_dir)
+    main_assemble(args.type, recipe, profile_dir, out_dir, palette=palette)
     print(f"Built {args.type} -> {out_dir}")
 
 
