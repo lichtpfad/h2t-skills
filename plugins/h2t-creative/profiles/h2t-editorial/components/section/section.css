@@ -1,0 +1,5 @@
+.content-section { padding: var(--space-xl); background: var(--color-bg-light); border-top: 1px solid var(--color-border); }
+.section-inner { max-width: 1100px; margin: 0 auto; }
+.section__title { font-family: var(--font-display); font-size: clamp(1.5rem, 3vw, 2.5rem); font-weight: 600; color: var(--color-text); margin-bottom: var(--space-lg); border-top: 1px solid var(--color-border); padding-top: var(--space-lg); }
+.section__body { font-family: var(--font-body); font-size: 1rem; color: var(--color-text); line-height: 1.75; }
+.section__body blockquote { border-left: 3px solid var(--color-accent); margin: var(--space-lg) 0; padding: var(--space-sm) var(--space-md); font-family: var(--font-display); font-style: italic; font-size: 1.1rem; }

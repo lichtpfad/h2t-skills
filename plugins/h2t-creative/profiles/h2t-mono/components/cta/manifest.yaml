@@ -1,0 +1,16 @@
+component: cta
+fields:
+  text:
+    type: text
+    required: true
+  href:
+    type: url
+    required: true
+  text_ghost:
+    type: text
+    required: false
+    default: "Learn more"
+  href_ghost:
+    type: url
+    required: false
+    default: "#"

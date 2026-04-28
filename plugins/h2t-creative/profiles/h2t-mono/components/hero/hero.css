@@ -1,0 +1,5 @@
+.hero { padding: var(--space-xl); background: var(--color-bg); }
+.hero-inner { max-width: 1200px; margin: 0 auto; }
+.hero__tag { font-size: 0.6rem; color: var(--color-accent); text-transform: uppercase; letter-spacing: 0.3em; margin-bottom: var(--space-lg); }
+.hero__headline { font-size: clamp(2.5rem, 6vw, 5.5rem); font-weight: 400; color: var(--color-text); line-height: 1.0; letter-spacing: -0.02em; margin-bottom: var(--space-lg); }
+.hero__subline { font-size: 0.85rem; color: var(--color-text-dim); line-height: 1.7; max-width: 500px; }
