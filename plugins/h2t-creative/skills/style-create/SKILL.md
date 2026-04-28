@@ -32,8 +32,10 @@ Ask one question at a time, wait for each answer:
 Create `$PROFILES_DIR/<name>/` with this structure:
 
 ```
-DESIGN.md          ← generated from wizard answers
-tokens.css         ← CSS custom properties from palette
+DESIGN.md
+tokens.css         ← fonts, spacing, radii, z-index (NO colors)
+palettes/
+  default.css      ← all --color-* variables
 components/
   nav/nav.html + nav.css + manifest.yaml
   hero/hero.html + hero.css + manifest.yaml
@@ -41,39 +43,46 @@ components/
   cta/cta.html + cta.css + manifest.yaml
   footer/footer.html + footer.css + manifest.yaml
 fx/                ← only if user said yes
-  background.js    ← Three.js boilerplate stub
+  background.js
 ```
 
 ### DESIGN.md template
 
 ```markdown
-# {name}
+# <Profile Name>
 
 ## Brand Intent
-{brand_intent_from_wizard}
+<one paragraph describing visual character>
 
 ## Color Tokens
-- `--color-bg`: {bg}
-- `--color-fg`: {fg}
-- `--color-accent`: {accent}
+
+### default
+- `--color-bg`: ...
+- `--color-fg`: ...
+- `--color-accent`: ...
+
+## Available Palettes
+- `default` — <description>
 
 ## Typography
-- `--font-display`: {font_display}
-- `--font-body`: {font_body}
+- `--font-display`: ...
+- `--font-body`: ...
 
 ## Restrictions
-- Maintain 8px spacing grid (use --space-* tokens only)
-
-## Usage Examples
-{use_case_from_wizard}
+- ...
 ```
 
-### tokens.css template
+### tokens.css — fonts, spacing, radii, z-index ONLY
 
-Generate based on wizard palette answers. Must define at minimum:
-`--color-bg`, `--color-fg`, `--color-accent`, `--color-accent-hover`, `--color-muted`,
-`--color-surface`, `--color-border`, `--space-xs/sm/md/lg/xl`,
-`--radius-sm/md/lg`, `--font-display`, `--font-body`, `--z-bg/base/nav`
+Generate from wizard answers. Must define: `--space-xs/sm/md/lg/xl`, `--radius-sm/md/lg`,
+`--font-display` and/or `--font-body` (or `--font` for mono-stack profiles), `--z-bg/base/nav`.
+Do NOT include any `--color-*` variable.
+
+### palettes/default.css — all color variables
+
+Generate from wizard color palette answers. Must define:
+`--color-bg`, `--color-fg`, `--color-accent`, `--color-accent-hover`,
+`--color-muted`, `--color-surface`, `--color-border`
 
 ### Component stubs
 
@@ -110,4 +119,9 @@ export function destroy() {
 
 ## After Scaffold
 
-Run `h2t-creative:style-validate <name>` to confirm the profile is complete before use.
+Ask: "Want to add alternative color palettes now? (y/n)"
+If yes: ask "Palette name and colors (bg, fg, accent hex values)?"
+Write as `palettes/<name>.css` defining the same set of `--color-*` vars as `default.css`.
+Repeat until user says no.
+
+Then run `h2t-creative:style-validate <name>` to confirm the profile is complete.
