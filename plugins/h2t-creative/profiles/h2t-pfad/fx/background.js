@@ -1,4 +1,5 @@
 let ctx, dots = [], animId;
+let _resizeHandler = null, _visibilityHandler = null;
 const DOT_COUNT = 50, MAX_DIST = 120;
 
 export function init(canvas) {
@@ -6,16 +7,21 @@ export function init(canvas) {
   _resize(canvas);
   _createDots(canvas);
   _draw(canvas);
-  window.addEventListener('resize', () => { _resize(canvas); _createDots(canvas); });
-  document.addEventListener('visibilitychange', () => {
+  _resizeHandler = () => { _resize(canvas); _createDots(canvas); };
+  _visibilityHandler = () => {
     if (document.hidden) { cancelAnimationFrame(animId); animId = null; }
     else if (!animId) { _draw(canvas); }
-  });
+  };
+  window.addEventListener('resize', _resizeHandler);
+  document.addEventListener('visibilitychange', _visibilityHandler);
 }
 
 export function destroy() {
   cancelAnimationFrame(animId);
+  animId = null;
   dots = [];
+  if (_resizeHandler) { window.removeEventListener('resize', _resizeHandler); _resizeHandler = null; }
+  if (_visibilityHandler) { document.removeEventListener('visibilitychange', _visibilityHandler); _visibilityHandler = null; }
 }
 
 function _resize(canvas) {
