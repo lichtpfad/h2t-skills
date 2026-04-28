@@ -1,0 +1,5 @@
+.content-section { padding: var(--space-xl) var(--space-lg); background: var(--color-bg-light); border-top: 1px solid var(--color-border); }
+.section-inner { max-width: 1200px; margin: 0 auto; }
+.section__label { font-size: 0.7rem; color: var(--color-accent); text-transform: uppercase; letter-spacing: 0.2em; margin-bottom: var(--space-md); }
+.section__label::before { content: '// '; }
+.section__body { font-size: 0.875rem; color: var(--color-text-dim); line-height: 1.8; }
