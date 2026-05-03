@@ -1,0 +1,33 @@
+type: landing
+profile: h2t-mono
+palette: default
+title: h2t-mono R1 Fidelity
+sections:
+  - component: nav
+    content:
+      brand_name: Spec Designer
+  - component: hero
+    content:
+      badge: SPEC FIRST
+      headline: Stop prompting pages. Define systems.
+      subline: A mono recovery page for validating the specdesigner visual language.
+  - component: two-column
+    content:
+      left_label: BEFORE
+      left_title: Prompt soup
+      left_body: '<code>make it modern</code><code>add some cards</code><code>try a dark theme</code>'
+      right_label: AFTER
+      right_title: Fixed contract
+      right_body: '<code class="is-good">source screenshot</code><code class="is-good">token contract</code><code class="is-warn">human visual gate</code>'
+  - component: comparison-table
+    content:
+      body_html: '<table><tr><th>Capability</th><th>Generic</th><th>Recovered</th></tr><tr><td>Visual source</td><td class="is-bad">missing</td><td class="is-good">required</td></tr><tr><td>Profile grammar</td><td class="is-bad">token-only</td><td class="is-good">component-level</td></tr><tr><td>Release gate</td><td class="is-bad">self-pass</td><td class="is-good">human confirmed</td></tr></table>'
+  - component: cta
+    content:
+      text: Validate source match
+      href: "#"
+      text_ghost: View contract
+      href_ghost: "#"
+  - component: footer
+    content:
+      copy: h2t-mono R1 recovery
