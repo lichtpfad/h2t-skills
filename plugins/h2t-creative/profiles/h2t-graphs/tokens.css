@@ -1,6 +1,8 @@
 :root {
   --font-sans: 'Inter', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', monospace;
+  --font-display: var(--font-sans);
+  --font-body: var(--font-mono);
 
   --space-xs: 0.25rem;
   --space-sm: 0.5rem;

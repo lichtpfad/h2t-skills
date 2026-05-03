@@ -1,6 +1,7 @@
 :root {
   --font-display: 'Playfair Display', 'Georgia', serif;
   --font-body: 'Inter', 'Helvetica Neue', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
 
   --space-xs: 0.25rem;
   --space-sm: 0.5rem;

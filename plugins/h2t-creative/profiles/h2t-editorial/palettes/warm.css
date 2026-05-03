@@ -6,4 +6,6 @@
   --color-text-dim: #8a7a6a;
   --color-accent: #b85c30;
   --color-border: #e8ddd0;
+  --color-accent-hover: var(--color-accent);
+  --color-on-accent: #ffffff;
 }

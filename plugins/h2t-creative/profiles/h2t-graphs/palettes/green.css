@@ -11,4 +11,6 @@
   --color-text-hi: #d0d0e0;
   --color-text-dim: #3a3a50;
   --color-border: rgba(0,255,136,0.12);
+  --color-accent-hover: var(--color-accent);
+  --color-on-accent: #000000;
 }

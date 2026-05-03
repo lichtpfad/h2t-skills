@@ -11,6 +11,7 @@
 
   --font-display: system-ui, sans-serif;
   --font-body: system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
 
   --z-bg: -1;
   --z-base: 0;
