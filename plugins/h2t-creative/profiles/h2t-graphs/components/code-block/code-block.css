@@ -1,0 +1,15 @@
+.code-block pre {
+  overflow-x: auto;
+  padding: 0;
+  background: transparent;
+}
+
+.code-block code {
+  display: block;
+  padding: 0;
+  color: var(--color-text);
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  line-height: 1.7;
+  white-space: pre;
+}

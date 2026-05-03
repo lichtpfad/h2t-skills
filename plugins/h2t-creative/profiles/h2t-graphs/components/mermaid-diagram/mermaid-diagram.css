@@ -1,0 +1,9 @@
+.mermaid-wrap {
+  overflow-x: auto;
+}
+
+.mermaid-wrap .mermaid {
+  background: transparent;
+  color: var(--color-text);
+  font-family: var(--font-mono);
+}

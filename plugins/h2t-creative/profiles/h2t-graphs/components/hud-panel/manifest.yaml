@@ -1,0 +1,13 @@
+component: hud-panel
+fields:
+  tag:
+    type: text
+    required: false
+    default: ""
+  title:
+    type: text
+    required: false
+    default: ""
+  body:
+    type: html
+    required: true

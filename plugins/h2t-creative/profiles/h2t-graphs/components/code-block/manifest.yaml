@@ -1,0 +1,9 @@
+component: code-block
+fields:
+  label:
+    type: text
+    required: false
+    default: ""
+  code:
+    type: text
+    required: true
