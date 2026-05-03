@@ -119,7 +119,7 @@ Current shared components (Phase 2a) are appropriate ONLY for `h2t-default` and 
 | `1.1.0` | Live-confirmed | Phase 2a shared components |
 | `1.2.0` | **NOT live-confirmed** | Phase 2b token contract — visual gate was wrong (self-comparison, not vs references) |
 
-**Correct semver path:** fix fidelity → visual gate against references → bump to `1.2.0` (re-use same tag if not pushed) or `1.3.0`.
+**Correct semver path:** v1.2.0 remains not live-confirmed. Next confirmed release version must be decided before bump based on actual git/publish state at the time of gate passage — do not assume re-use of `1.2.0` tag is safe.
 
 ---
 
