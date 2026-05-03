@@ -8,4 +8,8 @@
   --color-accent-dim: rgba(214,48,48,0.4);
   --color-accent-glow: rgba(214,48,48,0.18);
   --color-border: rgba(255,255,255,0.10);
+  --color-text: var(--color-fg);
+  --color-text-dim: var(--color-fg-dim);
+  --color-on-accent: #ffffff;
+  --color-accent-hover: var(--color-accent);
 }

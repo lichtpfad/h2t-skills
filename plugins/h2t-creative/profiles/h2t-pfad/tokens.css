@@ -1,5 +1,8 @@
 :root {
   --font: 'JetBrains Mono', 'IBM Plex Mono', monospace;
+  --font-display: var(--font);
+  --font-body: var(--font);
+  --font-mono: var(--font);
 
   --space-xs: 0.25rem;
   --space-sm: 0.5rem;

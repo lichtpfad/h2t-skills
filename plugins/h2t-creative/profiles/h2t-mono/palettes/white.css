@@ -5,4 +5,5 @@
   --color-accent: #e8352b;
   --color-border: #e0e0e0;
   --color-on-accent: #ffffff;
+  --color-accent-hover: var(--color-accent);
 }
