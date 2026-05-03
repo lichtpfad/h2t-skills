@@ -1,0 +1,68 @@
+.two-column {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  margin: 4rem auto;
+  max-width: 1120px;
+  background: var(--color-border);
+  border: 1px solid var(--color-border);
+  font-family: var(--font);
+}
+
+.two-column__pane {
+  min-height: 320px;
+  padding: 2rem;
+  background: var(--color-bg);
+}
+
+.two-column__pane--accent {
+  background: color-mix(in srgb, var(--color-accent) 7%, var(--color-bg));
+}
+
+.two-column__label {
+  display: block;
+  margin-bottom: 1.25rem;
+  color: var(--color-accent);
+  font-size: 0.7rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.two-column__label:empty {
+  display: none;
+}
+
+.two-column h2 {
+  margin: 0 0 1.5rem;
+  color: var(--color-text);
+  font-size: clamp(1.6rem, 3vw, 3rem);
+  line-height: 1.05;
+  letter-spacing: -0.06em;
+}
+
+.two-column__body {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.two-column code {
+  display: block;
+  padding: 0.7rem 0;
+  color: var(--color-text-dim);
+  border-bottom: 1px solid var(--color-border);
+  font-family: var(--font);
+}
+
+.two-column code.is-good {
+  color: var(--color-accent);
+}
+
+.two-column code.is-warn {
+  color: #d6a657;
+}
+
+@media (max-width: 760px) {
+  .two-column {
+    grid-template-columns: 1fr;
+  }
+}

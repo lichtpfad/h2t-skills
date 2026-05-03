@@ -1,0 +1,42 @@
+.mono-compare {
+  margin: 4rem auto;
+  max-width: 1120px;
+  overflow-x: auto;
+  border: 1px solid var(--color-border);
+  font-family: var(--font);
+}
+
+.mono-compare table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.mono-compare th,
+.mono-compare td {
+  padding: 1rem;
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-text-dim);
+  text-align: left;
+  vertical-align: top;
+}
+
+.mono-compare th {
+  color: var(--color-text);
+  font-size: 0.72rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.mono-compare td + td,
+.mono-compare th + th {
+  border-left: 1px solid var(--color-border);
+}
+
+.mono-compare .is-good {
+  color: var(--color-accent);
+}
+
+.mono-compare .is-bad {
+  color: var(--color-text-dim);
+  text-decoration: line-through;
+}

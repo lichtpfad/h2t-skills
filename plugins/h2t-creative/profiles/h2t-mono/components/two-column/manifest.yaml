@@ -1,0 +1,22 @@
+component: two-column
+fields:
+  left_label:
+    type: text
+    required: false
+    default: ""
+  left_title:
+    type: text
+    required: true
+  left_body:
+    type: html
+    required: true
+  right_label:
+    type: text
+    required: false
+    default: ""
+  right_title:
+    type: text
+    required: true
+  right_body:
+    type: html
+    required: true

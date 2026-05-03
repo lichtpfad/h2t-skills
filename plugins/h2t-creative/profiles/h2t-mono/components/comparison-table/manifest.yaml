@@ -1,0 +1,5 @@
+component: comparison-table
+fields:
+  body_html:
+    type: html
+    required: true

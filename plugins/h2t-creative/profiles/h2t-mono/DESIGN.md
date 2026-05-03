@@ -32,3 +32,27 @@ Ultra-minimal. Pure monospace, near-black bg, single red accent, zero decoration
 - Zero decorative elements
 - No border-radius
 - All labels uppercase, body mixed-case
+
+## R1 Source Of Truth
+
+- Primary: `profiles/h2t-mono/sources/references.yaml`
+- Live reference: `specdesigner.netlify.app`
+- Reference screenshot: `sources/screenshots/reference-desktop.png`
+
+## R1 Required Components
+
+| Component | Visual Pattern |
+|-----------|---------------|
+| `two-column` | 1px background separator, label / title / code rows |
+| `comparison-table` | Sparse borders, `.is-good` / `.is-bad` state classes |
+
+## Forbidden Patterns
+
+These patterns must NOT appear in h2t-mono components or validation recipe:
+
+- HUD brackets or corner marks
+- `hud-panel` class
+- `box-shadow` (any)
+- `text-shadow` (any)
+- Rounded cards or pill shapes (`border-radius`)
+- Generic shared blocks: `features-grid`, `pricing`, `testimonials`, `faq`, `logos`
