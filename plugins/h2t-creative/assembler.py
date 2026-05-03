@@ -12,6 +12,27 @@ PLUGIN_ROOT = Path(__file__).parent
 BASE_DIR = PLUGIN_ROOT / "base"
 PROFILES_DIR = PLUGIN_ROOT / "profiles"
 SHARED_DIR = PLUGIN_ROOT / "shared"
+
+
+def _load_profile_config(profile_dir: Path) -> dict:
+    config_path = profile_dir / "profile.yaml"
+    if not config_path.exists():
+        return {}
+    with open(config_path, encoding="utf-8") as f:
+        return yaml.safe_load(f) or {}
+
+
+def _build_font_links(profile_dir: Path) -> str:
+    urls = _load_profile_config(profile_dir).get("web_fonts", [])
+    if not urls:
+        return ""
+    lines = [
+        '  <link rel="preconnect" href="https://fonts.googleapis.com">',
+        '  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>',
+    ]
+    for url in urls:
+        lines.append(f'  <link rel="stylesheet" href="{url}">')
+    return "\n".join(lines) + "\n"
 DECK_LAYOUTS = {"title-only", "title-body", "title-media", "blank"}
 FX_SIZE_WARN_BYTES = 50 * 1024
 
@@ -84,7 +105,7 @@ _HTML_LANDING = """\
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{title}</title>
-  <link rel="stylesheet" href="base.css">
+{font_links}  <link rel="stylesheet" href="base.css">
   <link rel="stylesheet" href="profile.css">
 </head>
 <body>
@@ -182,8 +203,10 @@ def assemble_landing(
     has_fx = _has_fx(profile_dir)
     fx_canvas = '<canvas id="bg-canvas"></canvas>' if has_fx else ""
     fx_script = _FX_SCRIPT_LANDING if has_fx else ""
+    font_links = _build_font_links(profile_dir)
     index_html = _HTML_LANDING.format(
         title=html.escape(str(recipe.get("title", ""))),
+        font_links=font_links,
         body=body,
         fx_canvas=fx_canvas,
         fx_script=fx_script,
@@ -242,7 +265,7 @@ _HTML_DECK = """\
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{title}</title>
-  <link rel="stylesheet" href="base.css">
+{font_links}  <link rel="stylesheet" href="base.css">
   <link rel="stylesheet" href="profile.css">
 </head>
 <body class="deck">
@@ -297,8 +320,10 @@ def assemble_deck(
         '<script>var c=document.getElementById("bg-canvas");'
         'import("./fx.js").then(function(m){m.init(c);});</script>'
     ) if has_fx else ""
+    font_links = _build_font_links(profile_dir)
     index_html = _HTML_DECK.format(
         title=html.escape(str(recipe.get("title", ""))),
+        font_links=font_links,
         menu_links=menu_links,
         slides_html=slides_html,
         fx_canvas=fx_canvas,
