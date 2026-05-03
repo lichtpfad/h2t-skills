@@ -11,6 +11,7 @@ from pathlib import Path
 PLUGIN_ROOT = Path(__file__).parent
 BASE_DIR = PLUGIN_ROOT / "base"
 PROFILES_DIR = PLUGIN_ROOT / "profiles"
+SHARED_DIR = PLUGIN_ROOT / "shared"
 DECK_LAYOUTS = {"title-only", "title-body", "title-media", "blank"}
 FX_SIZE_WARN_BYTES = 50 * 1024
 
@@ -62,6 +63,18 @@ def load_manifest(component_dir: Path) -> dict:
         return yaml.safe_load(f)
 
 
+def _resolve_component_dir(component_name: str, profile_dir: Path, shared_dir: Path = SHARED_DIR) -> Path:
+    profile_comp = profile_dir / "components" / component_name
+    if profile_comp.exists():
+        return profile_comp
+    shared_comp = shared_dir / "components" / component_name
+    if shared_comp.exists():
+        return shared_comp
+    raise ValueError(
+        f"Component '{component_name}' not found in profile '{profile_dir.name}' or shared/"
+    )
+
+
 # --- Landing ---
 
 _HTML_LANDING = """\
@@ -104,9 +117,7 @@ def _has_fx(profile_dir: Path) -> bool:
 
 def _build_section_html(section: dict, profile_dir: Path) -> str:
     component_name = section["component"]
-    component_dir = profile_dir / "components" / component_name
-    if not component_dir.exists():
-        raise ValueError(f"Component '{component_name}' not found in profile at {component_dir}")
+    component_dir = _resolve_component_dir(component_name, profile_dir)
     manifest = load_manifest(component_dir)
     validate_section_content(section, manifest)
     template = (component_dir / f"{component_name}.html").read_text(encoding="utf-8")
@@ -138,9 +149,12 @@ def _build_profile_css(profile_dir: Path, sections: list, palette: str = "defaul
     for section in sections:
         name = section["component"]
         if name not in seen:
-            css_path = profile_dir / "components" / name / f"{name}.css"
-            if css_path.exists():
-                parts.append(css_path.read_text(encoding="utf-8"))
+            shared_css = SHARED_DIR / "components" / name / f"{name}.css"
+            if shared_css.exists():
+                parts.append(shared_css.read_text(encoding="utf-8"))
+            profile_css = profile_dir / "components" / name / f"{name}.css"
+            if profile_css.exists():
+                parts.append(profile_css.read_text(encoding="utf-8"))
             seen.add(name)
     return "\n".join(parts)
 
