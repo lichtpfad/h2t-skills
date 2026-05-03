@@ -1,0 +1,82 @@
+type: landing
+profile: h2t-graphs
+palette: default
+title: h2t-graphs R1 Fidelity
+sections:
+  - component: nav
+    content:
+      brand_name: H2T Graphs
+  - component: hero
+    content:
+      badge: GRAPH INTELLIGENCE
+      headline: From raw signals to navigable knowledge graphs.
+      subline: A HUD-style recovery page for validating the original graphs.lichtpfadstudio.com design system.
+  - component: stats-bar
+    content:
+      stat1_value: "619"
+      stat1_label: videos indexed
+      stat2_value: "9"
+      stat2_label: pipeline stages
+      stat3_value: "28"
+      stat3_label: courses mapped
+  - component: hud-panel
+    content:
+      tag: PIPELINE
+      title: Source-first extraction
+      body: "<p>Every component is recovered from a source reference before it becomes reusable.</p>"
+  - component: mermaid-diagram
+    content:
+      label: DAG
+      diagram: "graph TD\n  A[Source screenshots] --> B[Token map]\n  B --> C[Profile components]\n  C --> D[Visual gate]"
+  - component: numbers-grid
+    content:
+      cell1_value: "01"
+      cell1_label: capture
+      cell2_value: "02"
+      cell2_label: extract
+      cell3_value: "03"
+      cell3_label: render
+      cell4_value: "04"
+      cell4_label: compare
+  - component: chip-stack
+    content:
+      chips_html: '<span class="chip hi">JetBrains Mono</span><span class="chip">Inter</span><span class="chip">Mermaid</span><span class="chip">HUD panels</span>'
+  - component: screenshot-card
+    content:
+      image_src: sources/screenshots/reference-desktop.png
+      alt: graphs reference
+      caption: Reference capture used as source of truth.
+  - component: code-block
+    content:
+      label: CLI
+      code: "h2t creative render --profile h2t-graphs --recipe validation/recipe.yaml"
+  - component: cards-grid
+    content:
+      title: RECOVERY
+      card1_title: Source
+      card1_body: Live page and legacy skill are recorded before implementation.
+      card2_title: Contract
+      card2_body: Components expose stable semantic fields.
+      card3_title: Render
+      card3_body: Profile-specific CSS owns structure and visual treatment.
+      card4_title: Gate
+      card4_body: Human visual comparison blocks release.
+  - component: layers
+    content:
+      title: LAYERS
+      layer1_title: Reference
+      layer1_body: screenshots and legacy CSS
+      layer2_title: Tokens
+      layer2_body: graph palette and typography
+      layer3_title: Components
+      layer3_body: HUD panels, diagrams, stats, chips
+  - component: comparison-table
+    content:
+      body_html: "<table><tr><th>Generic</th><th>Recovered</th></tr><tr><td>shared blocks</td><td>profile-specific HUD system</td></tr><tr><td>token-only adaptation</td><td>source-derived component structure</td></tr></table>"
+  - component: cta
+    content:
+      text: Validate visually
+      href: "#"
+  - component: footer
+    content:
+      copy: h2t-graphs R1 recovery
