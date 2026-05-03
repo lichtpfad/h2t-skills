@@ -1,0 +1,46 @@
+# Educational lesson deck: title → agenda → concepts → demo → summary → Q&A
+type: deck
+profile: h2t-default
+palette: default
+title: "Lesson Title"
+
+slides:
+  - layout: title-only
+    title: "Title"
+    content:
+      headline: "Lesson Title"
+
+  - layout: title-body
+    title: "Agenda"
+    content:
+      headline: "Today's Agenda"
+      body: "<ol><li>Concept A</li><li>Concept B</li><li>Hands-on demo</li><li>Q&amp;A</li></ol>"
+
+  - layout: title-body
+    title: "Concept A"
+    content:
+      headline: "Concept A"
+      body: "<p>Explain the concept. Use analogies. Keep to one idea per slide.</p>"
+
+  - layout: title-body
+    title: "Concept B"
+    content:
+      headline: "Concept B"
+      body: "<p>Second concept. Connect it to Concept A.</p>"
+
+  - layout: title-body
+    title: "Demo"
+    content:
+      headline: "Hands-On Demo"
+      body: "<p>Step-by-step instructions for the demo. Reference files: <code>demo/scene.hip</code>.</p>"
+
+  - layout: title-body
+    title: "Summary"
+    content:
+      headline: "Key Takeaways"
+      body: "<ul><li>Takeaway from Concept A</li><li>Takeaway from Concept B</li><li>When to use this technique</li></ul>"
+
+  - layout: title-only
+    title: "Q&A"
+    content:
+      headline: "Questions?"
