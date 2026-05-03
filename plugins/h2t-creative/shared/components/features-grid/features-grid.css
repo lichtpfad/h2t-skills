@@ -1,6 +1,6 @@
 .features-grid__heading:empty { display: none; }
-.features-grid__heading { font-family: var(--font-display); margin-bottom: var(--space-lg); }
+.features-grid__heading { font-family: var(--font-display, inherit); margin-bottom: var(--space-lg); }
 .features-grid__item { display: flex; flex-direction: column; gap: var(--space-sm); }
 .features-grid__icon { font-size: 2rem; line-height: 1; }
-.features-grid__title { font-family: var(--font-display); color: var(--color-fg); margin: 0; }
-.features-grid__body { color: var(--color-muted); margin: 0; }
+.features-grid__title { font-family: var(--font-display, inherit); color: var(--color-text); margin: 0; }
+.features-grid__body { color: var(--color-text-dim); margin: 0; }
