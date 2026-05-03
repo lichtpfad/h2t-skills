@@ -1,0 +1,11 @@
+<section class="hud-panel mermaid-wrap">
+  <span class="corner-br"></span>
+  <span class="section-tag">{{ label }}</span>
+  <pre class="mermaid">{{ diagram }}</pre>
+  <script>
+    if (window.mermaid && !window.__h2tMermaidInitialized) {
+      window.__h2tMermaidInitialized = true;
+      window.mermaid.initialize({ startOnLoad: true, theme: 'dark' });
+    }
+  </script>
+</section>
