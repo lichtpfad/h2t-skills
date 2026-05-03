@@ -98,6 +98,42 @@ def test_shared_features_grid(tmp_path):
     assert "Body C" in html
 
 
+def test_shared_stats(tmp_path):
+    recipe = {
+        "title": "Stats Test",
+        "sections": [{
+            "component": "stats",
+            "content": {
+                "stat1_value": "120+", "stat1_label": "Lessons",
+                "stat2_value": "12h",  "stat2_label": "Runtime",
+                "stat3_value": "2500+","stat3_label": "Students",
+            },
+        }],
+    }
+    asm.assemble_landing(recipe, asm.PROFILES_DIR / "h2t-default", tmp_path / "out")
+    html = (tmp_path / "out" / "index.html").read_text(encoding="utf-8")
+    assert "120+" in html
+    assert "Students" in html
+
+
+def test_shared_testimonials(tmp_path):
+    recipe = {
+        "title": "Testimonials Test",
+        "sections": [{
+            "component": "testimonials",
+            "content": {
+                "quote": "Best course ever.",
+                "author": "Jane Smith",
+                "role": "Motion Designer",
+            },
+        }],
+    }
+    asm.assemble_landing(recipe, asm.PROFILES_DIR / "h2t-default", tmp_path / "out")
+    html = (tmp_path / "out" / "index.html").read_text(encoding="utf-8")
+    assert "Best course ever." in html
+    assert "Jane Smith" in html
+
+
 def test_css_cascade_order(tmp_path):
     """Shared CSS appears strictly BEFORE profile override CSS in profile.css."""
     import shutil
