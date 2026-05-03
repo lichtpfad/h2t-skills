@@ -1,0 +1,5 @@
+.faq__title:empty { display: none; }
+.faq__title { font-family: var(--font-display); margin-bottom: var(--space-lg); }
+.faq__list { display: flex; flex-direction: column; gap: var(--space-lg); }
+.faq__list dt { font-weight: 700; color: var(--color-fg); margin-bottom: var(--space-xs); }
+.faq__list dd { color: var(--color-muted); margin-left: 0; }
