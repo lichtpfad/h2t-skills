@@ -1,0 +1,47 @@
+# Pitch deck: cover → problem → solution → market → traction → team → ask
+type: deck
+profile: h2t-default
+palette: default
+title: "Company Name — Pitch Deck"
+
+slides:
+  - layout: title-only
+    title: "Cover"
+    content:
+      headline: "Company Name"
+
+  - layout: title-body
+    title: "Problem"
+    content:
+      headline: "The Problem"
+      body: "<p>Describe the pain point clearly. One paragraph, no jargon.</p>"
+
+  - layout: title-body
+    title: "Solution"
+    content:
+      headline: "Our Solution"
+      body: "<p>One sentence. Then 3 bullets: how it works, why it's unique, what it replaces.</p>"
+
+  - layout: title-body
+    title: "Market"
+    content:
+      headline: "Market Size"
+      body: "<p>TAM / SAM / SOM with credible sources.</p>"
+
+  - layout: title-body
+    title: "Traction"
+    content:
+      headline: "Traction"
+      body: "<p>Key metrics, logos of customers, growth numbers.</p>"
+
+  - layout: title-body
+    title: "Team"
+    content:
+      headline: "Team"
+      body: "<p>Founders with relevant credentials in 2–3 lines each.</p>"
+
+  - layout: title-body
+    title: "Ask"
+    content:
+      headline: "The Ask"
+      body: "<p>Amount, use of funds breakdown (3–4 lines).</p>"
