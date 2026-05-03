@@ -80,6 +80,24 @@ def test_shared_component_fallback(tmp_path):
         shutil.rmtree(comp_dir)
 
 
+def test_shared_features_grid(tmp_path):
+    recipe = {
+        "title": "FG Test",
+        "sections": [{
+            "component": "features-grid",
+            "content": {
+                "item1_icon": "🔥", "item1_title": "A", "item1_body": "Body A",
+                "item2_icon": "⚡", "item2_title": "B", "item2_body": "Body B",
+                "item3_icon": "🎯", "item3_title": "C", "item3_body": "Body C",
+            },
+        }],
+    }
+    asm.assemble_landing(recipe, asm.PROFILES_DIR / "h2t-default", tmp_path / "out")
+    html = (tmp_path / "out" / "index.html").read_text(encoding="utf-8")
+    assert "Body A" in html
+    assert "Body C" in html
+
+
 def test_css_cascade_order(tmp_path):
     """Shared CSS appears strictly BEFORE profile override CSS in profile.css."""
     import shutil
