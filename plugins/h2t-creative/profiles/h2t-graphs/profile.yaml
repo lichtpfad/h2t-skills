@@ -1,2 +1,4 @@
 web_fonts:
   - https://fonts.googleapis.com/css2?family=Inter:wght@700;800&family=JetBrains+Mono:ital,wght@0,400;0,500&display=swap
+head_scripts:
+  - https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js
