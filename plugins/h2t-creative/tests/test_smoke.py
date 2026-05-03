@@ -134,6 +134,58 @@ def test_shared_testimonials(tmp_path):
     assert "Jane Smith" in html
 
 
+def test_shared_pricing(tmp_path):
+    recipe = {
+        "title": "Pricing Test",
+        "sections": [{
+            "component": "pricing",
+            "content": {
+                "plan_name": "Full Access",
+                "price": "$149",
+                "period": "one-time",
+                "features": "<li>Lifetime access</li><li>All updates</li>",
+                "cta_text": "Enrol Now",
+                "cta_href": "https://example.com/checkout",
+            },
+        }],
+    }
+    asm.assemble_landing(recipe, asm.PROFILES_DIR / "h2t-default", tmp_path / "out")
+    html = (tmp_path / "out" / "index.html").read_text(encoding="utf-8")
+    assert "$149" in html
+    assert "Enrol Now" in html
+
+
+def test_shared_faq(tmp_path):
+    recipe = {
+        "title": "FAQ Test",
+        "sections": [{
+            "component": "faq",
+            "content": {
+                "title": "FAQ",
+                "body": "<div><dt>Q?</dt><dd>A.</dd></div>",
+            },
+        }],
+    }
+    asm.assemble_landing(recipe, asm.PROFILES_DIR / "h2t-default", tmp_path / "out")
+    html = (tmp_path / "out" / "index.html").read_text(encoding="utf-8")
+    assert "Q?" in html
+
+
+def test_shared_logos(tmp_path):
+    recipe = {
+        "title": "Logos Test",
+        "sections": [{
+            "component": "logos",
+            "content": {
+                "logos": "<span>Acme</span><span>Corp</span>",
+            },
+        }],
+    }
+    asm.assemble_landing(recipe, asm.PROFILES_DIR / "h2t-default", tmp_path / "out")
+    html = (tmp_path / "out" / "index.html").read_text(encoding="utf-8")
+    assert "Acme" in html
+
+
 def test_css_cascade_order(tmp_path):
     """Shared CSS appears strictly BEFORE profile override CSS in profile.css."""
     import shutil
