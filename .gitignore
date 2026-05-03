@@ -14,6 +14,9 @@ __pycache__/
 /tmp/
 *.drawio.bak
 
+# Assembler build output
+/dist/
+
 # Documentation artifacts (ephemeral)
 docs/.artifacts/
 
