@@ -1,6 +1,47 @@
-.cta-section { padding: var(--space-xl); background: var(--color-bg); border-top: 1px solid var(--color-border); }
-.cta-inner { max-width: 1200px; margin: 0 auto; display: flex; gap: var(--space-md); align-items: center; flex-wrap: wrap; }
-.cta-btn { display: inline-block; font-size: 0.7rem; text-decoration: none; text-transform: uppercase; letter-spacing: 0.2em; padding: 0.6rem 1.5rem; transition: opacity 0.15s; }
-.cta-btn--filled { color: var(--color-on-accent); background: var(--color-accent); }
-.cta-btn--ghost { color: var(--color-text-dim); border: 1px solid var(--color-border); }
-.cta-btn:hover { opacity: 0.8; }
+.cta-section { text-align: center; }
+
+.cta-card {
+  max-width: 640px;
+  margin: 0 auto;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  padding: var(--space-lg);
+}
+
+.waitlist-form {
+  display: flex;
+  gap: var(--space-xs);
+}
+.waitlist-form input {
+  flex: 1;
+  padding: calc(var(--grid) * 1.5) var(--space-sm);
+  font-family: var(--font);
+  font-size: 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--fg);
+  outline: none;
+  transition: border-color 0.2s;
+}
+.waitlist-form input:focus { border-color: var(--accent); }
+.waitlist-form input::placeholder { color: var(--fg-muted); }
+
+.waitlist-msg {
+  margin-top: var(--space-xs);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  min-height: 20px;
+}
+.waitlist-msg.ok { color: var(--ok); }
+.waitlist-msg.err { color: var(--accent); }
+
+.cta-telegram {
+  margin-top: var(--space-md);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+@media (max-width: 768px) {
+  .waitlist-form { flex-direction: column; }
+}

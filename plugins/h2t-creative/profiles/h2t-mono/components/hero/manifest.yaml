@@ -1,13 +1,37 @@
 component: hero
 fields:
-  headline:
+  brand_prefix:
     type: text
-    required: true
-  subline:
+    required: false
+    default: "SPEC"
+  brand_accent:
+    type: text
+    required: false
+    default: "DESIGNER"
+  subtitle:
     type: text
     required: false
     default: ""
-  badge:
+  headlines_html:
+    type: html
+    required: true
+  btn1_label:
     type: text
+    required: false
+    default: "JOIN WAITLIST"
+  btn1_href:
+    type: url
+    required: false
+    default: "#waitlist"
+  btn2_label:
+    type: text
+    required: false
+    default: "TELEGRAM"
+  btn2_href:
+    type: url
+    required: false
+    default: "#"
+  agents_html:
+    type: html
     required: false
     default: ""

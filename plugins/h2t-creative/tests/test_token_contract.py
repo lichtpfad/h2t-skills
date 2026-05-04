@@ -4,11 +4,10 @@ import pytest
 from pathlib import Path
 import assembler as asm
 
+# R1 profiles (h2t-graphs, h2t-mono) follow golden token contract — see test_r1_legacy_fidelity.py
 PROFILES = {
     "h2t-default":   ["default"],
     "h2t-editorial": ["default", "night", "warm"],
-    "h2t-graphs":    ["default", "blue", "green"],
-    "h2t-mono":      ["default", "blue", "white"],
     "h2t-pfad":      ["default"],
     "h2t-terminal":  ["default", "amber", "cyan"],
 }

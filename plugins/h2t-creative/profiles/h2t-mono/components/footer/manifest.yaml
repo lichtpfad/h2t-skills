@@ -1,5 +1,6 @@
 component: footer
 fields:
   copy:
-    type: text
-    required: true
+    type: html
+    required: false
+    default: "&copy; 2026 Stanislav Glazov"

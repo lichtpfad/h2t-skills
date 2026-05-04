@@ -207,7 +207,33 @@ def test_profile_head_scripts_are_injected(tmp_path):
         profile_yaml.write_text(original, encoding="utf-8")
 
 
-# --- h2t-mono minimal assembly (unchanged profile — update separately) ---
+# --- h2t-mono component inventory ---
+
+def test_h2t_mono_golden_components_exist():
+    required = {
+        "hero", "meme-grid", "problem-grid", "pipeline-svg", "c4-grid",
+        "comparison-table", "principles-grid", "screenshot-frame", "faq",
+        "cta", "footer",
+    }
+    profile_dir = _profile_dir("h2t-mono")
+    for component in required:
+        assert (profile_dir / "components" / component).exists(), \
+            f"h2t-mono/components/{component} missing"
+
+
+def test_h2t_mono_validation_recipe_uses_golden_components():
+    required = {
+        "hero", "meme-grid", "problem-grid", "pipeline-svg", "c4-grid",
+        "comparison-table", "principles-grid", "screenshot-frame", "faq",
+        "cta", "footer",
+    }
+    recipe = _read_validation_recipe("h2t-mono")
+    components = set(_components(recipe))
+    assert required.issubset(components), \
+        f"h2t-mono recipe missing components: {required - components}"
+
+
+# --- h2t-mono assembly ---
 
 def test_h2t_mono_validation_recipe_assembles(tmp_path):
     recipe = _read_validation_recipe("h2t-mono")
@@ -222,3 +248,80 @@ def test_h2t_mono_validation_recipe_assembles(tmp_path):
 
     assert "<!doctype html>" in html.lower()
     assert len(css) > 500
+
+
+# --- h2t-mono token contracts ---
+
+def test_h2t_mono_palette_has_golden_tokens(tmp_path):
+    recipe = _read_validation_recipe("h2t-mono")
+    out_dir = tmp_path / "h2t-mono"
+    profile_dir = PROFILES_DIR / "h2t-mono"
+    asm.assemble_landing(recipe, profile_dir, out_dir, palette="default")
+    css = (out_dir / "profile.css").read_text(encoding="utf-8")
+
+    assert "--bg:" in css
+    assert "#0a0a0a" in css
+    assert "--bg-card:" in css
+    assert "#111111" in css
+    assert "--accent:" in css
+    assert "#d63030" in css
+    assert "--ok:" in css
+    assert "#1DD9A0" in css
+    assert "--border:" in css
+    assert "rgba(255,255,255,0.10)" in css
+    assert "JetBrains Mono" in css
+    assert "--space-lg: calc(var(--grid) * 5)" in css or "--space-lg:calc(var(--grid)* 5)" in css.replace(" ", "")
+
+
+# --- h2t-mono structural contracts ---
+
+def test_h2t_mono_section_title_uses_double_colon_prefix(tmp_path):
+    recipe = _read_validation_recipe("h2t-mono")
+    out_dir = tmp_path / "h2t-mono"
+    profile_dir = PROFILES_DIR / "h2t-mono"
+    asm.assemble_landing(recipe, profile_dir, out_dir, palette="default")
+    css = (out_dir / "profile.css").read_text(encoding="utf-8")
+    assert "content: ':: '" in css
+
+
+# --- h2t-mono forbidden patterns ---
+
+def test_h2t_mono_forbidden_patterns_absent(tmp_path):
+    recipe = _read_validation_recipe("h2t-mono")
+    out_dir = tmp_path / "h2t-mono"
+    profile_dir = PROFILES_DIR / "h2t-mono"
+    asm.assemble_landing(recipe, profile_dir, out_dir, palette="default")
+    css = (out_dir / "profile.css").read_text(encoding="utf-8")
+    html = (out_dir / "index.html").read_text(encoding="utf-8")
+    combined = css + html
+
+    assert "site-nav" not in combined, "forbidden: site-nav (no nav in golden)"
+    assert ".corner-tl" not in combined, "forbidden: L-bracket corners"
+    assert ".corner-br" not in combined, "forbidden: L-bracket corners"
+    assert ".hud-panel" not in combined, "forbidden: hud-panel"
+    assert ".section-tag" not in combined, "forbidden: section-tag (mono uses .section-title)"
+    assert "repeating-linear-gradient" not in combined, "forbidden: background grid"
+    assert "backdrop-filter" not in combined, "forbidden: backdrop blur"
+    assert "mermaid.min.js" not in html, "forbidden: mermaid script (golden uses SVG pipeline)"
+    assert 'class="mermaid"' not in html, "forbidden: mermaid pre (golden uses SVG pipeline)"
+    assert ".mermaid-wrap" not in css, "forbidden: mermaid-wrap component"
+    assert "min-height: 100vh" not in css, "forbidden: full-height hero"
+    assert "cursor: crosshair" not in combined, "forbidden: cursor crosshair"
+
+
+# --- h2t-mono section titles ---
+
+def test_h2t_mono_recipe_uses_golden_section_titles():
+    recipe = _read_validation_recipe("h2t-mono")
+    titles = []
+    for section in recipe["sections"]:
+        title = section.get("content", {}).get("title", "")
+        if title:
+            titles.append(title)
+    golden_titles = {
+        "The Problem", "How It Works", "Built on C4", "Comparison",
+        "Key Principles", "See It In Action", "FAQ", "Get Early Access",
+    }
+    found = set(titles)
+    assert golden_titles.issubset(found), \
+        f"h2t-mono recipe missing golden titles: {golden_titles - found}"

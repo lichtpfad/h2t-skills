@@ -1,16 +1,26 @@
 component: cta
 fields:
-  text:
-    type: text
-    required: true
-  href:
-    type: url
-    required: true
-  text_ghost:
+  section_id:
     type: text
     required: false
-    default: "Learn more"
-  href_ghost:
+    default: "waitlist"
+  title:
+    type: text
+    required: false
+    default: "Get Early Access"
+  placeholder:
+    type: text
+    required: false
+    default: "Your email"
+  btn_label:
+    type: text
+    required: false
+    default: "JOIN WAITLIST"
+  telegram_href:
     type: url
     required: false
     default: "#"
+  telegram_label:
+    type: text
+    required: false
+    default: "JOIN TELEGRAM →"
