@@ -1,0 +1,1223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SpecDesigner — Visual context designer for AI agents</title>
+  <meta name="description" content="Architecture docs that never go stale. Draw your system, compile per-module specs, let your AI agent build with full context.">
+  <meta property="og:title" content="SpecDesigner — Visual context designer for AI agents">
+  <meta property="og:description" content="One tool. Always up-to-date specs. Nothing to maintain.">
+  <meta property="og:type" content="website">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "SpecDesigner",
+    "description": "Visual architecture editor where diagram and spec are one object. Compile per-module contracts your AI agent reads and implements.",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "Web",
+    "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+    "author": { "@type": "Person", "name": "Stanislav Glazov" }
+  }
+  </script>
+  <style>
+    /* ── Reset ── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    /* ── Design Tokens ── */
+    :root {
+      --bg: #0a0a0a;
+      --bg-card: #111111;
+      --fg: #e0e0e0;
+      --fg-dim: #888888;
+      --fg-muted: #555555;
+      --accent: #d63030;
+      --accent-dim: rgba(214,48,48,0.4);
+      --accent-glow: rgba(214,48,48,0.15);
+      --ok: #1DD9A0;
+      --border: rgba(255,255,255,0.10);
+      --font: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
+
+      /* 8px grid system */
+      --grid: 8px;
+      --space-xs: calc(var(--grid) * 1);   /* 8 */
+      --space-sm: calc(var(--grid) * 2);   /* 16 */
+      --space-md: calc(var(--grid) * 3);   /* 24 */
+      --space-lg: calc(var(--grid) * 5);   /* 40 */
+      --space-xl: calc(var(--grid) * 8);   /* 64 */
+      --space-2xl: calc(var(--grid) * 10); /* 80 */
+      --space-3xl: calc(var(--grid) * 12); /* 96 */
+      --space-4xl: calc(var(--grid) * 15); /* 120 */
+
+      /* Column grid: 12 columns, max 1200px */
+      --cols: 12;
+      --col-gap: var(--space-md);
+      --max-width: 1200px;
+      --side-padding: var(--space-lg);
+    }
+
+    body {
+      font-family: var(--font);
+      font-size: 14px;
+      color: var(--fg);
+      background: var(--bg);
+      -webkit-font-smoothing: antialiased;
+      line-height: 1.6;
+      overflow-x: hidden;
+    }
+
+    /* CRT effect — deferred to separate R&D task (#121) */
+
+    /* ── Grid Container ── */
+    .container {
+      max-width: var(--max-width);
+      margin: 0 auto;
+      padding-left: var(--side-padding);
+      padding-right: var(--side-padding);
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(var(--cols), 1fr);
+      gap: var(--col-gap);
+    }
+
+    /* ── Section rhythm ── */
+    section {
+      padding-top: var(--space-3xl);
+      padding-bottom: var(--space-3xl);
+    }
+
+    /* ── Section titles ── */
+    .section-title {
+      font-size: 14px;
+      font-weight: 400;
+      letter-spacing: 0.2em;
+      color: var(--accent);
+      text-transform: uppercase;
+      margin-bottom: var(--space-lg);
+    }
+    .section-title::before { content: ':: '; }
+
+    /* ── Links ── */
+    a { color: var(--accent); text-decoration: none; transition: opacity 0.2s; }
+    a:hover { opacity: 0.8; }
+
+    /* ══════════════════════════════════════
+       HERO
+       ══════════════════════════════════════ */
+    .hero {
+      padding-top: var(--space-4xl);
+      padding-bottom: var(--space-2xl);
+      text-align: center;
+    }
+
+    .hero-logo {
+      font-size: clamp(36px, 5vw, 56px);
+      font-weight: 300;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      margin-bottom: var(--space-xs);
+    }
+    .hero-logo .accent { color: var(--accent); }
+
+    .hero-subtitle {
+      font-size: clamp(13px, 1.8vw, 16px);
+      color: var(--fg-dim);
+      letter-spacing: 0.08em;
+      margin-bottom: var(--space-lg);
+    }
+
+    .hero-headlines {
+      position: relative;
+      height: 3.6em;
+      margin-bottom: var(--space-lg);
+    }
+    .headline {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: clamp(16px, 2.5vw, 22px);
+      font-weight: 300;
+      color: var(--fg);
+      letter-spacing: 0.02em;
+      text-align: center;
+      padding: 0 var(--space-md);
+      opacity: 0;
+      transition: opacity 0.8s ease;
+    }
+    .headline.active { opacity: 1; }
+
+    .hero-cta {
+      display: flex;
+      gap: var(--space-sm);
+      justify-content: center;
+      flex-wrap: wrap;
+      margin-bottom: var(--space-xl);
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      padding: calc(var(--grid) * 1.5) calc(var(--grid) * 4);
+      font-family: var(--font);
+      font-size: 11px;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      text-decoration: none;
+      border: 1px solid var(--border);
+      transition: all 0.2s;
+      cursor: pointer;
+    }
+    .btn-primary {
+      background: var(--accent);
+      color: var(--fg);
+      border-color: var(--accent);
+    }
+    .btn-primary:hover {
+      background: transparent;
+      color: var(--accent);
+      opacity: 1;
+    }
+    .btn-secondary {
+      background: transparent;
+      color: var(--fg-dim);
+    }
+    .btn-secondary:hover {
+      border-color: var(--fg-dim);
+      color: var(--fg);
+      opacity: 1;
+    }
+
+    /* Terminal */
+    .hero-terminal-wrapper {
+      max-width: 640px;
+      margin: 0 auto var(--space-xl);
+      height: 280px;
+      position: relative;
+    }
+    .hero-terminal {
+      position: absolute;
+      inset: 0;
+      text-align: left;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      padding: var(--space-md);
+      padding-bottom: var(--space-lg);
+      font-size: clamp(11px, 1.2vw, 13px);
+      line-height: 1.8;
+      color: var(--fg-dim);
+      overflow: hidden;
+    }
+    .term-line { opacity: 0; animation: fade-in 0.3s forwards; white-space: pre; }
+    @keyframes fade-in { to { opacity: 1; } }
+    .t-cmd { color: var(--accent); }
+    .t-ok { color: var(--ok); }
+    .t-dim { color: var(--fg-muted); }
+
+    /* Agent badges */
+    .hero-agents {
+      display: flex;
+      gap: var(--space-md);
+      justify-content: center;
+      align-items: center;
+      flex-wrap: wrap;
+      max-width: 640px;
+      margin: 0 auto;
+    }
+    .agent-badge {
+      font-size: 9px;
+      letter-spacing: 0.12em;
+      padding: calc(var(--grid) * 0.5) calc(var(--grid) * 1.5);
+      border: 1px solid var(--border);
+      color: var(--fg-muted);
+      text-transform: uppercase;
+    }
+    .agent-logo {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      opacity: 0.6;
+      transition: opacity 0.2s;
+    }
+    .agent-logo:hover { opacity: 1; }
+    .agent-logo svg {
+      width: 18px;
+      height: 18px;
+      fill: var(--fg-dim);
+    }
+    .agent-logo span {
+      font-size: 11px;
+      letter-spacing: 0.06em;
+      color: var(--fg-dim);
+    }
+
+    /* ══════════════════════════════════════
+       CARDS (shared)
+       ══════════════════════════════════════ */
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      padding: var(--space-md) var(--space-md);
+      position: relative;
+      overflow: hidden;
+      transition: border-color 0.2s;
+    }
+    .card:hover { border-color: rgba(255,255,255,0.18); }
+    .card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0;
+      width: 0; height: 2px;
+      background: var(--accent);
+      transition: width 0.4s ease;
+    }
+    .card:hover::before { width: 100%; }
+    .card-num {
+      font-size: 28px;
+      font-weight: 300;
+      color: var(--accent);
+      opacity: 0.25;
+      margin-bottom: var(--space-xs);
+      line-height: 1;
+    }
+    .card-label {
+      font-size: 11px;
+      letter-spacing: 0.16em;
+      color: var(--fg);
+      text-transform: uppercase;
+      font-weight: 400;
+      margin-bottom: var(--space-sm);
+    }
+    .card-text {
+      font-size: 13px;
+      font-weight: 300;
+      color: var(--fg-dim);
+      line-height: 1.7;
+    }
+
+    /* ══════════════════════════════════════
+       PROBLEM — 3 columns
+       ══════════════════════════════════════ */
+    .problem-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: var(--space-sm);
+    }
+    .problem-grid .card-label {
+      font-size: 14px;
+      letter-spacing: 0.12em;
+      margin-bottom: var(--space-md);
+    }
+    .problem-grid .card-text {
+      font-size: 14px;
+      line-height: 1.8;
+    }
+    .problem-grid .card {
+      padding: var(--space-lg) var(--space-md);
+    }
+
+    /* ══════════════════════════════════════
+       HOW IT WORKS — nodes with edges
+       ══════════════════════════════════════ */
+    .pipeline {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0;
+      padding: var(--space-md) 0;
+    }
+    .node {
+      position: relative;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      padding: var(--space-md) var(--space-sm);
+      text-align: center;
+      width: 160px;
+      min-height: 120px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: var(--space-xs);
+      transition: border-color 0.3s;
+      z-index: 1;
+    }
+    .node:hover { border-color: var(--accent); }
+    .node-icon {
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      opacity: 0.6;
+    }
+    .node-label {
+      font-size: 12px;
+      letter-spacing: 0.14em;
+      color: var(--fg);
+      text-transform: uppercase;
+      font-weight: 400;
+    }
+    .node-desc {
+      font-size: 10px;
+      color: var(--fg-dim);
+      line-height: 1.5;
+    }
+    .edge {
+      width: 48px;
+      height: 2px;
+      position: relative;
+      flex-shrink: 0;
+    }
+    .edge::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 1px;
+      background: linear-gradient(90deg, var(--accent), transparent 30%, transparent 70%, var(--accent));
+      opacity: 0.4;
+    }
+    .edge::after {
+      content: '';
+      position: absolute;
+      top: -3px;
+      right: 0;
+      width: 0;
+      height: 0;
+      border-top: 4px solid transparent;
+      border-bottom: 4px solid transparent;
+      border-left: 6px solid var(--accent);
+      opacity: 0.4;
+    }
+    .section-quote {
+      margin-top: var(--space-lg);
+      text-align: center;
+      font-size: clamp(14px, 1.6vw, 16px);
+      font-weight: 300;
+      color: var(--fg-dim);
+      font-style: italic;
+      letter-spacing: 0.02em;
+    }
+
+    /* ══════════════════════════════════════
+       MOBILE PIPELINE (waterfall SVG)
+       ══════════════════════════════════════ */
+    .mobile-pipeline { display: none; }
+
+    /* ══════════════════════════════════════
+       C4 MODEL
+       ══════════════════════════════════════ */
+    .c4-grid {
+      width: 100%;
+    }
+    .c4-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      border: 1px solid var(--border);
+      border-bottom: none;
+      background: var(--bg-card);
+    }
+    .c4-row:last-child { border-bottom: 1px solid var(--border); }
+    .c4-level {
+      padding: var(--space-sm) var(--space-md);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .c4-name {
+      font-size: 12px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--fg);
+      font-weight: 400;
+    }
+    .c4-what {
+      font-size: 10px;
+      color: var(--fg-muted);
+    }
+    .c4-mapping {
+      padding: var(--space-sm) var(--space-md);
+      display: flex;
+      align-items: center;
+      font-size: 14px;
+      color: var(--accent);
+      letter-spacing: 0.06em;
+    }
+
+    /* ══════════════════════════════════════
+       COMPARISON TABLE
+       ══════════════════════════════════════ */
+    .table-scroll {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    .comparison-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      letter-spacing: 0.04em;
+    }
+    .comparison-table th,
+    .comparison-table td {
+      padding: var(--space-sm) var(--space-md);
+      border: 1px solid var(--border);
+      text-align: center;
+      white-space: nowrap;
+    }
+    .comparison-table th {
+      background: var(--bg-card);
+      color: var(--fg-dim);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      font-weight: 400;
+      font-size: 12px;
+    }
+    .comparison-table td { color: var(--fg-dim); font-size: 14px; }
+    .comparison-table td:first-child {
+      text-align: left;
+      color: var(--fg);
+      font-size: 13px;
+    }
+    .comparison-table .hl { color: var(--ok); font-weight: 500; font-size: 14px; }
+    .comparison-table th.hl { color: var(--ok); font-size: 13px; }
+    .sticky-col {
+      position: sticky;
+      background: var(--bg-card);
+      z-index: 2;
+    }
+    .sticky-feature { left: 0; }
+    .sticky-ours { left: 160px; border-right: 2px solid rgba(29,217,160,0.2); }
+    thead .sticky-col { z-index: 3; }
+    @media (max-width: 768px) {
+      .sticky-col { position: static; }
+      .sticky-ours { border-right: none; }
+    }
+
+    /* ══════════════════════════════════════
+       DELIVERY PIPELINE
+       ══════════════════════════════════════ */
+    .delivery-pipeline {
+      display: flex;
+      align-items: center;
+      gap: 0;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    .dp-node {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      padding: var(--space-md);
+      text-align: center;
+      min-width: 140px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+    .dp-accent { border-color: var(--accent); }
+    .dp-icon { font-size: 20px; opacity: 0.5; }
+    .dp-accent .dp-icon { color: var(--accent); opacity: 0.8; }
+    .dp-label {
+      font-size: 12px;
+      letter-spacing: 0.14em;
+      color: var(--fg);
+      text-transform: uppercase;
+      font-weight: 400;
+    }
+    .dp-desc { font-size: 10px; color: var(--fg-dim); line-height: 1.4; }
+    .dp-edge {
+      width: 40px;
+      height: 1px;
+      background: linear-gradient(90deg, var(--accent), transparent 30%, transparent 70%, var(--accent));
+      opacity: 0.4;
+      flex-shrink: 0;
+      position: relative;
+    }
+    .dp-edge::after {
+      content: '';
+      position: absolute;
+      top: -3px;
+      right: 0;
+      border-top: 3.5px solid transparent;
+      border-bottom: 3.5px solid transparent;
+      border-left: 5px solid var(--accent);
+      opacity: 0.6;
+    }
+    .dp-channels {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      padding: var(--space-sm) var(--space-md);
+      text-align: center;
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-xs);
+    }
+    .dp-badges {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .dp-badges span {
+      font-size: 9px;
+      letter-spacing: 0.1em;
+      padding: 3px 10px;
+      border: 1px solid rgba(29,217,160,0.3);
+      color: var(--ok);
+      text-transform: uppercase;
+    }
+
+    /* ══════════════════════════════════════
+       FEATURES — 2x2
+       ══════════════════════════════════════ */
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 2px;
+    }
+
+    /* ══════════════════════════════════════
+       FAQ
+       ══════════════════════════════════════ */
+    .faq-list { max-width: 960px; margin: 0 auto; }
+    .faq-item summary { font-size: 13px; }
+    .faq-item p { font-size: 14px; }
+    .faq-item {
+      border: 1px solid var(--border);
+      border-bottom: none;
+      background: var(--bg-card);
+    }
+    .faq-item:last-child { border-bottom: 1px solid var(--border); }
+    .faq-item summary {
+      padding: var(--space-sm) var(--space-md);
+      cursor: pointer;
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      color: var(--fg);
+      text-transform: uppercase;
+      font-weight: 400;
+      list-style: none;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .faq-item summary::after {
+      content: '+';
+      color: var(--fg-muted);
+      font-size: 16px;
+      transition: transform 0.3s;
+    }
+    .faq-item[open] summary::after {
+      content: '-';
+    }
+    .faq-item summary::-webkit-details-marker { display: none; }
+    .faq-item p {
+      padding: 0 var(--space-md) var(--space-sm);
+      font-size: 13px;
+      color: var(--fg-dim);
+      line-height: 1.7;
+      font-weight: 300;
+    }
+
+    /* ══════════════════════════════════════
+       CTA
+       ══════════════════════════════════════ */
+    .cta-section { text-align: center; }
+    .cta-card {
+      max-width: 640px;
+      margin: 0 auto;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      padding: var(--space-lg);
+    }
+    .waitlist-form {
+      display: flex;
+      gap: var(--space-xs);
+    }
+    .waitlist-form input {
+      flex: 1;
+      padding: calc(var(--grid) * 1.5) var(--space-sm);
+      font-family: var(--font);
+      font-size: 12px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--fg);
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .waitlist-form input:focus { border-color: var(--accent); }
+    .waitlist-form input::placeholder { color: var(--fg-muted); }
+    .waitlist-msg {
+      margin-top: var(--space-xs);
+      font-size: 11px;
+      letter-spacing: 0.06em;
+      min-height: 20px;
+    }
+    .waitlist-msg.ok { color: var(--ok); }
+    .waitlist-msg.err { color: var(--accent); }
+    .cta-telegram {
+      margin-top: var(--space-md);
+      font-size: 11px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
+    /* ══════════════════════════════════════
+       FOOTER
+       ══════════════════════════════════════ */
+    .site-footer {
+      padding: var(--space-md) 0;
+      border-top: 1px solid var(--border);
+      font-size: 10px;
+      color: var(--fg-muted);
+      letter-spacing: 0.1em;
+    }
+
+    /* ══════════════════════════════════════
+       RESPONSIVE
+       ══════════════════════════════════════ */
+    @media (max-width: 768px) {
+      :root {
+        --side-padding: var(--space-md);
+      }
+      section { padding-top: var(--space-xl); padding-bottom: var(--space-xl); }
+      .hero { padding-top: var(--space-2xl); }
+      .problem-grid { grid-template-columns: 1fr; gap: var(--space-xs); }
+      .features-grid { grid-template-columns: 1fr; gap: var(--space-xs); }
+      .pipeline { overflow-x: auto; -webkit-overflow-scrolling: touch; justify-content: flex-start; padding-bottom: var(--space-xs); }
+      .node { min-width: 120px; width: 120px; }
+      .c4-row { grid-template-columns: 1fr; }
+      .c4-level { border-right: none; border-bottom: 1px solid var(--border); }
+      .waitlist-form { flex-direction: column; }
+      .hero-cta { flex-direction: column; align-items: center; }
+      .meme-grid { grid-template-columns: 1fr !important; }
+      .principles-grid { grid-template-columns: 1fr !important; }
+      /* How It Works: hide desktop SVG, show mobile waterfall SVG */
+      .desktop-pipeline { display: none !important; }
+      .mobile-pipeline { display: block !important; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ════════ HERO ════════ -->
+  <section class="hero">
+    <div class="container">
+      <div class="hero-logo">SPEC<span class="accent">DESIGNER</span></div>
+      <div class="hero-subtitle">Visual context designer for AI agents.</div>
+
+      <div class="hero-headlines">
+        <div class="headline active">One tool. Always up-to-date specs. Nothing to maintain.</div>
+        <div class="headline">Architecture docs that never go stale.</div>
+        <div class="headline">Stop maintaining docs. Start designing systems.</div>
+      </div>
+
+      <div class="hero-cta">
+        <a href="#waitlist" class="btn btn-primary">JOIN WAITLIST</a>
+        <a href="https://t.me/specdesigner" class="btn btn-secondary" target="_blank" rel="noopener">TELEGRAM</a>
+      </div>
+
+      <div class="hero-terminal-wrapper"><div class="hero-terminal" id="hero-terminal"></div></div>
+
+      <div class="hero-agents" style="margin-top:var(--space-lg);">
+        <div class="agent-logo">
+          <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 15v-4H7l5-7v4h4l-5 7z"/></svg>
+          <span>Claude Code</span>
+        </div>
+        <div class="agent-logo">
+          <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M22.106 5.68L12.5.135a.998.998 0 00-.998 0L1.893 5.68a.84.84 0 00-.419.726v11.186c0 .3.16.577.42.727l9.607 5.547a.999.999 0 00.998 0l9.608-5.547a.84.84 0 00.42-.727V6.407a.84.84 0 00-.42-.726zm-.603 1.176L12.228 22.92c-.063.108-.228.064-.228-.061V12.34a.59.59 0 00-.295-.51l-9.11-5.26c-.107-.062-.063-.228.062-.228h18.55c.264 0 .428.286.296.514z"/></svg>
+          <span>Cursor</span>
+        </div>
+        <div class="agent-logo">
+          <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z" fill="none"/><path d="M8 12l2.5 2.5L16 9" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span>Codex</span>
+        </div>
+        <div class="agent-logo">
+          <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M23.78 5.004h-.228a2.187 2.187 0 00-2.18 2.196v4.912c0 .98-.804 1.775-1.76 1.775a1.818 1.818 0 01-1.472-.773L13.168 5.95a2.197 2.197 0 00-1.81-.95c-1.134 0-2.154.972-2.154 2.173v4.94c0 .98-.797 1.775-1.76 1.775-.57 0-1.136-.289-1.472-.773L.408 5.098C.282 4.918 0 5.007 0 5.228v4.284c0 .216.066.426.188.604l5.475 7.889c.324.466.8.812 1.351.938 1.377.316 2.645-.754 2.645-2.117V11.89c0-.98.787-1.775 1.76-1.775h.002c.586 0 1.135.288 1.472.773l4.972 7.163a2.15 2.15 0 001.81.95c1.158 0 2.151-.973 2.151-2.173v-4.939c0-.98.787-1.775 1.76-1.775h.194c.122 0 .22-.1.22-.222V5.225a.221.221 0 00-.22-.222z"/></svg>
+          <span>Windsurf</span>
+        </div>
+        <div class="agent-logo">
+          <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 2C6.477 2 2 6.477 2 12c0 4.42 2.865 8.166 6.839 9.489.5.092.682-.217.682-.482 0-.237-.008-.866-.013-1.7-2.782.604-3.369-1.341-3.369-1.341-.454-1.155-1.11-1.462-1.11-1.462-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.087 2.91.831.092-.646.35-1.086.636-1.336-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.578 9.578 0 0112 6.836c.85.004 1.705.115 2.504.337 1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.203 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.743 0 .267.18.578.688.48C19.138 20.163 22 16.418 22 12c0-5.523-4.477-10-10-10z"/></svg>
+          <span>Copilot</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ════════ MEME: Without vs With ════════ -->
+  <section>
+    <div class="container">
+      <div class="meme-grid" style="display:grid; grid-template-columns:1fr 1fr; gap:var(--space-sm);">
+
+        <!-- Without -->
+        <div>
+          <div style="font-size:11px; letter-spacing:0.16em; color:var(--fg-muted); text-transform:uppercase; margin-bottom:var(--space-sm);">Without SpecDesigner</div>
+          <div style="background:var(--bg-card); border:1px solid var(--border); padding:var(--space-sm) var(--space-md); font-size:12px; line-height:2.4;">
+            <div style="display:flex; justify-content:space-between;"><span style="color:var(--fg-muted);">9:00</span> <span style="color:#6B9BF7;">Ask Claude to write the code</span></div>
+            <div style="display:flex; justify-content:space-between;"><span style="color:var(--fg-muted);">9:15</span> <span style="color:#F7A54B;">Ask Claude to fix what it wrote</span></div>
+            <div style="display:flex; justify-content:space-between;"><span style="color:var(--fg-muted);">9:45</span> <span style="color:#F7A54B;">Explain Claude why its fix broke...</span></div>
+            <div style="display:flex; justify-content:space-between;"><span style="color:var(--fg-muted);">10:30</span> <span style="color:var(--fg-dim);">Give up and write it myself</span></div>
+            <div style="display:flex; justify-content:space-between;"><span style="color:var(--fg-muted);">11:00</span> <span style="color:#F7A54B;">Realize Claude was right...</span></div>
+            <div style="display:flex; justify-content:space-between;"><span style="color:var(--fg-muted);">11:30</span> <span style="color:#E05252;">Exceed rate limit</span></div>
+            <div style="display:flex; justify-content:space-between;"><span style="color:var(--fg-muted);">14:00</span> <span style="color:#C084FC;">Rewrite everything from scratch</span></div>
+            <div style="display:flex; justify-content:space-between;"><span style="color:var(--fg-muted);">16:00</span> <span style="color:#E05252;">Prod is down</span></div>
+            <div style="display:flex; justify-content:space-between;"><span style="color:var(--fg-muted);">17:00</span> <span style="color:#4ADE80;">Post about 10x productivity</span></div>
+          </div>
+        </div>
+
+        <!-- With -->
+        <div>
+          <div style="font-size:11px; letter-spacing:0.16em; color:var(--ok); text-transform:uppercase; margin-bottom:var(--space-sm);">With SpecDesigner</div>
+          <div style="background:var(--bg-card); border:1px solid rgba(29,217,160,0.3); padding:var(--space-sm) var(--space-md); font-size:12px; line-height:2.4;">
+            <div style="display:flex; justify-content:space-between;"><span style="color:var(--fg-muted);">9:00</span> <span style="color:var(--fg-dim);">Draw architecture in SpecDesigner</span></div>
+            <div style="display:flex; justify-content:space-between;"><span style="color:var(--fg-muted);">9:20</span> <span style="color:var(--fg-dim);">Fill specs: boundaries, criteria</span></div>
+            <div style="display:flex; justify-content:space-between;"><span style="color:var(--fg-muted);">9:30</span> <span style="color:var(--fg-dim);">Verify &mdash; catch 2 design mistakes</span></div>
+            <div style="display:flex; justify-content:space-between;"><span style="color:var(--fg-muted);">9:35</span> <span style="color:var(--ok);">Compile &mdash; 6 specs generated</span></div>
+            <div style="display:flex; justify-content:space-between;"><span style="color:var(--fg-muted);">9:40</span> <span style="color:var(--ok);">Agent reads spec, writes code</span></div>
+            <div style="display:flex; justify-content:space-between;"><span style="color:var(--fg-muted);">10:00</span> <span style="color:var(--ok);">All acceptance criteria pass</span></div>
+            <div style="display:flex; justify-content:space-between;"><span style="color:var(--fg-muted);">10:15</span> <span style="color:var(--ok);">Deployed. Coffee time.</span></div>
+            <div><span style="color:var(--fg-muted);">&nbsp;</span></div>
+            <div><span style="color:var(--fg-muted);">&nbsp;</span></div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ════════ PROBLEM ════════ -->
+  <section>
+    <div class="container">
+      <div class="section-title">The Problem</div>
+      <div class="problem-grid">
+        <div class="card">
+          <div class="card-num">01</div>
+          <div class="card-label">Diagram ≠ Docs</div>
+          <div class="card-text">draw.io in one place, Notion in another. They diverge in hours. Agent works from an outdated version.</div>
+        </div>
+        <div class="card">
+          <div class="card-num">02</div>
+          <div class="card-label">One File For All</div>
+          <div class="card-text">CLAUDE.md = 1 file for entire project. Doesn't scale past 5 modules. Agent drowns in 10K tokens of noise.</div>
+        </div>
+        <div class="card">
+          <div class="card-num">03</div>
+          <div class="card-label">Docs Drift</div>
+          <div class="card-text">Specs live in chats, notes, boards. Every new session starts from scratch. No contract, no continuity.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ════════ HOW IT WORKS — SVG Pipeline ════════ -->
+  <section>
+    <div class="container">
+      <div class="section-title">How It Works</div>
+      <div class="desktop-pipeline" style="overflow-x:auto; -webkit-overflow-scrolling:touch;">
+        <svg viewBox="0 0 1100 170" xmlns="http://www.w3.org/2000/svg" style="width:100%; max-width:1100px; height:auto; display:block; margin:0 auto;">
+
+          <!-- ── Node 1: DESIGN ── -->
+          <rect x="4" y="15" width="176" height="140" rx="4" fill="#111" stroke="rgba(255,255,255,0.10)" stroke-width="1"/>
+          <rect x="4" y="15" width="176" height="2.5" rx="1" fill="#438DD5"/>
+          <circle cx="20" cy="42" r="3.5" fill="#438DD5"/>
+          <text x="30" y="46" fill="#438DD5" font-family="JetBrains Mono, monospace" font-size="13" font-weight="400" letter-spacing="1.5" text-transform="uppercase">DESIGN</text>
+          <text x="20" y="78" fill="#888" font-family="JetBrains Mono, monospace" font-size="10">Draw architecture</text>
+          <text x="20" y="93" fill="#888" font-family="JetBrains Mono, monospace" font-size="10">on visual canvas</text>
+          <circle cx="184" cy="85" r="5" fill="#438DD5" stroke="#0a0a0a" stroke-width="2"/>
+
+          <!-- Edge 1→2 -->
+          <line x1="189" y1="85" x2="227" y2="85" stroke="#555" stroke-width="1.5"/>
+
+          <!-- ── Node 2: SPECIFY ── -->
+          <rect x="232" y="15" width="176" height="140" rx="4" fill="#111" stroke="rgba(255,255,255,0.10)" stroke-width="1"/>
+          <rect x="232" y="15" width="176" height="2.5" rx="1" fill="#438DD5"/>
+          <circle cx="228" cy="85" r="5" fill="#438DD5" stroke="#0a0a0a" stroke-width="2"/>
+          <circle cx="248" cy="42" r="3.5" fill="#438DD5"/>
+          <text x="258" y="46" fill="#438DD5" font-family="JetBrains Mono, monospace" font-size="13" font-weight="400" letter-spacing="1.5">SPECIFY</text>
+          <text x="248" y="78" fill="#888" font-family="JetBrains Mono, monospace" font-size="10">What it does,</text>
+          <text x="248" y="93" fill="#888" font-family="JetBrains Mono, monospace" font-size="10">what it doesn't</text>
+          <circle cx="412" cy="85" r="5" fill="#438DD5" stroke="#0a0a0a" stroke-width="2"/>
+
+          <!-- Edge 2→3 -->
+          <line x1="417" y1="85" x2="455" y2="85" stroke="#555" stroke-width="1.5"/>
+
+          <!-- ── Node 3: VERIFY ── -->
+          <rect x="460" y="15" width="176" height="140" rx="4" fill="#111" stroke="rgba(255,255,255,0.10)" stroke-width="1"/>
+          <rect x="460" y="15" width="176" height="2.5" rx="1" fill="#00897B"/>
+          <circle cx="456" cy="85" r="5" fill="#00897B" stroke="#0a0a0a" stroke-width="2"/>
+          <circle cx="476" cy="42" r="3.5" fill="#00897B"/>
+          <text x="486" y="46" fill="#00897B" font-family="JetBrains Mono, monospace" font-size="13" font-weight="400" letter-spacing="1.5">VERIFY</text>
+          <text x="476" y="78" fill="#888" font-family="JetBrains Mono, monospace" font-size="10">Catch mistakes</text>
+          <text x="476" y="93" fill="#888" font-family="JetBrains Mono, monospace" font-size="10">before any code</text>
+          <circle cx="640" cy="85" r="5" fill="#00897B" stroke="#0a0a0a" stroke-width="2"/>
+
+          <!-- Edge 3→4 -->
+          <line x1="645" y1="85" x2="683" y2="85" stroke="#555" stroke-width="1.5"/>
+
+          <!-- ── Node 4: DELIVER (multi-port) ── -->
+          <rect x="688" y="15" width="176" height="140" rx="4" fill="#111" stroke="rgba(255,255,255,0.10)" stroke-width="1"/>
+          <rect x="688" y="15" width="176" height="2.5" rx="1" fill="#E65100"/>
+          <circle cx="684" cy="85" r="5" fill="#E65100" stroke="#0a0a0a" stroke-width="2"/>
+          <circle cx="704" cy="42" r="3.5" fill="#E65100"/>
+          <text x="714" y="46" fill="#E65100" font-family="JetBrains Mono, monospace" font-size="13" font-weight="400" letter-spacing="1.5">DELIVER</text>
+          <!-- Channel labels with colored bg badges, right-aligned -->
+          <rect x="790" y="59" width="62" height="16" rx="2" fill="rgba(67,141,213,0.15)"/>
+          <text x="851" y="71" text-anchor="end" fill="#438DD5" font-family="JetBrains Mono, monospace" font-size="9">REST API</text>
+          <rect x="770" y="79" width="82" height="16" rx="2" fill="rgba(76,175,80,0.15)"/>
+          <text x="851" y="91" text-anchor="end" fill="#4CAF50" font-family="JetBrains Mono, monospace" font-size="9">MCP SERVER</text>
+          <rect x="780" y="99" width="72" height="16" rx="2" fill="rgba(230,81,0,0.15)"/>
+          <text x="851" y="111" text-anchor="end" fill="#E65100" font-family="JetBrains Mono, monospace" font-size="9">FILE SYNC</text>
+          <rect x="800" y="119" width="52" height="16" rx="2" fill="rgba(107,114,128,0.15)"/>
+          <text x="851" y="131" text-anchor="end" fill="#6B7280" font-family="JetBrains Mono, monospace" font-size="9">GITHUB</text>
+          <!-- 4 output ports -->
+          <circle cx="868" cy="67" r="4" fill="#438DD5" stroke="#0a0a0a" stroke-width="2"/>
+          <circle cx="868" cy="87" r="4" fill="#4CAF50" stroke="#0a0a0a" stroke-width="2"/>
+          <circle cx="868" cy="107" r="4" fill="#E65100" stroke="#0a0a0a" stroke-width="2"/>
+          <circle cx="868" cy="127" r="4" fill="#6B7280" stroke="#0a0a0a" stroke-width="2"/>
+
+          <!-- 4 horizontal edges to 4 input ports on Implement -->
+          <line x1="872" y1="67" x2="908" y2="67" stroke="#438DD5" stroke-width="1.5" opacity="0.5"/>
+          <line x1="872" y1="87" x2="908" y2="87" stroke="#4CAF50" stroke-width="1.5" opacity="0.5"/>
+          <line x1="872" y1="107" x2="908" y2="107" stroke="#E65100" stroke-width="1.5" opacity="0.5"/>
+          <line x1="872" y1="127" x2="908" y2="127" stroke="#6B7280" stroke-width="1.5" opacity="0.5"/>
+
+          <!-- ── Node 5: IMPLEMENT (4 input ports) ── -->
+          <rect x="916" y="15" width="180" height="140" rx="4" fill="#111" stroke="rgba(255,255,255,0.10)" stroke-width="1"/>
+          <rect x="916" y="15" width="180" height="2.5" rx="1" fill="#6B7280" opacity="0.8"/>
+          <!-- 4 input ports matching Deliver outputs -->
+          <circle cx="912" cy="67" r="4" fill="#438DD5" stroke="#0a0a0a" stroke-width="2"/>
+          <circle cx="912" cy="87" r="4" fill="#4CAF50" stroke="#0a0a0a" stroke-width="2"/>
+          <circle cx="912" cy="107" r="4" fill="#E65100" stroke="#0a0a0a" stroke-width="2"/>
+          <circle cx="912" cy="127" r="4" fill="#6B7280" stroke="#0a0a0a" stroke-width="2"/>
+          <circle cx="932" cy="42" r="3.5" fill="#6B7280"/>
+          <text x="942" y="46" fill="#6B7280" font-family="JetBrains Mono, monospace" font-size="13" font-weight="400" letter-spacing="1.5">IMPLEMENT</text>
+          <text x="932" y="78" fill="#888" font-family="JetBrains Mono, monospace" font-size="10">Agent reads spec,</text>
+          <text x="932" y="93" fill="#888" font-family="JetBrains Mono, monospace" font-size="10">writes code</text>
+        </svg>
+      </div>
+      <!-- Mobile waterfall SVG (hidden on desktop) -->
+      <div class="mobile-pipeline" style="background:var(--bg-card); border:1px solid var(--border); padding:var(--space-sm);">
+        <svg viewBox="-10 0 360 770" xmlns="http://www.w3.org/2000/svg" style="width:100%; max-width:340px; height:auto; display:block; margin:0 auto;">
+
+          <!-- Node 1: DESIGN (y=0) -->
+          <rect x="10" y="5" width="300" height="100" rx="4" fill="#111" stroke="rgba(255,255,255,0.10)" stroke-width="1"/>
+          <rect x="10" y="5" width="300" height="2.5" rx="1" fill="#438DD5"/>
+          <circle cx="26" cy="32" r="3.5" fill="#438DD5"/>
+          <text x="36" y="36" fill="#438DD5" font-family="JetBrains Mono, monospace" font-size="14" letter-spacing="1.5">DESIGN</text>
+          <text x="26" y="62" fill="#888" font-family="JetBrains Mono, monospace" font-size="11">Draw architecture</text>
+          <text x="26" y="78" fill="#888" font-family="JetBrains Mono, monospace" font-size="11">on visual canvas</text>
+          <circle cx="314" cy="55" r="5" fill="#438DD5" stroke="#0a0a0a" stroke-width="2"/>
+
+          <!-- Edge 1→2 -->
+          <path d="M319,55 L332,55 L332,130 L-7,130 L-7,215 L6,215" fill="none" stroke="#555" stroke-width="1.5"/>
+
+          <!-- Node 2: SPECIFY (y=160) -->
+          <rect x="10" y="165" width="300" height="100" rx="4" fill="#111" stroke="rgba(255,255,255,0.10)" stroke-width="1"/>
+          <rect x="10" y="165" width="300" height="2.5" rx="1" fill="#438DD5"/>
+          <circle cx="6" cy="215" r="5" fill="#438DD5" stroke="#0a0a0a" stroke-width="2"/>
+          <circle cx="26" cy="192" r="3.5" fill="#438DD5"/>
+          <text x="36" y="196" fill="#438DD5" font-family="JetBrains Mono, monospace" font-size="14" letter-spacing="1.5">SPECIFY</text>
+          <text x="26" y="222" fill="#888" font-family="JetBrains Mono, monospace" font-size="11">What it does,</text>
+          <text x="26" y="238" fill="#888" font-family="JetBrains Mono, monospace" font-size="11">what it doesn't</text>
+          <circle cx="314" cy="215" r="5" fill="#438DD5" stroke="#0a0a0a" stroke-width="2"/>
+
+          <!-- Edge 2→3 -->
+          <path d="M319,215 L332,215 L332,290 L-7,290 L-7,375 L6,375" fill="none" stroke="#555" stroke-width="1.5"/>
+
+          <!-- Node 3: VERIFY (y=320) -->
+          <rect x="10" y="325" width="300" height="100" rx="4" fill="#111" stroke="rgba(255,255,255,0.10)" stroke-width="1"/>
+          <rect x="10" y="325" width="300" height="2.5" rx="1" fill="#00897B"/>
+          <circle cx="6" cy="375" r="5" fill="#00897B" stroke="#0a0a0a" stroke-width="2"/>
+          <circle cx="26" cy="352" r="3.5" fill="#00897B"/>
+          <text x="36" y="356" fill="#00897B" font-family="JetBrains Mono, monospace" font-size="14" letter-spacing="1.5">VERIFY</text>
+          <text x="26" y="382" fill="#888" font-family="JetBrains Mono, monospace" font-size="11">Catch mistakes</text>
+          <text x="26" y="398" fill="#888" font-family="JetBrains Mono, monospace" font-size="11">before any code</text>
+          <circle cx="314" cy="375" r="5" fill="#00897B" stroke="#0a0a0a" stroke-width="2"/>
+
+          <!-- Edge 3→4 -->
+          <path d="M319,375 L332,375 L332,450 L-7,450 L-7,535 L6,535" fill="none" stroke="#555" stroke-width="1.5"/>
+
+          <!-- Node 4: DELIVER (y=480) -->
+          <rect x="10" y="485" width="300" height="120" rx="4" fill="#111" stroke="rgba(255,255,255,0.10)" stroke-width="1"/>
+          <rect x="10" y="485" width="300" height="2.5" rx="1" fill="#E65100"/>
+          <circle cx="6" cy="535" r="5" fill="#E65100" stroke="#0a0a0a" stroke-width="2"/>
+          <circle cx="26" cy="512" r="3.5" fill="#E65100"/>
+          <text x="36" y="516" fill="#E65100" font-family="JetBrains Mono, monospace" font-size="14" letter-spacing="1.5">DELIVER</text>
+          <rect x="26" y="530" width="60" height="14" rx="2" fill="rgba(67,141,213,0.15)"/>
+          <text x="30" y="541" fill="#438DD5" font-family="JetBrains Mono, monospace" font-size="9">REST API</text>
+          <rect x="92" y="530" width="36" height="14" rx="2" fill="rgba(76,175,80,0.15)"/>
+          <text x="96" y="541" fill="#4CAF50" font-family="JetBrains Mono, monospace" font-size="9">MCP</text>
+          <rect x="134" y="530" width="62" height="14" rx="2" fill="rgba(230,81,0,0.15)"/>
+          <text x="138" y="541" fill="#E65100" font-family="JetBrains Mono, monospace" font-size="9">FILE SYNC</text>
+          <rect x="202" y="530" width="50" height="14" rx="2" fill="rgba(107,114,128,0.15)"/>
+          <text x="206" y="541" fill="#6B7280" font-family="JetBrains Mono, monospace" font-size="9">GITHUB</text>
+          <circle cx="314" cy="535" r="5" fill="#E65100" stroke="#0a0a0a" stroke-width="2"/>
+
+          <!-- Edge 4→5 -->
+          <path d="M319,535 L332,535 L332,620 L-7,620 L-7,705 L6,705" fill="none" stroke="#555" stroke-width="1.5"/>
+
+          <!-- Node 5: IMPLEMENT (y=650) -->
+          <rect x="10" y="655" width="300" height="100" rx="4" fill="#111" stroke="rgba(255,255,255,0.10)" stroke-width="1"/>
+          <rect x="10" y="655" width="300" height="2.5" rx="1" fill="#6B7280" opacity="0.8"/>
+          <circle cx="6" cy="705" r="5" fill="#6B7280" stroke="#0a0a0a" stroke-width="2"/>
+          <circle cx="26" cy="682" r="3.5" fill="#6B7280"/>
+          <text x="36" y="686" fill="#6B7280" font-family="JetBrains Mono, monospace" font-size="14" letter-spacing="1.5">IMPLEMENT</text>
+          <text x="26" y="712" fill="#888" font-family="JetBrains Mono, monospace" font-size="11">Agent reads spec,</text>
+          <text x="26" y="728" fill="#888" font-family="JetBrains Mono, monospace" font-size="11">writes code</text>
+
+        </svg>
+      </div>
+
+      <div class="section-quote">"Diagram and spec are one object. They never diverge."</div>
+    </div>
+  </section>
+
+  <!-- ════════ C4 MODEL ════════ -->
+  <section>
+    <div class="container">
+      <div class="section-title">Built on C4</div>
+      <div class="c4-grid">
+        <div class="c4-row">
+          <div class="c4-level">
+            <span class="c4-name">Context</span>
+            <span class="c4-what">System boundary, actors</span>
+          </div>
+          <div class="c4-mapping">&rarr; Project node</div>
+        </div>
+        <div class="c4-row">
+          <div class="c4-level">
+            <span class="c4-name">Container</span>
+            <span class="c4-what">Deployable units, pipelines</span>
+          </div>
+          <div class="c4-mapping">&rarr; Subnetworks</div>
+        </div>
+        <div class="c4-row">
+          <div class="c4-level">
+            <span class="c4-name">Component</span>
+            <span class="c4-what">Core building blocks</span>
+          </div>
+          <div class="c4-mapping">&rarr; Service, Store, Queue, Gateway, External</div>
+        </div>
+        <div class="c4-row">
+          <div class="c4-level">
+            <span class="c4-name">Code</span>
+            <span class="c4-what">Implementation</span>
+          </div>
+          <div class="c4-mapping">&rarr; Agent reads compiled spec, writes code</div>
+        </div>
+      </div>
+      <div class="section-quote">"C4 gives you the structure. SpecDesigner fills it with contracts your agent can execute."</div>
+    </div>
+  </section>
+
+  <!-- ════════ COMPARISON ════════ -->
+  <section>
+    <div class="container">
+      <div class="section-title">Comparison</div>
+      <div class="table-scroll">
+        <table class="comparison-table">
+          <thead>
+            <tr>
+              <th class="sticky-col sticky-feature"></th>
+              <th class="sticky-col sticky-ours hl">SpecDesigner</th>
+              <th>draw.io</th>
+              <th>Mermaid</th>
+              <th>CLAUDE.md</th>
+              <th>Structurizr</th>
+              <th>IcePanel</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td class="sticky-col sticky-feature">Visual editor</td><td class="sticky-col sticky-ours hl">&#10004;</td><td>&#10004;</td><td>&mdash;</td><td>&mdash;</td><td>&mdash; (DSL)</td><td>&#10004;</td></tr>
+            <tr><td class="sticky-col sticky-feature">Per-module specs</td><td class="sticky-col sticky-ours hl">&#10004;</td><td>&mdash;</td><td>&mdash;</td><td>&mdash;</td><td>&mdash;</td><td>&mdash;</td></tr>
+            <tr><td class="sticky-col sticky-feature">Diagram = spec</td><td class="sticky-col sticky-ours hl">&#10004;</td><td>&mdash;</td><td>&mdash;</td><td>&mdash;</td><td>&mdash;</td><td>&mdash;</td></tr>
+            <tr><td class="sticky-col sticky-feature">Agent delivery</td><td class="sticky-col sticky-ours hl">&#10004; MCP</td><td>&mdash;</td><td>&mdash;</td><td>partial</td><td>&mdash;</td><td>beta</td></tr>
+            <tr><td class="sticky-col sticky-feature">Context graph</td><td class="sticky-col sticky-ours hl">&#10004;</td><td>&mdash;</td><td>&mdash;</td><td>&mdash;</td><td>&mdash;</td><td>&mdash;</td></tr>
+            <tr><td class="sticky-col sticky-feature">Forced clarity</td><td class="sticky-col sticky-ours hl">&#10004;</td><td>&mdash;</td><td>&mdash;</td><td>&mdash;</td><td>&mdash;</td><td>&mdash;</td></tr>
+            <tr><td class="sticky-col sticky-feature">Price</td><td class="sticky-col sticky-ours hl">free beta</td><td>free</td><td>free</td><td>free</td><td>free/$</td><td>$18/user/mo</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ════════ KEY PRINCIPLES ════════ -->
+  <section>
+    <div class="container">
+      <div class="section-title">Key Principles</div>
+      <div class="principles-grid" style="display:grid; grid-template-columns:repeat(3, 1fr); gap:var(--space-sm);">
+        <div class="card">
+          <div class="card-label">Single Source of Truth</div>
+          <div class="card-text">One place for architecture and specs. Git-versioned. Change a module &mdash; all downstream consumers see the update instantly. No manual sync, no stale docs, no drift.</div>
+        </div>
+        <div class="card">
+          <div class="card-label">Progressive Disclosure</div>
+          <div class="card-text">Hierarchical context from project down to task: rules &rarr; subsystem &rarr; module &rarr; neighbors. Delivered through any channel &mdash; REST API, MCP, file sync. Agent-agnostic by design.</div>
+        </div>
+        <div class="card">
+          <div class="card-label">Visual Docs + Forced Clarity</div>
+          <div class="card-text">Diagram and spec in one visual editor. Spec template makes you describe what a module does, what it doesn't, and when it's done &mdash; before any code is written.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ════════ SCREENSHOT PLACEHOLDER ════════ -->
+  <section>
+    <div class="container" style="text-align:center;">
+      <div class="section-title">See It In Action</div>
+      <div style="max-width:960px; margin:0 auto; border:1px solid var(--border); border-radius:8px; overflow:hidden;">
+        <img src="specdesigner.png" alt="SpecDesigner — POS architecture graph with PostgreSQL node spec open" style="width:100%; height:auto; display:block;">
+      </div>
+      <p style="margin-top:var(--space-sm); font-size:12px; color:var(--fg-muted);">POS architecture in SpecDesigner — 12 nodes, subnetworks, compiled specs with Context API</p>
+    </div>
+  </section>
+
+  <!-- Features merged into Context Delivery section above -->
+
+  <!-- ════════ FAQ ════════ -->
+  <section>
+    <div class="container">
+      <div class="section-title">FAQ</div>
+      <div class="faq-list">
+        <details class="faq-item">
+          <summary>How is this different from draw.io?</summary>
+          <p>draw.io draws diagrams. SpecDesigner makes each diagram node a structured spec with boundaries, acceptance criteria, and code mapping. Diagram and spec are one object &mdash; they never diverge.</p>
+        </details>
+        <details class="faq-item">
+          <summary>Why not just write a good CLAUDE.md?</summary>
+          <p>CLAUDE.md is one file for your entire project. It doesn't scale past 5-10 modules. SpecDesigner compiles per-module specs &mdash; each agent gets only the context it needs.</p>
+        </details>
+        <details class="faq-item">
+          <summary>Does it work with Cursor / Codex / other agents?</summary>
+          <p>Yes. SpecDesigner compiles to standard Markdown files. Any agent that reads files works: Claude Code, Cursor, Codex, Windsurf, GitHub Copilot. MCP Server also available.</p>
+        </details>
+        <details class="faq-item">
+          <summary>Is it open source?</summary>
+          <p>The product is closed source. The Agent Spec Template (spec format) is open and free to use. Early access is free for focus group participants. Pricing TBD after feedback.</p>
+        </details>
+        <details class="faq-item">
+          <summary>What does "forced clarity" mean?</summary>
+          <p>The spec template (summary, boundaries, acceptance criteria, code mapping) forces you to think through each module before coding. Users report this is valuable even without an AI agent.</p>
+        </details>
+      </div>
+    </div>
+  </section>
+
+  <!-- ════════ CTA ════════ -->
+  <section id="waitlist" class="cta-section">
+    <div class="container">
+      <div class="section-title">Get Early Access</div>
+      <div class="cta-card">
+        <form id="waitlist-form" class="waitlist-form">
+          <input type="email" id="waitlist-email" placeholder="Your email" required autocomplete="email">
+          <button type="submit" class="btn btn-primary">JOIN WAITLIST</button>
+        </form>
+        <div id="waitlist-msg" class="waitlist-msg"></div>
+        <div class="cta-telegram">
+          <a href="https://t.me/specdesigner" target="_blank" rel="noopener">JOIN TELEGRAM &rarr;</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ════════ FOOTER ════════ -->
+  <footer class="site-footer">
+    <div class="container">
+      &copy; 2026 Stanislav Glazov
+    </div>
+  </footer>
+
+  <!-- ════════ SCRIPTS ════════ -->
+  <script>
+    // ── Headline rotation ──
+    (function() {
+      const headlines = document.querySelectorAll('.headline');
+      if (!headlines.length) return;
+      let current = 0;
+      setInterval(() => {
+        headlines[current].classList.remove('active');
+        current = (current + 1) % headlines.length;
+        headlines[current].classList.add('active');
+      }, 4000);
+    })();
+
+    // ── Terminal animation ──
+    (function() {
+      const el = document.getElementById('hero-terminal');
+      if (!el) return;
+      const lines = [
+        { text: '$ specdesigner compile', cls: 't-cmd' },
+        { text: '  scanning 6 nodes, 5 edges...', cls: '' },
+        { text: '✓ graph validated in 0.12s', cls: 't-ok' },
+        { text: '', cls: '' },
+        { text: '  compiling brief-collector...', cls: '' },
+        { text: '  summary: "Central pipeline service"', cls: 't-dim' },
+        { text: '  boundaries: 3 constraints', cls: 't-dim' },
+        { text: '  acceptance_criteria: 4 checks', cls: 't-dim' },
+        { text: '✓ brief-collector.md written', cls: 't-ok' },
+        { text: '', cls: '' },
+        { text: '  compiling notion...', cls: '' },
+        { text: '✓ notion.md written', cls: 't-ok' },
+        { text: '  compiling gmail...', cls: '' },
+        { text: '✓ gmail.md written', cls: 't-ok' },
+        { text: '  compiling calendar...', cls: '' },
+        { text: '✓ calendar.md written', cls: 't-ok' },
+        { text: '', cls: '' },
+        { text: '✓ all specs compiled: 6/6 modules', cls: 't-ok' },
+        { text: '✓ ARCHITECTURE.md regenerated', cls: 't-ok' },
+      ];
+      // Use innerHTML replacement instead of DOM manipulation to prevent layout shifts
+      const MAX_LINES = 9;
+      let buffer = [];
+      let i = 0;
+      function addLine() {
+        const line = lines[i % lines.length];
+        const cls = line.cls ? ' class="' + line.cls + '"' : '';
+        buffer.push('<div' + cls + '>' + (line.text || '&nbsp;') + '</div>');
+        if (buffer.length > MAX_LINES) buffer.shift();
+        // Pad with empty lines to fill container
+        const padded = buffer.slice();
+        while (padded.length < MAX_LINES) padded.unshift('<div>&nbsp;</div>');
+        el.innerHTML = padded.join('');
+        i++;
+        const next = lines[i % lines.length];
+        const delay = next.text === '' ? 600 : 200 + Math.random() * 300;
+        setTimeout(addLine, delay);
+      }
+      setTimeout(addLine, 800);
+    })();
+
+    // ── Waitlist form (placeholder — replace with Supabase) ──
+    document.getElementById('waitlist-form').addEventListener('submit', function(e) {
+      e.preventDefault();
+      const email = document.getElementById('waitlist-email').value.trim();
+      const msg = document.getElementById('waitlist-msg');
+      if (!email) return;
+
+      // TODO: Replace with Supabase
+      // const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+      // const { error } = await sb.from('waitlist').insert({ email });
+
+      msg.textContent = '✓ You are on the list. We will reach out soon.';
+      msg.className = 'waitlist-msg ok';
+      document.getElementById('waitlist-email').value = '';
+    });
+  </script>
+
+</body>
+</html>

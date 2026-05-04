@@ -1,0 +1,21 @@
+.problem-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-sm);
+}
+.problem-grid .card-label {
+  font-size: 14px;
+  letter-spacing: 0.12em;
+  margin-bottom: var(--space-md);
+}
+.problem-grid .card-text {
+  font-size: 14px;
+  line-height: 1.8;
+}
+.problem-grid .card {
+  padding: var(--space-lg) var(--space-md);
+}
+
+@media (max-width: 768px) {
+  .problem-grid { grid-template-columns: 1fr; gap: var(--space-xs); }
+}

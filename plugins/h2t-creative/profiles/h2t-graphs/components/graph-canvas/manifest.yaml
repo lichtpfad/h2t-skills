@@ -1,0 +1,22 @@
+component: graph-canvas
+fields:
+  tag:
+    type: text
+    required: false
+    default: ""
+  h2:
+    type: text
+    required: false
+    default: ""
+  sub:
+    type: text
+    required: false
+    default: ""
+  canvas_id:
+    type: text
+    required: false
+    default: "graphCanvas"
+  caption:
+    type: text
+    required: false
+    default: ""

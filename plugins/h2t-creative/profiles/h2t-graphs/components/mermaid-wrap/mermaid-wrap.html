@@ -1,0 +1,38 @@
+<section>
+  <span class="section-tag">{{ tag }}</span>
+  <h2>{{ h2 }}</h2>
+  <p class="sub">{{ sub }}</p>
+  <div class="mermaid-wrap mermaid-desktop">
+    <pre class="mermaid">{{ diagram }}</pre>
+  </div>
+  <div class="mermaid-wrap mermaid-mobile">
+    <pre class="mermaid">{{ diagram_mobile }}</pre>
+  </div>
+  {{ caption_html | safe }}
+  {{ body_after_html | safe }}
+  <script>
+    if (window.mermaid && !window.__h2tMermaidInitialized) {
+      window.__h2tMermaidInitialized = true;
+      mermaid.initialize({
+        startOnLoad: true,
+        theme: 'dark',
+        themeVariables: {
+          darkMode: true,
+          background: '#0e0e16',
+          primaryColor: '#16161f',
+          primaryTextColor: '#a0a0b8',
+          primaryBorderColor: '#2a2a3a',
+          lineColor: '#3a3a4a',
+          secondaryColor: '#0e0e16',
+          tertiaryColor: '#0e0e16',
+          fontFamily: 'JetBrains Mono, monospace',
+          fontSize: '17px',
+          clusterBkg: '#0a0a10',
+          clusterBorder: '#1e1e2e',
+          edgeLabelBackground: '#0a0a10',
+        },
+        flowchart: { curve: 'basis', padding: 20, htmlLabels: true, nodeSpacing: 30, rankSpacing: 60 }
+      });
+    }
+  </script>
+</section>

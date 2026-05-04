@@ -1,15 +1,22 @@
-.nav {
-  position: sticky; top: 0; z-index: var(--z-nav);
-  background: rgba(6,6,9,0.92); /* intentional: semi-transparent overlay for all h2t-graphs palettes (bg is always #060609) */
+nav {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+  background: rgba(6,6,9,0.95);
   backdrop-filter: blur(12px);
-  border-bottom: 1px solid var(--color-border);
-  padding: var(--space-md) var(--space-xl);
+  border-bottom: 1px solid var(--border);
+  padding: 0.6rem 2rem;
+  display: flex; align-items: center; justify-content: space-between;
+  font-size: 0.7rem; letter-spacing: 0.1em;
 }
-.nav-inner { max-width: 1200px; margin: 0 auto; display: flex; align-items: center; }
-.nav__brand { text-decoration: none; }
-.nav__brand-text {
-  font-family: var(--font-mono);
-  font-size: 0.7rem; font-weight: 600;
-  color: var(--color-text-hi);
-  letter-spacing: 0.2em; text-transform: uppercase;
+
+nav .logo { font-weight: 700; color: var(--text-dim); }
+nav .logo span { color: var(--accent); text-shadow: 0 0 8px var(--accent-glow); }
+
+nav .links { display: flex; gap: 1.5rem; }
+nav .links a {
+  color: var(--text-dim);
+  text-transform: uppercase;
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  text-decoration: none;
 }
+nav .links a:hover { color: var(--accent); text-shadow: 0 0 6px var(--accent-glow); }

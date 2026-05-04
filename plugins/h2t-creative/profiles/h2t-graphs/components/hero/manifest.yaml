@@ -1,13 +1,29 @@
 component: hero
 fields:
-  headline:
-    type: text
-    required: true
-  subline:
-    type: text
-    required: false
-    default: ""
   badge:
     type: text
     required: false
     default: ""
+  headline_html:
+    type: html
+    required: true
+  desc:
+    type: text
+    required: false
+    default: ""
+  btn1_label:
+    type: text
+    required: false
+    default: "GET STARTED"
+  btn1_href:
+    type: url
+    required: false
+    default: "#"
+  btn2_label:
+    type: text
+    required: false
+    default: "READ DOCS"
+  btn2_href:
+    type: url
+    required: false
+    default: "#"

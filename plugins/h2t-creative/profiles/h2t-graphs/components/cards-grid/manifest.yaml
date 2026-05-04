@@ -1,0 +1,30 @@
+component: cards-grid
+fields:
+  title:
+    type: text
+    required: false
+    default: ""
+  card1_title:
+    type: text
+    required: true
+  card1_body:
+    type: text
+    required: true
+  card2_title:
+    type: text
+    required: true
+  card2_body:
+    type: text
+    required: true
+  card3_title:
+    type: text
+    required: true
+  card3_body:
+    type: text
+    required: true
+  card4_title:
+    type: text
+    required: true
+  card4_body:
+    type: text
+    required: true

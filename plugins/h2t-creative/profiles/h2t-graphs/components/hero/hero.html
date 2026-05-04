@@ -1,7 +1,9 @@
-<section class="section hero">
-  <div class="hero-inner">
-    <div class="hero__badge">{{ badge }}</div>
-    <h1 class="hero__headline">{{ headline }}</h1>
-    <p class="hero__subline">{{ subline }}</p>
+<section class="hero">
+  <div class="hero-badge">{{ badge }}</div>
+  <h1>{{ headline_html | safe }}</h1>
+  <p class="desc">{{ desc }}</p>
+  <div class="btn-row">
+    <a href="{{ btn1_href }}" class="btn btn-fill">{{ btn1_label }}</a>
+    <a href="{{ btn2_href }}" class="btn btn-outline">{{ btn2_label }}</a>
   </div>
 </section>

@@ -1,0 +1,17 @@
+component: feature-grid
+fields:
+  tag:
+    type: text
+    required: false
+    default: ""
+  h2:
+    type: text
+    required: false
+    default: ""
+  sub:
+    type: text
+    required: false
+    default: ""
+  cells_html:
+    type: html
+    required: true

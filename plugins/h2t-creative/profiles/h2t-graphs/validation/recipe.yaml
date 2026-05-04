@@ -1,0 +1,273 @@
+type: landing
+profile: h2t-graphs
+palette: default
+title: "h2t-graphs — Knowledge Graph Engine for AI Agents"
+
+sections:
+  - component: nav
+    content:
+      brand_accent: "H2T"
+      brand_suffix: "GRAPHS"
+      links_html: |
+        <a href="#why">Why</a>
+        <a href="#how">How it works</a>
+        <a href="#search">Search</a>
+        <a href="/docs" style="color:var(--accent)">API Docs</a>
+        <a href="#access">Get Access</a>
+
+  - component: hero
+    content:
+      badge: "Knowledge Engine for AI Agents"
+      headline_html: 'Your agents need <span class="glow">knowledge</span>,<br>not another database'
+      desc: "Multi-source knowledge graph engine with provenance tracking, confidence scoring, and semantic search. Domain-agnostic — the engine provides infrastructure, your agents bring the domain."
+      btn1_label: "API Documentation"
+      btn1_href: "/docs"
+      btn2_label: "Get Access"
+      btn2_href: "#access"
+
+  - component: graph-canvas
+    content:
+      tag: "how it works"
+      h2: "What is a knowledge graph?"
+      sub: "Nodes are facts — concepts, operators, frameworks, cases. Edges are relationships — teaches, extends, illustrates. Confidence encodes trust. Click any node to see how traversal discovers connected knowledge."
+      canvas_id: "graphCanvas"
+      caption: "Node color = type · brightness = confidence · click to traverse"
+
+  - component: compare-grid
+    content:
+      tag: "positioning"
+      h2: "Not a graph database. A knowledge engine."
+      sub: "Graph databases store and query relationships. h2t-graphs goes further — it scores, ranks, tracks provenance, and serves LLM-optimized subgraphs. Your agent gets answers, not rows."
+      no_title: "Graph Database (Neo4j, ArangoDB)"
+      no_items_html: |
+        <li>Store nodes and edges</li>
+        <li>Cypher / AQL queries</li>
+        <li>Returns raw graph data</li>
+        <li>No opinion on quality or trust</li>
+        <li>Agent must interpret results</li>
+        <li>Generic for any graph workload</li>
+      yes_title: "h2t-graphs (Knowledge Engine)"
+      yes_items_html: |
+        <li>Provenance on every node — who said it, how reliable</li>
+        <li>Confidence scoring with promotion path</li>
+        <li>Semantic + keyword + hybrid search in one call</li>
+        <li>LLM-optimized output — scored, ranked, token-estimated</li>
+        <li>Multi-source with cross-source linking</li>
+        <li>Built specifically for AI agent consumption</li>
+
+  - component: mermaid-wrap
+    content:
+      tag: "architecture"
+      h2: "Engine owns infrastructure. Domain owns knowledge."
+      sub: "The engine knows nothing about Houdini, TouchDesigner, or creative thinking. It stores, scores, queries, and validates. Consumers bring domain-specific data and get domain-specific answers."
+      diagram: |
+        graph LR
+            subgraph DOMAIN ["YOUR DOMAIN"]
+                D1["Schemas"] & D2["Fields"] & D3["Review"]
+            end
+            subgraph ENGINE ["h2t-graphs"]
+                E1["Store"] & E2["Score"] & E3["Search"] & E4["Validate"]
+            end
+            subgraph AGENTS ["AI AGENTS"]
+                A1["Query"] & A2["Write"] & A3["Feedback"]
+            end
+            DOMAIN -->|"data"| ENGINE
+            ENGINE -->|"answers"| AGENTS
+            AGENTS -->|"feedback"| ENGINE
+            style ENGINE fill:#1a0a10,stroke:#e94560,color:#e94560
+            style DOMAIN fill:#0a0d1a,stroke:#4a9eff,color:#c0c0d0
+            style AGENTS fill:#0a1a0d,stroke:#00ff88,color:#c0c0d0
+      diagram_mobile: |
+        graph TD
+            DOMAIN["YOUR DOMAIN"] -->|"data"| ENGINE["h2t-graphs"]
+            ENGINE -->|"answers"| AGENTS["AI AGENTS"]
+            AGENTS -->|"feedback"| ENGINE
+            style ENGINE fill:#1a0a10,stroke:#e94560,color:#e94560
+            style DOMAIN fill:#0a0d1a,stroke:#4a9eff,color:#c0c0d0
+            style AGENTS fill:#0a1a0d,stroke:#00ff88,color:#c0c0d0
+      caption_html: '<p style="font-size:0.7rem;color:var(--text-dim);margin-top:1.5rem;text-align:center">Currently serving: creative methodologies, DCC operators, educational courses, TRIZ principles, design thinking frameworks</p>'
+
+  - component: feature-grid
+    content:
+      tag: "search"
+      h2: "Four search modes. One API call."
+      sub: "Keyword precision, semantic understanding, or both. Query expansion enriches searches with LLM-generated synonyms. Edge-enriched embeddings capture graph context, not just node text."
+      cells_html: |
+        <div class="feature-cell">
+          <div class="icon" style="color:var(--blue)">&#x2263;</div>
+          <h3>Keyword Search</h3>
+          <p>Case-insensitive text match across configurable fields. Weighted scoring: relevance × source weight × confidence. Fast, precise, deterministic.</p>
+        </div>
+        <div class="feature-cell">
+          <div class="icon" style="color:var(--accent)">&#x2740;</div>
+          <h3>Semantic Search</h3>
+          <p>Gemini embeddings (768d) with HNSW index. Edge-enriched — each node's embedding includes its graph neighborhood. Finds concepts even when wording doesn't match.</p>
+        </div>
+        <div class="feature-cell">
+          <div class="icon" style="color:var(--green)">&#x2726;</div>
+          <h3>Hybrid + Expansion</h3>
+          <p>Keyword and semantic merged with score normalization. Optional LLM query expansion adds synonyms before embedding. Best of both worlds.</p>
+        </div>
+        <div class="feature-cell">
+          <div class="icon" style="color:var(--amber)">&#x21C4;</div>
+          <h3>Graph Traversal</h3>
+          <p>BFS from any node with depth and type filters. Confidence-gated — traverse only through trusted nodes. Python runtime, not database-locked.</p>
+        </div>
+
+  - component: mermaid-wrap
+    content:
+      tag: "provenance"
+      h2: "Every node has a trust score"
+      sub: "Not all knowledge is equal. LLM-generated content starts at low confidence. Expert-verified content earns trust. The engine tracks the journey."
+      diagram: |
+        graph LR
+            M["MODEL<br/>confidence: 0.3"] -->|"human review"| S["SESSION<br/>confidence: 0.6"]
+            S -->|"expert validation"| E["EXPERT<br/>confidence: 0.9"]
+            E -->|"feedback refines"| S
+            style M fill:#0e0e14,stroke:#3a3a50,color:#a0a0b8
+            style S fill:#0a0d1a,stroke:#4a9eff,color:#4a9eff
+            style E fill:#0a1a0d,stroke:#00ff88,color:#00ff88,stroke-width:2px
+      diagram_mobile: |
+        graph TD
+            M["MODEL<br/>confidence: 0.3"] -->|"human review"| S["SESSION<br/>confidence: 0.6"]
+            S -->|"expert validation"| E["EXPERT<br/>confidence: 0.9"]
+            E -->|"feedback refines"| S
+            style M fill:#0e0e14,stroke:#3a3a50,color:#a0a0b8
+            style S fill:#0a0d1a,stroke:#4a9eff,color:#4a9eff
+            style E fill:#0a1a0d,stroke:#00ff88,color:#00ff88,stroke-width:2px
+      caption_html: '<p style="font-size:0.72rem;color:var(--text);margin-top:1.5rem">Source types: <code style="color:var(--accent)">expert</code> (0.8–1.0) · <code style="color:var(--blue)">docs</code> (0.9) · <code style="color:var(--blue)">session</code> (0.6–0.8) · <code style="color:var(--text-dim)">model</code> (0.3–0.5). Queries filter by <code>min_confidence</code>. Feedback adjusts scores in real time.</p>'
+
+  - component: code-block
+    content:
+      tag: "real-time"
+      h2: "Write a node. Search it instantly."
+      sub: "On-write embedding — every new node is automatically vectorized with edge context. No batch jobs, no waiting. The node is semantically searchable the moment it's written."
+      code_html: |
+        <pre class="code-desktop" style="font-size:0.75rem;color:var(--text);line-height:2;overflow-x:auto"><code><span style="color:var(--text-dim)"># Write a node via API</span>
+        POST /api/nodes
+        {
+          "source": "my-domain",
+          "node": {"id": "insight_42", "node_type": "insight", "label": "Pattern discovered", ...}
+        }
+
+        <span style="color:var(--green)">→ {"status": "ok", "node_id": "insight_42", "embedded": true}</span>
+
+        <span style="color:var(--text-dim)"># Immediately searchable</span>
+        GET /api/query?source=my-domain&amp;semantic=pattern+discovery
+        <span style="color:var(--green)">→ results include insight_42</span></code></pre>
+        <pre class="code-mobile" style="color:var(--text)"><code><span style="color:var(--text-dim)"># Write node</span>
+        POST /api/nodes
+
+        {
+          "source": "my-domain",
+          "node": {
+            "id": "insight_42",
+            "label": "Pattern discovered"
+          }
+        }
+
+        <span style="color:var(--green)">→ embedded: true</span>
+
+        <span style="color:var(--text-dim)"># Search</span>
+        GET /api/query?semantic=pattern
+
+        <span style="color:var(--green)">→ results include insight_42</span></code></pre>
+
+  - component: mermaid-wrap
+    content:
+      tag: "integrations"
+      h2: "Part of a self-improving ecosystem"
+      sub: "h2t-graphs is the persistence layer in a larger feedback loop. Evaluation, optimization, and continuous learning flow through the graph."
+      diagram: |
+        graph LR
+            subgraph CLIENTS ["CLIENTS"]
+                C1["DCC Skill"] & C2["Creative"] & C3["Bot"]
+            end
+            subgraph GRAPHS ["h2t-graphs"]
+                G1["Store"] & G2["Search"] & G3["Score"]
+            end
+            subgraph EVALS ["h2t-evals"]
+                V1["GT Packs"] & V2["Judge"] & V3["Optimizer"]
+            end
+            CLIENTS -->|"query"| GRAPHS
+            GRAPHS -->|"metrics"| EVALS
+            EVALS -->|"improve"| CLIENTS
+            style GRAPHS fill:#1a0a10,stroke:#e94560,color:#e94560
+            style CLIENTS fill:#0a1a0d,stroke:#00ff88,color:#c0c0d0
+            style EVALS fill:#0a0d1a,stroke:#4a9eff,color:#c0c0d0
+      diagram_mobile: |
+        graph TD
+            CLIENTS["CLIENTS"] -->|"query"| GRAPHS["h2t-graphs"]
+            GRAPHS -->|"metrics"| EVALS["h2t-evals"]
+            EVALS -->|"improve"| CLIENTS
+            style GRAPHS fill:#1a0a10,stroke:#e94560,color:#e94560
+            style CLIENTS fill:#0a1a0d,stroke:#00ff88,color:#c0c0d0
+            style EVALS fill:#0a0d1a,stroke:#4a9eff,color:#c0c0d0
+      body_after_html: |
+        <div class="compare-grid" style="margin-top:2rem">
+          <div class="compare-card" style="border-color:rgba(233,69,96,0.2)">
+            <h3 style="color:var(--accent)">h2t-graphs</h3>
+            <ul>
+              <li style="color:var(--text)">Knowledge persistence &amp; query</li>
+              <li style="color:var(--text)">Provenance &amp; confidence tracking</li>
+              <li style="color:var(--text)">Semantic + keyword search</li>
+              <li style="color:var(--text)">Cross-source linking</li>
+            </ul>
+          </div>
+          <div class="compare-card" style="border-color:rgba(74,158,255,0.2)">
+            <h3 style="color:var(--blue)">h2t-evals</h3>
+            <ul>
+              <li style="color:var(--text)">Ground truth pack management</li>
+              <li style="color:var(--text)">Judge calibration &amp; scoring</li>
+              <li style="color:var(--text)">Prompt optimization (DSPy)</li>
+              <li style="color:var(--text)">Quality regression detection</li>
+            </ul>
+          </div>
+        </div>
+
+  - component: stack-row
+    content:
+      tag: "stack"
+      h2: "Built for solo + AI teams"
+      rows_html: |
+        <p class="sub">Lightweight. No Kubernetes. No managed services. One VPS, auto-TLS, full control.</p>
+        <div class="stack-row"><div class="chip">Python 3.11</div><div class="chip">FastAPI</div><div class="chip">PostgreSQL + pgvector</div><div class="chip">NetworkX</div></div>
+        <div class="stack-row"><div class="chip hi">Gemini Embeddings</div><div class="chip hi">HNSW Vector Index</div><div class="chip hi">On-Write Embedding</div></div>
+        <div class="stack-row"><div class="chip">Caddy + Auto-TLS</div><div class="chip">Docker</div><div class="chip">Token Auth (RO/RW)</div></div>
+
+  - component: hud-panel
+    content:
+      tag: "access"
+      h2: "Get API Access"
+      sub: 'All <code style="background:var(--surface);padding:2px 6px">/api/</code> endpoints require an <code style="background:var(--surface);padding:2px 6px;color:var(--accent)">X-H2T-Token</code> header. Documentation and this page are public.'
+      body: |
+        <div style="margin:2rem 0">
+          <p style="font-size:0.8rem;color:var(--text-hi);margin-bottom:0.5rem">Python (recommended):</p>
+          <pre class="code-desktop" style="background:var(--bg);border:1px solid var(--border);padding:1.2rem;font-size:0.75rem;overflow-x:auto;color:var(--text)"><code>pip install git+https://github.com/lichtpfad/h2t-client.git
+
+        from h2t_client import GraphsClient
+        client = GraphsClient()  <span style="color:var(--text-dim)"># auto-reads token from ~/.dor/secrets.env</span>
+        results = client.search("td", "noise generation", semantic=True)</code></pre>
+          <pre class="code-mobile" style="background:var(--bg);border:1px solid var(--border);color:var(--text)"><code>from h2t_client import GraphsClient
+        client = GraphsClient()
+        results = client.search(
+            "td",
+            "noise generation",
+            semantic=True,
+        )</code></pre>
+        </div>
+        <div style="margin:2rem 0">
+          <p style="font-size:0.8rem;color:var(--text-hi);margin-bottom:0.5rem">curl:</p>
+          <pre class="code-desktop" style="background:var(--bg);border:1px solid var(--border);padding:1.2rem;font-size:0.75rem;overflow-x:auto;color:var(--text)"><code>curl -H "X-H2T-Token: YOUR_TOKEN" \
+          "https://graphs.lichtpfadstudio.com/api/query?source=creative&amp;semantic=инверсия"</code></pre>
+          <pre class="code-mobile" style="background:var(--bg);border:1px solid var(--border);color:var(--text)"><code>curl -H "X-H2T-Token: TOKEN" \
+          "https://graphs.../api/query?semantic=инверсия"</code></pre>
+        </div>
+        <p style="margin-top:2rem;font-size:0.78rem;color:var(--text-dim)">For API access, contact <a href="https://t.me/prcdrl" style="color:var(--accent);text-decoration:none">@prcdrl</a> on Telegram.</p>
+
+  - component: footer
+    content:
+      motto_prefix: ""
+      motto_accent: "Schema-first."
+      motto_suffix: " Provenance on everything."
+      sub: "Knowledge engine for agents that need answers, not rows."

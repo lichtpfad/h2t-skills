@@ -1,0 +1,6 @@
+.mobile-pipeline { display: none; }
+
+@media (max-width: 768px) {
+  .desktop-pipeline { display: none !important; }
+  .mobile-pipeline { display: block !important; }
+}
