@@ -1,6 +1,30 @@
-<section class="section cta-section">
-  <div class="cta-inner">
-    <a href="{{ href }}" class="cta-btn cta-btn--filled">{{ text }}</a>
-    <a href="{{ href_ghost }}" class="cta-btn cta-btn--ghost">{{ text_ghost }}</a>
+<section id="{{ section_id }}" class="cta-section">
+  <div class="container">
+    <div class="section-title">{{ title }}</div>
+    <div class="cta-card">
+      <form id="waitlist-form" class="waitlist-form">
+        <input type="email" id="waitlist-email" placeholder="{{ placeholder }}" required autocomplete="email">
+        <button type="submit" class="btn btn-primary">{{ btn_label }}</button>
+      </form>
+      <div id="waitlist-msg" class="waitlist-msg"></div>
+      <div class="cta-telegram">
+        <a href="{{ telegram_href }}" target="_blank" rel="noopener">{{ telegram_label }}</a>
+      </div>
+    </div>
   </div>
+  <script>
+  (function() {
+    const form = document.getElementById('waitlist-form');
+    if (!form) return;
+    form.addEventListener('submit', function(e) {
+      e.preventDefault();
+      const email = document.getElementById('waitlist-email').value.trim();
+      const msg = document.getElementById('waitlist-msg');
+      if (!email) return;
+      msg.textContent = '✓ You are on the list. We will reach out soon.';
+      msg.className = 'waitlist-msg ok';
+      document.getElementById('waitlist-email').value = '';
+    });
+  })();
+  </script>
 </section>

@@ -1,0 +1,17 @@
+component: hud-panel
+fields:
+  tag:
+    type: text
+    required: false
+    default: ""
+  h2:
+    type: text
+    required: false
+    default: ""
+  sub:
+    type: html
+    required: false
+    default: ""
+  body:
+    type: html
+    required: true

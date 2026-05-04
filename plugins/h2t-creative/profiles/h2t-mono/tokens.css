@@ -1,28 +1,153 @@
 :root {
-  --font: 'JetBrains Mono', monospace;
-  --font-display: var(--font);
-  --font-body: var(--font);
-  --font-mono: var(--font);
+  --font: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
 
-  --space-xs: 0.25rem;
-  --space-sm: 0.5rem;
-  --space-md: 1rem;
-  --space-lg: 2rem;
-  --space-xl: 4rem;
+  --grid: 8px;
+  --space-xs: calc(var(--grid) * 1);
+  --space-sm: calc(var(--grid) * 2);
+  --space-md: calc(var(--grid) * 3);
+  --space-lg: calc(var(--grid) * 5);
+  --space-xl: calc(var(--grid) * 8);
+  --space-2xl: calc(var(--grid) * 10);
+  --space-3xl: calc(var(--grid) * 12);
+  --space-4xl: calc(var(--grid) * 15);
 
-  --radius-sm: 0;
-  --radius-md: 0;
-  --radius-lg: 0;
-
-  --z-bg: -1;
-  --z-base: 0;
-  --z-nav: 100;
+  --cols: 12;
+  --col-gap: var(--space-md);
+  --max-width: 1200px;
+  --side-padding: var(--space-lg);
 }
 
 body {
   font-family: var(--font);
   font-size: 14px;
-  background-color: var(--color-bg);
-  color: var(--color-text);
+  color: var(--fg);
+  background: var(--bg);
   -webkit-font-smoothing: antialiased;
+  line-height: 1.6;
+  overflow-x: hidden;
+}
+
+.container {
+  max-width: var(--max-width);
+  margin: 0 auto;
+  padding-left: var(--side-padding);
+  padding-right: var(--side-padding);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(var(--cols), 1fr);
+  gap: var(--col-gap);
+}
+
+section {
+  padding-top: var(--space-3xl);
+  padding-bottom: var(--space-3xl);
+}
+
+.section-title {
+  font-size: 14px;
+  font-weight: 400;
+  letter-spacing: 0.2em;
+  color: var(--accent);
+  text-transform: uppercase;
+  margin-bottom: var(--space-lg);
+}
+.section-title::before { content: ':: '; }
+
+a { color: var(--accent); text-decoration: none; transition: opacity 0.2s; }
+a:hover { opacity: 0.8; }
+
+/* ── Cards (shared) ── */
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  padding: var(--space-md) var(--space-md);
+  position: relative;
+  overflow: hidden;
+  transition: border-color 0.2s;
+}
+.card:hover { border-color: rgba(255,255,255,0.18); }
+.card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0;
+  width: 0; height: 2px;
+  background: var(--accent);
+  transition: width 0.4s ease;
+}
+.card:hover::before { width: 100%; }
+
+.card-num {
+  font-size: 28px;
+  font-weight: 300;
+  color: var(--accent);
+  opacity: 0.25;
+  margin-bottom: var(--space-xs);
+  line-height: 1;
+}
+
+.card-label {
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  color: var(--fg);
+  text-transform: uppercase;
+  font-weight: 400;
+  margin-bottom: var(--space-sm);
+}
+
+.card-text {
+  font-size: 13px;
+  font-weight: 300;
+  color: var(--fg-dim);
+  line-height: 1.7;
+}
+
+/* ── Buttons (shared) ── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  padding: calc(var(--grid) * 1.5) calc(var(--grid) * 4);
+  font-family: var(--font);
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  text-decoration: none;
+  border: 1px solid var(--border);
+  transition: all 0.2s;
+  cursor: pointer;
+}
+.btn-primary {
+  background: var(--accent);
+  color: var(--fg);
+  border-color: var(--accent);
+}
+.btn-primary:hover {
+  background: transparent;
+  color: var(--accent);
+  opacity: 1;
+}
+.btn-secondary {
+  background: transparent;
+  color: var(--fg-dim);
+}
+.btn-secondary:hover {
+  border-color: var(--fg-dim);
+  color: var(--fg);
+  opacity: 1;
+}
+
+.section-quote {
+  margin-top: var(--space-lg);
+  text-align: center;
+  font-size: clamp(14px, 1.6vw, 16px);
+  font-weight: 300;
+  color: var(--fg-dim);
+  font-style: italic;
+  letter-spacing: 0.02em;
+}
+
+@media (max-width: 768px) {
+  :root { --side-padding: var(--space-md); }
+  section { padding-top: var(--space-xl); padding-bottom: var(--space-xl); }
 }

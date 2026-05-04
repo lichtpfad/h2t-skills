@@ -33,6 +33,13 @@ def _build_font_links(profile_dir: Path) -> str:
     for url in urls:
         lines.append(f'  <link rel="stylesheet" href="{url}">')
     return "\n".join(lines) + "\n"
+
+
+def _build_head_scripts(profile_dir: Path) -> str:
+    scripts = _load_profile_config(profile_dir).get("head_scripts", [])
+    if not scripts:
+        return ""
+    return "\n".join(f'  <script src="{src}"></script>' for src in scripts) + "\n"
 DECK_LAYOUTS = {"title-only", "title-body", "title-media", "blank"}
 FX_SIZE_WARN_BYTES = 50 * 1024
 
@@ -105,7 +112,7 @@ _HTML_LANDING = """\
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{title}</title>
-{font_links}  <link rel="stylesheet" href="base.css">
+{font_links}{head_scripts}  <link rel="stylesheet" href="base.css">
   <link rel="stylesheet" href="profile.css">
 </head>
 <body>
@@ -204,9 +211,11 @@ def assemble_landing(
     fx_canvas = '<canvas id="bg-canvas"></canvas>' if has_fx else ""
     fx_script = _FX_SCRIPT_LANDING if has_fx else ""
     font_links = _build_font_links(profile_dir)
+    head_scripts = _build_head_scripts(profile_dir)
     index_html = _HTML_LANDING.format(
         title=html.escape(str(recipe.get("title", ""))),
         font_links=font_links,
+        head_scripts=head_scripts,
         body=body,
         fx_canvas=fx_canvas,
         fx_script=fx_script,

@@ -1,0 +1,203 @@
+type: landing
+profile: h2t-mono
+palette: default
+title: "SpecDesigner — Visual context designer for AI agents"
+
+sections:
+  - component: hero
+    content:
+      brand_prefix: "SPEC"
+      brand_accent: "DESIGNER"
+      subtitle: "Visual context designer for AI agents."
+      headlines_html: |
+        <div class="headline active">One tool. Always up-to-date specs. Nothing to maintain.</div>
+        <div class="headline">Architecture docs that never go stale.</div>
+        <div class="headline">Stop maintaining docs. Start designing systems.</div>
+      btn1_label: "JOIN WAITLIST"
+      btn1_href: "#waitlist"
+      btn2_label: "TELEGRAM"
+      btn2_href: "https://t.me/specdesigner"
+      agents_html: |
+        <div class="agent-logo">
+          <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 15v-4H7l5-7v4h4l-5 7z"/></svg>
+          <span>Claude Code</span>
+        </div>
+        <div class="agent-logo">
+          <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M22.106 5.68L12.5.135a.998.998 0 00-.998 0L1.893 5.68a.84.84 0 00-.419.726v11.186c0 .3.16.577.42.727l9.607 5.547a.999.999 0 00.998 0l9.608-5.547a.84.84 0 00.42-.727V6.407a.84.84 0 00-.42-.726zm-.603 1.176L12.228 22.92c-.063.108-.228.064-.228-.061V12.34a.59.59 0 00-.295-.51l-9.11-5.26c-.107-.062-.063-.228.062-.228h18.55c.264 0 .428.286.296.514z"/></svg>
+          <span>Cursor</span>
+        </div>
+        <div class="agent-logo">
+          <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z" fill="none"/><path d="M8 12l2.5 2.5L16 9" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span>Codex</span>
+        </div>
+        <div class="agent-logo">
+          <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M23.78 5.004h-.228a2.187 2.187 0 00-2.18 2.196v4.912c0 .98-.804 1.775-1.76 1.775a1.818 1.818 0 01-1.472-.773L13.168 5.95a2.197 2.197 0 00-1.81-.95c-1.134 0-2.154.972-2.154 2.173v4.94c0 .98-.797 1.775-1.76 1.775-.57 0-1.136-.289-1.472-.773L.408 5.098C.282 4.918 0 5.007 0 5.228v4.284c0 .216.066.426.188.604l5.475 7.889c.324.466.8.812 1.351.938 1.377.316 2.645-.754 2.645-2.117V11.89c0-.98.787-1.775 1.76-1.775h.002c.586 0 1.135.288 1.472.773l4.972 7.163a2.15 2.15 0 001.81.95c1.158 0 2.151-.973 2.151-2.173v-4.939c0-.98.787-1.775 1.76-1.775h.194c.122 0 .22-.1.22-.222V5.225a.221.221 0 00-.22-.222z"/></svg>
+          <span>Windsurf</span>
+        </div>
+        <div class="agent-logo">
+          <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 2C6.477 2 2 6.477 2 12c0 4.42 2.865 8.166 6.839 9.489.5.092.682-.217.682-.482 0-.237-.008-.866-.013-1.7-2.782.604-3.369-1.341-3.369-1.341-.454-1.155-1.11-1.462-1.11-1.462-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.087 2.91.831.092-.646.35-1.086.636-1.336-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.578 9.578 0 0112 6.836c.85.004 1.705.115 2.504.337 1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.203 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.743 0 .267.18.578.688.48C19.138 20.163 22 16.418 22 12c0-5.523-4.477-10-10-10z"/></svg>
+          <span>Copilot</span>
+        </div>
+
+  - component: meme-grid
+    content:
+      inner_html: |
+        <div>
+          <div style="font-size:11px; letter-spacing:0.16em; color:var(--fg-muted); text-transform:uppercase; margin-bottom:var(--space-sm);">Without SpecDesigner</div>
+          <div style="background:var(--bg-card); border:1px solid var(--border); padding:var(--space-sm) var(--space-md); font-size:12px; line-height:2.4;">
+            <div style="display:flex; justify-content:space-between;"><span style="color:var(--fg-muted);">9:00</span> <span style="color:#6B9BF7;">Ask Claude to write the code</span></div>
+            <div style="display:flex; justify-content:space-between;"><span style="color:var(--fg-muted);">9:15</span> <span style="color:#F7A54B;">Ask Claude to fix what it wrote</span></div>
+            <div style="display:flex; justify-content:space-between;"><span style="color:var(--fg-muted);">9:45</span> <span style="color:#F7A54B;">Explain Claude why its fix broke...</span></div>
+            <div style="display:flex; justify-content:space-between;"><span style="color:var(--fg-muted);">10:30</span> <span style="color:var(--fg-dim);">Give up and write it myself</span></div>
+            <div style="display:flex; justify-content:space-between;"><span style="color:var(--fg-muted);">11:00</span> <span style="color:#F7A54B;">Realize Claude was right...</span></div>
+            <div style="display:flex; justify-content:space-between;"><span style="color:var(--fg-muted);">11:30</span> <span style="color:#E05252;">Exceed rate limit</span></div>
+            <div style="display:flex; justify-content:space-between;"><span style="color:var(--fg-muted);">14:00</span> <span style="color:#C084FC;">Rewrite everything from scratch</span></div>
+            <div style="display:flex; justify-content:space-between;"><span style="color:var(--fg-muted);">16:00</span> <span style="color:#E05252;">Prod is down</span></div>
+            <div style="display:flex; justify-content:space-between;"><span style="color:var(--fg-muted);">17:00</span> <span style="color:#4ADE80;">Post about 10x productivity</span></div>
+          </div>
+        </div>
+        <div>
+          <div style="font-size:11px; letter-spacing:0.16em; color:var(--ok); text-transform:uppercase; margin-bottom:var(--space-sm);">With SpecDesigner</div>
+          <div style="background:var(--bg-card); border:1px solid rgba(29,217,160,0.3); padding:var(--space-sm) var(--space-md); font-size:12px; line-height:2.4;">
+            <div style="display:flex; justify-content:space-between;"><span style="color:var(--fg-muted);">9:00</span> <span style="color:var(--fg-dim);">Draw architecture in SpecDesigner</span></div>
+            <div style="display:flex; justify-content:space-between;"><span style="color:var(--fg-muted);">9:20</span> <span style="color:var(--fg-dim);">Fill specs: boundaries, criteria</span></div>
+            <div style="display:flex; justify-content:space-between;"><span style="color:var(--fg-muted);">9:30</span> <span style="color:var(--fg-dim);">Verify &mdash; catch 2 design mistakes</span></div>
+            <div style="display:flex; justify-content:space-between;"><span style="color:var(--fg-muted);">9:35</span> <span style="color:var(--ok);">Compile &mdash; 6 specs generated</span></div>
+            <div style="display:flex; justify-content:space-between;"><span style="color:var(--fg-muted);">9:40</span> <span style="color:var(--ok);">Agent reads spec, writes code</span></div>
+            <div style="display:flex; justify-content:space-between;"><span style="color:var(--fg-muted);">10:00</span> <span style="color:var(--ok);">All acceptance criteria pass</span></div>
+            <div style="display:flex; justify-content:space-between;"><span style="color:var(--fg-muted);">10:15</span> <span style="color:var(--ok);">Deployed. Coffee time.</span></div>
+            <div><span style="color:var(--fg-muted);">&nbsp;</span></div>
+            <div><span style="color:var(--fg-muted);">&nbsp;</span></div>
+          </div>
+        </div>
+
+  - component: problem-grid
+    content:
+      title: "The Problem"
+      cards_html: |
+        <div class="card">
+          <div class="card-num">01</div>
+          <div class="card-label">Diagram ≠ Docs</div>
+          <div class="card-text">draw.io in one place, Notion in another. They diverge in hours. Agent works from an outdated version.</div>
+        </div>
+        <div class="card">
+          <div class="card-num">02</div>
+          <div class="card-label">One File For All</div>
+          <div class="card-text">CLAUDE.md = 1 file for entire project. Doesn't scale past 5 modules. Agent drowns in 10K tokens of noise.</div>
+        </div>
+        <div class="card">
+          <div class="card-num">03</div>
+          <div class="card-label">Docs Drift</div>
+          <div class="card-text">Specs live in chats, notes, boards. Every new session starts from scratch. No contract, no continuity.</div>
+        </div>
+
+  - component: pipeline-svg
+    content:
+      title: "How It Works"
+      quote: '"Diagram and spec are one object. They never diverge."'
+
+  - component: c4-grid
+    content:
+      title: "Built on C4"
+      rows_html: |
+        <div class="c4-row">
+          <div class="c4-level"><span class="c4-name">Context</span><span class="c4-what">System boundary, actors</span></div>
+          <div class="c4-mapping">→ Project node</div>
+        </div>
+        <div class="c4-row">
+          <div class="c4-level"><span class="c4-name">Container</span><span class="c4-what">Deployable units, pipelines</span></div>
+          <div class="c4-mapping">→ Subnetworks</div>
+        </div>
+        <div class="c4-row">
+          <div class="c4-level"><span class="c4-name">Component</span><span class="c4-what">Core building blocks</span></div>
+          <div class="c4-mapping">→ Service, Store, Queue, Gateway, External</div>
+        </div>
+        <div class="c4-row">
+          <div class="c4-level"><span class="c4-name">Code</span><span class="c4-what">Implementation</span></div>
+          <div class="c4-mapping">→ Agent reads compiled spec, writes code</div>
+        </div>
+      quote: '"C4 gives you the structure. SpecDesigner fills it with contracts your agent can execute."'
+
+  - component: comparison-table
+    content:
+      title: "Comparison"
+      thead_html: |
+        <tr>
+          <th class="sticky-col sticky-feature"></th>
+          <th class="sticky-col sticky-ours hl">SpecDesigner</th>
+          <th>draw.io</th>
+          <th>Mermaid</th>
+          <th>CLAUDE.md</th>
+          <th>Structurizr</th>
+          <th>IcePanel</th>
+        </tr>
+      tbody_html: |
+        <tr><td class="sticky-col sticky-feature">Visual editor</td><td class="sticky-col sticky-ours hl">✔</td><td>✔</td><td>—</td><td>—</td><td>— (DSL)</td><td>✔</td></tr>
+        <tr><td class="sticky-col sticky-feature">Per-module specs</td><td class="sticky-col sticky-ours hl">✔</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>
+        <tr><td class="sticky-col sticky-feature">Diagram = spec</td><td class="sticky-col sticky-ours hl">✔</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>
+        <tr><td class="sticky-col sticky-feature">Agent delivery</td><td class="sticky-col sticky-ours hl">✔ MCP</td><td>—</td><td>—</td><td>partial</td><td>—</td><td>beta</td></tr>
+        <tr><td class="sticky-col sticky-feature">Context graph</td><td class="sticky-col sticky-ours hl">✔</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>
+        <tr><td class="sticky-col sticky-feature">Forced clarity</td><td class="sticky-col sticky-ours hl">✔</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>
+        <tr><td class="sticky-col sticky-feature">Price</td><td class="sticky-col sticky-ours hl">free beta</td><td>free</td><td>free</td><td>free</td><td>free/$</td><td>$18/user/mo</td></tr>
+
+  - component: principles-grid
+    content:
+      title: "Key Principles"
+      cards_html: |
+        <div class="card">
+          <div class="card-label">Single Source of Truth</div>
+          <div class="card-text">One place for architecture and specs. Git-versioned. Change a module — all downstream consumers see the update instantly. No manual sync, no stale docs, no drift.</div>
+        </div>
+        <div class="card">
+          <div class="card-label">Progressive Disclosure</div>
+          <div class="card-text">Hierarchical context from project down to task: rules → subsystem → module → neighbors. Delivered through any channel — REST API, MCP, file sync. Agent-agnostic by design.</div>
+        </div>
+        <div class="card">
+          <div class="card-label">Visual Docs + Forced Clarity</div>
+          <div class="card-text">Diagram and spec in one visual editor. Spec template makes you describe what a module does, what it doesn't, and when it's done — before any code is written.</div>
+        </div>
+
+  - component: screenshot-frame
+    content:
+      title: "See It In Action"
+      image_src: "specdesigner.png"
+      image_alt: "SpecDesigner — POS architecture graph with PostgreSQL node spec open"
+      caption: "POS architecture in SpecDesigner — 12 nodes, subnetworks, compiled specs with Context API"
+
+  - component: faq
+    content:
+      title: "FAQ"
+      items_html: |
+        <details class="faq-item">
+          <summary>How is this different from draw.io?</summary>
+          <p>draw.io draws diagrams. SpecDesigner makes each diagram node a structured spec with boundaries, acceptance criteria, and code mapping. Diagram and spec are one object — they never diverge.</p>
+        </details>
+        <details class="faq-item">
+          <summary>Why not just write a good CLAUDE.md?</summary>
+          <p>CLAUDE.md is one file for your entire project. It doesn't scale past 5-10 modules. SpecDesigner compiles per-module specs — each agent gets only the context it needs.</p>
+        </details>
+        <details class="faq-item">
+          <summary>Does it work with Cursor / Codex / other agents?</summary>
+          <p>Yes. SpecDesigner compiles to standard Markdown files. Any agent that reads files works: Claude Code, Cursor, Codex, Windsurf, GitHub Copilot. MCP Server also available.</p>
+        </details>
+        <details class="faq-item">
+          <summary>Is it open source?</summary>
+          <p>The product is closed source. The Agent Spec Template (spec format) is open and free to use. Early access is free for focus group participants. Pricing TBD after feedback.</p>
+        </details>
+        <details class="faq-item">
+          <summary>What does "forced clarity" mean?</summary>
+          <p>The spec template (summary, boundaries, acceptance criteria, code mapping) forces you to think through each module before coding. Users report this is valuable even without an AI agent.</p>
+        </details>
+
+  - component: cta
+    content:
+      section_id: "waitlist"
+      title: "Get Early Access"
+      placeholder: "Your email"
+      btn_label: "JOIN WAITLIST"
+      telegram_href: "https://t.me/specdesigner"
+      telegram_label: "JOIN TELEGRAM →"
+
+  - component: footer
+    content:
+      copy: "&copy; 2026 Stanislav Glazov"

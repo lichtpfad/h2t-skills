@@ -1,0 +1,17 @@
+.screenshot-card img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.screenshot-card__caption {
+  margin-top: 0.75rem;
+  color: var(--color-text-dim);
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  letter-spacing: 0.12em;
+}
+
+.screenshot-card__caption:empty {
+  display: none;
+}

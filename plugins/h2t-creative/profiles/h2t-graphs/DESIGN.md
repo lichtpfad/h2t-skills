@@ -38,3 +38,37 @@ Swap accent: `--color-accent: #00ff88`, `--color-accent-glow: rgba(0,255,136,0.4
 - Headlines only in Inter; all other text in JetBrains Mono
 - Corner bracket decorations for badges and nav
 - All spacing via CSS tokens only
+
+## R1 Source Of Truth
+
+- Primary: `profiles/h2t-graphs/sources/references.yaml`
+- Live reference: `graphs.lichtpfadstudio.com`
+- Local source: `C:/dev/h2t-landings/graphs/index.html`
+- Legacy skill: `h2t:landing` v2.14.1 SKILL.md
+
+## R1 Required Components
+
+These components must be profile-specific. Shared variants are forbidden as validation evidence:
+
+| Component | Visual Pattern |
+|-----------|---------------|
+| `hud-panel` | L-bracket corners, `--color-surface` bg, `--color-border` |
+| `stats-bar` | Segmented cells, Inter 800, `text-shadow: 0 0 15px var(--color-accent-glow)` |
+| `numbers-grid` | 4-cell grid, `--color-surface` per cell, 1px border |
+| `chip-stack` | Monospace bordered labels, `.chip.hi` = accent border |
+| `mermaid-diagram` | HUD panel + Mermaid dark theme |
+| `screenshot-card` | HUD panel wrapping img, no image filters |
+| `code-block` | HUD panel + pre/code |
+| `cards-grid` | Surface cells, 1px grid separator, section-tag |
+| `layers` | Numbered steps, accent glow on numbers |
+| `comparison-table` | HUD panel + table, 1px column borders |
+
+## Forbidden Substitutions
+
+The following shared components MUST NOT appear in h2t-graphs validation recipe:
+
+- `features-grid`
+- `pricing`
+- `testimonials`
+- `faq`
+- `logos`
