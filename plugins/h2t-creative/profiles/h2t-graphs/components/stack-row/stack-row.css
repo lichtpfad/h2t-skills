@@ -1,0 +1,14 @@
+.stack-row {
+  display: flex; gap: 0.5rem; justify-content: center; flex-wrap: wrap; margin-bottom: 0.6rem;
+}
+
+.chip {
+  font-family: var(--mono); background: var(--surface);
+  border: 1px solid var(--border); padding: 0.35rem 0.9rem;
+  font-size: 0.7rem; font-weight: 500; color: var(--text-dim);
+}
+
+.chip.hi {
+  border-color: rgba(233,69,96,0.25); color: var(--accent);
+  text-shadow: 0 0 6px var(--accent-glow);
+}

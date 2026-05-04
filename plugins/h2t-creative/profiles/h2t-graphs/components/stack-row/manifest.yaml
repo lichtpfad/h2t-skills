@@ -1,4 +1,4 @@
-component: hud-panel
+component: stack-row
 fields:
   tag:
     type: text
@@ -8,10 +8,6 @@ fields:
     type: text
     required: false
     default: ""
-  sub:
-    type: html
-    required: false
-    default: ""
-  body:
+  rows_html:
     type: html
     required: true

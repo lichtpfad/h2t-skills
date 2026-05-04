@@ -1,0 +1,899 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>h2t-graphs &mdash; Knowledge Graph Engine for AI Agents</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700;800&family=Inter:wght@300;400;600;700;900&display=swap');
+
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg:      #060609;
+    --bg2:     #0a0a10;
+    --surface: #0e0e16;
+    --accent:  #e94560;
+    --accent-glow: rgba(233,69,96,0.4);
+    --green:   #00ff88;
+    --green-glow: rgba(0,255,136,0.3);
+    --blue:    #4a9eff;
+    --amber:   #ffb800;
+    --text:    #a0a0b8;
+    --text-hi: #d0d0e0;
+    --text-dim:#3a3a50;
+    --grid:    rgba(255,255,255,0.02);
+    --border:  rgba(233,69,96,0.12);
+    --mono:    'JetBrains Mono', monospace;
+    --sans:    'Inter', system-ui, sans-serif;
+    --corner:  12px;
+  }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    font-family: var(--mono);
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    overflow-x: hidden;
+  }
+
+  body::before {
+    content: '';
+    position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background-image:
+      linear-gradient(var(--grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 40px 40px;
+  }
+
+  .hud-panel {
+    position: relative;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 2rem 2.5rem;
+  }
+  .hud-panel::before, .hud-panel::after,
+  .hud-panel .corner-br::before, .hud-panel .corner-br::after {
+    content: ''; position: absolute;
+    width: var(--corner); height: var(--corner);
+    border-color: var(--accent); border-style: solid;
+  }
+  .hud-panel::before { top: -1px; left: -1px; border-width: 2px 0 0 2px; }
+  .hud-panel::after  { top: -1px; right: -1px; border-width: 2px 2px 0 0; }
+  .hud-panel .corner-br::before { bottom: -1px; left: -1px; border-width: 0 0 2px 2px; }
+  .hud-panel .corner-br::after  { bottom: -1px; right: -1px; border-width: 0 2px 2px 0; }
+
+  nav {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+    background: rgba(6,6,9,0.95);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+    padding: 0.6rem 2rem;
+    display: flex; align-items: center; justify-content: space-between;
+    font-size: 0.7rem; letter-spacing: 0.1em;
+  }
+  nav .logo { font-weight: 700; color: var(--text-dim); }
+  nav .logo span { color: var(--accent); text-shadow: 0 0 8px var(--accent-glow); }
+  nav .links a {
+    color: var(--text-dim); text-decoration: none;
+    margin-left: 2rem; transition: all 0.2s;
+    text-transform: uppercase;
+  }
+  nav .links a:hover { color: var(--accent); text-shadow: 0 0 6px var(--accent-glow); }
+
+  section {
+    max-width: 1100px; margin: 0 auto; padding: 5rem 2rem;
+    position: relative; z-index: 1;
+  }
+
+  .section-tag {
+    font-size: 0.55rem; color: var(--text-dim);
+    letter-spacing: 0.25em; text-transform: uppercase;
+    margin-bottom: 0.6rem;
+  }
+  .section-tag::before { content: '// '; color: var(--accent); }
+
+  h2 {
+    font-family: var(--sans);
+    font-size: 1.6rem; font-weight: 800;
+    color: var(--text-hi);
+    letter-spacing: -0.02em;
+    margin-bottom: 0.8rem;
+  }
+  .sub {
+    color: var(--text-dim); font-size: 0.78rem;
+    max-width: 650px; margin-bottom: 2rem; line-height: 1.8;
+  }
+
+  .hero {
+    min-height: 100vh;
+    display: flex; flex-direction: column; justify-content: center; align-items: center;
+    text-align: center; padding-top: 6rem;
+  }
+  .hero-badge {
+    font-size: 0.6rem; letter-spacing: 0.2em; text-transform: uppercase;
+    color: var(--accent); border: 1px solid var(--border);
+    padding: 0.3rem 1rem; margin-bottom: 2rem;
+    position: relative; text-shadow: 0 0 10px var(--accent-glow);
+  }
+  .hero-badge::before, .hero-badge::after {
+    content: ''; position: absolute;
+    width: 6px; height: 6px; border-color: var(--accent); border-style: solid;
+  }
+  .hero-badge::before { top: -1px; left: -1px; border-width: 1px 0 0 1px; }
+  .hero-badge::after  { top: -1px; right: -1px; border-width: 1px 1px 0 0; }
+
+  .hero h1 {
+    font-family: var(--sans);
+    font-size: clamp(2rem, 5vw, 3.5rem);
+    font-weight: 900; line-height: 1.15;
+    color: var(--text-hi); margin-bottom: 1.5rem;
+    letter-spacing: -0.03em;
+  }
+  .hero h1 .glow {
+    color: var(--accent);
+    text-shadow: 0 0 20px var(--accent-glow), 0 0 40px rgba(233,69,96,0.15);
+  }
+  .hero .desc {
+    font-size: 0.85rem; color: var(--text);
+    max-width: 600px; margin-bottom: 3rem;
+  }
+
+  .btn-row {
+    display: flex; gap: 1rem; margin-bottom: 3rem;
+    flex-wrap: wrap; justify-content: center;
+  }
+  .btn {
+    font-family: var(--mono); font-size: 0.75rem;
+    padding: 0.7rem 2rem; text-decoration: none;
+    letter-spacing: 0.1em; text-transform: uppercase;
+    transition: all 0.2s;
+  }
+  .btn-fill {
+    background: var(--accent); color: #fff; border: none;
+    text-shadow: 0 0 10px rgba(0,0,0,0.3);
+  }
+  .btn-fill:hover { box-shadow: 0 0 20px var(--accent-glow); }
+  .btn-outline {
+    background: transparent; color: var(--accent);
+    border: 1px solid var(--accent);
+  }
+  .btn-outline:hover { background: rgba(233,69,96,0.1); }
+
+  .mermaid-wrap {
+    position: relative; background: var(--surface);
+    border: 1px solid var(--border); padding: 1.5rem; overflow: hidden;
+    max-width: 100%;
+  }
+  .mermaid-wrap { overflow: hidden; }
+  .mermaid-wrap .mermaid svg {
+    max-width: 100%; height: auto;
+  }
+  .mermaid-wrap::before, .mermaid-wrap::after {
+    content: ''; position: absolute;
+    width: 10px; height: 10px; border-color: var(--accent); border-style: solid;
+  }
+  .mermaid-wrap::before { top: -1px; left: -1px; border-width: 2px 0 0 2px; }
+  .mermaid-wrap::after  { bottom: -1px; right: -1px; border-width: 0 2px 2px 0; }
+  .mermaid { display: flex; justify-content: center; }
+
+  .compare-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 2rem;
+    margin: 2rem 0;
+  }
+  .compare-card {
+    background: var(--surface); border: 1px solid var(--border);
+    padding: 1.5rem 2rem; position: relative;
+  }
+  .compare-card::before {
+    content: ''; position: absolute; top: -1px; left: -1px;
+    width: 10px; height: 10px; border-color: var(--accent);
+    border-style: solid; border-width: 2px 0 0 2px;
+  }
+  .compare-card h3 {
+    font-family: var(--sans); font-size: 0.95rem;
+    font-weight: 700; margin-bottom: 0.8rem;
+  }
+  .compare-card ul {
+    list-style: none; font-size: 0.75rem; line-height: 2;
+  }
+  .compare-card ul li::before { margin-right: 0.5rem; }
+  .compare-card.yes h3 { color: var(--green); text-shadow: 0 0 8px var(--green-glow); }
+  .compare-card.yes ul li::before { content: '✓'; color: var(--green); }
+  .compare-card.no h3 { color: var(--text-dim); }
+  .compare-card.no ul li::before { content: '—'; color: var(--text-dim); }
+
+  .feature-grid {
+    display: grid; grid-template-columns: repeat(2, 1fr);
+    gap: 1px; background: var(--border); border: 1px solid var(--border);
+    position: relative;
+  }
+  .feature-grid::before, .feature-grid::after {
+    content: ''; position: absolute;
+    width: 8px; height: 8px; border-color: var(--accent);
+    border-style: solid; z-index: 2;
+  }
+  .feature-grid::before { top: -1px; left: -1px; border-width: 2px 0 0 2px; }
+  .feature-grid::after  { bottom: -1px; right: -1px; border-width: 0 2px 2px 0; }
+  .feature-cell {
+    background: var(--surface); padding: 1.5rem;
+  }
+  .feature-cell .icon {
+    font-size: 1.2rem; margin-bottom: 0.5rem;
+  }
+  .feature-cell h3 {
+    font-family: var(--sans); font-size: 0.85rem;
+    font-weight: 700; color: var(--text-hi); margin-bottom: 0.4rem;
+  }
+  .feature-cell p {
+    font-size: 0.7rem; color: var(--text-dim); line-height: 1.7;
+  }
+
+  .stack-row {
+    display: flex; gap: 0.5rem; justify-content: center;
+    flex-wrap: wrap; margin-bottom: 0.6rem;
+  }
+  .chip {
+    font-family: var(--mono); background: var(--surface);
+    border: 1px solid var(--border); padding: 0.35rem 0.9rem;
+    font-size: 0.7rem; font-weight: 500; color: var(--text-dim);
+  }
+  .chip.hi {
+    border-color: rgba(233,69,96,0.25); color: var(--accent);
+    text-shadow: 0 0 6px var(--accent-glow);
+  }
+
+  .teaser {
+    text-align: center; padding: 3rem 2rem;
+    border: 1px dashed var(--border); background: var(--bg2);
+    position: relative;
+  }
+  .teaser .tag {
+    font-size: 0.55rem; letter-spacing: 0.2em;
+    text-transform: uppercase; color: var(--amber); margin-bottom: 0.5rem;
+  }
+  .teaser h3 {
+    font-family: var(--sans); font-size: 1.1rem;
+    font-weight: 700; color: var(--text-hi); margin-bottom: 0.5rem;
+  }
+  .teaser p { font-size: 0.75rem; color: var(--text-dim); }
+
+  table { border-collapse: collapse; font-size: 0.85rem; width: 100%; }
+  th, td { padding: 0.8rem 1.2rem; border: 1px solid var(--border); text-align: left; }
+  th { background: var(--surface); color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.1em; font-size: 0.65rem; font-weight: 600; }
+  td { background: var(--bg2); }
+
+  footer {
+    text-align: center; padding: 4rem 2rem;
+    border-top: 1px solid var(--border);
+    position: relative; z-index: 1;
+  }
+  footer .motto {
+    font-family: var(--sans); font-size: 1.3rem;
+    font-weight: 800; color: var(--text-hi); margin-bottom: 0.4rem;
+  }
+  footer .motto span { color: var(--accent); text-shadow: 0 0 15px var(--accent-glow); }
+  footer p { color: var(--text-dim); font-size: 0.7rem; letter-spacing: 0.05em; }
+
+  @media (max-width: 700px) {
+    section { padding: 3rem 1rem; }
+    .compare-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<nav>
+  <div class="logo">[<span>H2T</span>] GRAPHS</div>
+  <div class="links">
+    <a href="#why">Why</a>
+    <a href="#how">How it works</a>
+    <a href="#search">Search</a>
+    <a href="/docs" style="color:var(--accent)">API Docs</a>
+    <a href="#access">Get Access</a>
+  </div>
+</nav>
+
+<!-- ===== HERO ===== -->
+<section class="hero">
+  <div class="hero-badge">Knowledge Engine for AI Agents</div>
+  <h1>Your agents need <span class="glow">knowledge</span>,<br>not another database</h1>
+  <p class="desc">Multi-source knowledge graph engine with provenance tracking, confidence scoring, and semantic search. Domain-agnostic &mdash; the engine provides infrastructure, your agents bring the domain.</p>
+  <div class="btn-row">
+    <a href="/docs" class="btn btn-fill">API Documentation</a>
+    <a href="#access" class="btn btn-outline">Get Access</a>
+  </div>
+</section>
+
+<!-- ===== GRAPH VISUALIZATION (under hero) ===== -->
+<section style="padding-top:0">
+  <div class="section-tag">how it works</div>
+  <h2>What is a knowledge graph?</h2>
+  <p class="sub">Nodes are facts &mdash; concepts, operators, frameworks, cases. Edges are relationships &mdash; teaches, extends, illustrates. Confidence encodes trust. Click any node to see how traversal discovers connected knowledge.</p>
+  <div class="mermaid-wrap" style="padding:0;overflow:hidden">
+    <canvas id="graphCanvas" style="width:100%;height:500px;display:block"></canvas>
+  </div>
+  <p style="font-size:0.6rem;color:var(--text-dim);margin-top:0.8rem;text-align:center">Node color = type &middot; brightness = confidence &middot; click to traverse</p>
+</section>
+
+<!-- ===== NOT A DATABASE ===== -->
+<section id="why">
+  <div class="section-tag">positioning</div>
+  <h2>Not a graph database. A knowledge engine.</h2>
+  <p class="sub">Graph databases store and query relationships. h2t-graphs goes further &mdash; it scores, ranks, tracks provenance, and serves LLM-optimized subgraphs. Your agent gets answers, not rows.</p>
+  <div class="compare-grid">
+    <div class="compare-card no">
+      <h3>Graph Database (Neo4j, ArangoDB)</h3>
+      <ul>
+        <li>Store nodes and edges</li>
+        <li>Cypher / AQL queries</li>
+        <li>Returns raw graph data</li>
+        <li>No opinion on quality or trust</li>
+        <li>Agent must interpret results</li>
+        <li>Generic for any graph workload</li>
+      </ul>
+    </div>
+    <div class="compare-card yes">
+      <h3>h2t-graphs (Knowledge Engine)</h3>
+      <ul>
+        <li>Provenance on every node &mdash; who said it, how reliable</li>
+        <li>Confidence scoring with promotion path</li>
+        <li>Semantic + keyword + hybrid search in one call</li>
+        <li>LLM-optimized output &mdash; scored, ranked, token-estimated</li>
+        <li>Multi-source with cross-source linking</li>
+        <li>Built specifically for AI agent consumption</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ===== DOMAIN vs ENGINE ===== -->
+<section id="how">
+  <div class="section-tag">architecture</div>
+  <h2>Engine owns infrastructure. Domain owns knowledge.</h2>
+  <p class="sub">The engine knows nothing about Houdini, TouchDesigner, or creative thinking. It stores, scores, queries, and validates. Consumers bring domain-specific data and get domain-specific answers.</p>
+  <div class="mermaid-wrap"><pre class="mermaid">
+graph LR
+    subgraph DOMAIN ["YOUR DOMAIN"]
+        D1["Schemas"] & D2["Fields"] & D3["Review"]
+    end
+    subgraph ENGINE ["h2t-graphs"]
+        E1["Store"] & E2["Score"] & E3["Search"] & E4["Validate"]
+    end
+    subgraph AGENTS ["AI AGENTS"]
+        A1["Query"] & A2["Write"] & A3["Feedback"]
+    end
+    DOMAIN -->|"data"| ENGINE
+    ENGINE -->|"answers"| AGENTS
+    AGENTS -->|"feedback"| ENGINE
+    style ENGINE fill:#1a0a10,stroke:#e94560,color:#e94560
+    style DOMAIN fill:#0a0d1a,stroke:#4a9eff,color:#c0c0d0
+    style AGENTS fill:#0a1a0d,stroke:#00ff88,color:#c0c0d0
+</pre></div>
+  <p style="font-size:0.7rem;color:var(--text-dim);margin-top:1.5rem;text-align:center">Currently serving: creative methodologies, DCC operators, educational courses, TRIZ principles, design thinking frameworks</p>
+</section>
+
+<!-- ===== SEARCH ===== -->
+<section id="search">
+  <div class="section-tag">search</div>
+  <h2>Four search modes. One API call.</h2>
+  <p class="sub">Keyword precision, semantic understanding, or both. Query expansion enriches searches with LLM-generated synonyms. Edge-enriched embeddings capture graph context, not just node text.</p>
+  <div class="feature-grid">
+    <div class="feature-cell">
+      <div class="icon" style="color:var(--blue)">&#x2263;</div>
+      <h3>Keyword Search</h3>
+      <p>Case-insensitive text match across configurable fields. Weighted scoring: relevance &times; source weight &times; confidence. Fast, precise, deterministic.</p>
+    </div>
+    <div class="feature-cell">
+      <div class="icon" style="color:var(--accent)">&#x2740;</div>
+      <h3>Semantic Search</h3>
+      <p>Gemini embeddings (768d) with HNSW index. Edge-enriched &mdash; each node's embedding includes its graph neighborhood. Finds concepts even when wording doesn't match.</p>
+    </div>
+    <div class="feature-cell">
+      <div class="icon" style="color:var(--green)">&#x2726;</div>
+      <h3>Hybrid + Expansion</h3>
+      <p>Keyword and semantic merged with score normalization. Optional LLM query expansion adds synonyms before embedding. Best of both worlds.</p>
+    </div>
+    <div class="feature-cell">
+      <div class="icon" style="color:var(--amber)">&#x21C4;</div>
+      <h3>Graph Traversal</h3>
+      <p>BFS from any node with depth and type filters. Confidence-gated &mdash; traverse only through trusted nodes. Python runtime, not database-locked.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ===== PROVENANCE ===== -->
+<section>
+  <div class="section-tag">provenance</div>
+  <h2>Every node has a trust score</h2>
+  <p class="sub">Not all knowledge is equal. LLM-generated content starts at low confidence. Expert-verified content earns trust. The engine tracks the journey.</p>
+  <div class="mermaid-wrap"><pre class="mermaid">
+graph LR
+    M["MODEL<br/>confidence: 0.3"] -->|"human review"| S["SESSION<br/>confidence: 0.6"]
+    S -->|"expert validation"| E["EXPERT<br/>confidence: 0.9"]
+    E -->|"feedback refines"| S
+    style M fill:#0e0e14,stroke:#3a3a50,color:#a0a0b8
+    style S fill:#0a0d1a,stroke:#4a9eff,color:#4a9eff
+    style E fill:#0a1a0d,stroke:#00ff88,color:#00ff88,stroke-width:2px
+</pre></div>
+  <p style="font-size:0.72rem;color:var(--text);margin-top:1.5rem">Source types: <code style="color:var(--accent)">expert</code> (0.8&ndash;1.0) &middot; <code style="color:var(--blue)">docs</code> (0.9) &middot; <code style="color:var(--blue)">session</code> (0.6&ndash;0.8) &middot; <code style="color:var(--text-dim)">model</code> (0.3&ndash;0.5). Queries filter by <code>min_confidence</code>. Feedback adjusts scores in real time.</p>
+</section>
+
+<!-- ===== ON-WRITE EMBEDDING ===== -->
+<section>
+  <div class="section-tag">real-time</div>
+  <h2>Write a node. Search it instantly.</h2>
+  <p class="sub">On-write embedding &mdash; every new node is automatically vectorized with edge context. No batch jobs, no waiting. The node is semantically searchable the moment it's written.</p>
+  <div class="hud-panel"><span class="corner-br"></span>
+    <pre style="font-size:0.75rem;color:var(--text);line-height:2;overflow-x:auto"><code><span style="color:var(--text-dim)"># Write a node via API</span>
+POST /api/nodes
+{
+  "source": "my-domain",
+  "node": {"id": "insight_42", "node_type": "insight", "label": "Pattern discovered", ...}
+}
+
+<span style="color:var(--green)">→ {"status": "ok", "node_id": "insight_42", "embedded": true}</span>
+
+<span style="color:var(--text-dim)"># Immediately searchable</span>
+GET /api/query?source=my-domain&amp;semantic=pattern+discovery
+<span style="color:var(--green)">→ results include insight_42</span></code></pre>
+  </div>
+</section>
+
+<!-- ===== INTEGRATIONS ===== -->
+<section>
+  <div class="section-tag">integrations</div>
+  <h2>Part of a self-improving ecosystem</h2>
+  <p class="sub">h2t-graphs is the persistence layer in a larger feedback loop. Evaluation, optimization, and continuous learning flow through the graph.</p>
+  <div class="mermaid-wrap"><pre class="mermaid">
+graph LR
+    subgraph CLIENTS ["CLIENTS"]
+        C1["DCC Skill"] & C2["Creative"] & C3["Bot"]
+    end
+    subgraph GRAPHS ["h2t-graphs"]
+        G1["Store"] & G2["Search"] & G3["Score"]
+    end
+    subgraph EVALS ["h2t-evals"]
+        V1["GT Packs"] & V2["Judge"] & V3["Optimizer"]
+    end
+    CLIENTS -->|"query"| GRAPHS
+    GRAPHS -->|"metrics"| EVALS
+    EVALS -->|"improve"| CLIENTS
+    style GRAPHS fill:#1a0a10,stroke:#e94560,color:#e94560
+    style CLIENTS fill:#0a1a0d,stroke:#00ff88,color:#c0c0d0
+    style EVALS fill:#0a0d1a,stroke:#4a9eff,color:#c0c0d0
+</pre></div>
+  <div class="compare-grid" style="margin-top:2rem">
+    <div class="compare-card" style="border-color:rgba(233,69,96,0.2)">
+      <h3 style="color:var(--accent)">h2t-graphs</h3>
+      <ul>
+        <li style="color:var(--text)">Knowledge persistence &amp; query</li>
+        <li style="color:var(--text)">Provenance &amp; confidence tracking</li>
+        <li style="color:var(--text)">Semantic + keyword search</li>
+        <li style="color:var(--text)">Cross-source linking</li>
+      </ul>
+    </div>
+    <div class="compare-card" style="border-color:rgba(74,158,255,0.2)">
+      <h3 style="color:var(--blue)">h2t-evals</h3>
+      <ul>
+        <li style="color:var(--text)">Ground truth pack management</li>
+        <li style="color:var(--text)">Judge calibration &amp; scoring</li>
+        <li style="color:var(--text)">Prompt optimization (DSPy)</li>
+        <li style="color:var(--text)">Quality regression detection</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ===== STACK ===== -->
+<section>
+  <div class="section-tag">stack</div>
+  <h2>Built for solo + AI teams</h2>
+  <p class="sub">Lightweight. No Kubernetes. No managed services. One VPS, auto-TLS, full control.</p>
+  <div class="stack-row"><div class="chip">Python 3.11</div><div class="chip">FastAPI</div><div class="chip">PostgreSQL + pgvector</div><div class="chip">NetworkX</div></div>
+  <div class="stack-row"><div class="chip hi">Gemini Embeddings</div><div class="chip hi">HNSW Vector Index</div><div class="chip hi">On-Write Embedding</div></div>
+  <div class="stack-row"><div class="chip">Caddy + Auto-TLS</div><div class="chip">Docker</div><div class="chip">Token Auth (RO/RW)</div></div>
+</section>
+
+<!-- ===== ACCESS ===== -->
+<section id="access">
+  <div class="hud-panel"><span class="corner-br"></span>
+    <div class="section-tag">access</div>
+    <h2>Get API Access</h2>
+    <p class="sub" style="color:var(--text)">All <code style="background:var(--surface);padding:2px 6px">/api/</code> endpoints require an <code style="background:var(--surface);padding:2px 6px;color:var(--accent)">X-H2T-Token</code> header. Documentation and this page are public.</p>
+    <div style="margin:2rem 0">
+      <p style="font-size:0.8rem;color:var(--text-hi);margin-bottom:0.5rem">Python (recommended):</p>
+      <pre style="background:var(--bg);border:1px solid var(--border);padding:1.2rem;font-size:0.75rem;overflow-x:auto;color:var(--text)"><code>pip install git+https://github.com/lichtpfad/h2t-client.git
+
+from h2t_client import GraphsClient
+client = GraphsClient()  <span style="color:var(--text-dim)"># auto-reads token from ~/.dor/secrets.env</span>
+results = client.search("td", "noise generation", semantic=True)</code></pre>
+    </div>
+    <div style="margin:2rem 0">
+      <p style="font-size:0.8rem;color:var(--text-hi);margin-bottom:0.5rem">curl:</p>
+      <pre style="background:var(--bg);border:1px solid var(--border);padding:1.2rem;font-size:0.75rem;overflow-x:auto;color:var(--text)"><code>curl -H "X-H2T-Token: YOUR_TOKEN" \
+  "https://graphs.lichtpfadstudio.com/api/query?source=creative&amp;semantic=инверсия"</code></pre>
+    </div>
+    <p style="margin-top:2rem;font-size:0.78rem;color:var(--text-dim)">For API access, contact <a href="https://t.me/prcdrl" style="color:var(--accent);text-decoration:none">@prcdrl</a> on Telegram.</p>
+  </div>
+</section>
+
+<footer>
+  <div class="motto"><span>Schema-first.</span> Provenance on everything.</div>
+  <p>Knowledge engine for agents that need answers, not rows.</p>
+  <p style="margin-top:1.5rem;font-size:0.55rem;letter-spacing:0.15em">[HOU2TOUCH] &mdash; Part of the H2T AI Platform</p>
+</footer>
+
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'dark',
+    themeVariables: {
+      darkMode: true,
+      background: '#0e0e16',
+      primaryColor: '#16161f',
+      primaryTextColor: '#a0a0b8',
+      primaryBorderColor: '#2a2a3a',
+      lineColor: '#3a3a4a',
+      secondaryColor: '#0e0e16',
+      tertiaryColor: '#0e0e16',
+      fontFamily: 'JetBrains Mono, monospace',
+      fontSize: '17px',
+      clusterBkg: '#0a0a10',
+      clusterBorder: '#1e1e2e',
+      edgeLabelBackground: '#0a0a10',
+    },
+    flowchart: { curve: 'basis', padding: 20, htmlLabels: true, nodeSpacing: 30, rankSpacing: 60 }
+  });
+</script>
+<script>
+(function() {
+  const canvas = document.getElementById('graphCanvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+
+  function resize() {
+    const rect = canvas.parentElement.getBoundingClientRect();
+    canvas.width = rect.width * dpr;
+    canvas.height = 500 * dpr;
+    canvas.style.height = '500px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  const W = () => canvas.width / dpr;
+  const H = () => 500;
+
+  const typeColors = {
+    framework: '#e94560',
+    concept: '#4a9eff',
+    principle: '#00ff88',
+    case: '#ffb800',
+    operator: '#a855f7',
+    lesson: '#6b7280',
+  };
+  const typeNames = ['framework','concept','principle','case','operator','lesson'];
+  const sampleLabels = {
+    framework: ['Inversion','Decomposition','Analogy','Empathy','Morphology','SCAMPER','Bisociation','Constraint Removal'],
+    concept: ['Lateral Thinking','Fixedness','Incubation','Transfer','Abstraction','Reframing','Serendipity','Divergence'],
+    principle: ['Segmentation','Extraction','Asymmetry','Merging','Universality','Nesting','Counterweight','Dynamics'],
+    case: ['IKEA Flat-pack','Post-it Notes','Dyson Cyclone','Velcro Hook','Shinkansen Nose','Walkman Pivot'],
+    operator: ['noiseTOP','feedbackTOP','blurTOP','compositeTOP','renderTOP','slopeTOP','edgeTOP','levelTOP'],
+    lesson: ['Lesson 01','Lesson 02','Lesson 03','Lesson 04','Lesson 05','Lesson 06'],
+  };
+
+  // Generate graph
+  const nodes = [];
+  const edges = [];
+  const adj = {};  // adjacency list
+  const N = 80;
+  for (let i = 0; i < N; i++) {
+    const type = typeNames[Math.floor(Math.random() * typeNames.length)];
+    const labels = sampleLabels[type];
+    const cluster = typeNames.indexOf(type);
+    const angle = (cluster / typeNames.length) * Math.PI * 2 + (Math.random() - 0.5) * 0.8;
+    const dist = 100 + Math.random() * 120;
+    nodes.push({
+      x: 0.5 + Math.cos(angle) * dist / 500,
+      y: 0.5 + Math.sin(angle) * dist / 400,
+      vx: 0, vy: 0,
+      type, confidence: +(0.3 + Math.random() * 0.7).toFixed(2),
+      r: 2.5 + Math.random() * 3,
+      label: labels[Math.floor(Math.random() * labels.length)],
+    });
+    adj[i] = [];
+  }
+  for (let i = 0; i < N; i++) {
+    const count = 1 + Math.floor(Math.random() * 2);
+    for (let c = 0; c < count; c++) {
+      let j;
+      if (Math.random() < 0.7) {
+        const same = nodes.map((_, idx) => idx).filter(idx => nodes[idx].type === nodes[i].type && idx !== i);
+        if (!same.length) continue;
+        j = same[Math.floor(Math.random() * same.length)];
+      } else {
+        j = Math.floor(Math.random() * N);
+        if (j === i) continue;
+      }
+      edges.push({ s: i, t: j });
+      adj[i].push(j);
+      adj[j].push(i);
+    }
+  }
+
+  // Interaction state
+  let hoverIdx = -1;
+  let traversal = null;  // { origin, visited: Set, frontier: [], wave: number, t: number }
+  const WAVE_DELAY = 600;
+
+  canvas.style.cursor = 'crosshair';
+
+  function hitTest(mx, my) {
+    const w = W(), h = H();
+    for (let i = nodes.length - 1; i >= 0; i--) {
+      const n = nodes[i];
+      const dx = mx - n.x * w, dy = my - n.y * h;
+      if (dx * dx + dy * dy < (n.r + 4) * (n.r + 4)) return i;
+    }
+    return -1;
+  }
+
+  canvas.addEventListener('mousemove', (e) => {
+    const rect = canvas.getBoundingClientRect();
+    hoverIdx = hitTest(e.clientX - rect.left, e.clientY - rect.top);
+    canvas.style.cursor = hoverIdx >= 0 ? 'pointer' : 'crosshair';
+  });
+
+  canvas.addEventListener('mouseleave', () => { hoverIdx = -1; });
+
+  canvas.addEventListener('click', (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const idx = hitTest(e.clientX - rect.left, e.clientY - rect.top);
+    if (idx < 0) { traversal = null; return; }
+    // Start BFS traversal animation
+    traversal = {
+      origin: idx,
+      visited: new Set([idx]),
+      waves: [[idx]],  // wave 0 = origin
+      maxWave: 3,
+      startTime: performance.now(),
+    };
+    // Pre-compute BFS waves
+    let frontier = [idx];
+    for (let d = 0; d < 3; d++) {
+      const next = [];
+      for (const ni of frontier) {
+        for (const nb of adj[ni]) {
+          if (!traversal.visited.has(nb)) {
+            traversal.visited.add(nb);
+            next.push(nb);
+          }
+        }
+      }
+      if (next.length) traversal.waves.push(next);
+      frontier = next;
+    }
+  });
+
+  function getTraversalDepth(nodeIdx, now) {
+    if (!traversal) return -1;
+    const elapsed = now - traversal.startTime;
+    for (let w = 0; w < traversal.waves.length; w++) {
+      if (traversal.waves[w].includes(nodeIdx)) {
+        const waveStart = w * WAVE_DELAY;
+        if (elapsed >= waveStart) {
+          return { depth: w, progress: Math.min(1, (elapsed - waveStart) / WAVE_DELAY) };
+        }
+        return { depth: w, progress: 0 };
+      }
+    }
+    return null;
+  }
+
+  function tick(now) {
+    const w = W(), h = H();
+
+    // Physics
+    for (let i = 0; i < nodes.length; i++) {
+      const n = nodes[i];
+      n.vx += (0.5 - n.x) * 0.0003;
+      n.vy += (0.5 - n.y) * 0.0003;
+      for (let j = i + 1; j < nodes.length; j++) {
+        const m = nodes[j];
+        let dx = n.x - m.x, dy = n.y - m.y;
+        let d2 = dx * dx + dy * dy;
+        if (d2 < 0.0001) d2 = 0.0001;
+        const f = 0.00001 / d2;
+        n.vx += dx * f; n.vy += dy * f;
+        m.vx -= dx * f; m.vy -= dy * f;
+      }
+    }
+    for (const e of edges) {
+      const a = nodes[e.s], b = nodes[e.t];
+      const dx = b.x - a.x, dy = b.y - a.y;
+      a.vx += dx * 0.01; a.vy += dy * 0.01;
+      b.vx -= dx * 0.01; b.vy -= dy * 0.01;
+    }
+    for (const n of nodes) {
+      n.vx *= 0.92; n.vy *= 0.92;
+      n.x = Math.max(0.05, Math.min(0.95, n.x + n.vx));
+      n.y = Math.max(0.05, Math.min(0.95, n.y + n.vy));
+    }
+
+    // Auto-expire traversal
+    if (traversal && now - traversal.startTime > traversal.waves.length * WAVE_DELAY + 3000) {
+      traversal = null;
+    }
+
+    // ── Draw ──
+    ctx.clearRect(0, 0, w, h);
+
+    // Edges
+    for (const e of edges) {
+      const a = nodes[e.s], b = nodes[e.t];
+      let alpha = 0.04;
+      let lineW = 0.5;
+      let color = '255,255,255';
+
+      // Hover: highlight edges of hovered node
+      if (hoverIdx >= 0 && (e.s === hoverIdx || e.t === hoverIdx)) {
+        alpha = 0.3;
+        lineW = 1;
+        color = typeColors[nodes[hoverIdx].type].replace('#','');
+        color = parseInt(color.slice(0,2),16)+','+parseInt(color.slice(2,4),16)+','+parseInt(color.slice(4,6),16);
+      }
+
+      // Traversal: highlight traversed edges
+      if (traversal) {
+        const ds = getTraversalDepth(e.s, now);
+        const dt = getTraversalDepth(e.t, now);
+        if (ds && dt && ds.progress > 0.5 && dt.progress > 0) {
+          alpha = 0.5 * dt.progress;
+          lineW = 1.5;
+          const depthColors = ['233,69,96','74,158,255','0,255,136','255,184,0'];
+          color = depthColors[Math.min(dt.depth, 3)];
+        }
+      }
+
+      ctx.strokeStyle = `rgba(${color},${alpha})`;
+      ctx.lineWidth = lineW;
+      ctx.beginPath();
+      ctx.moveTo(a.x * w, a.y * h);
+      ctx.lineTo(b.x * w, b.y * h);
+      ctx.stroke();
+    }
+
+    // Traversal: expanding ring at origin
+    if (traversal) {
+      const elapsed = now - traversal.startTime;
+      const ox = nodes[traversal.origin].x * w;
+      const oy = nodes[traversal.origin].y * h;
+      for (let wv = 0; wv < traversal.waves.length; wv++) {
+        const t = (elapsed - wv * WAVE_DELAY) / WAVE_DELAY;
+        if (t > 0 && t < 2) {
+          const radius = t * 60;
+          const fade = Math.max(0, 1 - t / 2);
+          ctx.strokeStyle = `rgba(233,69,96,${fade * 0.2})`;
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.arc(ox, oy, radius, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+      }
+    }
+
+    // Nodes
+    for (let i = 0; i < nodes.length; i++) {
+      const n = nodes[i];
+      const color = typeColors[n.type];
+      let alpha = 0.3 + n.confidence * 0.5;
+      let r = n.r;
+      let glow = n.r * 2;
+
+      // Dim non-connected on hover
+      if (hoverIdx >= 0) {
+        if (i === hoverIdx) {
+          alpha = 1; r = n.r + 2; glow = 12;
+        } else if (adj[hoverIdx].includes(i)) {
+          alpha = 0.9; r = n.r + 1; glow = 8;
+        } else {
+          alpha = 0.1; glow = 0;
+        }
+      }
+
+      // Traversal highlight
+      if (traversal) {
+        const td = getTraversalDepth(i, now);
+        if (td && td.progress > 0) {
+          alpha = 0.4 + 0.6 * td.progress;
+          r = n.r + 2 * td.progress;
+          glow = 10 * td.progress;
+        } else if (traversal.visited.has(i)) {
+          // visited but wave not yet arrived
+        } else {
+          alpha = 0.08; glow = 0;
+        }
+      }
+
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = color;
+      ctx.shadowColor = color;
+      ctx.shadowBlur = glow;
+      ctx.beginPath();
+      ctx.arc(n.x * w, n.y * h, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    ctx.shadowBlur = 0;
+
+    // Hover tooltip
+    if (hoverIdx >= 0 && !traversal) {
+      const n = nodes[hoverIdx];
+      const tx = n.x * w + 12, ty = n.y * h - 12;
+      const lines = [n.label, `type: ${n.type}`, `confidence: ${n.confidence}`];
+      ctx.font = '10px JetBrains Mono, monospace';
+      const maxW = Math.max(...lines.map(l => ctx.measureText(l).width));
+      ctx.fillStyle = 'rgba(6,6,9,0.9)';
+      ctx.fillRect(tx - 4, ty - 14, maxW + 16, lines.length * 15 + 8);
+      ctx.strokeStyle = 'rgba(233,69,96,0.3)';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(tx - 4, ty - 14, maxW + 16, lines.length * 15 + 8);
+      lines.forEach((line, li) => {
+        ctx.fillStyle = li === 0 ? '#d0d0e0' : '#6a6a80';
+        ctx.fillText(line, tx + 4, ty + li * 15);
+      });
+    }
+
+    // Traversal info
+    if (traversal) {
+      const n = nodes[traversal.origin];
+      const elapsed = now - traversal.startTime;
+      const currentDepth = Math.min(Math.floor(elapsed / WAVE_DELAY), traversal.waves.length - 1);
+      const visited = traversal.waves.slice(0, currentDepth + 1).flat().length;
+      const info = `BFS from "${n.label}" — depth ${currentDepth}, ${visited} nodes reached`;
+      ctx.font = '11px JetBrains Mono, monospace';
+      const tw = ctx.measureText(info).width;
+      ctx.fillStyle = 'rgba(6,6,9,0.85)';
+      ctx.fillRect(w / 2 - tw / 2 - 12, 10, tw + 24, 28);
+      ctx.strokeStyle = 'rgba(233,69,96,0.4)';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(w / 2 - tw / 2 - 12, 10, tw + 24, 28);
+      ctx.fillStyle = '#e94560';
+      ctx.fillText(info, w / 2 - tw / 2, 29);
+    }
+
+    // Legend
+    ctx.font = '10px JetBrains Mono, monospace';
+    let lx = 12, ly = h - 12;
+    for (let i = typeNames.length - 1; i >= 0; i--) {
+      const t = typeNames[i];
+      ctx.fillStyle = typeColors[t];
+      ctx.globalAlpha = 0.6;
+      ctx.beginPath(); ctx.arc(lx, ly, 3, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 0.4;
+      ctx.fillText(t, lx + 8, ly + 3.5);
+      ly -= 16;
+    }
+    ctx.globalAlpha = 1;
+
+    // Hint
+    if (!traversal && hoverIdx < 0) {
+      ctx.globalAlpha = 0.25;
+      ctx.font = '10px JetBrains Mono, monospace';
+      const hint = 'click a node to see BFS traversal';
+      ctx.fillStyle = '#a0a0b8';
+      ctx.fillText(hint, w - ctx.measureText(hint).width - 12, h - 12);
+      ctx.globalAlpha = 1;
+    }
+
+    requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+})();
+</script>
+</body>
+</html>

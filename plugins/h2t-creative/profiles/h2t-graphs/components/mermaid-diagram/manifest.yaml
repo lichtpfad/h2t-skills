@@ -1,9 +1,0 @@
-component: mermaid-diagram
-fields:
-  label:
-    type: text
-    required: false
-    default: ""
-  diagram:
-    type: text
-    required: true

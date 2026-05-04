@@ -1,9 +1,14 @@
 component: nav
 fields:
-  brand_name:
+  brand_accent:
     type: text
-    required: true
-  home_href:
-    type: url
     required: false
-    default: "/"
+    default: "H2T"
+  brand_suffix:
+    type: text
+    required: false
+    default: "GRAPHS"
+  links_html:
+    type: html
+    required: false
+    default: ""

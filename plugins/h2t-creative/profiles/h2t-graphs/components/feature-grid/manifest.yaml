@@ -1,4 +1,4 @@
-component: hud-panel
+component: feature-grid
 fields:
   tag:
     type: text
@@ -9,9 +9,9 @@ fields:
     required: false
     default: ""
   sub:
-    type: html
+    type: text
     required: false
     default: ""
-  body:
+  cells_html:
     type: html
     required: true
