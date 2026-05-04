@@ -1,9 +1,17 @@
 component: code-block
 fields:
-  label:
+  tag:
     type: text
     required: false
     default: ""
-  code:
+  h2:
     type: text
+    required: false
+    default: ""
+  sub:
+    type: html
+    required: false
+    default: ""
+  code_html:
+    type: html
     required: true

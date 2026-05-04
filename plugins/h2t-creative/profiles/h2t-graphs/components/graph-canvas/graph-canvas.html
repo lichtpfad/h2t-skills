@@ -1,0 +1,338 @@
+<section style="padding-top:0">
+  <div class="section-tag">{{ tag }}</div>
+  <h2>{{ h2 }}</h2>
+  <p class="sub">{{ sub }}</p>
+  <div class="mermaid-wrap" style="padding:0;overflow:hidden">
+    <canvas id="{{ canvas_id }}" style="width:100%;height:500px;display:block"></canvas>
+  </div>
+  <p style="font-size:0.6rem;color:var(--text-dim);margin-top:0.8rem;text-align:center">{{ caption }}</p>
+  <script>
+  (function() {
+    const canvas = document.getElementById('graphCanvas');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const dpr = window.devicePixelRatio || 1;
+
+    function resize() {
+      const rect = canvas.parentElement.getBoundingClientRect();
+      canvas.width = rect.width * dpr;
+      canvas.height = 500 * dpr;
+      canvas.style.height = '500px';
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+    resize();
+    window.addEventListener('resize', resize);
+
+    const W = () => canvas.width / dpr;
+    const H = () => 500;
+
+    const typeColors = {
+      framework: '#e94560',
+      concept: '#4a9eff',
+      principle: '#00ff88',
+      case: '#ffb800',
+      operator: '#a855f7',
+      lesson: '#6b7280',
+    };
+    const typeNames = ['framework','concept','principle','case','operator','lesson'];
+    const sampleLabels = {
+      framework: ['Inversion','Decomposition','Analogy','Empathy','Morphology','SCAMPER','Bisociation','Constraint Removal'],
+      concept: ['Lateral Thinking','Fixedness','Incubation','Transfer','Abstraction','Reframing','Serendipity','Divergence'],
+      principle: ['Segmentation','Extraction','Asymmetry','Merging','Universality','Nesting','Counterweight','Dynamics'],
+      case: ['IKEA Flat-pack','Post-it Notes','Dyson Cyclone','Velcro Hook','Shinkansen Nose','Walkman Pivot'],
+      operator: ['noiseTOP','feedbackTOP','blurTOP','compositeTOP','renderTOP','slopeTOP','edgeTOP','levelTOP'],
+      lesson: ['Lesson 01','Lesson 02','Lesson 03','Lesson 04','Lesson 05','Lesson 06'],
+    };
+
+    const nodes = [];
+    const edges = [];
+    const adj = {};
+    const N = 80;
+    for (let i = 0; i < N; i++) {
+      const type = typeNames[Math.floor(Math.random() * typeNames.length)];
+      const labels = sampleLabels[type];
+      const cluster = typeNames.indexOf(type);
+      const angle = (cluster / typeNames.length) * Math.PI * 2 + (Math.random() - 0.5) * 0.8;
+      const dist = 100 + Math.random() * 120;
+      nodes.push({
+        x: 0.5 + Math.cos(angle) * dist / 500,
+        y: 0.5 + Math.sin(angle) * dist / 400,
+        vx: 0, vy: 0,
+        type, confidence: +(0.3 + Math.random() * 0.7).toFixed(2),
+        r: 2.5 + Math.random() * 3,
+        label: labels[Math.floor(Math.random() * labels.length)],
+      });
+      adj[i] = [];
+    }
+    for (let i = 0; i < N; i++) {
+      const count = 1 + Math.floor(Math.random() * 2);
+      for (let c = 0; c < count; c++) {
+        let j;
+        if (Math.random() < 0.7) {
+          const same = nodes.map((_, idx) => idx).filter(idx => nodes[idx].type === nodes[i].type && idx !== i);
+          if (!same.length) continue;
+          j = same[Math.floor(Math.random() * same.length)];
+        } else {
+          j = Math.floor(Math.random() * N);
+          if (j === i) continue;
+        }
+        edges.push({ s: i, t: j });
+        adj[i].push(j);
+        adj[j].push(i);
+      }
+    }
+
+    let hoverIdx = -1;
+    let traversal = null;
+    const WAVE_DELAY = 600;
+
+    canvas.style.cursor = 'crosshair';
+
+    function hitTest(mx, my) {
+      const w = W(), h = H();
+      for (let i = nodes.length - 1; i >= 0; i--) {
+        const n = nodes[i];
+        const dx = mx - n.x * w, dy = my - n.y * h;
+        if (dx * dx + dy * dy < (n.r + 4) * (n.r + 4)) return i;
+      }
+      return -1;
+    }
+
+    canvas.addEventListener('mousemove', (e) => {
+      const rect = canvas.getBoundingClientRect();
+      hoverIdx = hitTest(e.clientX - rect.left, e.clientY - rect.top);
+      canvas.style.cursor = hoverIdx >= 0 ? 'pointer' : 'crosshair';
+    });
+
+    canvas.addEventListener('mouseleave', () => { hoverIdx = -1; });
+
+    canvas.addEventListener('click', (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const idx = hitTest(e.clientX - rect.left, e.clientY - rect.top);
+      if (idx < 0) { traversal = null; return; }
+      traversal = {
+        origin: idx,
+        visited: new Set([idx]),
+        waves: [[idx]],
+        maxWave: 3,
+        startTime: performance.now(),
+      };
+      let frontier = [idx];
+      for (let d = 0; d < 3; d++) {
+        const next = [];
+        for (const ni of frontier) {
+          for (const nb of adj[ni]) {
+            if (!traversal.visited.has(nb)) {
+              traversal.visited.add(nb);
+              next.push(nb);
+            }
+          }
+        }
+        if (next.length) traversal.waves.push(next);
+        frontier = next;
+      }
+    });
+
+    function getTraversalDepth(nodeIdx, now) {
+      if (!traversal) return -1;
+      const elapsed = now - traversal.startTime;
+      for (let w = 0; w < traversal.waves.length; w++) {
+        if (traversal.waves[w].includes(nodeIdx)) {
+          const waveStart = w * WAVE_DELAY;
+          if (elapsed >= waveStart) {
+            return { depth: w, progress: Math.min(1, (elapsed - waveStart) / WAVE_DELAY) };
+          }
+          return { depth: w, progress: 0 };
+        }
+      }
+      return null;
+    }
+
+    function tick(now) {
+      const w = W(), h = H();
+
+      for (let i = 0; i < nodes.length; i++) {
+        const n = nodes[i];
+        n.vx += (0.5 - n.x) * 0.0003;
+        n.vy += (0.5 - n.y) * 0.0003;
+        for (let j = i + 1; j < nodes.length; j++) {
+          const m = nodes[j];
+          let dx = n.x - m.x, dy = n.y - m.y;
+          let d2 = dx * dx + dy * dy;
+          if (d2 < 0.0001) d2 = 0.0001;
+          const f = 0.00001 / d2;
+          n.vx += dx * f; n.vy += dy * f;
+          m.vx -= dx * f; m.vy -= dy * f;
+        }
+      }
+      for (const e of edges) {
+        const a = nodes[e.s], b = nodes[e.t];
+        const dx = b.x - a.x, dy = b.y - a.y;
+        a.vx += dx * 0.01; a.vy += dy * 0.01;
+        b.vx -= dx * 0.01; b.vy -= dy * 0.01;
+      }
+      for (const n of nodes) {
+        n.vx *= 0.92; n.vy *= 0.92;
+        n.x = Math.max(0.05, Math.min(0.95, n.x + n.vx));
+        n.y = Math.max(0.05, Math.min(0.95, n.y + n.vy));
+      }
+
+      if (traversal && now - traversal.startTime > traversal.waves.length * WAVE_DELAY + 3000) {
+        traversal = null;
+      }
+
+      ctx.clearRect(0, 0, w, h);
+
+      for (const e of edges) {
+        const a = nodes[e.s], b = nodes[e.t];
+        let alpha = 0.04;
+        let lineW = 0.5;
+        let color = '255,255,255';
+
+        if (hoverIdx >= 0 && (e.s === hoverIdx || e.t === hoverIdx)) {
+          alpha = 0.3;
+          lineW = 1;
+          color = typeColors[nodes[hoverIdx].type].replace('#','');
+          color = parseInt(color.slice(0,2),16)+','+parseInt(color.slice(2,4),16)+','+parseInt(color.slice(4,6),16);
+        }
+
+        if (traversal) {
+          const ds = getTraversalDepth(e.s, now);
+          const dt = getTraversalDepth(e.t, now);
+          if (ds && dt && ds.progress > 0.5 && dt.progress > 0) {
+            alpha = 0.5 * dt.progress;
+            lineW = 1.5;
+            const depthColors = ['233,69,96','74,158,255','0,255,136','255,184,0'];
+            color = depthColors[Math.min(dt.depth, 3)];
+          }
+        }
+
+        ctx.strokeStyle = 'rgba(' + color + ',' + alpha + ')';
+        ctx.lineWidth = lineW;
+        ctx.beginPath();
+        ctx.moveTo(a.x * w, a.y * h);
+        ctx.lineTo(b.x * w, b.y * h);
+        ctx.stroke();
+      }
+
+      if (traversal) {
+        const elapsed = now - traversal.startTime;
+        const ox = nodes[traversal.origin].x * w;
+        const oy = nodes[traversal.origin].y * h;
+        for (let wv = 0; wv < traversal.waves.length; wv++) {
+          const t = (elapsed - wv * WAVE_DELAY) / WAVE_DELAY;
+          if (t > 0 && t < 2) {
+            const radius = t * 60;
+            const fade = Math.max(0, 1 - t / 2);
+            ctx.strokeStyle = 'rgba(233,69,96,' + (fade * 0.2) + ')';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.arc(ox, oy, radius, 0, Math.PI * 2);
+            ctx.stroke();
+          }
+        }
+      }
+
+      for (let i = 0; i < nodes.length; i++) {
+        const n = nodes[i];
+        const color = typeColors[n.type];
+        let alpha = 0.3 + n.confidence * 0.5;
+        let r = n.r;
+        let glow = n.r * 2;
+
+        if (hoverIdx >= 0) {
+          if (i === hoverIdx) {
+            alpha = 1; r = n.r + 2; glow = 12;
+          } else if (adj[hoverIdx].includes(i)) {
+            alpha = 0.9; r = n.r + 1; glow = 8;
+          } else {
+            alpha = 0.1; glow = 0;
+          }
+        }
+
+        if (traversal) {
+          const td = getTraversalDepth(i, now);
+          if (td && td.progress > 0) {
+            alpha = 0.4 + 0.6 * td.progress;
+            r = n.r + 2 * td.progress;
+            glow = 10 * td.progress;
+          } else if (traversal.visited.has(i)) {
+            // visited but wave not yet arrived
+          } else {
+            alpha = 0.08; glow = 0;
+          }
+        }
+
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = color;
+        ctx.shadowColor = color;
+        ctx.shadowBlur = glow;
+        ctx.beginPath();
+        ctx.arc(n.x * w, n.y * h, r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+      ctx.shadowBlur = 0;
+
+      if (hoverIdx >= 0 && !traversal) {
+        const n = nodes[hoverIdx];
+        const tx = n.x * w + 12, ty = n.y * h - 12;
+        const lines = [n.label, 'type: ' + n.type, 'confidence: ' + n.confidence];
+        ctx.font = '10px JetBrains Mono, monospace';
+        const maxW = Math.max.apply(null, lines.map(l => ctx.measureText(l).width));
+        ctx.fillStyle = 'rgba(6,6,9,0.9)';
+        ctx.fillRect(tx - 4, ty - 14, maxW + 16, lines.length * 15 + 8);
+        ctx.strokeStyle = 'rgba(233,69,96,0.3)';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(tx - 4, ty - 14, maxW + 16, lines.length * 15 + 8);
+        lines.forEach((line, li) => {
+          ctx.fillStyle = li === 0 ? '#d0d0e0' : '#6a6a80';
+          ctx.fillText(line, tx + 4, ty + li * 15);
+        });
+      }
+
+      if (traversal) {
+        const n = nodes[traversal.origin];
+        const elapsed = now - traversal.startTime;
+        const currentDepth = Math.min(Math.floor(elapsed / WAVE_DELAY), traversal.waves.length - 1);
+        const visited = traversal.waves.slice(0, currentDepth + 1).flat().length;
+        const info = 'BFS from "' + n.label + '" — depth ' + currentDepth + ', ' + visited + ' nodes reached';
+        ctx.font = '11px JetBrains Mono, monospace';
+        const tw = ctx.measureText(info).width;
+        ctx.fillStyle = 'rgba(6,6,9,0.85)';
+        ctx.fillRect(w / 2 - tw / 2 - 12, 10, tw + 24, 28);
+        ctx.strokeStyle = 'rgba(233,69,96,0.4)';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(w / 2 - tw / 2 - 12, 10, tw + 24, 28);
+        ctx.fillStyle = '#e94560';
+        ctx.fillText(info, w / 2 - tw / 2, 29);
+      }
+
+      ctx.font = '10px JetBrains Mono, monospace';
+      let lx = 12, ly = h - 12;
+      for (let i = typeNames.length - 1; i >= 0; i--) {
+        const t = typeNames[i];
+        ctx.fillStyle = typeColors[t];
+        ctx.globalAlpha = 0.6;
+        ctx.beginPath(); ctx.arc(lx, ly, 3, 0, Math.PI * 2); ctx.fill();
+        ctx.globalAlpha = 0.4;
+        ctx.fillText(t, lx + 8, ly + 3.5);
+        ly -= 16;
+      }
+      ctx.globalAlpha = 1;
+
+      if (!traversal && hoverIdx < 0) {
+        ctx.globalAlpha = 0.25;
+        ctx.font = '10px JetBrains Mono, monospace';
+        const hint = 'click a node to see BFS traversal';
+        ctx.fillStyle = '#a0a0b8';
+        ctx.fillText(hint, w - ctx.measureText(hint).width - 12, h - 12);
+        ctx.globalAlpha = 1;
+      }
+
+      requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+  })();
+  </script>
+</section>

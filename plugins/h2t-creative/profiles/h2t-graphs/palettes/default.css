@@ -1,16 +1,16 @@
 :root {
-  --color-bg: #060609;
-  --color-bg2: #0a0a10;
-  --color-surface: #0e0e16;
-  --color-accent: #e94560;
-  --color-accent-glow: rgba(233,69,96,0.4);
-  --color-green: #00ff88;
-  --color-blue: #4a9eff;
-  --color-amber: #ffb800;
-  --color-text: #a0a0b8;
-  --color-text-hi: #d0d0e0;
-  --color-text-dim: #3a3a50;
-  --color-border: rgba(233,69,96,0.12);
-  --color-accent-hover: var(--color-accent);
-  --color-on-accent: #ffffff;
+  --bg:          #060609;
+  --bg2:         #0a0a10;
+  --surface:     #0e0e16;
+  --accent:      #e94560;
+  --accent-glow: rgba(233,69,96,0.4);
+  --green:       #00ff88;
+  --green-glow:  rgba(0,255,136,0.3);
+  --blue:        #4a9eff;
+  --amber:       #ffb800;
+  --text:        #a0a0b8;
+  --text-hi:     #d0d0e0;
+  --text-dim:    #3a3a50;
+  --grid:        rgba(255,255,255,0.02);
+  --border:      rgba(233,69,96,0.12);
 }

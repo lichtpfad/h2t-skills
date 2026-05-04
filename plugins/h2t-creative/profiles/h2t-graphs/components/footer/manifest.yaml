@@ -1,5 +1,22 @@
 component: footer
 fields:
-  copy:
+  motto_prefix:
     type: text
-    required: true
+    required: false
+    default: ""
+  motto_accent:
+    type: text
+    required: false
+    default: "Schema-first."
+  motto_suffix:
+    type: text
+    required: false
+    default: " Provenance on everything."
+  sub:
+    type: text
+    required: false
+    default: ""
+  small:
+    type: text
+    required: false
+    default: "[HOU2TOUCH] — Part of the H2T AI Platform"

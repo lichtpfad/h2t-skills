@@ -1,0 +1,26 @@
+component: compare-grid
+fields:
+  tag:
+    type: text
+    required: false
+    default: ""
+  h2:
+    type: text
+    required: false
+    default: ""
+  sub:
+    type: text
+    required: false
+    default: ""
+  no_title:
+    type: text
+    required: true
+  no_items_html:
+    type: html
+    required: true
+  yes_title:
+    type: text
+    required: true
+  yes_items_html:
+    type: html
+    required: true

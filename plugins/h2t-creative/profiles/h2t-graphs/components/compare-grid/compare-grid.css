@@ -1,0 +1,28 @@
+.compare-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin: 2rem 0;
+}
+
+.compare-card {
+  background: var(--surface); border: 1px solid var(--border);
+  padding: 1.5rem 2rem; position: relative;
+}
+
+.compare-card::before {
+  top: -1px; left: -1px;
+  width: 10px; height: 10px;
+  border-width: 2px 0 0 2px;
+}
+
+.compare-card h3 { font-family: var(--sans); font-size: 0.95rem; font-weight: 700; }
+.compare-card ul { list-style: none; font-size: 0.75rem; line-height: 2; }
+
+.compare-card.yes h3 { color: var(--green); text-shadow: 0 0 8px var(--green-glow); }
+.compare-card.yes ul li::before { content: '✓ '; color: var(--green); }
+
+.compare-card.no h3 { color: var(--text-dim); }
+.compare-card.no ul li::before { content: '— '; color: var(--text-dim); }
+
+@media (max-width: 700px) {
+  .compare-grid { grid-template-columns: 1fr; gap: 1rem; }
+  .compare-card { padding: 1.25rem 1.25rem; }
+}

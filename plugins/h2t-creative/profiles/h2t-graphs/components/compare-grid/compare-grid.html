@@ -1,0 +1,15 @@
+<section>
+  <span class="section-tag">{{ tag }}</span>
+  <h2>{{ h2 }}</h2>
+  <p class="sub">{{ sub }}</p>
+  <div class="compare-grid">
+    <div class="compare-card no">
+      <h3>{{ no_title }}</h3>
+      <ul>{{ no_items_html | safe }}</ul>
+    </div>
+    <div class="compare-card yes">
+      <h3>{{ yes_title }}</h3>
+      <ul>{{ yes_items_html | safe }}</ul>
+    </div>
+  </div>
+</section>
