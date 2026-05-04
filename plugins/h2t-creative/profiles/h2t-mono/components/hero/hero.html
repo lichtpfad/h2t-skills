@@ -1,7 +1,73 @@
-<section class="section hero">
-  <div class="hero-inner">
-    <p class="hero__tag">{{ badge }}</p>
-    <h1 class="hero__headline">{{ headline }}</h1>
-    <p class="hero__subline">{{ subline }}</p>
+<section class="hero">
+  <div class="container">
+    <div class="hero-logo">{{ brand_prefix }}<span class="accent">{{ brand_accent }}</span></div>
+    <div class="hero-subtitle">{{ subtitle }}</div>
+
+    <div class="hero-headlines">{{ headlines_html | safe }}</div>
+
+    <div class="hero-cta">
+      <a href="{{ btn1_href }}" class="btn btn-primary">{{ btn1_label }}</a>
+      <a href="{{ btn2_href }}" class="btn btn-secondary" target="_blank" rel="noopener">{{ btn2_label }}</a>
+    </div>
+
+    <div class="hero-terminal-wrapper"><div class="hero-terminal" id="hero-terminal"></div></div>
+
+    <div class="hero-agents" style="margin-top:var(--space-lg);">{{ agents_html | safe }}</div>
   </div>
+
+  <script>
+  (function() {
+    const headlines = document.querySelectorAll('.headline');
+    if (!headlines.length) return;
+    let current = 0;
+    setInterval(() => {
+      headlines[current].classList.remove('active');
+      current = (current + 1) % headlines.length;
+      headlines[current].classList.add('active');
+    }, 4000);
+  })();
+
+  (function() {
+    const el = document.getElementById('hero-terminal');
+    if (!el) return;
+    const lines = [
+      { text: '$ specdesigner compile', cls: 't-cmd' },
+      { text: '  scanning 6 nodes, 5 edges...', cls: '' },
+      { text: '✓ graph validated in 0.12s', cls: 't-ok' },
+      { text: '', cls: '' },
+      { text: '  compiling brief-collector...', cls: '' },
+      { text: '  summary: "Central pipeline service"', cls: 't-dim' },
+      { text: '  boundaries: 3 constraints', cls: 't-dim' },
+      { text: '  acceptance_criteria: 4 checks', cls: 't-dim' },
+      { text: '✓ brief-collector.md written', cls: 't-ok' },
+      { text: '', cls: '' },
+      { text: '  compiling notion...', cls: '' },
+      { text: '✓ notion.md written', cls: 't-ok' },
+      { text: '  compiling gmail...', cls: '' },
+      { text: '✓ gmail.md written', cls: 't-ok' },
+      { text: '  compiling calendar...', cls: '' },
+      { text: '✓ calendar.md written', cls: 't-ok' },
+      { text: '', cls: '' },
+      { text: '✓ all specs compiled: 6/6 modules', cls: 't-ok' },
+      { text: '✓ ARCHITECTURE.md regenerated', cls: 't-ok' },
+    ];
+    const MAX_LINES = 9;
+    let buffer = [];
+    let i = 0;
+    function addLine() {
+      const line = lines[i % lines.length];
+      const cls = line.cls ? ' class="' + line.cls + '"' : '';
+      buffer.push('<div' + cls + '>' + (line.text || '&nbsp;') + '</div>');
+      if (buffer.length > MAX_LINES) buffer.shift();
+      const padded = buffer.slice();
+      while (padded.length < MAX_LINES) padded.unshift('<div>&nbsp;</div>');
+      el.innerHTML = padded.join('');
+      i++;
+      const next = lines[i % lines.length];
+      const delay = next.text === '' ? 600 : 200 + Math.random() * 300;
+      setTimeout(addLine, delay);
+    }
+    setTimeout(addLine, 800);
+  })();
+  </script>
 </section>

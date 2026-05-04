@@ -1,0 +1,10 @@
+component: pipeline-svg
+fields:
+  title:
+    type: text
+    required: false
+    default: "How It Works"
+  quote:
+    type: text
+    required: false
+    default: ""

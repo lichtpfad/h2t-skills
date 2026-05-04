@@ -1,1 +1,11 @@
-<section class="mono-compare">{{ body_html | safe }}</section>
+<section>
+  <div class="container">
+    <div class="section-title">{{ title }}</div>
+    <div class="table-scroll">
+      <table class="comparison-table">
+        <thead>{{ thead_html | safe }}</thead>
+        <tbody>{{ tbody_html | safe }}</tbody>
+      </table>
+    </div>
+  </div>
+</section>

@@ -1,0 +1,5 @@
+component: meme-grid
+fields:
+  inner_html:
+    type: html
+    required: true

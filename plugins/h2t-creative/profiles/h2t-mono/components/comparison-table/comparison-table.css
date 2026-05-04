@@ -1,42 +1,52 @@
-.mono-compare {
-  margin: 4rem auto;
-  max-width: 1120px;
+.table-scroll {
   overflow-x: auto;
-  border: 1px solid var(--color-border);
-  font-family: var(--font);
+  -webkit-overflow-scrolling: touch;
 }
 
-.mono-compare table {
+.comparison-table {
   width: 100%;
   border-collapse: collapse;
+  font-size: 13px;
+  letter-spacing: 0.04em;
 }
 
-.mono-compare th,
-.mono-compare td {
-  padding: 1rem;
-  border-bottom: 1px solid var(--color-border);
-  color: var(--color-text-dim);
-  text-align: left;
-  vertical-align: top;
+.comparison-table th,
+.comparison-table td {
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--border);
+  text-align: center;
+  white-space: nowrap;
 }
 
-.mono-compare th {
-  color: var(--color-text);
-  font-size: 0.72rem;
-  letter-spacing: 0.16em;
+.comparison-table th {
+  background: var(--bg-card);
+  color: var(--fg-dim);
   text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-weight: 400;
+  font-size: 12px;
 }
 
-.mono-compare td + td,
-.mono-compare th + th {
-  border-left: 1px solid var(--color-border);
+.comparison-table td { color: var(--fg-dim); font-size: 14px; }
+.comparison-table td:first-child {
+  text-align: left;
+  color: var(--fg);
+  font-size: 13px;
 }
 
-.mono-compare .is-good {
-  color: var(--color-accent);
-}
+.comparison-table .hl { color: var(--ok); font-weight: 500; font-size: 14px; }
+.comparison-table th.hl { color: var(--ok); font-size: 13px; }
 
-.mono-compare .is-bad {
-  color: var(--color-text-dim);
-  text-decoration: line-through;
+.sticky-col {
+  position: sticky;
+  background: var(--bg-card);
+  z-index: 2;
+}
+.sticky-feature { left: 0; }
+.sticky-ours { left: 160px; border-right: 2px solid rgba(29,217,160,0.2); }
+thead .sticky-col { z-index: 3; }
+
+@media (max-width: 768px) {
+  .sticky-col { position: static; }
+  .sticky-ours { border-right: none; }
 }
