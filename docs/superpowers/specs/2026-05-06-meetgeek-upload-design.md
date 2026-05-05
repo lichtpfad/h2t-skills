@@ -61,7 +61,9 @@ External state:
 - New pip: `imageio-ffmpeg`
 - Reused: `requests`, `python-dotenv`, `google-api-python-client` (уже у drive_cli)
 - ffmpeg binary: бандлится через `imageio_ffmpeg.get_ffmpeg_exe()`
-- ffprobe: `imageio_ffmpeg.get_ffprobe_exe()` (если есть в имеджио — иначе fallback на ffmpeg `-i` parsing)
+- **ffprobe не предоставляется imageio-ffmpeg.** Поэтому stream-detection делаем через сам ffmpeg: `ffmpeg -hide_banner -i in.webm -f null -` → парсим stderr regex `Stream #\d+:\d+(\([\w]+\))?: Audio:` для подсчёта audio streams. Надёжно для нашего use-case (typed source: webm/mp4/m4a).
+
+**Reuse Drive helpers:** функция `get_drive_service()` из `plugins/h2t-ops/skills/drive/scripts/drive_cli.py` импортируется как пакет (через `sys.path.append` к sibling скрипту) или копируется minimal version. Решается на этапе implementation — обе опции допустимы при условии что OAuth token path остаётся `~/.config/google-calendar-mcp/tokens.json` без изменений.
 
 ## 4. Components
 
@@ -77,8 +79,8 @@ meetgeek convert <in.webm> [-o out.mp4] [--audio-only] [--mix-mode amix|first|ke
 
 Поведение:
 
-1. ffprobe → читает streams (video count, audio count, duration, codec).
-2. `--probe` без `-o` → печатает summary в stdout, exit 0. Полезно для diagnostics.
+1. Probe через `ffmpeg -hide_banner -i in -f null -`: парсим stderr на `Stream #...: Audio:` matches → audio stream count; `Duration: HH:MM:SS.MS` → длительность.
+2. `--probe` без `-o` → печатает summary в stdout (audio_streams, duration, has_video, codecs), exit 0. Полезно для diagnostics.
 3. `-o` не задан → `~/.dor/lake/meetgeek/uploads-staging/{YYYY-MM-DD}/{basename}.mp4`.
 4. Если выходной файл уже существует с size > 0 → skip, warn в stderr.
 5. ffmpeg recipe выбирается по числу audio streams:
@@ -136,7 +138,8 @@ meetgeek upload --from-file <path-or-glob> [--audio-only] [--language ru]
    - drive_upload → `drive_id, download_url` (idempotent search)
    - POST `/v1/upload {download_url, title, language}` → 202
    - manifest append: финальная entry с `status: "submitted"`
-6. Title default: `"Meeting {date} {HH:MM} UTC"`, parsed из имени `meetgeek-recording-{ISO}Z.webm`. Override через `--title` (применяется ко всем файлам в batch — пока без per-file override; если нужно — отдельная задача).
+6. **Default behavior:** `--skip-existing` ВКЛ по умолчанию. Можно отключить через `--no-skip-existing` (re-process даже если уже submitted в manifest). Argparse: `BooleanOptionalAction` или ручная пара флагов.
+7. Title default: `"Meeting {date} {HH:MM} UTC"`, parsed из имени `meetgeek-recording-{ISO}Z.webm`. Override через `--title` применяется ко **всем** файлам batch (per-file override out of scope для этого milestone).
 7. Stderr: progress per file `[N/total] basename  convert ✓  drive ✓  submit ✓`.
 8. Stdout: финальная сводка JSON `{processed, skipped, errors, drive_folder, note}`.
 
