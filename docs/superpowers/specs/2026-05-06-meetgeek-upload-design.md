@@ -83,15 +83,27 @@ meetgeek convert <in.webm> [-o out.mp4] [--audio-only] [--mix-mode amix|first|ke
 2. `--probe` без `-o` → печатает summary в stdout (audio_streams, duration, has_video, codecs), exit 0. Полезно для diagnostics.
 3. `-o` не задан → `~/.dor/lake/meetgeek/uploads-staging/{YYYY-MM-DD}/{basename}.mp4`.
 4. Если выходной файл уже существует с size > 0 → skip, warn в stderr.
-5. ffmpeg recipe выбирается по числу audio streams:
+5. ffmpeg recipe выбирается по числу audio streams. **Default mix-mode = `amix`**, реально *суммирует* дорожки — это семантика правильная для transcription, в отличие от `amerge` (склеивает в multichannel layout). Конкретные filtergraphs:
    - `count == 1`:
-     `ffmpeg -y -i in -c:v libx264 -preset medium -crf 23 -c:a aac -b:a 192k out`
-   - `count > 1` и `--mix-mode amix` (default):
-     `ffmpeg -y -i in -filter_complex "[0:a]amerge=inputs=N[a]" -map 0:v -map "[a]" -ac 2 -c:v libx264 ... -c:a aac ...`
-   - `--mix-mode first`: `-map 0:v -map 0:a:0 ...`
-   - `--mix-mode keep`: `-map 0 ...` (debug only)
-6. `--audio-only` использует `-vn`, выход `.m4a`, иные параметры те же.
-7. Sample rate mismatch при `amerge` → автодобавляем `aresample` в filter chain.
+     ```
+     ffmpeg -y -i in \
+       -c:v libx264 -preset medium -crf 23 \
+       -c:a aac -b:a 192k -ar 48000 -ac 2 \
+       out
+     ```
+   - `count > 1` и `--mix-mode amix` (default — сумма дорожек, нормализованная):
+     ```
+     ffmpeg -y -i in \
+       -filter_complex "[0:a:0][0:a:1]...[0:a:N-1]amix=inputs=N:duration=longest:dropout_transition=0,aresample=48000[a]" \
+       -map 0:v? -map "[a]" \
+       -c:v libx264 -preset medium -crf 23 \
+       -c:a aac -b:a 192k -ac 2 \
+       out
+     ```
+     `aresample=48000` гарантирует одинаковый sample rate перед mix; `0:v?` (с `?`) терпимо к audio-only source.
+   - `--mix-mode first`: `-map 0:v? -map 0:a:0 ...`
+   - `--mix-mode keep`: `-map 0 -c:v libx264 -c:a aac ...` (все исходные streams сохраняются; debug only)
+6. `--audio-only` использует `-vn`, выход `.m4a`. Filtergraph для multi-track такой же (amix), просто без видео-маппинга.
 8. Sanity check: после ffmpeg, проверяем mp4 size > 1KB; иначе удаляем и raise.
 9. Stdout: путь к mp4.
 
@@ -108,18 +120,18 @@ meetgeek drive-upload <file> [--folder "MeetGeek Uploads/2026-05-06"] [--make-pu
 
 1. `get_drive_service()` — re-use из `drive_cli.py` (тот же tokens.json).
 2. Default folder: `MeetGeek Uploads/{YYYY-MM-DD}/`. Создаётся если нет (recursive: `MeetGeek Uploads/` тоже создастся).
-3. Idempotent search: `files.list(q="name='X' and parents in '<folder_id>' and trashed=false")`. Если совпадение — return `{drive_id, ..., created: false}`.
+3. Idempotent search: `files.list(q="name='X' and '<folder_id>' in parents and trashed=false")`. Обрати внимание: правильный Drive Query syntax — `'<folder_id>' in parents` (а не `parents in '<folder_id>'`). Если совпадение — return `{drive_id, ..., created: false}`.
 4. Иначе `MediaFileUpload(file, resumable=True, chunksize=...)` → upload.
 5. Если `--make-public` (default true) → `permissions.create({type:"anyone", role:"reader"})`.
 6. `download_url = f"https://drive.google.com/uc?export=download&id={drive_id}"`.
 7. Stdout: вышеуказанный JSON.
 
-### 4.3 `cmd_upload` (расширение существующей)
+### 4.3 `cmd_upload` (новая команда)
 
-Текущая `cmd_upload` принимает только `--download-url`. Расширяем двумя режимами:
+В текущем `meetgeek_cli.py` (1.0.7) команды `upload` нет — её нужно создать с нуля. Это новый argparse-branch, новый handler-функция, новые тесты — не «расширение». Direct mode (`--download-url`) и orchestrated mode (`--from-file`) реализуются вместе как два сценария одной команды:
 
 ```bash
-# Direct (existing)
+# Direct: URL уже есть
 meetgeek upload --download-url URL [--title T] [--language ru|en|auto]
 
 # Orchestrated (new)
@@ -163,9 +175,20 @@ MeetGeek API: 202 Accepted (async processing 5-30 min)
 meetgeek sync --since-cursor → новый митинг подтянется в historical/
 ```
 
+### Manifest reader semantics
+
+Manifest — append-only jsonl. Per source webm может быть несколько строк (одна на каждое успешное завершение стадии). **Правила чтения:**
+
+- **Effective state for a source = последняя строка с тем же `source_webm`** (linear scan, "last write wins").
+- Поля reading order: `source_webm` определяется по absolute path после `Path(p).resolve()`. Любая иная нормализация — out of scope.
+- `--skip-existing` (default ON): skip processing если effective.status == `"submitted"` И `effective.source_size_bytes == current_size_bytes` И `effective.source_mtime == current_mtime`. Если file changed (size/mtime отличаются), переобрабатывается как новый — это позволяет detect когда user заменил файл с тем же именем.
+- `--no-skip-existing`: ignore manifest при decision, всё равно процессим. Drive idempotency (по name+folder) и cached mp4 (по path+size) остаются — мы не дублируем работу впустую, просто не пропускаем по статусу.
+- Resume через intermediate states: если effective.status == `"converted"` и есть валидный `mp4_path` (file exists, size>0) → пропускаем convert, идём в drive. Если `"in-drive"` с валидным `drive_id` → идём прямо в submit.
+- Failed states (`convert-failed`, `drive-failed`, `upload-rejected`) НЕ блокируют retry: при следующем запуске пробуем снова с того же шага. Если повторно falить — следующая failed-строка просто appendится.
+
 ### Manifest schema
 
-One line per source webm (append-only, can have multiple lines per source при retry):
+One line per stage transition (append-only):
 
 ```json
 {
@@ -228,6 +251,26 @@ Status enum: `convert-failed | converted | drive-failed | in-drive | upload-reje
 2. `meetgeek drive-upload` → Drive web UI показывает файл с share=anyone-with-link
 3. `meetgeek upload --download-url <real Drive link>` → 202
 4. ~10 мин → `meetgeek list --limit 5` → новый митинг
+
+## 7.5 Live verification gate (pre-batch)
+
+Перед массовой реализацией batch+resume — **первый smoke на одном реальном файле** обязателен. Цель: подтвердить assumption что Drive `https://drive.google.com/uc?export=download&id={id}` действительно работает как `download_url` для MeetGeek. Эта URL-схема — допущение из общего паттерна Drive sharing, а не из MeetGeek docs.
+
+Steps (manual, до того как мы пишем `--from-file` orchestrator):
+
+1. `meetgeek convert <one.webm>` → mp4 ОК (играется в QuickTime/VLC)
+2. `meetgeek drive-upload <mp4>` → JSON с `download_url`
+3. Открыть `download_url` в incognito браузере (без auth) → файл должен начать качаться
+4. `meetgeek upload --download-url <url> --title test` → 202 Accepted
+5. ~10 мин → `meetgeek list --limit 5` → новый митинг появился, `transcript` содержит реальный текст
+
+Если пункт 3 или 5 fails — Drive `uc?export=download&id=` insufficient. Альтернативы (для plan):
+
+- Использовать API endpoint `https://www.googleapis.com/drive/v3/files/{id}?alt=media` (требует Bearer token, НЕ работает для MeetGeek)
+- Создавать `permissions.create({type:"anyone", role:"reader"})` + `webContentLink` из metadata Drive API
+- Promote file в Shared Drive с broader visibility
+
+В spec фиксируем: live gate — **первая стадия implementation**, до того как пишем `cmd_upload --from-file` orchestrator.
 
 ## 8. Out of scope (this milestone)
 
