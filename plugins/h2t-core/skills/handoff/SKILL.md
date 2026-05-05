@@ -13,8 +13,8 @@ metadata:
 
 ```bash
 WRITER="${CLAUDE_PLUGIN_ROOT}/skills/handoff/scripts/writer.py"
-H2T_PYTHON="${H2T_PYTHON:-$HOME/.h2t/venv/Scripts/python.exe}"
-[ ! -f "$H2T_PYTHON" ] && H2T_PYTHON="$HOME/.h2t/venv/bin/python"
+source "${CLAUDE_PLUGIN_ROOT}/scripts/resolve-h2t-python.sh"
+resolve_h2t_python || { echo "ERROR: no working Python found for h2t"; exit 1; }
 ```
 
 ## Pipeline
@@ -76,7 +76,7 @@ Display before writing. **Follow the format from `references/handoff-example.md`
 ### Step 6: Write handoff
 
 ```bash
-$H2T_PYTHON "$WRITER" write \
+"${H2T_PYTHON_CMD[@]}" "$WRITER" write \
   --session-id "<SESSION_NAME>" \
   --domain "<DOMAIN>" \
   --project "<PROJECT_ID>" \
@@ -102,7 +102,7 @@ Replace all `<...>` with literal values (not shell variables).
 
 ```bash
 SKILL_GRAPH_DIR="${SKILL_GRAPH_DIR:-C:/dev/claude-agent-skills/lib}"
-(cd "$SKILL_GRAPH_DIR" && $H2T_PYTHON -m skill_graph.cli query \
+(cd "$SKILL_GRAPH_DIR" && "${H2T_PYTHON_CMD[@]}" -m skill_graph.cli query \
   --context "handoff: session summary, what-done reconstruction, what-remains inference" \
   --skill "handoff") 2>/dev/null || true
 ```
@@ -112,7 +112,7 @@ If results contain relevant patterns or lessons, apply them before proceeding.
 ### Add Lesson (after resolving unexpected behavior in this skill)
 
 ```bash
-(cd "$SKILL_GRAPH_DIR" && $H2T_PYTHON -m skill_graph.cli add-lesson \
+(cd "$SKILL_GRAPH_DIR" && "${H2T_PYTHON_CMD[@]}" -m skill_graph.cli add-lesson \
   --skill "handoff" \
   --trigger "<what broke or caused confusion>" \
   --resolution "<what fixed it>" \

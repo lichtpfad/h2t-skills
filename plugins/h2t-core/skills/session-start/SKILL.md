@@ -16,8 +16,8 @@ metadata:
 ```bash
 GATHER="${CLAUDE_PLUGIN_ROOT}/skills/session-start/scripts/gather.py"
 ACTIVITY_LOG="${CLAUDE_PLUGIN_ROOT}/lib/activity/writer.py"
-H2T_PYTHON="${H2T_PYTHON:-$HOME/.h2t/venv/Scripts/python.exe}"
-[ ! -f "$H2T_PYTHON" ] && H2T_PYTHON="$HOME/.h2t/venv/bin/python"
+source "${CLAUDE_PLUGIN_ROOT}/scripts/resolve-h2t-python.sh"
+resolve_h2t_python || { echo "ERROR: no working Python found for h2t"; exit 1; }
 ```
 
 ## Pipeline
@@ -41,7 +41,7 @@ If `BRIEFING:` is present in your system context:
 If `BRIEFING:` is NOT in your context, run:
 
 ```bash
-$H2T_PYTHON "$GATHER" --cwd "$(pwd)" --format-briefing
+"${H2T_PYTHON_CMD[@]}" "$GATHER" --cwd "$(pwd)" --format-briefing
 ```
 
 Parse the full JSON output as GATHER_RESULT.
@@ -92,7 +92,7 @@ Wait for user input. Accept:
 Substitute literal values from GATHER_RESULT and run:
 
 ```bash
-$H2T_PYTHON "$ACTIVITY_LOG" start \
+"${H2T_PYTHON_CMD[@]}" "$ACTIVITY_LOG" start \
   --session-id "<SESSION_NAME>" \
   --domain "<DOMAIN>" \
   --project "<PROJECT_ID>"
@@ -127,7 +127,7 @@ Fill `N` and `branch` from GATHER_RESULT.
 
 ```bash
 SKILL_GRAPH_DIR="${SKILL_GRAPH_DIR:-C:/dev/claude-agent-skills/lib}"
-(cd "$SKILL_GRAPH_DIR" && $H2T_PYTHON -m skill_graph.cli query \
+(cd "$SKILL_GRAPH_DIR" && "${H2T_PYTHON_CMD[@]}" -m skill_graph.cli query \
   --context "session start: unclear work direction or unfamiliar project context" \
   --skill "session-start") 2>/dev/null || true
 ```
@@ -137,7 +137,7 @@ If results contain relevant patterns or lessons, apply them before proceeding.
 ### Add Lesson (after resolving unexpected behavior in this skill)
 
 ```bash
-(cd "$SKILL_GRAPH_DIR" && $H2T_PYTHON -m skill_graph.cli add-lesson \
+(cd "$SKILL_GRAPH_DIR" && "${H2T_PYTHON_CMD[@]}" -m skill_graph.cli add-lesson \
   --skill "session-start" \
   --trigger "<what broke or caused confusion>" \
   --resolution "<what fixed it>" \
