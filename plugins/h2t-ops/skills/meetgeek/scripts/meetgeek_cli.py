@@ -182,8 +182,20 @@ def _now_iso() -> str:
 
 # ─── Formatters ───────────────────────────────────────────────────────────────
 
+def _extract_speakers(transcript: dict) -> list[str]:
+    """Unique speakers from transcript.sentences (preserves first-seen order)."""
+    seen: list[str] = []
+    for s in transcript.get("sentences") or transcript.get("transcript") or []:
+        sp = (s.get("speaker") or s.get("speaker_name") or "").strip()
+        if sp and sp not in seen:
+            seen.append(sp)
+    return seen
+
+
 def _fmt_transcript_md(meeting: dict, transcript: dict) -> str:
     meta = _meeting_pick(meeting)
+    if not meta["attendees"]:
+        meta["attendees"] = _extract_speakers(transcript)
     fm = _frontmatter({
         **meta,
         "source": "meetgeek-api",
@@ -264,7 +276,12 @@ def _iter_meetings(limit: int | None = None, cursor: str | None = None,
             next_cursor = None
         else:
             items = data.get("meetings") or data.get("items") or data.get("data") or []
-            next_cursor = data.get("next_cursor") or data.get("cursor")
+            pagination = data.get("pagination") or {}
+            next_cursor = (
+                pagination.get("next_cursor")
+                or data.get("next_cursor")
+                or data.get("cursor")
+            )
         for m in items:
             yield m
             fetched += 1
@@ -313,10 +330,6 @@ def cmd_get(args: argparse.Namespace) -> int:
     return 0
 
 
-def _fetch_meeting_meta(meeting_id: str) -> dict:
-    return _get_json(f"/v1/meeting/{meeting_id}")
-
-
 def _output(text_or_obj: Any, path: str | None) -> None:
     payload = text_or_obj if isinstance(text_or_obj, str) else json.dumps(text_or_obj, ensure_ascii=False, indent=2)
     if path:
@@ -356,7 +369,7 @@ def cmd_transcript(args: argparse.Namespace) -> int:
     if args.format == "json":
         _output(transcript, args.output)
     else:
-        meeting = _fetch_meeting_meta(args.meeting_id)
+        meeting = {"meeting_id": args.meeting_id}
         _output(_fmt_transcript_md(meeting, transcript), args.output)
     return 0
 
@@ -366,7 +379,7 @@ def cmd_summary(args: argparse.Namespace) -> int:
     if args.format == "json":
         _output(summary, args.output)
     else:
-        meeting = _fetch_meeting_meta(args.meeting_id)
+        meeting = {"meeting_id": args.meeting_id}
         _output(_fmt_summary_md(meeting, summary), args.output)
     return 0
 
@@ -376,7 +389,7 @@ def cmd_highlights(args: argparse.Namespace) -> int:
     if args.format == "json":
         _output(highlights, args.output)
     else:
-        meeting = _fetch_meeting_meta(args.meeting_id)
+        meeting = {"meeting_id": args.meeting_id}
         _output(_fmt_highlights_md(meeting, highlights), args.output)
     return 0
 
@@ -386,7 +399,7 @@ def cmd_insights(args: argparse.Namespace) -> int:
     if args.format == "json":
         _output(insights, args.output)
     else:
-        meeting = _fetch_meeting_meta(args.meeting_id)
+        meeting = {"meeting_id": args.meeting_id}
         _output(_fmt_insights_md(meeting, insights), args.output)
     return 0
 
@@ -460,12 +473,41 @@ def _read_manifest_ids(path: Path) -> set[str]:
     return seen
 
 
-def cmd_sync(args: argparse.Namespace) -> int:
+def _fetch_recording_url(meeting_id: str) -> str:
+    """POST /v1/meetings/{id}/download → temp signed URL (download_link)."""
+    r = _request("POST", f"/v1/meetings/{meeting_id}/download")
+    if r.status_code >= 400:
+        raise ApiError(f"download endpoint {r.status_code}: {r.text[:200]}", exit_code=1)
+    info = r.json()
+    url = info.get("download_link") or info.get("download_url") or info.get("url")
+    if not url:
+        raise ApiError(f"no download link: {info}", exit_code=1)
+    return url
+
+
+def _stream_to_file(url: str, dest: Path) -> int:
+    api_host = BASE_URL.split("//", 1)[-1].split("/", 1)[0]
+    headers = {"Authorization": f"Bearer {API_KEY}"} if api_host in url else {}
+    bytes_written = 0
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    with requests.get(url, headers=headers, stream=True, timeout=TIMEOUT) as r:
+        if r.status_code >= 400:
+            raise ApiError(f"download stream {r.status_code}: {r.text[:200]}", exit_code=1)
+        with dest.open("wb") as f:
+            for chunk in r.iter_content(chunk_size=1 << 16):
+                if chunk:
+                    f.write(chunk)
+                    bytes_written += len(chunk)
+    return bytes_written
+
+
+def _run_sync_once(args: argparse.Namespace) -> tuple[int, int, int]:
+    """Single sync pass. Returns (synced, skipped, errors)."""
     lake = Path(args.to).expanduser()
     lake.mkdir(parents=True, exist_ok=True)
 
     include = {p.strip() for p in (args.include or "transcripts").split(",") if p.strip()}
-    valid = {"transcripts", "summaries", "highlights", "insights"}
+    valid = {"transcripts", "summaries", "highlights", "insights", "recordings"}
     unknown = include - valid
     if unknown:
         raise ApiError(f"unknown --include values: {unknown} (valid: {sorted(valid)})", exit_code=2)
@@ -504,6 +546,8 @@ def cmd_sync(args: argparse.Namespace) -> int:
         try:
             if "transcripts" in include:
                 t = _fetch_transcript_full(mid)
+                if not meta["attendees"]:
+                    meta["attendees"] = _extract_speakers(t)
                 _write_pair(lake / "transcripts", mid, _fmt_transcript_md(m, t), t)
             if "summaries" in include:
                 s = _get_json(f"/v1/meetings/{mid}/summary")
@@ -514,6 +558,11 @@ def cmd_sync(args: argparse.Namespace) -> int:
             if "insights" in include:
                 i = _get_json(f"/v1/meetings/{mid}/insights")
                 _write_pair(lake / "insights", mid, _fmt_insights_md(m, i), i)
+            if "recordings" in include:
+                url = _fetch_recording_url(mid)
+                rec_path = lake / "recordings" / f"{mid}.mp4"
+                if not rec_path.exists():
+                    _stream_to_file(url, rec_path)
         except ApiError as e:
             errors += 1
             print(f"WARN: skip {mid}: {e}", file=sys.stderr)
@@ -544,7 +593,82 @@ def cmd_sync(args: argparse.Namespace) -> int:
     _save_cursor(cursor_path, cursor)
 
     print(f"synced={count} skipped={skipped} errors={errors} cursor={cursor_path}")
-    return 0 if errors == 0 else 1
+    return count, skipped, errors
+
+
+def cmd_sync(args: argparse.Namespace) -> int:
+    if not getattr(args, "watch", None):
+        _, _, errors = _run_sync_once(args)
+        return 0 if errors == 0 else 1
+    interval = max(int(args.watch), 30)
+    print(f"watch mode: interval={interval}s, --since-cursor={args.since_cursor}")
+    while True:
+        try:
+            _run_sync_once(args)
+        except ApiError as e:
+            print(f"WARN run failed: {e}", file=sys.stderr)
+        try:
+            time.sleep(interval)
+        except KeyboardInterrupt:
+            print("\nwatch stopped", file=sys.stderr)
+            return 0
+
+
+# ─── Webhook receiver ─────────────────────────────────────────────────────────
+
+def cmd_webhook_server(args: argparse.Namespace) -> int:
+    """Minimal HTTP server that dumps incoming POSTs as JSON files."""
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+    from uuid import uuid4
+
+    out_dir = Path(args.out).expanduser()
+    out_dir.mkdir(parents=True, exist_ok=True)
+    secret = (args.secret or "").strip()
+
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, format, *args):  # noqa: A002 — base class signature
+            sys.stderr.write(f"[webhook] {self.address_string()} - {format % args}\n")
+
+        def _reply(self, code: int, body: str = ""):
+            self.send_response(code)
+            self.send_header("Content-Type", "text/plain; charset=utf-8")
+            self.end_headers()
+            if body:
+                self.wfile.write(body.encode("utf-8"))
+
+        def do_POST(self):
+            if secret and self.headers.get("X-Webhook-Secret", "") != secret:
+                return self._reply(401, "unauthorized\n")
+            length = int(self.headers.get("Content-Length", "0") or 0)
+            raw = self.rfile.read(length) if length else b""
+            try:
+                payload = json.loads(raw.decode("utf-8")) if raw else {}
+            except (UnicodeDecodeError, ValueError):
+                payload = {"_raw_base64": raw.hex()}
+            event = {
+                "received_at": _now_iso(),
+                "path": self.path,
+                "headers": {k: v for k, v in self.headers.items()},
+                "payload": payload,
+            }
+            event_id = str(uuid4())
+            (out_dir / f"{event_id}.json").write_text(
+                json.dumps(event, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+            self._reply(200, "ok\n")
+
+        def do_GET(self):  # health probe
+            self._reply(200, "meetgeek webhook receiver\n")
+
+    server = ThreadingHTTPServer((args.bind, args.port), Handler)
+    print(f"webhook-server: bind={args.bind}:{args.port} out={out_dir} secret={'set' if secret else 'none'}")
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        print("\nstopped", file=sys.stderr)
+    finally:
+        server.server_close()
+    return 0
 
 
 def _write_pair(folder: Path, mid: str, md: str, raw: dict) -> None:
@@ -600,7 +724,7 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("sync", help="Bulk pull to LAKE_PATH (manifest.jsonl + per-asset folders)")
     s.add_argument("--to", required=True, help="Lake destination (e.g. ~/.dor/lake/meetgeek/historical/)")
     s.add_argument("--include", default="transcripts",
-                   help="Comma-separated: transcripts,summaries,highlights,insights")
+                   help="Comma-separated: transcripts,summaries,highlights,insights,recordings")
     s.add_argument("--since", default=None, help="ISO date YYYY-MM-DD")
     s.add_argument("--since-cursor", action="store_true",
                    help="Resume from last_seen_ts in cursor file")
@@ -608,7 +732,18 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--limit", type=int, default=None)
     s.add_argument("--cursor-file", dest="cursor_file", default=None,
                    help=f"Default: {CURSOR_PATH_DEFAULT}")
+    s.add_argument("--watch", type=int, default=None, metavar="SECONDS",
+                   help="Run sync in a loop every N seconds (min 30); Ctrl-C to stop")
     s.set_defaults(func=cmd_sync)
+
+    s = sub.add_parser("webhook-server", help="Receive MeetGeek webhook events to disk")
+    s.add_argument("--port", type=int, default=8765)
+    s.add_argument("--bind", default="127.0.0.1")
+    s.add_argument("--out", default=str(Path.home() / ".dor" / "lake" / "meetgeek" / "webhooks"),
+                   help="Directory to dump received events as JSON")
+    s.add_argument("--secret", default=os.environ.get("MEETGEEK_WEBHOOK_SECRET", ""),
+                   help="Optional shared secret; if set, requests without matching X-Webhook-Secret are 401'd")
+    s.set_defaults(func=cmd_webhook_server)
 
     return p
 
