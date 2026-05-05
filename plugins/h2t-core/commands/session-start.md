@@ -9,8 +9,8 @@ description: "Use at the start of any working session (dev, creative, personal).
 ```bash
 GATHER="${CLAUDE_PLUGIN_ROOT}/skills/session-start/scripts/gather.py"
 ACTIVITY_LOG="${CLAUDE_PLUGIN_ROOT}/lib/activity/writer.py"
-H2T_PYTHON="${H2T_PYTHON:-$HOME/.h2t/venv/Scripts/python.exe}"
-[ ! -f "$H2T_PYTHON" ] && H2T_PYTHON="$HOME/.h2t/venv/bin/python"
+source "${CLAUDE_PLUGIN_ROOT}/scripts/resolve-h2t-python.sh"
+resolve_h2t_python || { echo "ERROR: no working Python found for h2t"; exit 1; }
 ```
 
 ## Pipeline
@@ -34,7 +34,7 @@ If `BRIEFING:` is present in your system context:
 If `BRIEFING:` is NOT in your context, run:
 
 ```bash
-$H2T_PYTHON "$GATHER" --cwd "$(pwd)" --format-briefing
+"${H2T_PYTHON_CMD[@]}" "$GATHER" --cwd "$(pwd)" --format-briefing
 ```
 
 Parse the full JSON output as GATHER_RESULT.
@@ -85,7 +85,7 @@ Wait for user input. Accept:
 Substitute literal values from GATHER_RESULT and run:
 
 ```bash
-$H2T_PYTHON "$ACTIVITY_LOG" start \
+"${H2T_PYTHON_CMD[@]}" "$ACTIVITY_LOG" start \
   --session-id "<SESSION_NAME>" \
   --domain "<DOMAIN>" \
   --project "<PROJECT_ID>"

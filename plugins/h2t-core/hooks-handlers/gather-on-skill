@@ -25,37 +25,37 @@ if [ -f "$LOCK_FILE" ]; then
 fi
 echo "$NOW" > "$LOCK_FILE"
 
-# Find Python
-H2T_PYTHON="${H2T_PYTHON:-}"
-[ -z "$H2T_PYTHON" ] && [ -f "$HOME/.h2t/venv/Scripts/python.exe" ] && H2T_PYTHON="$HOME/.h2t/venv/Scripts/python.exe"
-[ -z "$H2T_PYTHON" ] && [ -f "$HOME/.h2t/venv/bin/python" ] && H2T_PYTHON="$HOME/.h2t/venv/bin/python"
-
-if [ -z "$H2T_PYTHON" ]; then
-  echo '{"systemMessage": "GATHER_ERROR: h2t venv not found. Run /h2t-core:setup"}'
-  exit 0
-fi
-
-# Build args
-ARGS="$skill --cwd $cwd"
-[[ "$skill" == *session-start* ]] && ARGS="$ARGS --format-briefing"
-
 # Run gather CLI (must run from dir containing lib/ so lib.cli.main is importable)
 # Cache layout: lib/ is at plugin root (../); dev layout: lib/ is at repo root (../../..)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [ -f "$SCRIPT_DIR/../lib/cli/main.py" ]; then
   REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+  PLUGIN_ROOT="$REPO_ROOT"
 else
   REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+  PLUGIN_ROOT="$REPO_ROOT/plugins/h2t-core"
 fi
-RESULT=$(cd "$REPO_ROOT" && "$H2T_PYTHON" -m lib.cli.main gather $ARGS 2>/dev/null) || true
+
+# Find Python
+source "$PLUGIN_ROOT/scripts/resolve-h2t-python.sh"
+if ! resolve_h2t_python; then
+  echo '{"systemMessage": "GATHER_ERROR: no working Python found for h2t. Recreate ~/.h2t/venv or set H2T_PYTHON."}'
+  exit 0
+fi
+
+# Build args
+ARGS=("$skill" "--cwd" "$cwd")
+[[ "$skill" == *session-start* ]] && ARGS+=("--format-briefing")
+
+RESULT=$(cd "$REPO_ROOT" && "${H2T_PYTHON_CMD[@]}" -m lib.cli.main gather "${ARGS[@]}" 2>/dev/null) || true
 
 if [ -z "$RESULT" ]; then
-  echo '{"systemMessage": "GATHER_ERROR: h2t gather returned no output. Run /h2t-core:setup to reinstall."}'
+  echo '{"systemMessage": "GATHER_ERROR: h2t gather returned no output. Check Python resolution or recreate ~/.h2t/venv."}'
   exit 0
 fi
 
 # Format output for Claude systemMessage injection
-BRIEFING=$("$H2T_PYTHON" -c "
+BRIEFING=$("${H2T_PYTHON_CMD[@]}" -c "
 import json, sys
 data = json.load(sys.stdin)
 b = data.get('_briefing', '')
@@ -63,7 +63,7 @@ m = json.dumps(data.get('_meta', {}))
 print(f'BRIEFING:\n{b}\n\nGATHER_META: {m}')
 " <<< "$RESULT" 2>/dev/null) || BRIEFING="GATHER_DATA: $RESULT"
 
-printf '{"systemMessage": "%s"}' "$("$H2T_PYTHON" -c "
+printf '{"systemMessage": "%s"}' "$("${H2T_PYTHON_CMD[@]}" -c "
 import sys
 print(sys.stdin.read()
   .replace('\\\\', '\\\\\\\\')
