@@ -159,7 +159,7 @@ meetgeek upload --from-file <path-or-glob> [--audio-only] [--language ru]
 
 ```
 ~/Downloads/meetgeek-recording-2026-01-20T15-44-31-132Z.webm
-  ↓ [ffprobe — 3 audio tracks → mix-mode=amix]
+  ↓ [ffmpeg -i ... -f null - stderr probe → 3 audio tracks → mix-mode=amix]
   ↓ [cmd_convert]
 ~/.dor/lake/meetgeek/uploads-staging/2026-05-06/meetgeek-recording-2026-01-20T15-44-31-132Z.mp4
   ↓ [cmd_drive_upload]
@@ -214,7 +214,7 @@ Status enum: `convert-failed | converted | drive-failed | in-drive | upload-reje
 | Слой | Симптом | Behavior |
 |---|---|---|
 | convert | ffmpeg not found | `ApiError("imageio-ffmpeg not installed; pip install --upgrade imageio-ffmpeg")`, exit 2 |
-| convert | corrupted source (ffprobe nonzero) | manifest `status: convert-failed`, error в stderr, **continue batch** |
+| convert | corrupted source (ffmpeg probe нет audio streams или nonzero exit) | manifest `status: convert-failed`, error в stderr, **continue batch** |
 | convert | disk full | partial mp4 удалён, manifest fail, error message с required free |
 | convert | mp4 size < 1KB | удалить, manifest fail |
 | drive | OAuth expired | auto-refresh из drive_cli (уже работает) |
@@ -236,14 +236,14 @@ Status enum: `convert-failed | converted | drive-failed | in-drive | upload-reje
 
 ## 7. Testing
 
-Расширяем `tests/test_meetgeek_cli.py` (текущих 15 → 29).
+Расширяем `tests/test_meetgeek_cli.py` (текущий live baseline 15 passing после 1.0.7 — 12 baseline + 3 v1.0.7 features). Прибавляем 14 новых → итого ~29.
 
 - 4 convert tests (single-track, multi-track amix, cached skip, corrupted source)
 - 3 drive_upload tests (idempotent existing, dated folder creation, permission set)
 - 4 upload-orchestrator tests (chain glob, skip-existing, resume-after-partial, dry-run)
 - 3 error-handling tests (per-file convert fail continues, 401 aborts, 202+warning is success)
 
-Все mock-based: `subprocess.run` для ffmpeg/ffprobe, `googleapiclient.discovery` для Drive, `requests.request` для MeetGeek (как уже сделано в существующих тестах).
+Все mock-based: `subprocess.run` для ffmpeg (probe и encode оба идут через один binary), `googleapiclient.discovery` для Drive, `requests.request` для MeetGeek (как уже сделано в существующих тестах).
 
 **Live smoke (manual checklist, не CI):**
 
