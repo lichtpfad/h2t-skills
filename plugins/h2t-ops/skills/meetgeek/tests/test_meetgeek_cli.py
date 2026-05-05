@@ -1,0 +1,266 @@
+"""
+Tests for meetgeek_cli.
+
+Covers spec scenarios:
+- auth-check (200, 401)
+- list (paginated, date filter)
+- transcript (markdown format, unicode, pagination)
+- sync (to temp dir, cursor update, cursor resume, idempotent dedup)
+"""
+
+from __future__ import annotations
+
+import importlib.util
+import json
+import sys
+from pathlib import Path
+from unittest.mock import patch
+
+import pytest
+
+SCRIPT = Path(__file__).resolve().parent.parent / "scripts" / "meetgeek_cli.py"
+
+
+@pytest.fixture()
+def cli(monkeypatch):
+    """Load fresh meetgeek_cli module with deterministic env."""
+    monkeypatch.setenv("MEETGEEK_API_KEY", "test-key")
+    monkeypatch.setenv("MEETGEEK_BASE_URL", "https://api.test")
+    spec = importlib.util.spec_from_file_location("meetgeek_cli_under_test", SCRIPT)
+    assert spec and spec.loader
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules["meetgeek_cli_under_test"] = mod
+    spec.loader.exec_module(mod)
+    return mod
+
+
+class FakeResponse:
+    def __init__(self, status_code: int = 200, body: object | None = None,
+                 headers: dict | None = None, raw_bytes: bytes | None = None):
+        self.status_code = status_code
+        self._body = body if body is not None else {}
+        self.headers = headers or {}
+        self._raw = raw_bytes or b""
+        self.text = json.dumps(self._body) if not raw_bytes else ""
+
+    def json(self):
+        return self._body
+
+    def iter_content(self, chunk_size: int = 1024):
+        yield self._raw
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+
+def _scripted_request(scripts: list[FakeResponse]):
+    """Return a callable that returns FakeResponses in order, recording calls."""
+    calls: list[dict] = []
+    iterator = iter(scripts)
+
+    def fake(method, url, **kwargs):
+        calls.append({"method": method, "url": url, **kwargs})
+        try:
+            return next(iterator)
+        except StopIteration:
+            raise AssertionError(f"Unexpected request: {method} {url}")
+
+    return fake, calls
+
+
+# ─── auth-check ────────────────────────────────────────────────────────────────
+
+def test_auth_check_returns_ok(cli, capsys):
+    fake, _ = _scripted_request([FakeResponse(200, {"meetings": []})])
+    with patch.object(cli.requests, "request", fake):
+        rc = cli.main(["auth-check"])
+    assert rc == 0
+    assert "OK" in capsys.readouterr().out
+
+
+def test_auth_check_invalid_key(cli, capsys):
+    fake, _ = _scripted_request([FakeResponse(401, {"error": "bad key"})])
+    with patch.object(cli.requests, "request", fake):
+        rc = cli.main(["auth-check"])
+    assert rc == 1
+    assert "401" in capsys.readouterr().err
+
+
+# ─── list ──────────────────────────────────────────────────────────────────────
+
+def test_list_paginated(cli, capsys):
+    page1 = {"data": [{"meeting_id": "a"}, {"meeting_id": "b"}], "next_cursor": "c1"}
+    page2 = {"data": [{"meeting_id": "c"}], "next_cursor": None}
+    fake, calls = _scripted_request([FakeResponse(200, page1), FakeResponse(200, page2)])
+    with patch.object(cli.requests, "request", fake):
+        rc = cli.main(["list"])
+    assert rc == 0
+    out = json.loads(capsys.readouterr().out)
+    assert [m["meeting_id"] for m in out] == ["a", "b", "c"]
+    assert calls[1]["params"] == {"cursor": "c1"}
+
+
+def test_list_date_filter(cli):
+    fake, calls = _scripted_request([FakeResponse(200, {"data": []})])
+    with patch.object(cli.requests, "request", fake):
+        cli.main(["list", "--from-date", "2026-04-01", "--to-date", "2026-05-01"])
+    assert calls[0]["params"]["from_date"] == "2026-04-01"
+    assert calls[0]["params"]["to_date"] == "2026-05-01"
+
+
+# ─── transcript ────────────────────────────────────────────────────────────────
+
+_RU_SENTENCES = [
+    {"speaker": "Максим Фадеев", "timestamp": "13:19:24", "transcript": "Должно работать"},
+    {"speaker": "Stanislav", "timestamp": "13:19:30", "transcript": "Проверим"},
+]
+
+
+def test_transcript_markdown_format(cli, tmp_path, capsys):
+    # transcript page (single) + meeting meta call
+    fake, _ = _scripted_request([
+        FakeResponse(200, {"meeting_id": "mid-1", "sentences": _RU_SENTENCES}),
+        FakeResponse(200, {"id": "mid-1", "title": "Стрим: тест", "start_time": "2026-03-12T13:19:06Z"}),
+    ])
+    out_path = tmp_path / "tx.md"
+    with patch.object(cli.requests, "request", fake):
+        rc = cli.main(["transcript", "mid-1", "-o", str(out_path)])
+    assert rc == 0
+    md = out_path.read_text(encoding="utf-8")
+    assert "meeting_id: mid-1" in md
+    assert "Максим Фадеев" in md
+    assert "## Transcript" in md
+
+
+def test_transcript_unicode_no_escaping(cli, tmp_path):
+    fake, _ = _scripted_request([
+        FakeResponse(200, {"meeting_id": "mid", "sentences": _RU_SENTENCES}),
+        FakeResponse(200, {"id": "mid", "title": "x"}),
+    ])
+    out_path = tmp_path / "tx.md"
+    with patch.object(cli.requests, "request", fake):
+        rc = cli.main(["transcript", "mid", "-o", str(out_path)])
+    assert rc == 0
+    raw = out_path.read_text(encoding="utf-8")
+    assert "\\u" not in raw  # no escape sequences in output
+    assert "Должно работать" in raw
+
+
+def test_transcript_pagination_assembled(cli, tmp_path):
+    page1 = {"meeting_id": "mid", "sentences": [{"speaker": "A", "transcript": "p1"}],
+             "pagination": {"next_cursor": "p2"}}
+    page2 = {"meeting_id": "mid", "sentences": [{"speaker": "B", "transcript": "p2text"}],
+             "pagination": {"next_cursor": None}}
+    meta = {"id": "mid", "title": "t"}
+    fake, calls = _scripted_request([
+        FakeResponse(200, page1), FakeResponse(200, page2), FakeResponse(200, meta),
+    ])
+    out = tmp_path / "tx.json"
+    with patch.object(cli.requests, "request", fake):
+        cli.main(["transcript", "mid", "--format", "json", "-o", str(out)])
+    data = json.loads(out.read_text(encoding="utf-8"))
+    assert len(data["sentences"]) == 2
+    assert data["sentences"][1]["transcript"] == "p2text"
+    # cursor passed on second call
+    assert calls[1]["params"] == {"cursor": "p2"}
+
+
+# ─── sync ──────────────────────────────────────────────────────────────────────
+
+def test_sync_to_temp_dir(cli, tmp_path):
+    meetings = {"data": [
+        {"meeting_id": "m1", "title": "T1", "start_time": "2026-04-10T10:00:00Z"},
+        {"meeting_id": "m2", "title": "T2", "start_time": "2026-04-11T10:00:00Z"},
+    ]}
+    tx = {"meeting_id": "_", "sentences": [{"speaker": "x", "transcript": "y"}]}
+    fake, _ = _scripted_request([
+        FakeResponse(200, meetings),
+        FakeResponse(200, tx),  # m1 transcript
+        FakeResponse(200, tx),  # m2 transcript
+    ])
+    cursor_file = tmp_path / "cursor.json"
+    with patch.object(cli.requests, "request", fake):
+        rc = cli.main([
+            "sync", "--to", str(tmp_path / "lake"),
+            "--include", "transcripts", "--limit", "2",
+            "--cursor-file", str(cursor_file),
+        ])
+    assert rc == 0
+    lake = tmp_path / "lake"
+    manifest = (lake / "manifest.jsonl").read_text(encoding="utf-8").strip().splitlines()
+    assert len(manifest) == 2
+    assert (lake / "transcripts" / "m1.md").exists()
+    assert (lake / "transcripts" / "m2.json").exists()
+    cur = json.loads(cursor_file.read_text())
+    assert cur["last_seen_id"] == "m2"
+    assert cur["items_ingested"] == 2
+
+
+def test_sync_idempotent_dedup(cli, tmp_path):
+    meetings = {"data": [{"meeting_id": "m1", "title": "T", "start_time": "2026-04-10T10:00:00Z"}]}
+    tx = {"sentences": []}
+    cursor_file = tmp_path / "cursor.json"
+    lake = tmp_path / "lake"
+
+    # first run: fetch list + tx
+    fake1, _ = _scripted_request([FakeResponse(200, meetings), FakeResponse(200, tx)])
+    with patch.object(cli.requests, "request", fake1):
+        cli.main(["sync", "--to", str(lake), "--include", "transcripts",
+                  "--limit", "1", "--cursor-file", str(cursor_file)])
+
+    # second run: only list (m1 already in manifest -> skipped, no tx fetch)
+    fake2, calls2 = _scripted_request([FakeResponse(200, meetings)])
+    with patch.object(cli.requests, "request", fake2):
+        rc = cli.main(["sync", "--to", str(lake), "--include", "transcripts",
+                       "--limit", "1", "--cursor-file", str(cursor_file)])
+    assert rc == 0
+    assert len(calls2) == 1  # no transcript fetch
+    manifest = (lake / "manifest.jsonl").read_text(encoding="utf-8").strip().splitlines()
+    assert len(manifest) == 1
+
+
+def test_sync_cursor_resume_filters_seen_ts(cli, tmp_path):
+    cursor_file = tmp_path / "cursor.json"
+    cursor_file.write_text(json.dumps({
+        "source": "meetgeek",
+        "last_seen_ts": "2026-04-10T12:00:00Z",
+        "last_seen_id": "old",
+        "items_ingested": 1,
+        "version": 1,
+    }))
+    lake = tmp_path / "lake"
+
+    # API returns old + new; only newer should be processed
+    page = {"data": [
+        {"meeting_id": "old", "start_time": "2026-04-10T12:00:00Z"},
+        {"meeting_id": "new", "start_time": "2026-04-11T09:00:00Z", "title": "n"},
+    ]}
+    tx = {"sentences": []}
+    fake, calls = _scripted_request([FakeResponse(200, page), FakeResponse(200, tx)])
+    with patch.object(cli.requests, "request", fake):
+        rc = cli.main(["sync", "--to", str(lake), "--include", "transcripts",
+                       "--since-cursor", "--cursor-file", str(cursor_file)])
+    assert rc == 0
+    # from_date passed as date slice of last_seen_ts
+    assert calls[0]["params"].get("from_date") == "2026-04-10"
+    # only "new" got transcript fetch
+    assert len(calls) == 2
+    assert "/v1/meetings/new/transcript" in calls[1]["url"]
+
+
+# ─── YAML safety ───────────────────────────────────────────────────────────────
+
+def test_frontmatter_escapes_special_chars(cli):
+    val = cli._yaml_value('title with "quotes" and: colon')
+    assert val.startswith('"') and val.endswith('"')
+    parsed = json.loads(val)
+    assert parsed == 'title with "quotes" and: colon'
+
+
+def test_frontmatter_list_with_special_chars(cli):
+    val = cli._yaml_value(["A, B", "with: colon"])
+    parsed = json.loads(val)
+    assert parsed == ["A, B", "with: colon"]
