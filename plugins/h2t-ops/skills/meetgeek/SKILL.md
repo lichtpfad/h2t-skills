@@ -1,10 +1,10 @@
 ---
 name: meetgeek
-description: "MeetGeek API: pull meetings, transcripts, summaries, highlights, insights. Bypasses broken Drive auto-sync (re-transcription bug, POS#80). Triggers: 'meetgeek', 'sync transcripts', 'pull meetings', 'митинги', 'h2t-ops:meetgeek'."
+description: "MeetGeek API: pull meetings, transcripts, summaries, highlights, insights, recordings. Bypasses broken Drive auto-sync (re-transcription bug, POS#80). Watch mode + webhook server. Triggers: 'meetgeek', 'sync transcripts', 'pull meetings', 'митинги', 'h2t-ops:meetgeek'."
 compatibility: "Requires MEETGEEK_API_KEY in ~/.dor/secrets.env or env var. Region-specific (EU/US) — key prefix indicates region."
 metadata:
   author: lichtpfad
-  version: 1.0.0
+  version: 1.1.0
 ---
 
 # Инструкции
@@ -73,6 +73,14 @@ $CLI sync --to ~/.dor/lake/meetgeek/$(date +%Y-%m-%d)/ \
 
 # Date range
 $CLI sync --to /tmp/test --since 2026-04-01 --limit 5
+
+# Включить recordings (mp4) — POST /download → media.meetgeek.ai stream
+$CLI sync --to ~/.dor/lake/meetgeek/historical/ \
+          --include transcripts,recordings
+
+# Watch mode: цикл sync каждые N секунд (мин 30), Ctrl-C для выхода
+$CLI sync --to ~/.dor/lake/meetgeek/$(date +%Y-%m-%d)/ \
+          --since-cursor --include transcripts --watch 300
 ```
 
 #### Layout output
@@ -109,6 +117,20 @@ $CLI sync --to /tmp/test --since 2026-04-01 --limit 5
 ```bash
 $CLI teams                  # list user's teams
 ```
+
+### Webhook server
+
+```bash
+# Receive MeetGeek webhook events to disk (POST → JSON file per event)
+$CLI webhook-server --port 8765 --bind 127.0.0.1 \
+                    --out ~/.dor/lake/meetgeek/webhooks/ \
+                    --secret <shared-secret>
+```
+
+- POST с любым path принимается; payload + headers + path сохраняется в `{out}/{uuid}.json`
+- Если `--secret` задан, требуется header `X-Webhook-Secret`; иначе 401
+- Без `--secret` любой POST пишется (для локальной разработки)
+- GET / → health probe
 
 ## Use cases
 

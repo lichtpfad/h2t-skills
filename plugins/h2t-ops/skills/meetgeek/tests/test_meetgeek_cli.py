@@ -135,6 +135,24 @@ def test_transcript_markdown_format(cli, tmp_path, capsys):
     assert "## Transcript" in md
 
 
+def test_transcript_extracts_attendees_from_speakers(cli, tmp_path):
+    fake, _ = _scripted_request([
+        FakeResponse(200, {"meeting_id": "mid", "sentences": _RU_SENTENCES}),
+        FakeResponse(200, {"id": "mid", "title": "t"}),
+    ])
+    out_path = tmp_path / "tx.md"
+    with patch.object(cli.requests, "request", fake):
+        cli.main(["transcript", "mid", "-o", str(out_path)])
+    md = out_path.read_text(encoding="utf-8")
+    assert "Максим Фадеев" in md
+    assert "Stanislav" in md
+    # frontmatter attendees line carries both
+    fm = md.split("---")[1]
+    assert "attendees:" in fm
+    assert "Максим Фадеев" in fm
+    assert "Stanislav" in fm
+
+
 def test_transcript_unicode_no_escaping(cli, tmp_path):
     fake, _ = _scripted_request([
         FakeResponse(200, {"meeting_id": "mid", "sentences": _RU_SENTENCES}),
@@ -252,6 +270,97 @@ def test_sync_cursor_resume_filters_seen_ts(cli, tmp_path):
 
 
 # ─── YAML safety ───────────────────────────────────────────────────────────────
+
+# ─── recordings (sync --include) ──────────────────────────────────────────────
+
+def test_sync_recordings_streams_file(cli, tmp_path):
+    meetings = {"meetings": [{"meeting_id": "m1", "title": "T", "start_time": "2026-04-10T10:00:00Z"}]}
+    download_resp = {"download_link": "https://media.meetgeek.ai/api/download?token=xyz"}
+    cursor_file = tmp_path / "cursor.json"
+    lake = tmp_path / "lake"
+
+    fake, calls = _scripted_request([
+        FakeResponse(200, meetings),       # /v1/meetings list
+        FakeResponse(200, download_resp),  # POST /download
+        FakeResponse(200, raw_bytes=b"FAKE_MP4_BYTES"),  # streamed file
+    ])
+    with patch.object(cli.requests, "request", fake), \
+         patch.object(cli.requests, "get", lambda url, **kw: fake("GET", url, **kw)):
+        rc = cli.main(["sync", "--to", str(lake), "--include", "recordings",
+                       "--limit", "1", "--cursor-file", str(cursor_file)])
+    assert rc == 0
+    rec_path = lake / "recordings" / "m1.mp4"
+    assert rec_path.exists() and rec_path.read_bytes() == b"FAKE_MP4_BYTES"
+    # verify POST was used for /download endpoint
+    download_call = [c for c in calls if c["url"].endswith("/download")][0]
+    assert download_call["method"] == "POST"
+
+
+# ─── webhook server (smoke) ───────────────────────────────────────────────────
+
+def test_webhook_server_writes_event(cli, tmp_path):
+    import threading
+    import urllib.error
+    import urllib.request
+    import socket
+
+    # find free port
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        port = s.getsockname()[1]
+
+    out = tmp_path / "webhooks"
+    args = ["webhook-server", "--port", str(port), "--bind", "127.0.0.1",
+            "--out", str(out), "--secret", "S"]
+    # Run server in a thread; stop via shutdown after one event
+    parser = cli.build_parser()
+    parsed = parser.parse_args(args)
+    from http.server import ThreadingHTTPServer
+    original_serve = ThreadingHTTPServer.serve_forever
+    server_holder: dict = {}
+
+    def capture_serve(self, *a, **kw):
+        server_holder["s"] = self
+        return original_serve(self, *a, **kw)
+
+    with patch.object(ThreadingHTTPServer, "serve_forever", capture_serve):
+        t = threading.Thread(target=cli.cmd_webhook_server, args=(parsed,), daemon=True)
+        t.start()
+        # wait for server start
+        for _ in range(50):
+            if "s" in server_holder:
+                break
+            import time as _t; _t.sleep(0.02)
+        assert "s" in server_holder, "server did not start"
+
+        req = urllib.request.Request(
+            f"http://127.0.0.1:{port}/event",
+            data=json.dumps({"event": "meeting.completed", "id": "abc"}).encode("utf-8"),
+            headers={"Content-Type": "application/json", "X-Webhook-Secret": "S"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=2) as resp:
+            assert resp.status == 200
+
+        # 401 without secret
+        req2 = urllib.request.Request(
+            f"http://127.0.0.1:{port}/event", data=b"{}",
+            headers={"Content-Type": "application/json"}, method="POST")
+        try:
+            urllib.request.urlopen(req2, timeout=2)
+            raise AssertionError("expected 401")
+        except urllib.error.HTTPError as e:
+            assert e.code == 401
+
+        server_holder["s"].shutdown()
+        t.join(timeout=2)
+
+    files = list(out.glob("*.json"))
+    assert len(files) == 1
+    rec = json.loads(files[0].read_text(encoding="utf-8"))
+    assert rec["payload"]["event"] == "meeting.completed"
+    assert rec["path"] == "/event"
+
 
 def test_frontmatter_escapes_special_chars(cli):
     val = cli._yaml_value('title with "quotes" and: colon')
