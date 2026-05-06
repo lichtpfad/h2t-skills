@@ -733,6 +733,40 @@ def cmd_drive_upload(args: argparse.Namespace) -> int:
     return 0
 
 
+# ─── Upload commands ─────────────────────────────────────────────────────────
+
+def _post_upload(download_url: str, title: str | None, language: str | None) -> dict:
+    body = {"download_url": download_url}
+    if title:
+        body["title"] = title
+    if language:
+        body["language"] = language
+    r = _request("POST", "/v1/upload", json_body=body)
+    if r.status_code == 401:
+        raise ApiError("401: invalid MEETGEEK_API_KEY", exit_code=1)
+    if r.status_code == 400:
+        raise ApiError(f"400: {r.text[:300]}", exit_code=1)
+    if r.status_code >= 500:
+        raise ApiError(f"{r.status_code}: {r.text[:300]}", exit_code=1)
+    if r.status_code not in (200, 202):
+        raise ApiError(f"unexpected status {r.status_code}: {r.text[:300]}", exit_code=1)
+    try:
+        return r.json()
+    except ValueError:
+        return {"message": r.text[:500]}
+
+
+def cmd_upload(args: argparse.Namespace) -> int:
+    if args.download_url:
+        resp = _post_upload(args.download_url, args.title, args.language)
+        _print_json({"status": "submitted", "response": resp})
+        return 0
+    if args.from_file:
+        # Implemented in Task 10
+        raise ApiError("--from-file not yet implemented (planned in Task 10)", exit_code=2)
+    raise ApiError("either --download-url or --from-file required", exit_code=2)
+
+
 # ─── Sync pipeline ────────────────────────────────────────────────────────────
 
 def _load_cursor(path: Path) -> dict:
@@ -1036,6 +1070,17 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--make-public", action=argparse.BooleanOptionalAction, default=True,
                    help="Set permissions to anyone-with-link reader (default on)")
     s.set_defaults(func=cmd_drive_upload)
+
+    s = sub.add_parser("upload", help="Submit URL or local file to MeetGeek /v1/upload")
+    grp = s.add_mutually_exclusive_group(required=True)
+    grp.add_argument("--download-url", default=None,
+                     help="Public URL MeetGeek will fetch (e.g. Drive uc?export=download)")
+    grp.add_argument("--from-file", default=None,
+                     help="Local file path or glob; orchestrates convert + drive-upload + upload")
+    s.add_argument("--title", default=None)
+    s.add_argument("--language", default=None,
+                   help="Language hint (ru, en, auto, etc.)")
+    s.set_defaults(func=cmd_upload)
 
     s = sub.add_parser("sync", help="Bulk pull to LAKE_PATH (manifest.jsonl + per-asset folders)")
     s.add_argument("--to", required=True, help="Lake destination (e.g. ~/.dor/lake/meetgeek/historical/)")
