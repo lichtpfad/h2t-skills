@@ -15,6 +15,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import subprocess
 import sys
 import time
 from datetime import datetime, timezone
@@ -435,6 +436,58 @@ def cmd_download(args: argparse.Namespace) -> int:
                     f.write(chunk)
     print(args.output)
     return 0
+
+
+# ─── ffmpeg helpers ───────────────────────────────────────────────────────────
+
+import re
+
+try:
+    import imageio_ffmpeg
+except ImportError:
+    imageio_ffmpeg = None  # late-checked in _ffmpeg_exe()
+
+
+def _ffmpeg_exe() -> str:
+    if imageio_ffmpeg is None:
+        raise ApiError(
+            "imageio-ffmpeg not installed; run: "
+            "~/.h2t/venv/Scripts/python.exe -m pip install imageio-ffmpeg",
+            exit_code=2,
+        )
+    return imageio_ffmpeg.get_ffmpeg_exe()
+
+
+_DURATION_RE = re.compile(r"Duration:\s*(\d+):(\d+):(\d+)(?:\.(\d+))?")
+_STREAM_AUDIO_RE = re.compile(r"Stream\s+#\d+:\d+(?:\([^)]+\))?: Audio:")
+_STREAM_VIDEO_RE = re.compile(r"Stream\s+#\d+:\d+(?:\([^)]+\))?: Video:")
+
+
+def _ffmpeg_probe(path: str) -> dict:
+    """Run `ffmpeg -i path -f null -` and parse stderr for streams + duration."""
+    r = subprocess.run(
+        [_ffmpeg_exe(), "-hide_banner", "-i", path, "-f", "null", "-"],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+    stderr = r.stderr or ""
+    audio = len(_STREAM_AUDIO_RE.findall(stderr))
+    video = len(_STREAM_VIDEO_RE.findall(stderr))
+    dur_match = _DURATION_RE.search(stderr)
+    duration = None
+    if dur_match:
+        h, m, s, _ = dur_match.groups()
+        duration = int(h) * 3600 + int(m) * 60 + int(s)
+    if audio == 0 and r.returncode != 0:
+        raise ApiError(f"ffmpeg cannot probe {path}: {stderr[:300]}", exit_code=1)
+    return {
+        "audio_streams": audio,
+        "has_video": video > 0,
+        "duration_seconds": duration,
+        "raw_stderr_tail": stderr[-500:],
+    }
 
 
 # ─── Sync pipeline ────────────────────────────────────────────────────────────
