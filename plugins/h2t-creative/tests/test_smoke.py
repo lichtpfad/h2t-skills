@@ -44,11 +44,83 @@ def test_landing_smoke(tmp_path, profile, palette):
 
 @pytest.mark.parametrize("profile", list(PROFILES.keys()))
 def test_deck_smoke(tmp_path, profile):
+    """Generic deck smoke for legacy multi-file profiles. Deck-form profiles (those with a
+    `deck/` subdir) are covered by test_deck_smoke_form_v2_with_temp_fixture below — skipping
+    them here keeps `_DECK_RECIPE`'s legacy layout vocabulary (`title-only`, `title-body`)
+    from leaking into the form-v2 path. See plan §A.3 (R2a)."""
     profile_dir = asm.PROFILES_DIR / profile
+    if asm._is_deck_form_profile(profile_dir):
+        pytest.skip(
+            f"{profile} is deck-form; covered by test_deck_smoke_form_v2_with_temp_fixture"
+        )
     out = tmp_path / "out"
     asm.assemble_deck(_DECK_RECIPE, profile_dir, out)
     assert (out / "index.html").exists()
     assert (out / "profile.css").exists()
+
+
+def test_terminal_deck_smoke_with_validation_recipe(tmp_path):
+    """End-to-end smoke for the real h2t-terminal validation deck (T9 §5.9).
+    Complements `test_deck_smoke[h2t-terminal]` (which is correctly skipped
+    because h2t-terminal is now deck-form). We assemble the recipe shipped at
+    `profiles/h2t-terminal/validation/recipe-deck.yaml` and confirm a
+    single-file `index.html` lands."""
+    import yaml as _yaml
+
+    profile_dir = asm.PROFILES_DIR / "h2t-terminal"
+    recipe_path = profile_dir / "validation" / "recipe-deck.yaml"
+    recipe = _yaml.safe_load(recipe_path.read_text(encoding="utf-8"))
+    out = tmp_path / "out"
+    asm.assemble_deck(
+        recipe, profile_dir, out, palette=recipe.get("palette", "default")
+    )
+    files = sorted(p.name for p in out.iterdir())
+    assert files == ["index.html"], f"Expected only index.html, got: {files}"
+
+
+def test_deck_smoke_form_v2_with_temp_fixture(tmp_path):
+    """Deck-form (form-v2) smoke. Uses a self-contained temp fixture so this does not
+    depend on the rollout of any specific profile's deck/ tree (h2t-terminal lands in
+    T4–T7). Verifies the dispatcher routes to form-v2 and produces single-file output."""
+    profile_dir = tmp_path / "profile-form-v2-smoke"
+    deck = profile_dir / "deck"
+    deck.mkdir(parents=True)
+    (deck / "tokens.css").write_text(":root { --bg: #0d1117; }")
+    (deck / "palettes").mkdir()
+    (deck / "palettes" / "default.css").write_text(":root { --border: #30363d; }")
+    (deck / "frame").mkdir()
+    (deck / "frame" / "frame.css").write_text("#progress-bar { height: 3px; }")
+    (deck / "js").mkdir()
+    (deck / "js" / "deck-nav.js").write_text(
+        "(function(){document.addEventListener('keydown',function(e){});})();"
+    )
+    layout = deck / "slides" / "title"
+    layout.mkdir(parents=True)
+    (layout / "manifest.yaml").write_text(
+        "component: title\nfields:\n  headline:\n    type: text\n    required: true\n"
+    )
+    (layout / "title.html").write_text(
+        '<div class="slide-inner"><h1>{{ headline }}</h1></div>'
+    )
+    (layout / "title.css").write_text(".slide-title-marker {}")
+    (profile_dir / "profile.yaml").write_text("web_fonts: []\n")
+
+    recipe = {
+        "title": "Form-v2 Smoke",
+        "slides": [
+            {"layout": "title", "content": {"headline": "S1"}},
+            {"layout": "title", "content": {"headline": "S2"}},
+        ],
+    }
+    out = tmp_path / "out"
+    asm.assemble_deck(recipe, profile_dir, out)
+    files = sorted(p.name for p in out.iterdir())
+    assert files == ["index.html"], f"Expected single-file, got: {files}"
+    content = (out / "index.html").read_text(encoding="utf-8")
+    assert "<style>" in content
+    assert "<script>" in content
+    assert 'class="slide-menu"' not in content
+    assert '<div id="progress-bar">' in content
 
 
 def test_shared_component_fallback(tmp_path):

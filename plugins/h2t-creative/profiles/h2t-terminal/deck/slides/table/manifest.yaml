@@ -1,0 +1,21 @@
+layout: table
+fields:
+  eyebrow:
+    type: text
+    required: false
+    default: ''
+  headline:
+    type: html
+    required: true
+  table_headers:
+    type: list
+    required: false
+    default: []
+  table_rows:
+    type: list
+    required: false
+    default: []
+  note:
+    type: text
+    required: false
+    default: ''

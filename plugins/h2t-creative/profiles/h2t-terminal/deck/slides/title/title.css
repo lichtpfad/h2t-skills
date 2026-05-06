@@ -1,0 +1,46 @@
+/* title — opening hero slide.
+ * Per design system §Typography (title-slide variant) and §Slide layouts.
+ * Larger h1 (64px / letter-spacing 4px) per merkazim .title-block; subline + meta
+ * stack below, dimmed. Centering comes from recipe `align: center` (sets
+ * .slide.center on the section) — this CSS only handles intra-block typography.
+ */
+
+.title-block { gap: 4px; }
+.title-block h1 {
+  font-size: 64px;
+  letter-spacing: 4px;
+  line-height: 1.1;
+}
+.title-block .sub {
+  font-size: 18px;
+  color: var(--text-dim);
+  max-width: 60ch;
+  line-height: 1.55;
+  margin-top: 18px;
+}
+.title-block .sub:empty { display: none; }
+.title-block .meta {
+  font-size: 13px;
+  color: var(--text-dim);
+  margin-top: 28px;
+  letter-spacing: 0.04em;
+}
+.title-block .meta:empty { display: none; }
+.slide.center .title-block .sub { margin-left: auto; margin-right: auto; }
+
+/* Mobile (T15): 64px hero overflows 390px viewport — scale down. */
+@media (max-width: 480px) {
+  .title-block h1 {
+    font-size: 32px;
+    letter-spacing: 1.5px;
+    line-height: 1.15;
+  }
+  .title-block .sub {
+    font-size: 16px;
+    margin-top: 14px;
+  }
+  .title-block .meta {
+    font-size: 12px;
+    margin-top: 20px;
+  }
+}

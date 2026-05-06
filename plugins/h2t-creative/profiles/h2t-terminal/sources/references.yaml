@@ -1,0 +1,55 @@
+# h2t-terminal deck — source dossier.
+#
+# Catalog of golden references that gate desktop fidelity for the deck form.
+# Authoritative imports live under
+#   docs/visual-regression/2026-05-05-r2/h2t-terminal-deck-golden/
+# and were approved during plan §1 / §2 review. References here are static
+# pointers; this dossier never instructs a runtime regenerator or model to
+# reproduce content at session time — every entry is a fixed snapshot. The
+# local screenshots/ folder caches the canonical pos-sprint capture for
+# quick diffing during desktop parity review (T11/T12).
+
+profile: h2t-terminal
+form: deck
+gate: desktop-fidelity
+mobile_baseline_only: true   # per #92 — mobile is recorded but not gated
+
+sources:
+  - id: pos-sprint-terminal-example
+    role: primary
+    kind: golden-html
+    slides: 7
+    path: docs/visual-regression/2026-05-05-r2/h2t-terminal-deck-golden/pos-sprint-terminal-example.html
+    notes: >-
+      Authoritative for token contract and core component vocabulary.
+      Title (slide 01), stats (02), quote+bullets (03), cards (04),
+      layers (05), code (06), final (07).
+
+  - id: merkazim
+    role: secondary
+    kind: golden-html
+    slides: 20
+    path: docs/visual-regression/2026-05-05-r2/h2t-terminal-deck-golden/merkazim.html
+    notes: >-
+      Authoritative for layout variety (title-block, divider-block, table)
+      and palette extension (--highlight, --pop). Source of split format
+      (slide 03), divider (slide 04), and table (slide 10) used by the
+      validation recipe.
+
+  - id: pos-sprint-deck-skill
+    role: contract
+    kind: skill-doc
+    path: docs/visual-regression/2026-05-05-r2/h2t-terminal-deck-golden/pos-sprint-deck-SKILL.md
+    notes: >-
+      Authoritative for canonical token list, required deck features
+      (progress bar, slide counter, scanline overlay, keyboard + swipe nav,
+      single-file output) and the JetBrains Mono fallback chain.
+
+reference_screenshots:
+  desktop: sources/screenshots/reference-desktop.png
+  mobile:  sources/screenshots/reference-mobile.png
+  source:  pos-sprint-terminal-example   # captures of slide 01 from the primary golden
+  notes: >-
+    Captured statically from the primary golden during plan import. Re-capture
+    only when goldens themselves change. Mobile screenshot is the #92 baseline,
+    not a parity gate.

@@ -1,0 +1,23 @@
+layout: code
+fields:
+  eyebrow:
+    type: text
+    required: false
+    default: ''
+  headline:
+    type: html
+    required: true
+  code_title:
+    type: text
+    required: false
+    default: terminal
+  code_html:
+    type: html
+    required: true
+    # Inner code lines / spans only. Layout owns the wrapping <pre>; recipe
+    # MUST NOT include an outer <pre> here (would produce nested <pre><pre>).
+  caption_html:
+    type: html
+    required: false
+    default: ''
+    # Optional caption rendered RAW after .code-block (below the terminal box).

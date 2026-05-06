@@ -1,0 +1,7 @@
+/* cards — h2 + N-card row OR auto-fit grid.
+ * Variant chosen via recipe field `cards_variant` (card-row | cards). Both
+ * variants' primitives live in frame.css.
+ */
+
+.cards-block .card-row,
+.cards-block .cards { margin-top: 14px; }
