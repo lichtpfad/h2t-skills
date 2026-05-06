@@ -731,3 +731,44 @@ def test_uploads_manifest_skip_existing_size_mtime_match(cli, tmp_path):
                                      size=200, mtime="2026-05-06T10:00:00Z") is False
     assert cli._is_already_submitted(state, "/x.webm",
                                      size=100, mtime="2026-05-06T11:00:00Z") is False
+
+
+# ─── upload --from-file (single file) ─────────────────────────────────────────
+
+def test_upload_from_file_chains_convert_drive_submit(cli, tmp_path, monkeypatch):
+    src = tmp_path / "meetgeek-recording-2026-01-20T15-44-31-132Z.webm"
+    src.write_bytes(b"x" * 1024)
+
+    calls = []
+
+    def fake_cmd_convert(ns):
+        calls.append(("convert", ns.input))
+        from pathlib import Path as P
+        out = P(ns.output) if ns.output else (
+            cli._staging_dir() / (P(ns.input).stem + ".mp4"))
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_bytes(b"M" * 2048)
+        return 0
+
+    posted = []
+    def fake_post_upload(url, title, lang):
+        posted.append({"url": url, "title": title, "lang": lang})
+        return {"message": "submitted (mock)"}
+
+    monkeypatch.setattr(cli, "cmd_convert", fake_cmd_convert)
+    monkeypatch.setattr(cli, "_post_upload", fake_post_upload)
+    monkeypatch.setattr(cli, "_drive_upload_file",
+                        lambda path, **kw:
+                        {"drive_id": "FAKE", "download_url": "https://example.com/dl/FAKE",
+                         "web_url": "https://drive/FAKE", "created": True})
+
+    manifest = tmp_path / "manifest.jsonl"
+    monkeypatch.setattr(cli, "_uploads_manifest_path", lambda: manifest)
+
+    rc = cli.main(["upload", "--from-file", str(src), "--language", "ru"])
+    assert rc == 0
+    assert len(posted) == 1
+    assert posted[0]["url"] == "https://example.com/dl/FAKE"
+    assert "2026-01-20" in (posted[0]["title"] or "")
+    lines = manifest.read_text(encoding="utf-8").strip().splitlines()
+    assert any('"status": "submitted"' in ln for ln in lines)

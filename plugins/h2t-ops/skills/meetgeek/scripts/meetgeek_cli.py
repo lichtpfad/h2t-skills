@@ -684,19 +684,17 @@ def _drive_download_url(file_id: str) -> str:
     return f"https://drive.google.com/uc?export=download&id={file_id}"
 
 
-def cmd_drive_upload(args: argparse.Namespace) -> int:
-    src = Path(args.file).expanduser().resolve()
+def _drive_upload_file(path: Path, folder: str | None = None,
+                      make_public: bool = True) -> dict:
+    src = Path(path).expanduser().resolve()
     if not src.exists():
         raise ApiError(f"file not found: {src}", exit_code=1)
-
     svc = _drive_service()
-
-    if args.folder:
-        parts = [p for p in args.folder.replace("\\", "/").split("/") if p]
+    if folder:
+        parts = [p for p in folder.replace("\\", "/").split("/") if p]
     else:
         date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
         parts = [DRIVE_ROOT_FOLDER_NAME, date]
-
     parent_id: str | None = None
     for part in parts:
         parent_id = _drive_find_or_create_folder(svc, part, parent_id)
@@ -704,37 +702,36 @@ def cmd_drive_upload(args: argparse.Namespace) -> int:
 
     existing = _drive_find_file(svc, src.name, folder_id)
     if existing:
-        if args.make_public:
+        if make_public:
             try:
                 _drive_make_public(svc, existing["id"])
-            except Exception:  # noqa: BLE001 — already public is fine
+            except Exception:  # noqa: BLE001
                 pass
-        out = {
+        return {
             "drive_id": existing["id"],
             "web_url": existing.get("webViewLink"),
             "download_url": _drive_download_url(existing["id"]),
             "created": False,
         }
-        _print_json(out)
-        return 0
 
-    try:
-        from googleapiclient.http import MediaFileUpload
-    except ImportError as e:
-        raise ApiError(f"googleapiclient missing: {e}", exit_code=2)
+    from googleapiclient.http import MediaFileUpload
     media = MediaFileUpload(str(src), resumable=True)
     body = {"name": src.name, "parents": [folder_id]}
     file = svc.files().create(body=body, media_body=media,
                               fields="id,webViewLink").execute()
-    if args.make_public:
+    if make_public:
         _drive_make_public(svc, file["id"])
-    out = {
+    return {
         "drive_id": file["id"],
         "web_url": file.get("webViewLink"),
         "download_url": _drive_download_url(file["id"]),
         "created": True,
     }
-    _print_json(out)
+
+
+def cmd_drive_upload(args: argparse.Namespace) -> int:
+    info = _drive_upload_file(Path(args.file), folder=args.folder, make_public=args.make_public)
+    _print_json(info)
     return 0
 
 
@@ -806,15 +803,163 @@ def _post_upload(download_url: str, title: str | None, language: str | None) -> 
         return {"message": r.text[:500]}
 
 
+import re as _re_titles
+_RECORDING_NAME_RE = _re_titles.compile(
+    r"meetgeek-recording-(\d{4})-(\d{2})-(\d{2})T(\d{2})-(\d{2})-\d{2}-\d+Z"
+)
+
+
+def _title_from_filename(stem: str) -> str:
+    m = _RECORDING_NAME_RE.search(stem)
+    if m:
+        y, mo, d, hh, mm = m.groups()
+        return f"Meeting {y}-{mo}-{d} {hh}:{mm} UTC"
+    return f"Meeting {stem}"
+
+
+def _process_one_for_upload(src_path: Path, *, language: str | None,
+                            title_override: str | None,
+                            audio_only: bool, mix_mode: str,
+                            manifest_path: Path) -> dict:
+    """Run convert → drive → submit. Skips already-completed stages by
+    consulting effective state in manifest. On per-stage failure writes
+    convert-failed / drive-failed / upload-rejected then re-raises.
+    """
+    src = src_path.resolve()
+    src_size = src.stat().st_size
+    src_mtime = datetime.fromtimestamp(src.stat().st_mtime, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    base_meta = {
+        "source_webm": str(src),
+        "source_size_bytes": src_size,
+        "source_mtime": src_mtime,
+    }
+
+    state = _read_uploads_manifest(manifest_path)
+    rec = state.get(str(src), {}) or {}
+    rec_status = rec.get("status")
+    suffix = ".m4a" if audio_only else ".mp4"
+    mp4_path = _staging_dir() / (src.stem + suffix)
+    mp4_size: int
+
+    # ── Stage 1: Convert ──────────────────────────────────────────────────
+    cached_mp4 = rec.get("mp4_path")
+    can_skip_convert = (
+        rec_status in ("converted", "in-drive", "submitted")
+        and cached_mp4
+        and Path(cached_mp4).exists()
+        and Path(cached_mp4).stat().st_size > 1024
+    )
+    if can_skip_convert:
+        mp4_path = Path(cached_mp4)
+        mp4_size = mp4_path.stat().st_size
+        print(f"  [resume] convert ✓ (cached {mp4_path.name})", file=sys.stderr)
+    else:
+        try:
+            mp4_path.parent.mkdir(parents=True, exist_ok=True)
+            cmd_convert(argparse.Namespace(
+                input=str(src), output=str(mp4_path),
+                audio_only=audio_only, mix_mode=mix_mode, probe=False,
+            ))
+            mp4_size = mp4_path.stat().st_size
+            _append_uploads_manifest({
+                **base_meta,
+                "mp4_path": str(mp4_path), "mp4_size_bytes": mp4_size,
+                "status": "converted",
+            }, manifest_path)
+        except ApiError as e:
+            _append_uploads_manifest({
+                **base_meta,
+                "status": "convert-failed", "error": str(e),
+            }, manifest_path)
+            raise
+
+    # ── Stage 2: Drive upload ─────────────────────────────────────────────
+    can_skip_drive = (
+        rec_status in ("in-drive", "submitted")
+        and rec.get("drive_id")
+        and rec.get("drive_download_url")
+    )
+    if can_skip_drive:
+        drive_info = {
+            "drive_id": rec["drive_id"],
+            "download_url": rec["drive_download_url"],
+            "web_url": rec.get("drive_web_url"),
+            "created": False,
+        }
+        print(f"  [resume] drive ✓ (cached {drive_info['drive_id']})", file=sys.stderr)
+    else:
+        try:
+            drive_info = _drive_upload_file(mp4_path)
+            _append_uploads_manifest({
+                **base_meta,
+                "mp4_path": str(mp4_path), "mp4_size_bytes": mp4_size,
+                "drive_id": drive_info["drive_id"],
+                "drive_download_url": drive_info["download_url"],
+                "drive_web_url": drive_info.get("web_url"),
+                "status": "in-drive",
+            }, manifest_path)
+        except ApiError as e:
+            _append_uploads_manifest({
+                **base_meta,
+                "mp4_path": str(mp4_path), "mp4_size_bytes": mp4_size,
+                "status": "drive-failed", "error": str(e),
+            }, manifest_path)
+            raise
+
+    # ── Stage 3: Submit ───────────────────────────────────────────────────
+    title = title_override or _title_from_filename(src.stem)
+    try:
+        resp = _post_upload(drive_info["download_url"], title, language)
+    except ApiError as e:
+        _append_uploads_manifest({
+            **base_meta,
+            "mp4_path": str(mp4_path), "mp4_size_bytes": mp4_size,
+            "drive_id": drive_info["drive_id"],
+            "drive_download_url": drive_info["download_url"],
+            "title": title, "language": language,
+            "status": "upload-rejected", "error": str(e),
+        }, manifest_path)
+        raise
+
+    final = {
+        **base_meta,
+        "mp4_path": str(mp4_path), "mp4_size_bytes": mp4_size,
+        "drive_id": drive_info["drive_id"],
+        "drive_download_url": drive_info["download_url"],
+        "title": title, "language": language,
+        "submitted_at": _now_iso(),
+        "upload_response_message": (resp.get("message") if isinstance(resp, dict) else None),
+        "status": "submitted",
+    }
+    _append_uploads_manifest(final, manifest_path)
+    return final
+
+
 def cmd_upload(args: argparse.Namespace) -> int:
     if args.download_url:
         resp = _post_upload(args.download_url, args.title, args.language)
         _print_json({"status": "submitted", "response": resp})
         return 0
-    if args.from_file:
-        # Implemented in Task 10
-        raise ApiError("--from-file not yet implemented (planned in Task 10)", exit_code=2)
-    raise ApiError("either --download-url or --from-file required", exit_code=2)
+
+    if not args.from_file:
+        raise ApiError("either --download-url or --from-file required", exit_code=2)
+
+    src_path = Path(args.from_file).expanduser()
+    if not src_path.exists() or not src_path.is_file():
+        raise ApiError(f"--from-file expects an existing file (glob is Task 11): {src_path}",
+                       exit_code=1)
+
+    manifest_path = _uploads_manifest_path()
+    final = _process_one_for_upload(
+        src_path,
+        language=args.language,
+        title_override=args.title,
+        audio_only=args.audio_only,
+        mix_mode=args.mix_mode,
+        manifest_path=manifest_path,
+    )
+    _print_json({"processed": 1, "skipped": 0, "errors": 0, "result": final})
+    return 0
 
 
 # ─── Sync pipeline ────────────────────────────────────────────────────────────
@@ -1130,6 +1275,8 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--title", default=None)
     s.add_argument("--language", default=None,
                    help="Language hint (ru, en, auto, etc.)")
+    s.add_argument("--audio-only", action="store_true")
+    s.add_argument("--mix-mode", choices=["amix", "first", "keep"], default="amix")
     s.set_defaults(func=cmd_upload)
 
     s = sub.add_parser("sync", help="Bulk pull to LAKE_PATH (manifest.jsonl + per-asset folders)")
