@@ -513,6 +513,54 @@ def test_convert_corrupted_raises(cli, tmp_path, monkeypatch):
     assert rc == 1
 
 
+def test_convert_single_track_maps_audio_explicitly(cli, tmp_path, monkeypatch):
+    """Regression: when any -map is specified, ffmpeg disables auto-mapping.
+    The single-track recipe used to give -map 0:v? without an audio map,
+    silently producing video-only mp4 that MeetGeek then rejects as Failed.
+    """
+    src = tmp_path / "in.webm"; src.write_bytes(b"x")
+    monkeypatch.setattr(cli, "_ffmpeg_probe",
+                        lambda p: {"audio_streams": 1, "has_video": True,
+                                   "duration_seconds": 60, "raw_stderr_tail": ""})
+    captured: dict = {}
+    def fake_run(cmd, **kw):
+        captured["cmd"] = cmd
+        from pathlib import Path as P
+        P(cmd[-1]).write_bytes(b"M" * 2048)
+        class R: returncode = 0; stderr = ""; stdout = ""
+        return R()
+    monkeypatch.setattr(cli.subprocess, "run", fake_run)
+
+    cli.main(["convert", str(src), "-o", str(tmp_path / "out.mp4")])
+    cmd = captured["cmd"]
+    # Both video and audio maps must be present
+    map_args = [cmd[i + 1] for i, a in enumerate(cmd) if a == "-map"]
+    assert "0:v?" in map_args
+    assert "0:a:0?" in map_args
+
+
+def test_convert_audio_only_still_maps_audio(cli, tmp_path, monkeypatch):
+    """audio_only must map audio stream explicitly (in addition to -vn)."""
+    src = tmp_path / "in.webm"; src.write_bytes(b"x")
+    monkeypatch.setattr(cli, "_ffmpeg_probe",
+                        lambda p: {"audio_streams": 1, "has_video": True,
+                                   "duration_seconds": 60, "raw_stderr_tail": ""})
+    captured: dict = {}
+    def fake_run(cmd, **kw):
+        captured["cmd"] = cmd
+        from pathlib import Path as P
+        P(cmd[-1]).write_bytes(b"M" * 2048)
+        class R: returncode = 0; stderr = ""; stdout = ""
+        return R()
+    monkeypatch.setattr(cli.subprocess, "run", fake_run)
+
+    cli.main(["convert", str(src), "-o", str(tmp_path / "out.m4a"), "--audio-only"])
+    cmd = captured["cmd"]
+    map_args = [cmd[i + 1] for i, a in enumerate(cmd) if a == "-map"]
+    assert "0:a:0?" in map_args
+    assert "-vn" in cmd
+
+
 def test_convert_multi_track_uses_amix(cli, tmp_path, monkeypatch):
     src = tmp_path / "in.webm"; src.write_bytes(b"x")
     monkeypatch.setattr(cli, "_ffmpeg_probe",
@@ -557,7 +605,8 @@ def test_convert_mix_mode_first_picks_first_stream(cli, tmp_path, monkeypatch):
     cli.main(["convert", str(src), "-o", str(tmp_path / "out.mp4"), "--mix-mode", "first"])
     cmd = captured["cmd"]
     assert "-filter_complex" not in cmd
-    assert "0:a:0" in cmd
+    # mapping uses optional `?` form (0:a:0?) to tolerate truncated containers
+    assert any("0:a:0" in a for a in cmd)
 
 
 def test_convert_audio_only_strips_video_codec_flags(cli, tmp_path, monkeypatch):

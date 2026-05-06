@@ -506,12 +506,14 @@ def _build_convert_cmd(input_path: str, output_path: str, *,
     """Construct ffmpeg argv. Multi-track logic lands in Task 4."""
     exe = _ffmpeg_exe()
     if probe["audio_streams"] <= 1 or mix_mode == "first":
+        # CRITICAL: when ANY -map is given, ffmpeg auto-mapping is disabled,
+        # so we MUST also map the audio stream explicitly. Forgetting this
+        # produces a video-only mp4 — silently fails downstream transcription.
         argv = [exe, "-y", "-hide_banner", "-i", input_path]
         if audio_only:
-            argv += ["-vn"]
+            argv += ["-vn", "-map", "0:a:0?"]
         else:
-            argv += ["-map", "0:v?"]
-        argv += ["-map", "0:a:0"] if mix_mode == "first" else []
+            argv += ["-map", "0:v?", "-map", "0:a:0?"]
         argv += [
             "-c:v", "libx264", "-preset", "medium", "-crf", "23",
             "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-ac", "2",
