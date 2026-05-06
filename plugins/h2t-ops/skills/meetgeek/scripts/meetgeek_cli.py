@@ -587,6 +587,61 @@ def cmd_convert(args: argparse.Namespace) -> int:
     return 0
 
 
+# ─── Drive upload ─────────────────────────────────────────────────────────────
+
+DRIVE_CONFIG_DIR = Path.home() / ".config" / "google-calendar-mcp"
+DRIVE_TOKEN_FILE = DRIVE_CONFIG_DIR / "tokens.json"
+DRIVE_CREDENTIALS_FILE = DRIVE_CONFIG_DIR / "credentials.json"
+DRIVE_SCOPES = ["https://www.googleapis.com/auth/drive"]
+DRIVE_ROOT_FOLDER_NAME = "MeetGeek Uploads"
+
+
+def _drive_service():
+    """Build a Drive v3 service. Mirrors drive_cli.get_drive_service() so OAuth is shared."""
+    if not DRIVE_TOKEN_FILE.exists():
+        raise ApiError(
+            f"Drive auth missing — token not at {DRIVE_TOKEN_FILE}. "
+            "Run /h2t-ops:drive list to trigger OAuth.",
+            exit_code=1,
+        )
+    try:
+        from google.auth.transport.requests import Request as _GReq
+        from google.oauth2.credentials import Credentials
+        from googleapiclient.discovery import build
+    except ImportError as e:
+        raise ApiError(
+            f"google-api-python-client not installed: {e}. "
+            "pip install google-api-python-client google-auth-httplib2",
+            exit_code=2,
+        )
+
+    with DRIVE_TOKEN_FILE.open(encoding="utf-8") as f:
+        token_data = json.load(f)
+    if "normal" in token_data:
+        token_data = token_data["normal"]
+
+    if "client_id" not in token_data:
+        if not DRIVE_CREDENTIALS_FILE.exists():
+            raise ApiError(f"Drive credentials missing: {DRIVE_CREDENTIALS_FILE}", exit_code=1)
+        with DRIVE_CREDENTIALS_FILE.open(encoding="utf-8") as f:
+            creds_data = json.load(f)
+        installed = creds_data.get("installed", creds_data)
+        token_data["client_id"] = installed.get("client_id")
+        token_data["client_secret"] = installed.get("client_secret")
+        token_data["token_uri"] = installed.get("token_uri", "https://oauth2.googleapis.com/token")
+
+    existing_scopes = token_data.get("scopes") or []
+    if isinstance(existing_scopes, str):
+        existing_scopes = existing_scopes.split()
+    creds = Credentials.from_authorized_user_info(
+        token_data, scopes=existing_scopes or DRIVE_SCOPES
+    )
+    if creds.expired and creds.refresh_token:
+        creds.refresh(_GReq())
+        DRIVE_TOKEN_FILE.write_text(creds.to_json())
+    return build("drive", "v3", credentials=creds)
+
+
 # ─── Sync pipeline ────────────────────────────────────────────────────────────
 
 def _load_cursor(path: Path) -> dict:

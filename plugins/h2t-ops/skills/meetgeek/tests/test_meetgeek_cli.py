@@ -554,3 +554,13 @@ def test_convert_audio_only_strips_video_codec_flags(cli, tmp_path, monkeypatch)
     assert "libx264" not in cmd
     assert "-vn" in cmd
     assert "aac" in cmd
+
+
+# ─── drive upload ──────────────────────────────────────────────────────────────
+
+def test_drive_service_raises_when_token_missing(cli, tmp_path, monkeypatch):
+    monkeypatch.setattr(cli, "DRIVE_TOKEN_FILE", tmp_path / "missing.json")
+    import pytest as _p
+    with _p.raises(cli.ApiError) as e:
+        cli._drive_service()
+    assert "tokens.json" in str(e.value).lower() or "drive auth" in str(e.value).lower()
