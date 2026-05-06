@@ -1,0 +1,17 @@
+layout: cards
+fields:
+  eyebrow:
+    type: text
+    required: false
+    default: ''
+  headline:
+    type: html
+    required: true
+  cards:
+    type: list
+    required: false
+    default: []
+  cards_variant:
+    type: text
+    required: false
+    default: card-row

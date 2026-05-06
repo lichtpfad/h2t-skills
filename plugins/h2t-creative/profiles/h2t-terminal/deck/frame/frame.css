@@ -1,0 +1,688 @@
+/* h2t-terminal deck — frame chrome + shared component primitives.
+ * Per design system §Frame and §Component primitives.
+ *
+ * Layout-specific CSS (per-slide-type tweaks) lives in deck/slides/<layout>/<layout>.css.
+ * This file is profile-wide and consumed by every slide.
+ */
+
+/* ─── Frame chrome ────────────────────────────────────────────── */
+/* Chrome z-index = 10000, one above scanline overlay (z-index: 9999 in tokens.css)
+   so progress / counter / nav stay readable. Goldens use z-index: 1000 here, which
+   technically sits below the scanlines — readable in practice only because the
+   stripes are near-transparent rgba(0,0,0,0.06). We correct that intentionally. */
+
+#progress-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  height: 3px;
+  background: var(--accent);
+  transition: width 0.4s ease;
+  z-index: 10000;
+  box-shadow: 0 0 8px var(--accent);
+}
+
+#slide-counter {
+  position: fixed;
+  top: 24px;
+  right: 32px;
+  font-size: 13px;
+  color: var(--text-dim);
+  letter-spacing: 0.05em;
+  z-index: 10000;
+}
+#slide-counter .current {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+#nav-hint {
+  position: fixed;
+  bottom: 20px;
+  right: 32px;
+  font-size: 12px;
+  color: var(--text-dim);
+  opacity: 0.5;
+  letter-spacing: 0.04em;
+  z-index: 10000;
+}
+
+.nav-btn {
+  position: fixed;
+  bottom: 28px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-dim);
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  z-index: 10000;
+  user-select: none;
+  text-transform: uppercase;
+}
+.nav-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  transform: translateY(-2px);
+}
+.nav-btn:active { transform: translateY(0); }
+.nav-btn.prev { left: 32px; }
+.nav-btn.next { right: 32px; }
+.nav-btn.disabled {
+  opacity: 0.25;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+.nav-btn .chevron {
+  font-size: 15px;
+  color: var(--accent);
+}
+
+/* ─── Color utility classes ───────────────────────────────────── */
+
+.dim       { color: var(--text-dim); }
+.accent    { color: var(--accent); }
+.accent2   { color: var(--accent2); }
+.accent3   { color: var(--accent3); }
+.danger    { color: var(--danger); }
+.highlight { color: var(--highlight); }
+.pop       { color: var(--pop); }
+.bold      { font-weight: 700; }
+
+/* ─── Eyebrow / slide label ───────────────────────────────────── */
+/* `// ` prefix is stored in recipe content (per merkazim convention),
+   not injected via ::before. */
+
+.eyebrow {
+  font-size: 12px;
+  color: var(--accent);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  font-weight: 600;
+  margin-bottom: 18px;
+}
+
+/* ─── Divider rule ────────────────────────────────────────────── */
+
+.divider {
+  width: 56px;
+  height: 2px;
+  background: var(--accent);
+  margin: 24px 0;
+}
+.slide.center .divider {
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* ─── Cursor blink (terminal motif) ───────────────────────────── */
+
+.cursor::after {
+  content: '\2588';
+  color: var(--accent);
+  margin-left: 4px;
+  animation: blink 1s step-end infinite;
+  font-weight: 400;
+}
+
+/* ─── Quote block ─────────────────────────────────────────────── */
+
+.quote-block {
+  border-left: 3px solid var(--accent);
+  padding: 20px 28px;
+  background: var(--bg-light);
+  margin: 8px 0 28px;
+  font-size: 18px;
+  line-height: 1.6;
+  color: var(--text);
+  font-style: italic;
+}
+.quote-block .quote-source {
+  font-style: normal;
+  font-size: 13px;
+  color: var(--text-dim);
+  margin-top: 12px;
+  opacity: 0.7;
+}
+
+/* Inline pull quote (no background, used in body content) */
+.quote {
+  border-left: 3px solid var(--accent);
+  padding: 12px 22px;
+  margin: 14px 0;
+}
+.quote p {
+  font-size: 19px;
+  line-height: 1.55;
+  color: var(--text);
+}
+
+/* ─── Bullet list ─────────────────────────────────────────────── */
+
+.bullet-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.bullet-list li {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  font-size: 16px;
+  color: var(--text);
+}
+.bullet-list li::before {
+  content: attr(data-sym);
+  color: var(--accent);
+  font-weight: 700;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+/* Plain ul fallback (merkazim style) — `> ` prefix */
+ul:not(.bullet-list) {
+  list-style: none;
+  padding-left: 0;
+}
+ul:not(.bullet-list) li {
+  padding: 4px 0;
+  font-size: 15px;
+  color: var(--text);
+}
+ul:not(.bullet-list) li::before {
+  content: '> ';
+  color: var(--accent);
+  font-weight: 700;
+}
+
+/* ─── Stats row ───────────────────────────────────────────────── */
+
+.stat-row {
+  display: flex;
+  gap: 16px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+/* stat-box variant: pos-sprint pattern with red top accent + data-index corner */
+.stat-box {
+  flex: 1;
+  min-width: 140px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-top: 2px solid var(--danger);
+  padding: 28px 24px;
+  position: relative;
+}
+.stat-box::before {
+  content: attr(data-index);
+  position: absolute;
+  top: 10px;
+  right: 14px;
+  font-size: 11px;
+  color: var(--text-dim);
+  opacity: 0.4;
+  letter-spacing: 0.08em;
+}
+.stat-number {
+  font-size: 36px;
+  font-weight: 700;
+  color: var(--danger);
+  line-height: 1;
+  margin-bottom: 12px;
+}
+.stat-label {
+  font-size: 14px;
+  color: var(--text-dim);
+  line-height: 1.5;
+}
+
+/* stat variant: merkazim pattern — centered, color via .num.<class> */
+.stat {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  padding: 16px 20px;
+  flex: 1;
+  min-width: 140px;
+  text-align: center;
+}
+.stat .num {
+  font-size: 32px;
+  font-weight: 700;
+  line-height: 1;
+}
+.stat .label {
+  font-size: 10px;
+  color: var(--text-dim);
+  margin-top: 6px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* ─── Cards ───────────────────────────────────────────────────── */
+
+/* card-row variant: pos-sprint flex 3-up with --card-color top border */
+.card-row {
+  display: flex;
+  gap: 16px;
+  width: 100%;
+  margin-top: 8px;
+}
+.card-row .card {
+  flex: 1;
+  min-width: 230px;
+  position: relative;
+  overflow: hidden;
+}
+.card-row .card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--card-color, var(--accent));
+}
+.card-row .card-icon {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--card-color, var(--accent));
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 14px;
+}
+.card-row .card-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 10px;
+}
+.card-row .card-desc {
+  font-size: 14px;
+  color: var(--text-dim);
+  line-height: 1.6;
+}
+
+/* cards variant: merkazim auto-fit grid */
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  padding: 18px 24px;
+  transition: border-color 0.2s ease;
+}
+.card:hover {
+  border-color: var(--accent);
+}
+.cards .card h3 {
+  color: var(--text);
+  font-size: 16px;
+  margin-bottom: 8px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.cards .card p {
+  font-size: 14px;
+  color: var(--text-dim);
+  line-height: 1.5;
+}
+.cards .card ul li {
+  font-size: 14px;
+  padding: 2px 0;
+}
+
+/* ─── Tag chips ───────────────────────────────────────────────── */
+
+.tag {
+  display: inline-block;
+  font-size: 11px;
+  padding: 2px 8px;
+  margin-bottom: 10px;
+  background: rgba(85, 170, 136, 0.15);
+  color: var(--accent);
+  letter-spacing: 0.08em;
+}
+.tag.amber  { background: rgba(212, 168, 67, 0.15);  color: var(--accent2); }
+.tag.blue   { background: rgba(68, 136, 204, 0.15);  color: var(--accent3); }
+.tag.purple { background: rgba(153, 102, 204, 0.15); color: var(--highlight); }
+.tag.pink   { background: rgba(238, 102, 136, 0.15); color: var(--pop); }
+.tag.red    { background: rgba(204, 68, 68, 0.15);   color: var(--danger); }
+
+/* ─── Layers ──────────────────────────────────────────────────── */
+
+.layers {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+  margin-top: 8px;
+}
+
+.layer {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--layer-color, var(--accent));
+  padding: 20px 24px;
+  transition: transform 0.3s ease;
+}
+.layer:hover { transform: translateX(6px); }
+.layer-num {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--layer-color, var(--accent));
+  letter-spacing: 0.1em;
+  flex-shrink: 0;
+  width: 36px;
+}
+.layer-name {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+  flex-shrink: 0;
+  width: 140px;
+}
+.layer-desc {
+  font-size: 14px;
+  color: var(--text-dim);
+  line-height: 1.5;
+  flex: 1;
+}
+
+/* Preset accent classes — used when recipe sets `preset` instead of inline color */
+.layer.l1 { border-color: rgba(85, 170, 136, 0.4);  background: rgba(85, 170, 136, 0.04); }
+.layer.l2 { border-color: rgba(212, 168, 67, 0.4);  background: rgba(212, 168, 67, 0.04); }
+.layer.l3 { border-color: rgba(68, 136, 204, 0.4);  background: rgba(68, 136, 204, 0.04); }
+.layer.l4 { border-color: rgba(153, 102, 204, 0.4); background: rgba(153, 102, 204, 0.04); }
+.layer.lh { border-color: rgba(204, 68, 68, 0.4);   background: rgba(204, 68, 68, 0.04); }
+
+/* ─── Code block ──────────────────────────────────────────────── */
+
+.code-block {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  padding: 28px 32px;
+  width: 100%;
+  position: relative;
+}
+.code-block::before {
+  content: attr(data-title);
+  position: absolute;
+  top: -1px;
+  left: -1px;
+  background: var(--accent);
+  color: var(--bg);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.code-block pre {
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.9;
+  color: var(--text);
+  margin-top: 16px;
+  white-space: pre;
+}
+.code-prompt  { color: var(--accent); user-select: none; }
+.code-cmd     { color: var(--text); }
+.code-arg     { color: var(--accent2); }
+.code-comment { color: var(--text-dim); font-size: 13px; }
+
+/* ─── Two-column split ────────────────────────────────────────── */
+
+.split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 28px;
+  margin-top: 14px;
+}
+
+/* ─── Table ───────────────────────────────────────────────────── */
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 14px;
+  font-size: 14px;
+}
+th, td {
+  text-align: left;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+}
+th {
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  font-weight: 600;
+}
+td.mono {
+  font-family: var(--font-heading);
+  color: var(--accent2);
+}
+
+/* ─── Misc badges ─────────────────────────────────────────────── */
+
+.duration-tag {
+  display: inline-block;
+  font-size: 12px;
+  padding: 4px 10px;
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  letter-spacing: 0.08em;
+  margin-bottom: 14px;
+}
+.duration-tag.danger {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.disclaimer-badge {
+  display: inline-block;
+  padding: 4px 12px;
+  margin-bottom: 12px;
+  border: 1px dashed var(--danger);
+  font-size: 11px;
+  color: var(--danger);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 18px 0;
+}
+.pill {
+  display: inline-block;
+  font-size: 14px;
+  padding: 8px 16px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text);
+  font-family: var(--font-body);
+  transition: all 0.2s ease;
+}
+.pill:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.meta-note {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-top: 12px;
+  font-style: italic;
+}
+
+/* ─── Dual-representation table (T15.5) ──────────────────────────────
+   Assembler emits both `.table-desktop` (with the original <table>) and
+   `.table-mobile` (with stacked .table-card articles). Desktop shows the
+   table; mobile shows the cards. Toggle lives in the mobile @media block
+   below. Both representations carry the same content — no data is hidden. */
+.table-desktop { display: block; }
+.table-mobile  { display: none;  }
+
+.table-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  padding: 14px 16px;
+  margin-bottom: 12px;
+}
+.table-card h3 {
+  font-family: var(--font-heading);
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: normal;
+  text-transform: none;
+  color: var(--text);
+  margin-bottom: 10px;
+}
+.table-card dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  column-gap: 14px;
+  row-gap: 6px;
+}
+.table-card dt {
+  font-size: 11px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  align-self: baseline;
+}
+.table-card dd {
+  font-size: 14px;
+  color: var(--text);
+  line-height: 1.5;
+}
+
+/* ─── Mobile adaptation (T15 / plan §5.10) ───────────────────────────
+   Component primitives collapse to vertical stacks; padding shrinks; no
+   primitive is hidden. Per-layout typography overrides live in their own
+   layout CSS files; this block only owns shared component primitives. */
+@media (max-width: 480px) {
+  /* Cards: row → vertical stack. */
+  .card-row {
+    flex-direction: column;
+    gap: 14px;
+  }
+  .card-row .card {
+    min-width: 0;
+    padding: 18px 20px;
+  }
+  .cards {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+
+  /* Layers: row → stacked rows; numeric prefix and name shed fixed widths. */
+  .layers {
+    gap: 10px;
+  }
+  .layer {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+    padding: 14px 16px;
+  }
+  .layer-num {
+    width: auto;
+  }
+  .layer-name {
+    width: auto;
+  }
+  .layer-desc {
+    flex: 0 1 auto;
+    line-height: 1.55;
+  }
+
+  /* Two-column body grid → single column. */
+  .split {
+    grid-template-columns: 1fr;
+    gap: 22px;
+  }
+
+  /* Code block: smaller font + tighter padding + horizontal scroll for
+     unbreakable command lines. Layout still owns the wrapping <pre>. */
+  .code-block {
+    padding: 18px 16px;
+  }
+  .code-block pre {
+    font-size: 12px;
+    line-height: 1.6;
+    overflow-x: auto;
+  }
+  /* TERMINAL badge polish (T17.5): the desktop pseudo sits at top: -1px /
+     left: -1px which can render sub-pixel and disappear at 390px. Anchor
+     it flush at top:0 / left:0 with a slightly smaller chip. */
+  .code-block::before {
+    top: 0;
+    left: 0;
+    font-size: 10px;
+    padding: 2px 8px;
+  }
+
+  /* Stats: flex-wrap already saved this — just tighten. */
+  .stat-row {
+    gap: 12px;
+  }
+  .stat-box {
+    padding: 18px 18px;
+  }
+  .stat-number {
+    font-size: 30px;
+  }
+
+  /* Bullet list: keep arrow visually anchored to the first text line. */
+  .bullet-list {
+    gap: 8px;
+  }
+  .bullet-list li {
+    align-items: flex-start;
+    gap: 10px;
+    line-height: 1.5;
+  }
+
+  /* Quote block: tighten padding to recover horizontal space. */
+  .quote-block {
+    padding: 14px 18px;
+    font-size: 16px;
+  }
+
+  /* Optional nav buttons (rendered when recipe.nav_buttons=true). */
+  .nav-btn {
+    bottom: 18px;
+    padding: 8px 14px;
+    font-size: 11px;
+  }
+  .nav-btn.prev { left: 16px; }
+  .nav-btn.next { right: 16px; }
+
+  /* Dual-representation table toggle: hide the desktop <table>, show the
+     stacked cards. This is representation switching (the .table-mobile
+     element carries the same content), not content hiding. */
+  .table-desktop { display: none;  }
+  .table-mobile  { display: block; }
+}

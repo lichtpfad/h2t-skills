@@ -1,0 +1,7 @@
+/* title-body — default content slide (h2 + free-form body).
+ * Body content is recipe-supplied raw HTML; primitives (.divider, .bullet-list,
+ * .quote-block, etc.) live in frame.css and apply automatically when used.
+ */
+
+.title-body-block .body { margin-top: 14px; }
+.title-body-block .body > * + * { margin-top: 14px; }
