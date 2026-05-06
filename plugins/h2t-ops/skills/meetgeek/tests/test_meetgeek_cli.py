@@ -363,6 +363,31 @@ def test_webhook_server_writes_event(cli, tmp_path):
     assert rec["path"] == "/event"
 
 
+def test_meeting_pick_reads_timestamp_start_utc(cli):
+    """Regression: list endpoint returns timestamp_start_utc / timestamp_end_utc;
+    earlier picker only checked start_time/created_at and lost dates for the
+    entire historical backfill (~200 entries with null timestamps).
+    """
+    m = {
+        "meeting_id": "abc",
+        "title": "Test",
+        "timestamp_start_utc": "2026-04-18T13:55:34Z",
+        "timestamp_end_utc": "2026-04-18T14:55:34Z",
+    }
+    out = cli._meeting_pick(m)
+    assert out["timestamp_start_utc"] == "2026-04-18T13:55:34Z"
+    assert out["timestamp_end_utc"] == "2026-04-18T14:55:34Z"
+    assert out["date"] == "2026-04-18"
+
+
+def test_meeting_pick_falls_back_to_start_time(cli):
+    """Older response shapes (or `/v1/meeting/{id}`) used start_time."""
+    m = {"meeting_id": "x", "start_time": "2026-01-01T00:00:00Z"}
+    out = cli._meeting_pick(m)
+    assert out["timestamp_start_utc"] == "2026-01-01T00:00:00Z"
+    assert out["date"] == "2026-01-01"
+
+
 def test_frontmatter_escapes_special_chars(cli):
     val = cli._yaml_value('title with "quotes" and: colon')
     assert val.startswith('"') and val.endswith('"')

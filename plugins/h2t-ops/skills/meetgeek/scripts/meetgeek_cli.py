@@ -158,7 +158,15 @@ def _frontmatter(fields: dict) -> str:
 
 
 def _meeting_pick(m: dict) -> dict:
-    """Normalize meeting record fields used in frontmatter / manifest."""
+    """Normalize meeting record fields used in frontmatter / manifest.
+
+    The MeetGeek list endpoint returns timestamps as `timestamp_start_utc`
+    / `timestamp_end_utc` (verified live 2026-05-06). Earlier versions of
+    this picker only checked `start_time` / `created_at`, which silently
+    produced `null` timestamps for every backfill entry. Now the
+    canonical API field is checked first, with `start_time` /
+    `created_at` retained as fallbacks for any older response shape.
+    """
     attendees = m.get("attendees") or m.get("participants") or []
     names = []
     for a in attendees:
@@ -166,13 +174,17 @@ def _meeting_pick(m: dict) -> dict:
             names.append(a.get("name") or a.get("email") or "")
         elif isinstance(a, str):
             names.append(a)
+    start_ts = (m.get("timestamp_start_utc")
+                or m.get("start_time")
+                or m.get("created_at"))
+    end_ts = m.get("timestamp_end_utc") or m.get("end_time")
     return {
         "meeting_id": m.get("id") or m.get("meeting_id"),
         "title": m.get("title") or m.get("name") or "",
         "attendees": [n for n in names if n],
-        "date": (m.get("start_time") or m.get("created_at") or "")[:10],
-        "timestamp_start_utc": m.get("start_time") or m.get("created_at"),
-        "timestamp_end_utc": m.get("end_time"),
+        "date": (start_ts or "")[:10],
+        "timestamp_start_utc": start_ts,
+        "timestamp_end_utc": end_ts,
         "duration_seconds": m.get("duration") or m.get("duration_seconds"),
         "language": m.get("language") or m.get("language_code"),
     }
