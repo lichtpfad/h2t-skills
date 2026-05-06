@@ -373,3 +373,54 @@ def test_frontmatter_list_with_special_chars(cli):
     val = cli._yaml_value(["A, B", "with: colon"])
     parsed = json.loads(val)
     assert parsed == ["A, B", "with: colon"]
+
+
+# ─── ffmpeg probe ──────────────────────────────────────────────────────────────
+
+def test_ffmpeg_probe_single_audio_stream(cli, monkeypatch):
+    """Single audio Stream line in stderr → audio_streams=1."""
+    fake_stderr = (
+        "ffmpeg version 6.0\n"
+        "  Stream #0:0(eng): Video: vp9, 1280x720, 30 fps\n"
+        "  Stream #0:1(eng): Audio: opus, 48000 Hz, stereo\n"
+        "Duration: 00:41:23.45\n"
+    )
+    class R:
+        returncode = 0
+        stderr = fake_stderr
+        stdout = ""
+    monkeypatch.setattr(cli.subprocess, "run", lambda *a, **kw: R())
+    info = cli._ffmpeg_probe("/fake/in.webm")
+    assert info["audio_streams"] == 1
+    assert info["has_video"] is True
+    assert info["duration_seconds"] == 41 * 60 + 23
+
+
+def test_ffmpeg_probe_multi_audio_streams(cli, monkeypatch):
+    fake_stderr = (
+        "  Stream #0:0: Video: h264, 1920x1080\n"
+        "  Stream #0:1(eng): Audio: aac, 48000 Hz, stereo\n"
+        "  Stream #0:2(rus): Audio: aac, 48000 Hz, stereo\n"
+        "  Stream #0:3: Audio: aac, 44100 Hz, mono\n"
+        "Duration: 01:00:00.00\n"
+    )
+    class R:
+        returncode = 0
+        stderr = fake_stderr
+        stdout = ""
+    monkeypatch.setattr(cli.subprocess, "run", lambda *a, **kw: R())
+    info = cli._ffmpeg_probe("/fake.mp4")
+    assert info["audio_streams"] == 3
+    assert info["has_video"] is True
+    assert info["duration_seconds"] == 3600
+
+
+def test_ffmpeg_probe_corrupted_raises(cli, monkeypatch):
+    class R:
+        returncode = 1
+        stderr = "Invalid data found when processing input\n"
+        stdout = ""
+    monkeypatch.setattr(cli.subprocess, "run", lambda *a, **kw: R())
+    import pytest as _pytest
+    with _pytest.raises(cli.ApiError):
+        cli._ffmpeg_probe("/broken.webm")
