@@ -60,6 +60,41 @@ $CLI download <meeting-id> [-o PATH]                        # recording
 
 If `-o` omitted: stdout. Otherwise writes to PATH.
 
+### Upload local recordings
+
+Three composable commands for `webm → mp4 → Drive → MeetGeek` flow.
+
+```bash
+# Convert (default: webm → mp4 H.264/AAC; multi-track audio → amix)
+$CLI convert <in.webm> [-o out.mp4] [--audio-only] [--mix-mode amix|first|keep] [--probe]
+
+# Upload to Drive (default folder: MeetGeek Uploads/{YYYY-MM-DD}/, share=anyone)
+$CLI drive-upload <file> [--folder "MeetGeek Uploads/2026-05-06"] [--no-make-public]
+
+# Submit one URL directly (presumes you already have a public URL)
+$CLI upload --download-url URL [--title T] [--language ru|en|auto]
+
+# Batch — convert + drive-upload + submit for many files
+$CLI upload --from-file '~/Downloads/meetgeek-recording-*.webm' \
+            [--audio-only] [--mix-mode amix|first|keep] \
+            [--language ru] [--no-skip-existing] [--dry-run]
+```
+
+State for resume lives in `~/.dor/lake/meetgeek/uploads-staging/`:
+- `{YYYY-MM-DD}/*.mp4` — converted cache (skip re-encode on retry)
+- `manifest.jsonl` — append-only state log; effective state per source = last line.
+
+Recipes:
+- One file end-to-end: `$CLI upload --from-file ~/Downloads/meetgeek-recording-2026-01-20T15-44-31-132Z.webm --language ru`
+- Backfill 16 files (default skip-existing keeps it idempotent): `$CLI upload --from-file '~/Downloads/meetgeek-recording-*.webm' --language ru`
+- Force re-process: append `--no-skip-existing` (Drive idempotent search and cached mp4 still avoid duplicate work).
+
+Dependencies (auto-installed once):
+```bash
+~/.h2t/venv/Scripts/python.exe -m pip install imageio-ffmpeg   # Windows
+~/.h2t/venv/bin/python -m pip install imageio-ffmpeg           # macOS
+```
+
 ### Bulk sync (главная команда)
 
 ```bash
