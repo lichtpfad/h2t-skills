@@ -486,3 +486,71 @@ def test_convert_corrupted_raises(cli, tmp_path, monkeypatch):
     monkeypatch.setattr(cli, "_ffmpeg_probe", bad_probe)
     rc = cli.main(["convert", str(src), "-o", str(tmp_path / "out.mp4")])
     assert rc == 1
+
+
+def test_convert_multi_track_uses_amix(cli, tmp_path, monkeypatch):
+    src = tmp_path / "in.webm"; src.write_bytes(b"x")
+    monkeypatch.setattr(cli, "_ffmpeg_probe",
+                        lambda p: {"audio_streams": 3, "has_video": True,
+                                   "duration_seconds": 60, "raw_stderr_tail": ""})
+    captured: dict = {}
+    def fake_run(cmd, **kw):
+        captured["cmd"] = cmd
+        from pathlib import Path as P
+        P(cmd[-1]).write_bytes(b"M" * 2048)
+        class R: returncode = 0; stderr = ""; stdout = ""
+        return R()
+    monkeypatch.setattr(cli.subprocess, "run", fake_run)
+
+    out = tmp_path / "out.mp4"
+    rc = cli.main(["convert", str(src), "-o", str(out)])
+    assert rc == 0
+    cmd = captured["cmd"]
+    fc_idx = cmd.index("-filter_complex")
+    filtergraph = cmd[fc_idx + 1]
+    assert "amix=inputs=3" in filtergraph
+    assert "[0:a:0][0:a:1][0:a:2]" in filtergraph
+    assert "duration=longest" in filtergraph
+    assert "aresample=48000" in filtergraph
+    assert '[a]' in cmd
+
+
+def test_convert_mix_mode_first_picks_first_stream(cli, tmp_path, monkeypatch):
+    src = tmp_path / "in.webm"; src.write_bytes(b"x")
+    monkeypatch.setattr(cli, "_ffmpeg_probe",
+                        lambda p: {"audio_streams": 3, "has_video": True,
+                                   "duration_seconds": 60, "raw_stderr_tail": ""})
+    captured = {}
+    def fake_run(cmd, **kw):
+        captured["cmd"] = cmd
+        from pathlib import Path as P
+        P(cmd[-1]).write_bytes(b"M" * 2048)
+        class R: returncode = 0; stderr = ""; stdout = ""
+        return R()
+    monkeypatch.setattr(cli.subprocess, "run", fake_run)
+
+    cli.main(["convert", str(src), "-o", str(tmp_path / "out.mp4"), "--mix-mode", "first"])
+    cmd = captured["cmd"]
+    assert "-filter_complex" not in cmd
+    assert "0:a:0" in cmd
+
+
+def test_convert_audio_only_strips_video_codec_flags(cli, tmp_path, monkeypatch):
+    src = tmp_path / "in.webm"; src.write_bytes(b"x")
+    monkeypatch.setattr(cli, "_ffmpeg_probe",
+                        lambda p: {"audio_streams": 1, "has_video": True,
+                                   "duration_seconds": 60, "raw_stderr_tail": ""})
+    captured = {}
+    def fake_run(cmd, **kw):
+        captured["cmd"] = cmd
+        from pathlib import Path as P
+        P(cmd[-1]).write_bytes(b"M" * 2048)
+        class R: returncode = 0; stderr = ""; stdout = ""
+        return R()
+    monkeypatch.setattr(cli.subprocess, "run", fake_run)
+
+    cli.main(["convert", str(src), "-o", str(tmp_path / "out.m4a"), "--audio-only"])
+    cmd = captured["cmd"]
+    assert "libx264" not in cmd
+    assert "-vn" in cmd
+    assert "aac" in cmd
