@@ -13,6 +13,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
 
@@ -772,3 +773,74 @@ def test_upload_from_file_chains_convert_drive_submit(cli, tmp_path, monkeypatch
     assert "2026-01-20" in (posted[0]["title"] or "")
     lines = manifest.read_text(encoding="utf-8").strip().splitlines()
     assert any('"status": "submitted"' in ln for ln in lines)
+
+
+def test_upload_from_file_glob_processes_all(cli, tmp_path, monkeypatch):
+    a = tmp_path / "meetgeek-recording-2026-01-01T10-00-00-000Z.webm"
+    b = tmp_path / "meetgeek-recording-2026-01-02T11-00-00-000Z.webm"
+    a.write_bytes(b"x" * 1024); b.write_bytes(b"x" * 1024)
+
+    posted = []
+    def fake_process(src, **kw):
+        posted.append(src.name)
+        return {"source_webm": str(src), "status": "submitted"}
+    monkeypatch.setattr(cli, "_process_one_for_upload", fake_process)
+
+    manifest = tmp_path / "manifest.jsonl"
+    monkeypatch.setattr(cli, "_uploads_manifest_path", lambda: manifest)
+
+    pattern = str(tmp_path / "meetgeek-recording-*.webm")
+    rc = cli.main(["upload", "--from-file", pattern])
+    assert rc == 0
+    assert sorted(posted) == [a.name, b.name]
+
+
+def test_upload_from_file_skip_existing(cli, tmp_path, monkeypatch):
+    src = tmp_path / "meetgeek-recording-2026-01-01T10-00-00-000Z.webm"
+    src.write_bytes(b"x" * 1024)
+
+    size = src.stat().st_size
+    mtime = datetime.fromtimestamp(src.stat().st_mtime, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    manifest = tmp_path / "manifest.jsonl"
+    manifest.write_text(json.dumps({
+        "source_webm": str(src.resolve()),
+        "source_size_bytes": size, "source_mtime": mtime, "status": "submitted",
+    }) + "\n", encoding="utf-8")
+
+    monkeypatch.setattr(cli, "_uploads_manifest_path", lambda: manifest)
+    called = {"n": 0}
+    monkeypatch.setattr(cli, "_process_one_for_upload",
+                        lambda *a, **kw: called.__setitem__("n", called["n"] + 1))
+
+    rc = cli.main(["upload", "--from-file", str(src)])
+    assert rc == 0
+    assert called["n"] == 0
+
+
+def test_upload_from_file_dry_run_no_calls(cli, tmp_path, monkeypatch):
+    src = tmp_path / "meetgeek-recording-2026-01-01T10-00-00-000Z.webm"
+    src.write_bytes(b"x" * 1024)
+    monkeypatch.setattr(cli, "_uploads_manifest_path", lambda: tmp_path / "m.jsonl")
+    called = {"n": 0}
+    monkeypatch.setattr(cli, "_process_one_for_upload",
+                        lambda *a, **kw: called.__setitem__("n", called["n"] + 1))
+    rc = cli.main(["upload", "--from-file", str(src), "--dry-run"])
+    assert rc == 0
+    assert called["n"] == 0
+
+
+def test_upload_from_file_continues_on_per_file_error(cli, tmp_path, monkeypatch):
+    a = tmp_path / "meetgeek-recording-2026-01-01T10-00-00-000Z.webm"
+    b = tmp_path / "meetgeek-recording-2026-01-02T10-00-00-000Z.webm"
+    c = tmp_path / "meetgeek-recording-2026-01-03T10-00-00-000Z.webm"
+    for f in (a, b, c): f.write_bytes(b"x" * 1024)
+
+    def proc(src, **kw):
+        if src.name == b.name:
+            raise cli.ApiError("boom on B", exit_code=1)
+        return {"source_webm": str(src), "status": "submitted"}
+    monkeypatch.setattr(cli, "_process_one_for_upload", proc)
+    monkeypatch.setattr(cli, "_uploads_manifest_path", lambda: tmp_path / "m.jsonl")
+
+    rc = cli.main(["upload", "--from-file", str(tmp_path / "meetgeek-recording-*.webm")])
+    assert rc == 1  # errors > 0

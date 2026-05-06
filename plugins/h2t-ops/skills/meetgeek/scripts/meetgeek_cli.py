@@ -13,6 +13,7 @@ Base URL: MEETGEEK_BASE_URL env, default https://api.meetgeek.ai.
 from __future__ import annotations
 
 import argparse
+import glob
 import json
 import os
 import subprocess
@@ -944,22 +945,66 @@ def cmd_upload(args: argparse.Namespace) -> int:
     if not args.from_file:
         raise ApiError("either --download-url or --from-file required", exit_code=2)
 
-    src_path = Path(args.from_file).expanduser()
-    if not src_path.exists() or not src_path.is_file():
-        raise ApiError(f"--from-file expects an existing file (glob is Task 11): {src_path}",
-                       exit_code=1)
+    raw = args.from_file
+    raw_path = Path(raw).expanduser()
+    if raw_path.is_dir():
+        # Directory mode: recursive *.webm walk
+        expanded = sorted(raw_path.rglob("*.webm"))
+    elif raw_path.is_file():
+        # Direct file path
+        expanded = [raw_path]
+    else:
+        # Glob fallback (string contains wildcard or path doesn't exist as-is)
+        expanded = sorted(Path(p) for p in glob.glob(str(raw_path), recursive=True))
+    if not expanded:
+        raise ApiError(f"no files match: {raw}", exit_code=1)
 
     manifest_path = _uploads_manifest_path()
-    final = _process_one_for_upload(
-        src_path,
-        language=args.language,
-        title_override=args.title,
-        audio_only=args.audio_only,
-        mix_mode=args.mix_mode,
-        manifest_path=manifest_path,
-    )
-    _print_json({"processed": 1, "skipped": 0, "errors": 0, "result": final})
-    return 0
+    state = _read_uploads_manifest(manifest_path)
+    processed = 0
+    skipped = 0
+    errors = 0
+    results: list[dict] = []
+    total = len(expanded)
+    for i, src_path in enumerate(expanded, 1):
+        if not src_path.is_file():
+            continue
+        size = src_path.stat().st_size
+        mtime = datetime.fromtimestamp(src_path.stat().st_mtime, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        if args.skip_existing and _is_already_submitted(state, str(src_path.resolve()),
+                                                        size=size, mtime=mtime):
+            print(f"[{i}/{total}] {src_path.name}  skip (already submitted)", file=sys.stderr)
+            skipped += 1
+            continue
+        if args.dry_run:
+            print(f"[{i}/{total}] {src_path.name}  would: convert+drive+upload", file=sys.stderr)
+            continue
+        try:
+            print(f"[{i}/{total}] {src_path.name}  convert ...", file=sys.stderr)
+            final = _process_one_for_upload(
+                src_path,
+                language=args.language,
+                title_override=args.title,
+                audio_only=args.audio_only,
+                mix_mode=args.mix_mode,
+                manifest_path=manifest_path,
+            )
+            results.append(final)
+            processed += 1
+            print(f"[{i}/{total}] {src_path.name}  ✓ submitted", file=sys.stderr)
+        except ApiError as e:
+            print(f"[{i}/{total}] {src_path.name}  ✗ {e}", file=sys.stderr)
+            errors += 1
+            # Per-stage handler in _process_one_for_upload already wrote the
+            # appropriate convert-failed / drive-failed / upload-rejected entry
+            # to manifest. Don't add a synthetic "upload-failed" line — it
+            # would drift from the spec's status enum.
+            continue
+
+    _print_json({"processed": processed, "skipped": skipped, "errors": errors,
+                 "drive_folder": f"{DRIVE_ROOT_FOLDER_NAME}/{datetime.now(timezone.utc).strftime('%Y-%m-%d')}",
+                 "results_count": len(results)})
+    return 0 if errors == 0 else 1
 
 
 # ─── Sync pipeline ────────────────────────────────────────────────────────────
@@ -1277,6 +1322,10 @@ def build_parser() -> argparse.ArgumentParser:
                    help="Language hint (ru, en, auto, etc.)")
     s.add_argument("--audio-only", action="store_true")
     s.add_argument("--mix-mode", choices=["amix", "first", "keep"], default="amix")
+    s.add_argument("--skip-existing", action=argparse.BooleanOptionalAction, default=True,
+                   help="Skip files already in manifest with status=submitted (default on)")
+    s.add_argument("--dry-run", action="store_true",
+                   help="Print plan; do not convert/upload")
     s.set_defaults(func=cmd_upload)
 
     s = sub.add_parser("sync", help="Bulk pull to LAKE_PATH (manifest.jsonl + per-asset folders)")
