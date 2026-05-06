@@ -64,7 +64,7 @@
     {
       "name": "h2t-creative",
       "description": "H2T Creative v2 — modular landing pages and decks: Swiss grid base, swappable profiles, Python assembler, Playwright QA.",
-      "version": "1.2.0",
+      "version": "1.3.0",
       "author": {
         "name": "lichtpfad"
       },
