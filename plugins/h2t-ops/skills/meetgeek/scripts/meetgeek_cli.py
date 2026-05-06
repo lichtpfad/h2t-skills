@@ -738,6 +738,51 @@ def cmd_drive_upload(args: argparse.Namespace) -> int:
     return 0
 
 
+# ─── Uploads manifest ────────────────────────────────────────────────────────
+
+def _uploads_manifest_path() -> Path:
+    return Path.home() / ".dor" / "lake" / "meetgeek" / "uploads-staging" / "manifest.jsonl"
+
+
+def _read_uploads_manifest(path: Path | None = None) -> dict[str, dict]:
+    """Last-line-wins per source_webm. Returns {source_path: latest_record_dict}."""
+    if path is None:
+        path = _uploads_manifest_path()
+    state: dict[str, dict] = {}
+    if not path.exists():
+        return state
+    with path.open(encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                rec = json.loads(line)
+            except ValueError:
+                continue
+            src = rec.get("source_webm")
+            if src:
+                state[src] = rec
+    return state
+
+
+def _append_uploads_manifest(record: dict, path: Path | None = None) -> None:
+    if path is None:
+        path = _uploads_manifest_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(record, ensure_ascii=False) + "\n")
+
+
+def _is_already_submitted(state: dict[str, dict], source: str, *,
+                          size: int, mtime: str) -> bool:
+    rec = state.get(source)
+    if not rec or rec.get("status") != "submitted":
+        return False
+    return (rec.get("source_size_bytes") == size
+            and rec.get("source_mtime") == mtime)
+
+
 # ─── Upload commands ─────────────────────────────────────────────────────────
 
 def _post_upload(download_url: str, title: str | None, language: str | None) -> dict:
