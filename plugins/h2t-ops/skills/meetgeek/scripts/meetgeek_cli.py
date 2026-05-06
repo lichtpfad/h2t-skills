@@ -517,8 +517,32 @@ def _build_convert_cmd(input_path: str, output_path: str, *,
                 if k in argv:
                     argv.remove(k)
         return argv
-    # Multi-track amix: implemented in Task 4
-    raise ApiError("multi-track convert not yet implemented", exit_code=2)
+    # Multi-track amix
+    if mix_mode == "keep":
+        argv = [exe, "-y", "-hide_banner", "-i", input_path,
+                "-map", "0", "-c:v", "libx264", "-preset", "medium", "-crf", "23",
+                "-c:a", "aac", "-b:a", "192k", output_path]
+        if audio_only:
+            argv = [a for a in argv if a not in ("-c:v", "libx264", "-preset", "medium", "-crf", "23")]
+            argv.insert(argv.index("-i") + 2, "-vn")
+        return argv
+
+    # mix_mode == "amix"
+    n = probe["audio_streams"]
+    inputs = "".join(f"[0:a:{i}]" for i in range(n))
+    filtergraph = (
+        f"{inputs}amix=inputs={n}:duration=longest:dropout_transition=0,"
+        f"aresample=48000[a]"
+    )
+    argv = [exe, "-y", "-hide_banner", "-i", input_path,
+            "-filter_complex", filtergraph]
+    if audio_only:
+        argv += ["-map", "[a]", "-c:a", "aac", "-b:a", "192k", "-ac", "2", output_path]
+    else:
+        argv += ["-map", "0:v?", "-map", "[a]",
+                 "-c:v", "libx264", "-preset", "medium", "-crf", "23",
+                 "-c:a", "aac", "-b:a", "192k", "-ac", "2", output_path]
+    return argv
 
 
 def cmd_convert(args: argparse.Namespace) -> int:
