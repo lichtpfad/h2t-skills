@@ -844,3 +844,126 @@ def test_upload_from_file_continues_on_per_file_error(cli, tmp_path, monkeypatch
 
     rc = cli.main(["upload", "--from-file", str(tmp_path / "meetgeek-recording-*.webm")])
     assert rc == 1  # errors > 0
+
+
+# ─── resume + directory + per-stage failure ──────────────────────────────────
+
+def test_upload_resumes_from_converted_state(cli, tmp_path, monkeypatch):
+    src = tmp_path / "meetgeek-recording-2026-01-01T10-00-00-000Z.webm"
+    src.write_bytes(b"x" * 1024)
+    size = src.stat().st_size
+    mtime = datetime.fromtimestamp(src.stat().st_mtime, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    cached_mp4 = tmp_path / "cached.mp4"
+    cached_mp4.write_bytes(b"M" * 2048)
+
+    manifest = tmp_path / "manifest.jsonl"
+    manifest.write_text(json.dumps({
+        "source_webm": str(src.resolve()),
+        "source_size_bytes": size, "source_mtime": mtime,
+        "mp4_path": str(cached_mp4), "mp4_size_bytes": 2048,
+        "status": "converted",
+    }) + "\n", encoding="utf-8")
+    monkeypatch.setattr(cli, "_uploads_manifest_path", lambda: manifest)
+
+    convert_called = {"n": 0}
+    def fake_convert(ns):
+        convert_called["n"] += 1
+        return 0
+    monkeypatch.setattr(cli, "cmd_convert", fake_convert)
+
+    monkeypatch.setattr(cli, "_drive_upload_file",
+                        lambda path, **kw: {"drive_id": "DID",
+                                            "download_url": "https://x/d",
+                                            "web_url": "https://x/w", "created": True})
+    monkeypatch.setattr(cli, "_post_upload",
+                        lambda url, title, lang: {"message": "ok"})
+
+    rc = cli.main(["upload", "--from-file", str(src), "--language", "ru", "--no-skip-existing"])
+    assert rc == 0
+    assert convert_called["n"] == 0  # convert skipped via resume
+
+
+def test_upload_resumes_from_in_drive_state(cli, tmp_path, monkeypatch):
+    src = tmp_path / "meetgeek-recording-2026-01-01T10-00-00-000Z.webm"
+    src.write_bytes(b"x" * 1024)
+    size = src.stat().st_size
+    mtime = datetime.fromtimestamp(src.stat().st_mtime, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    cached_mp4 = tmp_path / "cached.mp4"
+    cached_mp4.write_bytes(b"M" * 2048)
+
+    manifest = tmp_path / "manifest.jsonl"
+    manifest.write_text(json.dumps({
+        "source_webm": str(src.resolve()),
+        "source_size_bytes": size, "source_mtime": mtime,
+        "mp4_path": str(cached_mp4), "mp4_size_bytes": 2048,
+        "drive_id": "EXISTING_DID",
+        "drive_download_url": "https://drive.google.com/uc?export=download&id=EXISTING_DID",
+        "status": "in-drive",
+    }) + "\n", encoding="utf-8")
+    monkeypatch.setattr(cli, "_uploads_manifest_path", lambda: manifest)
+
+    convert_called = {"n": 0}
+    drive_called = {"n": 0}
+    monkeypatch.setattr(cli, "cmd_convert",
+                        lambda ns: convert_called.__setitem__("n", convert_called["n"] + 1) or 0)
+    monkeypatch.setattr(cli, "_drive_upload_file",
+                        lambda path, **kw: drive_called.__setitem__("n", drive_called["n"] + 1) or {})
+
+    posted = []
+    monkeypatch.setattr(cli, "_post_upload",
+                        lambda url, title, lang: posted.append({"url": url}) or {"message": "ok"})
+
+    rc = cli.main(["upload", "--from-file", str(src), "--language", "ru", "--no-skip-existing"])
+    assert rc == 0
+    assert convert_called["n"] == 0
+    assert drive_called["n"] == 0
+    assert len(posted) == 1
+    assert posted[0]["url"] == "https://drive.google.com/uc?export=download&id=EXISTING_DID"
+
+
+def test_upload_drive_failure_writes_drive_failed_status(cli, tmp_path, monkeypatch):
+    src = tmp_path / "meetgeek-recording-2026-01-01T10-00-00-000Z.webm"
+    src.write_bytes(b"x" * 1024)
+    manifest = tmp_path / "manifest.jsonl"
+    monkeypatch.setattr(cli, "_uploads_manifest_path", lambda: manifest)
+
+    def fake_convert(ns):
+        from pathlib import Path as P
+        out = P(ns.output)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_bytes(b"M" * 2048)
+        return 0
+    monkeypatch.setattr(cli, "cmd_convert", fake_convert)
+
+    def boom(*a, **kw):
+        raise cli.ApiError("drive boom", exit_code=1)
+    monkeypatch.setattr(cli, "_drive_upload_file", boom)
+
+    rc = cli.main(["upload", "--from-file", str(src)])
+    assert rc == 1
+    lines = [json.loads(ln) for ln in manifest.read_text(encoding="utf-8").strip().splitlines()]
+    statuses = [r["status"] for r in lines]
+    assert "converted" in statuses
+    assert "drive-failed" in statuses
+    assert "upload-failed" not in statuses  # spec enum compliance — synthetic status forbidden
+    assert "upload-rejected" not in statuses  # drive failure ≠ upload failure
+
+
+def test_upload_from_file_directory_walks_recursively(cli, tmp_path, monkeypatch):
+    nested = tmp_path / "nested"
+    nested.mkdir()
+    a = tmp_path / "meetgeek-recording-2026-01-01T10-00-00-000Z.webm"
+    b = nested / "meetgeek-recording-2026-01-02T10-00-00-000Z.webm"
+    for f in (a, b):
+        f.write_bytes(b"x" * 1024)
+
+    seen = []
+    monkeypatch.setattr(cli, "_process_one_for_upload",
+                        lambda src, **kw: seen.append(src.name) or {"status": "submitted"})
+    monkeypatch.setattr(cli, "_uploads_manifest_path", lambda: tmp_path / "m.jsonl")
+
+    rc = cli.main(["upload", "--from-file", str(tmp_path)])
+    assert rc == 0
+    assert sorted(seen) == [a.name, b.name]
