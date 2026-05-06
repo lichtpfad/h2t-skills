@@ -684,7 +684,18 @@ def _drive_make_public(svc, file_id: str) -> None:
 
 
 def _drive_download_url(file_id: str) -> str:
-    return f"https://drive.google.com/uc?export=download&id={file_id}"
+    """Anonymous public-link URL that returns the file content (not the
+    'virus-scan warning' HTML page). The legacy `drive.google.com/uc?...`
+    pattern works only for files <100 MB; for larger files Google serves
+    an HTML interstitial and ignores `confirm=t` on that host. The
+    `drive.usercontent.google.com/download?...&confirm=t` form is the
+    direct download endpoint and works for both small and large files.
+    Verified live 2026-05-06 on 22 MB and 124 MB mp4 → both 200 video/mp4.
+    """
+    return (
+        "https://drive.usercontent.google.com/download"
+        f"?id={file_id}&export=download&confirm=t"
+    )
 
 
 def _drive_upload_file(path: Path, folder: str | None = None,
