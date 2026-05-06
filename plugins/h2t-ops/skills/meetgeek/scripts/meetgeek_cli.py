@@ -642,6 +642,97 @@ def _drive_service():
     return build("drive", "v3", credentials=creds)
 
 
+def _drive_find_or_create_folder(svc, name: str, parent_id: str | None = None) -> str:
+    """Return folder id; create if missing under parent (or root if parent is None)."""
+    parent_clause = f" and '{parent_id}' in parents" if parent_id else " and 'root' in parents"
+    q = (
+        f"name = '{name}' and mimeType = 'application/vnd.google-apps.folder' "
+        f"and trashed = false{parent_clause}"
+    )
+    res = svc.files().list(q=q, fields="files(id,name)", pageSize=1).execute()
+    files = res.get("files", [])
+    if files:
+        return files[0]["id"]
+    body = {"name": name, "mimeType": "application/vnd.google-apps.folder"}
+    if parent_id:
+        body["parents"] = [parent_id]
+    created = svc.files().create(body=body, fields="id").execute()
+    return created["id"]
+
+
+def _drive_find_file(svc, name: str, folder_id: str) -> dict | None:
+    q = f"name = '{name}' and '{folder_id}' in parents and trashed = false"
+    res = svc.files().list(q=q, fields="files(id,name,webViewLink)", pageSize=1).execute()
+    files = res.get("files", [])
+    return files[0] if files else None
+
+
+def _drive_make_public(svc, file_id: str) -> None:
+    svc.permissions().create(
+        fileId=file_id,
+        body={"type": "anyone", "role": "reader"},
+        fields="id",
+    ).execute()
+
+
+def _drive_download_url(file_id: str) -> str:
+    return f"https://drive.google.com/uc?export=download&id={file_id}"
+
+
+def cmd_drive_upload(args: argparse.Namespace) -> int:
+    src = Path(args.file).expanduser().resolve()
+    if not src.exists():
+        raise ApiError(f"file not found: {src}", exit_code=1)
+
+    svc = _drive_service()
+
+    if args.folder:
+        parts = [p for p in args.folder.replace("\\", "/").split("/") if p]
+    else:
+        date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        parts = [DRIVE_ROOT_FOLDER_NAME, date]
+
+    parent_id: str | None = None
+    for part in parts:
+        parent_id = _drive_find_or_create_folder(svc, part, parent_id)
+    folder_id = parent_id
+
+    existing = _drive_find_file(svc, src.name, folder_id)
+    if existing:
+        if args.make_public:
+            try:
+                _drive_make_public(svc, existing["id"])
+            except Exception:  # noqa: BLE001 — already public is fine
+                pass
+        out = {
+            "drive_id": existing["id"],
+            "web_url": existing.get("webViewLink"),
+            "download_url": _drive_download_url(existing["id"]),
+            "created": False,
+        }
+        _print_json(out)
+        return 0
+
+    try:
+        from googleapiclient.http import MediaFileUpload
+    except ImportError as e:
+        raise ApiError(f"googleapiclient missing: {e}", exit_code=2)
+    media = MediaFileUpload(str(src), resumable=True)
+    body = {"name": src.name, "parents": [folder_id]}
+    file = svc.files().create(body=body, media_body=media,
+                              fields="id,webViewLink").execute()
+    if args.make_public:
+        _drive_make_public(svc, file["id"])
+    out = {
+        "drive_id": file["id"],
+        "web_url": file.get("webViewLink"),
+        "download_url": _drive_download_url(file["id"]),
+        "created": True,
+    }
+    _print_json(out)
+    return 0
+
+
 # ─── Sync pipeline ────────────────────────────────────────────────────────────
 
 def _load_cursor(path: Path) -> dict:
@@ -937,6 +1028,14 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--probe", action="store_true",
                    help="Print probe info as JSON and exit")
     s.set_defaults(func=cmd_convert)
+
+    s = sub.add_parser("drive-upload", help="Upload a file to Drive (idempotent by name)")
+    s.add_argument("file")
+    s.add_argument("--folder", default=None,
+                   help="Path like 'MeetGeek Uploads/2026-05-06'; default: MeetGeek Uploads/{today UTC}")
+    s.add_argument("--make-public", action=argparse.BooleanOptionalAction, default=True,
+                   help="Set permissions to anyone-with-link reader (default on)")
+    s.set_defaults(func=cmd_drive_upload)
 
     s = sub.add_parser("sync", help="Bulk pull to LAKE_PATH (manifest.jsonl + per-asset folders)")
     s.add_argument("--to", required=True, help="Lake destination (e.g. ~/.dor/lake/meetgeek/historical/)")

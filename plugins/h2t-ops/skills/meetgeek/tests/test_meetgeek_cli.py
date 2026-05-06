@@ -564,3 +564,77 @@ def test_drive_service_raises_when_token_missing(cli, tmp_path, monkeypatch):
     with _p.raises(cli.ApiError) as e:
         cli._drive_service()
     assert "tokens.json" in str(e.value).lower() or "drive auth" in str(e.value).lower()
+
+
+def test_drive_upload_idempotent_returns_existing(cli, tmp_path, monkeypatch):
+    file_path = tmp_path / "test.mp4"; file_path.write_bytes(b"M" * 1024)
+
+    folder_resp = {"files": [{"id": "FOLDER123", "name": "MeetGeek Uploads"}]}
+    dated_resp = {"files": [{"id": "DATED456", "name": "2026-05-06"}]}
+    file_resp = {"files": [{"id": "EXISTING789", "name": "test.mp4",
+                            "webViewLink": "https://drive.google.com/file/d/EXISTING789"}]}
+    responses = [folder_resp, dated_resp, file_resp]
+
+    class FakeService:
+        def files(self): return self
+        def list(self, **kw):
+            self._resp = responses.pop(0); return self
+        def execute(self): return self._resp
+        def permissions(self):
+            class _P:
+                def create(self, **kw):
+                    class _R:
+                        def execute(self): return {"id": "perm_x"}
+                    return _R()
+            return _P()
+
+    monkeypatch.setattr(cli, "_drive_service", lambda: FakeService())
+
+    rc = cli.main(["drive-upload", str(file_path)])
+    assert rc == 0
+
+
+def test_drive_upload_creates_dated_folder_and_uploads(cli, tmp_path, monkeypatch):
+    file_path = tmp_path / "x.mp4"; file_path.write_bytes(b"M" * 1024)
+    state = {"folders": {}, "files": {}, "perm_calls": []}
+
+    class _FakePerms:
+        def __init__(self, s): self.s = s
+        def create(self, fileId, body, fields=None):
+            self.s["perm_calls"].append((fileId, body))
+            class _R:
+                def execute(_): return {"id": "perm_x"}
+            return _R()
+
+    class FakeService:
+        def files(self): return self
+        def list(self, q, **kw):
+            self._mode = ("folder" if "folder" in q else "file")
+            return self
+        def create(self, body, fields=None, media_body=None):
+            self._create_body = body
+            return self
+        def permissions(self): return _FakePerms(state)
+        def execute(self):
+            if getattr(self, "_create_body", None):
+                b = self._create_body; self._create_body = None
+                if b.get("mimeType") == "application/vnd.google-apps.folder":
+                    new_id = f"FOLDER_{b['name']}"
+                    state["folders"][b["name"]] = new_id
+                    return {"id": new_id}
+                else:
+                    new_id = f"FILE_{b['name']}"
+                    state["files"][b["name"]] = new_id
+                    return {"id": new_id, "webViewLink": f"https://drive/{new_id}"}
+            return {"files": []}
+
+    monkeypatch.setattr(cli, "_drive_service", lambda: FakeService())
+    # MediaFileUpload imported lazily inside cmd_drive_upload — patch via googleapiclient.http
+    import googleapiclient.http as _ghttp
+    monkeypatch.setattr(_ghttp, "MediaFileUpload", lambda *a, **kw: object())
+
+    rc = cli.main(["drive-upload", str(file_path)])
+    assert rc == 0
+    assert any(f.startswith("FILE_") for f in state["files"].values())
+    assert len(state["perm_calls"]) == 1
+    assert state["perm_calls"][0][1] == {"type": "anyone", "role": "reader"}
