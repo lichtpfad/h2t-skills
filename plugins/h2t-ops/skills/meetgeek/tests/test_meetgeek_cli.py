@@ -632,6 +632,16 @@ def test_convert_audio_only_strips_video_codec_flags(cli, tmp_path, monkeypatch)
 
 # ─── drive upload ──────────────────────────────────────────────────────────────
 
+def test_drive_download_url_uses_usercontent_with_confirm(cli):
+    """Regression: large Drive files (>100 MB) need usercontent host +
+    confirm=t to bypass virus-scan HTML interstitial. Live-verified that
+    drive.google.com/uc?... returns text/html for big files."""
+    url = cli._drive_download_url("ABC123")
+    assert "drive.usercontent.google.com/download" in url
+    assert "id=ABC123" in url
+    assert "confirm=t" in url
+
+
 def test_drive_service_raises_when_token_missing(cli, tmp_path, monkeypatch):
     monkeypatch.setattr(cli, "DRIVE_TOKEN_FILE", tmp_path / "missing.json")
     import pytest as _p
