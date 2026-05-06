@@ -979,7 +979,10 @@ def test_upload_resumes_from_in_drive_state(cli, tmp_path, monkeypatch):
     assert convert_called["n"] == 0
     assert drive_called["n"] == 0
     assert len(posted) == 1
-    assert posted[0]["url"] == "https://drive.google.com/uc?export=download&id=EXISTING_DID"
+    # URL is regenerated from drive_id, not reused from cached manifest line —
+    # this lets old entries pick up newer URL patterns (e.g. virus-scan bypass).
+    assert "id=EXISTING_DID" in posted[0]["url"]
+    assert "drive.usercontent.google.com" in posted[0]["url"]
 
 
 def test_upload_drive_failure_writes_drive_failed_status(cli, tmp_path, monkeypatch):

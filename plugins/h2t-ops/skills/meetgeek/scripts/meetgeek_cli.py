@@ -894,9 +894,13 @@ def _process_one_for_upload(src_path: Path, *, language: str | None,
         and rec.get("drive_download_url")
     )
     if can_skip_drive:
+        # Regenerate URL from drive_id rather than reusing the cached value.
+        # The URL pattern is logic, not state — recomputing it lets old
+        # manifest entries pick up newer URL fixes (e.g. the >100MB
+        # virus-scan-bypass switch to drive.usercontent.google.com).
         drive_info = {
             "drive_id": rec["drive_id"],
-            "download_url": rec["drive_download_url"],
+            "download_url": _drive_download_url(rec["drive_id"]),
             "web_url": rec.get("drive_web_url"),
             "created": False,
         }
