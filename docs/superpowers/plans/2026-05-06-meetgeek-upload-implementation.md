@@ -1363,43 +1363,109 @@ def _process_one_for_upload(src_path: Path, *, language: str | None,
                             title_override: str | None,
                             audio_only: bool, mix_mode: str,
                             manifest_path: Path) -> dict:
-    """Run convert → drive_upload → POST /v1/upload for ONE file. Append manifest at each stage. Returns final record."""
+    """Run convert → drive → submit. Skips already-completed stages by
+    consulting effective state in manifest. On per-stage failure writes
+    `convert-failed` / `drive-failed` / `upload-rejected` then re-raises.
+    """
     src = src_path.resolve()
     src_size = src.stat().st_size
     src_mtime = datetime.fromtimestamp(src.stat().st_mtime, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    base_meta = {
+        "source_webm": str(src),
+        "source_size_bytes": src_size,
+        "source_mtime": src_mtime,
+    }
 
-    # 1) Convert (delegate to cmd_convert for path-resolution + cache logic)
+    # Read effective state for resume decisions
+    state = _read_uploads_manifest(manifest_path)
+    rec = state.get(str(src), {}) or {}
+    rec_status = rec.get("status")
     suffix = ".m4a" if audio_only else ".mp4"
-    out_dir = _staging_dir()
-    out_dir.mkdir(parents=True, exist_ok=True)
-    mp4_path = out_dir / (src.stem + suffix)
-    convert_ns = argparse.Namespace(
-        input=str(src), output=str(mp4_path),
-        audio_only=audio_only, mix_mode=mix_mode, probe=False,
+    mp4_path = _staging_dir() / (src.stem + suffix)
+    mp4_size: int
+
+    # ── Stage 1: Convert ──────────────────────────────────────────────────
+    cached_mp4 = rec.get("mp4_path")
+    can_skip_convert = (
+        rec_status in ("converted", "in-drive", "submitted")
+        and cached_mp4
+        and Path(cached_mp4).exists()
+        and Path(cached_mp4).stat().st_size > 1024
     )
-    cmd_convert(convert_ns)
-    mp4_size = mp4_path.stat().st_size
-    _append_uploads_manifest({
-        "source_webm": str(src), "source_size_bytes": src_size, "source_mtime": src_mtime,
-        "mp4_path": str(mp4_path), "mp4_size_bytes": mp4_size,
-        "status": "converted",
-    }, manifest_path)
+    if can_skip_convert:
+        mp4_path = Path(cached_mp4)
+        mp4_size = mp4_path.stat().st_size
+        print(f"  [resume] convert ✓ (cached {mp4_path.name})", file=sys.stderr)
+    else:
+        try:
+            mp4_path.parent.mkdir(parents=True, exist_ok=True)
+            cmd_convert(argparse.Namespace(
+                input=str(src), output=str(mp4_path),
+                audio_only=audio_only, mix_mode=mix_mode, probe=False,
+            ))
+            mp4_size = mp4_path.stat().st_size
+            _append_uploads_manifest({
+                **base_meta,
+                "mp4_path": str(mp4_path), "mp4_size_bytes": mp4_size,
+                "status": "converted",
+            }, manifest_path)
+        except ApiError as e:
+            _append_uploads_manifest({
+                **base_meta,
+                "status": "convert-failed", "error": str(e),
+            }, manifest_path)
+            raise
 
-    # 2) Drive upload
-    drive_info = _drive_upload_file(mp4_path)
-    _append_uploads_manifest({
-        "source_webm": str(src), "source_size_bytes": src_size, "source_mtime": src_mtime,
-        "mp4_path": str(mp4_path), "mp4_size_bytes": mp4_size,
-        "drive_id": drive_info["drive_id"],
-        "drive_download_url": drive_info["download_url"],
-        "status": "in-drive",
-    }, manifest_path)
+    # ── Stage 2: Drive upload ─────────────────────────────────────────────
+    can_skip_drive = (
+        rec_status in ("in-drive", "submitted")
+        and rec.get("drive_id")
+        and rec.get("drive_download_url")
+    )
+    if can_skip_drive:
+        drive_info = {
+            "drive_id": rec["drive_id"],
+            "download_url": rec["drive_download_url"],
+            "web_url": rec.get("drive_web_url"),
+            "created": False,
+        }
+        print(f"  [resume] drive ✓ (cached {drive_info['drive_id']})", file=sys.stderr)
+    else:
+        try:
+            drive_info = _drive_upload_file(mp4_path)
+            _append_uploads_manifest({
+                **base_meta,
+                "mp4_path": str(mp4_path), "mp4_size_bytes": mp4_size,
+                "drive_id": drive_info["drive_id"],
+                "drive_download_url": drive_info["download_url"],
+                "drive_web_url": drive_info.get("web_url"),
+                "status": "in-drive",
+            }, manifest_path)
+        except ApiError as e:
+            _append_uploads_manifest({
+                **base_meta,
+                "mp4_path": str(mp4_path), "mp4_size_bytes": mp4_size,
+                "status": "drive-failed", "error": str(e),
+            }, manifest_path)
+            raise
 
-    # 3) POST /v1/upload
+    # ── Stage 3: Submit ───────────────────────────────────────────────────
     title = title_override or _title_from_filename(src.stem)
-    resp = _post_upload(drive_info["download_url"], title, language)
+    try:
+        resp = _post_upload(drive_info["download_url"], title, language)
+    except ApiError as e:
+        _append_uploads_manifest({
+            **base_meta,
+            "mp4_path": str(mp4_path), "mp4_size_bytes": mp4_size,
+            "drive_id": drive_info["drive_id"],
+            "drive_download_url": drive_info["download_url"],
+            "title": title, "language": language,
+            "status": "upload-rejected", "error": str(e),
+        }, manifest_path)
+        raise
+
     final = {
-        "source_webm": str(src), "source_size_bytes": src_size, "source_mtime": src_mtime,
+        **base_meta,
         "mp4_path": str(mp4_path), "mp4_size_bytes": mp4_size,
         "drive_id": drive_info["drive_id"],
         "drive_download_url": drive_info["download_url"],
@@ -1504,14 +1570,18 @@ In `cmd_upload`, replace the `if not src_path.exists() ...` block with:
 
 ```python
     raw = args.from_file
-    expanded = sorted(Path(p) for p in glob.glob(str(Path(raw).expanduser()), recursive=True))
+    raw_path = Path(raw).expanduser()
+    if raw_path.is_dir():
+        # Directory mode: recursive *.webm walk
+        expanded = sorted(raw_path.rglob("*.webm"))
+    elif raw_path.is_file():
+        # Direct file path
+        expanded = [raw_path]
+    else:
+        # Glob fallback (string contains wildcard or path doesn't exist as-is)
+        expanded = sorted(Path(p) for p in glob.glob(str(raw_path), recursive=True))
     if not expanded:
-        # Allow direct file path (no glob magic)
-        candidate = Path(raw).expanduser()
-        if candidate.is_file():
-            expanded = [candidate]
-        else:
-            raise ApiError(f"no files match: {raw}", exit_code=1)
+        raise ApiError(f"no files match: {raw}", exit_code=1)
 
     manifest_path = _uploads_manifest_path()
     state = _read_uploads_manifest(manifest_path)
@@ -1549,13 +1619,10 @@ In `cmd_upload`, replace the `if not src_path.exists() ...` block with:
         except ApiError as e:
             print(f"[{i}/{total}] {src_path.name}  ✗ {e}", file=sys.stderr)
             errors += 1
-            # error-status entry already appended (or partial); record final fail line
-            _append_uploads_manifest({
-                "source_webm": str(src_path.resolve()),
-                "source_size_bytes": size, "source_mtime": mtime,
-                "status": "upload-failed",
-                "error": str(e),
-            }, manifest_path)
+            # Per-stage handler in _process_one_for_upload already wrote the
+            # appropriate convert-failed / drive-failed / upload-rejected entry
+            # to manifest. Don't add a synthetic "upload-failed" line — it
+            # would drift from the spec's status enum.
             continue
 
     _print_json({"processed": processed, "skipped": skipped, "errors": errors,
@@ -1662,54 +1729,166 @@ git -C C:/dev/h2t-skills commit -m "feat(h2t-ops): meetgeek upload --from-file g
 
 ---
 
-## Task 12: Resume from intermediate states
+## Task 12: Resume tests + directory-input test
 
-Confirm `--no-skip-existing` still benefits from cached mp4 (convert) and idempotent Drive (no re-upload).
+Resume logic itself was added inline in Task 10's `_process_one_for_upload` (the `can_skip_convert` / `can_skip_drive` branches and per-stage failure status writes). This task locks the behaviour down with TDD coverage and adds the directory-input case missing from the glob test in Task 11.
 
 **Files:**
-- Modify: tests only (logic already in place via cached-mp4 + idempotent Drive search)
+- Test: `plugins/h2t-ops/skills/meetgeek/tests/test_meetgeek_cli.py`
 
-- [ ] **Step 1: Test — `--no-skip-existing` re-runs but reuses cached mp4 and Drive entry**
+- [ ] **Step 1: Resume from `converted` state — convert is skipped**
 
 ```python
-def test_upload_no_skip_existing_reuses_cache(cli, tmp_path, monkeypatch):
+def test_upload_resumes_from_converted_state(cli, tmp_path, monkeypatch):
     src = tmp_path / "meetgeek-recording-2026-01-01T10-00-00-000Z.webm"
     src.write_bytes(b"x" * 1024)
     size = src.stat().st_size
     mtime = datetime.fromtimestamp(src.stat().st_mtime, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
-    # Pre-populate manifest with submitted entry — but we override --no-skip-existing
+    cached_mp4 = tmp_path / "cached.mp4"
+    cached_mp4.write_bytes(b"M" * 2048)
+
     manifest = tmp_path / "manifest.jsonl"
     manifest.write_text(json.dumps({
         "source_webm": str(src.resolve()),
-        "source_size_bytes": size, "source_mtime": mtime, "status": "submitted",
+        "source_size_bytes": size, "source_mtime": mtime,
+        "mp4_path": str(cached_mp4), "mp4_size_bytes": 2048,
+        "status": "converted",
     }) + "\n", encoding="utf-8")
     monkeypatch.setattr(cli, "_uploads_manifest_path", lambda: manifest)
 
-    called = {"n": 0}
-    def proc(src, **kw):
-        called["n"] += 1
-        return {"source_webm": str(src), "status": "submitted"}
-    monkeypatch.setattr(cli, "_process_one_for_upload", proc)
+    convert_called = {"n": 0}
+    def fake_convert(ns):
+        convert_called["n"] += 1
+        return 0
+    monkeypatch.setattr(cli, "cmd_convert", fake_convert)
 
-    rc = cli.main(["upload", "--from-file", str(src), "--no-skip-existing"])
+    monkeypatch.setattr(cli, "_drive_upload_file",
+                        lambda path, **kw: {"drive_id": "DID",
+                                            "download_url": "https://x/d",
+                                            "web_url": "https://x/w", "created": True})
+    monkeypatch.setattr(cli, "_post_upload",
+                        lambda url, title, lang: {"message": "ok"})
+
+    rc = cli.main(["upload", "--from-file", str(src), "--language", "ru", "--no-skip-existing"])
     assert rc == 0
-    assert called["n"] == 1  # processed despite manifest having submitted entry
+    assert convert_called["n"] == 0  # convert skipped via resume
 ```
 
-- [ ] **Step 2: Run — should pass since `BooleanOptionalAction` already supports `--no-skip-existing`**
+- [ ] **Step 2: Resume from `in-drive` state — both convert AND drive are skipped**
+
+```python
+def test_upload_resumes_from_in_drive_state(cli, tmp_path, monkeypatch):
+    src = tmp_path / "meetgeek-recording-2026-01-01T10-00-00-000Z.webm"
+    src.write_bytes(b"x" * 1024)
+    size = src.stat().st_size
+    mtime = datetime.fromtimestamp(src.stat().st_mtime, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    cached_mp4 = tmp_path / "cached.mp4"
+    cached_mp4.write_bytes(b"M" * 2048)
+
+    manifest = tmp_path / "manifest.jsonl"
+    manifest.write_text(json.dumps({
+        "source_webm": str(src.resolve()),
+        "source_size_bytes": size, "source_mtime": mtime,
+        "mp4_path": str(cached_mp4), "mp4_size_bytes": 2048,
+        "drive_id": "EXISTING_DID",
+        "drive_download_url": "https://drive.google.com/uc?export=download&id=EXISTING_DID",
+        "status": "in-drive",
+    }) + "\n", encoding="utf-8")
+    monkeypatch.setattr(cli, "_uploads_manifest_path", lambda: manifest)
+
+    convert_called = {"n": 0}
+    drive_called = {"n": 0}
+    monkeypatch.setattr(cli, "cmd_convert",
+                        lambda ns: convert_called.__setitem__("n", convert_called["n"] + 1) or 0)
+    monkeypatch.setattr(cli, "_drive_upload_file",
+                        lambda path, **kw: drive_called.__setitem__("n", drive_called["n"] + 1) or {})
+
+    posted = []
+    monkeypatch.setattr(cli, "_post_upload",
+                        lambda url, title, lang: posted.append({"url": url}) or {"message": "ok"})
+
+    rc = cli.main(["upload", "--from-file", str(src), "--language", "ru", "--no-skip-existing"])
+    assert rc == 0
+    assert convert_called["n"] == 0
+    assert drive_called["n"] == 0
+    assert len(posted) == 1
+    assert posted[0]["url"] == "https://drive.google.com/uc?export=download&id=EXISTING_DID"
+```
+
+- [ ] **Step 3: Per-stage failure writes correct status (drive-failed, not upload-failed)**
+
+```python
+def test_upload_drive_failure_writes_drive_failed_status(cli, tmp_path, monkeypatch):
+    src = tmp_path / "meetgeek-recording-2026-01-01T10-00-00-000Z.webm"
+    src.write_bytes(b"x" * 1024)
+    manifest = tmp_path / "manifest.jsonl"
+    monkeypatch.setattr(cli, "_uploads_manifest_path", lambda: manifest)
+
+    # convert succeeds (mock), drive raises ApiError
+    def fake_convert(ns):
+        from pathlib import Path as P
+        out = P(ns.output)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_bytes(b"M" * 2048)
+        return 0
+    monkeypatch.setattr(cli, "cmd_convert", fake_convert)
+    monkeypatch.setattr(cli, "_drive_upload_file",
+                        lambda *a, **kw: (_ for _ in ()).throw(cli.ApiError("drive boom", exit_code=1)))
+
+    rc = cli.main(["upload", "--from-file", str(src)])
+    assert rc == 1
+    lines = [json.loads(ln) for ln in manifest.read_text(encoding="utf-8").strip().splitlines()]
+    statuses = [r["status"] for r in lines]
+    assert "converted" in statuses
+    assert "drive-failed" in statuses
+    assert "upload-failed" not in statuses  # spec enum compliance
+    assert "upload-rejected" not in statuses  # drive failure ≠ upload failure
+```
+
+- [ ] **Step 4: Directory input mode — recursive .webm walk**
+
+```python
+def test_upload_from_file_directory_walks_recursively(cli, tmp_path, monkeypatch):
+    nested = tmp_path / "nested"
+    nested.mkdir()
+    a = tmp_path / "meetgeek-recording-2026-01-01T10-00-00-000Z.webm"
+    b = nested / "meetgeek-recording-2026-01-02T10-00-00-000Z.webm"
+    for f in (a, b):
+        f.write_bytes(b"x" * 1024)
+
+    seen = []
+    monkeypatch.setattr(cli, "_process_one_for_upload",
+                        lambda src, **kw: seen.append(src.name) or {"status": "submitted"})
+    monkeypatch.setattr(cli, "_uploads_manifest_path", lambda: tmp_path / "m.jsonl")
+
+    rc = cli.main(["upload", "--from-file", str(tmp_path)])
+    assert rc == 0
+    assert sorted(seen) == [a.name, b.name]
+```
+
+- [ ] **Step 5: Run all four tests**
 
 ```bash
-C:/Users/stani/.h2t/venv/Scripts/python.exe -m pytest tests/test_meetgeek_cli.py::test_upload_no_skip_existing_reuses_cache -v
+C:/Users/stani/.h2t/venv/Scripts/python.exe -m pytest tests/test_meetgeek_cli.py -k "resumes_from or drive_failure or directory_walks" -v
 ```
 
-Expected: PASS.
+Expected: 4 passed.
 
-- [ ] **Step 3: Commit if nothing changed but test added**
+- [ ] **Step 6: Run full suite**
+
+```bash
+C:/Users/stani/.h2t/venv/Scripts/python.exe -m pytest tests/test_meetgeek_cli.py -q
+```
+
+Expected: all green.
+
+- [ ] **Step 7: Commit**
 
 ```bash
 git -C C:/dev/h2t-skills add plugins/h2t-ops/skills/meetgeek/tests/test_meetgeek_cli.py
-git -C C:/dev/h2t-skills commit -m "test(h2t-ops): meetgeek upload --no-skip-existing keeps Drive/cache idempotency (#93)"
+git -C C:/dev/h2t-skills commit -m "test(h2t-ops): meetgeek resume + directory + drive-failed status (#93)"
 ```
 
 ---
@@ -1889,7 +2068,7 @@ If any per-file error during Step 5 — open follow-up issue with the affected f
 
 ## Self-Review Checklist (run after writing this plan, before handoff)
 
-- [x] **Spec coverage:** Sections 4.1 (convert) → Tasks 2–4. 4.2 (drive-upload) → Tasks 5–6. 4.3 (upload direct + orchestrated) → Tasks 7, 10, 11. Section 5 (data flow) → 10–11. Section 6 (error handling) → 11. Section 7 (testing) → all tasks include their tests; total target ~29 tests covered. Section 7.5 (live gate) → Task 8 with explicit STOP-condition. Section 9 (versioning, 1.0.7 → 1.1.0) → Task 14.
+- [x] **Spec coverage:** Sections 4.1 (convert) → Tasks 2–4. 4.2 (drive-upload) → Tasks 5–6. 4.3 (upload direct + file/glob/directory) → Tasks 7, 10, 11 (directory branch in 11). Section 5 (data flow) → 10–11. Section 6 (error handling) → 11 (per-stage statuses written by `_process_one_for_upload`). Manifest reader semantics + resume from `converted` / `in-drive` → Task 10 inline implementation, Task 12 tests. Status enum (`convert-failed | converted | drive-failed | in-drive | upload-rejected | submitted`) — no synthetic `upload-failed` line. Section 7 (testing) → all tasks include their tests; live baseline 15 + ~16 new ≈ 31. Section 7.5 (live gate) → Task 8 with explicit STOP-condition. Section 9 (versioning, 1.0.7 → 1.1.0) → Task 14.
 - [x] **Placeholder scan:** All steps contain concrete code or commands with expected outputs. No "TBD" / "implement later" / "similar to". The only places that say "Task N" are forward references that already point to fully-spelled later tasks.
 - [x] **Type/name consistency:** `_ffmpeg_probe`, `_ffmpeg_exe`, `_build_convert_cmd`, `_drive_service`, `_drive_find_or_create_folder`, `_drive_find_file`, `_drive_make_public`, `_drive_download_url`, `_drive_upload_file`, `_uploads_manifest_path`, `_read_uploads_manifest`, `_append_uploads_manifest`, `_is_already_submitted`, `_post_upload`, `_process_one_for_upload`, `_title_from_filename`, `_staging_dir`, `cmd_convert`, `cmd_drive_upload`, `cmd_upload`, `_RECORDING_NAME_RE`, `_DURATION_RE`, `_STREAM_AUDIO_RE`, `_STREAM_VIDEO_RE`, `DRIVE_TOKEN_FILE`, `DRIVE_CONFIG_DIR`, `DRIVE_CREDENTIALS_FILE`, `DRIVE_SCOPES`, `DRIVE_ROOT_FOLDER_NAME` — used consistently across tasks.
 - [x] **Live gate placement:** Task 8 sits between direct `cmd_upload` (Task 7) and the manifest/orchestrator/glob work (Tasks 9–11). If the Drive `download_url` assumption fails, we discover before writing resume logic.
