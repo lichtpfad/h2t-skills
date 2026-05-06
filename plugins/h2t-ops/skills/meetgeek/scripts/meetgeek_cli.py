@@ -473,8 +473,13 @@ def _ffmpeg_probe(path: str) -> dict:
         errors="replace",
     )
     stderr = r.stderr or ""
-    audio = len(_STREAM_AUDIO_RE.findall(stderr))
-    video = len(_STREAM_VIDEO_RE.findall(stderr))
+    # ffmpeg also prints output-side `Stream #...: Audio:` lines for the null
+    # muxer, which would double-count input audio. Restrict to the
+    # `Input #...` section by truncating at the first `Output #` line.
+    output_marker = stderr.find("Output #")
+    input_section = stderr[:output_marker] if output_marker != -1 else stderr
+    audio = len(_STREAM_AUDIO_RE.findall(input_section))
+    video = len(_STREAM_VIDEO_RE.findall(input_section))
     dur_match = _DURATION_RE.search(stderr)
     duration = None
     if dur_match:
