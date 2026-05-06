@@ -424,3 +424,65 @@ def test_ffmpeg_probe_corrupted_raises(cli, monkeypatch):
     import pytest as _pytest
     with _pytest.raises(cli.ApiError):
         cli._ffmpeg_probe("/broken.webm")
+
+
+# ─── convert ───────────────────────────────────────────────────────────────────
+
+def test_convert_single_track_builds_simple_recipe(cli, tmp_path, monkeypatch):
+    src = tmp_path / "in.webm"
+    src.write_bytes(b"x")  # presence-only; ffmpeg is mocked
+
+    # probe → 1 audio stream, has_video
+    monkeypatch.setattr(cli, "_ffmpeg_probe",
+                        lambda p: {"audio_streams": 1, "has_video": True,
+                                   "duration_seconds": 60, "raw_stderr_tail": ""})
+
+    captured: dict = {}
+
+    def fake_run(cmd, **kw):
+        captured["cmd"] = cmd
+        # write a fake mp4 so size>1KB check passes
+        out_path = cmd[-1]
+        from pathlib import Path as P
+        P(out_path).write_bytes(b"M" * 2048)
+        class R:
+            returncode = 0; stderr = ""; stdout = ""
+        return R()
+
+    monkeypatch.setattr(cli.subprocess, "run", fake_run)
+
+    out = tmp_path / "out.mp4"
+    rc = cli.main(["convert", str(src), "-o", str(out)])
+    assert rc == 0
+    assert out.exists() and out.stat().st_size > 1024
+    cmd = captured["cmd"]
+    assert "-c:v" in cmd and "libx264" in cmd
+    assert "-c:a" in cmd and "aac" in cmd
+    # single-track path should NOT use amix filter
+    assert not any("amix=" in a for a in cmd)
+
+
+def test_convert_skip_if_cached(cli, tmp_path, monkeypatch):
+    src = tmp_path / "in.webm"; src.write_bytes(b"x")
+    out = tmp_path / "out.mp4"; out.write_bytes(b"M" * 2048)  # already big enough
+
+    monkeypatch.setattr(cli, "_ffmpeg_probe",
+                        lambda p: {"audio_streams": 1, "has_video": True,
+                                   "duration_seconds": 60, "raw_stderr_tail": ""})
+    called = {"n": 0}
+    def no_run(*a, **kw):
+        called["n"] += 1
+        raise AssertionError("ffmpeg should not run when cache hit")
+    monkeypatch.setattr(cli.subprocess, "run", no_run)
+
+    rc = cli.main(["convert", str(src), "-o", str(out)])
+    assert rc == 0
+    assert called["n"] == 0
+
+
+def test_convert_corrupted_raises(cli, tmp_path, monkeypatch):
+    src = tmp_path / "broken.webm"; src.write_bytes(b"x")
+    def bad_probe(p): raise cli.ApiError("ffmpeg cannot probe", exit_code=1)
+    monkeypatch.setattr(cli, "_ffmpeg_probe", bad_probe)
+    rc = cli.main(["convert", str(src), "-o", str(tmp_path / "out.mp4")])
+    assert rc == 1
