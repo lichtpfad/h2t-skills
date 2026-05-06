@@ -1,0 +1,16 @@
+layout: quote
+fields:
+  eyebrow:
+    type: text
+    required: false
+    default: ''
+  headline:
+    type: html
+    required: true
+  quote_html:
+    type: html
+    required: true
+  bullets:
+    type: list
+    required: false
+    default: []

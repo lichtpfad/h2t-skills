@@ -231,6 +231,272 @@ def assemble_landing(
 
 # --- Deck ---
 
+# Deck-form profile switch (R2a / issue #86):
+#   When a profile contains a `deck/` subdir with `tokens.css`, `assemble_deck` routes
+#   to the new single-file path (`_assemble_deck_form_v2`). Otherwise it routes to the
+#   legacy multi-file path (`_assemble_deck_legacy`). T1 only wires the switch — the
+#   form-v2 rendering itself is implemented in T2/T3.
+DECK_FORM_DIR = "deck"
+
+
+def _deck_dir(profile_dir: Path) -> Path:
+    return profile_dir / DECK_FORM_DIR
+
+
+def _is_deck_form_profile(profile_dir: Path) -> bool:
+    """True when profile contains deck/tokens.css — switches assemble_deck to single-file path."""
+    return (_deck_dir(profile_dir) / "tokens.css").exists()
+
+
+# --- Deck-form rendering helpers (R2a T2) ---
+# These render array fields from the deck recipe into HTML strings.
+# Contract conventions (used across all helpers):
+#   - Plain text fields (e.g. `label`, `desc`, `name`, `title`) are HTML-escaped.
+#   - Fields with `_html` suffix (e.g. `label_html`, `desc_html`, `items_html`, `text_html`)
+#     are kept raw — recipe author is responsible for escaping/quoting.
+#   - Table cells and headers follow design system §Component primitives:
+#     headers escaped (plain text), cells raw (per recipe convention).
+
+
+def _render_stats(stats: list) -> str:
+    """Render stats as <div class="stat-row">...</div>.
+
+    Each item: {number, label OR label_html, index?, variant?, number_class?}.
+    variant='stat-box' (default, pos-sprint): red top border, data-index attr.
+    variant='stat' (merkazim): centered, color via .num.<number_class>.
+    """
+    items = []
+    for i, s in enumerate(stats, start=1):
+        number = html.escape(str(s.get("number", "")))
+        label = s["label_html"] if "label_html" in s else html.escape(str(s.get("label", "")))
+        variant = s.get("variant", "stat-box")
+        if variant == "stat-box":
+            index = html.escape(str(s.get("index", f"{i:02d}")), quote=True)
+            items.append(
+                f'<div class="stat-box" data-index="{index}">'
+                f'<div class="stat-number">{number}</div>'
+                f'<div class="stat-label">{label}</div>'
+                f'</div>'
+            )
+        elif variant == "stat":
+            num_class = str(s.get("number_class", "")).strip()
+            num_attr = (
+                f'class="num {html.escape(num_class)}"' if num_class else 'class="num"'
+            )
+            items.append(
+                f'<div class="stat">'
+                f'<div {num_attr}>{number}</div>'
+                f'<div class="label">{label}</div>'
+                f'</div>'
+            )
+        else:
+            raise ValueError(
+                f"Unknown stat variant: '{variant}'. Valid: stat-box, stat"
+            )
+    return f'<div class="stat-row">{"".join(items)}</div>'
+
+
+def _render_cards(cards: list, variant: str = "card-row") -> str:
+    """Render cards in one of two variants.
+
+    variant='card-row' (pos-sprint): flex row of cards with icon/title/desc and
+    optional --card-color top border.
+    Each item: {icon, title, desc OR desc_html, color?}.
+
+    variant='cards' (merkazim): auto-fit grid of cards with tag chip + h3 + items.
+    Each item: {tag, tag_class?, title, items? (list[str], escaped) OR items_html (raw)
+                OR body_html (raw)}.
+    """
+    items = []
+    if variant == "card-row":
+        for c in cards:
+            color = c.get("color")
+            style_attr = (
+                f' style="--card-color: {html.escape(str(color), quote=True)};"'
+                if color
+                else ""
+            )
+            icon = html.escape(str(c.get("icon", "")))
+            title = html.escape(str(c.get("title", "")))
+            desc = (
+                c["desc_html"]
+                if "desc_html" in c
+                else html.escape(str(c.get("desc", "")))
+            )
+            items.append(
+                f'<div class="card"{style_attr}>'
+                f'<div class="card-icon">{icon}</div>'
+                f'<div class="card-title">{title}</div>'
+                f'<div class="card-desc">{desc}</div>'
+                f'</div>'
+            )
+        return f'<div class="card-row">{"".join(items)}</div>'
+    if variant == "cards":
+        for c in cards:
+            tag_class = str(c.get("tag_class", "")).strip()
+            tag_attr = (
+                f'class="tag {html.escape(tag_class)}"' if tag_class else 'class="tag"'
+            )
+            tag_text = html.escape(str(c.get("tag", "")))
+            title = html.escape(str(c.get("title", "")))
+            if "items_html" in c:
+                inner = f'<ul>{c["items_html"]}</ul>'
+            elif "items" in c:
+                lis = "".join(
+                    f'<li>{html.escape(str(item))}</li>' for item in c["items"]
+                )
+                inner = f"<ul>{lis}</ul>"
+            elif "body_html" in c:
+                inner = c["body_html"]
+            else:
+                inner = ""
+            items.append(
+                f'<div class="card">'
+                f'<span {tag_attr}>{tag_text}</span>'
+                f'<h3>{title}</h3>'
+                f'{inner}'
+                f'</div>'
+            )
+        return f'<div class="cards">{"".join(items)}</div>'
+    raise ValueError(f"Unknown cards variant: '{variant}'. Valid: card-row, cards")
+
+
+def _render_layers(layers: list) -> str:
+    """Render architecture layers as <div class="layers">...</div>.
+
+    Each item: {num, name, desc OR desc_html, color? OR preset?}.
+    `color` (inline `--layer-color: ...`) takes precedence over `preset` (CSS class
+    `l1`/`l2`/`l3`/`l4`/`lh`). When both are set, `color` is applied and `preset` is ignored.
+    """
+    items = []
+    for layer in layers:
+        num = html.escape(str(layer.get("num", "")))
+        name = html.escape(str(layer.get("name", "")))
+        desc = (
+            layer["desc_html"]
+            if "desc_html" in layer
+            else html.escape(str(layer.get("desc", "")))
+        )
+        color = layer.get("color")
+        preset = layer.get("preset")
+        if color:
+            class_attr = 'class="layer"'
+            style_attr = (
+                f' style="--layer-color: {html.escape(str(color), quote=True)};"'
+            )
+        elif preset:
+            class_attr = f'class="layer {html.escape(str(preset))}"'
+            style_attr = ""
+        else:
+            class_attr = 'class="layer"'
+            style_attr = ""
+        items.append(
+            f'<div {class_attr}{style_attr}>'
+            f'<div class="layer-num">{num}</div>'
+            f'<div class="layer-name">{name}</div>'
+            f'<div class="layer-desc">{desc}</div>'
+            f'</div>'
+        )
+    return f'<div class="layers">{"".join(items)}</div>'
+
+
+def _render_table(headers: list, rows: list, note: str = "") -> str:
+    """Render a dual-representation table for desktop + mobile (T15.5).
+
+    Output structure:
+      <div class="table-desktop">
+        <table>...</table>
+      </div>
+      <div class="table-mobile">
+        <article class="table-card">
+          <h3>{first cell raw}</h3>
+          <dl>
+            <dt>{header[1] escaped}</dt><dd>{cell[1] raw}</dd>
+            <dt>{header[2] escaped}</dt><dd>{cell[2] raw}</dd>
+            ...
+          </dl>
+        </article>
+        ...
+      </div>
+      [<p class="meta-note">{note escaped}</p> if note]
+
+    Contract:
+      - **headers** are plain text and are HTML-escaped (used as <th> on desktop
+        and as <dt> labels on mobile).
+      - **cells** (rows[][]) are kept raw — recipe author passes HTML strings
+        like '<span class="accent">A</span>'. This is the documented convention
+        (design system §Component primitives + plan §5.8 critical test).
+      - **note** is plain text and is HTML-escaped, rendered as
+        `<p class="meta-note">` appended after both representations when non-empty.
+
+    Mobile mapping per row:
+      - first cell  → <h3> (card title); raw HTML preserved
+      - rest cells  → <dt>{header}</dt><dd>{cell}</dd> pairs
+
+    CSS toggles which representation is visible (desktop / mobile @media); the
+    DOM always carries both — no content is hidden, only one rendering is shown.
+    """
+    # --- Desktop representation (original <table>) ---
+    head = "".join(f"<th>{html.escape(str(h))}</th>" for h in headers)
+    body = "".join(
+        "<tr>" + "".join(f"<td>{cell}</td>" for cell in row) + "</tr>"
+        for row in rows
+    )
+    desktop = (
+        f'<div class="table-desktop">'
+        f'<table><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table>'
+        f'</div>'
+    )
+
+    # --- Mobile representation (stacked cards) ---
+    rest_headers = headers[1:] if len(headers) > 1 else []
+    cards = []
+    for row in rows:
+        if not row:
+            continue
+        title_cell = row[0]
+        rest = row[1:]
+        dl_pairs = []
+        for i, cell in enumerate(rest):
+            label = (
+                html.escape(str(rest_headers[i]))
+                if i < len(rest_headers)
+                else ""
+            )
+            dl_pairs.append(f"<dt>{label}</dt><dd>{cell}</dd>")
+        dl = f'<dl>{"".join(dl_pairs)}</dl>' if dl_pairs else ""
+        cards.append(
+            f'<article class="table-card">'
+            f'<h3>{title_cell}</h3>'
+            f'{dl}'
+            f'</article>'
+        )
+    mobile = f'<div class="table-mobile">{"".join(cards)}</div>'
+
+    parts = [desktop, mobile]
+    if note:
+        parts.append(f'<p class="meta-note">{html.escape(str(note))}</p>')
+    return "".join(parts)
+
+
+def _render_bullets(bullets: list) -> str:
+    """Render bullets as <ul class="bullet-list">...</ul>.
+
+    Each item: {text OR text_html, sym?}. Default `sym` = '>'.
+    The `sym` value goes into a `data-sym` attribute and is escaped accordingly.
+    """
+    items = []
+    for b in bullets:
+        sym = html.escape(str(b.get("sym", ">")), quote=True)
+        text = (
+            b["text_html"]
+            if "text_html" in b
+            else html.escape(str(b.get("text", "")))
+        )
+        items.append(f'<li data-sym="{sym}">{text}</li>')
+    return f'<ul class="bullet-list">{"".join(items)}</ul>'
+
+
 _DECK_LAYOUT_HTML = {
     "title-only": '<div class="slide-inner"><h1 class="slide-headline">{{ headline }}</h1></div>',
     "title-body": (
@@ -313,6 +579,28 @@ def assemble_deck(
     base_dir: Path | None = None,
     palette: str = "default",
 ) -> None:
+    """Dispatch to legacy multi-file or form-v2 single-file path based on profile shape.
+
+    A profile is considered "deck-form" iff `<profile_dir>/deck/tokens.css` exists.
+    See R2a plan §1.4 / §A. Public signature unchanged from prior versions.
+    """
+    if _is_deck_form_profile(profile_dir):
+        return _assemble_deck_form_v2(
+            recipe, profile_dir, out_dir, base_dir=base_dir, palette=palette
+        )
+    return _assemble_deck_legacy(
+        recipe, profile_dir, out_dir, base_dir=base_dir, palette=palette
+    )
+
+
+def _assemble_deck_legacy(
+    recipe: dict,
+    profile_dir: Path,
+    out_dir: Path,
+    base_dir: Path | None = None,
+    palette: str = "default",
+) -> None:
+    """Legacy multi-file deck output. Used for any profile without `deck/` subdir."""
     if base_dir is None:
         base_dir = BASE_DIR
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -346,6 +634,225 @@ def assemble_deck(
     )
     if has_fx:
         shutil.copy(profile_dir / "fx" / "background.js", out_dir / "fx.js")
+
+
+def _load_slide_layout(profile_dir: Path, layout: str) -> tuple:
+    """Return (template_html, manifest_dict) for a deck slide layout.
+
+    Layout files live at <profile>/deck/slides/<layout>/{<layout>.html, manifest.yaml}.
+    Raises ValueError with the available layouts list when the layout dir is missing.
+    """
+    slides_root = _deck_dir(profile_dir) / "slides"
+    layout_dir = slides_root / layout
+    if not layout_dir.exists():
+        available = (
+            sorted([d.name for d in slides_root.iterdir() if d.is_dir()])
+            if slides_root.exists()
+            else []
+        )
+        raise ValueError(
+            f"Slide layout '{layout}' not found in {profile_dir.name}/deck/slides/. "
+            f"Available: {available}"
+        )
+    template_path = layout_dir / f"{layout}.html"
+    manifest_path = layout_dir / "manifest.yaml"
+    if not template_path.exists():
+        raise ValueError(
+            f"Slide layout '{layout}' is missing {layout}.html at {template_path}"
+        )
+    if not manifest_path.exists():
+        raise ValueError(
+            f"Slide layout '{layout}' is missing manifest.yaml at {manifest_path}"
+        )
+    template = template_path.read_text(encoding="utf-8")
+    manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8")) or {}
+    return template, manifest
+
+
+def _apply_manifest_defaults(content: dict, manifest: dict) -> dict:
+    """Fill in default values from manifest for fields absent in content."""
+    out = dict(content)
+    for field, schema in manifest.get("fields", {}).items():
+        if field not in out and "default" in schema:
+            out[field] = schema["default"]
+    return out
+
+
+def _build_deck_slide_html_v2(slide: dict, profile_dir: Path, index: int = 0) -> str:
+    """Build one <section class="slide">...</section> for deck-form profiles.
+
+    Pre-renders array fields (stats/cards/layers/table/bullets) into HTML strings,
+    applies manifest defaults, then interpolates the layout template via interpolate().
+    """
+    layout = slide.get("layout", "title-body")
+    template, manifest = _load_slide_layout(profile_dir, layout)
+    content = _apply_manifest_defaults(dict(slide.get("content", {})), manifest)
+
+    # Pre-render array fields into *_html keys consumed by templates.
+    if "stats" in content:
+        content["stats_html"] = _render_stats(content.pop("stats"))
+    if "cards" in content:
+        cards_variant = content.pop("cards_variant", "card-row")
+        content["cards_html"] = _render_cards(
+            content.pop("cards"), variant=cards_variant
+        )
+    if "layers" in content:
+        content["layers_html"] = _render_layers(content.pop("layers"))
+    if "table_headers" in content or "table_rows" in content:
+        content["table_html"] = _render_table(
+            content.pop("table_headers", []),
+            content.pop("table_rows", []),
+            content.pop("note", ""),
+        )
+    if "bullets" in content:
+        content["bullets_html"] = _render_bullets(content.pop("bullets"))
+
+    inner = interpolate(template, content)
+    classes = "slide center" if slide.get("align") == "center" else "slide"
+    return f'<section class="{classes}" data-index="{index}">{inner}</section>'
+
+
+def _build_deck_css_inline(
+    profile_dir: Path, slides: list, palette: str = "default"
+) -> str:
+    """Concatenate deck CSS: tokens, palette, frame, deduped per-layout CSS."""
+    deck_root = _deck_dir(profile_dir)
+    parts = []
+    tokens_path = deck_root / "tokens.css"
+    if tokens_path.exists():
+        parts.append(tokens_path.read_text(encoding="utf-8"))
+    palettes_dir = deck_root / "palettes"
+    palette_path = palettes_dir / f"{palette}.css"
+    if not palette_path.exists():
+        available = (
+            sorted([p.stem for p in palettes_dir.glob("*.css")])
+            if palettes_dir.exists()
+            else []
+        )
+        raise ValueError(
+            f"Deck palette '{palette}' not found in {profile_dir.name}/deck/palettes/. "
+            f"Available: {available}"
+        )
+    parts.append(palette_path.read_text(encoding="utf-8"))
+    frame_css = deck_root / "frame" / "frame.css"
+    if frame_css.exists():
+        parts.append(frame_css.read_text(encoding="utf-8"))
+    seen: set = set()
+    for s in slides:
+        layout = s.get("layout", "title-body")
+        if layout in seen:
+            continue
+        seen.add(layout)
+        css_path = deck_root / "slides" / layout / f"{layout}.css"
+        if css_path.exists():
+            parts.append(css_path.read_text(encoding="utf-8"))
+    return "\n".join(parts)
+
+
+def _build_deck_js_inline(profile_dir: Path) -> str:
+    """Read deck nav JS for inlining into <script>."""
+    js_path = _deck_dir(profile_dir) / "js" / "deck-nav.js"
+    if not js_path.exists():
+        raise ValueError(
+            f"Deck nav script not found at {js_path}. "
+            f"Profile must provide deck/js/deck-nav.js for form-v2 output."
+        )
+    return js_path.read_text(encoding="utf-8")
+
+
+def _render_nav_buttons() -> str:
+    """Optional prev/next nav buttons rendered when recipe.nav_buttons is true."""
+    return (
+        '  <button class="nav-btn prev" id="btn-prev">'
+        '<span class="chevron">◄</span> prev</button>\n'
+        '  <button class="nav-btn next" id="btn-next">'
+        'next <span class="chevron">►</span></button>\n'
+    )
+
+
+# Single-file deck HTML template. Slot tokens use __SLOT_*__ sentinels (replaced via
+# str.replace, not str.format) so inline CSS/JS containing { and } chars pass through
+# verbatim. Sentinel strings do not appear in CSS/JS by convention.
+_HTML_DECK_FORM_V2 = """\
+<!DOCTYPE html>
+<html lang="__SLOT_LANG__">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>__SLOT_TITLE__</title>
+__SLOT_FONT_LINKS__  <style>
+__SLOT_INLINE_CSS__
+  </style>
+</head>
+<body>
+  <div id="progress-bar"></div>
+  <div id="slide-counter">
+    <span class="current" id="cnt-current">01</span>
+    <span class="dim"> / </span>
+    <span id="cnt-total">__SLOT_TOTAL_PADDED__</span>
+  </div>
+  <div id="nav-hint">__SLOT_NAV_HINT__</div>
+__SLOT_NAV_BUTTONS__  <div id="deck">
+__SLOT_SLIDES_HTML__
+  </div>
+  <script>
+__SLOT_INLINE_JS__
+  </script>
+</body>
+</html>
+"""
+
+
+def _assemble_deck_form_v2(
+    recipe: dict,
+    profile_dir: Path,
+    out_dir: Path,
+    base_dir: Path | None = None,
+    palette: str = "default",
+) -> None:
+    """Single-file deck output for deck-form profiles.
+
+    Contract:
+      - Output is exactly one file: out_dir/index.html
+      - All app CSS inlined in <style>; Google Fonts via <link rel="stylesheet"> still allowed
+      - All JS inlined in <script>; no <script src=>
+      - No <link rel="stylesheet"> for base.css/profile.css/any non-fonts URL
+      - No legacy slide-menu sidebar; frame chrome = progress + counter + nav-hint
+        + optional prev/next buttons
+      - `base_dir` accepted for signature consistency; unused (no base.css written).
+    """
+    out_dir.mkdir(parents=True, exist_ok=True)
+    slides = recipe.get("slides", [])
+    slides_html = "\n".join(
+        _build_deck_slide_html_v2(s, profile_dir, index=i)
+        for i, s in enumerate(slides)
+    )
+    inline_css = _build_deck_css_inline(profile_dir, slides, palette=palette)
+    inline_js = _build_deck_js_inline(profile_dir)
+    font_links = _build_font_links(profile_dir)
+    nav_buttons_html = _render_nav_buttons() if recipe.get("nav_buttons") else ""
+    lang = html.escape(str(recipe.get("lang", "en")), quote=True)
+    title = html.escape(str(recipe.get("title", "")))
+    nav_hint = html.escape(
+        str(recipe.get("nav_hint_text", "arrows / space / swipe"))
+    )
+    total_padded = str(len(slides)).zfill(2) if slides else "00"
+
+    out_html = _HTML_DECK_FORM_V2
+    # str.replace() avoids {} collisions with inline CSS/JS — see template comment.
+    for token, value in (
+        ("__SLOT_LANG__", lang),
+        ("__SLOT_TITLE__", title),
+        ("__SLOT_FONT_LINKS__", font_links),
+        ("__SLOT_INLINE_CSS__", inline_css),
+        ("__SLOT_TOTAL_PADDED__", total_padded),
+        ("__SLOT_NAV_HINT__", nav_hint),
+        ("__SLOT_NAV_BUTTONS__", nav_buttons_html),
+        ("__SLOT_SLIDES_HTML__", slides_html),
+        ("__SLOT_INLINE_JS__", inline_js),
+    ):
+        out_html = out_html.replace(token, value)
+    (out_dir / "index.html").write_text(out_html, encoding="utf-8")
 
 
 # --- Shared entry points ---

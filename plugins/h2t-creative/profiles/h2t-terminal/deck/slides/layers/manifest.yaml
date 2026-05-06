@@ -1,0 +1,13 @@
+layout: layers
+fields:
+  eyebrow:
+    type: text
+    required: false
+    default: ''
+  headline:
+    type: html
+    required: true
+  layers:
+    type: list
+    required: false
+    default: []
