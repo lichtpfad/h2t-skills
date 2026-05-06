@@ -490,6 +490,79 @@ def _ffmpeg_probe(path: str) -> dict:
     }
 
 
+def _staging_dir() -> Path:
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    return Path.home() / ".dor" / "lake" / "meetgeek" / "uploads-staging" / today
+
+
+def _build_convert_cmd(input_path: str, output_path: str, *,
+                       probe: dict, audio_only: bool, mix_mode: str) -> list[str]:
+    """Construct ffmpeg argv. Multi-track logic lands in Task 4."""
+    exe = _ffmpeg_exe()
+    if probe["audio_streams"] <= 1 or mix_mode == "first":
+        argv = [exe, "-y", "-hide_banner", "-i", input_path]
+        if audio_only:
+            argv += ["-vn"]
+        else:
+            argv += ["-map", "0:v?"]
+        argv += ["-map", "0:a:0"] if mix_mode == "first" else []
+        argv += [
+            "-c:v", "libx264", "-preset", "medium", "-crf", "23",
+            "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-ac", "2",
+            output_path,
+        ]
+        # remove video codec args if audio_only
+        if audio_only:
+            for k in ("-c:v", "libx264", "-preset", "medium", "-crf", "23"):
+                if k in argv:
+                    argv.remove(k)
+        return argv
+    # Multi-track amix: implemented in Task 4
+    raise ApiError("multi-track convert not yet implemented", exit_code=2)
+
+
+def cmd_convert(args: argparse.Namespace) -> int:
+    src = Path(args.input).expanduser().resolve()
+    if not src.exists():
+        raise ApiError(f"input not found: {src}", exit_code=1)
+
+    probe = _ffmpeg_probe(str(src))
+    if args.probe:
+        _print_json(probe)
+        return 0
+
+    if args.output:
+        out = Path(args.output).expanduser()
+    else:
+        suffix = ".m4a" if args.audio_only else ".mp4"
+        out = _staging_dir() / (src.stem + suffix)
+
+    out.parent.mkdir(parents=True, exist_ok=True)
+
+    if out.exists() and out.stat().st_size > 1024:
+        print(f"INFO: cached {out} (skip)", file=sys.stderr)
+        print(out)
+        return 0
+
+    cmd = _build_convert_cmd(
+        str(src), str(out),
+        probe=probe, audio_only=args.audio_only, mix_mode=args.mix_mode,
+    )
+    print(f"INFO: ffmpeg {len(cmd)} args (audio_streams={probe['audio_streams']})",
+          file=sys.stderr)
+    r = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
+    if r.returncode != 0:
+        if out.exists():
+            out.unlink()
+        raise ApiError(f"ffmpeg encode failed: {r.stderr[:500]}", exit_code=1)
+    if not out.exists() or out.stat().st_size <= 1024:
+        if out.exists():
+            out.unlink()
+        raise ApiError(f"ffmpeg produced empty output: {out}", exit_code=1)
+    print(out)
+    return 0
+
+
 # ─── Sync pipeline ────────────────────────────────────────────────────────────
 
 def _load_cursor(path: Path) -> dict:
@@ -773,6 +846,18 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("-o", "--output", default=None,
                    help="If omitted, prints URL; otherwise downloads to PATH")
     s.set_defaults(func=cmd_download)
+
+    s = sub.add_parser("convert", help="Convert media file (webm→mp4 default)")
+    s.add_argument("input")
+    s.add_argument("-o", "--output", default=None,
+                   help="Output path; default: ~/.dor/lake/meetgeek/uploads-staging/{YYYY-MM-DD}/{name}.mp4")
+    s.add_argument("--audio-only", action="store_true",
+                   help="Strip video; output .m4a")
+    s.add_argument("--mix-mode", choices=["amix", "first", "keep"], default="amix",
+                   help="Multi-track audio strategy (default: amix — sums all tracks)")
+    s.add_argument("--probe", action="store_true",
+                   help="Print probe info as JSON and exit")
+    s.set_defaults(func=cmd_convert)
 
     s = sub.add_parser("sync", help="Bulk pull to LAKE_PATH (manifest.jsonl + per-asset folders)")
     s.add_argument("--to", required=True, help="Lake destination (e.g. ~/.dor/lake/meetgeek/historical/)")
