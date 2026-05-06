@@ -594,6 +594,39 @@ def test_drive_upload_idempotent_returns_existing(cli, tmp_path, monkeypatch):
     assert rc == 0
 
 
+# ─── upload (POST /v1/upload) ─────────────────────────────────────────────────
+
+def test_upload_direct_url_succeeds_on_202(cli, capsys):
+    fake, calls = _scripted_request([
+        FakeResponse(202, {"message": "The recording has been validated and submitted "
+                                       "for analysis. However, webhook_url is not configured."})
+    ])
+    with patch.object(cli.requests, "request", fake):
+        rc = cli.main(["upload", "--download-url", "https://example.com/x.mp4",
+                       "--title", "Test", "--language", "ru"])
+    assert rc == 0
+    body = calls[0]["json"]
+    assert body["download_url"] == "https://example.com/x.mp4"
+    assert body["title"] == "Test"
+    assert body["language"] == "ru"
+    assert calls[0]["method"] == "POST"
+    assert calls[0]["url"].endswith("/v1/upload")
+
+
+def test_upload_direct_url_401_aborts(cli):
+    fake, _ = _scripted_request([FakeResponse(401, {"message": "unauthorized"})])
+    with patch.object(cli.requests, "request", fake):
+        rc = cli.main(["upload", "--download-url", "https://example.com/x.mp4"])
+    assert rc == 1
+
+
+def test_upload_direct_url_400_invalid(cli):
+    fake, _ = _scripted_request([FakeResponse(400, {"message": "bad", "reason": "download_url field is not a valid url"})])
+    with patch.object(cli.requests, "request", fake):
+        rc = cli.main(["upload", "--download-url", "not-a-url"])
+    assert rc == 1
+
+
 def test_drive_upload_creates_dated_folder_and_uploads(cli, tmp_path, monkeypatch):
     file_path = tmp_path / "x.mp4"; file_path.write_bytes(b"M" * 1024)
     state = {"folders": {}, "files": {}, "perm_calls": []}
