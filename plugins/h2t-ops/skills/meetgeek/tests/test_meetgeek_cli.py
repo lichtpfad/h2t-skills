@@ -426,6 +426,30 @@ def test_ffmpeg_probe_corrupted_raises(cli, monkeypatch):
         cli._ffmpeg_probe("/broken.webm")
 
 
+def test_ffmpeg_probe_ignores_output_section_audio_streams(cli, monkeypatch):
+    """Regression: ffmpeg also prints Stream #...: Audio: lines for the null
+    muxer's Output # block; those must NOT count toward input audio_streams.
+    """
+    fake_stderr = (
+        "Input #0, matroska,webm, from 'x.webm':\n"
+        "  Stream #0:0(eng): Video: vp8, 1280x720\n"
+        "  Stream #0:1(eng): Audio: opus, 48000 Hz, stereo\n"
+        "Output #0, null, to 'pipe:':\n"
+        "  Stream #0:0(eng): Video: rawvideo\n"
+        "  Stream #0:1(eng): Audio: pcm_s16le, 48000 Hz, stereo\n"
+        "frame= 100 fps=30\n"
+        "video:1KiB audio:42KiB\n"
+    )
+    class R:
+        returncode = 0
+        stderr = fake_stderr
+        stdout = ""
+    monkeypatch.setattr(cli.subprocess, "run", lambda *a, **kw: R())
+    info = cli._ffmpeg_probe("/fake.webm")
+    assert info["audio_streams"] == 1  # only the input stream, not the null-muxer output
+    assert info["has_video"] is True
+
+
 # ─── convert ───────────────────────────────────────────────────────────────────
 
 def test_convert_single_track_builds_simple_recipe(cli, tmp_path, monkeypatch):
