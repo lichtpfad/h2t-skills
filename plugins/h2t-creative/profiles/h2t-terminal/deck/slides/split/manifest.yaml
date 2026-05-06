@@ -1,0 +1,15 @@
+layout: split
+fields:
+  eyebrow:
+    type: text
+    required: false
+    default: ''
+  headline:
+    type: html
+    required: true
+  left_html:
+    type: html
+    required: true
+  right_html:
+    type: html
+    required: true

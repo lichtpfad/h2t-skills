@@ -1,0 +1,6 @@
+/* layers — h2 + vertical ordered list with colored borders.
+ * Layer primitive (.layers, .layer, .layer-num, .layer-name, .layer-desc) and
+ * preset classes (.l1..l4, .lh) live in frame.css.
+ */
+
+.layers-block .layers { margin-top: 14px; }

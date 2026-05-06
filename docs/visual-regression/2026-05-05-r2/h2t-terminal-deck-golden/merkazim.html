@@ -1,0 +1,1011 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Claude Working × Merkazim</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0d1117;
+  --bg-light: #161b22;
+  --bg-card: #1c2129;
+  --text: #e6edf3;
+  --text-dim: #8b949e;
+  --accent: #55aa88;
+  --accent2: #d4a843;
+  --accent3: #4488cc;
+  --danger: #cc4444;
+  --highlight: #9966cc;
+  --pop: #ee6688;
+  --border: #30363d;
+  --font-heading: 'JetBrains Mono','Fira Code','SF Mono','Menlo','Consolas',monospace;
+  --font-body: 'JetBrains Mono','Fira Code','SF Mono','Menlo','Consolas',monospace;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  width: 100%; height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 16px;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+body::after {
+  content: '';
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0,0,0,0.03) 2px,
+    rgba(0,0,0,0.03) 4px
+  );
+  pointer-events: none;
+  z-index: 9999;
+}
+
+.slide {
+  display: none;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  width: 100vw;
+  height: 100vh;
+  padding: 56px 80px 80px;
+  position: relative;
+}
+.slide.active { display: flex; }
+
+.slide-inner {
+  width: 100%;
+  max-width: 1100px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+h1 {
+  font-family: var(--font-heading);
+  font-size: 40px;
+  font-weight: 700;
+  color: var(--text);
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  margin-bottom: 16px;
+  line-height: 1.2;
+}
+
+h2 {
+  font-family: var(--font-heading);
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 14px;
+  line-height: 1.3;
+}
+
+h3 {
+  font-family: var(--font-heading);
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-dim);
+  margin-bottom: 10px;
+  letter-spacing: 1px;
+}
+
+p, li {
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.6;
+  color: var(--text);
+}
+
+ul { list-style: none; padding-left: 0; }
+ul li { padding: 4px 0; font-size: 15px; }
+ul li::before {
+  content: '> ';
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.dim { color: var(--text-dim); }
+.accent { color: var(--accent); }
+.accent2 { color: var(--accent2); }
+.accent3 { color: var(--accent3); }
+.danger { color: var(--danger); }
+.highlight { color: var(--highlight); }
+.pop { color: var(--pop); }
+
+.cursor::after {
+  content: '\2588';
+  animation: blink 1s step-end infinite;
+  color: var(--accent);
+  margin-left: 4px;
+}
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+.eyebrow {
+  font-size: 12px;
+  color: var(--accent);
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  margin-bottom: 18px;
+  font-weight: 600;
+}
+
+.duration-tag {
+  display: inline-block;
+  font-size: 12px;
+  padding: 4px 10px;
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  border-radius: 3px;
+  letter-spacing: 1px;
+  margin-bottom: 14px;
+}
+.duration-tag.danger {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.disclaimer-badge {
+  display: inline-block;
+  padding: 4px 12px;
+  margin-bottom: 12px;
+  border: 1px dashed var(--danger);
+  border-radius: 3px;
+  font-size: 11px;
+  color: var(--danger);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+}
+
+.lead {
+  font-size: 17px;
+  line-height: 1.55;
+  color: var(--text);
+  margin-bottom: 14px;
+  max-width: 75ch;
+}
+.lead.dim { color: var(--text-dim); }
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 18px 20px;
+  transition: border-color 0.2s;
+}
+.card:hover { border-color: var(--accent); }
+.card h3 { color: var(--text); font-size: 16px; margin-bottom: 8px; letter-spacing: 0; text-transform: none; }
+.card p { font-size: 14px; color: var(--text-dim); line-height: 1.5; }
+.card ul li { font-size: 14px; padding: 2px 0; }
+
+.tag {
+  display: inline-block;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 3px;
+  margin-bottom: 10px;
+  background: rgba(85,170,136,0.15);
+  color: var(--accent);
+  letter-spacing: 1px;
+}
+.tag.amber { background: rgba(212,168,67,0.15); color: var(--accent2); }
+.tag.blue { background: rgba(68,136,204,0.15); color: var(--accent3); }
+.tag.purple { background: rgba(153,102,204,0.15); color: var(--highlight); }
+.tag.pink { background: rgba(238,102,136,0.15); color: var(--pop); }
+.tag.red { background: rgba(204,68,68,0.15); color: var(--danger); }
+
+.pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 18px 0;
+}
+.pill {
+  display: inline-block;
+  font-size: 14px;
+  padding: 8px 16px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text);
+  border-radius: 999px;
+  font-family: var(--font-body);
+  transition: all 0.2s;
+}
+.pill:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 28px;
+  margin-top: 14px;
+}
+
+.stat-row { display: flex; gap: 14px; margin-top: 14px; flex-wrap: wrap; }
+.stat {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px 20px;
+  flex: 1;
+  min-width: 140px;
+  text-align: center;
+}
+.stat .num { font-size: 32px; font-weight: 700; line-height: 1; }
+.stat .label { font-size: 10px; color: var(--text-dim); margin-top: 6px; letter-spacing: 1px; text-transform: uppercase; }
+
+.layers { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; }
+.layer {
+  display: flex; align-items: center; gap: 14px;
+  padding: 14px 18px; border-radius: 8px;
+  border: 1px solid var(--border);
+  transition: transform 0.3s;
+}
+.layer:hover { transform: translateX(6px); }
+.layer-icon { font-size: 14px; min-width: 40px; font-weight: 700; letter-spacing: 1px; }
+.layer-name { font-size: 16px; font-weight: 600; min-width: 200px; }
+.layer-desc { font-size: 13px; color: var(--text-dim); flex: 1; line-height: 1.5; }
+.layer.l1 { border-color: rgba(85,170,136,0.4); background: rgba(85,170,136,0.04); }
+.layer.l2 { border-color: rgba(212,168,67,0.4); background: rgba(212,168,67,0.04); }
+.layer.l3 { border-color: rgba(68,136,204,0.4); background: rgba(68,136,204,0.04); }
+.layer.l4 { border-color: rgba(153,102,204,0.4); background: rgba(153,102,204,0.04); }
+.layer.lh { border-color: rgba(204,68,68,0.4); background: rgba(204,68,68,0.04); }
+
+.code-block {
+  background: var(--bg-light);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 14px 18px;
+  font-size: 13px;
+  line-height: 1.6;
+  margin-top: 14px;
+  font-family: var(--font-body);
+}
+.comment { color: var(--text-dim); }
+
+.quote {
+  border-left: 3px solid var(--accent);
+  padding: 12px 22px;
+  margin: 14px 0;
+}
+.quote p {
+  font-size: 19px;
+  line-height: 1.55;
+  color: var(--text);
+  font-weight: 400;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 14px;
+  font-size: 14px;
+}
+th, td {
+  text-align: left;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+}
+th {
+  font-size: 11px;
+  letter-spacing: 1.5px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  font-weight: 600;
+}
+td.mono { font-family: var(--font-heading); color: var(--accent2); }
+
+.meta-note {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-top: 12px;
+  font-style: italic;
+}
+
+.slide-counter {
+  position: absolute;
+  top: 24px; right: 32px;
+  font-size: 12px;
+  color: var(--text-dim);
+  opacity: 0.7;
+  letter-spacing: 1px;
+}
+
+.progress-bar {
+  position: fixed;
+  bottom: 0; left: 0;
+  height: 3px;
+  background: var(--accent);
+  transition: width 0.3s;
+  z-index: 100;
+}
+
+.nav-hint {
+  position: fixed;
+  bottom: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 10px;
+  color: var(--text-dim);
+  opacity: 0.45;
+  letter-spacing: 1px;
+}
+
+.nav-btn {
+  position: fixed;
+  bottom: 28px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-dim);
+  letter-spacing: 1px;
+  cursor: pointer;
+  transition: all 0.2s;
+  z-index: 200;
+  user-select: none;
+  text-transform: uppercase;
+}
+.nav-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  transform: translateY(-2px);
+}
+.nav-btn:active { transform: translateY(0); }
+.nav-btn.prev { left: 32px; }
+.nav-btn.next { right: 32px; }
+.nav-btn.disabled {
+  opacity: 0.25;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+.nav-btn .chevron { font-size: 15px; color: var(--accent); }
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.slide.active .slide-inner > * {
+  animation: fadeUp 0.45s ease-out both;
+}
+.slide.active .slide-inner > *:nth-child(2) { animation-delay: 0.08s; }
+.slide.active .slide-inner > *:nth-child(3) { animation-delay: 0.16s; }
+.slide.active .slide-inner > *:nth-child(4) { animation-delay: 0.24s; }
+.slide.active .slide-inner > *:nth-child(5) { animation-delay: 0.32s; }
+.slide.active .slide-inner > *:nth-child(6) { animation-delay: 0.40s; }
+.slide.active .slide-inner > *:nth-child(7) { animation-delay: 0.48s; }
+
+.title-block {
+  text-align: left;
+}
+.title-block h1 {
+  font-size: 64px;
+  letter-spacing: 4px;
+}
+.title-block .sub {
+  font-size: 18px;
+  color: var(--text-dim);
+  margin-top: 12px;
+  max-width: 60ch;
+  line-height: 1.55;
+}
+.title-block .meta-row {
+  margin-top: 40px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  justify-content: flex-end;
+  font-size: 12px;
+  color: var(--text-dim);
+  letter-spacing: 1px;
+}
+
+.divider-block {
+  text-align: center;
+}
+.divider-block .divider-num {
+  font-size: 14px;
+  color: var(--accent);
+  letter-spacing: 4px;
+  margin-bottom: 20px;
+}
+.divider-block h1 {
+  font-size: 48px;
+  text-align: center;
+}
+
+@media (max-width: 768px) {
+  .slide { padding: 32px 24px 48px; }
+  h1 { font-size: 28px; letter-spacing: 1px; }
+  h2 { font-size: 20px; }
+  p, li { font-size: 14px; }
+  .split { grid-template-columns: 1fr; }
+  .cards { grid-template-columns: 1fr; }
+  .nav-hint { display: none; }
+  .nav-btn { padding: 8px 12px; font-size: 11px; bottom: 20px; }
+  .nav-btn.prev { left: 16px; }
+  .nav-btn.next { right: 16px; }
+  .title-block h1 { font-size: 34px; letter-spacing: 2px; }
+  .layer { flex-direction: column; align-items: flex-start; }
+  .layer-name { min-width: unset; }
+}
+</style>
+</head>
+<body>
+
+<!-- 01 TITLE -->
+<div class="slide active">
+  <div class="slide-counter"><span class="current">1</span> / <span class="total">20</span></div>
+  <div class="slide-inner">
+    <div class="title-block">
+      <div class="eyebrow">// pilot proposal · 2026.04.19</div>
+      <h1 class="cursor">Claude<br>Working</h1>
+      <p class="sub">Серия практических AI-встреч для комьюнити Merkazim. Люди приходят с ноутбуками и собирают рабочие AI-инструменты под свою задачу.</p>
+      <div class="meta-row">
+        <span class="accent">Tel Aviv · Станислав Глазов</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 02 СУТЬ -->
+<div class="slide">
+  <div class="slide-counter"><span class="current">2</span> / <span class="total">20</span></div>
+  <div class="slide-inner">
+    <div class="eyebrow">// 01 · суть</div>
+    <h1>Формат:<br>Лаборатория / <span class="accent">Хакатон.</span></h1>
+    <div class="quote">
+      <p>После встречи участники уходят с <span class="accent">рабочим прототипом</span>, workflow или понятной картой следующих шагов.</p>
+    </div>
+    <div class="stat-row" style="margin-top: 24px;">
+      <div class="stat"><div class="num accent">build</div><div class="label">session</div></div>
+      <div class="stat"><div class="num accent2">master</div><div class="label">class</div></div>
+      <div class="stat"><div class="num accent3">network</div><div class="label">ing</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- 03 ФОРМАТ -->
+<div class="slide">
+  <div class="slide-counter"><span class="current">3</span> / <span class="total">20</span></div>
+  <div class="slide-inner">
+    <div class="eyebrow">// 02 · формат</div>
+    <h1>Лаборатория. 15 человек. <span class="accent">3 часа.</span></h1>
+    <div class="split">
+      <div>
+        <h3 class="accent">// параметры</h3>
+        <ul>
+          <li>Группа <span class="dim">—</span> <span class="accent">12–15</span> человек</li>
+          <li>Встреча <span class="dim">—</span> <span class="accent">3 часа</span></li>
+          <li>Пилот <span class="dim">—</span> 1 месяц, 2 или 4 встречи</li>
+          <li>Ритм <span class="dim">—</span> раз в 2 недели или еженедельно</li>
+        </ul>
+      </div>
+      <div>
+        <h3 class="accent2">// структура встречи</h3>
+        <ul>
+          <li><span class="accent2">15 мин</span> интро</li>
+          <li><span class="accent2">45 мин</span> разбор 1–2 кейсов</li>
+          <li><span class="accent2">80 мин</span> практика в группе</li>
+          <li><span class="accent2">40 мин</span> демо, разбор и нетворкинг</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 04 DIVIDER: ТЕМЫ -->
+<div class="slide">
+  <div class="slide-counter"><span class="current">4</span> / <span class="total">20</span></div>
+  <div class="slide-inner">
+    <div class="divider-block">
+      <div class="divider-num">// 03 · темы пилота</div>
+      <h1>Четыре трека <span class="dim">+</span><br><span class="accent">расширенный intro.</span></h1>
+    </div>
+  </div>
+</div>
+
+<!-- 05 ТРЕК 0 INTRO + КОНТЕКСТ -->
+<div class="slide">
+  <div class="slide-counter"><span class="current">5</span> / <span class="total">20</span></div>
+  <div class="slide-inner">
+    <div class="eyebrow">// трек 0 · обязательный pre-session</div>
+    <h1>Intro + <span class="accent">Контекст</span></h1>
+    <div class="duration-tag">2 встречи × 3 часа</div>
+    <p class="lead dim">Контекст-менеджмент — большая тема, за 30 минут не уложить. Делим intro на две сессии: сначала снимаем техническую тревогу, потом учим работать с ограниченным ресурсом внимания модели.</p>
+    <div class="cards">
+      <div class="card">
+        <span class="tag">SESSION 1</span>
+        <h3>Установка</h3>
+        <ul>
+          <li>Глоссарий AI: prompt, agent, skill, hook, MCP, RAG</li>
+          <li>Установка: Claude, Claude Code, GitHub, git, venv</li>
+          <li>Первый запуск: hello-world + commit</li>
+          <li>Практика: базовые промпты, git-flow</li>
+        </ul>
+      </div>
+      <div class="card">
+        <span class="tag amber">SESSION 2</span>
+        <h3>Контекст</h3>
+        <ul>
+          <li>Контекст как ограниченный ресурс</li>
+          <li>Длинные документы: chunking, summaries, RAG</li>
+          <li>Skills, hooks, memory в Claude Code</li>
+          <li>Субагенты и session hygiene</li>
+          <li>Практика: свой шаблон context hygiene</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 06 ТРЕК 1 PERSONAL OS -->
+<div class="slide">
+  <div class="slide-counter"><span class="current">6</span> / <span class="total">20</span></div>
+  <div class="slide-inner">
+    <div class="eyebrow">// трек 01 · флагман</div>
+    <h1>Personal OS</h1>
+    <div class="duration-tag">4 недели · 6 встреч</div>
+    <p class="lead"><span class="accent">Second brain</span> на AI-агентах. <span class="dim">Свой минимальный OS с 2–3 рабочими агентами.</span></p>
+    <div class="split">
+      <div>
+        <h3 class="accent">// неделя 1 · фундамент</h3>
+        <ul>
+          <li>Intro + WS01 — философия, агенты</li>
+          <li>Focus — разбор системы ведущего</li>
+          <li>WS02 — первые агенты и ритуалы</li>
+          <li>Office Hours</li>
+        </ul>
+      </div>
+      <div>
+        <h3 class="accent2">// неделя 2 · интеграция</h3>
+        <ul>
+          <li>WS03 — Claude Code и автоматизация</li>
+          <li>WS04 — Skills, Rules, пайплайны</li>
+          <li>Bonus — breakout rooms, 5–6 кейсов</li>
+          <li>Demo Day</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 07 ТРЕК 2 РАБОТА И БИЗНЕС -->
+<div class="slide">
+  <div class="slide-counter"><span class="current">7</span> / <span class="total">20</span></div>
+  <div class="slide-inner">
+    <div class="eyebrow">// трек 02</div>
+    <h1>Работа и <span class="accent2">бизнес</span></h1>
+    <div class="duration-tag">3–4 недели · 4–5 встреч</div>
+    <p class="lead dim">Инструментарий на 80% общий между «найти работу» и «автоматизировать своё дело». Объединяем в один трек.</p>
+    <div class="split" style="margin-top: 20px;">
+      <div>
+        <h3 class="accent">// содержание</h3>
+        <ul>
+          <li>Research assistant — вакансии, рынок, клиенты</li>
+          <li>Writing assistant — тексты для работы и бизнеса</li>
+          <li>Mock interview и personal branding</li>
+          <li>Контент-пайплайн и клиентская поддержка</li>
+          <li>Автоматизация рутины — отчёты, inbox</li>
+        </ul>
+      </div>
+      <div>
+        <h3 class="accent2">// артефакт + гость</h3>
+        <p style="font-size: 14px; margin-bottom: 12px;">Один встроенный AI-процесс в работе или бизнесе.</p>
+        <p style="font-size: 13px; color: var(--text-dim);">Гость: предприниматель или рекрутер с AI-кейсом.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 08 ТРЕК 3 РЕСЁРЧ -->
+<div class="slide">
+  <div class="slide-counter"><span class="current">8</span> / <span class="total">20</span></div>
+  <div class="slide-inner">
+    <div class="eyebrow">// трек 03</div>
+    <h1>Ресёрч и <span class="accent3">факт-чекинг</span></h1>
+    <div class="duration-tag">2–3 недели · 3–4 встречи</div>
+    <p class="lead dim">Персональная система проверки и глубокого ресёрча. Выборы в Израиле — один из живых кейсов.</p>
+    <div class="split" style="margin-top: 20px;">
+      <div>
+        <h3 class="accent">// содержание</h3>
+        <ul>
+          <li>Критическое чтение источников</li>
+          <li>Research-ассистент — промпты, workflow</li>
+          <li>Fact-check workflow — проверка новостей</li>
+          <li>News research bot — подписки, дайджесты</li>
+        </ul>
+      </div>
+      <div>
+        <h3 class="accent2">// артефакт + гость</h3>
+        <p style="font-size: 14px; margin-bottom: 12px;">Research + fact-check bot под любую важную тему.</p>
+        <p style="font-size: 13px; color: var(--text-dim);">Гость: журналист или аналитик.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 09 ТРЕК 4 ИВРИТ -->
+<div class="slide">
+  <div class="slide-counter"><span class="current">9</span> / <span class="total">20</span></div>
+  <div class="slide-inner">
+    <div class="eyebrow">// трек 04 · экспериментальный</div>
+    <div class="disclaimer-badge">⚠ гипотеза</div>
+    <h1>Иврит и <span class="danger">адаптация</span></h1>
+    <div class="duration-tag danger">3 недели · 4 встречи · оценочно</div>
+    <p class="lead"><span class="danger">//</span> Ведущий этот трек не проводил — запуск как эксперимент с готовностью корректировать формат.</p>
+    <div class="split" style="margin-top: 18px;">
+      <div>
+        <h3 class="danger">// возможное содержание</h3>
+        <ul>
+          <li><span class="accent">Изучение языка</span> — практика, грамматика, vocabulary</li>
+          <li><span class="accent">Иврит-помощник</span> — письма, документы, ответы</li>
+          <li><span class="accent">Бюрократия</span> — Bituach Leumi, Misrad HaPnim, Misrad HaKlita</li>
+          <li><span class="accent">Поиск услуг</span> — врачи, банки, сервисы</li>
+        </ul>
+      </div>
+      <div>
+        <h3 class="accent2">// артефакт + гость</h3>
+        <p style="font-size: 14px; margin-bottom: 12px;">Иврит + бюрократия + routine-помощь.</p>
+        <p style="font-size: 13px; color: var(--text-dim);">Гость (усиливает): ульпан-преподаватель или специалист по интеграции.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 10 ВАРИАНТЫ ПИЛОТА -->
+<div class="slide">
+  <div class="slide-counter"><span class="current">10</span> / <span class="total">20</span></div>
+  <div class="slide-inner">
+    <div class="eyebrow">// 04 · варианты пилота</div>
+    <h1>Как треки собираются</h1>
+    <table>
+      <thead>
+        <tr><th>Вариант</th><th>Объём</th><th>Логика</th></tr>
+      </thead>
+      <tbody>
+        <tr><td class="accent">A · Узкий фокус</td><td class="mono">2 встречи</td><td>Intro + первые 2 сессии одного трека. Демо формата.</td></tr>
+        <tr><td class="accent2">B · Расширенный</td><td class="mono">4 встречи</td><td>Intro + по 2 WS из двух треков параллельно.</td></tr>
+        <tr><td class="accent3">C · Полный трек</td><td class="mono">4–6 встреч</td><td>Один трек целиком с Demo Day. Реальный результат.</td></tr>
+        <tr><td class="highlight">D · Флагман</td><td class="mono">6 встреч</td><td>Полный Personal OS, 4 недели. Отдельное предложение.</td></tr>
+      </tbody>
+    </table>
+    <p class="meta-note">Решение за Merkazim — обсуждаем на встрече.</p>
+  </div>
+</div>
+
+<!-- 11 ПРИГЛАШЁННЫЕ ЭКСПЕРТЫ -->
+<div class="slide">
+  <div class="slide-counter"><span class="current">11</span> / <span class="total">20</span></div>
+  <div class="slide-inner">
+    <div class="eyebrow">// 05 · приглашённые эксперты</div>
+    <h1>Приглашённые<br><span class="accent">эксперты.</span></h1>
+    <div class="split">
+      <div>
+        <h3 class="accent">// приоритет</h3>
+        <ul>
+          <li><span class="accent">Предприниматель / стартапер</span> с реальным AI-кейсом — для работы и бизнеса</li>
+          <li><span class="accent">Журналист / аналитик</span> — для ресёрч-трека, процесс фактчека</li>
+          <li><span class="accent">Ульпан-преподаватель</span> — если Merkazim хочет иврит-трек</li>
+        </ul>
+      </div>
+      <div>
+        <h3 class="danger">// не в пилот</h3>
+        <ul>
+          <li><span class="danger">Психолог</span> — только для спец-темы саморефлексии</li>
+          <li><span class="danger">Инфлюенсер без практики</span> — работает только если реально использует AI</li>
+        </ul>
+        <p class="meta-note">Один сильный гость > панель.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 12 РАЗДЕЛЕНИЕ РОЛЕЙ -->
+<div class="slide">
+  <div class="slide-counter"><span class="current">12</span> / <span class="total">20</span></div>
+  <div class="slide-inner">
+    <div class="eyebrow">// 06 · разделение ролей</div>
+    <h1>Что делает кто</h1>
+    <div class="cards">
+      <div class="card">
+        <span class="tag amber">ВЕДУЩИЙ</span>
+        <h3>Содержание</h3>
+        <ul>
+          <li>Концепция и программа</li>
+          <li>Кейсы и шаблоны</li>
+          <li>Проведение сессий</li>
+          <li>Разбор результатов</li>
+        </ul>
+      </div>
+      <div class="card">
+        <span class="tag blue">MERKAZIM</span>
+        <h3>Организация</h3>
+        <ul>
+          <li>Помещение и техника</li>
+          <li>Регистрация и коммуникация</li>
+          <li>Промо и набор аудитории</li>
+          <li>Контакт в день события</li>
+          <li>Лицензии Anthropic</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 13 ДОСТУП OVERVIEW -->
+<div class="slide">
+  <div class="slide-counter"><span class="current">13</span> / <span class="total">20</span></div>
+  <div class="slide-inner">
+    <div class="eyebrow">// 07 · доступ к инструментам</div>
+    <h1>Два варианта</h1>
+    <p class="lead">Для практики нужен Claude Code. <span class="dim">Доступ надо решить до старта пилота.</span></p>
+    <div class="layers">
+      <div class="layer l1">
+        <div class="layer-icon accent">[A]</div>
+        <div class="layer-name accent">Участники покупают сами</div>
+      </div>
+      <div class="layer l2">
+        <div class="layer-icon accent2">[B]</div>
+        <div class="layer-name accent2">Централизованно через Merkazim</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 14 ВАРИАНТ A -->
+<div class="slide">
+  <div class="slide-counter"><span class="current">14</span> / <span class="total">20</span></div>
+  <div class="slide-inner">
+    <div class="eyebrow">// вариант a · участники сами</div>
+    <h1>Каждый <span class="accent">платит сам</span></h1>
+    <div class="stat-row">
+      <div class="stat">
+        <div class="num pop">$100</div>
+        <div class="label">claude max / мес · ≈ ₪296</div>
+      </div>
+    </div>
+    <div class="split" style="margin-top: 24px;">
+      <div>
+        <h3 class="accent">// плюсы</h3>
+        <ul>
+          <li>Merkazim не берёт бюджет на лицензии</li>
+          <li>Личный аккаунт остаётся с участником</li>
+          <li>Нет организационной нагрузки по seats</li>
+        </ul>
+      </div>
+      <div>
+        <h3 class="danger">// минусы</h3>
+        <ul>
+          <li>Барьер входа <span class="dim">~$100 / месяц</span></li>
+          <li>Фильтрует аудиторию</li>
+          <li>Для соцпроекта = «платный курс»</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 15 ВАРИАНТ B -->
+<div class="slide">
+  <div class="slide-counter"><span class="current">15</span> / <span class="total">20</span></div>
+  <div class="slide-inner">
+    <div class="eyebrow">// вариант b · claude for nonprofits</div>
+    <h1>Claude <span class="accent">for Nonprofits</span></h1>
+    <p class="lead dim">Программа Anthropic для 501(c)(3) НКО. Скидка ~68% от стандартных тарифов. Claude Code включён.</p>
+    <div class="stat-row">
+      <div class="stat"><div class="num accent">$8</div><div class="label">standard / seat</div></div>
+      <div class="stat"><div class="num pop">$40</div><div class="label">premium / seat</div></div>
+      <div class="stat"><div class="num accent2">5×</div><div class="label">usage premium</div></div>
+    </div>
+    <table style="margin-top: 16px;">
+      <thead><tr><th>План</th><th>15 + 3 seats</th><th>В месяц</th></tr></thead>
+      <tbody>
+        <tr><td class="accent">Standard</td><td class="mono">18 × $8</td><td class="mono accent">$144</td></tr>
+        <tr><td class="pop">Premium</td><td class="mono">18 × $40</td><td class="mono pop">$720</td></tr>
+      </tbody>
+    </table>
+    <p class="meta-note"><span class="danger">!</span> Anthropic не раскрывает точные лимиты. До старта — <span class="accent">dry-run</span> на 1–2 машинах.</p>
+  </div>
+</div>
+
+<!-- 16 ЭКОНОМИКА ВЕДУЩЕГО -->
+<div class="slide">
+  <div class="slide-counter"><span class="current">16</span> / <span class="total">20</span></div>
+  <div class="slide-inner">
+    <div class="eyebrow">// 08 · экономика</div>
+    <h1>Ставка ведущего <span class="accent">на пилот</span></h1>
+    <div class="split">
+      <div>
+        <div class="stat" style="text-align: left; padding: 24px;">
+          <div class="num accent2" style="font-size: 44px;">₪1,500</div>
+          <div class="label" style="text-align: left;">за сессию · подготовка + проведение + разбор</div>
+        </div>
+        <div class="stat-row" style="margin-top: 12px;">
+          <div class="stat"><div class="num accent">₪3,000</div><div class="label">пилот 2 встречи</div></div>
+          <div class="stat"><div class="num accent">₪6,000</div><div class="label">пилот 4 встречи</div></div>
+        </div>
+      </div>
+      <div>
+        <h3 class="accent2">// отдельно считается</h3>
+        <ul>
+          <li>Кастомная программа под Merkazim</li>
+          <li>Привлечение и сопровождение гостей</li>
+          <li>Работа с участниками между встречами</li>
+          <li>Материалы для переиспользования</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 17 DIVIDER: ВОПРОСЫ -->
+<div class="slide">
+  <div class="slide-counter"><span class="current">17</span> / <span class="total">20</span></div>
+  <div class="slide-inner">
+    <div class="divider-block">
+      <div class="divider-num">// 09 · вопросы</div>
+      <h1><span class="accent">12 вопросов</span><br>до запуска</h1>
+    </div>
+  </div>
+</div>
+
+<!-- 18 ВОПРОСЫ 1-6 -->
+<div class="slide">
+  <div class="slide-counter"><span class="current">18</span> / <span class="total">20</span></div>
+  <div class="slide-inner">
+    <div class="eyebrow">// вопросы 1–6</div>
+    <h1>Инструменты · Формат</h1>
+    <div class="split">
+      <div>
+        <h3 class="accent">// инструменты</h3>
+        <ul>
+          <li>Идём по варианту A или B?</li>
+          <li>Подходит ли Merkazim под nonprofit-статус?</li>
+          <li>Бюджет на extra usage, если Standard тесен?</li>
+        </ul>
+      </div>
+      <div>
+        <h3 class="accent2">// формат</h3>
+        <ul>
+          <li>Пилот на 2 или 4 встречи?</li>
+          <li>Одна сквозная тема или две параллельно?</li>
+          <li>Закрытый поток или открытые события?</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 19 ВОПРОСЫ 7-12 -->
+<div class="slide">
+  <div class="slide-counter"><span class="current">19</span> / <span class="total">20</span></div>
+  <div class="slide-inner">
+    <div class="eyebrow">// вопросы 7–12</div>
+    <h1>Участники · Роли · Бюджет</h1>
+    <div class="cards">
+      <div class="card">
+        <span class="tag">УЧАСТНИКИ</span>
+        <ul>
+          <li>Гость в пилоте — нужен?</li>
+          <li>У всех будут ноутбуки?</li>
+          <li>Нужен ли фильтр по уровню?</li>
+        </ul>
+      </div>
+      <div class="card">
+        <span class="tag amber">РОЛИ</span>
+        <ul>
+          <li>Кто ведёт промо?</li>
+          <li>Кто ведёт регистрацию?</li>
+          <li>Кто отвечает на месте?</li>
+        </ul>
+      </div>
+      <div class="card">
+        <span class="tag pink">БЮДЖЕТ</span>
+        <ul>
+          <li>Ставка ₪1,500 / сессия — ок?</li>
+          <li>Лицензии — за счёт кого?</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 20 СЛЕДУЮЩИЙ ШАГ -->
+<div class="slide">
+  <div class="slide-counter"><span class="current">20</span> / <span class="total">20</span></div>
+  <div class="slide-inner">
+    <div class="title-block">
+      <div class="eyebrow">// next step</div>
+      <h1 class="cursor">Встретиться<br>и <span class="accent">решить.</span></h1>
+      <p class="sub">Пройдём по 12 вопросам. Выберем формат, темы, роли и закроем вопрос с инструментами. После встречи — запуск через 3–4 недели.</p>
+      <div class="meta-row">
+        <span class="accent">Claude Working × Merkazim</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="progress-bar"></div>
+<button class="nav-btn prev" id="btn-prev"><span class="chevron">◄</span> prev</button>
+<button class="nav-btn next" id="btn-next">next <span class="chevron">►</span></button>
+<div class="nav-hint">← → / space / swipe · <span id="nav-counter">1/20</span></div>
+
+<script>
+let current = 0;
+const slides = document.querySelectorAll('.slide');
+const bar = document.querySelector('.progress-bar');
+const counterCurrent = document.querySelectorAll('.current');
+const counterTotal = document.querySelectorAll('.total');
+const btnPrev = document.getElementById('btn-prev');
+const btnNext = document.getElementById('btn-next');
+const navCounter = document.getElementById('nav-counter');
+
+function showSlide(n) {
+  slides[current].classList.remove('active');
+  current = Math.max(0, Math.min(n, slides.length - 1));
+  slides[current].classList.add('active');
+  if (bar) bar.style.width = ((current + 1) / slides.length * 100) + '%';
+  counterCurrent.forEach(el => el.textContent = current + 1);
+  if (navCounter) navCounter.textContent = (current + 1) + '/' + slides.length;
+  if (btnPrev) btnPrev.classList.toggle('disabled', current === 0);
+  if (btnNext) btnNext.classList.toggle('disabled', current === slides.length - 1);
+  history.replaceState(null, '', '#' + (current + 1));
+}
+
+counterTotal.forEach(el => el.textContent = slides.length);
+if (bar) bar.style.width = (1 / slides.length * 100) + '%';
+if (navCounter) navCounter.textContent = '1/' + slides.length;
+
+document.addEventListener('keydown', e => {
+  if (['ArrowRight','Space','Enter'].includes(e.code)) { e.preventDefault(); showSlide(current + 1); }
+  if (['ArrowLeft','Backspace'].includes(e.code)) { e.preventDefault(); showSlide(current - 1); }
+  if (e.code === 'Home') { e.preventDefault(); showSlide(0); }
+  if (e.code === 'End') { e.preventDefault(); showSlide(slides.length - 1); }
+});
+
+if (btnPrev) btnPrev.addEventListener('click', () => showSlide(current - 1));
+if (btnNext) btnNext.addEventListener('click', () => showSlide(current + 1));
+
+let touchStartX = 0;
+document.addEventListener('touchstart', e => { touchStartX = e.changedTouches[0].screenX; });
+document.addEventListener('touchend', e => {
+  const diff = touchStartX - e.changedTouches[0].screenX;
+  if (Math.abs(diff) > 50) { diff > 0 ? showSlide(current + 1) : showSlide(current - 1); }
+});
+
+const hash = parseInt(location.hash.slice(1));
+if (hash && hash >= 1 && hash <= slides.length) showSlide(hash - 1);
+else showSlide(0);
+</script>
+
+</body>
+</html>

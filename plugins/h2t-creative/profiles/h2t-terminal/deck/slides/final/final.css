@@ -1,0 +1,32 @@
+/* final — closing slide. Large centered headline with cursor blink.
+ * Mirrors title-block typography but minus meta line; subline reads as a closing
+ * call-to-action rather than a setup.
+ */
+
+.final-block { gap: 4px; align-items: center; text-align: center; }
+.final-block h1 {
+  font-size: 56px;
+  letter-spacing: 3px;
+  line-height: 1.15;
+}
+.final-block .sub {
+  font-size: 18px;
+  color: var(--text-dim);
+  max-width: 60ch;
+  margin: 18px auto 0;
+  line-height: 1.55;
+}
+.final-block .sub:empty { display: none; }
+
+/* Mobile (T15) */
+@media (max-width: 480px) {
+  .final-block h1 {
+    font-size: 30px;
+    letter-spacing: 1.5px;
+    line-height: 1.15;
+  }
+  .final-block .sub {
+    font-size: 16px;
+    margin-top: 14px;
+  }
+}

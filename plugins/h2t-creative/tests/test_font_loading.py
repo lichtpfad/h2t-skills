@@ -40,6 +40,23 @@ def test_font_links_deck_editorial(tmp_path):
     assert "fonts.googleapis.com" in html
 
 
+def test_font_links_deck_terminal(tmp_path):
+    """Terminal is deck-form; font link must end up inlined in the single-file
+    output (T9 §5.9). Drive via the validation recipe so the layout vocabulary
+    matches the form-v2 path."""
+    import yaml as _yaml
+
+    profile_dir = asm.PROFILES_DIR / "h2t-terminal"
+    recipe = _yaml.safe_load(
+        (profile_dir / "validation" / "recipe-deck.yaml").read_text(encoding="utf-8")
+    )
+    out = tmp_path / "out"
+    asm.assemble_deck(recipe, profile_dir, out, palette=recipe.get("palette", "default"))
+    html = (out / "index.html").read_text(encoding="utf-8")
+    assert "fonts.googleapis.com" in html
+    assert "JetBrains+Mono" in html or "JetBrains Mono" in html
+
+
 def test_preconnect_hints(tmp_path):
     out = tmp_path / "out"
     asm.assemble_landing(_RECIPE, asm.PROFILES_DIR / "h2t-editorial", out)

@@ -1,0 +1,37 @@
+/* divider — section break slide.
+ * Per design system §Typography (divider-slide variant) and §Slide layouts.
+ * Centered headline + accent-colored numeric label + horizontal divider.
+ * Recipe-side `align: center` adds .slide.center for full centering.
+ */
+
+.divider-block { gap: 6px; align-items: center; text-align: center; }
+.divider-block h1 {
+  font-size: 48px;
+  text-align: center;
+}
+.divider-block .divider-num {
+  font-size: 14px;
+  color: var(--accent);
+  letter-spacing: 4px;
+  margin-bottom: 12px;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+.divider-block .divider-num:empty { display: none; }
+.divider-block .divider {
+  margin-left: auto;
+  margin-right: auto;
+  margin-top: 24px;
+}
+
+/* Mobile (T15) */
+@media (max-width: 480px) {
+  .divider-block h1 {
+    font-size: 26px;
+  }
+  .divider-block .divider-num {
+    font-size: 12px;
+    letter-spacing: 3px;
+    margin-bottom: 10px;
+  }
+}
