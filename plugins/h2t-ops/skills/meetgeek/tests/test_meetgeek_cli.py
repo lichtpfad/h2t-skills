@@ -695,3 +695,39 @@ def test_drive_upload_creates_dated_folder_and_uploads(cli, tmp_path, monkeypatc
     assert any(f.startswith("FILE_") for f in state["files"].values())
     assert len(state["perm_calls"]) == 1
     assert state["perm_calls"][0][1] == {"type": "anyone", "role": "reader"}
+
+
+# ─── uploads manifest ──────────────────────────────────────────────────────────
+
+def test_uploads_manifest_last_line_wins(cli, tmp_path):
+    m = tmp_path / "manifest.jsonl"
+    lines = [
+        {"source_webm": "/a.webm", "status": "converted",
+         "source_size_bytes": 100, "source_mtime": "2026-05-06T10:00:00Z"},
+        {"source_webm": "/a.webm", "status": "in-drive",
+         "source_size_bytes": 100, "source_mtime": "2026-05-06T10:00:00Z",
+         "drive_id": "X"},
+        {"source_webm": "/b.webm", "status": "submitted",
+         "source_size_bytes": 200, "source_mtime": "2026-05-06T11:00:00Z"},
+    ]
+    with m.open("w", encoding="utf-8") as f:
+        for r in lines:
+            f.write(json.dumps(r) + "\n")
+    state = cli._read_uploads_manifest(m)
+    assert state["/a.webm"]["status"] == "in-drive"
+    assert state["/a.webm"]["drive_id"] == "X"
+    assert state["/b.webm"]["status"] == "submitted"
+
+
+def test_uploads_manifest_skip_existing_size_mtime_match(cli, tmp_path):
+    m = tmp_path / "manifest.jsonl"
+    rec = {"source_webm": "/x.webm", "status": "submitted",
+           "source_size_bytes": 100, "source_mtime": "2026-05-06T10:00:00Z"}
+    m.write_text(json.dumps(rec) + "\n", encoding="utf-8")
+    state = cli._read_uploads_manifest(m)
+    assert cli._is_already_submitted(state, "/x.webm",
+                                     size=100, mtime="2026-05-06T10:00:00Z") is True
+    assert cli._is_already_submitted(state, "/x.webm",
+                                     size=200, mtime="2026-05-06T10:00:00Z") is False
+    assert cli._is_already_submitted(state, "/x.webm",
+                                     size=100, mtime="2026-05-06T11:00:00Z") is False
