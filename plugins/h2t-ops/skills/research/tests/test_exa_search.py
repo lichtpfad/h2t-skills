@@ -24,7 +24,7 @@ def test_version_flag():
         text=True,
     )
     assert result.returncode == 0, result.stderr
-    assert "0.1.0" in result.stdout
+    assert "0.1.1" in result.stdout
 
 
 # --- MODE_CONFIG tests ---
