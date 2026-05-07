@@ -273,3 +273,15 @@ def test_direct_provider_final_url_after_redirect():
         r = p.fetch("http://example.com/pops-intro",
                     timeout_ms=15000, user_agent="ua/test")
     assert r.final_url == "https://www.example.com/pops-intro"
+
+
+def test_detect_js_shell_true_for_spa_skeleton():
+    html = _load_fixture("js_shell.html")
+    body_text = ""  # inline_extract would yield empty
+    assert fetch_url._detect_js_shell(html=html, body_text=body_text) is True
+
+
+def test_detect_js_shell_false_for_real_article():
+    html = _load_fixture("public_article.html")
+    _, _, body_text, _, _, _ = fetch_url._inline_extract(html, base_url="x")
+    assert fetch_url._detect_js_shell(html=html, body_text=body_text) is False
