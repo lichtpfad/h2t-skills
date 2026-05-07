@@ -619,7 +619,105 @@ After ack, T1 starts on this branch, this worktree.
 
 ---
 
-## 12. References
+## 12. T0 — Caller inventory (executed 2026-05-08)
+
+Pre-T1 audit. Every call site of public API + internal helpers, with
+the explicit backward-compat verdict. No code changes here.
+
+### 12.1 Public API call sites
+
+| Symbol | Definition | Production callers | Test callers | Verdict |
+|---|---|---|---|---|
+| `assemble_landing(recipe, profile_dir, out_dir, base_dir=None, palette="default")` | `assembler.py:198` | `main_assemble` line 875 | `tests/h2t_creative/test_assembler.py` (lines 93, 110, 125, 138, 242, 341); `plugins/h2t-creative/tests/test_smoke.py`, `test_r1_legacy_fidelity.py`, `test_font_loading.py` | **Signature preserved.** Semantic branch lives INSIDE this function (early check on `recipe.get("blocks")` → semantic path; otherwise `sections` path). All existing callers call it the same way; no behavioural change for `sections:` recipes (locked by T9 byte-identity). |
+| `assemble_deck(recipe, profile_dir, out_dir, base_dir=None, palette="default")` | `assembler.py` (form-v2 branch + legacy) | `main_assemble` line 877 | `test_assembler.py` deck tests (lines 158, 176, 197, 228, 353, 392, 417, 1029+); `test_r2b_legacy_fidelity_deck.py`, `test_r2_legacy_fidelity.py` | **Untouched.** v0 is landing-only. No deck signature change. |
+| `main_assemble(output_type, recipe, profile_dir, out_dir, base_dir=None, palette="default")` | `assembler.py:862` | `main()` CLI line 916 | `test_assembler.py:208, 216` | **Untouched.** Dispatcher already routes `output_type=landing` to `assemble_landing`; new branch is fully internal to `assemble_landing`. Existing guard rules (lines 868-873: "landing must not have `slides:`", "deck must not have `sections:`") stay. |
+| `main()` CLI (`--profile / --type / --recipe / --out`) | `assembler.py:893` | `plugins/h2t-creative/skills/{landing,deck}/SKILL.md` | implicit | **Untouched.** `--profile / --type / --recipe / --out / --palette / --dry-run` flags all preserved. SKILL invocation strings stay valid byte-for-byte. |
+
+### 12.2 Internal helpers (legacy path) — locked under guardrail G-B
+
+| Symbol | Definition | Verdict |
+|---|---|---|
+| `_resolve_component_dir(component_name, profile_dir, shared_dir=SHARED_DIR)` | line 94 | **Locked.** Semantic adapter calls it exactly the same way (per-derived-section component lookup). Signature unchanged. |
+| `_build_section_html(section, profile_dir)` | line 146 | **Locked.** Semantic adapter calls it once per derived section after field-mapping. No modification. |
+| `_build_profile_css(profile_dir, sections, palette="default")` | line 159 | **Locked.** Adapter passes a `sections` list derived from semantic blocks (post-skin-mapping) so the existing CSS-bundling logic walks the right components. Signature + behaviour unchanged. |
+| `interpolate(template, fields)` | line 50 | **Locked.** No new placeholder syntax. |
+| `validate_section_content(section, manifest)` | line 66 | **Locked.** Semantic adapter runs it after field-mapping translates semantic block → component fields. |
+
+All five helpers are read by the semantic adapter; none are rewritten.
+G-B (§1.1) is satisfied by construction.
+
+### 12.3 Live recipes (T9 backward-compat baseline scope)
+
+Per P-D3 verdict: baseline locked for active landing recipes only.
+
+| Profile | Path | Type | Action |
+|---|---|---|---|
+| `h2t-graphs` | `profiles/h2t-graphs/validation/recipe.yaml` | landing | **T9 baseline.** Capture pre-v0 build, hash, lock. |
+| `h2t-mono` | `profiles/h2t-mono/validation/recipe.yaml` | landing | **T9 baseline.** Same. |
+| `h2t-editorial` | `profiles/h2t-editorial/validation/recipe-deck.yaml` | deck | **Out of v0 scope.** Deck-only profile change tracked by R2b deck (PR #102, already merged). |
+| `h2t-terminal` | `profiles/h2t-terminal/validation/recipe-deck.yaml` | deck | **Out of v0 scope.** R2a deck PR #95. |
+
+T9 fixture surface is two recipe builds (graphs + mono), captured under
+`tests/fixtures/legacy_landing_baselines.json` BEFORE T4 lands and
+asserted byte-identical AFTER T4 lands.
+
+### 12.4 CLI / SKILL invocation surface
+
+| File | Invocation | Verdict |
+|---|---|---|
+| `plugins/h2t-creative/skills/landing/SKILL.md` line 81 | `python assembler.py --profile <name> --type landing --recipe recipe.yaml --out ./dist` | **Unchanged.** Recipe file format is auto-detected from `blocks:` vs `sections:` keys inside the YAML. No new flag, no new sub-command. |
+| `plugins/h2t-creative/skills/deck/SKILL.md` line 78 | same shape for deck | **Untouched.** |
+
+The skills are not modified in v0. A semantic-mode authoring guide
+lands as a separate skill or skill amendment in a follow-up slice
+(per G-B "no bulk doc rewrites").
+
+### 12.5 Branch-attachment recommendation
+
+**Where semantic check goes:**
+
+```python
+def assemble_landing(recipe, profile_dir, out_dir, base_dir=None, palette="default"):
+    # NEW: semantic branch
+    if "blocks" in recipe:
+        return _assemble_landing_semantic(recipe, profile_dir, out_dir, base_dir, palette)
+    # EXISTING: legacy section-based path (unchanged below)
+    if base_dir is None:
+        base_dir = BASE_DIR
+    out_dir.mkdir(parents=True, exist_ok=True)
+    sections = recipe.get("sections", [])
+    ...
+```
+
+`main_assemble` (line 862) stays unchanged. The existing guard
+"landing must not have `slides:`" stays; we ADD an analogous guard
+inside `assemble_landing` that "recipe must not have BOTH `blocks:`
+AND `sections:`" (semantic_parser test §T1).
+
+This minimises blast radius:
+- All current `assemble_landing` callers see the same signature.
+- All current legacy recipes hit the existing path unchanged.
+- The new path activates ONLY when `blocks:` is present (a key that
+  no current production recipe uses — confirmed by §12.3 sweep).
+
+### 12.6 Risks surfaced by T0
+
+| Risk | Mitigation |
+|---|---|
+| The semantic adapter must construct synthetic `sections:` lists to feed `_build_profile_css` (so the right component CSS gets bundled). If the synthesis is wrong, profile.css may miss CSS or pull legacy CSS. | T9 byte-identity covers legacy. New `test_semantic_adapter_synthesizes_correct_section_list_for_skin` (T4) covers semantic side. |
+| `validate_section_content` is per-component and may raise if semantic field-mapping misses a required field. | T3 field_mapper tests assert the contract per role — RED tests must include "missing field at block N raises with block-position-aware error". |
+| Tests in `test_assembler.py` use `_make_minimal_profile` / `_make_palette_profile` helpers; semantic path doesn't have helper analogues yet. | T1-T4 ship per-test fixtures; no test-helper expansion in v0. |
+| Recipe duplicate-key error case (`blocks:` + `sections:`) currently silently picks one due to YAML loader behaviour. | T1 explicit guard with `KeyError` / `ValueError` and a descriptive message. |
+
+### 12.7 T0 verdict
+
+T1 is unblocked. Public API is preserved, internal helpers are
+preserved, branch-attachment point is identified, fixture surface is
+scoped, and the four risks are tracked.
+
+---
+
+## 13. References
 
 - Architecture spec: `docs/superpowers/specs/2026-05-08-h2t-creative-semantic-rendering-architecture.md` (this branch).
 - Rhythm spec + research-validated v0 standard: `docs/visual-regression/2026-05-07-r2b/h2t-editorial-landing-rhythm-spec.md` (`codex/r2b-editorial-landing`; cherry-picked here in T6.3).
