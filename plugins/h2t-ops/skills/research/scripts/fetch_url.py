@@ -1063,7 +1063,27 @@ def _run_fetch(args: argparse.Namespace) -> int:
 
     _write_sources_json(paths["sources_json"], envelope, project=args.project)
 
+    if envelope["status"] != "FAILED":
+        _write_partial_md(paths["partial_md"], envelope)
+
     return _emit_stdout_and_exit(envelope, args)
+
+
+def _write_partial_md(path: Path, envelope: dict[str, Any]) -> None:
+    lines = []
+    lines.append(f"# Fetch: {envelope['url']}")
+    lines.append("")
+    lines.append(f"status: {envelope['status']}")
+    lines.append(f"provider_used: {envelope['provider_used']}")
+    lines.append(f"content_type: {envelope['content_type']}")
+    if envelope["title"]:
+        lines.append(f"title: {envelope['title']}")
+    lines.append("")
+    lines.append("## Body")
+    lines.append("")
+    lines.append(envelope["body_markdown"] or envelope["body_text"])
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n".join(lines), encoding="utf-8")
 
 
 def _emit_stdout_and_exit(envelope: dict[str, Any],

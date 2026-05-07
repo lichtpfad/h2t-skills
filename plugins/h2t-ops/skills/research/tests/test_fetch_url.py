@@ -966,3 +966,29 @@ def test_keep_raw_on_writes_raw_file(tmp_path):
     assert data["envelope"]["metadata"]["raw_html_path"] == str(raws[0])
     content = raws[0].read_text(encoding="utf-8")
     assert "POPs in TouchDesigner" in content
+
+
+def test_partial_md_written_for_ok(tmp_path):
+    html = _load_fixture("public_article.html").encode("utf-8")
+    with patch("urllib.request.urlopen") as mock_urlopen:
+        mock_urlopen.return_value = _make_http_response(
+            html, url="https://example.com/x",
+        )
+        fetch_url.main([
+            "fetch", "--url", "https://example.com/x",
+            "--output-dir", str(tmp_path), "--project", "test",
+        ])
+    p = next(tmp_path.glob("*.partial.md"))
+    body = p.read_text(encoding="utf-8")
+    assert "POPs in TouchDesigner" in body
+    assert "provider_used: direct" in body
+
+
+def test_partial_md_not_written_for_failed(tmp_path):
+    with patch("urllib.request.urlopen") as mock_urlopen:
+        mock_urlopen.side_effect = _http_error(503)
+        fetch_url.main([
+            "fetch", "--url", "https://example.com/x",
+            "--output-dir", str(tmp_path), "--project", "test",
+        ])
+    assert list(tmp_path.glob("*.partial.md")) == []
