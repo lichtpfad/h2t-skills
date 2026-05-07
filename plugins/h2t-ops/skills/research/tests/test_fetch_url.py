@@ -161,3 +161,38 @@ def test_inline_extract_public_article():
     assert any(l["href"].endswith("/glsl-pops") for l in links)
     # Script content excluded from body
     assert "/static/app.js" not in body_text
+
+
+def _make_http_response(body: bytes, *, status: int = 200,
+                        headers: dict[str, str] | None = None,
+                        url: str = "https://example.com/x"):
+    """Build a duck-typed urlopen response."""
+    headers = headers or {"Content-Type": "text/html; charset=utf-8"}
+    resp = MagicMock()
+    resp.read.return_value = body
+    resp.status = status
+    resp.headers = headers
+    resp.geturl.return_value = url
+    resp.__enter__ = lambda self_: self_
+    resp.__exit__ = lambda self_, *a: None
+    return resp
+
+
+def test_direct_provider_happy_path_extracts_article():
+    html = _load_fixture("public_article.html").encode("utf-8")
+    p = fetch_url.DirectProvider()
+    with patch("urllib.request.urlopen") as mock_urlopen:
+        mock_urlopen.return_value = _make_http_response(
+            html, url="https://example.com/pops-intro",
+        )
+        r = p.fetch("https://example.com/pops-intro",
+                    timeout_ms=15000, user_agent="ua/test")
+    assert r.provider == "direct"
+    assert r.http_status == 200
+    assert r.title == "POPs in TouchDesigner — Introduction"
+    assert "POPs are the new particle context" in r.body_text
+    assert r.body_chars > 200
+    assert r.final_url == "https://example.com/pops-intro"
+    assert r.canonical_url == "https://example.com/pops-intro"
+    assert r.lang == "en"
+    assert r.raw_html.startswith("<!DOCTYPE html>") or "<html" in r.raw_html
