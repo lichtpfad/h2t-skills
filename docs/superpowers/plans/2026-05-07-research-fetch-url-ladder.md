@@ -56,6 +56,16 @@ For pattern matching prefer the **Grep tool** over `grep`/`Select-String` in she
 
 Before Task 1, verify environment:
 
+- [ ] **Pre-0: Mark worktree as a safe directory for git**
+
+Worktree paths created from another shell are flagged by Git as `dubious ownership` until added to `safe.directory`, which makes ALL `git -C C:/dev/h2t-skills-fetch-ladder ...` commands fail with `fatal: detected dubious ownership in repository at ...`. Run **once** per machine:
+
+```bash
+git config --global --add safe.directory C:/dev/h2t-skills-fetch-ladder
+```
+
+Idempotent: `--add` does not create a duplicate if the entry already exists. After this, every other `git -C` command in the plan works.
+
 - [ ] **Pre-1: Verify worktree**
 
 ```bash
@@ -64,10 +74,10 @@ git -C C:/dev/h2t-skills-fetch-ladder status -sb
 
 Expected:
 ```
-## feature/research-fetch-url-ladder...origin/main [ahead 1]
+## feature/research-fetch-url-ladder...origin/main [ahead 2]
 ```
 
-(Allowed: spec commit `85f86d6` — это единственный ahead-commit.)
+(Allowed ahead commits: `85f86d6` spec + `6c72717` plan = 2.)
 
 - [ ] **Pre-2: Verify Python**
 
@@ -2535,7 +2545,15 @@ def test_inline_baseline_works_without_trafilatura(capsys):
 @pytest.mark.optional
 def test_trafilatura_used_when_available_uplifts_body(monkeypatch):
     """If a trafilatura-shaped uplift function is present, body should be
-    at least as long as inline baseline."""
+    at least as long as inline baseline.
+
+    NOTE: `@pytest.mark.optional` here is a *label*, not a skip condition.
+    This test does NOT require real trafilatura installed — it monkeypatches
+    a fake module shape. So the test runs in the baseline pytest invocation
+    and must pass. If you ever need a true opt-in skip (real trafilatura
+    integration smoke), use `@pytest.mark.skipif(not _has_real_trafilatura(),
+    reason="...")` in a separate test.
+    """
     fake_module = MagicMock()
     fake_module.extract.return_value = (
         "POPs are the new particle context in TouchDesigner. "
@@ -2742,6 +2760,8 @@ git -C C:/dev/h2t-skills-fetch-ladder commit -m "feat(research): CLI argparse + 
 
 - [ ] **Step 1: Failing test**
 
+Sidecar schema follows spec §10.4: `{meta, envelope, body}`. `meta` is sidecar-level metadata (tool, project, url, status); `envelope` is the full fetch envelope verbatim; `body` carries the markdown plus a text excerpt. Don't conflate sidecar `meta` with `envelope.meta`.
+
 ```python
 def test_cli_fetch_writes_sources_json_sidecar(tmp_path, monkeypatch):
     html = _load_fixture("public_article.html").encode("utf-8")
@@ -2759,9 +2779,20 @@ def test_cli_fetch_writes_sources_json_sidecar(tmp_path, monkeypatch):
     sidecars = list(tmp_path.glob("test-fetch-*.sources.json"))
     assert len(sidecars) == 1
     data = json.loads(sidecars[0].read_text(encoding="utf-8"))
+    # Top-level shape per spec §10.4:
+    assert set(data.keys()) >= {"meta", "envelope", "body"}
+    # Sidecar meta:
+    assert data["meta"]["tool"] == "fetch_url.py"
+    assert data["meta"]["project"] == "test"
+    assert data["meta"]["url"] == "https://example.com/x"
+    assert data["meta"]["status"] == "OK"
+    # Envelope verbatim:
     assert data["envelope"]["status"] == "OK"
     assert data["envelope"]["meta"]["envelope_version"] == "1"
     assert data["envelope"]["provider_used"] == "direct"
+    # Body block:
+    assert "POPs in TouchDesigner" in data["body"]["markdown"]
+    assert "POPs are the new particle context" in data["body"]["text_excerpt"]
 ```
 
 - [ ] **Step 2: FAIL**
@@ -2796,10 +2827,24 @@ def _output_paths(output_dir: Path, project: str, url: str,
 
 
 def _write_sources_json(path: Path, envelope: dict[str, Any],
-                        body_excerpt: str) -> None:
+                        *, project: str) -> None:
+    """Write sidecar per spec §10.4: {meta, envelope, body}."""
     payload = {
+        "meta": {
+            "tool": "fetch_url.py",
+            "tool_version": __version__,
+            "project": project,
+            "url": envelope["url"],
+            "final_url": envelope.get("final_url"),
+            "status": envelope["status"],
+            "provider_used": envelope.get("provider_used"),
+            "timestamp": envelope["meta"]["timestamp"],
+        },
         "envelope": envelope,
-        "body_excerpt": body_excerpt[:5000],
+        "body": {
+            "markdown": envelope.get("body_markdown", ""),
+            "text_excerpt": (envelope.get("body_text", "") or "")[:5000],
+        },
     }
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2),
                     encoding="utf-8")
@@ -2826,8 +2871,7 @@ def _run_fetch(args: argparse.Namespace) -> int:
         output_paths=paths,
     )
 
-    _write_sources_json(paths["sources_json"], envelope,
-                        envelope.get("body_text", ""))
+    _write_sources_json(paths["sources_json"], envelope, project=args.project)
 
     return _emit_stdout_and_exit(envelope, args)
 ```
@@ -3043,8 +3087,8 @@ def test_keep_raw_off_by_default_no_raw_file(tmp_path):
     raws = list(tmp_path.glob("*.raw.html"))
     assert raws == []
     sidecar = next(tmp_path.glob("*.sources.json"))
-    env = json.loads(sidecar.read_text(encoding="utf-8"))["envelope"]
-    assert env["metadata"]["raw_html_path"] is None
+    data = json.loads(sidecar.read_text(encoding="utf-8"))
+    assert data["envelope"]["metadata"]["raw_html_path"] is None
 
 
 def test_keep_raw_on_writes_raw_file(tmp_path):
@@ -3060,8 +3104,8 @@ def test_keep_raw_on_writes_raw_file(tmp_path):
     raws = list(tmp_path.glob("*.raw.html"))
     assert len(raws) == 1
     sidecar = next(tmp_path.glob("*.sources.json"))
-    env = json.loads(sidecar.read_text(encoding="utf-8"))["envelope"]
-    assert env["metadata"]["raw_html_path"] == str(raws[0])
+    data = json.loads(sidecar.read_text(encoding="utf-8"))
+    assert data["envelope"]["metadata"]["raw_html_path"] == str(raws[0])
     content = raws[0].read_text(encoding="utf-8")
     assert "POPs in TouchDesigner" in content
 ```
@@ -3448,24 +3492,28 @@ git -C C:/dev/h2t-skills-fetch-ladder commit -m "feat(research): public __all__ 
 C:/Users/stani/.h2t/venv/Scripts/python.exe -m pytest plugins/h2t-ops/skills/research/tests/test_fetch_url.py -v
 ```
 
-Expected: all baseline tests pass; `@pytest.mark.optional` tests skipped or passed (depends on whether `optional` marker is registered).
+Expected: **all** tests pass — including `@pytest.mark.optional`, since that decorator is a label here, not a skip. The `optional` test monkeypatches a fake trafilatura module and does not require real install.
 
-- [ ] **Step 2: Register marker (avoid pytest warnings)**
+- [ ] **Step 2: Register the marker label (avoid pytest warnings)**
 
-If pytest warns about unknown `optional` marker, add `pytest.ini` markers entry or `conftest.py`. Cheapest: prepend the test file with:
+Pytest emits `PytestUnknownMarkWarning` for unrecognised marker names. Register `optional` so the test output stays clean. Prepend in `tests/test_fetch_url.py`:
 
 ```python
 def pytest_configure(config):
-    config.addinivalue_line("markers", "optional: opt-in tests (e.g. trafilatura uplift)")
+    config.addinivalue_line(
+        "markers",
+        "optional: label for opt-in scenarios (e.g. real-trafilatura uplift). "
+        "Currently still runs in baseline; reserve for future @skipif gating.",
+    )
 ```
 
-…or, if the project already has a `conftest.py`, add the marker there. Run:
+…or, if the project already has a `conftest.py`, add the marker there instead. Run:
 
 ```bash
 C:/Users/stani/.h2t/venv/Scripts/python.exe -m pytest plugins/h2t-ops/skills/research/tests/test_fetch_url.py -v 2>&1 | tail -10
 ```
 
-Expected: clean run, no PytestUnknownMarkWarning.
+Expected: clean run, no `PytestUnknownMarkWarning`. Again — **no tests should be reported as skipped** under this configuration; the marker is purely informational.
 
 - [ ] **Step 3: Run sister test file too (no regressions)**
 
@@ -3624,19 +3672,30 @@ git -C C:/dev/h2t-skills-fetch-ladder commit -m "docs(research): reference.md �
 
 ---
 
-## Task 40: Plugin version bump
+## Task 40: Plugin version bump (atomic across plugin.json + marketplace.json)
 
 **Files:**
 - Modify: `plugins/h2t-ops/.claude-plugin/plugin.json`
+- Modify: `.claude-plugin/marketplace.json`
 
-- [ ] **Step 1: Bump version**
+The repo ships a helper that bumps **both** files atomically — `scripts/bump_plugin.py`. Editing only `plugin.json` causes version drift between marketplace and plugin manifest (incident: lichtpfad/h2t-skills#74). Use the helper.
 
-Change `"version": "1.1.1"` → `"version": "1.1.2"`.
+- [ ] **Step 1: Run bump helper**
 
-- [ ] **Step 2: Commit**
+```
+C:/Users/stani/.h2t/venv/Scripts/python.exe scripts/bump_plugin.py h2t-ops 1.1.2
+```
+
+Expected: prints recommended commit command, exits 0. Both files now contain `"version": "1.1.2"`.
+
+- [ ] **Step 2: Verify both files updated**
+
+Use Grep tool, pattern `"version"` in `plugins/h2t-ops/.claude-plugin/plugin.json` AND `.claude-plugin/marketplace.json`. Each must show `"version": "1.1.2"` for the `h2t-ops` entry.
+
+- [ ] **Step 3: Commit (stage both files explicitly)**
 
 ```bash
-git -C C:/dev/h2t-skills-fetch-ladder add plugins/h2t-ops/.claude-plugin/plugin.json
+git -C C:/dev/h2t-skills-fetch-ladder add plugins/h2t-ops/.claude-plugin/plugin.json .claude-plugin/marketplace.json
 git -C C:/dev/h2t-skills-fetch-ladder commit -m "chore(h2t-ops): bump plugin to 1.1.2 (fetch_url.py)"
 ```
 
@@ -3754,9 +3813,22 @@ gh issue comment 98 --repo lichtpfad/h2t-skills --body "Chosen ladder design lan
 
 ## Execution Handoff
 
-Plan complete and saved to `docs/superpowers/plans/2026-05-07-research-fetch-url-ladder.md`. Two execution options:
+Plan complete and saved to `docs/superpowers/plans/2026-05-07-research-fetch-url-ladder.md`.
 
-1. **Subagent-Driven (recommended)** — I dispatch a fresh subagent per task, review between tasks, fast iteration.
-2. **Inline Execution** — Execute tasks in this session using executing-plans, batch execution with checkpoints.
+**Execution mode: 3 worker-blocks with reviews between them.** 41 fresh subagents = too much context-reload overhead for tasks this dense. Worker-blocks are sized so each one produces a coherent, reviewable diff and ends at a natural boundary.
 
-Which approach?
+| Block | Tasks | What lands | Review focus |
+|---|---|---|---|
+| **Worker A** | 1–17 | Bootstrap, envelope, exceptions, ProviderResult, inline extractor, DirectProvider full error matrix, content classifier, JinaProvider, stubs, JSON config loader | Provider contracts, exception taxonomy, classifier signals, no leaked HTTP from stubs |
+| **Worker B** | 18–32 | ProviderLadder (single-OK / fall-through / hard-gate / all-fail / DEGRADED-best / explicit-skip / providers_skipped / cumulative timeout), trafilatura uplift, CLI argparse + sidecars + `--keep-raw` + `--json` + preflight | Ladder decision logic, sidecar shape `{meta, envelope, body}`, exit code matrix, gating short-circuit invariants |
+| **Worker C** | 33–41 | Cloudflare 403 regression, unicode, KNOWN_PAYWALLED_DOMAINS, public `__all__`, smoke run, SKILL.md, reference.md, plugin version bump (via `scripts/bump_plugin.py`), acceptance walk-through | Public API surface for adapters, docs accuracy, version-sync (plugin.json + marketplace.json), spec §12 acceptance coverage |
+
+**Push and `gh pr create` (Task 41 Step 4–6) are gated by an additional explicit user OK.** Do not push until reviewer signs off on Worker C.
+
+**Review checkpoints:**
+
+- After **A**: cherry-check provider tests + diff size; Confirm no stub provider issues outbound HTTP; verify `__all__` not yet exported (Worker C job).
+- After **B**: run full pytest; eyeball ladder code for skipped-reason consistency (`not_configured_stub` / `disabled_in_config` / `cumulative_timeout_exhausted`); confirm `--json + gated` test passes with exit 5.
+- After **C**: run `git log --oneline origin/main..HEAD` — should be ~41 conventional-commit-prefixed entries; spec §12 checklist all covered; SKILL.md privacy note present; both manifest files at 1.1.2.
+
+**If a worker hits a blocker mid-block:** stop, surface the issue, do NOT skip the task. Plan amendments go through the same review gate as the original spec.
