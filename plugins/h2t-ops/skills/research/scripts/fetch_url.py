@@ -78,3 +78,64 @@ def build_fetch_envelope(
             "user_agent": user_agent,
         },
     }
+
+
+from dataclasses import dataclass, field
+
+
+class ProviderTransientError(Exception):
+    """Retryable across providers: 5xx, 429, network timeout, URLError."""
+
+    def __init__(self, message: str, *, provider: str, http_status: int | None,
+                 latency_ms: int):
+        super().__init__(message)
+        self.provider = provider
+        self.http_status = http_status
+        self.latency_ms = latency_ms
+
+
+class ProviderPermanentError(Exception):
+    """Non-retryable for THIS provider; ladder may try next: 4xx, malformed."""
+
+    def __init__(self, message: str, *, provider: str, http_status: int | None,
+                 latency_ms: int):
+        super().__init__(message)
+        self.provider = provider
+        self.http_status = http_status
+        self.latency_ms = latency_ms
+
+
+class ProviderHardGate(Exception):
+    """Bypass forbidden — ladder STOPS, does not try further providers."""
+
+    def __init__(self, message: str, *, provider: str, gate: str, latency_ms: int,
+                 http_status: int | None = None):
+        super().__init__(message)
+        self.provider = provider
+        self.gate = gate  # login_required | paid
+        self.http_status = http_status
+        self.latency_ms = latency_ms
+
+
+class ProviderNotConfigured(Exception):
+    """Provider exists but not enabled. Ladder skips silently."""
+
+    def __init__(self, message: str, *, provider: str):
+        super().__init__(message)
+        self.provider = provider
+
+
+@dataclass
+class ProviderResult:
+    provider: str
+    http_status: int | None
+    latency_ms: int
+    final_url: str | None
+    title: str | None
+    body_markdown: str
+    body_text: str
+    body_chars: int
+    links: list[dict[str, Any]]
+    canonical_url: str | None
+    lang: str | None
+    raw_html: str | None
