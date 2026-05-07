@@ -1284,3 +1284,44 @@ def test_crawl_empty_is_degraded(monkeypatch, tmp_path):
     sources = list(tmp_path.glob("*.sources.json"))
     data = json.loads(sources[0].read_text(encoding="utf-8"))
     assert data["meta"]["envelope"]["status"] == "DEGRADED"
+
+
+# --- h2t_secrets bootstrap integration (Task 4 of secrets-loader) ---
+
+
+def test_main_calls_h2t_secrets_bootstrap(monkeypatch):
+    """exa_search.main() must invoke h2t_secrets.bootstrap() before parsing args.
+
+    Mocks the loader so we don't need a real secrets.env. Verifies the call
+    happens via the cached _h2t_secrets_bootstrap module-level handle.
+    """
+    bootstrap_called = []
+
+    def fake_bootstrap(*, env_file=None):
+        bootstrap_called.append(True)
+        return {}
+
+    monkeypatch.setattr(exa_search, "_h2t_secrets_bootstrap", fake_bootstrap)
+    monkeypatch.setenv("EXA_API_KEY", "stub-for-preflight-skip")
+
+    # Pass empty argv to fall through parser → print_help → return 0,
+    # avoiding argparse's --version SystemExit. Bootstrap fires before parsing.
+    rc = exa_search.main([])
+
+    assert rc == 0
+    assert bootstrap_called == [True]
+
+
+def test_main_handles_missing_secrets_file(monkeypatch, capsys):
+    """If h2t_secrets.bootstrap raises FileNotFoundError, main exits 4 with EXA_ERROR:ENV."""
+
+    def failing_bootstrap(*, env_file=None):
+        raise FileNotFoundError("h2t_secrets: secrets file not found at /tmp/missing")
+
+    monkeypatch.setattr(exa_search, "_h2t_secrets_bootstrap", failing_bootstrap)
+
+    with pytest.raises(SystemExit) as excinfo:
+        exa_search.main(["search", "--query", "x", "--mode", "generic"])
+
+    assert excinfo.value.code == 4
+    assert "EXA_ERROR:ENV" in capsys.readouterr().err
