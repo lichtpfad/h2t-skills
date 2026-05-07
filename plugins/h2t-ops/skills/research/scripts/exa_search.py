@@ -236,6 +236,159 @@ def build_envelope(
     }
 
 
+RETRY_BACKOFF_SECONDS: dict[str, float] = {
+    "exa_5xx_retryable":   2.0,  # also covers 429
+    "exa_network_timeout": 1.5,
+    "exa_empty_results":   1.0,
+}
+RETRY_BUDGET_SECONDS = 10.0
+
+
+def _classify_attempt_from_call(
+    body: dict[str, Any],
+    api_key: str,
+) -> tuple[dict[str, Any], int | None, dict[str, Any] | None]:
+    """One call_exa wrapped to produce (attempt_record, http_status, response_body).
+
+    attempt_record always contains: engine, endpoint, http (or None), latency_ms, error.
+    On success: error=None and response_body is the parsed Exa response.
+    On any handled exception: response_body is None.
+    """
+    try:
+        status, data, latency = call_exa("/search", body, api_key)
+        results = data.get("results")
+        if results is None:
+            return (
+                {"engine": "exa", "endpoint": "/search", "http": status,
+                 "latency_ms": latency, "error": "exa_malformed_json"},
+                None, None,
+            )
+        if len(results) == 0:
+            return (
+                {"engine": "exa", "endpoint": "/search", "http": status,
+                 "latency_ms": latency, "error": "exa_empty_results"},
+                status, data,
+            )
+        return (
+            {"engine": "exa", "endpoint": "/search", "http": status,
+             "latency_ms": latency, "error": None},
+            status, data,
+        )
+    except ExaPermanentError as e:
+        return (
+            {"engine": "exa", "endpoint": "/search", "http": e.http_status,
+             "latency_ms": e.latency_ms, "error": "exa_4xx_nonretryable"},
+            None, None,
+        )
+    except ExaTransientError as e:
+        if e.http_status is None:
+            label = "exa_network_timeout"
+        else:
+            label = "exa_5xx_retryable"
+        return (
+            {"engine": "exa", "endpoint": "/search", "http": e.http_status,
+             "latency_ms": e.latency_ms, "error": label},
+            None, None,
+        )
+    except ExaMalformedResponseError as e:
+        return (
+            {"engine": "exa", "endpoint": "/search", "http": None,
+             "latency_ms": e.latency_ms, "error": "exa_malformed_json"},
+            None, None,
+        )
+
+
+def _exit_code_for_failure(error_label: str) -> int:
+    if error_label == "exa_network_timeout":
+        return 3
+    return 2
+
+
+def search_with_retry(
+    *,
+    body: dict[str, Any],
+    api_key: str,
+    retry: bool,
+    mode: str = "generic",
+) -> tuple[dict[str, Any], int]:
+    """Run /search with optional 1-retry loop. Returns (envelope, exit_code).
+
+    Retryable error labels: exa_5xx_retryable, exa_network_timeout, exa_empty_results.
+    Non-retryable: exa_4xx_nonretryable, exa_malformed_json.
+    Hard cap: cumulative sleep <= RETRY_BUDGET_SECONDS.
+    """
+    attempts: list[dict[str, Any]] = []
+    last_data: dict[str, Any] | None = None
+    cumulative_sleep = 0.0
+    max_attempts = 2 if retry else 1
+
+    for i in range(max_attempts):
+        attempt, _status, data = _classify_attempt_from_call(body, api_key)
+        attempts.append(attempt)
+        if data is not None:
+            last_data = data
+        error = attempt["error"]
+
+        # Success on this attempt
+        if error is None:
+            break
+        # Non-retryable
+        if error in ("exa_4xx_nonretryable", "exa_malformed_json"):
+            break
+        # No more attempts left
+        if i == max_attempts - 1:
+            break
+        # Backoff before next attempt
+        backoff = RETRY_BACKOFF_SECONDS.get(error, 1.0)
+        if cumulative_sleep + backoff > RETRY_BUDGET_SECONDS:
+            print(
+                f"EXA_WARN:RETRY_BUDGET_EXHAUSTED skipped backoff={backoff}s "
+                f"after cumulative={cumulative_sleep}s",
+                file=sys.stderr,
+            )
+            break
+        sleep_with_jitter(backoff)
+        cumulative_sleep += backoff
+
+    # Determine final status + exit
+    last_error = attempts[-1]["error"]
+    if last_error is None:
+        status_label = "OK"
+        exit_code = 0
+        results = (last_data or {}).get("results", [])
+        cost = float((last_data or {}).get("costDollars", {}).get("total", 0.0))
+        reason = None
+    elif last_error == "exa_empty_results":
+        status_label = "DEGRADED"
+        exit_code = 0
+        results = []
+        cost = float((last_data or {}).get("costDollars", {}).get("total", 0.0))
+        reason = "exa_empty_results"
+    else:
+        status_label = "FAILED"
+        exit_code = _exit_code_for_failure(last_error)
+        results = []
+        cost = 0.0
+        reason = None
+
+    timestamp = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    envelope = build_envelope(
+        status=status_label,
+        results=results,
+        attempts=attempts,
+        meta={
+            "query": body.get("query", ""),
+            "mode": mode,
+            "num_results_requested": body.get("numResults", 0),
+            "num_results_returned": len(results),
+            "timestamp": timestamp,
+        },
+        total_cost_usd=cost,
+        reason_for_fallback=reason,
+    )
+    return envelope, exit_code
+
+
 def call_exa(
     endpoint: str,
     body: dict[str, Any],
