@@ -370,7 +370,7 @@ class DirectProvider:
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
             "Accept-Language": "en,*;q=0.5",
         })
-        t0 = time.monotonic()
+        t0 = time.perf_counter()
         try:
             with urllib.request.urlopen(req, timeout=timeout_ms / 1000) as resp:
                 raw_bytes = resp.read()
@@ -378,16 +378,16 @@ class DirectProvider:
                 resp_headers = dict(resp.headers.items()) if hasattr(resp.headers, "items") else dict(resp.headers)
                 http_status = getattr(resp, "status", 200)
         except urllib.error.HTTPError as e:
-            latency_ms = int((time.monotonic() - t0) * 1000)
+            latency_ms = int((time.perf_counter() - t0) * 1000)
             self._raise_http_error(e, url=url, latency_ms=latency_ms)
             raise  # unreachable
         except (urllib.error.URLError, TimeoutError, OSError) as e:
-            latency_ms = int((time.monotonic() - t0) * 1000)
+            latency_ms = int((time.perf_counter() - t0) * 1000)
             raise ProviderTransientError(
                 f"network: {e}", provider=self.name,
                 http_status=None, latency_ms=latency_ms,
             )
-        latency_ms = int((time.monotonic() - t0) * 1000)
+        latency_ms = int((time.perf_counter() - t0) * 1000)
         encoding = _detect_encoding(resp_headers, raw_bytes)
         html_text = raw_bytes.decode(encoding, errors="replace")
         title, md, txt, links, canonical, lang = _extract_with_optional_uplift(
@@ -557,23 +557,23 @@ class JinaProvider:
         if api_key:
             headers["Authorization"] = f"Bearer {api_key}"
         req = urllib.request.Request(target, headers=headers)
-        t0 = time.monotonic()
+        t0 = time.perf_counter()
         try:
             with urllib.request.urlopen(req, timeout=timeout_ms / 1000) as resp:
                 raw = resp.read()
                 final_url = resp.geturl() or target
                 http_status = getattr(resp, "status", 200)
         except urllib.error.HTTPError as e:
-            latency_ms = int((time.monotonic() - t0) * 1000)
+            latency_ms = int((time.perf_counter() - t0) * 1000)
             self._raise_http_error(e, latency_ms=latency_ms)
             raise  # unreachable
         except (urllib.error.URLError, TimeoutError, OSError) as e:
-            latency_ms = int((time.monotonic() - t0) * 1000)
+            latency_ms = int((time.perf_counter() - t0) * 1000)
             raise ProviderTransientError(
                 f"network: {e}", provider=self.name,
                 http_status=None, latency_ms=latency_ms,
             )
-        latency_ms = int((time.monotonic() - t0) * 1000)
+        latency_ms = int((time.perf_counter() - t0) * 1000)
         markdown_text = raw.decode("utf-8", errors="replace")
         title = _jina_extract_title(markdown_text)
         body_md = _jina_extract_body(markdown_text)
@@ -927,3 +927,78 @@ def fetch_via_ladder(
         detected_reason=None,
         user_agent=user_agent,
     )
+
+
+import argparse
+
+
+EXIT_OK = 0
+EXIT_ARGS = 1
+EXIT_HTTP = 2
+EXIT_NETWORK = 3
+EXIT_ENV = 4
+EXIT_GATED = 5
+
+
+STUB_PROVIDERS = {"playwright", "crawl4ai", "firecrawl", "browserless"}
+
+
+def _build_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(prog="fetch_url.py")
+    sub = p.add_subparsers(dest="cmd")
+    f = sub.add_parser("fetch")
+    f.add_argument("--url", required=False)
+    f.add_argument("--provider", default="auto",
+                   choices=["auto", "direct", "jina", "playwright",
+                            "crawl4ai", "firecrawl", "browserless"])
+    f.add_argument("--format", default="markdown",
+                   choices=["markdown", "text", "html"])
+    f.add_argument("--json", action="store_true",
+                   help="Print envelope JSON to stdout instead of summary.")
+    f.add_argument("--keep-raw", action="store_true",
+                   help="Save raw HTML sidecar.")
+    f.add_argument("--timeout-ms", type=int, default=15000)
+    f.add_argument("--min-body-chars", type=int, default=200)
+    f.add_argument("--user-agent", default=DEFAULT_USER_AGENT)
+    f.add_argument("--output-dir", default="~/.h2t/research")
+    f.add_argument("--project", default="default")
+    f.add_argument("--config", default=None)
+    sub.add_parser("preflight")
+    return p
+
+
+def _die_args(msg: str) -> None:
+    print(f"FETCH_ERROR:ARGS {msg}", file=sys.stderr)
+    sys.exit(EXIT_ARGS)
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = _build_parser()
+    args = parser.parse_args(argv)
+    if args.cmd is None:
+        _die_args("subcommand required (fetch | preflight)")
+    if args.cmd == "fetch":
+        return _run_fetch(args)
+    if args.cmd == "preflight":
+        return _run_preflight(args)
+    _die_args(f"unknown subcommand {args.cmd}")
+    return EXIT_ARGS  # unreachable
+
+
+def _run_fetch(args: argparse.Namespace) -> int:
+    if not args.url:
+        _die_args("--url is required for `fetch`")
+    if args.provider in STUB_PROVIDERS:
+        _die_args(
+            f"provider={args.provider} not configured (stub in this version)"
+        )
+    # Continued in Task 28+.
+    return EXIT_OK
+
+
+def _run_preflight(args: argparse.Namespace) -> int:
+    return EXIT_OK
+
+
+if __name__ == "__main__":
+    sys.exit(main())
