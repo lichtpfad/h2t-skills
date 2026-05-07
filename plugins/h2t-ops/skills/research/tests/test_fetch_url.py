@@ -1034,3 +1034,33 @@ def test_direct_403_without_auth_header_falls_through_to_jina_not_gated():
     assert env["status"] == "OK"
     assert env["content_gate"] == "none"
     assert env["provider_used"] == "jina"
+
+
+def test_unicode_article_extracts_safely():
+    html = _load_fixture("non_ascii_article.html").encode("utf-8")
+    p = fetch_url.DirectProvider()
+    with patch("urllib.request.urlopen") as mock_urlopen:
+        mock_urlopen.return_value = _make_http_response(
+            html, url="https://example.com/ru",
+            headers={"Content-Type": "text/html; charset=utf-8"},
+        )
+        r = p.fetch("https://example.com/ru",
+                    timeout_ms=15000, user_agent="ua/test")
+    assert "Атрибуты POP" in r.title
+    assert "Жизненный цикл атрибута" in r.body_text
+
+
+def test_envelope_version_fields_present_on_ok(tmp_path):
+    html = _load_fixture("public_article.html").encode("utf-8")
+    with patch("urllib.request.urlopen") as mock_urlopen:
+        mock_urlopen.return_value = _make_http_response(
+            html, url="https://example.com/x",
+        )
+        env = fetch_url.fetch_via_ladder(
+            url="https://example.com/x", provider_choice="auto",
+            config=fetch_url.load_config(None),
+            user_agent="ua/test", keep_raw=False,
+        )
+    assert env["meta"]["envelope_version"] == "1"
+    assert env["meta"]["fetch_envelope_version"] == "1"
+    assert env["meta"]["primary_engine"] == "fetch_ladder"
