@@ -801,3 +801,21 @@ def test_trafilatura_used_when_available_uplifts_body(monkeypatch):
         html, base_url="https://example.com/x",
     )
     assert len(txt) >= len(txt_inline)
+
+
+def test_cli_args_no_url_returns_exit_1(capsys):
+    with pytest.raises(SystemExit) as ei:
+        fetch_url.main(["fetch"])
+    assert ei.value.code == 1
+    err = capsys.readouterr().err
+    assert "FETCH_ERROR:ARGS" in err
+
+
+def test_cli_args_explicit_stub_provider_returns_exit_1(capsys):
+    with pytest.raises(SystemExit) as ei:
+        fetch_url.main(["fetch", "--url", "https://example.com/x",
+                        "--provider", "playwright"])
+    assert ei.value.code == 1
+    err = capsys.readouterr().err
+    assert "FETCH_ERROR:ARGS" in err
+    assert "playwright" in err
