@@ -485,3 +485,26 @@ def test_stub_providers_not_configured_and_fetch_raises(name, monkeypatch):
     assert p.is_configured(env=dict(os.environ), config={}) is False
     with pytest.raises(fetch_url.ProviderNotConfigured):
         p.fetch("https://example.com/x", timeout_ms=15000, user_agent="ua/test")
+
+
+def test_load_config_returns_defaults_when_file_missing(tmp_path):
+    cfg = fetch_url.load_config(tmp_path / "nope.json")
+    assert cfg["providers"]["direct"]["enabled"] is True
+    assert cfg["providers"]["jina"]["enabled"] is True
+    assert cfg["providers"]["playwright"]["enabled"] is False
+    assert cfg["ladder"]["per_provider_timeout_ms"] == 15000
+    assert cfg["ladder"]["cumulative_timeout_ms"] == 60000
+    assert cfg["ladder"]["min_body_chars"] == 200
+
+
+def test_load_config_overrides_with_user_file(tmp_path):
+    p = tmp_path / "fetch_providers.json"
+    p.write_text(json.dumps({
+        "providers": {"jina": {"enabled": False}},
+        "ladder": {"min_body_chars": 500},
+    }))
+    cfg = fetch_url.load_config(p)
+    assert cfg["providers"]["jina"]["enabled"] is False
+    assert cfg["providers"]["direct"]["enabled"] is True  # default preserved
+    assert cfg["ladder"]["min_body_chars"] == 500
+    assert cfg["ladder"]["per_provider_timeout_ms"] == 15000  # default preserved
