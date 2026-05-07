@@ -649,7 +649,11 @@ DEFAULT_CONFIG: dict[str, Any] = {
 
 
 def _deep_merge(base: dict[str, Any], over: dict[str, Any]) -> dict[str, Any]:
-    out = dict(base)
+    out: dict[str, Any] = {}
+    for k, v in base.items():
+        out[k] = dict(v) if isinstance(v, dict) else v
+        if isinstance(v, dict):
+            out[k] = _deep_merge(v, {})
     for k, v in over.items():
         if k in out and isinstance(out[k], dict) and isinstance(v, dict):
             out[k] = _deep_merge(out[k], v)
@@ -821,7 +825,7 @@ def fetch_via_ladder(
         else:
             skipped[name] = "not_attempted"
 
-    if chosen is None and final_status != "FAILED":
+    if chosen is None and final_status != "OK" and content_gate == "none":
         # All ran but none returned article. Pick best candidate or FAILED.
         if candidates:
             chosen = max(candidates, key=lambda c: c.body_chars)
