@@ -360,7 +360,149 @@ Out of scope for v0:
 - cross-profile automatic visual parity;
 - pricing/FAQ/gallery/testimonials if not needed for the pilot.
 
-## 11. Migration Strategy
+## 11. Core Block Library and Extension Protocol
+
+The semantic layer is not a closed component list. It is an extensible block
+library with strict guardrails. The system should cover common landing needs
+with a core set, then grow safely when a real task needs a new block.
+
+### 11.1 Core Block Set
+
+These blocks are the minimum reusable surface for most landing work. A landing
+mode decides priority; it does not create a separate incompatible component
+family.
+
+| Core block | Typical roles | Notes |
+|---|---|---|
+| `hero` | first screen, value proposition | May include media/visual role. |
+| `proof` / `stats` | credibility, numbers, trust facts | Compact by default. |
+| `features` | capability / differentiator grid | Cards or editorial feature rows. |
+| `process` | how it works | Flow, timeline, stepper. |
+| `comparison` | contrast alternatives | Compact table/grid; mobile cards by default. |
+| `table` | data, packages, matrices, reports | Core, not forbidden; density depends on mode. |
+| `media` / `gallery` | image/video/project evidence | Asset policy required. |
+| `testimonial` | social proof | Optional unless mode requires it. |
+| `pricing` / `offer` | commercial offer | Product/service modes. |
+| `faq` | objections | Product/service modes. |
+| `cta` | primary action | Required for true landing pages. |
+| `footer` / `evidence` | legal, audit trail, sources | Profile/mode-specific. |
+
+### 11.2 Landing Modes and Block Priority
+
+One schema supports multiple landing intents. Modes assign priority to blocks.
+
+Priority levels:
+
+| Priority | Meaning |
+|---|---|
+| `P0 required` | Page fails the mode without it. |
+| `P1 recommended` | Expected in most pages of this mode. |
+| `P2 optional` | Include when content exists. |
+| `P3 advanced` | Requires assets, heavier interaction, or explicit human approval. |
+| `P4 report-only` | Valid in reports/appendices, not default landing flow. |
+
+Initial modes:
+
+| Mode | Use case |
+|---|---|
+| `product` | Commercial product / SaaS / tool. |
+| `service` | Consulting, agency, course, school. |
+| `editorial` | Explainer, manifesto, profile page, internal proof page. |
+| `report` | Appendix, audit, research report. |
+| `portfolio` | Art/project/case presentation. |
+| `deck-companion` | Web page around a presentation/deck. |
+
+Mode x block priority starts as a design contract, not runtime code:
+
+| Block | product | service | editorial | report | portfolio | deck-companion |
+|---|---|---|---|---|---|---|
+| hero | P0 | P0 | P0 | P1 | P0 | P0 |
+| problem | P1 | P1 | P2 | P2 | P3 | P2 |
+| solution/features | P0 | P1 | P1 | P2 | P2 | P1 |
+| proof/stats | P1 | P1 | P1 | P1 | P2 | P1 |
+| process | P2 | P1 | P1 | P2 | P1 | P2 |
+| comparison | P1 | P2 | P2 | P1 | P4 | P2 |
+| table | P2 | P2 | P2 | P0 | P4 | P3 |
+| gallery/media | P2 | P2 | P3 | P3 | P0 | P2 |
+| video | P2 | P2 | P3 | P4 | P1 | P2 |
+| pricing/offer | P1 | P2 | P4 | P4 | P4 | P4 |
+| testimonials | P1 | P1 | P3 | P4 | P2 | P3 |
+| faq | P1 | P1 | P3 | P4 | P4 | P3 |
+| evidence/footer | P2 | P2 | P1 | P0 | P2 | P1 |
+| cta | P0 | P0 | P1 | P4 | P1 | P1 |
+
+### 11.3 Block Extension Protocol
+
+When a task needs a block that does not exist, the agent must not improvise a
+one-off component. It must extend the block library.
+
+Required extension steps:
+
+1. **Classify semantic role.** Decide whether the need is a new block or a
+   variant of an existing block.
+2. **Check existing blocks.** Reuse an existing block if it can express the
+   intent without distorting semantics.
+3. **Define slot contract.** Required/optional fields, array shapes, asset
+   references, limits.
+4. **Define style mapping.** How the current profile renders the block.
+5. **Define desktop behavior.** Layout, density, max rows/items/text.
+6. **Define mobile behavior.** Stack/cards/scroll/fallback; no hidden content.
+7. **Define asset policy.** Required assets, fallback, no fake visual evidence.
+8. **Write tests first.** Structural tests, output guards, forbidden patterns,
+   mobile contract.
+9. **Run visual QA.** Capture desktop/mobile and classify PASS/ISSUE/BLOCKER.
+10. **Update registry/spec.** Add the block or variant to the library contract.
+
+Example new block contract:
+
+```yaml
+block: timeline
+semantic_role: process
+slots:
+  title: string
+  intro: string?
+  events:
+    - date: string?
+      title: string
+      body: string
+desktop:
+  layout: vertical-spine
+mobile:
+  layout: stacked-cards
+limits:
+  max_events: 6
+  max_words_per_event: 24
+assets: none
+forbidden:
+  - horizontal scroll required for reading
+  - hidden event bodies on mobile
+```
+
+### 11.4 Guardrails for New Blocks
+
+Every new block or profile-specific renderer must specify:
+
+- semantic role;
+- slot contract;
+- style mapping;
+- desktop behavior;
+- mobile behavior;
+- asset/media policy;
+- density limits;
+- forbidden patterns;
+- structural tests;
+- visual QA evidence;
+- registry/spec update.
+
+Hard rules:
+
+- no fake placeholders in visual gates;
+- no mobile pass without opening screenshots;
+- no table/comparison block without a declared mobile representation;
+- no style-specific block that cannot be mapped back to a semantic role;
+- no hidden essential content as a mobile strategy;
+- no arbitrary JS injection from recipe content.
+## 12. Migration Strategy
 
 Legacy component recipes remain supported.
 
@@ -376,7 +518,7 @@ profile/form as recovery work touches it.
 | `h2t-pfad` | Dashboard first; landing deferred. |
 | `h2t-default` | Generic fallback skin. |
 
-## 12. Applying This to #88
+## 13. Applying This to #88
 
 Current #88 landing work recovered useful primitives from the Rejuve appendix
 goldens, but the validation recipe drifted into a primitive showcase. That is
@@ -405,7 +547,7 @@ For #88, the next accepted path is:
    - `cta -> editorial-cta`;
 5. build and capture only after the semantic composition contract is approved.
 
-## 13. Acceptance Criteria
+## 14. Acceptance Criteria
 
 This spec is accepted when future h2t-creative landing work follows these
 rules:
@@ -419,4 +561,5 @@ rules:
 - visual assets have explicit asset/fallback policy;
 - tables/comparison blocks define desktop and mobile representation;
 - visual QA checks the rendered page, not component presence.
+
 
