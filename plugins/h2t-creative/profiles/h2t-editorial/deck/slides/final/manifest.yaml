@@ -1,0 +1,13 @@
+layout: final
+fields:
+  label:
+    type: text
+    required: false
+    default: ''
+  headline:
+    type: html
+    required: true
+  subline:
+    type: html
+    required: false
+    default: ''

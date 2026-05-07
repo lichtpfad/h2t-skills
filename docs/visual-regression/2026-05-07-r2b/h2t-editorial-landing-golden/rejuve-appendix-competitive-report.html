@@ -1,0 +1,1265 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>REjuve — Конкурентная разведка</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#fafaf8;--sf:#f5f3ee;--bd:#e0dbd3;
+  --ac:#c9a96e;--ad:#8a6520;
+  --tx:#1a1a18;--mu:#666;
+  --gr:#3d6b4a;--dn:#cc2222;--bl:#2255aa;
+  --r:6px;
+  --serif:'Playfair Display',Georgia,serif;
+  --sans:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif
+}
+body{background:var(--bg);color:var(--tx);font-family:var(--sans);font-size:14px;line-height:1.6}
+
+/* NAV TABS */
+.tabs{display:flex;border-bottom:2px solid var(--ac);background:var(--bg);position:sticky;top:0;z-index:10}
+.tab{padding:12px 20px;cursor:pointer;font-size:13px;color:var(--mu);border:none;background:none;border-bottom:2px solid transparent;margin-bottom:-2px;white-space:nowrap;transition:color .15s}
+.tab:hover{color:var(--tx)}
+.tab.active{color:var(--ad);font-weight:700;border-bottom-color:var(--ac)}
+
+/* PAGES */
+.page{display:none;padding:28px 32px;max-width:1100px;margin:0 auto}
+.page.active{display:block}
+
+/* HEADINGS */
+h1{font-family:var(--serif);font-size:28px;color:var(--ad);margin-bottom:6px}
+h2{font-family:var(--serif);font-size:20px;color:var(--ad);margin:28px 0 12px}
+h3{font-size:14px;font-weight:700;color:var(--tx);margin:0 0 6px}
+
+/* PAGE HEADER */
+.ph{display:flex;align-items:baseline;gap:16px;margin-bottom:24px;padding-bottom:16px;border-bottom:1px solid var(--bd)}
+.ph h1{margin:0}
+.ph-meta{font-size:12px;color:var(--mu)}
+
+/* SECTION */
+.section{margin-bottom:36px}
+
+/* CARD */
+.card{background:var(--sf);border:1px solid var(--bd);border-radius:var(--r);padding:16px}
+
+/* GRID HELPERS */
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px}
+.g4{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+
+/* STAT BLOCK */
+.stat{background:var(--sf);border:1px solid var(--bd);border-radius:var(--r);padding:14px 16px;text-align:center}
+.stat-n{font-family:var(--serif);font-size:26px;color:var(--ad);display:block;line-height:1.1}
+.stat-l{font-size:11px;color:var(--mu);margin-top:4px;display:block;line-height:1.4}
+
+/* FUNNEL */
+.funnel{display:flex;align-items:center;margin:0 0 20px}
+.fn-box{text-align:center;padding:20px 24px;background:var(--sf);border:1px solid var(--bd);border-radius:var(--r)}
+.fn-n{font-family:var(--serif);font-size:40px;color:var(--ad);display:block;line-height:1}
+.fn-l{font-size:11px;color:var(--mu);margin-top:6px;display:block;line-height:1.6}
+.fn-arr{flex:1;text-align:center;color:var(--ac);font-size:28px;padding:0 8px}
+.fn-detail{background:var(--sf);border:1px solid var(--bd);border-radius:var(--r);padding:14px 16px}
+.fn-detail h3{margin-bottom:8px}
+.fn-detail ul{list-style:none;font-size:12px;color:var(--mu);line-height:2}
+.fn-detail ul li::before{content:'→ ';color:var(--ac)}
+
+/* MARKET MAP */
+.mmap{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.mmap-cell{background:var(--sf);border:1px solid var(--bd);border-radius:var(--r);padding:14px}
+.mmap-type{font-size:11px;font-weight:700;color:var(--ad);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px}
+.mmap-brands{font-size:12px;color:var(--tx);line-height:1.8}
+.mmap-note{margin-top:6px;font-size:11px;color:var(--mu)}
+
+/* POSITIONS */
+.pos-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.pos{background:var(--sf);border:1px solid var(--bd);border-left:3px solid var(--ac);border-radius:0 var(--r) var(--r) 0;padding:12px 14px}
+.pos-title{font-weight:700;font-size:13px;color:var(--tx);margin-bottom:4px}
+.pos-desc{font-size:12px;color:var(--mu)}
+
+/* BRAND TABLE */
+.bt{width:100%;border-collapse:collapse;font-size:12px}
+.bt th{background:var(--sf);border:1px solid var(--bd);padding:8px 10px;text-align:left;font-size:11px;font-weight:700;color:var(--ad);white-space:nowrap}
+.bt td{border:1px solid var(--bd);padding:8px 10px;vertical-align:middle}
+.bt tr:hover td{background:#f0ede6}
+.bt tr.deep td{background:#c9a96e14}
+.bt tr.rejuve td{background:#c9a96e30;font-weight:700}
+.tag{display:inline-block;padding:2px 7px;border-radius:3px;font-size:10px;font-weight:600;margin:1px}
+.tag-fs{background:#c9a96e22;color:#8a6520}
+.tag-md{background:#2255aa18;color:#1a3d80}
+.tag-sm{background:#3d6b4a18;color:#2a5035}
+.tag-b2{background:#66229918;color:#440077}
+.yes{color:var(--gr);font-weight:700}
+.no{color:var(--dn)}
+.part{color:#aa7700}
+
+/* BRAND CARDS */
+.ck{display:flex;background:var(--sf);border:1px solid var(--bd);border-radius:var(--r);margin-bottom:16px;overflow:hidden}
+.ck-vis{width:240px;flex-shrink:0;display:flex;flex-direction:column;border-right:1px solid var(--bd)}
+.ck-vis img{width:100%;height:160px;object-fit:cover;object-position:top;display:block}
+.ck-vis img.meta-ad{height:120px}
+.ck-vis-sep{border-top:1px solid var(--bd)}
+.ck-soc{padding:8px 12px;font-size:11px;color:var(--mu);background:var(--bg);flex:1;line-height:1.6}
+.ck-meta-none{padding:10px 12px;font-size:11px;color:var(--mu);line-height:1.8;background:var(--bg);flex:1}
+.ck-body{flex:1;padding:16px 20px}
+.ck-head{display:flex;align-items:baseline;gap:10px;margin-bottom:10px}
+.ck-name{font-family:var(--serif);font-size:17px;color:var(--ad)}
+.ck-loc{font-size:11px;color:var(--mu)}
+.ck-tags{margin-bottom:10px;display:flex;flex-wrap:wrap;gap:4px}
+.mod-tag{display:inline-block;padding:2px 8px;border-radius:3px;font-size:10px;background:var(--bg);border:1px solid var(--bd);color:var(--mu)}
+.ck-bullets{font-size:12px;line-height:1.9;color:var(--tx);list-style:none}
+.ck-bullets li{padding-left:14px;position:relative}
+.ck-bullets li::before{content:'—';position:absolute;left:0;color:var(--ac)}
+.ck-strategy{margin-top:10px;padding:8px 10px;background:var(--bg);border:1px solid var(--bd);border-radius:4px;font-size:11px;color:var(--mu)}
+.ck-strategy strong{color:var(--ad)}
+
+/* POSITIONING MAP */
+.pmap-wrap{position:relative;margin:0 auto 20px;max-width:480px}
+.pmap{position:relative;width:100%;padding-top:85%;background:var(--sf);border:1px solid var(--bd);border-radius:var(--r);overflow:hidden}
+.pmap-inner{position:absolute;inset:0}
+.pmap-ax-x{position:absolute;top:50%;left:5%;right:5%;height:1px;background:var(--bd)}
+.pmap-ax-y{position:absolute;left:50%;top:5%;bottom:5%;width:1px;background:var(--bd)}
+.pmap-label{position:absolute;font-size:10px;color:var(--mu)}
+.pmap-dot{position:absolute;width:10px;height:10px;border-radius:50%;transform:translate(-50%,-50%)}
+.pmap-dot-label{position:absolute;font-size:9px;font-weight:600;white-space:nowrap;transform:translateX(-50%);color:var(--tx)}
+.d-re{background:var(--ac);width:14px;height:14px;border:2px solid var(--ad)}
+.d-fs{background:var(--ac)}
+.d-md{background:var(--bl)}
+.d-sm{background:var(--gr)}
+.d-b2{background:#882299}
+
+/* LEGEND */
+.legend{display:flex;flex-wrap:wrap;gap:12px;margin-top:10px;font-size:11px}
+.leg-item{display:flex;align-items:center;gap:5px}
+.leg-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+
+/* COMPARISON TABLE */
+.cx{width:100%;border-collapse:collapse;font-size:12px}
+.cx th{background:var(--sf);border:1px solid var(--bd);padding:8px 10px;font-size:11px;font-weight:700;color:var(--ad);text-align:center;white-space:nowrap}
+.cx th:first-child{text-align:left}
+.cx td{border:1px solid var(--bd);padding:6px 10px;text-align:center}
+.cx td:first-child{text-align:left;font-weight:600;font-size:12px}
+.cx tr.rejuve td{background:#c9a96e30;font-weight:700}
+.cx tr:hover td{background:#f0ede6}
+
+/* SEMRUSH */
+.sem-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px}
+.sem-img{width:100%;border:1px solid var(--bd);border-radius:var(--r)}
+.sem-cap{font-size:11px;color:var(--mu);text-align:center;margin-top:6px}
+
+/* DEMO BARS */
+.demo-bar-wrap{margin:8px 0}
+.demo-bar-label{font-size:11px;color:var(--tx);margin-bottom:3px;display:flex;justify-content:space-between}
+.demo-bar{height:12px;background:var(--bd);border-radius:3px;overflow:hidden}
+.demo-bar-fill{height:100%;background:var(--ac);border-radius:3px}
+
+/* ICP TABLE */
+.icp-tbl{width:100%;border-collapse:collapse;font-size:12px}
+.icp-tbl th{background:var(--sf);border:1px solid var(--bd);padding:7px 10px;font-size:11px;font-weight:700;color:var(--ad);text-align:left}
+.icp-tbl td{border:1px solid var(--bd);padding:7px 10px;vertical-align:top}
+.icp-tbl td:first-child{font-weight:600;width:120px;color:var(--mu)}
+
+/* DECISION FLOW */
+.flow{display:flex;flex-direction:column}
+.flow-step{display:flex;gap:12px;padding:10px 0}
+.flow-num{width:28px;height:28px;border-radius:50%;background:var(--ac);color:white;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:2px}
+.flow-body{flex:1}
+.flow-title{font-weight:700;font-size:13px;margin-bottom:2px}
+.flow-desc{font-size:12px;color:var(--mu)}
+.flow-sep{width:2px;height:14px;background:var(--bd);margin-left:13px}
+
+/* COMPLIANCE */
+.comp-box{background:var(--sf);border:1px solid var(--bd);border-radius:var(--r);padding:14px}
+.comp-law{font-size:11px;font-weight:700;color:var(--ad);margin-bottom:6px;text-transform:uppercase;letter-spacing:.04em}
+.comp-desc{font-size:12px;color:var(--tx);line-height:1.7}
+.comp-fine{display:inline-block;padding:2px 8px;border-radius:3px;background:#cc222215;color:var(--dn);font-size:11px;font-weight:700;margin-top:6px}
+
+/* PROHIBITED TABLE */
+.proh-tbl{width:100%;border-collapse:collapse;font-size:12px}
+.proh-tbl th{background:var(--sf);border:1px solid var(--bd);padding:7px 10px;font-size:11px;font-weight:700;color:var(--ad);text-align:left}
+.proh-tbl td{border:1px solid var(--bd);padding:8px 10px;vertical-align:top;line-height:1.6}
+.proh-tbl td:first-child{color:var(--dn)}
+.proh-tbl td:nth-child(2){color:var(--gr)}
+.proh-tbl td:last-child{font-size:11px;color:var(--mu)}
+
+/* DISCLAIMER */
+.disc{background:var(--sf);border:1px solid var(--bd);border-left:3px solid var(--ac);border-radius:0 var(--r) var(--r) 0;padding:10px 14px;font-size:11px;color:var(--mu);line-height:1.7;margin:8px 0}
+
+/* META POLICY */
+.meta-box{background:#f0f4ff;border:1px solid #b8c8e8;border-radius:var(--r);padding:14px}
+.meta-box h3{color:var(--bl)}
+
+/* PENALTY TABLE */
+.pen-tbl{width:100%;border-collapse:collapse;font-size:12px}
+.pen-tbl th{background:var(--sf);border:1px solid var(--bd);padding:7px 10px;font-size:11px;font-weight:700;color:var(--ad);text-align:left}
+.pen-tbl td{border:1px solid var(--bd);padding:7px 10px;vertical-align:top;line-height:1.6}
+.pen-tbl td:nth-child(3){color:var(--dn);font-weight:700}
+</style>
+</head>
+<body>
+
+<!-- TAB NAV -->
+<nav class="tabs">
+  <button class="tab active" onclick="switchTab(this,'overview')">Обзор</button>
+  <button class="tab" onclick="switchTab(this,'cards')">Карточки</button>
+  <button class="tab" onclick="switchTab(this,'matrix')">Матрица</button>
+  <button class="tab" onclick="switchTab(this,'signals')">Сигналы</button>
+  <button class="tab" onclick="switchTab(this,'audience')">Аудитория</button>
+</nav>
+
+<!-- ===== TAB 1: ОБЗОР ===== -->
+<div id="overview" class="page active">
+  <div class="ph">
+    <h1>Конкурентная разведка — REjuve</h1>
+    <span class="ph-meta">Апрель 2026 · Кантон Цуг + Zürich-area</span>
+  </div>
+
+  <div class="section">
+    <h2>Воронка отбора</h2>
+    <div class="funnel">
+      <div class="fn-box">
+        <span class="fn-n">70</span>
+        <span class="fn-l">первичный скан<br>longevity / biohacking<br>CH + DACH</span>
+      </div>
+      <div class="fn-arr">→</div>
+      <div class="fn-box">
+        <span class="fn-n">16</span>
+        <span class="fn-l">отфильтровано:<br>гео Zürich / Zug,<br>релевантные модальности</span>
+      </div>
+      <div class="fn-arr">→</div>
+      <div class="fn-box" style="border-color:var(--ac)">
+        <span class="fn-n" style="color:var(--ac)">10</span>
+        <span class="fn-l">глубокий анализ<br>сайт + соцсети +<br>Meta Ads + прайс</span>
+      </div>
+    </div>
+    <div class="g2">
+      <div class="fn-detail">
+        <h3>Критерии отбора 70 → 16</h3>
+        <ul>
+          <li>Физическое присутствие в Zürich / Zug / центральная CH</li>
+          <li>Минимум 2 longevity-модальности или медицинская специализация</li>
+          <li>Активный сайт с публичным описанием услуг</li>
+          <li>Запуск после 2020 или явная digital-активность после 2022</li>
+        </ul>
+      </div>
+      <div class="fn-detail">
+        <h3>Критерии глубокого анализа 16 → 10</h3>
+        <ul>
+          <li>Прямое пересечение с целевой аудиторией REjuve (35–55, EN-first)</li>
+          <li>Сопоставимый ценовой диапазон или позиционирование</li>
+          <li>Активность в Meta Ads / органический поиск</li>
+          <li>Наличие membership или пакетных программ</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Карта рынка — 4 типа игроков</h2>
+    <div class="mmap">
+      <div class="mmap-cell" style="border-left:3px solid var(--ac)">
+        <div class="mmap-type">Full-stack longevity студии</div>
+        <div class="mmap-brands">Relysian · REjuve ★</div>
+        <div class="mmap-note">Широкий стек + персонализация + membership. Конкурируют с REjuve напрямую.</div>
+      </div>
+      <div class="mmap-cell" style="border-left:3px solid var(--bl)">
+        <div class="mmap-type" style="color:var(--bl)">Медицинские longevity-клиники</div>
+        <div class="mmap-brands">AYUN · Swiss Center H&amp;L · Longevity Center CH · KALEIDOSCOP</div>
+        <div class="mmap-note">Врачебный надзор, медицинские протоколы. Другая регуляторная рамка, выше ценник.</div>
+      </div>
+      <div class="mmap-cell" style="border-left:3px solid var(--gr)">
+        <div class="mmap-type" style="color:var(--gr)">Single-modality специалисты</div>
+        <div class="mmap-brands">Coolzoone (крио) · Cryodukt (крио budget) · E-Pulsive (EMS)</div>
+        <div class="mmap-note">Одна технология, доступные цены. Потенциальный источник клиентов-апсейлов для REjuve.</div>
+      </div>
+      <div class="mmap-cell" style="border-left:3px solid #882299">
+        <div class="mmap-type" style="color:#882299">B2B / гибридные игроки</div>
+        <div class="mmap-brands">Longevity Biohacking CH · Biohacking Studio (ZG)</div>
+        <div class="mmap-note">Корпоративный wellness, интеграторы оборудования. Не прямые конкуренты, потенциальные партнёры.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>5 уникальных позиций REjuve</h2>
+    <div class="pos-grid">
+      <div class="pos">
+        <div class="pos-title">Full-stack + English-first</div>
+        <div class="pos-desc">Единственная студия в регионе с полным стеком модальностей (крио, IHHT, EMS, диагностика, нутрициология) и English-first обслуживанием. Relysian — ближайший, но без явного EN-позиционирования.</div>
+      </div>
+      <div class="pos">
+        <div class="pos-title">Публичный прайс</div>
+        <div class="pos-desc">REjuve — единственный в нише с открытыми ценами на сайте. Конкуренты скрывают цены или требуют консультацию. Устраняет главный барьер для expat-аудитории.</div>
+      </div>
+      <div class="pos">
+        <div class="pos-title">Диагностика как точка входа</div>
+        <div class="pos-desc">OligoScan + Tanita = данные, а не обещания. Single-modality конкуренты не предлагают диагностику. Медицинские клиники предлагают, но за clinic-level ценник.</div>
+      </div>
+      <div class="pos">
+        <div class="pos-title">Consumer studio, не клиника</div>
+        <div class="pos-desc">Позиционирование между spa (слишком мягкое) и medical (слишком холодное). «Лаборатория с результатами» — язык, который медицинские клиники не могут себе позволить по tone-of-voice.</div>
+      </div>
+      <div class="pos">
+        <div class="pos-title">Zug-база</div>
+        <div class="pos-desc">Конкуренты преимущественно в Zürich. REjuve — единственный full-service provider в кантоне с #1 HNWI-концентрацией и 30% экспатов. Географическая монополия в своём сегменте.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>10 конкурентов — сводная таблица</h2>
+    <table class="bt">
+      <thead>
+        <tr>
+          <th>Бренд</th>
+          <th>Тип</th>
+          <th>Локация</th>
+          <th>Ключевые модальности</th>
+          <th>Ценник</th>
+          <th>EN</th>
+          <th>Публ. прайс</th>
+          <th>Meta Ads</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr class="rejuve">
+          <td>REjuve ★</td>
+          <td><span class="tag tag-fs">Full-stack</span></td>
+          <td>Zug</td>
+          <td>Крио · IHHT · EMS · Диагн. · Нутр.</td>
+          <td>CHF 400–1500/мес</td>
+          <td class="yes">✓</td>
+          <td class="yes">✓</td>
+          <td class="part">~</td>
+        </tr>
+        <tr class="deep">
+          <td>Relysian</td>
+          <td><span class="tag tag-fs">Full-stack</span></td>
+          <td>Zürich</td>
+          <td>PT · Крио · Recovery · Диагн.</td>
+          <td>Membership</td>
+          <td class="part">~</td>
+          <td class="no">✗</td>
+          <td class="yes">✓</td>
+        </tr>
+        <tr class="deep">
+          <td>AYUN</td>
+          <td><span class="tag tag-md">Medical</span></td>
+          <td>Zürich</td>
+          <td>LDN · IV терапия · Диагн.</td>
+          <td>~CHF 3 300/год</td>
+          <td class="yes">✓</td>
+          <td class="no">✗</td>
+          <td class="yes">✓</td>
+        </tr>
+        <tr class="deep">
+          <td>Coolzoone</td>
+          <td><span class="tag tag-sm">Single</span></td>
+          <td>Zürich</td>
+          <td>Крио −90°C</td>
+          <td>—</td>
+          <td class="part">~</td>
+          <td class="no">✗</td>
+          <td class="yes">✓</td>
+        </tr>
+        <tr class="deep">
+          <td>Biohacking Studio</td>
+          <td><span class="tag tag-b2">B2B/Hybrid</span></td>
+          <td>Menzingen ZG</td>
+          <td>IHHT</td>
+          <td>—</td>
+          <td class="no">✗</td>
+          <td class="no">✗</td>
+          <td class="yes">✓</td>
+        </tr>
+        <tr class="deep">
+          <td>KALEIDOSCOP</td>
+          <td><span class="tag tag-md">Medical</span></td>
+          <td>Zürich / Zug</td>
+          <td>Эстетика · IHHT · Диагн.</td>
+          <td>CHF 500/конс.</td>
+          <td class="part">~</td>
+          <td class="no">✗</td>
+          <td class="no">✗</td>
+        </tr>
+        <tr class="deep">
+          <td>Cryodukt</td>
+          <td><span class="tag tag-sm">Single</span></td>
+          <td>Zürich</td>
+          <td>Крио −110°C</td>
+          <td>Сессия</td>
+          <td class="part">~</td>
+          <td class="part">~</td>
+          <td class="no">✗</td>
+        </tr>
+        <tr class="deep">
+          <td>Longevity Biohacking CH</td>
+          <td><span class="tag tag-b2">B2B</span></td>
+          <td>Zug</td>
+          <td>8/12 модальностей</td>
+          <td>B2B</td>
+          <td class="yes">✓</td>
+          <td class="no">✗</td>
+          <td class="no">✗</td>
+        </tr>
+        <tr class="deep">
+          <td>Longevity Center CH</td>
+          <td><span class="tag tag-md">Medical</span></td>
+          <td>Zürich</td>
+          <td>Диагн. · IV · Nutrition · NMN</td>
+          <td>—</td>
+          <td class="yes">✓</td>
+          <td class="no">✗</td>
+          <td class="no">✗</td>
+        </tr>
+        <tr class="deep">
+          <td>Swiss Center H&amp;L</td>
+          <td><span class="tag tag-md">Medical premium</span></td>
+          <td>Zürich</td>
+          <td>Афереза · Blood · Villa recovery</td>
+          <td>4-значные CHF</td>
+          <td class="part">~</td>
+          <td class="no">✗</td>
+          <td class="yes">✓</td>
+        </tr>
+        <tr class="deep">
+          <td>E-Pulsive</td>
+          <td><span class="tag tag-sm">Single</span></td>
+          <td>Zürich / DE</td>
+          <td>EMS · Wellness</td>
+          <td>—</td>
+          <td class="yes">✓</td>
+          <td class="no">✗</td>
+          <td class="no">✗</td>
+        </tr>
+      </tbody>
+    </table>
+    <div style="font-size:11px;color:var(--mu);margin-top:8px">★ REjuve · ✓ да · ✗ нет · ~ частично · <span style="background:#c9a96e18;padding:1px 6px;border-radius:2px">Золотой фон = глубокий анализ</span></div>
+  </div>
+</div>
+
+<!-- ===== TAB 2: КАРТОЧКИ ===== -->
+<div id="cards" class="page">
+  <div class="ph">
+    <h1>Досье конкурентов</h1>
+    <span class="ph-meta">10 игроков · скриншоты апрель 2026</span>
+  </div>
+
+  <!-- 1. Relysian -->
+  <div class="ck">
+    <div class="ck-vis">
+      <img src="../research/competitors/screenshots/relysian.ch/desktop_20260421_002105.png" alt="Relysian">
+      <div class="ck-vis-sep"></div>
+      <img src="../research/competitors/screenshots/meta-ad-library/relysian.png" alt="Relysian Meta Ad" class="meta-ad">
+      <div class="ck-soc">@personaltrainingzurich<br>Meta Ads: <strong>активно</strong></div>
+    </div>
+    <div class="ck-body">
+      <div class="ck-head">
+        <span class="ck-name">Relysian</span>
+        <span class="ck-loc">Zürich · relysian.ch</span>
+      </div>
+      <div class="ck-tags">
+        <span class="tag tag-fs">Full-stack</span>
+        <span class="mod-tag">Персональный тренинг</span>
+        <span class="mod-tag">Криотерапия</span>
+        <span class="mod-tag">Recovery</span>
+        <span class="mod-tag">Диагностика</span>
+        <span class="mod-tag">AI-персонализация</span>
+      </div>
+      <ul class="ck-bullets">
+        <li>AI-powered longevity membership — ближайший структурный конкурент REjuve</li>
+        <li>Membership-модель без публичных цен — скрытый ценник как барьер для сравнения</li>
+        <li>Единственный из 10, кто систематически рекламируется в Meta Ads</li>
+        <li>Расположен в Zürich — нет физического присутствия в Zug</li>
+        <li>Позиционирование: performance + longevity, ближе к elite fitness чем к biohacking</li>
+      </ul>
+      <div class="ck-strategy"><strong>Стратегия REjuve:</strong> Главный конкурент. Дифференциация через публичный прайс, Zug-локацию, диагностику (OligoScan/Tanita) и явный English-first tone.</div>
+    </div>
+  </div>
+
+  <!-- 2. AYUN -->
+  <div class="ck">
+    <div class="ck-vis">
+      <img src="../research/competitors/screenshots/ayun.ch/desktop_20260421_001632.png" alt="AYUN">
+      <div class="ck-vis-sep"></div>
+      <img src="../research/competitors/screenshots/meta-ad-library/ayun.png" alt="AYUN Meta Ad" class="meta-ad">
+      <div class="ck-soc">@ayunhealth · Meta Ads: <strong>активно</strong><br>Инвестиции: Maximon VC</div>
+    </div>
+    <div class="ck-body">
+      <div class="ck-head">
+        <span class="ck-name">AYUN</span>
+        <span class="ck-loc">Zürich · ayun.ch</span>
+      </div>
+      <div class="ck-tags">
+        <span class="tag tag-md">Medical</span>
+        <span class="mod-tag">LDN протокол</span>
+        <span class="mod-tag">IV терапия</span>
+        <span class="mod-tag">Диагностика</span>
+        <span class="mod-tag">Nutrition</span>
+      </div>
+      <ul class="ck-bullets">
+        <li>MD-led клиника, Maximon VC — серьёзный institutional backing</li>
+        <li>~CHF 3,300/год членство — значительно выше ценника REjuve, другой сегмент</li>
+        <li>Low-dose naltrexone (LDN) как фирменный протокол — нишевая медицинская специализация</li>
+        <li>English-first коммуникация, ориентация на expat-аудиторию Zürich</li>
+        <li>Не предоставляет физические longevity-модальности (крио, EMS, IHHT)</li>
+      </ul>
+      <div class="ck-strategy"><strong>Стратегия REjuve:</strong> Не прямой конкурент — другой ценовой уровень и тип услуг. Потенциальный партнёр: клиенты AYUN, которым нужны физические модальности, → referral к REjuve.</div>
+    </div>
+  </div>
+
+  <!-- 3. Coolzoone -->
+  <div class="ck">
+    <div class="ck-vis">
+      <img src="../research/competitors/screenshots/coolzoone.ch/desktop_20260421_001735.png" alt="Coolzoone">
+      <div class="ck-vis-sep"></div>
+      <img src="../research/competitors/screenshots/meta-ad-library/coolzoone.png" alt="Coolzoone Meta Ad" class="meta-ad">
+      <div class="ck-soc">@coolzoone_koeln<br>Meta Ads: <strong>активно</strong> · нем. франшиза</div>
+    </div>
+    <div class="ck-body">
+      <div class="ck-head">
+        <span class="ck-name">Coolzoone</span>
+        <span class="ck-loc">Zürich · coolzoone.ch</span>
+      </div>
+      <div class="ck-tags">
+        <span class="tag tag-sm">Single-modality</span>
+        <span class="mod-tag">Криотерапия −90°C</span>
+        <span class="mod-tag">RemediCool AI</span>
+      </div>
+      <ul class="ck-bullets">
+        <li>Только криотерапия, −90°C — более мягкий режим чем Cryodukt (−110°C)</li>
+        <li>RemediCool AI-платформа — попытка добавить «умную» диагностику вокруг cryo</li>
+        <li>Немецкая франшиза (@coolzoone_koeln) — неопределённость с локальным управлением в CH</li>
+        <li>Meta Ads активны — awareness-воронка с конверсией в cryo-бронирование</li>
+        <li>Узкий стек: клиент, которому нужно больше, уйдёт в другое место</li>
+      </ul>
+      <div class="ck-strategy"><strong>Стратегия REjuve:</strong> Клиенты Coolzoone — потенциальные апсейлы. REjuve предлагает крио как часть комплексной программы с диагностикой и сопровождением.</div>
+    </div>
+  </div>
+
+  <!-- 4. Biohacking Studio -->
+  <div class="ck">
+    <div class="ck-vis">
+      <img src="../research/competitors/screenshots/biohacking-studio.ch/desktop_20260421_001650.png" alt="Biohacking Studio">
+      <div class="ck-vis-sep"></div>
+      <img src="../research/competitors/screenshots/meta-ad-library/b-hacking-studio.png" alt="Biohacking Studio Meta Ad" class="meta-ad">
+      <div class="ck-soc">Meta Ads: <strong>активно</strong><br>Arztpraxis · Menzingen ZG</div>
+    </div>
+    <div class="ck-body">
+      <div class="ck-head">
+        <span class="ck-name">Biohacking Studio</span>
+        <span class="ck-loc">Menzingen ZG · biohacking-studio.ch</span>
+      </div>
+      <div class="ck-tags">
+        <span class="tag tag-b2">B2B/Hybrid</span>
+        <span class="mod-tag">IHHT</span>
+        <span class="mod-tag">Arztpraxis</span>
+      </div>
+      <ul class="ck-bullets">
+        <li>Тот же кантон (Zug), название «Biohacking Studio» — <strong style="color:var(--dn)">риск путаницы с брендом REjuve</strong></li>
+        <li>Специализируется только на IHHT (Intermittent Hypoxia–Hyperoxia Training)</li>
+        <li>Работает как Arztpraxis — медицинская лицензия, другая регуляторная рамка</li>
+        <li>Узкий фокус снижает прямую конкуренцию, но географическая близость создаёт territory overlap</li>
+      </ul>
+      <div class="ck-strategy"><strong>Стратегия REjuve:</strong> Мониторинг trademark. Всегда использовать полное название REjuve и чёткое позиционирование — не допускать ассоциации с «biohacking studio» как концепцией.</div>
+    </div>
+  </div>
+
+  <!-- 5. KALEIDOSCOP -->
+  <div class="ck">
+    <div class="ck-vis">
+      <img src="../research/competitors/screenshots/kaleidoscop.ch/desktop_20260421_001733.png" alt="KALEIDOSCOP">
+      <div class="ck-meta-none">
+        <strong>Meta Ads:</strong> не найдено<br>
+        <strong>Тип:</strong> медицинская эстетика<br>
+        <strong>Ценник:</strong> CHF 500/конс.
+      </div>
+    </div>
+    <div class="ck-body">
+      <div class="ck-head">
+        <span class="ck-name">KALEIDOSCOP</span>
+        <span class="ck-loc">Zürich / Zug · kaleidoscop.ch</span>
+      </div>
+      <div class="ck-tags">
+        <span class="tag tag-md">Medical</span>
+        <span class="mod-tag">Медицинская эстетика</span>
+        <span class="mod-tag">IHHT</span>
+        <span class="mod-tag">Диагностика</span>
+      </div>
+      <ul class="ck-bullets">
+        <li>MD-led, CHF 500/консультация — premium medical frame</li>
+        <li>Пересечение по IHHT и диагностике, но контекст эстетики отличается от longevity</li>
+        <li>Ограниченный digital footprint — не активен в paid social</li>
+        <li>Аудитория ближе к medical aesthetics (40-60, женщины), не biohacker-профиль</li>
+      </ul>
+      <div class="ck-strategy"><strong>Стратегия REjuve:</strong> Низкое пересечение аудитории. Потенциальный referral-партнёр для клиентов, которым нужна эстетическая медицина.</div>
+    </div>
+  </div>
+
+  <!-- 6. Cryodukt -->
+  <div class="ck">
+    <div class="ck-vis">
+      <img src="../research/competitors/screenshots/cryodukt.ch/desktop_20260421_001744.png" alt="Cryodukt">
+      <div class="ck-meta-none">
+        <strong>IG:</strong> @cryodukt<br>
+        <strong>Meta Ads:</strong> не найдено<br>
+        <strong>Пресса:</strong> Tagesanzeiger
+      </div>
+    </div>
+    <div class="ck-body">
+      <div class="ck-head">
+        <span class="ck-name">Cryodukt</span>
+        <span class="ck-loc">Zürich · cryodukt.ch</span>
+      </div>
+      <div class="ck-tags">
+        <span class="tag tag-sm">Single-modality</span>
+        <span class="mod-tag">Криотерапия −110°C</span>
+        <span class="mod-tag">Budget-сегмент</span>
+      </div>
+      <ul class="ck-bullets">
+        <li>5,000+ клиентов — крупнейшая клиентская база в cryo-сегменте Zürich</li>
+        <li>Самая низкая температура (−110°C) — маркетинговый дифференциатор</li>
+        <li>Упоминание в Tagesanzeiger — earned media без paid social</li>
+        <li>Budget-позиционирование: сессионная оплата, нет membership, нет комплексных программ</li>
+      </ul>
+      <div class="ck-strategy"><strong>Стратегия REjuve:</strong> Разные сегменты. Клиенты Cryodukt — доступный вход в cryo. Апсейл в полную программу REjuve = большой шаг, слабый overlap.</div>
+    </div>
+  </div>
+
+  <!-- 7. Longevity Biohacking CH -->
+  <div class="ck">
+    <div class="ck-vis">
+      <img src="../research/competitors/screenshots/longevity-biohacking.ch/desktop_20260421_001653.png" alt="Longevity Biohacking">
+      <div class="ck-meta-none">
+        <strong>Meta Ads:</strong> не найдено<br>
+        <strong>Тип:</strong> B2B интегратор<br>
+        <strong>Стек:</strong> 8 из 12 модальностей REjuve
+      </div>
+    </div>
+    <div class="ck-body">
+      <div class="ck-head">
+        <span class="ck-name">Longevity Biohacking CH</span>
+        <span class="ck-loc">Zug · longevity-biohacking.ch</span>
+      </div>
+      <div class="ck-tags">
+        <span class="tag tag-b2">B2B</span>
+        <span class="mod-tag">Крио</span>
+        <span class="mod-tag">IHHT</span>
+        <span class="mod-tag">EMS</span>
+        <span class="mod-tag">+5 модальностей</span>
+      </div>
+      <ul class="ck-bullets">
+        <li>B2B-интегратор, не consumer studio — продаёт оборудование и корпоративные решения</li>
+        <li>8 из 12 модальностей REjuve — высокое overlap по технологиям, не по аудитории</li>
+        <li>Базируется в Zug — тот же кантон, но другой рынок (корпоративный)</li>
+        <li>English-first коммуникация, международная B2B-ориентация</li>
+        <li>Нет потребительского membership и розничного клиента</li>
+      </ul>
+      <div class="ck-strategy"><strong>Стратегия REjuve:</strong> Не конкурент в B2C. Интересен как потенциальный поставщик оборудования. Мониторинг: запуск B2C = прямая угроза в Zug.</div>
+    </div>
+  </div>
+
+  <!-- 8. Longevity Center CH -->
+  <div class="ck">
+    <div class="ck-vis">
+      <img src="../research/competitors/screenshots/longevitycenter.ch/desktop_20260421_001808.png" alt="Longevity Center">
+      <div class="ck-meta-none">
+        <strong>IG:</strong> @longevity_center<br>
+        <strong>Meta Ads:</strong> не найдено<br>
+        <strong>2 врача · EU-бренд</strong>
+      </div>
+    </div>
+    <div class="ck-body">
+      <div class="ck-head">
+        <span class="ck-name">Longevity Center CH</span>
+        <span class="ck-loc">Zürich · longevitycenter.ch</span>
+      </div>
+      <div class="ck-tags">
+        <span class="tag tag-md">Medical</span>
+        <span class="mod-tag">Диагностика</span>
+        <span class="mod-tag">IV терапия</span>
+        <span class="mod-tag">Nutrition</span>
+        <span class="mod-tag">NMN</span>
+      </div>
+      <ul class="ck-bullets">
+        <li>EU-бренд с локацией в Zürich, 2 врача-партнёра</li>
+        <li>Акцент на страховое покрытие части услуг — дифференциатор в медицинской нише</li>
+        <li>NMN и молекулярные протоколы — специализированная аудитория «продвинутых» биохакеров</li>
+        <li>Нет физических longevity-модальностей (крио, EMS, IHHT)</li>
+      </ul>
+      <div class="ck-strategy"><strong>Стратегия REjuve:</strong> Частичное пересечение по диагностике и нутрициологии. REjuve сильнее в физических модальностях. Referral partnership возможен.</div>
+    </div>
+  </div>
+
+  <!-- 9. Swiss Center H&L -->
+  <div class="ck">
+    <div class="ck-vis">
+      <img src="../research/competitors/screenshots/healthlongevity.ch/desktop_20260421_001801.png" alt="Swiss Center H&L">
+      <div class="ck-vis-sep"></div>
+      <img src="../research/competitors/screenshots/meta-ad-library/swiss-center-health-longevity.png" alt="Swiss Center Meta Ad" class="meta-ad">
+      <div class="ck-soc">Meta Ads: <strong>активно</strong><br>Villa recovery · Blood filtration</div>
+    </div>
+    <div class="ck-body">
+      <div class="ck-head">
+        <span class="ck-name">Swiss Center H&amp;L</span>
+        <span class="ck-loc">Zürich · healthlongevity.ch</span>
+      </div>
+      <div class="ck-tags">
+        <span class="tag tag-md">Medical premium</span>
+        <span class="mod-tag">Плазмаферез</span>
+        <span class="mod-tag">Blood filtration</span>
+        <span class="mod-tag">Villa recovery</span>
+      </div>
+      <ul class="ck-bullets">
+        <li>Ультра-премиум: апаферез крови, виллы для recovery — совсем другой ценовой уровень</li>
+        <li>4-значные суммы в CHF за протокол — клиенты вне scope REjuve ICP</li>
+        <li>Meta Ads активны — работает с high-intent аудиторией</li>
+        <li>Медицинская лицензия = другие regulatory requirements и brand voice</li>
+        <li>Нет longevity studio-компонента (тренировки, lifestyle coaching)</li>
+      </ul>
+      <div class="ck-strategy"><strong>Стратегия REjuve:</strong> Разные ценовые сегменты: UHNWI vs HNWI/upper-middle. Нет прямой конкуренции, возможна Tier-2 referral-координация.</div>
+    </div>
+  </div>
+
+  <!-- 10. E-Pulsive -->
+  <div class="ck">
+    <div class="ck-vis">
+      <img src="../research/competitors/screenshots/e-pulsive.ch/desktop_20260421_001812.png" alt="E-Pulsive">
+      <div class="ck-meta-none">
+        <strong>IG:</strong> @epulsive<br>
+        <strong>Meta Ads:</strong> не найдено<br>
+        <strong>DE + EN · JS-rendered сайт</strong>
+      </div>
+    </div>
+    <div class="ck-body">
+      <div class="ck-head">
+        <span class="ck-name">E-Pulsive</span>
+        <span class="ck-loc">Zürich / DE · e-pulsive.ch</span>
+      </div>
+      <div class="ck-tags">
+        <span class="tag tag-sm">Single-modality</span>
+        <span class="mod-tag">EMS</span>
+        <span class="mod-tag">Электростимуляция</span>
+      </div>
+      <ul class="ck-bullets">
+        <li>EMS-специалист: электромиостимуляция как основная и единственная услуга</li>
+        <li>DE + EN сайт, @epulsive на Instagram — двуязычное позиционирование</li>
+        <li>JS-rendered сайт — ограниченные данные из crawl, SEO-невидимость</li>
+        <li>Аудитория: фитнес-ориентированные клиенты, не longevity-сегмент</li>
+      </ul>
+      <div class="ck-strategy"><strong>Стратегия REjuve:</strong> Минимальное пересечение. EMS у REjuve — часть комплексной longevity-программы. Клиенты E-Pulsive могут перейти в REjuve при поиске более широкого подхода.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== TAB 3: МАТРИЦА ===== -->
+<div id="matrix" class="page">
+  <div class="ph">
+    <h1>Матрица позиционирования</h1>
+    <span class="ph-meta">Ширина стека × Уровень медицинского надзора</span>
+  </div>
+
+  <div class="section">
+    <h2>Карта позиционирования</h2>
+    <div class="pmap-wrap">
+      <div class="pmap">
+        <div class="pmap-inner">
+          <div class="pmap-ax-x"></div>
+          <div class="pmap-ax-y"></div>
+          <div class="pmap-label" style="top:7px;left:50%;transform:translateX(-50%)">↑ Медицинский</div>
+          <div class="pmap-label" style="bottom:7px;left:50%;transform:translateX(-50%)">Consumer ↓</div>
+          <div class="pmap-label" style="left:6px;top:50%;transform:translateY(-50%)">Узкий →</div>
+          <div class="pmap-label" style="right:6px;top:50%;transform:translateY(-50%)">← Full-stack</div>
+
+          <!-- REjuve: full-stack (80%), consumer (72%) -->
+          <div class="pmap-dot d-re" style="left:80%;top:70%"></div>
+          <div class="pmap-dot-label" style="left:80%;top:81%;color:var(--ad)">REjuve ★</div>
+
+          <!-- Relysian: full-stack (70%), slightly more medical (58%) -->
+          <div class="pmap-dot d-fs" style="left:70%;top:56%"></div>
+          <div class="pmap-dot-label" style="left:70%;top:67%">Relysian</div>
+
+          <!-- AYUN: medium stack (55%), medical (30%) -->
+          <div class="pmap-dot d-md" style="left:55%;top:28%"></div>
+          <div class="pmap-dot-label" style="left:55%;top:39%">AYUN</div>
+
+          <!-- Swiss Center: narrow (28%), very medical (14%) -->
+          <div class="pmap-dot d-md" style="left:28%;top:13%"></div>
+          <div class="pmap-dot-label" style="left:28%;top:24%">Swiss C.</div>
+
+          <!-- Longevity Center: medium (50%), medical (25%) -->
+          <div class="pmap-dot d-md" style="left:50%;top:23%"></div>
+          <div class="pmap-dot-label" style="left:50%;top:34%">LC CH</div>
+
+          <!-- KALEIDOSCOP: narrow (24%), medical (35%) -->
+          <div class="pmap-dot d-md" style="left:24%;top:33%"></div>
+          <div class="pmap-dot-label" style="left:24%;top:44%">KALEID.</div>
+
+          <!-- Biohacking Studio: narrow (18%), semi-medical (43%) -->
+          <div class="pmap-dot d-b2" style="left:18%;top:42%"></div>
+          <div class="pmap-dot-label" style="left:18%;top:53%">BH Studio</div>
+
+          <!-- Longevity Biohacking CH: wide (64%), B2B mid (52%) -->
+          <div class="pmap-dot d-b2" style="left:64%;top:50%"></div>
+          <div class="pmap-dot-label" style="left:64%;top:61%">LB CH</div>
+
+          <!-- Coolzoone: very narrow (12%), consumer (74%) -->
+          <div class="pmap-dot d-sm" style="left:12%;top:72%"></div>
+          <div class="pmap-dot-label" style="left:12%;top:83%">Coolz.</div>
+
+          <!-- Cryodukt: narrow (22%), consumer budget (80%) -->
+          <div class="pmap-dot d-sm" style="left:22%;top:78%"></div>
+          <div class="pmap-dot-label" style="left:22%;top:89%">Cryodukt</div>
+
+          <!-- E-Pulsive: narrow (35%), consumer (74%) -->
+          <div class="pmap-dot d-sm" style="left:35%;top:74%"></div>
+          <div class="pmap-dot-label" style="left:35%;top:85%">E-Pulsive</div>
+        </div>
+      </div>
+    </div>
+    <div class="legend">
+      <div class="leg-item"><div class="leg-dot" style="background:var(--ac);border:2px solid var(--ad)"></div>REjuve</div>
+      <div class="leg-item"><div class="leg-dot d-fs"></div>Full-stack studio</div>
+      <div class="leg-item"><div class="leg-dot d-md"></div>Medical clinic</div>
+      <div class="leg-item"><div class="leg-dot d-sm"></div>Single-modality</div>
+      <div class="leg-item"><div class="leg-dot d-b2"></div>B2B/Hybrid</div>
+    </div>
+    <div style="margin-top:10px;font-size:11px;color:var(--mu)">REjuve занимает уникальную позицию в нижнем правом квадранте (full-stack + consumer) — без прямых конкурентов с тем же профилем в кантоне Zug.</div>
+  </div>
+
+  <div class="section">
+    <h2>Сравнительная матрица</h2>
+    <table class="cx">
+      <thead>
+        <tr>
+          <th>Бренд</th>
+          <th>Крио</th>
+          <th>IHHT</th>
+          <th>EMS</th>
+          <th>Диагн.</th>
+          <th>EN-first</th>
+          <th>Публ. прайс</th>
+          <th>Membership</th>
+          <th>Meta Ads</th>
+          <th>Zug</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr class="rejuve">
+          <td>REjuve ★</td>
+          <td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td>
+          <td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td>
+          <td class="yes">✓</td><td class="part">~</td><td class="yes">✓</td>
+        </tr>
+        <tr>
+          <td>Relysian</td>
+          <td class="yes">✓</td><td class="no">✗</td><td class="no">✗</td>
+          <td class="yes">✓</td><td class="part">~</td><td class="no">✗</td>
+          <td class="yes">✓</td><td class="yes">✓</td><td class="no">✗</td>
+        </tr>
+        <tr>
+          <td>AYUN</td>
+          <td class="no">✗</td><td class="no">✗</td><td class="no">✗</td>
+          <td class="yes">✓</td><td class="yes">✓</td><td class="no">✗</td>
+          <td class="yes">✓</td><td class="yes">✓</td><td class="no">✗</td>
+        </tr>
+        <tr>
+          <td>Coolzoone</td>
+          <td class="yes">✓</td><td class="no">✗</td><td class="no">✗</td>
+          <td class="no">✗</td><td class="part">~</td><td class="no">✗</td>
+          <td class="no">✗</td><td class="yes">✓</td><td class="no">✗</td>
+        </tr>
+        <tr>
+          <td>Biohacking Studio</td>
+          <td class="no">✗</td><td class="yes">✓</td><td class="no">✗</td>
+          <td class="no">✗</td><td class="no">✗</td><td class="no">✗</td>
+          <td class="no">✗</td><td class="yes">✓</td><td class="yes">✓</td>
+        </tr>
+        <tr>
+          <td>KALEIDOSCOP</td>
+          <td class="no">✗</td><td class="yes">✓</td><td class="no">✗</td>
+          <td class="yes">✓</td><td class="part">~</td><td class="no">✗</td>
+          <td class="no">✗</td><td class="no">✗</td><td class="part">~</td>
+        </tr>
+        <tr>
+          <td>Cryodukt</td>
+          <td class="yes">✓</td><td class="no">✗</td><td class="no">✗</td>
+          <td class="no">✗</td><td class="part">~</td><td class="part">~</td>
+          <td class="no">✗</td><td class="no">✗</td><td class="no">✗</td>
+        </tr>
+        <tr>
+          <td>Longevity Biohacking</td>
+          <td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td>
+          <td class="yes">✓</td><td class="yes">✓</td><td class="no">✗</td>
+          <td class="no">✗</td><td class="no">✗</td><td class="yes">✓</td>
+        </tr>
+        <tr>
+          <td>Longevity Center</td>
+          <td class="no">✗</td><td class="no">✗</td><td class="no">✗</td>
+          <td class="yes">✓</td><td class="yes">✓</td><td class="no">✗</td>
+          <td class="yes">✓</td><td class="no">✗</td><td class="no">✗</td>
+        </tr>
+        <tr>
+          <td>Swiss Center H&amp;L</td>
+          <td class="no">✗</td><td class="no">✗</td><td class="no">✗</td>
+          <td class="yes">✓</td><td class="part">~</td><td class="no">✗</td>
+          <td class="no">✗</td><td class="yes">✓</td><td class="no">✗</td>
+        </tr>
+        <tr>
+          <td>E-Pulsive</td>
+          <td class="no">✗</td><td class="no">✗</td><td class="yes">✓</td>
+          <td class="no">✗</td><td class="yes">✓</td><td class="no">✗</td>
+          <td class="no">✗</td><td class="no">✗</td><td class="no">✗</td>
+        </tr>
+      </tbody>
+    </table>
+    <div style="font-size:11px;color:var(--mu);margin-top:8px">✓ да · ✗ нет · ~ частично · <span style="background:#c9a96e30;padding:1px 6px;border-radius:2px">★ Единственный с ✓ по всем ключевым параметрам</span></div>
+  </div>
+</div>
+
+<!-- ===== TAB 4: СИГНАЛЫ ===== -->
+<div id="signals" class="page">
+  <div class="ph">
+    <h1>Рыночные сигналы</h1>
+    <span class="ph-meta">SemRush · Демография · Туризм</span>
+  </div>
+
+  <div class="section">
+    <h2>SemRush — органический трафик конкурентов</h2>
+    <div class="sem-grid">
+      <div>
+        <img src="../research/competitors/screenshots/SemRush/Screenshot%202026-04-21%20161839.png" alt="SemRush обзор" class="sem-img">
+        <div class="sem-cap">Обзор — топ-домены и трафик</div>
+      </div>
+      <div>
+        <img src="../research/competitors/screenshots/SemRush/Screenshot%202026-04-21%20161910.png" alt="SemRush ключевые слова" class="sem-img">
+        <div class="sem-cap">Ключевые слова — longevity CH</div>
+      </div>
+      <div>
+        <img src="../research/competitors/screenshots/SemRush/Screenshot%202026-04-21%20161935.png" alt="SemRush позиции" class="sem-img">
+        <div class="sem-cap">Позиции в поиске — регион CH</div>
+      </div>
+    </div>
+    <div class="card" style="font-size:12px;color:var(--mu)">
+      <strong style="color:var(--tx)">Вывод по SemRush:</strong> Большинство конкурентов имеют низкий органический трафик (&lt;1,000 визитов/мес). Ниша недостаточно проработана с точки зрения SEO — значительный потенциал для REjuve через content marketing и local SEO в Zug.
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Демография кантона Цуг</h2>
+    <div class="g4" style="margin-bottom:16px">
+      <div class="stat"><span class="stat-n">133 739</span><span class="stat-l">жителей<br>(BFS 2024)</span></div>
+      <div class="stat"><span class="stat-n">#1</span><span class="stat-l">кантон по HNWI-концентрации<br>(14.2% домохозяйств &gt;CHF 1M)</span></div>
+      <div class="stat"><span class="stat-n">CHF 116k</span><span class="stat-l">средний доход<br>на душу населения</span></div>
+      <div class="stat"><span class="stat-n">30%</span><span class="stat-l">экспатов<br>(143 национальности)</span></div>
+    </div>
+    <div class="g4" style="margin-bottom:20px">
+      <div class="stat"><span class="stat-n">40 000+</span><span class="stat-l">ежедневных маятниковых<br>мигрантов</span></div>
+      <div class="stat"><span class="stat-n">~19 000</span><span class="stat-l">English-dominant<br>резидентов (14%)</span></div>
+      <div class="stat"><span class="stat-n">900+</span><span class="stat-l">commodity-фирм<br>(Glencore, Vitol, Trafigura)</span></div>
+      <div class="stat"><span class="stat-n">143</span><span class="stat-l">национальности<br>проживают в кантоне</span></div>
+    </div>
+    <div class="card">
+      <h3 style="margin-bottom:12px">Топ-5 экспат-сообществ по численности</h3>
+      <div class="demo-bar-wrap">
+        <div class="demo-bar-label"><span>Немцы</span><span>~20%</span></div>
+        <div class="demo-bar"><div class="demo-bar-fill" style="width:67%"></div></div>
+      </div>
+      <div class="demo-bar-wrap">
+        <div class="demo-bar-label"><span>Итальянцы</span><span>~10%</span></div>
+        <div class="demo-bar"><div class="demo-bar-fill" style="width:33%"></div></div>
+      </div>
+      <div class="demo-bar-wrap">
+        <div class="demo-bar-label"><span>Британцы</span><span>~6.5%</span></div>
+        <div class="demo-bar"><div class="demo-bar-fill" style="width:22%"></div></div>
+      </div>
+      <div class="demo-bar-wrap">
+        <div class="demo-bar-label"><span>Португальцы</span><span>~5%</span></div>
+        <div class="demo-bar"><div class="demo-bar-fill" style="width:17%"></div></div>
+      </div>
+      <div class="demo-bar-wrap">
+        <div class="demo-bar-label"><span>Американцы</span><span>~1.6%</span></div>
+        <div class="demo-bar"><div class="demo-bar-fill" style="width:5%"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Туристический поток — кантон Цуг 2025</h2>
+    <div class="g3" style="margin-bottom:16px">
+      <div class="stat"><span class="stat-n">304 483</span><span class="stat-l">Logiernächte 2025<br>(+12% YoY — двузначный рост, лучший в CH)</span></div>
+      <div class="stat"><span class="stat-n">+25%</span><span class="stat-l">Северная Америка<br>(самый быстрый рост)</span></div>
+      <div class="stat"><span class="stat-n">2.41</span><span class="stat-l">ночи — средняя<br>продолжительность визита</span></div>
+    </div>
+    <div class="card" style="font-size:12px">
+      <strong>Импликации для REjuve:</strong>
+      <ul style="margin-top:8px;line-height:2;list-style:disc;padding-left:18px;color:var(--mu)">
+        <li>Рост числа туристов из Северной Америки (+25%) расширяет потенциальную аудиторию для разового посещения</li>
+        <li>Средний визит 2.41 ночи: достаточно для 1–2 сессий диагностики или крио-протокола</li>
+        <li>Туристы = awareness/trial канал → remote follow-up через membership</li>
+        <li>Concierge-партнёрства с отелями Zug + ~2.4M туристов в Lucerne (30 км) как дополнительный поток</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- ===== TAB 5: АУДИТОРИЯ ===== -->
+<div id="audience" class="page">
+  <div class="ph">
+    <h1>Аудитория и законодательство</h1>
+    <span class="ph-meta">ICP · Путь клиента · CH Compliance · Meta Health Policy</span>
+  </div>
+
+  <div class="section">
+    <h2>Ideal Customer Profile (ICP)</h2>
+    <div class="g2" style="margin-bottom:20px">
+      <div>
+        <table class="icp-tbl">
+          <thead><tr><th>Параметр</th><th>Описание</th></tr></thead>
+          <tbody>
+            <tr><td>Возраст</td><td>35–55 лет</td></tr>
+            <tr><td>Пол</td><td>Без выраженного смещения; сегмент perimenopause (40–55, женщины) — отдельный приоритет</td></tr>
+            <tr><td>Доход</td><td>HNWI или upper-middle: CHF 116,000+; готовность платить CHF 400–1,500/мес</td></tr>
+            <tr><td>Профессия</td><td>Финансы, commodities (Glencore-кампания = прямой сигнал), IT, предпринимательство</td></tr>
+            <tr><td>Язык</td><td>English-first (~19,000 чел. в кантоне) + German</td></tr>
+            <tr><td>Локация</td><td>Кантон Цуг + Zürich (28 км)</td></tr>
+            <tr><td>Гражданство</td><td>~30% экспатов (143 нации): немцы 20%, британцы 6.5%, американцы 1.6%</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="card">
+        <h3 style="font-family:var(--serif);color:var(--ad);margin-bottom:12px">Психографика</h3>
+        <blockquote style="border-left:3px solid var(--ac);padding-left:12px;margin-bottom:14px;font-style:italic;font-size:12px;color:var(--mu);line-height:1.7">«People who are doing many things right, but not getting results»</blockquote>
+        <ul style="list-style:none;font-size:12px;line-height:2.1">
+          <li>✓ Уже health-engaged — спорт, питание, добавки — но «потолок»</li>
+          <li>✓ Высокая tolerance к сложности: готовы к диагностике и данным</li>
+          <li>✓ Скептики к wellness-хайпу — хотят понять зачем именно им</li>
+          <li>✓ Результато-ориентированы: измеримый прогресс важнее атмосферы</li>
+          <li>✓ Time-poor: ценят эффективность и чёткую систему</li>
+        </ul>
+      </div>
+    </div>
+
+    <h3 style="margin-bottom:10px">Вторичные сегменты</h3>
+    <div class="g3">
+      <div class="comp-box">
+        <div class="mmap-type">Корпоративный wellness</div>
+        <div class="comp-desc">Сотрудники Glencore, Roche, ABB. Подтверждён Glencore-кампанией. B2B = более предсказуемый LTV.</div>
+        <div style="margin-top:8px;font-size:11px;font-weight:700;color:var(--gr)">Потенциал: высокий</div>
+      </div>
+      <div class="comp-box">
+        <div class="mmap-type">HNWI-туристы</div>
+        <div class="comp-desc">Северная Америка +25% в 2025; средний визит 2.41 ночи. Trial → awareness → remote follow-up.</div>
+        <div style="margin-top:8px;font-size:11px;font-weight:700;color:#aa7700">Потенциал: средний</div>
+      </div>
+      <div class="comp-box">
+        <div class="mmap-type">Люцернский рынок</div>
+        <div class="comp-desc">2.4M туристов/год в 30 км. Hotel concierge referral-канал. Сейчас тактический.</div>
+        <div style="margin-top:8px;font-size:11px;font-weight:700;color:var(--mu)">Потенциал: низкий сейчас</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Путь клиента к покупке</h2>
+    <div class="flow">
+      <div class="flow-step">
+        <div class="flow-num">1</div>
+        <div class="flow-body">
+          <div class="flow-title">Триггер</div>
+          <div class="flow-desc">Хроническая усталость / плохое восстановление / «потолок» несмотря на правильный образ жизни</div>
+        </div>
+      </div>
+      <div class="flow-sep"></div>
+      <div class="flow-step">
+        <div class="flow-num">2</div>
+        <div class="flow-body">
+          <div class="flow-title">Поиск объяснения</div>
+          <div class="flow-desc">Google: «functional medicine zurich», «longevity biohacking», «diagnostics швейцария» — или совет от врача / тренера / коллеги</div>
+        </div>
+      </div>
+      <div class="flow-sep"></div>
+      <div class="flow-step">
+        <div class="flow-num">3</div>
+        <div class="flow-body">
+          <div class="flow-title">Исследование вариантов <span style="font-weight:400;color:var(--mu)">(1–4 недели)</span></div>
+          <div class="flow-desc">Читает сайты, смотрит Instagram, сравнивает, проверяет цены. Если цен нет — вероятность контакта снижается.</div>
+        </div>
+      </div>
+      <div class="flow-sep"></div>
+      <div class="flow-step">
+        <div class="flow-num" style="background:var(--ad)">4</div>
+        <div class="flow-body">
+          <div class="flow-title" style="color:var(--ad)">Точка принятия решения ← ключевая</div>
+          <div class="flow-desc">Прозрачный прайс + внятный первый шаг («начните с OligoScan-диагностики»). REjuve — единственный в нише с публичными ценами.</div>
+        </div>
+      </div>
+      <div class="flow-sep"></div>
+      <div class="flow-step">
+        <div class="flow-num">5</div>
+        <div class="flow-body">
+          <div class="flow-title">Первый контакт</div>
+          <div class="flow-desc">Онлайн-бронирование или WhatsApp. Партнёрства с тренерами, врачами, expat-клубами — критически важный referral-канал.</div>
+        </div>
+      </div>
+      <div class="flow-sep"></div>
+      <div class="flow-step">
+        <div class="flow-num">6</div>
+        <div class="flow-body">
+          <div class="flow-title">Конверсия в членство</div>
+          <div class="flow-desc">После 1–3 сессий + видимого результата (данные → улучшение показателей)</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>CH Compliance — что можно и нельзя</h2>
+    <div class="g3" style="margin-bottom:20px">
+      <div class="comp-box">
+        <div class="comp-law">HMG Art. 87</div>
+        <div class="comp-desc">Запрет рекламы лекарственных средств с медицинскими claims. Основание для административных санкций.</div>
+        <div class="comp-fine">CHF 50,000 штраф</div>
+      </div>
+      <div class="comp-box">
+        <div class="comp-law">AWV Art. 22</div>
+        <div class="comp-desc">Запрет гарантий результата, before/after сравнений, testimonials для Heilmittel.</div>
+        <div class="comp-fine">Административная ответственность</div>
+      </div>
+      <div class="comp-box">
+        <div class="comp-law">UWG Art. 23 + Zug GesG IV</div>
+        <div class="comp-desc">Вводящая в заблуждение реклама = уголовная ответственность. Zug GesG: Arztvorbehalt для медицинских услуг. Kristina Busse — нутрициолог, не MD.</div>
+        <div class="comp-fine">До 3 лет лишения свободы</div>
+      </div>
+    </div>
+
+    <h3 style="margin-bottom:10px">Запрещённые фразы → безопасные альтернативы</h3>
+    <table class="proh-tbl">
+      <thead>
+        <tr><th>❌ Запрещено</th><th>✓ Безопасная альтернатива</th><th>Основание</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>«Вылечим / избавим от…»</td>
+          <td>«Поддерживает восстановление / помогает организму адаптироваться»</td>
+          <td>HMG — запрет терапевтических claims</td>
+        </tr>
+        <tr>
+          <td>«Гарантируем результат»</td>
+          <td>«Клиенты отмечают улучшение показателей через 4–6 недель»</td>
+          <td>AWV Art. 22 — запрет гарантий</td>
+        </tr>
+        <tr>
+          <td>Before/after фотографии</td>
+          <td>Графики данных (Tanita, OligoScan), анонимные quotes без упоминания болезней</td>
+          <td>AWV — запрет before/after для Heilmittel</td>
+        </tr>
+        <tr>
+          <td>«Лечение гормонального дисбаланса»</td>
+          <td>«Протоколы для поддержки гормонального баланса» или «женский longevity-протокол»</td>
+          <td>Medical claim без Arztvorbehalt</td>
+        </tr>
+        <tr>
+          <td>«Снимаем хроническую усталость»</td>
+          <td>«Программы восстановления и управления энергией»</td>
+          <td>Диагноз = медицинский claim</td>
+        </tr>
+        <tr>
+          <td>«Добавка X увеличивает теломеры на Y%»</td>
+          <td>Только claims по LIV Anhang 14 (дословно, без экстраполяции)</td>
+          <td>LIV Anhang 14 — supplements verbatim only</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3 style="margin:20px 0 8px">Обязательные дисклеймеры</h3>
+    <div class="disc">Предоставляемые услуги не являются медицинским лечением и не заменяют консультацию врача. Kristina Busse — сертифицированный нутрициолог, не врач. При наличии медицинских показаний необходима консультация специалиста.</div>
+    <div class="disc">Результаты индивидуальны и зависят от исходного состояния здоровья, образа жизни и регулярности посещений. Приведённые данные клиентов — субъективные отзывы, не клинические результаты.</div>
+  </div>
+
+  <div class="section">
+    <h2>Meta Health Ads Policy — DACH (январь 2025)</h2>
+    <div class="g2" style="margin-bottom:16px">
+      <div class="meta-box">
+        <h3 style="margin-bottom:10px">Что запрещено</h3>
+        <ul style="font-size:12px;line-height:2;list-style:disc;padding-left:16px;color:var(--mu)">
+          <li>Оптимизация под lower-funnel events (appointments, purchases, leads)</li>
+          <li>Pixel-отслеживание конверсий связанных со здоровьем</li>
+          <li>CAPI для health-related событий</li>
+          <li>Ретаргетинг на основе посещения health/wellness страниц</li>
+          <li>Lookalike audiences на основе health-конверсий</li>
+        </ul>
+      </div>
+      <div class="meta-box">
+        <h3 style="margin-bottom:10px">Что разрешено</h3>
+        <ul style="font-size:12px;line-height:2;list-style:disc;padding-left:16px;color:var(--mu)">
+          <li>Upper-funnel метрики: views, engagement, link clicks</li>
+          <li>Brand awareness кампании без конверсионных целей</li>
+          <li>Reach-оптимизация</li>
+          <li>Lifestyle-контент без медицинских claims</li>
+          <li>Video views кампании</li>
+        </ul>
+      </div>
+    </div>
+    <div class="card" style="font-size:12px;color:var(--mu);margin-bottom:20px">
+      <strong style="color:var(--tx)">Практическое следствие для REjuve:</strong> Instagram = канал awareness и brand trust, не conversion. 4 из 5 конкурентов с найденными Meta Ads — неактивны или спорадические. Основные конверсионные каналы: Google Search (intent-driven) + referral (word-of-mouth, expat-клубы, партнёры-врачи).
+    </div>
+
+    <h3 style="margin-bottom:10px">Сводная таблица рисков</h3>
+    <table class="pen-tbl">
+      <thead><tr><th>Нарушение</th><th>Закон</th><th>Санкция</th><th>Вероятность</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>Рекламный claim с лечебным эффектом</td>
+          <td>HMG Art. 87</td>
+          <td>CHF 50,000</td>
+          <td>Средняя (без medical review)</td>
+        </tr>
+        <tr>
+          <td>Гарантия результата / before-after</td>
+          <td>AWV Art. 22</td>
+          <td>Адм. ответственность</td>
+          <td>Высокая (common mistake)</td>
+        </tr>
+        <tr>
+          <td>Misleading health claim в рекламе</td>
+          <td>UWG Art. 23</td>
+          <td>До 3 лет лиш. свободы</td>
+          <td>Низкая (требует умысла)</td>
+        </tr>
+        <tr>
+          <td>Медицинская услуга без врача</td>
+          <td>Zug GesG IV</td>
+          <td>Лишение лицензии</td>
+          <td>Низкая (если нет medical claims)</td>
+        </tr>
+        <tr>
+          <td>Добавка — неразрешённый claim</td>
+          <td>LIV Anhang 14</td>
+          <td>Адм. ответственность</td>
+          <td>Средняя (supplement marketing)</td>
+        </tr>
+        <tr>
+          <td>Meta Ads — health conversion event</td>
+          <td>Meta Policy 2025</td>
+          <td>Блокировка аккаунта</td>
+          <td>Высокая (автоматическая проверка)</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+function switchTab(btn, name) {
+  document.querySelectorAll('.tab').forEach(function(t){ t.classList.remove('active'); });
+  document.querySelectorAll('.page').forEach(function(p){ p.classList.remove('active'); });
+  btn.classList.add('active');
+  document.getElementById(name).classList.add('active');
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,9 @@
+layout: divider
+fields:
+  label:
+    type: text
+    required: false
+    default: ''
+  headline:
+    type: html
+    required: true
