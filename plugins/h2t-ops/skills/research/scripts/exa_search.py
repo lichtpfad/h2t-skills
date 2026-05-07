@@ -10,6 +10,7 @@ __version__ = "0.1.0"
 import argparse
 import json
 import os
+import random
 import re
 import sys
 import time
@@ -190,6 +191,19 @@ class ExaMalformedResponseError(Exception):
     def __init__(self, message: str, *, latency_ms: int):
         super().__init__(message)
         self.latency_ms = latency_ms
+
+
+JITTER_MAX_SECONDS = 0.5
+
+
+def sleep_with_jitter(base_seconds: float) -> None:
+    """Sleep for base_seconds + uniform(0, JITTER_MAX_SECONDS) jitter.
+
+    Extracted as a module-level function so tests can monkeypatch it
+    without touching real time.sleep, and so retry loop calls are
+    homogeneous and easy to count in tests.
+    """
+    time.sleep(base_seconds + random.uniform(0.0, JITTER_MAX_SECONDS))
 
 
 def call_exa(

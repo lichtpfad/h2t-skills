@@ -548,16 +548,17 @@ def test_run_search_http_429_exits_2(monkeypatch, tmp_path, capsys):
     sp_dir.mkdir()
     (sp_dir / "generic.md").write_text("---\n---\nsp\n", encoding="utf-8")
     monkeypatch.setattr(exa_search, "SYSTEMPROMPTS_DIR", sp_dir)
+    monkeypatch.setattr(exa_search, "sleep_with_jitter", lambda s: None)
 
     err = urllib.error.HTTPError(
         url="https://api.exa.ai/search", code=429, msg="Too Many",
-        hdrs=None, fp=io.BytesIO(b'{"error": "rate_limit_exceeded"}'),
+        hdrs=None, fp=io.BytesIO(b'{"error":"rate"}'),
     )
-    with patch("urllib.request.urlopen", side_effect=err):
+    with patch("urllib.request.urlopen", side_effect=[err, err]):
         with pytest.raises(SystemExit) as excinfo:
             exa_search.main([
-                "search", "--query", "q",
-                "--output-dir", str(tmp_path),
+                "search", "--query", "x", "--mode", "generic",
+                "--output-dir", str(tmp_path), "--project", "p",
             ])
     assert excinfo.value.code == 2
     assert "EXA_ERROR:API" in capsys.readouterr().err
@@ -788,3 +789,21 @@ def test_run_search_malformed_exits_2_with_malformed_message(monkeypatch, tmp_pa
     assert excinfo.value.code == 2
     captured = capsys.readouterr().err
     assert "EXA_ERROR:MALFORMED" in captured
+
+
+# --- sleep_with_jitter (Task 2) ---
+
+def test_sleep_with_jitter_calls_time_sleep_with_jitter_range():
+    sleeps = []
+    with patch("time.sleep", side_effect=lambda s: sleeps.append(s)), \
+         patch("random.uniform", return_value=0.25):
+        exa_search.sleep_with_jitter(2.0)
+    assert sleeps == [2.25]
+
+
+def test_sleep_with_jitter_zero_base():
+    sleeps = []
+    with patch("time.sleep", side_effect=lambda s: sleeps.append(s)), \
+         patch("random.uniform", return_value=0.0):
+        exa_search.sleep_with_jitter(0.0)
+    assert sleeps == [0.0]
