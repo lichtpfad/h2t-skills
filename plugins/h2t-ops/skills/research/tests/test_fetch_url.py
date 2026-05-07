@@ -467,3 +467,21 @@ def test_jina_provider_urlerror_transient():
         with pytest.raises(fetch_url.ProviderTransientError):
             p.fetch("https://example.com/x",
                     timeout_ms=20000, user_agent="ua/test")
+
+
+@pytest.mark.parametrize("name", ["playwright", "crawl4ai", "firecrawl", "browserless"])
+def test_stub_providers_not_configured_and_fetch_raises(name, monkeypatch):
+    # Even with potential env-keys set, stubs must remain inert in PR#1.
+    monkeypatch.setenv("FIRECRAWL_API_KEY", "x")
+    monkeypatch.setenv("BROWSERLESS_TOKEN", "x")
+    cls = {
+        "playwright": fetch_url.PlaywrightProvider,
+        "crawl4ai": fetch_url.Crawl4AIProvider,
+        "firecrawl": fetch_url.FirecrawlProvider,
+        "browserless": fetch_url.BrowserlessProvider,
+    }[name]
+    p = cls()
+    assert p.name == name
+    assert p.is_configured(env=dict(os.environ), config={}) is False
+    with pytest.raises(fetch_url.ProviderNotConfigured):
+        p.fetch("https://example.com/x", timeout_ms=15000, user_agent="ua/test")

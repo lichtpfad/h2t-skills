@@ -589,3 +589,32 @@ def _jina_extract_body(md: str) -> str:
             return "\n".join(lines[i + 1:]).strip()
     # No marker — return the whole thing.
     return md.strip()
+
+
+class _StubProvider:
+    name = "stub"
+
+    def is_configured(self, env: dict[str, str], config: dict[str, Any]) -> bool:
+        return False
+
+    def fetch(self, url: str, *, timeout_ms: int, user_agent: str) -> ProviderResult:
+        raise ProviderNotConfigured(
+            f"{self.name} stub: implementation deferred to follow-up PR.",
+            provider=self.name,
+        )
+
+
+class PlaywrightProvider(_StubProvider):
+    name = "playwright"
+
+
+class Crawl4AIProvider(_StubProvider):
+    name = "crawl4ai"
+
+
+class FirecrawlProvider(_StubProvider):
+    name = "firecrawl"
+
+
+class BrowserlessProvider(_StubProvider):
+    name = "browserless"
