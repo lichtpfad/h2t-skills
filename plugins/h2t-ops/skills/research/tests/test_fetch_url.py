@@ -736,3 +736,30 @@ def test_ladder_paid_provider_not_called_when_key_set_but_stubbed(monkeypatch):
     # Firecrawl must NOT appear in attempts even with key set in env.
     assert "firecrawl" not in [a["provider"] for a in env["telemetry"]["attempts"]]
     assert env["telemetry"]["providers_skipped_reason"]["firecrawl"] == "not_configured_stub"
+
+
+def test_ladder_cumulative_timeout_skips_remaining(capsys):
+    import time
+    config = fetch_url.load_config(None)
+    config["ladder"]["cumulative_timeout_ms"] = 1  # immediate cap
+
+    html = _load_fixture("short_body.html").encode("utf-8")
+
+    def fake_urlopen(req, timeout):
+        # Direct returns short_body → DEGRADED candidate, latency_ms > 1.
+        time.sleep(0.005)
+        return _make_http_response(html, url="https://example.com/x")
+
+    with patch("urllib.request.urlopen", side_effect=fake_urlopen):
+        env = fetch_url.fetch_via_ladder(
+            url="https://example.com/x",
+            provider_choice="auto",
+            config=config,
+            user_agent="ua/test",
+            keep_raw=False,
+        )
+    err = capsys.readouterr().err
+    assert "FETCH_WARN:CUMULATIVE_TIMEOUT_EXHAUSTED" in err
+    # jina (and others) skipped with the timeout reason.
+    skipped_reason = env["telemetry"]["providers_skipped_reason"]
+    assert skipped_reason.get("jina") == "cumulative_timeout_exhausted"
