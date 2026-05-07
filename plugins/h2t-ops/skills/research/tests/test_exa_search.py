@@ -24,7 +24,7 @@ def test_version_flag():
         text=True,
     )
     assert result.returncode == 0, result.stderr
-    assert "0.1.0" in result.stdout
+    assert "0.1.1" in result.stdout
 
 
 # --- MODE_CONFIG tests ---
@@ -276,32 +276,6 @@ def test_call_exa_success():
     assert status == 200
     assert data["results"][0]["url"] == "https://x"
     assert latency_ms >= 0
-
-
-def test_call_exa_http_429_returns_error_body(capsys):
-    err = urllib.error.HTTPError(
-        url="https://api.exa.ai/search",
-        code=429,
-        msg="Too Many Requests",
-        hdrs=None,
-        fp=io.BytesIO(json.dumps({"error": "rate_limit_exceeded"}).encode("utf-8")),
-    )
-    with patch("urllib.request.urlopen", side_effect=err):
-        status, body, latency_ms = exa_search.call_exa(
-            "/search", {"query": "q"}, api_key="testkey"
-        )
-    assert status == 429
-    assert body["error"] == "rate_limit_exceeded"
-
-
-def test_call_exa_network_timeout_exits_3(capsys):
-    with patch("urllib.request.urlopen", side_effect=urllib.error.URLError("timed out")):
-        with pytest.raises(SystemExit) as excinfo:
-            exa_search.call_exa("/search", {"query": "q"}, api_key="testkey")
-    assert excinfo.value.code == 3
-    err = capsys.readouterr().err
-    assert "EXA_ERROR:NETWORK" in err
-    assert "timed out" in err
 
 
 # --- preflight tests ---
@@ -574,16 +548,17 @@ def test_run_search_http_429_exits_2(monkeypatch, tmp_path, capsys):
     sp_dir.mkdir()
     (sp_dir / "generic.md").write_text("---\n---\nsp\n", encoding="utf-8")
     monkeypatch.setattr(exa_search, "SYSTEMPROMPTS_DIR", sp_dir)
+    monkeypatch.setattr(exa_search, "sleep_with_jitter", lambda s: None)
 
     err = urllib.error.HTTPError(
         url="https://api.exa.ai/search", code=429, msg="Too Many",
-        hdrs=None, fp=io.BytesIO(b'{"error": "rate_limit_exceeded"}'),
+        hdrs=None, fp=io.BytesIO(b'{"error":"rate"}'),
     )
-    with patch("urllib.request.urlopen", side_effect=err):
+    with patch("urllib.request.urlopen", side_effect=[err, err]):
         with pytest.raises(SystemExit) as excinfo:
             exa_search.main([
-                "search", "--query", "q",
-                "--output-dir", str(tmp_path),
+                "search", "--query", "x", "--mode", "generic",
+                "--output-dir", str(tmp_path), "--project", "p",
             ])
     assert excinfo.value.code == 2
     assert "EXA_ERROR:API" in capsys.readouterr().err
@@ -663,3 +638,649 @@ def test_call_exa_sets_user_agent_header():
     ua = captured["headers"].get("User-agent") or captured["headers"].get("User-Agent")
     assert ua is not None, f"User-Agent missing; captured={captured['headers']}"
     assert "exa_search.py" in ua
+
+
+# --- call_exa typed exceptions (Task 1) ---
+
+def test_call_exa_raises_transient_on_5xx():
+    with patch("urllib.request.urlopen") as mock_urlopen:
+        err = urllib.error.HTTPError(
+            url="https://api.exa.ai/search", code=503,
+            msg="Service Unavailable", hdrs=None,
+            fp=io.BytesIO(b'{"error":"upstream"}'),
+        )
+        mock_urlopen.side_effect = err
+        with pytest.raises(exa_search.ExaTransientError) as ei:
+            exa_search.call_exa("/search", {"query": "x"}, api_key="k")
+        assert ei.value.http_status == 503
+        assert ei.value.latency_ms >= 0
+
+
+def test_call_exa_raises_transient_on_429():
+    with patch("urllib.request.urlopen") as mock_urlopen:
+        err = urllib.error.HTTPError(
+            url="https://api.exa.ai/search", code=429,
+            msg="Too Many Requests", hdrs=None,
+            fp=io.BytesIO(b'{"error":"rate"}'),
+        )
+        mock_urlopen.side_effect = err
+        with pytest.raises(exa_search.ExaTransientError) as ei:
+            exa_search.call_exa("/search", {"query": "x"}, api_key="k")
+        assert ei.value.http_status == 429
+
+
+def test_call_exa_raises_permanent_on_4xx():
+    with patch("urllib.request.urlopen") as mock_urlopen:
+        err = urllib.error.HTTPError(
+            url="https://api.exa.ai/search", code=401,
+            msg="Unauthorized", hdrs=None,
+            fp=io.BytesIO(b'{"error":"bad key"}'),
+        )
+        mock_urlopen.side_effect = err
+        with pytest.raises(exa_search.ExaPermanentError) as ei:
+            exa_search.call_exa("/search", {"query": "x"}, api_key="k")
+        assert ei.value.http_status == 401
+
+
+def test_call_exa_raises_transient_on_urlerror():
+    with patch("urllib.request.urlopen") as mock_urlopen:
+        mock_urlopen.side_effect = urllib.error.URLError("dns fail")
+        with pytest.raises(exa_search.ExaTransientError) as ei:
+            exa_search.call_exa("/search", {"query": "x"}, api_key="k")
+        assert ei.value.http_status is None
+        assert "dns fail" in str(ei.value)
+
+
+def test_call_exa_raises_malformed_on_bad_json():
+    fake_resp = MagicMock()
+    fake_resp.status = 200
+    fake_resp.read.return_value = b"<html>not json</html>"
+    fake_resp.__enter__ = lambda self: fake_resp
+    fake_resp.__exit__ = lambda *a: None
+    with patch("urllib.request.urlopen", return_value=fake_resp):
+        with pytest.raises(exa_search.ExaMalformedResponseError):
+            exa_search.call_exa("/search", {"query": "x"}, api_key="k")
+
+
+def test_call_exa_returns_tuple_on_success():
+    fake_resp = MagicMock()
+    fake_resp.status = 200
+    fake_resp.read.return_value = b'{"results":[{"url":"u","title":"t"}],"costDollars":{"total":0.01}}'
+    fake_resp.__enter__ = lambda self: fake_resp
+    fake_resp.__exit__ = lambda *a: None
+    with patch("urllib.request.urlopen", return_value=fake_resp):
+        status, body, latency = exa_search.call_exa("/search", {"query": "x"}, api_key="k")
+        assert status == 200
+        assert body["results"][0]["url"] == "u"
+        assert latency >= 0
+
+
+# --- _run_search exception → exit code mapping (Task 1 review fix) ---
+
+
+def _make_search_systemprompts(tmp_path):
+    """Helper: minimal systemprompts dir for _run_search integration tests."""
+    sp_dir = tmp_path / "systemprompts"
+    sp_dir.mkdir()
+    (sp_dir / "generic.md").write_text("---\n---\nsp\n", encoding="utf-8")
+    return sp_dir
+
+
+def test_run_search_permanent_error_exits_2_with_api_message(monkeypatch, tmp_path, capsys):
+    monkeypatch.setenv("EXA_API_KEY", "stub")
+    monkeypatch.setattr(exa_search, "SYSTEMPROMPTS_DIR", _make_search_systemprompts(tmp_path))
+    err = exa_search.ExaPermanentError("http 401", http_status=401, latency_ms=50, body={"error": "bad"})
+    with patch.object(exa_search, "call_exa", side_effect=err):
+        with pytest.raises(SystemExit) as excinfo:
+            exa_search.main([
+                "search", "--query", "x", "--mode", "generic",
+                "--output-dir", str(tmp_path), "--project", "p",
+            ])
+    assert excinfo.value.code == 2
+    captured = capsys.readouterr().err
+    assert "EXA_ERROR:API" in captured
+    assert "http=401" in captured
+
+
+def test_run_search_transient_with_status_exits_2_with_api_message(monkeypatch, tmp_path, capsys):
+    monkeypatch.setenv("EXA_API_KEY", "stub")
+    monkeypatch.setattr(exa_search, "SYSTEMPROMPTS_DIR", _make_search_systemprompts(tmp_path))
+    err = exa_search.ExaTransientError("http 503", http_status=503, latency_ms=200, body={"error": "down"})
+    with patch.object(exa_search, "call_exa", side_effect=err):
+        with pytest.raises(SystemExit) as excinfo:
+            exa_search.main([
+                "search", "--query", "x", "--mode", "generic",
+                "--output-dir", str(tmp_path), "--project", "p",
+            ])
+    assert excinfo.value.code == 2
+    captured = capsys.readouterr().err
+    assert "EXA_ERROR:API" in captured
+    assert "http=503" in captured
+
+
+def test_run_search_transient_no_status_exits_3_with_network_message(monkeypatch, tmp_path, capsys):
+    """Format: EXA_ERROR:NETWORK <reason> after <N>ms — no duplicate 'network:' prefix."""
+    monkeypatch.setenv("EXA_API_KEY", "stub")
+    monkeypatch.setattr(exa_search, "SYSTEMPROMPTS_DIR", _make_search_systemprompts(tmp_path))
+    err = exa_search.ExaTransientError("timed out", http_status=None, latency_ms=300)
+    with patch.object(exa_search, "call_exa", side_effect=err):
+        with pytest.raises(SystemExit) as excinfo:
+            exa_search.main([
+                "search", "--query", "x", "--mode", "generic",
+                "--output-dir", str(tmp_path), "--project", "p",
+            ])
+    assert excinfo.value.code == 3
+    captured = capsys.readouterr().err
+    assert "EXA_ERROR:NETWORK after 300ms (after retries)" in captured
+    # Regression guard: no duplicate "network:" prefix.
+    assert "network: timed out" not in captured
+
+
+def test_run_search_malformed_exits_2_with_malformed_message(monkeypatch, tmp_path, capsys):
+    monkeypatch.setenv("EXA_API_KEY", "stub")
+    monkeypatch.setattr(exa_search, "SYSTEMPROMPTS_DIR", _make_search_systemprompts(tmp_path))
+    err = exa_search.ExaMalformedResponseError("non-JSON body", latency_ms=100)
+    with patch.object(exa_search, "call_exa", side_effect=err):
+        with pytest.raises(SystemExit) as excinfo:
+            exa_search.main([
+                "search", "--query", "x", "--mode", "generic",
+                "--output-dir", str(tmp_path), "--project", "p",
+            ])
+    assert excinfo.value.code == 2
+    captured = capsys.readouterr().err
+    assert "EXA_ERROR:MALFORMED" in captured
+
+
+# --- sleep_with_jitter (Task 2) ---
+
+def test_sleep_with_jitter_calls_time_sleep_with_jitter_range():
+    sleeps = []
+    with patch("time.sleep", side_effect=lambda s: sleeps.append(s)), \
+         patch("random.uniform", return_value=0.25):
+        exa_search.sleep_with_jitter(2.0)
+    assert sleeps == [2.25]
+
+
+def test_sleep_with_jitter_zero_base():
+    sleeps = []
+    with patch("time.sleep", side_effect=lambda s: sleeps.append(s)), \
+         patch("random.uniform", return_value=0.0):
+        exa_search.sleep_with_jitter(0.0)
+    assert sleeps == [0.0]
+
+
+# --- build_envelope (Task 3) ---
+
+def test_build_envelope_ok_shape():
+    attempts = [{"engine": "exa", "endpoint": "/search", "http": 200, "latency_ms": 100, "error": None}]
+    env = exa_search.build_envelope(
+        status="OK",
+        results=[{"url": "u", "title": "t"}],
+        attempts=attempts,
+        meta={"query": "q", "mode": "generic", "num_results_requested": 10,
+              "num_results_returned": 1, "timestamp": "2026-05-07T00:00:00+00:00"},
+        total_cost_usd=0.01,
+    )
+    assert env["status"] == "OK"
+    assert env["primary_engine"] == "exa"
+    assert env["fallback_engine_used"] is None
+    assert env["results"] == [{"url": "u", "title": "t"}]
+    assert env["telemetry"]["attempts"] == attempts
+    assert env["telemetry"]["reason_for_fallback"] is None
+    assert env["telemetry"]["total_latency_ms"] == 100
+    assert env["telemetry"]["total_cost_usd"] == 0.01
+    assert env["meta"]["envelope_version"] == "1"
+    assert env["meta"]["num_results_returned"] == 1
+
+
+def test_build_envelope_degraded_with_reason():
+    attempts = [
+        {"engine": "exa", "endpoint": "/search", "http": 200, "latency_ms": 80, "error": "exa_empty_results"},
+        {"engine": "exa", "endpoint": "/search", "http": 200, "latency_ms": 90, "error": "exa_empty_results"},
+    ]
+    env = exa_search.build_envelope(
+        status="DEGRADED",
+        results=[],
+        attempts=attempts,
+        meta={"query": "q", "mode": "generic", "num_results_requested": 10,
+              "num_results_returned": 0, "timestamp": "2026-05-07T00:00:00+00:00"},
+        total_cost_usd=0.0,
+        reason_for_fallback="exa_empty_results",
+    )
+    assert env["status"] == "DEGRADED"
+    assert env["results"] == []
+    assert env["telemetry"]["reason_for_fallback"] == "exa_empty_results"
+    assert env["telemetry"]["total_latency_ms"] == 170
+
+
+def test_build_envelope_failed_empty_results():
+    env = exa_search.build_envelope(
+        status="FAILED",
+        results=[],
+        attempts=[{"engine": "exa", "endpoint": "/search", "http": 401,
+                   "latency_ms": 50, "error": "exa_4xx_nonretryable"}],
+        meta={"query": "q", "mode": "generic", "num_results_requested": 10,
+              "num_results_returned": 0, "timestamp": "2026-05-07T00:00:00+00:00"},
+        total_cost_usd=0.0,
+    )
+    assert env["status"] == "FAILED"
+    assert env["results"] == []
+
+
+# --- search_with_retry (Task 4) ---
+
+def _ok_response(results_count: int = 3, cost: float = 0.01) -> tuple[int, dict, int]:
+    return (200, {
+        "results": [{"url": f"u{i}", "title": f"t{i}"} for i in range(results_count)],
+        "costDollars": {"total": cost},
+    }, 100)
+
+
+def _patch_no_sleep(monkeypatch):
+    monkeypatch.setattr(exa_search, "sleep_with_jitter", lambda s: None)
+
+
+def test_search_with_retry_ok_first_try(monkeypatch):
+    _patch_no_sleep(monkeypatch)
+    with patch.object(exa_search, "call_exa", return_value=_ok_response(3)) as m:
+        env, exit_code = exa_search.search_with_retry(
+            body={"query": "x"}, api_key="k", retry=True,
+        )
+    assert m.call_count == 1
+    assert env["status"] == "OK"
+    assert exit_code == 0
+    assert len(env["results"]) == 3
+    assert len(env["telemetry"]["attempts"]) == 1
+
+
+def test_search_with_retry_empty_then_empty_is_degraded(monkeypatch):
+    _patch_no_sleep(monkeypatch)
+    empty = (200, {"results": [], "costDollars": {"total": 0.0}}, 50)
+    with patch.object(exa_search, "call_exa", side_effect=[empty, empty]) as m:
+        env, exit_code = exa_search.search_with_retry(
+            body={"query": "x"}, api_key="k", retry=True,
+        )
+    assert m.call_count == 2
+    assert env["status"] == "DEGRADED"
+    assert exit_code == 0
+    assert env["telemetry"]["reason_for_fallback"] == "exa_empty_results"
+    assert all(a["error"] == "exa_empty_results" for a in env["telemetry"]["attempts"])
+
+
+def test_search_with_retry_empty_then_ok_is_ok(monkeypatch):
+    _patch_no_sleep(monkeypatch)
+    empty = (200, {"results": [], "costDollars": {"total": 0.0}}, 50)
+    with patch.object(exa_search, "call_exa", side_effect=[empty, _ok_response(2)]) as m:
+        env, exit_code = exa_search.search_with_retry(
+            body={"query": "x"}, api_key="k", retry=True,
+        )
+    assert m.call_count == 2
+    assert env["status"] == "OK"
+    assert exit_code == 0
+    assert env["telemetry"]["attempts"][0]["error"] == "exa_empty_results"
+    assert env["telemetry"]["attempts"][1]["error"] is None
+
+
+def test_search_with_retry_5xx_then_5xx_is_failed(monkeypatch):
+    _patch_no_sleep(monkeypatch)
+    err = exa_search.ExaTransientError("http 503", http_status=503, latency_ms=200)
+    with patch.object(exa_search, "call_exa", side_effect=[err, err]) as m:
+        env, exit_code = exa_search.search_with_retry(
+            body={"query": "x"}, api_key="k", retry=True,
+        )
+    assert m.call_count == 2
+    assert env["status"] == "FAILED"
+    assert exit_code == 2
+    assert all(a["error"] == "exa_5xx_retryable" for a in env["telemetry"]["attempts"])
+
+
+def test_search_with_retry_5xx_then_ok_is_ok(monkeypatch):
+    _patch_no_sleep(monkeypatch)
+    err = exa_search.ExaTransientError("http 503", http_status=503, latency_ms=200)
+    with patch.object(exa_search, "call_exa", side_effect=[err, _ok_response(1)]):
+        env, exit_code = exa_search.search_with_retry(
+            body={"query": "x"}, api_key="k", retry=True,
+        )
+    assert env["status"] == "OK"
+    assert exit_code == 0
+    assert len(env["telemetry"]["attempts"]) == 2
+
+
+def test_search_with_retry_4xx_no_retry_is_failed(monkeypatch):
+    _patch_no_sleep(monkeypatch)
+    err = exa_search.ExaPermanentError("http 401", http_status=401, latency_ms=80, body={"e": "k"})
+    with patch.object(exa_search, "call_exa", side_effect=[err]) as m:
+        env, exit_code = exa_search.search_with_retry(
+            body={"query": "x"}, api_key="k", retry=True,
+        )
+    assert m.call_count == 1
+    assert env["status"] == "FAILED"
+    assert exit_code == 2
+    assert env["telemetry"]["attempts"][0]["error"] == "exa_4xx_nonretryable"
+
+
+def test_search_with_retry_urlerror_then_urlerror_is_failed(monkeypatch):
+    _patch_no_sleep(monkeypatch)
+    err = exa_search.ExaTransientError("network: dns", http_status=None, latency_ms=300)
+    with patch.object(exa_search, "call_exa", side_effect=[err, err]):
+        env, exit_code = exa_search.search_with_retry(
+            body={"query": "x"}, api_key="k", retry=True,
+        )
+    assert env["status"] == "FAILED"
+    assert exit_code == 3
+    assert all(a["error"] == "exa_network_timeout" for a in env["telemetry"]["attempts"])
+
+
+def test_search_with_retry_urlerror_then_ok_is_ok(monkeypatch):
+    _patch_no_sleep(monkeypatch)
+    err = exa_search.ExaTransientError("network: dns", http_status=None, latency_ms=300)
+    with patch.object(exa_search, "call_exa", side_effect=[err, _ok_response(1)]):
+        env, exit_code = exa_search.search_with_retry(
+            body={"query": "x"}, api_key="k", retry=True,
+        )
+    assert env["status"] == "OK"
+    assert exit_code == 0
+
+
+def test_search_with_retry_malformed_no_retry(monkeypatch):
+    _patch_no_sleep(monkeypatch)
+    err = exa_search.ExaMalformedResponseError("non-JSON body", latency_ms=70)
+    with patch.object(exa_search, "call_exa", side_effect=[err]) as m:
+        env, exit_code = exa_search.search_with_retry(
+            body={"query": "x"}, api_key="k", retry=True,
+        )
+    assert m.call_count == 1
+    assert env["status"] == "FAILED"
+    assert exit_code == 2
+    assert env["telemetry"]["attempts"][0]["error"] == "exa_malformed_json"
+
+
+def test_search_with_retry_429_triggers_retry(monkeypatch):
+    _patch_no_sleep(monkeypatch)
+    err = exa_search.ExaTransientError("http 429", http_status=429, latency_ms=120)
+    with patch.object(exa_search, "call_exa", side_effect=[err, _ok_response(1)]) as m:
+        env, exit_code = exa_search.search_with_retry(
+            body={"query": "x"}, api_key="k", retry=True,
+        )
+    assert m.call_count == 2
+    assert env["status"] == "OK"
+    assert env["telemetry"]["attempts"][0]["error"] == "exa_5xx_retryable"  # 429 also retryable bucket
+
+
+def test_search_with_retry_no_retry_flag_disables_retries(monkeypatch):
+    _patch_no_sleep(monkeypatch)
+    empty = (200, {"results": [], "costDollars": {"total": 0.0}}, 50)
+    with patch.object(exa_search, "call_exa", side_effect=[empty, empty]) as m:
+        env, exit_code = exa_search.search_with_retry(
+            body={"query": "x"}, api_key="k", retry=False,
+        )
+    assert m.call_count == 1
+    assert env["status"] == "DEGRADED"
+    assert exit_code == 0
+    assert len(env["telemetry"]["attempts"]) == 1
+
+
+def test_search_with_retry_meta_fields_populated(monkeypatch):
+    _patch_no_sleep(monkeypatch)
+    with patch.object(exa_search, "call_exa", return_value=_ok_response(2)):
+        env, _ = exa_search.search_with_retry(
+            body={"query": "find me", "numResults": 10, "type": "auto"},
+            api_key="k", retry=True, mode="generic",
+        )
+    assert env["meta"]["query"] == "find me"
+    assert env["meta"]["mode"] == "generic"
+    assert env["meta"]["num_results_requested"] == 10
+    assert env["meta"]["num_results_returned"] == 2
+    assert "timestamp" in env["meta"]
+
+
+# --- backoff budget cap (Task 5) ---
+
+def test_warn_emitted_when_budget_exhausted(monkeypatch, capsys):
+    sleeps_called = []
+
+    def fake_sleep(s):
+        sleeps_called.append(s)
+
+    monkeypatch.setattr(exa_search, "sleep_with_jitter", fake_sleep)
+    monkeypatch.setattr(exa_search, "RETRY_BUDGET_SECONDS", 0.5)
+
+    err = exa_search.ExaTransientError("http 503", http_status=503, latency_ms=200)
+    with patch.object(exa_search, "call_exa", side_effect=[err, err]):
+        env, exit_code = exa_search.search_with_retry(
+            body={"query": "x"}, api_key="k", retry=True,
+        )
+    captured = capsys.readouterr()
+    assert "EXA_WARN:RETRY_BUDGET_EXHAUSTED" in captured.err
+    assert env["status"] == "FAILED"
+    assert exit_code == 2
+    assert sleeps_called == []
+
+
+# --- CLI flags --envelope, --no-retry (Task 6) ---
+
+def _make_search_argv(extra: list[str] | None = None) -> list[str]:
+    argv = ["search", "--query", "anything", "--mode", "generic", "--num-results", "3"]
+    if extra:
+        argv.extend(extra)
+    return argv
+
+
+def _setup_sp(monkeypatch, tmp_path):
+    """Override SYSTEMPROMPTS_DIR for hermetic CLI tests."""
+    sp_dir = tmp_path / "systemprompts"
+    sp_dir.mkdir(exist_ok=True)
+    (sp_dir / "generic.md").write_text("---\n---\nsp\n", encoding="utf-8")
+    monkeypatch.setattr(exa_search, "SYSTEMPROMPTS_DIR", sp_dir)
+
+
+def test_default_stdout_is_markdown_summary(monkeypatch, capsys, tmp_path):
+    monkeypatch.setenv("EXA_API_KEY", "k")
+    monkeypatch.setattr(exa_search, "sleep_with_jitter", lambda s: None)
+    _setup_sp(monkeypatch, tmp_path)
+    out_dir = tmp_path / "out"
+    with patch.object(exa_search, "call_exa", return_value=(200, {
+        "results": [{"url": "u", "title": "t", "highlights": ["snippet"]}],
+        "costDollars": {"total": 0.01},
+    }, 100)):
+        rc = exa_search.main(_make_search_argv(["--output-dir", str(out_dir), "--project", "p"]))
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert out.startswith("## Exa Search:")
+    assert not out.lstrip().startswith("{")
+
+
+def test_envelope_flag_prints_json_to_stdout(monkeypatch, capsys, tmp_path):
+    monkeypatch.setenv("EXA_API_KEY", "k")
+    monkeypatch.setattr(exa_search, "sleep_with_jitter", lambda s: None)
+    _setup_sp(monkeypatch, tmp_path)
+    out_dir = tmp_path / "out"
+    with patch.object(exa_search, "call_exa", return_value=(200, {
+        "results": [{"url": "u", "title": "t", "highlights": ["snippet"]}],
+        "costDollars": {"total": 0.01},
+    }, 100)):
+        rc = exa_search.main(_make_search_argv(
+            ["--output-dir", str(out_dir), "--project", "p", "--envelope"]
+        ))
+    out = capsys.readouterr().out
+    assert rc == 0
+    payload = json.loads(out)
+    assert payload["status"] == "OK"
+    assert payload["primary_engine"] == "exa"
+    assert "## Exa Search:" not in out
+
+
+def test_no_retry_flag_disables_retries_via_cli(monkeypatch, capsys, tmp_path):
+    monkeypatch.setenv("EXA_API_KEY", "k")
+    monkeypatch.setattr(exa_search, "sleep_with_jitter", lambda s: None)
+    _setup_sp(monkeypatch, tmp_path)
+    out_dir = tmp_path / "out"
+    empty = (200, {"results": [], "costDollars": {"total": 0.0}}, 50)
+    with patch.object(exa_search, "call_exa", side_effect=[empty, empty]) as m:
+        rc = exa_search.main(_make_search_argv(
+            ["--output-dir", str(out_dir), "--project", "p", "--envelope", "--no-retry"]
+        ))
+    assert m.call_count == 1
+    assert rc == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["status"] == "DEGRADED"
+
+
+def test_envelope_in_sources_json_always_written(monkeypatch, tmp_path):
+    monkeypatch.setenv("EXA_API_KEY", "k")
+    monkeypatch.setattr(exa_search, "sleep_with_jitter", lambda s: None)
+    _setup_sp(monkeypatch, tmp_path)
+    out_dir = tmp_path / "out"
+    with patch.object(exa_search, "call_exa", return_value=(200, {
+        "results": [{"url": "u", "title": "t", "highlights": []}],
+        "costDollars": {"total": 0.02},
+    }, 100)):
+        rc = exa_search.main(_make_search_argv(
+            ["--output-dir", str(out_dir), "--project", "p"]
+        ))
+    assert rc == 0
+    sources_files = list(out_dir.glob("*.sources.json"))
+    assert len(sources_files) == 1
+    data = json.loads(sources_files[0].read_text(encoding="utf-8"))
+    assert "envelope" in data["meta"]
+    assert data["meta"]["envelope"]["status"] == "OK"
+    assert data["meta"]["envelope"]["primary_engine"] == "exa"
+
+
+# --- FAILED + --envelope: JSON envelope must reach stdout (Task 6 Fix 1) ---
+
+def _make_search_argv_with_envelope(tmp_path):
+    out_dir = tmp_path / "out"
+    return ["search", "--query", "x", "--mode", "generic", "--num-results", "3",
+            "--output-dir", str(out_dir), "--project", "p", "--envelope"]
+
+
+def test_envelope_flag_4xx_prints_envelope_and_stderr(monkeypatch, tmp_path, capsys):
+    monkeypatch.setenv("EXA_API_KEY", "k")
+    monkeypatch.setattr(exa_search, "sleep_with_jitter", lambda s: None)
+    _setup_sp(monkeypatch, tmp_path)
+    err = urllib.error.HTTPError(
+        url="https://api.exa.ai/search", code=401, msg="Unauthorized",
+        hdrs=None, fp=io.BytesIO(b'{"error":"bad key"}'),
+    )
+    with patch("urllib.request.urlopen", side_effect=err):
+        with pytest.raises(SystemExit) as excinfo:
+            exa_search.main(_make_search_argv_with_envelope(tmp_path))
+    captured = capsys.readouterr()
+    assert excinfo.value.code == 2
+    assert "EXA_ERROR:API" in captured.err
+    payload = json.loads(captured.out)
+    assert payload["status"] == "FAILED"
+    assert payload["telemetry"]["attempts"][0]["error"] == "exa_4xx_nonretryable"
+
+
+def test_envelope_flag_5xx_exhausted_prints_envelope(monkeypatch, tmp_path, capsys):
+    monkeypatch.setenv("EXA_API_KEY", "k")
+    monkeypatch.setattr(exa_search, "sleep_with_jitter", lambda s: None)
+    _setup_sp(monkeypatch, tmp_path)
+    err = urllib.error.HTTPError(
+        url="https://api.exa.ai/search", code=503, msg="Service Unavailable",
+        hdrs=None, fp=io.BytesIO(b'{"error":"down"}'),
+    )
+    with patch("urllib.request.urlopen", side_effect=[err, err]):
+        with pytest.raises(SystemExit) as excinfo:
+            exa_search.main(_make_search_argv_with_envelope(tmp_path))
+    captured = capsys.readouterr()
+    assert excinfo.value.code == 2
+    assert "EXA_ERROR:API" in captured.err
+    payload = json.loads(captured.out)
+    assert payload["status"] == "FAILED"
+    assert len(payload["telemetry"]["attempts"]) == 2
+    assert all(a["error"] == "exa_5xx_retryable" for a in payload["telemetry"]["attempts"])
+
+
+def test_envelope_flag_network_exhausted_prints_envelope(monkeypatch, tmp_path, capsys):
+    monkeypatch.setenv("EXA_API_KEY", "k")
+    monkeypatch.setattr(exa_search, "sleep_with_jitter", lambda s: None)
+    _setup_sp(monkeypatch, tmp_path)
+    with patch("urllib.request.urlopen", side_effect=urllib.error.URLError("dns")):
+        with pytest.raises(SystemExit) as excinfo:
+            exa_search.main(_make_search_argv_with_envelope(tmp_path))
+    captured = capsys.readouterr()
+    assert excinfo.value.code == 3
+    assert "EXA_ERROR:NETWORK" in captured.err
+    payload = json.loads(captured.out)
+    assert payload["status"] == "FAILED"
+    assert all(a["error"] == "exa_network_timeout" for a in payload["telemetry"]["attempts"])
+
+
+def test_envelope_flag_malformed_prints_envelope(monkeypatch, tmp_path, capsys):
+    monkeypatch.setenv("EXA_API_KEY", "k")
+    monkeypatch.setattr(exa_search, "sleep_with_jitter", lambda s: None)
+    _setup_sp(monkeypatch, tmp_path)
+    fake_resp = MagicMock()
+    fake_resp.status = 200
+    fake_resp.read.return_value = b"<html>not json</html>"
+    fake_resp.__enter__ = lambda self: fake_resp
+    fake_resp.__exit__ = lambda *a: None
+    with patch("urllib.request.urlopen", return_value=fake_resp):
+        with pytest.raises(SystemExit) as excinfo:
+            exa_search.main(_make_search_argv_with_envelope(tmp_path))
+    captured = capsys.readouterr()
+    assert excinfo.value.code == 2
+    assert "EXA_ERROR:MALFORMED" in captured.err
+    assert "JSONDecodeError" not in captured.err
+    assert "Traceback" not in captured.err
+    payload = json.loads(captured.out)
+    assert payload["status"] == "FAILED"
+    assert payload["telemetry"]["attempts"][0]["error"] == "exa_malformed_json"
+
+
+def test_envelope_flag_failed_writes_sources_json(monkeypatch, tmp_path):
+    """FAILED status still writes sidecar so post-hoc analysis works."""
+    monkeypatch.setenv("EXA_API_KEY", "k")
+    monkeypatch.setattr(exa_search, "sleep_with_jitter", lambda s: None)
+    _setup_sp(monkeypatch, tmp_path)
+    err = urllib.error.HTTPError(
+        url="https://api.exa.ai/search", code=401, msg="Unauthorized",
+        hdrs=None, fp=io.BytesIO(b'{"error":"bad"}'),
+    )
+    with patch("urllib.request.urlopen", side_effect=err):
+        with pytest.raises(SystemExit):
+            exa_search.main(_make_search_argv_with_envelope(tmp_path))
+    out_dir = tmp_path / "out"
+    sources = list(out_dir.glob("*.sources.json"))
+    assert len(sources) == 1
+    data = json.loads(sources[0].read_text(encoding="utf-8"))
+    assert data["meta"]["envelope"]["status"] == "FAILED"
+    assert data["meta"]["status"] == "failed"
+
+
+# --- crawl envelope sidecar (Task 7) ---
+
+def test_crawl_writes_envelope_to_sources_json(monkeypatch, tmp_path):
+    monkeypatch.setenv("EXA_API_KEY", "k")
+    with patch.object(exa_search, "call_exa", return_value=(200, {
+        "results": [{"url": "https://x", "text": "body"}],
+        "costDollars": {"total": 0.001},
+    }, 200)):
+        rc = exa_search.main([
+            "crawl", "--url", "https://x",
+            "--output-dir", str(tmp_path), "--project", "p",
+        ])
+    assert rc == 0
+    sources = list(tmp_path.glob("*.sources.json"))
+    assert len(sources) == 1
+    data = json.loads(sources[0].read_text(encoding="utf-8"))
+    assert data["meta"]["envelope"]["status"] == "OK"
+    assert data["meta"]["envelope"]["primary_engine"] == "exa"
+
+
+def test_crawl_empty_is_degraded(monkeypatch, tmp_path):
+    monkeypatch.setenv("EXA_API_KEY", "k")
+    with patch.object(exa_search, "call_exa", return_value=(200, {
+        "results": [], "costDollars": {"total": 0.0},
+    }, 80)):
+        rc = exa_search.main([
+            "crawl", "--url", "https://x",
+            "--output-dir", str(tmp_path), "--project", "p",
+        ])
+    assert rc == 0
+    sources = list(tmp_path.glob("*.sources.json"))
+    data = json.loads(sources[0].read_text(encoding="utf-8"))
+    assert data["meta"]["envelope"]["status"] == "DEGRADED"
