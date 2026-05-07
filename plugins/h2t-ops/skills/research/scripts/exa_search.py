@@ -658,6 +658,10 @@ def _build_parser() -> argparse.ArgumentParser:
     s.add_argument("--output-dir", default=str(Path.home() / ".h2t" / "research"),
                    dest="output_dir")
     s.add_argument("--project", default="default")
+    s.add_argument("--envelope", action="store_true",
+                   help="Print JSON envelope to stdout instead of markdown summary.")
+    s.add_argument("--no-retry", action="store_true", dest="no_retry",
+                   help="Disable retry policy (for tests/debug).")
 
     c = sub.add_parser("crawl", help="Run Exa /contents on one URL.")
     c.add_argument("--url", required=True)
@@ -698,6 +702,24 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
+def _emit_failed_stderr(envelope: dict[str, Any]) -> str:
+    """Compose the EXA_ERROR:* message for stderr from envelope.
+
+    Returns the message; caller prints. Pure for testability.
+    """
+    last = envelope["telemetry"]["attempts"][-1]
+    error = last["error"]
+    if error == "exa_4xx_nonretryable":
+        return f"EXA_ERROR:API http={last['http']}"
+    if error == "exa_5xx_retryable":
+        return f"EXA_ERROR:API http={last['http']} (after retries)"
+    if error == "exa_network_timeout":
+        return f"EXA_ERROR:NETWORK after {last['latency_ms']}ms (after retries)"
+    if error == "exa_malformed_json":
+        return "EXA_ERROR:MALFORMED non-JSON or missing 'results' field"
+    return f"EXA_ERROR:UNKNOWN {error}"
+
+
 def _run_search(args: argparse.Namespace) -> int:
     validate_args(args)
     api_key = os.environ.get("EXA_API_KEY")
@@ -705,63 +727,71 @@ def _run_search(args: argparse.Namespace) -> int:
         die(4, "EXA_ERROR:ENV EXA_API_KEY missing")
     system_prompt, schema = load_system_prompt(args.mode)
     body = build_body(args, system_prompt, schema)
-    try:
-        status, data, latency_ms = call_exa("/search", body, api_key)
-    except ExaPermanentError as e:
-        err_body = json.dumps(e.body)[:300]
-        die(2, f"EXA_ERROR:API http={e.http_status} body={err_body!r}")
-    except ExaTransientError as e:
-        if e.http_status is None:
-            die(3, f"EXA_ERROR:NETWORK {e} after {e.latency_ms}ms")
-        die(2, f"EXA_ERROR:API http={e.http_status} body={json.dumps(e.body)[:300]!r}")
-    except ExaMalformedResponseError as e:
-        die(2, f"EXA_ERROR:MALFORMED {e}")
 
-    # Persist + report
+    envelope, exit_code = search_with_retry(
+        body=body, api_key=api_key, retry=not args.no_retry, mode=args.mode,
+    )
+
+    # Persist sidecar (always — OK, DEGRADED, FAILED all get .sources.json).
     out_dir = Path(args.output_dir)
-    date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    timestamp = datetime.now(timezone.utc).isoformat(timespec="seconds")
-    topic = args.query
-    paths = output_paths(out_dir, args.project, topic, date)
-
-    cost = float(data.get("costDollars", {}).get("total", 0))
-    n_results = len(data.get("results", []))
-    cat = MODE_CONFIG[args.mode]["category"]
-    tel_args = f"type={MODE_CONFIG[args.mode]['type']}"
-    if cat:
-        tel_args += f",category={cat}"
-    tel_args += f",numResults={body['numResults']}"
-
-    telemetry_rows = [{
-        "num": 1,
-        "tool": "exa_search.py search",
-        "args": tel_args,
-        "http": status,
-        "latency_ms": latency_ms,
-        "cost_usd": cost,
-        "results": n_results,
-    }]
+    paths = output_paths(out_dir, args.project, args.query,
+                         datetime.now(timezone.utc).strftime("%Y-%m-%d"))
+    response_for_writers = {
+        "results": envelope["results"],
+        "costDollars": {"total": envelope["telemetry"]["total_cost_usd"]},
+    }
     meta = {
         "query": args.query,
         "mode": args.mode,
         "depth": args.depth,
         "project": args.project,
-        "date": timestamp,
-        "status": "completed" if n_results > 0 else "partial",
+        "date": envelope["meta"]["timestamp"],
+        "status": ("completed" if envelope["status"] == "OK"
+                   else ("partial" if envelope["status"] == "DEGRADED" else "failed")),
         "cache_hit": False,
+        "envelope": envelope,
     }
-    write_sources_json(paths["sources_json"], meta, data)
-    write_partial_md(paths["partial_md"], meta=meta, telemetry_rows=telemetry_rows)
-    render_stdout_summary(
-        data,
-        query=args.query,
-        mode=args.mode,
-        latency_ms=latency_ms,
-        partial_path=paths["partial_md"],
-        json_path=paths["sources_json"],
-    )
+    write_sources_json(paths["sources_json"], meta, response_for_writers)
 
-    # Fire-and-forget telemetry
+    # .partial.md only for OK/DEGRADED — FAILED has no synthesizable content.
+    if envelope["status"] != "FAILED":
+        cat = MODE_CONFIG[args.mode]["category"]
+        tel_args = f"type={MODE_CONFIG[args.mode]['type']}"
+        if cat:
+            tel_args += f",category={cat}"
+        tel_args += f",numResults={body['numResults']}"
+        telemetry_rows = [{
+            "num": i + 1,
+            "tool": "exa_search.py search",
+            "args": tel_args,
+            "http": a["http"] or 0,
+            "latency_ms": a["latency_ms"],
+            "cost_usd": (envelope["telemetry"]["total_cost_usd"] if a["error"] is None else 0.0),
+            "results": (len(envelope["results"]) if a["error"] is None else 0),
+        } for i, a in enumerate(envelope["telemetry"]["attempts"])]
+        write_partial_md(paths["partial_md"], meta=meta, telemetry_rows=telemetry_rows)
+
+    # FAILED: always emit EXA_ERROR:* to stderr (back-compat fail-loud).
+    if envelope["status"] == "FAILED":
+        print(_emit_failed_stderr(envelope), file=sys.stderr)
+
+    # Stdout policy:
+    #   --envelope: print JSON envelope (OK, DEGRADED, FAILED — all of them).
+    #   default + OK/DEGRADED: markdown summary.
+    #   default + FAILED: nothing on stdout (stderr already has EXA_ERROR:*).
+    if args.envelope:
+        print(json.dumps(envelope, indent=2, ensure_ascii=False))
+    elif envelope["status"] != "FAILED":
+        render_stdout_summary(
+            response_for_writers,
+            query=args.query,
+            mode=args.mode,
+            latency_ms=envelope["telemetry"]["total_latency_ms"],
+            partial_path=paths["partial_md"],
+            json_path=paths["sources_json"],
+        )
+
+    # Telemetry (fire-and-forget, unchanged shape).
     post_telemetry(
         event={
             "session_id": os.environ.get("H2T_SESSION_ID", ""),
@@ -772,16 +802,19 @@ def _run_search(args: argparse.Namespace) -> int:
             "exa_category": body.get("category"),
             "query_hash": sha256(args.query.encode("utf-8")).hexdigest()[:16],
             "num_results_requested": body["numResults"],
-            "num_results_returned": n_results,
-            "cost_usd": cost,
-            "latency_ms": latency_ms,
-            "http_status": status,
-            "exit_code": 0,
-            "timestamp": timestamp,
+            "num_results_returned": len(envelope["results"]),
+            "cost_usd": envelope["telemetry"]["total_cost_usd"],
+            "latency_ms": envelope["telemetry"]["total_latency_ms"],
+            "http_status": envelope["telemetry"]["attempts"][-1]["http"] or 0,
+            "exit_code": exit_code,
+            "timestamp": envelope["meta"]["timestamp"],
         },
         buffer_path=out_dir / ".pending_telemetry.jsonl",
     )
-    return 0
+
+    if exit_code != 0:
+        sys.exit(exit_code)
+    return exit_code
 
 
 def _run_crawl(args: argparse.Namespace) -> int:
