@@ -395,3 +395,48 @@ def test_direct_provider_paywall_html_short_circuits():
             p.fetch("https://example.com/article/x",
                     timeout_ms=15000, user_agent="ua/test")
     assert ei.value.gate == "paid"
+
+
+def test_jina_provider_happy_path_extracts_markdown():
+    body = _load_fixture("public_article_jina.md").encode("utf-8")
+    p = fetch_url.JinaProvider()
+    captured = {}
+    def fake_urlopen(req, timeout):
+        captured["url"] = req.full_url
+        captured["headers"] = dict(req.header_items())
+        return _make_http_response(
+            body,
+            url="https://r.jina.ai/https://example.com/pops-intro",
+            headers={"Content-Type": "text/markdown; charset=utf-8"},
+        )
+    with patch("urllib.request.urlopen", side_effect=fake_urlopen):
+        r = p.fetch("https://example.com/pops-intro",
+                    timeout_ms=20000, user_agent="ua/test")
+    assert r.provider == "jina"
+    assert r.title == "POPs in TouchDesigner — Introduction"
+    assert "POPs are the new particle context" in r.body_text
+    assert r.body_chars > 100
+    assert captured["url"].startswith("https://r.jina.ai/")
+    # No JINA_API_KEY → no Authorization header.
+    assert not any(k.lower() == "authorization" for k in captured["headers"])
+
+
+def test_jina_provider_passes_authorization_when_key_set(monkeypatch):
+    monkeypatch.setenv("JINA_API_KEY", "secret-test-key")
+    body = _load_fixture("public_article_jina.md").encode("utf-8")
+    p = fetch_url.JinaProvider()
+    captured = {}
+    def fake_urlopen(req, timeout):
+        captured["headers"] = dict(req.header_items())
+        return _make_http_response(
+            body,
+            url="https://r.jina.ai/https://example.com/pops-intro",
+            headers={"Content-Type": "text/markdown; charset=utf-8"},
+        )
+    with patch("urllib.request.urlopen", side_effect=fake_urlopen):
+        p.fetch("https://example.com/pops-intro",
+                timeout_ms=20000, user_agent="ua/test")
+    assert any(
+        k.lower() == "authorization" and v == "Bearer secret-test-key"
+        for k, v in captured["headers"].items()
+    )
