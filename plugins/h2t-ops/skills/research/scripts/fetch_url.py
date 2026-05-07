@@ -618,3 +618,52 @@ class FirecrawlProvider(_StubProvider):
 
 class BrowserlessProvider(_StubProvider):
     name = "browserless"
+
+
+import json
+from pathlib import Path
+
+DEFAULT_CONFIG: dict[str, Any] = {
+    "providers": {
+        "direct": {"enabled": True, "user_agent": DEFAULT_USER_AGENT,
+                   "timeout_ms": 15000},
+        "jina": {"enabled": True, "endpoint": JINA_ENDPOINT_DEFAULT,
+                 "timeout_ms": 20000},
+        "playwright": {"enabled": False, "timeout_ms": 30000},
+        "crawl4ai": {"enabled": False},
+        "firecrawl": {"enabled": False},
+        "browserless": {"enabled": False},
+    },
+    "ladder": {
+        "default_order": ["direct", "jina", "playwright", "crawl4ai",
+                          "firecrawl", "browserless"],
+        "cumulative_timeout_ms": 60000,
+        "per_provider_timeout_ms": 15000,
+        "min_body_chars": 200,
+    },
+    "gating": {
+        "abort_on_login_required": True,
+        "abort_on_paid": True,
+    },
+}
+
+
+def _deep_merge(base: dict[str, Any], over: dict[str, Any]) -> dict[str, Any]:
+    out = dict(base)
+    for k, v in over.items():
+        if k in out and isinstance(out[k], dict) and isinstance(v, dict):
+            out[k] = _deep_merge(out[k], v)
+        else:
+            out[k] = v
+    return out
+
+
+def load_config(path: Path | str | None) -> dict[str, Any]:
+    """Load JSON config from path; return defaults if path missing or None."""
+    if path is None:
+        return _deep_merge(DEFAULT_CONFIG, {})
+    p = Path(path)
+    if not p.is_file():
+        return _deep_merge(DEFAULT_CONFIG, {})
+    user = json.loads(p.read_text(encoding="utf-8"))
+    return _deep_merge(DEFAULT_CONFIG, user)
