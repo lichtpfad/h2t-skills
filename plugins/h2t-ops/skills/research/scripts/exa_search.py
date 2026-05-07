@@ -5,7 +5,7 @@ See docs/superpowers/specs/2026-04-18-research-skill-architecture-design.md
 """
 from __future__ import annotations
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 
 import argparse
 import json
