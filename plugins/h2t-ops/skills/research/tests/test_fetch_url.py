@@ -96,3 +96,45 @@ def test_build_fetch_envelope_ok_with_attempts_sums_latency():
     assert env["telemetry"]["providers_skipped_reason"] == {"playwright": "not_configured_stub"}
     assert env["provider_used"] == "jina"
     assert env["title"] == "Hello"
+
+
+def test_provider_exceptions_have_required_attrs():
+    e = fetch_url.ProviderTransientError(
+        "5xx", provider="direct", http_status=503, latency_ms=100,
+    )
+    assert e.provider == "direct"
+    assert e.http_status == 503
+    assert e.latency_ms == 100
+
+    p = fetch_url.ProviderPermanentError(
+        "4xx", provider="direct", http_status=403, latency_ms=50,
+    )
+    assert p.http_status == 403
+
+    g = fetch_url.ProviderHardGate(
+        "auth", provider="direct", gate="login_required", latency_ms=10,
+    )
+    assert g.gate == "login_required"
+
+    nc = fetch_url.ProviderNotConfigured("stub", provider="firecrawl")
+    assert nc.provider == "firecrawl"
+
+
+def test_provider_result_dataclass_fields():
+    r = fetch_url.ProviderResult(
+        provider="direct",
+        http_status=200,
+        latency_ms=120,
+        final_url="https://example.com/x",
+        title="T",
+        body_markdown="# T\n",
+        body_text="T",
+        body_chars=1,
+        links=[],
+        canonical_url=None,
+        lang=None,
+        raw_html="<html></html>",
+    )
+    assert r.provider == "direct"
+    assert r.body_chars == 1
+    assert r.raw_html == "<html></html>"
