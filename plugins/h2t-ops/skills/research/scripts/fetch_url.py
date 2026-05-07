@@ -308,6 +308,43 @@ import time
 import urllib.error
 import urllib.request
 
+try:
+    import trafilatura as _trafilatura_module  # type: ignore
+    _TRAFILATURA_AVAILABLE = True
+except Exception:  # pragma: no cover
+    _trafilatura_module = None  # type: ignore
+    _TRAFILATURA_AVAILABLE = False
+
+_trafilatura_warned = False
+
+
+def _reset_trafilatura_warned_for_tests() -> None:
+    global _trafilatura_warned
+    _trafilatura_warned = False
+
+
+def _extract_with_optional_uplift(
+    html: str, *, base_url: str,
+) -> tuple[str | None, str, str, list[dict[str, Any]], str | None, str | None]:
+    title, md, txt, links, canonical, lang = _inline_extract(
+        html, base_url=base_url,
+    )
+    global _trafilatura_warned
+    import sys as _sys
+    if not _TRAFILATURA_AVAILABLE:
+        if not _trafilatura_warned:
+            print("FETCH_WARN:NO_TRAFILATURA inline parser only", file=_sys.stderr)
+            _trafilatura_warned = True
+        return title, md, txt, links, canonical, lang
+    try:
+        uplift_text = _trafilatura_module.extract(html) or ""
+    except Exception:
+        uplift_text = ""
+    if uplift_text and len(uplift_text) > len(txt):
+        return title, uplift_text, uplift_text, links, canonical, lang
+    return title, md, txt, links, canonical, lang
+
+
 DEFAULT_USER_AGENT = (
     "h2t-research-fetch/0.0.1 (+https://github.com/lichtpfad/h2t-skills)"
 )
@@ -353,7 +390,7 @@ class DirectProvider:
         latency_ms = int((time.monotonic() - t0) * 1000)
         encoding = _detect_encoding(resp_headers, raw_bytes)
         html_text = raw_bytes.decode(encoding, errors="replace")
-        title, md, txt, links, canonical, lang = _inline_extract(
+        title, md, txt, links, canonical, lang = _extract_with_optional_uplift(
             html_text, base_url=final_url,
         )
         site = _site_from_url(final_url)
