@@ -657,3 +657,24 @@ def test_ladder_degraded_picks_best_candidate_by_body_chars():
     # Whichever has more body_chars wins; both small here, just verify shape:
     assert env["provider_used"] in ("direct", "jina")
     assert env["telemetry"]["reason_for_degraded"] is not None
+
+
+def test_ladder_explicit_direct_does_not_fallback_to_jina():
+    config = fetch_url.load_config(None)
+    saw = {"jina": False}
+    def fake_urlopen(req, timeout):
+        if req.full_url.startswith("https://r.jina.ai/"):
+            saw["jina"] = True
+        raise _http_error(403)
+    with patch("urllib.request.urlopen", side_effect=fake_urlopen):
+        env = fetch_url.fetch_via_ladder(
+            url="https://example.com/x",
+            provider_choice="direct",
+            config=config,
+            user_agent="ua/test",
+            keep_raw=False,
+        )
+    assert env["status"] == "FAILED"
+    assert saw["jina"] is False
+    providers_attempted = [a["provider"] for a in env["telemetry"]["attempts"]]
+    assert providers_attempted == ["direct"]
