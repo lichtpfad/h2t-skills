@@ -985,6 +985,56 @@ def main(argv: list[str] | None = None) -> int:
     return EXIT_ARGS  # unreachable
 
 
+import re as _re
+
+def _slug_from_url(url: str) -> str:
+    from urllib.parse import urlparse
+    p = urlparse(url)
+    host = p.hostname or "url"
+    path = (p.path or "").strip("/").replace("/", "-")
+    raw = f"{host}-{path}" if path else host
+    raw = _re.sub(r"[^a-zA-Z0-9._-]+", "-", raw).strip("-")
+    return raw[:80] or "url"
+
+
+def _output_paths(output_dir: Path, project: str, url: str,
+                  ) -> dict[str, Path]:
+    output_dir = Path(output_dir).expanduser()
+    output_dir.mkdir(parents=True, exist_ok=True)
+    date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    slug = _slug_from_url(url)
+    base = output_dir / f"{project}-fetch-{slug}-{date}"
+    return {
+        "partial_md": Path(str(base) + ".partial.md"),
+        "sources_json": Path(str(base) + ".sources.json"),
+        "raw_html": Path(str(base) + ".raw.html"),
+    }
+
+
+def _write_sources_json(path: Path, envelope: dict[str, Any],
+                        *, project: str) -> None:
+    """Write sidecar per spec §10.4: {meta, envelope, body}."""
+    payload = {
+        "meta": {
+            "tool": "fetch_url.py",
+            "tool_version": __version__,
+            "project": project,
+            "url": envelope["url"],
+            "final_url": envelope.get("final_url"),
+            "status": envelope["status"],
+            "provider_used": envelope.get("provider_used"),
+            "timestamp": envelope["meta"]["timestamp"],
+        },
+        "envelope": envelope,
+        "body": {
+            "markdown": envelope.get("body_markdown", ""),
+            "text_excerpt": (envelope.get("body_text", "") or "")[:5000],
+        },
+    }
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2),
+                    encoding="utf-8")
+
+
 def _run_fetch(args: argparse.Namespace) -> int:
     if not args.url:
         _die_args("--url is required for `fetch`")
@@ -992,7 +1042,27 @@ def _run_fetch(args: argparse.Namespace) -> int:
         _die_args(
             f"provider={args.provider} not configured (stub in this version)"
         )
-    # Continued in Task 28+.
+    cfg_path = Path(args.config).expanduser() if args.config else None
+    config = load_config(cfg_path)
+    paths = _output_paths(Path(args.output_dir), args.project, args.url)
+
+    envelope = fetch_via_ladder(
+        url=args.url,
+        provider_choice=args.provider,
+        config=config,
+        user_agent=args.user_agent,
+        keep_raw=args.keep_raw,
+        min_body_chars=args.min_body_chars,
+        output_paths=paths,
+    )
+
+    _write_sources_json(paths["sources_json"], envelope, project=args.project)
+
+    return _emit_stdout_and_exit(envelope, args)
+
+
+def _emit_stdout_and_exit(envelope: dict[str, Any],
+                          args: argparse.Namespace) -> int:
     return EXIT_OK
 
 

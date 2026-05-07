@@ -819,3 +819,35 @@ def test_cli_args_explicit_stub_provider_returns_exit_1(capsys):
     err = capsys.readouterr().err
     assert "FETCH_ERROR:ARGS" in err
     assert "playwright" in err
+
+
+def test_cli_fetch_writes_sources_json_sidecar(tmp_path, monkeypatch):
+    html = _load_fixture("public_article.html").encode("utf-8")
+    with patch("urllib.request.urlopen") as mock_urlopen:
+        mock_urlopen.return_value = _make_http_response(
+            html, url="https://example.com/x",
+        )
+        rc = fetch_url.main([
+            "fetch",
+            "--url", "https://example.com/x",
+            "--output-dir", str(tmp_path),
+            "--project", "test",
+        ])
+    assert rc == 0
+    sidecars = list(tmp_path.glob("test-fetch-*.sources.json"))
+    assert len(sidecars) == 1
+    data = json.loads(sidecars[0].read_text(encoding="utf-8"))
+    # Top-level shape per spec §10.4:
+    assert set(data.keys()) >= {"meta", "envelope", "body"}
+    # Sidecar meta:
+    assert data["meta"]["tool"] == "fetch_url.py"
+    assert data["meta"]["project"] == "test"
+    assert data["meta"]["url"] == "https://example.com/x"
+    assert data["meta"]["status"] == "OK"
+    # Envelope verbatim:
+    assert data["envelope"]["status"] == "OK"
+    assert data["envelope"]["meta"]["envelope_version"] == "1"
+    assert data["envelope"]["provider_used"] == "direct"
+    # Body block:
+    assert "POPs in TouchDesigner" in data["body"]["markdown"]
+    assert "POPs are the new particle context" in data["body"]["text_excerpt"]
