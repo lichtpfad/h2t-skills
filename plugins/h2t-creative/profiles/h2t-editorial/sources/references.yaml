@@ -1,0 +1,222 @@
+# h2t-editorial deck — source dossier (R2b slice for #87).
+#
+# Catalog of golden references that gate desktop fidelity for the editorial
+# deck form. Authoritative imports live under
+#   docs/visual-regression/2026-05-07-r2b/h2t-editorial-deck-golden/
+# and were locked during R2b T0 inventory. References here are static
+# pointers; this dossier never instructs a runtime regenerator or model to
+# reproduce content at session time — every entry is a fixed snapshot.
+#
+# Landing form (#88) has its own dossier in the codex/r2b-editorial-landing
+# branch (separate slice). This file references DECK sources only.
+#
+# ⚠ SOURCE ARBITRATION RESET 2026-05-07
+# Initial T1 designation marked pos-sprint-editorial-example as primary.
+# Visual review revealed the human canonical target is the LUXURY-PRINT
+# system embodied by rejuve-pitch-deck (gold accent + Playfair/Georgia +
+# brand-wordmark cover), NOT the tech-article system shared by pos-sprint
+# and rejuve-presentation (terracotta + Playfair/Inter + left-aligned
+# article cover). Roles below are post-reset. Full arbitration report at
+#   docs/superpowers/specs/2026-05-07-r2b-source-arbitration.md
+# T1–T7 implementation artifacts (tokens, palettes, layouts, recipe, mobile
+# CSS) are tied to System A and require rebuild before any visual pass.
+
+profile: h2t-editorial
+form: deck
+slice: r2b-deck
+gate: desktop-fidelity
+mobile_gate: usability   # not "baseline-only" — mobile is Gate B per R2b plan
+canonical_source: rejuve-pitch-deck   # post-arbitration (2026-05-07)
+visual_system: B-luxury-print         # vs A-tech-article (pos-sprint family)
+
+sources:
+  - id: pos-sprint-editorial-example
+    role: secondary
+    visual_system: A-tech-article
+    kind: golden-html
+    path: docs/visual-regression/2026-05-07-r2b/h2t-editorial-deck-golden/pos-sprint-editorial-example.html
+    notes: >-
+      Original T1 designation: PRIMARY. Reclassified to SECONDARY by the
+      2026-05-07 source arbitration reset. Represents the tech-article
+      editorial system (System A): terracotta accent #c45a3c + Playfair
+      Display headline + Inter body + left-aligned article cover with thin
+      <hr> rule. Useful for layout vocabulary catalogue (the seven layout
+      ids — title/title-body/quote/two-column/image-text/divider/final
+      — are still valid concepts) but its tokens, color palette, body
+      typography, and cover composition do NOT match the rejuve-pitch-deck
+      canonical target. Do not re-elevate to primary without explicit
+      human direction.
+
+  - id: pos-sprint-deck-skill
+    role: contract-only
+    visual_system: A-tech-article
+    kind: skill-doc
+    path: docs/visual-regression/2026-05-07-r2b/h2t-editorial-deck-golden/pos-sprint-deck-SKILL.md
+    notes: >-
+      Specifies STYLE 2 (System A) typography stack (Playfair Display +
+      Inter), token shape, and slide-structure HTML contract. SHARED
+      §Slide Structure section is form-agnostic and still applies. The
+      STYLE 2 typography prescription (Inter body) is NOT canonical for
+      h2t-editorial — see canonical_source above. Treat this file as a
+      contract reference for assembler shape (single-file output, slide
+      sectioning, JS contract) but NOT for visual styling.
+
+  - id: pos-sprint-deck-readme
+    role: contract-only
+    visual_system: A-tech-article
+    kind: skill-readme
+    path: docs/visual-regression/2026-05-07-r2b/h2t-editorial-deck-golden/pos-sprint-deck-README.md
+    notes: >-
+      Skill README — overview only. Not authoritative for visual styling
+      after the 2026-05-07 arbitration reset.
+
+  - id: rejuve-presentation
+    role: secondary
+    visual_system: A-tech-article
+    kind: live-deck
+    slides: 83
+    path: docs/visual-regression/2026-05-07-r2b/h2t-editorial-deck-golden/rejuve-presentation.html
+    notes: >-
+      Live editorial presentation deck (Russian + English mix). Same visual
+      system as pos-sprint-editorial-example: terracotta accent #c45a3c +
+      Playfair Display + Inter body + 2px progress-bar + JetBrains Mono
+      chrome (counter, mono caption details). Cover grammar: "PROPOSAL —
+      DATE" kicker + brand wordmark + Playfair italic subtitle + uppercase
+      meta caps line. NOT the canonical target — see canonical_source. Kept
+      as a recipe-content reference for content-grammar exploration only;
+      do not lift its tokens or palette.
+
+  - id: rejuve-pitch-deck
+    role: primary
+    visual_system: B-luxury-print
+    kind: live-deck
+    slides: 15   # cover + 14 content slides per direct count (not 45 as in pre-reset note)
+    path: docs/visual-regression/2026-05-07-r2b/h2t-editorial-deck-golden/rejuve-pitch-deck.html
+    notes: >-
+      Reclassified to PRIMARY by the 2026-05-07 arbitration reset. Embodies
+      the LUXURY-PRINT editorial system (System B) that matches the human
+      visual target for #87:
+        • palette: gold accent #c9a96e + copper #7d4e2d + dim copper-text #8a6520
+        • bg: warmer near-white #fafaf8 (vs A's #faf9f6)
+        • typography: Playfair Display headings + GEORGIA serif body
+          (NOT Inter — System B body is serif), system-ui sans for utility
+          (counter, labels)
+        • token shape: --fh / --fb / --fu (vs A's --font-heading / --font-body)
+        • cover grammar: brand wordmark <div class="brand">RE<em>juve</em></div>
+          (Playfair 58px, em fragment in accent gold) + uppercase letter-spaced
+          .cover-sub + 40px×2px gold .rule decorator + sans .cover-meta
+        • per-slide grammar: small uppercase .label kicker (10.5px, 2.5px
+          letter-spacing, gold) + h2 (Playfair 27px) + .rule (40×2 gold)
+          + body (Georgia 16.5px line-height 1.65)
+        • progress-bar: 2px gold
+        • counter: 11px sans dim, top-right
+      Authoritative for tokens, palette, typography, cover composition,
+      and chrome styling on the rebuild.
+
+reference_screenshots:
+  - source: pos-sprint-editorial-example
+    desktop: docs/visual-regression/2026-05-07-r2b/h2t-editorial-deck-golden/screenshots-pos-sprint/unknown/desktop_20260507_013252.png
+    mobile:  docs/visual-regression/2026-05-07-r2b/h2t-editorial-deck-golden/screenshots-pos-sprint/unknown/mobile_20260507_013252.png
+  - source: rejuve-presentation
+    desktop: docs/visual-regression/2026-05-07-r2b/h2t-editorial-deck-golden/screenshots-rejuve-presentation/unknown/desktop_20260507_013308.png
+    mobile:  docs/visual-regression/2026-05-07-r2b/h2t-editorial-deck-golden/screenshots-rejuve-presentation/unknown/mobile_20260507_013308.png
+  - source: rejuve-pitch-deck
+    desktop: docs/visual-regression/2026-05-07-r2b/h2t-editorial-deck-golden/screenshots-rejuve-pitch-deck/unknown/desktop_20260507_013311.png
+    mobile:  docs/visual-regression/2026-05-07-r2b/h2t-editorial-deck-golden/screenshots-rejuve-pitch-deck/unknown/mobile_20260507_013311.png
+source_conflict:
+  detected_at: 2026-05-07
+  reset_kind: source-arbitration
+  trigger: >-
+    Human visual review of dist/r2b-h2t-editorial-deck-validation/index.html
+    against the rejuve-pitch-deck reference screenshot revealed the
+    implementation followed System A (pos-sprint editorial / tech-article),
+    while the human canonical target is System B (rejuve-pitch-deck /
+    luxury-print). The two systems diverge on: accent color, body font,
+    cover composition, token-naming convention, and decorative rule usage.
+  systems:
+    A-tech-article:
+      members: [pos-sprint-editorial-example, rejuve-presentation]
+      accent:        "#c45a3c terracotta"
+      body_font:     "Inter (sans)"
+      heading_font:  "Playfair Display"
+      cover_grammar: "left-aligned article OR centered Playfair italic subtitle + meta caps"
+    B-luxury-print:
+      members: [rejuve-pitch-deck]
+      accent:        "#c9a96e gold"
+      body_font:     "Georgia (serif)"
+      heading_font:  "Playfair Display"
+      cover_grammar: "centered brand wordmark + 40×2 accent rule + meta line"
+  decision: >-
+    Promote rejuve-pitch-deck to PRIMARY (canonical_source). Demote
+    pos-sprint-editorial-example to SECONDARY. Demote rejuve-presentation
+    to SECONDARY (alternate sub-style, recipe-content reference only).
+    Keep pos-sprint deck-skill / readme as CONTRACT-ONLY references for
+    assembler shape (single-file output, slide structure, JS contract).
+    Full report: docs/superpowers/specs/2026-05-07-r2b-source-arbitration.md
+  rebuild_required: true
+  invalidated_artifacts:
+    - "T1: profiles/h2t-editorial/deck/tokens.css (System A tokens — Playfair+Inter, terracotta vars)"
+    - "T1: profiles/h2t-editorial/deck/palettes/{default,warm,night}.css (System A palettes)"
+    - "T2: profiles/h2t-editorial/deck/slides/title/{title.html,title.css} (cover composition wrong: pos-sprint article vs pitch-deck brand wordmark)"
+    - "T2: profiles/h2t-editorial/deck/slides/title-body/* (h2 size, body typography)"
+    - "T2: profiles/h2t-editorial/deck/slides/quote/quote.css (System A typography stack)"
+    - "T2: profiles/h2t-editorial/deck/slides/two-column/two-column.css (System A typography stack)"
+    - "T2: profiles/h2t-editorial/deck/slides/image-text/image-text.css"
+    - "T2: profiles/h2t-editorial/deck/slides/divider/divider.css"
+    - "T2: profiles/h2t-editorial/deck/slides/final/final.css"
+    - "T3: profiles/h2t-editorial/deck/frame/frame.css (chrome typography, progress-bar height, eyebrow style — pitch-deck uses .label not .eyebrow)"
+    - "T5: profiles/h2t-editorial/validation/recipe-deck.yaml (copy lifted from pos-sprint slides 1-7 — replace with pitch-deck-derived copy)"
+    - "T6: mobile @media blocks calibrated to System A sizes (typography scale will recompute under System B base sizes)"
+    - "dist/r2b-h2t-editorial-deck-validation/* (build output — not commits)"
+    - "docs/visual-regression/2026-05-07-r2b/h2t-editorial-deck-modular/* (14 captured screenshots — not visual evidence)"
+  preserved_artifacts:
+    - "Plugin assembler routing (_is_deck_form_profile + _assemble_deck_form_v2 — form-agnostic)"
+    - "deck-nav.js (chrome JS contract is design-system-agnostic)"
+    - "Layout vocabulary CONCEPT (7 layouts: title/title-body/quote/two-column/image-text/divider/final)"
+    - "Manifest field shapes (need re-verification per layout but the schema concept holds)"
+    - "Single-file output contract (T4)"
+    - "Source dossier file (this file — restructured but kept)"
+    - "image-text known_fidelity_gaps marker (still valid: pitch-deck has no <img> either)"
+    - "Mobile Gate B contract (CSS-only, no JS branching)"
+    - "Test suite scaffolding (helpers, parametrized matrices) — assertion *values* will need to update to System B tokens but the structural contracts hold"
+  follow_up_phase: rebuild-around-pitch-deck
+  rebuild_scope:
+    - "Re-derive tokens.css from rejuve-pitch-deck: gold accent palette, Playfair+Georgia font stack, 2px progress-bar height, slide-padding tokens calibrated to pitch-deck spacing"
+    - "Replace .eyebrow shared primitive with .label (pitch-deck uses .label kicker, not editorial-style eyebrow)"
+    - "Add .rule decorative primitive (40×2px accent) to frame.css — pitch-deck uses it heavily (cover + per-slide kicker separator)"
+    - "Rewrite title.html as brand-wordmark cover (.brand with em-fragment accent + .cover-sub + .rule + .cover-meta) — different field set than current title manifest"
+    - "Rewrite per-layout CSS for System B typography (h1 42, h2 27, body Georgia 16.5)"
+    - "Re-lift validation recipe content from rejuve-pitch-deck slides — Russian copy preserved verbatim or English-translated copy from a sibling pitch deck"
+    - "Re-run T6 mobile coverage with System B sizes (matrix structure unchanged; values recompute)"
+    - "Re-build → re-capture → human visual approval"
+
+known_fidelity_gaps:
+  # Documented at R2b Batch A.5 (2026-05-07) — kept here so the visual parity
+  # gate at T8/T9 explicitly excludes the marked layouts/slides from desktop
+  # fidelity scoring rather than silently failing on missing golden coverage.
+  - layout: image-text
+    reason: >-
+      None of the locked editorial deck goldens
+      (pos-sprint-editorial-example, rejuve-presentation, rejuve-pitch-deck)
+      contain photographic <img> assets or background-image references —
+      they are all prose + structural typography. The image-text layout is
+      part of the editorial vocabulary catalogued by the pos-sprint deck
+      skill, but no golden slide exercises it visually.
+    stub_kind: data-uri-svg-rect
+    stub_intent: >-
+      Neutral two-tone rectangle inlined as a data-URI SVG so the slide
+      assembles, renders without a broken-image icon, and the LAYOUT
+      structure (figure / figcaption / body composition) remains testable.
+      Intentionally not styled to look like editorial content — it is a
+      structural marker, not synthetic visual evidence.
+    parity_gate: excluded   # image-text slide is NOT scored for fidelity at T8/T9
+    next_step: >-
+      If a real editorial image asset surfaces (or rejuve client supplies a
+      figure), swap the data-URI for that asset and reinstate the slide
+      into the visual parity gate.
+
+notes: >-
+  Reference screenshots are slide-01 only per source (single static frame for
+  quick golden diffing). Per-slide capture across the 11/45/83 sources is not
+  required at T1 — that lands during R2b implementation Agent Visual QA via
+  tools/deck-screenshot-all.py against the assembled validation deck.

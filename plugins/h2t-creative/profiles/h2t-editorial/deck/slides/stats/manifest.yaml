@@ -1,0 +1,16 @@
+layout: stats
+fields:
+  label:
+    type: text
+    required: false
+    default: ''
+  headline:
+    type: html
+    required: true
+  stats_html:
+    type: html
+    required: true
+  note:
+    type: html
+    required: false
+    default: ''

@@ -1,0 +1,10 @@
+<div class="slide-inner image-text-block">
+  <div class="label">{{ label }}</div>
+  <h2>{{ headline | safe }}</h2>
+  <div class="rule"></div>
+  <figure class="figure">
+    <img src="{{ image_url }}" alt="{{ image_alt }}">
+    <figcaption>{{ caption | safe }}</figcaption>
+  </figure>
+  <div class="body">{{ body_html | safe }}</div>
+</div>

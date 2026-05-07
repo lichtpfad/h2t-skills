@@ -1,0 +1,208 @@
+/* h2t-editorial deck — frame chrome + shared editorial primitives.
+ * System B canonical (rejuve-pitch-deck post-arbitration). Declares the
+ * shared kicker primitive (.label — replaces the demoted System A kicker
+ * class), the decorative rectangle (.rule — 40x2 gold reused as cover
+ * separator and per-slide divider), and frame chrome (#progress-bar,
+ * #slide-counter, #nav-hint). All colour values come from token vars
+ * (palette swap works across default / warm / night without re-touching
+ * this file).
+ *
+ * Layout-specific CSS (per-slide-type tweaks) lives in
+ * deck/slides/<layout>/<layout>.css. This file is profile-wide.
+ */
+
+/* ─── Frame chrome ────────────────────────────────────────────── */
+
+#progress-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  height: 2px;
+  background: var(--accent);
+  transition: width 0.3s ease;
+  z-index: 100;
+}
+
+#slide-counter {
+  position: fixed;
+  top: 22px;
+  right: 30px;
+  font-family: var(--fu);
+  font-size: 11px;
+  color: var(--text-dim);
+  opacity: 0.45;
+  z-index: 100;
+}
+
+#nav-hint {
+  position: fixed;
+  bottom: 13px;
+  right: 30px;
+  font-family: var(--fu);
+  font-size: 10px;
+  color: var(--text-dim);
+  opacity: 0.3;
+  z-index: 100;
+}
+
+/* Optional prev/next nav buttons — quiet text affordance. */
+.nav-btn {
+  position: fixed;
+  bottom: 30px;
+  font-family: var(--fu);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+  background: transparent;
+  border: 1px solid var(--border);
+  padding: 7px 13px;
+  cursor: pointer;
+  transition: border-color 0.2s ease, color 0.2s ease;
+  z-index: 100;
+}
+.nav-btn:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+.nav-btn.prev { left: 30px; }
+.nav-btn.next { right: 30px; }
+.nav-btn.disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* ─── Shared editorial primitives ──────────────────────────────── */
+
+/* Label — kicker above each slide headline. System B canonical: small
+   uppercase utility-sans, gold, 2.5px letter-spacing. Rejuve-pitch-deck
+   format: "NN — Section text" (numbered). */
+.label {
+  font-family: var(--fu);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 2.5px;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 10px;
+}
+.label:empty { display: none; }
+
+/* Rule — 40×2 gold rectangle. Cover separator (between subhead and meta)
+   and per-slide divider (between h2 and body). Reused across layouts. */
+.rule {
+  width: 40px;
+  height: 2px;
+  background: var(--accent);
+  margin: 12px 0 18px;
+}
+
+/* Color utility classes — used inline via <span class="..."> emphasis
+   inside headlines and body HTML. */
+.dim       { color: var(--text-dim); }
+.accent    { color: var(--accent); }
+.text      { color: var(--text); }
+.bold      { font-weight: 700; }
+.italic    { font-style: italic; }
+
+/* Browser default reset for blockquote (used by quote layout). Keep margins
+   collapsed; layout-specific styling lives in slides/quote/quote.css. */
+blockquote { margin: 0; padding: 0; quotes: none; }
+blockquote::before, blockquote::after { content: none; }
+
+/* Base figure reset (used by image-text layout). */
+figure { margin: 0; }
+
+/* ─── Baseline table styling (System B canonical, used by `table` layout)
+ * Lifted verbatim from rejuve-pitch-deck. Tables use utility-sans (--fu)
+ * for compactness, not the body Georgia serif. Colour-row variants
+ * (.ra / .rc / .rcu / .rat / .rg) live in slides/table/table.css. */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 8px;
+  font-family: var(--fu);
+}
+th {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  border-bottom: 1px solid var(--border);
+  padding: 7px 10px;
+  text-align: left;
+}
+td {
+  font-size: 13px;
+  line-height: 1.4;
+  padding: 7px 10px;
+  color: var(--text);
+  border-bottom: 1px solid rgba(226, 223, 216, 0.4);
+  vertical-align: top;
+}
+tr:last-child td { border-bottom: none; }
+
+/* ─── Mobile adaptation (R2b plan §6 — Gate B) ─────────────────────────
+   CSS-only — JS does not branch on viewport. Per-layout typography
+   overrides live in the layout CSS files; this block owns the shared
+   primitives: token-driven slide padding, default h2 sizing, frame
+   chrome, .label kicker, and .rule decorator. No primitive is hidden. */
+@media (max-width: 480px) {
+  :root {
+    /* Token override — preserves the desktop handle (R2a T17.6 pattern):
+       only the values change inside mobile, not the `.slide { padding: ... }`
+       rule. System B mobile inset: 24 / 20 / 40 / 20 (rejuve-pitch-deck
+       responsive block uses 24px 20px 40px). */
+    --deck-slide-padding-top:    24px;
+    --deck-slide-padding-right:  20px;
+    --deck-slide-padding-bottom: 40px;
+    --deck-slide-padding-left:   20px;
+  }
+
+  /* Default h2 size (Playfair stays — only size & leading shrink). */
+  h2 {
+    font-size: 21px;
+    line-height: 1.3;
+  }
+
+  /* Body sizes — pitch-deck mobile uses 15px for p/li. */
+  p, li {
+    font-size: 15px;
+  }
+
+  /* Frame chrome: tighter inset + smaller type. */
+  #slide-counter {
+    top: 14px;
+    right: 16px;
+    font-size: 10px;
+  }
+  #nav-hint {
+    bottom: 12px;
+    right: 16px;
+    font-size: 9px;
+  }
+
+  /* Optional prev/next nav buttons. */
+  .nav-btn {
+    bottom: 18px;
+    padding: 6px 12px;
+    font-size: 10px;
+  }
+  .nav-btn.prev { left: 16px; }
+  .nav-btn.next { right: 16px; }
+
+  /* Label kicker: tighten letter-spacing + bottom margin to recover
+     vertical room. */
+  .label {
+    font-size: 9.5px;
+    letter-spacing: 2px;
+    margin-bottom: 8px;
+  }
+
+  /* Decorative rule — slightly smaller on mobile. */
+  .rule {
+    width: 32px;
+    margin: 10px 0 14px;
+  }
+}
