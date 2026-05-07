@@ -851,3 +851,82 @@ def test_cli_fetch_writes_sources_json_sidecar(tmp_path, monkeypatch):
     # Body block:
     assert "POPs in TouchDesigner" in data["body"]["markdown"]
     assert "POPs are the new particle context" in data["body"]["text_excerpt"]
+
+
+def test_cli_default_stdout_markdown_summary(tmp_path, capsys):
+    html = _load_fixture("public_article.html").encode("utf-8")
+    with patch("urllib.request.urlopen") as mock_urlopen:
+        mock_urlopen.return_value = _make_http_response(
+            html, url="https://example.com/x",
+        )
+        rc = fetch_url.main([
+            "fetch", "--url", "https://example.com/x",
+            "--output-dir", str(tmp_path), "--project", "test",
+        ])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert out.startswith("## Fetch:") or out.startswith("# Fetch:")
+    assert "provider_used: direct" in out
+
+
+def test_cli_json_flag_prints_envelope(tmp_path, capsys):
+    html = _load_fixture("public_article.html").encode("utf-8")
+    with patch("urllib.request.urlopen") as mock_urlopen:
+        mock_urlopen.return_value = _make_http_response(
+            html, url="https://example.com/x",
+        )
+        rc = fetch_url.main([
+            "fetch", "--url", "https://example.com/x", "--json",
+            "--output-dir", str(tmp_path), "--project", "test",
+        ])
+    out = capsys.readouterr().out
+    assert rc == 0
+    parsed = json.loads(out)
+    assert parsed["status"] == "OK"
+    assert parsed["provider_used"] == "direct"
+
+
+def test_cli_failed_no_json_prints_stderr_only(tmp_path, capsys):
+    with patch("urllib.request.urlopen") as mock_urlopen:
+        mock_urlopen.side_effect = _http_error(503)
+        rc = fetch_url.main([
+            "fetch", "--url", "https://example.com/x",
+            "--output-dir", str(tmp_path), "--project", "test",
+        ])
+    captured = capsys.readouterr()
+    assert rc == 2
+    assert captured.out == "" or captured.out.strip() == ""
+    assert "FETCH_ERROR:HTTP" in captured.err
+
+
+def test_cli_failed_with_json_prints_envelope_and_error(tmp_path, capsys):
+    with patch("urllib.request.urlopen") as mock_urlopen:
+        mock_urlopen.side_effect = _http_error(503)
+        rc = fetch_url.main([
+            "fetch", "--url", "https://example.com/x", "--json",
+            "--output-dir", str(tmp_path), "--project", "test",
+        ])
+    captured = capsys.readouterr()
+    assert rc == 2
+    parsed = json.loads(captured.out)
+    assert parsed["status"] == "FAILED"
+    assert "FETCH_ERROR:HTTP" in captured.err
+
+
+def test_cli_gated_with_json_flag(tmp_path, capsys):
+    html = _load_fixture("login_wall.html").encode("utf-8")
+    with patch("urllib.request.urlopen") as mock_urlopen:
+        mock_urlopen.return_value = _make_http_response(
+            html, url="https://example.com/article/x",
+        )
+        rc = fetch_url.main([
+            "fetch", "--url", "https://example.com/article/x", "--json",
+            "--output-dir", str(tmp_path), "--project", "test",
+        ])
+    captured = capsys.readouterr()
+    assert rc == 5
+    parsed = json.loads(captured.out)
+    assert parsed["status"] == "FAILED"
+    assert parsed["content_gate"] == "login_required"
+    assert "FETCH_ERROR:GATED" in captured.err
+    assert "login_required" in captured.err
