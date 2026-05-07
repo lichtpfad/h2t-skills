@@ -1081,3 +1081,16 @@ def test_known_paywalled_domain_short_circuits(monkeypatch):
         )
     assert env["status"] == "FAILED"
     assert env["content_gate"] == "paid"
+
+
+def test_public_api_exports_for_adapters():
+    expected = {
+        "fetch_via_ladder", "build_fetch_envelope", "load_config",
+        "ProviderResult", "ProviderTransientError", "ProviderPermanentError",
+        "ProviderHardGate", "ProviderNotConfigured",
+        "DirectProvider", "JinaProvider",
+        "PlaywrightProvider", "Crawl4AIProvider",
+        "FirecrawlProvider", "BrowserlessProvider",
+        "ENVELOPE_VERSION", "FETCH_ENVELOPE_VERSION",
+    }
+    assert expected.issubset(set(fetch_url.__all__))
