@@ -448,3 +448,36 @@ def _detect_login_wall(*, html: str, final_url: str) -> bool:
         if "/login" in path or "/signin" in path:
             return True
     return False
+
+
+PAYWALL_DOM_TOKENS = (
+    'data-paid="true"',
+    'class="paywall-active"',
+    'class="article-paywall"',
+    'itemtype="https://schema.org/Paywall"',
+)
+
+KNOWN_PAYWALLED_DOMAINS: set[str] = set()  # populated in follow-up
+
+
+def _detect_paywall(*, html: str, site: str) -> bool:
+    if site and site.lower() in KNOWN_PAYWALLED_DOMAINS:
+        return True
+    return any(tok in html for tok in PAYWALL_DOM_TOKENS)
+
+
+def _classify_content(
+    *, html: str, body_text: str, final_url: str, site: str,
+    min_body_chars: int,
+) -> tuple[str, str]:
+    """Return (content_type, content_gate)."""
+    if _detect_login_wall(html=html, final_url=final_url):
+        return "gated", "login_required"
+    if _detect_paywall(html=html, site=site):
+        return "gated", "paid"
+    if _detect_js_shell(html=html, body_text=body_text):
+        return "js_shell", "none"
+    if len(body_text) < min_body_chars:
+        return "short_body", "none"
+    # Listing heuristic: many <li><a> relative to text — punt for PR#1.
+    return "article", "none"

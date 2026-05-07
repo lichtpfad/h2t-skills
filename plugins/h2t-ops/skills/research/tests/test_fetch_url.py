@@ -305,3 +305,67 @@ def test_detect_login_wall_true_for_final_url_login_path():
 def test_detect_login_wall_false_for_real_article():
     html = _load_fixture("public_article.html")
     assert fetch_url._detect_login_wall(html=html, final_url="https://example.com/x") is False
+
+
+def test_detect_paywall_true_for_dom_token():
+    html = _load_fixture("paywall.html")
+    assert fetch_url._detect_paywall(html=html, site="example.com") is True
+
+
+def test_detect_paywall_false_for_public_article():
+    html = _load_fixture("public_article.html")
+    assert fetch_url._detect_paywall(html=html, site="example.com") is False
+
+
+def test_classify_content_type_article():
+    html = _load_fixture("public_article.html")
+    _, _, txt, _, _, _ = fetch_url._inline_extract(html, base_url="https://x/")
+    ct, gate = fetch_url._classify_content(
+        html=html, body_text=txt, final_url="https://example.com/x",
+        site="example.com", min_body_chars=200,
+    )
+    assert ct == "article"
+    assert gate == "none"
+
+
+def test_classify_content_type_short_body():
+    html = _load_fixture("short_body.html")
+    _, _, txt, _, _, _ = fetch_url._inline_extract(html, base_url="https://x/")
+    ct, gate = fetch_url._classify_content(
+        html=html, body_text=txt, final_url="https://example.com/x",
+        site="example.com", min_body_chars=200,
+    )
+    assert ct == "short_body"
+    assert gate == "none"
+
+
+def test_classify_content_type_js_shell():
+    html = _load_fixture("js_shell.html")
+    ct, gate = fetch_url._classify_content(
+        html=html, body_text="", final_url="https://example.com/x",
+        site="example.com", min_body_chars=200,
+    )
+    assert ct == "js_shell"
+    assert gate == "none"
+
+
+def test_classify_content_type_gated_login():
+    html = _load_fixture("login_wall.html")
+    _, _, txt, _, _, _ = fetch_url._inline_extract(html, base_url="https://x/")
+    ct, gate = fetch_url._classify_content(
+        html=html, body_text=txt, final_url="https://example.com/article/x",
+        site="example.com", min_body_chars=200,
+    )
+    assert ct == "gated"
+    assert gate == "login_required"
+
+
+def test_classify_content_type_gated_paid():
+    html = _load_fixture("paywall.html")
+    _, _, txt, _, _, _ = fetch_url._inline_extract(html, base_url="https://x/")
+    ct, gate = fetch_url._classify_content(
+        html=html, body_text=txt, final_url="https://example.com/x",
+        site="example.com", min_body_chars=200,
+    )
+    assert ct == "gated"
+    assert gate == "paid"
