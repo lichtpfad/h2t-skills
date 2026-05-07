@@ -1,0 +1,24 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Skill",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -r '.tool_input.skill // \"\"' | grep -qE '(session-start|handoff)' && (mkdir -p ~/.h2t && touch ~/.h2t/.gather-active); echo '{}'"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if find ~/.h2t/.gather-active -mmin -5 2>/dev/null | grep -q .; then jq -r '.tool_input.command' | grep -qE '^(git log|git status|git branch|git diff|git stash|gh issue list|gh pr list|gh milestone list)\\s*$' && echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"Контекст уже собран gather-on-skill hook (BRIEFING). Во время session-start/handoff не дублируй scrape — используй данные из BRIEFING. Блок снимается автоматически через 5 минут после старта.\"}}' || echo '{}'; else echo '{}'; fi"
+          }
+        ]
+      }
+    ]
+  }
+}
