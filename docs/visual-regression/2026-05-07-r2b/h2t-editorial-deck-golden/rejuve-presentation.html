@@ -1,0 +1,969 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>REjuve — Agentic Marketing System Proposal</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700;800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#faf9f6; --bg-light:#f0eeeb; --bg-card:#ffffff;
+  --text:#1a1a1a; --text-dim:#6b6b6b;
+  --accent:#c45a3c; --accent2:#2d5f8a; --accent3:#5a8a5c;
+  --danger:#b33a3a; --highlight:#8b6fb0; --pop:#c45a3c;
+  --border:#e0ddd8;
+  --font-heading:'Playfair Display','Georgia','Times New Roman',serif;
+  --font-body:'Inter','Helvetica Neue','Arial',sans-serif;
+  --font-mono:'JetBrains Mono',monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:100%;height:100%;background:var(--bg);color:var(--text);font-family:var(--font-body);font-size:16px;overflow:hidden;-webkit-font-smoothing:antialiased}
+h1{font-family:var(--font-heading);font-size:44px;font-weight:700;color:var(--text);margin-bottom:16px;line-height:1.2}
+h2{font-family:var(--font-heading);font-size:30px;font-weight:600;color:var(--text);margin-bottom:20px;line-height:1.3}
+h3{font-family:var(--font-body);font-size:14px;font-weight:500;color:var(--text-dim);text-transform:uppercase;letter-spacing:2px;margin:18px 0 10px}
+p,li{font-family:var(--font-body);font-size:17px;line-height:1.6;color:var(--text);margin-bottom:8px}
+ul,ol{padding-left:22px;margin-bottom:10px}
+em,.emphasis{font-style:italic;color:var(--accent)}
+strong{font-weight:600}
+.accent{color:var(--accent)}
+.accent2{color:var(--accent2)}
+.accent3{color:var(--accent3)}
+.dim{color:var(--text-dim)}
+.danger{color:var(--danger)}
+.highlight{color:var(--highlight)}
+.slide{display:none;flex-direction:column;justify-content:center;align-items:center;width:100vw;height:100vh;padding:48px 72px 64px;position:relative;overflow-y:auto}
+.slide.active{display:flex}
+.slide-inner{width:100%;max-width:1180px;flex:1;display:flex;flex-direction:column;justify-content:center}
+.slide-counter{position:absolute;top:20px;right:28px;font-size:12px;color:var(--text-dim);opacity:0.6;font-family:var(--font-mono)}
+.slide-title{position:absolute;top:20px;left:28px;font-size:12px;color:var(--text-dim);opacity:0.6;text-transform:uppercase;letter-spacing:2px;font-weight:500}
+.progress-bar{position:fixed;bottom:0;left:0;height:2px;background:var(--accent);transition:width 0.3s;z-index:100}
+.nav-hint{position:fixed;bottom:14px;right:28px;font-size:11px;color:var(--text-dim);opacity:0.4;font-family:var(--font-mono)}
+.intro{text-align:center;align-items:center;justify-content:center}
+.intro h1{font-size:64px;margin-bottom:8px}
+.intro .subtitle{font-family:var(--font-heading);font-size:22px;font-style:italic;color:var(--text-dim);margin-bottom:40px}
+.intro .meta{font-family:var(--font-mono);font-size:12px;color:var(--text-dim);letter-spacing:2px;text-transform:uppercase}
+.intro .brand{font-family:var(--font-heading);font-size:12px;letter-spacing:4px;text-transform:uppercase;color:var(--accent);margin-bottom:24px}
+.toc{list-style:none;padding:0;columns:2;column-gap:40px;margin-top:20px}
+.toc li{font-size:15px;color:var(--text);margin-bottom:10px;break-inside:avoid}
+.toc li .num{display:inline-block;width:28px;color:var(--accent);font-family:var(--font-mono);font-weight:600}
+table{width:100%;border-collapse:collapse;margin:14px 0;font-size:14px;background:var(--bg-card);border-radius:6px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,0.04)}
+th,td{padding:10px 14px;text-align:left;border-bottom:1px solid var(--border);vertical-align:top}
+th{background:var(--bg-light);font-weight:600;font-size:13px;text-transform:uppercase;letter-spacing:1px;color:var(--text-dim)}
+tr:last-child td{border-bottom:none}
+tr:hover{background:var(--bg-light)}
+.split{display:grid;grid-template-columns:1fr 1fr;gap:28px;margin-top:10px}
+.split-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:18px;margin-top:10px}
+.card{background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:18px 20px;box-shadow:0 2px 10px rgba(0,0,0,0.04);transition:box-shadow 0.3s}
+.card:hover{box-shadow:0 4px 18px rgba(0,0,0,0.08)}
+.card h4{font-family:var(--font-heading);font-size:17px;margin-bottom:8px;font-weight:600}
+.card p{font-size:14px;line-height:1.5}
+.quote{border-left:3px solid var(--accent);padding:10px 20px;margin:14px 0;background:transparent}
+.quote p{font-family:var(--font-heading);font-style:italic;font-size:20px;line-height:1.5;color:var(--text)}
+.pre-wrap{background:var(--bg-light);border:1px solid var(--border);border-radius:6px;padding:14px 18px;font-family:var(--font-mono);font-size:11px;line-height:1.45;white-space:pre;overflow-x:auto;color:var(--text);margin:12px 0}
+.arch{display:flex;flex-direction:column;gap:14px;margin:14px 0;font-size:14px}
+.arch-row{display:flex;gap:10px;align-items:stretch;justify-content:center}
+.arch-box{background:var(--bg-card);border:1px solid var(--border);border-radius:6px;padding:10px 14px;flex:1;position:relative;box-shadow:0 1px 3px rgba(0,0,0,0.04)}
+.arch-box .label{font-size:10px;text-transform:uppercase;letter-spacing:1.2px;color:var(--text-dim);margin-bottom:4px;font-weight:600}
+.arch-box .title{font-family:var(--font-heading);font-weight:600;font-size:15px;margin-bottom:2px}
+.arch-box .pct{font-size:12px;color:var(--accent);font-weight:600}
+.arch-box.l1{border-left:3px solid var(--accent3)}
+.arch-box.l2{border-left:3px solid var(--accent3)}
+.arch-box.l3{border-left:3px solid var(--accent2)}
+.arch-box.l4{border-left:3px solid var(--accent2)}
+.arch-box.l5{border-left:3px solid var(--highlight)}
+.arch-box.l6{border-left:3px solid var(--accent);background:rgba(196,90,60,0.04)}
+.arch-control{background:#f5f2ed;border:1px solid var(--border);border-radius:8px;padding:14px 18px;text-align:center}
+.arch-control .label{font-size:10px;text-transform:uppercase;letter-spacing:2px;color:var(--accent);margin-bottom:6px;font-weight:600}
+.arch-control .desc{font-size:13px;color:var(--text)}
+.arch-arrow{text-align:center;font-family:var(--font-mono);color:var(--text-dim);font-size:18px;line-height:1}
+.arch-arrow-label{font-size:11px;color:var(--text-dim);font-style:italic;margin-top:2px}
+.arch-feedback{border:1.5px dashed var(--accent);border-radius:6px;padding:10px 14px;background:rgba(196,90,60,0.03);text-align:center}
+.arch-feedback .label{font-size:10px;text-transform:uppercase;letter-spacing:2px;color:var(--accent);font-weight:700;margin-bottom:4px}
+.arch-human{position:absolute;top:-8px;right:-8px;background:var(--accent);color:white;font-size:9px;padding:2px 6px;border-radius:3px;font-weight:600;letter-spacing:0.5px}
+.stat-row{display:flex;gap:14px;margin:14px 0;flex-wrap:wrap}
+.stat{background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:14px 18px;flex:1;min-width:130px;text-align:center}
+.stat .num{font-family:var(--font-heading);font-size:30px;font-weight:700;color:var(--accent);line-height:1}
+.stat .label{font-size:11px;color:var(--text-dim);margin-top:6px;text-transform:uppercase;letter-spacing:1px}
+.tag{display:inline-block;font-size:10px;padding:2px 8px;border-radius:3px;margin:0 4px 4px 0;background:rgba(196,90,60,0.1);color:var(--accent);font-weight:500;text-transform:uppercase;letter-spacing:0.5px}
+.tag.blue{background:rgba(45,95,138,0.1);color:var(--accent2)}
+.tag.green{background:rgba(90,138,92,0.1);color:var(--accent3)}
+.tag.gray{background:var(--bg-light);color:var(--text-dim)}
+.lead{font-family:var(--font-heading);font-size:20px;font-style:italic;line-height:1.5;color:var(--text);margin:14px 0;padding-left:16px;border-left:2px solid var(--accent)}
+.footnote{font-size:12px;color:var(--text-dim);margin-top:14px;font-style:italic}
+.slide.active .slide-inner > *{animation:slideIn 0.5s ease-out both}
+.slide.active .slide-inner > *:nth-child(2){animation-delay:0.06s}
+.slide.active .slide-inner > *:nth-child(3){animation-delay:0.12s}
+.slide.active .slide-inner > *:nth-child(4){animation-delay:0.18s}
+.slide.active .slide-inner > *:nth-child(5){animation-delay:0.24s}
+.slide.active .slide-inner > *:nth-child(6){animation-delay:0.30s}
+.slide.active .slide-inner > *:nth-child(7){animation-delay:0.36s}
+.slide.active .slide-inner > *:nth-child(8){animation-delay:0.42s}
+@keyframes slideIn{from{opacity:0;transform:translateX(-16px)}to{opacity:1;transform:translateX(0)}}
+@media (max-width:768px){.slide{padding:32px 20px 48px}h1{font-size:30px}h2{font-size:22px}.intro h1{font-size:40px}p,li{font-size:14px}.split,.split-3{grid-template-columns:1fr}.nav-hint{display:none}.pre-wrap{font-size:9px}.toc{columns:1}table{font-size:12px}th,td{padding:6px 8px}}
+</style>
+</head>
+<body>
+
+<div class="slide intro">
+  <div class="slide-inner">
+    <div class="brand">Proposal — 2026-04-18</div>
+    <h1>REjuve</h1>
+    <div class="subtitle">Agentic Marketing System — альтернатива классическому агентству</div>
+    <div class="meta">Оплата по результату · 8-канальная атрибуция · Swiss health compliance</div>
+  </div>
+</div>
+
+<div class="slide">
+  <span class="slide-title">Оглавление</span>
+  <div class="slide-inner">
+    <h2>Структура предложения</h2>
+    <ul class="toc">
+      <li><span class="num">01</span>Контекст и подход</li>
+      <li><span class="num">02</span>Разбор предложения ELPODIUM</li>
+      <li><span class="num">03</span>Специфика REjuve</li>
+      <li><span class="num">04</span>Конкурентный ландшафт DACH</li>
+      <li><span class="num">05</span>Юнит-экономика</li>
+      <li><span class="num">06</span>Что AI реально делает для REjuve</li>
+      <li><span class="num">07</span>Instagram — что работает</li>
+      <li><span class="num">08</span>Channel mix — 8 каналов</li>
+      <li><span class="num">09</span>Архитектура системы</li>
+      <li><span class="num">10</span>% автоматизации по слоям</li>
+      <li><span class="num">11</span>Evals + Feedback + HITL</li>
+      <li><span class="num">12</span>Что остаётся за человеком</li>
+      <li><span class="num">13</span>Матрица ответственности</li>
+      <li><span class="num">14</span>Декомпозиция на элементы</li>
+      <li><span class="num">15</span>Таблица по ELPODIUM</li>
+      <li><span class="num">16</span>Модульное внедрение</li>
+      <li><span class="num">17</span>Почему модульно выигрывает</li>
+      <li><span class="num">18</span>Метрики по результату</li>
+      <li><span class="num">19</span>Pricing — Option R/A/B/C</li>
+      <li><span class="num">20</span>Сравнительная таблица</li>
+      <li><span class="num">21</span>Риски и mitigation</li>
+      <li><span class="num">22</span>Вопросы Tier 1</li>
+      <li><span class="num">23</span>Вопросы Tier 2</li>
+      <li><span class="num">24</span>Вопросы Tier 3</li>
+      <li><span class="num">25</span>Next steps — roadmap</li>
+    </ul>
+  </div>
+</div>
+
+<div class="slide">
+  <span class="slide-title">01 · Контекст</span>
+  <div class="slide-inner">
+    <h2>Контекст и подход</h2>
+    <p class="lead">REjuve (ранее B.Hacking Studio) — premium functional health studio в Zug. Получил предложение от маркетингового агентства ELPODIUM на <strong>~€17 580/год</strong>.</p>
+    <p>Наша задача: предложить <strong>агентную AI-альтернативу</strong> с метриками <em>по результату</em> — пришедшие клиенты × соотношение с затратами, а не по объёму работ.</p>
+    <h3>Подход</h3>
+    <ul>
+      <li>Все оценки основаны на отраслевых источниках 2025–2026: <span class="accent2">AYUN pricing, Averi 2026, CMI 2025, Gartner 2025, Socialinsider 2025, Swissmedic, Nature npj Digital Medicine 2025, Bundesamt für Statistik</span></li>
+      <li>60+ проверенных источников</li>
+      <li>Конкретные цифры, не маркетинговые заявления</li>
+    </ul>
+    <h3>Что исследовалось</h3>
+    <ul>
+      <li>Реальная продуктовая линейка и ценовая структура REjuve</li>
+      <li>Конкурентный ландшафт DACH (15 игроков premium-wellness)</li>
+      <li>Юнит-экономика functional medicine (LTV, CAC, conversion)</li>
+      <li>Швейцарская регуляторика health advertising (HMG / UWG / Swissmedic)</li>
+      <li>Каналы и форматы маркетинга 2026</li>
+      <li>Capabilities AI-агентов в апреле 2026</li>
+    </ul>
+  </div>
+</div>
+
+<div class="slide">
+  <span class="slide-title">02 · Разбор ELPODIUM</span>
+  <div class="slide-inner">
+    <h2>Разбор предложения ELPODIUM</h2>
+    <div class="split">
+      <div>
+        <h3>Экономика</h3>
+        <table>
+          <tr><td>Setup + мес 1</td><td><strong>€3 600</strong></td></tr>
+          <tr><td>Мес 2–3 (×2)</td><td>€3 180</td></tr>
+          <tr><td>Мес 4–12 (×9)</td><td>€10 800</td></tr>
+          <tr><td><strong>База/год</strong></td><td><strong>~€17 580</strong></td></tr>
+          <tr><td>KPI-бонус (потолок)</td><td>до €4 050</td></tr>
+          <tr><td><strong>Максимум/год</strong></td><td><strong>~€21 630</strong></td></tr>
+        </table>
+      </div>
+      <div>
+        <h3>Команда 7 человек</h3>
+        <p>CEO · проджект · маркетолог в нише · стратег · SMM · таргетолог · дизайнер</p>
+      </div>
+    </div>
+    <h3>Что важно отметить в структуре оффера</h3>
+    <p class="dim" style="font-size:14px;margin-bottom:10px">Нейтральный разбор — не критика, а input для выбора модели сотрудничества:</p>
+    <ol>
+      <li><strong>Фиксированный retainer €1 200/мес</strong> в месяцы 4+ не зависит от результата. KPI-бонус привязан к «плану лидов» после 3-го месяца.</li>
+      <li><strong>Health-niche compliance</strong> не заявлен. Кейсы: рестораны, бельё, IT. Для Swiss wellness нужна отдельная экспертиза (HMG / UWG / Swissmedic).</li>
+      <li><strong>Мультиязычность</strong> не указана. REjuve работает с DE / EN / RU.</li>
+      <li><strong>Контент-план «12–15 постов + рилс»</strong> — модель 2021–2023. Данные 2025 (Socialinsider) показывают смещение engagement к carousels.</li>
+    </ol>
+  </div>
+</div>
+
+<div class="slide">
+  <span class="slide-title">03 · Специфика REjuve</span>
+  <div class="slide-inner">
+    <h2>Специфика REjuve — ключевые вводные</h2>
+    <div class="split">
+      <div>
+        <h3>1 · Regulatory gap</h3>
+        <p>Founder <strong>Kristina Busse — не MD</strong> (certified nutritionist, BSc Nutritional Therapy в процессе). Licensed medical practitioner публично не найден.</p>
+        <p class="dim" style="font-size:14px"><em>Следствие:</em> REjuve юридически не может позиционировать diagnostic+interpretation+supplement combo (Arztvorbehalt). Всё marketing сообщение — в wellness-framing.</p>
+        <h3>3 · «Средний чек 60 CHF»</h3>
+        <p>Не single-session. Не LTV. Это <strong>blended ARPU per visit</strong> (unit внутри memberships/packs). Реальный LTV зависит от tier-mix.</p>
+        <h3>4 · Мультиязычный рынок Zug</h3>
+        <p>DE (кантональный) + EN (экспаты) + RU (активная expat community).</p>
+      </div>
+      <div>
+        <h3>2 · Product ladder (реальный, с сайта)</h3>
+        <table>
+          <tr><th>Tier</th><th>CHF</th><th>LTV/год</th></tr>
+          <tr><td>Single sessions</td><td>50–150</td><td>sporadic</td></tr>
+          <tr><td>10-packs</td><td>350–600</td><td>400–1 200</td></tr>
+          <tr><td>Programs</td><td>1 250–1 510</td><td>—</td></tr>
+          <tr><td><strong>Bronze membership</strong></td><td><strong>400/мес</strong></td><td><strong>4 800</strong></td></tr>
+          <tr><td><strong>Gold membership</strong></td><td><strong>700/мес</strong></td><td><strong>8 400</strong></td></tr>
+          <tr><td><strong>Platinum membership</strong></td><td><strong>1 500/мес</strong></td><td><strong>18 000</strong></td></tr>
+        </table>
+        <h3>5 · Ребрендинг REjuve</h3>
+        <p class="dim" style="font-size:14px">Публично всё ещё B.Hacking Studio. IG @rejuve.healthstudio не подтверждён. Влияет на контент-производство и timing.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="slide">
+  <span class="slide-title">04 · Конкуренты</span>
+  <div class="slide-inner">
+    <h2>Конкурентный ландшафт DACH</h2>
+    <h3>Прямой конкурент #1: AYUN Zurich</h3>
+    <div class="stat-row">
+      <div class="stat"><div class="num">3 300</div><div class="label">CHF / longevity check</div></div>
+      <div class="stat"><div class="num">5.5k–8.9k</div><div class="label">CHF/год membership</div></div>
+      <div class="stat"><div class="num">580 м²</div><div class="label">Maximon-backed · 7 человек</div></div>
+    </div>
+    <p class="dim" style="font-size:14px">Идентичный tech stack: HBOT / cryo / red light / 150+ биомаркеров. CEO Francois Casanova.</p>
+    <h3>Ценовой spectrum DACH (15 игроков)</h3>
+    <table>
+      <tr><th>Слой</th><th>CHF</th><th>Примеры</th></tr>
+      <tr><td>Ultra-lux resort</td><td>20k–50k/программа</td><td>Clinique La Prairie, Chenot Palace, Lanserhof</td></tr>
+      <tr><td><strong>Premium urban</strong></td><td><strong>1 850–14 500 check-up</strong></td><td>AYUN, Longevity Center Zurich, <em>REjuve</em></td></tr>
+      <tr><td>Bio-medical clinical</td><td>10–30k / 2–4 нед</td><td>Paracelsus Lustmühle</td></tr>
+      <tr><td>Local practitioners</td><td>55–710 / сеанс</td><td>Paramed Baar, Dr. Haucke</td></tr>
+    </table>
+    <h3>Ключевые insights</h3>
+    <ol>
+      <li><strong>Zug-кантон — белое пятно.</strong> В радиусе 10 км от REjuve нет другой premium diagnostic-first студии. Ближайший конкурент (AYUN) в 30 мин езды, ultra-luxe resorts — в часах пути. REjuve — единственный «местный» premium-вариант для Zug-жителя.</li>
+      <li><strong>Gold membership 8 400 CHF/год попадает точно в AYUN range</strong> (5 500–8 900). Значит цена не overpriced относительно ближайшего конкурента и не дешёвка относительно ultra-lux — правильный premium-spot.</li>
+      <li><strong>Positioning gap = studio vs institutional.</strong> AYUN — clinical longevity, 580 м², Maximon-backed, корпоративный бренд. REjuve — founder-led studio с biohacking-эстетикой, community-driven, менее формальная. Разные ICP: кому-то нужна клиника, кому-то studio experience. REjuve занимает нишу, не пытаясь клонировать AYUN.</li>
+    </ol>
+  </div>
+</div>
+
+<div class="slide">
+  <span class="slide-title">05 · Юнит-экономика</span>
+  <div class="slide-inner">
+    <h2>Юнит-экономика — industry benchmarks</h2>
+    <div class="split">
+      <div>
+        <h3>LTV benchmarks (functional medicine)</h3>
+        <ul>
+          <li><strong>Functional-med program:</strong> $6 000–8 000/год <span class="dim">(Rupa Health)</span></li>
+          <li><strong>Anti-aging comprehensive:</strong> $3 000–8 000/год</li>
+          <li><strong>Concierge medicine median:</strong> $2 000–5 000/год</li>
+          <li><strong>Longevity CH entry (Maximon):</strong> CHF 3 300 one-off</li>
+        </ul>
+        <h3>Conversion rates</h3>
+        <ul>
+          <li>Wellness landing → lead: <strong>8.2% median</strong></li>
+          <li>Medical consultation → paying: <strong>3.6–7.4%</strong></li>
+          <li>Single → program upsell: публично не раскрывается</li>
+        </ul>
+      </div>
+      <div>
+        <h3>CAC benchmarks</h3>
+        <ul>
+          <li><strong>Meta healthcare CPL:</strong> $41–52</li>
+          <li><strong>Meta healthcare CPA:</strong> ~$61</li>
+          <li><strong>Switzerland премия:</strong> +20–30% к DACH</li>
+          <li class="accent"><strong>Working CAC для CH premium: €300–700</strong></li>
+        </ul>
+        <h3>Healthy ratios</h3>
+        <div class="stat-row">
+          <div class="stat"><div class="num">3:1</div><div class="label">LTV : CAC minimum</div></div>
+          <div class="stat"><div class="num">&lt; 12 мес</div><div class="label">CAC payback</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="slide">
+  <span class="slide-title">06 · AI-агенты 2026</span>
+  <div class="slide-inner">
+    <h2>Что AI может реально делать для REjuve сейчас</h2>
+    <p class="dim" style="font-size:14px">Простыми словами — без технического жаргона. За всё это отвечают самые современные модели от Anthropic, OpenAI и Google (апрель 2026).</p>
+    <div class="split">
+      <div>
+        <h3>Что AI делает хорошо</h3>
+        <ul>
+          <li><strong>Пишет на трёх языках сразу</strong> (немецкий, английский, русский) — посты, сторис, рилс-сценарии, email</li>
+          <li><strong>Изучает конкурентов</strong> — собирает их цены, офферы, контент, рекламу в одну сравнительную таблицу</li>
+          <li><strong>Создаёт визуалы</strong> — lifestyle-изображения, схемы, иллюстрации (не заменяет фотосессию клиентов, но помогает с дополнительным контентом)</li>
+          <li><strong>Монтирует короткие видео</strong> (до 20 секунд) — для reels и stories</li>
+          <li><strong>Держит в голове всё</strong> — бренд-стиль, прошлые посты, compliance-правила — при каждой новой задаче</li>
+          <li><strong>Работает 24/7</strong> — автоматические email и WhatsApp-сообщения после визита, напоминания, re-activation</li>
+        </ul>
+      </div>
+      <div>
+        <h3>Где AI нужен человек рядом</h3>
+        <ul>
+          <li><strong>Медицинские утверждения</strong> — AI может ошибиться в 15–25% health-кейсов без проверки. Все публикации с health-claims проходят через врача.</li>
+          <li><strong>Тонкий швейцарско-немецкий тон</strong> — draft хороший, но для premium-аудитории Zug нужна еженедельная вычитка носителем</li>
+          <li><strong>Реклама в Meta для health</strong> — Meta с янв 2025 режет конверсионную статистику для health-аккаунтов. Нужна настройка обхода этого ограничения.</li>
+          <li><strong>Физические съёмки</strong> — клиенты, процедуры, интерьер студии — только настоящий фотограф</li>
+          <li><strong>Закрытие продаж</strong> — разговор по телефону с потенциальным клиентом — всегда человек</li>
+        </ul>
+      </div>
+    </div>
+    <h3>Контекст рынка — где сейчас находится индустрия</h3>
+    <div class="stat-row">
+      <div class="stat"><div class="num">89%</div><div class="label">компаний уже используют AI в контенте</div></div>
+      <div class="stat"><div class="num">23%</div><div class="label">имеют настоящую агентную систему (остальные — отдельные инструменты)</div></div>
+      <div class="stat"><div class="num">73%</div><div class="label">используют модель «AI + человек»</div></div>
+    </div>
+    <p class="footnote">Источники: Averi 2026 State of AI Content Marketing, CMI 2025, Gartner 2025, HubSpot 2026. Чистая автоматизация без человека проваливается через 3–6 месяцев (падение качества) — поэтому строим именно hybrid-систему.</p>
+  </div>
+</div>
+
+<div class="slide">
+  <span class="slide-title">07 · Instagram 2026</span>
+  <div class="slide-inner">
+    <h2>Instagram — что работает сейчас</h2>
+    <p class="dim" style="font-size:14px">Данные из отраслевых отчётов 2025–Q1 2026 (Socialinsider, Hootsuite, Mosseri @Instagram official, ALM Corp).</p>
+    <div class="split">
+      <div>
+        <h3>Engagement по форматам</h3>
+        <table>
+          <tr><th>Формат</th><th>Engagement</th><th>Роль</th></tr>
+          <tr><td>Reels</td><td><strong>1.23%</strong></td><td>Discovery</td></tr>
+          <tr><td>Carousels</td><td><strong class="accent">10.15%</strong></td><td>Engagement + conversion</td></tr>
+          <tr><td>Static image</td><td>~7% (wellness)</td><td>Announcements</td></tr>
+          <tr><td>Stories</td><td>5-15% viewers</td><td>Retention</td></tr>
+        </table>
+        <div class="quote"><p>Algorithm shift — carousels = engagement champions.</p><div class="dim" style="font-size:12px;margin-top:6px">— Adam Mosseri, Jan 2025</div></div>
+      </div>
+      <div>
+        <h3>Organic reach</h3>
+        <ul>
+          <li>Business &lt;10k: <strong>2-3%</strong> (упало с 10-15% в 2020)</li>
+          <li>Business &gt;10k: <strong>&lt;1%</strong></li>
+          <li><strong class="danger">−30-40% YoY</strong> в 2025</li>
+          <li>87% business report reach decline (Sprout Social)</li>
+        </ul>
+        <h3>Meta Health Policy (с янв 2025)</h3>
+        <ul>
+          <li>Запрет conversion events для health-labeled</li>
+          <li><strong class="danger">−30-40%</strong> ad efficiency в категории</li>
+          <li>С марта 2026: mandatory AI-disclosure</li>
+        </ul>
+        <p class="footnote"><strong>Решение:</strong> IG-категория как Health spa / Medical centre (не триггерит restrictions).</p>
+      </div>
+    </div>
+    <h3>Рекомендованный weekly content mix для REjuve</h3>
+    <p><span class="tag">3–4 Reels</span><span class="tag blue">2–3 Carousels</span><span class="tag green">1–2 Static</span><span class="tag gray">4–7 Stories</span></p>
+    <p class="dim" style="font-size:14px">Balance 50/50 Reels vs Carousels: Reels дают охват, Carousels удерживают внимание и конвертируют.</p>
+  </div>
+</div>
+
+<div class="slide">
+  <span class="slide-title">08 · Channel mix</span>
+  <div class="slide-inner">
+    <h2>Channel mix — 8 параллельных каналов</h2>
+    <h3>Почему multi-channel</h3>
+    <ol>
+      <li>Conversion tracking в Meta ограничен для health-категории</li>
+      <li>Organic reach в Instagram снизился до 2-3% для small-to-mid аккаунтов</li>
+      <li>Zug-специфика: local channels работают сильнее, чем generic social</li>
+    </ol>
+    <h3>Рекомендованный channel mix Wave 1</h3>
+    <table>
+      <tr><th>Канал</th><th>% усилий</th><th>New clients/мес</th><th>Auto %</th></tr>
+      <tr><td>Instagram (carousel+reels mix)</td><td>20%</td><td>3–5</td><td>65%</td></tr>
+      <tr><td>Google Business Profile + local SEO</td><td>15%</td><td>4–7</td><td>80%</td></tr>
+      <tr><td>Google Ads (local intent)</td><td>10%</td><td>3–5</td><td>90%</td></tr>
+      <tr><td><strong>Corporate outreach (Glencore+)</strong></td><td>15%</td><td><strong>2–4 (high AOV)</strong></td><td>60%</td></tr>
+      <tr><td>Email automation</td><td>10%</td><td>2–4 retention</td><td>90%</td></tr>
+      <tr><td>WhatsApp Business</td><td>10%</td><td>3–5 retention</td><td>85%</td></tr>
+      <tr><td>Expat partnerships</td><td>10%</td><td>2–4</td><td>50%</td></tr>
+      <tr><td>Referral programme</td><td>10%</td><td>3–5</td><td>75%</td></tr>
+      <tr><td><strong>TOTAL</strong></td><td>100%</td><td><strong class="accent">22–39 new/мес</strong></td><td>weighted 73%</td></tr>
+    </table>
+    <h3>Каналы, не в приоритете для REjuve</h3>
+    <p><span class="tag gray">TikTok — ICP mismatch</span><span class="tag gray">Pinterest — female skew</span><span class="tag gray">Reels-only без carousels — слабый conversion</span></p>
+  </div>
+</div>
+
+<div class="slide">
+  <span class="slide-title">09 · Архитектура</span>
+  <div class="slide-inner">
+    <h2>Архитектура системы — 6 слоёв + обратная связь</h2>
+    <p class="dim" style="font-size:14px">Контент производится слева направо, проходит через compliance-проверку, публикуется, результаты измеряются и обратной петлёй возвращаются в систему для обучения.</p>
+    <div class="arch">
+
+      <div class="arch-row">
+        <div class="arch-box l1"><div class="label">Слой 1</div><div class="title">Research</div><div class="pct">85–90% авто</div></div>
+        <div class="arch-box l2"><div class="label">Слой 2</div><div class="title">Content</div><div class="pct">60–70% авто</div></div>
+        <div class="arch-box l3"><div class="label">Слой 3</div><div class="title">Distribution</div><div class="pct">50–60% авто</div></div>
+        <div class="arch-box l4"><div class="label">Слой 4</div><div class="title">Lead lifecycle</div><div class="pct">70–75% авто</div></div>
+      </div>
+
+      <div class="arch-arrow">↓<div class="arch-arrow-label">каждый артефакт перед публикацией</div></div>
+
+      <div class="arch-row">
+        <div class="arch-box l6" style="max-width:520px">
+          <div class="arch-human">Licensed MD 2–4 ч/нед</div>
+          <div class="label">Слой 6 · Compliance</div>
+          <div class="title">Pre-publish gate</div>
+          <div style="font-size:13px;margin-top:6px">Проверка: Swiss HMG/UWG · Meta health policy · brand voice · факты.<br><strong class="danger">Блокирует публикацию</strong>, если оценка ниже порога.</div>
+        </div>
+      </div>
+
+      <div class="arch-arrow">↓<div class="arch-arrow-label">публикация</div></div>
+
+      <div class="arch-row">
+        <div class="arch-box l5"><div class="label">Слой 5</div><div class="title">Analytics &amp; Attribution</div><div style="font-size:13px;margin-top:4px">UTM → SimplyBook webhook → дашборд.<br>CAC · MER · LTV · conversion per tier</div><div class="pct" style="margin-top:4px">85–90% авто</div></div>
+      </div>
+
+      <div class="arch-feedback">
+        <div class="label">↑ Feedback loop — данные идут наверх ↑</div>
+        <div style="font-size:13px">Performance metrics возвращаются в систему для обучения</div>
+      </div>
+
+      <div class="arch-control">
+        <div class="label">Control plane · Learning system</div>
+        <div class="desc"><strong>Learning store</strong> (каждый артефакт + его метрики) → <strong>Auto feedback</strong> (еженедельный batch с одобрением) → <strong>HITL triggers</strong> (CAC / MER / compliance / budget alerts)</div>
+      </div>
+
+      <div class="arch-arrow">↓<div class="arch-arrow-label">обновления возвращаются в пайплайн</div></div>
+
+      <div class="arch-control" style="background:var(--bg-card)">
+        <div class="label">Orchestrator · Claude Sonnet 4.6</div>
+        <div class="desc" style="font-size:13px">Роутит задачи · следит за бюджетами · применяет обновления к слоям 1–6.<br>Workers: Haiku 4.5 (массовые) · Opus 4.7 (только критичные).</div>
+      </div>
+
+    </div>
+    <p class="footnote"><strong>Циклы обучения:</strong> real-time — блок публикации · ежедневно — alerts · еженедельно — feedback batch · ежемесячно — стратегический review · ежеквартально — переобучение.</p>
+  </div>
+</div>
+
+<div class="slide">
+  <span class="slide-title">10 · % автоматизации</span>
+  <div class="slide-inner">
+    <h2>Реалистичный % автоматизации по слоям</h2>
+    <table>
+      <tr><th>Слой</th><th>Auto %</th><th>Что делает</th><th>Evidence</th></tr>
+      <tr><td>L1 · Research &amp; Intel</td><td class="accent"><strong>85–90%</strong></td><td>Конкуренты, audience insights, trends, keywords</td><td>Anthropic multi-agent +90.2%</td></tr>
+      <tr><td>L2 · Content Production</td><td><strong>60–70% gen</strong> / 100% sched</td><td>Drafts EN/DE/RU, images, videos, hashtags</td><td>Averi 2026 (73% teams hybrid)</td></tr>
+      <tr><td>L3 · Distribution &amp; Ads</td><td><strong>50–60%</strong></td><td>Creative variants, budget mgmt, email flows</td><td>Meta health-bucket drag</td></tr>
+      <tr><td>L4 · Lead Lifecycle</td><td><strong>70–75%</strong></td><td>Enrichment, scoring, follow-ups, reactivation</td><td>HubSpot +25–30%</td></tr>
+      <tr><td>L5 · Analytics &amp; Attribution</td><td class="accent"><strong>85–90%</strong></td><td>UTM → SimplyBook → BigQuery → dashboard</td><td>Native webhooks</td></tr>
+      <tr><td>L6 · Compliance &amp; QA</td><td><strong class="danger">40–50%</strong></td><td>Keyword screener, Anhang 14 LIV lookup</td><td>Swissmedic 80 дел/2023</td></tr>
+      <tr><td><strong>Overall weighted</strong></td><td><strong class="accent">~65–70%</strong></td><td></td><td>Averi 2026 + Anthropic research</td></tr>
+    </table>
+    <p class="footnote">Не «80%+». Честная evidence-based оценка с учётом Meta health restrictions и Swiss compliance требований.</p>
+  </div>
+</div>
+
+<div class="slide">
+  <span class="slide-title">11 · Evals + Feedback + HITL</span>
+  <div class="slide-inner">
+    <h2>Evals + Feedback Loop + Metric-driven HITL</h2>
+    <p class="lead">Без этих трёх компонентов — набор скриптов, не learning agent. Cross-cutting слой над всеми 6 слоями.</p>
+    <div class="split">
+      <div>
+        <h3>Evals — pre-publish gate</h3>
+        <table>
+          <tr><th>Метрика</th><th>Threshold</th></tr>
+          <tr><td>Brand voice (0-10)</td><td>≥ 7.5</td></tr>
+          <tr><td>Compliance</td><td><strong>PASS</strong> обязательно</td></tr>
+          <tr><td>Factuality (0-10)</td><td>≥ 8 для health</td></tr>
+          <tr><td>Readability DE/EN/RU</td><td>band-specific</td></tr>
+        </table>
+        <p class="footnote">Evaluators: Opus 4.7 (batched LLM-as-judge) + NeMo Guardrails (rules) + human 10% sample weekly.</p>
+        <h3>Feedback loops (weekly batch, human-approved)</h3>
+        <ul style="font-size:14px">
+          <li>Low brand voice 2× → corpus update proposal</li>
+          <li>High engagement (p90) → golden set candidate</li>
+          <li>Meta rejection pattern → screener update</li>
+          <li>Low conversion by source → budget reallocation</li>
+        </ul>
+      </div>
+      <div>
+        <h3>Metric-driven HITL — по threshold</h3>
+        <table>
+          <tr><th>Trigger</th><th>Action</th></tr>
+          <tr><td>CAC &gt; cap 2 нед</td><td>Pause channels</td></tr>
+          <tr><td>MER &lt; 2.0 3 мес</td><td>Strategy review</td></tr>
+          <tr><td>No-show &gt; 15%</td><td>Lead quality audit</td></tr>
+          <tr><td>Compliance &lt; 8 (3+ artifacts)</td><td><strong class="danger">Halt publishing</strong></td></tr>
+          <tr><td>Budget &gt; 20% deviation</td><td>Pause + review</td></tr>
+          <tr><td>Meta ad rejection</td><td>Appeal draft ready</td></tr>
+        </table>
+        <h3>Почему это важно</h3>
+        <ul style="font-size:14px">
+          <li>Система не просто «генерит», а <strong>улучшается по данным</strong></li>
+          <li>Каждое стратегическое решение <strong>обосновано метрикой</strong></li>
+          <li>Защита от «AI делает всё, не спрашивая»</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="slide">
+  <span class="slide-title">12 · Человек в системе</span>
+  <div class="slide-inner">
+    <h2>Что остаётся за человеком — 12–18 ч/нед</h2>
+    <p class="dim" style="font-size:14px">Оценка основана на отраслевых источниках (Anthropic multi-agent, AWS HITL healthcare, Averi 2026, hillock studio brand voice).</p>
+    <table>
+      <tr><th>Функция</th><th>Кто</th><th>Часов/нед</th><th>Обоснование</th></tr>
+      <tr><td>Medical/legal review</td><td><strong>Licensed practitioner</strong></td><td>2–4</td><td>ASCO 20% inaccuracy + Swissmedic enforcement</td></tr>
+      <tr><td>Strategic decisions</td><td>Founder</td><td>1–2</td><td>Не заменяется by design</td></tr>
+      <tr><td>Sales closing звонки</td><td>Owner/sales</td><td>4–6</td><td>Conversion 3–10% × volume</td></tr>
+      <tr><td>Brand voice + DE review</td><td>Marketing lead</td><td>1–2</td><td>Weekly similarity checks</td></tr>
+      <tr><td>Photo/video съёмка</td><td>Photographer</td><td>2–4 (периодично)</td><td>Physical production</td></tr>
+      <tr><td>Agent ops + QA</td><td>Marketing lead</td><td>2–3</td><td>Meta rejections, prompt tuning</td></tr>
+      <tr><td>Influencer + partners</td><td>Owner</td><td>1–2</td><td>Human-to-human</td></tr>
+      <tr><td>Event prep/follow-up</td><td>Owner</td><td>1–2 avg</td><td>Physical events</td></tr>
+      <tr><td><strong>TOTAL steady state</strong></td><td></td><td><strong class="accent">12–18 ч/нед</strong></td><td>сумма по функциям</td></tr>
+    </table>
+    <p class="footnote"><strong>Build-out phase (недели 1–8): 25–35 ч/нед</strong> — brand corpus (30–50 эталонов), compliance library setup с lawyer (5–10 ч), attribution plumbing, first-month calibration.</p>
+  </div>
+</div>
+
+<div class="slide">
+  <span class="slide-title">13 · Матрица ответственности</span>
+  <div class="slide-inner">
+    <h2>Матрица ответственности — кто за что отвечает</h2>
+    <p class="lead">Проект требует маркетинговой экспертизы, которую я не беру на себя. Я отвечаю за техническую инфраструктуру; бренд, стратегия и продажи остаются на founder'е; отдельные эксперты привлекаются точечно.</p>
+    <div class="split-3">
+      <div class="card">
+        <h3 style="color:var(--accent2);letter-spacing:1.5px;font-size:11px">МОЯ ЗОНА</h3>
+        <h4>Техническая инфраструктура</h4>
+        <ul style="font-size:13px;padding-left:18px">
+          <li>Система агентов (build + ops)</li>
+          <li>Attribution pipeline (UTM → SimplyBook → dashboard)</li>
+          <li>Integrations (Mailchimp, Meta, Google APIs, WhatsApp)</li>
+          <li>Content pipeline infrastructure</li>
+          <li>Evals + feedback loop + observability</li>
+          <li>Compliance rule engine (с input от юриста)</li>
+          <li>Cost transparency, мониторинг, инциденты</li>
+        </ul>
+        <p class="footnote" style="font-size:11px"><strong>Гарантирую:</strong> система работает технически, метрики честны, data flow без потерь. <strong>Не гарантирую:</strong> сколько клиентов придут — зависит от контента, креативов, closing.</p>
+      </div>
+      <div class="card">
+        <h3 style="color:var(--accent);letter-spacing:1.5px;font-size:11px">FOUNDER REJUVE</h3>
+        <h4>Бренд, стратегия, продажи</h4>
+        <ul style="font-size:13px;padding-left:18px">
+          <li>Brand voice — approval и калибровка</li>
+          <li>Стратегическое позиционирование</li>
+          <li>Quarterly content pillars</li>
+          <li>Sales closing звонки</li>
+          <li>Influencer и partner relationships</li>
+          <li>Event delivery (open days, ceremonies)</li>
+          <li>Final calls на visual brand-fit</li>
+        </ul>
+        <p class="footnote" style="font-size:11px"><strong>Steady state:</strong> 5–8 ч/нед. <strong>Build-out (недели 1–8):</strong> 10–15 ч/нед — brand corpus creation, calibration.</p>
+      </div>
+      <div class="card">
+        <h3 style="color:var(--accent3);letter-spacing:1.5px;font-size:11px">EXTERNAL SPECIALISTS</h3>
+        <h4>Точечная экспертиза</h4>
+        <ul style="font-size:13px;padding-left:18px">
+          <li><strong>Licensed practitioner</strong> — medical review <span class="dim">(2–4 ч/нед)</span></li>
+          <li><strong>Senior копирайтер</strong> — brand voice setup <span class="dim">(one-off)</span></li>
+          <li><strong>DE native reviewer</strong> — weekly content <span class="dim">(1–2 ч/нед)</span></li>
+          <li><strong>Performance marketer</strong> — ads, media buying <span class="dim">(2–4 ч/нед)</span></li>
+          <li><strong>Swiss lawyer</strong> — compliance library <span class="dim">(one-off)</span></li>
+          <li><strong>Photographer</strong> — физ съёмки <span class="dim">(по запросу)</span></li>
+        </ul>
+        <p class="footnote" style="font-size:11px"><strong>Экономика:</strong> ~€1.4–3k/мес (steady state) + €3–6k one-off (brand corpus + lawyer).</p>
+      </div>
+    </div>
+    <p class="footnote"><strong>Почему такое распределение:</strong> я не маркетолог. Обещать маркетинговый результат я не могу — могу обещать работающую инфраструктуру. Маркетинговая экспертиза подтягивается точечно через founder + external specialists, без full agency overhead. Детали — в <code>work-decomposition.md</code> §6.</p>
+  </div>
+</div>
+
+<div class="slide">
+  <span class="slide-title">14 · Декомпозиция</span>
+  <div class="slide-inner">
+    <h2>12 блоков работы — отранжированы по важности для привлечения клиентов</h2>
+    <p class="dim" style="font-size:14px">Критерий скоринга: насколько блок напрямую двигает новых платящих клиентов для REjuve. Высокий вес → Wave 1; средний → Wave 2; низкий → Wave 3 или исключаем.</p>
+    <table style="font-size:12px">
+      <tr><th>#</th><th>Блок</th><th>Вес</th><th>Волна</th><th>Почему такой вес</th></tr>
+      <tr><td><strong>B9</strong></td><td><strong>Attribution &amp; analytics</strong></td><td><strong class="accent">95%</strong></td><td>Wave 1</td><td>Без этого ни один другой блок нельзя измерить. Клиент впервые видит реальный CAC/LTV.</td></tr>
+      <tr><td><strong>B12</strong></td><td><strong>Human-only (sales closing, sign-off)</strong></td><td><strong class="accent">95%</strong></td><td>всегда</td><td>Sales closing = единственный путь от лида к платящему клиенту. Роли у клиента.</td></tr>
+      <tr><td><strong>B5</strong></td><td><strong>Organic &amp; local</strong></td><td><strong class="accent">90%</strong></td><td>Wave 1</td><td>Expected 9–16 new clients/мес (GBP + local SEO + referral + expat). Самый большой direct-driver для Zug-бизнеса.</td></tr>
+      <tr><td><strong>B7</strong></td><td><strong>B2B corporate outreach</strong></td><td><strong class="accent">85%</strong></td><td>Wave 1</td><td>Zug = top-5 global commodity hub. 1 corporate deal = 5–20 individual clients. Unique leverage.</td></tr>
+      <tr><td><strong>B10</strong></td><td><strong>Compliance &amp; quality</strong></td><td><strong>80%</strong></td><td>Wave 2</td><td>HMG штраф до 50k CHF, Meta банит health-аккаунты. Обязательная gate для B3/B4.</td></tr>
+      <tr><td><strong>B2</strong></td><td><strong>Стратегия и позиционирование</strong></td><td><strong>75%</strong></td><td>Wave 2</td><td>Brand voice критичен для premium-сегмента. Без 30–50 эталонов AI генерит generic контент.</td></tr>
+      <tr><td><strong>B6</strong></td><td><strong>Email / WhatsApp / Telegram</strong></td><td><strong>75%</strong></td><td>Wave 1–2</td><td>Retention = multiplier LTV. WhatsApp 98% open rate в DACH. Для membership-модели критично.</td></tr>
+      <tr><td><strong>B1</strong></td><td><strong>Research &amp; discovery</strong></td><td>70%</td><td>Wave 1</td><td>Foundational, но уже частично сделано в research. Низкий ongoing cost.</td></tr>
+      <tr><td><strong>B4</strong></td><td><strong>Платная реклама (Meta + Google)</strong></td><td>70%</td><td>Wave 2</td><td>Google Ads на local intent — MUST. Meta в health-bucket ограничен. Expected 6–10 clients/мес.</td></tr>
+      <tr><td><strong>B3</strong></td><td><strong>Контент-производство</strong></td><td>65%</td><td>Wave 1–2</td><td>Engagement medium-term. Stories — Wave 1 (low risk). Посты — Wave 2 (нужен compliance).</td></tr>
+      <tr><td><strong>B8</strong></td><td><strong>Lead lifecycle</strong></td><td>55%</td><td>Wave 3</td><td>+25–30% к conversion, но нужен volume of leads. В первые месяцы overkill.</td></tr>
+      <tr><td><strong>B11</strong></td><td><strong>Физические активности</strong></td><td>50%</td><td>Wave 2–3</td><td>Events + influencers + direct mail работают медленно. Требуют бюджета и planning.</td></tr>
+    </table>
+    <p class="footnote"><strong>Wave 1 (обязательно):</strong> B9 + B12 + B5 + B7 + часть B6 (email) + часть B3 (stories) + B1. Ожидаемый результат за 4–8 недель: 12–20 new clients/мес + baseline CAC/LTV.</p>
+    <p class="footnote"><strong>Исключаем из оффера ELPODIUM:</strong> тайный покупатель (уже есть в research), массфоловинг (нарушает ToS), отдельная product-photo фабрика (AI + 1–2 physical сессии/мес достаточно).</p>
+  </div>
+</div>
+
+<div class="slide">
+  <span class="slide-title">15 · Таблица по ELPODIUM</span>
+  <div class="slide-inner">
+    <h2>Что из предложения ELPODIUM делает агентная система</h2>
+    <p class="dim" style="font-size:14px">Поэлементный разбор: каждый пункт из предложения ELPODIUM → кто и как это закрывает в нашей модели.</p>
+    <table style="font-size:12px">
+      <tr><th>Элемент ELPODIUM</th><th>Как закрываем</th><th>Ответственный</th></tr>
+      <tr><td colspan="3" style="background:var(--bg-light);font-weight:600">Стратегия (20 дней)</td></tr>
+      <tr><td>Кастдевы до 10 глубинных интервью</td><td>🟡 AI готовит вопросы, транскрипцию, анализ; сами звонки — founder</td><td>Founder + AI</td></tr>
+      <tr><td>Анализ ЦА (портрет, боли, критерии, лестница Бена-Ханта)</td><td>🟢 AI парсит соцсети/форумы/отзывы, кластеризует</td><td>AI + founder 2ч approval</td></tr>
+      <tr><td>Анализ 6–7 конкурентов</td><td>🟢 AI полностью. <strong>Уже сделано для 15 игроков DACH.</strong></td><td>AI</td></tr>
+      <tr><td>Анализ рекламы конкурентов (Meta Ad Library)</td><td>🟢 AI скрейпит, NLP-анализ</td><td>AI</td></tr>
+      <tr><td>Тайный покупатель у конкурентов</td><td>🔴 Human — через контрактора выборочно</td><td>External</td></tr>
+      <tr><td>Аудит профиля REjuve</td><td>🟡 AI собирает метрики; стратегические решения — founder</td><td>AI + Founder</td></tr>
+      <tr><td>Анализ скриптов продаж</td><td>🟡 AI анализирует паттерны; применение — sales</td><td>AI + Founder</td></tr>
+      <tr><td>Контент-план и рубрикатор</td><td>🟢 AI генерит pillars, темы, календарь</td><td>AI + Founder quarterly approval</td></tr>
+      <tr><td>Упаковка профиля (шапка, хайлайтс, хештеги)</td><td>🟡 AI даёт варианты; final call — founder</td><td>AI + Founder</td></tr>
+      <tr><td>Анализ сайта</td><td>🟡 AI технический аудит; UX — human</td><td>AI + founder</td></tr>
+      <tr><td>Позиционирование и SWOT</td><td>🟡 AI матрица; выводы — founder</td><td>AI + Founder</td></tr>
+      <tr><td>Анализ спроса (keywords DE/EN/RU)</td><td>🟢 AI полностью</td><td>AI</td></tr>
+      <tr><td colspan="3" style="background:var(--bg-light);font-weight:600">Ежемесячное ведение</td></tr>
+      <tr><td>12–15 постов/мес</td><td>🟡 AI drafts EN/DE/RU; medical + DE review</td><td>AI + Medical + DE reviewer</td></tr>
+      <tr><td>90–120 сторис/мес</td><td>🟢 AI полностью + scheduling</td><td>AI + batch approval</td></tr>
+      <tr><td>Reels монтаж/scripts</td><td>🟡 AI scripts и b-roll; физ съёмка — human</td><td>AI + Photographer</td></tr>
+      <tr><td>Таргет (настройка, ЦА, креативы, оптимизация)</td><td>🟡 AI programmatic; compliance review перед запуском</td><td>AI + Performance marketer</td></tr>
+      <tr><td>Meta ban appeals</td><td>🔴 Human process</td><td>Performance marketer</td></tr>
+      <tr><td>Email-маркетинг (4 рассылки/мес)</td><td>🟢 AI полностью через Mailchimp</td><td>AI</td></tr>
+      <tr><td>Welcome/nurture/win-back sequences</td><td>🟢 AI полностью через SimplyBook webhook</td><td>AI</td></tr>
+      <tr><td>Еженедельная/ежемесячная отчётность</td><td>🟢 AI полностью (dashboard + alerts)</td><td>AI</td></tr>
+    </table>
+    <p class="footnote">🟢 AUTO · 🟡 HYBRID (нужен человек для качества) · 🔴 HUMAN. Полный список 70 элементов — в <code>work-decomposition.md</code>.</p>
+  </div>
+</div>
+
+<div class="slide">
+  <span class="slide-title">16 · Модульное внедрение</span>
+  <div class="slide-inner">
+    <h2>Модульное внедрение — Wave 1/2/3</h2>
+    <p>Вместо «big bang» за 8–11 недель → три волны с возможностью остановки после каждой.</p>
+    <div class="split-3">
+      <div class="card">
+        <h4 class="accent">Wave 1 · Недели 1–4</h4>
+        <h3 style="margin-top:10px">Quick wins</h3>
+        <p style="font-size:13px">Attribution + stories + email + reporting. Клиент впервые видит реальный CAC/LTV.</p>
+        <p style="font-size:13px"><strong>€2–3k setup + €800–1 200/мес</strong></p>
+        <p><span class="tag">~45% ELPODIUM заменено</span></p>
+        <p class="dim" style="font-size:12px;margin-top:8px"><em>Risk:</em> низкий. Эфемерный контент + email + attribution — infrastructure остаётся у клиента.</p>
+      </div>
+      <div class="card">
+        <h4 class="accent2">Wave 2 · Недели 5–8</h4>
+        <h3 style="margin-top:10px">Core production</h3>
+        <p style="font-size:13px">Посты + таргет + compliance gate. Нужен licensed practitioner, brand corpus, Swiss lawyer sign-off.</p>
+        <p style="font-size:13px"><strong>+€4.5–8k setup + €1.3–3k/мес</strong></p>
+        <p><span class="tag blue">~70% ELPODIUM заменено</span></p>
+        <p class="dim" style="font-size:12px;margin-top:8px"><em>Trigger:</em> Wave 1 подтвердил baseline CAC/LTV.</p>
+      </div>
+      <div class="card">
+        <h4 class="accent3">Wave 3 · Мес 3+</h4>
+        <h3 style="margin-top:10px">Optimization &amp; scale</h3>
+        <p style="font-size:13px">Lead scoring, multilingual consistency, retargeting, competitor monitoring.</p>
+        <p style="font-size:13px"><strong>Переход на performance pricing</strong></p>
+        <p><span class="tag green">75%+ автоматизации</span></p>
+        <p class="dim" style="font-size:12px;margin-top:8px"><em>Trigger:</em> Wave 2 deliverables проверены, метрики стабильны.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="slide">
+  <span class="slide-title">17 · Почему модульно</span>
+  <div class="slide-inner">
+    <h2>Почему модульный подход выигрывает</h2>
+    <table>
+      <tr><th>Аспект</th><th>Big Bang</th><th>Модульно (Wave 1/2/3)</th></tr>
+      <tr><td>Upfront investment</td><td>€6.5–11k</td><td><strong class="accent">€2–3k (Wave 1)</strong></td></tr>
+      <tr><td>Time to first value</td><td>8–11 недель</td><td><strong class="accent">2–4 недели</strong></td></tr>
+      <tr><td>Risk у клиента</td><td>высокий</td><td>низкий, с возможностью остановки</td></tr>
+      <tr><td>Performance-pricing</td><td>только Phase 4</td><td>после Wave 2</td></tr>
+      <tr><td>Если не нравится</td><td>потеря €6.5k</td><td>attribution остаётся у клиента</td></tr>
+      <tr><td>Asset ownership</td><td>в конце</td><td><strong>с Wave 1</strong></td></tr>
+    </table>
+    <div class="quote">
+      <p>За 4 недели вы получите инфраструктуру attribution и увидите свои реальные CAC и LTV. Дальнейшие шаги — по подтверждённым данным, не по обещаниям.</p>
+    </div>
+  </div>
+</div>
+
+<div class="slide">
+  <span class="slide-title">18 · Метрики</span>
+  <div class="slide-inner">
+    <h2>Метрики по результату</h2>
+    <p class="lead">Не платим за посты. Платим за paying clients, которых можно атрибутировать.</p>
+    <h3>Технические preconditions</h3>
+    <p><span class="tag">UTM schema</span><span class="tag">SimplyBook.me webhook</span><span class="tag">Booking survey</span><span class="tag">Real-time agent cost tracking</span></p>
+    <div class="split">
+      <div>
+        <h3>Первичные метрики (то, за что платим)</h3>
+        <table>
+          <tr><th>Метрика</th><th>Target</th></tr>
+          <tr><td>Net new paid clients / мес</td><td>рост MoM</td></tr>
+          <tr><td><strong>CAC</strong></td><td>&lt; 25% от first-year revenue</td></tr>
+          <tr><td><strong>MER</strong></td><td class="accent"><strong>&gt; 3.0</strong> (premium 4–6)</strong></td></tr>
+          <tr><td>Payback period</td><td>&lt; 3 мес</td></tr>
+          <tr><td>LTV : CAC</td><td><strong>&gt; 4:1</strong></td></tr>
+        </table>
+      </div>
+      <div>
+        <h3>Leading indicators (weekly)</h3>
+        <ul>
+          <li>Qualified leads/мес</li>
+          <li>Consultation → Paid conversion rate</li>
+          <li>No-show rate</li>
+          <li>Source mix (% по каналам)</li>
+          <li>Content velocity vs compliance rejection</li>
+        </ul>
+        <h3>Attribution model</h3>
+        <p class="dim" style="font-size:14px">Weighted: first-touch + last-touch + time-decay hybrid. Post-booking survey закрывает offline gap.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="slide">
+  <span class="slide-title">19 · Pricing</span>
+  <div class="slide-inner">
+    <h2>Pricing — модульно + Option R (рекомендовано)</h2>
+    <h3>Wave structure</h3>
+    <table>
+      <tr><th>Фаза</th><th>Setup</th><th>Monthly</th><th>Срок</th></tr>
+      <tr><td><strong>Wave 1</strong></td><td>€2 000–3 000</td><td>€800–1 200</td><td>4 недели</td></tr>
+      <tr><td>Wave 2 (если Wave 1 OK)</td><td>+€4 500–8 000</td><td>€1 300–3 000</td><td>4 недели</td></tr>
+      <tr><td>Wave 3 (с мес 3)</td><td>—</td><td>переход на Option R/A</td><td>ongoing</td></tr>
+    </table>
+    <h3>Option R — Revenue-share (рекомендовано для REjuve)</h3>
+    <p class="dim" style="font-size:14px">Текущий revenue ~6 000 CHF → target 20 000. Клиент платит пропорционально incremental revenue.</p>
+    <table>
+      <tr><th>Месяц</th><th>Revenue CHF</th><th>Incremental</th><th>Total агенту €</th><th>% revenue</th></tr>
+      <tr><td>1–2</td><td>6 000 (baseline)</td><td>0</td><td><strong>500</strong></td><td><strong class="accent">8%</strong></td></tr>
+      <tr><td>3–4</td><td>8 500</td><td>2 500</td><td>1 165</td><td>14%</td></tr>
+      <tr><td>5–6</td><td>12 000</td><td>6 000</td><td>2 095</td><td>17%</td></tr>
+      <tr><td>7–9</td><td>16 000</td><td>10 000</td><td>3 160</td><td>20%</td></tr>
+      <tr><td>10–12</td><td><strong>20 000 (target)</strong></td><td>14 000</td><td><strong>4 225</strong></td><td><strong>21%</strong></td></tr>
+    </table>
+    <p class="footnote"><strong>Формула:</strong> Base €400–600/мес + 20–25% от incremental revenue над baseline 6k CHF. При неудаче — €500/мес (vs ELPODIUM €1 590+). При target — зарабатывает +€11k/мес incremental net.</p>
+  </div>
+</div>
+
+<div class="slide">
+  <span class="slide-title">20 · Сравнение</span>
+  <div class="slide-inner">
+    <h2>Сравнительная таблица</h2>
+    <table>
+      <tr><th></th><th>ELPODIUM</th><th>Agent system (модульно)</th></tr>
+      <tr><td><strong>Setup</strong></td><td>0</td><td>Wave 1: €2–3k. Full: €6.5–11k поэтапно</td></tr>
+      <tr><td><strong>Time to first value</strong></td><td>20 дней до стратегии</td><td class="accent"><strong>4 недели до attribution</strong></td></tr>
+      <tr><td>Monthly ops</td><td>€1 590 → €1 200+KPI</td><td>Wave 1: €800–1 200. Full: €2 100–4 200</td></tr>
+      <tr><td>Annual (full rollout)</td><td>~€17 580 + €4 050</td><td>~€31 700–61 400</td></tr>
+      <tr><td>Команда исполнителя</td><td>7 человек</td><td>1 marketing lead + licensed + агенты</td></tr>
+      <tr><td>Health compliance</td><td>не заявлена</td><td><strong>встроена</strong></td></tr>
+      <tr><td>Мультиязычность</td><td>не заявлена</td><td><strong>EN/DE/RU</strong></td></tr>
+      <tr><td>Content throughput</td><td>12–15 постов/90 stories</td><td>без предела, linear scaling</td></tr>
+      <tr><td>Attribution</td><td>стандартная</td><td>обязательная часть</td></tr>
+      <tr><td>Performance pricing</td><td>KPI-бонус (не штраф)</td><td>с 4-го мес</td></tr>
+      <tr><td><strong>Ownership</strong></td><td>вендор-lock</td><td><strong>infrastructure у клиента</strong></td></tr>
+      <tr><td>Risk при провале</td><td>€6.7k платится независимо</td><td>€500/мес базы</td></tr>
+    </table>
+    <p class="footnote"><strong>Честно:</strong> в absolute numbers agent system дороже. Экономия появляется, если заменяет total marketing org (agency + in-house). Главный выигрыш — attribution-based pricing, compliance, scaling, asset ownership.</p>
+  </div>
+</div>
+
+<div class="slide">
+  <span class="slide-title">21 · Риски</span>
+  <div class="slide-inner">
+    <h2>Риски и mitigation</h2>
+    <table>
+      <tr><th>#</th><th>Risk</th><th>Impact</th><th>Mitigation</th></tr>
+      <tr><td>1</td><td>Hallucinated medical claim в публичном контенте</td><td>High</td><td>NeMo Guardrails + licensed reviewer; mandatory review clause</td></tr>
+      <tr><td>2</td><td>Meta account suspension (health policy)</td><td>High (1–4 нед downtime)</td><td>Pre-flight screener, backup BM, appeal playbook</td></tr>
+      <tr><td>3</td><td>Brand voice drift в DE</td><td>Medium</td><td>30–50 эталонов + DE native weekly + quarterly retrain</td></tr>
+      <tr><td>4</td><td>LLM cost explosion (15× multi-agent)</td><td>Medium</td><td>Budget caps, value-gating, prompt caching</td></tr>
+      <tr><td>5</td><td>Attribution silent failure</td><td>High (убивает performance pricing)</td><td>uptime-kuma monitoring, daily DQ alerts</td></tr>
+      <tr><td>6</td><td>GDPR/FADP при enrichment</td><td>High</td><td>Только first-party + explicit consent + DPA</td></tr>
+    </table>
+    <h3>Швейцарская regulatory reality</h3>
+    <p><span class="tag gray">HMG штрафы до CHF 50 000</span><span class="tag gray">UWG до 3 лет</span><span class="tag gray">LMG до CHF 40 000</span><span class="tag gray">revDSG до CHF 250 000</span></p>
+    <p class="footnote"><strong>Compliance red lines (auto-reject):</strong> disease mentions, «heilt/behandelt/beugt vor», testimonials с healing-claim, before/after imagery, supplement claims вне Anhang 14 LIV. Swissmedic 2023: 80 рекламных дел (27 админ + 5 уголовных).</p>
+  </div>
+</div>
+
+<div class="slide">
+  <span class="slide-title">22 · Вопросы Tier 1</span>
+  <div class="slide-inner">
+    <h2>Вопросы Tier 1 — для первой встречи</h2>
+    <p class="lead">Эти 7 вопросов блокируют финализацию pricing-модели и оценку реалистичности проекта. Отвечать до или на первой встрече — дальнейшая работа зависит от ответов.</p>
+    <ol>
+      <li style="margin-bottom:14px"><strong>Revenue mix по tiers в Q1 2026.</strong> Какой % выручки приходится на каждый tier: single visits · 10-packs · programs · Bronze · Gold · Platinum? <span class="dim">Нужно для калибровки per-client ставок в Option R.</span></li>
+      <li style="margin-bottom:14px"><strong>Timeline роста с 6 000 до 20 000 CHF/мес.</strong> 6 месяцев / 12 / 18? <span class="dim">От этого зависит realistic growth plan и budget phasing.</span></li>
+      <li style="margin-bottom:14px"><strong>Реалистичный marketing budget сейчас.</strong> Сколько клиент готов выделять в месяц при текущем revenue 6k CHF? <span class="dim">Industry benchmark — 10–20% от revenue (600–1 200 CHF/мес).</span></li>
+      <li style="margin-bottom:14px"><strong>Licensed practitioner.</strong> Есть ли у REjuve контракт с врачом для medical review каждого публичного артефакта? Если нет — нужна помощь в поиске? <span class="dim">Без этой роли compliance-слой не работает.</span></li>
+      <li style="margin-bottom:14px"><strong>In-house маркетинг-ресурс founder'а.</strong> Сколько часов в неделю Kristina готова выделять на brand voice approval, sales closing, стратегические решения? <span class="dim">Определяет, какой вариант распределения ответственности подходит (A/B/C).</span></li>
+      <li style="margin-bottom:14px"><strong>Готовность на external consultants.</strong> Бюджет +€1–3k/мес на freelance specialists (DE copywriter, performance marketer, medical reviewer) — возможен? <span class="dim">Эти роли закрывают маркетинг-экспертизу, которую я не беру на себя.</span></li>
+      <li><strong>Swiss lawyer.</strong> Есть ли контакт юриста, специализирующегося на Werbung im Gesundheitswesen? <span class="dim">Нужен одноразово на 5–10 часов для sign-off compliance library (€1.5–3k).</span></li>
+    </ol>
+  </div>
+</div>
+
+<div class="slide">
+  <span class="slide-title">23 · Вопросы Tier 2</span>
+  <div class="slide-inner">
+    <h2>Вопросы Tier 2 — перед подписанием контракта</h2>
+    <p class="dim" style="font-size:14px">Ответы нужны до финализации контракта, но не блокируют первое обсуждение. Собираем по результатам первой встречи.</p>
+    <div class="split">
+      <div>
+        <ol>
+          <li><strong>Average membership tenure</strong> — сколько месяцев в среднем клиенты держатся на Bronze / Gold / Platinum?</li>
+          <li><strong>Upgrade funnel</strong> — какой процент single-session клиентов переходит в pack? pack → program? program → membership?</li>
+          <li><strong>Trial conversion</strong> — промо «Try 2 for 1»: какой процент возвращается за платным визитом?</li>
+          <li><strong>MoM revenue и new paying clients</strong> за Q1 2026 — точные цифры для baseline attribution.</li>
+          <li><strong>Ребрендинг REjuve</strong> — когда запланирован публичный go-live? Влияет на весь контент-pipeline.</li>
+        </ol>
+      </div>
+      <div>
+        <ol start="6">
+          <li><strong>Brand corpus</strong> — есть ли 30–50 эталонных текстов, которые задают голос бренда? Или создаём с нуля?</li>
+          <li><strong>Supplement sales</strong> — продаются ли supplements в студии? Какие health-claims используются сейчас?</li>
+          <li><strong>IV therapy</strong> — в планах ли запуск? Требует MD и Meldung в Amt für Gesundheit Zug.</li>
+          <li><strong>Corporate wellness pipeline</strong> — помимо Glencore, какие commodity firms в воронке (Trafigura, Mercuria, Vitol)?</li>
+          <li><strong>Языковой приоритет каналов</strong> — какой канал на каком языке сейчас даёт лучшие результаты?</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="slide">
+  <span class="slide-title">24 · Вопросы Tier 3</span>
+  <div class="slide-inner">
+    <h2>Вопросы Tier 3 — tactical / discovery phase</h2>
+    <p class="dim" style="font-size:14px">Собираем в первую неделю работы (Phase 0). Не блокируют решение о сотрудничестве.</p>
+    <div class="split">
+      <div>
+        <ol>
+          <li><strong>SimplyBook.me tier</strong> — Premium+ или Enterprise? Нужно для native webhooks (основа всей attribution).</li>
+          <li><strong>Meta Business Manager</strong> — один аккаунт или есть backup? В какой категории помечен IG-аккаунт (критично для conversion tracking)?</li>
+          <li><strong>Существующие ads accounts и pixels</strong> — что настроено, что нужно восстановить?</li>
+          <li><strong>WhatsApp Business</strong> — уже используется или setup с нуля? Это один из ключевых каналов retention в DACH.</li>
+        </ol>
+      </div>
+      <div>
+        <ol start="5">
+          <li><strong>Google Business Profile</strong> — настроен? Сколько отзывов, средний рейтинг?</li>
+          <li><strong>Expat community partnerships</strong> — есть ли текущие отношения с AWC Zurich, IAmExpat, Glocals, Zug International Women's Club?</li>
+          <li><strong>Русскоязычная Zug community</strong> — насколько активна? Есть ли контакты в Telegram-каналах / группах?</li>
+        </ol>
+      </div>
+    </div>
+    <p class="footnote"><strong>Итого:</strong> Tier 1 (7) — для первой встречи, блокируют pricing. Tier 2 (10) — перед контрактом. Tier 3 (7) — в первую неделю работы. Полный список с обоснованиями — в <code>work-decomposition.md</code> §7.</p>
+  </div>
+</div>
+
+<div class="slide">
+  <span class="slide-title">25 · Next steps</span>
+  <div class="slide-inner">
+    <h2>Next steps — модульный roadmap</h2>
+    <div class="split">
+      <div>
+        <h3>Wave 1 · Недели 1–4</h3>
+        <table>
+          <tr><td>1</td><td>Discovery + attribution schema + UTM conventions</td></tr>
+          <tr><td>2</td><td>SimplyBook webhook → BigQuery + dashboard skeleton</td></tr>
+          <tr><td>3</td><td>Email sequences + stories generator</td></tr>
+          <tr><td>4</td><td>Reporting dashboard + baseline CAC/LTV</td></tr>
+        </table>
+        <p><strong>€2–3k setup + €800–1 200/мес</strong></p>
+        <h3>Decision gate (конец недели 4)</h3>
+        <ul style="font-size:14px">
+          <li><span class="accent3">✓</span> Baseline OK → Wave 2</li>
+          <li><span class="danger">!</span> Метрики недостаточны → остановка, attribution остаётся</li>
+        </ul>
+      </div>
+      <div>
+        <h3>Wave 2 · Недели 5–8</h3>
+        <table>
+          <tr><td>5</td><td>Brand corpus + compliance library + Swiss lawyer sign-off</td></tr>
+          <tr><td>6</td><td>Content pipeline + medical review workflow</td></tr>
+          <tr><td>7</td><td>Ad creative pipeline + compliance screener</td></tr>
+          <tr><td>8</td><td>Таргет ops + первый performance review</td></tr>
+        </table>
+        <p><strong>+€4.5–8k setup + €1.3–3k/мес</strong></p>
+        <h3>Ближайшие шаги</h3>
+        <ol style="font-size:14px">
+          <li>60-минутная встреча по 7 вопросам Tier 1</li>
+          <li>Финализация pricing (Option R/A/B/C)</li>
+          <li>Контракт (licensed practitioner, compliance, SLA, budget caps)</li>
+          <li>Kick-off Wave 1 на неделе 1</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="slide intro">
+  <div class="slide-inner">
+    <div class="brand">Спасибо</div>
+    <h1 style="font-size:52px">За обсуждение</h1>
+    <div class="subtitle">Следующий шаг — 60-минутная встреча по Tier 1 вопросам</div>
+    <div class="meta">product/presentation.md · architecture/system-design.md · product/work-decomposition.md · research/</div>
+  </div>
+</div>
+
+<div class="slide-counter"><span class="current">1</span> / <span class="total">27</span></div>
+<div class="progress-bar"></div>
+<div class="nav-hint">arrows · space · swipe</div>
+
+<script>
+let current = 0;
+const slides = document.querySelectorAll('.slide');
+const bar = document.querySelector('.progress-bar');
+const counterCurrent = document.querySelectorAll('.current');
+const counterTotal = document.querySelectorAll('.total');
+function showSlide(n) {
+  slides[current].classList.remove('active');
+  current = Math.max(0, Math.min(n, slides.length - 1));
+  slides[current].classList.add('active');
+  if (bar) bar.style.width = ((current + 1) / slides.length * 100) + '%';
+  counterCurrent.forEach(el => el.textContent = current + 1);
+}
+counterTotal.forEach(el => el.textContent = slides.length);
+slides[0].classList.add('active');
+if (bar) bar.style.width = (1 / slides.length * 100) + '%';
+document.addEventListener('keydown', e => {
+  if (['ArrowRight','Space','Enter','PageDown'].includes(e.code)) { e.preventDefault(); showSlide(current + 1); }
+  if (['ArrowLeft','Backspace','PageUp'].includes(e.code)) { e.preventDefault(); showSlide(current - 1); }
+  if (e.code === 'Home') { e.preventDefault(); showSlide(0); }
+  if (e.code === 'End') { e.preventDefault(); showSlide(slides.length - 1); }
+});
+let touchStartX = 0;
+document.addEventListener('touchstart', e => { touchStartX = e.changedTouches[0].screenX; });
+document.addEventListener('touchend', e => {
+  const diff = touchStartX - e.changedTouches[0].screenX;
+  if (Math.abs(diff) > 50) { diff > 0 ? showSlide(current + 1) : showSlide(current - 1); }
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,75 @@
+/* stats — System B canonical (rejuve-pitch-deck slide 3 grammar).
+ * Composition: .label kicker + h2 (Playfair 27px) + .stat-row (flex-wrap
+ * cards) + optional dim utility-sans note paragraph below. Each .stat
+ * card carries `.num` (Playfair 24px gold) and `.lbl` (utility-sans
+ * 10.5px dim). Lifted verbatim from pitch-deck `:root` block.
+ *
+ * Note: `.stat-row` is the wrapper that varies by system — terminal R2a
+ * wraps a different inner card class. Editorial uses the System B triple
+ * (`.stat / .stat .num / .stat .lbl`); the terminal-only inner triple
+ * (declared in R2a's deck CSS only) stays forbidden in editorial via
+ * the layout-forbidden-pattern guard.
+ */
+
+.stats-block .stat-row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 16px;
+}
+.stats-block .stat {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 14px 16px;
+  flex: 1;
+  min-width: 140px;
+  text-align: center;
+}
+.stats-block .stat .num {
+  font-family: var(--fh);
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--accent);
+  display: block;
+}
+.stats-block .stat .lbl {
+  font-family: var(--fu);
+  font-size: 10.5px;
+  color: var(--text-dim);
+  margin-top: 3px;
+  line-height: 1.4;
+}
+
+.stats-block .note {
+  font-family: var(--fu);
+  font-size: 14px;
+  color: var(--text-dim);
+  line-height: 1.5;
+  margin-top: 16px;
+}
+.stats-block .note:empty { display: none; }
+
+/* Mobile (R2b plan §6 — Gate B): cards collapse into a single column
+   stack so each metric remains readable at 390px. */
+@media (max-width: 480px) {
+  .stats-block .stat-row {
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 12px;
+  }
+  .stats-block .stat {
+    min-width: 0;
+    padding: 12px 14px;
+  }
+  .stats-block .stat .num {
+    font-size: 22px;
+  }
+  .stats-block .stat .lbl {
+    font-size: 11px;
+  }
+  .stats-block .note {
+    font-size: 13px;
+    margin-top: 12px;
+  }
+}

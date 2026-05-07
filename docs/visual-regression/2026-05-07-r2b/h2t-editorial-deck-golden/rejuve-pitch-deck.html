@@ -1,0 +1,631 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>REjuve — AI Revenue Infrastructure</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #fafaf8; --bg-light: #f2f0eb; --bg-card: #fff;
+  --text: #141414; --text-dim: #6b6560;
+  --accent: #c9a96e; --accent-text: #8a6520; --accent-soft: rgba(201,169,110,.1);
+  --danger: #cc2222; --danger-soft: rgba(204,34,34,.09);
+  --copper: #7d4e2d; --copper-soft: rgba(125,78,45,.09);
+  --auto: #3a3a3a; --auto-soft: rgba(45,45,45,.05);
+  --green: #3d6b4a; --green-soft: rgba(61,107,74,.09);
+  --border: #e2dfd8;
+  --fh: 'Playfair Display', Georgia, serif;
+  --fb: Georgia, 'Times New Roman', serif;
+  --fu: system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { width: 100%; height: 100%; background: var(--bg); color: var(--text); font-family: var(--fb); overflow: hidden; -webkit-font-smoothing: antialiased; }
+
+.slide { display: none; flex-direction: column; justify-content: center; align-items: center; width: 100vw; height: 100vh; padding: 44px 80px 58px; position: relative; }
+.slide.active { display: flex; }
+.slide-inner { width: 100%; max-width: 1100px; flex: 1; display: flex; flex-direction: column; justify-content: center; }
+
+.label { font-family: var(--fu); font-size: 10.5px; font-weight: 600; letter-spacing: 2.5px; text-transform: uppercase; color: var(--accent); margin-bottom: 10px; }
+h1 { font-family: var(--fh); font-size: 42px; font-weight: 700; line-height: 1.2; margin-bottom: 22px; }
+h2 { font-family: var(--fh); font-size: 27px; font-weight: 600; line-height: 1.3; margin-bottom: 14px; }
+h3 { font-family: var(--fu); font-size: 11px; font-weight: 600; letter-spacing: 2px; text-transform: uppercase; color: var(--text-dim); margin-bottom: 8px; }
+p, li { font-family: var(--fb); font-size: 16.5px; line-height: 1.65; }
+strong { font-weight: 700; }
+em { font-style: italic; color: var(--accent-text); }
+ul { list-style: none; }
+ul li { padding: 4px 0; }
+ul li::before { content: '—'; color: var(--accent); margin-right: 9px; }
+
+.rule { width: 40px; height: 2px; background: var(--accent); margin: 12px 0 18px; }
+
+/* COUNTER + PROGRESS */
+.slide-counter { position: absolute; top: 22px; right: 30px; font-family: var(--fu); font-size: 11px; color: var(--text-dim); opacity: .45; }
+.progress-bar { position: fixed; bottom: 0; left: 0; height: 2px; background: var(--accent); transition: width .3s; z-index: 100; }
+.nav-hint { position: fixed; bottom: 13px; right: 30px; font-family: var(--fu); font-size: 10px; color: var(--text-dim); opacity: .3; }
+
+/* COVER */
+.cover { text-align: center; align-items: center; }
+.cover .slide-inner { align-items: center; justify-content: center; }
+.brand { font-family: var(--fh); font-size: 58px; font-weight: 700; letter-spacing: 2px; }
+.brand em { font-style: normal; color: var(--accent); }
+.cover-sub { font-family: var(--fu); font-size: 13px; letter-spacing: 3.5px; text-transform: uppercase; color: var(--text-dim); margin-top: 10px; }
+.cover .rule { margin: 26px auto; }
+.cover-meta { font-family: var(--fu); font-size: 12px; color: var(--text-dim); opacity: .55; letter-spacing: 1px; }
+
+/* QUOTE */
+.quote { border-left: 3px solid var(--accent); padding: 12px 20px; margin: 12px 0; background: var(--accent-soft); border-radius: 0 5px 5px 0; }
+.quote p { font-family: var(--fh); font-style: italic; font-size: 18.5px; line-height: 1.6; }
+
+/* ALERT */
+.alert { border: 1px solid var(--accent); border-radius: 6px; padding: 11px 16px; background: var(--accent-soft); margin: 10px 0; }
+.alert p { font-family: var(--fu); font-size: 14.5px; line-height: 1.5; }
+
+/* STATS */
+.stat-row { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 16px; }
+.stat { background: var(--bg-card); border: 1px solid var(--border); border-radius: 7px; padding: 14px 16px; flex: 1; min-width: 140px; text-align: center; }
+.stat .num { font-family: var(--fh); font-size: 24px; font-weight: 700; color: var(--accent); display: block; }
+.stat .lbl { font-family: var(--fu); font-size: 10.5px; color: var(--text-dim); margin-top: 3px; line-height: 1.4; }
+
+/* SPLIT */
+.split { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; margin-top: 8px; }
+
+/* TABLES */
+table { width: 100%; border-collapse: collapse; margin-top: 8px; font-family: var(--fu); }
+th { font-size: 10.5px; font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase; color: var(--text-dim); border-bottom: 1px solid var(--border); padding: 7px 10px; text-align: left; }
+td { font-size: 13px; line-height: 1.4; padding: 7px 10px; color: var(--text); border-bottom: 1px solid rgba(226,223,216,.4); vertical-align: top; }
+tr:last-child td { border-bottom: none; }
+.t-sm td { font-size: 12.5px; padding: 6px 9px; }
+
+/* COLOR ROWS */
+tr.rc td:first-child { border-left: 3px solid var(--danger); }
+tr.rc { background: var(--danger-soft); }
+tr.ra td:first-child { border-left: 3px solid var(--accent); }
+tr.ra { background: var(--accent-soft); }
+tr.rcu td:first-child { border-left: 3px solid var(--copper); }
+tr.rcu { background: var(--copper-soft); }
+tr.rat td:first-child { border-left: 3px solid var(--auto); }
+tr.rat { background: var(--auto-soft); }
+tr.rg td:first-child { border-left: 3px solid var(--green); }
+tr.rg { background: var(--green-soft); }
+
+/* LEGEND */
+.legend { display: flex; gap: 18px; margin-top: 10px; flex-wrap: wrap; }
+.legend-i { display: flex; align-items: center; gap: 6px; font-family: var(--fu); font-size: 11px; color: var(--text-dim); }
+.ld { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
+.ld-rc { background: var(--danger); }
+.ld-ra { background: var(--accent); }
+.ld-rcu { background: var(--copper); }
+.ld-rat { background: var(--auto); }
+.ld-rg { background: var(--green); }
+
+/* RULES COMPACT */
+.rules-line { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); display: flex; gap: 20px; flex-wrap: wrap; }
+.rules-line span { font-family: var(--fu); font-size: 12px; color: var(--text-dim); }
+.rules-line strong { color: var(--text); }
+
+/* NUMBERED LIST */
+.nlist { list-style: none; counter-reset: nl; }
+.nlist li { counter-increment: nl; padding: 5px 0; display: flex; gap: 10px; align-items: baseline; font-family: var(--fu); font-size: 14.5px; line-height: 1.5; }
+.nlist li::before { content: counter(nl); font-family: var(--fh); color: var(--accent); font-size: 17px; font-weight: 700; min-width: 18px; }
+
+/* CROSS LIST */
+.xlist { list-style: none; }
+.xlist li { padding: 3px 0; font-family: var(--fu); font-size: 13.5px; line-height: 1.5; display: flex; gap: 8px; align-items: baseline; }
+.xlist li::before { content: '✗'; color: var(--danger); font-size: 11px; }
+
+/* CHECK LIST */
+.clist { list-style: none; }
+.clist li { padding: 3px 0; font-family: var(--fu); font-size: 13.5px; line-height: 1.5; display: flex; gap: 8px; align-items: baseline; }
+.clist li::before { content: '✓'; color: var(--accent-text); font-size: 11px; }
+
+/* DIFF ITEMS */
+.diff { list-style: none; margin-top: 8px; }
+.diff li { padding: 4px 0; display: flex; gap: 9px; align-items: baseline; font-family: var(--fu); font-size: 13.5px; line-height: 1.45; border-bottom: 1px solid rgba(226,223,216,.3); }
+.diff li:last-child { border-bottom: none; }
+.diff .n { font-family: var(--fh); color: var(--accent); font-size: 16px; font-weight: 700; min-width: 16px; }
+
+/* WATCH CARDS */
+.watch-row { display: flex; gap: 12px; margin-top: 12px; }
+.watch-card { flex: 1; background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px; padding: 12px 14px; }
+.watch-card .wname { font-family: var(--fu); font-size: 12px; font-weight: 600; color: var(--text); letter-spacing: .5px; }
+.watch-card .wnote { font-family: var(--fu); font-size: 11.5px; color: var(--text-dim); margin-top: 4px; line-height: 1.4; }
+.watch-card.flag { border-color: rgba(184,58,58,.3); background: var(--danger-soft); }
+.watch-card.partner { border-color: rgba(201,169,110,.35); background: var(--accent-soft); }
+
+/* SCOPE TABLE */
+.scope-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 8px; }
+
+/* STEP LIST */
+.steps { list-style: none; counter-reset: st; margin-top: 8px; }
+.steps li { counter-increment: st; padding: 5px 0; display: flex; gap: 10px; font-family: var(--fu); font-size: 14px; line-height: 1.5; }
+.steps li::before { content: counter(st) '.'; font-family: var(--fh); color: var(--accent); font-size: 15px; font-weight: 700; min-width: 20px; }
+
+/* ANIMATIONS */
+@keyframes fadeUp { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
+.slide.active .slide-inner > * { animation: fadeUp .38s ease-out both; }
+.slide.active .slide-inner > *:nth-child(1) { animation-delay: 0s; }
+.slide.active .slide-inner > *:nth-child(2) { animation-delay: .06s; }
+.slide.active .slide-inner > *:nth-child(3) { animation-delay: .12s; }
+.slide.active .slide-inner > *:nth-child(4) { animation-delay: .18s; }
+.slide.active .slide-inner > *:nth-child(5) { animation-delay: .24s; }
+.slide.active .slide-inner > *:nth-child(6) { animation-delay: .30s; }
+.slide.active .slide-inner > *:nth-child(7) { animation-delay: .36s; }
+
+/* RESPONSIVE */
+@media (max-width: 768px) {
+  .slide { padding: 24px 20px 40px; }
+  h1 { font-size: 26px; } h2 { font-size: 21px; }
+  p, li { font-size: 15px; } td { font-size: 12px; padding: 5px 7px; }
+  .split { grid-template-columns: 1fr; }
+  .scope-grid { grid-template-columns: 1fr; }
+  .watch-row { flex-direction: column; }
+  .nav-hint { display: none; }
+}
+</style>
+</head>
+<body>
+
+<!-- COVER -->
+<div class="slide cover active">
+  <div class="slide-counter"><span class="current">1</span> / <span class="total"></span></div>
+  <div class="slide-inner">
+    <div class="brand">RE<em>juve</em></div>
+    <div class="cover-sub">AI Revenue Infrastructure</div>
+    <div class="rule"></div>
+    <div class="cover-meta">Апрель 2026 &nbsp;·&nbsp; Confidential</div>
+  </div>
+</div>
+
+<!-- SLIDE 1 — ФРЕЙМ -->
+<div class="slide">
+  <div class="slide-counter"><span class="current"></span> / <span class="total"></span></div>
+  <div class="slide-inner">
+    <div class="label">01 — Зачем мы здесь</div>
+    <h2>Мы не маркетинговое агентство</h2>
+    <div class="rule"></div>
+    <ul>
+      <li>Мы AI-специалисты по автоматизации <strong>revenue-инфраструктуры</strong></li>
+      <li>Показываем, где в вашей воронке деньги утекают не из-за плохой рекламы, а из-за <strong>отсутствия инфраструктуры</strong> между касанием и платящим клиентом</li>
+      <li>Никаких обещаний роста выручки до того, как увидим <strong>ваши реальные данные</strong></li>
+    </ul>
+    <p style="margin-top:18px; font-family:var(--fu); font-size:14.5px; color:var(--text-dim); line-height:1.6;">
+      <strong style="color:var(--text);">За встречу:</strong> наш анализ вашей ниши и конкурентов → разбор оффера ELPODIUM → что мы предлагаем и что нужно от вас
+    </p>
+  </div>
+</div>
+
+<!-- SLIDE 2 — ПРОДУКТ -->
+<div class="slide">
+  <div class="slide-counter"><span class="current"></span> / <span class="total"></span></div>
+  <div class="slide-inner">
+    <div class="label">02 — Как мы читаем ваш продукт</div>
+    <h2>Три вещи, которые определяют всю модель</h2>
+    <div class="rule"></div>
+    <ul>
+      <li><strong>Membership — якорь экономики.</strong> Single-session и 10-pack — это воронка в Bronze / Gold / Platinum. Весь план строим вокруг движения клиента по этой лестнице</li>
+      <li><strong>Самый широкий стек процедур</strong> среди не-медицинских студий в CH: крио, инфракрас, IHHT, PEMF, флоат, OligoScan + Tanita. Это позиционный актив</li>
+      <li><strong>Constraint по лицензии:</strong> Kristina — certified nutritionist, не MD. Это <em>позиционная рамка</em> — functional health studio, не medical clinic. От этого зависит, что можно говорить публично</li>
+    </ul>
+  </div>
+</div>
+
+<!-- SLIDE 3 — РЫНОК ЦУГА -->
+<div class="slide">
+  <div class="slide-counter"><span class="current"></span> / <span class="total"></span></div>
+  <div class="slide-inner">
+    <div class="label">03 — Рынок Цуга</div>
+    <h2>Это не просто «богатый швейцарский город»</h2>
+    <div class="stat-row">
+      <div class="stat"><span class="num">143</span><div class="lbl">национальности в кантоне</div></div>
+      <div class="stat"><span class="num">~30%</span><div class="lbl">населения — не граждане CH (одна из самых высоких концентраций)</div></div>
+      <div class="stat"><span class="num">900+</span><div class="lbl">commodity-фирм: Glencore, Trafigura, Mercuria…</div></div>
+      <div class="stat"><span class="num">~19 000</span><div class="lbl">англоговорящих жителей только в кантоне</div></div>
+      <div class="stat"><span class="num">+12%</span><div class="lbl">туризм в 2025 — самый быстрорастущий регион CH</div></div>
+      <div class="stat"><span class="num">+25%</span><div class="lbl">ночёвок из Северной Америки (Zug Tourismus)</div></div>
+    </div>
+    <p style="margin-top:16px; font-family:var(--fu); font-size:14px; color:var(--text-dim);">
+      Конкретная структура аудитории: <strong style="color:var(--text);">международные профессионалы, корпоративные клиенты, туристы, мультиязычная среда</strong> — каналы и месседжи здесь принципиально другие
+    </p>
+  </div>
+</div>
+
+<!-- SLIDE 4 — КТО КЛИЕНТ -->
+<div class="slide">
+  <div class="slide-counter"><span class="current"></span> / <span class="total"></span></div>
+  <div class="slide-inner">
+    <div class="label">04 — Кто ваш клиент?</div>
+    <h2>Наша гипотеза — нужна ваша валидация</h2>
+    <div class="split">
+      <div>
+        <h3>Гипотеза ICP</h3>
+        <ul>
+          <li>Возраст 35–55, HNWI, живёт / работает в Цуге</li>
+          <li>Делает «всё правильно», но не получает результата</li>
+          <li>Аналитический, ищет ясность, не шаблонные протоколы</li>
+          <li>Science-based подход, не инстаграм-wellness</li>
+        </ul>
+      </div>
+      <div>
+        <h3>Что нашли в исследовании</h3>
+        <ul>
+          <li>~19 000 англоязычных HNWI, 900+ commodity-firm, 143 национальности</li>
+          <li>Среди 16 longevity-брендов CH — позиции, которые не занимает никто</li>
+          <li>Для этой аудитории каналы <strong>НЕ Instagram</strong> — Google, рекомендации, corporate-сети</li>
+        </ul>
+      </div>
+    </div>
+    <div class="alert" style="margin-top:14px;">
+      <p>⚠ <strong>Открытый вопрос:</strong> когда клиент заходит на ваш сайт — понимает ли он «зачем именно у вас»? Или текущее оформление не доносит эту ясность?</p>
+    </div>
+  </div>
+</div>
+
+<!-- SLIDE 5 — МЕССЕДЖИ -->
+<div class="slide">
+  <div class="slide-counter"><span class="current"></span> / <span class="total"></span></div>
+  <div class="slide-inner">
+    <div class="label">05 — Месседжи</div>
+    <h2>Из вашего brand brief</h2>
+    <div class="quote">
+      <p>«Most people are not lacking effort. They are lacking clarity. REjuve is a diagnostic-first functional health studio.»</p>
+    </div>
+    <div class="split" style="margin-top:12px;">
+      <div>
+        <h3>Как мы это читаем</h3>
+        <ul>
+          <li>Помогаем людям, которые <strong>делают всё правильно, но не получают результата</strong></li>
+          <li>Начинаем с измерений, не с гаджетов</li>
+          <li>Персональный протокол, не шаблонная программа</li>
+        </ul>
+      </div>
+      <div>
+        <h3>Что нужно проверить на встрече</h3>
+        <ul>
+          <li>Правильный ли этот message? На какую аудиторию — RU / DE / EN?</li>
+          <li>Есть ли 30–50 эталонных текстов, которые вы считаете «правильными»?</li>
+          <li>Какие формулировки категорически <strong>не ваши</strong>?</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- SLIDE 6 — КАНАЛЫ -->
+<div class="slide">
+  <div class="slide-counter"><span class="current"></span> / <span class="total"></span></div>
+  <div class="slide-inner">
+    <div class="label">06 — Каналы для этой аудитории в Швейцарии</div>
+    <h2>Реальность рынка CH-longevity</h2>
+    <table>
+      <thead>
+        <tr><th>Канал</th><th>Ситуация в CH-longevity</th><th>Гипотеза</th></tr>
+      </thead>
+      <tbody>
+        <tr class="rc"><td><strong>Meta Ads (IG/FB)</strong></td><td>Из 5 ближайших конкурентов активна только AYUN — через weight-loss framing для обхода Meta Health Policy 2025. Остальные dark</td><td>Не основной канал для этой аудитории</td></tr>
+        <tr class="ra"><td><strong>Google Ads</strong></td><td><em>longevity</em> — 3 600 поисков/мес в CH, аукцион пустой (CPC 0.77); <em>biohacking</em> — 1 000/мес (CPC 0.29)</td><td><strong>First-mover advantage</strong> — дёшево и без конкурентов</td></tr>
+        <tr class="ra"><td><strong>Google Business + local SEO</strong></td><td>65–77% health-клиентов гуглят перед записью. AYUN уже инвестирует</td><td>Обязательно</td></tr>
+        <tr class="ra"><td><strong>Events / Open Days</strong></td><td>Именно так люди в Цуге находят premium health. У вас это уже делается</td><td><strong>Самый сильный канал</strong> — нужна система</td></tr>
+        <tr class="ra"><td><strong>Corporate B2B</strong></td><td>900+ commodity-firm в Цуге. Glencore pilot — подтверждение концепции</td><td>Уникальное преимущество Цуга</td></tr>
+        <tr><td><strong>WhatsApp / private clubs</strong></td><td>В DACH 98% open rate</td><td>Retention-канал, не acquisition</td></tr>
+        <tr><td><strong>Influencer / longevity-docs</strong></td><td>Работает для этой аудитории</td><td>Нужны отношения — сложно автоматизировать</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- SLIDE 7 — КОНКУРЕНТНЫЙ АНАЛИЗ -->
+<div class="slide">
+  <div class="slide-counter"><span class="current"></span> / <span class="total"></span></div>
+  <div class="slide-inner">
+    <div class="label">07 — Маркетинговый анализ</div>
+    <h2>16 брендов — где REjuve выделяется</h2>
+    <div class="split" style="gap:20px;">
+      <div>
+        <h3>4 типа игроков в CH</h3>
+        <table>
+          <thead><tr><th>Тип</th><th>Примеры</th><th>Цена</th></tr></thead>
+          <tbody>
+            <tr><td>Ультра-премиум ретриты</td><td>Clinique La Prairie, Kusnacht</td><td>CHF 20 000 – 100 000+</td></tr>
+            <tr><td>Медицинские клиники</td><td>AYUN, Seegarten, Swiss C. H&amp;L</td><td>CHF 300 – 5 000+</td></tr>
+            <tr><td>B2B-интеграторы</td><td>Longevity Biohacking</td><td>Только corporate</td></tr>
+            <tr><td>Специализированные студии</td><td>Coolzoone, Cryodukt</td><td>Одна модальность</td></tr>
+          </tbody>
+        </table>
+        <div style="margin-top:14px;">
+          <h3>Три бренда, за которыми следить</h3>
+          <div class="watch-row">
+            <div class="watch-card">
+              <div class="wname">Relysian (Zurich)</div>
+              <div class="wnote">AI-членство, waitlist. Если откроются в Цуге — прямая конкуренция</div>
+            </div>
+            <div class="watch-card partner">
+              <div class="wname">AYUN (Zurich)</div>
+              <div class="wnote">Диагностика без стека. Возможный партнёр по рефералам</div>
+            </div>
+            <div class="watch-card flag">
+              <div class="wname">Biohacking Studio (Menzingen)</div>
+              <div class="wnote">⚠ Тот же кантон. <strong>Юрпроверка товарного знака обязательна</strong></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <h3>Где REjuve выделяется</h3>
+        <ul class="diff">
+          <li><span class="n">1</span> <span><strong>English-first в Цуге.</strong> Ближайший англоязычный конкурент — в 28 км (AYUN)</span></li>
+          <li><span class="n">2</span> <span><strong>Прозрачный прайс в premium-сегменте.</strong> 13 из 16 скрывают цены</span></li>
+          <li><span class="n">3</span> <span><strong>Полный стек в потребительском формате.</strong> Такой набор — только у B2B или ультра-люкса</span></li>
+          <li><span class="n">4</span> <span><strong>Диагностика + стек в одной студии.</strong> AYUN — диагностика без стека; Seegarten — наоборот</span></li>
+          <li><span class="n">5</span> <span><strong>Флоат-камера — нулевая конкуренция</strong> среди 16 брендов</span></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- SLIDE 8 — РАЗБОР ELPODIUM -->
+<div class="slide">
+  <div class="slide-counter"><span class="current"></span> / <span class="total"></span></div>
+  <div class="slide-inner">
+    <div class="label">08 — Разбор оффера ELPODIUM</div>
+    <h2>Где их модель не работает для вашего случая</h2>
+    <div class="rule"></div>
+    <p style="font-family:var(--fu); font-size:13.5px; color:var(--text-dim); margin-bottom:10px;">Структура: 12–15 постов/мес + reels + массфоловинг + email + Meta-таргет · Команда 7 чел. · €17 580/год + KPI-бонус</p>
+    <ol class="nlist">
+      <li><strong>Reels-first — устаревший шаблон 2021.</strong> Socialinsider 2025: reels engagement 1.23% vs carousels 10.15%. Mosseri: «carousels are engagement champions»</li>
+      <li><strong>Массфоловинг</strong> — прямое нарушение Instagram ToS, риск блокировки аккаунта</li>
+      <li><strong>Нет compliance-специализации.</strong> Кейсы: рестораны, бельё, IT. Для CH health нужен знающий HMG / UWG — штрафы до CHF 50 000</li>
+      <li><strong>Meta Health Policy Jan 2025</strong> — для health-аккаунтов запрещены conversion events. −30–40% ad efficiency. В оффере не учтено</li>
+      <li><strong>Нет attribution.</strong> Через 4 месяца никто не ответит, какой канал привёл платящего клиента</li>
+      <li><strong>Не учитывают реальность каналов CH-longevity.</strong> Прямые конкуренты почти не рекламируются в Meta</li>
+      <li><strong>Непрозрачные тезисы</strong> («сокращает воронку на 40%» — без методологии)</li>
+    </ol>
+  </div>
+</div>
+
+<!-- SLIDE 9 — ВЕСА АКТИВНОСТЕЙ -->
+<div class="slide">
+  <div class="slide-counter"><span class="current"></span> / <span class="total"></span></div>
+  <div class="slide-inner">
+    <div class="label">09 — Веса важности активностей ELPODIUM</div>
+    <h2>Что реально двигает выручку для REjuve</h2>
+    <p style="font-family:var(--fu); font-size:13px; color:var(--text-dim); margin-bottom:4px;">Prefill — финальные веса за вами на следующем звонке</p>
+    <table class="t-sm">
+      <thead>
+        <tr><th>Блок</th><th>Вес</th><th>Когда</th></tr>
+      </thead>
+      <tbody>
+        <tr class="rg"><td><strong>Research &amp; discovery</strong></td><td>70%</td><td>Большая часть уже готова</td></tr>
+        <tr class="rc"><td><strong>Attribution &amp; analytics</strong></td><td>95%</td><td>В первую очередь</td></tr>
+        <tr class="rc"><td><strong>Sales closing / medical sign-off (human-only)</strong></td><td>95%</td><td>Всегда</td></tr>
+        <tr class="rc"><td><strong>Organic + local (GMB, SEO, expat partnerships)</strong></td><td>90%</td><td>Месяцы 1–2</td></tr>
+        <tr class="rc"><td><strong>B2B corporate outreach (Glencore+)</strong></td><td>85%</td><td>Месяцы 1–2</td></tr>
+        <tr class="rc"><td><strong>Compliance &amp; quality gate</strong></td><td>80%</td><td>До любой рекламы</td></tr>
+        <tr class="ra"><td>Стратегия и позиционирование</td><td>75%</td><td>Сторонний консультант</td></tr>
+        <tr class="ra"><td>Email / WhatsApp / Telegram цепочки</td><td>75%</td><td>Частично в месяцы 1–2</td></tr>
+        <tr class="ra"><td>Платная реклама (Google &gt; Meta)</td><td>70%</td><td>Google — да; Meta — осторожно</td></tr>
+        <tr class="ra"><td>Контент-производство</td><td>65%</td><td>Минимальный конвейер сначала</td></tr>
+      </tbody>
+    </table>
+    <div class="legend">
+      <div class="legend-i"><div class="ld ld-rg"></div> Уже готово / в работе</div>
+      <div class="legend-i"><div class="ld ld-rc"></div> Критично — делать сейчас</div>
+      <div class="legend-i"><div class="ld ld-ra"></div> Важно — следующим приоритетом</div>
+    </div>
+  </div>
+</div>
+
+<!-- SLIDE 10 — ОДНО ОКНО -->
+<div class="slide">
+  <div class="slide-counter"><span class="current"></span> / <span class="total"></span></div>
+  <div class="slide-inner">
+    <div class="label">10 — Три разные задачи, одно окно</div>
+    <h2>Три компетенции.</h2>
+    <table>
+      <thead>
+        <tr><th>Задача</th><th>Кто делает</th><th>Как организовано</th></tr>
+      </thead>
+      <tbody>
+        <tr class="rcu"><td><strong>1. Позиционирование и бренд</strong> — ясный ответ на «зачем именно у вас», tone of voice DE/EN/RU</td><td>Brand strategist / senior копирайтер</td><td>Привлекаем через нас на one-off, либо ваши подрядчики</td></tr>
+        <tr class="rcu"><td><strong>2. Performance-трафик</strong> — Google Ads, Meta, медиабайинг, creative</td><td>Performance-маркетолог</td><td>Либо через нас, либо ваш внешний контакт. Мы координируем</td></tr>
+        <tr class="ra"><td><strong>3. Revenue-инфраструктура</strong> — attribution, автоматизация воронки, reactivation, rebooking</td><td><strong>Мы</strong></td><td>Наша прямая работа</td></tr>
+      </tbody>
+    </table>
+    <ul style="margin-top:14px; font-family:var(--fu);">
+      <li style="font-family:var(--fu); font-size:14px; padding:3px 0;"><strong>У вас нет времени управлять тремя командами</strong> — мы обеспечиваем, чтобы три задачи не разъехались</li>
+    </ul>
+  </div>
+</div>
+
+<!-- SLIDE 11 — AI / ЧЕЛОВЕК -->
+<div class="slide">
+  <div class="slide-counter"><span class="current"></span> / <span class="total"></span></div>
+  <div class="slide-inner">
+    <div class="label">11 — Что делает AI / что делает человек</div>
+    <h2>Честное разделение ролей</h2>
+    <table class="t-sm">
+      <thead>
+        <tr><th>Зона работы</th><th>AI</th><th>Человек</th></tr>
+      </thead>
+      <tbody>
+        <tr class="rg"><td><strong>Research &amp; discovery</strong></td><td>Сбор данных, мониторинг конкурентов, отчёты</td><td>Quarterly approval стратегии</td></tr>
+        <tr class="ra"><td><strong>Tone of voice</strong></td><td>— Не делает —</td><td>REjuve: все решения. Brand consultant — one-off установка</td></tr>
+        <tr class="ra"><td><strong>Контент — тексты</strong></td><td>Драфты DE/EN/RU по brand corpus</td><td>Approve final. DE-native weekly review</td></tr>
+        <tr class="ra"><td><strong>Контент — визуалы</strong></td><td>Концепты, карусели, generative visuals</td><td>Approve. Photographer — физические съёмки</td></tr>
+        <tr class="rcu"><td><strong>Compliance / medical</strong></td><td>Pre-publish скрининг (HMG, UWG, Meta Health Policy)</td><td>Licensed practitioner sign-off. Lawyer — one-off setup</td></tr>
+        <tr class="ra"><td><strong>Attribution / analytics</strong></td><td>Сбор событий, live dashboard real-time</td><td>Еженедельный обзор результатов</td></tr>
+        <tr class="ra"><td><strong>Email / WhatsApp / Telegram</strong></td><td>Триггерные персональные цепочки</td><td>One-time approve шаблонов</td></tr>
+        <tr class="rg"><td><strong>Lead response</strong></td><td>Типовые вопросы, слот-запись, квалификация</td><td>Hot-leads → звонок sales. VIP и жалобы — всегда человек</td></tr>
+        <tr class="ra"><td><strong>Reactivation / rebooking / no-show</strong></td><td>Сегментация, цепочки, трекинг возвратов</td><td>Approve первой генерации. Далее — только edge cases</td></tr>
+        <tr class="rc"><td><strong>Sales closing</strong></td><td>— Не делает. Готовит briefing + summary —</td><td>Только human-to-human</td></tr>
+        <tr class="rg"><td><strong>B2B corporate outreach</strong></td><td>Research, драфты outreach, follow-ups</td><td>Звонки, встречи, закрытие</td></tr>
+        <tr class="rcu"><td><strong>Paid ads (Meta, Google)</strong></td><td>Creatives, compliance screener</td><td>Performance-agency: strategy + media buying</td></tr>
+        <tr class="rcu"><td><strong>События, influencer</strong></td><td>Checklist, задачи, follow-up участникам</td><td>Команда: организация, присутствие, отношения</td></tr>
+      </tbody>
+    </table>
+    <div class="legend" style="margin-top:8px;">
+      <div class="legend-i"><div class="ld ld-rc"></div> Никогда не автоматизируется</div>
+      <div class="legend-i"><div class="ld ld-ra"></div> REjuve approve required</div>
+      <div class="legend-i"><div class="ld ld-rcu"></div> Внешний специалист</div>
+      <div class="legend-i"><div class="ld ld-rg"></div> AI-автономно</div>
+    </div>
+  </div>
+</div>
+
+<!-- SLIDE 12 — УРОВНИ АВТОНОМИИ -->
+<div class="slide">
+  <div class="slide-counter"><span class="current"></span> / <span class="total"></span></div>
+  <div class="slide-inner">
+    <div class="label">12 — Уровни автоматизации</div>
+    <h2>Уровни автоматизации</h2>
+    <table>
+      <thead>
+        <tr><th>Уровень</th><th>Что делает AI</th><th>Что делает человек</th><th>Этап перехода</th></tr>
+      </thead>
+      <tbody>
+        <tr class="rat"><td><strong>L0</strong></td><td>Ничего</td><td>Всё руками</td><td>Начало — до пилота</td></tr>
+        <tr class="ra"><td><strong>L1</strong></td><td>Draft, summary, suggestion</td><td>Редактирует, решает, отправляет</td><td>Пилот — начало</td></tr>
+        <tr class="ra"><td><strong>L2</strong></td><td>Workflow до точки approve-кнопки</td><td>Approve одной кнопкой, правит edge cases</td><td>Пилот — завершение</td></tr>
+        <tr><td><strong>L3</strong></td><td>Автономный workflow + алерты на нестандартное</td><td>Мониторит исключения</td><td>После пилота</td></tr>
+        <tr><td><strong>L4</strong></td><td>Сам находит проблемы и решает</td><td>Ставит гардрейлы, стратегия</td><td>Долгосрочно</td></tr>
+      </tbody>
+    </table>
+    <div class="alert" style="margin-top:14px;">
+      <p>На старте approve-rate AI-драфтов: <strong>15–30%.</strong> По мере работы с вашей обратной связью он растёт до <strong>80–90%.</strong> Каждая правка обучает агента вашему tone of voice и edge cases. Уровни нельзя перепрыгивать — каждый следующий строится на обратной связи предыдущего.</p>
+    </div>
+  </div>
+</div>
+
+<!-- SLIDE 13 — SCOPE -->
+<div class="slide">
+  <div class="slide-counter"><span class="current"></span> / <span class="total"></span></div>
+  <div class="slide-inner">
+    <div class="label">13 — Наша часть: узкий scope за 8 недель</div>
+    <h2>Четыре компонента. Ничего лишнего.</h2>
+    <div class="scope-grid">
+      <div>
+        <h3>Что настраиваем</h3>
+        <table class="t-sm">
+          <thead><tr><th>Недели</th><th>Что</th></tr></thead>
+          <tbody>
+            <tr class="rat"><td><strong>До старта</strong></td><td>Discovery-интервью, сбор доступов, выгрузка данных, финальный бриф — несколько рабочих дней</td></tr>
+            <tr class="rc"><td><strong>1–2</strong></td><td>Attribution pipeline: UTM → SimplyBook webhooks → live dashboard</td></tr>
+            <tr class="ra"><td><strong>2–3</strong></td><td>Минимальный контент-конвейер + compliance-screener</td></tr>
+            <tr class="ra"><td><strong>3–5</strong></td><td>Reactivation engine: сегментация → триггерные цепочки → возврат спящих</td></tr>
+            <tr class="ra"><td><strong>5–7</strong></td><td>Post-visit rebooking + no-show rescue: follow-ups + напоминания</td></tr>
+            <tr><td><strong>7–8</strong></td><td>Отчётность + handover</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div>
+        <h3>Что мы НЕ делаем в этом scope</h3>
+        <ul class="xlist">
+          <li>Полноценный paid advertising (performance-agency)</li>
+          <li>Бренд-стратегию и позиционирование (brand consultant)</li>
+          <li>Physical съёмки (photographer)</li>
+          <li>Sales closing (вы)</li>
+          <li>Полный контент-конвейер 12–15 постов/мес</li>
+        </ul>
+        <h3 style="margin-top:14px;">Зачем именно эти 4 блока</h3>
+        <ul class="clist">
+          <li><strong>Attribution</strong> — без него нельзя честно оценить ни один канал</li>
+          <li><strong>Reactivation</strong> — самый быстрый revenue (клиенты уже знают бренд)</li>
+          <li><strong>Post-visit / no-show</strong> — самые частые утечки first→repeat</li>
+          <li><strong>Минимальный контент</strong> — чтобы не было тишины в соцсетях</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- SLIDE 14 — ПИЛОТ + NEXT STEPS -->
+<div class="slide">
+  <div class="slide-counter"><span class="current"></span> / <span class="total"></span></div>
+  <div class="slide-inner">
+    <div class="label">14 — Пилот 4 недели + next steps</div>
+    <h2>Один живой результат к концу второй недели</h2>
+    <div class="scope-grid">
+      <div>
+        <h3>Что делаем за 4 недели</h3>
+        <table class="t-sm">
+          <thead><tr><th>Неделя</th><th>Результат</th></tr></thead>
+          <tbody>
+            <tr class="ra"><td>1</td><td>Discovery + audit данных (CRM, SimplyBook, Meta BM, Mailchimp)</td></tr>
+            <tr class="rc"><td>2</td><td><strong>Живой dashboard с attribution</strong> — впервые видите, какой канал приводит платящих</td></tr>
+            <tr><td>3–4</td><td>Одна автоматизация (reactivation или lead response) + карта утечек</td></tr>
+          </tbody>
+        </table>
+        <h3 style="margin-top:12px;">Что вы получаете в любом случае</h3>
+        <ul class="clist">
+          <li>Dashboard с baseline-метриками — остаётся у вас</li>
+          <li>Карта потерь воронки</li>
+          <li>Roadmap на следующие 2 месяца с конкретными шагами</li>
+        </ul>
+      </div>
+      <div>
+        <h3>Что нам нужно от вас</h3>
+        <ul class="clist">
+          <li>Доступы: SimplyBook.me, Meta BM, Mailchimp, Google Business</li>
+          <li>1 час founder'а для интервью</li>
+          <li>Экспорт Meta-кампаний май 2025 – апрель 2026</li>
+          <li>Ответы на 7 ключевых вопросов о вашем бизнесе</li>
+        </ul>
+        <h3 style="margin-top:12px;">Next steps</h3>
+        <ol class="steps">
+          <li>Сегодня — пройти 7 валидационных вопросов</li>
+          <li>В течение недели — вы даёте доступы, мы проводим audit-интервью</li>
+          <li>Через 2 недели — у вас живой dashboard + первый automation-прототип</li>
+          <li>Через 4 недели — gate: продолжаем, меняем подход, или расходимся с чистой картинкой</li>
+        </ol>
+        <p style="font-family:var(--fu); font-size:12.5px; color:var(--text-dim); margin-top:12px; border-top:1px solid var(--border); padding-top:8px;">
+          Условия сотрудничества обсуждаются отдельно — не на этой встрече
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="progress-bar"></div>
+<div class="nav-hint">← → / пробел / свайп</div>
+
+<script>
+let current = 0;
+const slides = document.querySelectorAll('.slide');
+const bar = document.querySelector('.progress-bar');
+const total = slides.length;
+
+document.querySelectorAll('.total').forEach(el => el.textContent = total);
+
+function show(n) {
+  slides[current].classList.remove('active');
+  current = Math.max(0, Math.min(n, total - 1));
+  slides[current].classList.add('active');
+  if (bar) bar.style.width = ((current + 1) / total * 100) + '%';
+  slides[current].querySelectorAll('.current').forEach(el => el.textContent = current + 1);
+}
+
+show(0);
+
+document.addEventListener('keydown', e => {
+  if (['ArrowRight', 'Space', 'Enter', 'PageDown'].includes(e.code)) { e.preventDefault(); show(current + 1); }
+  if (['ArrowLeft', 'Backspace', 'PageUp'].includes(e.code)) { e.preventDefault(); show(current - 1); }
+  if (e.code === 'Home') { e.preventDefault(); show(0); }
+  if (e.code === 'End') { e.preventDefault(); show(total - 1); }
+});
+
+let tx = 0;
+document.addEventListener('touchstart', e => { tx = e.changedTouches[0].screenX; });
+document.addEventListener('touchend', e => {
+  const d = tx - e.changedTouches[0].screenX;
+  if (Math.abs(d) > 50) d > 0 ? show(current + 1) : show(current - 1);
+});
+
+// Click right half = next, left half = prev
+document.addEventListener('click', e => {
+  if (e.target.closest('a, button, input')) return;
+  e.clientX > window.innerWidth / 2 ? show(current + 1) : show(current - 1);
+});
+</script>
+</body>
+</html>

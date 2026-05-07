@@ -1,0 +1,74 @@
+/* title — opening cover slide. System B canonical (rejuve-pitch-deck).
+ *
+ * Composition: Playfair brand wordmark (with optional <em> accent
+ * fragment) + uppercase utility-sans cover-sub + 40×2 gold .rule +
+ * dim utility-sans cover-meta. Centered via the slide-level `align:
+ * center` recipe flag (`.slide.center`).
+ *
+ * No <h1> here — the brand wordmark is the visual anchor and uses its
+ * own `.brand` class for the larger 58px display weight.
+ */
+
+.title-block {
+  gap: 0;
+  align-items: center;
+  text-align: center;
+}
+
+.title-block .brand {
+  font-family: var(--fh);
+  font-size: 58px;
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: 2px;
+  color: var(--text);
+}
+.title-block .brand em {
+  font-style: normal;       /* System B: em is COLOR-only, not italic */
+  color: var(--accent);
+}
+
+.title-block .cover-sub {
+  font-family: var(--fu);
+  font-size: 13px;
+  letter-spacing: 3.5px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-top: 10px;
+}
+.title-block .cover-sub:empty { display: none; }
+
+/* Cover-specific .rule — centered + larger margin than per-slide rule. */
+.title-block .rule {
+  margin: 26px auto;
+}
+
+.title-block .cover-meta {
+  font-family: var(--fu);
+  font-size: 12px;
+  color: var(--text-dim);
+  opacity: 0.55;
+  letter-spacing: 1px;
+}
+.title-block .cover-meta:empty { display: none; }
+
+/* Mobile (R2b plan §6 — Gate B). Brand stays the visual anchor; sizes
+   shrink proportionally for 390px viewport while preserving the wordmark
+   + rule + meta rhythm. */
+@media (max-width: 480px) {
+  .title-block .brand {
+    font-size: 36px;
+    letter-spacing: 1.5px;
+  }
+  .title-block .cover-sub {
+    font-size: 11px;
+    letter-spacing: 2.5px;
+    margin-top: 8px;
+  }
+  .title-block .rule {
+    margin: 18px auto;
+  }
+  .title-block .cover-meta {
+    font-size: 11px;
+  }
+}
