@@ -20,7 +20,7 @@
     {
       "name": "h2t-core",
       "description": "Session lifecycle: start, handoff, init-project, scaffold-project, overview, setup.",
-      "version": "3.0.21",
+      "version": "3.0.22",
       "author": {
         "name": "lichtpfad"
       },
