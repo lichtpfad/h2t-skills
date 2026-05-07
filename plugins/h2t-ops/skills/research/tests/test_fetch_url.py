@@ -231,3 +231,13 @@ def test_direct_provider_429_raises_transient():
         mock_urlopen.side_effect = _http_error(429)
         with pytest.raises(fetch_url.ProviderTransientError):
             p.fetch("https://example.com/x", timeout_ms=15000, user_agent="ua/test")
+
+
+def test_direct_provider_urlerror_raises_transient():
+    p = fetch_url.DirectProvider()
+    with patch("urllib.request.urlopen") as mock_urlopen:
+        mock_urlopen.side_effect = urllib.error.URLError("connection refused")
+        with pytest.raises(fetch_url.ProviderTransientError) as ei:
+            p.fetch("https://example.com/x", timeout_ms=15000, user_agent="ua/test")
+    assert ei.value.http_status is None
+    assert ei.value.latency_ms >= 0
