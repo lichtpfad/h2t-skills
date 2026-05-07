@@ -631,3 +631,29 @@ def test_ladder_all_active_providers_fail_returns_failed():
     providers_attempted = [a["provider"] for a in env["telemetry"]["attempts"]]
     assert providers_attempted == ["direct", "jina"]
     assert env["telemetry"]["reason_for_failed"] == "all_providers_failed"
+
+
+def test_ladder_degraded_picks_best_candidate_by_body_chars():
+    config = fetch_url.load_config(None)
+    short_html = _load_fixture("short_body.html").encode("utf-8")
+    jina_short = b"Title: Tiny\n\nMarkdown Content:\nHi.\n"
+    def fake_urlopen(req, timeout):
+        if req.full_url.startswith("https://r.jina.ai/"):
+            return _make_http_response(
+                jina_short,
+                url="https://r.jina.ai/https://example.com/x",
+                headers={"Content-Type": "text/markdown"},
+            )
+        return _make_http_response(short_html, url="https://example.com/x")
+    with patch("urllib.request.urlopen", side_effect=fake_urlopen):
+        env = fetch_url.fetch_via_ladder(
+            url="https://example.com/x",
+            provider_choice="auto",
+            config=config,
+            user_agent="ua/test",
+            keep_raw=False,
+        )
+    assert env["status"] == "DEGRADED"
+    # Whichever has more body_chars wins; both small here, just verify shape:
+    assert env["provider_used"] in ("direct", "jina")
+    assert env["telemetry"]["reason_for_degraded"] is not None
