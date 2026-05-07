@@ -403,3 +403,15 @@ def _detect_encoding(headers: dict[str, str], body: bytes) -> str:
     if "charset=" in ct.lower():
         return ct.lower().split("charset=", 1)[1].split(";")[0].strip() or "utf-8"
     return "utf-8"
+
+
+import re
+
+_SCRIPT_TAG_RE = re.compile(r"<script\b[^>]*>", re.IGNORECASE)
+
+
+def _detect_js_shell(*, html: str, body_text: str) -> bool:
+    """Heuristic: SPA skeleton — short body + many script tags."""
+    if len(body_text) >= 200:
+        return False
+    return len(_SCRIPT_TAG_RE.findall(html)) >= 5
