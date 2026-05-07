@@ -241,3 +241,22 @@ def test_direct_provider_urlerror_raises_transient():
             p.fetch("https://example.com/x", timeout_ms=15000, user_agent="ua/test")
     assert ei.value.http_status is None
     assert ei.value.latency_ms >= 0
+
+
+def test_direct_provider_401_with_www_authenticate_is_gated():
+    p = fetch_url.DirectProvider()
+    err = _http_error(401, headers={"WWW-Authenticate": 'Bearer realm="api"'})
+    with patch("urllib.request.urlopen") as mock_urlopen:
+        mock_urlopen.side_effect = err
+        with pytest.raises(fetch_url.ProviderHardGate) as ei:
+            p.fetch("https://example.com/x", timeout_ms=15000, user_agent="ua/test")
+    assert ei.value.gate == "login_required"
+
+
+def test_direct_provider_403_without_auth_header_is_permanent_not_gated():
+    p = fetch_url.DirectProvider()
+    err = _http_error(403, headers={})
+    with patch("urllib.request.urlopen") as mock_urlopen:
+        mock_urlopen.side_effect = err
+        with pytest.raises(fetch_url.ProviderPermanentError):
+            p.fetch("https://example.com/x", timeout_ms=15000, user_agent="ua/test")
