@@ -1147,6 +1147,169 @@ def test_cli_json_emits_utf8_envelope_with_non_ascii(tmp_path, monkeypatch, caps
     assert "Жизненный" in parsed["body_text"]
 
 
+def test_detect_homepage_redirect_true_for_alltd_pattern():
+    """AllTD-class silent failure: requested article path → homepage `/`.
+    Live smoke (#98) confirmed 6/6 AllTD URLs collapse this way."""
+    assert fetch_url._detect_homepage_redirect(
+        "https://alltd.org/glsl-for-pops-lesson-0-introduction/",
+        "https://www.alltd.org/",
+    ) is True
+
+
+def test_detect_homepage_redirect_false_for_canonical_slash():
+    """`/foo` → `/foo/` is normal canonical-slash redirect, not a collapse."""
+    assert fetch_url._detect_homepage_redirect(
+        "https://example.com/foo",
+        "https://example.com/foo/",
+    ) is False
+
+
+def test_detect_homepage_redirect_false_for_root_request():
+    """Asked for `/`, got `/` — obviously fine (no path collapse)."""
+    assert fetch_url._detect_homepage_redirect(
+        "https://example.com/",
+        "https://example.com/",
+    ) is False
+
+
+def test_detect_homepage_redirect_false_for_no_final_url():
+    """No final URL recorded → cannot decide, do not flag."""
+    assert fetch_url._detect_homepage_redirect(
+        "https://example.com/foo/bar",
+        None,
+    ) is False
+
+
+def test_classify_content_redirect_collapsed_when_path_collapses():
+    """Long body that LOOKS like an article must be marked redirect_collapsed
+    when the requested article path collapsed to homepage root."""
+    homepage_html = (
+        "<html><body><article>"
+        "<h1>Welcome to AllTouchDesigner</h1>"
+        "<p>Browse our latest courses, tutorials, and resources for "
+        "TouchDesigner. We cover GLSL, POPs, CHOPs, and much more in our "
+        "tutorial library. " * 5
+        + "</p></article></body></html>"
+    )
+    _, _, txt, _, _, _ = fetch_url._inline_extract(
+        homepage_html, base_url="https://www.alltd.org/",
+    )
+    # Sanity: body is long enough to otherwise pass article classification.
+    assert len(txt) >= 200
+    ct, gate = fetch_url._classify_content(
+        html=homepage_html,
+        body_text=txt,
+        final_url="https://www.alltd.org/",
+        site="alltd.org",
+        min_body_chars=200,
+        request_url="https://alltd.org/glsl-for-pops-lesson-0-introduction/",
+    )
+    assert ct == "redirect_collapsed"
+    assert gate == "none"
+
+
+def test_ladder_alltd_collapse_falls_through_to_jina_then_degraded():
+    """Direct collapses (homepage shell), Jina also collapses (auth-gated
+    article requires login). All providers see the same homepage; final
+    envelope is DEGRADED with redirect_collapsed_to_homepage reason and
+    both attempts marked fetch_redirect_collapsed."""
+    config = fetch_url.load_config(None)
+    homepage_html = (
+        "<html><body><article>"
+        "<h1>AllTouchDesigner</h1>"
+        "<p>" + ("Welcome to our tutorial library covering GLSL, POPs, CHOPs. " * 20)
+        + "</p></article></body></html>"
+    ).encode("utf-8")
+    # Jina also returns the homepage chrome (Jina cannot authenticate).
+    jina_homepage_md = (
+        "Title: AllTouchDesigner\n\n"
+        "URL Source: https://www.alltd.org/\n\n"
+        "Markdown Content:\n"
+        + ("Welcome to AllTouchDesigner — homepage listing. " * 30)
+    ).encode("utf-8")
+
+    def fake_urlopen(req, timeout):
+        if req.full_url.startswith("https://r.jina.ai/"):
+            # Jina relay returns the homepage shell too (real-world AllTD).
+            return _make_http_response(
+                jina_homepage_md,
+                url="https://r.jina.ai/https://alltd.org/glsl-for-pops-lesson-0/",
+                headers={"Content-Type": "text/markdown; charset=utf-8"},
+            )
+        # Direct: requested /glsl-for-pops-lesson-0/ → final URL is homepage /.
+        return _make_http_response(
+            homepage_html,
+            url="https://www.alltd.org/",
+            headers={"Content-Type": "text/html; charset=utf-8"},
+        )
+
+    with patch("urllib.request.urlopen", side_effect=fake_urlopen):
+        env = fetch_url.fetch_via_ladder(
+            url="https://alltd.org/glsl-for-pops-lesson-0/",
+            provider_choice="auto",
+            config=config,
+            user_agent="ua/test",
+            keep_raw=False,
+        )
+    assert env["status"] == "DEGRADED"
+    assert env["content_type"] == "redirect_collapsed"
+    assert env["telemetry"]["reason_for_degraded"] == "redirect_collapsed_to_homepage"
+    attempts = env["telemetry"]["attempts"]
+    direct_attempt = next(a for a in attempts if a["provider"] == "direct")
+    jina_attempt = next(a for a in attempts if a["provider"] == "jina")
+    assert direct_attempt["error"] == "fetch_redirect_collapsed"
+    assert jina_attempt["error"] == "fetch_redirect_collapsed"
+
+
+def test_ladder_alltd_collapse_recovers_via_jina():
+    """Direct collapses to homepage, Jina returns the real article body.
+    Ladder must continue past the collapse and pick Jina's good result."""
+    config = fetch_url.load_config(None)
+    homepage_html = (
+        "<html><body><article>"
+        "<h1>AllTouchDesigner</h1>"
+        "<p>" + ("Welcome to our tutorial library covering GLSL, POPs, CHOPs. " * 20)
+        + "</p></article></body></html>"
+    ).encode("utf-8")
+    # Jina returns substantive markdown about the requested topic.
+    jina_real_article = (
+        "Title: GLSL for POPs — Lesson 0\n\n"
+        "URL Source: https://alltd.org/glsl-for-pops-lesson-0/\n\n"
+        "Markdown Content:\n"
+        "# GLSL for POPs — Lesson 0\n\n"
+        + ("Real lesson content discussing GLSL POPs setup in detail. " * 25)
+    ).encode("utf-8")
+
+    def fake_urlopen(req, timeout):
+        if req.full_url.startswith("https://r.jina.ai/"):
+            return _make_http_response(
+                jina_real_article,
+                url="https://r.jina.ai/https://alltd.org/glsl-for-pops-lesson-0/",
+                headers={"Content-Type": "text/markdown; charset=utf-8"},
+            )
+        return _make_http_response(
+            homepage_html,
+            url="https://www.alltd.org/",
+            headers={"Content-Type": "text/html; charset=utf-8"},
+        )
+
+    with patch("urllib.request.urlopen", side_effect=fake_urlopen):
+        env = fetch_url.fetch_via_ladder(
+            url="https://alltd.org/glsl-for-pops-lesson-0/",
+            provider_choice="auto",
+            config=config,
+            user_agent="ua/test",
+            keep_raw=False,
+        )
+    assert env["status"] == "OK"
+    assert env["provider_used"] == "jina"
+    attempts = env["telemetry"]["attempts"]
+    assert attempts[0]["provider"] == "direct"
+    assert attempts[0]["error"] == "fetch_redirect_collapsed"
+    assert attempts[1]["provider"] == "jina"
+    assert attempts[1]["error"] is None
+
+
 def test_public_api_exports_for_adapters():
     expected = {
         "fetch_via_ladder", "build_fetch_envelope", "load_config",
