@@ -8,6 +8,7 @@ from __future__ import annotations
 __version__ = "0.1.1"
 
 import argparse
+import importlib.util
 import json
 import os
 import random
@@ -20,6 +21,41 @@ from datetime import datetime, timezone
 from hashlib import sha256
 from pathlib import Path
 from typing import Any, NoReturn
+
+
+def _load_h2t_secrets():
+    """Dynamically import h2t_secrets from h2t-core plugin.
+
+    Cross-plugin path resolution:
+      1. relative path from this file: ../../../../../h2t-core/scripts/h2t_secrets.py
+         (parents: [0]=scripts, [1]=research, [2]=skills, [3]=h2t-ops, [4]=plugins)
+      2. fallback: $H2T_PLUGIN_ROOT/h2t-core/scripts/h2t_secrets.py
+      3. else: fail-loud with FileNotFoundError listing tried paths.
+    """
+    here = Path(__file__).resolve()
+    relative = here.parents[4] / "h2t-core" / "scripts" / "h2t_secrets.py"
+    candidates = [relative]
+    plugin_root = os.environ.get("H2T_PLUGIN_ROOT")
+    if plugin_root:
+        candidates.append(Path(plugin_root) / "h2t-core" / "scripts" / "h2t_secrets.py")
+
+    for candidate in candidates:
+        if candidate.is_file():
+            spec = importlib.util.spec_from_file_location("h2t_secrets", candidate)
+            if spec is None or spec.loader is None:
+                continue
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            return module
+    raise FileNotFoundError(
+        f"h2t_secrets module not found. Tried: {[str(c) for c in candidates]}. "
+        f"Set H2T_PLUGIN_ROOT or restore plugins/h2t-core/scripts/h2t_secrets.py."
+    )
+
+
+# Cached at first main() call so tests can monkeypatch this directly.
+_h2t_secrets_bootstrap = None
+
 
 # Module globals
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -684,6 +720,22 @@ def main(argv: list[str] | None = None) -> int:
             stream.reconfigure(encoding="utf-8", errors="replace")
         except (AttributeError, OSError):
             pass
+
+    # Load secrets from ~/.dor/secrets/secrets.env if available.
+    # Shell-exported env vars take precedence (non-overriding merge).
+    global _h2t_secrets_bootstrap
+    if _h2t_secrets_bootstrap is None:
+        try:
+            _h2t_secrets_bootstrap = _load_h2t_secrets().bootstrap
+        except FileNotFoundError as e:
+            die(4, f"EXA_ERROR:ENV {e}")
+    try:
+        _h2t_secrets_bootstrap()
+    except FileNotFoundError as e:
+        die(4, f"EXA_ERROR:ENV {e}")
+    except (ValueError, OSError) as e:
+        die(4, f"EXA_ERROR:ENV malformed secrets.env: {e}")
+
     parser = _build_parser()
     args = parser.parse_args(argv)
     if args.cmd == "preflight":
