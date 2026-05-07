@@ -712,3 +712,79 @@ def test_call_exa_returns_tuple_on_success():
         assert status == 200
         assert body["results"][0]["url"] == "u"
         assert latency >= 0
+
+
+# --- _run_search exception → exit code mapping (Task 1 review fix) ---
+
+
+def _make_search_systemprompts(tmp_path):
+    """Helper: minimal systemprompts dir for _run_search integration tests."""
+    sp_dir = tmp_path / "systemprompts"
+    sp_dir.mkdir()
+    (sp_dir / "generic.md").write_text("---\n---\nsp\n", encoding="utf-8")
+    return sp_dir
+
+
+def test_run_search_permanent_error_exits_2_with_api_message(monkeypatch, tmp_path, capsys):
+    monkeypatch.setenv("EXA_API_KEY", "stub")
+    monkeypatch.setattr(exa_search, "SYSTEMPROMPTS_DIR", _make_search_systemprompts(tmp_path))
+    err = exa_search.ExaPermanentError("http 401", http_status=401, latency_ms=50, body={"error": "bad"})
+    with patch.object(exa_search, "call_exa", side_effect=err):
+        with pytest.raises(SystemExit) as excinfo:
+            exa_search.main([
+                "search", "--query", "x", "--mode", "generic",
+                "--output-dir", str(tmp_path), "--project", "p",
+            ])
+    assert excinfo.value.code == 2
+    captured = capsys.readouterr().err
+    assert "EXA_ERROR:API" in captured
+    assert "http=401" in captured
+
+
+def test_run_search_transient_with_status_exits_2_with_api_message(monkeypatch, tmp_path, capsys):
+    monkeypatch.setenv("EXA_API_KEY", "stub")
+    monkeypatch.setattr(exa_search, "SYSTEMPROMPTS_DIR", _make_search_systemprompts(tmp_path))
+    err = exa_search.ExaTransientError("http 503", http_status=503, latency_ms=200, body={"error": "down"})
+    with patch.object(exa_search, "call_exa", side_effect=err):
+        with pytest.raises(SystemExit) as excinfo:
+            exa_search.main([
+                "search", "--query", "x", "--mode", "generic",
+                "--output-dir", str(tmp_path), "--project", "p",
+            ])
+    assert excinfo.value.code == 2
+    captured = capsys.readouterr().err
+    assert "EXA_ERROR:API" in captured
+    assert "http=503" in captured
+
+
+def test_run_search_transient_no_status_exits_3_with_network_message(monkeypatch, tmp_path, capsys):
+    """Format: EXA_ERROR:NETWORK <reason> after <N>ms — no duplicate 'network:' prefix."""
+    monkeypatch.setenv("EXA_API_KEY", "stub")
+    monkeypatch.setattr(exa_search, "SYSTEMPROMPTS_DIR", _make_search_systemprompts(tmp_path))
+    err = exa_search.ExaTransientError("timed out", http_status=None, latency_ms=300)
+    with patch.object(exa_search, "call_exa", side_effect=err):
+        with pytest.raises(SystemExit) as excinfo:
+            exa_search.main([
+                "search", "--query", "x", "--mode", "generic",
+                "--output-dir", str(tmp_path), "--project", "p",
+            ])
+    assert excinfo.value.code == 3
+    captured = capsys.readouterr().err
+    assert "EXA_ERROR:NETWORK timed out after 300ms" in captured
+    # Regression guard: no duplicate "network:" prefix.
+    assert "network: timed out" not in captured
+
+
+def test_run_search_malformed_exits_2_with_malformed_message(monkeypatch, tmp_path, capsys):
+    monkeypatch.setenv("EXA_API_KEY", "stub")
+    monkeypatch.setattr(exa_search, "SYSTEMPROMPTS_DIR", _make_search_systemprompts(tmp_path))
+    err = exa_search.ExaMalformedResponseError("non-JSON body", latency_ms=100)
+    with patch.object(exa_search, "call_exa", side_effect=err):
+        with pytest.raises(SystemExit) as excinfo:
+            exa_search.main([
+                "search", "--query", "x", "--mode", "generic",
+                "--output-dir", str(tmp_path), "--project", "p",
+            ])
+    assert excinfo.value.code == 2
+    captured = capsys.readouterr().err
+    assert "EXA_ERROR:MALFORMED" in captured

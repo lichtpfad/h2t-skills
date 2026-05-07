@@ -18,7 +18,7 @@ import urllib.request
 from datetime import datetime, timezone
 from hashlib import sha256
 from pathlib import Path
-from typing import Any
+from typing import Any, NoReturn
 
 # Module globals
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -45,7 +45,7 @@ CATEGORY_BLOCKS: dict[str, set[str]] = {
 }
 
 
-def die(code: int, stderr_msg: str) -> None:
+def die(code: int, stderr_msg: str) -> NoReturn:
     """Write structured error to stderr and exit. Spec §5.4."""
     print(stderr_msg, file=sys.stderr)
     sys.exit(code)
@@ -247,7 +247,7 @@ def call_exa(
     except urllib.error.URLError as e:
         latency = int((time.monotonic() - start) * 1000)
         raise ExaTransientError(
-            f"network: {e.reason}", http_status=None, latency_ms=latency,
+            f"{e.reason}", http_status=None, latency_ms=latency,
         ) from e
 
 
