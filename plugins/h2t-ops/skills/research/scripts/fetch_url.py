@@ -667,3 +667,222 @@ def load_config(path: Path | str | None) -> dict[str, Any]:
         return _deep_merge(DEFAULT_CONFIG, {})
     user = json.loads(p.read_text(encoding="utf-8"))
     return _deep_merge(DEFAULT_CONFIG, user)
+
+
+import sys
+
+LADDER_CLASSES: dict[str, type] = {
+    "direct": DirectProvider,
+    "jina": JinaProvider,
+    "playwright": PlaywrightProvider,
+    "crawl4ai": Crawl4AIProvider,
+    "firecrawl": FirecrawlProvider,
+    "browserless": BrowserlessProvider,
+}
+
+CUMULATIVE_TIMEOUT_WARN = "FETCH_WARN:CUMULATIVE_TIMEOUT_EXHAUSTED"
+
+
+def _attempt_record(provider: str, http: int | None, latency_ms: int,
+                    error: str | None) -> dict[str, Any]:
+    return {"provider": provider, "http": http,
+            "latency_ms": latency_ms, "error": error}
+
+
+def fetch_via_ladder(
+    *,
+    url: str,
+    provider_choice: str,
+    config: dict[str, Any],
+    user_agent: str,
+    keep_raw: bool,
+    min_body_chars: int | None = None,
+    output_paths: dict[str, Path] | None = None,
+) -> dict[str, Any]:
+    """Run the provider ladder for `url`. Returns envelope dict."""
+    if min_body_chars is None:
+        min_body_chars = int(config["ladder"]["min_body_chars"])
+    per_timeout = int(config["ladder"]["per_provider_timeout_ms"])
+    cum_timeout = int(config["ladder"]["cumulative_timeout_ms"])
+
+    order: list[str]
+    if provider_choice == "auto":
+        order = list(config["ladder"]["default_order"])
+    else:
+        order = [provider_choice]
+
+    attempts: list[dict[str, Any]] = []
+    skipped: dict[str, str] = {}
+    candidates: list[ProviderResult] = []
+    chosen: ProviderResult | None = None
+    final_status: str = "FAILED"
+    content_type = "unknown"
+    content_gate = "none"
+    reason_for_failed: str | None = None
+    reason_for_degraded: str | None = None
+    cumulative_ms = 0
+
+    for name in order:
+        if name not in LADDER_CLASSES:
+            skipped[name] = "unknown_provider"
+            continue
+        provider = LADDER_CLASSES[name]()
+        if provider_choice == "auto" and not provider.is_configured(
+            env=dict(os.environ), config=config,
+        ):
+            # Distinguish stub vs disabled-in-config.
+            if isinstance(provider, _StubProvider):
+                skipped[name] = "not_configured_stub"
+            else:
+                skipped[name] = "disabled_in_config"
+            continue
+        if cumulative_ms >= cum_timeout:
+            skipped[name] = "cumulative_timeout_exhausted"
+            print(f"{CUMULATIVE_TIMEOUT_WARN} skipped={name}", file=sys.stderr)
+            continue
+        try:
+            r = provider.fetch(url, timeout_ms=per_timeout, user_agent=user_agent)
+        except ProviderHardGate as e:
+            attempts.append(_attempt_record(
+                name, e.http_status, e.latency_ms, "fetch_gated_" + e.gate,
+            ))
+            cumulative_ms += e.latency_ms
+            content_type = "gated"
+            content_gate = e.gate
+            reason_for_failed = "content_gate_" + e.gate
+            final_status = "FAILED"
+            break
+        except ProviderPermanentError as e:
+            attempts.append(_attempt_record(
+                name, e.http_status, e.latency_ms, "fetch_http_4xx_nonretryable",
+            ))
+            cumulative_ms += e.latency_ms
+            continue
+        except ProviderTransientError as e:
+            attempts.append(_attempt_record(
+                name, e.http_status, e.latency_ms,
+                "fetch_network_timeout" if e.http_status is None
+                else "fetch_http_5xx_retryable",
+            ))
+            cumulative_ms += e.latency_ms
+            continue
+        except ProviderNotConfigured:
+            skipped[name] = "not_configured_stub"
+            continue
+
+        cumulative_ms += r.latency_ms
+        # Classify result on the basis of body content.
+        ct, gate = _classify_content(
+            html=r.raw_html or "",
+            body_text=r.body_text,
+            final_url=r.final_url or url,
+            site=_site_from_url(r.final_url or url),
+            min_body_chars=min_body_chars,
+        )
+        if gate != "none":
+            attempts.append(_attempt_record(
+                name, r.http_status, r.latency_ms, "fetch_gated_" + gate,
+            ))
+            content_type = "gated"
+            content_gate = gate
+            reason_for_failed = "content_gate_" + gate
+            final_status = "FAILED"
+            break
+        if ct == "article":
+            attempts.append(_attempt_record(
+                name, r.http_status, r.latency_ms, None,
+            ))
+            chosen = r
+            content_type = ct
+            final_status = "OK"
+            break
+        # DEGRADED-class result — record and continue.
+        err_label = "fetch_js_shell" if ct == "js_shell" else "fetch_short_body"
+        attempts.append(_attempt_record(
+            name, r.http_status, r.latency_ms, err_label,
+        ))
+        candidates.append(r)
+        content_type = ct  # last-seen DEGRADED type as fallback
+
+    # Record skip reasons for providers that follow an early break/success.
+    attempted_or_skipped = {a["provider"] for a in attempts} | set(skipped.keys())
+    for name in order:
+        if name in attempted_or_skipped:
+            continue
+        if name not in LADDER_CLASSES:
+            skipped[name] = "unknown_provider"
+            continue
+        provider = LADDER_CLASSES[name]()
+        if not provider.is_configured(env=dict(os.environ), config=config):
+            if isinstance(provider, _StubProvider):
+                skipped[name] = "not_configured_stub"
+            else:
+                skipped[name] = "disabled_in_config"
+        else:
+            skipped[name] = "not_attempted"
+
+    if chosen is None and final_status != "FAILED":
+        # All ran but none returned article. Pick best candidate or FAILED.
+        if candidates:
+            chosen = max(candidates, key=lambda c: c.body_chars)
+            final_status = "DEGRADED"
+            reason_for_degraded = (
+                "all_providers_degraded_short_body"
+                if all(c.body_chars < min_body_chars for c in candidates)
+                else "all_providers_degraded_js_shell"
+            )
+        else:
+            final_status = "FAILED"
+            reason_for_failed = (
+                reason_for_failed or "all_providers_failed"
+            )
+
+    # Build envelope.
+    if chosen is not None:
+        title = chosen.title
+        md = chosen.body_markdown
+        txt = chosen.body_text
+        body_chars = chosen.body_chars
+        links = chosen.links
+        canonical = chosen.canonical_url
+        lang = chosen.lang
+        final_url = chosen.final_url
+        provider_used = chosen.provider
+        site = _site_from_url(chosen.final_url or url)
+    else:
+        title = None
+        md = ""
+        txt = ""
+        body_chars = 0
+        links = []
+        canonical = None
+        lang = None
+        final_url = None
+        provider_used = "none"
+        site = _site_from_url(url)
+
+    raw_html_path = None  # populated by Task 30
+
+    return build_fetch_envelope(
+        status=final_status,
+        url=url,
+        final_url=final_url,
+        provider_used=provider_used,
+        content_type=content_type,
+        content_gate=content_gate,
+        title=title,
+        body_markdown=md,
+        body_text=txt,
+        body_chars=body_chars,
+        links=links,
+        attempts=attempts,
+        providers_skipped=skipped,
+        reason_for_failed=reason_for_failed,
+        reason_for_degraded=reason_for_degraded,
+        raw_html_path=raw_html_path,
+        site=site,
+        canonical_url=canonical,
+        lang=lang,
+        detected_reason=None,
+        user_agent=user_agent,
+    )

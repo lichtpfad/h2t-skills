@@ -508,3 +508,31 @@ def test_load_config_overrides_with_user_file(tmp_path):
     assert cfg["providers"]["direct"]["enabled"] is True  # default preserved
     assert cfg["ladder"]["min_body_chars"] == 500
     assert cfg["ladder"]["per_provider_timeout_ms"] == 15000  # default preserved
+
+
+def test_ladder_single_provider_ok_returns_envelope():
+    html = _load_fixture("public_article.html").encode("utf-8")
+    config = fetch_url.load_config(None)
+    # Disable jina + stubs so only direct is in ladder.
+    config["providers"]["jina"]["enabled"] = False
+    with patch("urllib.request.urlopen") as mock_urlopen:
+        mock_urlopen.return_value = _make_http_response(
+            html, url="https://example.com/pops-intro",
+        )
+        env = fetch_url.fetch_via_ladder(
+            url="https://example.com/pops-intro",
+            provider_choice="auto",
+            config=config,
+            user_agent="ua/test",
+            keep_raw=False,
+            min_body_chars=200,
+        )
+    assert env["status"] == "OK"
+    assert env["provider_used"] == "direct"
+    assert env["telemetry"]["attempts"][0]["provider"] == "direct"
+    assert env["telemetry"]["attempts"][0]["error"] is None
+    assert env["content_type"] == "article"
+    assert env["title"] == "POPs in TouchDesigner — Introduction"
+    assert env["body_chars"] > 200
+    assert "jina" in env["telemetry"]["providers_skipped"]
+    assert env["telemetry"]["providers_skipped_reason"]["jina"] == "disabled_in_config"
