@@ -1083,6 +1083,70 @@ def test_known_paywalled_domain_short_circuits(monkeypatch):
     assert env["content_gate"] == "paid"
 
 
+def test_cli_json_emits_utf8_envelope_with_non_ascii(tmp_path, monkeypatch, capsys):
+    """Live smoke (issue #98) revealed the --json envelope crashes with
+    UnicodeEncodeError on Windows when stdout is cp1252 and the body / title
+    contains non-ASCII (emoji, Cyrillic, em-dash). Process exits with empty
+    stdout. The CLI must reconfigure stdout/stderr to utf-8 so it never
+    requires PYTHONIOENCODING=utf-8 to print non-ASCII envelopes.
+    """
+    # HTML with mixed non-ASCII glyphs: Cyrillic + em-dash + emoji-like glyphs.
+    html = (
+        "<!DOCTYPE html><html lang=\"ru\"><head><meta charset=\"utf-8\">"
+        "<title>POPs — ⚡ Atributi ПОП ⦿</title>"
+        "</head><body><article>"
+        "<h1>POPs — ⚡ ПОП ⦿</h1>"
+        "<p>Жизненный "
+        "цикл атрибута "
+        "— emoji ⦿ ⚡ — long enough body content text "
+        "to clear the min_body_chars threshold for article classification, "
+        "padded with extra prose so the classifier accepts this as an article "
+        "rather than short_body. The em-dash and Cyrillic glyphs and emoji-like "
+        "characters must round-trip cleanly through stdout.</p>"
+        "</article></body></html>"
+    ).encode("utf-8")
+
+    # Replace sys.stdout/sys.stderr with cp1252-restricted streams. The
+    # buffer-backed TextIOWrapper exposes reconfigure() (Python 3.7+) so the
+    # fix-under-test is allowed to switch encoding to utf-8.
+    raw_out = io.BytesIO()
+    raw_err = io.BytesIO()
+    fake_stdout = io.TextIOWrapper(
+        raw_out, encoding="cp1252", errors="strict", write_through=True,
+    )
+    fake_stderr = io.TextIOWrapper(
+        raw_err, encoding="cp1252", errors="strict", write_through=True,
+    )
+    monkeypatch.setattr(sys, "stdout", fake_stdout)
+    monkeypatch.setattr(sys, "stderr", fake_stderr)
+
+    with patch("urllib.request.urlopen") as mock_urlopen:
+        mock_urlopen.return_value = _make_http_response(
+            html, url="https://example.com/x",
+            headers={"Content-Type": "text/html; charset=utf-8"},
+        )
+        rc = fetch_url.main([
+            "fetch", "--url", "https://example.com/x", "--json",
+            "--output-dir", str(tmp_path), "--project", "test",
+        ])
+
+    fake_stdout.flush()
+    fake_stderr.flush()
+    raw_stdout_bytes = raw_out.getvalue()
+    out_text = raw_stdout_bytes.decode("utf-8")
+
+    assert rc == 0, f"expected rc=0, got {rc}; stdout={raw_stdout_bytes!r}"
+    assert raw_stdout_bytes, "stdout must not be empty after --json print"
+    parsed = json.loads(out_text)
+    assert parsed["status"] == "OK"
+    # Title must round-trip — no mojibake, no replacement chars.
+    assert "ПОП" in parsed["title"]  # Cyrillic ПОП
+    assert "—" in parsed["title"]              # em-dash
+    assert "⚡" in parsed["title"]              # ⚡
+    # Body must also survive.
+    assert "Жизненный" in parsed["body_text"]
+
+
 def test_public_api_exports_for_adapters():
     expected = {
         "fetch_via_ladder", "build_fetch_envelope", "load_config",
