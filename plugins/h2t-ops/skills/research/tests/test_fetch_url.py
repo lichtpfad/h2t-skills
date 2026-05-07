@@ -678,3 +678,61 @@ def test_ladder_explicit_direct_does_not_fallback_to_jina():
     assert saw["jina"] is False
     providers_attempted = [a["provider"] for a in env["telemetry"]["attempts"]]
     assert providers_attempted == ["direct"]
+
+
+def test_ladder_stubs_skipped_with_reason_in_auto():
+    config = fetch_url.load_config(None)
+    html = _load_fixture("public_article.html").encode("utf-8")
+    with patch("urllib.request.urlopen") as mock_urlopen:
+        mock_urlopen.return_value = _make_http_response(
+            html, url="https://example.com/x",
+        )
+        env = fetch_url.fetch_via_ladder(
+            url="https://example.com/x",
+            provider_choice="auto",
+            config=config,
+            user_agent="ua/test",
+            keep_raw=False,
+        )
+    skipped_reason = env["telemetry"]["providers_skipped_reason"]
+    for stub in ("playwright", "crawl4ai", "firecrawl", "browserless"):
+        assert skipped_reason.get(stub) == "not_configured_stub"
+
+
+def test_ladder_jina_disabled_skipped_in_config(tmp_path):
+    config = fetch_url.load_config(None)
+    config["providers"]["jina"]["enabled"] = False
+    html = _load_fixture("public_article.html").encode("utf-8")
+    with patch("urllib.request.urlopen") as mock_urlopen:
+        mock_urlopen.return_value = _make_http_response(
+            html, url="https://example.com/x",
+        )
+        env = fetch_url.fetch_via_ladder(
+            url="https://example.com/x",
+            provider_choice="auto",
+            config=config,
+            user_agent="ua/test",
+            keep_raw=False,
+        )
+    assert env["telemetry"]["providers_skipped_reason"]["jina"] == "disabled_in_config"
+    assert "jina" not in [a["provider"] for a in env["telemetry"]["attempts"]]
+
+
+def test_ladder_paid_provider_not_called_when_key_set_but_stubbed(monkeypatch):
+    monkeypatch.setenv("FIRECRAWL_API_KEY", "x")
+    config = fetch_url.load_config(None)
+    html = _load_fixture("public_article.html").encode("utf-8")
+    with patch("urllib.request.urlopen") as mock_urlopen:
+        mock_urlopen.return_value = _make_http_response(
+            html, url="https://example.com/x",
+        )
+        env = fetch_url.fetch_via_ladder(
+            url="https://example.com/x",
+            provider_choice="auto",
+            config=config,
+            user_agent="ua/test",
+            keep_raw=False,
+        )
+    # Firecrawl must NOT appear in attempts even with key set in env.
+    assert "firecrawl" not in [a["provider"] for a in env["telemetry"]["attempts"]]
+    assert env["telemetry"]["providers_skipped_reason"]["firecrawl"] == "not_configured_stub"
