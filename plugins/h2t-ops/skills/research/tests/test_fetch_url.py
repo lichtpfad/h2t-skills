@@ -536,3 +536,36 @@ def test_ladder_single_provider_ok_returns_envelope():
     assert env["body_chars"] > 200
     assert "jina" in env["telemetry"]["providers_skipped"]
     assert env["telemetry"]["providers_skipped_reason"]["jina"] == "disabled_in_config"
+
+
+def test_ladder_direct_403_falls_through_to_jina():
+    config = fetch_url.load_config(None)
+    config["providers"]["playwright"]["enabled"] = False
+    config["providers"]["crawl4ai"]["enabled"] = False
+    config["providers"]["firecrawl"]["enabled"] = False
+    config["providers"]["browserless"]["enabled"] = False
+    jina_md = _load_fixture("public_article_jina.md").encode("utf-8")
+
+    def fake_urlopen(req, timeout):
+        if req.full_url.startswith("https://r.jina.ai/"):
+            return _make_http_response(
+                jina_md,
+                url="https://r.jina.ai/https://example.com/x",
+                headers={"Content-Type": "text/markdown; charset=utf-8"},
+            )
+        raise _http_error(403, headers={})
+
+    with patch("urllib.request.urlopen", side_effect=fake_urlopen):
+        env = fetch_url.fetch_via_ladder(
+            url="https://example.com/x",
+            provider_choice="auto",
+            config=config,
+            user_agent="ua/test",
+            keep_raw=False,
+        )
+    assert env["status"] == "OK"
+    assert env["provider_used"] == "jina"
+    assert env["telemetry"]["attempts"][0]["provider"] == "direct"
+    assert env["telemetry"]["attempts"][0]["error"] == "fetch_http_4xx_nonretryable"
+    assert env["telemetry"]["attempts"][1]["provider"] == "jina"
+    assert env["telemetry"]["attempts"][1]["error"] is None
