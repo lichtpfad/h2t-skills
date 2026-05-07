@@ -986,7 +986,27 @@ def _die_args(msg: str) -> None:
     sys.exit(EXIT_ARGS)
 
 
+def _force_utf8_streams() -> None:
+    """Reconfigure stdout/stderr to utf-8 so non-ASCII envelope text never
+    crashes on Windows cp1252 consoles. Live smoke against TD POP URLs (#98)
+    showed the --json path exits 1 with empty stdout when the title/body
+    contains emoji, Cyrillic, or em-dash and PYTHONIOENCODING=utf-8 is unset.
+    Machine-mode CLI must not require an env-var dance.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:
+            continue
+        try:
+            reconfigure(encoding="utf-8")
+        except Exception:
+            # Already-detached / non-text streams / read-only encodings
+            # must not crash startup. Best-effort only.
+            pass
+
+
 def main(argv: list[str] | None = None) -> int:
+    _force_utf8_streams()
     parser = _build_parser()
     args = parser.parse_args(argv)
     if args.cmd is None:
