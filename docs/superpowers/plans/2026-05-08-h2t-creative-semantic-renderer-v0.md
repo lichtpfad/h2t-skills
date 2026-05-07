@@ -719,6 +719,7 @@ scoped, and the four risks are tracked.
 
 ## 13. References
 
+- **Prior-art reference (READ THIS BEFORE T1):** `docs/superpowers/references/h2t-creative-semantic-rendering-prior-art.md` — discoverable standalone entry for the prior-art research (Storyblok / Contentful / Gutenberg / Portable Text / Block Protocol). Same content as architecture spec §15; this file is the discovery hook.
 - Architecture spec: `docs/superpowers/specs/2026-05-08-h2t-creative-semantic-rendering-architecture.md` (this branch).
 - Rhythm spec + research-validated v0 standard: `docs/visual-regression/2026-05-07-r2b/h2t-editorial-landing-rhythm-spec.md` (`codex/r2b-editorial-landing`; cherry-picked here in T6.3).
 - Source arbitration verdict: `docs/superpowers/specs/2026-05-07-r2b-landing-source-arbitration.md` (`codex/r2b-editorial-landing`; cherry-picked in T6.3).
