@@ -1063,7 +1063,66 @@ def _run_fetch(args: argparse.Namespace) -> int:
 
 def _emit_stdout_and_exit(envelope: dict[str, Any],
                           args: argparse.Namespace) -> int:
-    return EXIT_OK
+    status = envelope["status"]
+    if args.json:
+        print(json.dumps(envelope, ensure_ascii=False, indent=2))
+    elif status != "FAILED":
+        print(_render_markdown_summary(envelope, args))
+
+    if status == "FAILED":
+        _emit_stderr_for_failed(envelope)
+
+    if status == "OK" or status == "DEGRADED":
+        return EXIT_OK
+    # FAILED:
+    gate = envelope.get("content_gate", "none")
+    if gate in ("login_required", "paid"):
+        return EXIT_GATED
+    last = envelope["telemetry"]["attempts"][-1] if envelope["telemetry"]["attempts"] else None
+    if last and last.get("error") == "fetch_network_timeout":
+        return EXIT_NETWORK
+    return EXIT_HTTP
+
+
+def _render_markdown_summary(envelope: dict[str, Any],
+                             args: argparse.Namespace) -> str:
+    lines = []
+    lines.append(f"## Fetch: {envelope['url']}")
+    lines.append("")
+    lines.append(f"status: {envelope['status']}")
+    lines.append(f"provider_used: {envelope['provider_used']}")
+    lines.append(f"content_type: {envelope['content_type']}")
+    if envelope["title"]:
+        lines.append(f"title: {envelope['title']}")
+    lines.append(f"body_chars: {envelope['body_chars']}")
+    lines.append("")
+    body = envelope["body_markdown"] or envelope["body_text"]
+    excerpt = body[:500]
+    if excerpt:
+        lines.append("### Excerpt")
+        lines.append("")
+        lines.append(excerpt)
+    return "\n".join(lines)
+
+
+def _emit_stderr_for_failed(envelope: dict[str, Any]) -> None:
+    gate = envelope.get("content_gate", "none")
+    url = envelope["url"]
+    if gate in ("login_required", "paid"):
+        print(f"FETCH_ERROR:GATED url={url} gate={gate}", file=sys.stderr)
+        return
+    attempts = envelope["telemetry"]["attempts"]
+    if not attempts:
+        print(f"FETCH_ERROR:HTTP url={url} attempts=0", file=sys.stderr)
+        return
+    last = attempts[-1]
+    err = last.get("error") or ""
+    if err == "fetch_network_timeout":
+        print(f"FETCH_ERROR:NETWORK url={url} attempts={len(attempts)}",
+              file=sys.stderr)
+    else:
+        print(f"FETCH_ERROR:HTTP url={url} http={last.get('http')}",
+              file=sys.stderr)
 
 
 def _run_preflight(args: argparse.Namespace) -> int:
