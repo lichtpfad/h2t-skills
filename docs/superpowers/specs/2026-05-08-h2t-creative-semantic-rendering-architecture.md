@@ -562,4 +562,130 @@ rules:
 - tables/comparison blocks define desktop and mobile representation;
 - visual QA checks the rendered page, not component presence.
 
+---
+
+## 15. External References / Prior Art
+
+This architecture sits in a well-explored design space. Before
+committing to specific shapes (block schema, slot contracts, skin
+mapping, render separation), we cross-checked our v0 vocabulary
+against four mature reference systems via Context7 (verified
+2026-05-08).
+
+The conclusion is **adopt selected battle-tested patterns, do not
+copy any system wholesale**. h2t-creative is a static
+recipe → HTML assembler with no runtime DB, no localisation, no
+asset CDN, no GraphQL — we lift concepts, not infrastructure.
+
+### 15.1 Terminology mapping
+
+User-facing terminology was already aligned with prior art when this
+spec was drafted; Context7 verification confirmed the mapping below.
+
+| External pattern | Concrete reference | h2t-creative term |
+|---|---|---|
+| Content type / Story | Contentful `ContentType` with list of `Fields`; Storyblok content-type block (`is_root: true`) | landing recipe |
+| Block / Component | Storyblok `component` (with `schema` map); Gutenberg `block` registered via `block.json` | semantic block |
+| Component / block schema | Storyblok `schema: {field: {type, pos}}`; Gutenberg `attributes: {field: {type}}`; Contentful Field with `Type` | slot contract |
+| Fields | Contentful Fields (Text, Symbol, Asset, Link, Array, RichText, …) | slots |
+| Theme / frontend renderer | Gutenberg `save` / `render_callback`; Contentful "structure separated from frontend" | profile skin |
+| Visual editor preview | Storyblok preview field + visual editor; Gutenberg `edit` component | Agent Visual QA + screenshots |
+| Component library | Storyblok components API; Gutenberg block library; Block Protocol blocks | core block registry + extension protocol (§11) |
+| Reference between content types | Contentful `Link` field with `linkContentType: [...]` validation | block referencing another block (deferred to v1) |
+
+### 15.2 What we adopt
+
+1. **Edit / render separation principle (Gutenberg).**
+   Gutenberg `registerBlockType({edit, save})` splits the editor
+   experience from the persisted render output. v0 mirrors this with
+   `recipe` (persisted, structural) → `skin → renderer` (presentation
+   choice). The recipe author never authors HTML; the renderer never
+   re-interprets intent. Source: developer.wordpress.org/block-editor
+   /getting-started/fundamentals/registration-of-a-block.
+
+2. **Schema-as-data (Storyblok + Gutenberg).**
+   Both systems encode block field shape as a structured map, not as
+   ad-hoc constructor signatures. v0 follows this — slot contracts
+   live in `profiles/<p>/skins/<format>.yaml` as data, not Python.
+   Storyblok shape (verified):
+   ```json
+   {"schema": {"bio": {"type": "richtext", "pos": 0}, "name": {"type": "text", "pos": 1}}}
+   ```
+   v0 skin file (this spec §8) follows the same key-value pattern,
+   without the `pos` field — recipe-block ordering carries position.
+
+3. **Field validation (Contentful).**
+   Contentful per-field validators (`MimeTypeValidator`,
+   `LinkContentTypeValidator`, regex, etc.) prove that validation is
+   data, not code. v0-scope validation is shallow (required / optional,
+   asset existence) but the architecture leaves room for richer
+   validators in v1 by extending the slot-contract YAML schema with a
+   `validations:` key. Source: contentful.com/developers/docs/net
+   /tutorials/management-api.
+
+4. **Reference fields for cross-block links (Contentful).**
+   Contentful's `Link` field with `linkContentType: ["page"]`
+   validation is the precedent for "this CTA block references a deck
+   PR entry" — when we later need cross-recipe references. v0 does
+   NOT implement this; the architecture preserves the option by
+   keeping block content as a typed dict (block→block links remain
+   addable as a `link` slot type).
+
+5. **Distinguishing root from nestable (Storyblok).**
+   Storyblok's `is_root` (top-level content type) vs `is_nestable`
+   (block usable inside others) maps to v0's distinction between
+   recipe-level `blocks:` and block content fields that may carry
+   nested HTML. v0-scope keeps this implicit; the boundary is "only
+   top-level recipe entries are blocks; nested HTML inside a slot is
+   rendered HTML, not a block".
+
+### 15.3 What we explicitly do NOT adopt
+
+| Pattern | Why not |
+|---|---|
+| Runtime DB (Contentful Spaces, Storyblok content store) | h2t-creative recipes live in git; assembler is static. |
+| Localisation (Contentful `Localized: bool`, Storyblok translation layer) | Out of scope for v0 (architecture §10). Add via slot-level `localizable: bool` if it becomes a requirement. |
+| GraphQL / REST content delivery (Contentful CDA, Storyblok CDN) | We compile to flat HTML / CSS / JS files. No runtime API. |
+| Asset CDN with image transformations (Storyblok image service, Contentful Images API) | Asset model (architecture §6) handles assets as static file references; transformations are out of scope. |
+| Editor UI (Storyblok Visual Editor, Gutenberg admin) | h2t-creative authoring is YAML + the editorial-author skill; no GUI. Agent Visual QA gate IS our preview equivalent. |
+| Versioning of content (Contentful entries with version history, Storyblok stories) | Git provides versioning; recipes are git-tracked. |
+| Block Protocol's host-application contract | We don't have a host application; renderer IS the host. Pattern noted, not implemented. |
+
+### 15.4 Concrete shape verifications from Context7
+
+These confirmed v0's design choices were not made in isolation:
+
+- Storyblok component is "self-contained reusable element with one or more field types, can be nested" — direct match for our semantic-block definition.
+- Contentful Field has `Type` ∈ {Text, Symbol, Number, Asset, Link, Array, RichText, …} — superset of v0 slot types (text / html / asset / list); v0 deliberately starts narrow.
+- Gutenberg `attributes: {fieldName: {type: "string|boolean|number"}}` — same shape as v0 slot definitions.
+- Contentful Compose landing content type has reference fields like `section_bottom` linking to `component_text` — precedent for our future "landing has named slots that reference shared content blocks" evolution. NOT v0 scope.
+
+### 15.5 Sources
+
+User-supplied (curated):
+
+- Storyblok content modeling — https://www.storyblok.com/docs/concepts/content-modeling
+- Storyblok blocks — https://www.storyblok.com/docs/concepts/blocks
+- Contentful content models — https://www.contentful.com/help/content-model-and-content-type/
+- Contentful fields — https://www.contentful.com/help/fields/
+- Portable Text — https://www.portabletext.org/
+- Block Protocol spec — https://blockprotocol.org/spec
+
+Context7-verified (2026-05-08):
+
+- Storyblok components API — `/websites/storyblok` (1287 snippets, High reputation, score 69)
+- Contentful developer docs — `/websites/contentful_developers` (7370 snippets, score 88.3)
+- WordPress Block Editor (Gutenberg, substitute for direct Block Protocol library which is not in Context7) — `/websites/developer_wordpress_block-editor` (5246 snippets, score 71.35)
+- Portable Text React — `/portabletext/react-portabletext` (resolved but not queried — 18 snippets, niche; user-supplied summary sufficient)
+
+### 15.6 Verdict
+
+The terminology and pattern set chosen in §3, §4, §5, §6, §8, §11 of
+this spec are aligned with prior art. v0 does not need to wait for
+further research before T1 starts. This appendix records the prior
+art for the next maintainer who asks "why these names, why this
+shape" — the answer is "Storyblok / Contentful / Gutenberg use
+versions of these, and we adopted what fits a static-assembler
+context".
+
 
