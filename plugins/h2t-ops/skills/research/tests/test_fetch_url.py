@@ -1064,3 +1064,20 @@ def test_envelope_version_fields_present_on_ok(tmp_path):
     assert env["meta"]["envelope_version"] == "1"
     assert env["meta"]["fetch_envelope_version"] == "1"
     assert env["meta"]["primary_engine"] == "fetch_ladder"
+
+
+def test_known_paywalled_domain_short_circuits(monkeypatch):
+    # Inject a domain into the runtime set; PR#1 ships empty.
+    monkeypatch.setattr(fetch_url, "KNOWN_PAYWALLED_DOMAINS", {"premium.example"})
+    config = fetch_url.load_config(None)
+    html = b"<html><body><article><p>x</p></article></body></html>"
+    with patch("urllib.request.urlopen") as mock_urlopen:
+        mock_urlopen.return_value = _make_http_response(
+            html, url="https://premium.example/x",
+        )
+        env = fetch_url.fetch_via_ladder(
+            url="https://premium.example/x", provider_choice="auto",
+            config=config, user_agent="ua/test", keep_raw=False,
+        )
+    assert env["status"] == "FAILED"
+    assert env["content_gate"] == "paid"
