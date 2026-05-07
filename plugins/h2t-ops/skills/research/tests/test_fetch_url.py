@@ -369,3 +369,29 @@ def test_classify_content_type_gated_paid():
     )
     assert ct == "gated"
     assert gate == "paid"
+
+
+def test_direct_provider_login_wall_html_short_circuits_via_classifier():
+    html = _load_fixture("login_wall.html").encode("utf-8")
+    p = fetch_url.DirectProvider()
+    with patch("urllib.request.urlopen") as mock_urlopen:
+        mock_urlopen.return_value = _make_http_response(
+            html, url="https://example.com/article/x",
+        )
+        with pytest.raises(fetch_url.ProviderHardGate) as ei:
+            p.fetch("https://example.com/article/x",
+                    timeout_ms=15000, user_agent="ua/test")
+    assert ei.value.gate == "login_required"
+
+
+def test_direct_provider_paywall_html_short_circuits():
+    html = _load_fixture("paywall.html").encode("utf-8")
+    p = fetch_url.DirectProvider()
+    with patch("urllib.request.urlopen") as mock_urlopen:
+        mock_urlopen.return_value = _make_http_response(
+            html, url="https://example.com/article/x",
+        )
+        with pytest.raises(fetch_url.ProviderHardGate) as ei:
+            p.fetch("https://example.com/article/x",
+                    timeout_ms=15000, user_agent="ua/test")
+    assert ei.value.gate == "paid"

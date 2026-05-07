@@ -351,12 +351,23 @@ class DirectProvider:
                 http_status=None, latency_ms=latency_ms,
             )
         latency_ms = int((time.monotonic() - t0) * 1000)
-        # 2xx path:
         encoding = _detect_encoding(resp_headers, raw_bytes)
         html_text = raw_bytes.decode(encoding, errors="replace")
         title, md, txt, links, canonical, lang = _inline_extract(
             html_text, base_url=final_url,
         )
+        site = _site_from_url(final_url)
+        # Hard-gate short-circuit on the basis of body content (200 + gated DOM):
+        if _detect_login_wall(html=html_text, final_url=final_url):
+            raise ProviderHardGate(
+                "login wall in body", provider=self.name,
+                gate="login_required", http_status=http_status, latency_ms=latency_ms,
+            )
+        if _detect_paywall(html=html_text, site=site):
+            raise ProviderHardGate(
+                "paywall in body", provider=self.name,
+                gate="paid", http_status=http_status, latency_ms=latency_ms,
+            )
         return ProviderResult(
             provider=self.name,
             http_status=http_status,
