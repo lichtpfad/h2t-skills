@@ -569,3 +569,47 @@ def test_ladder_direct_403_falls_through_to_jina():
     assert env["telemetry"]["attempts"][0]["error"] == "fetch_http_4xx_nonretryable"
     assert env["telemetry"]["attempts"][1]["provider"] == "jina"
     assert env["telemetry"]["attempts"][1]["error"] is None
+
+
+def test_ladder_login_wall_short_circuits_does_not_call_jina():
+    config = fetch_url.load_config(None)
+    html = _load_fixture("login_wall.html").encode("utf-8")
+    calls = {"count": 0, "saw_jina": False}
+
+    def fake_urlopen(req, timeout):
+        calls["count"] += 1
+        if req.full_url.startswith("https://r.jina.ai/"):
+            calls["saw_jina"] = True
+        return _make_http_response(
+            html, url="https://example.com/article/x",
+        )
+
+    with patch("urllib.request.urlopen", side_effect=fake_urlopen):
+        env = fetch_url.fetch_via_ladder(
+            url="https://example.com/article/x",
+            provider_choice="auto",
+            config=config,
+            user_agent="ua/test",
+            keep_raw=False,
+        )
+    assert env["status"] == "FAILED"
+    assert env["content_gate"] == "login_required"
+    assert calls["saw_jina"] is False
+
+
+def test_ladder_paywall_short_circuits():
+    config = fetch_url.load_config(None)
+    html = _load_fixture("paywall.html").encode("utf-8")
+    with patch("urllib.request.urlopen") as mock_urlopen:
+        mock_urlopen.return_value = _make_http_response(
+            html, url="https://example.com/article/x",
+        )
+        env = fetch_url.fetch_via_ladder(
+            url="https://example.com/article/x",
+            provider_choice="auto",
+            config=config,
+            user_agent="ua/test",
+            keep_raw=False,
+        )
+    assert env["status"] == "FAILED"
+    assert env["content_gate"] == "paid"
