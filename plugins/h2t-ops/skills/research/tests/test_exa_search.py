@@ -865,3 +865,170 @@ def test_build_envelope_failed_empty_results():
     )
     assert env["status"] == "FAILED"
     assert env["results"] == []
+
+
+# --- search_with_retry (Task 4) ---
+
+def _ok_response(results_count: int = 3, cost: float = 0.01) -> tuple[int, dict, int]:
+    return (200, {
+        "results": [{"url": f"u{i}", "title": f"t{i}"} for i in range(results_count)],
+        "costDollars": {"total": cost},
+    }, 100)
+
+
+def _patch_no_sleep(monkeypatch):
+    monkeypatch.setattr(exa_search, "sleep_with_jitter", lambda s: None)
+
+
+def test_search_with_retry_ok_first_try(monkeypatch):
+    _patch_no_sleep(monkeypatch)
+    with patch.object(exa_search, "call_exa", return_value=_ok_response(3)) as m:
+        env, exit_code = exa_search.search_with_retry(
+            body={"query": "x"}, api_key="k", retry=True,
+        )
+    assert m.call_count == 1
+    assert env["status"] == "OK"
+    assert exit_code == 0
+    assert len(env["results"]) == 3
+    assert len(env["telemetry"]["attempts"]) == 1
+
+
+def test_search_with_retry_empty_then_empty_is_degraded(monkeypatch):
+    _patch_no_sleep(monkeypatch)
+    empty = (200, {"results": [], "costDollars": {"total": 0.0}}, 50)
+    with patch.object(exa_search, "call_exa", side_effect=[empty, empty]) as m:
+        env, exit_code = exa_search.search_with_retry(
+            body={"query": "x"}, api_key="k", retry=True,
+        )
+    assert m.call_count == 2
+    assert env["status"] == "DEGRADED"
+    assert exit_code == 0
+    assert env["telemetry"]["reason_for_fallback"] == "exa_empty_results"
+    assert all(a["error"] == "exa_empty_results" for a in env["telemetry"]["attempts"])
+
+
+def test_search_with_retry_empty_then_ok_is_ok(monkeypatch):
+    _patch_no_sleep(monkeypatch)
+    empty = (200, {"results": [], "costDollars": {"total": 0.0}}, 50)
+    with patch.object(exa_search, "call_exa", side_effect=[empty, _ok_response(2)]) as m:
+        env, exit_code = exa_search.search_with_retry(
+            body={"query": "x"}, api_key="k", retry=True,
+        )
+    assert m.call_count == 2
+    assert env["status"] == "OK"
+    assert exit_code == 0
+    assert env["telemetry"]["attempts"][0]["error"] == "exa_empty_results"
+    assert env["telemetry"]["attempts"][1]["error"] is None
+
+
+def test_search_with_retry_5xx_then_5xx_is_failed(monkeypatch):
+    _patch_no_sleep(monkeypatch)
+    err = exa_search.ExaTransientError("http 503", http_status=503, latency_ms=200)
+    with patch.object(exa_search, "call_exa", side_effect=[err, err]) as m:
+        env, exit_code = exa_search.search_with_retry(
+            body={"query": "x"}, api_key="k", retry=True,
+        )
+    assert m.call_count == 2
+    assert env["status"] == "FAILED"
+    assert exit_code == 2
+    assert all(a["error"] == "exa_5xx_retryable" for a in env["telemetry"]["attempts"])
+
+
+def test_search_with_retry_5xx_then_ok_is_ok(monkeypatch):
+    _patch_no_sleep(monkeypatch)
+    err = exa_search.ExaTransientError("http 503", http_status=503, latency_ms=200)
+    with patch.object(exa_search, "call_exa", side_effect=[err, _ok_response(1)]):
+        env, exit_code = exa_search.search_with_retry(
+            body={"query": "x"}, api_key="k", retry=True,
+        )
+    assert env["status"] == "OK"
+    assert exit_code == 0
+    assert len(env["telemetry"]["attempts"]) == 2
+
+
+def test_search_with_retry_4xx_no_retry_is_failed(monkeypatch):
+    _patch_no_sleep(monkeypatch)
+    err = exa_search.ExaPermanentError("http 401", http_status=401, latency_ms=80, body={"e": "k"})
+    with patch.object(exa_search, "call_exa", side_effect=[err]) as m:
+        env, exit_code = exa_search.search_with_retry(
+            body={"query": "x"}, api_key="k", retry=True,
+        )
+    assert m.call_count == 1
+    assert env["status"] == "FAILED"
+    assert exit_code == 2
+    assert env["telemetry"]["attempts"][0]["error"] == "exa_4xx_nonretryable"
+
+
+def test_search_with_retry_urlerror_then_urlerror_is_failed(monkeypatch):
+    _patch_no_sleep(monkeypatch)
+    err = exa_search.ExaTransientError("network: dns", http_status=None, latency_ms=300)
+    with patch.object(exa_search, "call_exa", side_effect=[err, err]):
+        env, exit_code = exa_search.search_with_retry(
+            body={"query": "x"}, api_key="k", retry=True,
+        )
+    assert env["status"] == "FAILED"
+    assert exit_code == 3
+    assert all(a["error"] == "exa_network_timeout" for a in env["telemetry"]["attempts"])
+
+
+def test_search_with_retry_urlerror_then_ok_is_ok(monkeypatch):
+    _patch_no_sleep(monkeypatch)
+    err = exa_search.ExaTransientError("network: dns", http_status=None, latency_ms=300)
+    with patch.object(exa_search, "call_exa", side_effect=[err, _ok_response(1)]):
+        env, exit_code = exa_search.search_with_retry(
+            body={"query": "x"}, api_key="k", retry=True,
+        )
+    assert env["status"] == "OK"
+    assert exit_code == 0
+
+
+def test_search_with_retry_malformed_no_retry(monkeypatch):
+    _patch_no_sleep(monkeypatch)
+    err = exa_search.ExaMalformedResponseError("non-JSON body", latency_ms=70)
+    with patch.object(exa_search, "call_exa", side_effect=[err]) as m:
+        env, exit_code = exa_search.search_with_retry(
+            body={"query": "x"}, api_key="k", retry=True,
+        )
+    assert m.call_count == 1
+    assert env["status"] == "FAILED"
+    assert exit_code == 2
+    assert env["telemetry"]["attempts"][0]["error"] == "exa_malformed_json"
+
+
+def test_search_with_retry_429_triggers_retry(monkeypatch):
+    _patch_no_sleep(monkeypatch)
+    err = exa_search.ExaTransientError("http 429", http_status=429, latency_ms=120)
+    with patch.object(exa_search, "call_exa", side_effect=[err, _ok_response(1)]) as m:
+        env, exit_code = exa_search.search_with_retry(
+            body={"query": "x"}, api_key="k", retry=True,
+        )
+    assert m.call_count == 2
+    assert env["status"] == "OK"
+    assert env["telemetry"]["attempts"][0]["error"] == "exa_5xx_retryable"  # 429 also retryable bucket
+
+
+def test_search_with_retry_no_retry_flag_disables_retries(monkeypatch):
+    _patch_no_sleep(monkeypatch)
+    empty = (200, {"results": [], "costDollars": {"total": 0.0}}, 50)
+    with patch.object(exa_search, "call_exa", side_effect=[empty, empty]) as m:
+        env, exit_code = exa_search.search_with_retry(
+            body={"query": "x"}, api_key="k", retry=False,
+        )
+    assert m.call_count == 1
+    assert env["status"] == "DEGRADED"
+    assert exit_code == 0
+    assert len(env["telemetry"]["attempts"]) == 1
+
+
+def test_search_with_retry_meta_fields_populated(monkeypatch):
+    _patch_no_sleep(monkeypatch)
+    with patch.object(exa_search, "call_exa", return_value=_ok_response(2)):
+        env, _ = exa_search.search_with_retry(
+            body={"query": "find me", "numResults": 10, "type": "auto"},
+            api_key="k", retry=True, mode="generic",
+        )
+    assert env["meta"]["query"] == "find me"
+    assert env["meta"]["mode"] == "generic"
+    assert env["meta"]["num_results_requested"] == 10
+    assert env["meta"]["num_results_returned"] == 2
+    assert "timestamp" in env["meta"]
