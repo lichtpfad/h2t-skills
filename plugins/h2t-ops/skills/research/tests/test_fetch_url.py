@@ -138,3 +138,26 @@ def test_provider_result_dataclass_fields():
     assert r.provider == "direct"
     assert r.body_chars == 1
     assert r.raw_html == "<html></html>"
+
+
+FIXTURES = Path(__file__).resolve().parent / "fixtures" / "fetch"
+
+
+def _load_fixture(name: str) -> str:
+    return (FIXTURES / name).read_text(encoding="utf-8")
+
+
+def test_inline_extract_public_article():
+    html = _load_fixture("public_article.html")
+    title, body_markdown, body_text, links, canonical, lang = (
+        fetch_url._inline_extract(html, base_url="https://example.com/pops-intro")
+    )
+    assert title == "POPs in TouchDesigner — Introduction"
+    assert "POPs are the new particle context" in body_text
+    assert "Attribute lifecycle" in body_text
+    assert "# POPs in TouchDesigner" in body_markdown or "POPs in TouchDesigner" in body_markdown
+    assert canonical == "https://example.com/pops-intro"
+    assert lang == "en"
+    assert any(l["href"].endswith("/glsl-pops") for l in links)
+    # Script content excluded from body
+    assert "/static/app.js" not in body_text

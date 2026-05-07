@@ -139,3 +139,166 @@ class ProviderResult:
     canonical_url: str | None
     lang: str | None
     raw_html: str | None
+
+
+from html.parser import HTMLParser
+from urllib.parse import urljoin
+
+
+class _InlineExtractor(HTMLParser):
+    """Minimal stdlib HTML extractor.
+
+    Strategy:
+    - Drop content inside <script>, <style>, <noscript>, <head>, <nav>,
+      <header>, <footer>, <aside>, <form>.
+    - Prefer body inside <article> if present; else <main>; else everything.
+    - Emit a stream of (kind, text) tokens that the caller turns into
+      markdown + plain text.
+    """
+
+    SKIP_TAGS = {"script", "style", "noscript", "nav", "header", "footer",
+                 "aside", "form", "iframe"}
+    BLOCK_TAGS = {"p", "h1", "h2", "h3", "h4", "h5", "h6", "li", "br",
+                  "div", "tr", "blockquote", "pre"}
+    HEADING_TAGS = {"h1", "h2", "h3", "h4", "h5", "h6"}
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self._skip_depth = 0
+        self._in_article = False
+        self._has_article = False
+        self.title: str | None = None
+        self._in_title = False
+        self._capture_outside_article = True
+        self._tokens: list[tuple[str, str]] = []
+        self._current_text: list[str] = []
+        self._current_link: dict[str, Any] | None = None
+        self.links: list[dict[str, Any]] = []
+        self.canonical_url: str | None = None
+        self.lang: str | None = None
+        self._in_head = False
+
+    # ---- helpers ----
+
+    def _emit_block(self, tag: str) -> None:
+        if not self._current_text:
+            return
+        text = "".join(self._current_text).strip()
+        self._current_text = []
+        if not text:
+            return
+        kind = "h" + tag[1] if tag in self.HEADING_TAGS else "p"
+        self._tokens.append((kind, text))
+
+    def _capturing(self) -> bool:
+        if self._skip_depth > 0:
+            return False
+        if self._has_article:
+            return self._in_article
+        return self._capture_outside_article
+
+    # ---- parser hooks ----
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        a = dict(attrs)
+        if tag == "html":
+            self.lang = a.get("lang") or self.lang
+            return
+        if tag == "head":
+            self._in_head = True
+            return
+        if tag == "title" and self._in_head:
+            self._in_title = True
+            return
+        if tag == "link" and self._in_head and a.get("rel") == "canonical":
+            self.canonical_url = a.get("href")
+            return
+        if tag == "article":
+            self._has_article = True
+            self._in_article = True
+            return
+        if tag in self.SKIP_TAGS:
+            self._skip_depth += 1
+            return
+        if not self._capturing():
+            return
+        if tag in self.BLOCK_TAGS or tag in self.HEADING_TAGS:
+            self._emit_block(tag)
+            self._pending_block = tag
+        if tag == "a":
+            href = a.get("href") or ""
+            self._current_link = {"href": href, "text": ""}
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag == "head":
+            self._in_head = False
+            return
+        if tag == "title":
+            self._in_title = False
+            return
+        if tag == "article":
+            self._in_article = False
+            self._emit_block("p")
+            return
+        if tag in self.SKIP_TAGS:
+            if self._skip_depth > 0:
+                self._skip_depth -= 1
+            return
+        if not self._capturing():
+            return
+        if tag == "a" and self._current_link is not None:
+            text = self._current_link["text"].strip()
+            href = self._current_link["href"]
+            if href:
+                self.links.append({"href": href, "text": text, "rel": ""})
+            self._current_link = None
+        if tag in self.BLOCK_TAGS or tag in self.HEADING_TAGS:
+            block_kind = getattr(self, "_pending_block", "p")
+            self._emit_block(block_kind)
+
+    def handle_data(self, data: str) -> None:
+        if self._in_title:
+            self.title = (self.title or "") + data
+            return
+        if not self._capturing():
+            return
+        if self._current_link is not None:
+            self._current_link["text"] += data
+        self._current_text.append(data)
+
+    def finish(self) -> None:
+        self._emit_block("p")
+        if self.title is not None:
+            self.title = self.title.strip()
+
+
+def _tokens_to_markdown_and_text(tokens: list[tuple[str, str]]) -> tuple[str, str]:
+    md_lines: list[str] = []
+    text_lines: list[str] = []
+    for kind, text in tokens:
+        if kind.startswith("h"):
+            level = int(kind[1])
+            md_lines.append(f"{'#' * level} {text}")
+        else:
+            md_lines.append(text)
+        text_lines.append(text)
+        md_lines.append("")
+        text_lines.append("")
+    md = "\n".join(md_lines).strip()
+    txt = "\n".join(text_lines).strip()
+    return md, txt
+
+
+def _inline_extract(
+    html: str, *, base_url: str,
+) -> tuple[str | None, str, str, list[dict[str, Any]], str | None, str | None]:
+    """Return (title, body_markdown, body_text, links, canonical_url, lang)."""
+    p = _InlineExtractor()
+    p.feed(html)
+    p.finish()
+    md, txt = _tokens_to_markdown_and_text(p._tokens)
+    # Resolve relative hrefs.
+    for link in p.links:
+        if link["href"]:
+            link["href"] = urljoin(base_url, link["href"])
+    return p.title, md, txt, p.links, p.canonical_url, p.lang
