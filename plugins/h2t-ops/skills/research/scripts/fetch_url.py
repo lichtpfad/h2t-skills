@@ -8,8 +8,27 @@ from __future__ import annotations
 
 __version__ = "0.0.1"
 
+import argparse
+import json
+import os
+import re
+import sys
+import time
+import urllib.error
+import urllib.request
+from dataclasses import dataclass
 from datetime import datetime, timezone
+from html.parser import HTMLParser
+from pathlib import Path
 from typing import Any
+from urllib.parse import urljoin, urlparse
+
+try:
+    import trafilatura as _trafilatura_module  # type: ignore
+    _TRAFILATURA_AVAILABLE = True
+except Exception:  # pragma: no cover
+    _trafilatura_module = None  # type: ignore
+    _TRAFILATURA_AVAILABLE = False
 
 ENVELOPE_VERSION = "1"
 FETCH_ENVELOPE_VERSION = "1"
@@ -80,9 +99,6 @@ def build_fetch_envelope(
     }
 
 
-from dataclasses import dataclass, field
-
-
 class ProviderTransientError(Exception):
     """Retryable across providers: 5xx, 429, network timeout, URLError."""
 
@@ -139,10 +155,6 @@ class ProviderResult:
     canonical_url: str | None
     lang: str | None
     raw_html: str | None
-
-
-from html.parser import HTMLParser
-from urllib.parse import urljoin
 
 
 class _InlineExtractor(HTMLParser):
@@ -304,17 +316,6 @@ def _inline_extract(
     return p.title, md, txt, p.links, p.canonical_url, p.lang
 
 
-import time
-import urllib.error
-import urllib.request
-
-try:
-    import trafilatura as _trafilatura_module  # type: ignore
-    _TRAFILATURA_AVAILABLE = True
-except Exception:  # pragma: no cover
-    _trafilatura_module = None  # type: ignore
-    _TRAFILATURA_AVAILABLE = False
-
 _trafilatura_warned = False
 
 
@@ -330,10 +331,9 @@ def _extract_with_optional_uplift(
         html, base_url=base_url,
     )
     global _trafilatura_warned
-    import sys as _sys
     if not _TRAFILATURA_AVAILABLE:
         if not _trafilatura_warned:
-            print("FETCH_WARN:NO_TRAFILATURA inline parser only", file=_sys.stderr)
+            print("FETCH_WARN:NO_TRAFILATURA inline parser only", file=sys.stderr)
             _trafilatura_warned = True
         return title, md, txt, links, canonical, lang
     try:
@@ -351,7 +351,6 @@ DEFAULT_USER_AGENT = (
 
 
 def _site_from_url(url: str) -> str:
-    from urllib.parse import urlparse
     return urlparse(url).hostname or ""
 
 
@@ -453,8 +452,6 @@ def _detect_encoding(headers: dict[str, str], body: bytes) -> str:
     return "utf-8"
 
 
-import re
-
 _SCRIPT_TAG_RE = re.compile(r"<script\b[^>]*>", re.IGNORECASE)
 
 
@@ -530,8 +527,6 @@ def _classify_content(
     # Listing heuristic: many <li><a> relative to text — punt for PR#1.
     return "article", "none"
 
-
-import os
 
 JINA_ENDPOINT_DEFAULT = "https://r.jina.ai/"
 
@@ -657,9 +652,6 @@ class BrowserlessProvider(_StubProvider):
     name = "browserless"
 
 
-import json
-from pathlib import Path
-
 DEFAULT_CONFIG: dict[str, Any] = {
     "providers": {
         "direct": {"enabled": True, "user_agent": DEFAULT_USER_AGENT,
@@ -709,8 +701,6 @@ def load_config(path: Path | str | None) -> dict[str, Any]:
     user = json.loads(p.read_text(encoding="utf-8"))
     return _deep_merge(DEFAULT_CONFIG, user)
 
-
-import sys
 
 LADDER_CLASSES: dict[str, type] = {
     "direct": DirectProvider,
@@ -934,9 +924,6 @@ def fetch_via_ladder(
     )
 
 
-import argparse
-
-
 EXIT_OK = 0
 EXIT_ARGS = 1
 EXIT_HTTP = 2
@@ -990,15 +977,12 @@ def main(argv: list[str] | None = None) -> int:
     return EXIT_ARGS  # unreachable
 
 
-import re as _re
-
 def _slug_from_url(url: str) -> str:
-    from urllib.parse import urlparse
     p = urlparse(url)
     host = p.hostname or "url"
     path = (p.path or "").strip("/").replace("/", "-")
     raw = f"{host}-{path}" if path else host
-    raw = _re.sub(r"[^a-zA-Z0-9._-]+", "-", raw).strip("-")
+    raw = re.sub(r"[^a-zA-Z0-9._-]+", "-", raw).strip("-")
     return raw[:80] or "url"
 
 
@@ -1151,6 +1135,20 @@ def _emit_stderr_for_failed(envelope: dict[str, Any]) -> None:
 
 
 def _run_preflight(args: argparse.Namespace) -> int:
+    # Ping Jina endpoint root.
+    try:
+        req = urllib.request.Request(JINA_ENDPOINT_DEFAULT, headers={
+            "User-Agent": DEFAULT_USER_AGENT,
+        })
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            resp.read()
+    except urllib.error.URLError as e:
+        print(f"FETCH_ERROR:ENV jina endpoint unreachable: {e}",
+              file=sys.stderr)
+        return EXIT_ENV
+    except Exception as e:
+        print(f"FETCH_ERROR:ENV preflight failure: {e}", file=sys.stderr)
+        return EXIT_ENV
     return EXIT_OK
 
 
