@@ -492,3 +492,100 @@ def _classify_content(
         return "short_body", "none"
     # Listing heuristic: many <li><a> relative to text — punt for PR#1.
     return "article", "none"
+
+
+import os
+
+JINA_ENDPOINT_DEFAULT = "https://r.jina.ai/"
+
+
+class JinaProvider:
+    """Fetch via Jina Reader URL-to-markdown relay."""
+
+    name = "jina"
+
+    def is_configured(self, env: dict[str, str], config: dict[str, Any]) -> bool:
+        cfg = (config.get("providers") or {}).get(self.name) or {}
+        return bool(cfg.get("enabled", True))
+
+    def fetch(self, url: str, *, timeout_ms: int, user_agent: str) -> ProviderResult:
+        endpoint = JINA_ENDPOINT_DEFAULT.rstrip("/") + "/"
+        target = endpoint + url
+        headers = {
+            "User-Agent": user_agent,
+            "Accept": "text/markdown",
+            "X-Return-Format": "markdown",
+        }
+        api_key = os.environ.get("JINA_API_KEY")
+        if api_key:
+            headers["Authorization"] = f"Bearer {api_key}"
+        req = urllib.request.Request(target, headers=headers)
+        t0 = time.monotonic()
+        try:
+            with urllib.request.urlopen(req, timeout=timeout_ms / 1000) as resp:
+                raw = resp.read()
+                final_url = resp.geturl() or target
+                http_status = getattr(resp, "status", 200)
+        except urllib.error.HTTPError as e:
+            latency_ms = int((time.monotonic() - t0) * 1000)
+            self._raise_http_error(e, latency_ms=latency_ms)
+            raise  # unreachable
+        except (urllib.error.URLError, TimeoutError, OSError) as e:
+            latency_ms = int((time.monotonic() - t0) * 1000)
+            raise ProviderTransientError(
+                f"network: {e}", provider=self.name,
+                http_status=None, latency_ms=latency_ms,
+            )
+        latency_ms = int((time.monotonic() - t0) * 1000)
+        markdown_text = raw.decode("utf-8", errors="replace")
+        title = _jina_extract_title(markdown_text)
+        body_md = _jina_extract_body(markdown_text)
+        body_text = body_md  # markdown ≈ text for Jina output
+        return ProviderResult(
+            provider=self.name,
+            http_status=http_status,
+            latency_ms=latency_ms,
+            final_url=url,  # logical URL, not the relay
+            title=title,
+            body_markdown=body_md,
+            body_text=body_text,
+            body_chars=len(body_text),
+            links=[],
+            canonical_url=None,
+            lang=None,
+            raw_html=markdown_text,  # Jina returns markdown; keep for --keep-raw
+        )
+
+    def _raise_http_error(self, e: urllib.error.HTTPError, *,
+                          latency_ms: int) -> None:
+        code = e.code
+        if code == 429 or 500 <= code <= 599:
+            raise ProviderTransientError(
+                f"http {code}", provider=self.name,
+                http_status=code, latency_ms=latency_ms,
+            )
+        raise ProviderPermanentError(
+            f"http {code}", provider=self.name,
+            http_status=code, latency_ms=latency_ms,
+        )
+
+
+def _jina_extract_title(md: str) -> str | None:
+    for line in md.splitlines():
+        s = line.strip()
+        if s.lower().startswith("title:"):
+            return s.split(":", 1)[1].strip()
+        if s.startswith("# "):
+            return s[2:].strip()
+    return None
+
+
+def _jina_extract_body(md: str) -> str:
+    """Drop the Jina header block ('Title:', 'URL Source:', empty lines) and
+    return the actual content after 'Markdown Content:' marker."""
+    lines = md.splitlines()
+    for i, line in enumerate(lines):
+        if line.strip().lower().startswith("markdown content:"):
+            return "\n".join(lines[i + 1:]).strip()
+    # No marker — return the whole thing.
+    return md.strip()
