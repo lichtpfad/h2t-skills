@@ -162,12 +162,17 @@ TD POP research run (`C:/work/TD/pipeline-log/td-pop/0001*.md`) выявил д�
 
 ### 5.3 Stdout Contract
 
-```
-default       → markdown summary (как сейчас)
---envelope    → JSON envelope (single line или indent=2 — выбираем indent=2 для читаемости)
-```
+|  | default | `--envelope` |
+|---|---|---|
+| `OK` | markdown summary | JSON envelope (indent=2) |
+| `DEGRADED` | markdown summary (показывает 0 results, но строится) | JSON envelope |
+| `FAILED` | **ничего** на stdout (stderr содержит `EXA_ERROR:*`) | **JSON envelope** (machine consumers нуждаются в structured FAILED для diagnostics) |
 
-Stderr остаётся каналом для `EXA_ERROR:*` независимо от флага.
+Stderr — независимо от флага: `EXA_ERROR:*` пишется на любой FAILED. Это сохраняет existing fail-loud контракт для legacy callers.
+
+**Sidecar `.sources.json`** пишется на любой статус (OK / DEGRADED / FAILED), чтобы post-hoc анализ failures был возможен. `.partial.md` пишется только для OK/DEGRADED — на FAILED нечего синтезировать.
+
+**Exit semantics:** на non-zero exit (FAILED) скрипт делает `sys.exit(exit_code)` **после** записи sidecar и печати stdout/stderr. Это критично: `die()` mid-function потерял бы envelope-output.
 
 ---
 
