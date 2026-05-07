@@ -613,3 +613,21 @@ def test_ladder_paywall_short_circuits():
         )
     assert env["status"] == "FAILED"
     assert env["content_gate"] == "paid"
+
+
+def test_ladder_all_active_providers_fail_returns_failed():
+    config = fetch_url.load_config(None)
+    with patch("urllib.request.urlopen") as mock_urlopen:
+        mock_urlopen.side_effect = _http_error(503)
+        env = fetch_url.fetch_via_ladder(
+            url="https://example.com/x",
+            provider_choice="auto",
+            config=config,
+            user_agent="ua/test",
+            keep_raw=False,
+        )
+    assert env["status"] == "FAILED"
+    assert env["provider_used"] == "none"
+    providers_attempted = [a["provider"] for a in env["telemetry"]["attempts"]]
+    assert providers_attempted == ["direct", "jina"]
+    assert env["telemetry"]["reason_for_failed"] == "all_providers_failed"
