@@ -902,7 +902,12 @@ def fetch_via_ladder(
         provider_used = "none"
         site = _site_from_url(url)
 
-    raw_html_path = None  # populated by Task 30
+    raw_html_path = None
+    if keep_raw and chosen is not None and chosen.raw_html and output_paths:
+        raw_path = output_paths["raw_html"]
+        raw_path.parent.mkdir(parents=True, exist_ok=True)
+        raw_path.write_text(chosen.raw_html, encoding="utf-8")
+        raw_html_path = str(raw_path)
 
     return build_fetch_envelope(
         status=final_status,
