@@ -566,6 +566,13 @@ rules:
 
 ## 15. External References / Prior Art
 
+> **Discoverable entry point:**
+> `docs/superpowers/references/h2t-creative-semantic-rendering-prior-art.md`
+> carries the same content in standalone form. Future agents should
+> read THAT file first; this section §15 is the embedded copy that
+> stays with the spec for self-contained reading. Keep the two
+> in sync — see the maintenance note at the end of the references file.
+
 This architecture sits in a well-explored design space. Before
 committing to specific shapes (block schema, slot contracts, skin
 mapping, render separation), we cross-checked our v0 vocabulary
