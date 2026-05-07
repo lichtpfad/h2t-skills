@@ -1249,3 +1249,38 @@ def test_envelope_flag_failed_writes_sources_json(monkeypatch, tmp_path):
     data = json.loads(sources[0].read_text(encoding="utf-8"))
     assert data["meta"]["envelope"]["status"] == "FAILED"
     assert data["meta"]["status"] == "failed"
+
+
+# --- crawl envelope sidecar (Task 7) ---
+
+def test_crawl_writes_envelope_to_sources_json(monkeypatch, tmp_path):
+    monkeypatch.setenv("EXA_API_KEY", "k")
+    with patch.object(exa_search, "call_exa", return_value=(200, {
+        "results": [{"url": "https://x", "text": "body"}],
+        "costDollars": {"total": 0.001},
+    }, 200)):
+        rc = exa_search.main([
+            "crawl", "--url", "https://x",
+            "--output-dir", str(tmp_path), "--project", "p",
+        ])
+    assert rc == 0
+    sources = list(tmp_path.glob("*.sources.json"))
+    assert len(sources) == 1
+    data = json.loads(sources[0].read_text(encoding="utf-8"))
+    assert data["meta"]["envelope"]["status"] == "OK"
+    assert data["meta"]["envelope"]["primary_engine"] == "exa"
+
+
+def test_crawl_empty_is_degraded(monkeypatch, tmp_path):
+    monkeypatch.setenv("EXA_API_KEY", "k")
+    with patch.object(exa_search, "call_exa", return_value=(200, {
+        "results": [], "costDollars": {"total": 0.0},
+    }, 80)):
+        rc = exa_search.main([
+            "crawl", "--url", "https://x",
+            "--output-dir", str(tmp_path), "--project", "p",
+        ])
+    assert rc == 0
+    sources = list(tmp_path.glob("*.sources.json"))
+    data = json.loads(sources[0].read_text(encoding="utf-8"))
+    assert data["meta"]["envelope"]["status"] == "DEGRADED"

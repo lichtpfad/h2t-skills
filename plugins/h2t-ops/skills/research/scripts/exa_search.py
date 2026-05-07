@@ -825,12 +825,11 @@ def _run_crawl(args: argparse.Namespace) -> int:
     try:
         status, data, latency_ms = call_exa("/contents", body, api_key)
     except ExaPermanentError as e:
-        err_body = json.dumps(e.body)[:300]
-        die(2, f"EXA_ERROR:API http={e.http_status} body={err_body!r}")
+        die(2, f"EXA_ERROR:API http={e.http_status} body={json.dumps(e.body)[:300]!r}")
     except ExaTransientError as e:
         if e.http_status is None:
             die(3, f"EXA_ERROR:NETWORK {e} after {e.latency_ms}ms")
-        die(2, f"EXA_ERROR:API http={e.http_status} body={json.dumps(e.body)[:300]!r}")
+        die(2, f"EXA_ERROR:API http={e.http_status}")
     except ExaMalformedResponseError as e:
         die(2, f"EXA_ERROR:MALFORMED {e}")
 
@@ -842,6 +841,22 @@ def _run_crawl(args: argparse.Namespace) -> int:
 
     cost = float(data.get("costDollars", {}).get("total", 0))
     n_results = len(data.get("results", []))
+    status_label = "OK" if n_results > 0 else "DEGRADED"
+    envelope = build_envelope(
+        status=status_label,
+        results=data.get("results", []),
+        attempts=[{"engine": "exa", "endpoint": "/contents", "http": status,
+                   "latency_ms": latency_ms,
+                   "error": None if n_results > 0 else "exa_empty_results"}],
+        meta={
+            "query": f"crawl({args.url})", "mode": "crawl",
+            "num_results_requested": 1, "num_results_returned": n_results,
+            "timestamp": timestamp,
+        },
+        total_cost_usd=cost,
+        reason_for_fallback=None if n_results > 0 else "exa_empty_results",
+    )
+
     meta = {
         "query": f"crawl({args.url})",
         "mode": "crawl",
@@ -850,6 +865,7 @@ def _run_crawl(args: argparse.Namespace) -> int:
         "date": timestamp,
         "status": "completed" if n_results > 0 else "partial",
         "cache_hit": False,
+        "envelope": envelope,
     }
     write_sources_json(paths["sources_json"], meta, data)
     render_stdout_summary(
