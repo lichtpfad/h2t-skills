@@ -992,3 +992,21 @@ def test_partial_md_not_written_for_failed(tmp_path):
             "--output-dir", str(tmp_path), "--project", "test",
         ])
     assert list(tmp_path.glob("*.partial.md")) == []
+
+
+def test_preflight_ok_when_jina_reachable(capsys):
+    with patch("urllib.request.urlopen") as mock_urlopen:
+        mock_urlopen.return_value = _make_http_response(
+            b"OK", url="https://r.jina.ai/",
+        )
+        rc = fetch_url.main(["preflight"])
+    assert rc == 0
+
+
+def test_preflight_fails_when_jina_unreachable(capsys):
+    with patch("urllib.request.urlopen") as mock_urlopen:
+        mock_urlopen.side_effect = urllib.error.URLError("dns fail")
+        rc = fetch_url.main(["preflight"])
+    assert rc == 4
+    err = capsys.readouterr().err
+    assert "FETCH_ERROR:ENV" in err or "FETCH_ERROR:NETWORK" in err
