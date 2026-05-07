@@ -206,6 +206,36 @@ def sleep_with_jitter(base_seconds: float) -> None:
     time.sleep(base_seconds + random.uniform(0.0, JITTER_MAX_SECONDS))
 
 
+ENVELOPE_VERSION = "1"
+
+
+def build_envelope(
+    *,
+    status: str,
+    results: list[Any],
+    attempts: list[dict[str, Any]],
+    meta: dict[str, Any],
+    total_cost_usd: float,
+    reason_for_fallback: str | None = None,
+    fallback_engine_used: str | None = None,
+) -> dict[str, Any]:
+    """Assemble the provider envelope per spec §3."""
+    total_latency_ms = sum(a["latency_ms"] for a in attempts)
+    return {
+        "status": status,
+        "primary_engine": "exa",
+        "fallback_engine_used": fallback_engine_used,
+        "results": results,
+        "telemetry": {
+            "attempts": attempts,
+            "reason_for_fallback": reason_for_fallback,
+            "total_latency_ms": total_latency_ms,
+            "total_cost_usd": total_cost_usd,
+        },
+        "meta": {**meta, "envelope_version": ENVELOPE_VERSION},
+    }
+
+
 def call_exa(
     endpoint: str,
     body: dict[str, Any],

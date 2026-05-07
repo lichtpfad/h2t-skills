@@ -807,3 +807,61 @@ def test_sleep_with_jitter_zero_base():
          patch("random.uniform", return_value=0.0):
         exa_search.sleep_with_jitter(0.0)
     assert sleeps == [0.0]
+
+
+# --- build_envelope (Task 3) ---
+
+def test_build_envelope_ok_shape():
+    attempts = [{"engine": "exa", "endpoint": "/search", "http": 200, "latency_ms": 100, "error": None}]
+    env = exa_search.build_envelope(
+        status="OK",
+        results=[{"url": "u", "title": "t"}],
+        attempts=attempts,
+        meta={"query": "q", "mode": "generic", "num_results_requested": 10,
+              "num_results_returned": 1, "timestamp": "2026-05-07T00:00:00+00:00"},
+        total_cost_usd=0.01,
+    )
+    assert env["status"] == "OK"
+    assert env["primary_engine"] == "exa"
+    assert env["fallback_engine_used"] is None
+    assert env["results"] == [{"url": "u", "title": "t"}]
+    assert env["telemetry"]["attempts"] == attempts
+    assert env["telemetry"]["reason_for_fallback"] is None
+    assert env["telemetry"]["total_latency_ms"] == 100
+    assert env["telemetry"]["total_cost_usd"] == 0.01
+    assert env["meta"]["envelope_version"] == "1"
+    assert env["meta"]["num_results_returned"] == 1
+
+
+def test_build_envelope_degraded_with_reason():
+    attempts = [
+        {"engine": "exa", "endpoint": "/search", "http": 200, "latency_ms": 80, "error": "exa_empty_results"},
+        {"engine": "exa", "endpoint": "/search", "http": 200, "latency_ms": 90, "error": "exa_empty_results"},
+    ]
+    env = exa_search.build_envelope(
+        status="DEGRADED",
+        results=[],
+        attempts=attempts,
+        meta={"query": "q", "mode": "generic", "num_results_requested": 10,
+              "num_results_returned": 0, "timestamp": "2026-05-07T00:00:00+00:00"},
+        total_cost_usd=0.0,
+        reason_for_fallback="exa_empty_results",
+    )
+    assert env["status"] == "DEGRADED"
+    assert env["results"] == []
+    assert env["telemetry"]["reason_for_fallback"] == "exa_empty_results"
+    assert env["telemetry"]["total_latency_ms"] == 170
+
+
+def test_build_envelope_failed_empty_results():
+    env = exa_search.build_envelope(
+        status="FAILED",
+        results=[],
+        attempts=[{"engine": "exa", "endpoint": "/search", "http": 401,
+                   "latency_ms": 50, "error": "exa_4xx_nonretryable"}],
+        meta={"query": "q", "mode": "generic", "num_results_requested": 10,
+              "num_results_returned": 0, "timestamp": "2026-05-07T00:00:00+00:00"},
+        total_cost_usd=0.0,
+    )
+    assert env["status"] == "FAILED"
+    assert env["results"] == []
