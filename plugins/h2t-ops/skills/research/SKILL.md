@@ -4,7 +4,7 @@ description: "Semantic web research via Exa API. Modes: fast / generic / news / 
 compatibility: "Requires $EXA_API_KEY env var. Get key at https://dashboard.exa.ai/api-keys. Requires ~/.h2t/venv (run /h2t-core:setup if missing)."
 metadata:
   author: lichtpfad
-  version: 0.1.0
+  version: 0.1.1
 ---
 
 # h2t-ops:research
@@ -69,6 +69,19 @@ EXA_CLI="$H2T_PYTHON ${CLAUDE_PLUGIN_ROOT}/skills/research/scripts/exa_search.py
 ## Tool Restriction (critical)
 
 **ONLY use `$EXA_CLI`.** Do NOT use `WebSearch`, `WebFetch`, or direct `curl` as substitutes. If `$EXA_CLI` fails, return `STATUS: DEGRADED` with exact `EXA_ERROR:*` — never silently substitute.
+
+## Provider Status Envelope
+
+Каждый `$EXA_CLI search` пишет envelope в `.sources.json` (поле `meta.envelope`).
+При флаге `--envelope` envelope печатается в stdout вместо markdown summary.
+
+| `envelope.status` | Что значит | Действие агента |
+|---|---|---|
+| `OK` | Exa вернул ≥1 результат после всех retries | Continue to Step 5 (synthesis) |
+| `DEGRADED` | Exa отработал, но 0 results после retries (`exit 0`) | Report `STATUS: DEGRADED + reason=exa_empty_results`. Агент МОЖЕТ: (a) попробовать другой mode/query вариацию явным новым CLI вызовом, (b) использовать `WebSearch` с обязательной пометкой `STATUS: DEGRADED + fallback=websearch` в репорте, (c) остановиться. Silent fallback запрещён. |
+| `FAILED` | HTTP 4xx/5xx/network/malformed после retries | Report `STATUS: FAILED + EXA_ERROR:*` (точное сообщение из stderr). STOP. |
+
+`exit 0` НЕ означает `status == OK`. Всегда читать envelope (либо из stdout при `--envelope`, либо из `.sources.json:meta.envelope`).
 
 ## Workflow
 
@@ -148,6 +161,7 @@ On any non-zero exit from `$EXA_CLI`:
 
 | Exit | Meaning | Action |
 |---|---|---|
+| envelope.status | OK / DEGRADED / FAILED | См. секцию Provider Status Envelope выше |
 | 0 | Success | Continue |
 | 1 | Args error | Stop, fix invocation |
 | 2 | HTTP error (4xx/5xx) | STATUS:DEGRADED, report exact code |
@@ -198,6 +212,8 @@ Write final report to `~/.h2t/research/{project}-{slug}-{date}.md` following REP
 - **Parse HTML inline in agent** — script's job. Agent reads cleaned markdown only.
 - **Forget to delete `.partial.md`** — leaves stale files. Always `rm .partial.md` after writing final `.md`.
 - **Translate non-English query to English** — destroys Exa multilingual ranking. Russian query → keep Russian. Mixed language → keep as-is. Only translate on explicit user request.
+- **Treat `exit 0` as success without reading envelope** — `status == DEGRADED` пишется при exit 0 на empty results. Всегда читать `envelope.status`.
+- **Silent retry того же запроса** — retry делает скрипт автоматически. Если агент видит `DEGRADED`, он либо явно меняет запрос (новый CLI вызов с другим `--mode` / query вариацией), либо переключается на fallback с пометкой. Никаких "молчаливых" повторов.
 
 ## When to use this skill
 
