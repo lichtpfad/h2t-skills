@@ -1010,3 +1010,27 @@ def test_preflight_fails_when_jina_unreachable(capsys):
     assert rc == 4
     err = capsys.readouterr().err
     assert "FETCH_ERROR:ENV" in err or "FETCH_ERROR:NETWORK" in err
+
+
+def test_direct_403_without_auth_header_falls_through_to_jina_not_gated():
+    # alltd_403_body fixture is the bytes that come back; key thing is
+    # the absence of WWW-Authenticate.
+    config = fetch_url.load_config(None)
+    jina_md = _load_fixture("public_article_jina.md").encode("utf-8")
+    body = _load_fixture("alltd_403_body.html").encode("utf-8")
+    def fake_urlopen(req, timeout):
+        if req.full_url.startswith("https://r.jina.ai/"):
+            return _make_http_response(
+                jina_md,
+                url="https://r.jina.ai/https://alltd.org/x",
+                headers={"Content-Type": "text/markdown"},
+            )
+        raise _http_error(403, body=body, headers={})
+    with patch("urllib.request.urlopen", side_effect=fake_urlopen):
+        env = fetch_url.fetch_via_ladder(
+            url="https://alltd.org/x", provider_choice="auto",
+            config=config, user_agent="ua/test", keep_raw=False,
+        )
+    assert env["status"] == "OK"
+    assert env["content_gate"] == "none"
+    assert env["provider_used"] == "jina"
