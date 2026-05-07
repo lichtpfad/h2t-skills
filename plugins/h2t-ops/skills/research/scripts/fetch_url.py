@@ -533,15 +533,55 @@ def _detect_paywall(*, html: str, site: str) -> bool:
     return any(tok in html for tok in PAYWALL_DOM_TOKENS)
 
 
+def _detect_homepage_redirect(request_url: str, final_url: str | None) -> bool:
+    """Detect AllTD-class silent failure: requested article path silently
+    redirects to the homepage (e.g. `/foo-bar/` → `/`). The body is then
+    homepage chrome, not the requested article — but it is long enough to
+    pass the article-length classifier, producing a false-OK envelope.
+
+    Live smoke (#98) confirmed 6/6 AllTouchDesigner article URLs collapse
+    this way (auth-gated content). Hostname-only normalization (e.g.
+    `alltd.org` ↔ `www.alltd.org`) is fine — only path-level collapse
+    counts as a redirect collapse.
+    """
+    if not final_url:
+        return False
+    rp = urlparse(request_url).path or "/"
+    fp = urlparse(final_url).path or "/"
+    # Asked for root, got root → no collapse possible.
+    if rp.rstrip("/") in ("", "/"):
+        return False
+    # Canonical-slash redirect (`/foo` ↔ `/foo/`): NOT a collapse.
+    if rp.rstrip("/") == fp.rstrip("/"):
+        return False
+    # Asked for non-root, landed on root → classic homepage collapse.
+    if fp.rstrip("/") in ("", "/"):
+        return True
+    # Path significantly shortened (e.g. /a/b/c → /a). Threshold matches
+    # the AllTD-style collapse without flagging canonical-slash redirects.
+    if len(fp.rstrip("/")) < max(len(rp.rstrip("/")) * 0.3, 8):
+        return True
+    return False
+
+
 def _classify_content(
     *, html: str, body_text: str, final_url: str, site: str,
-    min_body_chars: int,
+    min_body_chars: int, request_url: str | None = None,
 ) -> tuple[str, str]:
-    """Return (content_type, content_gate)."""
+    """Return (content_type, content_gate).
+
+    `redirect_collapsed` is a non-gated content_type: the ladder must
+    continue to the next provider when it is encountered, so the final
+    envelope can be honestly DEGRADED rather than silently OK.
+    """
     if _detect_login_wall(html=html, final_url=final_url):
         return "gated", "login_required"
     if _detect_paywall(html=html, site=site):
         return "gated", "paid"
+    if request_url is not None and _detect_homepage_redirect(
+        request_url, final_url,
+    ):
+        return "redirect_collapsed", "none"
     if _detect_js_shell(html=html, body_text=body_text):
         return "js_shell", "none"
     if len(body_text) < min_body_chars:
@@ -595,11 +635,15 @@ class JinaProvider:
         title = _jina_extract_title(markdown_text)
         body_md = _jina_extract_body(markdown_text)
         body_text = body_md  # markdown ≈ text for Jina output
+        # Prefer Jina's reported URL Source over the request URL: it reveals
+        # upstream redirects (e.g. AllTD article → homepage) that would
+        # otherwise be invisible to the classifier.
+        upstream_url = _jina_extract_url_source(markdown_text) or url
         return ProviderResult(
             provider=self.name,
             http_status=http_status,
             latency_ms=latency_ms,
-            final_url=url,  # logical URL, not the relay
+            final_url=upstream_url,  # upstream URL Jina actually fetched
             title=title,
             body_markdown=body_md,
             body_text=body_text,
@@ -631,6 +675,18 @@ def _jina_extract_title(md: str) -> str | None:
             return s.split(":", 1)[1].strip()
         if s.startswith("# "):
             return s[2:].strip()
+    return None
+
+
+def _jina_extract_url_source(md: str) -> str | None:
+    """Extract the `URL Source:` header from Jina markdown output. This is
+    the URL Jina actually fetched on the upstream — when AllTD-style sites
+    redirect article paths to `/`, this header reflects the homepage URL,
+    which lets the classifier detect the silent collapse."""
+    for line in md.splitlines():
+        s = line.strip()
+        if s.lower().startswith("url source:"):
+            return s.split(":", 1)[1].strip() or None
     return None
 
 
@@ -767,6 +823,7 @@ def fetch_via_ladder(
     attempts: list[dict[str, Any]] = []
     skipped: dict[str, str] = {}
     candidates: list[ProviderResult] = []
+    candidate_kinds: list[str] = []  # parallel to candidates: ct of each
     chosen: ProviderResult | None = None
     final_status: str = "FAILED"
     content_type = "unknown"
@@ -831,6 +888,7 @@ def fetch_via_ladder(
             final_url=r.final_url or url,
             site=_site_from_url(r.final_url or url),
             min_body_chars=min_body_chars,
+            request_url=url,
         )
         if gate != "none":
             attempts.append(_attempt_record(
@@ -850,11 +908,17 @@ def fetch_via_ladder(
             final_status = "OK"
             break
         # DEGRADED-class result — record and continue.
-        err_label = "fetch_js_shell" if ct == "js_shell" else "fetch_short_body"
+        if ct == "redirect_collapsed":
+            err_label = "fetch_redirect_collapsed"
+        elif ct == "js_shell":
+            err_label = "fetch_js_shell"
+        else:
+            err_label = "fetch_short_body"
         attempts.append(_attempt_record(
             name, r.http_status, r.latency_ms, err_label,
         ))
         candidates.append(r)
+        candidate_kinds.append(ct)
         content_type = ct  # last-seen DEGRADED type as fallback
 
     # Record skip reasons for providers that follow an early break/success.
@@ -879,11 +943,13 @@ def fetch_via_ladder(
         if candidates:
             chosen = max(candidates, key=lambda c: c.body_chars)
             final_status = "DEGRADED"
-            reason_for_degraded = (
-                "all_providers_degraded_short_body"
-                if all(c.body_chars < min_body_chars for c in candidates)
-                else "all_providers_degraded_js_shell"
-            )
+            if all(k == "redirect_collapsed" for k in candidate_kinds):
+                reason_for_degraded = "redirect_collapsed_to_homepage"
+                content_type = "redirect_collapsed"
+            elif all(c.body_chars < min_body_chars for c in candidates):
+                reason_for_degraded = "all_providers_degraded_short_body"
+            else:
+                reason_for_degraded = "all_providers_degraded_js_shell"
         else:
             final_status = "FAILED"
             reason_for_failed = (
@@ -986,7 +1052,27 @@ def _die_args(msg: str) -> None:
     sys.exit(EXIT_ARGS)
 
 
+def _force_utf8_streams() -> None:
+    """Reconfigure stdout/stderr to utf-8 so non-ASCII envelope text never
+    crashes on Windows cp1252 consoles. Live smoke against TD POP URLs (#98)
+    showed the --json path exits 1 with empty stdout when the title/body
+    contains emoji, Cyrillic, or em-dash and PYTHONIOENCODING=utf-8 is unset.
+    Machine-mode CLI must not require an env-var dance.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:
+            continue
+        try:
+            reconfigure(encoding="utf-8")
+        except Exception:
+            # Already-detached / non-text streams / read-only encodings
+            # must not crash startup. Best-effort only.
+            pass
+
+
 def main(argv: list[str] | None = None) -> int:
+    _force_utf8_streams()
     parser = _build_parser()
     args = parser.parse_args(argv)
     if args.cmd is None:
