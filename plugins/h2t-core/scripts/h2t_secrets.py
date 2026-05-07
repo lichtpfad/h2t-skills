@@ -66,5 +66,21 @@ def bootstrap(*, env_file: Path | None = None) -> dict[str, str]:
 
 
 def get_blob(relative_path: str) -> Path:
-    """Stub — implemented in Task 3."""
-    raise NotImplementedError
+    """Return absolute Path to a credential blob under SECRETS_DIR.
+
+    Args:
+        relative_path: e.g. 'google/gmail-oauth.json' or 'telegram/h2t.session'.
+
+    Returns:
+        Absolute resolved Path.
+
+    Raises:
+        FileNotFoundError: blob does not exist at the resolved path.
+    """
+    candidate = (SECRETS_DIR / relative_path).resolve()
+    if not candidate.is_file():
+        raise FileNotFoundError(
+            f"h2t_secrets: blob not found at {candidate} "
+            f"(relative_path={relative_path!r})"
+        )
+    return candidate
