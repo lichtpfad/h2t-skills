@@ -24,16 +24,19 @@
 | `plugins/h2t-ops/skills/research/reference.md` | modify | New "Envelope schema" section |
 | `plugins/h2t-ops/.claude-plugin/plugin.json` | modify (via bump_plugin.py) | h2t-ops 1.1.0 → 1.1.1 |
 
-**Test runner:** `~/.h2t/venv/Scripts/python.exe -m pytest plugins/h2t-ops/skills/research/tests/test_exa_search.py -v`
+**Shell environment:** Windows. Default executor is PowerShell; Bash tool also available. The user's CLAUDE.md prohibits venv activation on Windows — always use direct python.exe path.
 
-**Single python alias for plan:**
-```
-PYTEST="C:/Users/stani/.h2t/venv/Scripts/python.exe -m pytest"
-PYTHON="C:/Users/stani/.h2t/venv/Scripts/python.exe"
-TEST_FILE="plugins/h2t-ops/skills/research/tests/test_exa_search.py"
-```
+**Literal paths used throughout the plan:**
 
-**Frequent commits:** один логический task = один commit. Conventional Commits scope `(research)`.
+- Python: `C:/Users/stani/.h2t/venv/Scripts/python.exe`
+- Pytest: `C:/Users/stani/.h2t/venv/Scripts/python.exe -m pytest`
+- Test file: `plugins/h2t-ops/skills/research/tests/test_exa_search.py`
+
+Some commands include bash-style pipes (`2>&1 | tail -N`) for output trimming. Either run them via the Bash tool, or strip the pipe and run the bare command — pytest already shows last failures by default.
+
+For pattern matching prefer the **Grep tool** over invoking `grep`/`Select-String` in shell. The plan uses `grep` in a few smoke-check steps; substitute Grep tool when convenient.
+
+**Frequent commits:** один логический task = один commit. Conventional Commits scope `(research)`. Stage only the listed files explicitly — never `git add .`, repo has unrelated dirty files.
 
 ---
 
@@ -128,7 +131,7 @@ def test_call_exa_returns_tuple_on_success():
 - [ ] **Step 2: Run tests to verify failure**
 
 ```bash
-$PYTEST $TEST_FILE -v -k "call_exa_" 2>&1 | tail -20
+C:/Users/stani/.h2t/venv/Scripts/python.exe -m pytest plugins/h2t-ops/skills/research/tests/test_exa_search.py -v -k "call_exa_" 2>&1 | tail -20
 ```
 
 Expected: 6 FAIL with `AttributeError: module 'exa_search' has no attribute 'ExaTransientError'`.
@@ -256,62 +259,34 @@ def _run_search(args: argparse.Namespace) -> int:
 
 In `_run_crawl` (line 536), apply the same try/except wrapper around `call_exa("/contents", ...)`.
 
-- [ ] **Step 5: Update 3 existing tests broken by refactor**
+- [ ] **Step 5: Delete 2 obsolete tests broken by refactor**
 
-The current test file has these tests that assume the old contract (call_exa returns tuple on 429, exits 3 on URLError). Refactor breaks them. Update each:
+The current test file has 2 tests that assume the old `call_exa` contract (returns tuple on 429, sys.exit on URLError). New typed-exception tests from Step 1 cover the same behaviour. Delete:
 
-**5a.** Delete `test_call_exa_http_429_returns_error_body` entirely (lines 281–294 in current file). The new `test_call_exa_raises_transient_on_429` from Step 1 covers the same behaviour with the new contract.
+**5a.** Delete `test_call_exa_http_429_returns_error_body` (lines 281–294 in current file). Covered by `test_call_exa_raises_transient_on_429`.
 
-**5b.** Delete `test_call_exa_network_timeout_exits_3` entirely (lines 297–304). Replaced by `test_call_exa_raises_transient_on_urlerror` from Step 1.
+**5b.** Delete `test_call_exa_network_timeout_exits_3` (lines 297–304). Covered by `test_call_exa_raises_transient_on_urlerror`.
 
-**5c.** Rewrite `test_run_search_http_429_exits_2` (currently around line 571) — after retry loop, 429 needs to fire twice with sleep stubbed. Replace its body with:
-
-```python
-def test_run_search_http_429_exits_2(monkeypatch, tmp_path, capsys):
-    monkeypatch.setenv("EXA_API_KEY", "stub")
-    sp_dir = tmp_path / "systemprompts"
-    sp_dir.mkdir()
-    (sp_dir / "generic.md").write_text("---\n---\nsp\n", encoding="utf-8")
-    monkeypatch.setattr(exa_search, "SYSTEMPROMPTS_DIR", sp_dir)
-    monkeypatch.setattr(exa_search, "sleep_with_jitter", lambda s: None)
-
-    err = urllib.error.HTTPError(
-        url="https://api.exa.ai/search", code=429, msg="Too Many",
-        hdrs=None, fp=io.BytesIO(b'{"error":"rate"}'),
-    )
-    with patch("urllib.request.urlopen", side_effect=[err, err]):
-        with pytest.raises(SystemExit) as excinfo:
-            exa_search.main([
-                "search", "--query", "x", "--mode", "generic",
-                "--output-dir", str(tmp_path), "--project", "p",
-            ])
-    assert excinfo.value.code == 2
-    assert "EXA_ERROR:API" in capsys.readouterr().err
-```
-
-Note: after Task 1 the rewrite passes immediately (no retry loop yet, so the first `err` triggers `die(2)`, the second is never consumed). After Task 4 lands retry, the same test still passes because `side_effect=[err, err]` provides two errors and `sleep_with_jitter` is monkeypatched to no-op.
-
-The `monkeypatch.setattr(exa_search, "sleep_with_jitter", lambda s: None)` line is harmless after Task 1 even before the helper exists — `setattr` adds the attribute to the module unconditionally. **Do not** wrap with try/except.
+**Do NOT touch `test_run_search_http_429_exits_2` in this Task.** It uses `_run_search` which after Task 1 will still pass (single 429 → `die(2)` because no retry loop yet). Rewrite happens in Task 2 after `sleep_with_jitter` exists (otherwise `monkeypatch.setattr` raises `AttributeError` because pytest defaults to `raising=True`).
 
 - [ ] **Step 6: Run tests to verify pass + no regressions**
 
-```bash
-$PYTEST $TEST_FILE -v 2>&1 | tail -30
+```
+C:/Users/stani/.h2t/venv/Scripts/python.exe -m pytest plugins/h2t-ops/skills/research/tests/test_exa_search.py -v
 ```
 
-Expected: 6 new typed-exception tests PASS, all previously passing tests still PASS.
+Expected: 6 new typed-exception tests PASS, all previously passing tests (minus the 2 deleted) still PASS. Total = original_count − 2 + 6.
 
 - [ ] **Step 7: Commit**
 
-```bash
+```
 git add plugins/h2t-ops/skills/research/scripts/exa_search.py plugins/h2t-ops/skills/research/tests/test_exa_search.py
 git commit -m "refactor(research): typed exceptions in call_exa
 
 Introduce ExaTransientError, ExaPermanentError, ExaMalformedResponseError.
 call_exa returns tuple on success or raises typed exception. die() moves
-to CLI top level (_run_search, _run_crawl). Replace 2 obsolete tests
-(429-tuple, URLError-exit-3) with new exception-based tests.
-test_run_search_http_429_exits_2 marked xfail pending sleep_with_jitter.
+to CLI top level (_run_search, _run_crawl). Delete 2 obsolete tests
+(429-tuple, URLError-exit-3); replaced by exception-based tests.
 
 Refs: lichtpfad/h2t-skills#100"
 ```
@@ -350,7 +325,7 @@ def test_sleep_with_jitter_zero_base():
 - [ ] **Step 2: Run to verify FAIL**
 
 ```bash
-$PYTEST $TEST_FILE -v -k "sleep_with_jitter" 2>&1 | tail -10
+C:/Users/stani/.h2t/venv/Scripts/python.exe -m pytest plugins/h2t-ops/skills/research/tests/test_exa_search.py -v -k "sleep_with_jitter" 2>&1 | tail -10
 ```
 
 Expected: 2 FAIL with `AttributeError`.
@@ -381,19 +356,58 @@ def sleep_with_jitter(base_seconds: float) -> None:
 
 - [ ] **Step 4: Run to verify PASS**
 
-```bash
-$PYTEST $TEST_FILE -v -k "sleep_with_jitter" 2>&1 | tail -10
+```
+C:/Users/stani/.h2t/venv/Scripts/python.exe -m pytest plugins/h2t-ops/skills/research/tests/test_exa_search.py -v -k "sleep_with_jitter"
 ```
 
 Expected: 2 PASS.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: Rewrite `test_run_search_http_429_exits_2` to use new helper**
 
-```bash
+Helper now exists, so `monkeypatch.setattr(exa_search, "sleep_with_jitter", ...)` is safe with default `raising=True`. Find the existing test (around line 571 in current file) and replace its body with:
+
+```python
+def test_run_search_http_429_exits_2(monkeypatch, tmp_path, capsys):
+    monkeypatch.setenv("EXA_API_KEY", "stub")
+    sp_dir = tmp_path / "systemprompts"
+    sp_dir.mkdir()
+    (sp_dir / "generic.md").write_text("---\n---\nsp\n", encoding="utf-8")
+    monkeypatch.setattr(exa_search, "SYSTEMPROMPTS_DIR", sp_dir)
+    monkeypatch.setattr(exa_search, "sleep_with_jitter", lambda s: None)
+
+    err = urllib.error.HTTPError(
+        url="https://api.exa.ai/search", code=429, msg="Too Many",
+        hdrs=None, fp=io.BytesIO(b'{"error":"rate"}'),
+    )
+    with patch("urllib.request.urlopen", side_effect=[err, err]):
+        with pytest.raises(SystemExit) as excinfo:
+            exa_search.main([
+                "search", "--query", "x", "--mode", "generic",
+                "--output-dir", str(tmp_path), "--project", "p",
+            ])
+    assert excinfo.value.code == 2
+    assert "EXA_ERROR:API" in capsys.readouterr().err
+```
+
+Note: this test still passes after Task 2 because retry loop doesn't exist yet — first 429 triggers `die(2)`, second `err` in side_effect is never consumed. After Task 4 lands retry, both errors are consumed (sleep stubbed to no-op) and final exit is still 2.
+
+Run:
+
+```
+C:/Users/stani/.h2t/venv/Scripts/python.exe -m pytest plugins/h2t-ops/skills/research/tests/test_exa_search.py::test_run_search_http_429_exits_2 -v
+```
+
+Expected: PASS.
+
+- [ ] **Step 6: Commit**
+
+```
 git add plugins/h2t-ops/skills/research/scripts/exa_search.py plugins/h2t-ops/skills/research/tests/test_exa_search.py
 git commit -m "feat(research): add sleep_with_jitter helper for retry backoff
 
 Module-level helper makes test mocking trivial via monkeypatch.
+Update test_run_search_http_429_exits_2 to use new helper (safe now
+that the attribute exists, so default monkeypatch raising=True works).
 
 Refs: lichtpfad/h2t-skills#100"
 ```
@@ -472,7 +486,7 @@ def test_build_envelope_failed_empty_results():
 - [ ] **Step 2: Run to verify FAIL**
 
 ```bash
-$PYTEST $TEST_FILE -v -k "build_envelope" 2>&1 | tail -10
+C:/Users/stani/.h2t/venv/Scripts/python.exe -m pytest plugins/h2t-ops/skills/research/tests/test_exa_search.py -v -k "build_envelope" 2>&1 | tail -10
 ```
 
 Expected: 3 FAIL with `AttributeError: build_envelope`.
@@ -515,7 +529,7 @@ def build_envelope(
 - [ ] **Step 4: Run to verify PASS**
 
 ```bash
-$PYTEST $TEST_FILE -v -k "build_envelope" 2>&1 | tail -10
+C:/Users/stani/.h2t/venv/Scripts/python.exe -m pytest plugins/h2t-ops/skills/research/tests/test_exa_search.py -v -k "build_envelope" 2>&1 | tail -10
 ```
 
 Expected: 3 PASS.
@@ -717,7 +731,7 @@ Note: the 429 test asserts `error == "exa_5xx_retryable"` because the spec lumps
 - [ ] **Step 2: Run to verify FAIL**
 
 ```bash
-$PYTEST $TEST_FILE -v -k "search_with_retry" 2>&1 | tail -30
+C:/Users/stani/.h2t/venv/Scripts/python.exe -m pytest plugins/h2t-ops/skills/research/tests/test_exa_search.py -v -k "search_with_retry" 2>&1 | tail -30
 ```
 
 Expected: 12 FAIL with `AttributeError: search_with_retry`.
@@ -885,7 +899,7 @@ def search_with_retry(
 - [ ] **Step 4: Run tests to verify PASS**
 
 ```bash
-$PYTEST $TEST_FILE -v -k "search_with_retry" 2>&1 | tail -25
+C:/Users/stani/.h2t/venv/Scripts/python.exe -m pytest plugins/h2t-ops/skills/research/tests/test_exa_search.py -v -k "search_with_retry" 2>&1 | tail -25
 ```
 
 Expected: 12 PASS.
@@ -941,7 +955,7 @@ def test_warn_emitted_when_budget_exhausted(monkeypatch, capsys):
 - [ ] **Step 2: Run to verify PASS** (already implemented in Task 4)
 
 ```bash
-$PYTEST $TEST_FILE -v -k "warn_emitted_when_budget" 2>&1 | tail -10
+C:/Users/stani/.h2t/venv/Scripts/python.exe -m pytest plugins/h2t-ops/skills/research/tests/test_exa_search.py -v -k "warn_emitted_when_budget" 2>&1 | tail -10
 ```
 
 Expected: PASS.
@@ -1041,15 +1055,113 @@ def test_envelope_in_sources_json_always_written(monkeypatch, tmp_path):
     assert "envelope" in data["meta"]
     assert data["meta"]["envelope"]["status"] == "OK"
     assert data["meta"]["envelope"]["primary_engine"] == "exa"
+
+
+# --- FAILED + --envelope: JSON envelope must reach stdout (Task 6 Fix 1) ---
+
+def _make_search_argv_with_envelope(tmp_path):
+    return ["search", "--query", "x", "--mode", "generic", "--num-results", "3",
+            "--output-dir", str(tmp_path), "--project", "p", "--envelope"]
+
+
+def test_envelope_flag_4xx_prints_envelope_and_stderr(monkeypatch, tmp_path, capsys):
+    monkeypatch.setenv("EXA_API_KEY", "k")
+    monkeypatch.setattr(exa_search, "sleep_with_jitter", lambda s: None)
+    err = urllib.error.HTTPError(
+        url="https://api.exa.ai/search", code=401, msg="Unauthorized",
+        hdrs=None, fp=io.BytesIO(b'{"error":"bad key"}'),
+    )
+    with patch("urllib.request.urlopen", side_effect=err):
+        with pytest.raises(SystemExit) as excinfo:
+            exa_search.main(_make_search_argv_with_envelope(tmp_path))
+    captured = capsys.readouterr()
+    assert excinfo.value.code == 2
+    assert "EXA_ERROR:API" in captured.err
+    payload = json.loads(captured.out)
+    assert payload["status"] == "FAILED"
+    assert payload["telemetry"]["attempts"][0]["error"] == "exa_4xx_nonretryable"
+
+
+def test_envelope_flag_5xx_exhausted_prints_envelope(monkeypatch, tmp_path, capsys):
+    monkeypatch.setenv("EXA_API_KEY", "k")
+    monkeypatch.setattr(exa_search, "sleep_with_jitter", lambda s: None)
+    err = urllib.error.HTTPError(
+        url="https://api.exa.ai/search", code=503, msg="Service Unavailable",
+        hdrs=None, fp=io.BytesIO(b'{"error":"down"}'),
+    )
+    with patch("urllib.request.urlopen", side_effect=[err, err]):
+        with pytest.raises(SystemExit) as excinfo:
+            exa_search.main(_make_search_argv_with_envelope(tmp_path))
+    captured = capsys.readouterr()
+    assert excinfo.value.code == 2
+    assert "EXA_ERROR:API" in captured.err
+    payload = json.loads(captured.out)
+    assert payload["status"] == "FAILED"
+    assert len(payload["telemetry"]["attempts"]) == 2
+    assert all(a["error"] == "exa_5xx_retryable" for a in payload["telemetry"]["attempts"])
+
+
+def test_envelope_flag_network_exhausted_prints_envelope(monkeypatch, tmp_path, capsys):
+    monkeypatch.setenv("EXA_API_KEY", "k")
+    monkeypatch.setattr(exa_search, "sleep_with_jitter", lambda s: None)
+    with patch("urllib.request.urlopen", side_effect=urllib.error.URLError("dns")):
+        with pytest.raises(SystemExit) as excinfo:
+            exa_search.main(_make_search_argv_with_envelope(tmp_path))
+    captured = capsys.readouterr()
+    assert excinfo.value.code == 3
+    assert "EXA_ERROR:NETWORK" in captured.err
+    payload = json.loads(captured.out)
+    assert payload["status"] == "FAILED"
+    assert all(a["error"] == "exa_network_timeout" for a in payload["telemetry"]["attempts"])
+
+
+def test_envelope_flag_malformed_prints_envelope(monkeypatch, tmp_path, capsys):
+    monkeypatch.setenv("EXA_API_KEY", "k")
+    monkeypatch.setattr(exa_search, "sleep_with_jitter", lambda s: None)
+    fake_resp = MagicMock()
+    fake_resp.status = 200
+    fake_resp.read.return_value = b"<html>not json</html>"
+    fake_resp.__enter__ = lambda self: fake_resp
+    fake_resp.__exit__ = lambda *a: None
+    with patch("urllib.request.urlopen", return_value=fake_resp):
+        with pytest.raises(SystemExit) as excinfo:
+            exa_search.main(_make_search_argv_with_envelope(tmp_path))
+    captured = capsys.readouterr()
+    assert excinfo.value.code == 2
+    assert "EXA_ERROR:MALFORMED" in captured.err
+    # CRITICAL: no raw JSONDecodeError traceback should leak
+    assert "JSONDecodeError" not in captured.err
+    assert "Traceback" not in captured.err
+    payload = json.loads(captured.out)
+    assert payload["status"] == "FAILED"
+    assert payload["telemetry"]["attempts"][0]["error"] == "exa_malformed_json"
+
+
+def test_envelope_flag_failed_writes_sources_json(monkeypatch, tmp_path):
+    """FAILED status still writes sidecar so post-hoc analysis works."""
+    monkeypatch.setenv("EXA_API_KEY", "k")
+    monkeypatch.setattr(exa_search, "sleep_with_jitter", lambda s: None)
+    err = urllib.error.HTTPError(
+        url="https://api.exa.ai/search", code=401, msg="Unauthorized",
+        hdrs=None, fp=io.BytesIO(b'{"error":"bad"}'),
+    )
+    with patch("urllib.request.urlopen", side_effect=err):
+        with pytest.raises(SystemExit):
+            exa_search.main(_make_search_argv_with_envelope(tmp_path))
+    sources = list(tmp_path.glob("*.sources.json"))
+    assert len(sources) == 1
+    data = json.loads(sources[0].read_text(encoding="utf-8"))
+    assert data["meta"]["envelope"]["status"] == "FAILED"
+    assert data["meta"]["status"] == "failed"
 ```
 
 - [ ] **Step 2: Run to verify FAIL**
 
-```bash
-$PYTEST $TEST_FILE -v -k "envelope_flag or no_retry_flag or default_stdout or sources_json_always" 2>&1 | tail -20
+```
+C:/Users/stani/.h2t/venv/Scripts/python.exe -m pytest plugins/h2t-ops/skills/research/tests/test_exa_search.py -v -k "envelope_flag or no_retry_flag or default_stdout or sources_json_always"
 ```
 
-Expected: 4 FAIL (flags missing or behaviour wrong).
+Expected: 9 FAIL (4 flag/back-compat + 5 FAILED-envelope tests). Reasons: flags missing, FAILED branch calls die() instead of printing envelope.
 
 - [ ] **Step 3: Add flags in `_build_parser`**
 
@@ -1064,9 +1176,29 @@ Find `_build_parser` (line 388). In the `s = sub.add_parser("search", ...)` bloc
 
 - [ ] **Step 4: Rewire `_run_search` to use search_with_retry**
 
+**Critical design point:** for FAILED status, we **must** still emit the envelope to stdout when `--envelope` is set. Calling `die()` mid-function loses the JSON output that machine consumers rely on. Pattern: emit `EXA_ERROR:*` to stderr (preserve fail-loud contract), conditionally print envelope JSON to stdout, then `sys.exit(exit_code)`. Persist sidecar `.sources.json` even on FAILED so post-hoc analysis is possible.
+
 Replace the body of `_run_search` (line 457 onwards) with:
 
 ```python
+def _emit_failed_stderr(envelope: dict[str, Any]) -> str:
+    """Compose the EXA_ERROR:* message for stderr from envelope.
+
+    Returns the message; caller prints. Pure for testability.
+    """
+    last = envelope["telemetry"]["attempts"][-1]
+    error = last["error"]
+    if error == "exa_4xx_nonretryable":
+        return f"EXA_ERROR:API http={last['http']}"
+    if error == "exa_5xx_retryable":
+        return f"EXA_ERROR:API http={last['http']} (after retries)"
+    if error == "exa_network_timeout":
+        return f"EXA_ERROR:NETWORK after {last['latency_ms']}ms (after retries)"
+    if error == "exa_malformed_json":
+        return "EXA_ERROR:MALFORMED non-JSON or missing 'results' field"
+    return f"EXA_ERROR:UNKNOWN {error}"
+
+
 def _run_search(args: argparse.Namespace) -> int:
     validate_args(args)
     api_key = os.environ.get("EXA_API_KEY")
@@ -1079,25 +1211,10 @@ def _run_search(args: argparse.Namespace) -> int:
         body=body, api_key=api_key, retry=not args.no_retry, mode=args.mode,
     )
 
-    # FAILED → emit EXA_ERROR:* to stderr (preserve existing fail-loud contract).
-    if envelope["status"] == "FAILED":
-        last = envelope["telemetry"]["attempts"][-1]
-        if last["error"] == "exa_4xx_nonretryable":
-            die(2, f"EXA_ERROR:API http={last['http']}")
-        if last["error"] == "exa_5xx_retryable":
-            die(2, f"EXA_ERROR:API http={last['http']} (after retries)")
-        if last["error"] == "exa_network_timeout":
-            die(3, f"EXA_ERROR:NETWORK after {last['latency_ms']}ms (after retries)")
-        if last["error"] == "exa_malformed_json":
-            die(2, "EXA_ERROR:MALFORMED non-JSON or missing 'results' field")
-        die(2, f"EXA_ERROR:UNKNOWN {last['error']}")  # defensive
-
-    # Persist (always — both .sources.json and .partial.md, OK and DEGRADED both)
+    # Persist sidecar (always — OK, DEGRADED, FAILED all get .sources.json).
     out_dir = Path(args.output_dir)
     date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     paths = output_paths(out_dir, args.project, args.query, date)
-
-    # Reconstruct an Exa-shaped response for existing writers (back-compat).
     response_for_writers = {
         "results": envelope["results"],
         "costDollars": {"total": envelope["telemetry"]["total_cost_usd"]},
@@ -1108,32 +1225,42 @@ def _run_search(args: argparse.Namespace) -> int:
         "depth": args.depth,
         "project": args.project,
         "date": envelope["meta"]["timestamp"],
-        "status": "completed" if envelope["status"] == "OK" else "partial",
+        "status": ("completed" if envelope["status"] == "OK"
+                   else ("partial" if envelope["status"] == "DEGRADED" else "failed")),
         "cache_hit": False,
-        "envelope": envelope,  # NEW: sidecar copy
+        "envelope": envelope,
     }
     write_sources_json(paths["sources_json"], meta, response_for_writers)
 
-    cat = MODE_CONFIG[args.mode]["category"]
-    tel_args = f"type={MODE_CONFIG[args.mode]['type']}"
-    if cat:
-        tel_args += f",category={cat}"
-    tel_args += f",numResults={body['numResults']}"
-    telemetry_rows = [{
-        "num": i + 1,
-        "tool": "exa_search.py search",
-        "args": tel_args,
-        "http": a["http"] or 0,
-        "latency_ms": a["latency_ms"],
-        "cost_usd": (envelope["telemetry"]["total_cost_usd"] if a["error"] is None else 0.0),
-        "results": (len(envelope["results"]) if a["error"] is None else 0),
-    } for i, a in enumerate(envelope["telemetry"]["attempts"])]
-    write_partial_md(paths["partial_md"], meta=meta, telemetry_rows=telemetry_rows)
+    # .partial.md only for OK/DEGRADED — FAILED has no synthesizable content.
+    if envelope["status"] != "FAILED":
+        cat = MODE_CONFIG[args.mode]["category"]
+        tel_args = f"type={MODE_CONFIG[args.mode]['type']}"
+        if cat:
+            tel_args += f",category={cat}"
+        tel_args += f",numResults={body['numResults']}"
+        telemetry_rows = [{
+            "num": i + 1,
+            "tool": "exa_search.py search",
+            "args": tel_args,
+            "http": a["http"] or 0,
+            "latency_ms": a["latency_ms"],
+            "cost_usd": (envelope["telemetry"]["total_cost_usd"] if a["error"] is None else 0.0),
+            "results": (len(envelope["results"]) if a["error"] is None else 0),
+        } for i, a in enumerate(envelope["telemetry"]["attempts"])]
+        write_partial_md(paths["partial_md"], meta=meta, telemetry_rows=telemetry_rows)
 
-    # Stdout: JSON envelope if --envelope, else markdown summary (back-compat default).
+    # FAILED: always emit EXA_ERROR:* to stderr (back-compat fail-loud).
+    if envelope["status"] == "FAILED":
+        print(_emit_failed_stderr(envelope), file=sys.stderr)
+
+    # Stdout policy:
+    #   --envelope: print JSON envelope (OK, DEGRADED, FAILED — all of them).
+    #   default + OK/DEGRADED: markdown summary.
+    #   default + FAILED: nothing on stdout (stderr already has EXA_ERROR:*).
     if args.envelope:
         print(json.dumps(envelope, indent=2, ensure_ascii=False))
-    else:
+    elif envelope["status"] != "FAILED":
         render_stdout_summary(
             response_for_writers,
             query=args.query,
@@ -1143,7 +1270,7 @@ def _run_search(args: argparse.Namespace) -> int:
             json_path=paths["sources_json"],
         )
 
-    # Telemetry — fire-and-forget, unchanged shape.
+    # Telemetry (fire-and-forget, unchanged shape).
     post_telemetry(
         event={
             "session_id": os.environ.get("H2T_SESSION_ID", ""),
@@ -1163,27 +1290,35 @@ def _run_search(args: argparse.Namespace) -> int:
         },
         buffer_path=out_dir / ".pending_telemetry.jsonl",
     )
+
+    if exit_code != 0:
+        sys.exit(exit_code)
     return exit_code
 ```
 
+**Subtle:** `sys.exit(exit_code)` for non-zero is necessary because `main()` returns `_run_search(...)` and Python exits 0 by default unless explicitly told otherwise via `sys.exit`. Tests catch this via `pytest.raises(SystemExit)`. Existing tests like `test_run_search_http_429_exits_2` already use this pattern.
+
 - [ ] **Step 5: Run all tests**
 
-```bash
-$PYTEST $TEST_FILE -v 2>&1 | tail -40
+```
+C:/Users/stani/.h2t/venv/Scripts/python.exe -m pytest plugins/h2t-ops/skills/research/tests/test_exa_search.py -v
 ```
 
-Expected: 4 new tests PASS, all earlier tests PASS. If any earlier test fails on stdout shape — investigate, but the markdown writer is unchanged, so it should be fine.
+Expected: 9 new tests PASS, all earlier tests PASS. If any earlier test fails on stdout shape — investigate, but the markdown writer is unchanged. Pay attention to `test_run_search_http_429_exits_2`: with the new retry path, `side_effect=[err, err]` is now fully consumed (sleep stubbed). It should still pass with exit 2 + `EXA_ERROR:API` in stderr.
 
 - [ ] **Step 6: Commit**
 
-```bash
+```
 git add plugins/h2t-ops/skills/research/scripts/exa_search.py plugins/h2t-ops/skills/research/tests/test_exa_search.py
-git commit -m "feat(research): wire envelope into search CLI; add --envelope/--no-retry flags
+git commit -m "feat(research): wire envelope into search CLI
 
-Default stdout unchanged (markdown summary). --envelope opt-in prints
-JSON envelope to stdout instead. Sidecar envelope always written to
-.sources.json under meta.envelope. --no-retry disables retry loop
-for tests/debug.
+Add --envelope and --no-retry flags. Default stdout unchanged (markdown
+summary). --envelope prints JSON envelope to stdout for OK, DEGRADED,
+AND FAILED — machine consumers see structured failure info even on
+non-zero exit. EXA_ERROR:* preserved on stderr (back-compat fail-loud).
+Sidecar envelope always written to .sources.json under meta.envelope,
+including FAILED runs for post-hoc analysis. .partial.md skipped on
+FAILED (no synthesizable content).
 
 Refs: lichtpfad/h2t-skills#100"
 ```
@@ -1239,7 +1374,7 @@ def test_crawl_empty_is_degraded(monkeypatch, tmp_path):
 - [ ] **Step 2: Run to verify FAIL**
 
 ```bash
-$PYTEST $TEST_FILE -v -k "crawl_writes_envelope or crawl_empty" 2>&1 | tail -10
+C:/Users/stani/.h2t/venv/Scripts/python.exe -m pytest plugins/h2t-ops/skills/research/tests/test_exa_search.py -v -k "crawl_writes_envelope or crawl_empty" 2>&1 | tail -10
 ```
 
 Expected: 2 FAIL (no envelope in sources.json yet for crawl).
@@ -1328,7 +1463,7 @@ def _run_crawl(args: argparse.Namespace) -> int:
 - [ ] **Step 4: Run to verify PASS**
 
 ```bash
-$PYTEST $TEST_FILE -v -k "crawl" 2>&1 | tail -15
+C:/Users/stani/.h2t/venv/Scripts/python.exe -m pytest plugins/h2t-ops/skills/research/tests/test_exa_search.py -v -k "crawl" 2>&1 | tail -15
 ```
 
 Expected: 2 new tests PASS.
@@ -1559,7 +1694,7 @@ New: `assert "0.1.1" in result.stdout`
 - [ ] **Step 3: Run version test to verify**
 
 ```bash
-$PYTEST $TEST_FILE::test_version_flag -v
+C:/Users/stani/.h2t/venv/Scripts/python.exe -m pytest plugins/h2t-ops/skills/research/tests/test_exa_search.py::test_version_flag -v
 ```
 
 Expected: PASS.
@@ -1567,7 +1702,7 @@ Expected: PASS.
 - [ ] **Step 4: Bump plugin manifest via helper script**
 
 ```bash
-$PYTHON scripts/bump_plugin.py h2t-ops 1.1.1
+C:/Users/stani/.h2t/venv/Scripts/python.exe scripts/bump_plugin.py h2t-ops 1.1.1
 ```
 
 Expected stdout: confirmation that both `marketplace.json` and `plugin.json` updated to 1.1.1.
@@ -1583,7 +1718,7 @@ Expected: `"version": "1.1.1"`.
 - [ ] **Step 6: Run full test suite for final clean state**
 
 ```bash
-$PYTEST $TEST_FILE -v 2>&1 | tail -10
+C:/Users/stani/.h2t/venv/Scripts/python.exe -m pytest plugins/h2t-ops/skills/research/tests/test_exa_search.py -v 2>&1 | tail -10
 ```
 
 Expected: all tests PASS, exit 0.
@@ -1609,7 +1744,7 @@ Refs: lichtpfad/h2t-skills#100"
 - [ ] **Step 1: Run full test suite**
 
 ```bash
-$PYTEST plugins/h2t-ops/skills/research/tests/ -v 2>&1 | tail -20
+C:/Users/stani/.h2t/venv/Scripts/python.exe -m pytest plugins/h2t-ops/skills/research/tests/ -v 2>&1 | tail -20
 ```
 
 Expected: all PASS. Print pass count.
@@ -1617,7 +1752,7 @@ Expected: all PASS. Print pass count.
 - [ ] **Step 2: Smoke test CLI shape — default stdout**
 
 ```bash
-$PYTHON plugins/h2t-ops/skills/research/scripts/exa_search.py --version
+C:/Users/stani/.h2t/venv/Scripts/python.exe plugins/h2t-ops/skills/research/scripts/exa_search.py --version
 ```
 
 Expected: `exa_search 0.1.1`, exit 0.
@@ -1627,10 +1762,10 @@ Expected: `exa_search 0.1.1`, exit 0.
 If `$EXA_API_KEY` is set:
 
 ```bash
-$PYTHON plugins/h2t-ops/skills/research/scripts/exa_search.py search \
+C:/Users/stani/.h2t/venv/Scripts/python.exe plugins/h2t-ops/skills/research/scripts/exa_search.py search \
   --query "TouchDesigner POP" --mode fast --num-results 3 \
   --output-dir /tmp/h2t-envelope-smoke --project smoketest --envelope \
-  | $PYTHON -c "import json,sys; e=json.load(sys.stdin); print('status=', e['status'], 'results=', len(e['results']))"
+  | C:/Users/stani/.h2t/venv/Scripts/python.exe -c "import json,sys; e=json.load(sys.stdin); print('status=', e['status'], 'results=', len(e['results']))"
 ```
 
 Expected: `status= OK results= 3` (or `DEGRADED results= 0` if Exa returned empty — both are valid envelope outputs).
