@@ -302,3 +302,87 @@ def _inline_extract(
         if link["href"]:
             link["href"] = urljoin(base_url, link["href"])
     return p.title, md, txt, p.links, p.canonical_url, p.lang
+
+
+import time
+import urllib.error
+import urllib.request
+
+DEFAULT_USER_AGENT = (
+    "h2t-research-fetch/0.0.1 (+https://github.com/lichtpfad/h2t-skills)"
+)
+
+
+def _site_from_url(url: str) -> str:
+    from urllib.parse import urlparse
+    return urlparse(url).hostname or ""
+
+
+class DirectProvider:
+    """stdlib urllib.request fetcher with inline extraction."""
+
+    name = "direct"
+
+    def is_configured(self, env: dict[str, str], config: dict[str, Any]) -> bool:
+        # Direct is always available.
+        return True
+
+    def fetch(self, url: str, *, timeout_ms: int, user_agent: str) -> ProviderResult:
+        req = urllib.request.Request(url, headers={
+            "User-Agent": user_agent,
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "en,*;q=0.5",
+        })
+        t0 = time.monotonic()
+        try:
+            with urllib.request.urlopen(req, timeout=timeout_ms / 1000) as resp:
+                raw_bytes = resp.read()
+                final_url = resp.geturl() or url
+                resp_headers = dict(resp.headers.items()) if hasattr(resp.headers, "items") else dict(resp.headers)
+                http_status = getattr(resp, "status", 200)
+        except urllib.error.HTTPError as e:
+            latency_ms = int((time.monotonic() - t0) * 1000)
+            self._raise_http_error(e, url=url, latency_ms=latency_ms)
+            raise  # unreachable
+        except (urllib.error.URLError, TimeoutError, OSError) as e:
+            latency_ms = int((time.monotonic() - t0) * 1000)
+            raise ProviderTransientError(
+                f"network: {e}", provider=self.name,
+                http_status=None, latency_ms=latency_ms,
+            )
+        latency_ms = int((time.monotonic() - t0) * 1000)
+        # 2xx path:
+        encoding = _detect_encoding(resp_headers, raw_bytes)
+        html_text = raw_bytes.decode(encoding, errors="replace")
+        title, md, txt, links, canonical, lang = _inline_extract(
+            html_text, base_url=final_url,
+        )
+        return ProviderResult(
+            provider=self.name,
+            http_status=http_status,
+            latency_ms=latency_ms,
+            final_url=final_url,
+            title=title,
+            body_markdown=md,
+            body_text=txt,
+            body_chars=len(txt),
+            links=links,
+            canonical_url=canonical,
+            lang=lang,
+            raw_html=html_text,
+        )
+
+    def _raise_http_error(self, e: urllib.error.HTTPError, *, url: str,
+                          latency_ms: int) -> None:
+        # Filled in next tasks. For now: any HTTP error → permanent.
+        raise ProviderPermanentError(
+            f"http {e.code}", provider=self.name,
+            http_status=e.code, latency_ms=latency_ms,
+        )
+
+
+def _detect_encoding(headers: dict[str, str], body: bytes) -> str:
+    ct = headers.get("Content-Type", "") or headers.get("content-type", "")
+    if "charset=" in ct.lower():
+        return ct.lower().split("charset=", 1)[1].split(";")[0].strip() or "utf-8"
+    return "utf-8"
