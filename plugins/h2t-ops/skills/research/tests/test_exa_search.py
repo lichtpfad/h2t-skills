@@ -1032,3 +1032,26 @@ def test_search_with_retry_meta_fields_populated(monkeypatch):
     assert env["meta"]["num_results_requested"] == 10
     assert env["meta"]["num_results_returned"] == 2
     assert "timestamp" in env["meta"]
+
+
+# --- backoff budget cap (Task 5) ---
+
+def test_warn_emitted_when_budget_exhausted(monkeypatch, capsys):
+    sleeps_called = []
+
+    def fake_sleep(s):
+        sleeps_called.append(s)
+
+    monkeypatch.setattr(exa_search, "sleep_with_jitter", fake_sleep)
+    monkeypatch.setattr(exa_search, "RETRY_BUDGET_SECONDS", 0.5)
+
+    err = exa_search.ExaTransientError("http 503", http_status=503, latency_ms=200)
+    with patch.object(exa_search, "call_exa", side_effect=[err, err]):
+        env, exit_code = exa_search.search_with_retry(
+            body={"query": "x"}, api_key="k", retry=True,
+        )
+    captured = capsys.readouterr()
+    assert "EXA_WARN:RETRY_BUDGET_EXHAUSTED" in captured.err
+    assert env["status"] == "FAILED"
+    assert exit_code == 2
+    assert sleeps_called == []
