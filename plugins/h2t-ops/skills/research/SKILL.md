@@ -1,10 +1,10 @@
 ---
 name: research
 description: "Semantic web research via Exa API. Modes: fast / generic / news / academic / competitor / people / deep. Transparent telemetry, fail-loud protocol. Use for web search, news tracking, academic papers, competitor intel, people research. NOT for LinkedIn lead-gen (use /search-leads from BayramAnnakov plugin). Triggers: 'research', 'find out', 'look up', 'исследуй', 'h2t:research'."
-compatibility: "Requires $EXA_API_KEY env var. Get key at https://dashboard.exa.ai/api-keys. Requires ~/.h2t/venv (run /h2t-core:setup if missing)."
+compatibility: "Requires $EXA_API_KEY env var. Get key at https://dashboard.exa.ai/api-keys. Requires ~/.h2t/venv (run /h2t-core:setup if missing). Optional: pip install trafilatura inside ~/.h2t/venv for richer article extraction (script falls back to stdlib inline parser if absent)."
 metadata:
   author: lichtpfad
-  version: 0.1.1
+  version: 0.1.2
 ---
 
 # h2t-ops:research
@@ -64,6 +64,7 @@ H2T_PYTHON="${H2T_PYTHON:-}"
 [ -z "$H2T_PYTHON" ] && echo "ERROR: h2t venv not found. Run /h2t-core:setup" && exit 1
 
 EXA_CLI="$H2T_PYTHON ${CLAUDE_PLUGIN_ROOT}/skills/research/scripts/exa_search.py"
+FETCH_CLI="$H2T_PYTHON ${CLAUDE_PLUGIN_ROOT}/skills/research/scripts/fetch_url.py"
 ```
 
 ## Tool Restriction (critical)
@@ -82,6 +83,36 @@ EXA_CLI="$H2T_PYTHON ${CLAUDE_PLUGIN_ROOT}/skills/research/scripts/exa_search.py
 | `FAILED` | HTTP 4xx/5xx/network/malformed после retries | Report `STATUS: FAILED + EXA_ERROR:*` (точное сообщение из stderr). STOP. |
 
 `exit 0` НЕ означает `status == OK`. Всегда читать envelope (либо из stdout при `--envelope`, либо из `.sources.json:meta.envelope`).
+
+## Fetching Specific URLs (`fetch_url.py`)
+
+`exa_search.py` находит URL'ы; `fetch_url.py` доставляет их содержимое через provider ladder (`direct → jina → stubs`).
+
+Когда использовать:
+- ✅ Известный URL, нужен полный текст статьи (а не только Exa highlight).
+- ✅ Plain WebFetch вернул shell / 403 / пустоту.
+- ✅ JS-rendered страницы (Jina Reader сам рендерит JS на их side).
+
+Когда НЕ использовать:
+- ❌ Поиск по теме → используй `$EXA_CLI search`.
+- ❌ Bulk crawl сайта → используй адаптеры (`alltd.py`, `iihq.py`) после их реализации.
+- ❌ Auth/paid контент → скрипт вернёт `FAILED + content_gate`; не пытайся обойти через `WebFetch`.
+
+CLI:
+
+$FETCH_CLI fetch --url "https://..." [--provider auto] [--json] [--keep-raw] [--project NAME]
+
+Envelope status — тот же контракт, что у `exa_search.py`:
+
+| `envelope.status` | exit | Действие агента |
+|---|---|---|
+| OK | 0 | Continue: synthesize from `body_markdown`. |
+| DEGRADED | 0 | Report `STATUS: DEGRADED + reason=...`. Можно: (a) попробовать `--provider jina` явно, (b) пометить источник `failed-harvest` и идти дальше. Никакого silent fallback. |
+| FAILED + `content_gate=login_required\|paid` | 5 | STOP. Не fetch'и через WebFetch. Источник legitimately gated. |
+| FAILED + http | 2 | STOP. Report exact `FETCH_ERROR:HTTP`. |
+| FAILED + network | 3 | STOP. Report exact `FETCH_ERROR:NETWORK`. |
+
+Privacy note: Jina Reader — third-party URL relay; URL и часть содержимого видны Jina'у. Для public web research это допустимо; для anything sensitive — `--provider direct` или disable Jina через `~/.h2t/config/research/fetch_providers.json` (`providers.jina.enabled: false`).
 
 ## Workflow
 
@@ -214,6 +245,8 @@ Write final report to `~/.h2t/research/{project}-{slug}-{date}.md` following REP
 - **Translate non-English query to English** — destroys Exa multilingual ranking. Russian query → keep Russian. Mixed language → keep as-is. Only translate on explicit user request.
 - **Treat `exit 0` as success without reading envelope** — `status == DEGRADED` пишется при exit 0 на empty results. Всегда читать `envelope.status`.
 - **Silent retry того же запроса** — retry делает скрипт автоматически. Если агент видит `DEGRADED`, он либо явно меняет запрос (новый CLI вызов с другим `--mode` / query вариацией), либо переключается на fallback с пометкой. Никаких "молчаливых" повторов.
+- **Bypass auth/paywall via WebFetch fallback** — `content_gate=login_required\|paid` означает legitimately gated. Substitute via WebFetch — нарушение интегритета.
+- **Synthesize article from short_body / js_shell** — `status=DEGRADED` означает body не пригоден для wiki ingest. Помечай `failed-harvest`.
 
 ## When to use this skill
 
