@@ -285,3 +285,23 @@ def test_detect_js_shell_false_for_real_article():
     html = _load_fixture("public_article.html")
     _, _, body_text, _, _, _ = fetch_url._inline_extract(html, base_url="x")
     assert fetch_url._detect_js_shell(html=html, body_text=body_text) is False
+
+
+def test_detect_login_wall_true_for_login_form():
+    html = _load_fixture("login_wall.html")
+    assert fetch_url._detect_login_wall(html=html, final_url="https://example.com/article/x") is True
+
+
+def test_detect_login_wall_true_for_meta_refresh_to_login():
+    html = _load_fixture("redirect_to_login.html")
+    assert fetch_url._detect_login_wall(html=html, final_url="https://example.com/article/x") is True
+
+
+def test_detect_login_wall_true_for_final_url_login_path():
+    html = "<html><body>noop</body></html>"
+    assert fetch_url._detect_login_wall(html=html, final_url="https://example.com/login") is True
+
+
+def test_detect_login_wall_false_for_real_article():
+    html = _load_fixture("public_article.html")
+    assert fetch_url._detect_login_wall(html=html, final_url="https://example.com/x") is False

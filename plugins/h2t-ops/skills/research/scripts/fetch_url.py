@@ -415,3 +415,36 @@ def _detect_js_shell(*, html: str, body_text: str) -> bool:
     if len(body_text) >= 200:
         return False
     return len(_SCRIPT_TAG_RE.findall(html)) >= 5
+
+
+LOGIN_DOM_TOKENS = (
+    'class="login-required"',
+    'data-auth="required"',
+    'id="login-form"',
+)
+
+_LOGIN_FORM_ACTION_RE = re.compile(
+    r'<form\b[^>]*action=["\'](/(?:login|signin|auth)[^"\']*)["\']',
+    re.IGNORECASE,
+)
+_META_REFRESH_LOGIN_RE = re.compile(
+    r'<meta\b[^>]*http-equiv=["\']refresh["\'][^>]*url=([^"\'>\s]+)',
+    re.IGNORECASE,
+)
+
+
+def _detect_login_wall(*, html: str, final_url: str) -> bool:
+    if any(tok in html for tok in LOGIN_DOM_TOKENS):
+        return True
+    if _LOGIN_FORM_ACTION_RE.search(html):
+        return True
+    m = _META_REFRESH_LOGIN_RE.search(html)
+    if m:
+        target = m.group(1).lower()
+        if "/login" in target or "/signin" in target or "/auth" in target:
+            return True
+    if final_url:
+        path = final_url.lower()
+        if "/login" in path or "/signin" in path:
+            return True
+    return False
