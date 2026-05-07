@@ -278,32 +278,6 @@ def test_call_exa_success():
     assert latency_ms >= 0
 
 
-def test_call_exa_http_429_returns_error_body(capsys):
-    err = urllib.error.HTTPError(
-        url="https://api.exa.ai/search",
-        code=429,
-        msg="Too Many Requests",
-        hdrs=None,
-        fp=io.BytesIO(json.dumps({"error": "rate_limit_exceeded"}).encode("utf-8")),
-    )
-    with patch("urllib.request.urlopen", side_effect=err):
-        status, body, latency_ms = exa_search.call_exa(
-            "/search", {"query": "q"}, api_key="testkey"
-        )
-    assert status == 429
-    assert body["error"] == "rate_limit_exceeded"
-
-
-def test_call_exa_network_timeout_exits_3(capsys):
-    with patch("urllib.request.urlopen", side_effect=urllib.error.URLError("timed out")):
-        with pytest.raises(SystemExit) as excinfo:
-            exa_search.call_exa("/search", {"query": "q"}, api_key="testkey")
-    assert excinfo.value.code == 3
-    err = capsys.readouterr().err
-    assert "EXA_ERROR:NETWORK" in err
-    assert "timed out" in err
-
-
 # --- preflight tests ---
 
 
@@ -663,3 +637,78 @@ def test_call_exa_sets_user_agent_header():
     ua = captured["headers"].get("User-agent") or captured["headers"].get("User-Agent")
     assert ua is not None, f"User-Agent missing; captured={captured['headers']}"
     assert "exa_search.py" in ua
+
+
+# --- call_exa typed exceptions (Task 1) ---
+
+def test_call_exa_raises_transient_on_5xx():
+    with patch("urllib.request.urlopen") as mock_urlopen:
+        err = urllib.error.HTTPError(
+            url="https://api.exa.ai/search", code=503,
+            msg="Service Unavailable", hdrs=None,
+            fp=io.BytesIO(b'{"error":"upstream"}'),
+        )
+        mock_urlopen.side_effect = err
+        with pytest.raises(exa_search.ExaTransientError) as ei:
+            exa_search.call_exa("/search", {"query": "x"}, api_key="k")
+        assert ei.value.http_status == 503
+        assert ei.value.latency_ms >= 0
+
+
+def test_call_exa_raises_transient_on_429():
+    with patch("urllib.request.urlopen") as mock_urlopen:
+        err = urllib.error.HTTPError(
+            url="https://api.exa.ai/search", code=429,
+            msg="Too Many Requests", hdrs=None,
+            fp=io.BytesIO(b'{"error":"rate"}'),
+        )
+        mock_urlopen.side_effect = err
+        with pytest.raises(exa_search.ExaTransientError) as ei:
+            exa_search.call_exa("/search", {"query": "x"}, api_key="k")
+        assert ei.value.http_status == 429
+
+
+def test_call_exa_raises_permanent_on_4xx():
+    with patch("urllib.request.urlopen") as mock_urlopen:
+        err = urllib.error.HTTPError(
+            url="https://api.exa.ai/search", code=401,
+            msg="Unauthorized", hdrs=None,
+            fp=io.BytesIO(b'{"error":"bad key"}'),
+        )
+        mock_urlopen.side_effect = err
+        with pytest.raises(exa_search.ExaPermanentError) as ei:
+            exa_search.call_exa("/search", {"query": "x"}, api_key="k")
+        assert ei.value.http_status == 401
+
+
+def test_call_exa_raises_transient_on_urlerror():
+    with patch("urllib.request.urlopen") as mock_urlopen:
+        mock_urlopen.side_effect = urllib.error.URLError("dns fail")
+        with pytest.raises(exa_search.ExaTransientError) as ei:
+            exa_search.call_exa("/search", {"query": "x"}, api_key="k")
+        assert ei.value.http_status is None
+        assert "dns fail" in str(ei.value)
+
+
+def test_call_exa_raises_malformed_on_bad_json():
+    fake_resp = MagicMock()
+    fake_resp.status = 200
+    fake_resp.read.return_value = b"<html>not json</html>"
+    fake_resp.__enter__ = lambda self: fake_resp
+    fake_resp.__exit__ = lambda *a: None
+    with patch("urllib.request.urlopen", return_value=fake_resp):
+        with pytest.raises(exa_search.ExaMalformedResponseError):
+            exa_search.call_exa("/search", {"query": "x"}, api_key="k")
+
+
+def test_call_exa_returns_tuple_on_success():
+    fake_resp = MagicMock()
+    fake_resp.status = 200
+    fake_resp.read.return_value = b'{"results":[{"url":"u","title":"t"}],"costDollars":{"total":0.01}}'
+    fake_resp.__enter__ = lambda self: fake_resp
+    fake_resp.__exit__ = lambda *a: None
+    with patch("urllib.request.urlopen", return_value=fake_resp):
+        status, body, latency = exa_search.call_exa("/search", {"query": "x"}, api_key="k")
+        assert status == 200
+        assert body["results"][0]["url"] == "u"
+        assert latency >= 0

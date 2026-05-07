@@ -164,16 +164,48 @@ def build_body(
 EXA_API = "https://api.exa.ai"
 
 
+class ExaTransientError(Exception):
+    """Retryable: HTTP 5xx, 429, URLError, timeout."""
+
+    def __init__(self, message: str, *, http_status: int | None, latency_ms: int, body: Any = None):
+        super().__init__(message)
+        self.http_status = http_status
+        self.latency_ms = latency_ms
+        self.body = body
+
+
+class ExaPermanentError(Exception):
+    """Non-retryable: HTTP 4xx (other than 429)."""
+
+    def __init__(self, message: str, *, http_status: int, latency_ms: int, body: Any = None):
+        super().__init__(message)
+        self.http_status = http_status
+        self.latency_ms = latency_ms
+        self.body = body
+
+
+class ExaMalformedResponseError(Exception):
+    """HTTP 2xx but body is not valid JSON or missing required fields."""
+
+    def __init__(self, message: str, *, latency_ms: int):
+        super().__init__(message)
+        self.latency_ms = latency_ms
+
+
 def call_exa(
     endpoint: str,
     body: dict[str, Any],
     api_key: str,
     timeout: int = 60,
 ) -> tuple[int, dict[str, Any], int]:
-    """POST to Exa. Returns (http_status, response_json_or_error_body, latency_ms).
+    """POST to Exa. Returns (http_status, response_json, latency_ms) on 2xx with valid JSON.
 
-    Network errors (URLError) exit 3 via die() — these cannot be silently swallowed.
-    HTTP errors (4xx/5xx) return (status, error_body, latency) to caller for decision.
+    Raises:
+      - ExaTransientError on HTTP 5xx, 429, URLError, timeout (retryable upstream).
+      - ExaPermanentError on HTTP 4xx other than 429 (caller decides exit).
+      - ExaMalformedResponseError on HTTP 2xx with non-JSON body.
+
+    No die() inside this function — all exit decisions live at CLI top level.
     """
     req = urllib.request.Request(
         f"{EXA_API}{endpoint}",
@@ -190,18 +222,33 @@ def call_exa(
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             latency = int((time.monotonic() - start) * 1000)
-            return resp.status, json.loads(resp.read().decode("utf-8")), latency
+            raw = resp.read().decode("utf-8")
+            try:
+                data = json.loads(raw)
+            except json.JSONDecodeError as e:
+                raise ExaMalformedResponseError(
+                    f"non-JSON body from Exa (first 120 chars): {raw[:120]!r}",
+                    latency_ms=latency,
+                ) from e
+            return resp.status, data, latency
     except urllib.error.HTTPError as e:
         latency = int((time.monotonic() - start) * 1000)
         try:
             err_body = json.loads(e.read().decode("utf-8"))
         except Exception:
             err_body = {"error": "non_json_error_response"}
-        return e.code, err_body, latency
+        if e.code == 429 or 500 <= e.code < 600:
+            raise ExaTransientError(
+                f"http {e.code}", http_status=e.code, latency_ms=latency, body=err_body,
+            ) from e
+        raise ExaPermanentError(
+            f"http {e.code}", http_status=e.code, latency_ms=latency, body=err_body,
+        ) from e
     except urllib.error.URLError as e:
         latency = int((time.monotonic() - start) * 1000)
-        die(3, f"EXA_ERROR:NETWORK {e.reason} after {latency}ms")
-        raise  # unreachable — satisfies type checker
+        raise ExaTransientError(
+            f"network: {e.reason}", http_status=None, latency_ms=latency,
+        ) from e
 
 
 def preflight() -> None:
@@ -461,10 +508,17 @@ def _run_search(args: argparse.Namespace) -> int:
         die(4, "EXA_ERROR:ENV EXA_API_KEY missing")
     system_prompt, schema = load_system_prompt(args.mode)
     body = build_body(args, system_prompt, schema)
-    status, data, latency_ms = call_exa("/search", body, api_key)
-    if status >= 400:
-        err_body = json.dumps(data)[:300]
-        die(2, f"EXA_ERROR:API http={status} body={err_body!r}")
+    try:
+        status, data, latency_ms = call_exa("/search", body, api_key)
+    except ExaPermanentError as e:
+        err_body = json.dumps(e.body)[:300]
+        die(2, f"EXA_ERROR:API http={e.http_status} body={err_body!r}")
+    except ExaTransientError as e:
+        if e.http_status is None:
+            die(3, f"EXA_ERROR:NETWORK {e} after {e.latency_ms}ms")
+        die(2, f"EXA_ERROR:API http={e.http_status} body={json.dumps(e.body)[:300]!r}")
+    except ExaMalformedResponseError as e:
+        die(2, f"EXA_ERROR:MALFORMED {e}")
 
     # Persist + report
     out_dir = Path(args.output_dir)
@@ -538,10 +592,17 @@ def _run_crawl(args: argparse.Namespace) -> int:
     if not api_key:
         die(4, "EXA_ERROR:ENV EXA_API_KEY missing")
     body = {"urls": [args.url], "text": {"maxCharacters": 15000}}
-    status, data, latency_ms = call_exa("/contents", body, api_key)
-    if status >= 400:
-        err_body = json.dumps(data)[:300]
-        die(2, f"EXA_ERROR:API http={status} body={err_body!r}")
+    try:
+        status, data, latency_ms = call_exa("/contents", body, api_key)
+    except ExaPermanentError as e:
+        err_body = json.dumps(e.body)[:300]
+        die(2, f"EXA_ERROR:API http={e.http_status} body={err_body!r}")
+    except ExaTransientError as e:
+        if e.http_status is None:
+            die(3, f"EXA_ERROR:NETWORK {e} after {e.latency_ms}ms")
+        die(2, f"EXA_ERROR:API http={e.http_status} body={json.dumps(e.body)[:300]!r}")
+    except ExaMalformedResponseError as e:
+        die(2, f"EXA_ERROR:MALFORMED {e}")
 
     out_dir = Path(args.output_dir)
     date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
