@@ -771,7 +771,7 @@ def test_run_search_transient_no_status_exits_3_with_network_message(monkeypatch
             ])
     assert excinfo.value.code == 3
     captured = capsys.readouterr().err
-    assert "EXA_ERROR:NETWORK timed out after 300ms" in captured
+    assert "EXA_ERROR:NETWORK after 300ms (after retries)" in captured
     # Regression guard: no duplicate "network:" prefix.
     assert "network: timed out" not in captured
 
@@ -1055,3 +1055,197 @@ def test_warn_emitted_when_budget_exhausted(monkeypatch, capsys):
     assert env["status"] == "FAILED"
     assert exit_code == 2
     assert sleeps_called == []
+
+
+# --- CLI flags --envelope, --no-retry (Task 6) ---
+
+def _make_search_argv(extra: list[str] | None = None) -> list[str]:
+    argv = ["search", "--query", "anything", "--mode", "generic", "--num-results", "3"]
+    if extra:
+        argv.extend(extra)
+    return argv
+
+
+def _setup_sp(monkeypatch, tmp_path):
+    """Override SYSTEMPROMPTS_DIR for hermetic CLI tests."""
+    sp_dir = tmp_path / "systemprompts"
+    sp_dir.mkdir(exist_ok=True)
+    (sp_dir / "generic.md").write_text("---\n---\nsp\n", encoding="utf-8")
+    monkeypatch.setattr(exa_search, "SYSTEMPROMPTS_DIR", sp_dir)
+
+
+def test_default_stdout_is_markdown_summary(monkeypatch, capsys, tmp_path):
+    monkeypatch.setenv("EXA_API_KEY", "k")
+    monkeypatch.setattr(exa_search, "sleep_with_jitter", lambda s: None)
+    _setup_sp(monkeypatch, tmp_path)
+    out_dir = tmp_path / "out"
+    with patch.object(exa_search, "call_exa", return_value=(200, {
+        "results": [{"url": "u", "title": "t", "highlights": ["snippet"]}],
+        "costDollars": {"total": 0.01},
+    }, 100)):
+        rc = exa_search.main(_make_search_argv(["--output-dir", str(out_dir), "--project", "p"]))
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert out.startswith("## Exa Search:")
+    assert not out.lstrip().startswith("{")
+
+
+def test_envelope_flag_prints_json_to_stdout(monkeypatch, capsys, tmp_path):
+    monkeypatch.setenv("EXA_API_KEY", "k")
+    monkeypatch.setattr(exa_search, "sleep_with_jitter", lambda s: None)
+    _setup_sp(monkeypatch, tmp_path)
+    out_dir = tmp_path / "out"
+    with patch.object(exa_search, "call_exa", return_value=(200, {
+        "results": [{"url": "u", "title": "t", "highlights": ["snippet"]}],
+        "costDollars": {"total": 0.01},
+    }, 100)):
+        rc = exa_search.main(_make_search_argv(
+            ["--output-dir", str(out_dir), "--project", "p", "--envelope"]
+        ))
+    out = capsys.readouterr().out
+    assert rc == 0
+    payload = json.loads(out)
+    assert payload["status"] == "OK"
+    assert payload["primary_engine"] == "exa"
+    assert "## Exa Search:" not in out
+
+
+def test_no_retry_flag_disables_retries_via_cli(monkeypatch, capsys, tmp_path):
+    monkeypatch.setenv("EXA_API_KEY", "k")
+    monkeypatch.setattr(exa_search, "sleep_with_jitter", lambda s: None)
+    _setup_sp(monkeypatch, tmp_path)
+    out_dir = tmp_path / "out"
+    empty = (200, {"results": [], "costDollars": {"total": 0.0}}, 50)
+    with patch.object(exa_search, "call_exa", side_effect=[empty, empty]) as m:
+        rc = exa_search.main(_make_search_argv(
+            ["--output-dir", str(out_dir), "--project", "p", "--envelope", "--no-retry"]
+        ))
+    assert m.call_count == 1
+    assert rc == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["status"] == "DEGRADED"
+
+
+def test_envelope_in_sources_json_always_written(monkeypatch, tmp_path):
+    monkeypatch.setenv("EXA_API_KEY", "k")
+    monkeypatch.setattr(exa_search, "sleep_with_jitter", lambda s: None)
+    _setup_sp(monkeypatch, tmp_path)
+    out_dir = tmp_path / "out"
+    with patch.object(exa_search, "call_exa", return_value=(200, {
+        "results": [{"url": "u", "title": "t", "highlights": []}],
+        "costDollars": {"total": 0.02},
+    }, 100)):
+        rc = exa_search.main(_make_search_argv(
+            ["--output-dir", str(out_dir), "--project", "p"]
+        ))
+    assert rc == 0
+    sources_files = list(out_dir.glob("*.sources.json"))
+    assert len(sources_files) == 1
+    data = json.loads(sources_files[0].read_text(encoding="utf-8"))
+    assert "envelope" in data["meta"]
+    assert data["meta"]["envelope"]["status"] == "OK"
+    assert data["meta"]["envelope"]["primary_engine"] == "exa"
+
+
+# --- FAILED + --envelope: JSON envelope must reach stdout (Task 6 Fix 1) ---
+
+def _make_search_argv_with_envelope(tmp_path):
+    out_dir = tmp_path / "out"
+    return ["search", "--query", "x", "--mode", "generic", "--num-results", "3",
+            "--output-dir", str(out_dir), "--project", "p", "--envelope"]
+
+
+def test_envelope_flag_4xx_prints_envelope_and_stderr(monkeypatch, tmp_path, capsys):
+    monkeypatch.setenv("EXA_API_KEY", "k")
+    monkeypatch.setattr(exa_search, "sleep_with_jitter", lambda s: None)
+    _setup_sp(monkeypatch, tmp_path)
+    err = urllib.error.HTTPError(
+        url="https://api.exa.ai/search", code=401, msg="Unauthorized",
+        hdrs=None, fp=io.BytesIO(b'{"error":"bad key"}'),
+    )
+    with patch("urllib.request.urlopen", side_effect=err):
+        with pytest.raises(SystemExit) as excinfo:
+            exa_search.main(_make_search_argv_with_envelope(tmp_path))
+    captured = capsys.readouterr()
+    assert excinfo.value.code == 2
+    assert "EXA_ERROR:API" in captured.err
+    payload = json.loads(captured.out)
+    assert payload["status"] == "FAILED"
+    assert payload["telemetry"]["attempts"][0]["error"] == "exa_4xx_nonretryable"
+
+
+def test_envelope_flag_5xx_exhausted_prints_envelope(monkeypatch, tmp_path, capsys):
+    monkeypatch.setenv("EXA_API_KEY", "k")
+    monkeypatch.setattr(exa_search, "sleep_with_jitter", lambda s: None)
+    _setup_sp(monkeypatch, tmp_path)
+    err = urllib.error.HTTPError(
+        url="https://api.exa.ai/search", code=503, msg="Service Unavailable",
+        hdrs=None, fp=io.BytesIO(b'{"error":"down"}'),
+    )
+    with patch("urllib.request.urlopen", side_effect=[err, err]):
+        with pytest.raises(SystemExit) as excinfo:
+            exa_search.main(_make_search_argv_with_envelope(tmp_path))
+    captured = capsys.readouterr()
+    assert excinfo.value.code == 2
+    assert "EXA_ERROR:API" in captured.err
+    payload = json.loads(captured.out)
+    assert payload["status"] == "FAILED"
+    assert len(payload["telemetry"]["attempts"]) == 2
+    assert all(a["error"] == "exa_5xx_retryable" for a in payload["telemetry"]["attempts"])
+
+
+def test_envelope_flag_network_exhausted_prints_envelope(monkeypatch, tmp_path, capsys):
+    monkeypatch.setenv("EXA_API_KEY", "k")
+    monkeypatch.setattr(exa_search, "sleep_with_jitter", lambda s: None)
+    _setup_sp(monkeypatch, tmp_path)
+    with patch("urllib.request.urlopen", side_effect=urllib.error.URLError("dns")):
+        with pytest.raises(SystemExit) as excinfo:
+            exa_search.main(_make_search_argv_with_envelope(tmp_path))
+    captured = capsys.readouterr()
+    assert excinfo.value.code == 3
+    assert "EXA_ERROR:NETWORK" in captured.err
+    payload = json.loads(captured.out)
+    assert payload["status"] == "FAILED"
+    assert all(a["error"] == "exa_network_timeout" for a in payload["telemetry"]["attempts"])
+
+
+def test_envelope_flag_malformed_prints_envelope(monkeypatch, tmp_path, capsys):
+    monkeypatch.setenv("EXA_API_KEY", "k")
+    monkeypatch.setattr(exa_search, "sleep_with_jitter", lambda s: None)
+    _setup_sp(monkeypatch, tmp_path)
+    fake_resp = MagicMock()
+    fake_resp.status = 200
+    fake_resp.read.return_value = b"<html>not json</html>"
+    fake_resp.__enter__ = lambda self: fake_resp
+    fake_resp.__exit__ = lambda *a: None
+    with patch("urllib.request.urlopen", return_value=fake_resp):
+        with pytest.raises(SystemExit) as excinfo:
+            exa_search.main(_make_search_argv_with_envelope(tmp_path))
+    captured = capsys.readouterr()
+    assert excinfo.value.code == 2
+    assert "EXA_ERROR:MALFORMED" in captured.err
+    assert "JSONDecodeError" not in captured.err
+    assert "Traceback" not in captured.err
+    payload = json.loads(captured.out)
+    assert payload["status"] == "FAILED"
+    assert payload["telemetry"]["attempts"][0]["error"] == "exa_malformed_json"
+
+
+def test_envelope_flag_failed_writes_sources_json(monkeypatch, tmp_path):
+    """FAILED status still writes sidecar so post-hoc analysis works."""
+    monkeypatch.setenv("EXA_API_KEY", "k")
+    monkeypatch.setattr(exa_search, "sleep_with_jitter", lambda s: None)
+    _setup_sp(monkeypatch, tmp_path)
+    err = urllib.error.HTTPError(
+        url="https://api.exa.ai/search", code=401, msg="Unauthorized",
+        hdrs=None, fp=io.BytesIO(b'{"error":"bad"}'),
+    )
+    with patch("urllib.request.urlopen", side_effect=err):
+        with pytest.raises(SystemExit):
+            exa_search.main(_make_search_argv_with_envelope(tmp_path))
+    out_dir = tmp_path / "out"
+    sources = list(out_dir.glob("*.sources.json"))
+    assert len(sources) == 1
+    data = json.loads(sources[0].read_text(encoding="utf-8"))
+    assert data["meta"]["envelope"]["status"] == "FAILED"
+    assert data["meta"]["status"] == "failed"
