@@ -763,3 +763,41 @@ def test_ladder_cumulative_timeout_skips_remaining(capsys):
     # jina (and others) skipped with the timeout reason.
     skipped_reason = env["telemetry"]["providers_skipped_reason"]
     assert skipped_reason.get("jina") == "cumulative_timeout_exhausted"
+
+
+def test_inline_baseline_works_without_trafilatura(capsys):
+    # Baseline: no install. Just verify the warning is emitted at most once
+    # when extraction is invoked without trafilatura.
+    fetch_url._reset_trafilatura_warned_for_tests()
+    html = _load_fixture("public_article.html")
+    title, md, txt, _, _, _ = fetch_url._extract_with_optional_uplift(
+        html, base_url="https://example.com/x",
+    )
+    err = capsys.readouterr().err
+    # Module is unavailable in baseline venv → expect warning.
+    if not fetch_url._TRAFILATURA_AVAILABLE:
+        assert err.count("FETCH_WARN:NO_TRAFILATURA") == 1
+    assert "POPs are the new particle context" in txt
+
+
+@pytest.mark.optional
+def test_trafilatura_used_when_available_uplifts_body(monkeypatch):
+    """If a trafilatura-shaped uplift function is present, body should be
+    at least as long as inline baseline.
+    """
+    fake_module = MagicMock()
+    fake_module.extract.return_value = (
+        "POPs are the new particle context in TouchDesigner. "
+        "GPU-driven pipeline. Attribute lifecycle. Long uplift body. " * 5
+    )
+    monkeypatch.setattr(fetch_url, "_TRAFILATURA_AVAILABLE", True)
+    monkeypatch.setattr(fetch_url, "_trafilatura_module", fake_module)
+
+    html = _load_fixture("public_article.html")
+    _, _, txt_inline, _, _, _ = fetch_url._inline_extract(
+        html, base_url="https://example.com/x",
+    )
+    title, md, txt, _, _, _ = fetch_url._extract_with_optional_uplift(
+        html, base_url="https://example.com/x",
+    )
+    assert len(txt) >= len(txt_inline)
