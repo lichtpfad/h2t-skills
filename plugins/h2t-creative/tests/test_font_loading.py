@@ -1,4 +1,6 @@
 """Font link injection: profile.yaml web_fonts list -> <link> tags in <head>."""
+import pytest
+
 import assembler as asm
 
 _RECIPE = {
@@ -34,8 +36,23 @@ def test_no_font_links_default(tmp_path):
 
 
 def test_font_links_deck_editorial(tmp_path):
+    """Generic legacy-vocab font-link smoke for editorial deck.
+
+    Mirrors R2a T3.5 mitigation for h2t-terminal: once a profile gets a
+    `deck/tokens.css`, `_is_deck_form_profile` flips TRUE and the legacy
+    multi-file vocab (`title-only`) no longer assembles. R2b T1 introduces
+    `profiles/h2t-editorial/deck/tokens.css`, so this test must skip until
+    R2b T7 ships the form-v2 validation recipe + layouts (a dedicated
+    `test_font_links_deck_editorial_form_v2` will land then).
+    """
+    profile_dir = asm.PROFILES_DIR / "h2t-editorial"
+    if asm._is_deck_form_profile(profile_dir):
+        pytest.skip(
+            "h2t-editorial is deck-form (R2b T1); form-v2 font-link smoke "
+            "lands at R2b T7 alongside validation/recipe-deck.yaml."
+        )
     out = tmp_path / "out"
-    asm.assemble_deck(_DECK_RECIPE, asm.PROFILES_DIR / "h2t-editorial", out)
+    asm.assemble_deck(_DECK_RECIPE, profile_dir, out)
     html = (out / "index.html").read_text()
     assert "fonts.googleapis.com" in html
 

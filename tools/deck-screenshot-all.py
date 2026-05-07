@@ -59,17 +59,20 @@ VIEWPORTS = {
 # Per-slide-inner block class -> layout name mapping. Used to derive a stable,
 # human-readable suffix in filenames. Falls back to `slide` when unrecognized.
 _INNER_CLASS_TO_LAYOUT = {
-    "title-block":      "title",
-    "title-body-block": "title-body",
-    "stats-block":      "stats",
-    "quote-slide":      "quote",
-    "cards-block":      "cards",
-    "layers-block":     "layers",
-    "split-block":      "split",
-    "code-slide":       "code",
-    "table-block":      "table",
-    "divider-block":    "divider",
-    "final-block":      "final",
+    "title-block":        "title",
+    "title-body-block":   "title-body",
+    "stats-block":        "stats",
+    "quote-slide":        "quote",
+    "cards-block":        "cards",
+    "layers-block":       "layers",
+    "split-block":        "split",
+    "code-slide":         "code",
+    "table-block":        "table",
+    "divider-block":      "divider",
+    "final-block":        "final",
+    # R2b editorial layouts (#87)
+    "two-column-block":   "two-column",
+    "image-text-block":   "image-text",
 }
 
 

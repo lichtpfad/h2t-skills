@@ -1,0 +1,13 @@
+layout: title
+fields:
+  brand_html:
+    type: html
+    required: true
+  cover_sub:
+    type: text
+    required: false
+    default: ''
+  cover_meta:
+    type: html
+    required: false
+    default: ''

@@ -1,0 +1,16 @@
+layout: table
+fields:
+  label:
+    type: text
+    required: false
+    default: ''
+  headline:
+    type: html
+    required: true
+  table_html:
+    type: html
+    required: true
+  note:
+    type: html
+    required: false
+    default: ''

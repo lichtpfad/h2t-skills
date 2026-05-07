@@ -1,0 +1,710 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>The Art of Knowledge Management</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #faf9f6;
+      --bg-light: #f0eeeb;
+      --bg-card: #ffffff;
+      --text: #1a1a1a;
+      --text-dim: #6b6b6b;
+      --accent: #c45a3c;
+      --accent2: #2d5f8a;
+      --accent3: #5a8a5c;
+      --danger: #b33a3a;
+      --border: #e0ddd8;
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', sans-serif;
+      font-size: 18px;
+      line-height: 1.7;
+      overflow: hidden;
+    }
+
+    /* ── Progress bar ── */
+    #progress-bar {
+      position: fixed;
+      top: 0; left: 0;
+      height: 2px;
+      background: var(--accent);
+      transition: width 0.4s ease;
+      z-index: 100;
+    }
+
+    /* ── Slide counter ── */
+    #slide-counter {
+      position: fixed;
+      top: 24px; right: 32px;
+      font-family: 'Inter', sans-serif;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-dim);
+      letter-spacing: 0.5px;
+      z-index: 100;
+    }
+
+    /* ── Nav hint ── */
+    #nav-hint {
+      position: fixed;
+      bottom: 20px; right: 32px;
+      font-family: 'Inter', sans-serif;
+      font-size: 12px;
+      color: var(--text-dim);
+      letter-spacing: 0.3px;
+      z-index: 100;
+      opacity: 0.6;
+    }
+
+    /* ── Deck container ── */
+    #deck {
+      position: relative;
+      width: 100%;
+      height: 100%;
+    }
+
+    /* ── Slides ── */
+    .slide {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 60px 80px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.4s ease;
+    }
+
+    .slide.active {
+      opacity: 1;
+      pointer-events: all;
+    }
+
+    .slide-inner {
+      width: 100%;
+      max-width: 860px;
+    }
+
+    /* ── Stagger animation ── */
+    @keyframes slideIn {
+      from {
+        opacity: 0;
+        transform: translateX(-20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateX(0);
+      }
+    }
+
+    .slide.active .anim {
+      animation: slideIn 0.5s ease-out both;
+    }
+
+    .slide.active .anim:nth-child(1) { animation-delay: 0.00s; }
+    .slide.active .anim:nth-child(2) { animation-delay: 0.08s; }
+    .slide.active .anim:nth-child(3) { animation-delay: 0.16s; }
+    .slide.active .anim:nth-child(4) { animation-delay: 0.24s; }
+    .slide.active .anim:nth-child(5) { animation-delay: 0.32s; }
+    .slide.active .anim:nth-child(6) { animation-delay: 0.40s; }
+    .slide.active .anim:nth-child(7) { animation-delay: 0.48s; }
+
+    /* ── Typography ── */
+    h1 {
+      font-family: 'Playfair Display', serif;
+      font-size: 44px;
+      font-weight: 700;
+      line-height: 1.2;
+      color: var(--text);
+    }
+
+    h2 {
+      font-family: 'Playfair Display', serif;
+      font-size: 30px;
+      font-weight: 600;
+      line-height: 1.3;
+      color: var(--text);
+    }
+
+    h3 {
+      font-family: 'Inter', sans-serif;
+      font-size: 16px;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      color: var(--text-dim);
+    }
+
+    p {
+      font-family: 'Inter', sans-serif;
+      font-size: 18px;
+      line-height: 1.7;
+      color: var(--text);
+    }
+
+    em {
+      font-style: italic;
+    }
+
+    /* ── Dividers ── */
+    hr {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: 28px 0;
+    }
+
+    hr.thin {
+      margin: 20px 0;
+    }
+
+    /* ── Cards ── */
+    .cards-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+      margin-top: 32px;
+    }
+
+    .card {
+      background: var(--bg-card);
+      border-radius: 6px;
+      padding: 28px 24px;
+      box-shadow: 0 2px 12px rgba(0,0,0,.06);
+      transition: box-shadow 0.25s ease;
+    }
+
+    .card:hover {
+      box-shadow: 0 6px 24px rgba(0,0,0,.12);
+    }
+
+    .card-title {
+      font-family: 'Playfair Display', serif;
+      font-size: 20px;
+      font-weight: 600;
+      margin-bottom: 10px;
+      color: var(--text);
+    }
+
+    .card-desc {
+      font-family: 'Playfair Display', serif;
+      font-style: italic;
+      font-size: 16px;
+      line-height: 1.6;
+      color: var(--text-dim);
+    }
+
+    .card-accent {
+      display: inline-block;
+      width: 28px;
+      height: 3px;
+      border-radius: 2px;
+      margin-bottom: 16px;
+    }
+
+    /* ── Blockquote ── */
+    blockquote {
+      border-left: 3px solid var(--accent);
+      padding: 4px 0 4px 28px;
+      margin: 32px 0;
+    }
+
+    blockquote p {
+      font-family: 'Playfair Display', serif;
+      font-style: italic;
+      font-size: 24px;
+      line-height: 1.5;
+      color: var(--text);
+    }
+
+    blockquote cite {
+      display: block;
+      margin-top: 12px;
+      font-family: 'Inter', sans-serif;
+      font-style: normal;
+      font-size: 14px;
+      color: var(--text-dim);
+    }
+
+    /* ── Bullet lists ── */
+    ul.editorial {
+      list-style: none;
+      padding: 0;
+      margin-top: 16px;
+    }
+
+    ul.editorial li {
+      padding: 8px 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 17px;
+      color: var(--text);
+      display: flex;
+      align-items: baseline;
+      gap: 12px;
+    }
+
+    ul.editorial li:last-child {
+      border-bottom: none;
+    }
+
+    ul.editorial li::before {
+      content: '–';
+      color: var(--accent);
+      flex-shrink: 0;
+      font-weight: 600;
+    }
+
+    /* ── Split layout ── */
+    .split {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 48px;
+      align-items: start;
+    }
+
+    .split-divider {
+      width: 1px;
+      background: var(--border);
+      align-self: stretch;
+    }
+
+    /* ── Stat block ── */
+    .stat-block {
+      text-align: center;
+      padding: 32px 24px;
+    }
+
+    .stat-number {
+      font-family: 'Playfair Display', serif;
+      font-size: 72px;
+      font-weight: 700;
+      line-height: 1;
+      color: var(--accent2);
+      margin-bottom: 8px;
+    }
+
+    .stat-label {
+      font-family: 'Inter', sans-serif;
+      font-size: 15px;
+      color: var(--text-dim);
+      line-height: 1.5;
+    }
+
+    /* ── Layer component ── */
+    .layers {
+      margin-top: 32px;
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+    }
+
+    .layer-item {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      padding: 20px 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .layer-item:last-child {
+      border-bottom: none;
+    }
+
+    .layer-number {
+      font-family: 'Playfair Display', serif;
+      font-size: 32px;
+      font-weight: 700;
+      color: var(--bg-light);
+      -webkit-text-stroke: 1.5px var(--border);
+      min-width: 48px;
+      text-align: center;
+    }
+
+    .layer-content {}
+
+    .layer-title {
+      font-family: 'Inter', sans-serif;
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 4px;
+    }
+
+    .layer-desc {
+      font-family: 'Inter', sans-serif;
+      font-size: 15px;
+      color: var(--text-dim);
+      line-height: 1.5;
+    }
+
+    /* ── Code block ── */
+    pre.code-block {
+      background: #f5f3f0;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 24px 28px;
+      margin-top: 28px;
+      font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+      font-size: 14px;
+      line-height: 1.8;
+      color: var(--text);
+      overflow-x: auto;
+    }
+
+    pre.code-block .comment {
+      color: var(--text-dim);
+    }
+
+    pre.code-block .folder {
+      color: var(--accent2);
+    }
+
+    pre.code-block .file {
+      color: var(--accent3);
+    }
+
+    /* ── Final slide ── */
+    .final-text {
+      font-family: 'Playfair Display', serif;
+      font-size: 38px;
+      font-weight: 600;
+      font-style: italic;
+      line-height: 1.4;
+      color: var(--text);
+      text-align: center;
+    }
+
+    .final-sub {
+      font-family: 'Inter', sans-serif;
+      font-size: 15px;
+      color: var(--text-dim);
+      text-align: center;
+      margin-top: 20px;
+    }
+
+    /* ── Title slide ── */
+    .title-eyebrow {
+      font-family: 'Inter', sans-serif;
+      font-size: 13px;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 3px;
+      color: var(--accent);
+      margin-bottom: 20px;
+    }
+
+    .title-subtitle {
+      font-family: 'Playfair Display', serif;
+      font-style: italic;
+      font-size: 22px;
+      color: var(--text-dim);
+      margin-top: 16px;
+    }
+
+    /* ── Responsive clamp ── */
+    @media (max-width: 768px) {
+      .slide { padding: 40px 32px; }
+      h1 { font-size: 32px; }
+      h2 { font-size: 24px; }
+      .cards-grid { grid-template-columns: 1fr; gap: 14px; }
+      .split { grid-template-columns: 1fr; gap: 28px; }
+      .stat-number { font-size: 56px; }
+      blockquote p { font-size: 20px; }
+      .final-text { font-size: 28px; }
+    }
+  </style>
+</head>
+<body>
+
+<div id="progress-bar"></div>
+<div id="slide-counter">1 / 7</div>
+<div id="nav-hint">arrows / space / swipe</div>
+
+<div id="deck">
+
+  <!-- Slide 1: Title -->
+  <section class="slide active" data-index="0">
+    <div class="slide-inner">
+      <div class="anim title-eyebrow">A framework</div>
+      <div class="anim">
+        <h1>The Art of Knowledge Management</h1>
+      </div>
+      <div class="anim title-subtitle">capture, connect, create</div>
+      <div class="anim"><hr /></div>
+      <div class="anim">
+        <p style="color: var(--text-dim); font-size: 16px; max-width: 460px;">
+          A practical philosophy for building a personal knowledge system that works with you — not against you.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Slide 2: The Problem -->
+  <section class="slide" data-index="1">
+    <div class="slide-inner">
+      <div class="anim"><h3>The Problem</h3></div>
+      <div class="anim"><hr class="thin" /></div>
+      <div class="anim">
+        <h2>What we lose every day</h2>
+      </div>
+      <div class="anim">
+        <div class="split" style="margin-top: 32px;">
+          <div>
+            <ul class="editorial">
+              <li><em>Context collapses between meetings — the "why" disappears before the "what" is even finished.</em></li>
+              <li><em>Ideas evaporate between the spark and the page — the best thought you had vanished on the commute.</em></li>
+              <li><em>Connections never form — two ideas that should have met live in different apps, unseen.</em></li>
+            </ul>
+          </div>
+          <div>
+            <div class="stat-block">
+              <div class="stat-number">47</div>
+              <div class="stat-label">apps the average<br/>knowledge worker uses<br/>to manage information</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Slide 3: Principles -->
+  <section class="slide" data-index="2">
+    <div class="slide-inner">
+      <div class="anim"><h3>Three Principles</h3></div>
+      <div class="anim"><hr class="thin" /></div>
+      <div class="anim"><h2>The foundation of a working system</h2></div>
+      <div class="anim">
+        <div class="cards-grid">
+          <div class="card">
+            <div class="card-accent" style="background: var(--accent);"></div>
+            <div class="card-title">Capture</div>
+            <div class="card-desc">Note everything that surprises you — <em>friction is the enemy of the fleeting idea.</em></div>
+          </div>
+          <div class="card">
+            <div class="card-accent" style="background: var(--accent2);"></div>
+            <div class="card-title">Connect</div>
+            <div class="card-desc">Link ideas across time and context — <em>knowledge compounds at the edge of categories.</em></div>
+          </div>
+          <div class="card">
+            <div class="card-accent" style="background: var(--accent3);"></div>
+            <div class="card-title">Create</div>
+            <div class="card-desc">Produce from your knowledge — <em>a note that never becomes something is just stored anxiety.</em></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Slide 4: Architecture -->
+  <section class="slide" data-index="3">
+    <div class="slide-inner">
+      <div class="anim"><h3>Architecture</h3></div>
+      <div class="anim"><hr class="thin" /></div>
+      <div class="anim">
+        <blockquote>
+          <p>"Your second brain is not a storage — it's a thinking partner."</p>
+          <cite>— Tiago Forte</cite>
+        </blockquote>
+      </div>
+      <div class="anim"><hr /></div>
+      <div class="anim">
+        <ul class="editorial">
+          <li>Design your system around retrieval, not storage — the question is never "where did I put it?" but "when will I need it?"</li>
+          <li>Let the structure emerge from use — a perfect taxonomy built upfront will collapse under the weight of real thinking.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- Slide 5: Daily Practice -->
+  <section class="slide" data-index="4">
+    <div class="slide-inner">
+      <div class="anim"><h3>Daily Practice</h3></div>
+      <div class="anim"><hr class="thin" /></div>
+      <div class="anim"><h2>Rituals that make the system real</h2></div>
+      <div class="anim">
+        <div class="layers">
+          <div class="layer-item">
+            <div class="layer-number">01</div>
+            <div class="layer-content">
+              <div class="layer-title">Morning Review</div>
+              <div class="layer-desc">Scan yesterday's captures. Promote what still matters. Delete what no longer does. Five minutes builds weeks of clarity.</div>
+            </div>
+          </div>
+          <div class="layer-item">
+            <div class="layer-number">02</div>
+            <div class="layer-content">
+              <div class="layer-title">Active Capture</div>
+              <div class="layer-desc">One trusted inbox. No decisions during capture — that's processing, not collecting. Context is king: record <em>why</em> alongside <em>what.</em></div>
+            </div>
+          </div>
+          <div class="layer-item">
+            <div class="layer-number">03</div>
+            <div class="layer-content">
+              <div class="layer-title">Evening Reflection</div>
+              <div class="layer-desc">One connection per day. Link a new note to an old one. The habit is small; the effect is cumulative and irreversible.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Slide 6: Tools -->
+  <section class="slide" data-index="5">
+    <div class="slide-inner">
+      <div class="anim"><h3>Structure</h3></div>
+      <div class="anim"><hr class="thin" /></div>
+      <div class="anim"><h2>One vault, layered by purpose</h2></div>
+      <div class="anim">
+        <p style="color: var(--text-dim); margin-top: 8px; font-size: 16px;">A simple folder hierarchy that mirrors how knowledge actually moves — from raw to refined.</p>
+      </div>
+      <div class="anim">
+<pre class="code-block"><span class="comment"># Obsidian vault — minimal viable structure</span>
+
+<span class="folder">inbox/</span>          <span class="comment"># raw captures — untouched, unsorted</span>
+<span class="folder">notes/</span>          <span class="comment"># processed — linked, tagged, permanent</span>
+<span class="folder">projects/</span>       <span class="comment"># active work — temporary by design</span>
+<span class="file">  └── MOC.md</span>    <span class="comment"># map of content — the connective tissue</span>
+<span class="folder">archive/</span>        <span class="comment"># finished — searchable, not browsable</span></pre>
+      </div>
+      <div class="anim">
+        <p style="margin-top: 20px; font-size: 15px; color: var(--text-dim);">
+          The tool matters less than the habit. Any system you maintain consistently outperforms a perfect system you abandon.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Slide 7: Final -->
+  <section class="slide" data-index="6">
+    <div class="slide-inner" style="text-align: center;">
+      <div class="anim">
+        <p style="font-family: 'Inter', sans-serif; font-size: 13px; text-transform: uppercase; letter-spacing: 3px; color: var(--text-dim);">Where to begin</p>
+      </div>
+      <div class="anim"><hr /></div>
+      <div class="anim">
+        <p class="final-text">start small.<br/>one note per day.</p>
+      </div>
+      <div class="anim">
+        <p class="final-sub">
+          Consistency at a small scale<br/>compounds into something you cannot build all at once.
+        </p>
+      </div>
+      <div class="anim" style="margin-top: 40px;">
+        <hr style="max-width: 240px; margin: 0 auto;" />
+      </div>
+      <div class="anim">
+        <p style="margin-top: 16px; font-family: 'Playfair Display', serif; font-style: italic; font-size: 15px; color: var(--text-dim);">
+          The Art of Knowledge Management
+        </p>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<script>
+(function () {
+  const slides = Array.from(document.querySelectorAll('.slide'));
+  const total = slides.length;
+  const counter = document.getElementById('slide-counter');
+  const progressBar = document.getElementById('progress-bar');
+  let current = 0;
+  let animating = false;
+
+  function updateProgress() {
+    const pct = ((current + 1) / total) * 100;
+    progressBar.style.width = pct + '%';
+    counter.textContent = (current + 1) + ' / ' + total;
+  }
+
+  function goTo(index) {
+    if (index < 0 || index >= total || index === current || animating) return;
+    animating = true;
+
+    // Remove active from old
+    const prev = slides[current];
+    prev.classList.remove('active');
+
+    // Reset all anim children so they replay
+    const nextSlide = slides[index];
+    const anims = nextSlide.querySelectorAll('.anim');
+    anims.forEach(el => {
+      el.style.animation = 'none';
+      // Force reflow
+      void el.offsetWidth;
+      el.style.animation = '';
+    });
+
+    current = index;
+    nextSlide.classList.add('active');
+    updateProgress();
+
+    setTimeout(() => { animating = false; }, 520);
+  }
+
+  function next() { goTo(current + 1); }
+  function prev() { goTo(current - 1); }
+
+  // Keyboard
+  document.addEventListener('keydown', function (e) {
+    switch (e.key) {
+      case 'ArrowRight':
+      case 'ArrowDown':
+      case ' ':
+      case 'Enter':
+        e.preventDefault();
+        next();
+        break;
+      case 'ArrowLeft':
+      case 'ArrowUp':
+        e.preventDefault();
+        prev();
+        break;
+      case 'Home':
+        e.preventDefault();
+        goTo(0);
+        break;
+      case 'End':
+        e.preventDefault();
+        goTo(total - 1);
+        break;
+    }
+  });
+
+  // Touch swipe
+  let touchStartX = 0;
+  let touchStartY = 0;
+
+  document.addEventListener('touchstart', function (e) {
+    touchStartX = e.touches[0].clientX;
+    touchStartY = e.touches[0].clientY;
+  }, { passive: true });
+
+  document.addEventListener('touchend', function (e) {
+    const dx = e.changedTouches[0].clientX - touchStartX;
+    const dy = e.changedTouches[0].clientY - touchStartY;
+    if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 40) {
+      if (dx < 0) next();
+      else prev();
+    }
+  }, { passive: true });
+
+  // Init
+  updateProgress();
+})();
+</script>
+</body>
+</html>

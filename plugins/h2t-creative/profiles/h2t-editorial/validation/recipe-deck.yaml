@@ -1,0 +1,143 @@
+# h2t-editorial validation deck — 8 slides covering the visual-gate set
+# (title, title-body, divider, quote, two-column, stats, table, final).
+# image-text is intentionally absent — see header note below. System B
+# canonical (post 2026-05-07 source arbitration reset).
+#
+# Copy lifted verbatim from the pitch-deck golden:
+#   docs/visual-regression/2026-05-07-r2b/h2t-editorial-deck-golden/
+#     rejuve-pitch-deck.html
+# Russian copy is preserved as-is. No synthetic copy: every label, headline,
+# quote, and prose paragraph traces back to a specific slide in pitch-deck.
+#
+# This recipe drives:
+#   - test_r2b_legacy_fidelity_deck.py validation-recipe contract tests
+#   - the assembled-output forbidden-pattern guards
+#   - desktop parity screenshot capture (deferred from this batch — Batch 1)
+#
+# Notes:
+#   * `align: center` only on title (cover) and final/divider — every other
+#     slide is left-aligned per pitch-deck DOM.
+#   * The image-text layout is INTENTIONALLY ABSENT from the visual
+#     validation recipe (post 2026-05-07 visual-fix batch). Reason: pitch-deck
+#     has no <img> assets, so any visual rendering of image-text would
+#     show a synthetic data-URI placeholder rectangle that the parity gate
+#     would score against an absent canonical reference. Structural
+#     coverage of the image-text layout (manifest, template, render smoke)
+#     stays in tests/test_r2b_legacy_fidelity_deck.py — we just don't
+#     visually validate it. The fidelity gap remains documented in
+#     sources/references.yaml::known_fidelity_gaps.
+#   * Field name is `label` (System B kicker primitive) — replaces the
+#     System A `eyebrow` field that was demoted with the rest of the
+#     pos-sprint layout vocabulary.
+
+type: deck
+profile: h2t-editorial
+palette: default
+lang: ru
+title: "REjuve — AI Revenue Infrastructure"
+nav_buttons: false
+nav_hint_text: "← → / пробел / свайп"
+
+slides:
+  # 01 — title (rejuve-pitch-deck cover)
+  - layout: title
+    align: center
+    content:
+      brand_html: "RE<em>juve</em>"
+      cover_sub: "AI Revenue Infrastructure"
+      cover_meta: "Апрель 2026 &nbsp;·&nbsp; Confidential"
+
+  # 02 — title-body (rejuve-pitch-deck slide 01 — фрейм)
+  - layout: title-body
+    content:
+      label: "01 — Зачем мы здесь"
+      headline: "Мы не маркетинговое агентство"
+      body_html: |
+        <ul>
+          <li>Мы AI-специалисты по автоматизации <strong>revenue-инфраструктуры</strong></li>
+          <li>Показываем, где в вашей воронке деньги утекают не из-за плохой рекламы, а из-за <strong>отсутствия инфраструктуры</strong> между касанием и платящим клиентом</li>
+          <li>Никаких обещаний роста выручки до того, как увидим <strong>ваши реальные данные</strong></li>
+        </ul>
+
+  # 03 — divider (synthesized from rejuve-pitch-deck slide 08 label + h2)
+  - layout: divider
+    align: center
+    content:
+      label: "08 — Разбор оффера ELPODIUM"
+      headline: "Где их модель не работает для вашего случая"
+
+  # 04 — quote (rejuve-pitch-deck slide 05 — brand quote)
+  - layout: quote
+    content:
+      label: "05 — Месседжи"
+      quote_html: "Most people are not lacking effort. They are lacking clarity. REjuve is a diagnostic-first functional health studio."
+      attribution: "из вашего brand brief"
+
+  # 05 — two-column (rejuve-pitch-deck slide 04 — split: ICP / research)
+  - layout: two-column
+    content:
+      label: "04 — Кто ваш клиент?"
+      headline: "Наша гипотеза — нужна ваша валидация"
+      left_html: |
+        <h3>Гипотеза ICP</h3>
+        <ul>
+          <li>Возраст 35–55, HNWI, живёт / работает в Цуге</li>
+          <li>Делает «всё правильно», но не получает результата</li>
+          <li>Аналитический, ищет ясность, не шаблонные протоколы</li>
+          <li>Science-based подход, не инстаграм-wellness</li>
+        </ul>
+      right_html: |
+        <h3>Что нашли в исследовании</h3>
+        <ul>
+          <li>~19 000 англоязычных HNWI, 900+ commodity-firm, 143 национальности</li>
+          <li>Среди 16 longevity-брендов CH — позиции, которые не занимает никто</li>
+          <li>Для этой аудитории каналы <strong>НЕ Instagram</strong> — Google, рекомендации, corporate-сети</li>
+        </ul>
+
+  # NOTE: image-text intentionally omitted from visual validation deck —
+  # see header comment. Layout retains structural test coverage; visual
+  # gate compares against canonical pitch-deck which has no <img>.
+
+  # 06 — stats (rejuve-pitch-deck slide 03 — Рынок Цуга, 6 stat cards)
+  - layout: stats
+    content:
+      label: "03 — Рынок Цуга"
+      headline: "Это не просто «богатый швейцарский город»"
+      stats_html: |
+        <div class="stat-row">
+          <div class="stat"><span class="num">143</span><div class="lbl">национальности в кантоне</div></div>
+          <div class="stat"><span class="num">~30%</span><div class="lbl">населения — не граждане CH (одна из самых высоких концентраций)</div></div>
+          <div class="stat"><span class="num">900+</span><div class="lbl">commodity-фирм: Glencore, Trafigura, Mercuria…</div></div>
+          <div class="stat"><span class="num">~19 000</span><div class="lbl">англоговорящих жителей только в кантоне</div></div>
+          <div class="stat"><span class="num">+12%</span><div class="lbl">туризм в 2025 — самый быстрорастущий регион CH</div></div>
+          <div class="stat"><span class="num">+25%</span><div class="lbl">ночёвок из Северной Америки (Zug Tourismus)</div></div>
+        </div>
+      note: |
+        Конкретная структура аудитории: <strong>международные профессионалы, корпоративные клиенты, туристы, мультиязычная среда</strong> — каналы и месседжи здесь принципиально другие
+
+  # 07 — table (rejuve-pitch-deck slide 10 — Три компетенции, .rcu/.ra rows)
+  - layout: table
+    content:
+      label: "10 — Три разные задачи, одно окно"
+      headline: "Три компетенции."
+      table_html: |
+        <table>
+          <thead>
+            <tr><th>Задача</th><th>Кто делает</th><th>Как организовано</th></tr>
+          </thead>
+          <tbody>
+            <tr class="rcu"><td><strong>1. Позиционирование и бренд</strong> — ясный ответ на «зачем именно у вас», tone of voice DE/EN/RU</td><td>Brand strategist / senior копирайтер</td><td>Привлекаем через нас на one-off, либо ваши подрядчики</td></tr>
+            <tr class="rcu"><td><strong>2. Performance-трафик</strong> — Google Ads, Meta, медиабайинг, creative</td><td>Performance-маркетолог</td><td>Либо через нас, либо ваш внешний контакт. Мы координируем</td></tr>
+            <tr class="ra"><td><strong>3. Revenue-инфраструктура</strong> — attribution, автоматизация воронки, reactivation, rebooking</td><td><strong>Мы</strong></td><td>Наша прямая работа</td></tr>
+          </tbody>
+        </table>
+      note: |
+        <strong>У вас нет времени управлять тремя командами</strong> — мы обеспечиваем, чтобы три задачи не разъехались
+
+  # 08 — final (rejuve-pitch-deck slide 14 closing — next steps gate)
+  - layout: final
+    align: center
+    content:
+      label: "14 — Пилот 4 недели"
+      headline: "Один живой результат к концу второй недели"
+      subline: 'Условия сотрудничества обсуждаются отдельно &mdash; не на этой встрече'
