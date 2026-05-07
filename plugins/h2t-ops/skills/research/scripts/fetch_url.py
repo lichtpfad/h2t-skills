@@ -375,12 +375,23 @@ class DirectProvider:
     def _raise_http_error(self, e: urllib.error.HTTPError, *, url: str,
                           latency_ms: int) -> None:
         code = e.code
+        # Auth-gated: 401 with WWW-Authenticate, OR 403 with explicit auth signal.
+        hdrs = {}
+        try:
+            if hasattr(e, "headers") and e.headers is not None:
+                hdrs = {k.lower(): v for k, v in e.headers.items()}
+        except Exception:
+            hdrs = {}
+        if code == 401 and "www-authenticate" in hdrs:
+            raise ProviderHardGate(
+                "auth required", provider=self.name,
+                gate="login_required", http_status=code, latency_ms=latency_ms,
+            )
         if code == 429 or 500 <= code <= 599:
             raise ProviderTransientError(
                 f"http {code}", provider=self.name,
                 http_status=code, latency_ms=latency_ms,
             )
-        # 4xx — caller (Task 8) refines for auth-gated cases.
         raise ProviderPermanentError(
             f"http {code}", provider=self.name,
             http_status=code, latency_ms=latency_ms,
