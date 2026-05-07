@@ -154,3 +154,50 @@ Always present in `.sources.json` under `meta.envelope`. Optionally to stdout vi
 | Malformed JSON | no | 1 | — |
 
 Hard cap on cumulative sleep: 10 seconds. When exceeded: `EXA_WARN:RETRY_BUDGET_EXHAUSTED` to stderr, retry skipped.
+
+---
+
+## Fetch Envelope Schema (fetch_url.py)
+
+Same `envelope_version: "1"` as Exa search envelope (status semantics OK / DEGRADED / FAILED), but flat single-URL shape:
+
+```json
+{
+  "status": "OK | DEGRADED | FAILED",
+  "url": "https://...",
+  "final_url": "https://... (after redirects)",
+  "provider_used": "direct | jina | none",
+  "content_type": "article | listing | js_shell | gated | short_body | unknown",
+  "content_gate": "none | login_required | paid | unknown",
+  "title": "...",
+  "body_markdown": "...",
+  "body_text": "...",
+  "body_chars": 1234,
+  "links": [{"href": "...", "text": "...", "rel": ""}],
+  "metadata": {
+    "canonical_url": "...",
+    "site": "alltd.org",
+    "lang": "en",
+    "detected_reason": null,
+    "site_adapter": null,
+    "raw_html_path": null
+  },
+  "telemetry": {
+    "attempts": [{"provider": "direct", "http": 403, "latency_ms": 100, "error": "fetch_http_4xx_nonretryable"}],
+    "reason_for_degraded": null,
+    "reason_for_failed": null,
+    "total_latency_ms": 100,
+    "providers_skipped": ["playwright", "crawl4ai", "firecrawl", "browserless"],
+    "providers_skipped_reason": {"playwright": "not_configured_stub"}
+  },
+  "meta": {
+    "primary_engine": "fetch_ladder",
+    "envelope_version": "1",
+    "fetch_envelope_version": "1",
+    "timestamp": "2026-05-07T12:34:56+00:00",
+    "user_agent": "h2t-research-fetch/0.0.1 ..."
+  }
+}
+```
+
+Adapters (#104/#105) extend by setting `metadata.site_adapter` and adding adapter-specific fields under `metadata`. The `list-by-tag` subcommand introduces a separate envelope variant with `items[]` instead of body fields — see adapter docs when those land.
