@@ -32,12 +32,6 @@ def test_env_override_constant():
     assert h2t_secrets.ENV_OVERRIDE == "H2T_SECRETS_FILE"
 
 
-def test_get_blob_raises_not_implemented_initially():
-    """Will be replaced in Task 3."""
-    with pytest.raises(NotImplementedError):
-        h2t_secrets.get_blob("foo/bar")
-
-
 # --- bootstrap() tests (Task 2) ---
 
 
@@ -139,3 +133,28 @@ def test_bootstrap_via_env_file_override(tmp_path, monkeypatch):
     new_keys = h2t_secrets.bootstrap()  # no env_file arg
 
     assert new_keys == {"OVERRIDE_KEY": "overridden"}
+
+
+# --- get_blob() tests (Task 3) ---
+
+
+def test_get_blob_returns_existing_path(tmp_path, monkeypatch):
+    monkeypatch.setattr(h2t_secrets, "SECRETS_DIR", tmp_path)
+    blob_dir = tmp_path / "google"
+    blob_dir.mkdir()
+    blob = blob_dir / "oauth-client.json"
+    blob.write_text('{"client_id": "fake"}', encoding="utf-8")
+
+    result = h2t_secrets.get_blob("google/oauth-client.json")
+
+    assert result == blob.resolve()
+    assert result.is_file()
+
+
+def test_get_blob_fail_loud_on_missing(tmp_path, monkeypatch):
+    monkeypatch.setattr(h2t_secrets, "SECRETS_DIR", tmp_path)
+
+    with pytest.raises(FileNotFoundError) as ei:
+        h2t_secrets.get_blob("google/missing.json")
+    msg = str(ei.value)
+    assert "google/missing.json" in msg or "missing.json" in msg
