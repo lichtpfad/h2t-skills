@@ -260,3 +260,16 @@ def test_direct_provider_403_without_auth_header_is_permanent_not_gated():
         mock_urlopen.side_effect = err
         with pytest.raises(fetch_url.ProviderPermanentError):
             p.fetch("https://example.com/x", timeout_ms=15000, user_agent="ua/test")
+
+
+def test_direct_provider_final_url_after_redirect():
+    p = fetch_url.DirectProvider()
+    html = _load_fixture("public_article.html").encode("utf-8")
+    with patch("urllib.request.urlopen") as mock_urlopen:
+        # urllib resolves 301/302 internally; geturl() returns the final URL.
+        mock_urlopen.return_value = _make_http_response(
+            html, url="https://www.example.com/pops-intro",
+        )
+        r = p.fetch("http://example.com/pops-intro",
+                    timeout_ms=15000, user_agent="ua/test")
+    assert r.final_url == "https://www.example.com/pops-intro"
