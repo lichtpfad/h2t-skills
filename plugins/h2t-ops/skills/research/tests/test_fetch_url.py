@@ -440,3 +440,30 @@ def test_jina_provider_passes_authorization_when_key_set(monkeypatch):
         k.lower() == "authorization" and v == "Bearer secret-test-key"
         for k, v in captured["headers"].items()
     )
+
+
+def test_jina_provider_5xx_transient():
+    p = fetch_url.JinaProvider()
+    with patch("urllib.request.urlopen") as mock_urlopen:
+        mock_urlopen.side_effect = _http_error(503)
+        with pytest.raises(fetch_url.ProviderTransientError):
+            p.fetch("https://example.com/x",
+                    timeout_ms=20000, user_agent="ua/test")
+
+
+def test_jina_provider_4xx_permanent():
+    p = fetch_url.JinaProvider()
+    with patch("urllib.request.urlopen") as mock_urlopen:
+        mock_urlopen.side_effect = _http_error(404)
+        with pytest.raises(fetch_url.ProviderPermanentError):
+            p.fetch("https://example.com/x",
+                    timeout_ms=20000, user_agent="ua/test")
+
+
+def test_jina_provider_urlerror_transient():
+    p = fetch_url.JinaProvider()
+    with patch("urllib.request.urlopen") as mock_urlopen:
+        mock_urlopen.side_effect = urllib.error.URLError("dns failure")
+        with pytest.raises(fetch_url.ProviderTransientError):
+            p.fetch("https://example.com/x",
+                    timeout_ms=20000, user_agent="ua/test")
