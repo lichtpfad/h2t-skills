@@ -196,3 +196,38 @@ def test_direct_provider_happy_path_extracts_article():
     assert r.canonical_url == "https://example.com/pops-intro"
     assert r.lang == "en"
     assert r.raw_html.startswith("<!DOCTYPE html>") or "<html" in r.raw_html
+
+
+def _http_error(code: int, body: bytes = b"", headers: dict[str, str] | None = None,
+                url: str = "https://example.com/x"):
+    return urllib.error.HTTPError(
+        url=url, code=code, msg="err",
+        hdrs=headers or {}, fp=io.BytesIO(body),
+    )
+
+
+def test_direct_provider_4xx_raises_permanent():
+    p = fetch_url.DirectProvider()
+    with patch("urllib.request.urlopen") as mock_urlopen:
+        mock_urlopen.side_effect = _http_error(403)
+        with pytest.raises(fetch_url.ProviderPermanentError) as ei:
+            p.fetch("https://example.com/x", timeout_ms=15000, user_agent="ua/test")
+    assert ei.value.http_status == 403
+    assert ei.value.provider == "direct"
+
+
+def test_direct_provider_5xx_raises_transient():
+    p = fetch_url.DirectProvider()
+    with patch("urllib.request.urlopen") as mock_urlopen:
+        mock_urlopen.side_effect = _http_error(503)
+        with pytest.raises(fetch_url.ProviderTransientError) as ei:
+            p.fetch("https://example.com/x", timeout_ms=15000, user_agent="ua/test")
+    assert ei.value.http_status == 503
+
+
+def test_direct_provider_429_raises_transient():
+    p = fetch_url.DirectProvider()
+    with patch("urllib.request.urlopen") as mock_urlopen:
+        mock_urlopen.side_effect = _http_error(429)
+        with pytest.raises(fetch_url.ProviderTransientError):
+            p.fetch("https://example.com/x", timeout_ms=15000, user_agent="ua/test")

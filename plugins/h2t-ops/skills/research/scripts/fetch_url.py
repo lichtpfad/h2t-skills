@@ -374,10 +374,16 @@ class DirectProvider:
 
     def _raise_http_error(self, e: urllib.error.HTTPError, *, url: str,
                           latency_ms: int) -> None:
-        # Filled in next tasks. For now: any HTTP error → permanent.
+        code = e.code
+        if code == 429 or 500 <= code <= 599:
+            raise ProviderTransientError(
+                f"http {code}", provider=self.name,
+                http_status=code, latency_ms=latency_ms,
+            )
+        # 4xx — caller (Task 8) refines for auth-gated cases.
         raise ProviderPermanentError(
-            f"http {e.code}", provider=self.name,
-            http_status=e.code, latency_ms=latency_ms,
+            f"http {code}", provider=self.name,
+            http_status=code, latency_ms=latency_ms,
         )
 
 
