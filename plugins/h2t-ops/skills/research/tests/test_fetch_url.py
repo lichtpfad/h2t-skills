@@ -930,3 +930,39 @@ def test_cli_gated_with_json_flag(tmp_path, capsys):
     assert parsed["content_gate"] == "login_required"
     assert "FETCH_ERROR:GATED" in captured.err
     assert "login_required" in captured.err
+
+
+def test_keep_raw_off_by_default_no_raw_file(tmp_path):
+    html = _load_fixture("public_article.html").encode("utf-8")
+    with patch("urllib.request.urlopen") as mock_urlopen:
+        mock_urlopen.return_value = _make_http_response(
+            html, url="https://example.com/x",
+        )
+        rc = fetch_url.main([
+            "fetch", "--url", "https://example.com/x",
+            "--output-dir", str(tmp_path), "--project", "test",
+        ])
+    raws = list(tmp_path.glob("*.raw.html"))
+    assert raws == []
+    sidecar = next(tmp_path.glob("*.sources.json"))
+    data = json.loads(sidecar.read_text(encoding="utf-8"))
+    assert data["envelope"]["metadata"]["raw_html_path"] is None
+
+
+def test_keep_raw_on_writes_raw_file(tmp_path):
+    html = _load_fixture("public_article.html").encode("utf-8")
+    with patch("urllib.request.urlopen") as mock_urlopen:
+        mock_urlopen.return_value = _make_http_response(
+            html, url="https://example.com/x",
+        )
+        rc = fetch_url.main([
+            "fetch", "--url", "https://example.com/x", "--keep-raw",
+            "--output-dir", str(tmp_path), "--project", "test",
+        ])
+    raws = list(tmp_path.glob("*.raw.html"))
+    assert len(raws) == 1
+    sidecar = next(tmp_path.glob("*.sources.json"))
+    data = json.loads(sidecar.read_text(encoding="utf-8"))
+    assert data["envelope"]["metadata"]["raw_html_path"] == str(raws[0])
+    content = raws[0].read_text(encoding="utf-8")
+    assert "POPs in TouchDesigner" in content
