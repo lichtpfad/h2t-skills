@@ -21,6 +21,8 @@ A profile defines visual language:
 
 Profile files live under `plugins/h2t-creative/profiles/<profile>/`.
 
+Profile `DESIGN.md` files follow the [Stitch DESIGN.md open standard](https://github.com/google-labs-code/design.md) (Apache 2.0). The Stitch standard defines machine-readable design tokens via YAML frontmatter (colors, typography, spacing, rounded, components) plus markdown rationale. The existing multi-file CSS implementation (`tokens.css` + `palettes/*.css`) sits below the standard as the runtime layer. See `docs/superpowers/references/stitch-design-md-spec-reference.md`.
+
 ### 3. Component / Primitive Layer
 
 Components are concrete renderable primitives:

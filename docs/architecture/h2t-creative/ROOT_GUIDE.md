@@ -24,6 +24,7 @@ For any h2t-creative task:
 - `docs/architecture/h2t-creative/COMPOSITION_RULES.md` — Swiss grid, rhythm, density, and composition constraints.
 - `docs/architecture/h2t-creative/EXTENSION_PROTOCOL.md` — adding blocks, layouts, formats, and interactive primitives.
 - `docs/library/h2t-creative/INDEX.md` — library index stub for roles, components, formats, and governance.
+- `docs/superpowers/references/stitch-design-md-spec-reference.md` — EXTERNAL standard. Summary of the open-source Apache-2.0 Stitch DESIGN.md spec released by Google Labs (2026). Profile `DESIGN.md` files conform to it; not internal architecture.
 
 ## Evidence Taxonomy
 
