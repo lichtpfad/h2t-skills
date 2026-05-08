@@ -101,3 +101,7 @@ No arbitrary inline script is allowed as a shortcut around the component system.
 - Format: output type with canvas/unit/export rules.
 
 Agents may add low-risk variants with tests. Humans must approve new roles, new formats, interactive primitives, and blocks that alter page flow.
+
+## New Profile Flow
+
+When adding a new profile, use the `/style-create` wizard which emits a [Stitch DESIGN.md](https://github.com/google-labs-code/design.md)-conformant `DESIGN.md` (Apache 2.0 open standard, machine-readable design tokens via YAML frontmatter). Validate the result with `/style-validate`. Do not invent a new design-system file format. See `docs/superpowers/references/stitch-design-md-spec-reference.md` for the spec summary and how h2t-creative consumes it.
