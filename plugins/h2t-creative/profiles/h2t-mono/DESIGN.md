@@ -1,3 +1,29 @@
+---
+version: alpha
+name: h2t-mono
+description: Ultra-minimal. Pure monospace, near-black bg, single red accent, zero decoration. Differentiation through spacing only — extracted from SpecDesigner aesthetic.
+colors:
+  primary: "#e8352b"
+  on-surface: "#e0e0e0"
+  on-surface-dim: "#666666"
+  surface: "#0d0d0d"
+  border: "#1a1a1a"
+typography:
+  body:
+    fontFamily: JetBrains Mono
+rounded:
+  none: 0px
+---
+
+<!-- Frontmatter conforms to the Stitch DESIGN.md open standard
+     (Apache 2.0, https://github.com/google-labs-code/design.md).
+     Carries the *default* (red) palette only; the white (inverted)
+     and blue palettes live in palettes/{white,blue}.css and remain
+     part of the runtime CSS implementation layer beneath this spec.
+     `rounded.none: 0px` formalises the "no border-radius"
+     restriction. The body sections below preserve the existing
+     h2t-creative conventions and coexist with the standard. -->
+
 # h2t-mono
 
 ## Brand Intent
