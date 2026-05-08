@@ -1,0 +1,227 @@
+# h2t-editorial LANDING — composition recipe (R2b / #88 post Intent Reset).
+#
+# REWRITTEN 2026-05-07 to satisfy the approved composition spec at
+# docs/visual-regression/2026-05-07-r2b/h2t-editorial-landing-composition-spec.md
+# (approved with Amendments A + B). The previous recipe in this file
+# cloned the appendix vertical structure 1:1 — that target was rejected
+# (plan §16 Intent Reset).
+#
+# Source role: System B-Landing goldens are PRIMITIVE SOURCES, not a
+# layout target. Composition is landing-shaped (conversion close, not
+# analyst depth).
+#
+# Block inventory follows spec §4 (10 blocks + 10.5 editorial-cta).
+# Every value below is content about the recovery slice ITSELF — not
+# lifted from competitive-report or elpodium (which are unrelated
+# subject-matter content). This is appropriate: the landing is its own
+# evidence that the System B-Landing form works for editorial content.
+#
+# Forbidden by spec: .dt / .proh-tbl / .wave-block / .comp-box / .disc /
+# .meta-box / .ck / .funnel / <img>. The recipe MUST stay under 10
+# top-level sections (block 10.5 = editorial-cta is the optional 11th).
+
+type: landing
+profile: h2t-editorial
+palette: default
+title: "h2t-editorial — landing"
+
+sections:
+  # ── Block 1. Editorial header (tab-strip brand chrome) ─────────────
+  - component: tabs
+    content:
+      tabs_html: |
+        <button class="tab active" onclick="switchTab(this,'overview')">Form: Landing</button>
+      pages_html: |
+        <div id="overview" class="page active"></div>
+
+  # ── Block 2. Page-header (h1 + meta) ───────────────────────────────
+  - component: page-header
+    content:
+      headline: "h2t-editorial — landing"
+      meta: "R2b · slice #88 · System B-Landing modular"
+
+  # ── Block 3. Lead summary (.section + short prose) ─────────────────
+  - component: section
+    content:
+      title: "Что это"
+      body: |
+        <p style="font-size:13px;line-height:1.7;color:var(--tx);margin:0 0 8px">
+          Editorial-форма h2t-creative для длинных аналитических разворотов: appendix-отчётов,
+          бенчмарков, исследовательских разборов. Палитра — System B (gold + Playfair),
+          плотность — 14 px body, 28 px h1 — приходит от приложений в формате rejuve-appendix.
+        </p>
+        <p style="font-size:13px;line-height:1.7;color:var(--tx);margin:0">
+          Этот лендинг — не отчёт. Он демонстрирует, что recovered visual system пригоден для
+          самой landing-формы — собран из тех же примитивов, но с landing-плотностью и
+          landing-целью.
+        </p>
+
+  # ── Block 4. 3 differentiator cards (g3) ───────────────────────────
+  - component: card-grid
+    content:
+      grid_class: "g3"
+      cards_html: |
+        <div class="card">
+          <h3>Closed primitive vocabulary</h3>
+          <p style="font-size:12px;color:var(--mu);line-height:1.7;margin:6px 0 0">
+            16 примитивов из 9 групп закрепены в design-system.md §10. Не &laquo;hero/cta/footer&raquo;,
+            а реальная грамматика (.tabs / .ph / .stat / .bt / .flow / .mmap / .pos / .ck).
+          </p>
+        </div>
+        <div class="card">
+          <h3>Layered token strategy</h3>
+          <p style="font-size:12px;color:var(--mu);line-height:1.7;margin:6px 0 0">
+            System B-Landing короткие токены (--ac/--ad/--tx/--mu/--bd/--sf) лежат рядом с
+            R1 --color-* — без слома существующих компонентов и без правок ассемблера.
+          </p>
+        </div>
+        <div class="card">
+          <h3>Source-role discipline</h3>
+          <p style="font-size:12px;color:var(--mu);line-height:1.7;margin:6px 0 0">
+            Locked goldens — primitive source, не fidelity target. Composition spec
+            фиксирует block-inventory отдельно от extracted vocabulary.
+          </p>
+        </div>
+
+  # ── Block 5. Compact KPI strip (3 stats) ───────────────────────────
+  - component: stats
+    content:
+      stat1_n: "16"
+      stat1_l: "primitive components"
+      stat2_n: "545"
+      stat2_l: "contract tests passing"
+      stat3_n: "0"
+      stat3_l: "R1 generic leaks · deck token leaks"
+
+  # ── Block 6. Primitive map (.mmap, 4 cells) ────────────────────────
+  - component: mmap
+    content:
+      cells_html: |
+        <div class="mmap-cell" style="border-left:3px solid var(--ac)">
+          <div class="mmap-type">Page shell</div>
+          <div class="mmap-brands">.tabs · .page · .ph · .section</div>
+          <div class="mmap-note">Tab-SPA-shell + editorial-header + базовая section-обёртка.</div>
+        </div>
+        <div class="mmap-cell" style="border-left:3px solid var(--bl)">
+          <div class="mmap-type" style="color:var(--bl)">Containers + grids</div>
+          <div class="mmap-brands">.card · .g2 · .g3 · .g4</div>
+          <div class="mmap-note">Сетки 1/2/3/4-up для размещения карточек / KPI / cells.</div>
+        </div>
+        <div class="mmap-cell" style="border-left:3px solid var(--gr)">
+          <div class="mmap-type" style="color:var(--gr)">Tables &amp; data</div>
+          <div class="mmap-brands">.bt · .stat · tags</div>
+          <div class="mmap-note">Сравнительная таблица + KPI-боксы + inline tag-семейство.</div>
+        </div>
+        <div class="mmap-cell" style="border-left:3px solid var(--pu)">
+          <div class="mmap-type" style="color:var(--pu)">Process &amp; navigation</div>
+          <div class="mmap-brands">.flow · .pos-grid</div>
+          <div class="mmap-note">Numbered flow + позиционная сетка для landing-композиций.</div>
+        </div>
+
+  # ── Block 7. Differentiator positions (.pos-grid, 4 cells) ─────────
+  - component: pos-grid
+    content:
+      items_html: |
+        <div class="pos">
+          <div class="pos-title">vs. h2t-terminal</div>
+          <div class="pos-desc">Editorial выбирает Playfair + warm cream + 14 px density. Terminal — JetBrains Mono + dark + ANSI-вокабуляр.</div>
+        </div>
+        <div class="pos">
+          <div class="pos-title">vs. h2t-graphs</div>
+          <div class="pos-desc">Editorial — длинные аналитические страницы. Graphs — интерактивные графовые лендинги с canvas.</div>
+        </div>
+        <div class="pos">
+          <div class="pos-title">vs. h2t-mono</div>
+          <div class="pos-desc">Editorial — multi-tab SPA + смешанные типографы. Mono — single-page + один моно-шрифт + минимализм.</div>
+        </div>
+        <div class="pos">
+          <div class="pos-title">vs. h2t-pfad</div>
+          <div class="pos-desc">Editorial — gold accent + табличная плотность. Pfad — generic warm-tone marketing layout.</div>
+        </div>
+
+  # ── Block 8. Profile comparison table (.bt, ≤5 rows) ───────────────
+  - component: comparison-table
+    content:
+      thead_html: |
+        <tr>
+          <th>Profile</th><th>Form</th><th>Primary use</th><th>Body type</th><th>Density</th>
+        </tr>
+      tbody_html: |
+        <tr class="rejuve">
+          <td>h2t-editorial ★</td><td>deck + landing</td><td>Аналитика, appendix, длинные разборы</td><td>System-ui sans 14 px</td><td>Editorial</td>
+        </tr>
+        <tr>
+          <td>h2t-terminal</td><td>deck</td><td>Технические доклады, code-walks</td><td>JetBrains Mono</td><td>Terminal</td>
+        </tr>
+        <tr>
+          <td>h2t-graphs</td><td>landing</td><td>Knowledge-graph продукт</td><td>Inter</td><td>Marketing</td>
+        </tr>
+        <tr>
+          <td>h2t-mono</td><td>landing</td><td>Минималистичные одностраничники</td><td>Single mono</td><td>Sparse</td>
+        </tr>
+        <tr>
+          <td>h2t-pfad</td><td>landing</td><td>Generic warm-tone marketing</td><td>Sans</td><td>Standard</td>
+        </tr>
+
+  # ── Block 9. Process flow (.flow, 4 steps) ─────────────────────────
+  - component: flow
+    content:
+      steps_html: |
+        <div class="flow-step">
+          <div class="flow-num">1</div>
+          <div class="flow-body">
+            <div class="flow-title">Source arbitration</div>
+            <div class="flow-desc">T0.5 visual gate. Locked goldens сравниваются попримитивно; роль (fidelity vs primitive source) фиксируется письменно.</div>
+          </div>
+        </div>
+        <div class="flow-sep"></div>
+        <div class="flow-step">
+          <div class="flow-num">2</div>
+          <div class="flow-body">
+            <div class="flow-title">Vocabulary extraction</div>
+            <div class="flow-desc">T2 design-system.md §10 закрепляет закрытый primitive set + R1-out-of-scope-таблицу.</div>
+          </div>
+        </div>
+        <div class="flow-sep"></div>
+        <div class="flow-step">
+          <div class="flow-num">3</div>
+          <div class="flow-body">
+            <div class="flow-title">TDD slices</div>
+            <div class="flow-desc">T3+T4 — компоненты под TDD, по slice'у на группу примитивов. Контракты сначала, реализация потом.</div>
+          </div>
+        </div>
+        <div class="flow-sep"></div>
+        <div class="flow-step">
+          <div class="flow-num" style="background:var(--ad)">4</div>
+          <div class="flow-body">
+            <div class="flow-title" style="color:var(--ad)">Composition spec ← landing-only</div>
+            <div class="flow-desc">Block-inventory из закрытого vocabulary, утверждённый человеком до recipe. Этот шаг отсутствовал в Batch C — отсюда intent-reset.</div>
+          </div>
+        </div>
+
+  # ── Block 10. Footnote / evidence (.section + audit links) ─────────
+  - component: section
+    content:
+      title: "Audit trail"
+      body: |
+        <p style="font-size:11px;line-height:1.8;color:var(--mu);margin:0">
+          Composition spec —
+          <a href="../../docs/visual-regression/2026-05-07-r2b/h2t-editorial-landing-composition-spec.md" style="color:var(--ac)">composition-spec.md</a> ·
+          Primitive vocabulary —
+          <a href="../../docs/visual-regression/2026-05-07-r2b/h2t-editorial-landing-design-system.md" style="color:var(--ac)">design-system.md</a> ·
+          Source dossier —
+          <a href="../../plugins/h2t-creative/profiles/h2t-editorial/sources/landing-references.yaml" style="color:var(--ac)">landing-references.yaml</a> ·
+          Source arbitration —
+          <a href="../../docs/superpowers/specs/2026-05-07-r2b-landing-source-arbitration.md" style="color:var(--ac)">arbitration.md</a>
+        </p>
+
+  # ── Block 10.5. Editorial CTA (Amendment A — approved extension) ───
+  - component: editorial-cta
+    content:
+      label: "Next"
+      title: "Смотреть deck-форму"
+      body: "Парная deck-форма h2t-editorial доставлена через PR #102. Те же System B токены, deck-плотность, brand-wordmark cover."
+      primary_label: "Открыть PR #102 →"
+      primary_href: "https://github.com/lichtpfad/h2t-skills/pull/102"
+      secondary_label: "Browse appendices"
+      secondary_href: "../../docs/visual-regression/2026-05-07-r2b/h2t-editorial-landing-golden/"
