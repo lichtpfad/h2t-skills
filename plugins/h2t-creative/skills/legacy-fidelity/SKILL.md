@@ -14,6 +14,11 @@ form-v2 layout (`profiles/<name>/{deck|landing}/...` + manifests + tests +
 validation recipe), preserving desktop fidelity and producing a usable mobile
 experience as a separate visual gate.
 
+Before starting, read `docs/architecture/h2t-creative/ROOT_GUIDE.md`. For any
+landing/deck/report/carousel candidate that is not a strict one-to-one fidelity
+recovery, run `docs/protocols/h2t-creative/WIREFRAME_GATE.md` before writing the
+recipe or production CSS. Primitive extraction is not composition approval.
+
 The canonical reference is **R2a** (terminal deck): plan
 `docs/superpowers/plans/2026-05-05-r2a-h2t-terminal-deck-modularization.md`,
 PR `lichtpfad/h2t-skills#95`, commits `da2f47f` (recovery) + `4c40973` (bump).
@@ -31,7 +36,11 @@ PR `lichtpfad/h2t-skills#95`, commits `da2f47f` (recovery) + `4c40973` (bump).
    vision and write a per-slide PASS / ISSUE / BLOCKER trail. "All N PNGs
    exist with non-zero size" is not visual QA. If the model cannot see the
    screenshots, the gate is BLOCKED, not passed.
-4. **No version bump until live confirmation.** Per `~/.claude/CLAUDE.md` the
+4. **Composition is a first-class gate.** A rendered page/deck is not visually
+   accepted just because every component appears. For non-1:1 recovery, compare
+   against the approved wireframe and report composition flow separately from
+   renderer/component success.
+5. **No version bump until live confirmation.** Per `~/.claude/CLAUDE.md` the
    plugin minor version bumps in a separate `chore` commit, after a human has
    live-tested the build in a real browser.
 
