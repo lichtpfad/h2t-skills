@@ -76,3 +76,7 @@ Human approval is required for new roles, new formats, and interactive primitive
 - h2t-terminal deck: mature deck component/layout library from R2a.
 - h2t-editorial deck: mature System B deck library from R2b.
 - h2t-editorial landing primitives: partial; current semantic landing candidate is not visually approved.
+
+## External Standards
+
+- **Stitch DESIGN.md** (Apache 2.0, Google Labs 2026) — open-standard format that every profile `DESIGN.md` conforms to. Reference summary: `docs/superpowers/references/stitch-design-md-spec-reference.md`. Upstream repo: https://github.com/google-labs-code/design.md.
