@@ -1,0 +1,9 @@
+component: page-header
+fields:
+  headline:
+    type: text
+    required: true
+  meta:
+    type: text
+    required: false
+    default: ""

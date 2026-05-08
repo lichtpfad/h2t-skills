@@ -1,0 +1,12 @@
+component: comparison-table
+fields:
+  thead_html:
+    type: html
+    required: true
+  tbody_html:
+    type: html
+    required: true
+  tbody_cards_html:
+    type: html
+    required: false
+    default: ""

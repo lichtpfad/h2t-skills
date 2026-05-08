@@ -1,0 +1,25 @@
+component: editorial-cta
+fields:
+  label:
+    type: text
+    required: true
+  title:
+    type: text
+    required: true
+  body:
+    type: text
+    required: true
+  primary_label:
+    type: text
+    required: true
+  primary_href:
+    type: text
+    required: true
+  secondary_label:
+    type: text
+    required: false
+    default: ""
+  secondary_href:
+    type: text
+    required: false
+    default: "#"
