@@ -202,6 +202,20 @@ def assemble_landing(
     base_dir: Path | None = None,
     palette: str = "default",
 ) -> None:
+    # Semantic-vs-legacy routing (T4 of semantic renderer v0 — issue #118).
+    # Legacy recipes never enter this branch; their byte-output is
+    # preserved verbatim by the unchanged code path below.
+    has_blocks = "blocks" in recipe
+    has_sections = "sections" in recipe
+    if has_blocks and has_sections:
+        raise ValueError(
+            "landing recipe declares both 'blocks:' (semantic format) "
+            "and 'sections:' (legacy format). Pick one — the formats "
+            "are mutually exclusive (architecture spec §3)."
+        )
+    if has_blocks:
+        from renderer.adapter import build_legacy_recipe_from_semantic
+        recipe = build_legacy_recipe_from_semantic(recipe, profile_dir)
     if base_dir is None:
         base_dir = BASE_DIR
     out_dir.mkdir(parents=True, exist_ok=True)

@@ -171,3 +171,19 @@ A single self-contained slice in branch `codex/<repo-short>-<slice-id>`:
 - Process amendment that established the two-gate model:
   `parity-notes.md` § T12.5 history
 - Pressure scenarios: `references/pressure-scenarios.md` (this skill)
+
+## Related: planning a landing semantic renderer (v0+)
+
+When the task is to build a landing form via the semantic renderer
+(blocks-format recipes, profile skins, slot contracts) rather than
+classic per-component recovery, **read this prior-art reference
+BEFORE T1**:
+
+- `docs/superpowers/references/h2t-creative-semantic-rendering-prior-art.md`
+
+It cross-validates the v0 design against Storyblok / Contentful /
+Gutenberg / Portable Text / Block Protocol patterns and records
+what was deliberately not adopted. Without it, an agent risks
+re-inventing concepts that prior art has already settled.
+
+The semantic-renderer plan itself: `docs/superpowers/plans/2026-05-08-h2t-creative-semantic-renderer-v0.md`.
