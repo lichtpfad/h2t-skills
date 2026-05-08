@@ -1,3 +1,35 @@
+---
+version: alpha
+name: h2t-pfad
+description: Elegant tactical dashboard aesthetic — small monospace, red accent. Extracted from PFAD design system (lichtpfad internal dashboard). Corner bracket tags, micro-type scale at 12px base. Canvas2D dot-field particle network as background fx.
+colors:
+  primary: "#d63030"
+  on-surface: "#eeeeee"
+  on-surface-dim: "#6e6e6e"
+  on-surface-muted: "#444444"
+  surface: "#0c0c0c"
+  surface-card: "#111111"
+typography:
+  body:
+    fontFamily: JetBrains Mono
+    fontSize: 12px
+  label:
+    fontFamily: JetBrains Mono
+    fontSize: 8px
+rounded:
+  none: 0px
+---
+
+<!-- Frontmatter conforms to the Stitch DESIGN.md open standard
+     (Apache 2.0, https://github.com/google-labs-code/design.md).
+     Single-palette profile — frontmatter is the canonical source.
+     The `--color-accent-dim` / `--color-accent-glow` /
+     `--color-border` rgba values stay in palettes/default.css —
+     Stitch Color type is hex SRGB only. `rounded.none: 0px`
+     formalises the sharp-edges restriction. The body sections below
+     preserve the existing h2t-creative conventions and coexist with
+     the standard. -->
+
 # h2t-pfad
 
 ## Brand Intent
