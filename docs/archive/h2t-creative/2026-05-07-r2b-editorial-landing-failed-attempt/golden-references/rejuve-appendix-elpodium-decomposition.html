@@ -1,0 +1,992 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>REjuve — Декомпозиция и вопросы к клиенту</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#fafaf8;--sf:#f5f3ee;--bd:#e0dbd3;
+  --ac:#c9a96e;--ad:#8a6520;
+  --tx:#1a1a18;--mu:#666;
+  --gr:#3d6b4a;--dn:#cc2222;--bl:#2255aa;--pu:#882299;
+  --w1:#3d6b4a;--w2:#2255aa;--w3:#882299;
+  --r:6px;
+  --serif:'Playfair Display',Georgia,serif;
+  --sans:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif
+}
+body{background:var(--bg);color:var(--tx);font-family:var(--sans);font-size:14px;line-height:1.6}
+
+.tabs{display:flex;border-bottom:2px solid var(--ac);background:var(--bg);position:sticky;top:0;z-index:10}
+.tab{padding:12px 20px;cursor:pointer;font-size:13px;color:var(--mu);border:none;background:none;border-bottom:2px solid transparent;margin-bottom:-2px;white-space:nowrap;transition:color .15s}
+.tab:hover{color:var(--tx)}
+.tab.active{color:var(--ad);font-weight:700;border-bottom-color:var(--ac)}
+
+.page{display:none;padding:28px 32px;max-width:1100px;margin:0 auto}
+.page.active{display:block}
+
+h1{font-family:var(--serif);font-size:28px;color:var(--ad);margin-bottom:6px}
+h2{font-family:var(--serif);font-size:20px;color:var(--ad);margin:28px 0 12px}
+h3{font-size:14px;font-weight:700;color:var(--tx);margin:0 0 8px}
+.ph{display:flex;align-items:baseline;gap:16px;margin-bottom:24px;padding-bottom:16px;border-bottom:1px solid var(--bd)}
+.ph h1{margin:0}
+.ph-meta{font-size:12px;color:var(--mu)}
+.section{margin-bottom:36px}
+.card{background:var(--sf);border:1px solid var(--bd);border-radius:var(--r);padding:16px}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px}
+.g4{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+
+/* STATUS BADGES */
+.auto{display:inline-block;padding:2px 8px;border-radius:3px;font-size:10px;font-weight:700;background:#3d6b4a18;color:#2a5035}
+.hybrid{display:inline-block;padding:2px 8px;border-radius:3px;font-size:10px;font-weight:700;background:#c9a96e22;color:#8a6520}
+.human{display:inline-block;padding:2px 8px;border-radius:3px;font-size:10px;font-weight:700;background:#cc222218;color:#aa1111}
+.na{display:inline-block;padding:2px 8px;border-radius:3px;font-size:10px;font-weight:700;background:#66666618;color:#555}
+.p0{display:inline-block;padding:2px 6px;border-radius:3px;font-size:10px;font-weight:700;background:#2255aa18;color:#1a3d80}
+.p1{display:inline-block;padding:2px 6px;border-radius:3px;font-size:10px;font-weight:700;background:#88229918;color:#550066}
+.p2{display:inline-block;padding:2px 6px;border-radius:3px;font-size:10px;font-weight:700;background:#66666614;color:#666}
+
+/* WAVE TAGS */
+.w1t{display:inline-block;padding:2px 8px;border-radius:3px;font-size:10px;font-weight:700;background:#3d6b4a18;color:#2a5035}
+.w2t{display:inline-block;padding:2px 8px;border-radius:3px;font-size:10px;font-weight:700;background:#2255aa18;color:#1a3d80}
+.w3t{display:inline-block;padding:2px 8px;border-radius:3px;font-size:10px;font-weight:700;background:#88229918;color:#550066}
+
+/* WEIGHT BAR */
+.wb-wrap{display:flex;align-items:center;gap:8px}
+.wb{flex:1;height:10px;background:var(--bd);border-radius:3px;overflow:hidden;max-width:120px}
+.wb-fill{height:100%;background:var(--ac);border-radius:3px}
+.wb-n{font-size:12px;font-weight:700;color:var(--ad);min-width:34px}
+
+/* AUTO BAR */
+.ab{flex:1;height:8px;background:var(--bd);border-radius:3px;overflow:hidden;max-width:80px}
+.ab-fill{height:100%;background:var(--gr);border-radius:3px}
+
+/* BLOCKS TABLE */
+.bt{width:100%;border-collapse:collapse;font-size:12px}
+.bt th{background:var(--sf);border:1px solid var(--bd);padding:8px 10px;text-align:left;font-size:11px;font-weight:700;color:var(--ad);white-space:nowrap}
+.bt td{border:1px solid var(--bd);padding:8px 10px;vertical-align:middle}
+.bt tr:hover td{background:#f0ede6}
+.bt tr.w1 td{border-left:3px solid var(--w1)}
+.bt tr.w2 td{border-left:3px solid var(--w2)}
+.bt tr.w3 td{border-left:3px solid var(--w3)}
+
+/* DETAIL TABLE */
+.dt{width:100%;border-collapse:collapse;font-size:12px}
+.dt th{background:var(--sf);border:1px solid var(--bd);padding:7px 10px;font-size:11px;font-weight:700;color:var(--ad);text-align:left;white-space:nowrap}
+.dt td{border:1px solid var(--bd);padding:6px 10px;vertical-align:top;line-height:1.5}
+.dt td:first-child{text-align:center;font-weight:700;color:var(--mu);width:36px;font-size:11px}
+.dt tr:hover td{background:#f0ede6}
+.dt-section{background:var(--sf);border:1px solid var(--bd);border-radius:var(--r);margin-bottom:4px;overflow:hidden}
+.dt-section-header{padding:10px 14px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;user-select:none}
+.dt-section-header:hover{background:#ede9e2}
+.dt-section-title{font-weight:700;font-size:13px;color:var(--ad)}
+.dt-section-meta{font-size:11px;color:var(--mu)}
+.dt-section-body{display:none;padding:0 4px 4px}
+.dt-section-body.open{display:block}
+.dt-chevron{color:var(--ac);font-size:12px;transition:transform .2s}
+.dt-chevron.open{transform:rotate(90deg)}
+
+/* WAVE TIMELINE */
+.wave-block{border:1px solid var(--bd);border-radius:var(--r);margin-bottom:16px;overflow:hidden}
+.wave-header{padding:14px 18px;display:flex;align-items:center;gap:12px}
+.wave-badge{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;color:white;flex-shrink:0}
+.wave-title{font-family:var(--serif);font-size:17px}
+.wave-sub{font-size:12px;color:var(--mu);margin-top:1px}
+.wave-body{padding:16px 18px;border-top:1px solid var(--bd);background:var(--bg)}
+.wave-items{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px}
+.wave-item{background:var(--sf);border:1px solid var(--bd);border-radius:4px;padding:8px 10px;font-size:12px}
+.wave-item strong{display:block;font-size:11px;font-weight:700;margin-bottom:2px}
+.wave-item span{color:var(--mu)}
+.wave-item.anchor{border-left:3px solid var(--ac)}
+.wave-outcome{margin-top:12px;padding:10px 12px;background:var(--sf);border:1px solid var(--bd);border-radius:4px;font-size:12px;color:var(--mu)}
+.wave-outcome strong{color:var(--tx)}
+
+/* RESPONSIBILITY TABLE */
+.rt{width:100%;border-collapse:collapse;font-size:11px}
+.rt th{background:var(--sf);border:1px solid var(--bd);padding:6px 8px;font-size:10px;font-weight:700;color:var(--ad);text-align:center;white-space:nowrap}
+.rt th:first-child{text-align:left}
+.rt td{border:1px solid var(--bd);padding:5px 8px;text-align:center;vertical-align:top}
+.rt td:first-child{text-align:left;font-weight:600;font-size:11px}
+.rt tr.highlight td{background:#c9a96e14}
+.owns{color:var(--dn);font-weight:700}
+.partial{color:var(--ac);font-weight:600}
+.check{color:var(--gr)}
+
+/* QUESTIONS */
+.tier-header{display:flex;align-items:center;gap:12px;margin-bottom:16px;padding:12px 16px;border-radius:var(--r)}
+.tier1{background:#cc222210;border:1px solid #cc222240}
+.tier2{background:#2255aa10;border:1px solid #2255aa40}
+.tier3{background:#3d6b4a10;border:1px solid #3d6b4a40}
+.tier-num{font-family:var(--serif);font-size:24px;font-weight:700}
+.t1n{color:var(--dn)}
+.t2n{color:var(--bl)}
+.t3n{color:var(--gr)}
+.tier-label{font-size:13px;font-weight:700}
+.tier-desc{font-size:12px;color:var(--mu);margin-top:2px}
+
+.q-table{width:100%;border-collapse:collapse;font-size:12px;margin-bottom:28px}
+.q-table th{padding:7px 10px;font-size:11px;font-weight:700;text-align:left;border:1px solid var(--bd)}
+.q-table td{border:1px solid var(--bd);padding:9px 10px;vertical-align:top;line-height:1.6}
+.q-table td:first-child{text-align:center;font-weight:700;width:42px;color:var(--mu);font-size:11px}
+.q-table td:nth-child(2){font-weight:600}
+.q1 th{background:#cc222212;color:var(--dn)}
+.q2 th{background:#2255aa12;color:var(--bl)}
+.q3 th{background:#3d6b4a12;color:var(--gr)}
+.blocker{display:inline-block;padding:2px 7px;border-radius:3px;font-size:10px;background:#cc222215;color:var(--dn);font-weight:700}
+.blocker-bl{display:inline-block;padding:2px 7px;border-radius:3px;font-size:10px;background:#2255aa15;color:var(--bl);font-weight:700}
+.blocker-gr{display:inline-block;padding:2px 7px;border-radius:3px;font-size:10px;background:#3d6b4a15;color:var(--gr);font-weight:700}
+
+/* STAT BLOCKS */
+.stat{background:var(--sf);border:1px solid var(--bd);border-radius:var(--r);padding:14px 16px;text-align:center}
+.stat-n{font-family:var(--serif);font-size:28px;color:var(--ad);display:block;line-height:1.1}
+.stat-l{font-size:11px;color:var(--mu);margin-top:4px;display:block;line-height:1.4}
+
+.note{font-size:11px;color:var(--mu);padding:8px 12px;background:var(--sf);border:1px solid var(--bd);border-radius:4px;margin-top:8px}
+</style>
+</head>
+<body>
+
+<nav class="tabs">
+  <button class="tab active" onclick="switchTab(this,'blocks')">12 блоков</button>
+  <button class="tab" onclick="switchTab(this,'waves')">Волны</button>
+  <button class="tab" onclick="switchTab(this,'elements')">70 элементов</button>
+  <button class="tab" onclick="switchTab(this,'questions')">Вопросы клиенту</button>
+</nav>
+
+<!-- ===== TAB 1: 12 БЛОКОВ ===== -->
+<div id="blocks" class="page active">
+  <div class="ph">
+    <h1>Декомпозиция — 12 рабочих блоков</h1>
+    <span class="ph-meta">Веса · Автоматизация · Волны</span>
+  </div>
+
+  <div class="section">
+    <div class="g4" style="margin-bottom:24px">
+      <div class="stat"><span class="stat-n">12</span><span class="stat-l">клиентских блоков<br>(свёрнуто из 70)</span></div>
+      <div class="stat"><span class="stat-n">~70%</span><span class="stat-l">overall automation<br>(Averi 2026 benchmark: 73%)</span></div>
+      <div class="stat"><span class="stat-n">Wave 1</span><span class="stat-l">6 блоков в первые<br>4 недели</span></div>
+      <div class="stat"><span class="stat-n">2</span><span class="stat-l">блока — by design HUMAN<br>(не автоматизируются)</span></div>
+    </div>
+
+    <table class="bt">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Блок</th>
+          <th>Что внутри</th>
+          <th>Статус</th>
+          <th>Auto %</th>
+          <th>Вес важности</th>
+          <th>Волна</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr class="w1">
+          <td style="font-weight:700;color:var(--ad)">B9</td>
+          <td style="font-weight:700">Attribution & analytics</td>
+          <td style="font-size:11px;color:var(--mu)">UTM-схема, SimplyBook webhooks → БД, dashboards, отчёты</td>
+          <td><span class="auto">AUTO</span></td>
+          <td>
+            <div class="wb-wrap"><div class="ab"><div class="ab-fill" style="width:90%"></div></div><span style="font-size:11px;color:var(--gr)">90%</span></div>
+          </td>
+          <td>
+            <div class="wb-wrap"><div class="wb"><div class="wb-fill" style="width:95%"></div></div><span class="wb-n">95%</span></div>
+          </td>
+          <td><span class="w1t">Wave 1</span></td>
+        </tr>
+        <tr class="w1">
+          <td style="font-weight:700;color:var(--ad)">B12</td>
+          <td style="font-weight:700">Human-only</td>
+          <td style="font-size:11px;color:var(--mu)">Meta ban appeals, medical sign-off, sales closing звонки</td>
+          <td><span class="human">HUMAN</span></td>
+          <td>
+            <div class="wb-wrap"><div class="ab"><div class="ab-fill" style="width:0%"></div></div><span style="font-size:11px;color:var(--dn)">0%</span></div>
+          </td>
+          <td>
+            <div class="wb-wrap"><div class="wb"><div class="wb-fill" style="width:95%"></div></div><span class="wb-n">95%</span></div>
+          </td>
+          <td><span style="font-size:10px;color:var(--mu)">всегда</span></td>
+        </tr>
+        <tr class="w1">
+          <td style="font-weight:700;color:var(--ad)">B5</td>
+          <td style="font-weight:700">Organic & local</td>
+          <td style="font-size:11px;color:var(--mu)">Google Business Profile, local SEO, expat partnerships, referral</td>
+          <td><span class="auto">AUTO</span></td>
+          <td>
+            <div class="wb-wrap"><div class="ab"><div class="ab-fill" style="width:80%"></div></div><span style="font-size:11px;color:var(--gr)">80%</span></div>
+          </td>
+          <td>
+            <div class="wb-wrap"><div class="wb"><div class="wb-fill" style="width:90%"></div></div><span class="wb-n">90%</span></div>
+          </td>
+          <td><span class="w1t">Wave 1</span></td>
+        </tr>
+        <tr class="w1">
+          <td style="font-weight:700;color:var(--ad)">B7</td>
+          <td style="font-weight:700">B2B outreach</td>
+          <td style="font-size:11px;color:var(--mu)">LinkedIn thought leadership, corporate wellness pitch для Zug commodity firms</td>
+          <td><span class="hybrid">HYBRID</span></td>
+          <td>
+            <div class="wb-wrap"><div class="ab"><div class="ab-fill" style="width:70%"></div></div><span style="font-size:11px;color:var(--gr)">70%</span></div>
+          </td>
+          <td>
+            <div class="wb-wrap"><div class="wb"><div class="wb-fill" style="width:85%"></div></div><span class="wb-n">85%</span></div>
+          </td>
+          <td><span class="w1t">Wave 1</span></td>
+        </tr>
+        <tr class="w2">
+          <td style="font-weight:700;color:var(--ad)">B10</td>
+          <td style="font-weight:700">Compliance & quality</td>
+          <td style="font-size:11px;color:var(--mu)">Pre-publish evals, medical review workflow, brand voice scorer, feedback loop</td>
+          <td><span class="hybrid">HYBRID</span></td>
+          <td>
+            <div class="wb-wrap"><div class="ab"><div class="ab-fill" style="width:50%"></div></div><span style="font-size:11px;color:var(--gr)">50%</span></div>
+          </td>
+          <td>
+            <div class="wb-wrap"><div class="wb"><div class="wb-fill" style="width:80%"></div></div><span class="wb-n">80%</span></div>
+          </td>
+          <td><span class="w2t">Wave 2</span></td>
+        </tr>
+        <tr class="w2">
+          <td style="font-weight:700;color:var(--ad)">B2</td>
+          <td style="font-weight:700">Стратегия и позиционирование</td>
+          <td style="font-size:11px;color:var(--mu)">SWOT, упаковка профиля, контент-план на квартал, brand corpus</td>
+          <td><span class="hybrid">HYBRID</span></td>
+          <td>
+            <div class="wb-wrap"><div class="ab"><div class="ab-fill" style="width:70%"></div></div><span style="font-size:11px;color:var(--gr)">70%</span></div>
+          </td>
+          <td>
+            <div class="wb-wrap"><div class="wb"><div class="wb-fill" style="width:75%"></div></div><span class="wb-n">75%</span></div>
+          </td>
+          <td><span class="w2t">Wave 2</span></td>
+        </tr>
+        <tr class="w1">
+          <td style="font-weight:700;color:var(--ad)">B6</td>
+          <td style="font-weight:700">Email / WhatsApp / Telegram</td>
+          <td style="font-size:11px;color:var(--mu)">Welcome / nurture / no-show rescue / reactivation, WhatsApp broadcasts, Telegram RU</td>
+          <td><span class="auto">AUTO</span></td>
+          <td>
+            <div class="wb-wrap"><div class="ab"><div class="ab-fill" style="width:90%"></div></div><span style="font-size:11px;color:var(--gr)">90%</span></div>
+          </td>
+          <td>
+            <div class="wb-wrap"><div class="wb"><div class="wb-fill" style="width:75%"></div></div><span class="wb-n">75%</span></div>
+          </td>
+          <td><span class="w1t">Wave 1</span> <span class="w2t">+2</span></td>
+        </tr>
+        <tr class="w1">
+          <td style="font-weight:700;color:var(--ad)">B1</td>
+          <td style="font-weight:700">Research & discovery</td>
+          <td style="font-size:11px;color:var(--mu)">Анализ ЦА, конкурентов, запросов, аудит сайта и профиля</td>
+          <td><span class="auto">AUTO</span></td>
+          <td>
+            <div class="wb-wrap"><div class="ab"><div class="ab-fill" style="width:85%"></div></div><span style="font-size:11px;color:var(--gr)">85%</span></div>
+          </td>
+          <td>
+            <div class="wb-wrap"><div class="wb"><div class="wb-fill" style="width:70%"></div></div><span class="wb-n">70%</span></div>
+          </td>
+          <td><span class="w1t">Wave 1</span> <span style="font-size:10px;color:var(--ac)">частично готово</span></td>
+        </tr>
+        <tr class="w2">
+          <td style="font-weight:700;color:var(--ad)">B4</td>
+          <td style="font-weight:700">Платная реклама</td>
+          <td style="font-size:11px;color:var(--mu)">Meta + Google Ads, генерация креативов, audience, бюджет, оптимизация</td>
+          <td><span class="hybrid">HYBRID</span></td>
+          <td>
+            <div class="wb-wrap"><div class="ab"><div class="ab-fill" style="width:65%"></div></div><span style="font-size:11px;color:var(--gr)">65%</span></div>
+          </td>
+          <td>
+            <div class="wb-wrap"><div class="wb"><div class="wb-fill" style="width:70%"></div></div><span class="wb-n">70%</span></div>
+          </td>
+          <td><span class="w2t">Wave 2</span></td>
+        </tr>
+        <tr class="w1">
+          <td style="font-weight:700;color:var(--ad)">B3</td>
+          <td style="font-weight:700">Контент-производство</td>
+          <td style="font-size:11px;color:var(--mu)">Посты, карусели, reels-сценарии, stories, визуалы, ТЗ на съёмки</td>
+          <td><span class="hybrid">HYBRID</span></td>
+          <td>
+            <div class="wb-wrap"><div class="ab"><div class="ab-fill" style="width:70%"></div></div><span style="font-size:11px;color:var(--gr)">70%</span></div>
+          </td>
+          <td>
+            <div class="wb-wrap"><div class="wb"><div class="wb-fill" style="width:65%"></div></div><span class="wb-n">65%</span></div>
+          </td>
+          <td><span class="w1t">Wave 1</span> <span class="w2t">+2</span></td>
+        </tr>
+        <tr class="w3">
+          <td style="font-weight:700;color:var(--ad)">B8</td>
+          <td style="font-weight:700">Lead lifecycle</td>
+          <td style="font-size:11px;color:var(--mu)">Enrichment, lead scoring, персонализированные follow-ups, reactivation</td>
+          <td><span class="auto">AUTO</span></td>
+          <td>
+            <div class="wb-wrap"><div class="ab"><div class="ab-fill" style="width:75%"></div></div><span style="font-size:11px;color:var(--gr)">75%</span></div>
+          </td>
+          <td>
+            <div class="wb-wrap"><div class="wb"><div class="wb-fill" style="width:55%"></div></div><span class="wb-n">55%</span></div>
+          </td>
+          <td><span class="w3t">Wave 3</span></td>
+        </tr>
+        <tr class="w3">
+          <td style="font-weight:700;color:var(--ad)">B11</td>
+          <td style="font-weight:700">Физические активности</td>
+          <td style="font-size:11px;color:var(--mu)">Съёмки фото/видео, events, influencer relations, direct mail</td>
+          <td><span class="human">HUMAN</span></td>
+          <td>
+            <div class="wb-wrap"><div class="ab"><div class="ab-fill" style="width:15%"></div></div><span style="font-size:11px;color:var(--dn)">15%</span></div>
+          </td>
+          <td>
+            <div class="wb-wrap"><div class="wb"><div class="wb-fill" style="width:50%"></div></div><span class="wb-n">50%</span></div>
+          </td>
+          <td><span class="w2t">Wave 2</span><span class="w3t">/3</span></td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="note" style="margin-top:10px">
+      Легенда: <span class="w1t">Wave 1</span> = первые 4 недели · <span class="w2t">Wave 2</span> = недели 5–8 · <span class="w3t">Wave 3</span> = мес 3+  ·  Вес = насколько этот блок двигает платящих клиентов (0–100%)
+      <br><br>⚠️ <strong>Это prefill-оценка исполнителя. Финальные веса — за Сергеем</strong> (валидация или корректировка в созвоне).
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Матрица ответственности</h2>
+    <table class="rt">
+      <thead>
+        <tr>
+          <th style="min-width:130px">Блок</th>
+          <th>AI-система</th>
+          <th>Founder (Kristina)</th>
+          <th>Licensed practitioner</th>
+          <th>DE copywriter</th>
+          <th>Perf. marketer</th>
+          <th>Lawyer</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>B1 Research</td><td class="check">✓ auto</td><td>approve quarterly</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>
+        <tr class="highlight"><td>B2 Стратегия</td><td class="partial">partial</td><td class="owns">owns decisions</td><td>—</td><td>one-off setup</td><td>—</td><td>—</td></tr>
+        <tr class="highlight"><td>B3 Контент</td><td class="check">✓ drafts</td><td class="owns">approve visuals</td><td class="owns">review health-claims</td><td>weekly DE review</td><td>—</td><td>—</td></tr>
+        <tr><td>B4 Реклама</td><td class="check">✓ generate</td><td>—</td><td>review creatives</td><td>review ads copy</td><td class="owns">owns strategy</td><td>—</td></tr>
+        <tr><td>B5 Organic</td><td class="check">✓ auto</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>
+        <tr><td>B6 Email/WA/TG</td><td class="check">✓ auto</td><td>first-time template</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>
+        <tr class="highlight"><td>B7 B2B outreach</td><td class="check">✓ drafts</td><td class="owns">owns closing</td><td>—</td><td>—</td><td>consult</td><td>—</td></tr>
+        <tr><td>B8 Lead lifecycle</td><td class="check">✓ auto</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>
+        <tr><td>B9 Attribution</td><td class="check">✓ auto</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>
+        <tr><td>B10 Compliance</td><td class="partial">partial</td><td>—</td><td class="owns">owns health-review</td><td>—</td><td>—</td><td>one-off library</td></tr>
+        <tr><td>B11 Физ. активности</td><td>ТЗ only</td><td class="owns">relationships + events</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>
+        <tr class="highlight"><td>B12 Human-only</td><td>—</td><td class="owns">sales closing</td><td class="owns">medical sign-off</td><td>—</td><td class="owns">Meta appeals</td><td>—</td></tr>
+      </tbody>
+    </table>
+    <div class="note" style="margin-top:8px">Founder (Kristina) активно вовлечена в B2, B3, B7, B12 — это 4 блока из 12. Остальное — AI + точечные external specialists.</div>
+  </div>
+</div>
+
+<!-- ===== TAB 2: ВОЛНЫ ===== -->
+<div id="waves" class="page">
+  <div class="ph">
+    <h1>Распределение по волнам</h1>
+    <span class="ph-meta">3 волны · не big-bang · модульный старт</span>
+  </div>
+
+  <div class="section">
+    <div class="wave-block">
+      <div class="wave-header" style="background:#3d6b4a10">
+        <div class="wave-badge" style="background:var(--w1)">1</div>
+        <div>
+          <div class="wave-title" style="color:var(--w1)">Wave 1 — Quick wins</div>
+          <div class="wave-sub">Недели 1–4 · attribution + nurture + local acquisition · высокая auto, низкий compliance-risk</div>
+        </div>
+      </div>
+      <div class="wave-body">
+        <div class="wave-items">
+          <div class="wave-item anchor">
+            <strong>B9 Attribution (95%)</strong>
+            <span>UTM + SimplyBook webhook → BigQuery → dashboard. Фундамент всего — без него performance-pricing не работает.</span>
+          </div>
+          <div class="wave-item anchor">
+            <strong>B5 Google Business + local SEO (90%)</strong>
+            <span>Must-have: 65–77% пациентов ищут онлайн до booking. Ожидается 9–16 new clients/мес.</span>
+          </div>
+          <div class="wave-item anchor">
+            <strong>B5 Google Ads local intent (90%)</strong>
+            <span>«Functional medicine Zug», low CPC, high intent. 6–10 clients/мес.</span>
+          </div>
+          <div class="wave-item">
+            <strong>B6 Email sequences (90%)</strong>
+            <span>Welcome, post-visit, no-show rescue, reactivation. 47.81% open rate wellness.</span>
+          </div>
+          <div class="wave-item">
+            <strong>B6 WhatsApp Business (85%)</strong>
+            <span>Broadcasts + appointment reminders. 98% open rate DACH.</span>
+          </div>
+          <div class="wave-item">
+            <strong>B3 Stories (85%)</strong>
+            <span>90–120/мес. Низкий compliance-risk (эфемерный контент). Batch-approval 30 мин/нед.</span>
+          </div>
+          <div class="wave-item">
+            <strong>B3 Контент-микс Instagram (70%)</strong>
+            <span>3–4 reels + 2–3 карусели + 1–2 static/нед. Карусели = 10.15% engagement vs Reels 1.23%.</span>
+          </div>
+          <div class="wave-item">
+            <strong>B7 Referral programme (75%)</strong>
+            <span>Activation existing clients. Warm channel для Zug expat community.</span>
+          </div>
+          <div class="wave-item">
+            <strong>B7 Expat partnerships (60%)</strong>
+            <span>IAmExpat, AWC Zürich, Glocals. Glencore — warm door (B2B).</span>
+          </div>
+          <div class="wave-item">
+            <strong>B1 Research + keywords (85%)</strong>
+            <span>Анализ ЦА + keywords DE/EN/RU. Частично уже сделано.</span>
+          </div>
+          <div class="wave-item">
+            <strong>B9 Отчётность (100%)</strong>
+            <span>Еженедельная + ежемесячная. Dashboard с anomaly detection.</span>
+          </div>
+          <div class="wave-item">
+            <strong>B12 Роли (0% auto)</strong>
+            <span>Sales closing + medical sign-off: роли у клиента должны быть готовы.</span>
+          </div>
+        </div>
+        <div class="wave-outcome"><strong>Ожидаемый результат Wave 1:</strong> Baseline CAC/LTV установлен. Attribution infrastructure работает. 40–50% активности автоматизировано. Потенциал 22–39 new clients/мес (канальный микс).</div>
+      </div>
+    </div>
+
+    <div class="wave-block">
+      <div class="wave-header" style="background:#2255aa10">
+        <div class="wave-badge" style="background:var(--w2)">2</div>
+        <div>
+          <div class="wave-title" style="color:var(--w2)">Wave 2 — Core production + B2B</div>
+          <div class="wave-sub">Недели 5–8 · Precondition: licensed practitioner onboarded, brand corpus, Swiss lawyer sign-off</div>
+        </div>
+      </div>
+      <div class="wave-body">
+        <div class="wave-items">
+          <div class="wave-item anchor">
+            <strong>B10 Compliance screener (50%)</strong>
+            <span>HMG/UWG/Anhang 14. Блокер для всего public content. Без этого B3/B4 не запускаются полностью.</span>
+          </div>
+          <div class="wave-item anchor">
+            <strong>B10 Licensed practitioner workflow (0%)</strong>
+            <span>Контракт обязателен. Medical review каждого public artifact с health-claim.</span>
+          </div>
+          <div class="wave-item">
+            <strong>B3 Посты + карусели (70%)</strong>
+            <span>Полноценные посты с medical review gate. Карусели — формат-чемпион.</span>
+          </div>
+          <div class="wave-item">
+            <strong>B4 Meta + Google Ads ops (65–90%)</strong>
+            <span>Таргет с compliance-screener. Audience iteration, A/B testing, авто-масштабирование.</span>
+          </div>
+          <div class="wave-item">
+            <strong>B2 Стратегия + brand corpus (70%)</strong>
+            <span>30–50 эталонных текстов + tone rubric. Foundational для всего контента.</span>
+          </div>
+          <div class="wave-item">
+            <strong>B7 LinkedIn + B2B outreach (75%)</strong>
+            <span>Commodity firms Zug. 1 corporate deal = 5–20 individual clients. Glencore = warm door.</span>
+          </div>
+          <div class="wave-item">
+            <strong>B6 Webinars monthly (65%)</strong>
+            <span>Lead-magnet. CPL healthcare ~$32, 56% conversion. Monthly cadence.</span>
+          </div>
+          <div class="wave-item">
+            <strong>B6 Direct mail Zug premium (70%)</strong>
+            <span>Postcodes 6300/6301/6302. 161% ROI, 91% open rate. Test wave.</span>
+          </div>
+          <div class="wave-item">
+            <strong>B6 Telegram RU channel (85%)</strong>
+            <span>Post-Soviet Zug community. Автоадаптация контента на RU.</span>
+          </div>
+          <div class="wave-item">
+            <strong>B3 Reels + DACH podcasting (55–70%)</strong>
+            <span>Физическая съёмка = HUMAN. Founder / licensed practitioner как speaker.</span>
+          </div>
+          <div class="wave-item">
+            <strong>B11 Micro-influencers pilot (70%)</strong>
+            <span>2–3 партнёрства 10–50k. 3x ROI vs macro-influencers.</span>
+          </div>
+          <div class="wave-item">
+            <strong>B6 Newsletter/Substack (60%)</strong>
+            <span>2x/мес long-form. Repurposes podcasts + Q&A. Founder editorial voice.</span>
+          </div>
+        </div>
+        <div class="wave-outcome"><strong>Ожидаемый результат Wave 2:</strong> 55–65% активности ELPODIUM + B2B multiplier. Performance-linked pricing Option R активен. Premium brand positioning начат.</div>
+      </div>
+    </div>
+
+    <div class="wave-block">
+      <div class="wave-header" style="background:#88229910">
+        <div class="wave-badge" style="background:var(--w3)">3</div>
+        <div>
+          <div class="wave-title" style="color:var(--w3)">Wave 3 — Scale + premium brand</div>
+          <div class="wave-sub">Мес 3+ · optimization, advanced attribution, brand authority</div>
+        </div>
+      </div>
+      <div class="wave-body">
+        <div class="wave-items">
+          <div class="wave-item">
+            <strong>B8 Lead scoring + routing (75%)</strong>
+            <span>+25–30% к conversion (HubSpot). Работает только при достаточном volume of leads.</span>
+          </div>
+          <div class="wave-item">
+            <strong>Advanced retargeting + reactivation</strong>
+            <span>Сложные сегментированные flows на основе накопленной attribution-истории.</span>
+          </div>
+          <div class="wave-item">
+            <strong>Swiss media native ads</strong>
+            <span>NZZone / Handelszeitung. Brand authority в premium CH context.</span>
+          </div>
+          <div class="wave-item">
+            <strong>Longevity Investors Conference Gstaad (Sep 2026)</strong>
+            <span>Sponsorship / speaker. Brand visibility в UHNWI longevity community.</span>
+          </div>
+          <div class="wave-item">
+            <strong>Own podcast production</strong>
+            <span>Founder как host. Repurposing для all channels.</span>
+          </div>
+          <div class="wave-item">
+            <strong>B11 Direct mail scale (70%)</strong>
+            <span>Scale после Wave 2 test. OOH с QR/UTM attribution.</span>
+          </div>
+          <div class="wave-item">
+            <strong>Multilingual consistency scale</strong>
+            <span>EN/DE/RU automated consistency check across all artifacts.</span>
+          </div>
+          <div class="wave-item">
+            <strong>Event-scout DACH pipeline (95%)</strong>
+            <span>Мониторинг Biohacking Days, Life Summit Berlin и других. Decision = human.</span>
+          </div>
+        </div>
+        <div class="wave-outcome"><strong>Ожидаемый результат Wave 3:</strong> 75%+ автоматизации. Premium brand positioning vs AYUN достигнут. Multi-channel attribution полностью настроена.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Что НЕ автоматизируем — осознанно</h2>
+    <div class="g3">
+      <div class="card" style="border-left:3px solid var(--dn)">
+        <h3 style="color:var(--dn);margin-bottom:8px">By design HUMAN</h3>
+        <ul style="list-style:none;font-size:12px;line-height:2;color:var(--mu)">
+          <li>→ Sales closing звонки</li>
+          <li>→ Final medical sign-off</li>
+          <li>→ Физические съёмки (фото/видео)</li>
+          <li>→ Influencer & partner relationships</li>
+          <li>→ Стратегические позиционные решения</li>
+        </ul>
+      </div>
+      <div class="card" style="border-left:3px solid #aa7700">
+        <h3 style="color:#aa7700;margin-bottom:8px">Технически нельзя</h3>
+        <ul style="list-style:none;font-size:12px;line-height:2;color:var(--mu)">
+          <li>→ Meta ban appeal process — ручной</li>
+          <li>→ Массфоловинг — нарушает ToS</li>
+          <li>→ Event delivery (open days, ceremonies)</li>
+          <li>→ Podcast сам эфир (founder / doctor)</li>
+        </ul>
+      </div>
+      <div class="card" style="border-left:3px solid var(--mu)">
+        <h3 style="margin-bottom:8px">Стоимость external specialists</h3>
+        <div style="font-size:12px;line-height:2;color:var(--mu)">
+          DE copywriter: €240–800/мес<br>
+          Performance marketer: €800–2 400 (мес 1–3)<br>
+          Licensed practitioner: €400–800/мес<br>
+          Swiss lawyer (one-off): €1 500–3 000<br>
+          Brand voice setup (one-off): €1 500–3 000<br>
+          <strong style="color:var(--tx)">Ongoing specialists: €940–2 400/мес</strong>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== TAB 3: 70 ЭЛЕМЕНТОВ ===== -->
+<div id="elements" class="page">
+  <div class="ph">
+    <h1>70 элементов — детальная декомпозиция</h1>
+    <span class="ph-meta">AUTO 35 · HYBRID 27 · HUMAN 5 · N/A 3</span>
+  </div>
+
+  <div class="section">
+    <div class="g4" style="margin-bottom:20px">
+      <div class="stat"><span class="stat-n">35</span><span class="stat-l"><span class="auto">AUTO</span><br>50% элементов</span></div>
+      <div class="stat"><span class="stat-n">27</span><span class="stat-l"><span class="hybrid">HYBRID</span><br>38.5%</span></div>
+      <div class="stat"><span class="stat-n">5</span><span class="stat-l"><span class="human">HUMAN</span><br>7%</span></div>
+      <div class="stat"><span class="stat-n">~70%</span><span class="stat-l">weighted automation<br>overall</span></div>
+    </div>
+
+    <!-- Section A: Strategy -->
+    <div class="dt-section">
+      <div class="dt-section-header" onclick="toggleSection(this)">
+        <div>
+          <span class="dt-section-title">Часть 1 — Стратегия (ELPODIUM)</span>
+          <span class="dt-section-meta" style="margin-left:10px">13 элементов · ~75% автоматизируется</span>
+        </div>
+        <span class="dt-chevron">›</span>
+      </div>
+      <div class="dt-section-body">
+        <table class="dt">
+          <thead><tr><th>#</th><th>Элемент</th><th>Статус</th><th>Auto%</th><th>Что делает агент</th><th>Что требует человека</th><th>Приоритет</th></tr></thead>
+          <tbody>
+            <tr><td>1</td><td><strong>Кастдевы (до 10 интервью)</strong></td><td><span class="hybrid">HYBRID</span></td><td>40%</td><td>Подготовка вопросов, транскрипция, summary, тематический анализ</td><td>Сами звонки — founder или интервьюер</td><td><span class="p1">P1</span></td></tr>
+            <tr><td>2</td><td>Анализ ЦА (портрет, боли, критерии)</td><td><span class="auto">AUTO</span></td><td>85%</td><td>Парсинг соцсетей/форумов/отзывов, кластеризация</td><td>Валидация founder'ом ~2 ч</td><td><span class="p0">P0</span></td></tr>
+            <tr><td>3</td><td>Анализ 6–7 конкурентов</td><td><span class="auto">AUTO</span></td><td>90%</td><td>Скрейп всех источников, сравнит. таблица</td><td><strong style="color:var(--ac)">Уже сделано в B1</strong></td><td><span class="p0">P0 готово</span></td></tr>
+            <tr><td>4</td><td>Тайный покупатель у конкурентов</td><td><span class="human">HUMAN</span></td><td>10%</td><td>Может подготовить скрипт и вопросы</td><td>Сам звонок / визит</td><td><span class="p2">P2</span></td></tr>
+            <tr><td>5</td><td>Анализ рекламы конкурентов (Meta Ad Library)</td><td><span class="auto">AUTO</span></td><td>90%</td><td>Скрейп Meta Ad Library, NLP-анализ creatives</td><td>Интерпретация 1 ч/кв</td><td><span class="p1">P1</span></td></tr>
+            <tr><td>6</td><td>Аудит профиля REjuve (точка A)</td><td><span class="hybrid">HYBRID</span></td><td>70%</td><td>Сбор метрик, engagement analysis, benchmarks</td><td>Strategic позиционные решения</td><td><span class="p0">P0</span></td></tr>
+            <tr><td>7</td><td>Анализ скриптов продаж</td><td><span class="hybrid">HYBRID</span></td><td>60%</td><td>Анализ transcripts, выявление patterns, рекомендации</td><td>Конкурентная переписка = mystery shopping</td><td><span class="p1">P1</span></td></tr>
+            <tr><td>8</td><td>Разработка контент-плана и рубрикатора</td><td><span class="auto">AUTO</span></td><td>85%</td><td>Pillar strategy, темы, angles, calendar на квартал</td><td>Quarterly approval founder (30 мин)</td><td><span class="p0">P0</span></td></tr>
+            <tr><td>9</td><td>Упаковка профиля (шапка, хайлайтс, хештеги)</td><td><span class="hybrid">HYBRID</span></td><td>70%</td><td>3 варианта bio + highlights + hashtag pools</td><td>Brand final call — founder</td><td><span class="p0">P0</span></td></tr>
+            <tr><td>10</td><td>Анализ сайта (маркетинг + навигация)</td><td><span class="hybrid">HYBRID</span></td><td>75%</td><td>Автоматический аудит: copy, CTA, SEO, speed</td><td>UX decisions — human</td><td><span class="p1">P1</span></td></tr>
+            <tr><td>11</td><td>Email sequences, lead magnets</td><td><span class="auto">AUTO</span></td><td>85%</td><td>Email sequences, dm-автоматизация (GDPR-safe)</td><td>Templates approval раз</td><td><span class="p1">P1</span></td></tr>
+            <tr><td>12</td><td>Позиционирование и SWOT</td><td><span class="hybrid">HYBRID</span></td><td>60%</td><td>Матрица по данным A1/B1/C1</td><td>Стратегические выводы — founder</td><td><span class="p0">P0</span></td></tr>
+            <tr><td>13</td><td>Анализ спроса (keywords DE/EN/RU)</td><td><span class="auto">AUTO</span></td><td>95%</td><td>Полный автомат: volume, seasonality, 3 языка</td><td>—</td><td><span class="p0">P0</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Section B: Monthly -->
+    <div class="dt-section">
+      <div class="dt-section-header" onclick="toggleSection(this)">
+        <div>
+          <span class="dt-section-title">Часть 2 — Ежемесячное ведение (ELPODIUM)</span>
+          <span class="dt-section-meta" style="margin-left:10px">21 элемент</span>
+        </div>
+        <span class="dt-chevron">›</span>
+      </div>
+      <div class="dt-section-body">
+        <table class="dt">
+          <thead><tr><th>#</th><th>Элемент</th><th>Статус</th><th>Auto%</th><th>Что делает агент</th><th>Что требует человека</th><th>P</th></tr></thead>
+          <tbody>
+            <tr><td colspan="7" style="background:var(--sf);font-size:11px;font-weight:700;color:var(--ad);padding:6px 10px">2A. Контент-производство</td></tr>
+            <tr><td>14</td><td>12–15 постов/мес (текст + визуал)</td><td><span class="hybrid">HYBRID</span></td><td>70%</td><td>Drafts EN/DE/RU, image gen, brand voice scoring</td><td>Medical review + DE native review weekly</td><td><span class="p0">P0</span></td></tr>
+            <tr><td>15</td><td>90–120 сторис/мес</td><td><span class="auto">AUTO</span></td><td>85%</td><td>Генерация + scheduling. Низкий compliance-risk</td><td>Batch-approval 30 мин/нед</td><td><span class="p0">P0</span></td></tr>
+            <tr><td>16</td><td>Reels: монтаж, выкладка, scripts</td><td><span class="hybrid">HYBRID</span></td><td>55%</td><td>Scripts, captions, hashtags</td><td>Физическая съёмка + финальный монтаж</td><td><span class="p1">P1</span></td></tr>
+            <tr><td>17</td><td>Карусели-посты (дизайн + текст)</td><td><span class="hybrid">HYBRID</span></td><td>80%</td><td>Layout templates + тексты. 10.15% engagement</td><td>Визуальный polish</td><td><span class="p0">P0</span></td></tr>
+            <tr><td>18</td><td>ТЗ для фото/видео съёмок</td><td><span class="auto">AUTO</span></td><td>95%</td><td>Полное ТЗ: списки кадров, props, свет</td><td>Сама съёмка — human</td><td><span class="p1">P1</span></td></tr>
+            <tr><td colspan="7" style="background:var(--sf);font-size:11px;font-weight:700;color:var(--ad);padding:6px 10px">2B. Таргет и дистрибуция</td></tr>
+            <tr><td>19</td><td>Настройка рекламного кабинета</td><td><span class="hybrid">HYBRID</span></td><td>50%</td><td>Структура campaigns, audiences, pixels</td><td>Первичный setup + verification</td><td><span class="p0">P0</span></td></tr>
+            <tr><td>20</td><td>Создание ЦА-групп, поиск связки</td><td><span class="auto">AUTO</span></td><td>80%</td><td>Audience iteration через Meta API, A/B</td><td>Approval новых гипотез раз/нед</td><td><span class="p1">P1</span></td></tr>
+            <tr><td>21</td><td>Создание офферов и креативов</td><td><span class="hybrid">HYBRID</span></td><td>70%</td><td>48+ variants, compliance-screened</td><td>Licensed practitioner review health-claims</td><td><span class="p0">P0</span></td></tr>
+            <tr><td>22</td><td>Тестирование форматов и плейсментов</td><td><span class="auto">AUTO</span></td><td>90%</td><td>Systematic A/B, budget rules</td><td>Weekly performance review</td><td><span class="p0">P0</span></td></tr>
+            <tr><td>23</td><td>Оптимизация, масштабирование</td><td><span class="auto">AUTO</span></td><td>85%</td><td>Auto-pause/scale по rules, creative fatigue detection</td><td>Strategic scaling раз/нед</td><td><span class="p0">P0</span></td></tr>
+            <tr><td>24</td><td>Appeal-процесс при Meta bans</td><td><span class="human">HUMAN</span></td><td>5%</td><td>Может подготовить текст appeal</td><td>Ручной процесс у Meta</td><td>—</td></tr>
+            <tr><td colspan="7" style="background:var(--sf);font-size:11px;font-weight:700;color:var(--ad);padding:6px 10px">2C. Email и дожимные механики</td></tr>
+            <tr><td>25</td><td>Email-маркетинг (4 рассылки/мес)</td><td><span class="auto">AUTO</span></td><td>85%</td><td>Сегментация, персонализация, subject A/B</td><td>Template approval первые 2 мес</td><td><span class="p0">P0</span></td></tr>
+            <tr><td>26</td><td>Welcome sequence, nurture, win-back</td><td><span class="auto">AUTO</span></td><td>85%</td><td>Full automation через SimplyBook webhook</td><td>Approval раз</td><td><span class="p0">P0</span></td></tr>
+            <tr><td>27</td><td>No-show rescue, reactivation</td><td><span class="auto">AUTO</span></td><td>90%</td><td>Trigger-based automation</td><td>—</td><td><span class="p0">P0</span></td></tr>
+            <tr><td>28</td><td>Приветственная рассылка новым подписчикам</td><td><span class="auto">AUTO</span></td><td>95%</td><td>Полный автомат</td><td>—</td><td><span class="p0">P0</span></td></tr>
+            <tr><td>29</td><td>Анализ скриптов продаж (регулярный)</td><td><span class="hybrid">HYBRID</span></td><td>60%</td><td>Анализ переписок, паттерны, рекомендации</td><td>Sales closing — human</td><td><span class="p1">P1</span></td></tr>
+            <tr><td colspan="7" style="background:var(--sf);font-size:11px;font-weight:700;color:var(--ad);padding:6px 10px">2D. Рост и активность / 2E. Отчётность</td></tr>
+            <tr><td>30</td><td>Ручной массфоловинг</td><td><span class="na">N/A</span></td><td>—</td><td>—</td><td colspan="2" style="color:var(--dn)"><strong>Нарушает ToS Instagram — не делать</strong></td></tr>
+            <tr><td>31</td><td>Подбор хэштегов и геотегов</td><td><span class="auto">AUTO</span></td><td>95%</td><td>Полный автомат</td><td>—</td><td><span class="p0">P0</span></td></tr>
+            <tr><td>32</td><td>Генерация идей для активности</td><td><span class="auto">AUTO</span></td><td>90%</td><td>Опросы, challenges, UGC triggers</td><td>Approval batch раз/нед</td><td><span class="p0">P0</span></td></tr>
+            <tr><td>33</td><td>Еженедельная отчётность</td><td><span class="auto">AUTO</span></td><td>100%</td><td>Dashboard + alerts + anomaly detection</td><td>—</td><td><span class="p0">P0</span></td></tr>
+            <tr><td>34</td><td>Ежемесячная отчётность</td><td><span class="auto">AUTO</span></td><td>95%</td><td>P&L маркетинга, cohort analysis, MoM</td><td>Interpretation раз/мес</td><td><span class="p0">P0</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Section C: Additions -->
+    <div class="dt-section">
+      <div class="dt-section-header" onclick="toggleSection(this)">
+        <div>
+          <span class="dt-section-title">Часть 3 — Что не в ELPODIUM, но критично для REjuve</span>
+          <span class="dt-section-meta" style="margin-left:10px">8 элементов · инфраструктурные блокеры</span>
+        </div>
+        <span class="dt-chevron">›</span>
+      </div>
+      <div class="dt-section-body">
+        <table class="dt">
+          <thead><tr><th>#</th><th>Элемент</th><th>Статус</th><th>Auto%</th><th>Почему критично</th><th>P</th></tr></thead>
+          <tbody>
+            <tr><td>35</td><td>Attribution plumbing (UTM → webhook → BigQuery)</td><td><span class="auto">AUTO</span></td><td>90%</td><td>Фундамент. Option R pricing не работает без него</td><td><span class="p0">P0</span></td></tr>
+            <tr><td>36</td><td>Compliance screener (HMG/UWG/LIV Anhang 14)</td><td><span class="hybrid">HYBRID</span></td><td>45%</td><td>Блокирует весь public content без licensed review</td><td><span class="p0">P0</span></td></tr>
+            <tr><td>37</td><td>Licensed practitioner review workflow</td><td><span class="human">HUMAN</span></td><td>0%</td><td>Требуется контракт. Юридически обязательно</td><td><span class="p0">P0</span></td></tr>
+            <tr><td>38</td><td>Brand voice library (30–50 эталонов)</td><td><span class="hybrid">HYBRID</span></td><td>50%</td><td>Foundational для всего AI-контента. Без этого — generic wellness</td><td><span class="p0">P0 one-off</span></td></tr>
+            <tr><td>39</td><td>Мультиязычная consistency check (EN/DE/RU)</td><td><span class="auto">AUTO</span></td><td>85%</td><td>Zug = 143 национальности, multi-language presence</td><td><span class="p1">P1</span></td></tr>
+            <tr><td>40</td><td>Swiss legal sign-off compliance library</td><td><span class="human">HUMAN</span></td><td>0%</td><td>€1.5–3k одноразово. Блокер без него</td><td><span class="p0">P0</span></td></tr>
+            <tr><td>41</td><td>Lead scoring + routing</td><td><span class="auto">AUTO</span></td><td>85%</td><td>Нужен volume of leads (Wave 3)</td><td><span class="p1">P1</span></td></tr>
+            <tr><td>42</td><td>No-show detection + rescue автоматизация</td><td><span class="auto">AUTO</span></td><td>90%</td><td>Критично для membership-модели (LTV recovery)</td><td><span class="p0">P0</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Section D: Channels -->
+    <div class="dt-section">
+      <div class="dt-section-header" onclick="toggleSection(this)">
+        <div>
+          <span class="dt-section-title">Часть 4 — Новые каналы (не у ELPODIUM)</span>
+          <span class="dt-section-meta" style="margin-left:10px">15 элементов · multi-channel expansion</span>
+        </div>
+        <span class="dt-chevron">›</span>
+      </div>
+      <div class="dt-section-body">
+        <table class="dt">
+          <thead><tr><th>#</th><th>Канал</th><th>Статус</th><th>Auto%</th><th>Потенциал</th><th>P</th></tr></thead>
+          <tbody>
+            <tr><td>43</td><td><strong>WhatsApp Business</strong> (broadcast + 1-1)</td><td><span class="auto">AUTO</span></td><td>85%</td><td>98% open rate, 45–60% CTR в DACH</td><td><span class="p0">P0</span></td></tr>
+            <tr><td>44</td><td><strong>LinkedIn content + outreach (B2B2C)</strong></td><td><span class="hybrid">HYBRID</span></td><td>75%</td><td>Zug commodity hub: 1 deal = 5–20 individual clients</td><td><span class="p1">P1</span></td></tr>
+            <tr><td>45</td><td><strong>Google Ads — local intent</strong></td><td><span class="auto">AUTO</span></td><td>90%</td><td>Low CPC, high intent. 6–10 clients/мес</td><td><span class="p0">P0</span></td></tr>
+            <tr><td>46</td><td><strong>Google Business Profile + local SEO</strong></td><td><span class="auto">AUTO</span></td><td>80%</td><td>65–77% пациентов ищут онлайн. 9–16 clients/мес</td><td><span class="p0">P0</span></td></tr>
+            <tr><td>47</td><td><strong>Email marketing (post-visit, nurture)</strong></td><td><span class="auto">AUTO</span></td><td>90%</td><td>47.81% open rate wellness сектор</td><td><span class="p0">P0</span></td></tr>
+            <tr><td>48</td><td>Newsletter / Substack long-form</td><td><span class="hybrid">HYBRID</span></td><td>60%</td><td>Thought leadership + SEO authority</td><td><span class="p1">P1</span></td></tr>
+            <tr><td>49</td><td>Direct mail Zug premium postcodes</td><td><span class="hybrid">HYBRID</span></td><td>70%</td><td>161% ROI, 91% open rate. 6300/6301/6302</td><td><span class="p1">P1</span></td></tr>
+            <tr><td>50</td><td><strong>Webinars / masterclasses</strong> (monthly)</td><td><span class="hybrid">HYBRID</span></td><td>65%</td><td>CPL healthcare ~$32, 56% conversion после вебинара</td><td><span class="p0">P0</span></td></tr>
+            <tr><td>51</td><td>Podcast guesting (DACH health podcasts)</td><td><span class="hybrid">HYBRID</span></td><td>70%</td><td>Authority building, earned reach</td><td><span class="p1">P1</span></td></tr>
+            <tr><td>52</td><td>Telegram RU channel + bot</td><td><span class="auto">AUTO</span></td><td>85%</td><td>Post-Soviet Zug community (немцы + русскоязычные)</td><td><span class="p1">P1</span></td></tr>
+            <tr><td>53</td><td>Micro-influencers (10–50k) sourcing</td><td><span class="hybrid">HYBRID</span></td><td>70%</td><td>3x ROI vs macro-influencers</td><td><span class="p1">P1</span></td></tr>
+            <tr><td>54</td><td><strong>Corporate wellness B2B outreach</strong></td><td><span class="hybrid">HYBRID</span></td><td>60%</td><td>Glencore = warm door. 1 corporate deal = 5–20 clients</td><td><span class="p0">P0</span></td></tr>
+            <tr><td>55</td><td>Review-harvester (GMB, Trustpilot)</td><td><span class="auto">AUTO</span></td><td>90%</td><td>Social proof. Post-visit triggers compliance-safe</td><td><span class="p1">P1</span></td></tr>
+            <tr><td>56</td><td>Event-scout (DACH longevity)</td><td><span class="auto">AUTO</span></td><td>95%</td><td>Biohacking Days, Life Summit Berlin, Gstaad conf</td><td><span class="p2">P2</span></td></tr>
+            <tr><td>57</td><td><strong>Referral programme</strong></td><td><span class="hybrid">HYBRID</span></td><td>75%</td><td>Word-of-mouth = primary acquisition в expat community</td><td><span class="p0">P0</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Section E: Evals -->
+    <div class="dt-section">
+      <div class="dt-section-header" onclick="toggleSection(this)">
+        <div>
+          <span class="dt-section-title">Часть 5 — Evals + Feedback Loop + HITL (нет у ELPODIUM)</span>
+          <span class="dt-section-meta" style="margin-left:10px">13 элементов · learning system</span>
+        </div>
+        <span class="dt-chevron">›</span>
+      </div>
+      <div class="dt-section-body">
+        <table class="dt">
+          <thead><tr><th>#</th><th>Элемент</th><th>Статус</th><th>Auto%</th><th>Назначение</th><th>P</th></tr></thead>
+          <tbody>
+            <tr><td>58</td><td>Brand voice scorer (pre-publish eval)</td><td><span class="auto">AUTO</span></td><td>90%</td><td>Scoring каждого artifact по similarity к эталонам</td><td><span class="p0">P0</span></td></tr>
+            <tr><td>59</td><td>Compliance screener (pre-publish gate)</td><td><span class="hybrid">HYBRID</span></td><td>50%</td><td>Keyword/pattern match HMG/Anhang 14/Meta policy</td><td><span class="p0">P0</span></td></tr>
+            <tr><td>60</td><td>Factuality auditor (health claims)</td><td><span class="hybrid">HYBRID</span></td><td>60%</td><td>Citation check + hallucination detection</td><td><span class="p0">P0</span></td></tr>
+            <tr><td>61</td><td>Post-publish performance tracker</td><td><span class="auto">AUTO</span></td><td>95%</td><td>Engagement/CTR/conversion через 48h/7d/14d</td><td><span class="p0">P0</span></td></tr>
+            <tr><td>62</td><td>Feedback loop: prompt updater</td><td><span class="hybrid">HYBRID</span></td><td>70%</td><td>Детектирует паттерны → предлагает обновления промптов</td><td><span class="p1">P1</span></td></tr>
+            <tr><td>63</td><td>Feedback loop: brand corpus updater</td><td><span class="hybrid">HYBRID</span></td><td>70%</td><td>Идентифицирует high-performers → golden set</td><td><span class="p1">P1</span></td></tr>
+            <tr><td>64</td><td>Metric-driven alert system (daily)</td><td><span class="auto">AUTO</span></td><td>95%</td><td>CAC/MER/budget/no-show anomaly detection</td><td><span class="p0">P0</span></td></tr>
+            <tr><td>65</td><td>Weekly metric reviews (scheduled HITL)</td><td><span class="hybrid">HYBRID</span></td><td>60%</td><td>Авто-отчёт + рекомендации → human решение</td><td><span class="p0">P0</span></td></tr>
+            <tr><td>66</td><td>Monthly strategic HITL review</td><td><span class="hybrid">HYBRID</span></td><td>40%</td><td>Channel mix + budget reallocation proposal</td><td><span class="p1">P1</span></td></tr>
+            <tr><td>67</td><td>A/B test framework + statistical gates</td><td><span class="auto">AUTO</span></td><td>85%</td><td>Experiments orchestration, significance testing</td><td><span class="p1">P1</span></td></tr>
+            <tr><td>68</td><td>Learning store (vector DB)</td><td><span class="auto">AUTO</span></td><td>100%</td><td>Embeddings всех artifacts + метрик, RAG retrieval</td><td><span class="p1">P1</span></td></tr>
+            <tr><td>69</td><td>Golden datasets maintenance</td><td><span class="hybrid">HYBRID</span></td><td>50%</td><td>Suggests golden set updates из high/low performers</td><td><span class="p2">P2</span></td></tr>
+            <tr><td>70</td><td>Observability dashboard (Langfuse)</td><td><span class="auto">AUTO</span></td><td>95%</td><td>All agent traces, full-stack ops visibility</td><td><span class="p0">P0</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== TAB 4: ВОПРОСЫ ===== -->
+<div id="questions" class="page">
+  <div class="ph">
+    <h1>Вопросы к клиенту</h1>
+    <span class="ph-meta">Tier 1 (7) · Tier 2 (10) · Tier 3 (7) · итого 24 вопроса</span>
+  </div>
+
+  <div class="section">
+    <div class="tier-header tier1" style="margin-bottom:12px">
+      <span class="tier-num t1n">Tier 1</span>
+      <div>
+        <div class="tier-label" style="color:var(--dn)">Блокирующие — для первой встречи</div>
+        <div class="tier-desc">7 вопросов · без ответов невозможно финализировать модель сотрудничества и pricing</div>
+      </div>
+    </div>
+    <table class="q-table q1">
+      <thead><tr><th>#</th><th>Вопрос</th><th>Что блокирует</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>T1.1</td>
+          <td><strong>Revenue mix по tiers Q1 2026</strong> — какой % от single / pack / program / Bronze / Gold / Platinum membership?</td>
+          <td><span class="blocker">LTV calibration</span> · Pricing-модель Option R</td>
+        </tr>
+        <tr>
+          <td>T1.2</td>
+          <td><strong>Timeline 6k → 20k CHF</strong> — за 6 месяцев / 12 месяцев / 18 месяцев?</td>
+          <td><span class="blocker">Growth plan</span> · Budget phasing по волнам</td>
+        </tr>
+        <tr>
+          <td>T1.3</td>
+          <td><strong>Budget reality</strong> — сколько клиент реально готов выделять СЕЙЧАС (при ~6k revenue)? Ориентир: 10–20% от revenue = CHF 600–1 200/мес</td>
+          <td><span class="blocker">Feasibility всей модели</span></td>
+        </tr>
+        <tr>
+          <td>T1.4</td>
+          <td><strong>Licensed practitioner</strong> — есть ли действующий контракт с врачом для medical review? Если нет — готов ли клиент его искать и заключить?</td>
+          <td><span class="blocker">Compliance layer</span> · Без этого B3/B4 Wave 2 заблокированы</td>
+        </tr>
+        <tr>
+          <td>T1.5</td>
+          <td><strong>In-house маркетинг-ресурс</strong> — есть ли у founder'а 5–15 ч/нед на brand voice, sales closing, стратегические решения? Или нужен наёмный маркетолог?</td>
+          <td><span class="blocker">Ответственность Вариант A/B/C</span></td>
+        </tr>
+        <tr>
+          <td>T1.6</td>
+          <td><strong>External consultants</strong> — готов ли клиент на дополнительные €1–3k/мес за freelance специалистов (DE copywriter, performance marketer, licensed medical)?</td>
+          <td><span class="blocker">Full economics</span> · Клиент должен понимать total cost</td>
+        </tr>
+        <tr>
+          <td>T1.7</td>
+          <td><strong>Swiss lawyer</strong> — есть ли контакт адвоката, специализирующегося в Werbung im Gesundheitswesen? Если нет — нужна помощь с поиском?</td>
+          <td><span class="blocker">One-off compliance setup</span> · €1.5–3k</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="section">
+    <div class="tier-header tier2" style="margin-bottom:12px">
+      <span class="tier-num t2n">Tier 2</span>
+      <div>
+        <div class="tier-label" style="color:var(--bl)">Для контракта — перед подписанием</div>
+        <div class="tier-desc">10 вопросов · не блокируют первое обсуждение, но нужны до финализации контракта</div>
+      </div>
+    </div>
+    <table class="q-table q2">
+      <thead><tr><th>#</th><th>Вопрос</th><th>Зачем нужно</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>T2.1</td>
+          <td><strong>Average membership tenure</strong> Bronze / Gold / Platinum — сколько месяцев в среднем клиент остаётся?</td>
+          <td><span class="blocker-bl">LTV per-client rates</span></td>
+        </tr>
+        <tr>
+          <td>T2.2</td>
+          <td><strong>Upgrade funnel</strong> — какой % конвертируется из single-session → pack → program → membership?</td>
+          <td><span class="blocker-bl">Attribution воронка</span></td>
+        </tr>
+        <tr>
+          <td>T2.3</td>
+          <td><strong>Trial «Try 2 for 1»</strong> — какой % клиентов возвращается после trial-акции?</td>
+          <td><span class="blocker-bl">Health acquisition metric</span></td>
+        </tr>
+        <tr>
+          <td>T2.4</td>
+          <td><strong>MoM revenue + new paying clients</strong> за Q1 2026 (январь–март) — цифры по месяцам</td>
+          <td><span class="blocker-bl">Baseline для attribution</span></td>
+        </tr>
+        <tr>
+          <td>T2.5</td>
+          <td><strong>Ребрендинг REjuve</strong> — когда go-live нового названия и визуала везде (сайт, соцсети, вывеска)?</td>
+          <td><span class="blocker-bl">Content pipeline timing</span></td>
+        </tr>
+        <tr>
+          <td>T2.6</td>
+          <td><strong>Brand corpus</strong> — есть ли уже 30–50 эталонных текстов в нужном tone-of-voice? Или нужно создавать с нуля?</td>
+          <td><span class="blocker-bl">Phase 0 timeline</span> · Foundational для AI-контента</td>
+        </tr>
+        <tr>
+          <td>T2.7</td>
+          <td><strong>Supplement sales</strong> — продаёт ли REjuve сейчас добавки? Какие claims используются в описаниях и рекламе?</td>
+          <td><span class="blocker-bl">LIV Anhang 14 compliance scope</span></td>
+        </tr>
+        <tr>
+          <td>T2.8</td>
+          <td><strong>IV therapy roadmap</strong> — планируется ли добавить внутривенную терапию? В какие сроки?</td>
+          <td><span class="blocker-bl">Требует MD + Meldung → compliance scope меняется</span></td>
+        </tr>
+        <tr>
+          <td>T2.9</td>
+          <td><strong>Corporate wellness pipeline</strong> — помимо Glencore, какие другие корпоративные контакты уже есть? Есть ли открытые переговоры?</td>
+          <td><span class="blocker-bl">B2B priority Wave 1/2</span></td>
+        </tr>
+        <tr>
+          <td>T2.10</td>
+          <td><strong>Языковой приоритет каналов</strong> — какой канал на каком языке работает лучше сейчас? Есть ли ощущение какой язык предпочитает текущая аудитория?</td>
+          <td><span class="blocker-bl">Content localization mix</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="section">
+    <div class="tier-header tier3" style="margin-bottom:12px">
+      <span class="tier-num t3n">Tier 3</span>
+      <div>
+        <div class="tier-label" style="color:var(--gr)">Tactical / Discovery phase</div>
+        <div class="tier-desc">7 вопросов · собираются в Phase 0 (неделя 1 onboarding) · не блокируют решение о сотрудничестве</div>
+      </div>
+    </div>
+    <table class="q-table q3">
+      <thead><tr><th>#</th><th>Вопрос</th><th>Формат / цель</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>T3.1</td>
+          <td><strong>SimplyBook.me tier</strong> — какой тарифный план (Premium+ / Enterprise)? Есть ли доступ к webhooks и API?</td>
+          <td><span class="blocker-gr">Access check</span> · Attribution plumbing #35</td>
+        </tr>
+        <tr>
+          <td>T3.2</td>
+          <td><strong>Meta Business Manager</strong> — один основной аккаунт или есть backup? В какую категорию отнесён Instagram (Health/Wellness или другая)?</td>
+          <td><span class="blocker-gr">Config audit</span> · Meta policy compliance</td>
+        </tr>
+        <tr>
+          <td>T3.3</td>
+          <td><strong>Существующие ads accounts / pixels</strong> — что сейчас подключено? Facebook Pixel, Conversions API, Google Tag?</td>
+          <td><span class="blocker-gr">Tech inventory</span></td>
+        </tr>
+        <tr>
+          <td>T3.4</td>
+          <td><strong>WhatsApp Business</strong> — уже используется для коммуникации с клиентами? Есть ли Business-аккаунт (не личный)?</td>
+          <td><span class="blocker-gr">Setup scope</span></td>
+        </tr>
+        <tr>
+          <td>T3.5</td>
+          <td><strong>Google Business Profile</strong> — настроен ли? Сколько отзывов? Какой рейтинг? Верифицирован ли владелец?</td>
+          <td><span class="blocker-gr">GMB baseline</span></td>
+        </tr>
+        <tr>
+          <td>T3.6</td>
+          <td><strong>Expat community partnerships</strong> — есть ли текущие партнёрства или контакты: AWC Zürich, IAmExpat, Glocals, Zug International Women's Club?</td>
+          <td><span class="blocker-gr">Partnership inventory</span></td>
+        </tr>
+        <tr>
+          <td>T3.7</td>
+          <td><strong>Русскоязычная Zug community</strong> — насколько активна? Есть ли уже клиенты из этой аудитории? Контакты в community?</td>
+          <td><span class="blocker-gr">Telegram RU scope</span></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="card" style="margin-top:20px;font-size:12px">
+      <h3 style="margin-bottom:10px;font-size:14px">Рекомендуемый порядок первой встречи</h3>
+      <div class="g3">
+        <div>
+          <div style="font-weight:700;color:var(--dn);margin-bottom:6px;font-size:12px">1. Открыть (5 мин)</div>
+          <div style="color:var(--mu);line-height:1.8">Подтвердить понимание цели: 6k → 20k CHF, Option R pricing, 3-волновой подход</div>
+        </div>
+        <div>
+          <div style="font-weight:700;color:var(--ad);margin-bottom:6px;font-size:12px">2. Tier 1 вопросы (25 мин)</div>
+          <div style="color:var(--mu);line-height:1.8">T1.1 → T1.7. Без ответов на эти 7 вопросов не закрываем встречу</div>
+        </div>
+        <div>
+          <div style="font-weight:700;color:var(--bl);margin-bottom:6px;font-size:12px">3. Tier 2 — по готовности (10 мин)</div>
+          <div style="color:var(--mu);line-height:1.8">T2.4, T2.5, T2.6 — если есть время. Остальные — до подписания контракта</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function switchTab(btn, name) {
+  document.querySelectorAll('.tab').forEach(function(t){ t.classList.remove('active'); });
+  document.querySelectorAll('.page').forEach(function(p){ p.classList.remove('active'); });
+  btn.classList.add('active');
+  document.getElementById(name).classList.add('active');
+}
+
+function toggleSection(header) {
+  var body = header.nextElementSibling;
+  var chevron = header.querySelector('.dt-chevron');
+  body.classList.toggle('open');
+  chevron.classList.toggle('open');
+}
+</script>
+</body>
+</html>
