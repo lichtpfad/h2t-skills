@@ -21,6 +21,7 @@ from renderer.field_mapper import (
     FieldMappingError,
     map_block_fields,
     render_cards,
+    render_comparison_cards,
     render_flow_steps,
     render_table_head,
     render_table_body,
@@ -274,6 +275,7 @@ def test_allowed_helpers_set_is_explicit():
         "render_flow_steps",
         "render_table_head",
         "render_table_body",
+        "render_comparison_cards",
     })
 
 
@@ -492,3 +494,150 @@ def test_empty_field_map_produces_empty_dict():
     mapping = _mapping({})
     out = map_block_fields(block, mapping)
     assert out == {}
+
+
+# ---------------------------------------------------------------------------
+# render_comparison_cards — mobile representation of comparison-table
+# ---------------------------------------------------------------------------
+# Pure unit tests for the helper. No profile, no skin, no recipe, no
+# CSS dependency — synthetic columns/rows only. Profile-side wiring
+# (skin field_map line + .bt-card CSS) lives in the consuming profile,
+# not in this hardening PR.
+
+_CMP_COLS = [
+    {"key": "aspect", "label": "Aspect"},
+    {"key": "legacy", "label": "Legacy"},
+    {"key": "semantic", "label": "Semantic"},
+]
+
+
+def _cmp_row(label, values, tone=None):
+    r: dict = {"label": label, "values": values}
+    if tone is not None:
+        r["tone"] = tone
+    return r
+
+
+def test_render_comparison_cards_in_allowed_helpers():
+    """Allowlist closed-set check — already covered by
+    `test_allowed_helpers_set_is_explicit` above; this is the
+    helper-specific anchor for grep."""
+    assert "render_comparison_cards" in ALLOWED_HELPERS
+
+
+def test_render_comparison_cards_callable():
+    assert callable(render_comparison_cards)
+
+
+def test_render_comparison_cards_emits_one_card_per_row():
+    rows = [
+        _cmp_row("Authoring", {"legacy": "Components", "semantic": "Roles"}),
+        _cmp_row("Portability", {"legacy": "Locked", "semantic": "Re-skin"}),
+    ]
+    out = render_comparison_cards(rows, _CMP_COLS)
+    assert out.count('class="bt-card"') == 2
+
+
+def test_render_comparison_cards_label_lands_in_h3():
+    rows = [_cmp_row("Portability", {"legacy": "Locked", "semantic": "Re-skin"})]
+    out = render_comparison_cards(rows, _CMP_COLS)
+    assert "<h3>Portability</h3>" in out
+
+
+def test_render_comparison_cards_dt_dd_for_non_label_columns():
+    rows = [_cmp_row("Portability", {"legacy": "Locked", "semantic": "Re-skin"})]
+    out = render_comparison_cards(rows, _CMP_COLS)
+    assert "<dt>Legacy</dt><dd>Locked</dd>" in out
+    assert "<dt>Semantic</dt><dd>Re-skin</dd>" in out
+
+
+def test_render_comparison_cards_first_column_not_repeated():
+    """First column is the label cell — must not appear as a dt/dd
+    pair, otherwise mobile cards would echo the headline twice."""
+    rows = [_cmp_row("Portability", {"legacy": "Locked", "semantic": "Re-skin"})]
+    out = render_comparison_cards(rows, _CMP_COLS)
+    assert "<dt>Aspect</dt>" not in out
+
+
+def test_render_comparison_cards_dl_wraps_pairs():
+    rows = [_cmp_row("Portability", {"legacy": "Locked", "semantic": "Re-skin"})]
+    out = render_comparison_cards(rows, _CMP_COLS)
+    assert "<dl>" in out and "</dl>" in out
+
+
+def test_render_comparison_cards_accent_tone_marks_rejuve_class():
+    """`tone: accent` parallels render_table_body's tr.rejuve. A
+    profile that wants the accent style declares
+    `.bt-card.rejuve { … }`; the helper itself is profile-agnostic."""
+    rows = [
+        _cmp_row("Plain", {"legacy": "x", "semantic": "y"}),
+        _cmp_row("Highlighted", {"legacy": "x", "semantic": "y"}, tone="accent"),
+    ]
+    out = render_comparison_cards(rows, _CMP_COLS)
+    assert 'class="bt-card rejuve"' in out
+    assert out.count('class="bt-card"') == 1  # plain row stays plain
+
+
+def test_render_comparison_cards_unknown_tone_is_plain():
+    rows = [_cmp_row("Mystery", {"legacy": "x", "semantic": "y"}, tone="weird")]
+    out = render_comparison_cards(rows, _CMP_COLS)
+    assert 'class="bt-card"' in out
+    assert "rejuve" not in out
+
+
+def test_render_comparison_cards_missing_value_is_empty_dd():
+    """Same convention as render_table_body."""
+    rows = [_cmp_row("Partial", {"legacy": "Yes"})]
+    out = render_comparison_cards(rows, _CMP_COLS)
+    assert "<dt>Legacy</dt><dd>Yes</dd>" in out
+    assert "<dt>Semantic</dt><dd></dd>" in out
+
+
+def test_render_comparison_cards_empty_rows_yields_empty_string():
+    assert render_comparison_cards([], _CMP_COLS) == ""
+
+
+def test_render_comparison_cards_html_escapes_text():
+    rows = [_cmp_row("<script>", {"legacy": "1 < 2", "semantic": "&"})]
+    out = render_comparison_cards(rows, _CMP_COLS)
+    assert "<script>" not in out
+    assert "&lt;script&gt;" in out
+    assert "1 &lt; 2" in out
+    assert ">&amp;<" in out
+
+
+def test_render_comparison_cards_string_columns_treated_as_labels():
+    """Mirrors render_table_head's fallback: a string column resolves
+    to its own label."""
+    rows = [_cmp_row("Row", {"x": "v"})]
+    cols = ["Aspect", "Detail"]
+    out = render_comparison_cards(rows, cols)
+    assert "<h3>Row</h3>" in out
+
+
+def test_render_comparison_cards_invocation_via_field_mapper():
+    """End-to-end through map_block_fields with a synthetic skin
+    mapping — proves the allowlist + registry wiring works without
+    needing any profile / skin file on disk."""
+    block = Block(
+        index=0,
+        type="comparison",
+        content={
+            "columns": [{"key": "a", "label": "A"}, {"key": "b", "label": "B"}],
+            "rows": [
+                {"label": "First", "values": {"b": "v"}},
+                {"label": "Second", "values": {"b": "w"}, "tone": "accent"},
+            ],
+        },
+    )
+    mapping = BlockMapping(
+        role="comparison",
+        component="comparison-table",
+        field_map={
+            "tbody_cards_html": "${render_comparison_cards(rows, columns)}",
+        },
+    )
+    out = map_block_fields(block, mapping)
+    cards_html = out["tbody_cards_html"]
+    assert "<h3>First</h3>" in cards_html
+    assert 'class="bt-card rejuve"' in cards_html

@@ -50,6 +50,7 @@ ALLOWED_HELPERS: frozenset[str] = frozenset({
     "render_flow_steps",
     "render_table_head",
     "render_table_body",
+    "render_comparison_cards",
 })
 
 
@@ -361,6 +362,74 @@ def render_table_body(rows: list[dict], columns: list[dict]) -> str:
     return "\n".join(pieces)
 
 
+def render_comparison_cards(rows: list[dict], columns: list[dict]) -> str:
+    """Mobile representation of `comparison-table`.
+
+    Mirrors `render_table_body` for input shape, but emits the
+    `.bt-card` HTML — the dual-representation contract from rhythm
+    spec §A.4 declares that a `comparison-table` block with
+    `mobile_representation: cards` should render stacked cards below
+    the table's mobile breakpoint instead of going invisible:
+
+        <div class="bt-card[ rejuve]">
+          <h3>{label}</h3>
+          <dl>
+            <dt>{col[1].label}</dt><dd>{values[col[1].key]}</dd>
+            <dt>{col[2].label}</dt><dd>{values[col[2].key]}</dd>
+            ...
+          </dl>
+        </div>
+
+    First column is treated as the label cell — it lands in the `<h3>`
+    and is NOT echoed as a `<dt>/<dd>` pair. Remaining columns become
+    one `<dt>/<dd>` pair each. Missing values render as empty `<dd>`,
+    matching `render_table_body`'s behaviour for the desktop tr.
+
+    `tone: accent` adds the `rejuve` class (same vocabulary as
+    `_TONE_TR_CLASS`), so a `.bt-card.rejuve` style applies in any
+    profile that defines one.
+    """
+    if not rows:
+        return ""
+    pieces: list[str] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        tone = row.get("tone", "default")
+        cls = "bt-card"
+        if tone in _TONE_TR_CLASS:
+            cls = f"bt-card {_TONE_TR_CLASS[tone]}"
+
+        label = row.get("label", "")
+        values = row.get("values", {}) if isinstance(row.get("values"), dict) else {}
+
+        dl_pairs: list[str] = []
+        for i, col in enumerate(columns):
+            if i == 0:
+                continue  # label cell goes into <h3> instead
+            if isinstance(col, dict):
+                col_label = str(col.get("label", col.get("key", "")))
+                col_key = col.get("key")
+            else:
+                col_label = str(col)
+                col_key = None
+            cell_value = ""
+            if col_key and col_key in values:
+                cell_value = str(values[col_key])
+            dl_pairs.append(
+                f"<dt>{html.escape(col_label)}</dt>"
+                f"<dd>{html.escape(cell_value)}</dd>"
+            )
+        dl = f"<dl>{''.join(dl_pairs)}</dl>" if dl_pairs else ""
+        pieces.append(
+            f'<div class="{cls}">'
+            f'<h3>{html.escape(str(label))}</h3>'
+            f'{dl}'
+            f'</div>'
+        )
+    return "\n".join(pieces)
+
+
 # Helper registry — keyed by name. Module-private; consumers go
 # through `map_block_fields` which validates against ALLOWED_HELPERS.
 _HELPERS: dict[str, Callable[..., Any]] = {
@@ -368,6 +437,7 @@ _HELPERS: dict[str, Callable[..., Any]] = {
     "render_flow_steps": render_flow_steps,
     "render_table_head": render_table_head,
     "render_table_body": render_table_body,
+    "render_comparison_cards": render_comparison_cards,
 }
 
 # Sanity check at module load: keys of _HELPERS must equal ALLOWED_HELPERS.
