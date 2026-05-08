@@ -1,0 +1,95 @@
+# h2t-editorial — landing skin (semantic v0).
+#
+# Maps the seven semantic roles supported by this profile to the
+# System B-Landing primitives migrated in #119 T6. Roles outside
+# this set are intentionally deferred (see `unsupported_in_v0:`
+# at the bottom).
+#
+# Architecture references:
+# - §4   Universal Landing Block Roles (17 total).
+# - §8   Skin schema.
+# - §13  step 4 mapping table.
+# - §A.4 (rhythm) dual-representation contract for tables.
+#
+# Hard guardrails (#119):
+# - `hero`  → page-header (compact editorial header), NOT R1 hero.
+# - `cta`   → editorial-cta (System B-Landing extension), NOT R1 cta.
+# - No role maps to a bare R1 generic component name.
+
+profile: h2t-editorial
+
+blocks:
+
+  hero:
+    component: page-header
+    field_map:
+      headline: headline
+      meta: meta
+    defaults:
+      meta: ""
+
+  proof:
+    component: stats
+    field_map:
+      stat1_n: stats[0].n
+      stat1_l: stats[0].l
+      stat2_n: stats[1].n
+      stat2_l: stats[1].l
+      stat3_n: stats[2].n
+      stat3_l: stats[2].l
+
+  features:
+    component: card-grid
+    field_map:
+      grid_class: grid_class
+      cards_html: ${render_cards(items)}
+    defaults:
+      grid_class: g3
+
+  process:
+    component: flow
+    field_map:
+      steps_html: ${render_flow_steps(steps)}
+
+  comparison:
+    component: comparison-table
+    mobile_representation: cards
+    field_map:
+      thead_html: ${render_table_head(columns)}
+      tbody_html: ${render_table_body(rows, columns)}
+
+  evidence:
+    component: section
+    field_map:
+      title: title
+      body: body
+
+  cta:
+    component: editorial-cta
+    field_map:
+      label: label
+      title: title
+      body: body
+      primary_label: primary_label
+      primary_href: primary_href
+      secondary_label: secondary_label
+      secondary_href: secondary_href
+    defaults:
+      secondary_label: ""
+      secondary_href: "#"
+
+# Architecture §4 universal roles intentionally NOT supported in
+# the editorial pilot. Each carries a one-line rationale so future
+# maintainers know what's deferred and why. Adding a role here
+# moves it into the supported `blocks:` mapping above.
+unsupported_in_v0:
+  nav: "single-purpose editorial landing has no nav primitive in v0"
+  problem: "rhythm spec D7 — folded into the hero lede rather than its own block"
+  solution: "rhythm spec D5(a) tight regime — the features block carries this role"
+  gallery: "image-bearing block deferred until asset pipeline lands"
+  video: "media-bearing block deferred until asset pipeline lands"
+  case_study: "narrative deferred — editorial pilot uses evidence + features instead"
+  testimonials: "social proof deferred — pilot relies on stats + evidence"
+  pricing: "editorial profile is non-transactional — no pricing surface"
+  faq: "rhythm spec D8 — pilot has no objection cluster"
+  footer: "closing role covered by the evidence block in editorial layout"
