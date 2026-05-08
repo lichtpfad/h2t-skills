@@ -1,0 +1,5 @@
+component: flow
+fields:
+  steps_html:
+    type: html
+    required: true

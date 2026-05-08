@@ -1,0 +1,128 @@
+/* System B-Landing — `.bt` brand-comparison table.
+ * Used by BOTH goldens: rejuve-appendix-competitive-report.html lines 84-89
+ * (deep / rejuve highlight rows) and rejuve-appendix-elpodium-decomposition.html
+ * lines 69-75 (wave-coded rows w1/w2/w3). Both row vocabularies are
+ * supported here so the primitive lifts the union of row coloring.
+ *
+ * Dual representation (rhythm spec §A.4 + #119 T6):
+ *   - desktop: `.bt` table renders; `.bt-cards` hidden.
+ *   - mobile (<480px): `.bt` hidden; `.bt-cards` renders one card per row.
+ * The recipe supplies both `tbody_html` (table rows) and
+ * `tbody_cards_html` (stacked cards). Cards is optional — a recipe that
+ * doesn't supply mobile cards still renders a usable desktop table; the
+ * mobile breakpoint just shows an empty container in that case. Future
+ * slices will add a field-mapping helper that derives cards from rows
+ * automatically. */
+
+.bt {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.bt th {
+  background: var(--sf);
+  border: 1px solid var(--bd);
+  padding: 8px 10px;
+  text-align: left;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ad);
+  white-space: nowrap;
+}
+
+.bt td {
+  border: 1px solid var(--bd);
+  padding: 8px 10px;
+  vertical-align: middle;
+}
+
+.bt tr:hover td {
+  background: #f0ede6;
+}
+
+/* competitive-report highlight rows (lines 88-89) */
+.bt tr.deep td {
+  background: #c9a96e14;
+}
+
+.bt tr.rejuve td {
+  background: #c9a96e30;
+  font-weight: 700;
+}
+
+/* elpodium-decomposition wave-coded rows (lines 73-75).
+ * --w3 alias resolves to --pu so the secondary's purple palette
+ * extension is reachable here. */
+.bt tr.w1 td {
+  border-left: 3px solid var(--w1);
+}
+
+.bt tr.w2 td {
+  border-left: 3px solid var(--w2);
+}
+
+.bt tr.w3 td {
+  border-left: 3px solid var(--w3);
+}
+
+/* ─── Mobile dual-representation ───────────────────────────────────
+ * Stacked cards. Each .bt-card mirrors one row of the desktop table:
+ * a header (first column / row label) followed by dl/dt/dd pairs for
+ * the remaining columns. Hidden on desktop; shown on mobile. */
+
+.bt-cards {
+  display: none;
+  margin-top: 8px;
+}
+
+.bt-card {
+  background: var(--sf);
+  border: 1px solid var(--bd);
+  border-radius: var(--r);
+  padding: 12px 14px;
+  margin-bottom: 8px;
+  font-size: 12px;
+}
+
+.bt-card h3 {
+  font-family: var(--serif);
+  font-size: 13px;
+  color: var(--ad);
+  margin: 0 0 6px;
+}
+
+.bt-card dl {
+  margin: 0;
+  display: grid;
+  grid-template-columns: minmax(80px, auto) 1fr;
+  gap: 4px 12px;
+}
+
+.bt-card dt {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--mu);
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+
+.bt-card dd {
+  margin: 0;
+  font-size: 12px;
+  color: var(--tx);
+}
+
+.bt-card.rejuve {
+  background: #c9a96e30;
+  font-weight: 700;
+}
+
+@media (max-width: 480px) {
+  .bt {
+    display: none;
+  }
+  .bt-cards {
+    display: block;
+  }
+}
