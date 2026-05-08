@@ -1,3 +1,28 @@
+---
+version: alpha
+name: h2t-default
+description: Clean, editorial Swiss-grid aesthetic — high contrast, geometric precision, generous whitespace. Suited for technical product landings and educational presentations.
+colors:
+  primary: "#1a1aff"
+  primary-hover: "#0000cc"
+  on-surface: "#0a0a0a"
+  on-surface-dim: "#6b7280"
+  surface: "#ffffff"
+  surface-low: "#f5f5f5"
+  border: "#e5e7eb"
+typography:
+  body:
+    fontFamily: system-ui
+  headline:
+    fontFamily: system-ui
+---
+
+<!-- Frontmatter conforms to the Stitch DESIGN.md open standard
+     (Apache 2.0, https://github.com/google-labs-code/design.md).
+     Single-palette profile — frontmatter is the canonical source.
+     Body sections below preserve the existing h2t-creative
+     conventions and coexist with the standard. -->
+
 # h2t-default
 
 ## Brand Intent

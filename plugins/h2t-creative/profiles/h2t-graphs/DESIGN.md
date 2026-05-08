@@ -1,3 +1,36 @@
+---
+version: alpha
+name: h2t-graphs
+description: Bold typographic hierarchy with mono labels. Data-rich product landing aesthetic from lichtpfad graphs landing page. Inter for headlines (700-800), JetBrains Mono for nav/labels/captions.
+colors:
+  primary: "#e94560"
+  on-surface: "#a0a0b8"
+  on-surface-hi: "#d0d0e0"
+  on-surface-dim: "#3a3a50"
+  surface: "#060609"
+  surface-low: "#0a0a10"
+  surface-card: "#0e0e16"
+  data-green: "#00ff88"
+  data-blue: "#4a9eff"
+  data-amber: "#ffb800"
+typography:
+  headline:
+    fontFamily: Inter
+    fontWeight: 800
+  body:
+    fontFamily: JetBrains Mono
+---
+
+<!-- Frontmatter conforms to the Stitch DESIGN.md open standard
+     (Apache 2.0, https://github.com/google-labs-code/design.md).
+     Carries the *default* (red) palette only; the blue and green
+     palettes live in palettes/{blue,green}.css and remain part of
+     the runtime CSS implementation layer beneath this spec. The
+     `--color-accent-glow` and `--color-border` rgba values stay in
+     CSS — Stitch Color type is hex SRGB only. The body sections
+     below preserve the existing R1 component contract and coexist
+     with the standard. -->
+
 # h2t-graphs
 
 ## Brand Intent
