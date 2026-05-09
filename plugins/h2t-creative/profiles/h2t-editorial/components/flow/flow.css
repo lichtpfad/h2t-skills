@@ -1,0 +1,50 @@
+/* System B-Landing — sequential flow with numbered steps (`.flow`).
+ * Lifted from rejuve-appendix-competitive-report.html lines 166-172. */
+
+.flow {
+  display: flex;
+  flex-direction: column;
+}
+
+.flow-step {
+  display: flex;
+  gap: 12px;
+  padding: 10px 0;
+}
+
+.flow-num {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--ac);
+  color: white;
+  font-size: 12px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.flow-body {
+  flex: 1;
+}
+
+.flow-title {
+  font-weight: 700;
+  font-size: 13px;
+  margin-bottom: 2px;
+}
+
+.flow-desc {
+  font-size: 12px;
+  color: var(--mu);
+}
+
+.flow-sep {
+  width: 2px;
+  height: 14px;
+  background: var(--bd);
+  margin-left: 13px;
+}

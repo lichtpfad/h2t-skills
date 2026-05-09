@@ -1,0 +1,20 @@
+component: stats
+fields:
+  stat1_n:
+    type: text
+    required: true
+  stat1_l:
+    type: text
+    required: true
+  stat2_n:
+    type: text
+    required: true
+  stat2_l:
+    type: text
+    required: true
+  stat3_n:
+    type: text
+    required: true
+  stat3_l:
+    type: text
+    required: true
