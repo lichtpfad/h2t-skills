@@ -169,15 +169,48 @@ The point is to close off a known wrong path so the human reviewer doesn't have 
 
 ## Format Options
 
-<!-- §7 fills this in -->
+The wireframe artefact may be expressed in any of these forms, alone or combined:
+
+- **Markdown document** with section headings matching the field list above. Preferred for git review.
+- **ASCII column diagrams** for desktop layout. Useful for showing column splits.
+- **Hand or low-fi tool sketch** (Excalidraw, Figma frame, paper photo) embedded by relative link from the markdown document.
+- **Annotated screenshot** of an existing approved page that this landing structurally inherits from, with deltas called out.
+
+The artefact MUST live in the repo at a stable path so the recipe author and reviewer can reference the same revision. Canonical path: `docs/wireframes/<YYYY-MM-DD>-<profile>-<page-slug>.md` and any embedded images alongside. The `docs/wireframes/` root is registered in `docs/architecture/h2t-creative/ROOT_GUIDE.md` § Canonical Architecture Docs (see Task 10 of the plan that produced this file).
+
+The artefact MUST NOT be a high-fidelity mockup, a full design comp, a production-ready CSS draft, or a screenshot of a competitor's site without deltas.
 
 ## Forbidden In A Wireframe
 
-<!-- §8 fills this in -->
+Items that DO NOT belong at the wireframe stage and that signal scope creep into recipe / skin / implementation:
+
+- **Production / final copy.** A representative draft headline, CTA label, table column labels, and one-line representative body per block IS allowed and recommended — abstract structure approves cleanly but breaks under real text, so a sample text load-bearing test belongs in the wireframe. Mark every such draft explicitly as `(non-final)` so a reader does not mistake it for locked copy. Final word-for-word copy is recipe stage.
+- **Specific hex colors / specific font sizes.** Profile `DESIGN.md` and tokens.css own that.
+- **Component implementation details** (HTML class names, manifest field names). Skin owns the role-to-component mapping.
+- **Pixel-perfect layouts.** This is intentionally low-fidelity. Aim for "structure and intent decided", not "design comp finished".
+- **One-off CSS overrides.** Implementation, not wireframe.
+- **JavaScript / interactive state machines.** Wireframe names the interactive primitive role and its fallback; the rest is implementation.
+
+A wireframe that violates these is rejected at review with a "scope creep — return to wireframe stage" verdict, not "approved with concerns".
 
 ## Approval Criteria
 
-<!-- §9 fills this in -->
+A wireframe is approved when ALL of the following hold. Each item is binary pass/fail.
+
+1. **Mode declared and in vocabulary** (one of `KNOWN_MODES`).
+2. **Block sequence is valid**: 5–8 entries; every entry in `KNOWN_BLOCK_TYPES`; first block after `nav` (or first overall) is `hero`; at least one CTA-bearing block.
+3. **Per-block intent stated** for every block — not just "show stats" but what the stats argue and to whom.
+4. **Per-block density classified** for every block.
+5. **Desktop layout sketch present** in any acceptable format, with content max-width and column model declared.
+6. **Mobile representation declared** for every multi-column desktop block.
+7. **Source classification stated** for every block.
+8. **Density budget within rules**: total 5–8; dense ≤ 2; dense never adjacent to dense.
+9. **Asset inventory present** with explicit Missing list (or empty).
+10. **Negative examples acknowledged** when project negative-evidence record contains a relevant failure mode.
+11. **Forbidden-content scan passes** — no production copy, no hex colors, no component implementation details. Representative `(non-final)` draft copy is allowed; production-locked copy is not.
+12. **Profile / style-target compatibility verified** against the profile's `DESIGN.md` Restrictions section.
+
+The reviewer signs off only when every item passes. Any failure returns the wireframe to the author with a numbered list of failed items. The reviewer never approves "with conditions to fix later" — fix first, approve after.
 
 ## Outputs After Approval
 
