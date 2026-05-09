@@ -283,3 +283,12 @@ A counter-example reconstructed from the #88 r2b attempt's `recipe-landing.yaml`
 The lesson: a primitive showcase is not a landing. The wireframe gate exists specifically to catch this before recipe authoring spends time on it.
 
 ## Cross-References
+
+- `docs/protocols/h2t-creative/WIREFRAME_GATE.md` — the generic gate this contract specialises.
+- `docs/protocols/h2t-creative/LANDING_WIREFRAME_REVIEW.md` — the review checklist a human reviewer runs against this contract.
+- `docs/architecture/h2t-creative/COMPOSITION_RULES.md` — Swiss grid, density, rhythm constraints the contract operationalises.
+- `docs/architecture/h2t-creative/CORE_SYSTEM.md` — the semantic layer vocabulary (`KNOWN_BLOCK_TYPES`, `KNOWN_MODES`) referenced by the contract.
+- `docs/architecture/h2t-creative/PRD.md` — workflow context (wireframe is step 4 of "Content To Representation").
+- `docs/architecture/h2t-creative/EXTENSION_PROTOCOL.md` — how to add new block roles or formats; new format-specific contracts (deck, report, …) follow this contract by analogy.
+- `docs/superpowers/references/stitch-design-md-spec-reference.md` — profile DESIGN.md format the wireframe must check compatibility against.
+- `docs/archive/h2t-creative/2026-05-07-r2b-editorial-landing-failed-attempt/` — concrete negative-evidence record cited in § Worked Examples.
