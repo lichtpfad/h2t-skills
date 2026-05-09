@@ -176,7 +176,7 @@ The wireframe artefact may be expressed in any of these forms, alone or combined
 - **Hand or low-fi tool sketch** (Excalidraw, Figma frame, paper photo) embedded by relative link from the markdown document.
 - **Annotated screenshot** of an existing approved page that this landing structurally inherits from, with deltas called out.
 
-The artefact MUST live in the repo at a stable path so the recipe author and reviewer can reference the same revision. Canonical path: `docs/wireframes/<YYYY-MM-DD>-<profile>-<page-slug>.md` and any embedded images alongside. The `docs/wireframes/` root is registered in `docs/architecture/h2t-creative/ROOT_GUIDE.md` § Canonical Architecture Docs (see Task 10 of the plan that produced this file).
+The artefact MUST live in the repo at a stable path so the recipe author and reviewer can reference the same revision. Canonical path: `docs/wireframes/<YYYY-MM-DD>-<profile>-<page-slug>.md` and any embedded images alongside. The `docs/wireframes/` root is registered in `docs/architecture/h2t-creative/ROOT_GUIDE.md` § Canonical Architecture Docs.
 
 The artefact MUST NOT be a high-fidelity mockup, a full design comp, a production-ready CSS draft, or a screenshot of a competitor's site without deltas.
 

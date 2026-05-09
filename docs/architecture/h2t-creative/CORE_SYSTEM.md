@@ -38,16 +38,27 @@ Components are not semantic intent by themselves. A `stats` component can serve 
 
 ### 4. Semantic Layer
 
-Semantic recipes use `blocks:` and declare intent:
+Semantic recipes use `blocks:` and declare intent. The canonical full vocabulary is encoded in `KNOWN_BLOCK_TYPES` (`plugins/h2t-creative/renderer/semantic_parser.py`):
 
+- `nav`
 - `hero`
 - `proof`
+- `problem`
+- `solution`
 - `features`
-- `comparison`
 - `process`
+- `comparison`
+- `gallery`
+- `video`
+- `case_study`
+- `testimonials`
+- `pricing`
+- `faq`
 - `evidence`
 - `cta`
-- plus future roles
+- `footer`
+
+The parser is the runtime source of truth; new roles require a code change there before they can appear in a recipe.
 
 The semantic layer maps roles to components through a skin file:
 
