@@ -50,6 +50,8 @@ Default landing constraints:
 - CTA must be visually distinct but not stylistically alien
 - Evidence should support the flow, not turn the page into an appendix
 
+The landing density rules above are operationalised by `docs/architecture/h2t-creative/LANDING_WIREFRAME_CONTRACT.md` § Density Budget. Wireframe approval enforces them before recipe authoring begins.
+
 Default deck constraints:
 
 - One primary idea per slide

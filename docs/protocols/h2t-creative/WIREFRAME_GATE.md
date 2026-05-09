@@ -43,6 +43,8 @@ It must include:
 - Required assets and missing assets
 - Explicit "not this" negative examples when relevant
 
+For landing pages specifically, the format-specialised shape of this artefact is defined in `docs/architecture/h2t-creative/LANDING_WIREFRAME_CONTRACT.md`. Reviewers run the checklist at `docs/protocols/h2t-creative/LANDING_WIREFRAME_REVIEW.md`. Sibling format-specific contracts (deck, report, carousel, interactive) follow the same pattern as they are added.
+
 ## Human Approval
 
 The human must approve the wireframe before recipe, CSS, component, or layout work begins.
