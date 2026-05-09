@@ -12,9 +12,10 @@ For any h2t-creative task:
 2. Read `docs/architecture/h2t-creative/PRD.md`.
 3. Read `docs/architecture/h2t-creative/CORE_SYSTEM.md`.
 4. Read the relevant protocol:
-   - Landing/deck/page work: `docs/protocols/h2t-creative/WIREFRAME_GATE.md`
-   - Visual review: `docs/protocols/h2t-creative/VISUAL_QA.md`
-   - New block/layout/format: `docs/architecture/h2t-creative/EXTENSION_PROTOCOL.md`
+   - Landing work: `docs/architecture/h2t-creative/LANDING_WIREFRAME_CONTRACT.md` (format-specific) plus `docs/protocols/h2t-creative/WIREFRAME_GATE.md` (generic) and `docs/protocols/h2t-creative/LANDING_WIREFRAME_REVIEW.md` (reviewer checklist).
+   - Deck / report / page work: `docs/protocols/h2t-creative/WIREFRAME_GATE.md` (format-specific contracts pending).
+   - Visual review: `docs/protocols/h2t-creative/VISUAL_QA.md`.
+   - New block/layout/format: `docs/architecture/h2t-creative/EXTENSION_PROTOCOL.md`.
 5. Read the profile `DESIGN.md` and source dossier for the affected profile.
 
 ## Canonical Architecture Docs
@@ -23,8 +24,11 @@ For any h2t-creative task:
 - `docs/architecture/h2t-creative/CORE_SYSTEM.md` — runtime, profiles, recipes, renderer, and evidence taxonomy.
 - `docs/architecture/h2t-creative/COMPOSITION_RULES.md` — Swiss grid, rhythm, density, and composition constraints.
 - `docs/architecture/h2t-creative/EXTENSION_PROTOCOL.md` — adding blocks, layouts, formats, and interactive primitives.
+- `docs/architecture/h2t-creative/LANDING_WIREFRAME_CONTRACT.md` — landing-specific wireframe artefact format. Required reading before any landing recipe is authored.
 - `docs/library/h2t-creative/INDEX.md` — library index stub for roles, components, formats, and governance.
+- `docs/protocols/h2t-creative/LANDING_WIREFRAME_REVIEW.md` — reviewer's pass/fail checklist for a landing wireframe.
 - `docs/superpowers/references/stitch-design-md-spec-reference.md` — EXTERNAL standard. Summary of the open-source Apache-2.0 Stitch DESIGN.md spec released by Google Labs (2026). Profile `DESIGN.md` files conform to it; not internal architecture.
+- `docs/wireframes/` — approved wireframe artefacts. One file per page at `<YYYY-MM-DD>-<profile>-<page-slug>.md`, with any embedded sketch images alongside. Living source for visual QA and recipe authoring.
 
 ## Evidence Taxonomy
 
