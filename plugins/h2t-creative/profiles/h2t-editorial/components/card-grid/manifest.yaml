@@ -1,0 +1,8 @@
+component: card-grid
+fields:
+  grid_class:
+    type: text
+    required: true
+  cards_html:
+    type: html
+    required: true
