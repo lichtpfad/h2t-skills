@@ -226,10 +226,60 @@ After approval, the implementation phase begins. Recipe edits, CSS edits, and co
 
 ## Worked Examples
 
-<!-- §11 fills this in -->
-
 ### Positive Example — Editorial Landing
 
+**Intent.** Publish a one-page argument explaining the editorial profile's positioning to a technical reader. Persuade the reader to follow the architecture spec.
+
+**Audience.** Engineers familiar with markdown-driven publishing tools.
+
+**Mode.** `editorial`.
+
+**Profile.** `h2t-editorial`.
+
+**Source dossier.** `target` for hero copy and CTA; `primitive source` for typography and section rhythm (rejuve appendix); `negative` for the failed #88 attempt to NOT repeat.
+
+**Block sequence.**
+
+1. `hero` (open) — headline + meta only
+2. `proof` (medium) — 3 stats: editorial profile facts
+3. `features` (medium) — 4 cards, what the profile gives the author
+4. `process` (medium) — 4 numbered steps from intent to publishable page
+5. `comparison` (dense) — legacy `sections:` vs semantic `blocks:` contrast
+6. `evidence` (open) — closing argument with two short paragraphs
+7. `cta` (open) — two link-style CTAs to architecture spec + recovery plan
+
+**Density budget.** 7 blocks, 1 dense (`comparison`). Dense block followed by open evidence — rhythm OK.
+
+**Desktop layout.** Content max-width 1100 px. Single column dominant; `proof` is 3-up; `features` is 3-up with one wrap; `comparison` is full-width table.
+
+**Mobile representation.** `proof` collapse-to-1col; `features` collapse-to-1col; `comparison` collapse-to-cards; everything else `stack`.
+
+**Asset inventory.** No images, no video. CTA hrefs are anchor links within the same site.
+
+**Negative examples.** Not the appendix-clone from `docs/archive/h2t-creative/2026-05-07-r2b-editorial-landing-failed-attempt/failed-candidates/system-b-modular/`.
+
+This wireframe passes all 12 approval criteria and is compatible with the primitives and landing skin merged in #128. (Note: #128 ships only primitives and the skin — no recipe. Authoring an actual recipe against this wireframe is a separate, post-merge slice.)
+
 ### Negative Example — Primitive Showcase (Why It Fails)
+
+A counter-example reconstructed from the #88 r2b attempt's `recipe-landing.yaml` (preserved at `docs/archive/h2t-creative/2026-05-07-r2b-editorial-landing-failed-attempt/recipe-landing.yaml`):
+
+**Intent.** *Implicit.* "Demonstrate the primitives we extracted from the rejuve appendix."
+
+**Mode.** Not declared.
+
+**Block sequence.** Twelve blocks: page-header, stats, comp-box, decomposition-table, prohibition-table, disc, mmap, meta-box, wave-block, tabs, tags, pos-grid. Effectively one block per primitive.
+
+**Per-block intent.** Each block's intent is "show this primitive". No block argues anything to anyone.
+
+**Density budget.** 12 blocks (above the 5–8 ceiling); 6 of them dense (above the ≤ 2 ceiling); dense blocks adjacent.
+
+**Mobile representation.** Not declared.
+
+**Source classification.** Every block is `primitive source`. Zero `target`. Zero original copy.
+
+**Why it fails review.** Approval criterion 1 (mode), 2 (block sequence size + first-block-hero rule), 3 (intent), 6 (mobile), 7 (source classification), and 8 (density budget) all fail. The renderer would build it, screenshots would render, every primitive would visually appear — and no reader could say what the page is for. The failure is composition, not implementation.
+
+The lesson: a primitive showcase is not a landing. The wireframe gate exists specifically to catch this before recipe authoring spends time on it.
 
 ## Cross-References
