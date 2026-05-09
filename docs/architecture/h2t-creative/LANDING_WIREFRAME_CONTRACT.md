@@ -39,27 +39,133 @@ Before drafting a wireframe, the author collects:
 
 ## Required Wireframe Artefact
 
-<!-- §6 fills this in -->
+The wireframe artefact is one document containing all of the following fields. Missing fields are a review failure. Empty fields are explicit `(none)` rather than absent.
 
 ### Mode Declaration
 
+State the mode from the `KNOWN_MODES` vocabulary. Pick one — the modes are mutually exclusive at this layer:
+
+| Mode | Primary intent | Typical sequence |
+|---|---|---|
+| `product` | Sell or explain a product | hero, proof, features, process, comparison, evidence, cta |
+| `service` | Persuade to engage a service | hero, proof, problem, solution, process, evidence, cta |
+| `editorial` | Publish a long-form argument or release | hero, proof, features (or evidence-cards), comparison, evidence, cta |
+| `report` | Surface findings of an analysis | hero (page-header), proof, evidence, comparison, cta-as-link |
+| `portfolio` | Showcase work or precedent | hero, gallery, case_study, evidence, cta |
+| `deck-companion` | Resource adjacent to a deck/talk | hero, proof, evidence, cta (typically download / signup) |
+
+The "Typical sequence" is a starting hint, not a constraint. Real wireframes deviate when intent demands.
+
 ### Block Sequence
+
+A numbered list of semantic block roles in the order they appear from top to bottom on desktop. Use the universal vocabulary from `docs/architecture/h2t-creative/CORE_SYSTEM.md` § Semantic Layer (also encoded in the parser's `KNOWN_BLOCK_TYPES` set):
+
+`nav`, `hero`, `proof`, `problem`, `solution`, `features`, `process`, `comparison`, `gallery`, `video`, `case_study`, `testimonials`, `pricing`, `faq`, `evidence`, `cta`, `footer`
+
+Constraints (see also § Density Budget):
+
+- 5–8 entries total per `COMPOSITION_RULES` density rules. Below 5, the page is rarely a landing; above 8, density discipline collapses.
+- The first block after `nav` (or first overall if no nav) MUST be `hero`. The first screen has to communicate intent.
+- At least one of `cta` or a CTA-equivalent block (e.g. `cta`-styled `evidence`) must appear. A landing without a CTA is a content page.
+- `footer` is optional — many landings ship without one if the surrounding site provides chrome.
+
+Format example:
+
+```
+1. `hero`           — first screen
+2. `proof`
+3. `features`
+4. `process`
+5. `comparison`
+6. `evidence`
+7. `cta`
+```
 
 ### Per-Block Intent
 
+For each block in the sequence, one or two sentences naming what that specific block must communicate to the specific audience. Not copy. Intent.
+
+Bad: "Stats with three numbers about the product."
+Good: "Establish credibility before features land — show that the product has been used at scale (count, retention, partner). Audience is procurement-focused, so prefer institutional metrics over user-testimonials feel."
+
+Per-block intent is the test the recipe author writes against and the human reviewer measures the rendered page against in `VISUAL_QA.md` § Gate A.
+
 ### Per-Block Density Classification
+
+Each block is one of: **dense**, **medium**, or **open**.
+
+- **dense** — table-heavy, multi-column data, ≥ 4 cards per row, paragraphs > 3 lines. Comparison tables, deep evidence sections.
+- **medium** — moderately structured: 3-card grids, stats blocks with labels, process steps, bordered CTAs.
+- **open** — generous whitespace, single-column copy, single hero image, single headline + meta. Hero, single-card evidence, simple CTAs.
+
+Density classification feeds the density budget below and the rhythm rule that dense sections must be followed by breathing room (`COMPOSITION_RULES` § Density Rules).
 
 ### Desktop Layout Sketch
 
+A low-fidelity representation of the desktop view. Acceptable formats (see § Format Options):
+
+- ASCII column diagram
+- Markdown table with one row per block listing `column count × role`
+- Hand sketch image embedded by relative link
+
+Required content of the sketch, regardless of format:
+
+- **Content max-width** — typically 1100 px for editorial, 1200 px for product. Profile may constrain.
+- **Column model per block** — single, two-up, three-up, four-up. Cards-per-row.
+- **Block ordering** — must agree with § Block Sequence above.
+- **Notes for non-rectangular blocks** — galleries, hero-with-media, full-bleed quotes — call out the divergence from the dominant grid.
+
+The sketch does not commit to specific copy or specific colors. It commits to layout structure.
+
 ### Mobile Representation Per Block
+
+For each block, name its mobile representation explicitly. One of:
+
+- **stack** — single column, contents flow top-to-bottom in source order.
+- **collapse-to-1col** — a multi-column desktop block redraws as one column on mobile (cards, stats, features grids).
+- **collapse-to-cards** — a desktop table redraws as stacked cards on mobile (the comparison-table dual-rep contract; rhythm spec § A.4).
+- **hide** — block does not render below a stated breakpoint. Allowed only for non-essential nav, decorative dividers, or surplus chrome. Essential content must never `hide`.
+- **media-fallback** — video, gallery, or interactive block uses a poster, static image, or text fallback on mobile.
+
+Mobile is not passive resizing (`COMPOSITION_RULES` § Responsive Representation). Every multi-column desktop block needs an explicit mobile representation declared here.
 
 ### Source Classification Per Block
 
+For each block, classify its content source per `CORE_SYSTEM.md` § Evidence Classification:
+
+- **target** — the block IS the canonical thing. Original copy / data / hero image authored for this landing.
+- **primitive source** — the block lifts visual or structural primitives from a prior approved evidence (e.g. an editorial appendix design system). Note the precedent.
+- **negative** — explicitly NOT a target; included only as a "not this" negative example. Rare; usually doesn't appear in a landing wireframe at all.
+
+A wireframe whose every block is "primitive source" is a **primitive showcase**, not a landing. That's the failure mode #88 fell into. The reviewer rejects such wireframes (see § Approval Criteria).
+
 ### Density Budget
+
+A summary count derived from § Per-Block Density Classification:
+
+- Total blocks: `<N>` (must be 5–8)
+- Dense blocks: `<D>` (must be 0–2 per `COMPOSITION_RULES` § Density Rules)
+- Dense-then-open ordering check: every dense block is followed by an open or medium block. State pass/fail.
+
+The budget is a hard gate. A wireframe with 3 dense blocks fails review.
 
 ### Asset Inventory
 
+Two lists:
+
+- **Required assets** — every image, video, or interactive primitive the wireframe relies on. Each entry: id, role (hero_media / gallery / product_demo / ambient_system / poster / fallback), source (target / primitive / negative), URL or path.
+- **Missing assets** — anything required but not yet available. Each entry: which block depends on it, what placeholder is acceptable, deadline for resolving.
+
+A wireframe with `Required: hero_media; Missing: hero_media` ships only if the placeholder is explicitly approved by the human reviewer.
+
 ### Negative Examples
+
+When a relevant failure mode exists in the project's negative-evidence record, name it here as "not this":
+
+- "Not the appendix-clone direction from the #88 r2b attempt — see `docs/archive/h2t-creative/2026-05-07-r2b-editorial-landing-failed-attempt/failed-candidates/system-b-modular/`."
+- "Not the primitive-showcase direction from the same attempt — see `failed-candidates/modular/`."
+
+The point is to close off a known wrong path so the human reviewer doesn't have to re-derive that it's wrong. Negative examples are optional but valuable when they exist.
 
 ## Format Options
 
