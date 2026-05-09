@@ -214,7 +214,15 @@ The reviewer signs off only when every item passes. Any failure returns the wire
 
 ## Outputs After Approval
 
-<!-- §10 fills this in -->
+The approved wireframe becomes a frozen reference for downstream work. It produces, by direct copy or simple derivation:
+
+- **Recipe authoring checklist** — the block sequence + per-block intent + per-block density become the recipe's `blocks:` order, `type:` per block, and shape. Recipe content fills intent into copy, data, and asset references.
+- **Skin compatibility check** — the chosen profile's `skins/landing.yaml` must map every block role in the sequence. Roles the skin documents under `unsupported_in_v0:` are immediate review failures.
+- **Visual QA checklist** — the desktop layout sketch and mobile representation become the per-block "this is what the rendered page should look like" reference for `docs/protocols/h2t-creative/VISUAL_QA.md` Gate A and Gate B. The reviewer compares the screenshot against the wireframe, not against an internal mental model.
+- **Test guardrails** — block sequence and required assets can be encoded as recipe-level tests (e.g. "comparison block has tone: accent on at least one row"). Optional and project-scoped.
+- **Frozen reference** — a versioned, committed wireframe artefact at a stable path. Subsequent revision requires re-approval through the same gate.
+
+After approval, the implementation phase begins. Recipe edits, CSS edits, and component edits MUST stay within the wireframe envelope. A divergence requires a new wireframe revision and a new approval round, not silent drift.
 
 ## Worked Examples
 
