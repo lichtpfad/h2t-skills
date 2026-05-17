@@ -63,8 +63,13 @@ H2T_PYTHON="${H2T_PYTHON:-}"
 [ -z "$H2T_PYTHON" ] && [ -f "$HOME/.h2t/venv/bin/python" ] && H2T_PYTHON="$HOME/.h2t/venv/bin/python"
 [ -z "$H2T_PYTHON" ] && echo "ERROR: h2t venv not found. Run /h2t-core:setup" && exit 1
 
-EXA_CLI="$H2T_PYTHON ${CLAUDE_PLUGIN_ROOT}/skills/research/scripts/exa_search.py"
-FETCH_CLI="$H2T_PYTHON ${CLAUDE_PLUGIN_ROOT}/skills/research/scripts/fetch_url.py"
+# CLAUDE_PLUGIN_ROOT is empty in bash agent context — discover via glob
+_EXA_PY=$(ls ~/.claude/plugins/cache/lichtpfad/h2t-ops/*/skills/research/scripts/exa_search.py 2>/dev/null | sort -V | tail -1)
+_FETCH_PY=$(ls ~/.claude/plugins/cache/lichtpfad/h2t-ops/*/skills/research/scripts/fetch_url.py 2>/dev/null | sort -V | tail -1)
+[ -z "$_EXA_PY" ] && echo "ERROR:SETUP exa_search.py not found. Run: /plugin marketplace update && /reload-plugins" && exit 1
+[ -z "$_FETCH_PY" ] && echo "ERROR:SETUP fetch_url.py not found. Run: /plugin marketplace update && /reload-plugins" && exit 1
+EXA_CLI="$H2T_PYTHON $_EXA_PY"
+FETCH_CLI="$H2T_PYTHON $_FETCH_PY"
 ```
 
 ## Tool Restriction (critical)
@@ -123,6 +128,7 @@ $EXA_CLI preflight
 ```
 
 Failures:
+- `ERROR:SETUP` in stderr (script not found) → tell user to run `/plugin marketplace update && /reload-plugins`, STOP. **Do NOT fall back to WebSearch.**
 - Exit 4 + `EXA_ERROR:ENV EXA_API_KEY missing` → tell user to export key, STOP
 - Exit 4 + `EXA_ERROR:NETWORK` → api.exa.ai unreachable, STOP
 
