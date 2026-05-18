@@ -115,8 +115,13 @@ MUST NOT import any SDK, read secrets, do OAuth, or hit the network.
 - `ConnectorSpec.client` is a `"module:attr"` string. `core.registry` resolves it only when a
   command actually runs (or an explicit health check asks). `connectors list`/`--help` never
   trigger resolution.
-- `client.py` MAY import its SDK at module level (it is only imported at exec time anyway), but
-  SHOULD defer expensive SDK construction/auth to `<Name>Client.__init__` or first use.
+- `client.py` MAY import its SDK at module level **only if that dependency is declared in
+  `pyproject` project deps** (always installed → import cannot fail at exec time). If the SDK is
+  an **optional** dependency, it MUST be imported inside `__init__`/first use and a missing
+  import converted to `ConfigError` with an install hint (e.g. "pip install h2t[telegram]"),
+  never an uncaught `ImportError`. Expensive SDK construction/auth is always deferred to
+  `<Name>Client.__init__` or first use. (The "registry build = zero heavy imports" test guards
+  discovery; this rule guards execution-time import failures for optional deps.)
 
 ### 4.2 Layer boundary (the duality)
 
@@ -194,9 +199,13 @@ that have no retry/fallback semantics. The rich envelope is specified in ТЗ-2.
   cross-platform via `uv`.
 - Update: `uv tool upgrade h2t`.
 - External sharing: a non-infra user runs one `uv tool install` and gets every connector.
-- Claude Code skills check availability with a single no-expansion line:
-  `command -v h2t >/dev/null || { echo "ERROR:SETUP install h2t (uv tool install …)"; exit 1; }`
-  — no glob, no `$VAR`, no `simple_expansion` prompt.
+- Availability is a **CLI-level contract, not a shell idiom**: `h2t --version` exits 0 when
+  installed; `h2t doctor` reports install path, version, resolvable connectors, and secrets
+  presence (no network). Skills probe with a single bare command (`h2t --version`) — no glob,
+  no `$VAR`, no `{ …; }`, so it is identical on POSIX and PowerShell and triggers no
+  `simple_expansion` prompt. The "not installed → run setup" guidance lives in `SKILL.md`
+  prose, not in a shell-specific one-liner. (`h2t doctor` is specified in the ТЗ-0
+  implementation plan; `--version` is in scope here.)
 - `h2t-core:setup` is updated to perform/repair the `uv tool install` (mechanics specified in
   the ТЗ-0 implementation plan).
 
@@ -229,6 +238,10 @@ The migration is tractable because of three rules, which are part of this standa
 2. **Backward-compatible alias = no big-bang.** `h2t ingest notion` and the current SKILL.md
    keep working via a deprecation shim forwarding to `h2t notion`. No moment requires rewriting
    everything at once. Skills update SKILL.md one at a time, when convenient.
+   **Shim policy (decided):** the shim emits a one-line deprecation notice to **stderr** when
+   output is human/`--format md`, and is **silent** when `--json` (machine consumers must not
+   get noise). Exit code is unchanged (forwards the wrapped command's code). No "warn once" /
+   no state file — emitting on every human invocation is acceptable and stateless.
 3. **Finite countable list + runbook.** 9 connectors, sequenced; the runbook derived from the
    Notion skeleton turns connectors #2..#9 into a checklist. Each is an independent shippable
    PR; the system is coherent if paused between any two connectors (migrated → new standard,
@@ -263,6 +276,7 @@ The migration is tractable because of three rules, which are part of this standa
 
 ## 12. Definition of Done (ТЗ-0)
 
+- [ ] `h2t --version` exits 0 (the cross-platform availability contract, §7)
 - [ ] `h2t notion --help` works
 - [ ] `from h2t.connectors.notion.client import NotionClient` works
 - [ ] `pyproject.toml` `[project.scripts]` → `h2t.cli:main`; no `sys.path.insert` anywhere
@@ -272,7 +286,8 @@ The migration is tractable because of three rules, which are part of this standa
 - [ ] `--json` / `--format md` / default outputs conform to §6
 - [ ] `tests/connectors/notion/` covers client (mocked) + CLI contract; `tests/core/` covers
       registry, envelope, errors — all green
-- [ ] Old `h2t ingest notion` is an alias or emits a deprecation notice and still works
+- [ ] Old `h2t ingest notion` still works and follows the §10 shim policy (stderr notice on
+      human output, silent on `--json`, forwarded exit code)
 - [ ] Notion `SKILL.md` conforms to §8
 
 ## 13. Testing Standard (ТЗ-0 portion)
@@ -289,7 +304,7 @@ The migration is tractable because of three rules, which are part of this standa
 
 - `uv tool install` from a private GitHub ref vs PyPI vs local path — pick in the ТЗ-0
   implementation plan (affects external sharing UX).
-- Deprecation shim for `h2t ingest *`: alias silently vs warn-on-stderr — decide in plan
-  (default: warn once on stderr, keep exit 0).
+- ~~Deprecation shim policy~~ — **decided in §10** (stderr on human output, silent on
+  `--json`, forwarded exit code, stateless). No longer open.
 - `core/secrets.py` "minimal" boundary: ТЗ-0 only needs Notion's token path; do not pre-build
   the multi-provider framework.
