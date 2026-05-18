@@ -630,6 +630,16 @@ def test_discover_does_not_import_notion_sdk(monkeypatch):
 def test_resolve_client_lazy_returns_class():
     spec = next(s for s in discover() if s.name == "notion")
     assert resolve_client(spec).__name__ == "NotionClient"
+
+
+def test_discover_skips_broken_connector(tmp_path, monkeypatch):
+    import h2t.connectors as _pkg
+    pkgdir = tmp_path / "broken_conn"
+    pkgdir.mkdir()
+    (pkgdir / "__init__.py").write_text("raise ImportError('missing dep')\n", encoding="utf-8")
+    monkeypatch.setattr(_pkg, "__path__", list(_pkg.__path__) + [str(tmp_path)])
+    names = {s.name for s in discover()}          # must NOT raise
+    assert "broken_conn" not in names
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -646,6 +656,7 @@ from __future__ import annotations
 
 import importlib
 import pkgutil
+import sys
 from dataclasses import dataclass
 from typing import Any, Callable, Iterator
 
@@ -661,11 +672,19 @@ class ConnectorSpec:
 
 
 def discover() -> Iterator[ConnectorSpec]:
-    """Yield CONNECTOR from each h2t.connectors.<name> subpackage (cheap import)."""
+    """Yield CONNECTOR from each h2t.connectors.<name> subpackage (cheap import).
+
+    A connector whose __init__ raises is skipped with a stderr warning rather
+    than killing discovery for every connector (plug-in registry convention).
+    """
     for mod in pkgutil.iter_modules(_connectors_pkg.__path__):
         if not mod.ispkg:
             continue
-        sub = importlib.import_module(f"h2t.connectors.{mod.name}")
+        try:
+            sub = importlib.import_module(f"h2t.connectors.{mod.name}")
+        except Exception as e:  # noqa: BLE001 — one bad connector must not kill the registry
+            print(f"h2t: warning: skipped connector {mod.name!r}: {e}", file=sys.stderr)
+            continue
         spec = getattr(sub, "CONNECTOR", None)
         if isinstance(spec, ConnectorSpec):
             yield spec
@@ -673,7 +692,9 @@ def discover() -> Iterator[ConnectorSpec]:
 
 def resolve_client(spec: ConnectorSpec) -> type:
     """Import and return the client class — only when actually needed."""
-    module_path, _, attr = spec.client.partition(":")
+    module_path, sep, attr = spec.client.partition(":")
+    if not sep or not attr:
+        raise ValueError(f"malformed connector client spec: {spec.client!r} (expected 'module:attr')")
     return getattr(importlib.import_module(module_path), attr)
 ```
 
