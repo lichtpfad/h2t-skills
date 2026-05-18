@@ -10,32 +10,38 @@ hardcode a python path or shell idiom.
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
 
 _RUNTIME = Path(__file__).resolve().parent.parent / ".h2t" / "agent-runtime.json"
+_SYSPATH_PAT = re.compile(r"sys\.path\.insert\s*\(")
 
 
 def _repo_root() -> Path:
     base = _RUNTIME.parent.parent
     try:
         cfg = json.loads(_RUNTIME.read_text(encoding="utf-8"))
-    except Exception:
+    except (json.JSONDecodeError, OSError):
         cfg = {}
     repo = cfg.get("repo", ".")
     return base.resolve() if repo == "." else Path(repo).resolve()
 
 
 def _run(cmd: list[str]) -> int:
-    return subprocess.run(cmd, cwd=_repo_root()).returncode
+    try:
+        return subprocess.run(cmd, cwd=_repo_root()).returncode
+    except FileNotFoundError as e:
+        print(f"h2t dev: cannot run {cmd[0]}: {e}", file=sys.stderr)
+        return 127
 
 
 def _check(name: str) -> int:
     root = _repo_root()
     if name == "no-syspath":
         hits = [str(p) for p in (root / "h2t").rglob("*.py")
-                if "sys.path.insert" in p.read_text(encoding="utf-8")]
+                if _SYSPATH_PAT.search(p.read_text(encoding="utf-8"))]
         if hits:
             print("FAIL no-syspath: " + ", ".join(hits), file=sys.stderr)
             return 1
@@ -54,6 +60,9 @@ def _check(name: str) -> int:
         try:
             from h2t.core.registry import discover
             names = {s.name for s in discover()}
+        except ImportError as e:
+            print(f"FAIL lazy-registry (not yet installed: {e})", file=sys.stderr)
+            return 1
         finally:
             builtins.__import__ = real
         ok = "notion" in names
