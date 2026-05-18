@@ -30,3 +30,13 @@ def test_discover_does_not_import_notion_sdk(monkeypatch):
 def test_resolve_client_lazy_returns_class():
     spec = next(s for s in discover() if s.name == "notion")
     assert resolve_client(spec).__name__ == "NotionClient"
+
+
+def test_discover_skips_broken_connector(tmp_path, monkeypatch):
+    import h2t.connectors as _pkg
+    pkgdir = tmp_path / "broken_conn"
+    pkgdir.mkdir()
+    (pkgdir / "__init__.py").write_text("raise ImportError('missing dep')\n", encoding="utf-8")
+    monkeypatch.setattr(_pkg, "__path__", list(_pkg.__path__) + [str(tmp_path)])
+    names = {s.name for s in discover()}          # must NOT raise
+    assert "broken_conn" not in names              # broken connector skipped, not propagated
