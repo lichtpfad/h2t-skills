@@ -3,7 +3,8 @@ from __future__ import annotations
 
 
 class H2TError(Exception):
-    """Base. Carries an optional install/fix hint."""
+    """Base. Carries an optional install/fix hint.
+    Always raise a typed subclass; do not raise H2TError directly."""
     kind: str = "provider"
 
     def __init__(self, message: str, *, hint: str | None = None) -> None:
@@ -44,5 +45,5 @@ EXIT_CODES: dict[str, int] = {
 def exit_code_for(exc: BaseException) -> int:
     """Map an exception to its exit code. Unknown → 1 (provider/runtime)."""
     if isinstance(exc, H2TError):
-        return EXIT_CODES[exc.kind]
+        return EXIT_CODES.get(exc.kind, EXIT_CODES["provider"])
     return 1
