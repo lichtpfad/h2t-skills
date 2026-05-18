@@ -31,3 +31,18 @@ def test_emit_human_error_writes_stderr(capsys):
     out = capsys.readouterr()
     assert code == 4 and "denied" in out.err and "Set NOTION_API_TOKEN" in out.err
     assert out.out == ""
+
+
+def test_emit_human_dict_result(capsys):
+    code = emit("notion", result={"key": "val"}, fmt="human")
+    out = capsys.readouterr()
+    assert code == 0
+    assert json.loads(out.out) == {"key": "val"}
+
+
+def test_emit_human_error_no_hint(capsys):
+    code = emit("notion", exc=AuthError("denied"), fmt="human")
+    out = capsys.readouterr()
+    assert code == 4
+    assert "denied" in out.err and "hint:" not in out.err
+    assert out.out == ""
