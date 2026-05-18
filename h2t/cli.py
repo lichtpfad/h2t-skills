@@ -20,7 +20,12 @@ def dispatch(argv: list[str]) -> int:
         legacy_main()
         return 0
     except SystemExit as e:
-        return int(e.code or 0)
+        code = e.code
+        if code is None:
+            return 0
+        if isinstance(code, int):
+            return code
+        return 1  # non-zero string message -> treat as error
     finally:
         sys.argv = old
 
