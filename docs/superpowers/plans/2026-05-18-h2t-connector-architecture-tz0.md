@@ -511,6 +511,21 @@ def test_emit_human_error_writes_stderr(capsys):
     out = capsys.readouterr()
     assert code == 4 and "denied" in out.err and "Set NOTION_API_TOKEN" in out.err
     assert out.out == ""
+
+
+def test_emit_human_dict_result(capsys):
+    code = emit("notion", result={"key": "val"}, fmt="human")
+    out = capsys.readouterr()
+    assert code == 0
+    assert json.loads(out.out) == {"key": "val"}
+
+
+def test_emit_human_error_no_hint(capsys):
+    code = emit("notion", exc=AuthError("denied"), fmt="human")
+    out = capsys.readouterr()
+    assert code == 4
+    assert "denied" in out.err and "hint:" not in out.err
+    assert out.out == ""
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -538,10 +553,11 @@ def emit(provider: str, *, result: Any = None, exc: BaseException | None = None,
     """Render to stdout (success) or stderr (error). Return exit code."""
     if exc is not None:
         code = exit_code_for(exc)
+        env_dict = error_envelope(provider, exc)
         if fmt == "json":
-            print(json.dumps(error_envelope(provider, exc), ensure_ascii=False), file=sys.stderr)
+            print(json.dumps(env_dict, ensure_ascii=False), file=sys.stderr)
         else:
-            env = error_envelope(provider, exc)["error"]
+            env = env_dict["error"]
             line = f"error[{env['type']}]: {env['message']}"
             if env["hint"]:
                 line += f"\nhint: {env['hint']}"
@@ -550,9 +566,11 @@ def emit(provider: str, *, result: Any = None, exc: BaseException | None = None,
     if fmt == "json":
         print(json.dumps(success_envelope(provider, result), ensure_ascii=False))
     elif fmt == "md":
+        # NOTE: md and human are identical for now; they diverge in Task 9
+        # (md → markdown tables, human → concise). Keep branches separate.
         print(result if isinstance(result, str)
               else json.dumps(result, ensure_ascii=False, indent=2))
-    else:
+    else:  # human
         print(result if isinstance(result, str)
               else json.dumps(result, ensure_ascii=False, indent=2))
     return 0
