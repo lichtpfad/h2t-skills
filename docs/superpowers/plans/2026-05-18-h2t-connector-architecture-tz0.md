@@ -131,8 +131,10 @@ def _run(cmd: list[str]) -> int:
 def _check(name: str) -> int:
     root = _repo_root()
     if name == "no-syspath":
+        import re
+        pat = re.compile(r"sys\.path\.insert\s*\(")  # call syntax, not bare needle
         hits = [str(p) for p in (root / "h2t").rglob("*.py")
-                if "sys.path.insert" in p.read_text(encoding="utf-8")]
+                if pat.search(p.read_text(encoding="utf-8"))]
         if hits:
             print("FAIL no-syspath: " + ", ".join(hits), file=sys.stderr)
             return 1
@@ -151,6 +153,9 @@ def _check(name: str) -> int:
         try:
             from h2t.core.registry import discover
             names = {s.name for s in discover()}
+        except ImportError as e:
+            print(f"FAIL lazy-registry (not yet installed: {e})", file=sys.stderr)
+            return 1
         finally:
             builtins.__import__ = real
         ok = "notion" in names
@@ -218,7 +223,10 @@ def dispatch(argv: list[str]) -> int:
         legacy_main()
         return 0
     except SystemExit as e:
-        return int(e.code or 0)
+        code = e.code
+        if code is None:
+            return 0
+        return code if isinstance(code, int) else 1
     finally:
         sys.argv = old
 
@@ -1275,7 +1283,10 @@ def _legacy(argv: list[str]) -> int:
         legacy_main()
         return 0
     except SystemExit as e:
-        return int(e.code or 0)
+        code = e.code
+        if code is None:
+            return 0
+        return code if isinstance(code, int) else 1
     finally:
         sys.argv = old
 
