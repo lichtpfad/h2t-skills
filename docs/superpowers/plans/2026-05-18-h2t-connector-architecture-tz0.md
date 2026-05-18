@@ -22,7 +22,7 @@
 - ❌ NO `command -v`, `$(...)`, `>NUL`, `echo $?`, or shell-specific redirection
 - ❌ NO `uv run h2t dev pip install -e .` — the project is auto-provisioned by `uv run`; `h2t dev pip` exists for ad-hoc deps only, never to install **this** project
 
-`uv run` provisions the project (incl. `[project.dependencies]`) into its managed env on first call — that is the single, documented bootstrap seam. No editable install in the TDD loop.
+`uv run` provisions the project (incl. `[project.dependencies]` **and the `dev` dependency-group → `pytest`**) into its managed env on first call — that is the single, documented bootstrap seam. No editable install in the TDD loop.
 
 **Prereq:** `uv` on PATH (installed by `/h2t-core:setup`: `pip install uv`).
 
@@ -243,6 +243,14 @@ dependencies = [
 ```
 replace `[project.scripts]` `h2t = "lib.cli.main:main"` with `h2t = "h2t.cli:main"`, and `[tool.setuptools.packages.find]` `include = ["lib*"]` with `include = ["h2t*", "lib*"]`.
 
+Then add a **new top-level table** so `uv run` provisions pytest (uv installs the `dev` dependency-group by default):
+```toml
+[dependency-groups]
+dev = [
+  "pytest>=8",
+]
+```
+
 - [ ] **Step 6: Provision + verify (first `uv run` = bootstrap seam)**
 
 Run: `uv run h2t --version`
@@ -254,8 +262,8 @@ Expected: prints `0.2.0`.
 - [ ] **Step 7: Commit**
 
 ```
-git -C C:/dev/h2t-skills add h2t/ .h2t/agent-runtime.json pyproject.toml
-git -C C:/dev/h2t-skills commit -m "feat(h2t): bootstrap skeleton + dev wrapper + agent-runtime config"
+git add h2t/ .h2t/agent-runtime.json pyproject.toml
+git commit -m "feat(h2t): bootstrap skeleton + dev wrapper + agent-runtime config"
 ```
 
 ---
@@ -364,8 +372,8 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```
-git -C C:/dev/h2t-skills add h2t/core/errors.py tests/core/test_errors.py
-git -C C:/dev/h2t-skills commit -m "feat(h2t-core): typed errors + exit-code map"
+git add h2t/core/errors.py tests/core/test_errors.py
+git commit -m "feat(h2t-core): typed errors + exit-code map"
 ```
 
 ---
@@ -435,8 +443,8 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```
-git -C C:/dev/h2t-skills add h2t/core/envelope.py tests/core/test_envelope.py
-git -C C:/dev/h2t-skills commit -m "feat(h2t-core): universal result/error envelope"
+git add h2t/core/envelope.py tests/core/test_envelope.py
+git commit -m "feat(h2t-core): universal result/error envelope"
 ```
 
 ---
@@ -537,8 +545,8 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```
-git -C C:/dev/h2t-skills add h2t/core/output.py tests/core/test_output.py
-git -C C:/dev/h2t-skills commit -m "feat(h2t-core): output emitter (json/md/human)"
+git add h2t/core/output.py tests/core/test_output.py
+git commit -m "feat(h2t-core): output emitter (json/md/human)"
 ```
 
 ---
@@ -638,8 +646,8 @@ Expected: PASS. (Remaining registry tests pass after Task 8 — re-run there.)
 - [ ] **Step 5: Commit**
 
 ```
-git -C C:/dev/h2t-skills add h2t/core/registry.py tests/core/test_registry.py
-git -C C:/dev/h2t-skills commit -m "feat(h2t-core): ConnectorSpec + lazy discovery"
+git add h2t/core/registry.py tests/core/test_registry.py
+git commit -m "feat(h2t-core): ConnectorSpec + lazy discovery"
 ```
 
 ---
@@ -747,8 +755,8 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```
-git -C C:/dev/h2t-skills add h2t/core/secrets.py tests/core/test_secrets.py
-git -C C:/dev/h2t-skills commit -m "feat(h2t-core): minimal secrets + notion token resolution"
+git add h2t/core/secrets.py tests/core/test_secrets.py
+git commit -m "feat(h2t-core): minimal secrets + notion token resolution"
 ```
 
 ---
@@ -928,8 +936,8 @@ Expected: PASS (5).
 - [ ] **Step 6: Commit**
 
 ```
-git -C C:/dev/h2t-skills add h2t/connectors/notion/__init__.py h2t/connectors/notion/client.py tests/connectors/notion/test_client.py
-git -C C:/dev/h2t-skills commit -m "feat(notion): re-wrapped client with typed errors"
+git add h2t/connectors/notion/__init__.py h2t/connectors/notion/client.py tests/connectors/notion/test_client.py
+git commit -m "feat(notion): re-wrapped client with typed errors"
 ```
 
 ---
@@ -1107,8 +1115,8 @@ Expected: PASS (3).
 - [ ] **Step 5: Commit**
 
 ```
-git -C C:/dev/h2t-skills add h2t/connectors/notion/commands.py tests/connectors/notion/test_commands.py
-git -C C:/dev/h2t-skills commit -m "feat(notion): argparse adapter with lazy client import"
+git add h2t/connectors/notion/commands.py tests/connectors/notion/test_commands.py
+git commit -m "feat(notion): argparse adapter with lazy client import"
 ```
 
 ---
@@ -1141,8 +1149,8 @@ Expected: PASS — incl. `test_discover_finds_notion`, `test_discover_does_not_i
 - [ ] **Step 3: Commit**
 
 ```
-git -C C:/dev/h2t-skills add h2t/connectors/notion/__init__.py
-git -C C:/dev/h2t-skills commit -m "feat(notion): register CONNECTOR spec (lazy client)"
+git add h2t/connectors/notion/__init__.py
+git commit -m "feat(notion): register CONNECTOR spec (lazy client)"
 ```
 
 ---
@@ -1363,8 +1371,8 @@ Expected: `h2t 0.2.0`; lists `notion`; notion help; doctor shows version/connect
 - [ ] **Step 6: Commit**
 
 ```
-git -C C:/dev/h2t-skills add h2t/cli.py tests/connectors/notion/test_commands.py
-git -C C:/dev/h2t-skills commit -m "feat(h2t): cli dispatcher, doctor, legacy delegation, ingest shim"
+git add h2t/cli.py tests/connectors/notion/test_commands.py
+git commit -m "feat(h2t): cli dispatcher, doctor, legacy delegation, ingest shim"
 ```
 
 ---
@@ -1458,8 +1466,8 @@ Expected: prints `OK skill-md-notion`, exit 0.
 - [ ] **Step 3: Commit**
 
 ```
-git -C C:/dev/h2t-skills add plugins/h2t-ops/skills/notion/SKILL.md
-git -C C:/dev/h2t-skills commit -m "docs(notion): SKILL.md to spec §8 contract (h2t notion)"
+git add plugins/h2t-ops/skills/notion/SKILL.md
+git commit -m "docs(notion): SKILL.md to spec §8 contract (h2t notion)"
 ```
 
 ---
@@ -1491,8 +1499,8 @@ Expected: `h2t 0.2.0` exit 0; notion help; doctor block; ingest-notion help (wit
 - [ ] **Step 3: Final commit**
 
 ```
-git -C C:/dev/h2t-skills add -A docs/superpowers/plans/2026-05-18-h2t-connector-architecture-tz0.md
-git -C C:/dev/h2t-skills commit -m "chore(h2t): ТЗ-0 walking skeleton complete — DoD verified"
+git add -A docs/superpowers/plans/2026-05-18-h2t-connector-architecture-tz0.md
+git commit -m "chore(h2t): ТЗ-0 walking skeleton complete — DoD verified"
 ```
 
 ---
