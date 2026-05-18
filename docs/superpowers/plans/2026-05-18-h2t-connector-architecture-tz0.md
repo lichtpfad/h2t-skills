@@ -311,6 +311,18 @@ def test_all_typed_errors_subclass_h2terror():
 def test_exit_codes_table_complete():
     assert EXIT_CODES == {"ok": 0, "provider": 1, "usage": 2,
                           "config": 3, "auth": 4, "not_found": 5, "network": 6}
+
+
+def test_all_subclass_kinds_are_in_exit_codes():
+    for cls in (UsageError, ConfigError, AuthError, ProviderError, NotFoundError, NetworkError):
+        assert cls.kind in EXIT_CODES, f"{cls.__name__}.kind={cls.kind!r} missing from EXIT_CODES"
+
+
+def test_hint_stored_and_defaults_none():
+    e = UsageError("bad arg", hint="run h2t --help")
+    assert e.hint == "run h2t --help"
+    assert str(e) == "bad arg"
+    assert UsageError("x").hint is None
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -327,7 +339,8 @@ from __future__ import annotations
 
 
 class H2TError(Exception):
-    """Base. Carries an optional install/fix hint."""
+    """Base. Carries an optional install/fix hint.
+    Always raise a typed subclass; do not raise H2TError directly."""
     kind: str = "provider"
 
     def __init__(self, message: str, *, hint: str | None = None) -> None:
@@ -368,7 +381,7 @@ EXIT_CODES: dict[str, int] = {
 def exit_code_for(exc: BaseException) -> int:
     """Map an exception to its exit code. Unknown → 1 (provider/runtime)."""
     if isinstance(exc, H2TError):
-        return EXIT_CODES[exc.kind]
+        return EXIT_CODES.get(exc.kind, EXIT_CODES["provider"])
     return 1
 ```
 
