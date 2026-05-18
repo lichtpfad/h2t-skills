@@ -5,7 +5,7 @@ See docs/superpowers/specs/2026-04-18-research-skill-architecture-design.md
 """
 from __future__ import annotations
 
-__version__ = "0.1.1"
+__version__ = "0.1.2"
 
 import argparse
 import importlib.util
@@ -27,18 +27,24 @@ def _load_h2t_secrets():
     """Dynamically import h2t_secrets from h2t-core plugin.
 
     Cross-plugin path resolution:
-      1. relative path from this file: ../../../../../h2t-core/scripts/h2t_secrets.py
-         (parents: [0]=scripts, [1]=research, [2]=skills, [3]=h2t-ops, [4]=plugins)
-      2. fallback: $H2T_PLUGIN_ROOT/h2t-core/scripts/h2t_secrets.py
-      3. else: fail-loud with FileNotFoundError listing tried paths.
+      1. glob: <lichtpfad>/h2t-core/*/scripts/h2t_secrets.py  (latest version wins)
+         lichtpfad = Path(__file__).parents[5]
+         (parents: [0]=scripts [1]=research [2]=skills [3]=h2t-ops/{ver} [4]=h2t-ops [5]=lichtpfad)
+      2. $H2T_PLUGIN_ROOT/scripts/h2t_secrets.py
+         (H2T_PLUGIN_ROOT = versioned h2t-core root, e.g. .../lichtpfad/h2t-core/3.0.22)
+      3. fail-loud with FileNotFoundError listing tried paths.
     """
     here = Path(__file__).resolve()
-    relative = here.parents[4] / "h2t-core" / "scripts" / "h2t_secrets.py"
-    candidates = [relative]
+    lichtpfad = here.parents[5]
+    candidates: list[Path] = sorted(
+        lichtpfad.glob("h2t-core/*/scripts/h2t_secrets.py"),
+        reverse=True,  # descending version sort → latest first
+    )
     plugin_root = os.environ.get("H2T_PLUGIN_ROOT")
     if plugin_root:
-        candidates.append(Path(plugin_root) / "h2t-core" / "scripts" / "h2t_secrets.py")
+        candidates.insert(0, Path(plugin_root) / "scripts" / "h2t_secrets.py")
 
+    tried: list[str] = []
     for candidate in candidates:
         if candidate.is_file():
             spec = importlib.util.spec_from_file_location("h2t_secrets", candidate)
@@ -47,9 +53,11 @@ def _load_h2t_secrets():
             module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(module)
             return module
+        tried.append(str(candidate))
     raise FileNotFoundError(
-        f"h2t_secrets module not found. Tried: {[str(c) for c in candidates]}. "
-        f"Set H2T_PLUGIN_ROOT or restore plugins/h2t-core/scripts/h2t_secrets.py."
+        f"h2t_secrets module not found. Tried: {tried}. "
+        f"Set H2T_PLUGIN_ROOT=~/.claude/plugins/cache/lichtpfad/h2t-core/<ver> "
+        f"or restore plugins/h2t-core/scripts/h2t_secrets.py."
     )
 
 
