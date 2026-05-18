@@ -6,16 +6,35 @@
 
 **Architecture:** Monolithic `h2t` package, lazily auto-registered connectors. `client.py` = API logic (typed errors, no I/O side effects); `commands.py` = thin argparse adapter (lazy client import); `core/` = registry, errors, envelope, output, secrets. New entrypoint `h2t.cli:main` delegates non-migrated commands to legacy `lib.cli.main:main` unchanged.
 
-**Tech Stack:** Python 3.11, stdlib `argparse`/`importlib`, `pytest`, `notion-client`, `httpx`, `python-dotenv`, `uv` for install.
+**Tech Stack:** Python 3.11, stdlib `argparse`/`importlib`, `pytest`, `notion-client`, `httpx`, `uv` (toolchain).
 
 ---
 
-## Locked Design Decisions (resolve §14 + transition gap before Task 1)
+## Execution Contract (read before any task)
 
-1. **Install source (dev/CI):** `uv tool install --editable .` from repo root (falls back to `pip install -e .` into `~/.h2t/venv`). External sharing (git-ref / PyPI) is a **separate rollout decision**, explicitly NOT in ТЗ-0 — it does not block the walking skeleton.
-2. **Transition compatibility (spec gap, decided here):** flipping `[project.scripts]` to `h2t.cli:main` must not regress `h2t gather` or `h2t ingest gmail/calendar`. `h2t/cli.py` recognizes migrated commands (`notion`, `connectors`, `--version`) and **delegates everything else** to legacy `lib.cli.main:main` by importing and calling it. `lib/` is NOT modified in ТЗ-0; its pre-existing `sys.path.insert` is knowingly retained until its commands migrate (ТЗ-1/ТЗ-2). The "no `sys.path.insert`" DoD applies to the **new `h2t` package**, which adds none.
-3. **`ingest notion` shim:** `h2t ingest notion …` forwards to the **new** notion connector (single implementation), with a small explicit legacy-arg mapping (Task 10). Deprecation notice → stderr on human/`md`, silent on `--json`, forwarded exit code, stateless (spec §10).
-4. **Notion SDK deps are NOT declared project deps** (`pyproject` `dependencies = []`; they ship via `requirements.txt`). Per spec §4.1 they are therefore treated as **optional** → imported lazily inside `client.py` methods/`__init__`, missing import → `ConfigError` with install hint. Never module-level in `client.py`.
+**All implementation-plan commands use exactly one prefix:** `uv run h2t dev <tool|check> ...`
+
+- ✅ `uv run h2t dev pytest tests/core -v`
+- ✅ `uv run h2t dev python -c "import h2t; print(h2t.__version__)"`
+- ✅ `uv run h2t dev check no-syspath`
+- ✅ availability/health: `uv run h2t --version`, `uv run h2t doctor`, `uv run h2t notion --help`
+- ❌ NO direct `.venv/Scripts/python` / `.venv/bin/python` / `$PY` / `$PIP` / `$PYTEST`
+- ❌ NO `command -v`, `$(...)`, `>NUL`, `echo $?`, or shell-specific redirection
+- ❌ NO `uv run h2t dev pip install -e .` — the project is auto-provisioned by `uv run`; `h2t dev pip` exists for ad-hoc deps only, never to install **this** project
+
+`uv run` provisions the project (incl. `[project.dependencies]`) into its managed env on first call — that is the single, documented bootstrap seam. No editable install in the TDD loop.
+
+**Prereq:** `uv` on PATH (installed by `/h2t-core:setup`: `pip install uv`).
+
+---
+
+## Locked Design Decisions (resolve spec §14 + transition gap)
+
+1. **Install source (dev/CI):** `uv run` auto-provisions from `pyproject`. No explicit editable install in the loop. External sharing (git-ref / PyPI / `uv tool install`) is a **separate rollout decision**, NOT in ТЗ-0.
+2. **Transition compatibility (spec gap, decided here):** flipping `[project.scripts]` to `h2t.cli:main` must not regress `h2t gather` or `h2t ingest gmail/calendar`. `h2t/cli.py` recognizes migrated commands (`dev`, `doctor`, `connectors`, `notion`, `--version`) and **delegates everything else** to legacy `lib.cli.main:main`. `lib/` is NOT modified in ТЗ-0; its pre-existing `sys.path.insert` is knowingly retained until its commands migrate (ТЗ-1/ТЗ-2). The "no `sys.path.insert`" DoD applies to the **new `h2t` package**, which adds none.
+3. **`ingest notion` shim:** `h2t ingest notion …` forwards to the **new** notion connector with a small explicit legacy-arg mapping (Task 9). Deprecation notice → stderr on human/`md`, silent on `--json`, forwarded exit code, stateless (spec §10).
+4. **Notion deps are DECLARED project deps** (spec §4.1 general rule unchanged; the spec is NOT edited). `pyproject` `[project.dependencies]` gains `notion-client`, `httpx`, `python-dotenv` → `uv run` gives a working Notion out of the box. `client.py` STILL imports the SDK lazily and converts a missing import to `ConfigError` — defensive depth for a broken env (lazy is always §4.1-compliant, even for declared deps). **Note:** the re-wrapped client uses stdlib `h2t.core.secrets`; `python-dotenv` is unused by the ТЗ-0 Notion path — declared for forward-compat / other notion tooling only. Future heavy connector deps may become optional extras.
+5. **Three distinct surfaces (spec §7):** `h2t --version` = availability contract; `h2t doctor` = installed CLI health (version, path, connectors, secrets presence — no network), for users/skills; `h2t dev …` = repo-local execution wrapper for agents/plans/tests.
 
 ---
 
@@ -23,108 +42,227 @@
 
 **Create:**
 - `h2t/__init__.py` — package marker, `__version__`
-- `h2t/cli.py` — entrypoint: parser from registry, dispatch, error→exit, legacy delegation, ingest shim
+- `h2t/dev.py` — `h2t dev` wrapper: `python|pip|pytest` + named `check`s
+- `h2t/cli.py` — entrypoint: dev/version routing + (Task 9) connector dispatch, legacy delegation, ingest shim, doctor
 - `h2t/core/__init__.py`
-- `h2t/core/errors.py` — typed exceptions + `EXIT_CODES` + `exit_code_for()`
-- `h2t/core/envelope.py` — `success_envelope()` / `error_envelope()`
-- `h2t/core/output.py` — `emit()` for json / md / human per spec §6
-- `h2t/core/registry.py` — `ConnectorSpec`, `resolve_client()`, `discover()`
-- `h2t/core/secrets.py` — `load_secrets()`, `resolve_notion_token()`
-- `h2t/connectors/__init__.py` — namespace marker (discovery scans this package)
-- `h2t/connectors/notion/__init__.py` — `CONNECTOR` spec + `from .commands import register`
-- `h2t/connectors/notion/client.py` — re-wrapped `NotionClient` (typed errors)
-- `h2t/connectors/notion/commands.py` — `register()` + `run_*` handlers
-- `tests/core/test_errors.py`, `tests/core/test_envelope.py`, `tests/core/test_output.py`, `tests/core/test_registry.py`, `tests/core/test_secrets.py`
-- `tests/connectors/notion/test_client.py`, `tests/connectors/notion/test_commands.py`
+- `h2t/core/errors.py`, `h2t/core/envelope.py`, `h2t/core/output.py`, `h2t/core/registry.py`, `h2t/core/secrets.py`
+- `h2t/connectors/__init__.py`
+- `h2t/connectors/notion/__init__.py`, `h2t/connectors/notion/client.py`, `h2t/connectors/notion/commands.py`
+- `.h2t/agent-runtime.json`
+- `tests/core/test_errors.py`, `test_envelope.py`, `test_output.py`, `test_registry.py`, `test_secrets.py`
+- `tests/connectors/notion/test_client.py`, `test_commands.py`
 
 **Modify:**
-- `pyproject.toml` — `[project.scripts] h2t = "h2t.cli:main"`; add `h2t*` to packages; keep `lib*` (transitional)
+- `pyproject.toml` — entrypoint, packages, Notion deps, version
 - `plugins/h2t-ops/skills/notion/SKILL.md` — spec §8 conformance
 
 ---
 
-### Task 1: Package skeleton + pyproject flip
+### Task 0: Bootstrap skeleton + dev wrapper + agent-runtime config
 
 **Files:**
-- Create: `h2t/__init__.py`, `h2t/core/__init__.py`, `h2t/connectors/__init__.py`
+- Create: `h2t/__init__.py`, `h2t/core/__init__.py`, `h2t/connectors/__init__.py`, `h2t/dev.py`, `h2t/cli.py`, `.h2t/agent-runtime.json`
 - Modify: `pyproject.toml`
 
-- [ ] **Step 1: Create package markers**
+- [ ] **Step 1: Package markers**
 
 `h2t/__init__.py`:
 ```python
-"""h2t — unified connector CLI + library. See docs/superpowers/specs/2026-05-18-h2t-connector-architecture-design.md"""
+"""h2t — unified connector CLI + library. Spec: docs/superpowers/specs/2026-05-18-h2t-connector-architecture-design.md"""
 __version__ = "0.2.0"
 ```
-
 `h2t/core/__init__.py`:
 ```python
 """h2t.core — shared foundation: registry, errors, envelope, output, secrets."""
 ```
-
 `h2t/connectors/__init__.py`:
 ```python
 """h2t.connectors — connector subpackages. Discovered lazily by h2t.core.registry."""
 ```
 
-- [ ] **Step 2: Flip pyproject entrypoint + packages**
+- [ ] **Step 2: Agent runtime config**
 
-In `pyproject.toml` replace:
-```toml
-[project.scripts]
-h2t = "lib.cli.main:main"
-
-[tool.setuptools.packages.find]
-where = ["."]
-include = ["lib*"]
+`.h2t/agent-runtime.json`:
+```json
+{
+  "schema": 1,
+  "repo": ".",
+  "platform": "auto"
+}
 ```
-with:
-```toml
-[project.scripts]
-h2t = "h2t.cli:main"
 
-[tool.setuptools.packages.find]
-where = ["."]
-include = ["h2t*", "lib*"]
-```
-Bump `version = "0.1.0"` → `version = "0.2.0"` in `[project]`.
+- [ ] **Step 3: dev wrapper**
 
-- [ ] **Step 3: Add minimal cli.py stub so install succeeds**
-
-`h2t/cli.py` (replaced fully in Task 10):
+`h2t/dev.py`:
 ```python
-"""h2t CLI entrypoint (stub — completed in Task 10)."""
+"""h2t dev — repo-local execution wrapper for agents/plans/tests.
+
+Resolves the running interpreter (uv-managed under `uv run`) so plans never
+hardcode a python path or shell idiom.
+  dev python <args...>   -> [py, <args...>]
+  dev pip <args...>      -> [py, -m pip, <args...>]   (NOT for installing this project)
+  dev pytest <args...>   -> [py, -m pytest, <args...>]
+  dev check <name>       -> named verification (no shell, cross-platform)
+"""
+from __future__ import annotations
+
+import json
+import subprocess
 import sys
+from pathlib import Path
+
+_RUNTIME = Path(__file__).resolve().parent.parent / ".h2t" / "agent-runtime.json"
+
+
+def _repo_root() -> Path:
+    base = _RUNTIME.parent.parent
+    try:
+        cfg = json.loads(_RUNTIME.read_text(encoding="utf-8"))
+    except Exception:
+        cfg = {}
+    repo = cfg.get("repo", ".")
+    return base.resolve() if repo == "." else Path(repo).resolve()
+
+
+def _run(cmd: list[str]) -> int:
+    return subprocess.run(cmd, cwd=_repo_root()).returncode
+
+
+def _check(name: str) -> int:
+    root = _repo_root()
+    if name == "no-syspath":
+        hits = [str(p) for p in (root / "h2t").rglob("*.py")
+                if "sys.path.insert" in p.read_text(encoding="utf-8")]
+        if hits:
+            print("FAIL no-syspath: " + ", ".join(hits), file=sys.stderr)
+            return 1
+        print("OK no-syspath")
+        return 0
+    if name == "lazy-registry":
+        import builtins
+        real = builtins.__import__
+
+        def guard(n, *a, **k):
+            if n in ("notion_client", "httpx"):
+                raise AssertionError(f"registry imported {n}")
+            return real(n, *a, **k)
+
+        builtins.__import__ = guard
+        try:
+            from h2t.core.registry import discover
+            names = {s.name for s in discover()}
+        finally:
+            builtins.__import__ = real
+        ok = "notion" in names
+        print(("OK" if ok else "FAIL") + " lazy-registry")
+        return 0 if ok else 1
+    if name == "gather-smoke":
+        code = subprocess.run(
+            [sys.executable, "-m", "h2t.cli", "gather", "session-start", "--cwd", str(root)],
+            cwd=root, stdout=subprocess.DEVNULL).returncode
+        print(("OK" if code == 0 else "FAIL") + f" gather-smoke (exit={code})")
+        return 0 if code == 0 else 1
+    if name == "skill-md-notion":
+        f = root / "plugins" / "h2t-ops" / "skills" / "notion" / "SKILL.md"
+        t = f.read_text(encoding="utf-8")
+        ok = t.startswith("---") and "h2t notion get" in t
+        print(("OK" if ok else "FAIL") + " skill-md-notion")
+        return 0 if ok else 1
+    print(f"unknown check: {name}", file=sys.stderr)
+    return 2
+
+
+def main(argv: list[str]) -> int:
+    if not argv:
+        print("usage: h2t dev {python|pip|pytest|check} ...", file=sys.stderr)
+        return 2
+    tool, rest, py = argv[0], argv[1:], sys.executable
+    if tool == "python":
+        return _run([py, *rest])
+    if tool == "pip":
+        return _run([py, "-m", "pip", *rest])
+    if tool == "pytest":
+        return _run([py, "-m", "pytest", *rest])
+    if tool == "check":
+        if not rest:
+            print("usage: h2t dev check <name>", file=sys.stderr)
+            return 2
+        return _check(rest[0])
+    print(f"unknown dev tool: {tool}", file=sys.stderr)
+    return 2
+```
+
+- [ ] **Step 4: Minimal cli.py (dev + version + legacy delegation; expanded in Task 9)**
+
+`h2t/cli.py`:
+```python
+"""h2t CLI entrypoint. dev/version here; connector dispatch + doctor added in Task 9."""
+from __future__ import annotations
+
+import sys
+
+import h2t
+from h2t.dev import main as _dev_main
+
+
+def dispatch(argv: list[str]) -> int:
+    if argv and argv[0] == "dev":
+        return _dev_main(argv[1:])
+    if argv and argv[0] in ("--version", "-V"):
+        print(f"h2t {h2t.__version__}")
+        return 0
+    from lib.cli.main import main as legacy_main  # legacy keeps its own sys.path hack
+    old = sys.argv
+    sys.argv = ["h2t", *argv]
+    try:
+        legacy_main()
+        return 0
+    except SystemExit as e:
+        return int(e.code or 0)
+    finally:
+        sys.argv = old
 
 
 def main() -> None:
-    print("h2t 0.2.0 (skeleton)", file=sys.stderr)
-    sys.exit(0)
+    sys.exit(dispatch(sys.argv[1:]))
+
+
+if __name__ == "__main__":
+    main()
 ```
 
-- [ ] **Step 4: Install editable and verify import + entrypoint**
+- [ ] **Step 5: pyproject — entrypoint, packages, Notion deps, version**
 
-Run:
+In `pyproject.toml` set `[project]` `version = "0.2.0"`, replace `dependencies = []` with:
+```toml
+dependencies = [
+  "notion-client>=2.0",
+  "httpx>=0.27",
+  "python-dotenv>=1.0",
+]
 ```
-C:/dev/h2t-skills/.venv/Scripts/pip install -e C:/dev/h2t-skills
-C:/dev/h2t-skills/.venv/Scripts/python -c "import h2t, h2t.core, h2t.connectors; print(h2t.__version__)"
-```
-Expected: prints `0.2.0`, no ImportError.
+replace `[project.scripts]` `h2t = "lib.cli.main:main"` with `h2t = "h2t.cli:main"`, and `[tool.setuptools.packages.find]` `include = ["lib*"]` with `include = ["h2t*", "lib*"]`.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Provision + verify (first `uv run` = bootstrap seam)**
+
+Run: `uv run h2t --version`
+Expected: uv provisions the env (one-time), then prints `h2t 0.2.0`, exit 0.
+
+Run: `uv run h2t dev python -c "import h2t, h2t.core, h2t.connectors; print(h2t.__version__)"`
+Expected: prints `0.2.0`.
+
+- [ ] **Step 7: Commit**
 
 ```
-git -C C:/dev/h2t-skills add h2t/ pyproject.toml
-git -C C:/dev/h2t-skills commit -m "feat(h2t): package skeleton + entrypoint flip to h2t.cli:main"
+git -C C:/dev/h2t-skills add h2t/ .h2t/agent-runtime.json pyproject.toml
+git -C C:/dev/h2t-skills commit -m "feat(h2t): bootstrap skeleton + dev wrapper + agent-runtime config"
 ```
 
 ---
 
-### Task 2: core/errors.py — typed exceptions + exit-code map
+### Task 1: core/errors.py — typed exceptions + exit-code map
 
-**Files:**
-- Create: `h2t/core/errors.py`
-- Test: `tests/core/test_errors.py`
+**Files:** Create `h2t/core/errors.py`; Test `tests/core/test_errors.py`
 
 - [ ] **Step 1: Write the failing test**
 
@@ -161,7 +299,7 @@ def test_exit_codes_table_complete():
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `C:/dev/h2t-skills/.venv/Scripts/pytest tests/core/test_errors.py -v`
+Run: `uv run h2t dev pytest tests/core/test_errors.py -v`
 Expected: FAIL — `ModuleNotFoundError: h2t.core.errors`.
 
 - [ ] **Step 3: Write minimal implementation**
@@ -220,8 +358,8 @@ def exit_code_for(exc: BaseException) -> int:
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `C:/dev/h2t-skills/.venv/Scripts/pytest tests/core/test_errors.py -v`
-Expected: PASS (all parametrized + 3).
+Run: `uv run h2t dev pytest tests/core/test_errors.py -v`
+Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
@@ -232,11 +370,9 @@ git -C C:/dev/h2t-skills commit -m "feat(h2t-core): typed errors + exit-code map
 
 ---
 
-### Task 3: core/envelope.py — universal result/error shape
+### Task 2: core/envelope.py — universal result/error shape
 
-**Files:**
-- Create: `h2t/core/envelope.py`
-- Test: `tests/core/test_envelope.py`
+**Files:** Create `h2t/core/envelope.py`; Test `tests/core/test_envelope.py`
 
 - [ ] **Step 1: Write the failing test**
 
@@ -247,27 +383,25 @@ from h2t.core.errors import AuthError
 
 
 def test_success_shape():
-    env = success_envelope("notion", {"id": "abc"})
-    assert env == {"ok": True, "provider": "notion", "result": {"id": "abc"}}
+    assert success_envelope("notion", {"id": "abc"}) == {
+        "ok": True, "provider": "notion", "result": {"id": "abc"}}
 
 
 def test_error_shape_with_hint():
     env = error_envelope("notion", AuthError("denied", hint="Set NOTION_API_TOKEN"))
-    assert env == {
-        "ok": False, "provider": "notion",
-        "error": {"type": "auth", "message": "denied", "hint": "Set NOTION_API_TOKEN"},
-    }
+    assert env == {"ok": False, "provider": "notion",
+                   "error": {"type": "auth", "message": "denied",
+                             "hint": "Set NOTION_API_TOKEN"}}
 
 
 def test_error_shape_unknown_exception_is_provider():
     env = error_envelope("notion", ValueError("boom"))
-    assert env["error"]["type"] == "provider"
-    assert env["error"]["hint"] is None
+    assert env["error"]["type"] == "provider" and env["error"]["hint"] is None
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `C:/dev/h2t-skills/.venv/Scripts/pytest tests/core/test_envelope.py -v`
+Run: `uv run h2t dev pytest tests/core/test_envelope.py -v`
 Expected: FAIL — `ModuleNotFoundError: h2t.core.envelope`.
 
 - [ ] **Step 3: Write minimal implementation**
@@ -289,17 +423,14 @@ def success_envelope(provider: str, result: Any) -> dict[str, Any]:
 def error_envelope(provider: str, exc: BaseException) -> dict[str, Any]:
     kind = exc.kind if isinstance(exc, H2TError) else "provider"
     hint = exc.hint if isinstance(exc, H2TError) else None
-    return {
-        "ok": False,
-        "provider": provider,
-        "error": {"type": kind, "message": str(exc), "hint": hint},
-    }
+    return {"ok": False, "provider": provider,
+            "error": {"type": kind, "message": str(exc), "hint": hint}}
 ```
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `C:/dev/h2t-skills/.venv/Scripts/pytest tests/core/test_envelope.py -v`
-Expected: PASS (3).
+Run: `uv run h2t dev pytest tests/core/test_envelope.py -v`
+Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
@@ -310,11 +441,9 @@ git -C C:/dev/h2t-skills commit -m "feat(h2t-core): universal result/error envel
 
 ---
 
-### Task 4: core/output.py — json / md / human emitter
+### Task 3: core/output.py — json / md / human emitter
 
-**Files:**
-- Create: `h2t/core/output.py`
-- Test: `tests/core/test_output.py`
+**Files:** Create `h2t/core/output.py`; Test `tests/core/test_output.py`
 
 - [ ] **Step 1: Write the failing test**
 
@@ -333,7 +462,7 @@ def test_emit_json_success(capsys):
     assert out.err == ""
 
 
-def test_emit_json_error_goes_to_stderr_and_nonzero(capsys):
+def test_emit_json_error_to_stderr_nonzero(capsys):
     code = emit("notion", exc=AuthError("denied", hint="Set NOTION_API_TOKEN"), fmt="json")
     out = capsys.readouterr()
     assert code == 4
@@ -345,20 +474,19 @@ def test_emit_json_error_goes_to_stderr_and_nonzero(capsys):
 def test_emit_md_passthrough_string(capsys):
     code = emit("notion", result="# Title\n", fmt="md")
     out = capsys.readouterr()
-    assert code == 0 and out.out == "# Title\n\n" or out.out == "# Title\n"
+    assert code == 0 and "# Title" in out.out
 
 
 def test_emit_human_error_writes_stderr(capsys):
     code = emit("notion", exc=AuthError("denied", hint="Set NOTION_API_TOKEN"), fmt="human")
     out = capsys.readouterr()
-    assert code == 4
-    assert "denied" in out.err and "Set NOTION_API_TOKEN" in out.err
+    assert code == 4 and "denied" in out.err and "Set NOTION_API_TOKEN" in out.err
     assert out.out == ""
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `C:/dev/h2t-skills/.venv/Scripts/pytest tests/core/test_output.py -v`
+Run: `uv run h2t dev pytest tests/core/test_output.py -v`
 Expected: FAIL — `ModuleNotFoundError: h2t.core.output`.
 
 - [ ] **Step 3: Write minimal implementation**
@@ -378,10 +506,7 @@ from h2t.core.errors import exit_code_for
 
 def emit(provider: str, *, result: Any = None, exc: BaseException | None = None,
          fmt: str = "human") -> int:
-    """Render to stdout (success) or stderr (error). Return exit code.
-
-    fmt: "json" | "md" | "human". Errors are always non-zero and stderr.
-    """
+    """Render to stdout (success) or stderr (error). Return exit code."""
     if exc is not None:
         code = exit_code_for(exc)
         if fmt == "json":
@@ -393,23 +518,21 @@ def emit(provider: str, *, result: Any = None, exc: BaseException | None = None,
                 line += f"\nhint: {env['hint']}"
             print(line, file=sys.stderr)
         return code
-
     if fmt == "json":
         print(json.dumps(success_envelope(provider, result), ensure_ascii=False))
     elif fmt == "md":
-        print(result if isinstance(result, str) else json.dumps(result, ensure_ascii=False, indent=2))
-    else:  # human
-        if isinstance(result, str):
-            print(result)
-        else:
-            print(json.dumps(result, ensure_ascii=False, indent=2))
+        print(result if isinstance(result, str)
+              else json.dumps(result, ensure_ascii=False, indent=2))
+    else:
+        print(result if isinstance(result, str)
+              else json.dumps(result, ensure_ascii=False, indent=2))
     return 0
 ```
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `C:/dev/h2t-skills/.venv/Scripts/pytest tests/core/test_output.py -v`
-Expected: PASS (4).
+Run: `uv run h2t dev pytest tests/core/test_output.py -v`
+Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
@@ -420,11 +543,9 @@ git -C C:/dev/h2t-skills commit -m "feat(h2t-core): output emitter (json/md/huma
 
 ---
 
-### Task 5: core/registry.py — ConnectorSpec + lazy discovery
+### Task 4: core/registry.py — ConnectorSpec + lazy discovery
 
-**Files:**
-- Create: `h2t/core/registry.py`
-- Test: `tests/core/test_registry.py`
+**Files:** Create `h2t/core/registry.py`; Test `tests/core/test_registry.py`
 
 - [ ] **Step 1: Write the failing test**
 
@@ -432,7 +553,6 @@ git -C C:/dev/h2t-skills commit -m "feat(h2t-core): output emitter (json/md/huma
 ```python
 import sys
 import builtins
-import pytest
 from h2t.core.registry import ConnectorSpec, discover, resolve_client
 
 
@@ -448,7 +568,6 @@ def test_discover_finds_notion():
 
 
 def test_discover_does_not_import_notion_sdk(monkeypatch):
-    # Simulate notion-client / httpx being absent: import must NOT be triggered
     real_import = builtins.__import__
 
     def guard(name, *a, **k):
@@ -458,19 +577,17 @@ def test_discover_does_not_import_notion_sdk(monkeypatch):
 
     monkeypatch.setattr(builtins, "__import__", guard)
     sys.modules.pop("h2t.connectors.notion.client", None)
-    names = {s.name for s in discover()}
-    assert "notion" in names  # discovery succeeded with zero heavy imports
+    assert "notion" in {s.name for s in discover()}
 
 
 def test_resolve_client_lazy_returns_class():
     spec = next(s for s in discover() if s.name == "notion")
-    cls = resolve_client(spec)
-    assert cls.__name__ == "NotionClient"
+    assert resolve_client(spec).__name__ == "NotionClient"
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `C:/dev/h2t-skills/.venv/Scripts/pytest tests/core/test_registry.py -v`
+Run: `uv run h2t dev pytest tests/core/test_registry.py -v`
 Expected: FAIL — `ModuleNotFoundError: h2t.core.registry`.
 
 - [ ] **Step 3: Write minimal implementation**
@@ -493,16 +610,11 @@ class ConnectorSpec:
     name: str
     help: str
     client: str                      # lazy "module:attr" — resolved on demand only
-    register: Callable[[Any], None]  # register(subparsers) -> None
+    register: Callable[[Any], None]
 
 
 def discover() -> Iterator[ConnectorSpec]:
-    """Yield CONNECTOR from each h2t.connectors.<name> subpackage.
-
-    Importing a subpackage __init__ must be cheap (no SDK/secrets/network);
-    `from .commands import register` in __init__ is allowed because commands.py
-    has no module-level heavy imports (spec §4.1).
-    """
+    """Yield CONNECTOR from each h2t.connectors.<name> subpackage (cheap import)."""
     for mod in pkgutil.iter_modules(_connectors_pkg.__path__):
         if not mod.ispkg:
             continue
@@ -515,15 +627,13 @@ def discover() -> Iterator[ConnectorSpec]:
 def resolve_client(spec: ConnectorSpec) -> type:
     """Import and return the client class — only when actually needed."""
     module_path, _, attr = spec.client.partition(":")
-    module = importlib.import_module(module_path)
-    return getattr(module, attr)
+    return getattr(importlib.import_module(module_path), attr)
 ```
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run (after Task 9 creates the notion subpackage, this fully passes; run now to confirm `test_connectorspec_fields` passes and others fail on missing notion):
-`C:/dev/h2t-skills/.venv/Scripts/pytest tests/core/test_registry.py::test_connectorspec_fields -v`
-Expected: PASS. (Remaining registry tests pass after Task 9 — re-run in Task 9 Step 6.)
+Run: `uv run h2t dev pytest tests/core/test_registry.py::test_connectorspec_fields -v`
+Expected: PASS. (Remaining registry tests pass after Task 8 — re-run there.)
 
 - [ ] **Step 5: Commit**
 
@@ -534,16 +644,15 @@ git -C C:/dev/h2t-skills commit -m "feat(h2t-core): ConnectorSpec + lazy discove
 
 ---
 
-### Task 6: core/secrets.py — minimal secrets + Notion token
+### Task 5: core/secrets.py — minimal secrets + Notion token
 
-**Files:**
-- Create: `h2t/core/secrets.py`
-- Test: `tests/core/test_secrets.py`
+**Files:** Create `h2t/core/secrets.py`; Test `tests/core/test_secrets.py`
 
 - [ ] **Step 1: Write the failing test**
 
 `tests/core/test_secrets.py`:
 ```python
+import os
 import pytest
 from h2t.core.secrets import resolve_notion_token, load_secrets
 from h2t.core.errors import ConfigError
@@ -576,14 +685,12 @@ def test_load_secrets_is_non_override(tmp_path, monkeypatch):
     env = tmp_path / "secrets.env"
     env.write_text("FOO=file\nBAR=baz\n")
     load_secrets(env_file=env)
-    import os
-    assert os.environ["FOO"] == "shell"   # shell wins
-    assert os.environ["BAR"] == "baz"     # new key loaded
+    assert os.environ["FOO"] == "shell" and os.environ["BAR"] == "baz"
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `C:/dev/h2t-skills/.venv/Scripts/pytest tests/core/test_secrets.py -v`
+Run: `uv run h2t dev pytest tests/core/test_secrets.py -v`
 Expected: FAIL — `ModuleNotFoundError: h2t.core.secrets`.
 
 - [ ] **Step 3: Write minimal implementation**
@@ -634,8 +741,8 @@ def resolve_notion_token() -> str:
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `C:/dev/h2t-skills/.venv/Scripts/pytest tests/core/test_secrets.py -v`
-Expected: PASS (4).
+Run: `uv run h2t dev pytest tests/core/test_secrets.py -v`
+Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
@@ -646,20 +753,17 @@ git -C C:/dev/h2t-skills commit -m "feat(h2t-core): minimal secrets + notion tok
 
 ---
 
-### Task 7: connectors/notion/client.py — re-wrap with typed errors
+### Task 6: connectors/notion/client.py — re-wrap with typed errors
 
-**Files:**
-- Create: `h2t/connectors/notion/__init__.py` (empty marker for now — `CONNECTOR` added in Task 9)
-- Create: `h2t/connectors/notion/client.py`
-- Test: `tests/connectors/notion/test_client.py`
+**Files:** Create `h2t/connectors/notion/__init__.py` (marker), `h2t/connectors/notion/client.py`; Test `tests/connectors/notion/test_client.py`
 
-This is a **mechanical re-wrap** of `lib/clients/notion.py` (spec §10 rule 1): same API logic, only side-effects and error types change.
+Mechanical re-wrap of `lib/clients/notion.py` (spec §10 rule 1): same API logic, only side-effects and error types change.
 
-- [ ] **Step 1: Create the subpackage marker**
+- [ ] **Step 1: Subpackage marker**
 
 `h2t/connectors/notion/__init__.py`:
 ```python
-"""Notion connector. CONNECTOR + register added in Task 9."""
+"""Notion connector. CONNECTOR + register added in Task 8."""
 ```
 
 - [ ] **Step 2: Write the failing test**
@@ -673,8 +777,7 @@ from h2t.core.errors import ConfigError
 
 @pytest.fixture
 def conv():
-    # bypass __init__ (no token / no SDK) — pure converters only
-    c = object.__new__(NotionClient)
+    c = object.__new__(NotionClient)  # bypass __init__ (no token / no SDK)
     c.token = "fake"
     return c
 
@@ -696,8 +799,10 @@ def test_blocks_to_markdown_roundtrip(conv):
 
 
 def test_missing_token_raises_configerror(monkeypatch):
+    import pathlib
     monkeypatch.delenv("NOTION_API_TOKEN", raising=False)
-    monkeypatch.setattr("h2t.core.secrets.Path.home", lambda: __import__("pathlib").Path("/nonexistent-xyz"))
+    monkeypatch.setattr("h2t.core.secrets.Path.home",
+                        lambda: pathlib.Path("/nonexistent-xyz"))
     with pytest.raises(ConfigError):
         NotionClient()
 
@@ -720,19 +825,19 @@ def test_missing_sdk_raises_configerror(monkeypatch):
 
 - [ ] **Step 3: Run test to verify it fails**
 
-Run: `C:/dev/h2t-skills/.venv/Scripts/pytest tests/connectors/notion/test_client.py -v`
+Run: `uv run h2t dev pytest tests/connectors/notion/test_client.py -v`
 Expected: FAIL — `ModuleNotFoundError: h2t.connectors.notion.client`.
 
 - [ ] **Step 4: Create client.py from the legacy file with these exact transforms**
 
-Copy `lib/clients/notion.py` → `h2t/connectors/notion/client.py`, then apply EXACTLY these edits:
+Copy `lib/clients/notion.py` → `h2t/connectors/notion/client.py`, then apply EXACTLY:
 
-1. Replace the top of file (lines 1–44, from the docstring through `self.client = Client(auth=self.token)`) with:
+1. Replace lines 1–44 (docstring through `self.client = Client(auth=self.token)`) with:
 ```python
 """NotionClient — bidirectional Notion adapter (re-wrapped, typed errors).
 
-API logic is byte-identical to lib/clients/notion.py; only side effects and
-error types changed per spec §10 (re-wrap not rewrite).
+API logic is identical to lib/clients/notion.py; only side effects and error
+types changed per spec §10 (re-wrap not rewrite).
 """
 from __future__ import annotations
 
@@ -743,6 +848,27 @@ from h2t.core.errors import (
     AuthError, ConfigError, NetworkError, NotFoundError, ProviderError,
 )
 from h2t.core.secrets import resolve_notion_token
+
+
+def _map_http_status(status: int, msg: str):
+    if status in (401, 403):
+        return AuthError(f"Notion auth/permission denied (HTTP {status}): {msg}")
+    if status == 404:
+        return NotFoundError(f"Notion resource not found (HTTP {status}): {msg}")
+    if status >= 500:
+        return ProviderError(f"Notion server error (HTTP {status}): {msg}")
+    return ProviderError(f"Notion API error (HTTP {status}): {msg}")
+
+
+def _map_sdk_exc(e: Exception, *, op: str):
+    s = str(e).lower()
+    if "unauthorized" in s or "restricted" in s or "permission" in s:
+        return AuthError(f"Failed to {op}: {e}")
+    if "object_not_found" in s or "could not find" in s:
+        return NotFoundError(f"Failed to {op}: {e}")
+    if "timeout" in s or "connection" in s or "network" in s:
+        return NetworkError(f"Failed to {op}: {e}")
+    return ProviderError(f"Failed to {op}: {e}")
 
 
 class NotionClient:
@@ -777,50 +903,26 @@ class NotionClient:
             raise NetworkError(f"Notion request failed: {e}") from e
 ```
 
-2. Delete the old module-level blocks that imported `dotenv`, `notion_client`, `httpx`, the `load_dotenv(...)` call, and the old `_get_token` method (lines ~46–53). Token now comes from `resolve_notion_token()`.
+2. Delete the now-removed old `_get_token` method (legacy lines ~46–53).
 
-3. Add this module-level helper just above `class NotionClient`:
-```python
-def _map_http_status(status: int, msg: str):
-    if status in (401, 403):
-        return AuthError(f"Notion auth/permission denied (HTTP {status}): {msg}")
-    if status == 404:
-        return NotFoundError(f"Notion resource not found (HTTP {status}): {msg}")
-    if status >= 500:
-        return ProviderError(f"Notion server error (HTTP {status}): {msg}")
-    return ProviderError(f"Notion API error (HTTP {status}): {msg}")
-```
+3. In `query_database`, replace the `httpx.post(...)` + `response.raise_for_status()` + `data = response.json()` block with `data = self._http_post(url, headers, body)`. Keep the pagination loop unchanged.
 
-4. In `query_database`, replace the `httpx.post(...)` + `response.raise_for_status()` + `response.json()` block with `data = self._http_post(url, headers, body)` and remove the now-unused `import httpx` references inside the method. Keep pagination/loop logic unchanged.
-
-5. For every method that wraps `notion_client` SDK calls (`get_page`, `get_blocks`, `get_database`, `find_databases_on_page`, `create_page`, `update_page`, `append_blocks`, `delete_block`, `replace_page_content`), replace each:
+4. For every SDK-wrapping method (`get_page`, `get_blocks`, `get_database`, `find_databases_on_page`, `create_page`, `update_page`, `append_blocks`, `delete_block`, `replace_page_content`, and the outer `query_database` try), replace each:
 ```python
         except Exception as e:
             raise Exception(f"Failed to ...: {e}") from e
 ```
-with this exact handler (preserve the original message text after `op=`):
+with (preserve the original message after `op=`):
 ```python
         except Exception as e:
             raise _map_sdk_exc(e, op="<original message, e.g. get page {page_id}>") from e
 ```
-and add this module-level helper next to `_map_http_status`:
-```python
-def _map_sdk_exc(e: Exception, *, op: str):
-    s = str(e).lower()
-    if "unauthorized" in s or "restricted" in s or "permission" in s:
-        return AuthError(f"Failed to {op}: {e}")
-    if "object_not_found" in s or "could not find" in s:
-        return NotFoundError(f"Failed to {op}: {e}")
-    if "timeout" in s or "connection" in s or "network" in s:
-        return NetworkError(f"Failed to {op}: {e}")
-    return ProviderError(f"Failed to {op}: {e}")
-```
 
-6. Leave ALL pure converter methods byte-identical: `blocks_to_markdown`, `_block_to_markdown`, `_rich_text_to_markdown`, `parse_inline`, `markdown_to_blocks`, `_extract_property_value`, `database_items_to_markdown`. (They have no I/O and need no error change.)
+5. Leave ALL pure converters byte-identical: `blocks_to_markdown`, `_block_to_markdown`, `_rich_text_to_markdown`, `parse_inline`, `markdown_to_blocks`, `_extract_property_value`, `database_items_to_markdown`.
 
 - [ ] **Step 5: Run test to verify it passes**
 
-Run: `C:/dev/h2t-skills/.venv/Scripts/pytest tests/connectors/notion/test_client.py -v`
+Run: `uv run h2t dev pytest tests/connectors/notion/test_client.py -v`
 Expected: PASS (5).
 
 - [ ] **Step 6: Commit**
@@ -832,11 +934,9 @@ git -C C:/dev/h2t-skills commit -m "feat(notion): re-wrapped client with typed e
 
 ---
 
-### Task 8: connectors/notion/commands.py — argparse adapter (lazy client)
+### Task 7: connectors/notion/commands.py — argparse adapter (lazy client)
 
-**Files:**
-- Create: `h2t/connectors/notion/commands.py`
-- Test: `tests/connectors/notion/test_commands.py`
+**Files:** Create `h2t/connectors/notion/commands.py`; Test `tests/connectors/notion/test_commands.py`
 
 - [ ] **Step 1: Write the failing test**
 
@@ -845,7 +945,6 @@ git -C C:/dev/h2t-skills commit -m "feat(notion): re-wrapped client with typed e
 import argparse
 import sys
 import builtins
-import pytest
 from h2t.connectors.notion.commands import register
 
 
@@ -857,21 +956,17 @@ def _parser():
 
 
 def test_register_adds_notion_subcommands():
-    p = _parser()
-    ns = p.parse_args(["notion", "get", "PAGEID"])
+    ns = _parser().parse_args(["notion", "get", "PAGEID"])
     assert ns.connector == "notion" and ns.notion_cmd == "get" and ns.page_id == "PAGEID"
 
 
 def test_register_has_format_and_json_flags():
     p = _parser()
-    ns = p.parse_args(["notion", "get", "PID", "--json"])
-    assert ns.as_json is True
-    ns2 = p.parse_args(["notion", "blocks", "PID", "--format", "md"])
-    assert ns2.fmt == "md"
+    assert p.parse_args(["notion", "get", "PID", "--json"]).as_json is True
+    assert p.parse_args(["notion", "blocks", "PID", "--format", "md"]).fmt == "md"
 
 
 def test_importing_commands_does_not_import_client(monkeypatch):
-    # commands.py must have NO module-level client import (spec §4.1)
     sys.modules.pop("h2t.connectors.notion.client", None)
     real = builtins.__import__
     seen = {"client": False}
@@ -889,7 +984,7 @@ def test_importing_commands_does_not_import_client(monkeypatch):
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `C:/dev/h2t-skills/.venv/Scripts/pytest tests/connectors/notion/test_commands.py -v`
+Run: `uv run h2t dev pytest tests/connectors/notion/test_commands.py -v`
 Expected: FAIL — `ModuleNotFoundError: h2t.connectors.notion.commands`.
 
 - [ ] **Step 3: Write minimal implementation**
@@ -899,7 +994,6 @@ Expected: FAIL — `ModuleNotFoundError: h2t.connectors.notion.commands`.
 """Notion CLI adapter. argparse only at module scope; client imported in handlers."""
 from __future__ import annotations
 
-import argparse
 from pathlib import Path
 from typing import Any
 
@@ -916,32 +1010,25 @@ def register(subparsers: Any) -> None:
         sp.add_argument("--format", dest="fmt", choices=["md", "human"], default="human",
                         help="md = markdown/table, human = concise (default)")
 
-    g = cmds.add_parser("get", help="Get page (blocks as markdown by default)")
+    g = cmds.add_parser("get", help="Get page blocks as markdown")
     g.add_argument("page_id"); add_fmt(g)
-
     b = cmds.add_parser("blocks", help="Get page blocks")
     b.add_argument("page_id"); b.add_argument("--limit", type=int); add_fmt(b)
-
     s = cmds.add_parser("search", help="Query a database")
     s.add_argument("database_id"); s.add_argument("--filter")
     s.add_argument("--filter-json"); s.add_argument("--limit", type=int); add_fmt(s)
-
     gd = cmds.add_parser("get-database", help="Database items")
     gd.add_argument("database_id"); gd.add_argument("--limit", type=int); add_fmt(gd)
-
     fd = cmds.add_parser("find-databases", help="Find databases on a page")
     fd.add_argument("page_id"); add_fmt(fd)
-
     c = cmds.add_parser("create", help="Create a page")
     c.add_argument("parent_id"); c.add_argument("title")
     c.add_argument("--content"); c.add_argument("--file")
     c.add_argument("--database", action="store_true"); add_fmt(c)
-
     u = cmds.add_parser("update", help="Update a page")
     u.add_argument("page_id"); u.add_argument("--title")
     u.add_argument("--append"); u.add_argument("--file")
     u.add_argument("--replace", action="store_true"); add_fmt(u)
-
     sy = cmds.add_parser("sync", help="Sync page to a markdown file")
     sy.add_argument("page_id"); sy.add_argument("output_file")
     sy.add_argument("--preserve-metadata", action="store_true"); add_fmt(sy)
@@ -954,16 +1041,15 @@ def _fmt(args) -> str:
 
 
 def run(args) -> Any:
-    """Dispatch a notion subcommand. Returns a result object or raises core.errors."""
+    """Dispatch a notion subcommand. Returns a result or raises core.errors."""
     from h2t.connectors.notion.client import NotionClient  # lazy (spec §4.1)
     client = NotionClient()
     cmd = args.notion_cmd
-
     if cmd == "get":
         return client.blocks_to_markdown(client.get_blocks(args.page_id))
     if cmd == "blocks":
         blocks = client.get_blocks(args.page_id, limit=args.limit)
-        return client.blocks_to_markdown(blocks) if _fmt(args) != "json" else blocks
+        return blocks if _fmt(args) == "json" else client.blocks_to_markdown(blocks)
     if cmd == "search":
         import json as _json
         fdict = None
@@ -973,14 +1059,12 @@ def run(args) -> Any:
             k, _, v = args.filter.partition("=")
             fdict = {"property": k.strip(), "select": {"equals": v.strip()}}
         rows = client.query_database(args.database_id, filter_dict=fdict, limit=args.limit)
-        if _fmt(args) == "json":
-            return rows
-        return client.database_items_to_markdown(rows, client.get_database(args.database_id))
+        return rows if _fmt(args) == "json" else client.database_items_to_markdown(
+            rows, client.get_database(args.database_id))
     if cmd == "get-database":
         rows = client.query_database(args.database_id, limit=args.limit)
-        if _fmt(args) == "json":
-            return rows
-        return client.database_items_to_markdown(rows, client.get_database(args.database_id))
+        return rows if _fmt(args) == "json" else client.database_items_to_markdown(
+            rows, client.get_database(args.database_id))
     if cmd == "find-databases":
         return client.find_databases_on_page(args.page_id)
     if cmd == "create":
@@ -1017,7 +1101,7 @@ def run(args) -> Any:
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `C:/dev/h2t-skills/.venv/Scripts/pytest tests/connectors/notion/test_commands.py -v`
+Run: `uv run h2t dev pytest tests/connectors/notion/test_commands.py -v`
 Expected: PASS (3).
 
 - [ ] **Step 5: Commit**
@@ -1029,10 +1113,9 @@ git -C C:/dev/h2t-skills commit -m "feat(notion): argparse adapter with lazy cli
 
 ---
 
-### Task 9: connectors/notion/__init__.py — CONNECTOR spec
+### Task 8: connectors/notion/__init__.py — CONNECTOR spec
 
-**Files:**
-- Modify: `h2t/connectors/notion/__init__.py`
+**Files:** Modify `h2t/connectors/notion/__init__.py`
 
 - [ ] **Step 1: Replace the marker with the spec**
 
@@ -1050,13 +1133,10 @@ CONNECTOR = ConnectorSpec(
 )
 ```
 
-- [ ] **Step 2: Run the full registry + notion suites**
+- [ ] **Step 2: Run registry + notion suites**
 
-Run:
-```
-C:/dev/h2t-skills/.venv/Scripts/pytest tests/core/test_registry.py tests/connectors/notion -v
-```
-Expected: PASS — including `test_discover_finds_notion`, `test_discover_does_not_import_notion_sdk`, `test_resolve_client_lazy_returns_class`.
+Run: `uv run h2t dev pytest tests/core/test_registry.py tests/connectors/notion -v`
+Expected: PASS — incl. `test_discover_finds_notion`, `test_discover_does_not_import_notion_sdk`, `test_resolve_client_lazy_returns_class`.
 
 - [ ] **Step 3: Commit**
 
@@ -1067,11 +1147,9 @@ git -C C:/dev/h2t-skills commit -m "feat(notion): register CONNECTOR spec (lazy 
 
 ---
 
-### Task 10: h2t/cli.py — dispatcher + legacy delegation + ingest shim
+### Task 9: h2t/cli.py — dispatcher + legacy delegation + ingest shim + doctor
 
-**Files:**
-- Modify: `h2t/cli.py` (replace the Task 1 stub)
-- Test: extend `tests/connectors/notion/test_commands.py` with CLI-level cases
+**Files:** Modify `h2t/cli.py` (replace Task 0 minimal version); extend `tests/connectors/notion/test_commands.py`
 
 - [ ] **Step 1: Write the failing CLI tests**
 
@@ -1080,11 +1158,9 @@ Append to `tests/connectors/notion/test_commands.py`:
 from h2t.cli import build_parser, dispatch
 
 
-def test_version_exits_zero(capsys):
-    import pytest as _pt
-    with _pt.raises(SystemExit) as ei:
-        build_parser().parse_args(["--version"])
-    assert ei.value.code == 0
+def test_version_branch_exits_zero(capsys):
+    assert dispatch(["--version"]) == 0
+    assert "h2t " in capsys.readouterr().out
 
 
 def test_connectors_list_no_heavy_import(capsys, monkeypatch):
@@ -1097,20 +1173,24 @@ def test_connectors_list_no_heavy_import(capsys, monkeypatch):
         return real(name, *a, **k)
 
     monkeypatch.setattr(builtins, "__import__", guard)
-    code = dispatch(["connectors"])
-    assert code == 0
+    assert dispatch(["connectors"]) == 0
     assert "notion" in capsys.readouterr().out
 
 
-def test_unknown_subcommand_exit_2(capsys):
-    code = dispatch(["notion", "bogus"])
-    assert code == 2 or code == 2  # argparse error path → SystemExit(2) handled
+def test_doctor_reports_connectors(capsys):
+    assert dispatch(["doctor"]) == 0
+    out = capsys.readouterr().out
+    assert "notion" in out and "secrets" in out
 
 
 def test_ingest_notion_shim_warns_on_human(monkeypatch, capsys):
     called = {}
-    monkeypatch.setattr("h2t.connectors.notion.commands.run",
-                        lambda args: called.setdefault("ran", True) or "OK")
+
+    def fake_run(args):
+        called["ran"] = True
+        return "OK"
+
+    monkeypatch.setattr("h2t.connectors.notion.commands.run", fake_run)
     code = dispatch(["ingest", "notion", "get", "PID"])
     err = capsys.readouterr().err
     assert called.get("ran") is True
@@ -1119,7 +1199,10 @@ def test_ingest_notion_shim_warns_on_human(monkeypatch, capsys):
 
 
 def test_ingest_notion_shim_silent_on_json(monkeypatch, capsys):
-    monkeypatch.setattr("h2t.connectors.notion.commands.run", lambda args: {"id": "x"})
+    def fake_run_json(args):
+        return {"id": "x"}
+
+    monkeypatch.setattr("h2t.connectors.notion.commands.run", fake_run_json)
     code = dispatch(["ingest", "notion", "get", "PID", "--json"])
     cap = capsys.readouterr()
     assert "deprecat" not in cap.err.lower()
@@ -1128,26 +1211,29 @@ def test_ingest_notion_shim_silent_on_json(monkeypatch, capsys):
 
 - [ ] **Step 2: Run to verify it fails**
 
-Run: `C:/dev/h2t-skills/.venv/Scripts/pytest tests/connectors/notion/test_commands.py -v -k "version or connectors_list or shim or unknown_subcommand"`
+Run: `uv run h2t dev pytest tests/connectors/notion/test_commands.py -v -k "version_branch or connectors_list or doctor or shim"`
 Expected: FAIL — `ImportError: cannot import name 'build_parser' from h2t.cli`.
 
 - [ ] **Step 3: Replace cli.py with the full implementation**
 
-`h2t/cli.py`:
+`h2t/cli.py` (keeps Task 0's `dev`/`--version` routing byte-identical; adds connectors, doctor, shim, legacy delegation):
 ```python
-"""h2t CLI: registry-built parser, central error→exit, legacy delegation, ingest shim."""
+"""h2t CLI: dev wrapper + registry dispatch + doctor + legacy delegation + ingest shim."""
 from __future__ import annotations
 
 import argparse
+import os
+import shutil
 import sys
-from typing import Any
+from pathlib import Path
 
 import h2t
-from h2t.core.errors import UsageError, exit_code_for
+from h2t.core.errors import UsageError
 from h2t.core.output import emit
 from h2t.core.registry import discover
+from h2t.dev import main as _dev_main
 
-_MIGRATED = {"notion"}  # connectors served by the new package
+_MIGRATED = {"notion"}
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -1155,18 +1241,30 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--version", action="version", version=f"h2t {h2t.__version__}")
     sub = p.add_subparsers(dest="connector")
     sub.add_parser("connectors", help="List available connectors")
+    sub.add_parser("doctor", help="Installed CLI health (version, path, connectors, secrets)")
     for spec in discover():
         spec.register(sub)
     return p
 
 
+def _doctor() -> int:
+    print(f"h2t {h2t.__version__}")
+    print(f"executable: {shutil.which('h2t') or sys.executable}")
+    print("connectors:")
+    for spec in discover():
+        print(f"  - {spec.name}: {spec.help}")
+    notion = bool(os.getenv("NOTION_API_TOKEN")) or \
+        (Path.home() / ".config" / "notion" / "token").is_file()
+    print(f"secrets: NOTION_API_TOKEN={'present' if notion else 'MISSING'}")
+    return 0
+
+
 def _legacy(argv: list[str]) -> int:
-    """Delegate non-migrated commands to lib.cli.main unchanged (transitional)."""
     from lib.cli.main import main as legacy_main  # legacy keeps its own sys.path hack
     old = sys.argv
     sys.argv = ["h2t", *argv]
     try:
-        legacy_main()  # calls sys.exit internally
+        legacy_main()
         return 0
     except SystemExit as e:
         return int(e.code or 0)
@@ -1184,50 +1282,11 @@ def _fmt_from(argv: list[str]) -> str:
     return "human"
 
 
-def dispatch(argv: list[str]) -> int:
-    # ingest shim: `ingest notion …` → new connector, deprecation per spec §10
-    if len(argv) >= 2 and argv[0] == "ingest" and argv[1] == "notion":
-        rest = argv[2:]
-        # legacy `--format json|markdown` → new surface
-        norm: list[str] = []
-        skip = False
-        for j, a in enumerate(rest):
-            if skip:
-                skip = False
-                continue
-            if a == "--format" and j + 1 < len(rest) and rest[j + 1] in ("json", "markdown"):
-                if rest[j + 1] == "json":
-                    norm.append("--json")
-                else:
-                    norm += ["--format", "md"]
-                skip = True
-            else:
-                norm.append(a)
-        fmt = _fmt_from(norm)
-        if fmt != "json":
-            print("deprecated: `h2t ingest notion` → use `h2t notion` (spec §10)",
-                  file=sys.stderr)
-        return _run_connector(["notion", *norm])
-
-    if argv and argv[0] in ("gather", "ingest"):
-        return _legacy(argv)
-
-    if argv and argv[0] == "connectors":
-        for spec in discover():
-            print(f"{spec.name:12} {spec.help}")
-        return 0
-
-    if argv and argv[0] in _MIGRATED:
-        return _run_connector(argv)
-
-    return _legacy(argv) if argv else (build_parser().print_help() or 0)
-
-
 def _run_connector(argv: list[str]) -> int:
     parser = build_parser()
     try:
         ns = parser.parse_args(argv)
-    except SystemExit as e:           # argparse usage error
+    except SystemExit as e:
         return int(e.code or 2)
     handler = getattr(ns, "_handler", None)
     if handler is None:
@@ -1235,12 +1294,49 @@ def _run_connector(argv: list[str]) -> int:
     fmt = "json" if getattr(ns, "as_json", False) else getattr(ns, "fmt", "human")
     provider = argv[0]
     try:
-        result = handler(ns)
-        return emit(provider, result=result, fmt=fmt)
-    except BaseException as exc:       # noqa: BLE001 — central mapping point
-        if isinstance(exc, SystemExit):
-            raise
+        return emit(provider, result=handler(ns), fmt=fmt)
+    except SystemExit:
+        raise
+    except BaseException as exc:  # noqa: BLE001 — central error→exit mapping
         return emit(provider, exc=exc, fmt=fmt)
+
+
+def dispatch(argv: list[str]) -> int:
+    if argv and argv[0] == "dev":
+        return _dev_main(argv[1:])
+    if argv and argv[0] in ("--version", "-V"):
+        print(f"h2t {h2t.__version__}")
+        return 0
+    if argv and argv[0] == "doctor":
+        return _doctor()
+    if argv and argv[0] == "connectors":
+        for spec in discover():
+            print(f"{spec.name:12} {spec.help}")
+        return 0
+    # ingest notion shim → new connector (spec §10)
+    if len(argv) >= 2 and argv[0] == "ingest" and argv[1] == "notion":
+        rest, norm, skip = argv[2:], [], False
+        for j, a in enumerate(argv[2:]):
+            if skip:
+                skip = False
+                continue
+            if a == "--format" and j + 1 < len(rest) and rest[j + 1] in ("json", "markdown"):
+                norm += ["--json"] if rest[j + 1] == "json" else ["--format", "md"]
+                skip = True
+            else:
+                norm.append(a)
+        if _fmt_from(norm) != "json":
+            print("deprecated: `h2t ingest notion` → use `h2t notion` (spec §10)",
+                  file=sys.stderr)
+        return _run_connector(["notion", *norm])
+    if argv and argv[0] in ("gather", "ingest"):
+        return _legacy(argv)
+    if argv and argv[0] in _MIGRATED:
+        return _run_connector(argv)
+    if not argv:
+        build_parser().print_help()
+        return 0
+    return _legacy(argv)
 
 
 def main() -> None:
@@ -1251,34 +1347,31 @@ if __name__ == "__main__":
     main()
 ```
 
-- [ ] **Step 4: Run the CLI tests + full notion suite**
+- [ ] **Step 4: Run CLI tests + full suite**
 
-Run: `C:/dev/h2t-skills/.venv/Scripts/pytest tests/connectors/notion tests/core -v`
-Expected: PASS (all core + notion incl. version/connectors-list/shim cases).
+Run: `uv run h2t dev pytest tests/connectors/notion tests/core -v`
+Expected: PASS (all core + notion incl. version/connectors/doctor/shim).
 
-- [ ] **Step 5: Manual smoke (no network) — version, list, lazy discovery**
+- [ ] **Step 5: Manual smoke (no network)**
 
-Run:
-```
-C:/dev/h2t-skills/.venv/Scripts/python -m h2t.cli --version
-C:/dev/h2t-skills/.venv/Scripts/python -m h2t.cli connectors
-C:/dev/h2t-skills/.venv/Scripts/python -m h2t.cli notion --help
-```
-Expected: prints `h2t 0.2.0`; lists `notion`; prints notion subcommand help. No `notion_client` import error (lazy).
+Run: `uv run h2t --version`
+Run: `uv run h2t connectors`
+Run: `uv run h2t notion --help`
+Run: `uv run h2t doctor`
+Expected: `h2t 0.2.0`; lists `notion`; notion help; doctor shows version/connectors/secrets. No `notion_client` import error (lazy).
 
 - [ ] **Step 6: Commit**
 
 ```
 git -C C:/dev/h2t-skills add h2t/cli.py tests/connectors/notion/test_commands.py
-git -C C:/dev/h2t-skills commit -m "feat(h2t): cli dispatcher, legacy delegation, ingest-notion shim"
+git -C C:/dev/h2t-skills commit -m "feat(h2t): cli dispatcher, doctor, legacy delegation, ingest shim"
 ```
 
 ---
 
-### Task 11: Notion SKILL.md → spec §8 conformance
+### Task 10: Notion SKILL.md → spec §8 conformance
 
-**Files:**
-- Modify: `plugins/h2t-ops/skills/notion/SKILL.md`
+**Files:** Modify `plugins/h2t-ops/skills/notion/SKILL.md`
 
 - [ ] **Step 1: Replace the whole file**
 
@@ -1298,7 +1391,8 @@ metadata:
 ## Availability (cross-platform contract)
 
 `h2t --version` exits 0 when installed (identical on PowerShell and POSIX — no shell idioms).
-If it fails: run `/h2t-core:setup`. `h2t doctor` reports install path, version, and secrets presence.
+If it fails: run `/h2t-core:setup`. `h2t doctor` reports version, install path, connectors,
+and secrets presence (no network).
 
 ## Secrets
 
@@ -1314,8 +1408,8 @@ Missing → exit 3 (`config`) with hint.
 | `h2t notion search <database-id> [--filter "Status=Done"] [--filter-json '{...}'] [--limit N]` | query database |
 | `h2t notion get-database <database-id> [--limit N]` | database items as markdown |
 | `h2t notion find-databases <page-id>` | list databases on a page |
-| `h2t notion create <parent-id> "Title" [--content "md" | --file f.md] [--database]` | create page |
-| `h2t notion update <page-id> [--title T] [--append "md" | --file f.md] [--replace]` | update page |
+| `h2t notion create <parent-id> "Title" [--content "md" \| --file f.md] [--database]` | create page |
+| `h2t notion update <page-id> [--title T] [--append "md" \| --file f.md] [--replace]` | update page |
 | `h2t notion sync <page-id> <out.md> [--preserve-metadata]` | write page to a file |
 
 Output flags (every command): `--json` (raw envelope), `--format md` (markdown/table),
@@ -1356,10 +1450,10 @@ h2t notion sync 1a2b3c4d ./export/page.md --preserve-metadata
 human output. Migrate call sites to `h2t notion …`.
 ```
 
-- [ ] **Step 2: Lint the SKILL.md frontmatter loads**
+- [ ] **Step 2: Verify via named check**
 
-Run: `C:/dev/h2t-skills/.venv/Scripts/python -c "import pathlib,sys; t=pathlib.Path('plugins/h2t-ops/skills/notion/SKILL.md').read_text(encoding='utf-8'); assert t.startswith('---') and 'h2t notion get' in t; print('SKILL.md ok')"`
-Expected: prints `SKILL.md ok`.
+Run: `uv run h2t dev check skill-md-notion`
+Expected: prints `OK skill-md-notion`, exit 0.
 
 - [ ] **Step 3: Commit**
 
@@ -1370,36 +1464,31 @@ git -C C:/dev/h2t-skills commit -m "docs(notion): SKILL.md to spec §8 contract 
 
 ---
 
-### Task 12: DoD verification (spec §12)
+### Task 11: DoD verification (spec §12)
 
 **Files:** none (verification only)
 
-- [ ] **Step 1: Run the full ТЗ-0 test suite**
+- [ ] **Step 1: Full ТЗ-0 suite**
 
-Run: `C:/dev/h2t-skills/.venv/Scripts/pytest tests/core tests/connectors -v`
+Run: `uv run h2t dev pytest tests/core tests/connectors -v`
 Expected: ALL PASS.
 
-- [ ] **Step 2: Walk the DoD checklist with exact commands**
+- [ ] **Step 2: DoD checklist (all via uv run — no shell idioms)**
 
 ```
-# 1. h2t --version exits 0
-C:/dev/h2t-skills/.venv/Scripts/python -m h2t.cli --version ; echo "exit=$?"
-# 2. h2t notion --help works
-C:/dev/h2t-skills/.venv/Scripts/python -m h2t.cli notion --help
-# 3. library import works
-C:/dev/h2t-skills/.venv/Scripts/python -c "from h2t.connectors.notion.client import NotionClient; print('import ok')"
-# 4. no sys.path.insert in the new package
-git -C C:/dev/h2t-skills grep -n "sys.path.insert" -- "h2t/**" ; echo "expect: no matches"
-# 5. registry build performs zero heavy imports
-C:/dev/h2t-skills/.venv/Scripts/pytest tests/core/test_registry.py::test_discover_does_not_import_notion_sdk -q
-# 6. legacy gather still works (transition non-regression)
-C:/dev/h2t-skills/.venv/Scripts/python -m h2t.cli gather session-start --cwd C:/dev/h2t-skills >NUL ; echo "gather exit=$?"
-# 7. ingest notion shim still works
-C:/dev/h2t-skills/.venv/Scripts/python -m h2t.cli ingest notion --help
+uv run h2t --version
+uv run h2t notion --help
+uv run h2t doctor
+uv run h2t ingest notion --help
+uv run h2t dev python -c "from h2t.connectors.notion.client import NotionClient; print('import ok')"
+uv run h2t dev check no-syspath
+uv run h2t dev check lazy-registry
+uv run h2t dev check gather-smoke
+uv run h2t dev check skill-md-notion
 ```
-Expected: 1 → `exit=0`; 2 → help text; 3 → `import ok`; 4 → no matches; 5 → PASS; 6 → `gather exit=0`; 7 → help text.
+Expected: `h2t 0.2.0` exit 0; notion help; doctor block; ingest-notion help (with deprecation on stderr); `import ok`; `OK no-syspath`; `OK lazy-registry`; `OK gather-smoke (exit=0)`; `OK skill-md-notion`.
 
-- [ ] **Step 3: Final commit + summary**
+- [ ] **Step 3: Final commit**
 
 ```
 git -C C:/dev/h2t-skills add -A docs/superpowers/plans/2026-05-18-h2t-connector-architecture-tz0.md
@@ -1411,18 +1500,19 @@ git -C C:/dev/h2t-skills commit -m "chore(h2t): ТЗ-0 walking skeleton complete
 ## Self-Review
 
 **Spec coverage (spec §11 In-ТЗ-0 → task):**
-- `h2t/` package + pyproject `h2t.cli:main` + no new `sys.path.insert` → Task 1, verified Task 12 step 2.4
-- `core/registry|errors|envelope|output|secrets` → Tasks 5,2,3,4,6
-- Notion connector walking skeleton → Tasks 7,8,9
-- Backward-compatible `ingest notion` route → Task 10 (shim, spec §10 policy)
-- Tests `tests/core/` + `tests/connectors/notion/` → every task TDD; aggregate Task 12
-- Notion SKILL.md §8 → Task 11
-- Lazy-discovery "zero heavy imports" → Task 5 test + Task 10 test + Task 12 step 2.5
-- Transition non-regression (`gather`) → Task 10 `_legacy` + Task 12 step 2.6
-- §14 decisions (install source / shim / secrets-minimal / optional-dep imports) → Locked Design Decisions block
+- `h2t/` package + pyproject `h2t.cli:main` + no new `sys.path.insert` → Task 0; verified Task 11 (`check no-syspath`)
+- `core/registry|errors|envelope|output|secrets` → Tasks 4,1,2,3,5
+- Notion connector walking skeleton → Tasks 6,7,8
+- Backward-compatible `ingest notion` route (spec §10 policy) → Task 9
+- Tests `tests/core/` + `tests/connectors/notion/` → every task TDD; aggregate Task 11
+- Notion SKILL.md §8 → Task 10
+- Lazy-discovery "zero heavy imports" → Task 4 test + `check lazy-registry` (Task 0 wrapper, run Task 11)
+- Transition non-regression (`gather`) → Task 9 `_legacy` + `check gather-smoke`
+- §14 decisions + transition gap → Locked Design Decisions block
+- spec §7 three surfaces (`--version` / `doctor` / `dev`) → Task 0 (dev/version) + Task 9 (doctor)
 
-**Placeholder scan:** no TBD/TODO; every code step shows full content; the Task 7 re-wrap uses exact copy-then-edit instructions against a named real file with each edit shown verbatim.
+**Placeholder scan:** no TBD/TODO; every code step shows full content; Task 6 re-wrap uses exact copy-then-edit instructions against a named real file with each edit shown verbatim.
 
-**Type consistency:** `ConnectorSpec(name,help,client,register)` consistent Tasks 5/9; `emit(provider,*,result,exc,fmt)` consistent Tasks 4/10; `discover()`/`resolve_client()` consistent Tasks 5/10; error `kind` strings ↔ `EXIT_CODES` keys ↔ envelope `error.type` consistent Tasks 2/3/4; `run(args)` handler + `_handler` default consistent Tasks 8/10.
+**Type consistency:** `ConnectorSpec(name,help,client,register)` consistent Tasks 4/8; `emit(provider,*,result,exc,fmt)` consistent Tasks 3/9; `discover()`/`resolve_client()` consistent Tasks 4/9/dev; `dispatch()` `dev`+`--version` branches byte-identical Task 0 ↔ Task 9; error `kind` ↔ `EXIT_CODES` ↔ envelope `error.type` consistent Tasks 1/2/3; `run(args)` handler + `_handler` default consistent Tasks 7/9; shim test uses named `def fake_run` (no lambda).
 
-Out-of-scope confirmed deferred: gmail/calendar/drive/meetgeek/telegram (ТЗ-1), research/fetch + `core/http.py` + legacy exit-code remap + rich envelope (ТЗ-2).
+Out-of-scope confirmed deferred: gmail/calendar/drive/meetgeek/telegram (ТЗ-1); research/fetch + `core/http.py` + legacy exit-code remap + rich envelope (ТЗ-2). `python-dotenv` declared but unused by ТЗ-0 Notion path (decision #4 note).
