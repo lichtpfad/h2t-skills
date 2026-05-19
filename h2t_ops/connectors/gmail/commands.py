@@ -52,4 +52,64 @@ def _fmt(args) -> str:
 
 
 def run(args) -> Any:
-    raise NotImplementedError  # body filled in Task 5
+    """Dispatch a gmail subcommand. Returns a result or raises core.errors."""
+    from h2t_ops.connectors.gmail.client import (  # lazy (spec §4.1)
+        GmailClient, format_message_list, format_message_detail,
+    )
+    from h2t_ops.core.errors import UsageError
+
+    def _read_file(path):
+        from pathlib import Path as _P
+        try:
+            return _P(path).read_text(encoding="utf-8")
+        except FileNotFoundError as e:
+            raise UsageError(f"file not found: {path}") from e
+
+    client = GmailClient()
+    cmd = args.gmail_cmd
+    if cmd == "list":
+        msgs = client.list_messages(
+            max_results=args.max, query=args.query, unread_only=args.unread)
+        return msgs if _fmt(args) == "json" else format_message_list(msgs)
+    if cmd == "search":
+        msgs = client.search_messages(args.query, max_results=args.max)
+        return msgs if _fmt(args) == "json" else format_message_list(msgs)
+    if cmd == "read":
+        msg = client.get_message(args.message_id)
+        return msg if _fmt(args) == "json" else format_message_detail(msg)
+    if cmd in ("send", "draft"):
+        body = args.body or (_read_file(args.file) if args.file else None)
+        if not body:
+            raise UsageError("send: provide body arg or --file")
+        as_draft = cmd == "draft" or getattr(args, "draft", False)
+        result = client.send_message(
+            to=args.to,
+            subject=args.subject,
+            body=body,
+            attachments=args.attach,
+            as_draft=as_draft,
+            thread_id=getattr(args, "thread_id", None),
+            reply_to_message_id=getattr(args, "reply_to", None),
+        )
+        if _fmt(args) == "json":
+            return {"id": result["id"], "draft": as_draft}
+        return (f"✓ {'Draft created' if as_draft else 'Message sent'} "
+                f"(ID: {result['id']})")
+    if cmd == "labels":
+        labels = client.list_labels()
+        if _fmt(args) == "json":
+            return labels
+        lines = [f"Found {len(labels)} label(s):\n"]
+        lines += [f"- {lb['name']} (ID: {lb['id']})" for lb in labels]
+        return "\n".join(lines)
+    if cmd == "label":
+        result = client.modify_labels(
+            message_id=args.message_id,
+            add_labels=args.add,
+            remove_labels=args.remove,
+        )
+        label_ids = result.get("labelIds", [])
+        if _fmt(args) == "json":
+            return {"labelIds": label_ids}
+        return f"✓ Labels modified. Current: {', '.join(label_ids)}"
+    raise UsageError(f"unknown gmail subcommand: {cmd}")

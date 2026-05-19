@@ -39,3 +39,46 @@ def test_importing_commands_does_not_import_client(monkeypatch):
     import importlib
     importlib.reload(importlib.import_module("h2t_ops.connectors.gmail.commands"))
     assert seen["client"] is False
+
+
+import types
+import pytest
+from h2t_ops.connectors.gmail import commands as gc
+from h2t_ops.core.errors import UsageError
+
+
+class _FakeClient:
+    def list_messages(self, **k): return [{"id": "1", "subject": "S", "from": "f",
+                                           "date": "d", "snippet": "x", "labelIds": []}]
+    def get_message(self, mid): return {"id": mid, "subject": "S", "from": "f",
+                                        "to": "t", "date": "d", "labelIds": [], "body": "B"}
+    def send_message(self, **k): return {"id": "m1"}
+
+
+def _ns(**kw): return types.SimpleNamespace(**kw)
+
+
+def _patch(monkeypatch):
+    import h2t_ops.connectors.gmail.client as m
+    monkeypatch.setattr(m, "GmailClient", lambda *a, **k: _FakeClient())
+
+
+def test_list_json_returns_raw(monkeypatch):
+    _patch(monkeypatch)
+    out = gc.run(_ns(gmail_cmd="list", max=10, unread=False, query=None,
+                     as_json=True, fmt="human"))
+    assert out == [{"id": "1", "subject": "S", "from": "f", "date": "d",
+                    "snippet": "x", "labelIds": []}]
+
+
+def test_read_human_returns_detail(monkeypatch):
+    _patch(monkeypatch)
+    out = gc.run(_ns(gmail_cmd="read", message_id="X", as_json=False, fmt="human"))
+    assert "# S" in out and "B" in out
+
+
+def test_send_no_body_raises_usageerror(monkeypatch):
+    _patch(monkeypatch)
+    with pytest.raises(UsageError):
+        gc.run(_ns(gmail_cmd="send", to="a", subject="s", body=None, file=None,
+                   attach=None, draft=False, as_json=False, fmt="human"))
