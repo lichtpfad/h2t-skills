@@ -41,6 +41,7 @@ foundation.
 | [TZ-0 implementation plan](superpowers/plans/2026-05-18-h2t-connector-architecture-tz0.md) | Core foundation + Notion walking skeleton |
 | [POS operational boundary](../plugins/h2t-ops/references/pos-operational-boundary.md) | Skill-facing rules for respecting POS ADR-0006 without duplicating the ADR |
 | [API coverage audit](reports/2026-05-19-h2t-ops-api-coverage-audit.md) | Read-only audit: per-connector legacy parity, provider API feature gaps, POS-boundary risks, and the "do next" sequence |
+| [Connector development runbook](../plugins/h2t-ops/references/h2t-connector-runbook.md) | Procedural-index recipe for adding/migrating a connector to the h2t-ops standard |
 
 ## Waves
 
@@ -403,7 +404,8 @@ thin re-wrap that ignores the provider-API gap.
 
 **What:**
 - Create or update the connector development skill.
-- Put the long runbook under that skill's `references/` directory.
+- Put the long runbook at `plugins/h2t-ops/references/h2t-connector-runbook.md`
+  (plugin-level references; no new skill scaffold).
 - Keep `SKILL.md` lean and point to the reference only when needed.
 - Base the runbook on the final Notion skeleton and TZ-1/TZ-2 lessons.
 - Embed the **API coverage checklist** (below) as a mandatory per-connector review gate.
@@ -436,7 +438,10 @@ and must not regress parity or boundary guarantees.
 
 **Definition of Done:**
 - Skill follows Claude/Codex skill structure.
-- `references/h2t-connector-runbook.md` exists.
+- `plugins/h2t-ops/references/h2t-connector-runbook.md` exists (plugin-level
+  references, beside `pos-operational-boundary.md` — no separate skill is
+  scaffolded; this satisfies the original "references/h2t-connector-runbook.md"
+  intent).
 - Runbook includes file layout, tests, error mapping, output contract, review checklist,
   and the 9-item API coverage checklist above as a required gate.
 
