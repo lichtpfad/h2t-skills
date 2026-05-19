@@ -46,3 +46,43 @@ def test_emit_human_error_no_hint(capsys):
     assert code == 4
     assert "denied" in out.err and "hint:" not in out.err
     assert out.out == ""
+
+
+import io
+import sys
+
+
+def test_emit_utf8_content_on_cp1252_stdout(monkeypatch):
+    """Cyrillic/emoji result must not crash even when the underlying
+    stdout is a cp1252 stream (the real Windows console condition)."""
+    buf = io.BytesIO()
+    cp = io.TextIOWrapper(buf, encoding="cp1252", newline="")
+    monkeypatch.setattr(sys, "stdout", cp)
+    code = emit("notion", result="Привет ✨ Notion", fmt="human")
+    cp.flush()
+    raw = buf.getvalue()
+    assert code == 0
+    assert "Привет ✨ Notion" in raw.decode("utf-8")  # emit forced UTF-8
+
+
+def test_emit_json_success_utf8_on_cp1252(monkeypatch):
+    buf = io.BytesIO()
+    monkeypatch.setattr(sys, "stdout", io.TextIOWrapper(buf, encoding="cp1252", newline=""))
+    code = emit("notion", result={"t": "Привет ✨"}, fmt="json")
+    sys.stdout.flush()
+    assert code == 0
+    payload = json.loads(buf.getvalue().decode("utf-8"))
+    assert payload["result"]["t"] == "Привет ✨"
+
+
+def test_emit_encode_failure_is_nonzero(monkeypatch):
+    """#141 secondary symptom: if writing the success output genuinely
+    fails, emit must NOT report success (no exit 0 with broken output)."""
+    class _Boom:
+        encoding = "ascii"
+        def write(self, *a, **k): raise UnicodeEncodeError("ascii", "x", 0, 1, "boom")
+        def flush(self): pass
+        def reconfigure(self, *a, **k): raise OSError("cannot reconfigure")
+    monkeypatch.setattr(sys, "stdout", _Boom())
+    code = emit("notion", result="Привет", fmt="human")
+    assert code != 0
