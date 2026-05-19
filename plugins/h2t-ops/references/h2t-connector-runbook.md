@@ -40,3 +40,26 @@ Path-only reference implementations:
 `h2t_ops/connectors/notion/` (read-centric) and `h2t_ops/connectors/gmail/`
 (read + write + OAuth); core: `h2t_ops/core/`; tests:
 `tests/connectors/{notion,gmail}/`.
+
+## Reference anchoring policy
+
+Stable file paths by default. `file:line` ONLY for: ConnectorSpec, lazy client
+string, cli `_MIGRATED`/shim, error map, `emit()`/envelope, POS boundary rule.
+Routine code is path-only — line anchors there drift and make this runbook
+brittle. When you edit this runbook, re-verify the anchors in the Reference map.
+
+## 1. When to use / scope
+
+## 2. Reference implementations
+
+## 3. Step-by-step procedure
+
+## 4. API coverage checklist (review gate)
+
+## 5. Error and exit-code map
+
+## 6. Output contract
+
+## 7. POS boundary and distribution-without-POS gate
+
+## 8. Definition of Done / PR gate
