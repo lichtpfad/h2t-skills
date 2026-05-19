@@ -217,16 +217,20 @@ def test_attachment_not_found_raises_usageerror():
 
 
 # --- Task 7: google deps declared in pyproject.toml ---
-# Note: parents[3] used (not [2]) — test file is at tests/connectors/gmail/,
-# so parents[2]=tests/, parents[3]=repo root (empirically verified).
 
 
 def test_google_deps_declared_in_pyproject():
     import tomllib
     from pathlib import Path
+    # test_client.py is <root>/tests/connectors/gmail/ → parents[3] = <root>
+    # (parents[2] = tests/, which has no pyproject.toml).
     root = Path(__file__).resolve().parents[3]
     data = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))
-    deps = " ".join(data["project"]["dependencies"]).lower()
-    assert "google-api-python-client" in deps
-    assert "google-auth" in deps
-    assert "google-auth-oauthlib" in deps
+    # Match on parsed dep NAMES, not substring-in-joined-string: a bare
+    # `"google-auth" in joined` falsely passes when only the longer
+    # `google-auth-oauthlib` is present (substring match).
+    names = {d.split(">=")[0].split("==")[0].strip().lower()
+             for d in data["project"]["dependencies"]}
+    assert "google-api-python-client" in names
+    assert "google-auth" in names
+    assert "google-auth-oauthlib" in names
