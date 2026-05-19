@@ -79,7 +79,7 @@ def emit(provider: str, *, result: Any = None, exc: BaseException | None = None,
         return code
 
     out_writer, out_created = _utf8_writer(sys.stdout)
-    _write_exc_ref: list[BaseException] = []
+    write_exc: BaseException | None = None
     try:
         if fmt == "json":
             print(json.dumps(success_envelope(provider, result), ensure_ascii=False),
@@ -94,16 +94,16 @@ def emit(provider: str, *, result: Any = None, exc: BaseException | None = None,
             print(result if isinstance(result, str)
                   else json.dumps(result, ensure_ascii=False, indent=2),
                   file=out_writer)
-    except (UnicodeEncodeError, OSError) as write_exc:
+    except (UnicodeEncodeError, OSError) as _exc:
         # Writing the success output failed — surface as a non-zero exit so
         # callers never see exit 0 with broken/missing output (#141).
-        _write_exc_ref.append(write_exc)
+        write_exc = _exc
     finally:
         _finalize(out_writer, out_created)
-    if _write_exc_ref:
+    if write_exc is not None:
         err_writer, err_created = _utf8_writer(sys.stderr)
         try:
-            print(f"error[runtime]: output encoding failed: {_write_exc_ref[0]}",
+            print(f"error[runtime]: output encoding failed: {write_exc}",
                   file=err_writer)
         except Exception:
             pass

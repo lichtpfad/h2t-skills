@@ -9,6 +9,8 @@ from pathlib import Path
 
 import h2t_ops
 from h2t_ops.core.errors import UsageError
+# Route shim deprecation notices through emit()'s UTF-8 writer (reuses privates
+# intentionally) so they don't UnicodeEncodeError on Windows consoles (#141 class).
 from h2t_ops.core.output import emit, _utf8_writer, _finalize
 from h2t_ops.core.registry import discover
 from h2t_ops.dev import main as _dev_main
