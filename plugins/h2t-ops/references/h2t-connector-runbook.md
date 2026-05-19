@@ -78,9 +78,9 @@ Each connector is exactly three files plus tests:
 
 | File | Responsibility | Canon |
 |---|---|---|
-| `<n>/__init__.py` | `CONNECTOR = ConnectorSpec(...)` only | `h2t_ops/connectors/notion/__init__.py:5` |
-| `<n>/client.py` | provider API logic, typed errors, lazy SDK import | `h2t_ops/connectors/notion/client.py` |
-| `<n>/commands.py` | argparse subcommands → client calls; no provider logic | `h2t_ops/connectors/notion/commands.py` |
+| `<name>/__init__.py` | `CONNECTOR = ConnectorSpec(...)` only | `h2t_ops/connectors/notion/__init__.py:5` |
+| `<name>/client.py` | provider API logic, typed errors, lazy SDK import | `h2t_ops/connectors/notion/client.py` |
+| `<name>/commands.py` | argparse subcommands → client calls; no provider logic | `h2t_ops/connectors/notion/commands.py` |
 | `tests/connectors/<name>/test_{client,commands}.py` | API + CLI contract | `tests/connectors/notion/` |
 
 ## 3. Step-by-step procedure
