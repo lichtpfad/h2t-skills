@@ -7,6 +7,7 @@ Skill definitions and gather framework for the h2t AI skill ecosystem.
 
 | Section | Description |
 |---------|-------------|
+| [H2T-OPS Roadmap](h2t-ops-roadmap.md) | Baseline connector roadmap, waves, inventory, GitHub issue backlog |
 | [Specs & Plans](superpowers/) | Design specs and implementation plans |
 | [ADRs](adr/) | Architectural decisions |
 | [Reports](reports/) | Milestone reports |
