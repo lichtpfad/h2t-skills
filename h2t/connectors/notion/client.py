@@ -9,7 +9,7 @@ import re
 from typing import Any, Dict, List, Optional
 
 from h2t.core.errors import (
-    AuthError, ConfigError, NetworkError, NotFoundError, ProviderError,
+    AuthError, ConfigError, H2TError, NetworkError, NotFoundError, ProviderError,
 )
 from h2t.core.secrets import resolve_notion_token
 
@@ -25,12 +25,22 @@ def _map_http_status(status: int, msg: str):
 
 
 def _map_sdk_exc(e: Exception, *, op: str):
+    if isinstance(e, H2TError):
+        return e  # already typed (e.g. from _http_post / get_blocks) — don't re-classify
+    code = getattr(e, "code", None)
+    if hasattr(code, "value"):           # notion_client APIErrorCode enum → str
+        code = code.value
+    status = getattr(e, "status", 0)
+    if code in ("unauthorized", "restricted_resource") or status in (401, 403):
+        return AuthError(f"Failed to {op}: {e}")
+    if code == "object_not_found" or status == 404:
+        return NotFoundError(f"Failed to {op}: {e}")
     s = str(e).lower()
     if "unauthorized" in s or "restricted" in s or "permission" in s:
         return AuthError(f"Failed to {op}: {e}")
-    if "object_not_found" in s or "could not find" in s:
+    if "could not find" in s:
         return NotFoundError(f"Failed to {op}: {e}")
-    if "timeout" in s or "connection" in s or "network" in s:
+    if "timeout" in s or "timed out" in s or "connection" in s or "network" in s:
         return NetworkError(f"Failed to {op}: {e}")
     return ProviderError(f"Failed to {op}: {e}")
 
