@@ -1,6 +1,6 @@
 import sys
 import builtins
-from h2t.core.registry import ConnectorSpec, discover, resolve_client
+from h2t_ops.core.registry import ConnectorSpec, discover, resolve_client
 
 
 def test_connectorspec_fields():
@@ -11,7 +11,7 @@ def test_connectorspec_fields():
 def test_discover_finds_notion():
     specs = {s.name: s for s in discover()}
     assert "notion" in specs
-    assert specs["notion"].client == "h2t.connectors.notion.client:NotionClient"
+    assert specs["notion"].client == "h2t_ops.connectors.notion.client:NotionClient"
 
 
 def test_discover_does_not_import_notion_sdk(monkeypatch):
@@ -25,7 +25,7 @@ def test_discover_does_not_import_notion_sdk(monkeypatch):
     monkeypatch.setattr(builtins, "__import__", guard)
     # delitem (not raw pop) so the client module is restored at teardown —
     # a raw pop leaks a sys.modules-vs-package-attr desync into later tests.
-    monkeypatch.delitem(sys.modules, "h2t.connectors.notion.client", raising=False)
+    monkeypatch.delitem(sys.modules, "h2t_ops.connectors.notion.client", raising=False)
     assert "notion" in {s.name for s in discover()}
 
 
@@ -35,7 +35,7 @@ def test_resolve_client_lazy_returns_class():
 
 
 def test_discover_skips_broken_connector(tmp_path, monkeypatch):
-    import h2t.connectors as _pkg
+    import h2t_ops.connectors as _pkg
     pkgdir = tmp_path / "broken_conn"
     pkgdir.mkdir()
     (pkgdir / "__init__.py").write_text("raise ImportError('missing dep')\n", encoding="utf-8")

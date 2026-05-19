@@ -7,7 +7,7 @@ import sys
 from dataclasses import dataclass
 from typing import Any, Callable, Iterator
 
-import h2t.connectors as _connectors_pkg
+import h2t_ops.connectors as _connectors_pkg
 
 
 @dataclass(frozen=True)
@@ -19,7 +19,7 @@ class ConnectorSpec:
 
 
 def discover() -> Iterator[ConnectorSpec]:
-    """Yield CONNECTOR from each h2t.connectors.<name> subpackage (cheap import).
+    """Yield CONNECTOR from each h2t_ops.connectors.<name> subpackage (cheap import).
 
     A connector whose __init__ raises is skipped with a stderr warning rather
     than killing discovery for every connector (plug-in registry convention).
@@ -28,9 +28,9 @@ def discover() -> Iterator[ConnectorSpec]:
         if not mod.ispkg:
             continue
         try:
-            sub = importlib.import_module(f"h2t.connectors.{mod.name}")
+            sub = importlib.import_module(f"h2t_ops.connectors.{mod.name}")
         except Exception as e:  # noqa: BLE001 — one bad connector must not kill the registry
-            print(f"h2t: warning: skipped connector {mod.name!r}: {e}", file=sys.stderr)
+            print(f"h2t-ops: warning: skipped connector {mod.name!r}: {e}", file=sys.stderr)
             continue
         spec = getattr(sub, "CONNECTOR", None)
         if isinstance(spec, ConnectorSpec):

@@ -1,5 +1,5 @@
 import pytest
-from h2t.core.errors import (
+from h2t_ops.core.errors import (
     H2TError, UsageError, ConfigError, AuthError,
     ProviderError, NotFoundError, NetworkError, exit_code_for, EXIT_CODES,
 )
@@ -33,7 +33,7 @@ def test_all_subclass_kinds_are_in_exit_codes():
 
 
 def test_hint_stored_and_defaults_none():
-    e = UsageError("bad arg", hint="run h2t --help")
-    assert e.hint == "run h2t --help"
+    e = UsageError("bad arg", hint="run h2t-ops --help")
+    assert e.hint == "run h2t-ops --help"
     assert str(e) == "bad arg"
     assert UsageError("x").hint is None

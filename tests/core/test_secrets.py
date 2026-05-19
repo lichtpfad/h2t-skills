@@ -1,7 +1,7 @@
 import os
 import pytest
-from h2t.core.secrets import resolve_notion_token, load_secrets
-from h2t.core.errors import ConfigError
+from h2t_ops.core.secrets import resolve_notion_token, load_secrets
+from h2t_ops.core.errors import ConfigError
 
 
 def test_env_var_wins(monkeypatch):
@@ -14,13 +14,13 @@ def test_config_file_fallback(tmp_path, monkeypatch):
     cfg = tmp_path / ".config" / "notion" / "token"
     cfg.parent.mkdir(parents=True)
     cfg.write_text("filetok\n")
-    monkeypatch.setattr("h2t.core.secrets.Path.home", lambda: tmp_path)
+    monkeypatch.setattr("h2t_ops.core.secrets.Path.home", lambda: tmp_path)
     assert resolve_notion_token() == "filetok"
 
 
 def test_missing_raises_configerror(tmp_path, monkeypatch):
     monkeypatch.delenv("NOTION_API_TOKEN", raising=False)
-    monkeypatch.setattr("h2t.core.secrets.Path.home", lambda: tmp_path)
+    monkeypatch.setattr("h2t_ops.core.secrets.Path.home", lambda: tmp_path)
     with pytest.raises(ConfigError) as ei:
         resolve_notion_token()
     assert ei.value.hint and "NOTION_API_TOKEN" in ei.value.hint

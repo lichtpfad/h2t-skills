@@ -8,10 +8,10 @@ from __future__ import annotations
 import re
 from typing import Any, Dict, List, Optional
 
-from h2t.core.errors import (
+from h2t_ops.core.errors import (
     AuthError, ConfigError, H2TError, NetworkError, NotFoundError, ProviderError,
 )
-from h2t.core.secrets import resolve_notion_token
+from h2t_ops.core.secrets import resolve_notion_token
 
 
 def _map_http_status(status: int, msg: str):

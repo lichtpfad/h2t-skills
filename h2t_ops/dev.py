@@ -1,4 +1,4 @@
-"""h2t dev — repo-local execution wrapper for agents/plans/tests.
+"""h2t-ops dev — repo-local execution wrapper for agents/plans/tests.
 
 Resolves the running interpreter (uv-managed under `uv run`) so plans never
 hardcode a python path or shell idiom.
@@ -33,14 +33,14 @@ def _run(cmd: list[str]) -> int:
     try:
         return subprocess.run(cmd, cwd=_repo_root()).returncode
     except FileNotFoundError as e:
-        print(f"h2t dev: cannot run {cmd[0]}: {e}", file=sys.stderr)
+        print(f"h2t-ops dev: cannot run {cmd[0]}: {e}", file=sys.stderr)
         return 127
 
 
 def _check(name: str) -> int:
     root = _repo_root()
     if name == "no-syspath":
-        hits = [str(p) for p in (root / "h2t").rglob("*.py")
+        hits = [str(p) for p in (root / "h2t_ops").rglob("*.py")
                 if _SYSPATH_PAT.search(p.read_text(encoding="utf-8"))]
         if hits:
             print("FAIL no-syspath: " + ", ".join(hits), file=sys.stderr)
@@ -58,7 +58,7 @@ def _check(name: str) -> int:
 
         builtins.__import__ = guard
         try:
-            from h2t.core.registry import discover
+            from h2t_ops.core.registry import discover
             names = {s.name for s in discover()}
         except ImportError as e:
             print(f"FAIL lazy-registry (not yet installed: {e})", file=sys.stderr)
@@ -70,14 +70,14 @@ def _check(name: str) -> int:
         return 0 if ok else 1
     if name == "gather-smoke":
         code = subprocess.run(
-            [sys.executable, "-m", "h2t.cli", "gather", "session-start", "--cwd", str(root)],
+            [sys.executable, "-m", "h2t_ops.cli", "gather", "session-start", "--cwd", str(root)],
             cwd=root, stdout=subprocess.DEVNULL).returncode
         print(("OK" if code == 0 else "FAIL") + f" gather-smoke (exit={code})")
         return 0 if code == 0 else 1
     if name == "skill-md-notion":
         f = root / "plugins" / "h2t-ops" / "skills" / "notion" / "SKILL.md"
         t = f.read_text(encoding="utf-8")
-        ok = t.startswith("---") and "h2t notion get" in t
+        ok = t.startswith("---") and "h2t-ops notion get" in t
         print(("OK" if ok else "FAIL") + " skill-md-notion")
         return 0 if ok else 1
     print(f"unknown check: {name}", file=sys.stderr)
@@ -86,7 +86,7 @@ def _check(name: str) -> int:
 
 def main(argv: list[str]) -> int:
     if not argv:
-        print("usage: h2t dev {python|pip|pytest|check} ...", file=sys.stderr)
+        print("usage: h2t-ops dev {python|pip|pytest|check} ...", file=sys.stderr)
         return 2
     tool, rest, py = argv[0], argv[1:], sys.executable
     if tool == "python":
@@ -97,7 +97,7 @@ def main(argv: list[str]) -> int:
         return _run([py, "-m", "pytest", *rest])
     if tool == "check":
         if not rest:
-            print("usage: h2t dev check <name>", file=sys.stderr)
+            print("usage: h2t-ops dev check <name>", file=sys.stderr)
             return 2
         return _check(rest[0])
     print(f"unknown dev tool: {tool}", file=sys.stderr)

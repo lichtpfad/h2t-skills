@@ -4,7 +4,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from h2t.core.errors import ConfigError
+from h2t_ops.core.errors import ConfigError
 
 DEFAULT_SECRETS = Path.home() / ".dor" / "secrets.env"
 
