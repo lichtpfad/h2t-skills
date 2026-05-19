@@ -70,7 +70,10 @@ def _run_connector(argv: list[str]) -> int:
     try:
         ns = parser.parse_args(argv)
     except SystemExit as e:
-        return int(e.code or 2)
+        code = e.code
+        if code is None:
+            return 0
+        return code if isinstance(code, int) else 2
     handler = getattr(ns, "_handler", None)
     if handler is None:
         return emit(argv[0], exc=UsageError("no subcommand"), fmt="human")

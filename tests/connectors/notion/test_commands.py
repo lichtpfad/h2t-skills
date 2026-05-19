@@ -137,3 +137,15 @@ def test_ingest_notion_shim_silent_on_json(monkeypatch, capsys):
     cap = capsys.readouterr()
     assert "deprecat" not in cap.err.lower()
     assert code == 0
+
+
+def test_connector_help_exits_zero(capsys):
+    """_run_connector must return 0 for --help (argparse SystemExit(0))."""
+    code = dispatch(["notion", "--help"])
+    assert code == 0
+    assert "notion" in capsys.readouterr().out
+
+
+def test_connector_subcommand_help_exits_zero(capsys):
+    code = dispatch(["notion", "get", "--help"])
+    assert code == 0
