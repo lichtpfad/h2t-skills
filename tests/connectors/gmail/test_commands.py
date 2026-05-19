@@ -132,3 +132,20 @@ def test_ingest_gmail_shim_silent_on_json(monkeypatch, capsys):
                         lambda a: [{"id": "1"}])
     code = dispatch(["ingest", "gmail", "list", "--json"])
     assert "deprecat" not in capsys.readouterr().err.lower() and code == 0
+
+
+def test_ingest_gmail_shim_format_json_normalized_silent(monkeypatch, capsys):
+    """`--format json` → `--json` → silent (regression-pins the gmail-only
+    shim divergence: gmail consumes ANY `--format <val>`, notion only json/md)."""
+    monkeypatch.setattr("h2t_ops.connectors.gmail.commands.run",
+                        lambda a: [{"id": "1"}])
+    code = dispatch(["ingest", "gmail", "list", "--format", "json"])
+    assert "deprecat" not in capsys.readouterr().err.lower() and code == 0
+
+
+def test_ingest_gmail_shim_format_plain_dropped_warns(monkeypatch, capsys):
+    """`--format plain` dropped → human default → deprecation warning."""
+    monkeypatch.setattr("h2t_ops.connectors.gmail.commands.run",
+                        lambda a: "OK")
+    code = dispatch(["ingest", "gmail", "list", "--format", "plain"])
+    assert "deprecat" in capsys.readouterr().err.lower() and code == 0

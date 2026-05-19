@@ -118,7 +118,10 @@ def dispatch(argv: list[str]) -> int:
             print("deprecated: `h2t-ops ingest notion` → use `h2t-ops notion` (spec §10)",
                   file=sys.stderr)
         return _run_connector(["notion", *norm])
-    # ingest gmail shim → new connector (spec §10.2)
+    # ingest gmail shim → new connector (spec §10.2).
+    # Gmail legacy accepted `--format plain` (& friends); notion did not — so we
+    # consume ANY `--format <val>` (json→--json, others dropped), unlike the
+    # notion shim above which only consumes json/markdown. Do not unify.
     if len(argv) >= 2 and argv[0] == "ingest" and argv[1] == "gmail":
         rest, norm, skip = argv[2:], [], False
         for j, a in enumerate(argv[2:]):
