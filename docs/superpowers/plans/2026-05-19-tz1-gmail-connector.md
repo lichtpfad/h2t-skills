@@ -74,6 +74,9 @@ def test_register_has_format_and_json_flags():
 
 
 def test_importing_commands_does_not_import_client(monkeypatch):
+    # delitem (not raw pop) so the popped client module is restored at
+    # teardown -- a raw pop leaks a sys.modules-vs-package-attr desync that
+    # breaks string-target monkeypatching in later tests.
     monkeypatch.delitem(sys.modules, "h2t_ops.connectors.gmail.client", raising=False)
     real = builtins.__import__
     seen = {"client": False}
@@ -152,9 +155,14 @@ def _fmt(args) -> str:
     return "json" if getattr(args, "as_json", False) else getattr(args, "fmt", "human")
 
 
-def run(args) -> Any:  # noqa: C901 — body filled in Task 5
-    raise NotImplementedError
+def run(args) -> Any:
+    raise NotImplementedError  # body filled in Task 5
 ```
+
+> **Defect mirror (Task 1 code-quality review):** do NOT add `# noqa: C901` to the
+> stub — it suppresses nothing on a complexity-1 body and diverges from the bare
+> Notion `def run(args) -> Any:` reference. If Task 5's real dispatch body trips
+> C901, add the suppression there, against real code.
 
 `h2t_ops/connectors/gmail/__init__.py` (mirror notion `__init__.py`):
 
@@ -228,12 +236,21 @@ def test_missing_google_libs_raises_configerror(monkeypatch):
 
 
 def test_no_creds_no_refresh_raises_configerror_not_browser(monkeypatch, tmp_path):
-    """§4.1 enforcement: must raise ConfigError, must NOT launch run_local_server."""
+    """§4.1 enforcement: must raise ConfigError, must NOT launch run_local_server.
+
+    Create credentials.json so delta-4 (missing-creds) is skipped, AND stub
+    `_load_credentials -> None` so delta-1 (missing google libs) is skipped —
+    only then does control reach the §4.1 branch and the no-browser assertion
+    become meaningful.
+    """
     from h2t_ops.connectors.gmail import client as gmod
     from h2t_ops.core.errors import ConfigError
 
-    # google libs importable but no token + no credentials.json under a temp HOME
+    cfg = tmp_path / ".config" / "gmail"
+    cfg.mkdir(parents=True)
+    (cfg / "credentials.json").write_text("{}")
     monkeypatch.setattr(gmod.Path, "home", staticmethod(lambda: tmp_path))
+    monkeypatch.setattr(gmod, "_load_credentials", lambda *a, **k: None)
 
     launched = {"browser": False}
 
@@ -243,7 +260,7 @@ def test_no_creds_no_refresh_raises_configerror_not_browser(monkeypatch, tmp_pat
             launched["browser"] = True
             raise AssertionError("run_local_server must never be reached")
 
-    monkeypatch.setattr(gmod, "_install_app_flow", lambda: _Flow, raising=False)
+    monkeypatch.setattr(gmod, "_install_app_flow", lambda: _Flow)
     with pytest.raises(ConfigError):
         gmod.GmailClient()
     assert launched["browser"] is False
@@ -265,12 +282,42 @@ def test_refresh_failure_raises_autherror(monkeypatch, tmp_path):
         refresh_token = "r"
         def refresh(self, _req): raise RuntimeError("invalid_grant")
 
-    monkeypatch.setattr(gmod, "_load_credentials", lambda *a, **k: _Creds(), raising=False)
+    monkeypatch.setattr(gmod, "_load_credentials", lambda *a, **k: _Creds())
+    # Seam (discretion): stub the lazy Request() import — google libs absent in test env.
+    monkeypatch.setattr(gmod, "_request", lambda: object())
     with pytest.raises(AuthError):
         gmod.GmailClient()
 ```
 
-> **Implementer note:** the test uses two seams (`_install_app_flow()`, `_load_credentials(...)`) so auth can be exercised without real google libs/network. Introduce these as thin module-level indirections in `client.py` wrapping the byte-identical logic — they are test seams, not logic changes. If a cleaner seam fits the transcribed code, adjust the test accordingly in the same step (keep the three assertions: ConfigError on missing libs, ConfigError + no-browser on no-creds, AuthError on refresh fail).
+> **Defect mirror (Task 2 code-quality review):** do NOT pass `raising=False` to
+> the seam `monkeypatch.setattr`s. The seams exist in production, so `raising=False`
+> is a no-op today but lets a future rename/delete of a seam (esp. the
+> never-production-called `_install_app_flow`) pass silently — the test is the only
+> pin on that seam. In `client.py`, add a one-line comment at the `_request()` seam
+> (`# test seam: lazy Request() — google libs absent until Task 7 declares deps`)
+> and at the §10.1-locked bare `except Exception:` in `_load_credentials`
+> (`# delta 2: legacy printed a warning here; dropped per §10.1, creds=None kept`).
+> Do NOT narrow the `except` — that breaks byte-identical fidelity (accepted
+> tradeoff). Sibling Google connectors (#132 Calendar) inherit these.
+
+> **Defect mirror (Task 2 spec review — CONFIRMED via two-way discriminator):**
+> The original plan draft of `test_no_creds_no_refresh…` (no `credentials.json`,
+> real `_load_credentials`) was a **non-functional §4.1 guard**: with google libs
+> absent it short-circuits at delta 1, and even with them it short-circuits at
+> delta 4 — the §4.1 branch is never reached, so the test passed even when the
+> legacy `flow.run_local_server` branch was restored. Fixed above (create
+> `credentials.json` + stub `_load_credentials → None`). `test_refresh_failure…`
+> additionally needs a third `_request()` seam because google libs are absent in
+> the `uv run` env until Task 7 — without it the byte-identical
+> `creds.refresh(_request())` raises `ConfigError`, masking the asserted
+> `AuthError`. **Sibling-connector note:** Calendar (#132) and any Google
+> connector plan reusing this auth test pattern MUST carry the same three fixes.
+>
+> **Implementer seam discipline:** `_install_app_flow()`, `_load_credentials(...)`,
+> `_request()` are thin module-level indirections wrapping byte-identical logic —
+> test seams, NOT logic changes. The 3 behavioral assertions must still hit real
+> code paths: ConfigError on missing libs; ConfigError + no-browser on
+> no-creds/no-refresh; AuthError on refresh fail.
 
 - [ ] **Step 2: Run test to verify it fails**
 
@@ -279,7 +326,7 @@ Expected: FAIL — `ModuleNotFoundError: h2t_ops.connectors.gmail.client`.
 
 - [ ] **Step 3: Write minimal implementation**
 
-Create `h2t_ops/connectors/gmail/client.py`: transcribe `GmailClient.__init__`/`_get_service` and the `SCOPES`, `_attach_file`, `_parse_message`, `_get_message_body`, `_html_to_text`, `format_message_list`, `format_message_detail` from `lib/clients/gmail.py` **verbatim**, applying only the Task-2 auth re-wrap rules above. Wrap google imports lazily. Expose `_install_app_flow()` / `_load_credentials(...)` seams around the (now ConfigError-raising) terminal branch and the credentials construction so the logic is unit-testable without google libs. `from h2t_ops.core.errors import AuthError, ConfigError`. Read/write API methods are added in Tasks 3–4 (leave them out or stubbed `raise NotImplementedError` for now — Step 4 only needs auth paths).
+Create `h2t_ops/connectors/gmail/client.py`: transcribe `GmailClient.__init__`/`_get_service` and the `SCOPES`, `_attach_file`, `_parse_message`, `_get_message_body`, `_html_to_text`, `format_message_list`, `format_message_detail` from `lib/clients/gmail.py` **verbatim**, applying only the Task-2 auth re-wrap rules above. Wrap google imports lazily. Expose `_install_app_flow()` / `_load_credentials(...)` / `_request()` thin module-level seams around the (now ConfigError-raising) terminal branch, the credentials construction, and the lazy `Request()` import so the logic is unit-testable without google libs. `from h2t_ops.core.errors import AuthError, ConfigError`. Read/write API methods are added in Tasks 3–4 (leave them out or stubbed `raise NotImplementedError` for now — Step 4 only needs auth paths).
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -349,18 +396,18 @@ class _Exec:
     def execute(self): return self._v
 
 
-def _client_with(monkeypatch, service):
+def _client_with(service):
     from h2t_ops.connectors.gmail import client as gmod
-    c = gmod.GmailClient.__new__(gmod.GmailClient)
+    c = gmod.GmailClient.__new__(gmod.GmailClient)  # bypass __init__/_get_service
     c.service = service
     return c, gmod
 
 
-def test_list_messages_happy(monkeypatch):
+def test_list_messages_happy():
     svc = _FakeService(list={"messages": [{"id": "1"}]},
                        get={"id": "1", "threadId": "t", "labelIds": [], "snippet": "",
                             "payload": {"headers": [{"name": "Subject", "value": "S"}]}})
-    c, _ = _client_with(monkeypatch, svc)
+    c, _ = _client_with(svc)
     out = c.list_messages(max_results=1)
     assert out[0]["id"] == "1" and out[0]["subject"] == "S"
 
@@ -375,13 +422,41 @@ def test_get_message_404_maps_notfound(monkeypatch):
         def get(self, **k):
             raise _HttpErr("not found")
 
-    c, gmod = _client_with(monkeypatch, _Svc())
-    monkeypatch.setattr(gmod, "HttpError", _HttpErr, raising=False)
+    c, gmod = _client_with(_Svc())
+    monkeypatch.setattr(gmod, "HttpError", _HttpErr)
     with pytest.raises(NotFoundError):
         c.get_message("missing")
+
+
+@pytest.mark.parametrize("status,exc_name", [
+    (401, "AuthError"), (403, "AuthError"), (404, "NotFoundError"),
+    (500, "ProviderError"), (503, "ProviderError"), (0, "ProviderError"),
+])
+def test_map_http_error_status_branches(status, exc_name):
+    from h2t_ops.connectors.gmail import client as gmod
+    import h2t_ops.core.errors as errs
+    e = type("_E", (Exception,), {"resp": types.SimpleNamespace(status=status)})("boom")
+    assert isinstance(gmod._map_http_error(e, op="x"), getattr(errs, exc_name))
+
+
+def test_map_http_error_network_substring():
+    from h2t_ops.connectors.gmail import client as gmod
+    from h2t_ops.core.errors import NetworkError
+    assert isinstance(gmod._map_http_error(Exception("connection timed out"), op="x"),
+                      NetworkError)
+
+
+def test_map_http_error_passthrough_does_not_downgrade():
+    """ТЗ-0 CRITICAL: an already-typed H2TError must pass through unchanged."""
+    from h2t_ops.connectors.gmail import client as gmod
+    from h2t_ops.core.errors import NotFoundError
+    nf = NotFoundError("x")
+    assert gmod._map_http_error(nf, op="y") is nf
 ```
 
-> **Implementer note:** `except HttpError` must catch the real `googleapiclient.errors.HttpError`. Bind `HttpError` lazily inside methods (same lazy-import discipline) and let `_map_http_error` dispatch on `.resp.status`; the test injects a stand-in via the module-level `HttpError` seam. Keep `_parse_message`/`_get_message_body` byte-identical.
+> **Implementer note:** `except HttpError` must catch the real `googleapiclient.errors.HttpError`. Bind `HttpError` lazily (module sentinel + one-shot bind after `build()`, or equivalent lazy seam — same §4.1 discipline) so `monkeypatch.setattr(gmod, "HttpError", ...)` works; `_map_http_error` dispatches on `.resp.status`. Keep `_parse_message`/`_get_message_body` byte-identical (already present from Task 2).
+>
+> **Defect mirror (Task 3 code-quality review):** (1) Do NOT pass `raising=False` to the `HttpError` `monkeypatch.setattr` — `HttpError` is a real module attr, so `raising=False` only silences a future rename (same precedent as Task 2's seam-pin hardening). (2) `_client_with` must NOT take an unused `monkeypatch` param. (3) `_map_http_error` is the ТЗ-0-CRITICAL error-downgrade trust boundary — it MUST have direct branch coverage incl. the `isinstance(H2TError) → return e` passthrough (the 3 added `test_map_http_error_*` tests above), not only the indirect 404-via-`get_message` path. Sibling Google connectors (#132 Calendar) inherit this test shape.
 
 - [ ] **Step 2: Run** `uv run h2t-ops dev pytest tests/connectors/gmail/test_client.py -q` → FAIL (`list_messages` NotImplemented / AttributeError).
 
@@ -409,26 +484,51 @@ git commit -m "feat(gmail): re-wrap read methods + typed HTTP error mapping (#13
 - [ ] **Step 1: Write the failing test** — append:
 
 ```python
-def test_send_message_happy(monkeypatch):
+def test_send_message_happy():
     sent = {}
 
     class _Svc(_FakeService):
         def send(self, userId, body): sent.update(body); return _Exec({"id": "m1"})
-        def messages(self): return self
-        def users(self): return self
 
-    c, _ = _client_with(monkeypatch, _Svc())
+    c, _ = _client_with(_Svc())
     out = c.send_message(to="a@b.com", subject="S", body="B")
     assert out["id"] == "m1" and "raw" in sent
 
 
-def test_attachment_not_found_raises_usageerror(monkeypatch):
+def test_draft_with_thread_and_reply_header():
+    created = {}
+
+    class _Svc(_FakeService):
+        def drafts(self): return self
+        def create(self, userId, body): created.update(body); return _Exec({"id": "d1"})
+
+    c, _ = _client_with(_Svc())
+    out = c.send_message(to="a@b.com", subject="S", body="B", as_draft=True,
+                         thread_id="T", reply_to_message_id="<mid@x>")
+    assert out["id"] == "d1" and created["message"]["threadId"] == "T"
+    import base64
+    raw = base64.urlsafe_b64decode(created["message"]["raw"]).decode()
+    assert "In-Reply-To: <mid@x>" in raw and "References: <mid@x>" in raw
+
+
+def test_attachment_not_found_raises_usageerror():
     from h2t_ops.core.errors import UsageError
-    c, _ = _client_with(monkeypatch, _FakeService())
+    c, _ = _client_with(_FakeService())
     with pytest.raises(UsageError):
         c.send_message(to="a@b.com", subject="S", body="B",
                        attachments=["/no/such/file.bin"])
 ```
+
+> **Defect mirror (Task 4 reviews):** (1) Plan draft used the pre-Task-3
+> `_client_with(monkeypatch, …)` signature — the real helper is
+> `_client_with(service)` (no `monkeypatch`); these tests reflect the corrected
+> signature. (2) Code-quality: the SEND-only happy test left the DRAFT/`thread_id`/
+> `reply_to_message_id` header path uncovered — `test_draft_with_thread_and_reply_header`
+> closes it (same coverage-discipline as Task 3's `_map_http_error` tests).
+> (3) Separately, in `client.py` the email-MIME imports' `# noqa: F401  (used by
+> Task 3-4 helpers)` parenthetical is now FALSE (Task 4 makes `MIMEMultipart`/
+> `MIMEText` directly used by `send_message`) — drop the dead `# noqa: F401`
+> comment. Sibling Google connectors (#132 Calendar) inherit these.
 
 - [ ] **Step 2: Run** → FAIL.
 - [ ] **Step 3: Implement** write methods per re-wrap rules.
@@ -452,10 +552,20 @@ git commit -m "feat(gmail): re-wrap write methods + attachment UsageError (#131)
 
 - `list`/`search`: `msgs = client.list_messages(...)` / `search_messages(...)`; json → return `msgs`; else → `format_message_list(msgs)`.
 - `read`: `msg = client.get_message(args.message_id)`; json → return `msg`; `fmt=="md"` → `format_message_detail(msg)`; human → `format_message_detail(msg)` (same renderer; `plain` NOT reproduced).
-- `send`/`draft`: resolve body from `args.body` or `_read_file(args.file)`; empty → `raise UsageError("send: provide body arg or --file")`; `as_draft = args.gmail_cmd=="draft" or getattr(args,"draft",False)`; call `client.send_message(...)`; return `{"id": result["id"], "draft": as_draft}`.
-- `labels`: `client.list_labels()` → json returns list; else a `"- name (id)"` joined string.
-- `label`: `client.modify_labels(...)` → return `{"labelIds": result.get("labelIds", [])}`.
-- `_read_file` helper identical to notion's (`FileNotFoundError → UsageError`).
+- `send`/`draft`: resolve body as **`body = _read_file(args.file) if args.file else args.body`** (legacy `--file` OVERRIDES a positional body — and this matches notion's own `create`/`update` idiom; do NOT use `args.body or _read_file(...)`, which silently ignores `--file` when both are given); empty → `raise UsageError(f"{cmd}: provide body arg or --file")` (use `{cmd}` so the `draft` path doesn't mis-say "send:"); `as_draft = args.gmail_cmd=="draft" or getattr(args,"draft",False)`; call `client.send_message(...)`; json → `{"id": result["id"], "draft": as_draft}`, else `✓ {'Draft created' if as_draft else 'Message sent'} (ID: {id})` (legacy tone).
+- `labels`: `client.list_labels()` → json returns list; else legacy tone: `Found N label(s):\n` header + `- {name} (ID: {id})` lines (NOT `"- name (id)"` — legacy `_cmd_gmail` is the byte-exact tone source).
+- `label`: `client.modify_labels(...)` → json `{"labelIds": result.get("labelIds", [])}`; else `✓ Labels modified. Current: {', '.join(labelIds)}` (legacy tone).
+- `_read_file` helper identical to notion's (`Path(path).read_text("utf-8")`, `FileNotFoundError → UsageError(f"file not found: {path}")`).
+
+> **Defect mirror (Task 5 code-quality review):** the original plan draft said
+> `body = args.body or _read_file(args.file)` and `UsageError("send: …")` and a
+> `"- name (id)"` label shorthand. All three diverged from legacy `_cmd_gmail`
+> (`lib/cli/main.py`): (1) legacy `--file` OVERRIDES positional body — corrected
+> to `_read_file(args.file) if args.file else args.body` (also the notion
+> `create`/`update` idiom); (2) the error must not hardcode `"send:"` on the
+> shared send/draft block — use `f"{cmd}:"`; (3) labels/label/confirmation
+> strings are byte-identical to legacy tone. Sibling Google connectors
+> (#132 Calendar) inherit the `_read_file`-override precedence + `{cmd}` lesson.
 
 - [ ] **Step 1: Write the failing test** — append to `tests/connectors/gmail/test_commands.py`:
 
@@ -478,6 +588,10 @@ def _ns(**kw): return types.SimpleNamespace(**kw)
 
 
 def _patch(monkeypatch):
+    # Patch GmailClient on the LIVE client module object (resolves via
+    # sys.modules, the same path run()'s lazy `from ...client import
+    # GmailClient` uses). A string target would resolve via package attrs
+    # and desync if an upstream test raw-popped the client from sys.modules.
     import h2t_ops.connectors.gmail.client as m
     monkeypatch.setattr(m, "GmailClient", lambda *a, **k: _FakeClient())
 
@@ -527,7 +641,10 @@ git commit -m "feat(gmail): commands.run dispatch + rendering (#131)"
 3. New shim branch in `dispatch`, **before** the generic `("gather","ingest")→_legacy` branch, mirroring the `ingest notion` block: when `argv[0]=="ingest" and argv[1]=="gmail"`, normalize legacy flags → connector flags: `--format json` → `--json`; `--format plain` → drop; legacy `--json` passes through unchanged (already the connector flag). Emit the one-line stderr deprecation notice when resolved format ≠ json; forward via `_run_connector(["gmail", *norm])`.
 
 ```python
-    # ingest gmail shim → new connector (spec §10.2)
+    # ingest gmail shim → new connector (spec §10.2).
+    # Gmail legacy accepted `--format plain` (& friends); notion did not — so we
+    # consume ANY `--format <val>` (json→--json, others dropped), unlike the
+    # notion shim above which only consumes json/markdown. Do not unify.
     if len(argv) >= 2 and argv[0] == "ingest" and argv[1] == "gmail":
         rest, norm, skip = argv[2:], [], False
         for j, a in enumerate(argv[2:]):
@@ -594,6 +711,23 @@ def test_ingest_gmail_shim_silent_on_json(monkeypatch, capsys):
                         lambda a: [{"id": "1"}])
     code = dispatch(["ingest", "gmail", "list", "--json"])
     assert "deprecat" not in capsys.readouterr().err.lower() and code == 0
+
+
+def test_ingest_gmail_shim_format_json_normalized_silent(monkeypatch, capsys):
+    """`--format json` → `--json` → silent (regression-pins the gmail-only
+    shim divergence: gmail consumes ANY `--format <val>`, notion only json/md)."""
+    monkeypatch.setattr("h2t_ops.connectors.gmail.commands.run",
+                        lambda a: [{"id": "1"}])
+    code = dispatch(["ingest", "gmail", "list", "--format", "json"])
+    assert "deprecat" not in capsys.readouterr().err.lower() and code == 0
+
+
+def test_ingest_gmail_shim_format_plain_dropped_warns(monkeypatch, capsys):
+    """`--format plain` dropped → human default → deprecation warning."""
+    monkeypatch.setattr("h2t_ops.connectors.gmail.commands.run",
+                        lambda a: "OK")
+    code = dispatch(["ingest", "gmail", "list", "--format", "plain"])
+    assert "deprecat" in capsys.readouterr().err.lower() and code == 0
 ```
 
 - [ ] **Step 2: Run** `uv run h2t-ops dev pytest tests/connectors/gmail/test_commands.py -q` → FAIL (shim/`_MIGRATED` not wired; `gmail --help` falls to `_legacy`).
@@ -620,13 +754,27 @@ git commit -m "feat(gmail): register in _MIGRATED + ingest gmail deprecation shi
 def test_google_deps_declared_in_pyproject():
     import tomllib
     from pathlib import Path
-    root = Path(__file__).resolve().parents[2]
+    # test_client.py is <root>/tests/connectors/gmail/ → parents[3] = <root>
+    # (parents[2] = tests/, which has no pyproject.toml).
+    root = Path(__file__).resolve().parents[3]
     data = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))
-    deps = " ".join(data["project"]["dependencies"]).lower()
-    assert "google-api-python-client" in deps
-    assert "google-auth" in deps
-    assert "google-auth-oauthlib" in deps
+    # Match on parsed dep NAMES, not substring-in-joined-string: a bare
+    # `"google-auth" in joined` falsely passes when only the longer
+    # `google-auth-oauthlib` is present (substring match).
+    names = {d.split(">=")[0].split("==")[0].strip().lower()
+             for d in data["project"]["dependencies"]}
+    assert "google-api-python-client" in names
+    assert "google-auth" in names
+    assert "google-auth-oauthlib" in names
 ```
+
+> **Defect mirror (Task 7 reviews):** the plan draft had two bugs reused by
+> sibling connectors if uncorrected — (1) `parents[2]` resolves to `tests/`,
+> not repo root → must be `parents[3]`; (2) `" ".join(deps)` substring asserts
+> false-pass (`"google-auth"` ⊂ `"google-auth-oauthlib"`) → assert against the
+> parsed dep-name set. Both fixed above. (Code-quality also noted this packaging
+> assertion lives in `test_client.py`; acceptable for the chore — notion has no
+> equivalent and a dedicated packaging-test file would be net scope; left as-is.)
 
 - [ ] **Step 2: Run** `uv run h2t-ops dev pytest tests/connectors/gmail/test_client.py::test_google_deps_declared_in_pyproject -q` → FAIL (KeyError/assert).
 
@@ -658,8 +806,10 @@ git commit -m "chore(gmail): declare google-api deps for h2t-ops (#131)"
 
 - [ ] **Step 1:** Read `plugins/h2t-ops/skills/notion/SKILL.md` and the current `plugins/h2t-ops/skills/gmail/SKILL.md`.
 
-- [ ] **Step 2:** Rewrite `plugins/h2t-ops/skills/gmail/SKILL.md` mirroring the notion SKILL.md structure exactly: frontmatter (`name: gmail`, description with triggers incl. `h2t-ops:gmail`, `compatibility` line, `metadata.author: lichtpfad`, `version` bumped), Availability contract (`h2t-ops --version`), Secrets (`~/.config/gmail/credentials.json` or `~/.config/google-calendar-mcp/`; missing → exit 3), Commands table (list/read/search/send/draft/labels/label with flags), Output flags, Examples, Exit codes table (0–6), When to use / not use, Deprecated section (`h2t-ops ingest gmail …` forwards, prints deprecation to stderr unless `--json`), and the **verbatim** umbrella note from spec §8:
+- [ ] **Step 2:** Rewrite `plugins/h2t-ops/skills/gmail/SKILL.md` mirroring the notion SKILL.md structure exactly: frontmatter (`name: gmail`, description with triggers incl. `h2t-ops:gmail`, `compatibility` line, `metadata.author: lichtpfad`, `version` bumped), Availability contract (`h2t-ops --version`), Secrets, Commands table (list/read/search/send/draft/labels/label with flags), Output flags, Examples, Exit codes table (0–6), When to use / not use, Deprecated section (`h2t-ops ingest gmail …` forwards, prints deprecation to stderr unless `--json`), and the **verbatim** umbrella note from spec §8:
   > In the internal umbrella CLI, `h2t gmail …` may be available later via h2t-ai delegation. Skills should call `h2t-ops …` directly unless a project explicitly provides the umbrella bridge.
+
+  **Secrets section — must be agent-actionable (Task 8 code-quality defect mirror):** do NOT just say "bootstrap via the legacy gmail skill" (agent can't resolve that on exit-3 → dead end). State both exit-3 cases concretely, aligned with `client.py`'s actual ConfigError hints: (a) **missing `credentials.json`** → "Download OAuth credentials from Google Cloud Console to `~/.config/gmail/` (or `~/.config/google-calendar-mcp/`)"; (b) **have creds, no token + no refresh** (§4.1 no-browser) → first-time auth is a ONE-TIME interactive bootstrap run OUTSIDE this connector: run the standalone legacy script `plugins/h2t/skills/gmail/scripts/gmail_cli.py` once (e.g. `python …/gmail_cli.py labels`) — it performs the browser OAuth and writes `token.json`/`tokens.json`; thereafter `h2t-ops gmail` reuses & silently refreshes it. Paths: `~/.config/google-calendar-mcp/` (shared w/ calendar, `tokens.json` plural) or `~/.config/gmail/` (`token.json` singular) + `credentials.json`; missing/unauth → exit 3 `config`. **Commands/Examples polish (Minor mirror):** the `--query`/`search` doc must show a date/attachment operator example (e.g. `from:alice after:2024/01/01 has:attachment`) not just `from:… subject:…`; the `read` row description must note "use `--format md` for full formatted detail". Sibling Google connectors (#132 Calendar) inherit the concrete-bootstrap-instruction requirement (same OAuth model).
 
 - [ ] **Step 3: Commit**
 
