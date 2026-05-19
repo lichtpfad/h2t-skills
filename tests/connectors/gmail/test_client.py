@@ -214,3 +214,19 @@ def test_attachment_not_found_raises_usageerror():
     with pytest.raises(UsageError):
         c.send_message(to="a@b.com", subject="S", body="B",
                        attachments=["/no/such/file.bin"])
+
+
+# --- Task 7: google deps declared in pyproject.toml ---
+# Note: parents[3] used (not [2]) — test file is at tests/connectors/gmail/,
+# so parents[2]=tests/, parents[3]=repo root (empirically verified).
+
+
+def test_google_deps_declared_in_pyproject():
+    import tomllib
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[3]
+    data = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))
+    deps = " ".join(data["project"]["dependencies"]).lower()
+    assert "google-api-python-client" in deps
+    assert "google-auth" in deps
+    assert "google-auth-oauthlib" in deps
