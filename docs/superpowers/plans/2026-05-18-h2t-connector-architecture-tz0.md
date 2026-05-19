@@ -1103,6 +1103,41 @@ def test_importing_commands_does_not_import_client(monkeypatch):
     import importlib
     importlib.reload(importlib.import_module("h2t.connectors.notion.commands"))
     assert seen["client"] is False
+
+
+import types
+import pytest
+from h2t.connectors.notion import commands as notion_cmds
+from h2t.core.errors import UsageError
+
+
+class _FakeClient:
+    def get_blocks(self, page_id, limit=None): return [{"type": "paragraph", "id": "b1"}]
+    def blocks_to_markdown(self, blocks): return "MD"
+    def update_page(self, *a, **k): return {"id": "p"}
+
+
+def _ns(**kw):
+    return types.SimpleNamespace(**kw)
+
+
+def test_get_json_returns_raw_blocks(monkeypatch):
+    monkeypatch.setattr("h2t.connectors.notion.client.NotionClient", lambda *a, **k: _FakeClient())
+    out = notion_cmds.run(_ns(notion_cmd="get", page_id="P", as_json=True, fmt="human"))
+    assert out == [{"type": "paragraph", "id": "b1"}]
+
+
+def test_get_human_returns_markdown(monkeypatch):
+    monkeypatch.setattr("h2t.connectors.notion.client.NotionClient", lambda *a, **k: _FakeClient())
+    out = notion_cmds.run(_ns(notion_cmd="get", page_id="P", as_json=False, fmt="human"))
+    assert out == "MD"
+
+
+def test_update_noop_raises_usageerror(monkeypatch):
+    monkeypatch.setattr("h2t.connectors.notion.client.NotionClient", lambda *a, **k: _FakeClient())
+    with pytest.raises(UsageError):
+        notion_cmds.run(_ns(notion_cmd="update", page_id="P", title=None,
+                            append=None, file=None, replace=False))
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -1166,10 +1201,20 @@ def _fmt(args) -> str:
 def run(args) -> Any:
     """Dispatch a notion subcommand. Returns a result or raises core.errors."""
     from h2t.connectors.notion.client import NotionClient  # lazy (spec §4.1)
+    from h2t.core.errors import UsageError
+
+    def _read_file(path):
+        from pathlib import Path as _P
+        try:
+            return _P(path).read_text(encoding="utf-8")
+        except FileNotFoundError as e:
+            raise UsageError(f"file not found: {path}") from e
+
     client = NotionClient()
     cmd = args.notion_cmd
     if cmd == "get":
-        return client.blocks_to_markdown(client.get_blocks(args.page_id))
+        blocks = client.get_blocks(args.page_id)
+        return blocks if _fmt(args) == "json" else client.blocks_to_markdown(blocks)
     if cmd == "blocks":
         blocks = client.get_blocks(args.page_id, limit=args.limit)
         return blocks if _fmt(args) == "json" else client.blocks_to_markdown(blocks)
@@ -1191,7 +1236,7 @@ def run(args) -> Any:
     if cmd == "find-databases":
         return client.find_databases_on_page(args.page_id)
     if cmd == "create":
-        content = Path(args.file).read_text(encoding="utf-8") if args.file else args.content
+        content = _read_file(args.file) if args.file else args.content
         return client.create_page(args.parent_id, args.title,
                                   content=content, is_database=args.database)
     if cmd == "update":
@@ -1199,13 +1244,15 @@ def run(args) -> Any:
         if args.title:
             out["title"] = client.update_page(args.page_id, title=args.title)
         if args.append or args.file:
-            text = Path(args.file).read_text(encoding="utf-8") if args.file else args.append
+            text = _read_file(args.file) if args.file else args.append
             if args.replace:
                 client.replace_page_content(args.page_id, text)
                 out["content"] = "replaced"
             else:
                 out["content"] = client.append_blocks(
                     args.page_id, client.markdown_to_blocks(text))
+        if not out:
+            raise UsageError("update: specify --title, --append, or --file")
         return out
     if cmd == "sync":
         md = client.blocks_to_markdown(client.get_blocks(args.page_id))
@@ -1218,7 +1265,6 @@ def run(args) -> Any:
         out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_text(md, encoding="utf-8")
         return f"Synced to {out_path}"
-    from h2t.core.errors import UsageError
     raise UsageError(f"unknown notion subcommand: {cmd}")
 ```
 
