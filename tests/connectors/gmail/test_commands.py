@@ -86,3 +86,49 @@ def test_send_no_body_raises_usageerror(monkeypatch):
     with pytest.raises(UsageError):
         gc.run(_ns(gmail_cmd="send", to="a", subject="s", body=None, file=None,
                    attach=None, draft=False, as_json=False, fmt="human"))
+
+
+from h2t_ops.cli import dispatch
+
+
+def test_gmail_help_exits_zero(capsys):
+    assert dispatch(["gmail", "--help"]) == 0
+    assert "gmail" in capsys.readouterr().out
+
+
+def test_gmail_subcommand_help_exits_zero():
+    assert dispatch(["gmail", "list", "--help"]) == 0
+
+
+def test_connectors_list_includes_gmail_no_heavy_import(capsys, monkeypatch):
+    import builtins
+    real = builtins.__import__
+
+    def guard(name, *a, **k):
+        if name.startswith("google") or name == "googleapiclient":
+            raise AssertionError("connectors list must not import Google SDK")
+        return real(name, *a, **k)
+
+    monkeypatch.setattr(builtins, "__import__", guard)
+    assert dispatch(["connectors"]) == 0
+    assert "gmail" in capsys.readouterr().out
+
+
+def test_ingest_gmail_shim_warns_on_human(monkeypatch, capsys):
+    called = {}
+
+    def fake_run(args):
+        called["ran"] = True
+        return "OK"
+
+    monkeypatch.setattr("h2t_ops.connectors.gmail.commands.run", fake_run)
+    code = dispatch(["ingest", "gmail", "list"])
+    err = capsys.readouterr().err
+    assert called.get("ran") is True and "deprecat" in err.lower() and code == 0
+
+
+def test_ingest_gmail_shim_silent_on_json(monkeypatch, capsys):
+    monkeypatch.setattr("h2t_ops.connectors.gmail.commands.run",
+                        lambda a: [{"id": "1"}])
+    code = dispatch(["ingest", "gmail", "list", "--json"])
+    assert "deprecat" not in capsys.readouterr().err.lower() and code == 0
