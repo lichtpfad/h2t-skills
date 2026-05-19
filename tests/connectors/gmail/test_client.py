@@ -118,18 +118,18 @@ class _Exec:
     def execute(self): return self._v
 
 
-def _client_with(monkeypatch, service):
+def _client_with(service):
     from h2t_ops.connectors.gmail import client as gmod
-    c = gmod.GmailClient.__new__(gmod.GmailClient)
+    c = gmod.GmailClient.__new__(gmod.GmailClient)  # bypass __init__/_get_service
     c.service = service
     return c, gmod
 
 
-def test_list_messages_happy(monkeypatch):
+def test_list_messages_happy():
     svc = _FakeService(list={"messages": [{"id": "1"}]},
                        get={"id": "1", "threadId": "t", "labelIds": [], "snippet": "",
                             "payload": {"headers": [{"name": "Subject", "value": "S"}]}})
-    c, _ = _client_with(monkeypatch, svc)
+    c, _ = _client_with(svc)
     out = c.list_messages(max_results=1)
     assert out[0]["id"] == "1" and out[0]["subject"] == "S"
 
@@ -144,7 +144,33 @@ def test_get_message_404_maps_notfound(monkeypatch):
         def get(self, **k):
             raise _HttpErr("not found")
 
-    c, gmod = _client_with(monkeypatch, _Svc())
-    monkeypatch.setattr(gmod, "HttpError", _HttpErr, raising=False)
+    c, gmod = _client_with(_Svc())
+    monkeypatch.setattr(gmod, "HttpError", _HttpErr)
     with pytest.raises(NotFoundError):
         c.get_message("missing")
+
+
+@pytest.mark.parametrize("status,exc_name", [
+    (401, "AuthError"), (403, "AuthError"), (404, "NotFoundError"),
+    (500, "ProviderError"), (503, "ProviderError"), (0, "ProviderError"),
+])
+def test_map_http_error_status_branches(status, exc_name):
+    from h2t_ops.connectors.gmail import client as gmod
+    import h2t_ops.core.errors as errs
+    e = type("_E", (Exception,), {"resp": types.SimpleNamespace(status=status)})("boom")
+    assert isinstance(gmod._map_http_error(e, op="x"), getattr(errs, exc_name))
+
+
+def test_map_http_error_network_substring():
+    from h2t_ops.connectors.gmail import client as gmod
+    from h2t_ops.core.errors import NetworkError
+    assert isinstance(gmod._map_http_error(Exception("connection timed out"), op="x"),
+                      NetworkError)
+
+
+def test_map_http_error_passthrough_does_not_downgrade():
+    """ТЗ-0 CRITICAL: an already-typed H2TError must pass through unchanged."""
+    from h2t_ops.connectors.gmail import client as gmod
+    from h2t_ops.core.errors import NotFoundError
+    nf = NotFoundError("x")
+    assert gmod._map_http_error(nf, op="y") is nf
