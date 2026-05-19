@@ -889,6 +889,51 @@ def test_missing_sdk_raises_configerror(monkeypatch):
     with pytest.raises(ConfigError) as ei:
         NotionClient()
     assert "notion-client" in (ei.value.hint or "")
+
+
+from h2t.connectors.notion.client import _map_http_status, _map_sdk_exc
+from h2t.core.errors import AuthError, NetworkError, NotFoundError, ProviderError
+
+
+@pytest.mark.parametrize("status,expected", [
+    (401, AuthError), (403, AuthError), (404, NotFoundError),
+    (500, ProviderError), (503, ProviderError), (400, ProviderError),
+])
+def test_map_http_status(status, expected):
+    assert isinstance(_map_http_status(status, "err"), expected)
+
+
+@pytest.mark.parametrize("msg,expected", [
+    ("insufficient permission to access", AuthError),
+    ("could not find page with id", NotFoundError),
+    ("connection refused", NetworkError),
+    ("request to notion api has timed out", NetworkError),
+    ("some other api error", ProviderError),
+])
+def test_map_sdk_exc_substring(msg, expected):
+    assert isinstance(_map_sdk_exc(Exception(msg), op="op"), expected)
+
+
+def test_map_sdk_exc_passthrough_typed():
+    e = NotFoundError("already typed")
+    assert _map_sdk_exc(e, op="op") is e
+
+
+class _FakeAPIErr(Exception):
+    def __init__(self, code, status):
+        super().__init__("opaque message")
+        self.code = code
+        self.status = status
+
+
+@pytest.mark.parametrize("code,status,expected", [
+    ("unauthorized", 401, AuthError),
+    ("restricted_resource", 403, AuthError),
+    ("object_not_found", 404, NotFoundError),
+    ("rate_limited", 429, ProviderError),
+])
+def test_map_sdk_exc_structured_code(code, status, expected):
+    assert isinstance(_map_sdk_exc(_FakeAPIErr(code, status), op="op"), expected)
 ```
 
 - [ ] **Step 3: Run test to verify it fails**
@@ -913,7 +958,7 @@ import re
 from typing import Any, Dict, List, Optional
 
 from h2t.core.errors import (
-    AuthError, ConfigError, NetworkError, NotFoundError, ProviderError,
+    AuthError, ConfigError, H2TError, NetworkError, NotFoundError, ProviderError,
 )
 from h2t.core.secrets import resolve_notion_token
 
@@ -929,10 +974,20 @@ def _map_http_status(status: int, msg: str):
 
 
 def _map_sdk_exc(e: Exception, *, op: str):
+    if isinstance(e, H2TError):
+        return e  # already typed (e.g. from _http_post / get_blocks) — don't re-classify
+    code = getattr(e, "code", None)
+    if hasattr(code, "value"):           # notion_client APIErrorCode enum → str
+        code = code.value
+    status = getattr(e, "status", 0)
+    if code in ("unauthorized", "restricted_resource") or status in (401, 403):
+        return AuthError(f"Failed to {op}: {e}")
+    if code == "object_not_found" or status == 404:
+        return NotFoundError(f"Failed to {op}: {e}")
     s = str(e).lower()
     if "unauthorized" in s or "restricted" in s or "permission" in s:
         return AuthError(f"Failed to {op}: {e}")
-    if "object_not_found" in s or "could not find" in s:
+    if "could not find" in s:
         return NotFoundError(f"Failed to {op}: {e}")
     if "timeout" in s or "connection" in s or "network" in s:
         return NetworkError(f"Failed to {op}: {e}")
