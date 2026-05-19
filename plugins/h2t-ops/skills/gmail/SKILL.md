@@ -18,20 +18,32 @@ and secrets presence (no network).
 ## Secrets
 
 Google OAuth — resolved from `~/.config/google-calendar-mcp/credentials.json` (shared with
-calendar, token file `tokens.json`) or `~/.config/gmail/credentials.json` + `token.json`.
-Missing credentials or unauthenticated state → exit 3 (`config`) with hint.
+calendar, token file `tokens.json` — plural) or `~/.config/gmail/credentials.json` +
+`token.json` (singular). Missing credentials or unauthenticated state → exit 3 (`config`).
 
-§4.1 non-interactive behavior: the connector will NOT open a browser. First-time auth must be
-bootstrapped once via the legacy gmail skill (which runs the interactive flow), after which
-the `token.json` / `tokens.json` is reused automatically (refreshed silently when possible).
+§4.1 non-interactive behavior: this connector will NOT open a browser. The two exit-3 cases
+have concrete fixes:
+
+- **Missing `credentials.json`** → download OAuth client credentials from the Google Cloud
+  Console and place them at `~/.config/gmail/credentials.json` (or
+  `~/.config/google-calendar-mcp/credentials.json`).
+- **Have `credentials.json`, no valid token and no refresh token** → run the one-time
+  interactive bootstrap OUTSIDE this connector (the legacy standalone script does the
+  browser OAuth and writes the token):
+  ```bash
+  python plugins/h2t/skills/gmail/scripts/gmail_cli.py labels
+  ```
+  This performs `run_local_server` OAuth and writes `~/.config/gmail/token.json` (or
+  `~/.config/google-calendar-mcp/tokens.json` if the shared dir is used). Afterwards,
+  `h2t-ops gmail …` reuses the token and refreshes it silently.
 
 ## Commands
 
 | Command | Purpose |
 |---|---|
 | `h2t-ops gmail list [--max N] [--unread] [--query Q]` | list messages (default 10); `--unread` filters to unread; `--query` accepts Gmail search syntax |
-| `h2t-ops gmail read <message_id>` | full message detail |
-| `h2t-ops gmail search <query> [--max N]` | search by Gmail query string (e.g. `from:alice subject:report`) |
+| `h2t-ops gmail read <message_id>` | message detail; use `--format md` for the full formatted message (headers + body) |
+| `h2t-ops gmail search <query> [--max N]` | search by Gmail query string; supports `from:`, `subject:`, `after:YYYY/MM/DD`, `before:`, `has:attachment`, `is:unread` (e.g. `from:alice after:2024/01/01 has:attachment`) |
 | `h2t-ops gmail send <to> <subject> [body] [--file f] [--attach file ...] [--draft]` | send message; body positional OR `--file f` required; `--draft` saves instead of sends |
 | `h2t-ops gmail draft <to> <subject> [body] [--file f] [--attach file ...] [--thread-id ID] [--reply-to MID]` | create a draft; body positional OR `--file f` required |
 | `h2t-ops gmail labels` | list all labels (system and user) |
@@ -44,7 +56,7 @@ default = concise human text.
 
 ```bash
 h2t-ops gmail list --max 5 --unread
-h2t-ops gmail search "from:alice subject:invoice" --max 20 --json
+h2t-ops gmail search "from:alice after:2024/01/01 has:attachment" --max 20 --json
 h2t-ops gmail read 18c3f4a12b9e7d --format md
 h2t-ops gmail send alice@example.com "Meeting notes" --file notes.md --attach slides.pdf
 h2t-ops gmail label 18c3f4a12b9e7d --add STARRED --remove UNREAD
