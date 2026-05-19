@@ -1597,14 +1597,14 @@ and secrets presence (no network).
 
 ## Secrets
 
-`NOTION_API_TOKEN` resolved in order: env var → `~/.config/notion/token`.
+`NOTION_API_TOKEN` resolved in order: env var (incl. `~/.dor/secrets.env` if loaded) → `~/.config/notion/token`.
 Missing → exit 3 (`config`) with hint.
 
 ## Commands
 
 | Command | Purpose |
 |---|---|
-| `h2t notion get <page-id>` | page blocks as markdown |
+| `h2t notion get <page-id>` | page blocks as markdown (raw blocks with `--json`) |
 | `h2t notion blocks <page-id> [--limit N]` | raw/markdown blocks |
 | `h2t notion search <database-id> [--filter "Status=Done"] [--filter-json '{...}'] [--limit N]` | query database |
 | `h2t notion get-database <database-id> [--limit N]` | database items as markdown |
@@ -1647,8 +1647,8 @@ h2t notion sync 1a2b3c4d ./export/page.md --preserve-metadata
 
 ## Deprecated
 
-`h2t ingest notion …` still works (forwards here) but prints a deprecation notice on
-human output. Migrate call sites to `h2t notion …`.
+`h2t ingest notion …` still works (forwards here) but prints a deprecation notice to
+stderr unless `--json`. Migrate call sites to `h2t notion …`.
 ```
 
 - [ ] **Step 2: Verify via named check**
