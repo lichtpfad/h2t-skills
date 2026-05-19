@@ -50,10 +50,20 @@ def _fmt(args) -> str:
 def run(args) -> Any:
     """Dispatch a notion subcommand. Returns a result or raises core.errors."""
     from h2t.connectors.notion.client import NotionClient  # lazy (spec §4.1)
+    from h2t.core.errors import UsageError
+
+    def _read_file(path):
+        from pathlib import Path as _P
+        try:
+            return _P(path).read_text(encoding="utf-8")
+        except FileNotFoundError as e:
+            raise UsageError(f"file not found: {path}") from e
+
     client = NotionClient()
     cmd = args.notion_cmd
     if cmd == "get":
-        return client.blocks_to_markdown(client.get_blocks(args.page_id))
+        blocks = client.get_blocks(args.page_id)
+        return blocks if _fmt(args) == "json" else client.blocks_to_markdown(blocks)
     if cmd == "blocks":
         blocks = client.get_blocks(args.page_id, limit=args.limit)
         return blocks if _fmt(args) == "json" else client.blocks_to_markdown(blocks)
@@ -75,7 +85,7 @@ def run(args) -> Any:
     if cmd == "find-databases":
         return client.find_databases_on_page(args.page_id)
     if cmd == "create":
-        content = Path(args.file).read_text(encoding="utf-8") if args.file else args.content
+        content = _read_file(args.file) if args.file else args.content
         return client.create_page(args.parent_id, args.title,
                                   content=content, is_database=args.database)
     if cmd == "update":
@@ -83,13 +93,15 @@ def run(args) -> Any:
         if args.title:
             out["title"] = client.update_page(args.page_id, title=args.title)
         if args.append or args.file:
-            text = Path(args.file).read_text(encoding="utf-8") if args.file else args.append
+            text = _read_file(args.file) if args.file else args.append
             if args.replace:
                 client.replace_page_content(args.page_id, text)
                 out["content"] = "replaced"
             else:
                 out["content"] = client.append_blocks(
                     args.page_id, client.markdown_to_blocks(text))
+        if not out:
+            raise UsageError("update: specify --title, --append, or --file")
         return out
     if cmd == "sync":
         md = client.blocks_to_markdown(client.get_blocks(args.page_id))
@@ -102,5 +114,4 @@ def run(args) -> Any:
         out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_text(md, encoding="utf-8")
         return f"Synced to {out_path}"
-    from h2t.core.errors import UsageError
     raise UsageError(f"unknown notion subcommand: {cmd}")
