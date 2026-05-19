@@ -10,7 +10,7 @@ the `h2t-ops` distribution and `h2t_ops` Python package.
 ## North Star
 
 `h2t-ops` owns operational connectors only: Notion, Gmail, Calendar, Drive, MeetGeek,
-Telegram, research, and fetch. It does not own the root `h2t` command or Python package.
+Telegram, and research. It does not own the root `h2t` command or Python package.
 Those remain owned by `h2t-ai` for DCC, registry, graph, vision proxy, and related platform
 namespaces.
 
@@ -45,7 +45,7 @@ foundation.
 | --- | --- | --- | --- |
 | TZ-0 | `h2t-ops` foundation + Notion walking skeleton | Branch ready to merge | 63 tests green; no root `h2t` collision; Notion reference connector |
 | TZ-1 | Gmail, Calendar, Drive, MeetGeek, Telegram | Planned | All normal connectors migrated to the Notion pattern |
-| TZ-2 | Research, Fetch | Planned | Provider ladder, `core/http.py`, rich envelope, legacy exit-code remap |
+| TZ-2 | Research + URL fetch ladder | Planned | Provider ladder, `core/http.py`, rich envelope, legacy exit-code remap |
 | TZ-3 | Skill docs + connector runbook | Planned | `SKILL.md` usage guides and `references/` runbook for adding connectors |
 | Follow-up | `h2t-ai` umbrella bridge | Deferred | `h2t <connector>` delegates to `h2t-ops <connector>` without touching DCC behavior |
 
@@ -59,12 +59,11 @@ foundation.
 | drive | skill exists; CLI gap | none / skill-local | `h2t-ops drive ...` | TZ-1 | Medium: discover exact source and auth shape |
 | meetgeek | standalone script / skill-local | none | `h2t-ops meetgeek ...` | TZ-1 | Medium: upload/transcript workflow boundaries |
 | telegram | standalone script / skill-local | none | `h2t-ops telegram ...` | TZ-1 | Medium: optional SDK and session secrets |
-| research | `exa_search.py` | standalone | `h2t-ops research ...` | TZ-2 | High: legacy exit codes, retry telemetry, provider envelope |
-| fetch | `fetch_url.py` | standalone | `h2t-ops fetch ...` | TZ-2 | High: provider ladder and network fallback semantics |
+| research | `exa_search.py` + `fetch_url.py` | standalone scripts | `h2t-ops research ...` including `research fetch --url ...` | TZ-2 | High: legacy exit codes, retry telemetry, provider envelope, URL fetch ladder |
 
 ## GitHub Issue Backlog
 
-Use the repo issue title standard: `skills: [TZ-N] Verb noun`.
+Use the repo issue title standard: `skills: [M3] Verb noun`. Put `Wave: TZ-N` in the issue body.
 
 ### skills: [TZ-0] Merge h2t-ops foundation
 
@@ -192,17 +191,21 @@ not be mixed into the normal TZ-1 connector wave.
 - Provider envelope tests cover OK / DEGRADED / FAILED.
 - Existing research workflows still have a documented migration path.
 
-### skills: [TZ-2] Migrate fetch connector
+### skills: [M3] Integrate URL fetch ladder into research connector
 
-**Context:** `fetch_url.py` has provider ladder behavior and network fallback semantics.
+**Context:** `fetch_url.py` is not a standalone business connector. It is a research capability:
+after `exa_search.py` finds a URL, the fetch ladder retrieves the full page content with
+machine-readable status, content gate detection, provider telemetry, and fallbacks.
 
 **What:**
-- Move fetch into `h2t_ops/connectors/fetch/`.
-- Model provider ladder explicitly.
+- Move URL fetching into `h2t_ops/connectors/research/`, not a top-level `fetch` connector.
+- Expose it as `h2t-ops research fetch --url ...` if the CLI surface is needed.
+- Model the provider ladder explicitly (`direct`, `jina`, future browser providers).
 - Reuse or introduce shared HTTP retry/backoff only when needed.
 - Add CLI and tests for direct/Jina/fallback behavior.
 
-**Why:** Fetch should be reliable as a reusable connector instead of a standalone script.
+**Why:** URL fetching should remain part of research, while becoming reproducible and testable
+instead of a standalone script discovered through plugin paths.
 
 **Definition of Done:**
 - Tests cover provider fallback order.
