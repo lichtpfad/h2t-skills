@@ -28,6 +28,14 @@ def register(subparsers: Any) -> None:
     gd.add_argument("database_id"); gd.add_argument("--limit", type=int); add_fmt(gd)
     fd = cmds.add_parser("find-databases", help="Find databases on a page")
     fd.add_argument("page_id"); add_fmt(fd)
+    ft = cmds.add_parser("find-project-tasks",
+                         help="List tasks whose Project relation points at <page_id>")
+    ft.add_argument("project_page_id")
+    ft.add_argument("--database-id", dest="database_id",
+                    default="beabac7bf4314952a9327759c638d89f",
+                    help="tasks database id (default: legacy workspace tasks db)")
+    ft.add_argument("--limit", type=int)
+    add_fmt(ft)
     c = cmds.add_parser("create", help="Create a page")
     c.add_argument("parent_id"); c.add_argument("title")
     c.add_argument("--content"); c.add_argument("--file")
@@ -84,6 +92,12 @@ def run(args) -> Any:
             rows, client.get_database(args.database_id))
     if cmd == "find-databases":
         return client.find_databases_on_page(args.page_id)
+    if cmd == "find-project-tasks":
+        fdict = {"property": "Project", "relation": {"contains": args.project_page_id}}
+        rows = client.query_database(args.database_id,
+                                     filter_dict=fdict, limit=args.limit)
+        return rows if _fmt(args) == "json" else client.database_items_to_markdown(
+            rows, client.get_database(args.database_id))
     if cmd == "create":
         content = _read_file(args.file) if args.file else args.content
         return client.create_page(args.parent_id, args.title,
