@@ -1,81 +1,71 @@
 ---
 name: notion
-description: "Reads and writes Notion pages and databases via API. Use for GTD tasks, creating pages, querying databases, updating properties. Triggers: 'notion', 'tasks', 'GTD', 'create page', 'query database', 'h2t:notion'"
-compatibility: "Requires NOTION_API_TOKEN in ~/.dor/secrets.env or ~/.config/notion/token"
+description: "Reads and writes Notion pages and databases via the h2t CLI. Use for GTD tasks, creating pages, querying databases, syncing pages to markdown. Triggers: 'notion', 'tasks', 'GTD', 'create page', 'query database', 'h2t:notion'"
+compatibility: "Requires the `h2t` CLI (run /h2t-core:setup) and NOTION_API_TOKEN in ~/.dor/secrets.env or ~/.config/notion/token"
 metadata:
   author: lichtpfad
-  version: 1.0.0
+  version: 2.0.0
 ---
 
-# Notion
+# Notion (h2t connector)
 
-## Переменные
+## Availability (cross-platform contract)
+
+`h2t --version` exits 0 when installed (identical on PowerShell and POSIX — no shell idioms).
+If it fails: run `/h2t-core:setup`. `h2t doctor` reports version, install path, connectors,
+and secrets presence (no network).
+
+## Secrets
+
+`NOTION_API_TOKEN` resolved in order: env var → `~/.config/notion/token`.
+Missing → exit 3 (`config`) with hint.
+
+## Commands
+
+| Command | Purpose |
+|---|---|
+| `h2t notion get <page-id>` | page blocks as markdown |
+| `h2t notion blocks <page-id> [--limit N]` | raw/markdown blocks |
+| `h2t notion search <database-id> [--filter "Status=Done"] [--filter-json '{...}'] [--limit N]` | query database |
+| `h2t notion get-database <database-id> [--limit N]` | database items as markdown |
+| `h2t notion find-databases <page-id>` | list databases on a page |
+| `h2t notion create <parent-id> "Title" [--content "md" \| --file f.md] [--database]` | create page |
+| `h2t notion update <page-id> [--title T] [--append "md" \| --file f.md] [--replace]` | update page |
+| `h2t notion sync <page-id> <out.md> [--preserve-metadata]` | write page to a file |
+
+Output flags (every command): `--json` (raw envelope), `--format md` (markdown/table),
+default = concise human text.
+
+## Examples
 
 ```bash
-# Notion API token — ищи в таком порядке:
-#   1. ~/.config/notion/token  (основное место на всех машинах)
-#   2. ~/.dor/secrets.env      (NOTION_API_TOKEN=...)
-NOTION_TOKEN="${NOTION_API_TOKEN:-$(cat "$HOME/.config/notion/token" 2>/dev/null || echo "")}"
-[ -z "$NOTION_TOKEN" ] && echo "ERROR: Notion token not found. Expected: ~/.config/notion/token" && exit 1
-
-H2T_PYTHON="${H2T_PYTHON:-}"
-[ -z "$H2T_PYTHON" ] && [ -f "$HOME/.h2t/venv/Scripts/python.exe" ] && H2T_PYTHON="$HOME/.h2t/venv/Scripts/python.exe"
-[ -z "$H2T_PYTHON" ] && [ -f "$HOME/.h2t/venv/bin/python" ] && H2T_PYTHON="$HOME/.h2t/venv/bin/python"
-[ -z "$H2T_PYTHON" ] && echo "ERROR: h2t venv not found. Run /h2t-core:setup" && exit 1
-
-CLI="$H2T_PYTHON ${CLAUDE_PLUGIN_ROOT}/lib/cli/main.py ingest notion"
+h2t notion get 1a2b3c4d --format md
+h2t notion search 9f8e7d6c --filter "Status=In progress" --json
+h2t notion create 1a2b3c4d "Sprint notes" --file notes.md
+h2t notion sync 1a2b3c4d ./export/page.md --preserve-metadata
 ```
 
-## Команды
+## Exit codes
 
-### Получение страницы
-```bash
-$CLI get <page-id> [--format json|markdown]
-```
+| Code | Meaning |
+|---|---|
+| 0 | ok |
+| 1 | provider/runtime error |
+| 2 | usage / bad args |
+| 3 | config / secrets missing |
+| 4 | auth / permission denied |
+| 5 | not found / empty resource |
+| 6 | network / timeout |
 
-### Блоки страницы
-```bash
-$CLI blocks <page-id> [--limit N] [--format json|markdown]
-```
+`--json` errors go to stderr as `{"ok":false,"provider":"notion","error":{...}}`; exit is non-zero.
 
-### Поиск в базе данных
-```bash
-$CLI search <database-id> [--filter "Status=Done"] [--filter-json '{"property":...}'] [--limit N] [--format json|markdown]
-```
+## When to use / not use
 
-### Создание страницы
-```bash
-$CLI create <parent-id> "Название" [--content "Markdown текст"] [--file content.md] [--database]
-```
+- ✅ Read/write Notion pages, query databases, sync a page to markdown.
+- ❌ Bulk export of an entire workspace — out of scope.
+- ❌ Do NOT fall back to raw HTTP if a command fails — report the exit code/error.
 
-### Обновление страницы
-```bash
-$CLI update <page-id> [--title "Новое название"] [--append "Markdown"] [--file content.md] [--replace]
-```
+## Deprecated
 
-### База данных
-```bash
-$CLI get-database <database-id> [--format json|markdown] [--limit N]
-$CLI find-databases <page-id>
-$CLI find-project-tasks <project-page-id> [--database-id <tasks-db-id>]
-```
-
-### Синхронизация в файл
-```bash
-$CLI sync <page-id> <output-file.md> [--preserve-metadata]
-```
-
-## Workflow
-
-1. Выполни команду через Bash tool
-2. Покажи результат в читаемом формате
-3. Для модификаций — подтверди успех
-
-## Поддерживаемые типы блоков
-
-Paragraph, Headings (1-3), Lists (bulleted/numbered), Quote, Code, Images, Dividers, Callouts, Toggle, Bookmarks, Tables
-
-## Обработка ошибок
-
-- **Unauthorized**: проверь `NOTION_API_TOKEN` в `~/.dor/secrets.env`
-- **object_not_found**: проверь что интеграция имеет доступ к странице
+`h2t ingest notion …` still works (forwards here) but prints a deprecation notice on
+human output. Migrate call sites to `h2t notion …`.
