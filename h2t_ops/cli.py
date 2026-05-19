@@ -9,11 +9,13 @@ from pathlib import Path
 
 import h2t_ops
 from h2t_ops.core.errors import UsageError
-from h2t_ops.core.output import emit
+# Route shim deprecation notices through emit()'s UTF-8 writer (reuses privates
+# intentionally) so they don't UnicodeEncodeError on Windows consoles (#141 class).
+from h2t_ops.core.output import emit, _utf8_writer, _finalize
 from h2t_ops.core.registry import discover
 from h2t_ops.dev import main as _dev_main
 
-_MIGRATED = {"notion"}
+_MIGRATED = {"notion", "gmail"}
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -36,6 +38,9 @@ def _doctor() -> int:
     notion = bool(os.getenv("NOTION_API_TOKEN")) or \
         (Path.home() / ".config" / "notion" / "token").is_file()
     print(f"secrets: NOTION_API_TOKEN={'present' if notion else 'MISSING'}")
+    gmail_creds = (Path.home() / ".config" / "gmail" / "credentials.json").is_file() or \
+        (Path.home() / ".config" / "google-calendar-mcp" / "credentials.json").is_file()
+    print(f"secrets: gmail credentials={'present' if gmail_creds else 'MISSING'}")
     return 0
 
 
@@ -112,9 +117,34 @@ def dispatch(argv: list[str]) -> int:
             else:
                 norm.append(a)
         if _fmt_from(norm) != "json":
+            _w, _c = _utf8_writer(sys.stderr)
             print("deprecated: `h2t-ops ingest notion` → use `h2t-ops notion` (spec §10)",
-                  file=sys.stderr)
+                  file=_w)
+            _finalize(_w, _c)
         return _run_connector(["notion", *norm])
+    # ingest gmail shim → new connector (spec §10.2).
+    # Gmail legacy accepted `--format plain` (& friends); notion did not — so we
+    # consume ANY `--format <val>` (json→--json, others dropped), unlike the
+    # notion shim above which only consumes json/markdown. Do not unify.
+    if len(argv) >= 2 and argv[0] == "ingest" and argv[1] == "gmail":
+        rest, norm, skip = argv[2:], [], False
+        for j, a in enumerate(argv[2:]):
+            if skip:
+                skip = False
+                continue
+            if a == "--format" and j + 1 < len(rest):
+                if rest[j + 1] == "json":
+                    norm.append("--json")
+                # "plain" (and any non-json) → drop; connector human default
+                skip = True
+            else:
+                norm.append(a)
+        if _fmt_from(norm) != "json":
+            _w, _c = _utf8_writer(sys.stderr)
+            print("deprecated: `h2t-ops ingest gmail` → use `h2t-ops gmail` (spec §10)",
+                  file=_w)
+            _finalize(_w, _c)
+        return _run_connector(["gmail", *norm])
     if argv and argv[0] in ("gather", "ingest"):
         return _legacy(argv)
     if argv and argv[0] in _MIGRATED:
