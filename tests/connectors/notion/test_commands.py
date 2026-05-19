@@ -149,3 +149,82 @@ def test_connector_help_exits_zero(capsys):
 def test_connector_subcommand_help_exits_zero(capsys):
     code = dispatch(["notion", "get", "--help"])
     assert code == 0
+
+
+def test_find_project_tasks_parser_registered():
+    """Audit #144: find-project-tasks must exist as a notion subcommand with the
+    legacy default database id."""
+    import argparse
+    from h2t_ops.connectors.notion.commands import register
+    parser = argparse.ArgumentParser()
+    sub = parser.add_subparsers(dest="provider")
+    register(sub)
+    args = parser.parse_args(["notion", "find-project-tasks", "proj-page-id"])
+    assert args.notion_cmd == "find-project-tasks"
+    assert args.project_page_id == "proj-page-id"
+    assert args.database_id == "beabac7bf4314952a9327759c638d89f"  # legacy default
+    assert args.limit is None
+
+
+def test_find_project_tasks_dispatch_uses_relation_filter(monkeypatch):
+    """find-project-tasks must build the Project-relation filter shape
+    {'property':'Project','relation':{'contains': <page_id>}} and pass --limit
+    through to client.query_database."""
+    import h2t_ops.connectors.notion.client as client_mod
+    from h2t_ops.connectors.notion import commands as cmds_mod
+    from types import SimpleNamespace
+
+    calls: list[tuple] = []
+
+    class _StubClient:
+        def query_database(self, db, *, filter_dict=None, limit=None, **_):
+            calls.append(("query", db, filter_dict, limit))
+            return [{"id": "task-1"}, {"id": "task-2"}]
+
+    monkeypatch.setattr(client_mod, "NotionClient", lambda: _StubClient())
+
+    args = SimpleNamespace(
+        notion_cmd="find-project-tasks",
+        project_page_id="proj-1",
+        database_id="db-1",
+        limit=5,
+        as_json=True,
+        fmt="human",
+    )
+    out = cmds_mod.run(args)
+    assert out == [{"id": "task-1"}, {"id": "task-2"}]
+    assert calls == [(
+        "query",
+        "db-1",
+        {"property": "Project", "relation": {"contains": "proj-1"}},
+        5,
+    )]
+
+
+def test_find_project_tasks_dispatch_markdown_uses_database_metadata(monkeypatch):
+    """Human/md output path must call get_database + database_items_to_markdown
+    (mirrors `search` and `get-database` dispatch in the same module)."""
+    import h2t_ops.connectors.notion.client as client_mod
+    from h2t_ops.connectors.notion import commands as cmds_mod
+    from types import SimpleNamespace
+
+    class _StubClient:
+        def query_database(self, db, *, filter_dict=None, limit=None, **_):
+            return [{"id": "task-1"}]
+        def get_database(self, db):
+            return {"id": db, "title": [{"plain_text": "Tasks"}]}
+        def database_items_to_markdown(self, rows, meta):
+            return f"# {meta['title'][0]['plain_text']} ({len(rows)} rows)"
+
+    monkeypatch.setattr(client_mod, "NotionClient", lambda: _StubClient())
+
+    args = SimpleNamespace(
+        notion_cmd="find-project-tasks",
+        project_page_id="proj-1",
+        database_id="db-1",
+        limit=None,
+        as_json=False,
+        fmt="human",
+    )
+    out = cmds_mod.run(args)
+    assert out == "# Tasks (1 rows)"
