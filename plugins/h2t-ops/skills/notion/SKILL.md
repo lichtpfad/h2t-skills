@@ -1,6 +1,6 @@
 ---
 name: notion
-description: "Reads and writes Notion pages and databases via the h2t-ops CLI. Use for GTD tasks, creating pages, querying databases, syncing pages to markdown. Triggers: 'notion', 'tasks', 'GTD', 'create page', 'query database', 'h2t:notion'"
+description: "Reads and writes Notion pages and databases via the h2t-ops CLI. Use for GTD tasks, creating pages, querying databases, syncing pages to markdown. Triggers: 'notion', 'tasks', 'GTD', 'create page', 'query database', 'h2t-ops:notion'"
 compatibility: "Requires the `h2t-ops` CLI (run /h2t-core:setup) and NOTION_API_TOKEN in ~/.dor/secrets.env or ~/.config/notion/token"
 metadata:
   author: lichtpfad
