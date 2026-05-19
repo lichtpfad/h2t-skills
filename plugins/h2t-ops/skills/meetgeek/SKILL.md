@@ -9,6 +9,15 @@ metadata:
 
 # Инструкции
 
+## POS Boundary
+
+For POS, meeting-memory, and daily-loop workflows, follow the shared boundary
+reference: `../../references/pos-operational-boundary.md`. This skill may read
+MeetGeek data through connector tooling, but must not write POS journal rows,
+mutate `~/.dor/pos.db`, or modify vault/lake directly except through approved
+`pos_ingest` or coordinator workflow. Emit structured proposed captures until
+POS journal commands exist.
+
 ## Переменные
 
 ```bash
