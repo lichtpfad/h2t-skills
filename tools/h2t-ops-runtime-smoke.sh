@@ -29,25 +29,34 @@ smoke() {
     shift
     local json_check="$1"
     shift
-    local out code ok leak
+    local out out_json code ok leak
 
-    out=$("$@" 2>&1)
-    code=$?
+    if [ "$json_check" = "json" ]; then
+        # json-mode: stdout-only capture for JSON validation (IMP-1),
+        # separate merged capture for leak-scan + display.
+        out_json=$("$@" 2>/dev/null)
+        code=$?
+        out=$("$@" 2>&1)
+    else
+        out=$("$@" 2>&1)
+        code=$?
+    fi
     ok=1
     [ $code -ne 0 ] && ok=0
 
-    # JSON check
+    # JSON check (validate STDOUT only)
     if [ $ok -eq 1 ] && [ "$json_check" = "json" ]; then
         if command -v jq >/dev/null 2>&1; then
-            echo "$out" | jq -e . >/dev/null 2>&1 || ok=0
+            echo "$out_json" | jq -e . >/dev/null 2>&1 || ok=0
         else
-            echo "$out" | python -c 'import json,sys;json.load(sys.stdin)' >/dev/null 2>&1 || ok=0
+            # python fallback is code-correct but untested vs live h2t-ops JSON; jq preferred
+            echo "$out_json" | python -c 'import json,sys;json.load(sys.stdin)' >/dev/null 2>&1 || ok=0
         fi
     fi
 
-    # Token leak check
+    # Token leak check (scan merged stdout+stderr)
     leak=0
-    if echo "$out" | grep -Eq 'secret_[A-Za-z0-9]{20,}|ntn_[A-Za-z0-9]{20,}'; then
+    if echo "$out" | grep -Eq 'secret_[A-Za-z0-9]{20,}|ntn_[A-Za-z0-9]{20,}|ya29\.[A-Za-z0-9._\-]{20,}'; then
         leak=1
         ok=0
     fi
@@ -83,6 +92,7 @@ for key in "uv --version" "h2t-ops --version" "h2t-ops doctor" "notion get" "not
 done
 echo "NOTE: 'gmail list' is a hard-gate command. exit 3 (§4.1 OAuth not bootstrapped) is a"
 echo "      FAIL for #139, not informational — run the Task-4 bootstrap, then re-run."
+echo "NOTE: exit=127 = binary not found (bash command-not-found, POSIX)"
 
 # Hard gate check (all six must pass)
 gate_pass=1

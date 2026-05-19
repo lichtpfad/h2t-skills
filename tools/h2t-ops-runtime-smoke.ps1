@@ -45,16 +45,29 @@ $Fixture = '10adbc1e61d04d13aa6f17210b77e0d3'   # Notion "Art - Projects", read-
 $results = [ordered]@{}
 
 function Smoke([string]$name, [scriptblock]$cmd, [bool]$json) {
+    $tmpErr = $null
     try {
-        $out = & $cmd 2>&1
-        $code = $LASTEXITCODE
-    } catch { $out = "$_"; $code = 999 }
+        if ($json) {
+            # json-mode: keep stderr OUT of the JSON parse (IMP-1). stdout -> $out;
+            # stderr -> temp file, folded back only for leak-scan + display.
+            $tmpErr = [System.IO.Path]::GetTempFileName()
+            $out  = & $cmd 2>$tmpErr
+            $code = $LASTEXITCODE   # all cmds are external exes; pure-PS scriptblocks would not reset $LASTEXITCODE
+            $errText = if (Test-Path $tmpErr) { Get-Content $tmpErr -Raw } else { '' }
+            $outFull = ($out | Out-String) + $errText
+        } else {
+            $out  = & $cmd 2>&1
+            $code = $LASTEXITCODE   # all cmds are external exes; pure-PS scriptblocks would not reset $LASTEXITCODE
+            $outFull = ($out | Out-String)
+        }
+    } catch { $out = "$_"; $outFull = "$_"; $code = 999 }
+    finally { if ($tmpErr -and (Test-Path $tmpErr)) { Remove-Item $tmpErr -Force -ErrorAction SilentlyContinue } }
     $ok = ($code -eq 0)
     if ($ok -and $json) {
         try { $null = ($out | Out-String | ConvertFrom-Json); $ok = $true }
         catch { $ok = $false }
     }
-    $leak = ($out | Out-String) -match 'secret_[A-Za-z0-9]{20,}|ntn_[A-Za-z0-9]{20,}'
+    $leak = $outFull -match 'secret_[A-Za-z0-9]{20,}|ntn_[A-Za-z0-9]{20,}|ya29\.[A-Za-z0-9._\-]{20,}'
     if ($leak) { $ok = $false }
     $results[$name] = [pscustomobject]@{ exit=$code; ok=$ok; jsonChecked=$json; tokenLeak=[bool]$leak }
     Write-Host ("[{0}] {1} exit={2} ok={3}{4}" -f $(if($ok){'PASS'}else{'FAIL'}),$name,$code,$ok,$(if($leak){' TOKEN-LEAK!'}else{''}))
@@ -82,5 +95,6 @@ $gatePass = ($hardGate | ForEach-Object { $results[$_].ok }) -notcontains $false
 $results.GetEnumerator() | ForEach-Object { "{0}: exit={1} ok={2}" -f $_.Key,$_.Value.exit,$_.Value.ok }
 "NOTE: 'gmail list' is a hard-gate command. exit 3 (§4.1 OAuth not bootstrapped) is a"
 "      FAIL for #139, not informational — run the Task-4 bootstrap, then re-run."
+"NOTE: exit=999 = binary not found (PowerShell throw sentinel, no native exit code)"
 "HARD GATE (#139, incl. Gmail): " + $(if($gatePass){'PASS'}else{'FAIL'})
 exit $(if($gatePass){0}else{1})
