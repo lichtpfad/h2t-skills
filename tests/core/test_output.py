@@ -86,3 +86,19 @@ def test_emit_encode_failure_is_nonzero(monkeypatch):
     monkeypatch.setattr(sys, "stdout", _Boom())
     code = emit("notion", result="Привет", fmt="human")
     assert code != 0
+
+
+def test_emit_tier2_buffer_not_closed(monkeypatch):
+    """Stream with .buffer but no usable .reconfigure → Tier-2 wrap;
+    after emit the underlying buffer must remain OPEN (detach, not close)."""
+    raw = io.BytesIO()
+    class _NoReconf:
+        def __init__(self, b): self.buffer = b
+        def reconfigure(self, *a, **k): raise OSError("no reconfigure")
+        # no write/flush of its own — Tier-2 must wrap .buffer
+    s = _NoReconf(raw)
+    monkeypatch.setattr(sys, "stdout", s)
+    code = emit("notion", result="Привет ✨", fmt="human")
+    assert code == 0
+    assert not raw.closed                      # detach() kept it open
+    assert "Привет ✨" in raw.getvalue().decode("utf-8")
