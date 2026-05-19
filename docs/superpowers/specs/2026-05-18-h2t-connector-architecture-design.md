@@ -29,13 +29,36 @@ extensible by a runbook — **without an infinite rewrite**.
 
 ## 2. Decision
 
-**Approach 1 — monolithic `h2t` package with lazily auto-registered connectors.**
+> ### Identity Decision (amendment 2026-05-19 — supersedes original `h2t` naming)
+>
+> Operational connectors are packaged as `h2t-ops` with Python namespace `h2t_ops`.
+> This package MUST NOT claim the root `h2t` Python package or `h2t` console script.
+> The existing `h2t` command remains owned by `h2t-ai`.
+> `h2t-ops` MAY expose its own console script `h2t-ops`.
+> `h2t-ai` MAY later delegate selected namespaces to `h2t-ops` for unified internal UX.
+>
+> **Root cause of the amendment:** `C:/dev/h2t-ai` already owns the `h2t` distribution
+> (`[project.scripts] h2t = "h2t.cli:main"`, `src/h2t/` import package, subcommands
+> `td registry graph vision transcribe enrich eval`). The original spec chose a monolithic
+> `h2t` package + `uv tool install` global `h2t` without surveying the ecosystem — a total,
+> byte-identical collision. The implementation is sound; only the **identity** was wrong.
+>
+> **Interpretation clause:** everywhere below this line, read `h2t` (the package) as
+> `h2t_ops`, `h2t.cli:main` as `h2t_ops.cli:main`, the console script `h2t` as `h2t-ops`,
+> and any `h2t.<sub>` import path as `h2t_ops.<sub>`. §3/§4/§8/§12 code/prose are not
+> mechanically rewritten; this clause is normative over their literal `h2t` spelling.
+> h2t-ai delegation (`h2t notion → h2t-ops notion`) is an explicit follow-up, NOT ТЗ-0.
+
+**Approach 1 — monolithic `h2t_ops` package with lazily auto-registered connectors** (a
+sub-distribution; root `h2t` stays h2t-ai's).
 
 Rejected alternatives:
 - *Per-connector uv packages* (`h2t-notion`, …): N packages to ship/upgrade, shared
   auth/secrets/envelope duplicated or pushed into a `h2t-core` dependency. Overkill for solo+AI.
 - *Library-only, no CLI*: breaks the requirement that scripts are usable as CLI in POS and kills
-  agent-friendly `h2t notion …` invocation.
+  agent-friendly `h2t-ops notion …` invocation.
+- *Claim root `h2t` / `h2t.cli:main`* (original draft): collides totally with h2t-ai — rejected
+  by the Identity Decision above.
 
 ## 3. Package Layout
 
@@ -191,30 +214,40 @@ envelope (`status: OK/DEGRADED/FAILED`, retry telemetry, cost) is an **optional 
 nested under `result`/`meta` for search-like connectors only — it is NOT imposed on connectors
 that have no retry/fallback semantics. The rich envelope is specified in ТЗ-2.
 
-## 7. Distribution
+## 7. Distribution (amended per §2 Identity Decision)
 
-- `pyproject.toml`: `[project.scripts] h2t = "h2t.cli:main"`; package = `h2t` (drop `lib*`
-  include and the `sys.path.insert`).
-- Install: `uv tool install` from the repo / git ref → global `h2t` command, no venv activation,
-  cross-platform via `uv`.
-- Update: `uv tool upgrade h2t`.
-- External sharing: a non-infra user runs one `uv tool install` and gets every connector.
-- Availability is a **CLI-level contract, not a shell idiom**: `h2t --version` exits 0 when
-  installed; `h2t doctor` reports install path, version, resolvable connectors, and secrets
-  presence (no network). Skills probe with a single bare command (`h2t --version`) — no glob,
-  no `$VAR`, no `{ …; }`, so it is identical on POSIX and PowerShell and triggers no
-  `simple_expansion` prompt. The "not installed → run setup" guidance lives in `SKILL.md`
-  prose, not in a shell-specific one-liner. (`h2t doctor` is specified in the ТЗ-0
-  implementation plan; `--version` is in scope here.)
-- `h2t-core:setup` is updated to perform/repair the `uv tool install` (mechanics specified in
-  the ТЗ-0 implementation plan).
+- `pyproject.toml`: distribution `name = "h2t-ops"`; `[project.scripts] h2t-ops =
+  "h2t_ops.cli:main"`; import package = `h2t_ops` (drop `lib*` include and the
+  `sys.path.insert`). It MUST NOT declare a top-level `h2t` package or an `h2t` console
+  script — that identity belongs to `h2t-ai`.
+- Install: `uv tool install` from the repo / git ref → global `h2t-ops` command, no venv
+  activation, cross-platform via `uv`. Update: `uv tool upgrade h2t-ops`.
+- External sharing: a non-infra user runs one `uv tool install` and gets every connector
+  under the unambiguous `h2t-ops` name (no clash with anyone's existing `h2t`).
+- `h2t-ai` MAY depend on `h2t-ops` (e.g. via `[project.optional-dependencies]`, the same way
+  it already composes `h2t-graphs`) and later expose an umbrella bridge so `h2t notion …`
+  delegates to `h2t-ops notion …` — **without rewriting the DCC CLI**. That delegation is a
+  documented follow-up, explicitly OUT of ТЗ-0.
+- Availability is a **CLI-level contract, not a shell idiom**: `h2t-ops --version` exits 0
+  when installed; `h2t-ops doctor` reports install path, version, resolvable connectors, and
+  secrets presence (no network). Skills probe with a single bare command (`h2t-ops --version`)
+  — no glob, no `$VAR`, no `{ …; }`, identical on POSIX and PowerShell, no `simple_expansion`
+  prompt. "Not installed → run setup" guidance lives in `SKILL.md` prose.
+- `h2t-core:setup` is updated to perform/repair the `uv tool install` of `h2t-ops` (mechanics
+  in the ТЗ-0 plan).
 
 ## 8. SKILL.md Contract
 
 A connector's `SKILL.md` is a usage guide for the agent, not just a bootstrap. It MUST contain:
 connector overview, every subcommand with flags, worked invocation examples, the error/exit-code
 table, required secrets, and "when to use / when not to use". Content mirrors
-`h2t <connector> --help` so the agent does not round-trip to discover capabilities.
+`h2t-ops <connector> --help` so the agent does not round-trip to discover capabilities.
+
+**Agent-facing wording rule (per §2 Identity Decision):** SKILL.md MUST instruct agents to
+call `h2t-ops <connector> …` directly — NOT `h2t <connector> …`. Add this note verbatim:
+> In the internal umbrella CLI, `h2t <connector> …` may be available later via h2t-ai
+> delegation. Skills should call `h2t-ops …` directly unless a project explicitly provides
+> the umbrella bridge.
 
 **Scope guard:** authoring rich SKILL.md for *all* skills is per-connector, non-blocking polish
 done lazily. Functional connector migration ≠ SKILL.md rewrite. ТЗ-0 ships only Notion's SKILL.md
