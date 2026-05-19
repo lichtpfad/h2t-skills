@@ -153,3 +153,67 @@ Print:
 | Running on wrong Python version | Check `python --version` >= 3.10 |
 | Windows: `python3` not found | On Windows use `python` not `python3`. Git Bash may alias it. |
 | Plugin not found | Run `claude plugins add lichtpfad/claude-agent-skills` first |
+
+## h2t-ops runtime (install / repair)
+
+`h2t-ops` is a separate `uv`-managed CLI tool (distinct from the legacy `~/.h2t/venv` model above). Install/repair it via the steps below. The existing venv-based setup is not superseded for other h2t skills; this section covers h2t-ops specifically.
+
+### Resolve `uv`
+
+`uv` is installed on this machine but is often absent from the interactive PATH. Resolution order (prefer the first that exists):
+
+1. **WinGet Links shim (stable, preferred):** `%LOCALAPPDATA%\Microsoft\WinGet\Links\uv.exe`
+2. **Version-stamped package path:** `C:\Users\stani\AppData\Local\Microsoft\WinGet\Packages\astral-sh.uv_Microsoft.Winget.Source_8wekyb3d8bbwe\uv.exe`
+3. `Get-Command uv` / `which uv` (PATH fallback)
+4. Or let the smoke harness resolve it: `pwsh -NoProfile -File tools/h2t-ops-runtime-smoke.ps1 -ResolveUvOnly`
+
+**Durable one-time PATH fix (run once in a normal shell — new shells then have `uv` and `h2t-ops`):**
+
+```powershell
+[Environment]::SetEnvironmentVariable('PATH',
+  [Environment]::GetEnvironmentVariable('PATH','User') + ';' +
+  (Split-Path "$env:LOCALAPPDATA\Microsoft\WinGet\Links\uv.exe") + ';' +
+  (Join-Path $HOME '.local\bin'), 'User')
+```
+
+### Install / repair h2t-ops (idempotent)
+
+```powershell
+# Self-healing uv resolution (always runnable verbatim — see "Resolve uv" prose
+# above for the Links shim → package path → PATH order it applies internally):
+$uv = pwsh -NoProfile -File tools/h2t-ops-runtime-smoke.ps1 -ResolveUvOnly
+
+# Example for #139 (temporary source = PR #140 worktree):
+& $uv tool install --reinstall "C:/dev/h2t-skills/.claude/worktrees/feat+131-gmail-connector"
+```
+
+`--reinstall` makes the command safe to re-run at any time (idempotent repair). Substitute the source per the Sequencing rule below.
+
+**Sequencing (verbatim, normative):**
+
+> - **Temporary source for #139:** PR #140 worktree (`C:/dev/h2t-skills/.claude/worktrees/feat+131-gmail-connector`).
+> - **Canonical future source:** released/merged `h2t-ops` package from `main` or a git ref (after #140 merges).
+> - **Do not use root `h2t` for this smoke.** h2t-ai's broken `h2t` is a separate problem; do not fix it here.
+> - **#139 is a blocker for *acceptance*, not for *coding*.** Gmail code (#131/PR #140) is already done; PR #140 stays **draft** until #139 passes through the installed CLI.
+
+### `~/.local/bin` PATH guidance
+
+`uv tool install` writes the `h2t-ops.exe` binary to `~/.local/bin` (`C:\Users\<you>\.local\bin`). After install, `h2t-ops` commands are invokable via the absolute path `~/.local/bin/h2t-ops.exe` (no PATH assumption needed in scripts) or via the shell once the durable PATH fix above is applied.
+
+### Boundary — NEVER touch h2t-ai's `h2t`
+
+**NEVER touch, reinstall, shadow, or repair h2t-ai's `h2t` (`~/.local/bin/h2t.exe`) — its `uv trampoline failed to canonicalize` is h2t-ai's own breakage, a separate problem.** Do not run `uv tool install` targeting the root `h2t` package, `--reinstall h2t`, or anything that modifies `~/.local/bin/h2t.exe`. That binary is out of scope for h2t-ops work.
+
+### Verify
+
+Run the committed smoke harness to confirm all gates pass (G0 runtime + Notion + Gmail):
+
+```powershell
+pwsh -File tools/h2t-ops-runtime-smoke.ps1
+```
+
+For a quick self-report of version, connectors, and secrets resolution:
+
+```powershell
+& "$HOME\.local\bin\h2t-ops.exe" doctor
+```

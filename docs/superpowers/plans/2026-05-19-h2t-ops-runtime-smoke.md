@@ -195,6 +195,16 @@ git add tools/h2t-ops-runtime-smoke.ps1 tools/h2t-ops-runtime-smoke.sh
 git commit -m "feat(runtime): h2t-ops smoke harness — fails on uninstalled state (#139)"
 ```
 
+> **Defect note (Task 2 code-quality review — harness gates the Task-4 live acceptance):**
+> the `$out = & $cmd 2>&1` / `out=$("$@" 2>&1)` single-stream capture merges stderr
+> into the JSON parse → any stderr line before JSON (future eager import / SDK
+> deprecation) silently flips a live PASS to a **false FAIL** in Task 4. Fixed by
+> **two-stream capture for json-mode** (parse stdout only; scan stdout+stderr for
+> leaks). Also: add EVIDENCE `NOTE:` lines explaining `exit=999` (PS throw sentinel)
+> vs `exit=127` (bash not-found); add `ya29\.[A-Za-z0-9._\-]{20,}` (Google OAuth)
+> to the token-leak regex before the live gmail run; one-line comments on the
+> `$LASTEXITCODE`-external-only assumption and the untested python JSON fallback.
+
 ---
 
 ### Task 3: Install `h2t-ops` from the PR #140 worktree (the G0 implement step)
