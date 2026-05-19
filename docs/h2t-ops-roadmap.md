@@ -36,6 +36,7 @@ foundation.
 
 | Document | Purpose |
 | --- | --- |
+| [H2T-OPS testing plan](h2t-ops-testing-plan.md) | Runtime, CLI, and live E2E acceptance gates |
 | [Connector architecture spec](superpowers/specs/2026-05-18-h2t-connector-architecture-design.md) | Connector standard, identity decision, CLI contract |
 | [TZ-0 implementation plan](superpowers/plans/2026-05-18-h2t-connector-architecture-tz0.md) | Core foundation + Notion walking skeleton |
 
