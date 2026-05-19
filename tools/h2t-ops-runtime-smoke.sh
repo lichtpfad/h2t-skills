@@ -29,14 +29,20 @@ smoke() {
     shift
     local json_check="$1"
     shift
-    local out out_json code ok leak
+    local out out_json code ok leak tmpout tmperr
 
     if [ "$json_check" = "json" ]; then
-        # json-mode: stdout-only capture for JSON validation (IMP-1),
-        # separate merged capture for leak-scan + display.
-        out_json=$("$@" 2>/dev/null)
+        # json-mode: ONE live invocation; split stdout/stderr via temp files
+        # so JSON validation sees stdout only (IMP-1) while leak-scan +
+        # display see the merged stream. Mirrors the PS1 temp-file split —
+        # never call the live provider twice (was a double-hit bug).
+        tmpout=$(mktemp)
+        tmperr=$(mktemp)
+        "$@" >"$tmpout" 2>"$tmperr"
         code=$?
-        out=$("$@" 2>&1)
+        out_json=$(cat "$tmpout")
+        out=$(cat "$tmpout" "$tmperr")
+        rm -f "$tmpout" "$tmperr"
     else
         out=$("$@" 2>&1)
         code=$?
