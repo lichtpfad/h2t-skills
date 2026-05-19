@@ -1390,6 +1390,18 @@ def test_ingest_notion_shim_silent_on_json(monkeypatch, capsys):
     cap = capsys.readouterr()
     assert "deprecat" not in cap.err.lower()
     assert code == 0
+
+
+def test_connector_help_exits_zero(capsys):
+    """_run_connector must return 0 for --help (argparse SystemExit(0))."""
+    code = dispatch(["notion", "--help"])
+    assert code == 0
+    assert "notion" in capsys.readouterr().out
+
+
+def test_connector_subcommand_help_exits_zero(capsys):
+    code = dispatch(["notion", "get", "--help"])
+    assert code == 0
 ```
 
 - [ ] **Step 2: Run to verify it fails**
@@ -1473,7 +1485,10 @@ def _run_connector(argv: list[str]) -> int:
     try:
         ns = parser.parse_args(argv)
     except SystemExit as e:
-        return int(e.code or 2)
+        code = e.code
+        if code is None:
+            return 0
+        return code if isinstance(code, int) else 2
     handler = getattr(ns, "_handler", None)
     if handler is None:
         return emit(argv[0], exc=UsageError("no subcommand"), fmt="human")
