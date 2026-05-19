@@ -262,6 +262,11 @@ class NotionClient:
             caption = self._rich_text_to_markdown(img.get("caption", []))
             url = img.get("file", {}).get("url") or img.get("external", {}).get("url", "")
             return f"![{caption or 'image'}]({url})\n\n" if url else ""
+        elif t == "video":
+            vid = block["video"]
+            caption = self._rich_text_to_markdown(vid.get("caption", []))
+            url = vid.get("file", {}).get("url") or vid.get("external", {}).get("url", "")
+            return f"[{caption or 'video'}]({url})\n\n" if url else ""
         elif t == "divider":
             return "---\n\n"
         elif t == "callout":

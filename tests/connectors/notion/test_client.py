@@ -92,3 +92,30 @@ class _FakeAPIErr(Exception):
 ])
 def test_map_sdk_exc_structured_code(code, status, expected):
     assert isinstance(_map_sdk_exc(_FakeAPIErr(code, status), op="op"), expected)
+
+
+def test_block_to_markdown_video_external_with_caption(conv):
+    """Audit #144: video block must render as a Markdown link, not be dropped."""
+    block = {
+        "type": "video",
+        "video": {
+            "external": {"url": "https://example.com/demo.mp4"},
+            "caption": [{"type": "text", "text": {"content": "Demo clip"}}],
+        },
+    }
+    out = conv._block_to_markdown(block)
+    assert out == "[Demo clip](https://example.com/demo.mp4)\n\n"
+
+
+def test_block_to_markdown_video_file_url_default_title(conv):
+    """No caption → default title 'video' (English; legacy used Russian — we
+    intentionally normalize to the same fallback string the image branch uses)."""
+    block = {
+        "type": "video",
+        "video": {
+            "file": {"url": "https://files.notion.so/v.mp4"},
+            "caption": [],
+        },
+    }
+    out = conv._block_to_markdown(block)
+    assert out == "[video](https://files.notion.so/v.mp4)\n\n"
