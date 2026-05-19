@@ -31,7 +31,7 @@ from email.mime.base import MIMEBase
 from email.mime.multipart import MIMEMultipart  # noqa: F401  (used by Task 3-4 helpers)
 from email.mime.text import MIMEText  # noqa: F401  (used by Task 3-4 helpers)
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from h2t_ops.core.errors import AuthError, ConfigError
 
@@ -102,6 +102,64 @@ def _install_app_flow():
             hint=_GOOGLE_HINT,
         ) from e
     return InstalledAppFlow
+
+
+class _UnboundHttpError(Exception):
+    """Placeholder so `except HttpError` is a valid target before google is bound.
+
+    `from googleapiclient.errors import HttpError` at module scope is removed per
+    spec §4.1 (google libs are an optional dep, absent until Task 7). `_get_service`
+    binds the real class once auth has succeeded; tests monkeypatch this name.
+    """
+
+
+HttpError: type = _UnboundHttpError  # lazy seam — re-bound by _bind_http_error()
+
+
+def _bind_http_error() -> None:
+    """One-shot: swap the placeholder for the real googleapiclient HttpError.
+
+    Called at the end of `_get_service` (after `build()` succeeded, so google is
+    importable). Idempotent and a no-op once already bound.
+    """
+    global HttpError
+    if HttpError is _UnboundHttpError:
+        try:
+            from googleapiclient.errors import HttpError as _real
+        except ImportError as e:
+            raise ConfigError(
+                "Google API libraries not installed.",
+                hint=_GOOGLE_HINT,
+            ) from e
+        HttpError = _real
+
+
+def _map_http_error(e: Exception, *, op: str):
+    """Map a googleapiclient HttpError (or arbitrary exc) to a typed H2TError.
+
+    Mirrors notion `_map_sdk_exc`: an already-typed `H2TError` passes through
+    UNCHANGED (ТЗ-0 CRITICAL: re-wrapped typed errors must not be downgraded).
+    """
+    from h2t_ops.core.errors import (
+        AuthError, H2TError, NetworkError, NotFoundError, ProviderError,
+    )
+    if isinstance(e, H2TError):
+        return e
+    status = getattr(getattr(e, "resp", None), "status", None) or getattr(e, "status_code", 0)
+    try:
+        status = int(status)
+    except (TypeError, ValueError):
+        status = 0
+    if status in (401, 403):
+        return AuthError(f"Gmail auth/permission denied (HTTP {status}) during {op}: {e}")
+    if status == 404:
+        return NotFoundError(f"Gmail resource not found (HTTP {status}) during {op}: {e}")
+    if status >= 500:
+        return ProviderError(f"Gmail server error (HTTP {status}) during {op}: {e}")
+    s = str(e).lower()
+    if "timeout" in s or "timed out" in s or "connection" in s or "network" in s:
+        return NetworkError(f"Gmail network error during {op}: {e}")
+    return ProviderError(f"Failed to {op}: {e}")
 
 
 def _load_credentials(token_path: Path, creds_path: Path):
@@ -196,7 +254,53 @@ class GmailClient:
             token_path.write_text(creds.to_json())
 
         _, build = _import_google()
-        return build("gmail", "v1", credentials=creds)
+        service = build("gmail", "v1", credentials=creds)
+        _bind_http_error()  # bind real HttpError now that google is importable
+        return service
+
+    # --- Read (re-wrap of lib/clients/gmail.py ~lines 113-149; §10.1) ---
+    #
+    # API / pagination / query logic is byte-identical to the legacy methods.
+    # ONLY delta: `except HttpError as e: raise Exception(...)` becomes
+    # `raise _map_http_error(e, op=...) from e` (typed errors, spec §5).
+
+    def list_messages(
+        self,
+        max_results: int = 10,
+        query: Optional[str] = None,
+        unread_only: bool = False,
+    ) -> List[Dict[str, Any]]:
+        try:
+            if unread_only and query:
+                query = f"is:unread {query}"
+            elif unread_only:
+                query = "is:unread"
+            results = self.service.users().messages().list(
+                userId="me", maxResults=max_results, q=query
+            ).execute()
+            messages = results.get("messages", [])
+            return [self.get_message(m["id"]) for m in messages]
+        except HttpError as e:
+            raise _map_http_error(e, op="list messages") from e
+
+    def get_message(self, message_id: str) -> Dict[str, Any]:
+        try:
+            message = self.service.users().messages().get(
+                userId="me", id=message_id, format="full"
+            ).execute()
+            return self._parse_message(message)
+        except HttpError as e:
+            raise _map_http_error(e, op=f"get message {message_id}") from e
+
+    def search_messages(self, query: str, max_results: int = 10) -> List[Dict[str, Any]]:
+        return self.list_messages(max_results=max_results, query=query)
+
+    def list_labels(self) -> List[Dict[str, str]]:
+        try:
+            results = self.service.users().labels().list(userId="me").execute()
+            return results.get("labels", [])
+        except HttpError as e:
+            raise _map_http_error(e, op="list labels") from e
 
     # --- Helpers (verbatim from lib/clients/gmail.py; used by Tasks 3-4) ---
 

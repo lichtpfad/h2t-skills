@@ -97,3 +97,54 @@ def test_refresh_failure_raises_autherror(monkeypatch, tmp_path):
     monkeypatch.setattr(gmod, "_request", lambda: object())
     with pytest.raises(AuthError):
         gmod.GmailClient()
+
+
+# --- Task 3: read methods + HTTP error mapping ---
+
+import types  # noqa: E402
+
+
+class _FakeService:
+    def __init__(self, **resp): self._r = resp
+    def users(self): return self
+    def messages(self): return self
+    def labels(self): return self
+    def list(self, **k): return _Exec(self._r.get("list", {}))
+    def get(self, **k): return _Exec(self._r.get("get", {}))
+
+
+class _Exec:
+    def __init__(self, v): self._v = v
+    def execute(self): return self._v
+
+
+def _client_with(monkeypatch, service):
+    from h2t_ops.connectors.gmail import client as gmod
+    c = gmod.GmailClient.__new__(gmod.GmailClient)
+    c.service = service
+    return c, gmod
+
+
+def test_list_messages_happy(monkeypatch):
+    svc = _FakeService(list={"messages": [{"id": "1"}]},
+                       get={"id": "1", "threadId": "t", "labelIds": [], "snippet": "",
+                            "payload": {"headers": [{"name": "Subject", "value": "S"}]}})
+    c, _ = _client_with(monkeypatch, svc)
+    out = c.list_messages(max_results=1)
+    assert out[0]["id"] == "1" and out[0]["subject"] == "S"
+
+
+def test_get_message_404_maps_notfound(monkeypatch):
+    from h2t_ops.core.errors import NotFoundError
+
+    class _HttpErr(Exception):
+        resp = types.SimpleNamespace(status=404)
+
+    class _Svc(_FakeService):
+        def get(self, **k):
+            raise _HttpErr("not found")
+
+    c, gmod = _client_with(monkeypatch, _Svc())
+    monkeypatch.setattr(gmod, "HttpError", _HttpErr, raising=False)
+    with pytest.raises(NotFoundError):
+        c.get_message("missing")
