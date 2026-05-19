@@ -83,3 +83,57 @@ def test_update_noop_raises_usageerror(monkeypatch):
     with pytest.raises(UsageError):
         notion_cmds.run(_ns(notion_cmd="update", page_id="P", title=None,
                             append=None, file=None, replace=False))
+
+
+from h2t.cli import build_parser, dispatch
+
+
+def test_version_branch_exits_zero(capsys):
+    assert dispatch(["--version"]) == 0
+    assert "h2t " in capsys.readouterr().out
+
+
+def test_connectors_list_no_heavy_import(capsys, monkeypatch):
+    import builtins
+    real = builtins.__import__
+
+    def guard(name, *a, **k):
+        if name in ("notion_client", "httpx"):
+            raise AssertionError("connectors list must not import SDK")
+        return real(name, *a, **k)
+
+    monkeypatch.setattr(builtins, "__import__", guard)
+    assert dispatch(["connectors"]) == 0
+    assert "notion" in capsys.readouterr().out
+
+
+def test_doctor_reports_connectors(capsys):
+    assert dispatch(["doctor"]) == 0
+    out = capsys.readouterr().out
+    assert "notion" in out and "secrets" in out
+
+
+def test_ingest_notion_shim_warns_on_human(monkeypatch, capsys):
+    called = {}
+
+    def fake_run(args):
+        called["ran"] = True
+        return "OK"
+
+    monkeypatch.setattr("h2t.connectors.notion.commands.run", fake_run)
+    code = dispatch(["ingest", "notion", "get", "PID"])
+    err = capsys.readouterr().err
+    assert called.get("ran") is True
+    assert "deprecat" in err.lower()
+    assert code == 0
+
+
+def test_ingest_notion_shim_silent_on_json(monkeypatch, capsys):
+    def fake_run_json(args):
+        return {"id": "x"}
+
+    monkeypatch.setattr("h2t.connectors.notion.commands.run", fake_run_json)
+    code = dispatch(["ingest", "notion", "get", "PID", "--json"])
+    cap = capsys.readouterr()
+    assert "deprecat" not in cap.err.lower()
+    assert code == 0
