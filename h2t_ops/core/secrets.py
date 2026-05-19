@@ -25,7 +25,15 @@ def load_secrets(env_file: Path | None = None) -> None:
 
 
 def resolve_notion_token() -> str:
-    """Env var → ~/.config/notion/token → ConfigError with install hint."""
+    """Env var → ~/.dor/secrets.env → ~/.config/notion/token → ConfigError.
+
+    Parity with legacy lib/clients/notion.py, which did
+    `load_dotenv(~/.dor/secrets.env, override=False)` at import. We do it
+    on-demand inside token resolution instead (idempotent, no-override merge).
+    The file IS read here, but only when a client actually needs the token —
+    registry/help still stay lazy because they never instantiate the client.
+    """
+    load_secrets()  # merges ~/.dor/secrets.env into os.environ; no override
     tok = os.getenv("NOTION_API_TOKEN")
     if tok:
         return tok
