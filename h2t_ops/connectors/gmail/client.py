@@ -75,6 +75,7 @@ def _import_google():
 
 
 def _request():
+    # test seam: lazy Request() — google libs absent until Task 7 declares deps
     """Lazy `google.auth.transport.requests.Request()` seam."""
     try:
         from google.auth.transport.requests import Request
@@ -137,6 +138,7 @@ def _load_credentials(token_path: Path, creds_path: Path):
             effective_scopes = token_data.get("scopes") or SCOPES
             creds = Credentials.from_authorized_user_info(token_data, effective_scopes)
         except Exception:
+            # delta 2: legacy printed a warning here; dropped per §10.1, creds=None kept
             creds = None
     return creds
 

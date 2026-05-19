@@ -60,7 +60,7 @@ def test_no_creds_no_refresh_raises_configerror_not_browser(monkeypatch, tmp_pat
     cfg.mkdir(parents=True)
     (cfg / "credentials.json").write_text("{}")
     monkeypatch.setattr(gmod.Path, "home", staticmethod(lambda: tmp_path))
-    monkeypatch.setattr(gmod, "_load_credentials", lambda *a, **k: None, raising=False)
+    monkeypatch.setattr(gmod, "_load_credentials", lambda *a, **k: None)
 
     launched = {"browser": False}
 
@@ -70,7 +70,7 @@ def test_no_creds_no_refresh_raises_configerror_not_browser(monkeypatch, tmp_pat
             launched["browser"] = True
             raise AssertionError("run_local_server must never be reached")
 
-    monkeypatch.setattr(gmod, "_install_app_flow", lambda: _Flow, raising=False)
+    monkeypatch.setattr(gmod, "_install_app_flow", lambda: _Flow)
     with pytest.raises(ConfigError):
         gmod.GmailClient()
     assert launched["browser"] is False
@@ -92,8 +92,8 @@ def test_refresh_failure_raises_autherror(monkeypatch, tmp_path):
         refresh_token = "r"
         def refresh(self, _req): raise RuntimeError("invalid_grant")
 
-    monkeypatch.setattr(gmod, "_load_credentials", lambda *a, **k: _Creds(), raising=False)
+    monkeypatch.setattr(gmod, "_load_credentials", lambda *a, **k: _Creds())
     # Seam (discretion): stub the lazy Request() import — google libs absent in test env.
-    monkeypatch.setattr(gmod, "_request", lambda: object(), raising=False)
+    monkeypatch.setattr(gmod, "_request", lambda: object())
     with pytest.raises(AuthError):
         gmod.GmailClient()
