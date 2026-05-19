@@ -989,7 +989,7 @@ def _map_sdk_exc(e: Exception, *, op: str):
         return AuthError(f"Failed to {op}: {e}")
     if "could not find" in s:
         return NotFoundError(f"Failed to {op}: {e}")
-    if "timeout" in s or "connection" in s or "network" in s:
+    if "timeout" in s or "timed out" in s or "connection" in s or "network" in s:
         return NetworkError(f"Failed to {op}: {e}")
     return ProviderError(f"Failed to {op}: {e}")
 
