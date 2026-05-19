@@ -3,14 +3,24 @@ requires = ["setuptools>=70"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "h2t"
-version = "0.1.0"
+name = "h2t-ops"
+version = "0.2.0"
 requires-python = ">=3.11"
-dependencies = []
+dependencies = [
+  "notion-client>=2.0",
+  "httpx>=0.27",
+  "python-dotenv>=1.0",
+]
 
 [project.scripts]
-h2t = "lib.cli.main:main"
+h2t-ops = "h2t_ops.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["lib*"]
+include = ["h2t_ops*", "lib*"]
+
+# PEP 735 — provisioned by `uv run`/`uv sync`; ignored by bare `pip install`.
+[dependency-groups]
+dev = [
+  "pytest>=8",
+]
