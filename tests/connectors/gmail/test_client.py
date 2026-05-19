@@ -174,3 +174,27 @@ def test_map_http_error_passthrough_does_not_downgrade():
     from h2t_ops.core.errors import NotFoundError
     nf = NotFoundError("x")
     assert gmod._map_http_error(nf, op="y") is nf
+
+
+# --- Task 4: write methods + attachment error ---
+
+
+def test_send_message_happy():
+    sent = {}
+
+    class _Svc(_FakeService):
+        def send(self, userId, body): sent.update(body); return _Exec({"id": "m1"})
+        def messages(self): return self
+        def users(self): return self
+
+    c, _ = _client_with(_Svc())
+    out = c.send_message(to="a@b.com", subject="S", body="B")
+    assert out["id"] == "m1" and "raw" in sent
+
+
+def test_attachment_not_found_raises_usageerror():
+    from h2t_ops.core.errors import UsageError
+    c, _ = _client_with(_FakeService())
+    with pytest.raises(UsageError):
+        c.send_message(to="a@b.com", subject="S", body="B",
+                       attachments=["/no/such/file.bin"])

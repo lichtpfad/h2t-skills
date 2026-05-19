@@ -33,7 +33,7 @@ from email.mime.text import MIMEText  # noqa: F401  (used by Task 3-4 helpers)
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from h2t_ops.core.errors import AuthError, ConfigError
+from h2t_ops.core.errors import AuthError, ConfigError, UsageError
 
 SCOPES = [
     "https://www.googleapis.com/auth/gmail.readonly",
@@ -302,6 +302,75 @@ class GmailClient:
         except HttpError as e:
             raise _map_http_error(e, op="list labels") from e
 
+    # --- Write (re-wrap of lib/clients/gmail.py ~lines 153-210; §10.1) ---
+    #
+    # MIME assembly / base64 / draft-vs-send / threadId / reply-header /
+    # addLabelIds-removeLabelIds logic is byte-identical to the legacy methods.
+    # ONLY delta: `except HttpError as e: raise Exception(...)` becomes
+    # `raise _map_http_error(e, op=...) from e` (typed errors, spec §5).
+    # `_attach_file` (a helper) additionally re-types its missing-file error
+    # FileNotFoundError -> UsageError so a bad path is exit-2 (usage).
+
+    def send_message(
+        self,
+        to: str,
+        subject: str,
+        body: str,
+        attachments: Optional[List[str]] = None,
+        as_draft: bool = False,
+        thread_id: Optional[str] = None,
+        reply_to_message_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        try:
+            message = MIMEMultipart() if attachments else MIMEText(body)
+            message["to"] = to
+            message["subject"] = subject
+            if reply_to_message_id:
+                message["In-Reply-To"] = reply_to_message_id
+                message["References"] = reply_to_message_id
+            if attachments:
+                message.attach(MIMEText(body, "plain"))
+                for file_path in attachments:
+                    self._attach_file(message, file_path)
+
+            raw = base64.urlsafe_b64encode(message.as_bytes()).decode()
+            if as_draft:
+                draft_body: Dict[str, Any] = {"raw": raw}
+                if thread_id:
+                    draft_body["threadId"] = thread_id
+                return self.service.users().drafts().create(
+                    userId="me", body={"message": draft_body}
+                ).execute()
+            else:
+                send_body: Dict[str, Any] = {"raw": raw}
+                if thread_id:
+                    send_body["threadId"] = thread_id
+                return self.service.users().messages().send(
+                    userId="me", body=send_body
+                ).execute()
+        except HttpError as e:
+            raise _map_http_error(
+                e, op="create draft" if as_draft else "send message"
+            ) from e
+
+    def modify_labels(
+        self,
+        message_id: str,
+        add_labels: Optional[List[str]] = None,
+        remove_labels: Optional[List[str]] = None,
+    ) -> Dict[str, Any]:
+        try:
+            body: Dict[str, Any] = {}
+            if add_labels:
+                body["addLabelIds"] = add_labels
+            if remove_labels:
+                body["removeLabelIds"] = remove_labels
+            return self.service.users().messages().modify(
+                userId="me", id=message_id, body=body
+            ).execute()
+        except HttpError as e:
+            raise _map_http_error(e, op=f"modify labels for {message_id}") from e
+
     # --- Helpers (verbatim from lib/clients/gmail.py; used by Tasks 3-4) ---
 
     def _parse_message(self, message: Dict[str, Any]) -> Dict[str, Any]:
@@ -347,7 +416,10 @@ class GmailClient:
     def _attach_file(self, message: MIMEMultipart, file_path: str) -> None:
         path = Path(file_path)
         if not path.exists():
-            raise FileNotFoundError(f"Attachment not found: {file_path}")
+            # delta (Task 4): legacy raised FileNotFoundError; re-typed to
+            # UsageError so a bad attachment path is exit-2 (usage). Raised
+            # during MIME assembly — byte-identically BEFORE base64/send.
+            raise UsageError(f"attachment not found: {file_path}")
         with open(path, "rb") as f:
             part = MIMEBase("application", "octet-stream")
             part.set_payload(f.read())
