@@ -23,7 +23,9 @@ def test_discover_does_not_import_notion_sdk(monkeypatch):
         return real_import(name, *a, **k)
 
     monkeypatch.setattr(builtins, "__import__", guard)
-    sys.modules.pop("h2t.connectors.notion.client", None)
+    # delitem (not raw pop) so the client module is restored at teardown —
+    # a raw pop leaks a sys.modules-vs-package-attr desync into later tests.
+    monkeypatch.delitem(sys.modules, "h2t.connectors.notion.client", raising=False)
     assert "notion" in {s.name for s in discover()}
 
 
