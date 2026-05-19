@@ -40,6 +40,7 @@ foundation.
 | [Connector architecture spec](superpowers/specs/2026-05-18-h2t-connector-architecture-design.md) | Connector standard, identity decision, CLI contract |
 | [TZ-0 implementation plan](superpowers/plans/2026-05-18-h2t-connector-architecture-tz0.md) | Core foundation + Notion walking skeleton |
 | [POS operational boundary](../plugins/h2t-ops/references/pos-operational-boundary.md) | Skill-facing rules for respecting POS ADR-0006 without duplicating the ADR |
+| [API coverage audit](reports/2026-05-19-h2t-ops-api-coverage-audit.md) | Read-only audit: per-connector legacy parity, provider API feature gaps, POS-boundary risks, and the "do next" sequence |
 
 ## Waves
 
@@ -56,9 +57,9 @@ foundation.
 
 | Connector | Current Source | Current CLI | Target CLI | Wave | Risk |
 | --- | --- | --- | --- | --- | --- |
-| notion | `lib/clients/notion.py` | `h2t ingest notion` legacy shim | `h2t-ops notion ...` | TZ-0 | Done |
+| notion | `lib/clients/notion.py` | `h2t ingest notion` legacy shim | `h2t-ops notion ...` | TZ-0 | Done (patch debt: `secrets.env` regression, `video` block drop, missing `find-project-tasks`) |
 | gmail | `lib/clients/gmail.py` | `h2t ingest gmail` legacy shim | `h2t-ops gmail ...` | TZ-1 | Done |
-| calendar | `lib/clients/calendar.py` | `h2t ingest calendar` | `h2t-ops calendar ...` | TZ-1 | Medium: Google auth and date/time output |
+| calendar | `lib/clients/calendar.py` | `h2t ingest calendar` | `h2t-ops calendar ...` | TZ-1 | Medium: parity vs provider-features split; shared Google auth helper is a prerequisite |
 | drive | skill exists; CLI gap | none / skill-local | `h2t-ops drive ...` | TZ-1 | Medium: discover exact source and auth shape |
 | meetgeek | standalone script / skill-local | none | `h2t-ops meetgeek ...` | TZ-1 | Medium: upload/transcript workflow boundaries |
 | telegram | standalone script / skill-local | none | `h2t-ops telegram ...` | TZ-1 | Medium: optional SDK and session secrets |
@@ -72,26 +73,56 @@ Use the repo issue title standard: `skills: [M3] Verb noun`. Put `Wave: TZ-N` in
 
 - Closed: #131 Gmail connector, #139 local runtime smoke, #141 UTF-8 core output.
 - Open: #132 Calendar, #133 Drive, #134 MeetGeek, #135 Telegram, #136 research,
-  #137 research URL fetch ladder, #138 connector development runbook.
-- Recommended next sequence: #138 runbook baseline first, then #132 Calendar as
-  the next normal connector migration.
+  #137 research URL fetch ladder, #138 connector development runbook,
+  #143 plugin bump script UTF-8.
+- New from the API coverage audit (2026-05-19): a Notion patch-debt issue
+  (`skills: [M3] Patch Notion connector coverage gaps`) and a Calendar
+  provider-features follow-up issue, kept separate from #132 parity scope.
+- Recommended next sequence: #138 runbook baseline first (now carrying the
+  API coverage checklist), then #132 Calendar **parity** as the first
+  runbook-driven migration, with a shared Google auth helper as its
+  prerequisite.
 
 ### Current Execution Sequence
 
 1. **#138 Connector development runbook.** Write the procedure before adding more
    connectors. The runbook must use Notion and Gmail as reference implementations
-   and must include POS-boundary and distribution-independence checks.
-2. **#132 Calendar migration.** Use Calendar as the first connector implemented
-   by following the runbook. It is the lowest-risk next migration because it
-   shares Google auth patterns with Gmail and feeds Daily Brief.
-3. **Inventory gate for Drive, MeetGeek, Telegram.** Before implementation,
+   and must include POS-boundary and distribution-independence checks, plus the
+   API coverage checklist (see the #138 backlog section) as a required review
+   gate for every connector PR.
+2. **Shared Google auth helper (prerequisite for #132).** Add
+   `resolve_google_credentials()` / token-refresh reuse to `core/secrets.py`
+   before or inside #132, so Calendar/Drive/Gmail stop duplicating inlined OAuth
+   resolution. Without it, Drive will duplicate the same auth code again.
+3. **Extend `dev check lazy-registry`.** Before Calendar/Drive/Telegram land,
+   extend the lazy-import guard from `notion_client` + `httpx` to `google*`,
+   `telethon`, and `exa`; otherwise `h2t-ops --help` / `connectors` risk
+   importing heavy SDKs. Treat as a mandatory gate in the runbook.
+4. **#132 Calendar — parity migration only.** First connector built by following
+   the runbook (lowest risk: shares Google OAuth with Gmail, feeds Daily Brief).
+   Scope is parity with the legacy client only (list/search/get/create/delete,
+   shared Google auth, typed errors, tests, legacy shim). Provider-feature
+   expansion (Meet links, recurrence, patch/reschedule, all-day, multi-calendar,
+   reminders/freebusy) is a **separate follow-up issue**, not #132, unless the
+   architect explicitly approves widening #132.
+5. **Notion patch debt.** Fix the audit-identified regressions in the already
+   migrated Notion connector: missing `load_dotenv(~/.dor/secrets.env)`
+   (`secrets.env` regression), `video` block silent data loss, and missing
+   `find-project-tasks`. Tracked as a dedicated patch issue; its sequence
+   relative to #132 is the architect's call.
+6. **Inventory gate for Drive, MeetGeek, Telegram.** Before implementation,
    document exact skill-local CLI surfaces, write/file side effects, optional
-   SDKs, and POS-boundary risks. Only then migrate each connector.
-4. **#136/#137 Research wave.** Keep research and URL fetch ladder in TZ-2.
+   SDKs, and POS-boundary risks. These connectors mix pure-API reads with
+   workflow/storage side effects (MeetGeek lake writes — CRITICAL; Telegram
+   DOR + Notion writes — HIGH; Drive `sync-meetings` DOR writes — HIGH). The
+   connector scope is pure-API reads only; side-effecting subcommands go to a
+   coordinator / POS-owned layer, not the connector. De-duplicate the Drive
+   client embedded in `meetgeek_cli.py`. Only then migrate each connector.
+7. **#136/#137 Research wave.** Keep research and URL fetch ladder in TZ-2.
    They are provider/strategy connectors with richer telemetry and legacy exit
    code remapping, not normal TZ-1 connectors.
-5. **Daily Brief update.** After Calendar is migrated, update Daily Brief to use
-   `h2t-ops calendar/gmail/notion` reads. Daily Brief remains a synthesis
+8. **Daily Brief update.** After Calendar parity is migrated, update Daily Brief
+   to use `h2t-ops calendar/gmail/notion` reads. Daily Brief remains a synthesis
    workflow, not a POS journal writer.
 
 ### Distribution Independence
@@ -174,25 +205,98 @@ connector standard without breaking existing `h2t ingest gmail` usage.
 - CLI tests cover `--json`, human output, help, and shim behavior.
 - Lazy registry test remains green.
 
-### skills: [TZ-1] Migrate Calendar connector
+### skills: [M3] Patch Notion connector coverage gaps
 
-**Status:** Next after #138 runbook baseline.
+**Status:** Backlog. Created from the API coverage audit (2026-05-19 §3 "Notion — partial").
 
-**Context:** Calendar shares Google auth concerns with Gmail but has distinct date/time and event
-output contracts.
+**Context:** Notion migrated in TZ-0, but the audit found three concrete gaps versus the legacy
+client/skill that make the connector partial, not full.
 
 **What:**
-- Create `h2t_ops/connectors/calendar/`.
-- Re-wrap existing calendar client logic.
-- Add CLI commands, tests, and legacy shim.
-- Normalize output shapes for events.
+- **`secrets.env` regression** — the connector's `resolve_notion_token()` reads only
+  `os.environ` → `~/.config/notion/token`; the legacy `lib/clients/notion.py` did
+  `load_dotenv(~/.dor/secrets.env)` at import. If the token lives only in `secrets.env` and
+  `load_secrets()` is not called upstream, the connector raises `ConfigError` where the legacy
+  client worked. Restore equivalent secrets resolution.
+- **`video` block silent data loss** — `video` blocks are rendered as a link in the skill
+  (`notion_cli.py`) but return `""` in the connector (`client.py`), dropping data silently
+  (also present in the legacy lib client). Render `video` instead of dropping it.
+- **Missing `find-project-tasks`** — present in `lib/cli/main.py` and the legacy Notion skill
+  script, dropped in `h2t_ops`. Restore the CLI command (relation-filter query).
 
-**Why:** Calendar is core to daily brief and scheduling skills.
+**Why:** A migrated connector rated "partial" undermines the parity guarantee the runbook will
+enforce; these are regressions, not new features.
 
 **Definition of Done:**
-- CLI supports the existing practical calendar workflows.
-- Tests cover event listing, creation path where applicable, and auth/config errors.
+- Token resolves from `~/.dor/secrets.env` parity with the legacy client (typed `ConfigError`
+  only when genuinely absent).
+- `video` blocks are rendered (no silent `""`), with a test.
+- `find-project-tasks` CLI command restored with a test.
+- No connector code outside Notion is touched; POS boundary unaffected.
+
+### skills: [M3] Migrate Calendar connector (parity) — #132
+
+**Status:** Next after #138 runbook baseline. **Scope: parity only.**
+
+**Context:** Calendar shares Google auth concerns with Gmail but has distinct date/time and event
+output contracts. The API coverage audit (2026-05-19 §3 "Calendar — #132 exact delta") shows the
+legacy client is primary-calendar-only with no Meet/recurrence/patch/all-day/multi-calendar. #132
+must not silently become a thin re-wrap that also drops the provider-feature gap on the floor —
+the parity migration and the provider-feature expansion are explicitly separated below.
+
+**Prerequisite (shared Google auth helper):** Before or inside #132, add a shared
+`resolve_google_credentials()` / token-refresh reuse helper to `core/secrets.py`. Gmail's OAuth
+resolution is currently inlined in `gmail/client.py`; without the shared helper, Calendar (and
+later Drive) duplicate it. This prerequisite is part of #132's required subtasks.
+
+**What (parity scope only):**
+- Create `h2t_ops/connectors/calendar/` (template: `h2t_ops/connectors/gmail/`).
+- Re-wrap the existing legacy `lib/clients/calendar.py` logic: `list / search / get / create /
+  delete`, primary calendar only — byte-equivalent behavior, no new provider features.
+- Use the shared Google auth helper (path `~/.config/google-calendar-mcp/tokens.json`, shared
+  with Gmail — no separate bootstrap).
+- Typed errors: missing libs/creds → `ConfigError` (browser never launched); refresh failure →
+  `AuthError`; HTTP → `_map_http_error` mirroring `gmail/client.py`.
+- Add `commands.py`, `CONNECTOR`, tests, and legacy shim; normalize event output shapes.
+
+**Why:** Calendar is core to Daily Brief and scheduling skills, and is the lowest-risk first
+runbook-driven migration.
+
+**Definition of Done:**
+- Parity CLI: `calendar list/search/get/create/delete` with `--json` / `--format`.
+- Tests cover event listing, the create path, auth/config errors (no browser launch), and the
+  lazy-import guard; migrate the 4 `_normalize_event` tests from `tests/clients/test_calendar.py`.
 - Existing legacy entrypoint still works.
+- Shared Google auth helper landed and used (no duplicated inline OAuth).
+
+**Audit-trail note:** The API coverage audit §6 recommended folding the provider features into
+#132 ("not a thin re-wrap"). Architect direction is to keep #132 **parity-only** and track the
+provider features as the separate follow-up below. Re-open this only if the architect explicitly
+widens #132.
+
+### skills: [M3] Calendar provider features follow-up
+
+**Status:** Backlog (separate from #132). Created from the API coverage audit (§6, §"Highest-impact
+missing features").
+
+**Context:** The legacy Calendar client — and therefore the #132 parity connector — exposes only
+primary-calendar single timed events. The Google Calendar API v3 supports substantially more, and
+this gap is where most "the CLI can't do that" friction will come from.
+
+**What (each may be its own issue/PR; do not fold into #132 without explicit approval):**
+- Google Meet links (`conferenceData.createRequest`, `conferenceDataVersion`).
+- Recurring / serial events (`recurrence: ["RRULE:..."]`).
+- Patch / reschedule (`events.patch`) — currently only create + delete exist.
+- All-day events (date vs dateTime).
+- Calendar-id / multi-calendar (currently `calendarId="primary"` hardcoded) + `calendarList`.
+- Reminders / notification overrides and FreeBusy query.
+
+**Why:** These are the highest-impact missing capabilities for real scheduling use; they need
+explicit acceptance items rather than being lost between parity and "done".
+
+**Definition of Done:**
+- Each provider feature has a typed-error path, tests, and `--json` output.
+- The runbook's provider-API-gap checklist item is satisfied for Calendar.
 
 ### skills: [TZ-1] Migrate Drive connector
 
@@ -288,25 +392,53 @@ instead of a standalone script discovered through plugin paths.
 - `--json` exposes enough metadata for agents to reason about degraded results.
 - Network and provider failures map to canonical exit codes.
 
-### skills: [TZ-3] Add connector development skill runbook
+### skills: [M3] Add connector development skill runbook — #138
 
-**Status:** Next.
+**Status:** Next (must land before any further connector migration).
 
 **Context:** New connectors need an agent-facing recipe that lives with the skill, not under
-`docs/superpowers`.
+`docs/superpowers`. The API coverage audit (2026-05-19) showed that without an explicit checklist,
+a migration can silently regress (Notion `secrets.env` / `video` / `find-project-tasks`) or ship a
+thin re-wrap that ignores the provider-API gap.
 
 **What:**
 - Create or update the connector development skill.
 - Put the long runbook under that skill's `references/` directory.
 - Keep `SKILL.md` lean and point to the reference only when needed.
 - Base the runbook on the final Notion skeleton and TZ-1/TZ-2 lessons.
+- Embed the **API coverage checklist** (below) as a mandatory per-connector review gate.
 
-**Why:** Future connector work should be repeatable without re-reading all specs and plans.
+**API coverage checklist (required gate for every connector PR):**
+
+1. **Legacy parity** — every legacy `lib/`/skill-script method and subcommand is matched
+   1:1; any intentionally dropped capability is documented, not silent.
+2. **Provider API gaps** — the connector is checked against the full documented provider
+   API; missing high-value capabilities are filed as explicit follow-up issues, not lost.
+3. **Auth/secrets** — credential resolution goes through the shared helper(s)
+   (`resolve_*_credentials()`); no inlined per-connector OAuth/dotenv duplication; no
+   `secrets.env` regression vs the legacy client.
+4. **Lazy imports** — heavy SDKs import lazily; `dev check lazy-registry` covers this
+   connector's SDK; `h2t-ops --help` / `connectors` never import it.
+5. **Tests** — API happy path + typed error mapping + CLI contract (`--json`, human,
+   help, shim) + lazy-registry guard; legacy normalize tests migrated.
+6. **Live smoke** — read-only live E2E through the installed CLI, evidence recorded in
+   the issue (per the testing plan).
+7. **POS boundary** — no connector writes `~/.dor/pos.db` / `dor.db` / vault / lake;
+   side-effecting subcommands are excluded from the connector scope.
+8. **Distribution-without-POS** — the connector imports no `pos`/`dor.db`/`vault`/`lake`
+   and does not default-write into `~/.dor/`; it works with POS absent.
+9. **Write side effects** — mutating operations (send/label/create/delete/upload/archive)
+   are enumerated; until POS journal commands exist they emit structured proposed
+   captures, never silent store mutation.
+
+**Why:** Future connector work should be repeatable without re-reading all specs and plans,
+and must not regress parity or boundary guarantees.
 
 **Definition of Done:**
 - Skill follows Claude/Codex skill structure.
 - `references/h2t-connector-runbook.md` exists.
-- Runbook includes file layout, tests, error mapping, output contract, and review checklist.
+- Runbook includes file layout, tests, error mapping, output contract, review checklist,
+  and the 9-item API coverage checklist above as a required gate.
 
 ### ai: Add h2t-ops umbrella bridge
 
