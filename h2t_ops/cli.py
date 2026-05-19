@@ -9,7 +9,7 @@ from pathlib import Path
 
 import h2t_ops
 from h2t_ops.core.errors import UsageError
-from h2t_ops.core.output import emit
+from h2t_ops.core.output import emit, _utf8_writer, _finalize
 from h2t_ops.core.registry import discover
 from h2t_ops.dev import main as _dev_main
 
@@ -115,8 +115,10 @@ def dispatch(argv: list[str]) -> int:
             else:
                 norm.append(a)
         if _fmt_from(norm) != "json":
+            _w, _c = _utf8_writer(sys.stderr)
             print("deprecated: `h2t-ops ingest notion` → use `h2t-ops notion` (spec §10)",
-                  file=sys.stderr)
+                  file=_w)
+            _finalize(_w, _c)
         return _run_connector(["notion", *norm])
     # ingest gmail shim → new connector (spec §10.2).
     # Gmail legacy accepted `--format plain` (& friends); notion did not — so we
@@ -136,8 +138,10 @@ def dispatch(argv: list[str]) -> int:
             else:
                 norm.append(a)
         if _fmt_from(norm) != "json":
+            _w, _c = _utf8_writer(sys.stderr)
             print("deprecated: `h2t-ops ingest gmail` → use `h2t-ops gmail` (spec §10)",
-                  file=sys.stderr)
+                  file=_w)
+            _finalize(_w, _c)
         return _run_connector(["gmail", *norm])
     if argv and argv[0] in ("gather", "ingest"):
         return _legacy(argv)

@@ -65,18 +65,21 @@ def emit(provider: str, *, result: Any = None, exc: BaseException | None = None,
         code = exit_code_for(exc)
         env_dict = error_envelope(provider, exc)
         err_writer, err_created = _utf8_writer(sys.stderr)
-        if fmt == "json":
-            print(json.dumps(env_dict, ensure_ascii=False), file=err_writer)
-        else:
-            env = env_dict["error"]
-            line = f"error[{env['type']}]: {env['message']}"
-            if env["hint"]:
-                line += f"\nhint: {env['hint']}"
-            print(line, file=err_writer)
-        _finalize(err_writer, err_created)
+        try:
+            if fmt == "json":
+                print(json.dumps(env_dict, ensure_ascii=False), file=err_writer)
+            else:
+                env = env_dict["error"]
+                line = f"error[{env['type']}]: {env['message']}"
+                if env["hint"]:
+                    line += f"\nhint: {env['hint']}"
+                print(line, file=err_writer)
+        finally:
+            _finalize(err_writer, err_created)
         return code
 
     out_writer, out_created = _utf8_writer(sys.stdout)
+    _write_exc_ref: list[BaseException] = []
     try:
         if fmt == "json":
             print(json.dumps(success_envelope(provider, result), ensure_ascii=False),
@@ -91,16 +94,20 @@ def emit(provider: str, *, result: Any = None, exc: BaseException | None = None,
             print(result if isinstance(result, str)
                   else json.dumps(result, ensure_ascii=False, indent=2),
                   file=out_writer)
-        _finalize(out_writer, out_created)
     except (UnicodeEncodeError, OSError) as write_exc:
         # Writing the success output failed — surface as a non-zero exit so
         # callers never see exit 0 with broken/missing output (#141).
+        _write_exc_ref.append(write_exc)
+    finally:
+        _finalize(out_writer, out_created)
+    if _write_exc_ref:
         err_writer, err_created = _utf8_writer(sys.stderr)
         try:
-            print(f"error[runtime]: output encoding failed: {write_exc}",
+            print(f"error[runtime]: output encoding failed: {_write_exc_ref[0]}",
                   file=err_writer)
-            _finalize(err_writer, err_created)
         except Exception:
             pass
+        finally:
+            _finalize(err_writer, err_created)
         return 1
     return 0

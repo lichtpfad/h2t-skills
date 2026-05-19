@@ -102,3 +102,47 @@ def test_emit_tier2_buffer_not_closed(monkeypatch):
     assert code == 0
     assert not raw.closed                      # detach() kept it open
     assert "Привет ✨" in raw.getvalue().decode("utf-8")
+
+
+def test_emit_tier2_finalize_runs_on_write_failure(monkeypatch):
+    """Fix 1: _finalize (detach) must run on the Tier-2 wrapper even when
+    the print raises UnicodeEncodeError — i.e., _finalize is in finally,
+    not only on the success branch inside try."""
+    raw = io.BytesIO()
+    detach_called = []
+
+    class _FailWriter:
+        """Tier-2-like wrapper: has .buffer (so _utf8_writer returns created=True),
+        reconfigure raises so Tier-2 path is taken, but write itself explodes."""
+        def __init__(self, b):
+            self.buffer = b
+            self.encoding = "ascii"
+            self.errors = "strict"
+            self.newlines = None
+        def reconfigure(self, *a, **k):
+            raise OSError("no reconfigure")
+        def write(self, *a, **k):
+            raise UnicodeEncodeError("ascii", "x", 0, 1, "boom")
+        def flush(self):
+            pass
+        def detach(self):
+            detach_called.append(True)
+            return raw
+
+    # Patch _utf8_writer directly: return (_FailWriter, created=True) so we
+    # control the exact Tier-2 scenario without relying on BytesIO internals.
+    import h2t_ops.core.output as _mod
+    orig_utf8_writer = _mod._utf8_writer
+    fw = _FailWriter(raw)
+
+    def _fake_utf8_writer(stream):
+        if stream is sys.stdout:
+            return fw, True
+        return orig_utf8_writer(stream)
+
+    monkeypatch.setattr(_mod, "_utf8_writer", _fake_utf8_writer)
+    code = emit("notion", result="Привет", fmt="human")
+    # Non-zero: write failure → return 1 (unchanged contract)
+    assert code != 0
+    # _finalize must have called detach() even though write raised
+    assert detach_called, "_finalize was NOT called on the Tier-2 wrapper after write failure"
