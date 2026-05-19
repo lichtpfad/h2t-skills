@@ -9,6 +9,14 @@ metadata:
 
 # Gmail (h2t-ops connector)
 
+## POS Boundary
+
+For POS and daily-loop workflows, follow the shared boundary reference:
+`../../references/pos-operational-boundary.md`. This skill may read Gmail data
+through `h2t-ops`, but must not write POS journal rows, mutate `~/.dor/pos.db`,
+or modify vault/lake directly. Emit structured proposed captures until POS
+journal commands exist.
+
 ## Availability (cross-platform contract)
 
 `h2t-ops --version` exits 0 when installed (identical on PowerShell and POSIX — no shell idioms).

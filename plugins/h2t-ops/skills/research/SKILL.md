@@ -11,6 +11,15 @@ metadata:
 
 Semantic research via Exa HTTP API. Transparent (all tool calls visible in main conversation), fail-loud (no silent fallbacks), debug-friendly (telemetry block in every report).
 
+## POS Boundary
+
+For POS, KB, and daily-loop workflows, follow the shared boundary reference:
+`../../references/pos-operational-boundary.md`. This skill may gather external
+research evidence, but must not write POS journal rows, mutate `~/.dor/pos.db`,
+or modify vault/lake directly except through approved `pos_ingest` or
+coordinator workflow. Emit structured proposed captures until POS journal
+commands exist.
+
 ## Architecture
 
 ```

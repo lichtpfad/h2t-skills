@@ -39,24 +39,25 @@ foundation.
 | [H2T-OPS testing plan](h2t-ops-testing-plan.md) | Runtime, CLI, and live E2E acceptance gates |
 | [Connector architecture spec](superpowers/specs/2026-05-18-h2t-connector-architecture-design.md) | Connector standard, identity decision, CLI contract |
 | [TZ-0 implementation plan](superpowers/plans/2026-05-18-h2t-connector-architecture-tz0.md) | Core foundation + Notion walking skeleton |
+| [POS operational boundary](../plugins/h2t-ops/references/pos-operational-boundary.md) | Skill-facing rules for respecting POS ADR-0006 without duplicating the ADR |
 
 ## Waves
 
 | Wave | Scope | Status | Exit Criteria |
 | --- | --- | --- | --- |
-| TZ-0 | `h2t-ops` foundation + Notion walking skeleton | Branch ready to merge | 63 tests green; no root `h2t` collision; Notion reference connector |
-| Runtime blocker | Local `h2t-ops` install + Notion/Gmail E2E smoke | Blocking TZ-1 validation | `h2t-ops` runs locally; Notion read smoke passes; Gmail read smoke passes |
-| TZ-1 | Gmail, Calendar, Drive, MeetGeek, Telegram | Planned | All normal connectors migrated to the Notion pattern |
+| TZ-0 | `h2t-ops` foundation + Notion walking skeleton | Done | Foundation merged; no root `h2t` collision; Notion reference connector |
+| Runtime blocker | Local `h2t-ops` install + Notion/Gmail E2E smoke | Done | Canonical installed CLI smoke passed for Notion and Gmail |
+| TZ-1 | Gmail, Calendar, Drive, MeetGeek, Telegram | In progress | Gmail done; remaining normal connectors migrated to the Notion/Gmail pattern |
 | TZ-2 | Research + URL fetch ladder | Planned | Provider ladder, `core/http.py`, rich envelope, legacy exit-code remap |
-| TZ-3 | Skill docs + connector runbook | Planned | `SKILL.md` usage guides and `references/` runbook for adding connectors |
+| TZ-3 | Skill docs + connector runbook | Planned / pull forward | `SKILL.md` usage guides and `references/` runbook for adding connectors |
 | Follow-up | `h2t-ai` umbrella bridge | Deferred | `h2t <connector>` delegates to `h2t-ops <connector>` without touching DCC behavior |
 
 ## Connector Inventory
 
 | Connector | Current Source | Current CLI | Target CLI | Wave | Risk |
 | --- | --- | --- | --- | --- | --- |
-| notion | `lib/clients/notion.py` | `h2t ingest notion` | `h2t-ops notion ...` | TZ-0 | Low, done in walking skeleton |
-| gmail | `lib/clients/gmail.py` | `h2t ingest gmail` | `h2t-ops gmail ...` | TZ-1 | Medium: Google auth and legacy shim |
+| notion | `lib/clients/notion.py` | `h2t ingest notion` legacy shim | `h2t-ops notion ...` | TZ-0 | Done |
+| gmail | `lib/clients/gmail.py` | `h2t ingest gmail` legacy shim | `h2t-ops gmail ...` | TZ-1 | Done |
 | calendar | `lib/clients/calendar.py` | `h2t ingest calendar` | `h2t-ops calendar ...` | TZ-1 | Medium: Google auth and date/time output |
 | drive | skill exists; CLI gap | none / skill-local | `h2t-ops drive ...` | TZ-1 | Medium: discover exact source and auth shape |
 | meetgeek | standalone script / skill-local | none | `h2t-ops meetgeek ...` | TZ-1 | Medium: upload/transcript workflow boundaries |
@@ -67,7 +68,17 @@ foundation.
 
 Use the repo issue title standard: `skills: [M3] Verb noun`. Put `Wave: TZ-N` in the issue body.
 
+### Current Status
+
+- Closed: #131 Gmail connector, #139 local runtime smoke, #141 UTF-8 core output.
+- Open: #132 Calendar, #133 Drive, #134 MeetGeek, #135 Telegram, #136 research,
+  #137 research URL fetch ladder, #138 connector development runbook.
+- Recommended next sequence: #138 runbook baseline, then #132 Calendar as the next
+  normal connector migration.
+
 ### skills: [TZ-0] Merge h2t-ops foundation
+
+**Status:** Done.
 
 **Context:** The connector foundation is implemented on `worktree-feat+tz0-connector-skeleton`
 with the corrected `h2t-ops` / `h2t_ops` identity.
@@ -85,6 +96,8 @@ with the corrected `h2t-ops` / `h2t_ops` identity.
 - `uv run h2t-ops dev pytest tests/core tests/connectors -v` is green.
 
 ### skills: [M3] Fix local h2t-ops runtime smoke
+
+**Status:** Done (#139).
 
 **Context:** TZ-0 passed CI and mocked connector tests, but local runtime adoption was not proven.
 On the current machine, `h2t-ops` is not on PATH, `uv` is not on PATH, the existing root `h2t`
@@ -111,6 +124,8 @@ the installed local CLI to work on the real machine.
 - GitHub issue #131 records the Gmail smoke result before merge.
 
 ### skills: [TZ-1] Migrate Gmail connector
+
+**Status:** Done (#131).
 
 **Context:** Gmail currently works through legacy skill/client code and must move to the
 connector standard without breaking existing `h2t ingest gmail` usage.
@@ -284,3 +299,9 @@ collision.
 - Preserve legacy entrypoints until their users are migrated.
 - Every connector PR must include API tests, CLI contract tests, and a lazy-registry check.
 - SKILL.md is a usage guide; long contributor instructions belong in `references/`.
+- Skills and agents must follow the POS operational boundary: h2t-ops owns connector
+  runtime; POS owns journal, sync state, interpretation, privacy/routing, and daily
+  loop. Skills must not write directly to `~/.dor/pos.db`, the existing `dor.db`,
+  vault, or lake.
+- Until POS journal commands exist, skills should emit structured proposed captures
+  instead of mutating stores.

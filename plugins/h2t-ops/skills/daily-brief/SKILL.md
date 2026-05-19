@@ -9,6 +9,13 @@ metadata:
 
 # Daily Brief
 
+## POS Boundary
+
+Daily Brief is a read and synthesis workflow, not the POS journal writer. Follow
+`../../references/pos-operational-boundary.md`: route decisions, tasks, lessons,
+and follow-ups through POS journal commands once available. Until then, emit
+structured proposed captures instead of mutating stores.
+
 ## Переменные
 
 ```bash
