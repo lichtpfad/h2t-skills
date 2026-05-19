@@ -44,6 +44,7 @@ foundation.
 | Wave | Scope | Status | Exit Criteria |
 | --- | --- | --- | --- |
 | TZ-0 | `h2t-ops` foundation + Notion walking skeleton | Branch ready to merge | 63 tests green; no root `h2t` collision; Notion reference connector |
+| Runtime blocker | Local `h2t-ops` install + Notion/Gmail E2E smoke | Blocking TZ-1 validation | `h2t-ops` runs locally; Notion read smoke passes; Gmail read smoke passes |
 | TZ-1 | Gmail, Calendar, Drive, MeetGeek, Telegram | Planned | All normal connectors migrated to the Notion pattern |
 | TZ-2 | Research + URL fetch ladder | Planned | Provider ladder, `core/http.py`, rich envelope, legacy exit-code remap |
 | TZ-3 | Skill docs + connector runbook | Planned | `SKILL.md` usage guides and `references/` runbook for adding connectors |
@@ -81,6 +82,32 @@ with the corrected `h2t-ops` / `h2t_ops` identity.
 - PR merged into `main`.
 - `h2t-ai` root `h2t` ownership remains untouched.
 - `uv run h2t-ops dev pytest tests/core tests/connectors -v` is green.
+
+### skills: [M3] Fix local h2t-ops runtime smoke
+
+**Context:** TZ-0 passed CI and mocked connector tests, but local runtime adoption was not proven.
+On the current machine, `h2t-ops` is not on PATH, `uv` is not on PATH, the existing root `h2t`
+trampoline fails, and one discovered worktree `.venv` points at a missing Python. Direct Notion
+REST with the stored token works, so the blocker is the local CLI/runtime layer, not Notion access.
+
+**What:**
+- Repair or install the local `h2t-ops` runtime.
+- Define the canonical setup/repair path (`uv tool install`, `/h2t-core:setup`, or equivalent).
+- Run read-only live E2E smoke for Notion through `h2t-ops`, not direct REST.
+- Run read-only live E2E smoke for Gmail through `h2t-ops` before accepting the Gmail connector.
+- Capture exact commands and results in the issue.
+
+**Why:** Connector migrations are not complete if they only pass mocked tests and CI. Agents need
+the installed local CLI to work on the real machine.
+
+**Definition of Done:**
+- `uv --version` or the chosen supported installer path works.
+- `h2t-ops --version` exits 0.
+- `h2t-ops doctor` exits 0 and reports connectors/secrets without crashing.
+- `h2t-ops notion get 10adbc1e61d04d13aa6f17210b77e0d3 --json` exits 0.
+- `h2t-ops notion blocks 10adbc1e61d04d13aa6f17210b77e0d3 --limit 3 --json` exits 0.
+- A Gmail read-only smoke command exits 0 through `h2t-ops gmail ...`.
+- GitHub issue #131 records the Gmail smoke result before merge.
 
 ### skills: [TZ-1] Migrate Gmail connector
 
