@@ -179,11 +179,15 @@ Print:
 ### Install / repair h2t-ops (idempotent)
 
 ```powershell
-$uv = "$env:LOCALAPPDATA\Microsoft\WinGet\Links\uv.exe"   # or resolved path above
-& $uv tool install --reinstall <source>
+# Self-healing uv resolution (always runnable verbatim — see "Resolve uv" prose
+# above for the Links shim → package path → PATH order it applies internally):
+$uv = pwsh -NoProfile -File tools/h2t-ops-runtime-smoke.ps1 -ResolveUvOnly
+
+# Example for #139 (temporary source = PR #140 worktree):
+& $uv tool install --reinstall "C:/dev/h2t-skills/.claude/worktrees/feat+131-gmail-connector"
 ```
 
-`--reinstall` makes the command safe to re-run at any time (idempotent repair).
+`--reinstall` makes the command safe to re-run at any time (idempotent repair). Substitute the source per the Sequencing rule below.
 
 **Sequencing (verbatim, normative):**
 
