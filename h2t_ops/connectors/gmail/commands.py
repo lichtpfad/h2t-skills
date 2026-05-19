@@ -78,9 +78,9 @@ def run(args) -> Any:
         msg = client.get_message(args.message_id)
         return msg if _fmt(args) == "json" else format_message_detail(msg)
     if cmd in ("send", "draft"):
-        body = args.body or (_read_file(args.file) if args.file else None)
+        body = _read_file(args.file) if args.file else args.body
         if not body:
-            raise UsageError("send: provide body arg or --file")
+            raise UsageError(f"{cmd}: provide body arg or --file")
         as_draft = cmd == "draft" or getattr(args, "draft", False)
         result = client.send_message(
             to=args.to,

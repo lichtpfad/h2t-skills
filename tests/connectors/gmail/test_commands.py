@@ -59,6 +59,10 @@ def _ns(**kw): return types.SimpleNamespace(**kw)
 
 
 def _patch(monkeypatch):
+    # Patch GmailClient on the LIVE client module object (resolves via
+    # sys.modules, the same path run()'s lazy `from ...client import
+    # GmailClient` uses). A string target would resolve via package attrs
+    # and desync if an upstream test raw-popped the client from sys.modules.
     import h2t_ops.connectors.gmail.client as m
     monkeypatch.setattr(m, "GmailClient", lambda *a, **k: _FakeClient())
 
