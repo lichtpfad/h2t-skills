@@ -78,9 +78,9 @@ Each connector is exactly three files plus tests:
 
 | File | Responsibility | Canon |
 |---|---|---|
-| `__init__.py` | `CONNECTOR = ConnectorSpec(...)` only | `h2t_ops/connectors/notion/__init__.py:5` |
-| `client.py` | provider API logic, typed errors, lazy SDK import | `h2t_ops/connectors/notion/client.py` |
-| `commands.py` | argparse subcommands → client calls; no provider logic | `h2t_ops/connectors/notion/commands.py` |
+| `<n>/__init__.py` | `CONNECTOR = ConnectorSpec(...)` only | `h2t_ops/connectors/notion/__init__.py:5` |
+| `<n>/client.py` | provider API logic, typed errors, lazy SDK import | `h2t_ops/connectors/notion/client.py` |
+| `<n>/commands.py` | argparse subcommands → client calls; no provider logic | `h2t_ops/connectors/notion/commands.py` |
 | `tests/connectors/<name>/test_{client,commands}.py` | API + CLI contract | `tests/connectors/notion/` |
 
 ## 3. Step-by-step procedure
@@ -88,7 +88,7 @@ Each connector is exactly three files plus tests:
 1. **Create the package.** `h2t_ops/connectors/<name>/{__init__,client,commands}.py`.
    Mirror the layout of `h2t_ops/connectors/notion/`.
 
-2. **Write `client.py`.** Re-wrap the legacy logic (do not rewrite behaviour).
+2. **Write `<name>/client.py`.** Re-wrap the legacy logic (do not rewrite behaviour).
    - Lazy-import the heavy SDK INSIDE the method/`__init__`, never at module
      scope (keeps `h2t-ops --help`/`connectors` cheap).
    - Map provider/HTTP failures to the typed hierarchy; copy the shape of
@@ -96,11 +96,11 @@ Each connector is exactly three files plus tests:
    - Missing creds/SDK → `ConfigError`; refused/expired auth → `AuthError`;
      never launch an interactive browser flow.
 
-3. **Write `commands.py`.** One argparse subparser per verb; each handler calls
+3. **Write `<name>/commands.py`.** One argparse subparser per verb; each handler calls
    the client and returns a result object — it must NOT build envelopes or print.
    Mirror `h2t_ops/connectors/notion/commands.py`.
 
-4. **Write `__init__.py`.** Exactly one `CONNECTOR = ConnectorSpec(...)`. The
+4. **Write `<name>/__init__.py`.** Exactly one `CONNECTOR = ConnectorSpec(...)`. The
    `client=` value is the **lazy string** `"h2t_ops.connectors.<name>.client:<Class>"`
    — see `h2t_ops/connectors/notion/__init__.py:8`. `ConnectorSpec` is defined at
    `h2t_ops/core/registry.py:14`; it is discovered automatically — never import
@@ -119,8 +119,8 @@ Each connector is exactly three files plus tests:
    in the issue per `docs/h2t-ops-testing-plan.md`.
 
 Common pitfalls: module-scope SDK import (breaks `--help`); building the
-envelope inside `commands.py` (envelope is `emit()`'s job); interactive OAuth in
-`client.py` (forbidden — must raise `ConfigError`); silently dropping a legacy
+envelope inside `<name>/commands.py` (envelope is `emit()`'s job); interactive OAuth in
+`<name>/client.py` (forbidden — must raise `ConfigError`); silently dropping a legacy
 subcommand instead of documenting the exclusion.
 
 ## 4. API coverage checklist (review gate)
@@ -154,7 +154,7 @@ failures with the same shape as `_map_http_error`
 
 ## 6. Output contract
 
-`commands.py` returns a result object; it never prints. `emit()`
+`<name>/commands.py` returns a result object; it never prints. `emit()`
 (`h2t_ops/core/output.py:61`) renders it through the universal envelope
 (`success_envelope`/`error_envelope` at `h2t_ops/core/envelope.py:9`) honoring
 `--json` / `--format md` / human. Do not hand-build envelopes in a connector.
@@ -188,3 +188,8 @@ A connector is done only when (authority: `docs/h2t-ops-testing-plan.md`):
   in the testing-plan format;
 - legacy entrypoint preserved until its users migrate;
 - no connector code outside the new package changed; POS boundary held.
+
+<!-- self-review 2026-05-19: 9-item gate coverage
+1 parity §3.2 · 2 provider-gap §4 · 3 auth/secrets §3.2,§5 · 4 lazy §3.2,§3.4
+5 tests §3.6 · 6 live smoke §3.7,§8 · 7 POS §7 · 8 dist-no-POS §7 · 9 writes §7
+all gates have a concrete runbook locus -->
