@@ -125,10 +125,66 @@ subcommand instead of documenting the exclusion.
 
 ## 4. API coverage checklist (review gate)
 
+Every connector PR must pass the **9-item API coverage checklist**. It is
+maintained verbatim in the roadmap — do not copy it here (single source of
+truth): see `docs/h2t-ops-roadmap.md`, section
+`skills: [M3] Add connector development skill runbook — #138` →
+"API coverage checklist (required gate for every connector PR)".
+
+The nine gates, by name (full text in the roadmap): 1 legacy parity ·
+2 provider API gaps · 3 auth/secrets · 4 lazy imports · 5 tests · 6 live smoke ·
+7 POS boundary · 8 distribution-without-POS · 9 write side effects.
+
+A reviewer who cannot point each gate at concrete evidence must block the PR.
+
 ## 5. Error and exit-code map
+
+Raise the typed hierarchy in `h2t_ops/core/errors.py`; never `sys.exit` or print
+from a client. The exit-code table is `EXIT_CODES` at
+`h2t_ops/core/errors.py:39` (resolved by `exit_code_for`). Map provider/HTTP
+failures with the same shape as `_map_http_error`
+(`h2t_ops/connectors/gmail/client.py:137`):
+
+- bad arguments → `UsageError` (2)
+- missing/!resolvable creds or SDK → `ConfigError` (3)
+- refused/expired auth → `AuthError` (4)
+- provider 4xx/5xx → `ProviderError` (1)
+- missing resource → `NotFoundError` (5)
+- transport/timeout → `NetworkError` (6)
 
 ## 6. Output contract
 
+`commands.py` returns a result object; it never prints. `emit()`
+(`h2t_ops/core/output.py:61`) renders it through the universal envelope
+(`success_envelope`/`error_envelope` at `h2t_ops/core/envelope.py:9`) honoring
+`--json` / `--format md` / human. Do not hand-build envelopes in a connector.
+
 ## 7. POS boundary and distribution-without-POS gate
 
+Authority: `plugins/h2t-ops/references/pos-operational-boundary.md`.
+
+- A connector imports no `pos`/`dor.db`/`vault`/`lake` and must run with POS
+  absent. It must not write `~/.dor/**` — see the rule at
+  `plugins/h2t-ops/references/pos-operational-boundary.md:28`.
+- Default any output path to stdout, not `~/.dor/`.
+
+Provider write commands are allowed only as explicit CLI verbs with clear user
+intent (e.g. `send`, `label`, `create`, `delete`). They must be classified in
+the API coverage checklist as write side effects and covered by tests.
+
+A synthesis/coordinator workflow must not auto-execute provider writes. If an
+agent discovery implies a task/decision/action and POS journal/action commands
+are unavailable, emit a structured `proposed_capture`
+(`plugins/h2t-ops/references/pos-operational-boundary.md:39`) instead of
+mutating POS/vault/lake or silently performing workflow writes.
+
 ## 8. Definition of Done / PR gate
+
+A connector is done only when (authority: `docs/h2t-ops-testing-plan.md`):
+
+- the 9-item checklist (§4) passes with evidence;
+- CI + mocked API/CLI tests green; lazy-registry guard covers the new SDK;
+- read-only live E2E through the **installed** CLI passed, evidence in the issue
+  in the testing-plan format;
+- legacy entrypoint preserved until its users migrate;
+- no connector code outside the new package changed; POS boundary held.
