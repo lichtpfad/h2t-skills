@@ -73,8 +73,39 @@ Use the repo issue title standard: `skills: [M3] Verb noun`. Put `Wave: TZ-N` in
 - Closed: #131 Gmail connector, #139 local runtime smoke, #141 UTF-8 core output.
 - Open: #132 Calendar, #133 Drive, #134 MeetGeek, #135 Telegram, #136 research,
   #137 research URL fetch ladder, #138 connector development runbook.
-- Recommended next sequence: #138 runbook baseline, then #132 Calendar as the next
-  normal connector migration.
+- Recommended next sequence: #138 runbook baseline first, then #132 Calendar as
+  the next normal connector migration.
+
+### Current Execution Sequence
+
+1. **#138 Connector development runbook.** Write the procedure before adding more
+   connectors. The runbook must use Notion and Gmail as reference implementations
+   and must include POS-boundary and distribution-independence checks.
+2. **#132 Calendar migration.** Use Calendar as the first connector implemented
+   by following the runbook. It is the lowest-risk next migration because it
+   shares Google auth patterns with Gmail and feeds Daily Brief.
+3. **Inventory gate for Drive, MeetGeek, Telegram.** Before implementation,
+   document exact skill-local CLI surfaces, write/file side effects, optional
+   SDKs, and POS-boundary risks. Only then migrate each connector.
+4. **#136/#137 Research wave.** Keep research and URL fetch ladder in TZ-2.
+   They are provider/strategy connectors with richer telemetry and legacy exit
+   code remapping, not normal TZ-1 connectors.
+5. **Daily Brief update.** After Calendar is migrated, update Daily Brief to use
+   `h2t-ops calendar/gmail/notion` reads. Daily Brief remains a synthesis
+   workflow, not a POS journal writer.
+
+### Distribution Independence
+
+`h2t-ops` skills must remain usable without Personal OS installed. POS boundary
+rules define what skills must not mutate, but POS is not a runtime dependency for
+read-only connector usage.
+
+- External reads must work through `h2t-ops` plus provider credentials.
+- POS CLI/API calls are allowed only for optional capture/decision/task/lesson
+  writes when POS is present.
+- If POS journal commands are unavailable, skills emit structured proposed
+  captures instead of failing or mutating local stores.
+- Connector runbook and connector PRs must include this check explicitly.
 
 ### skills: [TZ-0] Merge h2t-ops foundation
 
@@ -144,6 +175,8 @@ connector standard without breaking existing `h2t ingest gmail` usage.
 - Lazy registry test remains green.
 
 ### skills: [TZ-1] Migrate Calendar connector
+
+**Status:** Next after #138 runbook baseline.
 
 **Context:** Calendar shares Google auth concerns with Gmail but has distinct date/time and event
 output contracts.
@@ -257,6 +290,8 @@ instead of a standalone script discovered through plugin paths.
 
 ### skills: [TZ-3] Add connector development skill runbook
 
+**Status:** Next.
+
 **Context:** New connectors need an agent-facing recipe that lives with the skill, not under
 `docs/superpowers`.
 
@@ -305,3 +340,5 @@ collision.
   vault, or lake.
 - Until POS journal commands exist, skills should emit structured proposed captures
   instead of mutating stores.
+- POS is not required for read-only connector usage. h2t-ops skills must degrade
+  gracefully when POS journal commands are unavailable.
