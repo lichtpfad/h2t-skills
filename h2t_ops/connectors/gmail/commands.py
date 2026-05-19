@@ -51,5 +51,5 @@ def _fmt(args) -> str:
     return "json" if getattr(args, "as_json", False) else getattr(args, "fmt", "human")
 
 
-def run(args) -> Any:  # noqa: C901 — body filled in Task 5
-    raise NotImplementedError
+def run(args) -> Any:
+    raise NotImplementedError  # body filled in Task 5

@@ -23,6 +23,9 @@ def test_register_has_format_and_json_flags():
 
 
 def test_importing_commands_does_not_import_client(monkeypatch):
+    # delitem (not raw pop) so the popped client module is restored at
+    # teardown -- a raw pop leaks a sys.modules-vs-package-attr desync that
+    # breaks string-target monkeypatching in later tests.
     monkeypatch.delitem(sys.modules, "h2t_ops.connectors.gmail.client", raising=False)
     real = builtins.__import__
     seen = {"client": False}
