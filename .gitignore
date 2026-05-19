@@ -22,3 +22,6 @@ docs/.artifacts/
 
 # Git worktrees
 .worktrees/
+
+# Python build artifacts
+*.egg-info/
