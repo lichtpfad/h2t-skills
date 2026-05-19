@@ -192,6 +192,22 @@ def test_send_message_happy():
     assert out["id"] == "m1" and "raw" in sent
 
 
+def test_draft_with_thread_and_reply_header():
+    created = {}
+
+    class _Svc(_FakeService):
+        def drafts(self): return self
+        def create(self, userId, body): created.update(body); return _Exec({"id": "d1"})
+
+    c, _ = _client_with(_Svc())
+    out = c.send_message(to="a@b.com", subject="S", body="B", as_draft=True,
+                         thread_id="T", reply_to_message_id="<mid@x>")
+    assert out["id"] == "d1" and created["message"]["threadId"] == "T"
+    import base64
+    raw = base64.urlsafe_b64decode(created["message"]["raw"]).decode()
+    assert "In-Reply-To: <mid@x>" in raw and "References: <mid@x>" in raw
+
+
 def test_attachment_not_found_raises_usageerror():
     from h2t_ops.core.errors import UsageError
     c, _ = _client_with(_FakeService())

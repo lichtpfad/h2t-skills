@@ -28,8 +28,8 @@ import re
 from datetime import datetime
 from email import encoders
 from email.mime.base import MIMEBase
-from email.mime.multipart import MIMEMultipart  # noqa: F401  (used by Task 3-4 helpers)
-from email.mime.text import MIMEText  # noqa: F401  (used by Task 3-4 helpers)
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
