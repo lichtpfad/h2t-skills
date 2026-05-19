@@ -2,25 +2,54 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build the `h2t` import package + `core/` foundation + a fully-migrated Notion connector (walking skeleton) proving the connector standard from `docs/superpowers/specs/2026-05-18-h2t-connector-architecture-design.md`.
+**Goal:** Build the `h2t_ops` import package + `core/` foundation + a fully-migrated Notion connector (walking skeleton) proving the connector standard from `docs/superpowers/specs/2026-05-18-h2t-connector-architecture-design.md`. (Identity per §2 amendment — see addendum above.)
 
-**Architecture:** Monolithic `h2t` package, lazily auto-registered connectors. `client.py` = API logic (typed errors, no I/O side effects); `commands.py` = thin argparse adapter (lazy client import); `core/` = registry, errors, envelope, output, secrets. New entrypoint `h2t.cli:main` delegates non-migrated commands to legacy `lib.cli.main:main` unchanged.
+**Architecture:** Monolithic `h2t_ops` package, lazily auto-registered connectors. `client.py` = API logic (typed errors, no I/O side effects); `commands.py` = thin argparse adapter (lazy client import); `core/` = registry, errors, envelope, output, secrets. Entrypoint `h2t_ops.cli:main` (console script `h2t-ops`) delegates non-migrated commands to legacy `lib.cli.main:main` unchanged.
 
 **Tech Stack:** Python 3.11, stdlib `argparse`/`importlib`, `pytest`, `notion-client`, `httpx`, `uv` (toolchain).
 
 ---
 
+## ⚠ Identity Migration Addendum (2026-05-19 — NORMATIVE, read FIRST)
+
+This plan was authored before the spec §2 **Identity Decision** amendment. `C:/dev/h2t-ai`
+already owns the root `h2t` package + `h2t` console script + `h2t.cli:main` — claiming them
+collides totally (see memory `project-h2t-name-ownership`, spec
+`2026-05-18-h2t-connector-architecture-design.md` §2/§7).
+
+**Normative interpretation clause — overrides every literal `h2t` spelling below:**
+- Python package `h2t` → **`h2t_ops`**; every `from h2t.<x>` / `import h2t` / `"h2t.<x>"`
+  string ref / `-m h2t.cli` / `root/"h2t"` scan → `h2t_ops.<x>` etc.
+- console script / dist: NO root `h2t`; distribution `h2t-ops`, `[project.scripts]
+  h2t-ops = "h2t_ops.cli:main"`, `packages.find include = ["h2t_ops*","lib*"]`.
+- Execution Contract & every command example: `uv run h2t dev …` → **`uv run h2t-ops dev …`**;
+  `uv run h2t --version|doctor|notion …` → `uv run h2t-ops …`; `prog`/`--version` text
+  `h2t` → `h2t-ops`.
+- SKILL.md agent-facing tokens `h2t notion …` → `h2t-ops notion …` (+ verbatim umbrella
+  note, spec §8).
+- commit-message scope tags `feat(h2t):` / `fix(h2t):` etc. → `feat(h2t-ops):` …
+- KEEP unchanged: `lib.cli.main` / `lib/` (legacy delegation), `notion_client`/`httpx`
+  (SDK), `.h2t/agent-runtime.json` (config dir), the string `h2t-ai`, `h2t-skills`,
+  `h2t-core:setup`, `ТЗ-0`, the `plugins/h2t-ops/` directory path.
+
+**Realized reference:** this plan is fully implemented under the corrected identity on branch
+`worktree-feat+tz0-connector-skeleton` (12 tasks, 63/63 green as `h2t-ops`, `import h2t`
+raises ModuleNotFoundError — collision proven gone). A re-run MUST apply the clause above
+throughout; reproducing the literal `h2t` identity recreates the h2t-ai collision.
+
+---
+
 ## Execution Contract (read before any task)
 
-**All implementation-plan commands use exactly one prefix:** `uv run h2t dev <tool|check> ...`
+**All implementation-plan commands use exactly one prefix:** `uv run h2t-ops dev <tool|check> ...`
 
-- ✅ `uv run h2t dev pytest tests/core -v`
-- ✅ `uv run h2t dev python -c "import h2t; print(h2t.__version__)"`
-- ✅ `uv run h2t dev check no-syspath`
-- ✅ availability/health: `uv run h2t --version`, `uv run h2t doctor`, `uv run h2t notion --help`
+- ✅ `uv run h2t-ops dev pytest tests/core -v`
+- ✅ `uv run h2t-ops dev python -c "import h2t_ops; print(h2t_ops.__version__)"`
+- ✅ `uv run h2t-ops dev check no-syspath`
+- ✅ availability/health: `uv run h2t-ops --version`, `uv run h2t-ops doctor`, `uv run h2t-ops notion --help`
 - ❌ NO direct `.venv/Scripts/python` / `.venv/bin/python` / `$PY` / `$PIP` / `$PYTEST`
 - ❌ NO `command -v`, `$(...)`, `>NUL`, `echo $?`, or shell-specific redirection
-- ❌ NO `uv run h2t dev pip install -e .` — the project is auto-provisioned by `uv run`; `h2t dev pip` exists for ad-hoc deps only, never to install **this** project
+- ❌ NO `uv run h2t-ops dev pip install -e .` — the project is auto-provisioned by `uv run`; `h2t-ops dev pip` exists for ad-hoc deps only, never to install **this** project
 
 `uv run` provisions the project (incl. `[project.dependencies]` **and the `dev` dependency-group → `pytest`**) into its managed env on first call — that is the single, documented bootstrap seam. No editable install in the TDD loop.
 
@@ -31,10 +60,10 @@
 ## Locked Design Decisions (resolve spec §14 + transition gap)
 
 1. **Install source (dev/CI):** `uv run` auto-provisions from `pyproject`. No explicit editable install in the loop. External sharing (git-ref / PyPI / `uv tool install`) is a **separate rollout decision**, NOT in ТЗ-0.
-2. **Transition compatibility (spec gap, decided here):** flipping `[project.scripts]` to `h2t.cli:main` must not regress `h2t gather` or `h2t ingest gmail/calendar`. `h2t/cli.py` recognizes migrated commands (`dev`, `doctor`, `connectors`, `notion`, `--version`) and **delegates everything else** to legacy `lib.cli.main:main`. `lib/` is NOT modified in ТЗ-0; its pre-existing `sys.path.insert` is knowingly retained until its commands migrate (ТЗ-1/ТЗ-2). The "no `sys.path.insert`" DoD applies to the **new `h2t` package**, which adds none.
+2. **Transition compatibility (spec gap, decided here):** flipping `[project.scripts]` to `h2t_ops.cli:main` must not regress legacy `gather` / `ingest gmail/calendar`. `h2t_ops/cli.py` recognizes migrated commands (`dev`, `doctor`, `connectors`, `notion`, `--version`) and **delegates everything else** to legacy `lib.cli.main:main`. `lib/` is NOT modified in ТЗ-0; its pre-existing `sys.path.insert` is knowingly retained until its commands migrate (ТЗ-1/ТЗ-2). The "no `sys.path.insert`" DoD applies to the **new `h2t_ops` package**, which adds none.
 3. **`ingest notion` shim:** `h2t ingest notion …` forwards to the **new** notion connector with a small explicit legacy-arg mapping (Task 9). Deprecation notice → stderr on human/`md`, silent on `--json`, forwarded exit code, stateless (spec §10).
-4. **Notion deps are DECLARED project deps** (spec §4.1 general rule unchanged; the spec is NOT edited). `pyproject` `[project.dependencies]` gains `notion-client`, `httpx`, `python-dotenv` → `uv run` gives a working Notion out of the box. `client.py` STILL imports the SDK lazily and converts a missing import to `ConfigError` — defensive depth for a broken env (lazy is always §4.1-compliant, even for declared deps). **Note:** the re-wrapped client uses stdlib `h2t.core.secrets`; `python-dotenv` is unused by the ТЗ-0 Notion path — declared for forward-compat / other notion tooling only. Future heavy connector deps may become optional extras.
-5. **Three distinct surfaces (spec §7):** `h2t --version` = availability contract; `h2t doctor` = installed CLI health (version, path, connectors, secrets presence — no network), for users/skills; `h2t dev …` = repo-local execution wrapper for agents/plans/tests.
+4. **Notion deps are DECLARED project deps** (spec §4.1 general rule unchanged). `pyproject` `[project.dependencies]` gains `notion-client`, `httpx`, `python-dotenv` → `uv run` gives a working Notion out of the box. `client.py` STILL imports the SDK lazily and converts a missing import to `ConfigError` — defensive depth for a broken env (lazy is always §4.1-compliant, even for declared deps). **Note:** the re-wrapped client uses stdlib `h2t_ops.core.secrets`; `python-dotenv` is unused by the ТЗ-0 Notion path — declared for forward-compat / other notion tooling only. Future heavy connector deps may become optional extras.
+5. **Three distinct surfaces (spec §7):** `h2t-ops --version` = availability contract; `h2t-ops doctor` = installed CLI health (version, path, connectors, secrets presence — no network), for users/skills; `h2t-ops dev …` = repo-local execution wrapper for agents/plans/tests.
 
 ---
 
