@@ -1,11 +1,11 @@
 import argparse
 import sys
 import builtins
-from h2t.connectors.notion.commands import register
+from h2t_ops.connectors.notion.commands import register
 
 
 def _parser():
-    p = argparse.ArgumentParser(prog="h2t")
+    p = argparse.ArgumentParser(prog="h2t-ops")
     sub = p.add_subparsers(dest="connector")
     register(sub)
     return p
@@ -26,25 +26,25 @@ def test_importing_commands_does_not_import_client(monkeypatch):
     # delitem (not raw pop) so the popped client module is restored at
     # teardown -- a raw pop leaks a sys.modules-vs-package-attr desync that
     # breaks string-target monkeypatching in later tests.
-    monkeypatch.delitem(sys.modules, "h2t.connectors.notion.client", raising=False)
+    monkeypatch.delitem(sys.modules, "h2t_ops.connectors.notion.client", raising=False)
     real = builtins.__import__
     seen = {"client": False}
 
     def guard(name, *a, **k):
-        if name == "h2t.connectors.notion.client":
+        if name == "h2t_ops.connectors.notion.client":
             seen["client"] = True
         return real(name, *a, **k)
 
     monkeypatch.setattr(builtins, "__import__", guard)
     import importlib
-    importlib.reload(importlib.import_module("h2t.connectors.notion.commands"))
+    importlib.reload(importlib.import_module("h2t_ops.connectors.notion.commands"))
     assert seen["client"] is False
 
 
 import types
 import pytest
-from h2t.connectors.notion import commands as notion_cmds
-from h2t.core.errors import UsageError
+from h2t_ops.connectors.notion import commands as notion_cmds
+from h2t_ops.core.errors import UsageError
 
 
 class _FakeClient:
@@ -62,7 +62,7 @@ def _ns(**kw):
 # target would resolve via package attrs and desync if an upstream test
 # raw-popped the client from sys.modules.
 def _patch_client(monkeypatch):
-    import h2t.connectors.notion.client as _client_mod
+    import h2t_ops.connectors.notion.client as _client_mod
     monkeypatch.setattr(_client_mod, "NotionClient", lambda *a, **k: _FakeClient())
 
 
@@ -85,12 +85,12 @@ def test_update_noop_raises_usageerror(monkeypatch):
                             append=None, file=None, replace=False))
 
 
-from h2t.cli import build_parser, dispatch
+from h2t_ops.cli import build_parser, dispatch
 
 
 def test_version_branch_exits_zero(capsys):
     assert dispatch(["--version"]) == 0
-    assert "h2t " in capsys.readouterr().out
+    assert "h2t-ops " in capsys.readouterr().out
 
 
 def test_connectors_list_no_heavy_import(capsys, monkeypatch):
@@ -120,7 +120,7 @@ def test_ingest_notion_shim_warns_on_human(monkeypatch, capsys):
         called["ran"] = True
         return "OK"
 
-    monkeypatch.setattr("h2t.connectors.notion.commands.run", fake_run)
+    monkeypatch.setattr("h2t_ops.connectors.notion.commands.run", fake_run)
     code = dispatch(["ingest", "notion", "get", "PID"])
     err = capsys.readouterr().err
     assert called.get("ran") is True
@@ -132,7 +132,7 @@ def test_ingest_notion_shim_silent_on_json(monkeypatch, capsys):
     def fake_run_json(args):
         return {"id": "x"}
 
-    monkeypatch.setattr("h2t.connectors.notion.commands.run", fake_run_json)
+    monkeypatch.setattr("h2t_ops.connectors.notion.commands.run", fake_run_json)
     code = dispatch(["ingest", "notion", "get", "PID", "--json"])
     cap = capsys.readouterr()
     assert "deprecat" not in cap.err.lower()

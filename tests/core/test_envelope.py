@@ -1,5 +1,5 @@
-from h2t.core.envelope import success_envelope, error_envelope
-from h2t.core.errors import AuthError
+from h2t_ops.core.envelope import success_envelope, error_envelope
+from h2t_ops.core.errors import AuthError
 
 
 def test_success_shape():

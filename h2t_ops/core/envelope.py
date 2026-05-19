@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from h2t.core.errors import H2TError
+from h2t_ops.core.errors import H2TError
 
 
 def success_envelope(provider: str, result: Any) -> dict[str, Any]:

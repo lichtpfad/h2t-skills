@@ -1,6 +1,6 @@
 import pytest
-from h2t.connectors.notion.client import NotionClient
-from h2t.core.errors import ConfigError
+from h2t_ops.connectors.notion.client import NotionClient
+from h2t_ops.core.errors import ConfigError
 
 
 @pytest.fixture
@@ -29,7 +29,7 @@ def test_blocks_to_markdown_roundtrip(conv):
 def test_missing_token_raises_configerror(monkeypatch):
     import pathlib
     monkeypatch.delenv("NOTION_API_TOKEN", raising=False)
-    monkeypatch.setattr("h2t.core.secrets.Path.home",
+    monkeypatch.setattr("h2t_ops.core.secrets.Path.home",
                         lambda: pathlib.Path("/nonexistent-xyz"))
     with pytest.raises(ConfigError):
         NotionClient()
@@ -52,8 +52,8 @@ def test_missing_sdk_raises_configerror(monkeypatch):
 
 
 import pytest
-from h2t.connectors.notion.client import _map_http_status, _map_sdk_exc
-from h2t.core.errors import AuthError, NetworkError, NotFoundError, ProviderError
+from h2t_ops.connectors.notion.client import _map_http_status, _map_sdk_exc
+from h2t_ops.core.errors import AuthError, NetworkError, NotFoundError, ProviderError
 
 
 @pytest.mark.parametrize("status,expected", [

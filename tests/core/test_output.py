@@ -1,6 +1,6 @@
 import json
-from h2t.core.output import emit
-from h2t.core.errors import AuthError
+from h2t_ops.core.output import emit
+from h2t_ops.core.errors import AuthError
 
 
 def test_emit_json_success(capsys):

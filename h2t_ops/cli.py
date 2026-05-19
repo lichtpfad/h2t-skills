@@ -1,4 +1,4 @@
-"""h2t CLI: dev wrapper + registry dispatch + doctor + legacy delegation + ingest shim."""
+"""h2t-ops CLI: dev wrapper + registry dispatch + doctor + legacy delegation + ingest shim."""
 from __future__ import annotations
 
 import argparse
@@ -7,18 +7,18 @@ import shutil
 import sys
 from pathlib import Path
 
-import h2t
-from h2t.core.errors import UsageError
-from h2t.core.output import emit
-from h2t.core.registry import discover
-from h2t.dev import main as _dev_main
+import h2t_ops
+from h2t_ops.core.errors import UsageError
+from h2t_ops.core.output import emit
+from h2t_ops.core.registry import discover
+from h2t_ops.dev import main as _dev_main
 
 _MIGRATED = {"notion"}
 
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="h2t", description="h2t unified connector CLI")
-    p.add_argument("--version", action="version", version=f"h2t {h2t.__version__}")
+    p = argparse.ArgumentParser(prog="h2t-ops", description="h2t-ops unified connector CLI")
+    p.add_argument("--version", action="version", version=f"h2t-ops {h2t_ops.__version__}")
     sub = p.add_subparsers(dest="connector")
     sub.add_parser("connectors", help="List available connectors")
     sub.add_parser("doctor", help="Installed CLI health (version, path, connectors, secrets)")
@@ -28,8 +28,8 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def _doctor() -> int:
-    print(f"h2t {h2t.__version__}")
-    print(f"executable: {shutil.which('h2t') or sys.executable}")
+    print(f"h2t-ops {h2t_ops.__version__}")
+    print(f"executable: {shutil.which('h2t-ops') or sys.executable}")
     print("connectors:")
     for spec in discover():
         print(f"  - {spec.name}: {spec.help}")
@@ -42,7 +42,7 @@ def _doctor() -> int:
 def _legacy(argv: list[str]) -> int:
     from lib.cli.main import main as legacy_main  # legacy keeps its own sys.path hack
     old = sys.argv
-    sys.argv = ["h2t", *argv]
+    sys.argv = ["h2t-ops", *argv]
     try:
         legacy_main()
         return 0
@@ -91,7 +91,7 @@ def dispatch(argv: list[str]) -> int:
     if argv and argv[0] == "dev":
         return _dev_main(argv[1:])
     if argv and argv[0] in ("--version", "-V"):
-        print(f"h2t {h2t.__version__}")
+        print(f"h2t-ops {h2t_ops.__version__}")
         return 0
     if argv and argv[0] == "doctor":
         return _doctor()
@@ -112,7 +112,7 @@ def dispatch(argv: list[str]) -> int:
             else:
                 norm.append(a)
         if _fmt_from(norm) != "json":
-            print("deprecated: `h2t ingest notion` → use `h2t notion` (spec §10)",
+            print("deprecated: `h2t-ops ingest notion` → use `h2t-ops notion` (spec §10)",
                   file=sys.stderr)
         return _run_connector(["notion", *norm])
     if argv and argv[0] in ("gather", "ingest"):

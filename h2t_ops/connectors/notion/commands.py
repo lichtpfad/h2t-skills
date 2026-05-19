@@ -49,8 +49,8 @@ def _fmt(args) -> str:
 
 def run(args) -> Any:
     """Dispatch a notion subcommand. Returns a result or raises core.errors."""
-    from h2t.connectors.notion.client import NotionClient  # lazy (spec §4.1)
-    from h2t.core.errors import UsageError
+    from h2t_ops.connectors.notion.client import NotionClient  # lazy (spec §4.1)
+    from h2t_ops.core.errors import UsageError
 
     def _read_file(path):
         from pathlib import Path as _P

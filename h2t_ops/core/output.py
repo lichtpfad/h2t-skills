@@ -5,8 +5,8 @@ import json
 import sys
 from typing import Any
 
-from h2t.core.envelope import error_envelope, success_envelope
-from h2t.core.errors import exit_code_for
+from h2t_ops.core.envelope import error_envelope, success_envelope
+from h2t_ops.core.errors import exit_code_for
 
 
 def emit(provider: str, *, result: Any = None, exc: BaseException | None = None,
