@@ -125,6 +125,14 @@ def test_list_meetings_raw_rows_preserve_api_fields(client_obj):
     assert result["rows"][0] is raw  # same object, no transformation
 
 
+def test_list_meetings_handles_items_response_shape(client_obj):
+    """API may return {"items": [...]} instead of {"meetings": [...]}."""
+    client_obj._get = MagicMock(return_value={"items": [{"meeting_id": "m3"}], "pagination": {}})
+    result = client_obj.list_meetings()
+    assert result["rows"] == [{"meeting_id": "m3"}]
+    assert result["next_cursor"] is None
+
+
 # ─── get_meeting ──────────────────────────────────────────────────────────────
 
 def test_get_meeting_calls_singular_endpoint(client_obj):
@@ -337,11 +345,9 @@ def test_raise_for_status_500_providererror(client_obj):
 
 
 def test_network_exception_raises_networkerror(client_obj, monkeypatch):
-    """ConnectionError from requests → NetworkError."""
-    import requests as _r
-
+    """NetworkError from _request propagates through _get unchanged."""
     def _fail(*a, **k):
-        raise _r.ConnectionError("connection refused")
+        raise NetworkError("connection refused")
 
     monkeypatch.setattr(
         "h2t_ops.connectors.meetgeek.client.MeetGeekClient._request",
@@ -349,3 +355,16 @@ def test_network_exception_raises_networkerror(client_obj, monkeypatch):
     )
     with pytest.raises(NetworkError):
         client_obj._get("/v1/meetings")
+
+
+def test_request_raises_networkerror_on_429_exhaustion(client_obj, monkeypatch):
+    """3x 429 responses should raise NetworkError mentioning rate limit, not 'server error'."""
+    import time as _time
+    monkeypatch.setattr(_time, "sleep", lambda _: None)
+    resp_429 = MagicMock()
+    resp_429.status_code = 429
+    resp_429.headers = {"Retry-After": "0"}
+    with patch("requests.request", return_value=resp_429):
+        with pytest.raises(NetworkError) as ei:
+            client_obj._request("GET", "/v1/meetings")
+    assert "429" in str(ei.value) or "rate" in str(ei.value).lower()

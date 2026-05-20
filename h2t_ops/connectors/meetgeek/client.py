@@ -87,9 +87,11 @@ class MeetGeekClient:
                 ) from exc
             if resp.status_code == 429:
                 retry_after = float(resp.headers.get("Retry-After", backoff))
-                time.sleep(retry_after)
-                backoff *= 2
-                continue
+                if attempt < 2:
+                    time.sleep(retry_after)
+                    backoff *= 2
+                    continue
+                raise NetworkError(f"MeetGeek rate limit — 429 after 3 attempts ({path})")
             if resp.status_code >= 500 and attempt < 2:
                 time.sleep(backoff)
                 backoff *= 2
@@ -100,15 +102,7 @@ class MeetGeekClient:
         )
 
     def _get(self, path: str, params: Optional[Dict] = None) -> Any:
-        try:
-            resp = self._request("GET", path, params=params)
-        except NetworkError:
-            raise
-        except Exception as exc:
-            import requests as _r
-            if isinstance(exc, _r.RequestException):
-                raise NetworkError(f"Network error on GET {path}: {exc}") from exc
-            raise
+        resp = self._request("GET", path, params=params)
         _raise_for_status(resp, path)
         try:
             return resp.json()
