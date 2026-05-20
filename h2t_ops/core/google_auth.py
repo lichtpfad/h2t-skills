@@ -93,6 +93,7 @@ def _candidate_paths(service_name: str) -> list[tuple[Path, Path]]:
     Token fallback policy (per design doc):
       - "gmail":    shared OAuth store → ~/.config/gmail/  fallback
       - "calendar": shared OAuth store only (no calendar-specific fallback)
+      - "drive":    shared OAuth store only (no drive-specific fallback)
     """
     shared = (_oauth_store_dir() / "tokens.json",
               _oauth_store_dir() / "credentials.json")
@@ -101,9 +102,11 @@ def _candidate_paths(service_name: str) -> list[tuple[Path, Path]]:
         return [shared, (gmail_dir / "token.json", gmail_dir / "credentials.json")]
     if service_name == "calendar":
         return [shared]
+    if service_name == "drive":
+        return [shared]
     raise ConfigError(
         f"google_auth: unknown service_name {service_name!r}",
-        hint="expected 'gmail' or 'calendar'",
+        hint="expected 'gmail', 'calendar', or 'drive'",
     )
 
 

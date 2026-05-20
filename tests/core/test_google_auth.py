@@ -12,6 +12,7 @@ from h2t_ops.core.errors import AuthError, ConfigError
 
 CAL_SCOPE = "https://www.googleapis.com/auth/calendar"
 GMAIL_READ_SCOPE = "https://www.googleapis.com/auth/gmail.readonly"
+DRIVE_SCOPE = "https://www.googleapis.com/auth/drive"
 
 
 def _write_token(path: Path, scopes: list[str], *, with_refresh: bool = True,
@@ -137,3 +138,29 @@ def test_install_app_flow_seam_exists_but_never_called_in_resolve(tmp_path, monk
         mod.resolve_google_credentials("calendar",
                                        ["https://www.googleapis.com/auth/calendar"])
     assert called["n"] == 0
+
+
+def test_resolve_drive_uses_shared_store_only(tmp_path, monkeypatch):
+    """service_name='drive': shared OAuth store only, NO drive-specific fallback."""
+    # A bogus drive-specific token at ~/.config/drive/ must be ignored.
+    bogus_drive_store = tmp_path / ".config" / "drive" / "token.json"
+    _write_token(bogus_drive_store, [DRIVE_SCOPE])
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.setattr(mod, "_install_app_flow",
+                        lambda: pytest.fail("browser flow MUST NOT be reached"))
+    with pytest.raises(ConfigError) as ei:
+        mod.resolve_google_credentials("drive", [DRIVE_SCOPE])
+    # Hint stays neutral (same constant Calendar uses).
+    assert "Google OAuth bootstrap" in ei.value.hint
+    assert "drive_cli" not in (ei.value.hint or "")
+
+
+def test_resolve_drive_happy_path_via_shared_store(tmp_path, monkeypatch):
+    """service_name='drive': token in shared store with drive scope -> creds returned."""
+    shared = tmp_path / ".config" / "google-calendar-mcp" / "tokens.json"
+    _write_token(shared, [DRIVE_SCOPE], expiry="2099-01-01T00:00:00Z")
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.setattr(mod, "_install_app_flow",
+                        lambda: pytest.fail("browser flow MUST NOT be reached"))
+    creds = mod.resolve_google_credentials("drive", [DRIVE_SCOPE])
+    assert creds is not None
