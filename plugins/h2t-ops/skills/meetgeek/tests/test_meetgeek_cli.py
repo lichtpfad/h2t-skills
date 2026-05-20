@@ -668,17 +668,8 @@ def test_drive_download_url_uses_usercontent_with_confirm(cli):
 
 
 def test_drive_service_raises_when_token_missing(cli, tmp_path, monkeypatch):
-    # DRIVE_TOKEN_FILE now lives in recovery module; patch via the recovery module
     import sys as _sys
-    _recovery = _sys.modules.get("recovery_module") or _sys.modules.get(
-        next((k for k in _sys.modules if "recovery" in k and "test" not in k), "")
-    )
-    # Find the recovery module imported by cli
-    _rec_mod = None
-    for mod_name, mod in _sys.modules.items():
-        if hasattr(mod, "DRIVE_TOKEN_FILE") and hasattr(mod, "RecoveryError"):
-            _rec_mod = mod
-            break
+    _rec_mod = _sys.modules.get("recovery")
     assert _rec_mod is not None, "recovery module not found in sys.modules"
     monkeypatch.setattr(_rec_mod, "DRIVE_TOKEN_FILE", tmp_path / "missing.json")
     import pytest as _p
@@ -709,7 +700,10 @@ def test_drive_upload_idempotent_returns_existing(cli, tmp_path, monkeypatch):
                     return _R()
             return _P()
 
-    monkeypatch.setattr(cli, "_drive_service", lambda: FakeService())
+    import sys as _sys
+    _rec_mod = _sys.modules.get("recovery")
+    assert _rec_mod is not None, "recovery module not found"
+    monkeypatch.setattr(_rec_mod, "drive_service", lambda: FakeService())
 
     rc = cli.main(["drive-upload", str(file_path)])
     assert rc == 0
@@ -780,14 +774,8 @@ def test_drive_upload_creates_dated_folder_and_uploads(cli, tmp_path, monkeypatc
                     return {"id": new_id, "webViewLink": f"https://drive/{new_id}"}
             return {"files": []}
 
-    # _drive_service and drive_upload_file now live in recovery module;
-    # patch drive_service on the recovery module so drive_upload_file picks it up.
     import sys as _sys
-    _rec_mod = None
-    for _mod in _sys.modules.values():
-        if hasattr(_mod, "drive_upload_file") and hasattr(_mod, "RecoveryError"):
-            _rec_mod = _mod
-            break
+    _rec_mod = _sys.modules.get("recovery")
     assert _rec_mod is not None, "recovery module not found"
     monkeypatch.setattr(_rec_mod, "drive_service", lambda: FakeService())
     # MediaFileUpload imported lazily inside drive_upload_file — patch via googleapiclient.http
