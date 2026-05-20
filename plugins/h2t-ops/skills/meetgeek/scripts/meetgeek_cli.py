@@ -808,25 +808,46 @@ def _is_already_submitted(state: dict[str, dict], source: str, *,
 
 # ─── Upload commands ─────────────────────────────────────────────────────────
 
-def _post_upload(download_url: str, title: str | None, language: str | None) -> dict:
-    body = {"download_url": download_url}
+def _submit_url_via_h2t_ops(download_url: str, title: str | None, language: str | None) -> dict:
+    """Compatibility route for MeetGeek /v1/upload.
+
+    Keep the recovery pipeline in this legacy script, but delegate the provider
+    write itself to the migrated h2t-ops connector so upload semantics live in
+    one place (#134).
+    """
+    h2t_ops = os.environ.get("H2T_OPS", "h2t-ops")
+    cmd = [h2t_ops, "meetgeek", "submit-url", download_url, "--json"]
     if title:
-        body["title"] = title
+        cmd.extend(["--title", title])
     if language:
-        body["language"] = language
-    r = _request("POST", "/v1/upload", json_body=body)
-    if r.status_code == 401:
-        raise ApiError("401: invalid MEETGEEK_API_KEY", exit_code=1)
-    if r.status_code == 400:
-        raise ApiError(f"400: {r.text[:300]}", exit_code=1)
-    if r.status_code >= 500:
-        raise ApiError(f"{r.status_code}: {r.text[:300]}", exit_code=1)
-    if r.status_code not in (200, 202):
-        raise ApiError(f"unexpected status {r.status_code}: {r.text[:300]}", exit_code=1)
+        cmd.extend(["--language-code", language])
     try:
-        return r.json()
-    except ValueError:
-        return {"message": r.text[:500]}
+        proc = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
+    except OSError as exc:
+        raise ApiError(f"h2t-ops submit-url failed to start: {exc}", exit_code=1) from exc
+    raw = (proc.stdout or proc.stderr or "").strip()
+    if proc.returncode != 0:
+        try:
+            env = json.loads(raw)
+            err = env.get("error") or {}
+            msg = err.get("message") or raw
+        except ValueError:
+            msg = raw or f"exit {proc.returncode}"
+        raise ApiError(f"h2t-ops submit-url failed: {msg}", exit_code=proc.returncode or 1)
+    try:
+        env = json.loads(proc.stdout)
+    except ValueError as exc:
+        raise ApiError(f"h2t-ops submit-url returned malformed JSON: {raw[:300]}", exit_code=1) from exc
+    if env.get("ok") is not True:
+        err = env.get("error") or {}
+        raise ApiError(f"h2t-ops submit-url failed: {err.get('message') or env}", exit_code=1)
+    return env.get("result") or {}
 
 
 import re as _re_titles
@@ -939,7 +960,7 @@ def _process_one_for_upload(src_path: Path, *, language: str | None,
     # ── Stage 3: Submit ───────────────────────────────────────────────────
     title = title_override or _title_from_filename(src.stem)
     try:
-        resp = _post_upload(drive_info["download_url"], title, language)
+        resp = _submit_url_via_h2t_ops(drive_info["download_url"], title, language)
     except ApiError as e:
         _append_uploads_manifest({
             **base_meta,
@@ -967,7 +988,7 @@ def _process_one_for_upload(src_path: Path, *, language: str | None,
 
 def cmd_upload(args: argparse.Namespace) -> int:
     if args.download_url:
-        resp = _post_upload(args.download_url, args.title, args.language)
+        resp = _submit_url_via_h2t_ops(args.download_url, args.title, args.language)
         _print_json({"status": "submitted", "response": resp})
         return 0
 
