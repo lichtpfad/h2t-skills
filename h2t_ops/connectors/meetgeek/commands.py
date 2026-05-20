@@ -89,7 +89,9 @@ def _fmt_transcript_md(meeting: dict, transcript: dict) -> str:
     lines = [fm, "", f"# {title}", "", "## Transcript", ""]
     for s in transcript.get("sentences") or []:
         speaker = s.get("speaker") or s.get("speaker_name") or "Speaker"
-        ts = s.get("timestamp") or s.get("start_time") or ""
+        ts = s.get("timestamp")
+        if ts is None:
+            ts = s.get("start_time") or ""
         text = s.get("transcript") or s.get("text") or ""
         if isinstance(ts, (int, float)):
             mins, secs = divmod(int(ts), 60)
