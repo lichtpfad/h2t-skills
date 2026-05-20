@@ -150,12 +150,14 @@ def build_convert_cmd(input_path: str, output_path: str, *,
 
 
 def convert_media(src: Path, *, audio_only: bool, mix_mode: str,
-                  output_path: Path | None = None) -> Path:
+                  output_path: Path | None = None,
+                  probe: dict | None = None) -> Path:
     """Probe src and encode to mp4/m4a. Skip if output already exists and >1 KB."""
     src = src.resolve()
     if not src.exists():
         raise RecoveryError(f"input not found: {src}", exit_code=1)
-    probe = ffmpeg_probe(str(src))
+    if probe is None:
+        probe = ffmpeg_probe(str(src))
     if output_path is None:
         suffix = ".m4a" if audio_only else ".mp4"
         output_path = staging_dir() / (src.stem + suffix)
