@@ -1565,9 +1565,10 @@ LEGACY_CLI="$H2T_PYTHON plugins/h2t-ops/skills/meetgeek/scripts/meetgeek_cli.py"
 $LEGACY_CLI convert --help
 $LEGACY_CLI upload --help
 $LEGACY_CLI sync --help
+$LEGACY_CLI webhook-server --help
 ```
 
-Expected: all three print help without error. If any fails, STOP — #149 hard non-regression violated.
+Expected: all four print help without error. If any fails, STOP — #149 hard non-regression violated.
 
 - [ ] **Step 7: Per-task verification (A/B/C/D)**
 
