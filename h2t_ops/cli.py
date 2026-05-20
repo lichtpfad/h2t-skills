@@ -15,7 +15,7 @@ from h2t_ops.core.output import emit, _utf8_writer, _finalize
 from h2t_ops.core.registry import discover
 from h2t_ops.dev import main as _dev_main
 
-_MIGRATED = {"notion", "gmail"}
+_MIGRATED = {"notion", "gmail", "calendar"}
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -145,6 +145,26 @@ def dispatch(argv: list[str]) -> int:
                   file=_w)
             _finalize(_w, _c)
         return _run_connector(["gmail", *norm])
+    # ingest calendar shim → new connector (spec §10.2). Mirror Gmail variant.
+    if len(argv) >= 2 and argv[0] == "ingest" and argv[1] == "calendar":
+        rest, norm, skip = argv[2:], [], False
+        for j, a in enumerate(argv[2:]):
+            if skip:
+                skip = False
+                continue
+            if a == "--format" and j + 1 < len(rest):
+                if rest[j + 1] == "json":
+                    norm.append("--json")
+                # non-json (e.g. legacy "markdown") → drop; connector human default
+                skip = True
+            else:
+                norm.append(a)
+        if _fmt_from(norm) != "json":
+            _w, _c = _utf8_writer(sys.stderr)
+            print("deprecated: `h2t-ops ingest calendar` → use `h2t-ops calendar` (spec §10)",
+                  file=_w)
+            _finalize(_w, _c)
+        return _run_connector(["calendar", *norm])
     if argv and argv[0] in ("gather", "ingest"):
         return _legacy(argv)
     if argv and argv[0] in _MIGRATED:
