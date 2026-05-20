@@ -50,9 +50,14 @@ def _check(name: str) -> int:
     if name == "lazy-registry":
         import builtins
         real = builtins.__import__
+        # Heavy modules that must NEVER be imported during registry/help dispatch.
+        _heavy_exact = {"notion_client", "httpx"}
+        _heavy_prefixes = ("google", "googleapiclient", "google_auth_oauthlib")
 
         def guard(n, *a, **k):
-            if n in ("notion_client", "httpx"):
+            if n in _heavy_exact or any(
+                n == p or n.startswith(p + ".") for p in _heavy_prefixes
+            ):
                 raise AssertionError(f"registry imported {n}")
             return real(n, *a, **k)
 
