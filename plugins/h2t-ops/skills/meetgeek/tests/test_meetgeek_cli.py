@@ -705,34 +705,32 @@ def test_drive_upload_idempotent_returns_existing(cli, tmp_path, monkeypatch):
 
 # ─── upload (POST /v1/upload) ─────────────────────────────────────────────────
 
-def test_upload_direct_url_succeeds_on_202(cli, capsys):
-    fake, calls = _scripted_request([
-        FakeResponse(202, {"message": "The recording has been validated and submitted "
-                                       "for analysis. However, webhook_url is not configured."})
-    ])
-    with patch.object(cli.requests, "request", fake):
-        rc = cli.main(["upload", "--download-url", "https://example.com/x.mp4",
-                       "--title", "Test", "--language", "ru"])
+def test_upload_direct_url_succeeds_on_202(cli, monkeypatch, capsys):
+    captured = []
+    monkeypatch.setattr(cli, "_submit_url_via_h2t_ops",
+                        lambda url, title, lang: captured.append((url, title, lang)) or {"message": "submitted"})
+    rc = cli.main(["upload", "--download-url", "https://example.com/x.mp4",
+                   "--title", "Test", "--language", "ru"])
     assert rc == 0
-    body = calls[0]["json"]
-    assert body["download_url"] == "https://example.com/x.mp4"
-    assert body["title"] == "Test"
-    assert body["language"] == "ru"
-    assert calls[0]["method"] == "POST"
-    assert calls[0]["url"].endswith("/v1/upload")
+    assert len(captured) == 1
+    assert captured[0][0] == "https://example.com/x.mp4"
+    assert captured[0][1] == "Test"
+    assert captured[0][2] == "ru"
 
 
-def test_upload_direct_url_401_aborts(cli):
-    fake, _ = _scripted_request([FakeResponse(401, {"message": "unauthorized"})])
-    with patch.object(cli.requests, "request", fake):
-        rc = cli.main(["upload", "--download-url", "https://example.com/x.mp4"])
+def test_upload_direct_url_401_aborts(cli, monkeypatch):
+    def _fail(url, title, lang):
+        raise cli.ApiError("unauthorized", exit_code=1)
+    monkeypatch.setattr(cli, "_submit_url_via_h2t_ops", _fail)
+    rc = cli.main(["upload", "--download-url", "https://example.com/x.mp4"])
     assert rc == 1
 
 
-def test_upload_direct_url_400_invalid(cli):
-    fake, _ = _scripted_request([FakeResponse(400, {"message": "bad", "reason": "download_url field is not a valid url"})])
-    with patch.object(cli.requests, "request", fake):
-        rc = cli.main(["upload", "--download-url", "not-a-url"])
+def test_upload_direct_url_400_invalid(cli, monkeypatch):
+    def _fail(url, title, lang):
+        raise cli.ApiError("bad: download_url field is not a valid url", exit_code=1)
+    monkeypatch.setattr(cli, "_submit_url_via_h2t_ops", _fail)
+    rc = cli.main(["upload", "--download-url", "not-a-url"])
     assert rc == 1
 
 
@@ -841,7 +839,7 @@ def test_upload_from_file_chains_convert_drive_submit(cli, tmp_path, monkeypatch
         return {"message": "submitted (mock)"}
 
     monkeypatch.setattr(cli, "cmd_convert", fake_cmd_convert)
-    monkeypatch.setattr(cli, "_post_upload", fake_post_upload)
+    monkeypatch.setattr(cli, "_submit_url_via_h2t_ops", fake_post_upload)
     monkeypatch.setattr(cli, "_drive_upload_file",
                         lambda path, **kw:
                         {"drive_id": "FAKE", "download_url": "https://example.com/dl/FAKE",
@@ -960,7 +958,7 @@ def test_upload_resumes_from_converted_state(cli, tmp_path, monkeypatch):
                         lambda path, **kw: {"drive_id": "DID",
                                             "download_url": "https://x/d",
                                             "web_url": "https://x/w", "created": True})
-    monkeypatch.setattr(cli, "_post_upload",
+    monkeypatch.setattr(cli, "_submit_url_via_h2t_ops",
                         lambda url, title, lang: {"message": "ok"})
 
     rc = cli.main(["upload", "--from-file", str(src), "--language", "ru", "--no-skip-existing"])
@@ -996,7 +994,7 @@ def test_upload_resumes_from_in_drive_state(cli, tmp_path, monkeypatch):
                         lambda path, **kw: drive_called.__setitem__("n", drive_called["n"] + 1) or {})
 
     posted = []
-    monkeypatch.setattr(cli, "_post_upload",
+    monkeypatch.setattr(cli, "_submit_url_via_h2t_ops",
                         lambda url, title, lang: posted.append({"url": url}) or {"message": "ok"})
 
     rc = cli.main(["upload", "--from-file", str(src), "--language", "ru", "--no-skip-existing"])
