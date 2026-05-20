@@ -16,6 +16,13 @@ import sys
 from pathlib import Path
 from typing import Any
 
+# Ensure unicode glyphs (✓, →) survive on Windows cp1252 consoles — see #143.
+# The actual file writes already use utf-8; this only guards stdout/stderr.
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8")
+
 ROOT = Path(__file__).resolve().parent.parent
 _SEMVER_RE = re.compile(r"^\d+\.\d+\.\d+([-+].+)?$")
 
