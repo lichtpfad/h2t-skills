@@ -4,7 +4,7 @@ description: "MeetGeek API: pull meetings, transcripts, summaries, highlights, i
 compatibility: "Requires MEETGEEK_API_KEY in ~/.dor/secrets.env or env var. Region-specific (EU/US) — key prefix indicates region."
 metadata:
   author: lichtpfad
-  version: 1.1.0
+  version: 1.2.0
 ---
 
 # Инструкции
@@ -21,167 +21,115 @@ POS journal commands exist.
 ## Переменные
 
 ```bash
-# Cross-platform h2t venv detection
+# New connector CLI (migrated verbs)
+H2T_OPS="h2t-ops"
+
+# Legacy script (recovery workflow — tracked in #149)
 H2T_PYTHON="${H2T_PYTHON:-}"
 if [ -z "$H2T_PYTHON" ]; then
   [ -f "$HOME/.h2t/venv/bin/python" ] && H2T_PYTHON="$HOME/.h2t/venv/bin/python"
   [ -f "$HOME/.h2t/venv/Scripts/python.exe" ] && H2T_PYTHON="$HOME/.h2t/venv/Scripts/python.exe"
 fi
 [ -z "$H2T_PYTHON" ] && echo "ERROR: h2t venv not found. Run /h2t-ops:setup" && exit 1
-
-CLI="$H2T_PYTHON ${CLAUDE_SKILL_DIR}/scripts/meetgeek_cli.py"
+LEGACY_CLI="$H2T_PYTHON ${CLAUDE_SKILL_DIR}/scripts/meetgeek_cli.py"
 ```
 
 ## Команды
 
-### Auth-check
+### Migrated verbs (delegate to h2t-ops meetgeek)
+
+#### Auth-check
 
 ```bash
-$CLI auth-check
+$H2T_OPS meetgeek auth-check
 ```
 
-Validate `MEETGEEK_API_KEY` against `/v1/meetings?limit=1`. Exit 0 = ok.
+Validate `MEETGEEK_API_KEY`. Exit 0 = ok.
 
-### List meetings
+#### Teams
 
 ```bash
-$CLI list [--limit N] [--cursor C] [--from-date YYYY-MM-DD] [--to-date YYYY-MM-DD]
-# Examples:
-$CLI list --limit 10
-$CLI list --from-date 2026-04-01 --to-date 2026-05-01
+$H2T_OPS meetgeek teams [--json]
 ```
 
-Output: JSON array. Pagination via `next_cursor` field.
-
-### Single meeting
+#### List meetings
 
 ```bash
-$CLI get <meeting-id>                                       # metadata
-$CLI transcript <meeting-id> [--format md|json] [-o PATH]   # default: md
-$CLI summary <meeting-id> [--format md|json] [-o PATH]
-$CLI highlights <meeting-id> [--format md|json] [-o PATH]
-$CLI insights <meeting-id> [--format md|json] [-o PATH]
-$CLI download <meeting-id> [-o PATH]                        # recording
+$H2T_OPS meetgeek list [--limit N] [--cursor C] [--from-date YYYY-MM-DD] [--to-date YYYY-MM-DD] [--json]
 ```
 
-`md` format: frontmatter (POS data-architecture v3.3 compatible) + body.
-`json` format: raw API response, full fidelity.
-
-If `-o` omitted: stdout. Otherwise writes to PATH.
-
-### Upload local recordings
-
-Three composable commands for `webm → mp4 → Drive → MeetGeek` flow.
+#### Single meeting
 
 ```bash
-# Convert (default: webm → mp4 H.264/AAC; multi-track audio → amix)
-$CLI convert <in.webm> [-o out.mp4] [--audio-only] [--mix-mode amix|first|keep] [--probe]
+$H2T_OPS meetgeek get <meeting-id> [--json]
+$H2T_OPS meetgeek transcript <meeting-id> [--format md|json] [--json]
+$H2T_OPS meetgeek summary    <meeting-id> [--format md|json] [--json]
+$H2T_OPS meetgeek highlights <meeting-id> [--format md|json] [--json]
+$H2T_OPS meetgeek insights   <meeting-id> [--format md|json] [--json]
+```
 
-# Upload to Drive (default folder: MeetGeek Uploads/{YYYY-MM-DD}/, share=anyone)
-$CLI drive-upload <file> [--folder "MeetGeek Uploads/2026-05-06"] [--no-make-public]
+#### Download recording URL
 
-# Submit one URL directly (presumes you already have a public URL)
-$CLI upload --download-url URL [--title T] [--language ru|en|auto]
+```bash
+$H2T_OPS meetgeek download-url <meeting-id> [--json]
+```
 
-# Batch — convert + drive-upload + submit for many files
-$CLI upload --from-file '~/Downloads/meetgeek-recording-*.webm' \
+Returns `{meeting_id, download_url}` — signed URL only, no file download.
+
+#### Submit URL for transcription
+
+```bash
+$H2T_OPS meetgeek submit-url <URL> [--title T] [--language-code CODE] [--template NAME] [--json]
+```
+
+`POST /v1/upload`. Submit a public recording URL directly to MeetGeek API.
+
+**Compatibility alias:** `$LEGACY_CLI upload --download-url <URL>` — route to `$H2T_OPS meetgeek submit-url <URL>` instead. The legacy `_post_upload` path is superseded by this connector verb.
+
+### Legacy: upload local recordings (tracked in #149)
+
+**Do not delete these commands** — they are production functionality preserved until #149 extracts
+and refactors the recovery workflow.
+
+```bash
+# Convert (webm → mp4)
+$LEGACY_CLI convert <in.webm> [-o out.mp4] [--audio-only] [--mix-mode amix|first|keep] [--probe]
+
+# Upload to Drive (creates MeetGeek Uploads/{YYYY-MM-DD}/, shares publicly)
+$LEGACY_CLI drive-upload <file> [--folder "MeetGeek Uploads/2026-05-06"] [--no-make-public]
+
+# Full pipeline: convert + drive-upload + submit (manifest/resume in ~/.dor/lake/meetgeek/)
+$LEGACY_CLI upload --from-file '~/Downloads/meetgeek-recording-*.webm' \
             [--audio-only] [--mix-mode amix|first|keep] \
             [--language ru] [--no-skip-existing] [--dry-run]
 ```
 
-State for resume lives in `~/.dor/lake/meetgeek/uploads-staging/`:
-- `{YYYY-MM-DD}/*.mp4` — converted cache (skip re-encode on retry)
-- `manifest.jsonl` — append-only state log; effective state per source = last line.
+State for resume: `~/.dor/lake/meetgeek/uploads-staging/manifest.jsonl`
 
-Recipes:
-- One file end-to-end: `$CLI upload --from-file ~/Downloads/meetgeek-recording-2026-01-20T15-44-31-132Z.webm --language ru`
-- Backfill 16 files (default skip-existing keeps it idempotent): `$CLI upload --from-file '~/Downloads/meetgeek-recording-*.webm' --language ru`
-- Force re-process: append `--no-skip-existing` (Drive idempotent search and cached mp4 still avoid duplicate work).
+These commands depend on `google-api-python-client` and `imageio-ffmpeg`.
+#149 will extract this workflow and replace the embedded Drive logic with the Drive connector (#133).
 
-Dependencies (auto-installed once):
-```bash
-~/.h2t/venv/Scripts/python.exe -m pip install imageio-ffmpeg   # Windows
-~/.h2t/venv/bin/python -m pip install imageio-ffmpeg           # macOS
-```
+### Legacy: sync and webhook-server
 
-### Bulk sync (главная команда)
+`sync` and `webhook-server` are **not migrated** to the h2t-ops connector.
+
+- `sync` writes to `~/.dor/lake/meetgeek/`, cursor, manifest — coordinator/lake layer, not connector.
+- `webhook-server` is dev-only; production webhook integration belongs to POS/VPS (stable public endpoint, signature verification, `pos_ingest` routing).
 
 ```bash
-# Backfill: вся история транскриптов
-$CLI sync --to ~/.dor/lake/meetgeek/historical/ \
-          --include transcripts,summaries,highlights
+# Legacy sync (still works via legacy script)
+$LEGACY_CLI sync --to ~/.dor/lake/meetgeek/$(date +%Y-%m-%d)/ --since-cursor --include transcripts
 
-# Incremental: только новые с последнего sync
-$CLI sync --to ~/.dor/lake/meetgeek/$(date +%Y-%m-%d)/ \
-          --since-cursor --include transcripts
-
-# Date range
-$CLI sync --to /tmp/test --since 2026-04-01 --limit 5
-
-# Включить recordings (mp4) — POST /download → media.meetgeek.ai stream
-$CLI sync --to ~/.dor/lake/meetgeek/historical/ \
-          --include transcripts,recordings
-
-# Watch mode: цикл sync каждые N секунд (мин 30), Ctrl-C для выхода
-$CLI sync --to ~/.dor/lake/meetgeek/$(date +%Y-%m-%d)/ \
-          --since-cursor --include transcripts --watch 300
+# Legacy webhook server (dev only)
+$LEGACY_CLI webhook-server --port 8765 --bind 127.0.0.1 --out ~/.dor/lake/meetgeek/webhooks/
 ```
-
-#### Layout output
-
-```
-{LAKE_PATH}/
-  manifest.jsonl            # one line per meeting (meta)
-  transcripts/{id}.md       # human-readable
-  transcripts/{id}.json     # raw API
-  summaries/{id}.{md,json}
-  highlights/{id}.{md,json}
-  insights/{id}.{md,json}
-```
-
-#### Cursor
-
-`~/.dor/lake/_cursors/meetgeek.json` (configurable via `--cursor-file`):
-
-```json
-{
-  "source": "meetgeek",
-  "last_seen_ts": "2026-05-02T14:00:40Z",
-  "last_seen_id": "...",
-  "last_run_at": "...",
-  "items_ingested": 111,
-  "version": 1
-}
-```
-
-`--since-cursor` reads `last_seen_ts` and pulls only newer.
-
-### Helpers
-
-```bash
-$CLI teams                  # list user's teams
-```
-
-### Webhook server
-
-```bash
-# Receive MeetGeek webhook events to disk (POST → JSON file per event)
-$CLI webhook-server --port 8765 --bind 127.0.0.1 \
-                    --out ~/.dor/lake/meetgeek/webhooks/ \
-                    --secret <shared-secret>
-```
-
-- POST с любым path принимается; payload + headers + path сохраняется в `{out}/{uuid}.json`
-- Если `--secret` задан, требуется header `X-Webhook-Secret`; иначе 401
-- Без `--secret` любой POST пишется (для локальной разработки)
-- GET / → health probe
 
 ## Use cases
 
-1. **Daily pull** новых митингов — `$CLI sync --since-cursor --to ~/.dor/lake/meetgeek/$(date +%Y-%m-%d)/`
-2. **Backfill всей истории** (POS#80) — `$CLI sync --to ~/.dor/lake/meetgeek/historical/ --include transcripts,summaries,highlights`
-3. **Get one transcript** для distillation — `$CLI transcript <id> -o ~/.dor/context/meetings/<title>.md`
-4. **Search by date range** — `$CLI list --from-date 2026-04-01 --to-date 2026-05-01`
+1. **Daily pull** новых митингов — `$H2T_OPS meetgeek list --since-cursor` (или `$LEGACY_CLI sync --since-cursor --to ~/.dor/lake/meetgeek/$(date +%Y-%m-%d)/`)
+2. **Backfill всей истории** (POS#80) — `$LEGACY_CLI sync --to ~/.dor/lake/meetgeek/historical/ --include transcripts,summaries,highlights`
+3. **Get one transcript** для distillation — `$H2T_OPS meetgeek transcript <id>`
+4. **Search by date range** — `$H2T_OPS meetgeek list --from-date 2026-04-01 --to-date 2026-05-01`
 
 ## Переменные окружения
 
@@ -195,7 +143,7 @@ Loaded from `~/.dor/secrets.env` если присутствует (`python-dote
 ## Обработка ошибок
 
 - **401** → key invalid. Check `~/.h2t/config/secrets/meetgeek.md`, regional prefix (`eu-`/`us-`).
-- **404** → meeting id не найден. List sначала: `$CLI list --limit 5`.
+- **404** → meeting id не найден. List сначала: `$H2T_OPS meetgeek list --limit 5`.
 - **429** → rate limit. CLI делает exponential backoff (max 3 retry).
 - **Network timeout** → 30s default, 1 retry. Override `MEETGEEK_TIMEOUT`.
 - **Sync partial fail** → cursor сохраняется как `partial(N)`, manifest содержит только успешные. Re-run пропустит уже синхронизированные через cursor.
