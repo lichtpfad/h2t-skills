@@ -1,6 +1,6 @@
 # h2t-ops MeetGeek Parity Migration — Design (#134)
 
-**Status:** Approved  
+**Status:** Draft — review-ready  
 **Date:** 2026-05-20  
 **Author:** lichtpfad  
 **Issue:** [#134 Migrate MeetGeek connector](https://github.com/lichtpfad/h2t-skills/issues/134)  
@@ -48,6 +48,7 @@ to disk is a coordinator concern (out of scope).
 | `webhook-server` | Local HTTP server + disk writes — dev-only until POS/VPS | POS/VPS issue |
 | `convert` | ffmpeg, local filesystem — no API calls | #149 |
 | `drive-upload` | Duplicates Drive connector (#133) | #149 |
+| `upload --download-url` | Compatibility alias → `h2t-ops meetgeek submit-url`; legacy `_post_upload` no longer called after T3 | T3 |
 | `upload --from-file` | Coordinator pipeline: convert + Drive + submit + manifest/resume | #149 |
 | `manifest.jsonl` state | POS artifact in `~/.dor/lake/` | #149 |
 
@@ -123,6 +124,18 @@ Do not make destructive/live submit in T0 — API discovery only (GET endpoints 
 
 ## File Map
 
+### T0 — API discovery (no code commit)
+
+**Output artefacts (assembled in reply, not committed):**
+- Endpoint/field matrix for `POST /v1/upload`: confirmed field names (`language_code` vs `language`, `template_name`, `title`)
+- Confirmation of `POST /v1/meetings/{id}/download` response field (`download_link` vs `download_url`)
+- Safe GET-only live smoke results (`auth-check`, `list --limit 1`)
+- Decision: use `language_code` in `submit_url()` (or dual-field if API accepts both)
+
+No provider-write submit (`POST /v1/upload`) in T0. Any live submit requires explicit maintainer approval before T2.
+
+### T1–T3 code files
+
 | File | Action | Task |
 |---|---|---|
 | `h2t_ops/connectors/meetgeek/__init__.py` | Create (T1 marker) → Modify (T2 CONNECTOR body) | T1, T2 |
@@ -132,7 +145,7 @@ Do not make destructive/live submit in T0 — API discovery only (GET endpoints 
 | `tests/connectors/meetgeek/__init__.py` | Create (empty) | T1 |
 | `tests/connectors/meetgeek/test_client.py` | Create | T1 |
 | `tests/connectors/meetgeek/test_commands.py` | Create | T2 |
-| `plugins/h2t-ops/skills/meetgeek/SKILL.md` | Modify — delegate migrated verbs to `h2t-ops meetgeek …`; preserve legacy commands with pointer → #149 and webhook → POS/VPS | T3 |
+| `plugins/h2t-ops/skills/meetgeek/SKILL.md` | Modify — delegate migrated verbs to `h2t-ops meetgeek …`; `upload --download-url` becomes alias for `submit-url`; preserve `convert`/`drive-upload`/`upload --from-file` as legacy; pointer → #149 and webhook → POS/VPS | T3 |
 
 **File-state verification before each task (per #144-T1 overwrite lesson):**
 
@@ -150,8 +163,11 @@ grep -q '"meetgeek"' h2t_ops/cli.py  && echo "T2: already in _MIGRATED" || echo 
 ```
 meetgeek list [--limit N] [--cursor C] [--from-date YYYY-MM-DD] [--to-date YYYY-MM-DD] [--json]
 ```
-Returns rows with `{id, title, start_time, end_time, language, status}`. Pagination:
-`next_cursor` in envelope when more pages exist.
+Client returns the **raw API response** for each meeting row. Display layer normalizes
+known field aliases: `meeting_id|id` → `id`; `timestamp_start_utc|start_time` → `start_time`;
+`timestamp_end_utc|end_time` → `end_time`. Both alias forms must be supported so the pre-existing
+date-field fix from e29804a is not regressed. Pagination: `next_cursor` in envelope when more pages
+exist.
 
 ### `get`
 ```
@@ -204,7 +220,8 @@ meetgeek teams [--json]
 ## SKILL.md Rewrite Strategy (T3)
 
 - Migrated verbs (`auth-check`, `teams`, `list`, `get`, `transcript`, `summary`, `highlights`, `insights`, `download-url`, `submit-url`): delegate to `h2t-ops meetgeek <verb>`.
-- Legacy verbs (`convert`, `drive-upload`, `upload --download-url`, `upload --from-file`, `sync`, `webhook-server`): **keep in skill**, still invoke `$CLI <verb>` via legacy script. Add section header "Legacy / Recovery workflow (tracked in #149)" and note that `sync` and `webhook-server` are not migrated.
+- `upload --download-url <URL>`: becomes a **compatibility alias** — SKILL.md routes it to `h2t-ops meetgeek submit-url <URL>` (new connector path). This eliminates the dual-path ambiguity; the legacy script's `_post_upload` is no longer called for this case after T3.
+- Legacy-only verbs (`convert`, `drive-upload`, `upload --from-file`, `sync`, `webhook-server`): **keep in skill**, still invoke `$CLI <verb>` via legacy script. Add section header "Legacy / Recovery workflow (tracked in #149)" and note that `sync` and `webhook-server` are not migrated.
 - Bump `metadata.version` from `1.1.0` to `1.2.0` (partial delegation is a contract change).
 
 ---
