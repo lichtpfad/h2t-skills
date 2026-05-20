@@ -166,3 +166,191 @@ class TestSubmitUrlViaH2tOps:
         monkeypatch.setattr("subprocess.run", lambda cmd, **kw: FakeProc())
         with pytest.raises(rec.RecoveryError):
             rec.submit_url_via_h2t_ops("https://example.com/r.mp4", None, None)
+
+
+# ─── ffmpeg_probe ─────────────────────────────────────────────────────────────
+
+class TestFfmpegProbe:
+    _STDERR_SAMPLE = (
+        "Input #0, matroska,webm, from 'test.webm':\n"
+        "  Duration: 00:01:23.45\n"
+        "    Stream #0:0: Video: vp8\n"
+        "    Stream #0:1: Audio: opus\n"
+        "    Stream #0:2: Audio: opus\n"
+        "Output #0, null, to 'pipe:'\n"
+        "    Stream #0:0: Audio: pcm_s16le\n"
+    )
+
+    def test_parses_streams_and_duration(self, rec, tmp_path):
+        dummy = tmp_path / "test.webm"
+        dummy.write_bytes(b"x")
+        fake_result = MagicMock(returncode=0, stderr=self._STDERR_SAMPLE)
+        with patch.object(rec, "ffmpeg_exe", return_value="/usr/bin/ffmpeg"):
+            with patch("subprocess.run", return_value=fake_result):
+                probe = rec.ffmpeg_probe(str(dummy))
+        assert probe["audio_streams"] == 2
+        assert probe["has_video"] is True
+        assert probe["duration_seconds"] == 83
+
+    def test_ignores_output_section_audio(self, rec, tmp_path):
+        dummy = tmp_path / "test.webm"
+        dummy.write_bytes(b"x")
+        fake_result = MagicMock(returncode=0, stderr=self._STDERR_SAMPLE)
+        with patch.object(rec, "ffmpeg_exe", return_value="/usr/bin/ffmpeg"):
+            with patch("subprocess.run", return_value=fake_result):
+                probe = rec.ffmpeg_probe(str(dummy))
+        assert probe["audio_streams"] == 2  # not 3; Output section excluded
+
+
+# ─── process_one ──────────────────────────────────────────────────────────────
+
+def _make_src(tmp_path: Path) -> Path:
+    src = tmp_path / "meetgeek-recording-2026-05-20T10-00-00-1Z.webm"
+    src.write_bytes(b"x" * 1024)
+    return src
+
+
+class TestProcessOne:
+    def _mp4(self, tmp_path: Path) -> Path:
+        p = tmp_path / "converted.mp4"
+        p.write_bytes(b"y" * 2048)
+        return p
+
+    def test_full_pipeline_writes_submitted(self, rec, tmp_path, monkeypatch):
+        src = _make_src(tmp_path)
+        mp4 = self._mp4(tmp_path)
+        manifest = tmp_path / "manifest.jsonl"
+        drive_result = {"drive_id": "d1", "download_url": "https://example.com/d1",
+                        "web_url": "https://drive.google.com/d1", "created": True}
+
+        monkeypatch.setattr(rec, "convert_media", lambda s, **kw: mp4)
+        monkeypatch.setattr(rec, "drive_upload_file", lambda p, **kw: drive_result)
+        monkeypatch.setattr(rec, "submit_url_via_h2t_ops", lambda url, title, lang: {"message": "ok"})
+        monkeypatch.setattr(rec, "emit_submission_artifact", lambda r, **kw: tmp_path / "art.json")
+
+        result = rec.process_one(src, language="ru", title_override=None,
+                                 audio_only=False, mix_mode="amix", manifest_path=manifest)
+
+        assert result["status"] == "submitted"
+        assert result["drive_id"] == "d1"
+        lines = [json.loads(l) for l in manifest.read_text().splitlines() if l.strip()]
+        statuses = [l["status"] for l in lines]
+        assert statuses == ["converted", "in-drive", "submitted"]
+
+    def test_resume_from_in_drive_skips_convert_and_drive(self, rec, tmp_path, monkeypatch):
+        src = _make_src(tmp_path)
+        mp4 = self._mp4(tmp_path)
+        manifest = tmp_path / "manifest.jsonl"
+        rec.append_uploads_manifest({
+            "source_webm": str(src),
+            "source_size_bytes": src.stat().st_size,
+            "source_mtime": "2026-05-20T10:00:00Z",
+            "mp4_path": str(mp4),
+            "mp4_size_bytes": mp4.stat().st_size,
+            "drive_id": "d2",
+            "drive_download_url": "https://example.com/d2",
+            "drive_web_url": None,
+            "status": "in-drive",
+        }, manifest)
+
+        convert_calls = []
+        drive_calls = []
+        monkeypatch.setattr(rec, "convert_media", lambda s, **kw: convert_calls.append(1) or mp4)
+        monkeypatch.setattr(rec, "drive_upload_file", lambda p, **kw: drive_calls.append(1) or {})
+        monkeypatch.setattr(rec, "submit_url_via_h2t_ops", lambda url, title, lang: {"message": "ok"})
+        monkeypatch.setattr(rec, "emit_submission_artifact", lambda r, **kw: tmp_path / "art.json")
+
+        result = rec.process_one(src, language=None, title_override=None,
+                                 audio_only=False, mix_mode="amix", manifest_path=manifest)
+
+        assert result["status"] == "submitted"
+        assert convert_calls == []
+        assert drive_calls == []
+
+    def test_convert_failure_writes_convert_failed(self, rec, tmp_path, monkeypatch):
+        src = _make_src(tmp_path)
+        manifest = tmp_path / "manifest.jsonl"
+
+        def fail_convert(s, **kw):
+            raise rec.RecoveryError("encode failed", exit_code=1)
+
+        monkeypatch.setattr(rec, "convert_media", fail_convert)
+
+        with pytest.raises(rec.RecoveryError):
+            rec.process_one(src, language=None, title_override=None,
+                            audio_only=False, mix_mode="amix", manifest_path=manifest)
+
+        lines = [json.loads(l) for l in manifest.read_text().splitlines() if l.strip()]
+        assert lines[-1]["status"] == "convert-failed"
+
+    def test_drive_failure_writes_drive_failed(self, rec, tmp_path, monkeypatch):
+        src = _make_src(tmp_path)
+        mp4 = self._mp4(tmp_path)
+        manifest = tmp_path / "manifest.jsonl"
+
+        monkeypatch.setattr(rec, "convert_media", lambda s, **kw: mp4)
+        monkeypatch.setattr(rec, "drive_upload_file",
+                            lambda p, **kw: (_ for _ in ()).throw(rec.RecoveryError("auth failed")))
+
+        with pytest.raises(rec.RecoveryError):
+            rec.process_one(src, language=None, title_override=None,
+                            audio_only=False, mix_mode="amix", manifest_path=manifest)
+
+        lines = [json.loads(l) for l in manifest.read_text().splitlines() if l.strip()]
+        assert lines[-1]["status"] == "drive-failed"
+
+    def test_infers_title_from_filename(self, rec, tmp_path, monkeypatch):
+        src = _make_src(tmp_path)
+        mp4 = self._mp4(tmp_path)
+        manifest = tmp_path / "manifest.jsonl"
+        captured = {}
+
+        def capture_submit(url, title, lang):
+            captured["title"] = title
+            return {"message": "ok"}
+
+        monkeypatch.setattr(rec, "convert_media", lambda s, **kw: mp4)
+        monkeypatch.setattr(rec, "drive_upload_file",
+                            lambda p, **kw: {"drive_id": "d", "download_url": "u",
+                                             "web_url": None, "created": True})
+        monkeypatch.setattr(rec, "submit_url_via_h2t_ops", capture_submit)
+        monkeypatch.setattr(rec, "emit_submission_artifact", lambda r, **kw: tmp_path / "art.json")
+
+        rec.process_one(src, language=None, title_override=None,
+                        audio_only=False, mix_mode="amix", manifest_path=manifest)
+
+        assert captured["title"] == "Meeting 2026-05-20 10:00 UTC"
+
+
+# ─── emit_submission_artifact ─────────────────────────────────────────────────
+
+class TestEmitSubmissionArtifact:
+    def test_writes_json_with_correct_type(self, rec, tmp_path):
+        result = {
+            "source_webm": str(tmp_path / "rec.webm"),
+            "source_size_bytes": 1024,
+            "source_mtime": "2026-05-20T10:00:00Z",
+            "mp4_path": str(tmp_path / "rec.mp4"),
+            "drive_id": "d1",
+            "drive_download_url": "https://example.com/d1",
+            "title": "Meeting 2026-05-20 10:00 UTC",
+            "language": "ru",
+            "submitted_at": "2026-05-20T10:05:00Z",
+            "status": "submitted",
+        }
+        path = rec.emit_submission_artifact(result, artifact_dir=tmp_path)
+        artifact = json.loads(path.read_text(encoding="utf-8"))
+        assert artifact["artifact_type"] == "recording_submission_artifact"
+        assert artifact["meetgeek_meeting_id"] is None
+        assert artifact["provider"] == "meetgeek"
+        assert artifact["drive_id"] == "d1"
+
+    def test_output_filename_matches_source_stem(self, rec, tmp_path):
+        result = {
+            "source_webm": str(tmp_path / "my-recording.webm"),
+            "source_size_bytes": 1024, "source_mtime": "2026-05-20T10:00:00Z",
+            "mp4_path": None, "drive_id": None, "drive_download_url": None,
+            "title": None, "language": None, "submitted_at": None, "status": "submitted",
+        }
+        path = rec.emit_submission_artifact(result, artifact_dir=tmp_path)
+        assert path.name == "my-recording.submission.json"

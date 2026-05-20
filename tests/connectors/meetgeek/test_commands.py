@@ -207,3 +207,45 @@ def test_normalize_meeting_supports_id_alias():
     m = {"id": "m3", "title": "T"}
     result = _normalize_meeting(m)
     assert result["meeting_id"] == "m3"
+
+
+# ─── upload --download-url regression guard ───────────────────────────────────
+
+class TestCmdUploadDirectUrl:
+    """upload --download-url must delegate to _submit_url_via_h2t_ops, not inline POST.
+
+    Regression guard: before #149 extraction this path called _request("POST", ...)
+    inline inside cmd_upload. After extraction it must call _submit_url_via_h2t_ops.
+    """
+
+    def test_delegates_to_submit_url_not_inline_post(self, tmp_path, monkeypatch):
+        import argparse
+        import importlib.util
+        import sys
+        from pathlib import Path
+
+        CLI = (Path(__file__).resolve().parent.parent.parent.parent
+               / "plugins" / "h2t-ops" / "skills" / "meetgeek" / "scripts" / "meetgeek_cli.py")
+        spec = importlib.util.spec_from_file_location("_cli_download_url_test", CLI)
+        assert spec and spec.loader
+        mod = importlib.util.module_from_spec(spec)
+        sys.modules["_cli_download_url_test"] = mod
+        spec.loader.exec_module(mod)
+
+        captured = []
+        monkeypatch.setattr(
+            mod, "_submit_url_via_h2t_ops",
+            lambda url, title, lang: captured.append((url, title, lang)) or {"message": "ok"},
+        )
+
+        args = argparse.Namespace(
+            download_url="https://drive.usercontent.google.com/download?id=testfile&confirm=t",
+            title="Test Meeting",
+            language="ru",
+            from_file=None,
+            dry_run=False,
+        )
+        mod.cmd_upload(args)
+
+        assert len(captured) == 1
+        assert captured[0][0] == args.download_url
