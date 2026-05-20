@@ -1,5 +1,5 @@
 ---
-name: research
+name: h2t-ops:research
 description: "Semantic web research via Exa API. Modes: fast / generic / news / academic / competitor / people / deep. Transparent telemetry, fail-loud protocol. Use for web search, news tracking, academic papers, competitor intel, people research. NOT for LinkedIn lead-gen (use /search-leads from BayramAnnakov plugin). Triggers: 'research', 'find out', 'look up', 'исследуй', 'h2t:research'."
 compatibility: "Requires $EXA_API_KEY env var. Get key at https://dashboard.exa.ai/api-keys. Requires ~/.h2t/venv (run /h2t-core:setup if missing). Optional: pip install trafilatura inside ~/.h2t/venv for richer article extraction (script falls back to stdlib inline parser if absent)."
 metadata:

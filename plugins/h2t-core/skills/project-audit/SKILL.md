@@ -1,5 +1,5 @@
 ---
-name: project-audit
+name: h2t-core:project-audit
 description: "Automated per-project audit pipeline: scan repo → positioning → readiness eval → generate docs → update registry. Usage: /project-audit [repo-id-or-path] [--tier product] [--dry-run]"
 compatibility: "Claude Code"
 metadata:

@@ -1,5 +1,5 @@
 ---
-name: convert-meeting-transcript
+name: h2t-edu:convert-meeting-transcript
 description: "Converts DOCX meeting transcripts to Markdown with speaker name replacement. Takes input .docx file, outputs .md alongside it. Triggers: 'convert transcript', 'docx to markdown', 'convert meeting'., 'h2t-edu:convert-meeting-transcript'"
 compatibility: "Requires python-docx. Input file path required."
 metadata:

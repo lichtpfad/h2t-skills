@@ -1,5 +1,5 @@
 ---
-name: gmail
+name: h2t-ops:gmail
 description: "Reads and sends Gmail via the h2t-ops CLI. Use for checking inbox, reading messages, searching mail, sending or drafting messages, and managing labels. Triggers: 'check email', 'show inbox', 'read message', 'search gmail', 'send email', 'create draft', 'gmail labels', 'h2t-ops:gmail'"
 compatibility: "Requires the `h2t-ops` CLI (run /h2t-core:setup) and Google OAuth credentials in ~/.config/google-calendar-mcp/ or ~/.config/gmail/"
 metadata:

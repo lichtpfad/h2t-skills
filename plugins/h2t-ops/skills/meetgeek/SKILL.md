@@ -1,5 +1,5 @@
 ---
-name: meetgeek
+name: h2t-ops:meetgeek
 description: "MeetGeek API: pull meetings, transcripts, summaries, highlights, insights, recordings. Bypasses broken Drive auto-sync (re-transcription bug, POS#80). Watch mode + webhook server. Triggers: 'meetgeek', 'sync transcripts', 'pull meetings', 'митинги', 'h2t-ops:meetgeek'."
 compatibility: "Requires MEETGEEK_API_KEY in ~/.dor/secrets.env or env var. Region-specific (EU/US) — key prefix indicates region."
 metadata:

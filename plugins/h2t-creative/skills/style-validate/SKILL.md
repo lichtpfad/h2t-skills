@@ -1,5 +1,5 @@
 ---
-name: style-validate
+name: h2t-creative:style-validate
 description: "Validates a h2t-creative profile directory for completeness. Checks DESIGN.md required sections, tokens.css required variables, all 5 components exist with manifest.yaml, fx/ exports contract if present. Triggers: 'validate profile', 'check style', 'style-validate', 'h2t-creative:style-validate'"
 compatibility: "Claude Code"
 metadata:
