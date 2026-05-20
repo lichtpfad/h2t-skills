@@ -516,7 +516,10 @@ def test_convert_skip_if_cached(cli, tmp_path, monkeypatch):
     src = tmp_path / "in.webm"; src.write_bytes(b"x")
     out = tmp_path / "out.mp4"; out.write_bytes(b"M" * 2048)  # already big enough
 
-    monkeypatch.setattr(cli, "_ffmpeg_probe",
+    import sys as _sys
+    _rec_mod = _sys.modules.get("recovery")
+    assert _rec_mod is not None, "recovery module not found in sys.modules"
+    monkeypatch.setattr(_rec_mod, "ffmpeg_probe",
                         lambda p: {"audio_streams": 1, "has_video": True,
                                    "duration_seconds": 60, "raw_stderr_tail": ""})
     called = {"n": 0}
@@ -588,7 +591,10 @@ def test_convert_audio_only_still_maps_audio(cli, tmp_path, monkeypatch):
 
 def test_convert_multi_track_uses_amix(cli, tmp_path, monkeypatch):
     src = tmp_path / "in.webm"; src.write_bytes(b"x")
-    monkeypatch.setattr(cli, "_ffmpeg_probe",
+    import sys as _sys
+    _rec_mod = _sys.modules.get("recovery")
+    assert _rec_mod is not None, "recovery module not found in sys.modules"
+    monkeypatch.setattr(_rec_mod, "ffmpeg_probe",
                         lambda p: {"audio_streams": 3, "has_video": True,
                                    "duration_seconds": 60, "raw_stderr_tail": ""})
     captured: dict = {}

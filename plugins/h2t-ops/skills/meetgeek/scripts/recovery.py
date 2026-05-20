@@ -489,4 +489,46 @@ def process_one(src_path: Path, *, language: str | None, title_override: str | N
         "status": "submitted",
     }
     append_uploads_manifest(final, manifest_path)
+    try:
+        emit_submission_artifact(final)
+    except Exception as e:  # noqa: BLE001
+        print(f"WARN: artifact emission failed: {e}", file=sys.stderr)
     return final
+
+
+# ─── Artifact emission ────────────────────────────────────────────────────────
+
+def emit_submission_artifact(result: dict, *, artifact_dir: Path | None = None) -> Path:
+    """Write recording_submission_artifact after Stage 3 submit.
+
+    Emitted immediately; meetgeek_meeting_id is null at this stage — MeetGeek
+    has not yet processed the recording. meeting_transcript_artifact is emitted
+    separately after transcript fetch/sync.
+    """
+    if artifact_dir is None:
+        date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        artifact_dir = (
+            Path.home() / ".dor" / "lake" / "meetgeek" / "uploads-staging" / date
+        )
+    artifact_dir.mkdir(parents=True, exist_ok=True)
+    stem = Path(result.get("source_webm", "unknown")).stem
+    artifact = {
+        "schema_version": "0.1",
+        "artifact_type": "recording_submission_artifact",
+        "provider": "meetgeek",
+        "provenance": "local-recording-recovery",
+        "source_file": result.get("source_webm"),
+        "source_size_bytes": result.get("source_size_bytes"),
+        "source_mtime": result.get("source_mtime"),
+        "converted_file": result.get("mp4_path"),
+        "drive_id": result.get("drive_id"),
+        "drive_download_url": result.get("drive_download_url"),
+        "title": result.get("title"),
+        "language": result.get("language"),
+        "submitted_at": result.get("submitted_at"),
+        "meetgeek_meeting_id": None,
+        "notes": None,
+    }
+    path = artifact_dir / f"{stem}.submission.json"
+    path.write_text(json.dumps(artifact, ensure_ascii=False, indent=2), encoding="utf-8")
+    return path

@@ -58,6 +58,7 @@ from recovery import (  # noqa: E402
     append_uploads_manifest as _append_uploads_manifest,
     is_already_submitted as _is_already_submitted,
     process_one as _process_one_for_upload,
+    emit_submission_artifact,
 )
 
 API_KEY = os.environ.get("MEETGEEK_API_KEY", "").strip()
@@ -478,47 +479,26 @@ def cmd_convert(args: argparse.Namespace) -> int:
     src = Path(args.input).expanduser().resolve()
     if not src.exists():
         raise ApiError(f"input not found: {src}", exit_code=1)
-
-    probe = _ffmpeg_probe(str(src))
     if args.probe:
-        _print_json(probe)
+        _print_json(_ffmpeg_probe(str(src)))
         return 0
-
-    if args.output:
-        out = Path(args.output).expanduser()
-    else:
-        suffix = ".m4a" if args.audio_only else ".mp4"
-        out = _staging_dir() / (src.stem + suffix)
-
-    out.parent.mkdir(parents=True, exist_ok=True)
-
-    if out.exists() and out.stat().st_size > 1024:
-        print(f"INFO: cached {out} (skip)", file=sys.stderr)
-        print(out)
-        return 0
-
-    cmd = _build_convert_cmd(
-        str(src), str(out),
-        probe=probe, audio_only=args.audio_only, mix_mode=args.mix_mode,
-    )
-    print(f"INFO: ffmpeg {len(cmd)} args (audio_streams={probe['audio_streams']})",
-          file=sys.stderr)
-    r = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
-    if r.returncode != 0:
-        if out.exists():
-            out.unlink()
-        raise ApiError(f"ffmpeg encode failed: {r.stderr[:500]}", exit_code=1)
-    if not out.exists() or out.stat().st_size <= 1024:
-        if out.exists():
-            out.unlink()
-        raise ApiError(f"ffmpeg produced empty output: {out}", exit_code=1)
-    print(out)
+    out_path = Path(args.output).expanduser() if args.output else None
+    try:
+        result = convert_media(src, audio_only=args.audio_only, mix_mode=args.mix_mode,
+                               output_path=out_path)
+    except RecoveryError as e:
+        raise ApiError(str(e), exit_code=e.exit_code) from e
+    print(result)
     return 0
 
 
 
 def cmd_drive_upload(args: argparse.Namespace) -> int:
-    info = _drive_upload_file(Path(args.file), folder=args.folder, make_public=args.make_public)
+    try:
+        info = _drive_upload_file(Path(args.file), folder=args.folder,
+                                  make_public=args.make_public)
+    except RecoveryError as e:
+        raise ApiError(str(e), exit_code=e.exit_code) from e
     _print_json(info)
     return 0
 
