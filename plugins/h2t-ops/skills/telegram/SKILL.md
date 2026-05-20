@@ -1,5 +1,5 @@
 ---
-name: telegram
+name: h2t-ops:telegram
 description: "Reads Telegram saved messages, channels, and work chats. Saves digests to vault and tasks to Notion. Triggers: 'telegram', 'saved messages', 'telegram digest', 'задачи из telegram', 'h2t:telegram'"
 compatibility: "Requires Telethon session (machine-local). GEMINI_API_KEY in ~/.dor/secrets.env. DOR_ROOT env var for context output."
 metadata:

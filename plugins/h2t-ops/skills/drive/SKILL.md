@@ -1,5 +1,5 @@
 ---
-name: drive
+name: h2t-ops:drive
 description: "Google Drive file browser through h2t-ops drive. Use to list, search, download, export, and upload Drive files. Triggers: 'drive', 'google drive', 'google docs', 'h2t-ops:drive'"
 compatibility: "Requires Google OAuth token with Drive scope. Bootstrap via the same flow as Gmail/Calendar."
 metadata:

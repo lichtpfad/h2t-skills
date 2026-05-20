@@ -1,5 +1,5 @@
 ---
-name: calendar
+name: h2t-ops:calendar
 description: "Reads and creates Google Calendar events via OAuth. Use to view schedule, list events, create meetings, or check free time. Triggers: 'calendar', 'schedule', 'events', 'meeting', 'расписание', 'h2t:calendar'"
 compatibility: "Requires Google OAuth token at ~/.config/google-calendar-mcp/tokens.json"
 metadata:

@@ -1,5 +1,5 @@
 ---
-name: legacy-fidelity
+name: h2t-creative:legacy-fidelity
 description: "Recovers a legacy h2t-creative profile (deck or landing) into the modular form-v2 structure with verified visual fidelity. Drives the work as TDD with two visual gates (Desktop Fidelity + Mobile Usability) and mandatory Agent Visual QA on every screenshot before human review. Triggers: 'recover profile', 'legacy fidelity', 'restore golden', 'h2t-creative:legacy-fidelity'. Reference exemplar: R2a (terminal deck, PR #95)."
 compatibility: "Claude Code"
 metadata:

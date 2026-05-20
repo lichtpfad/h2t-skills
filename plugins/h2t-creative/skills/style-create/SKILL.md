@@ -1,5 +1,5 @@
 ---
-name: style-create
+name: h2t-creative:style-create
 description: "Wizard to scaffold a new h2t-creative design profile directory. Creates DESIGN.md, tokens.css, 5 component templates (nav, hero, section, cta, footer) with manifest.yaml files. Optionally adds fx/ with Three.js boilerplate. Triggers: 'create profile', 'new design style', 'scaffold profile', 'style-create', 'h2t-creative:style-create'"
 compatibility: "Claude Code"
 metadata:

@@ -1,5 +1,5 @@
 ---
-name: session-start
+name: h2t-core:session-start
 description: "Session-start pipeline for h2t-core. Loaded automatically by /h2t-core:session-start slash command. DO NOT invoke via Skill tool while already executing session-start — causes duplicate execution loop."
 compatibility: "Claude Code"
 metadata:

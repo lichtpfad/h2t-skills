@@ -1,5 +1,5 @@
 ---
-name: youtube-transcript
+name: h2t-edu:youtube-transcript
 description: "Extracts YouTube video transcripts with chapters and saves to vault. Triggers: 'youtube', 'video transcript', 'youtube transcript', 'сохрани видео'., 'h2t-edu:youtube-transcript'"
 compatibility: "Requires h2t venv (~/.h2t/venv) with youtube-transcript-api. DOR_ROOT env var optional."
 metadata:

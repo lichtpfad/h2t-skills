@@ -1,5 +1,5 @@
 ---
-name: handoff
+name: h2t-core:handoff
 description: This skill should be used when the user says "handoff", "завершить сессию", "конец сессии", "wrap up", "закончим", "сохрани сессию", or asks to close/end the current working session. Reconstructs what was done and what remains from conversation context and git history, shows a summary for confirmation, then writes the session record.
 compatibility: "Claude Code"
 metadata:

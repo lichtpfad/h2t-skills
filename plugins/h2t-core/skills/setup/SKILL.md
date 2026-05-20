@@ -1,5 +1,5 @@
 ---
-name: setup
+name: h2t-core:setup
 description: "Install h2t Python dependencies into ~/.h2t/venv. Cross-platform: Mac, Linux, Windows. Run once after plugin install or update. Triggers: 'h2t setup', 'install h2t', 'setup plugin', 'h2t install', 'h2t:setup'."
 compatibility: "Claude Code"
 metadata:
