@@ -1,5 +1,10 @@
-"""Drive connector — populated in T2 (registry entry).
+"""Drive connector — registry entry."""
+from h2t_ops.core.registry import ConnectorSpec
+from .commands import register  # safe: commands.py has no heavy module-level imports
 
-T1 ships the package marker + client.py only; T2 wires CONNECTOR and commands.
-This split lets T1 client tests import the package without commands.py existing.
-"""
+CONNECTOR = ConnectorSpec(
+    name="drive",
+    help="Work with Google Drive files",
+    client="h2t_ops.connectors.drive.client:DriveClient",
+    register=register,
+)
