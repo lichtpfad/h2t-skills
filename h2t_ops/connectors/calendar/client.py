@@ -6,11 +6,11 @@ tracked in #145 — this module is parity-only.
 """
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from h2t_ops.core.errors import (
-    AuthError, ConfigError, H2TError, NetworkError, NotFoundError, ProviderError,
+    AuthError, H2TError, NetworkError, NotFoundError, ProviderError,
 )
 from h2t_ops.core.google_auth import (
     build_google_service,
@@ -51,7 +51,6 @@ class CalendarClient:
 
     # ----- Read -----
     def list_events(self, days: int = 1, max_results: int = 20) -> List[Dict[str, Any]]:
-        from datetime import timezone
         time_min = datetime.now(timezone.utc).isoformat()
         time_max = (datetime.now(timezone.utc) + timedelta(days=days)).isoformat()
         try:
