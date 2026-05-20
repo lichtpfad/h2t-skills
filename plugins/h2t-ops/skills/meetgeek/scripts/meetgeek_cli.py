@@ -57,6 +57,7 @@ from recovery import (  # noqa: E402
     read_uploads_manifest as _read_uploads_manifest,
     append_uploads_manifest as _append_uploads_manifest,
     is_already_submitted as _is_already_submitted,
+    process_one as _process_one_for_upload,
 )
 
 API_KEY = os.environ.get("MEETGEEK_API_KEY", "").strip()
@@ -524,128 +525,6 @@ def cmd_drive_upload(args: argparse.Namespace) -> int:
 
 
 # ─── Upload commands ─────────────────────────────────────────────────────────
-
-def _process_one_for_upload(src_path: Path, *, language: str | None,
-                            title_override: str | None,
-                            audio_only: bool, mix_mode: str,
-                            manifest_path: Path) -> dict:
-    """Run convert → drive → submit. Skips already-completed stages by
-    consulting effective state in manifest. On per-stage failure writes
-    convert-failed / drive-failed / upload-rejected then re-raises.
-    """
-    src = src_path.resolve()
-    src_size = src.stat().st_size
-    src_mtime = datetime.fromtimestamp(src.stat().st_mtime, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    base_meta = {
-        "source_webm": str(src),
-        "source_size_bytes": src_size,
-        "source_mtime": src_mtime,
-    }
-
-    state = _read_uploads_manifest(manifest_path)
-    rec = state.get(str(src), {}) or {}
-    rec_status = rec.get("status")
-    suffix = ".m4a" if audio_only else ".mp4"
-    mp4_path = _staging_dir() / (src.stem + suffix)
-    mp4_size: int
-
-    # ── Stage 1: Convert ──────────────────────────────────────────────────
-    cached_mp4 = rec.get("mp4_path")
-    can_skip_convert = (
-        rec_status in ("converted", "in-drive", "submitted")
-        and cached_mp4
-        and Path(cached_mp4).exists()
-        and Path(cached_mp4).stat().st_size > 1024
-    )
-    if can_skip_convert:
-        mp4_path = Path(cached_mp4)
-        mp4_size = mp4_path.stat().st_size
-        print(f"  [resume] convert ✓ (cached {mp4_path.name})", file=sys.stderr)
-    else:
-        try:
-            mp4_path.parent.mkdir(parents=True, exist_ok=True)
-            cmd_convert(argparse.Namespace(
-                input=str(src), output=str(mp4_path),
-                audio_only=audio_only, mix_mode=mix_mode, probe=False,
-            ))
-            mp4_size = mp4_path.stat().st_size
-            _append_uploads_manifest({
-                **base_meta,
-                "mp4_path": str(mp4_path), "mp4_size_bytes": mp4_size,
-                "status": "converted",
-            }, manifest_path)
-        except (ApiError, RecoveryError) as e:
-            _append_uploads_manifest({
-                **base_meta,
-                "status": "convert-failed", "error": str(e),
-            }, manifest_path)
-            raise
-
-    # ── Stage 2: Drive upload ─────────────────────────────────────────────
-    can_skip_drive = (
-        rec_status in ("in-drive", "submitted")
-        and rec.get("drive_id")
-        and rec.get("drive_download_url")
-    )
-    if can_skip_drive:
-        # Regenerate URL from drive_id rather than reusing the cached value.
-        # The URL pattern is logic, not state — recomputing it lets old
-        # manifest entries pick up newer URL fixes (e.g. the >100MB
-        # virus-scan-bypass switch to drive.usercontent.google.com).
-        drive_info = {
-            "drive_id": rec["drive_id"],
-            "download_url": _drive_download_url(rec["drive_id"]),
-            "web_url": rec.get("drive_web_url"),
-            "created": False,
-        }
-        print(f"  [resume] drive ✓ (cached {drive_info['drive_id']})", file=sys.stderr)
-    else:
-        try:
-            drive_info = _drive_upload_file(mp4_path)
-            _append_uploads_manifest({
-                **base_meta,
-                "mp4_path": str(mp4_path), "mp4_size_bytes": mp4_size,
-                "drive_id": drive_info["drive_id"],
-                "drive_download_url": drive_info["download_url"],
-                "drive_web_url": drive_info.get("web_url"),
-                "status": "in-drive",
-            }, manifest_path)
-        except (ApiError, RecoveryError) as e:
-            _append_uploads_manifest({
-                **base_meta,
-                "mp4_path": str(mp4_path), "mp4_size_bytes": mp4_size,
-                "status": "drive-failed", "error": str(e),
-            }, manifest_path)
-            raise
-
-    # ── Stage 3: Submit ───────────────────────────────────────────────────
-    title = title_override or _title_from_filename(src.stem)
-    try:
-        resp = _submit_url_via_h2t_ops(drive_info["download_url"], title, language)
-    except (ApiError, RecoveryError) as e:
-        _append_uploads_manifest({
-            **base_meta,
-            "mp4_path": str(mp4_path), "mp4_size_bytes": mp4_size,
-            "drive_id": drive_info["drive_id"],
-            "drive_download_url": drive_info["download_url"],
-            "title": title, "language": language,
-            "status": "upload-rejected", "error": str(e),
-        }, manifest_path)
-        raise
-
-    final = {
-        **base_meta,
-        "mp4_path": str(mp4_path), "mp4_size_bytes": mp4_size,
-        "drive_id": drive_info["drive_id"],
-        "drive_download_url": drive_info["download_url"],
-        "title": title, "language": language,
-        "submitted_at": _now_iso(),
-        "upload_response_message": (resp.get("message") if isinstance(resp, dict) else None),
-        "status": "submitted",
-    }
-    _append_uploads_manifest(final, manifest_path)
-    return final
-
 
 def cmd_upload(args: argparse.Namespace) -> int:
     if args.download_url:

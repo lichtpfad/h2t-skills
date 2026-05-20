@@ -831,25 +831,28 @@ def test_upload_from_file_chains_convert_drive_submit(cli, tmp_path, monkeypatch
     src = tmp_path / "meetgeek-recording-2026-01-20T15-44-31-132Z.webm"
     src.write_bytes(b"x" * 1024)
 
+    import sys as _sys
+    _rec_mod = _sys.modules.get("recovery")
+    assert _rec_mod is not None, "recovery module not found in sys.modules"
+
     calls = []
 
-    def fake_cmd_convert(ns):
-        calls.append(("convert", ns.input))
+    def fake_convert_media(src_p, *, audio_only, mix_mode, output_path=None):
+        calls.append(("convert", str(src_p)))
         from pathlib import Path as P
-        out = P(ns.output) if ns.output else (
-            cli._staging_dir() / (P(ns.input).stem + ".mp4"))
+        out = output_path or (cli._staging_dir() / (P(str(src_p)).stem + ".mp4"))
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_bytes(b"M" * 2048)
-        return 0
+        return out
 
     posted = []
     def fake_post_upload(url, title, lang):
         posted.append({"url": url, "title": title, "lang": lang})
         return {"message": "submitted (mock)"}
 
-    monkeypatch.setattr(cli, "cmd_convert", fake_cmd_convert)
-    monkeypatch.setattr(cli, "_submit_url_via_h2t_ops", fake_post_upload)
-    monkeypatch.setattr(cli, "_drive_upload_file",
+    monkeypatch.setattr(_rec_mod, "convert_media", fake_convert_media)
+    monkeypatch.setattr(_rec_mod, "submit_url_via_h2t_ops", fake_post_upload)
+    monkeypatch.setattr(_rec_mod, "drive_upload_file",
                         lambda path, **kw:
                         {"drive_id": "FAKE", "download_url": "https://example.com/dl/FAKE",
                          "web_url": "https://drive/FAKE", "created": True})
@@ -957,17 +960,21 @@ def test_upload_resumes_from_converted_state(cli, tmp_path, monkeypatch):
     }) + "\n", encoding="utf-8")
     monkeypatch.setattr(cli, "_uploads_manifest_path", lambda: manifest)
 
-    convert_called = {"n": 0}
-    def fake_convert(ns):
-        convert_called["n"] += 1
-        return 0
-    monkeypatch.setattr(cli, "cmd_convert", fake_convert)
+    import sys as _sys
+    _rec_mod = _sys.modules.get("recovery")
+    assert _rec_mod is not None, "recovery module not found in sys.modules"
 
-    monkeypatch.setattr(cli, "_drive_upload_file",
+    convert_called = {"n": 0}
+    def fake_convert_media(src_p, *, audio_only, mix_mode, output_path=None):
+        convert_called["n"] += 1
+        return output_path or (tmp_path / "out.mp4")
+    monkeypatch.setattr(_rec_mod, "convert_media", fake_convert_media)
+
+    monkeypatch.setattr(_rec_mod, "drive_upload_file",
                         lambda path, **kw: {"drive_id": "DID",
                                             "download_url": "https://x/d",
                                             "web_url": "https://x/w", "created": True})
-    monkeypatch.setattr(cli, "_submit_url_via_h2t_ops",
+    monkeypatch.setattr(_rec_mod, "submit_url_via_h2t_ops",
                         lambda url, title, lang: {"message": "ok"})
 
     rc = cli.main(["upload", "--from-file", str(src), "--language", "ru", "--no-skip-existing"])
@@ -995,15 +1002,20 @@ def test_upload_resumes_from_in_drive_state(cli, tmp_path, monkeypatch):
     }) + "\n", encoding="utf-8")
     monkeypatch.setattr(cli, "_uploads_manifest_path", lambda: manifest)
 
+    import sys as _sys
+    _rec_mod = _sys.modules.get("recovery")
+    assert _rec_mod is not None, "recovery module not found in sys.modules"
+
     convert_called = {"n": 0}
     drive_called = {"n": 0}
-    monkeypatch.setattr(cli, "cmd_convert",
-                        lambda ns: convert_called.__setitem__("n", convert_called["n"] + 1) or 0)
-    monkeypatch.setattr(cli, "_drive_upload_file",
+    monkeypatch.setattr(_rec_mod, "convert_media",
+                        lambda src_p, *, audio_only, mix_mode, output_path=None:
+                        convert_called.__setitem__("n", convert_called["n"] + 1) or output_path)
+    monkeypatch.setattr(_rec_mod, "drive_upload_file",
                         lambda path, **kw: drive_called.__setitem__("n", drive_called["n"] + 1) or {})
 
     posted = []
-    monkeypatch.setattr(cli, "_submit_url_via_h2t_ops",
+    monkeypatch.setattr(_rec_mod, "submit_url_via_h2t_ops",
                         lambda url, title, lang: posted.append({"url": url}) or {"message": "ok"})
 
     rc = cli.main(["upload", "--from-file", str(src), "--language", "ru", "--no-skip-existing"])
@@ -1023,17 +1035,21 @@ def test_upload_drive_failure_writes_drive_failed_status(cli, tmp_path, monkeypa
     manifest = tmp_path / "manifest.jsonl"
     monkeypatch.setattr(cli, "_uploads_manifest_path", lambda: manifest)
 
-    def fake_convert(ns):
+    import sys as _sys
+    _rec_mod = _sys.modules.get("recovery")
+    assert _rec_mod is not None, "recovery module not found in sys.modules"
+
+    def fake_convert_media(src_p, *, audio_only, mix_mode, output_path=None):
         from pathlib import Path as P
-        out = P(ns.output)
+        out = output_path or (tmp_path / (P(str(src_p)).stem + ".mp4"))
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_bytes(b"M" * 2048)
-        return 0
-    monkeypatch.setattr(cli, "cmd_convert", fake_convert)
+        return out
+    monkeypatch.setattr(_rec_mod, "convert_media", fake_convert_media)
 
     def boom(*a, **kw):
-        raise cli.ApiError("drive boom", exit_code=1)
-    monkeypatch.setattr(cli, "_drive_upload_file", boom)
+        raise _rec_mod.RecoveryError("drive boom", exit_code=1)
+    monkeypatch.setattr(_rec_mod, "drive_upload_file", boom)
 
     rc = cli.main(["upload", "--from-file", str(src)])
     assert rc == 1

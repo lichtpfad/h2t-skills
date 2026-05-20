@@ -379,3 +379,114 @@ def is_already_submitted(state: dict[str, dict], source: str, *,
     if not rec or rec.get("status") != "submitted":
         return False
     return rec.get("source_size_bytes") == size and rec.get("source_mtime") == mtime
+
+
+# ─── Pipeline coordinator ─────────────────────────────────────────────────────
+
+def process_one(src_path: Path, *, language: str | None, title_override: str | None,
+                audio_only: bool, mix_mode: str, manifest_path: Path) -> dict:
+    """Three-stage recovery pipeline: convert → drive → submit. Manifest-based resume."""
+    src = src_path.resolve()
+    src_size = src.stat().st_size
+    src_mtime = datetime.fromtimestamp(src.stat().st_mtime, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    base_meta = {
+        "source_webm": str(src),
+        "source_size_bytes": src_size,
+        "source_mtime": src_mtime,
+    }
+
+    state = read_uploads_manifest(manifest_path)
+    rec = state.get(str(src), {}) or {}
+    rec_status = rec.get("status")
+    suffix = ".m4a" if audio_only else ".mp4"
+    mp4_path = staging_dir() / (src.stem + suffix)
+    mp4_size: int
+
+    # ── Stage 1: Convert ──────────────────────────────────────────────────────
+    cached_mp4 = rec.get("mp4_path")
+    can_skip_convert = (
+        rec_status in ("converted", "in-drive", "submitted")
+        and cached_mp4
+        and Path(cached_mp4).exists()
+        and Path(cached_mp4).stat().st_size > 1024
+    )
+    if can_skip_convert:
+        mp4_path = Path(cached_mp4)
+        mp4_size = mp4_path.stat().st_size
+        print(f"  [resume] convert ✓ (cached {mp4_path.name})", file=sys.stderr)
+    else:
+        try:
+            mp4_path = convert_media(src, audio_only=audio_only, mix_mode=mix_mode,
+                                     output_path=mp4_path)
+            mp4_size = mp4_path.stat().st_size
+            append_uploads_manifest({
+                **base_meta,
+                "mp4_path": str(mp4_path), "mp4_size_bytes": mp4_size,
+                "status": "converted",
+            }, manifest_path)
+        except RecoveryError as e:
+            append_uploads_manifest({
+                **base_meta, "status": "convert-failed", "error": str(e),
+            }, manifest_path)
+            raise
+
+    # ── Stage 2: Drive upload ─────────────────────────────────────────────────
+    can_skip_drive = (
+        rec_status in ("in-drive", "submitted")
+        and rec.get("drive_id")
+        and rec.get("drive_download_url")
+    )
+    if can_skip_drive:
+        drive_info = {
+            "drive_id": rec["drive_id"],
+            "download_url": drive_download_url(rec["drive_id"]),
+            "web_url": rec.get("drive_web_url"),
+            "created": False,
+        }
+        print(f"  [resume] drive ✓ (cached {drive_info['drive_id']})", file=sys.stderr)
+    else:
+        try:
+            drive_info = drive_upload_file(mp4_path)
+            append_uploads_manifest({
+                **base_meta,
+                "mp4_path": str(mp4_path), "mp4_size_bytes": mp4_size,
+                "drive_id": drive_info["drive_id"],
+                "drive_download_url": drive_info["download_url"],
+                "drive_web_url": drive_info.get("web_url"),
+                "status": "in-drive",
+            }, manifest_path)
+        except RecoveryError as e:
+            append_uploads_manifest({
+                **base_meta,
+                "mp4_path": str(mp4_path), "mp4_size_bytes": mp4_size,
+                "status": "drive-failed", "error": str(e),
+            }, manifest_path)
+            raise
+
+    # ── Stage 3: Submit ───────────────────────────────────────────────────────
+    title = title_override or title_from_filename(src.stem)
+    try:
+        resp = submit_url_via_h2t_ops(drive_info["download_url"], title, language)
+    except RecoveryError as e:
+        append_uploads_manifest({
+            **base_meta,
+            "mp4_path": str(mp4_path), "mp4_size_bytes": mp4_size,
+            "drive_id": drive_info["drive_id"],
+            "drive_download_url": drive_info["download_url"],
+            "title": title, "language": language,
+            "status": "upload-rejected", "error": str(e),
+        }, manifest_path)
+        raise
+
+    final = {
+        **base_meta,
+        "mp4_path": str(mp4_path), "mp4_size_bytes": mp4_size,
+        "drive_id": drive_info["drive_id"],
+        "drive_download_url": drive_info["download_url"],
+        "title": title, "language": language,
+        "submitted_at": now_iso(),
+        "upload_response_message": (resp.get("message") if isinstance(resp, dict) else None),
+        "status": "submitted",
+    }
+    append_uploads_manifest(final, manifest_path)
+    return final
