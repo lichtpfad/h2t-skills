@@ -35,6 +35,30 @@ try:
 except ImportError:
     pass
 
+# ─── Recovery module ──────────────────────────────────────────────────────────
+import sys as _sys_r
+from pathlib import Path as _Path_r
+_sys_r.path.insert(0, str(_Path_r(__file__).parent))
+from recovery import (  # noqa: E402
+    RecoveryError,
+    now_iso as _now_iso,
+    staging_dir as _staging_dir,
+    ffmpeg_exe as _ffmpeg_exe,
+    ffmpeg_probe as _ffmpeg_probe,
+    build_convert_cmd as _build_convert_cmd,
+    convert_media,
+    drive_service as _drive_service,
+    drive_upload_file as _drive_upload_file,
+    drive_download_url as _drive_download_url,
+    submit_url_via_h2t_ops as _submit_url_via_h2t_ops,
+    title_from_filename as _title_from_filename,
+    DRIVE_ROOT_FOLDER_NAME,
+    uploads_manifest_path as _uploads_manifest_path,
+    read_uploads_manifest as _read_uploads_manifest,
+    append_uploads_manifest as _append_uploads_manifest,
+    is_already_submitted as _is_already_submitted,
+)
+
 API_KEY = os.environ.get("MEETGEEK_API_KEY", "").strip()
 BASE_URL = os.environ.get("MEETGEEK_BASE_URL", "https://api.meetgeek.ai").rstrip("/")
 TIMEOUT = int(os.environ.get("MEETGEEK_TIMEOUT", "30"))
@@ -189,9 +213,6 @@ def _meeting_pick(m: dict) -> dict:
         "language": m.get("language") or m.get("language_code"),
     }
 
-
-def _now_iso() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 # ─── Formatters ───────────────────────────────────────────────────────────────
@@ -451,119 +472,6 @@ def cmd_download(args: argparse.Namespace) -> int:
     return 0
 
 
-# ─── ffmpeg helpers ───────────────────────────────────────────────────────────
-
-import re
-
-try:
-    import imageio_ffmpeg
-except ImportError:
-    imageio_ffmpeg = None  # late-checked in _ffmpeg_exe()
-
-
-def _ffmpeg_exe() -> str:
-    if imageio_ffmpeg is None:
-        raise ApiError(
-            "imageio-ffmpeg not installed; run: "
-            "~/.h2t/venv/Scripts/python.exe -m pip install imageio-ffmpeg",
-            exit_code=2,
-        )
-    return imageio_ffmpeg.get_ffmpeg_exe()
-
-
-_DURATION_RE = re.compile(r"Duration:\s*(\d+):(\d+):(\d+)(?:\.(\d+))?")
-_STREAM_AUDIO_RE = re.compile(r"Stream\s+#\d+:\d+(?:\([^)]+\))?: Audio:")
-_STREAM_VIDEO_RE = re.compile(r"Stream\s+#\d+:\d+(?:\([^)]+\))?: Video:")
-
-
-def _ffmpeg_probe(path: str) -> dict:
-    """Run `ffmpeg -i path -f null -` and parse stderr for streams + duration."""
-    r = subprocess.run(
-        [_ffmpeg_exe(), "-hide_banner", "-i", path, "-f", "null", "-"],
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-    )
-    stderr = r.stderr or ""
-    # ffmpeg also prints output-side `Stream #...: Audio:` lines for the null
-    # muxer, which would double-count input audio. Restrict to the
-    # `Input #...` section by truncating at the first `Output #` line.
-    output_marker = stderr.find("Output #")
-    input_section = stderr[:output_marker] if output_marker != -1 else stderr
-    audio = len(_STREAM_AUDIO_RE.findall(input_section))
-    video = len(_STREAM_VIDEO_RE.findall(input_section))
-    dur_match = _DURATION_RE.search(stderr)
-    duration = None
-    if dur_match:
-        h, m, s, _ = dur_match.groups()
-        duration = int(h) * 3600 + int(m) * 60 + int(s)
-    if audio == 0 and r.returncode != 0:
-        raise ApiError(f"ffmpeg cannot probe {path}: {stderr[:300]}", exit_code=1)
-    return {
-        "audio_streams": audio,
-        "has_video": video > 0,
-        "duration_seconds": duration,
-        "raw_stderr_tail": stderr[-500:],
-    }
-
-
-def _staging_dir() -> Path:
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    return Path.home() / ".dor" / "lake" / "meetgeek" / "uploads-staging" / today
-
-
-def _build_convert_cmd(input_path: str, output_path: str, *,
-                       probe: dict, audio_only: bool, mix_mode: str) -> list[str]:
-    """Construct ffmpeg argv. Multi-track logic lands in Task 4."""
-    exe = _ffmpeg_exe()
-    if probe["audio_streams"] <= 1 or mix_mode == "first":
-        # CRITICAL: when ANY -map is given, ffmpeg auto-mapping is disabled,
-        # so we MUST also map the audio stream explicitly. Forgetting this
-        # produces a video-only mp4 — silently fails downstream transcription.
-        argv = [exe, "-y", "-hide_banner", "-i", input_path]
-        if audio_only:
-            argv += ["-vn", "-map", "0:a:0?"]
-        else:
-            argv += ["-map", "0:v?", "-map", "0:a:0?"]
-        argv += [
-            "-c:v", "libx264", "-preset", "medium", "-crf", "23",
-            "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-ac", "2",
-            output_path,
-        ]
-        # remove video codec args if audio_only
-        if audio_only:
-            for k in ("-c:v", "libx264", "-preset", "medium", "-crf", "23"):
-                if k in argv:
-                    argv.remove(k)
-        return argv
-    # Multi-track amix
-    if mix_mode == "keep":
-        argv = [exe, "-y", "-hide_banner", "-i", input_path,
-                "-map", "0", "-c:v", "libx264", "-preset", "medium", "-crf", "23",
-                "-c:a", "aac", "-b:a", "192k", output_path]
-        if audio_only:
-            argv = [a for a in argv if a not in ("-c:v", "libx264", "-preset", "medium", "-crf", "23")]
-            argv.insert(argv.index("-i") + 2, "-vn")
-        return argv
-
-    # mix_mode == "amix"
-    n = probe["audio_streams"]
-    inputs = "".join(f"[0:a:{i}]" for i in range(n))
-    filtergraph = (
-        f"{inputs}amix=inputs={n}:duration=longest:dropout_transition=0,"
-        f"aresample=48000[a]"
-    )
-    argv = [exe, "-y", "-hide_banner", "-i", input_path,
-            "-filter_complex", filtergraph]
-    if audio_only:
-        argv += ["-map", "[a]", "-c:a", "aac", "-b:a", "192k", "-ac", "2", output_path]
-    else:
-        argv += ["-map", "0:v?", "-map", "[a]",
-                 "-c:v", "libx264", "-preset", "medium", "-crf", "23",
-                 "-c:a", "aac", "-b:a", "192k", "-ac", "2", output_path]
-    return argv
-
 
 def cmd_convert(args: argparse.Namespace) -> int:
     src = Path(args.input).expanduser().resolve()
@@ -607,153 +515,6 @@ def cmd_convert(args: argparse.Namespace) -> int:
     return 0
 
 
-# ─── Drive upload ─────────────────────────────────────────────────────────────
-
-DRIVE_CONFIG_DIR = Path.home() / ".config" / "google-calendar-mcp"
-DRIVE_TOKEN_FILE = DRIVE_CONFIG_DIR / "tokens.json"
-DRIVE_CREDENTIALS_FILE = DRIVE_CONFIG_DIR / "credentials.json"
-DRIVE_SCOPES = ["https://www.googleapis.com/auth/drive"]
-DRIVE_ROOT_FOLDER_NAME = "MeetGeek Uploads"
-
-
-def _drive_service():
-    """Build a Drive v3 service. Mirrors drive_cli.get_drive_service() so OAuth is shared."""
-    if not DRIVE_TOKEN_FILE.exists():
-        raise ApiError(
-            f"Drive auth missing — token not at {DRIVE_TOKEN_FILE}. "
-            "Run /h2t-ops:drive list to trigger OAuth.",
-            exit_code=1,
-        )
-    try:
-        from google.auth.transport.requests import Request as _GReq
-        from google.oauth2.credentials import Credentials
-        from googleapiclient.discovery import build
-    except ImportError as e:
-        raise ApiError(
-            f"google-api-python-client not installed: {e}. "
-            "pip install google-api-python-client google-auth-httplib2",
-            exit_code=2,
-        )
-
-    with DRIVE_TOKEN_FILE.open(encoding="utf-8") as f:
-        token_data = json.load(f)
-    if "normal" in token_data:
-        token_data = token_data["normal"]
-
-    if "client_id" not in token_data:
-        if not DRIVE_CREDENTIALS_FILE.exists():
-            raise ApiError(f"Drive credentials missing: {DRIVE_CREDENTIALS_FILE}", exit_code=1)
-        with DRIVE_CREDENTIALS_FILE.open(encoding="utf-8") as f:
-            creds_data = json.load(f)
-        installed = creds_data.get("installed", creds_data)
-        token_data["client_id"] = installed.get("client_id")
-        token_data["client_secret"] = installed.get("client_secret")
-        token_data["token_uri"] = installed.get("token_uri", "https://oauth2.googleapis.com/token")
-
-    existing_scopes = token_data.get("scopes") or []
-    if isinstance(existing_scopes, str):
-        existing_scopes = existing_scopes.split()
-    creds = Credentials.from_authorized_user_info(
-        token_data, scopes=existing_scopes or DRIVE_SCOPES
-    )
-    if creds.expired and creds.refresh_token:
-        creds.refresh(_GReq())
-        DRIVE_TOKEN_FILE.write_text(creds.to_json())
-    return build("drive", "v3", credentials=creds)
-
-
-def _drive_find_or_create_folder(svc, name: str, parent_id: str | None = None) -> str:
-    """Return folder id; create if missing under parent (or root if parent is None)."""
-    parent_clause = f" and '{parent_id}' in parents" if parent_id else " and 'root' in parents"
-    q = (
-        f"name = '{name}' and mimeType = 'application/vnd.google-apps.folder' "
-        f"and trashed = false{parent_clause}"
-    )
-    res = svc.files().list(q=q, fields="files(id,name)", pageSize=1).execute()
-    files = res.get("files", [])
-    if files:
-        return files[0]["id"]
-    body = {"name": name, "mimeType": "application/vnd.google-apps.folder"}
-    if parent_id:
-        body["parents"] = [parent_id]
-    created = svc.files().create(body=body, fields="id").execute()
-    return created["id"]
-
-
-def _drive_find_file(svc, name: str, folder_id: str) -> dict | None:
-    q = f"name = '{name}' and '{folder_id}' in parents and trashed = false"
-    res = svc.files().list(q=q, fields="files(id,name,webViewLink)", pageSize=1).execute()
-    files = res.get("files", [])
-    return files[0] if files else None
-
-
-def _drive_make_public(svc, file_id: str) -> None:
-    svc.permissions().create(
-        fileId=file_id,
-        body={"type": "anyone", "role": "reader"},
-        fields="id",
-    ).execute()
-
-
-def _drive_download_url(file_id: str) -> str:
-    """Anonymous public-link URL that returns the file content (not the
-    'virus-scan warning' HTML page). The legacy `drive.google.com/uc?...`
-    pattern works only for files <100 MB; for larger files Google serves
-    an HTML interstitial and ignores `confirm=t` on that host. The
-    `drive.usercontent.google.com/download?...&confirm=t` form is the
-    direct download endpoint and works for both small and large files.
-    Verified live 2026-05-06 on 22 MB and 124 MB mp4 → both 200 video/mp4.
-    """
-    return (
-        "https://drive.usercontent.google.com/download"
-        f"?id={file_id}&export=download&confirm=t"
-    )
-
-
-def _drive_upload_file(path: Path, folder: str | None = None,
-                      make_public: bool = True) -> dict:
-    src = Path(path).expanduser().resolve()
-    if not src.exists():
-        raise ApiError(f"file not found: {src}", exit_code=1)
-    svc = _drive_service()
-    if folder:
-        parts = [p for p in folder.replace("\\", "/").split("/") if p]
-    else:
-        date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-        parts = [DRIVE_ROOT_FOLDER_NAME, date]
-    parent_id: str | None = None
-    for part in parts:
-        parent_id = _drive_find_or_create_folder(svc, part, parent_id)
-    folder_id = parent_id
-
-    existing = _drive_find_file(svc, src.name, folder_id)
-    if existing:
-        if make_public:
-            try:
-                _drive_make_public(svc, existing["id"])
-            except Exception:  # noqa: BLE001
-                pass
-        return {
-            "drive_id": existing["id"],
-            "web_url": existing.get("webViewLink"),
-            "download_url": _drive_download_url(existing["id"]),
-            "created": False,
-        }
-
-    from googleapiclient.http import MediaFileUpload
-    media = MediaFileUpload(str(src), resumable=True)
-    body = {"name": src.name, "parents": [folder_id]}
-    file = svc.files().create(body=body, media_body=media,
-                              fields="id,webViewLink").execute()
-    if make_public:
-        _drive_make_public(svc, file["id"])
-    return {
-        "drive_id": file["id"],
-        "web_url": file.get("webViewLink"),
-        "download_url": _drive_download_url(file["id"]),
-        "created": True,
-    }
-
 
 def cmd_drive_upload(args: argparse.Namespace) -> int:
     info = _drive_upload_file(Path(args.file), folder=args.folder, make_public=args.make_public)
@@ -761,108 +522,8 @@ def cmd_drive_upload(args: argparse.Namespace) -> int:
     return 0
 
 
-# ─── Uploads manifest ────────────────────────────────────────────────────────
-
-def _uploads_manifest_path() -> Path:
-    return Path.home() / ".dor" / "lake" / "meetgeek" / "uploads-staging" / "manifest.jsonl"
-
-
-def _read_uploads_manifest(path: Path | None = None) -> dict[str, dict]:
-    """Last-line-wins per source_webm. Returns {source_path: latest_record_dict}."""
-    if path is None:
-        path = _uploads_manifest_path()
-    state: dict[str, dict] = {}
-    if not path.exists():
-        return state
-    with path.open(encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                rec = json.loads(line)
-            except ValueError:
-                continue
-            src = rec.get("source_webm")
-            if src:
-                state[src] = rec
-    return state
-
-
-def _append_uploads_manifest(record: dict, path: Path | None = None) -> None:
-    if path is None:
-        path = _uploads_manifest_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8") as f:
-        f.write(json.dumps(record, ensure_ascii=False) + "\n")
-
-
-def _is_already_submitted(state: dict[str, dict], source: str, *,
-                          size: int, mtime: str) -> bool:
-    rec = state.get(source)
-    if not rec or rec.get("status") != "submitted":
-        return False
-    return (rec.get("source_size_bytes") == size
-            and rec.get("source_mtime") == mtime)
-
 
 # ─── Upload commands ─────────────────────────────────────────────────────────
-
-def _submit_url_via_h2t_ops(download_url: str, title: str | None, language: str | None) -> dict:
-    """Compatibility route for MeetGeek /v1/upload.
-
-    Keep the recovery pipeline in this legacy script, but delegate the provider
-    write itself to the migrated h2t-ops connector so upload semantics live in
-    one place (#134).
-    """
-    h2t_ops = os.environ.get("H2T_OPS", "h2t-ops")
-    cmd = [h2t_ops, "meetgeek", "submit-url", download_url, "--json"]
-    if title:
-        cmd.extend(["--title", title])
-    if language:
-        cmd.extend(["--language-code", language])
-    try:
-        proc = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-        )
-    except OSError as exc:
-        raise ApiError(f"h2t-ops submit-url failed to start: {exc}", exit_code=1) from exc
-    raw = (proc.stdout or proc.stderr or "").strip()
-    if proc.returncode != 0:
-        try:
-            env = json.loads(raw)
-            err = env.get("error") or {}
-            msg = err.get("message") or raw
-        except ValueError:
-            msg = raw or f"exit {proc.returncode}"
-        raise ApiError(f"h2t-ops submit-url failed: {msg}", exit_code=proc.returncode or 1)
-    try:
-        env = json.loads(proc.stdout)
-    except ValueError as exc:
-        raise ApiError(f"h2t-ops submit-url returned malformed JSON: {raw[:300]}", exit_code=1) from exc
-    if env.get("ok") is not True:
-        err = env.get("error") or {}
-        raise ApiError(f"h2t-ops submit-url failed: {err.get('message') or env}", exit_code=1)
-    return env.get("result") or {}
-
-
-import re as _re_titles
-_RECORDING_NAME_RE = _re_titles.compile(
-    r"meetgeek-recording-(\d{4})-(\d{2})-(\d{2})T(\d{2})-(\d{2})-\d{2}-\d+Z"
-)
-
-
-def _title_from_filename(stem: str) -> str:
-    m = _RECORDING_NAME_RE.search(stem)
-    if m:
-        y, mo, d, hh, mm = m.groups()
-        return f"Meeting {y}-{mo}-{d} {hh}:{mm} UTC"
-    return f"Meeting {stem}"
-
 
 def _process_one_for_upload(src_path: Path, *, language: str | None,
                             title_override: str | None,
@@ -913,7 +574,7 @@ def _process_one_for_upload(src_path: Path, *, language: str | None,
                 "mp4_path": str(mp4_path), "mp4_size_bytes": mp4_size,
                 "status": "converted",
             }, manifest_path)
-        except ApiError as e:
+        except (ApiError, RecoveryError) as e:
             _append_uploads_manifest({
                 **base_meta,
                 "status": "convert-failed", "error": str(e),
@@ -949,7 +610,7 @@ def _process_one_for_upload(src_path: Path, *, language: str | None,
                 "drive_web_url": drive_info.get("web_url"),
                 "status": "in-drive",
             }, manifest_path)
-        except ApiError as e:
+        except (ApiError, RecoveryError) as e:
             _append_uploads_manifest({
                 **base_meta,
                 "mp4_path": str(mp4_path), "mp4_size_bytes": mp4_size,
@@ -961,7 +622,7 @@ def _process_one_for_upload(src_path: Path, *, language: str | None,
     title = title_override or _title_from_filename(src.stem)
     try:
         resp = _submit_url_via_h2t_ops(drive_info["download_url"], title, language)
-    except ApiError as e:
+    except (ApiError, RecoveryError) as e:
         _append_uploads_manifest({
             **base_meta,
             "mp4_path": str(mp4_path), "mp4_size_bytes": mp4_size,
@@ -1042,7 +703,7 @@ def cmd_upload(args: argparse.Namespace) -> int:
             results.append(final)
             processed += 1
             print(f"[{i}/{total}] {src_path.name}  ✓ submitted", file=sys.stderr)
-        except ApiError as e:
+        except (ApiError, RecoveryError) as e:
             print(f"[{i}/{total}] {src_path.name}  ✗ {e}", file=sys.stderr)
             errors += 1
             # Per-stage handler in _process_one_for_upload already wrote the
@@ -1409,7 +1070,7 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
         return args.func(args)
-    except ApiError as e:
+    except (ApiError, RecoveryError) as e:
         print(f"ERROR: {e}", file=sys.stderr)
         return e.exit_code
 
