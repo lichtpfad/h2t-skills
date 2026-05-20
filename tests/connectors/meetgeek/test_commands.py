@@ -8,7 +8,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from h2t_ops.core.errors import ConfigError, UsageError
+from h2t_ops.core.errors import UsageError
 
 
 def _build_parser():
