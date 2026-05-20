@@ -479,13 +479,14 @@ def cmd_convert(args: argparse.Namespace) -> int:
     src = Path(args.input).expanduser().resolve()
     if not src.exists():
         raise ApiError(f"input not found: {src}", exit_code=1)
-    if args.probe:
-        _print_json(_ffmpeg_probe(str(src)))
-        return 0
     out_path = Path(args.output).expanduser() if args.output else None
     try:
+        probe = _ffmpeg_probe(str(src))
+        if args.probe:
+            _print_json(probe)
+            return 0
         result = convert_media(src, audio_only=args.audio_only, mix_mode=args.mix_mode,
-                               output_path=out_path)
+                               output_path=out_path, probe=probe)
     except RecoveryError as e:
         raise ApiError(str(e), exit_code=e.exit_code) from e
     print(result)
