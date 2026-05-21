@@ -18,10 +18,13 @@ jobs:
           python-version: "3.11"
 
       - name: Install test deps
-        run: pip install pytest
+        run: pip install -e . pytest
 
       - name: Run lib/ unit tests
         run: python -m pytest lib/ -v --tb=short
+
+      - name: Run h2t-ops connector tests
+        run: python -m pytest tests/core tests/connectors -q
 
   eval-gate:
     name: h2t-evals validate-repo
