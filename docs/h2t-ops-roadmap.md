@@ -1,7 +1,7 @@
 # H2T-OPS Roadmap
 
-**Status:** Active baseline
-**Date:** 2026-05-19
+**Status:** Active closure roadmap
+**Date:** 2026-05-21
 **Owner:** h2t-skills
 
 This is the canonical roadmap for moving operational connectors from ad-hoc skill scripts to
@@ -43,15 +43,65 @@ foundation.
 | [API coverage audit](reports/2026-05-19-h2t-ops-api-coverage-audit.md) | Read-only audit: per-connector legacy parity, provider API feature gaps, POS-boundary risks, and the "do next" sequence |
 | [Connector development runbook](../plugins/h2t-ops/references/h2t-connector-runbook.md) | Procedural-index recipe for adding/migrating a connector to the h2t-ops standard |
 
+## 2026-05-21 Fast Closure Plan
+
+The normal connector migrations are now mostly complete. `h2t_ops/connectors/` contains
+Notion, Gmail, Calendar, Drive, and MeetGeek. The remaining work should be sequenced to close
+the migration quickly, then move attention to repo/profile hygiene.
+
+### Closure Sequence
+
+1. **Telegram migration (#135 + #121).** Last normal operational connector. Keep pure
+   Telegram reads/provider calls in `h2t-ops telegram`; leave DOR/Notion/Gemini interpretation
+   workflows out of the connector. Treat #121's Telethon schema crash as part of the
+   migration acceptance gate.
+2. **Research migration (#136) + URL fetch ladder (#137).** Last thick provider connector.
+   Preserve the existing research provider envelope and remap legacy exit codes into the
+   canonical `h2t-ops` table. `fetch_url.py` belongs under `h2t-ops research fetch`, not as a
+   top-level connector.
+3. **Daily Brief update.** After Telegram/Research decisions are clear, update Daily Brief to
+   call migrated `h2t-ops` reads (`gmail`, `calendar`, `notion`, and any relevant new
+   connectors). Daily Brief remains a synthesis workflow, not a connector and not a POS journal
+   writer.
+4. **Legacy workflow retirement.** Close or explicitly defer workflow leftovers:
+   `sync-meetings` (#147), legacy `h2t` overlap, and skill docs that still point users to old
+   scripts when a migrated connector exists.
+5. **Agent profile system (#153).** Implement `h2t-core:agent-profile` after connector closure
+   so repo-specific plugin profiles replace the current global everything-enabled setup.
+6. **Repository closure sweep.** Triage remaining open issues into: must-close-for-h2t-skills,
+   follow-up/provider-feature backlog, or moved-to-another-repo. Close stale completed issues
+   (#151-style cleanup issues) with evidence.
+
+### Must Close Before Calling M3 "Done"
+
+| Area | Issue(s) | Required result |
+| --- | --- | --- |
+| Telegram connector | #135, #121 | `h2t-ops telegram ...` migrated with lazy Telethon imports, typed auth/session errors, tests, and live/safe smoke |
+| Research connector | #136 | `h2t-ops research ...` migrated with provider envelope preserved |
+| URL fetch ladder | #137 | `h2t-ops research fetch --url ...` integrated or explicitly scoped into #136 |
+| Daily Brief | create/confirm issue | Uses migrated connectors; no direct `lib/cli/main.py ingest ...` dependency |
+| Legacy h2t overlap | create/confirm issue | Decide retire/disable/keep-compat for monolith `h2t` skills after split plugins are stable |
+
+### Follow-Up / Not Blocking Closure
+
+| Area | Issue | Treatment |
+| --- | --- | --- |
+| Calendar provider features | #145 | Backlog; not part of parity migration closure |
+| Notion workspace discovery | #146 | Backlog/enhancement; not a migration blocker |
+| Drive sync-meetings retirement | #147 | Cleanup after Drive + MeetGeek; not a connector blocker |
+| Agent permissions / packer hardening | #148 | Important security cleanup, but separate from connector migration |
+| Agent profiles | #153 | Next strategic repo-hygiene task after connector closure |
+| h2t-core setup wizard / secrets unification | #112, #107, #94 | Cross-cutting follow-up; do not block Telegram/Research unless directly needed |
+
 ## Waves
 
 | Wave | Scope | Status | Exit Criteria |
 | --- | --- | --- | --- |
 | TZ-0 | `h2t-ops` foundation + Notion walking skeleton | Done | Foundation merged; no root `h2t` collision; Notion reference connector |
 | Runtime blocker | Local `h2t-ops` install + Notion/Gmail E2E smoke | Done | Canonical installed CLI smoke passed for Notion and Gmail |
-| TZ-1 | Gmail, Calendar, Drive, MeetGeek, Telegram | In progress | Gmail done; remaining normal connectors migrated to the Notion/Gmail pattern |
-| TZ-2 | Research + URL fetch ladder | Planned | Provider ladder, `core/http.py`, rich envelope, legacy exit-code remap |
-| TZ-3 | Skill docs + connector runbook | Planned / pull forward | `SKILL.md` usage guides and `references/` runbook for adding connectors |
+| TZ-1 | Gmail, Calendar, Drive, MeetGeek, Telegram | Nearly done | Gmail/Calendar/Drive/MeetGeek done; Telegram remains |
+| TZ-2 | Research + URL fetch ladder | Next after Telegram | Provider ladder, `core/http.py` if needed, rich envelope, legacy exit-code remap |
+| TZ-3 | Skill docs + connector runbook | Mostly done / cleanup | Runbook exists; remaining skill docs should delegate to migrated connectors |
 | Follow-up | `h2t-ai` umbrella bridge | Deferred | `h2t <connector>` delegates to `h2t-ops <connector>` without touching DCC behavior |
 
 ## Connector Inventory
@@ -60,11 +110,11 @@ foundation.
 | --- | --- | --- | --- | --- | --- |
 | notion | `lib/clients/notion.py` | `h2t ingest notion` legacy shim | `h2t-ops notion ...` | TZ-0 | Done (patch debt: `secrets.env` regression, `video` block drop, missing `find-project-tasks`) |
 | gmail | `lib/clients/gmail.py` | `h2t ingest gmail` legacy shim | `h2t-ops gmail ...` | TZ-1 | Done |
-| calendar | `lib/clients/calendar.py` | `h2t ingest calendar` | `h2t-ops calendar ...` | TZ-1 | Medium: parity vs provider-features split; shared Google auth helper is a prerequisite |
-| drive | skill exists; CLI gap | none / skill-local | `h2t-ops drive ...` | TZ-1 | Medium: discover exact source and auth shape |
-| meetgeek | standalone script / skill-local | none | `h2t-ops meetgeek ...` | TZ-1 | Medium: upload/transcript workflow boundaries |
-| telegram | standalone script / skill-local | none | `h2t-ops telegram ...` | TZ-1 | Medium: optional SDK and session secrets |
-| research | `exa_search.py` + `fetch_url.py` | standalone scripts | `h2t-ops research ...` including `research fetch --url ...` | TZ-2 | High: legacy exit codes, retry telemetry, provider envelope, URL fetch ladder |
+| calendar | `lib/clients/calendar.py` | `h2t ingest calendar` shim | `h2t-ops calendar ...` | TZ-1 | Done (parity); provider features tracked in #145 |
+| drive | `plugins/h2t-ops/skills/drive/scripts/drive_cli.py` | skill-local / legacy | `h2t-ops drive ...` | TZ-1 | Done (pure Drive); `sync-meetings` retirement tracked in #147 |
+| meetgeek | `plugins/h2t-ops/skills/meetgeek/scripts/meetgeek_cli.py` | skill-local / legacy | `h2t-ops meetgeek ...` | TZ-1 | Done (pure API + submit-url); local recovery remains skill-layer (#149 done) |
+| telegram | standalone script / skill-local | none | `h2t-ops telegram ...` | TZ-1 | Remaining normal connector; optional SDK/session secrets; #121 crash must be addressed |
+| research | `exa_search.py` + `fetch_url.py` | standalone scripts | `h2t-ops research ...` including `research fetch --url ...` | TZ-2 | Remaining thick connector; legacy exit codes, retry telemetry, provider envelope, URL fetch ladder |
 
 ## GitHub Issue Backlog
 
@@ -72,59 +122,38 @@ Use the repo issue title standard: `skills: [M3] Verb noun`. Put `Wave: TZ-N` in
 
 ### Current Status
 
-- Closed: #131 Gmail connector, #139 local runtime smoke, #141 UTF-8 core output.
-- Open: #132 Calendar, #133 Drive, #134 MeetGeek, #135 Telegram, #136 research,
-  #137 research URL fetch ladder, #138 connector development runbook,
-  #143 plugin bump script UTF-8.
-- New from the API coverage audit (2026-05-19): a Notion patch-debt issue
-  (`skills: [M3] Patch Notion connector coverage gaps`) and a Calendar
-  provider-features follow-up issue, kept separate from #132 parity scope.
-- Recommended next sequence: #138 runbook baseline first (now carrying the
-  API coverage checklist), then #132 Calendar **parity** as the first
-  runbook-driven migration, with a shared Google auth helper as its
-  prerequisite.
+- Closed/done: #131 Gmail, #132 Calendar parity, #133 Drive parity, #134 MeetGeek
+  parity, #138 connector runbook, #139 runtime smoke, #143 bump script UTF-8,
+  #144 Notion patch debt, #149 MeetGeek local recovery, #150 gather-on-skill fix,
+  #151/#152 duplicate skill cleanup plus cleanup commits `027832f`/`da8a826`.
+- Still open and relevant to connector closure: #135 Telegram, #136 Research,
+  #137 research URL fetch ladder, #121 Telegram Telethon crash.
+- Open but follow-up/backlog: #145 Calendar provider features, #146 Notion workspace
+  discovery, #147 Drive `sync-meetings` retirement, #148 tracked permission hardening,
+  #153 agent-profile skill.
 
 ### Current Execution Sequence
 
-1. **#138 Connector development runbook.** Write the procedure before adding more
-   connectors. The runbook must use Notion and Gmail as reference implementations
-   and must include POS-boundary and distribution-independence checks, plus the
-   API coverage checklist (see the #138 backlog section) as a required review
-   gate for every connector PR.
-2. **Shared Google auth helper (prerequisite for #132).** Add
-   `resolve_google_credentials()` / token-refresh reuse to `core/secrets.py`
-   before or inside #132, so Calendar/Drive/Gmail stop duplicating inlined OAuth
-   resolution. Without it, Drive will duplicate the same auth code again.
-3. **Extend `dev check lazy-registry`.** Before Calendar/Drive/Telegram land,
-   extend the lazy-import guard from `notion_client` + `httpx` to `google*`,
-   `telethon`, and `exa`; otherwise `h2t-ops --help` / `connectors` risk
-   importing heavy SDKs. Treat as a mandatory gate in the runbook.
-4. **#132 Calendar — parity migration only.** First connector built by following
-   the runbook (lowest risk: shares Google OAuth with Gmail, feeds Daily Brief).
-   Scope is parity with the legacy client only (list/search/get/create/delete,
-   shared Google auth, typed errors, tests, legacy shim). Provider-feature
-   expansion (Meet links, recurrence, patch/reschedule, all-day, multi-calendar,
-   reminders/freebusy) is a **separate follow-up issue**, not #132, unless the
-   architect explicitly approves widening #132.
-5. **Notion patch debt.** Fix the audit-identified regressions in the already
-   migrated Notion connector: missing `load_dotenv(~/.dor/secrets.env)`
-   (`secrets.env` regression), `video` block silent data loss, and missing
-   `find-project-tasks`. Tracked as a dedicated patch issue; its sequence
-   relative to #132 is the architect's call.
-6. **Inventory gate for Drive, MeetGeek, Telegram.** Before implementation,
-   document exact skill-local CLI surfaces, write/file side effects, optional
-   SDKs, and POS-boundary risks. These connectors mix pure-API reads with
-   workflow/storage side effects (MeetGeek lake writes — CRITICAL; Telegram
-   DOR + Notion writes — HIGH; Drive `sync-meetings` DOR writes — HIGH). The
-   connector scope is pure-API reads only; side-effecting subcommands go to a
-   coordinator / POS-owned layer, not the connector. De-duplicate the Drive
-   client embedded in `meetgeek_cli.py`. Only then migrate each connector.
-7. **#136/#137 Research wave.** Keep research and URL fetch ladder in TZ-2.
-   They are provider/strategy connectors with richer telemetry and legacy exit
-   code remapping, not normal TZ-1 connectors.
-8. **Daily Brief update.** After Calendar parity is migrated, update Daily Brief
-   to use `h2t-ops calendar/gmail/notion` reads. Daily Brief remains a synthesis
-   workflow, not a POS journal writer.
+1. **#135 Telegram migration.** Final TZ-1 normal connector. Scope must be raw Telegram
+   provider operations only; DOR context writes, Gemini interpretation, Notion task creation,
+   and archive/cleanup mutations stay out unless explicitly approved. Fix or supersede #121
+   inside this work.
+2. **#136 Research connector.** Migrate Exa/research into `h2t_ops/connectors/research/`
+   while preserving the richer provider envelope under the canonical h2t-ops output contract.
+3. **#137 URL fetch ladder.** Integrate as `h2t-ops research fetch --url ...` or fold into
+   #136 if the implementation plan makes that cleaner. Do not create a top-level `fetch`
+   connector.
+4. **Daily Brief connector switch.** Create/confirm a tracking issue, then update the
+   workflow to use migrated `h2t-ops` connector reads. Keep it as synthesis, not connector
+   runtime and not POS journal mutation.
+5. **Legacy h2t retirement decision.** After Telegram/Research/Daily Brief are stable,
+   decide whether to uninstall/disable the legacy `h2t` plugin by default or keep it as a
+   compatibility pack. This is the largest remaining skill-listing duplication source.
+6. **#153 Agent profiles.** Implement `h2t-core:agent-profile` to encode per-repo base
+   profiles and task overlays, so future sessions do not load every plugin globally.
+7. **Final issue sweep.** Reclassify older research/creative/secrets issues into active,
+   moved, backlog, or stale-closed. The goal is a small h2t-skills issue list where open
+   issues represent real near-term work.
 
 ### Distribution Independence
 
@@ -208,7 +237,7 @@ connector standard without breaking existing `h2t ingest gmail` usage.
 
 ### skills: [M3] Patch Notion connector coverage gaps
 
-**Status:** Backlog. Created from the API coverage audit (2026-05-19 §3 "Notion — partial").
+**Status:** Done (#144). Created from the API coverage audit (2026-05-19 §3 "Notion — partial").
 
 **Context:** Notion migrated in TZ-0, but the audit found three concrete gaps versus the legacy
 client/skill that make the connector partial, not full.
@@ -237,7 +266,7 @@ enforce; these are regressions, not new features.
 
 ### skills: [M3] Migrate Calendar connector (parity) — #132
 
-**Status:** Next after #138 runbook baseline. **Scope: parity only.**
+**Status:** Done (#132). **Scope: parity only.**
 
 **Context:** Calendar shares Google auth concerns with Gmail but has distinct date/time and event
 output contracts. The API coverage audit (2026-05-19 §3 "Calendar — #132 exact delta") shows the
@@ -301,6 +330,8 @@ explicit acceptance items rather than being lost between parity and "done".
 
 ### skills: [TZ-1] Migrate Drive connector
 
+**Status:** Done (#133). Pure Drive runtime migrated; `sync-meetings` remains legacy debt tracked in #147.
+
 **Context:** Drive has a skill surface but is not represented cleanly in the current CLI inventory.
 
 **What:**
@@ -318,6 +349,8 @@ CLI surface.
 - Tests cover auth/config and output shape.
 
 ### skills: [TZ-1] Migrate MeetGeek connector
+
+**Status:** Done (#134). Pure MeetGeek API runtime migrated; local recording recovery was kept in the skill layer and handled separately in #149.
 
 **Context:** MeetGeek is currently script/skill-local and needs a connector boundary before it can
 be used reliably by agents and workflows.
@@ -337,6 +370,8 @@ be used reliably by agents and workflows.
 
 ### skills: [TZ-1] Migrate Telegram connector
 
+**Status:** Next connector to implement (#135), with #121 folded into acceptance.
+
 **Context:** Telegram likely needs optional SDK/session handling and must not break registry
 laziness.
 
@@ -355,6 +390,8 @@ registry/help calls.
 - CLI tests cover output and exit codes.
 
 ### skills: [TZ-2] Migrate research connector
+
+**Status:** Next after Telegram (#136), paired with URL fetch ladder #137.
 
 **Context:** `exa_search.py` has legacy exit codes and a richer provider-status envelope. It should
 not be mixed into the normal TZ-1 connector wave.
@@ -395,7 +432,7 @@ instead of a standalone script discovered through plugin paths.
 
 ### skills: [M3] Add connector development skill runbook — #138
 
-**Status:** Next (must land before any further connector migration).
+**Status:** Done (#138). Keep as the procedure for remaining Telegram/Research work.
 
 **Context:** New connectors need an agent-facing recipe that lives with the skill, not under
 `docs/superpowers`. The API coverage audit (2026-05-19) showed that without an explicit checklist,
