@@ -15,7 +15,7 @@ from h2t_ops.core.output import emit, _utf8_writer, _finalize
 from h2t_ops.core.registry import discover
 from h2t_ops.dev import main as _dev_main
 
-_MIGRATED = {"notion", "gmail", "calendar", "drive", "meetgeek", "telegram"}
+_MIGRATED = {"notion", "gmail", "calendar", "drive", "meetgeek", "telegram", "research"}
 
 
 def build_parser() -> argparse.ArgumentParser:

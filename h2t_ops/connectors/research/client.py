@@ -307,6 +307,119 @@ class ResearchClient:
     def __init__(self, *, output_dir: Path | None = None) -> None:
         self.output_dir = output_dir or DEFAULT_OUTPUT_DIR
 
+    def preflight(self) -> dict[str, Any]:
+        """Validate Exa credential resolution and provider connectivity."""
+        from h2t_ops.connectors.research import exa
+
+        exa.preflight(resolve_secret("EXA_API_KEY"))
+        return {"status": "OK", "provider": "exa"}
+
+    def crawl(self, url: str, *, project: str = "default") -> dict[str, Any]:
+        """Fetch URL contents through Exa /contents and persist provider artifacts."""
+        from h2t_ops.connectors.research import exa
+
+        api_key = resolve_secret("EXA_API_KEY")
+        body = {"urls": [url], "text": {"maxCharacters": 15000}}
+        try:
+            status, data, latency_ms = exa.call_exa("/contents", body, api_key)
+        except exa.ExaPermanentError as exc:
+            details = sanitize_details(
+                {
+                    "http_status": exc.http_status,
+                    "latency_ms": exc.latency_ms,
+                    "provider_error": exc.body,
+                }
+            )
+            if exc.http_status in {401, 403}:
+                raise AuthError(
+                    f"Exa crawl auth failed: http {exc.http_status}",
+                    details=details,
+                ) from exc
+            raise ProviderError(
+                f"Exa crawl failed: http {exc.http_status}",
+                details=details,
+            ) from exc
+        except exa.ExaTransientError as exc:
+            details = sanitize_details(
+                {
+                    "http_status": exc.http_status,
+                    "latency_ms": exc.latency_ms,
+                    "provider_error": exc.body,
+                }
+            )
+            if exc.http_status is None:
+                raise NetworkError(
+                    f"Exa crawl network failed: {exc}",
+                    details=details,
+                ) from exc
+            raise ProviderError(
+                f"Exa crawl failed: http {exc.http_status}",
+                details=details,
+            ) from exc
+        except exa.ExaMalformedResponseError as exc:
+            raise ProviderError(
+                f"Exa crawl malformed response: {exc}",
+                details=sanitize_details({"latency_ms": exc.latency_ms}),
+            ) from exc
+
+        results = data.get("results", [])
+        if not isinstance(results, list):
+            raise ProviderError(
+                "Exa crawl malformed response: results must be a list",
+                details=sanitize_details({"results_type": type(results).__name__}),
+            )
+
+        statuses = data.get("statuses")
+        if not results and statuses:
+            _raise_for_crawl_statuses(
+                url=url,
+                http_status=status,
+                latency_ms=latency_ms,
+                statuses=statuses,
+                cost=_cost_from_exa_response(data),
+                build_envelope=exa.build_envelope,
+            )
+
+        reason = None if results else "exa_empty_results"
+        cost = _cost_from_exa_response(data)
+        provider_envelope = exa.build_envelope(
+            status="OK" if results else "DEGRADED",
+            results=results,
+            attempts=[
+                {
+                    "engine": "exa",
+                    "endpoint": "/contents",
+                    "http": status,
+                    "latency_ms": latency_ms,
+                    "error": reason,
+                }
+            ],
+            meta={
+                "query": url,
+                "mode": "crawl",
+                "num_results_requested": 1,
+                "num_results_returned": len(results),
+            },
+            total_cost_usd=cost,
+            reason_for_fallback=reason,
+        )
+        telemetry = _artifact_telemetry(provider_envelope)
+        artifact = self._write_provider_artifacts(
+            kind="crawl",
+            slug_source=url,
+            project=project,
+            provider_envelope=provider_envelope,
+            telemetry=telemetry,
+            ledger_provider="exa",
+            ledger_endpoint="/contents",
+            ledger_mode="crawl",
+        )
+        return {
+            "kind": "research_provider_envelope",
+            **provider_envelope,
+            "artifact": artifact,
+        }
+
     def _write_provider_artifacts(
         self,
         *,
@@ -559,6 +672,159 @@ def _artifact_telemetry(provider_envelope: dict[str, Any]) -> dict[str, Any]:
         "estimated_cost_usd": provider_telemetry.get("total_cost_usd"),
         "cost_basis": "provider_reported",
     }
+
+
+def _cost_from_exa_response(data: dict[str, Any]) -> float:
+    cost = data.get("costDollars", {})
+    if isinstance(cost, dict):
+        raw = cost.get("total", 0.0)
+    else:
+        raw = cost
+    try:
+        return float(raw or 0.0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+_GATE_STATUS_TOKENS = (
+    "login",
+    "paywall",
+    "paid",
+    "subscription",
+    "subscriber",
+    "auth_required",
+    "login_required",
+    "payment_required",
+    "unauthorized",
+)
+_NETWORK_STATUS_TOKENS = (
+    "timeout",
+    "timed out",
+    "network",
+    "connection",
+    "dns",
+    "unreachable",
+    "reset",
+)
+_STATUS_ERROR_TOKENS = (
+    "error",
+    "fail",
+    "failed",
+    "forbidden",
+    "unauthorized",
+    "not_found",
+    "not found",
+    "missing",
+    "timeout",
+    "timed out",
+    "network",
+)
+
+
+def _raise_for_crawl_statuses(
+    *,
+    url: str,
+    http_status: int,
+    latency_ms: int,
+    statuses: Any,
+    cost: float,
+    build_envelope: Any,
+) -> None:
+    failure = _classify_crawl_status_failure(statuses)
+    if failure is None:
+        return
+
+    error, status_code = failure
+    provider_envelope = build_envelope(
+        status="FAILED",
+        results=[],
+        attempts=[
+            {
+                "engine": "exa",
+                "endpoint": "/contents",
+                "http": status_code or http_status,
+                "latency_ms": latency_ms,
+                "error": error,
+            }
+        ],
+        meta={
+            "query": url,
+            "mode": "crawl",
+            "num_results_requested": 1,
+            "num_results_returned": 0,
+        },
+        total_cost_usd=cost,
+        reason_for_fallback=error,
+    )
+    provider_envelope["statuses"] = statuses
+    details = sanitize_details({"provider_envelope": provider_envelope})
+
+    if error == "exa_contents_status_gated":
+        raise AuthError("Exa crawl gated", details=details)
+    if error == "exa_contents_status_network":
+        raise NetworkError("Exa crawl network failed", details=details)
+    raise ProviderError("Exa crawl failed", details=details)
+
+
+def _classify_crawl_status_failure(statuses: Any) -> tuple[str, int | None] | None:
+    status_items: list[Any]
+    if isinstance(statuses, list):
+        status_items = statuses
+    else:
+        status_items = [statuses]
+
+    saw_provider_error: int | None = None
+    for item in status_items:
+        status_code = _status_code_from_item(item)
+        text = _status_text_from_item(item)
+        if status_code is None and not any(token in text for token in _STATUS_ERROR_TOKENS):
+            continue
+        if status_code == 401:
+            return "exa_contents_status_gated", status_code
+        if any(token in text for token in _GATE_STATUS_TOKENS):
+            return "exa_contents_status_gated", status_code
+        if status_code in {408} or any(token in text for token in _NETWORK_STATUS_TOKENS):
+            return "exa_contents_status_network", status_code
+        if status_code is not None and status_code >= 400:
+            return "exa_contents_status_4xx" if status_code < 500 else "exa_contents_status_5xx", status_code
+        saw_provider_error = status_code
+
+    if saw_provider_error is not None or status_items:
+        has_error_text = any(
+            any(token in _status_text_from_item(item) for token in _STATUS_ERROR_TOKENS)
+            for item in status_items
+        )
+        if has_error_text:
+            return "exa_contents_status_error", saw_provider_error
+    return None
+
+
+def _status_code_from_item(item: Any) -> int | None:
+    if not isinstance(item, dict):
+        return None
+    for key in ("statusCode", "status_code", "httpStatus", "http_status", "http", "code"):
+        raw = item.get(key)
+        if isinstance(raw, int):
+            return raw
+        if isinstance(raw, str) and raw.isdigit():
+            return int(raw)
+    raw_status = item.get("status")
+    if isinstance(raw_status, int):
+        return raw_status
+    if isinstance(raw_status, str) and raw_status.isdigit():
+        return int(raw_status)
+    return None
+
+
+def _status_text_from_item(item: Any) -> str:
+    if isinstance(item, dict):
+        parts = [
+            str(value)
+            for key, value in item.items()
+            if key not in {"url", "id"} and value is not None
+        ]
+        return " ".join(parts).lower()
+    return str(item).lower()
 
 
 def _render_partial_markdown(provider_envelope: dict[str, Any]) -> str:

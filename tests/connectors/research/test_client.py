@@ -727,3 +727,343 @@ def test_research_client_fetch_keep_raw_redacts_url_secrets_in_raw_ref(tmp_path)
     assert "secret123" not in raw_ref
     assert "token456" not in raw_ref
     assert "redacted" in raw_ref.lower()
+
+
+def test_research_client_preflight_resolves_secret_and_calls_exa(monkeypatch):
+    _clear_secret_env(monkeypatch)
+    calls: list[str] = []
+
+    from h2t_ops.connectors.research import exa
+
+    monkeypatch.setattr(client, "resolve_secret", lambda name: "exa-key")
+    monkeypatch.setattr(exa, "preflight", lambda api_key: calls.append(api_key))
+
+    result = client.ResearchClient().preflight()
+
+    assert result == {"status": "OK", "provider": "exa"}
+    assert calls == ["exa-key"]
+
+
+def test_research_client_crawl_ok_writes_artifacts(tmp_path, monkeypatch):
+    _clear_secret_env(monkeypatch)
+    from h2t_ops.connectors.research import exa
+
+    monkeypatch.setattr(client, "resolve_secret", lambda name: "exa-key")
+
+    def call_exa(endpoint, body, api_key):
+        assert endpoint == "/contents"
+        assert body == {"urls": ["https://example.com/page"], "text": {"maxCharacters": 15000}}
+        assert api_key == "exa-key"
+        return (
+            200,
+            {
+                "results": [
+                    {
+                        "title": "Example",
+                        "url": "https://example.com/page",
+                        "text": "Evidence body",
+                    }
+                ],
+                "costDollars": {"total": 0.034},
+            },
+            44,
+        )
+
+    monkeypatch.setattr(exa, "call_exa", call_exa)
+
+    result = client.ResearchClient(output_dir=tmp_path).crawl(
+        "https://example.com/page",
+        project="h2t skills",
+    )
+
+    assert result["kind"] == "research_provider_envelope"
+    assert result["status"] == "OK"
+    assert result["telemetry"]["total_latency_ms"] == 44
+    assert result["telemetry"]["total_cost_usd"] == 0.034
+    assert result["telemetry"]["attempts"][0]["endpoint"] == "/contents"
+    assert result["meta"]["mode"] == "crawl"
+    assert result["artifact"]["provider_status"] == "OK"
+    assert result["artifact"]["telemetry"]["estimated_cost_usd"] == 0.034
+
+    refs = result["artifact"]["artifact_refs"]
+    assert json.loads((tmp_path / refs["sources_json"]).read_text(encoding="utf-8")) == result["results"]
+    assert json.loads((tmp_path / refs["artifact_json"]).read_text(encoding="utf-8")) == result["artifact"]
+
+
+def test_research_client_crawl_empty_results_returns_degraded(tmp_path, monkeypatch):
+    _clear_secret_env(monkeypatch)
+    from h2t_ops.connectors.research import exa
+
+    monkeypatch.setattr(client, "resolve_secret", lambda name: "exa-key")
+    monkeypatch.setattr(
+        exa,
+        "call_exa",
+        lambda endpoint, body, api_key: (
+            200,
+            {"results": [], "costDollars": {"total": 0}},
+            12,
+        ),
+    )
+
+    result = client.ResearchClient(output_dir=tmp_path).crawl("https://example.com")
+
+    assert result["status"] == "DEGRADED"
+    assert result["telemetry"]["reason_for_fallback"] == "exa_empty_results"
+    assert result["telemetry"]["attempts"][0]["error"] == "exa_empty_results"
+    assert result["artifact"]["provider_status"] == "DEGRADED"
+
+
+def test_research_client_crawl_empty_results_with_plain_403_status_raises_providererror(
+    tmp_path,
+    monkeypatch,
+):
+    _clear_secret_env(monkeypatch)
+    from h2t_ops.connectors.research import exa
+
+    statuses = [
+        {
+            "url": "https://example.com/private",
+            "statusCode": 403,
+            "error": "forbidden",
+        }
+    ]
+    monkeypatch.setattr(client, "resolve_secret", lambda name: "exa-key")
+    monkeypatch.setattr(
+        exa,
+        "call_exa",
+        lambda endpoint, body, api_key: (
+            200,
+            {"results": [], "statuses": statuses, "costDollars": {"total": 0.011}},
+            17,
+        ),
+    )
+
+    with pytest.raises(ProviderError) as ei:
+        client.ResearchClient(output_dir=tmp_path).crawl("https://example.com/private")
+
+    envelope = ei.value.details["provider_envelope"]
+    assert envelope["status"] == "FAILED"
+    assert envelope["statuses"] == statuses
+    assert envelope["telemetry"]["attempts"][0]["http"] == 403
+    assert envelope["telemetry"]["attempts"][0]["error"] == "exa_contents_status_4xx"
+    assert envelope["telemetry"]["total_cost_usd"] == 0.011
+
+
+def test_research_client_crawl_empty_results_with_login_status_raises_autherror(
+    tmp_path,
+    monkeypatch,
+):
+    _clear_secret_env(monkeypatch)
+    from h2t_ops.connectors.research import exa
+
+    statuses = [
+        {
+            "url": "https://example.com/login",
+            "http_status": 403,
+            "error": "login_required",
+        }
+    ]
+    monkeypatch.setattr(client, "resolve_secret", lambda name: "exa-key")
+    monkeypatch.setattr(
+        exa,
+        "call_exa",
+        lambda endpoint, body, api_key: (
+            200,
+            {"results": [], "statuses": statuses},
+            21,
+        ),
+    )
+
+    with pytest.raises(AuthError) as ei:
+        client.ResearchClient(output_dir=tmp_path).crawl("https://example.com/login")
+
+    envelope = ei.value.details["provider_envelope"]
+    assert envelope["statuses"] == statuses
+    assert envelope["telemetry"]["attempts"][0]["error"] == "exa_contents_status_gated"
+
+
+def test_research_client_crawl_empty_results_with_unauthorized_status_raises_autherror(
+    tmp_path,
+    monkeypatch,
+):
+    _clear_secret_env(monkeypatch)
+    from h2t_ops.connectors.research import exa
+
+    statuses = [
+        {
+            "url": "https://example.com/unauthorized",
+            "statusCode": 401,
+            "error": "unauthorized",
+        }
+    ]
+    monkeypatch.setattr(client, "resolve_secret", lambda name: "exa-key")
+    monkeypatch.setattr(
+        exa,
+        "call_exa",
+        lambda endpoint, body, api_key: (
+            200,
+            {"results": [], "statuses": statuses},
+            19,
+        ),
+    )
+
+    with pytest.raises(AuthError) as ei:
+        client.ResearchClient(output_dir=tmp_path).crawl(
+            "https://example.com/unauthorized"
+        )
+
+    envelope = ei.value.details["provider_envelope"]
+    assert envelope["statuses"] == statuses
+    assert envelope["telemetry"]["attempts"][0]["http"] == 401
+    assert envelope["telemetry"]["attempts"][0]["error"] == "exa_contents_status_gated"
+
+
+def test_research_client_crawl_empty_results_with_numeric_401_status_raises_autherror(
+    tmp_path,
+    monkeypatch,
+):
+    _clear_secret_env(monkeypatch)
+    from h2t_ops.connectors.research import exa
+
+    statuses = [{"statusCode": 401}]
+    monkeypatch.setattr(client, "resolve_secret", lambda name: "exa-key")
+    monkeypatch.setattr(
+        exa,
+        "call_exa",
+        lambda endpoint, body, api_key: (
+            200,
+            {"results": [], "statuses": statuses},
+            11,
+        ),
+    )
+
+    with pytest.raises(AuthError) as ei:
+        client.ResearchClient(output_dir=tmp_path).crawl("https://example.com/401")
+
+    envelope = ei.value.details["provider_envelope"]
+    assert envelope["statuses"] == statuses
+    assert envelope["telemetry"]["attempts"][0]["http"] == 401
+    assert envelope["telemetry"]["attempts"][0]["error"] == "exa_contents_status_gated"
+
+
+def test_research_client_crawl_empty_results_with_timeout_status_raises_networkerror(
+    tmp_path,
+    monkeypatch,
+):
+    _clear_secret_env(monkeypatch)
+    from h2t_ops.connectors.research import exa
+
+    statuses = [
+        {
+            "url": "https://example.com/slow",
+            "status": "timeout",
+            "message": "request timed out",
+        }
+    ]
+    monkeypatch.setattr(client, "resolve_secret", lambda name: "exa-key")
+    monkeypatch.setattr(
+        exa,
+        "call_exa",
+        lambda endpoint, body, api_key: (
+            200,
+            {"results": [], "statuses": statuses},
+            30,
+        ),
+    )
+
+    with pytest.raises(NetworkError) as ei:
+        client.ResearchClient(output_dir=tmp_path).crawl("https://example.com/slow")
+
+    envelope = ei.value.details["provider_envelope"]
+    assert envelope["statuses"] == statuses
+    assert envelope["telemetry"]["attempts"][0]["error"] == "exa_contents_status_network"
+
+
+def test_research_client_crawl_empty_results_with_not_found_status_raises_providererror(
+    tmp_path,
+    monkeypatch,
+):
+    _clear_secret_env(monkeypatch)
+    from h2t_ops.connectors.research import exa
+
+    statuses = [
+        {
+            "url": "https://example.com/missing",
+            "status_code": 404,
+            "error": "not_found",
+        }
+    ]
+    monkeypatch.setattr(client, "resolve_secret", lambda name: "exa-key")
+    monkeypatch.setattr(
+        exa,
+        "call_exa",
+        lambda endpoint, body, api_key: (
+            200,
+            {"results": [], "statuses": statuses},
+            8,
+        ),
+    )
+
+    with pytest.raises(ProviderError) as ei:
+        client.ResearchClient(output_dir=tmp_path).crawl("https://example.com/missing")
+
+    envelope = ei.value.details["provider_envelope"]
+    assert envelope["statuses"] == statuses
+    assert envelope["telemetry"]["attempts"][0]["http"] == 404
+    assert envelope["telemetry"]["attempts"][0]["error"] == "exa_contents_status_4xx"
+
+
+def test_research_client_crawl_permanent_error_sanitizes_details(tmp_path, monkeypatch):
+    _clear_secret_env(monkeypatch)
+    from h2t_ops.connectors.research import exa
+
+    leaked = "secret" + "_exa_value"
+    monkeypatch.setattr(client, "resolve_secret", lambda name: "exa-key")
+
+    def call_exa(endpoint, body, api_key):
+        raise exa.ExaPermanentError(
+            "bad request",
+            http_status=400,
+            latency_ms=9,
+            body={"message": "EXA_API_KEY=" + leaked, "x-api-key": leaked},
+        )
+
+    monkeypatch.setattr(exa, "call_exa", call_exa)
+
+    with pytest.raises(ProviderError) as ei:
+        client.ResearchClient(output_dir=tmp_path).crawl("https://example.com")
+
+    details_text = json.dumps(ei.value.details)
+    assert leaked not in details_text
+    assert "[REDACTED]" in details_text
+    assert ei.value.details["http_status"] == 400
+    assert ei.value.details["latency_ms"] == 9
+
+
+def test_research_client_crawl_network_failure_maps_to_networkerror(
+    tmp_path,
+    monkeypatch,
+):
+    _clear_secret_env(monkeypatch)
+    from h2t_ops.connectors.research import exa
+
+    monkeypatch.setattr(client, "resolve_secret", lambda name: "exa-key")
+
+    def call_exa(endpoint, body, api_key):
+        raise exa.ExaTransientError(
+            "timed out",
+            http_status=None,
+            latency_ms=101,
+        )
+
+    monkeypatch.setattr(exa, "call_exa", call_exa)
+
+    with pytest.raises(NetworkError) as ei:
+        client.ResearchClient(output_dir=tmp_path).crawl("https://example.com")
+
+    assert "network failed" in str(ei.value)
+    assert ei.value.details == {
+        "http_status": None,
+        "latency_ms": 101,
+        "provider_error": None,
+    }
