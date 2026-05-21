@@ -1,24 +1,43 @@
 ---
 name: h2t-ops:telegram
-description: "Reads Telegram saved messages, channels, and work chats. Saves digests to vault and tasks to Notion. Triggers: 'telegram', 'saved messages', 'telegram digest', 'задачи из telegram', 'h2t:telegram'"
-compatibility: "Requires Telethon session (machine-local). GEMINI_API_KEY in ~/.dor/secrets.env. DOR_ROOT env var for context output."
+description: "Telegram provider access and compatibility workflows. Use for Telegram auth/session, dialogs, messages, saved messages, mentions, and legacy digest/tasks/research workflows. Triggers: telegram, saved messages, telegram digest, задачи из telegram"
+compatibility: "Provider reads use h2t-ops telegram. Legacy workflow commands remain available through scripts/telegram_cli.py until portable workflow extraction."
 metadata:
   author: lichtpfad
-  version: 1.0.0
+  version: 1.1.0
 ---
 
 # Telegram
 
-## POS Boundary
+## Boundary
 
-For POS and daily-loop workflows, follow the shared boundary reference:
-`../../references/pos-operational-boundary.md`. This skill may read Telegram
-data through connector tooling, but must not write POS journal rows, mutate
-`~/.dor/pos.db`, or modify vault/lake directly except through approved
-`pos_ingest` or coordinator workflow. Emit structured proposed captures until
-POS journal commands exist.
+Telegram provider data is evidence, not truth.
 
-## Переменные
+- `h2t-ops telegram ...` is the provider connector: auth/session, dialogs, folders, messages, saved-messages, mentions, bootstrap.
+- Legacy `telegram_cli.py` workflows remain available for compatibility: `saved`, `digest`, `tasks`, `research`, `students`, `sync`, `scan-chats`, `cleanup`.
+- Gemini summaries/classification are analytics outputs and suggestions.
+- POS/coordinator decides which proposals become accepted captures/tasks/decisions or provider writes.
+- Notion writes are explicit coordinator actions executed through the Notion connector, not Telegram runtime.
+
+## Provider Connector
+
+```bash
+h2t-ops telegram auth status --json
+h2t-ops telegram auth request-code --phone +XXXXXXXXXXX
+h2t-ops telegram auth complete --phone +XXXXXXXXXXX --code XXXXX
+h2t-ops telegram dialogs --limit 20 --json
+h2t-ops telegram folders --json
+h2t-ops telegram messages <entity> --days 7 --limit 200 --json
+h2t-ops telegram saved-messages --days 7 --limit 200 --json
+h2t-ops telegram mentions --chat-id 123456 --days 7 --json
+h2t-ops telegram bootstrap --force --json
+```
+
+`saved-messages` returns raw Telegram rows. The legacy `saved` workflow below still produces the Gemini/markdown digest.
+
+## Legacy Compatibility Workflows
+
+These commands are useful and remain available, but their current placement is not the target architecture. They will move to portable workflow scripts with explicit input/output paths.
 
 ```bash
 H2T_PYTHON="${H2T_PYTHON:-}"
@@ -29,52 +48,61 @@ H2T_PYTHON="${H2T_PYTHON:-}"
 CLI="$H2T_PYTHON ${CLAUDE_SKILL_DIR}/scripts/telegram_cli.py"
 ```
 
-## Команды
-
-### Auth (первичная настройка)
-
-```bash
-$CLI auth --phone +XXXXXXXXXXX
-$CLI auth --phone +XXXXXXXXXXX --code XXXXX
-$CLI auth --phone +XXXXXXXXXXX --password XXXXX  # если 2FA
-```
-
-Сессия сохраняется в `~/.config/telegram/session` — повторная аутентификация не нужна.
-
-### Saved Messages → MD
 ```bash
 $CLI saved [--all]
-```
-Output: `context/telegram/saved-YYYY-MM-DD.md`
-
-### Digest (образовательные каналы)
-```bash
 $CLI digest [--all]
-```
-Output: `context/telegram/digest-YYYY-MM-DD.md`
-
-### Tasks (рабочие чаты → Notion)
-```bash
 $CLI tasks [--all]
+$CLI research [--all]
+$CLI students [--all]
+$CLI sync
+$CLI scan-chats [--import-folders]
+$CLI cleanup
 ```
 
-### Sync (все три pipeline)
+Do not use `cleanup --archive` unless the user explicitly asks for a Telegram account mutation.
+
+## Troubleshooting
+
+### SESSION_INCOMPATIBLE
+
+If `h2t-ops telegram ... --json` returns `SESSION_INCOMPATIBLE`, the Telethon SQLite session file is incompatible with the installed Telethon version.
+
+The connector will not delete credentials automatically. Recovery is manual:
+
 ```bash
-$CLI sync
+# move the old session aside yourself, then re-auth
+h2t-ops telegram auth request-code --phone +XXXXXXXXXXX
+h2t-ops telegram auth complete --phone +XXXXXXXXXXX --code XXXXX
 ```
+
+If Telegram asks for 2FA:
+
+```bash
+h2t-ops telegram auth complete --phone +XXXXXXXXXXX --password YOUR_PASSWORD
+```
+
+Passing `--password` can enter shell history. Prefer a future password-stdin/prompt flow when available.
 
 ## Config
 
-```
+```text
 ~/.config/telegram/
-├── config.json      {"api_id": N, "api_hash": "..."}
-├── session          Telethon session (SQLite)
-└── last_sync.json   timestamps per pipeline
-
-~/.config/telegram/chats.yaml — конфиг каналов и чатов
+  config.json          {"api_id": N, "api_hash": "..."}
+  session.session      Telethon session SQLite credential
+  auth_state.json      temporary phone_code_hash between auth steps
+  dialogs_bootstrapped entity-cache timestamp
+  chats.yaml           workflow configuration owned by scripts/workflows, not connector
 ```
 
-## Обработка ошибок
+## Future Extraction
 
-- **SessionExpiredError**: повторите `auth`
-- **GEMINI_API_KEY не найден**: добавьте в `~/.dor/secrets.env`
+Planned follow-up: extract Telegram analytics/POS workflows into portable scripts.
+
+Target shape:
+
+```bash
+h2t-ops telegram saved-messages --days 7 --json > saved.json
+python scripts/workflows/telegram_digest.py --input saved.json --output digest.md
+```
+
+Portable scripts may call Gemini and write declared output paths. They must not be imported by connector registry/help and must not write POS journal/KB directly.
