@@ -603,3 +603,33 @@ Important for finishing the repository, but not connector migration:
 3. Implement `h2t-core:agent-profile`.
 4. Do final repo/security/issue cleanup.
 5. Run Creative/DCC/Edu as separate streams, not as connector-closure blockers.
+
+## Closure Forecast
+
+Date: 2026-05-21
+
+Basis: observed work rate from 2026-05-17 through 2026-05-21. In that window the repo
+landed 110 commits, including the `h2t-ops` foundation, Gmail, Calendar, Drive, MeetGeek,
+Notion patch debt, runtime smoke, connector runbook, MeetGeek recovery, and skill-listing
+cleanup. This was an unusually dense sprint, so the forecast below should be treated as
+calibrated but not guaranteed.
+
+| Remaining block | Optimistic | Realistic | Main risk |
+| --- | ---: | ---: | --- |
+| h2t-ops closure: Telegram -> Research/fetch -> Daily Brief | 2-3 days | 4-6 days | Telegram auth/session + Research envelope/fetch ladder |
+| Legacy `h2t` overlap decision | 0.5-1 day | 1-2 days | Breaking old entrypoints too early |
+| `h2t-core:agent-profile` | 1-2 days | 2-3 days | Safe settings merge, sync, doctor behavior |
+| Final repo/security/issue cleanup | 1-2 days | 2-4 days | Dirty tree, #148 permissions, issue triage |
+
+Total estimate:
+
+- Very optimistic: 5-7 working days.
+- Realistic: 8-12 working days.
+- With contingency: 2-3 weeks if Telegram/Research or security cleanup expands.
+
+Expected target if focus holds: roughly 1.5 weeks to move `h2t-skills` from active migration to
+maintenance/closure mode.
+
+Risk note: Telegram is the highest-uncertainty remaining connector because it combines session
+credentials, Telethon schema drift (#121), live smoke, and the boundary between raw provider
+reads and DOR/Notion/Gemini workflows. Start there rather than leaving it to the end.
