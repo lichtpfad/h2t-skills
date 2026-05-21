@@ -1,14 +1,12 @@
 #!/usr/bin/env python3
 """
-Google Drive CLI — list, search, download, export, upload, sync-meetings.
+Google Drive CLI — list, search, download, export, upload.
 """
 
-import os
 import sys
 import json
 import io
 import argparse
-import subprocess
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -26,13 +24,6 @@ except ImportError:
 CONFIG_DIR = Path.home() / '.config' / 'google-calendar-mcp'
 TOKEN_FILE = CONFIG_DIR / 'tokens.json'
 CREDENTIALS_FILE = CONFIG_DIR / 'credentials.json'
-
-DOR_ROOT = Path(os.environ.get('DOR_ROOT', Path.home() / 'Projects' / 'DOR'))
-VAULT_ROOT = Path(os.environ.get('VAULT_ROOT',
-    DOR_ROOT / 'vault' if DOR_ROOT.exists() else Path.home() / '.dor' / 'vault'))
-MEETINGS_DIR = DOR_ROOT / 'context' / 'meetings'
-CONVERT_SCRIPT = DOR_ROOT / '.claude' / 'skills' / 'convert-meeting-transcript' / 'convert_docx_to_md.py'
-
 
 def get_drive_service():
     """Build Drive API service from shared OAuth token."""
@@ -449,173 +440,17 @@ def upload_file(file_path, folder_name=None, no_convert=False):
     return result
 
 
-def get_meetgeek_docs(folder_name='MeetGeek Files'):
-    """Get all Google Doc transcripts from MeetGeek Files subfolders."""
-    service = get_drive_service()
-
-    # Find MeetGeek Files folder
-    safe_name = folder_name.replace("'", "\\'")
-    try:
-        resp = service.files().list(
-            q=f"name='{safe_name}' and mimeType='application/vnd.google-apps.folder' and trashed=false",
-            fields='files(id, name)',
-            pageSize=5,
-        ).execute()
-    except Exception as e:
-        print(f"Drive API error: {e}", file=sys.stderr)
-        sys.exit(1)
-
-    folders = resp.get('files', [])
-    if not folders:
-        print(f"Папка '{folder_name}' не найдена на Drive.", file=sys.stderr)
-        print("   Запустите: drive list  — чтобы увидеть доступные папки", file=sys.stderr)
-        sys.exit(1)
-
-    main_folder_id = folders[0]['id']
-
-    # Get all subfolders inside MeetGeek Files
-    subfolders = []
-    page_token = None
-    while True:
-        try:
-            resp = service.files().list(
-                q=f"'{main_folder_id}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false",
-                fields='files(id, name, modifiedTime),nextPageToken',
-                pageSize=1000,
-                orderBy='modifiedTime desc',
-                pageToken=page_token,
-            ).execute()
-        except Exception as e:
-            print(f"Drive API error: {e}", file=sys.stderr)
-            sys.exit(1)
-        subfolders.extend(resp.get('files', []))
-        page_token = resp.get('nextPageToken')
-        if not page_token:
-            break
-    docs = []
-
-    # Get Google Doc from each subfolder
-    for sf in subfolders:
-        try:
-            resp = service.files().list(
-                q=f"'{sf['id']}' in parents and mimeType='application/vnd.google-apps.document' and trashed=false",
-                fields='files(id, name, modifiedTime)',
-                pageSize=5,
-            ).execute()
-        except Exception as e:
-            print(f"Ошибка при чтении папки {sf['name'][:40]}: {e}", file=sys.stderr)
-            continue
-
-        for doc in resp.get('files', []):
-            docs.append({
-                'id': doc['id'],
-                'name': doc['name'],
-                'folder': sf['name'],
-                'modifiedTime': doc.get('modifiedTime', ''),
-            })
-
-    return docs
-
-
 def sync_meetings(dry_run=False, folder_name='MeetGeek Files'):
-    """Sync new MeetGeek transcripts from Drive to context/meetings/ and convert."""
-    drive_docs = get_meetgeek_docs(folder_name)
-
-    MEETINGS_DIR.mkdir(parents=True, exist_ok=True)
-
-    # Sanitize name for filesystem (replace problematic chars)
-    def safe_filename(name):
-        for ch in ['/', '\\', ':', '*', '?', '"', '<', '>', '|']:
-            name = name.replace(ch, '-')
-        return name + '.docx'
-
-    # Use .md as completion marker — .docx without .md = orphan from failed conversion
-    existing_md_stems = {f.stem for f in MEETINGS_DIR.glob('*.md')}
-    existing_docx_stems = {f.stem for f in MEETINGS_DIR.glob('*.docx')}
-    orphan_docx = existing_docx_stems - existing_md_stems
-
-    if orphan_docx:
-        print(f"⚠️  Найдено {len(orphan_docx)} .docx без .md (незавершённая конвертация): {', '.join(list(orphan_docx)[:3])}")
-
-    new_docs = [d for d in drive_docs if Path(safe_filename(d['name'])).stem not in existing_md_stems]
-
-    print(f"\nDrive/{folder_name}: {len(drive_docs)} транскриптов")
-    print(f"context/meetings/: {len(existing_md_stems)} уже конвертировано")
-    print(f"Новых: {len(new_docs)}\n")
-
-    if not new_docs:
-        print("Всё актуально, новых транскриптов нет.")
-        return
-
-    for d in new_docs:
-        print(f"  * {d['name'][:60]} ({d['modifiedTime'][:10]})")
-
-    if dry_run:
-        print("\n[dry-run] Реального скачивания не было.")
-        return
-
-    service = get_drive_service()
-    downloaded, converted, failed = 0, 0, 0
-
-    for doc in new_docs:
-        filename = safe_filename(doc['name'])
-        dest = MEETINGS_DIR / filename
-        print(f"\n-> {doc['name'][:60]}")
-
-        # Export Google Doc as DOCX
-        try:
-            request = service.files().export_media(
-                fileId=doc['id'],
-                mimeType='application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-            )
-            buf = io.BytesIO()
-            downloader = MediaIoBaseDownload(buf, request)
-            done = False
-            while not done:
-                status, done = downloader.next_chunk()
-                if status:
-                    print(f"   {int(status.progress() * 100)}%", end='\r')
-            dest.write_bytes(buf.getvalue())
-            print(f"   Сохранено: {dest.name} ({dest.stat().st_size} bytes)")
-            downloaded += 1
-        except Exception as e:
-            print(f"   Ошибка скачивания: {e}", file=sys.stderr)
-            if dest.exists():
-                dest.unlink()
-                print(f"   Удалён неполный файл: {dest.name}")
-            failed += 1
-            continue
-
-        # Convert DOCX -> Markdown via convert-meeting-transcript
-        if not CONVERT_SCRIPT.exists():
-            print(f"   [skip] Скрипт конвертации не найден: {CONVERT_SCRIPT}", file=sys.stderr)
-            dest.unlink()
-            print(f"   Удалён {dest.name} (конвертация невозможна)")
-            failed += 1
-            continue
-
-        try:
-            result = subprocess.run(
-                ['python3', str(CONVERT_SCRIPT), str(dest)],
-                capture_output=True, text=True, timeout=60,
-                input='y\n',
-            )
-            if result.returncode == 0:
-                print(f"   Конвертирован в MD")
-                converted += 1
-            else:
-                print(f"   Конвертация не удалась: {result.stderr[:100]}")
-                dest.unlink()
-                print(f"   Удалён {dest.name} (будет повторная попытка при следующем sync)")
-                failed += 1
-        except Exception as e:
-            print(f"   Ошибка конвертации: {e}", file=sys.stderr)
-            dest.unlink()
-            print(f"   Удалён {dest.name} (будет повторная попытка при следующем sync)")
-            failed += 1
-
-    print(f"\n{'='*40}")
-    print(f"Скачано: {downloaded} | Конвертировано: {converted} | Ошибок: {failed}")
+    """Retired legacy Drive-owned meeting backfill workflow."""
+    _ = (dry_run, folder_name)
+    print(
+        "drive sync-meetings is retired: meeting backfill is a POS/coordinator "
+        "workflow, not a Drive provider capability. Use h2t-ops drive export "
+        "for individual Drive files and h2t-ops meetgeek for MeetGeek API "
+        "artifacts. Future batch backfill belongs to POS meeting intake.",
+        file=sys.stderr,
+    )
+    sys.exit(2)
 
 
 def main():
@@ -659,10 +494,13 @@ def main():
     p_up.add_argument('--no-convert', action='store_true',
                       help='Disable auto-conversion to Google Doc/Sheet')
 
-    # sync-meetings
-    p_sync = subparsers.add_parser('sync-meetings', help='Sync MeetGeek transcripts from Drive')
-    p_sync.add_argument('--dry-run', action='store_true', help='Show what would be downloaded')
-    p_sync.add_argument('--folder', default='MeetGeek Files', help='Drive folder name (default: MeetGeek Files)')
+    # sync-meetings — retired compatibility stub
+    p_sync = subparsers.add_parser(
+        'sync-meetings',
+        help='Retired: meeting backfill moved out of Drive',
+    )
+    p_sync.add_argument('--dry-run', action='store_true', help=argparse.SUPPRESS)
+    p_sync.add_argument('--folder', default='MeetGeek Files', help=argparse.SUPPRESS)
 
     args = parser.parse_args()
     if not args.command:

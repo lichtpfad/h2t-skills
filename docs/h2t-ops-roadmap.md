@@ -88,7 +88,7 @@ the migration quickly, then move attention to repo/profile hygiene.
 | --- | --- | --- |
 | Calendar provider features | #145 | Backlog; not part of parity migration closure |
 | Notion workspace discovery | #146 | Backlog/enhancement; not a migration blocker |
-| Drive sync-meetings retirement | #147 | Cleanup after Drive + MeetGeek; not a connector blocker |
+| Drive sync-meetings retirement | #147 | Retired from Drive; semantics handed to future POS/coordinator meeting backfill |
 | Agent permissions / packer hardening | #148 | Important security cleanup, but separate from connector migration |
 | Agent profiles | #153 | Next strategic repo-hygiene task after connector closure |
 | h2t-core setup wizard / secrets unification | #112, #107, #94 | Cross-cutting follow-up; do not block Telegram/Research unless directly needed |
@@ -129,8 +129,8 @@ Use the repo issue title standard: `skills: [M3] Verb noun`. Put `Wave: TZ-N` in
 - Still open and relevant to connector closure: #135 Telegram, #136 Research,
   #137 research URL fetch ladder, #121 Telegram Telethon crash.
 - Open but follow-up/backlog: #145 Calendar provider features, #146 Notion workspace
-  discovery, #147 Drive `sync-meetings` retirement, #148 tracked permission hardening,
-  #153 agent-profile skill.
+  discovery, #148 tracked permission hardening, #153 agent-profile skill.
+- Retired/closed after connector migration: #147 Drive `sync-meetings` retirement.
 
 ### Current Execution Sequence
 
@@ -330,7 +330,7 @@ explicit acceptance items rather than being lost between parity and "done".
 
 ### skills: [TZ-1] Migrate Drive connector
 
-**Status:** Done (#133). Pure Drive runtime migrated; `sync-meetings` remains legacy debt tracked in #147.
+**Status:** Done (#133). Pure Drive runtime migrated; `sync-meetings` retired in #147.
 
 **Context:** Drive has a skill surface but is not represented cleanly in the current CLI inventory.
 
@@ -562,6 +562,26 @@ Workflows that combine providers or write local operational state are not
 - batch/sync pipelines generally.
 
 These may live in skills/scripts or a future coordinator layer, but not in connector runtime.
+
+#### Meeting workflow boundary
+
+Historical meeting skills solved overlapping parts of the same pipeline. The target split is:
+
+- `h2t-ops drive`: Drive provider I/O only (`list`, `search`, `export`, `download`, `upload`).
+- `h2t-ops meetgeek`: MeetGeek provider I/O and provider-specific recovery artifacts.
+- Portable workflow/converter scripts: DOCX/legacy export conversion, batch discovery, and
+  explicit input/output transformation runnable from any repo.
+- POS transcript intake: canonical artifact registration, provenance, `meeting_key`, and
+  raw/readable transcript storage.
+- POS distillation: summaries, action items, decisions, and captures as proposals with review
+  gates, not truth.
+- Surfaces such as Daily Brief/session-start: read POS snapshots; they do not fetch or mutate
+  meeting state.
+
+`drive sync-meetings` (#147) is retired as a Drive-owned command. Its useful semantics are
+preserved for a future POS/coordinator backlog item: discover historical meeting artifacts,
+resolve a weak `meeting_key`, skip already-ingested items, normalize to readable transcript
+artifacts, call POS transcript intake, and write a provenance manifest.
 
 ### 4. Legacy `h2t` monolith
 

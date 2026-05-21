@@ -4,7 +4,7 @@ description: "Google Drive file browser through h2t-ops drive. Use to list, sear
 compatibility: "Requires Google OAuth token with Drive scope. Bootstrap via the same flow as Gmail/Calendar."
 metadata:
   author: lichtpfad
-  version: 1.1.0
+  version: 1.1.1
 ---
 
 # Инструкции
@@ -70,28 +70,26 @@ h2t-ops drive upload <file> --folder "NAME" [--no-convert] [--json]
 `--folder` обязателен. Drive folder names are not unique: если найдено больше
 одной папки с таким именем, команда вернёт ошибку ambiguous folder.
 
-### Legacy: синхронизация транскриптов (не для нового кода)
+### Retired: синхронизация транскриптов
 
-Subcommand `sync-meetings` исторически жил в `drive_cli.py`, пока у MeetGeek
-не было нормального публичного API. Он скачивает Google Doc транскрипты из
-папки `MeetGeek Files/`, экспортирует в DOCX в `$DOR_ROOT/context/meetings/`
-и вызывает DOR-internal конвертер. Это **coordinator/POS workflow, а не Drive
-runtime**, и в `h2t-ops drive ...` он не мигрирован.
+`sync-meetings` retired in #147. It was a historical Drive-owned workaround
+for meeting backfill before the MeetGeek API connector existed: discover docs
+under `MeetGeek Files/`, export DOCX, write into DOR `context/meetings/`, then
+run a local converter.
 
-Disposition этой команды отслеживается в **#147** (`Retire Drive
-sync-meetings legacy workflow`). Для нового кода используй:
+That useful workflow shape is preserved as future POS/coordinator semantics,
+not as a Drive capability:
 
-- `h2t-ops drive list "MeetGeek Files"` + `h2t-ops drive export <doc_id> --print` для отдельных транскриптов, или
-- `h2t-ops meetgeek ...` когда #134 закроет MeetGeek connector.
+1. discover historical meeting artifacts;
+2. assign or resolve a weak `meeting_key`;
+3. skip already ingested artifacts;
+4. store raw/readable transcript artifacts with provenance;
+5. pass them to POS transcript intake;
+6. leave journal/tasks/decisions behind review gates.
 
-Не вызывай `h2t-ops drive sync-meetings` — такого верба больше нет.
-
-Legacy-only env vars for the old script:
-
-- `DOR_ROOT` — путь к DOR repo (по умолчанию: `~/Projects/DOR`)
-- `VAULT_ROOT` — путь к vault (по умолчанию: `$DOR_ROOT/vault`)
-
-Они не влияют на `h2t-ops drive ...` verbs.
+Use `h2t-ops drive list/search/export/download/upload` only for Drive provider
+I/O. For MeetGeek artifacts, use `h2t-ops meetgeek ...`; for future batch
+meeting backfill, use the POS/coordinator workflow when it exists.
 
 ## Обработка ошибок
 
