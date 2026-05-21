@@ -123,8 +123,7 @@ Resolution:
 - E2E passed for `--days`, explicit date window, `--busy-only`, and partial
   window usage-error behavior.
 
-#82 remains open on GitHub until the local commits are pushed and the issue is
-closed with evidence.
+#82 was pushed and closed with E2E evidence.
 
 The broader #145 feature list remains provider backlog unless explicitly pulled
 into this freeze pass:

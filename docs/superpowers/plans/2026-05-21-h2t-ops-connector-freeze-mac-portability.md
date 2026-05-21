@@ -24,7 +24,7 @@ provider backlog or `h2t-core:agent-profile`.
 | Testing plan | `docs/h2t-ops-testing-plan.md` |
 | Umbrella issue | #155 |
 | MeetGeek 404 | #156 — fixed/closed in `f363746` |
-| Calendar UX | #82 — fixed locally in `6631f57`, pending push/close |
+| Calendar UX | #82 — fixed in `6631f57`, pushed and closed with E2E evidence |
 | Calendar provider backlog | #145 |
 | Notion backlog | #81, #146 |
 | Secrets/setup backlog | #107, #109, #110, #112, #94, #13 |
@@ -195,7 +195,7 @@ Steps:
    git commit -m "fix(meetgeek): classify listed meeting 404 behavior (#156)"
    ```
 
-## T2 — Completed Locally: Calendar UX Closure (#82)
+## T2 — Completed: Calendar UX Closure (#82)
 
 Commit: `6631f57 feat(calendar): add date-window and busy-only list filters (#82)`.
 
@@ -215,8 +215,7 @@ Outcome:
 - E2E passed for `--days`, explicit date window, `--busy-only`, and partial
   window validation.
 
-#82 is still open on GitHub until the local commits are pushed and the issue is
-closed with evidence.
+#82 was pushed and closed with E2E evidence.
 
 Archived execution scope:
 
@@ -432,12 +431,12 @@ Steps:
 
 7. STOP for approval.
 
-   Do not push, close #155, or close #82 without explicit user approval.
+   Do not push or close #155 without explicit user approval.
 
 ## Final Success Criteria
 
 - #156 is fixed in `f363746` and closed.
-- #82 fix-now scope is implemented in `6631f57`; push and issue closure remain.
+- #82 fix-now scope is implemented in `6631f57`, pushed, and closed with E2E evidence.
 - #81/#146 are classified.
 - secrets/setup/Mac issues are classified.
 - changed connector tests pass.
