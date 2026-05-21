@@ -76,8 +76,23 @@ surface:
 
 - explicit date window: `--from YYYY-MM-DD --to YYYY-MM-DD`;
 - configurable limit with a safe default;
-- `--busy-only` / transparency filtering;
-- optional `free-time` if it stays small and deterministic.
+- `--busy-only` / transparency filtering.
+
+Date-window contract:
+
+- `--from` is inclusive at local 00:00:00 in the query timezone.
+- `--to` is inclusive as a user-facing date and converted to an exclusive
+  next-day 00:00:00 API bound.
+- Query timezone is explicit: `--tz`, then `H2T_CALENDAR_TZ`, then
+  `Asia/Jerusalem` as the fallback matching existing create-event defaults.
+- Boundary tests must cover timed events, all-day events, and events at the
+  start/end of the window.
+
+Busy-only contract:
+
+- Filter raw Google Calendar events before normalization.
+- Missing `transparency` means busy.
+- `transparency == "transparent"` is excluded when `--busy-only` is set.
 
 The broader #145 feature list remains provider backlog unless explicitly pulled
 into this freeze pass:
@@ -89,6 +104,7 @@ into this freeze pass:
 - multi-calendar;
 - reminders;
 - FreeBusy.
+- `free-time` scheduling helper.
 
 ## Classify, Do Not Necessarily Implement
 
