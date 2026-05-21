@@ -131,6 +131,38 @@ def test_auth_status_maps_authorized_user(tmp_path, monkeypatch):
     assert status["user"]["username"] == "stan"
 
 
+def test_request_code_uses_connect_without_context_prompt(tmp_path, monkeypatch):
+    from h2t_ops.connectors.telegram import client as tmod
+
+    (tmp_path / "config.json").write_text(
+        json.dumps({"api_id": 123, "api_hash": "hash"}),
+        encoding="utf-8",
+    )
+    calls = []
+
+    class FakeClient:
+        def __init__(self, session, api_id, api_hash):
+            self.session = session
+
+        def __enter__(self):
+            raise AssertionError("Telethon context manager would call start() and prompt")
+
+        def connect(self):
+            calls.append("connect")
+
+        def disconnect(self):
+            calls.append("disconnect")
+
+        def send_code_request(self, phone):
+            calls.append(("send_code_request", phone))
+            return SimpleNamespace(phone_code_hash="hash1")
+
+    monkeypatch.setattr(tmod.TelegramClientAdapter, "_telegram_client_class", lambda self: FakeClient)
+    result = tmod.TelegramClientAdapter(config_dir=tmp_path).request_code("+100")
+    assert result == {"phone": "+100", "code_requested": True}
+    assert calls == ["connect", ("send_code_request", "+100"), "disconnect"]
+
+
 class _CtxClient:
     def __init__(self, inner):
         self.inner = inner

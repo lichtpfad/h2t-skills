@@ -6,9 +6,10 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 from h2t_ops.core.errors import AuthError, ConfigError
 
@@ -155,6 +156,26 @@ class TelegramClientAdapter:
         client_cls = self._telegram_client_class()
         return client_cls(self.session_file, cfg["api_id"], cfg["api_hash"])
 
+    @contextmanager
+    def _connected_client(self) -> Iterator[Any]:
+        """Connect without Telethon's context-manager start() prompt.
+
+        Telethon's ``with TelegramClient(...)`` calls ``start()``, which may
+        prompt for a phone on unauthenticated sessions. The CLI owns phone/code
+        explicitly, so use connect/disconnect instead.
+        """
+        client = self._client()
+        if hasattr(client, "connect"):
+            client.connect()
+            try:
+                yield client
+            finally:
+                if hasattr(client, "disconnect"):
+                    client.disconnect()
+            return
+        with client as connected:
+            yield connected
+
     def auth_status(self) -> dict[str, Any]:
         self._load_config()
         session_exists = self.session_sqlite_file.exists()
@@ -166,7 +187,7 @@ class TelegramClientAdapter:
                 "user": None,
             }
         try:
-            with self._client() as client:
+            with self._connected_client() as client:
                 authorized = bool(client.is_user_authorized())
                 user = self._user_row(client.get_me()) if authorized else None
         except (ValueError, sqlite3.OperationalError) as exc:
@@ -181,7 +202,7 @@ class TelegramClientAdapter:
     def request_code(self, phone: str) -> dict[str, Any]:
         self.config_dir.mkdir(parents=True, exist_ok=True)
         try:
-            with self._client() as client:
+            with self._connected_client() as client:
                 sent = client.send_code_request(phone)
         except (ValueError, sqlite3.OperationalError) as exc:
             raise _session_incompatible_error(exc) from exc
@@ -204,7 +225,7 @@ class TelegramClientAdapter:
         phone_code_hash = state.get("phone_code_hash")
         password_needed = self._session_password_error_class()
         try:
-            with self._client() as client:
+            with self._connected_client() as client:
                 try:
                     if code:
                         client.sign_in(phone, code, phone_code_hash=phone_code_hash)
@@ -270,7 +291,7 @@ class TelegramClientAdapter:
         kind: str | None = None,
     ) -> list[dict[str, Any]]:
         try:
-            with self._client() as client:
+            with self._connected_client() as client:
                 rows = [self._dialog_row(dialog) for dialog in client.iter_dialogs(limit=limit)]
         except (ValueError, sqlite3.OperationalError) as exc:
             raise _session_incompatible_error(exc) from exc
@@ -291,7 +312,7 @@ class TelegramClientAdapter:
 
             cutoff = datetime.now(timezone.utc) - timedelta(days=days)
         try:
-            with self._client() as client:
+            with self._connected_client() as client:
                 rows = []
                 for msg in client.iter_messages(entity, limit=limit):
                     msg_date = _get_attr(msg, "date")
@@ -323,7 +344,7 @@ class TelegramClientAdapter:
 
             cutoff = datetime.now(timezone.utc) - timedelta(days=days)
         try:
-            with self._client() as client:
+            with self._connected_client() as client:
                 me = client.get_me()
                 username = (_get_attr(me, "username", "") or "").lower()
                 needle = f"@{username}" if username else ""
@@ -343,7 +364,7 @@ class TelegramClientAdapter:
     def list_folders(self) -> list[dict[str, Any]]:
         request_cls = self._dialog_filters_request_class()
         try:
-            with self._client() as client:
+            with self._connected_client() as client:
                 filters = client(request_cls())
         except (ValueError, sqlite3.OperationalError) as exc:
             raise _session_incompatible_error(exc) from exc
@@ -375,7 +396,7 @@ class TelegramClientAdapter:
                 "timestamp_path": str(self.dialogs_bootstrap_file),
             }
         try:
-            with self._client() as client:
+            with self._connected_client() as client:
                 count = sum(1 for _ in client.iter_dialogs(limit=None))
         except (ValueError, sqlite3.OperationalError) as exc:
             raise _session_incompatible_error(exc) from exc
