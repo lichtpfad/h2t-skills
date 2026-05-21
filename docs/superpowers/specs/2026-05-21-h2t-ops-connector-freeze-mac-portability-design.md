@@ -85,7 +85,7 @@ If this class of bug returns, a listed item that cannot be fetched is either:
 The freeze pass should preserve this regression coverage, not reopen #156
 unless a new failing id contradicts the fixed behavior.
 
-### Calendar UX gap (#82)
+### Resolved Locally: Calendar UX gap (#82)
 
 Calendar parity is complete (#132), but daily use still needs a stronger query
 surface:
@@ -109,6 +109,22 @@ Busy-only contract:
 - Filter raw Google Calendar events before normalization.
 - Missing `transparency` means busy.
 - `transparency == "transparent"` is excluded when `--busy-only` is set.
+
+Resolution:
+
+- Implemented in `6631f57`.
+- `calendar list` now supports `--from YYYY-MM-DD --to YYYY-MM-DD`, `--tz`,
+  `--max`, and `--busy-only`.
+- `--to` is user-facing inclusive and converted to an exclusive next-day API
+  bound.
+- `--max` defaults to `250`.
+- `tzdata` is a project dependency so IANA timezones such as
+  `Asia/Jerusalem` work on Windows as well as macOS/Linux.
+- E2E passed for `--days`, explicit date window, `--busy-only`, and partial
+  window usage-error behavior.
+
+#82 remains open on GitHub until the local commits are pushed and the issue is
+closed with evidence.
 
 The broader #145 feature list remains provider backlog unless explicitly pulled
 into this freeze pass:
@@ -219,7 +235,7 @@ At the end of the freeze:
 The freeze is accepted when:
 
 1. #156 remains fixed with regression tests and live-smoke evidence.
-2. #82 is fixed or deliberately narrowed with an explicit remaining backlog.
+2. #82 remains fixed in `6631f57`, with push/issue-close evidence recorded.
 3. #81/#146 are classified as fix-now or accepted backlog.
 4. secrets/setup issues are classified for Mac portability.
 5. a Mac smoke plan exists.

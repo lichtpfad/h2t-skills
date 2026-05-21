@@ -38,6 +38,7 @@ The M3 connector migration is complete.
 | Foundation / Notion skeleton | TZ-0, #144 | Done |
 | Gmail | #131 | Done |
 | Calendar parity | #132 | Done |
+| Calendar UX closure | #82 | Done locally in `6631f57`; pending push and issue close |
 | Drive parity | #133 | Done |
 | MeetGeek API connector | #134 | Done |
 | Telegram connector | #135, #121 | Done; #121 closed as fixed by typed `SESSION_INCOMPATIBLE` handling |
@@ -60,12 +61,13 @@ triaged. That freeze happens before `h2t-core:agent-profile`.
 | Priority | Issue(s) | Work | Why it matters |
 | --- | --- | --- | --- |
 | 1 | #155 | h2t-ops connector freeze + Mac portability gate | Stop reopening connector migration work; make every remaining gap fixed, accepted backlog, or Mac/setup follow-up |
-| 2 | #82, #145 | Calendar closure | Fix the concrete CLI UX gap, then leave broader Calendar provider features as explicit backlog |
+| 2 | #82 | Push and close Calendar UX fix | Code and E2E are done locally in `6631f57`; GitHub issue is still open until evidence is posted |
 | 3 | #81, #146 | Notion closure | Decide whether embedded DB / workspace graph is needed before freeze or accepted as backlog |
 | 4 | #107, #109, #110, #112, #94, #13 | Secrets/setup closure | Make connector credentials portable enough for the later Mac pass |
 | 5 | #53, #73, #85, #79 | Cross-platform / Mac readiness | Remove Windows-only assumptions from connector setup/tests where they block Mac usage |
-| 6 | #153 | `h2t-core:agent-profile` | Replace global everything-enabled plugin load with repo base profiles, task overlays, and sync between machines |
-| 7 | #148 | Harden tracked agent permissions and context packer | Prevent broad local-agent permissions and unpinned `npx repomix@latest` from becoming shipped policy |
+| 6 | #145 | Calendar provider backlog | Keep broader Calendar provider features out of connector freeze unless explicitly pulled in |
+| 7 | #153 | `h2t-core:agent-profile` | Replace global everything-enabled plugin load with repo base profiles, task overlays, and sync between machines |
+| 8 | #148 | Harden tracked agent permissions and context packer | Prevent broad local-agent permissions and unpinned `npx repomix@latest` from becoming shipped policy |
 
 ## Critical Path Details
 
@@ -107,11 +109,11 @@ Resolution:
 - Live E2E passed for `get`, `transcript --format md`, and
   `transcript --format json --json` on the failing id.
 
-### 3. Calendar Closure (#82, #145)
+### 3. Resolved Locally: Calendar Closure (#82, #145)
 
 Goal: make `h2t-ops calendar` good enough for real day-to-day querying.
 
-Concrete fix-now candidate from #82:
+Concrete fix-now scope from #82:
 
 - arbitrary date window: `--from YYYY-MM-DD --to YYYY-MM-DD`;
 - configurable limit, default high enough to avoid silent truncation;
@@ -126,6 +128,15 @@ missing `transparency` means busy; `transparency: transparent` is excluded.
 Broader #145 provider features can remain backlog unless pulled in explicitly:
 Meet links, recurrence, patch/reschedule, all-day, multi-calendar, reminders, and
 FreeBusy. `free-time` is also backlog unless explicitly scoped later.
+
+Status:
+
+- #82 is fixed locally in `6631f57`.
+- E2E passed for old `--days`, explicit `--from/--to`, `--busy-only`, and
+  partial-window validation.
+- GitHub issue #82 remains open until the local commits are pushed and evidence
+  is posted.
+- #145 remains provider backlog, not connector-freeze critical path.
 
 ### 4. Notion Closure (#81, #146)
 
@@ -234,7 +245,7 @@ Recommended triage:
 | Connector freeze umbrella | #155 | Immediate gate before agent profiles |
 | MeetGeek follow-up | #156 | Closed; fixed in `f363746` |
 | Secrets/setup | #107, #112, #94, #109, #110, #13 | Triage for connector Mac portability; avoid piecemeal drift |
-| Calendar follow-up | #145, #82 | #82 likely fix-now; #145 mostly provider backlog unless explicitly widened |
+| Calendar follow-up | #82, #145 | #82 fixed locally in `6631f57`, pending push/close; #145 remains provider backlog unless explicitly widened |
 | Notion follow-up | #146, #81 | Decide fix-now vs accepted provider backlog |
 | Research backlog | #98, #97, #99, #101, #105, #72, #71, #70 | Keep as research/product backlog, not repo-closure blockers |
 | Creative backlog | #119, #83, #88, #89, #90, #91, #92 | Move to creative roadmap; not h2t-ops closure |
@@ -248,7 +259,7 @@ Recommended triage:
 | --- | --- | --- | --- |
 | Notion | `h2t-ops notion ...` | Done | Provider gaps tracked separately in #146/#81 |
 | Gmail | `h2t-ops gmail ...` | Done | Normal connector |
-| Calendar | `h2t-ops calendar ...` | Done parity | UX/provider gaps tracked in #82/#145 |
+| Calendar | `h2t-ops calendar ...` | Done | #82 fixed locally; #145 remains provider backlog |
 | Drive | `h2t-ops drive ...` | Done | `sync-meetings` retired from Drive in #147 |
 | MeetGeek | `h2t-ops meetgeek ...` | Done | #156 fixed; local recording recovery remains skill-layer (#149) |
 | Telegram | `h2t-ops telegram ...` | Done | Live auth verified; #121 closed |
@@ -375,10 +386,10 @@ Important for finishing the repository:
 
 ## Practical Order
 
-1. Continue #155 connector freeze triage.
-2. Implement the fix-now Calendar gap (#82).
-3. Decide #81/#146 Notion and secrets/setup scope for Mac portability.
-4. Run or document the final read-only connector smoke matrix.
+1. Push local #155/#82 docs and code commits; close #82 with E2E evidence.
+2. Continue #155 T3: classify #81/#146 Notion and secrets/setup scope for Mac portability.
+3. Run or document the final read-only connector smoke matrix.
+4. Close #155 when the freeze report and issue dispositions are complete.
 5. Then implement #153 `h2t-core:agent-profile`.
 6. Resolve #148 security/dev hygiene and #85 CI/unit-test hygiene.
 7. Sweep remaining issues into active / backlog / moved / stale-closed.
@@ -398,7 +409,6 @@ connector-freeze pass before agent profiles.
 | Remaining block | Optimistic | Realistic | Main risk |
 | --- | ---: | ---: | --- |
 | #155 connector freeze triage | 0.5 day | 1 day | Scope creep from "freeze" into all provider backlog |
-| #82 Calendar UX fix | 0.5-1 day | 1-2 days | Date/time edge cases and transparency semantics |
 | Notion/secrets/Mac portability decisions | 0.5-1 day | 1-2 days | Deciding what is fix-now vs accepted backlog |
 | Final connector smoke matrix | 0.5 day | 1 day | Live auth/provider flakiness |
 | #153 `h2t-core:agent-profile` | 1-2 days | 2-3 days | Profile merge semantics, temporary overlays, cross-machine sync |
@@ -408,8 +418,8 @@ connector-freeze pass before agent profiles.
 
 Total estimate to maintenance/closure mode:
 
-- optimistic: 4.5-6.5 focused working days;
-- realistic: 7-11 focused working days;
+- optimistic: 4-6 focused working days;
+- realistic: 6-9 focused working days;
 - with interruptions: 2-3 calendar weeks.
 
 This excludes broad Calendar/Notion provider enhancements, research product backlog,
