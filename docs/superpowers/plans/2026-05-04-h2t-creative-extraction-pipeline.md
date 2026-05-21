@@ -1,10 +1,9 @@
 ---
-type: plan
-status: draft — awaiting approval
-created: 2026-05-04
-author: Claude / Stanislav Glazov
+title: "h2t-creative: Style Extraction Pipeline"
+status: "draft"
+date: "2026-05-04"
+milestone: ""
 ---
-
 # h2t-creative: Style Extraction Pipeline
 
 ## Why this plan exists

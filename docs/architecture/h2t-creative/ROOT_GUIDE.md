@@ -44,8 +44,9 @@ Do not treat every historical artifact as a target.
 - R1 graphs/mono landing recovery: useful component and style evidence.
 - R2a terminal deck: successful fidelity and mobile adaptation precedent.
 - R2b editorial deck: successful System B deck precedent.
-- #119 semantic renderer v0: useful technical renderer proof.
-- #119 editorial semantic landing visual candidate: failed landing composition; keep as negative evidence until replaced by an approved wireframe-driven candidate.
+- #119 semantic renderer v0: rejected product direction. It generated files, but did not produce a valid design system, semantic block system, or landing.
+- #119 editorial semantic landing visual candidate: failed landing composition and failed visual system; keep as negative evidence. Do not use it as a foundation for new landing work.
+- 2026-05-08 semantic-CMS / semantic-renderer spec and plan: superseded by the 2026-05-19 review. Future work must start from a concrete, human-approved visual target, not from a CMS abstraction.
 
 ## Non-Negotiable Gates
 

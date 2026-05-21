@@ -1,3 +1,10 @@
+---
+title: "meetgeek upload + media conversion — design spec"
+status: "draft"
+owner: "Stanislav Glazov"
+date: "2026-05-06"
+milestone: ""
+---
 # meetgeek upload + media conversion — design spec
 
 **Date:** 2026-05-06

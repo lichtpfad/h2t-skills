@@ -1,3 +1,9 @@
+---
+title: "R2a — h2t-terminal deck modularization plan"
+status: "draft"
+date: "2026-05-05"
+milestone: ""
+---
 # R2a — h2t-terminal deck modularization plan
 
 **Issue:** [#86 skills: [R2a] Recover h2t-terminal deck legacy fidelity](https://github.com/lichtpfad/h2t-skills/issues/86)

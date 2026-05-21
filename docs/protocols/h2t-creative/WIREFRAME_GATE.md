@@ -80,4 +80,4 @@ The approved wireframe becomes:
 
 ## Current #119 Lesson
 
-#119 proved the semantic renderer path but failed as a landing candidate because recipe implementation happened before an approved landing wireframe. Future work must classify that result as a technical proof and negative composition evidence.
+#119 did not prove the semantic renderer as a product path. It generated a page, but the result had no accepted design system, no convincing semantic blocks, and no valid landing composition. Future work must classify #119 as negative evidence for abstraction-first planning. Start from a concrete, human-approved wireframe and a hand-verified visual target before extracting any reusable layer.

@@ -1,14 +1,9 @@
 ---
-type: plan
-status: draft — awaiting approval
-created: 2026-05-04
-author: Claude / Stanislav Glazov
-parent-plan: 2026-05-04-h2t-creative-extraction-pipeline.md
-source-of-truth:
-  - docs/visual-regression/2026-05-04-r1/h2t-graphs-design-system.md
-  - docs/visual-regression/2026-05-04-r1/h2t-mono-design-system.md
+title: "h2t-creative Step 3: Modularization Plan"
+status: "draft"
+date: "2026-05-04"
+milestone: ""
 ---
-
 # h2t-creative Step 3: Modularization Plan
 
 ## Rule

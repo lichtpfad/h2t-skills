@@ -3,7 +3,9 @@
 **Date:** 2026-05-08
 **Branch:** `codex/h2t-creative-semantic-renderer-v0`
 **Worktree:** `C:/dev/h2t-skills-semantic-v0`
-**Status:** APPROVED 2026-05-08 by human, with two added guardrails (§1.1) and recorded decisions P-D1–P-D5 (§10).
+**Status:** SUPERSEDED / DO NOT EXECUTE. Approved on 2026-05-08, but rejected by human review on 2026-05-19 after the #119 output was inspected in browser.
+
+> 2026-05-19 review: this plan represents the wrong vector. The semantic renderer generated a page, but the result had no accepted design system, no convincing semantic blocks, and no valid landing. Do not continue from this plan. Use it only as negative evidence for abstraction-first planning.
 
 **Issues:** to be filed under `lichtpfad/h2t-skills` once plan is acked
 (`creative: [v0] Add semantic block renderer for landings` —

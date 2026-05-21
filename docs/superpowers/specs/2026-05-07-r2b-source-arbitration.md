@@ -1,3 +1,10 @@
+---
+title: "R2b — Source Arbitration Reset (h2t-editorial deck, #87)"
+status: "draft"
+owner: "Stanislav Glazov"
+date: "2026-05-07"
+milestone: ""
+---
 # R2b — Source Arbitration Reset (h2t-editorial deck, #87)
 
 **Status:** Decision recorded. Rebuild required before any visual pass.
