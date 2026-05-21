@@ -24,7 +24,7 @@ provider backlog or `h2t-core:agent-profile`.
 | Testing plan | `docs/h2t-ops-testing-plan.md` |
 | Umbrella issue | #155 |
 | MeetGeek 404 | #156 — fixed/closed in `f363746` |
-| Calendar UX | #82 |
+| Calendar UX | #82 — fixed locally in `6631f57`, pending push/close |
 | Calendar provider backlog | #145 |
 | Notion backlog | #81, #146 |
 | Secrets/setup backlog | #107, #109, #110, #112, #94, #13 |
@@ -195,11 +195,30 @@ Steps:
    git commit -m "fix(meetgeek): classify listed meeting 404 behavior (#156)"
    ```
 
-## T2 — Calendar UX Closure (#82)
+## T2 — Completed Locally: Calendar UX Closure (#82)
 
-Commit: one code/test/docs commit.
+Commit: `6631f57 feat(calendar): add date-window and busy-only list filters (#82)`.
 
 Purpose: make `h2t-ops calendar` good enough for real date-window usage.
+
+Outcome:
+
+- Added `calendar list --from YYYY-MM-DD --to YYYY-MM-DD`.
+- Added `--tz`, resolving as arg -> `H2T_CALENDAR_TZ` -> `Asia/Jerusalem`.
+- Added `--busy-only` with raw-event transparency filtering before
+  normalization.
+- Raised `--max` default to `250`.
+- Added `tzdata` dependency for Windows IANA timezone support.
+- Updated Calendar skill docs to use direct `h2t-ops calendar`.
+- Local tests: `tests/connectors/calendar` -> 25 passed.
+- Full connector tests: `tests/connectors` -> 404 passed.
+- E2E passed for `--days`, explicit date window, `--busy-only`, and partial
+  window validation.
+
+#82 is still open on GitHub until the local commits are pushed and the issue is
+closed with evidence.
+
+Archived execution scope:
 
 Fix-now scope:
 
@@ -418,7 +437,7 @@ Steps:
 ## Final Success Criteria
 
 - #156 is fixed in `f363746` and closed.
-- #82 fix-now scope is implemented or explicitly narrowed.
+- #82 fix-now scope is implemented in `6631f57`; push and issue closure remain.
 - #81/#146 are classified.
 - secrets/setup/Mac issues are classified.
 - changed connector tests pass.
