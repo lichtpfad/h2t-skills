@@ -192,8 +192,19 @@ Fix-now scope:
 - `calendar list --from YYYY-MM-DD --to YYYY-MM-DD`;
 - `calendar list --max N` with safe default high enough to avoid silent
   truncation;
-- `calendar list --busy-only` filtering out transparent/non-blocking events;
-- optional `calendar free-time` only if it stays small and deterministic.
+- `calendar list --busy-only` filtering out transparent/non-blocking events.
+
+Date-window contract:
+
+- `--from` is inclusive at local 00:00:00 in the query timezone.
+- `--to` is inclusive as a user-facing date and converted to an exclusive
+  next-day 00:00:00 API bound.
+- Query timezone resolution: `--tz`, then `H2T_CALENDAR_TZ`, then
+  `Asia/Jerusalem`.
+- Backward-compatible `--days` remains available.
+- Raw Google events are filtered for `--busy-only` before normalization:
+  missing `transparency` means busy; `transparency == "transparent"` is
+  excluded.
 
 Out of scope unless explicitly approved:
 
@@ -204,6 +215,7 @@ Out of scope unless explicitly approved:
 - multi-calendar;
 - reminders;
 - full FreeBusy provider integration.
+- `free-time` scheduling helper.
 
 Steps:
 
@@ -212,9 +224,15 @@ Steps:
    Required test contracts:
 
    - client can list using explicit `time_min` / `time_max`;
-   - commands parse `--from`, `--to`, `--max`, `--busy-only`;
+   - commands parse `--from`, `--to`, `--max`, `--busy-only`, `--tz`;
+   - date-only `--from` / `--to` use inclusive user-facing dates and an
+     exclusive next-day API upper bound;
+   - timezone resolution uses `--tz`, then `H2T_CALENDAR_TZ`, then
+     `Asia/Jerusalem`;
    - `--days` backward compatibility remains;
-   - transparent events are filtered when `--busy-only` is set;
+   - transparent events are filtered before normalization when `--busy-only` is
+     set;
+   - missing `transparency` is treated as busy;
    - output still normalizes all-day/timed events;
    - module-level Google import guard remains true.
 
@@ -230,6 +248,7 @@ Steps:
        *,
        time_min: str | None = None,
        time_max: str | None = None,
+       tz: str | None = None,
        busy_only: bool = False,
    ) -> list[dict]:
        # implementation follows existing CalendarClient event-listing pattern
@@ -238,34 +257,26 @@ Steps:
 3. Implement CLI parser:
 
    ```bash
-   h2t-ops calendar list --from 2026-05-01 --to 2026-05-21 --max 250 --busy-only --json
+   h2t-ops calendar list --from 2026-05-01 --to 2026-05-21 --tz Asia/Jerusalem --max 250 --busy-only --json
    h2t-ops calendar list --days 7 --json
    ```
 
-4. If `free-time` is included, keep it pure and local:
+4. Update `plugins/h2t-ops/skills/calendar/SKILL.md`.
 
-   ```bash
-   h2t-ops calendar free-time --from 2026-05-01 --to 2026-05-21 --work-hours 09:00-18:00 --json
-   ```
-
-   Do not let it call POS or write local state.
-
-5. Update `plugins/h2t-ops/skills/calendar/SKILL.md`.
-
-6. Run:
+5. Run:
 
    ```bash
    uv run h2t-ops dev pytest tests/connectors/calendar -q
    uv run h2t-ops dev check lazy-registry
    ```
 
-7. Optional live read-only smoke:
+6. Optional live read-only smoke:
 
    ```bash
-   uv run h2t-ops calendar list --from 2026-05-01 --to 2026-05-21 --max 250 --busy-only --json
+   uv run h2t-ops calendar list --from 2026-05-01 --to 2026-05-21 --tz Asia/Jerusalem --max 250 --busy-only --json
    ```
 
-8. Commit scoped files only:
+7. Commit scoped files only:
 
    ```bash
    git add h2t_ops/connectors/calendar tests/connectors/calendar plugins/h2t-ops/skills/calendar/SKILL.md docs/reports/2026-05-21-h2t-ops-connector-freeze.md
@@ -351,17 +362,18 @@ Steps:
 3. Run read-only live smokes when credentials are available:
 
    ```bash
-   uv run h2t-ops notion search --query test --limit 1 --json
+   # Notion requires a real known page id. If none is available, record SKIPPED.
+   uv run h2t-ops notion blocks REAL_PAGE_ID --limit 1 --json
    uv run h2t-ops gmail list --max 1 --json
    uv run h2t-ops calendar list --days 1 --max 10 --json
    uv run h2t-ops drive list --max 1 --json
    uv run h2t-ops meetgeek auth-check --json
    uv run h2t-ops telegram auth status --json
-   uv run h2t-ops research search "test" --limit 1 --json
+   uv run h2t-ops research search --query "test" --num-results 1 --json
    ```
 
-   If a command shape differs from current implementation, record the correct
-   command in the report instead of forcing the command above.
+   Replace `REAL_PAGE_ID` before running. Do not run placeholder commands; mark
+   the provider smoke as skipped if no safe read-only id is available.
 
 4. Update the freeze report with:
 

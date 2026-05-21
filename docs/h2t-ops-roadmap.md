@@ -113,12 +113,17 @@ Concrete fix-now candidate from #82:
 
 - arbitrary date window: `--from YYYY-MM-DD --to YYYY-MM-DD`;
 - configurable limit, default high enough to avoid silent truncation;
-- busy/transparency filtering, for example `--busy-only`;
-- possibly `free-time` if the implementation stays small.
+- busy/transparency filtering, for example `--busy-only`.
+
+Date-only windows use explicit semantics: `--from` is inclusive at local
+00:00, `--to` is an inclusive user-facing date converted to an exclusive
+next-day API bound, and query timezone resolves from `--tz` -> `H2T_CALENDAR_TZ`
+-> `Asia/Jerusalem`. `--busy-only` filters raw events before normalization:
+missing `transparency` means busy; `transparency: transparent` is excluded.
 
 Broader #145 provider features can remain backlog unless pulled in explicitly:
 Meet links, recurrence, patch/reschedule, all-day, multi-calendar, reminders, and
-FreeBusy.
+FreeBusy. `free-time` is also backlog unless explicitly scoped later.
 
 ### 4. Notion Closure (#81, #146)
 
