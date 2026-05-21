@@ -5,3 +5,7 @@ The baseline plan for operational connector work is
 
 Use it before creating H2T-OPS specs, plans, PRs, or GitHub issues. It defines the current
 `h2t-ops` / `h2t_ops` identity, migration waves, connector inventory, and issue backlog.
+
+## Plugin Development
+
+Dev session (no duplicate skills): `pwsh scripts/claude-dev.ps1`
