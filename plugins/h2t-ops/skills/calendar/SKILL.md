@@ -20,23 +20,22 @@ captures until POS journal commands exist.
 ## Переменные
 
 ```bash
-H2T_PYTHON="${H2T_PYTHON:-}"
-[ -z "$H2T_PYTHON" ] && [ -f "$HOME/.h2t/venv/Scripts/python.exe" ] && H2T_PYTHON="$HOME/.h2t/venv/Scripts/python.exe"
-[ -z "$H2T_PYTHON" ] && [ -f "$HOME/.h2t/venv/bin/python" ] && H2T_PYTHON="$HOME/.h2t/venv/bin/python"
-[ -z "$H2T_PYTHON" ] && echo "ERROR: h2t venv not found. Run /h2t-core:setup" && exit 1
-
-CLI="$H2T_PYTHON ${CLAUDE_PLUGIN_ROOT}/lib/cli/main.py ingest calendar"
+CLI="h2t-ops calendar"
 ```
 
 ## Команды
 
 ### Просмотр событий
 ```bash
-$CLI list [--days N] [--max N] [--json]
+$CLI list [--days N] [--from YYYY-MM-DD --to YYYY-MM-DD] [--tz TZ] [--max N] [--busy-only] [--json]
 ```
 
 - `--days 1` — события на сегодня (по умолчанию)
 - `--days 7` — события на неделю
+- `--from ... --to ...` — явное окно дат; `--to` включительно для пользователя
+- `--tz Asia/Jerusalem` — timezone для date-window; fallback: `H2T_CALENDAR_TZ`, затем `Asia/Jerusalem`
+- `--busy-only` — скрыть transparent/free события
+- `--max 250` — безопасный дефолт, чтобы не терять насыщенные дни
 
 ### Поиск событий
 ```bash
@@ -77,4 +76,8 @@ $CLI get <event-id>
 OAuth ошибка:
 1. Проверь `~/.config/google-calendar-mcp/credentials.json`
 2. Проверь `~/.config/google-calendar-mcp/tokens.json`
-3. Если токен истёк — переавторизуйся через gmail skill
+3. Если токен истёк — переавторизуйся через Google OAuth setup
+
+Timezone ошибка:
+1. Запусти команды через project env (`uv run h2t-ops ...`) или установленный `h2t-ops`
+2. На Windows для IANA timezone вроде `Asia/Jerusalem` нужен пакет `tzdata`

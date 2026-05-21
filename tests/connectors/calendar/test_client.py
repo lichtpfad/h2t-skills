@@ -126,6 +126,54 @@ def test_list_events_happy_path_returns_normalized_list(client_obj):
     assert rows[0]["time"] == "14:00"
 
 
+def test_list_events_accepts_explicit_time_bounds_and_timezone(client_obj):
+    client_obj.service.events.return_value.list.return_value.execute.return_value = {
+        "items": []
+    }
+
+    rows = client_obj.list_events(
+        max_results=250,
+        time_min="2026-05-01T00:00:00+03:00",
+        time_max="2026-05-22T00:00:00+03:00",
+        tz="Asia/Jerusalem",
+    )
+
+    assert rows == []
+    client_obj.service.events.return_value.list.assert_called_once_with(
+        calendarId="primary",
+        timeMin="2026-05-01T00:00:00+03:00",
+        timeMax="2026-05-22T00:00:00+03:00",
+        maxResults=250,
+        singleEvents=True,
+        orderBy="startTime",
+        timeZone="Asia/Jerusalem",
+    )
+
+
+def test_list_events_busy_only_filters_transparent_before_normalization(client_obj):
+    client_obj.service.events.return_value.list.return_value.execute.return_value = {
+        "items": [
+            {
+                "id": "busy",
+                "summary": "Busy",
+                "start": {"dateTime": "2026-05-01T10:00:00+03:00"},
+                "end": {"dateTime": "2026-05-01T11:00:00+03:00"},
+            },
+            {
+                "id": "free",
+                "summary": "Free",
+                "transparency": "transparent",
+                "start": {"dateTime": "2026-05-01T12:00:00+03:00"},
+                "end": {"dateTime": "2026-05-01T13:00:00+03:00"},
+            },
+        ]
+    }
+
+    rows = client_obj.list_events(busy_only=True)
+
+    assert [row["id"] for row in rows] == ["busy"]
+
+
 # ---------- missing-libs / missing-creds path (re-checked via google_auth) ----------
 
 def test_init_with_missing_google_libs_raises_configerror(monkeypatch):
