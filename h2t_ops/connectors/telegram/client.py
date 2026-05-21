@@ -66,6 +66,15 @@ def _sender_name(sender: Any) -> str:
     return name or title
 
 
+def _plain_text(value: Any) -> str:
+    if value is None:
+        return ""
+    text = _get_attr(value, "text", None)
+    if text is not None:
+        return str(text)
+    return str(value)
+
+
 def _extract_urls(msg: Any) -> list[str]:
     text = _get_attr(msg, "text", "") or ""
     urls: list[str] = []
@@ -365,11 +374,12 @@ class TelegramClientAdapter:
         request_cls = self._dialog_filters_request_class()
         try:
             with self._connected_client() as client:
-                filters = client(request_cls())
+                response = client(request_cls())
         except (ValueError, sqlite3.OperationalError) as exc:
             raise _session_incompatible_error(exc) from exc
+        filters = _get_attr(response, "filters", response) or []
         rows = []
-        for item in filters or []:
+        for item in filters:
             peer_ids = []
             for peer in _get_attr(item, "include_peers", []) or []:
                 peer_id = (
@@ -382,7 +392,7 @@ class TelegramClientAdapter:
             rows.append(
                 {
                     "id": _get_attr(item, "id"),
-                    "title": _get_attr(item, "title", ""),
+                    "title": _plain_text(_get_attr(item, "title", "")),
                     "peer_ids": peer_ids,
                 }
             )

@@ -300,6 +300,47 @@ def test_list_folders_uses_raw_dialog_filters_request(tmp_path, monkeypatch):
     assert rows == [{"id": 2, "title": "Work", "peer_ids": [1, 2]}]
 
 
+def test_list_folders_accepts_dialog_filters_wrapper(tmp_path, monkeypatch):
+    from h2t_ops.connectors.telegram import client as tmod
+
+    (tmp_path / "config.json").write_text(json.dumps({"api_id": 1, "api_hash": "h"}), encoding="utf-8")
+
+    wrapped_filter = SimpleNamespace(
+        id=4,
+        title="WORK",
+        include_peers=[SimpleNamespace(channel_id=10), SimpleNamespace(user_id=20)],
+    )
+
+    class FakeInner:
+        def __call__(self, request):
+            return SimpleNamespace(filters=[wrapped_filter])
+
+    monkeypatch.setattr(tmod.TelegramClientAdapter, "_dialog_filters_request_class", lambda self: object)
+    monkeypatch.setattr(tmod.TelegramClientAdapter, "_client", lambda self: _CtxClient(FakeInner()))
+    rows = tmod.TelegramClientAdapter(config_dir=tmp_path).list_folders()
+    assert rows == [{"id": 4, "title": "WORK", "peer_ids": [10, 20]}]
+
+
+def test_list_folders_flattens_text_with_entities_title(tmp_path, monkeypatch):
+    from h2t_ops.connectors.telegram import client as tmod
+
+    (tmp_path / "config.json").write_text(json.dumps({"api_id": 1, "api_hash": "h"}), encoding="utf-8")
+    wrapped_filter = SimpleNamespace(
+        id=5,
+        title=SimpleNamespace(text="Research"),
+        include_peers=[],
+    )
+
+    class FakeInner:
+        def __call__(self, request):
+            return SimpleNamespace(filters=[wrapped_filter])
+
+    monkeypatch.setattr(tmod.TelegramClientAdapter, "_dialog_filters_request_class", lambda self: object)
+    monkeypatch.setattr(tmod.TelegramClientAdapter, "_client", lambda self: _CtxClient(FakeInner()))
+    rows = tmod.TelegramClientAdapter(config_dir=tmp_path).list_folders()
+    assert rows == [{"id": 5, "title": "Research", "peer_ids": []}]
+
+
 def test_bootstrap_dialogs_writes_timestamp_without_chats_yaml(tmp_path, monkeypatch):
     from h2t_ops.connectors.telegram import client as tmod
 
