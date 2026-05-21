@@ -24,7 +24,7 @@ POS journal commands exist.
 # New connector CLI (migrated verbs)
 H2T_OPS="h2t-ops"
 
-# Legacy script (recovery workflow — tracked in #149)
+# Legacy script (recovery workflow — extracted by #149)
 H2T_PYTHON="${H2T_PYTHON:-}"
 if [ -z "$H2T_PYTHON" ]; then
   [ -f "$HOME/.h2t/venv/bin/python" ] && H2T_PYTHON="$HOME/.h2t/venv/bin/python"
@@ -86,10 +86,9 @@ $H2T_OPS meetgeek submit-url <URL> [--title T] [--language-code CODE] [--templat
 
 **Compatibility alias:** `$LEGACY_CLI upload --download-url <URL>` — route to `$H2T_OPS meetgeek submit-url <URL>` instead. The legacy `_post_upload` path is superseded by this connector verb.
 
-### Legacy: upload local recordings (tracked in #149)
+### Legacy: upload local recordings (extracted by #149)
 
-**Do not delete these commands** — they are production functionality preserved until #149 extracts
-and refactors the recovery workflow.
+**Do not delete these commands** — they are production local-recording recovery functionality extracted into `scripts/recovery.py` by #149. It remains a legacy/coordinator surface, not pure connector API.
 
 ```bash
 # Convert (webm → mp4)
@@ -107,7 +106,7 @@ $LEGACY_CLI upload --from-file '~/Downloads/meetgeek-recording-*.webm' \
 State for resume: `~/.dor/lake/meetgeek/uploads-staging/manifest.jsonl`
 
 These commands depend on `google-api-python-client` and `imageio-ffmpeg`.
-#149 will extract this workflow and replace the embedded Drive logic with the Drive connector (#133).
+#149 extracted this workflow into `scripts/recovery.py`. Embedded Drive upload remains until a recovery-compatible Drive connector replacement exists; submit delegates to `h2t-ops meetgeek submit-url`.
 
 ### Legacy: sync and webhook-server
 
