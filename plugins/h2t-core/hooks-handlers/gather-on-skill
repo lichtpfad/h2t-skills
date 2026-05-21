@@ -26,9 +26,10 @@ fi
 echo "$NOW" > "$LOCK_FILE"
 
 # Run gather CLI (must run from dir containing lib/ so lib.cli.main is importable)
-# Cache layout: lib/ is at plugin root (../); dev layout: lib/ is at repo root (../../..)
+# Cache layout: scripts/resolve-h2t-python.sh is at ../scripts/ (plugin root = ../)
+# Dev layout: scripts/ is at plugins/h2t-core/ (repo root = ../../..)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-if [ -f "$SCRIPT_DIR/../lib/cli/main.py" ]; then
+if [ -f "$SCRIPT_DIR/../scripts/resolve-h2t-python.sh" ]; then
   REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
   PLUGIN_ROOT="$REPO_ROOT"
 else
