@@ -5,10 +5,11 @@ import json
 import re
 from datetime import datetime, timezone
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
-from h2t_ops.core.errors import ConfigError
+from h2t_ops.core.errors import ConfigError, NetworkError, ProviderError, UsageError
 from h2t_ops.connectors.research import client
 
 
@@ -149,6 +150,7 @@ def test_sanitize_details_redacts_known_tokens():
             "curl -H 'Authorization: Bearer bearer-secret' https://example.com",
             "value=secret_internal_token",
         ],
+        "source_url": "https://example.com/?access_token=url-leak-token&safe=value",
     }
 
     sanitized = client.sanitize_details(details)
@@ -161,6 +163,8 @@ def test_sanitize_details_redacts_known_tokens():
     assert "jina-secret" not in text
     assert "bearer-secret" not in text
     assert "secret_internal_token" not in text
+    assert "url-leak-token" not in text
+    assert "safe=value" in text
     assert "[REDACTED]" in text
 
 
@@ -243,3 +247,291 @@ def test_append_telemetry_coerces_non_json_values(tmp_path, monkeypatch):
 
     assert loaded["path"] == str(tmp_path / "artifact.json")
     assert loaded["created_at"] == str(now)
+
+
+def _patch_exa_search(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    provider_envelope: dict,
+    exit_code: int,
+) -> SimpleNamespace:
+    calls = SimpleNamespace(
+        validate_args=[],
+        load_system_prompt=[],
+        build_body=[],
+        search_with_retry=[],
+    )
+
+    def validate_args(args):
+        calls.validate_args.append(args)
+
+    def load_system_prompt(mode):
+        calls.load_system_prompt.append(mode)
+        return "system prompt", {"type": "object"}
+
+    def build_body(args, system_prompt, output_schema):
+        calls.build_body.append((args, system_prompt, output_schema))
+        return {
+            "query": args.query,
+            "numResults": args.num_results,
+            "systemPrompt": system_prompt,
+            "outputSchema": output_schema,
+        }
+
+    def search_with_retry(*, body, api_key, retry, mode):
+        calls.search_with_retry.append((body, api_key, retry, mode))
+        return provider_envelope, exit_code
+
+    from h2t_ops.connectors.research import exa
+
+    monkeypatch.setattr(exa, "validate_args", validate_args)
+    monkeypatch.setattr(exa, "load_system_prompt", load_system_prompt)
+    monkeypatch.setattr(exa, "build_body", build_body)
+    monkeypatch.setattr(exa, "search_with_retry", search_with_retry)
+    return calls
+
+
+def _provider_envelope(status: str = "OK") -> dict:
+    return {
+        "status": status,
+        "primary_engine": "exa",
+        "fallback_engine_used": None,
+        "results": [
+            {
+                "title": "Result",
+                "url": "https://example.com/result",
+                "highlights": ["quoted evidence"],
+            }
+        ]
+        if status == "OK"
+        else [],
+        "telemetry": {
+            "attempts": [
+                {
+                    "engine": "exa",
+                    "endpoint": "/search",
+                    "http": 200 if status == "OK" else 500,
+                    "latency_ms": 123,
+                    "error": None if status == "OK" else "exa_5xx_retryable",
+                }
+            ],
+            "reason_for_fallback": None,
+            "total_latency_ms": 123,
+            "total_cost_usd": 0.012,
+        },
+        "meta": {
+            "query": "research connector migration",
+            "mode": "generic",
+            "num_results_requested": 3,
+            "num_results_returned": 1 if status == "OK" else 0,
+            "envelope_version": "1",
+        },
+    }
+
+
+def test_research_client_search_ok_writes_artifacts(tmp_path, monkeypatch):
+    _clear_secret_env(monkeypatch)
+    monkeypatch.setattr(client, "resolve_secret", lambda name: "exa-key")
+    provider_envelope = _provider_envelope("OK")
+    calls = _patch_exa_search(
+        monkeypatch,
+        provider_envelope=provider_envelope,
+        exit_code=0,
+    )
+
+    result = client.ResearchClient(output_dir=tmp_path).search(
+        query="research connector migration",
+        mode="generic",
+        num_results=3,
+        project="h2t skills",
+        no_retry=True,
+    )
+
+    assert result["kind"] == "research_provider_envelope"
+    assert result["status"] == "OK"
+    assert result["results"] == provider_envelope["results"]
+    artifact = result["artifact"]
+    assert artifact["kind"] == "research_artifact"
+    assert artifact["provider_status"] == "OK"
+    assert artifact["telemetry"]["cost_basis"] == "provider_reported"
+    assert artifact["telemetry"]["estimated_cost_usd"] == 0.012
+
+    refs = artifact["artifact_refs"]
+    sources_path = tmp_path / refs["sources_json"]
+    partial_path = tmp_path / refs["partial_md"]
+    artifact_path = tmp_path / refs["artifact_json"]
+    assert json.loads(sources_path.read_text(encoding="utf-8")) == provider_envelope["results"]
+    assert "https://example.com/result" in partial_path.read_text(encoding="utf-8")
+    assert json.loads(artifact_path.read_text(encoding="utf-8")) == artifact
+
+    telemetry_lines = (tmp_path / "telemetry.jsonl").read_text(encoding="utf-8").splitlines()
+    assert len(telemetry_lines) == 1
+    telemetry = json.loads(telemetry_lines[0])
+    assert telemetry["provider"] == "exa"
+    assert telemetry["endpoint"] == "/search"
+    assert telemetry["cost_basis"] == "provider_reported"
+    assert telemetry["artifact_id"] == artifact["artifact_id"]
+
+    assert calls.validate_args[0].query == "research connector migration"
+    assert calls.search_with_retry == [
+        (
+            {
+                "query": "research connector migration",
+                "numResults": 3,
+                "systemPrompt": "system prompt",
+                "outputSchema": {"type": "object"},
+            },
+            "exa-key",
+            False,
+            "generic",
+        )
+    ]
+
+
+def test_research_client_search_artifacts_redact_token_like_provider_values(
+    tmp_path, monkeypatch
+):
+    _clear_secret_env(monkeypatch)
+    monkeypatch.setattr(client, "resolve_secret", lambda name: "exa-key")
+    query_secret = "query-exa-value"
+    title_secret = "title-bearer-value"
+    highlight_secret = "secret" + "_highlight_value"
+    provider_envelope = _provider_envelope("OK")
+    provider_envelope["meta"]["query"] = "EXA_API_KEY=" + query_secret
+    provider_envelope["results"][0]["title"] = "Authorization: Bearer " + title_secret
+    provider_envelope["results"][0]["highlights"] = ["quote " + highlight_secret]
+    _patch_exa_search(
+        monkeypatch,
+        provider_envelope=provider_envelope,
+        exit_code=0,
+    )
+
+    result = client.ResearchClient(output_dir=tmp_path).search(
+        query="EXA_API_KEY=" + query_secret,
+        project="h2t skills",
+    )
+
+    refs = result["artifact"]["artifact_refs"]
+    partial_text = (tmp_path / refs["partial_md"]).read_text(encoding="utf-8")
+    sources_text = (tmp_path / refs["sources_json"]).read_text(encoding="utf-8")
+    artifact_text = (tmp_path / refs["artifact_json"]).read_text(encoding="utf-8")
+    combined = "\n".join([partial_text, sources_text, artifact_text])
+
+    assert query_secret not in combined
+    assert title_secret not in combined
+    assert highlight_secret not in combined
+    assert "[REDACTED]" in combined
+
+
+def test_research_client_search_artifacts_redact_sensitive_url_query_params(
+    tmp_path, monkeypatch
+):
+    _clear_secret_env(monkeypatch)
+    monkeypatch.setattr(client, "resolve_secret", lambda name: "exa-key")
+    url_secret = "url-leak-token"
+    provider_envelope = _provider_envelope("OK")
+    provider_envelope["results"][0]["url"] = (
+        "https://example.com/result?access_token=" + url_secret + "&safe=value"
+    )
+    _patch_exa_search(
+        monkeypatch,
+        provider_envelope=provider_envelope,
+        exit_code=0,
+    )
+
+    result = client.ResearchClient(output_dir=tmp_path).search(
+        query="research connector migration",
+        project="h2t skills",
+    )
+
+    refs = result["artifact"]["artifact_refs"]
+    partial_text = (tmp_path / refs["partial_md"]).read_text(encoding="utf-8")
+    sources_text = (tmp_path / refs["sources_json"]).read_text(encoding="utf-8")
+
+    assert url_secret not in sources_text
+    assert url_secret not in partial_text
+    assert "safe=value" in sources_text
+    assert "safe=value" in partial_text
+    assert "[REDACTED]" in sources_text
+    assert "[REDACTED]" in partial_text
+
+
+def test_research_client_search_sanitizes_project_before_artifact_paths(
+    tmp_path, monkeypatch
+):
+    _clear_secret_env(monkeypatch)
+    monkeypatch.setattr(client, "resolve_secret", lambda name: "exa-key")
+    project_secret = "project-leak-token"
+    provider_envelope = _provider_envelope("OK")
+    _patch_exa_search(
+        monkeypatch,
+        provider_envelope=provider_envelope,
+        exit_code=0,
+    )
+
+    result = client.ResearchClient(output_dir=tmp_path).search(
+        query="research connector migration",
+        project="access_token=" + project_secret,
+    )
+
+    refs = result["artifact"]["artifact_refs"]
+    ref_text = json.dumps(refs)
+    generated_names = "\n".join(path.name for path in tmp_path.iterdir())
+
+    assert project_secret not in ref_text
+    assert project_secret not in generated_names
+    assert "redacted" in ref_text
+    assert "redacted" in generated_names
+
+
+def test_research_client_search_failed_provider_envelope_raises_providererror(
+    tmp_path, monkeypatch
+):
+    _clear_secret_env(monkeypatch)
+    monkeypatch.setattr(client, "resolve_secret", lambda name: "exa-key")
+    provider_envelope = _provider_envelope("FAILED")
+    provider_envelope["telemetry"]["attempts"][0]["error"] = "exa_4xx_nonretryable"
+    _patch_exa_search(monkeypatch, provider_envelope=provider_envelope, exit_code=2)
+
+    with pytest.raises(ProviderError) as ei:
+        client.ResearchClient(output_dir=tmp_path).search(query="q")
+
+    details = ei.value.details
+    assert details["provider_envelope"]["status"] == "FAILED"
+    assert details["provider_envelope"]["telemetry"]["attempts"][0]["error"] == "exa_4xx_nonretryable"
+    assert (tmp_path / "telemetry.jsonl").is_file()
+
+
+def test_research_client_search_exit_code_1_raises_usageerror(tmp_path, monkeypatch):
+    _clear_secret_env(monkeypatch)
+    monkeypatch.setattr(client, "resolve_secret", lambda name: "exa-key")
+    provider_envelope = _provider_envelope("FAILED")
+    provider_envelope["telemetry"]["attempts"][0]["error"] = "exa_usage_error"
+    _patch_exa_search(monkeypatch, provider_envelope=provider_envelope, exit_code=1)
+
+    with pytest.raises(UsageError) as ei:
+        client.ResearchClient(output_dir=tmp_path).search(query="q")
+
+    details = ei.value.details
+    assert details["provider_envelope"]["status"] == "FAILED"
+    assert details["provider_envelope"]["telemetry"]["attempts"][0]["error"] == "exa_usage_error"
+
+
+def test_research_client_search_network_failure_exit_code_3_raises_networkerror(
+    tmp_path, monkeypatch
+):
+    _clear_secret_env(monkeypatch)
+    monkeypatch.setattr(client, "resolve_secret", lambda name: "exa-key")
+    provider_envelope = _provider_envelope("FAILED")
+    provider_envelope["telemetry"]["attempts"][0].update(
+        {"http": None, "error": "exa_network_timeout"}
+    )
+    _patch_exa_search(monkeypatch, provider_envelope=provider_envelope, exit_code=3)
+
+    with pytest.raises(NetworkError) as ei:
+        client.ResearchClient(output_dir=tmp_path).search(query="q")
+
+    details = ei.value.details
+    assert details["provider_envelope"]["status"] == "FAILED"
+    assert details["provider_envelope"]["telemetry"]["attempts"][0]["error"] == "exa_network_timeout"
+    assert (tmp_path / "telemetry.jsonl").is_file()
