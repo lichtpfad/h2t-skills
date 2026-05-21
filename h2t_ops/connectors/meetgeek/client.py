@@ -156,8 +156,32 @@ class MeetGeekClient:
         return {"rows": rows, "next_cursor": next_cursor}
 
     def get_meeting(self, meeting_id: str) -> Dict[str, Any]:
-        """/v1/meeting/{id} — note singular endpoint."""
-        return self._get(f"/v1/meeting/{meeting_id}")
+        """/v1/meeting/{id}; fallback to list row when metadata endpoint 404s."""
+        try:
+            return self._get(f"/v1/meeting/{meeting_id}")
+        except NotFoundError as exc:
+            listed = self._find_listed_meeting(meeting_id)
+            if listed is not None:
+                return listed
+            raise NotFoundError(
+                f"Meeting {meeting_id} was not found by metadata endpoint or list fallback.",
+                hint="If this meeting appeared recently, wait for MeetGeek processing to finish.",
+            ) from exc
+
+    def _find_listed_meeting(self, meeting_id: str) -> Optional[Dict[str, Any]]:
+        cursor: Optional[str] = None
+        pages = 0
+        max_pages = int(os.environ.get("MEETGEEK_MAX_PAGES", "1000"))
+        while pages < max_pages:
+            data = self.list_meetings(limit=100, cursor=cursor)
+            for row in data["rows"]:
+                if (row.get("id") or row.get("meeting_id")) == meeting_id:
+                    return row
+            cursor = data.get("next_cursor")
+            pages += 1
+            if not cursor:
+                return None
+        return None
 
     def get_transcript(self, meeting_id: str) -> Dict[str, Any]:
         """Fetches all transcript pages; returns {sentences: [...], ...metadata}."""
