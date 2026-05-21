@@ -1,10 +1,10 @@
 ---
 name: h2t-core:session-start
-description: "Session-start pipeline for h2t-core. Loaded automatically by /h2t-core:session-start slash command. DO NOT invoke via Skill tool while already executing session-start — causes duplicate execution loop."
+description: "Use at the start of any working session (dev, creative, personal). Triggers on 'start session', 'начинаем', 'новая сессия'. Do not invoke again while already executing session-start."
 compatibility: "Claude Code"
 metadata:
   author: lichtpfad
-  version: 3.0.10
+  version: 3.0.11
 ---
 
 # Session Start v3
