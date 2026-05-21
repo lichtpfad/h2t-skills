@@ -80,7 +80,7 @@ the migration quickly, then move attention to repo/profile hygiene.
 | Research connector | #136 | `h2t-ops research ...` migrated with provider envelope preserved |
 | URL fetch ladder | #137 | `h2t-ops research fetch --url ...` integrated or explicitly scoped into #136 |
 | Daily Brief | create/confirm issue | Uses migrated connectors; no direct `lib/cli/main.py ingest ...` dependency |
-| Legacy h2t overlap | create/confirm issue | Decide retire/disable/keep-compat for monolith `h2t` skills after split plugins are stable |
+| Legacy h2t overlap | #151 | Retire monolith `h2t` from marketplace; keep split plugins as active entrypoints |
 
 ### Follow-Up / Not Blocking Closure
 
@@ -146,9 +146,9 @@ Use the repo issue title standard: `skills: [M3] Verb noun`. Put `Wave: TZ-N` in
 4. **Daily Brief connector switch.** Create/confirm a tracking issue, then update the
    workflow to use migrated `h2t-ops` connector reads. Keep it as synthesis, not connector
    runtime and not POS journal mutation.
-5. **Legacy h2t retirement decision.** After Telegram/Research/Daily Brief are stable,
-   decide whether to uninstall/disable the legacy `h2t` plugin by default or keep it as a
-   compatibility pack. This is the largest remaining skill-listing duplication source.
+5. **Legacy h2t retirement (#151).** Retire the legacy `h2t` plugin from marketplace.
+   Keep `plugins/h2t/` as rollback/archive source for one release; active entrypoints live in
+   split plugins.
 6. **#153 Agent profiles.** Implement `h2t-core:agent-profile` to encode per-repo base
    profiles and task overlays, so future sessions do not load every plugin globally.
 7. **Final issue sweep.** Reclassify older research/creative/secrets issues into active,
@@ -585,14 +585,21 @@ artifacts, call POS transcript intake, and write a provenance manifest.
 
 ### 4. Legacy `h2t` monolith
 
-The legacy `h2t` plugin still contributes duplicate/overlapping entries:
+The legacy `h2t` plugin is retired from the marketplace in #151. `plugins/h2t/`
+stays in the repository for one release as rollback/archive source, but it is no
+longer an active production plugin.
 
-- `gmail`, `calendar`, `drive`, `notion`, `telegram`;
-- `deck`, `landing`, `design`;
-- `github-issues`, `pre-merge-check`, and related dev helpers.
+Active replacements:
 
-Retire/disable/keep-compat is a separate decision. Do it after Telegram, Research/fetch, and
-Daily Brief are stable, so old entrypoints are not removed too early.
+- provider reads and operational connectors: `h2t-ops`;
+- session/project runtime: `h2t-core`;
+- dev/GitHub/docs workflow: `h2t-dev`;
+- creative/style work, including `voice-eval`: `h2t-creative`;
+- education/transcripts: `h2t-edu`.
+
+Old Telegram/Notion/meeting dynamics are not migrated as part of #151. Those
+belong to portable workflow scripts or POS/coordinator backlog by the boundary
+decision above.
 
 ### 5. Creative / Arch / Edu / DCC
 
@@ -619,7 +626,7 @@ Important for finishing the repository, but not connector migration:
 ### Practical Order
 
 1. Close `h2t-ops`: Telegram -> Research/fetch -> Daily Brief.
-2. Decide legacy `h2t` overlap.
+2. Retire legacy `h2t` marketplace plugin (#151).
 3. Implement `h2t-core:agent-profile`.
 4. Do final repo/security/issue cleanup.
 5. Run Creative/DCC/Edu as separate streams, not as connector-closure blockers.
