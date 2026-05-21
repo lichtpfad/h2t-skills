@@ -3,13 +3,20 @@ from __future__ import annotations
 
 
 class H2TError(Exception):
-    """Base. Carries an optional install/fix hint.
+    """Base. Carries an optional install/fix hint and public diagnostic details.
     Always raise a typed subclass; do not raise H2TError directly."""
     kind: str = "provider"
 
-    def __init__(self, message: str, *, hint: str | None = None) -> None:
+    def __init__(
+        self,
+        message: str,
+        *,
+        hint: str | None = None,
+        details: object | None = None,
+    ) -> None:
         super().__init__(message)
         self.hint = hint
+        self.details = details
 
 
 class UsageError(H2TError):
