@@ -1,6 +1,6 @@
 # h2t-ops Connector Freeze + Mac Portability Gate — Design
 
-Status: draft for review
+Status: active execution
 Date: 2026-05-21
 Issue: #155
 Related: #82, #145, #156, #81, #146, #107, #109, #110, #112, #94, #13, #53, #73, #85, #79
@@ -31,6 +31,7 @@ The core connectors exist and are usable through `h2t-ops`:
 
 The legacy `h2t` marketplace plugin is retired (#151). Drive `sync-meetings` is
 retired from Drive (#147). Telegram session-rot was fixed by #135/#121.
+MeetGeek listed-meeting 404 was fixed and closed in #156.
 
 The remaining problem is closure quality: some known gaps are still mixed
 together with backlog, setup, Mac portability, and provider feature requests.
@@ -50,7 +51,7 @@ imports, and typed errors.
 
 ## Fix-Now Candidates
 
-### MeetGeek listed-meeting 404 (#156)
+### Resolved: MeetGeek listed-meeting 404 (#156)
 
 Live usage surfaced repeated 404s:
 
@@ -58,8 +59,22 @@ Live usage surfaced repeated 404s:
 - `h2t-ops meetgeek transcript <id>` returns 404;
 - `h2t-ops meetgeek get <id>` also needs verification for the same listed id.
 
-This is a freeze blocker until classified. A listed item that cannot be fetched
-is either:
+This was treated as a legacy-parity regression rather than provider behavior by
+default, because the legacy MeetGeek skill path worked reliably for transcript
+fetches.
+
+Resolution:
+
+- Markdown artifact commands no longer require `/v1/meeting/{id}` metadata to
+  succeed; if metadata 404s, they format with the known `meeting_id`, matching
+  legacy behavior.
+- `meetgeek get` falls back from singular `/v1/meeting/{id}` to the
+  `/v1/meetings` list row when the listed meeting exists but the metadata
+  endpoint returns 404.
+
+Fixed in `f363746`; #156 is closed with E2E evidence.
+
+If this class of bug returns, a listed item that cannot be fetched is either:
 
 - wrong endpoint shape;
 - wrong id field selected from the list response;
@@ -67,7 +82,8 @@ is either:
 - provider retention/permission limitation;
 - or acceptable provider behavior with a poor error message.
 
-The freeze pass must reproduce or classify this before closing #155.
+The freeze pass should preserve this regression coverage, not reopen #156
+unless a new failing id contradicts the fixed behavior.
 
 ### Calendar UX gap (#82)
 
@@ -202,7 +218,7 @@ At the end of the freeze:
 
 The freeze is accepted when:
 
-1. #156 is fixed or classified with a better error contract.
+1. #156 remains fixed with regression tests and live-smoke evidence.
 2. #82 is fixed or deliberately narrowed with an explicit remaining backlog.
 3. #81/#146 are classified as fix-now or accepted backlog.
 4. secrets/setup issues are classified for Mac portability.

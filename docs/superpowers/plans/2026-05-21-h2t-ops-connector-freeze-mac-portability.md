@@ -1,7 +1,7 @@
 # h2t-ops Connector Freeze + Mac Portability Gate — Implementation Plan (#155)
 
 Date: 2026-05-21
-Status: ready for review
+Status: active execution
 Design: docs/superpowers/specs/2026-05-21-h2t-ops-connector-freeze-mac-portability-design.md
 
 ## Goal
@@ -23,7 +23,7 @@ provider backlog or `h2t-core:agent-profile`.
 | POS boundary | `plugins/h2t-ops/references/pos-operational-boundary.md` |
 | Testing plan | `docs/h2t-ops-testing-plan.md` |
 | Umbrella issue | #155 |
-| MeetGeek 404 | #156 |
+| MeetGeek 404 | #156 — fixed/closed in `f363746` |
 | Calendar UX | #82 |
 | Calendar provider backlog | #145 |
 | Notion backlog | #81, #146 |
@@ -35,7 +35,8 @@ provider backlog or `h2t-core:agent-profile`.
 1. Do not revive the legacy `h2t` marketplace plugin.
 2. Do not add POS, DOR, vault, lake, or journal writes to connectors.
 3. Do not expand this into all Calendar/Notion provider features.
-4. Treat MeetGeek `list` → `get/transcript` 404 as fix-now or explicitly classified.
+4. Keep MeetGeek `list` → `get/transcript` 404 regression coverage; #156 is
+   fixed/closed in `f363746`.
 5. Keep SDK imports lazy; `dev check lazy-registry` must stay green.
 6. Stage only files named by the current task. The repo has unrelated dirty
    `.claude/*`, `.superpowers/`, `build/`, backup, and packer files.
@@ -122,12 +123,25 @@ Steps:
    git commit -m "docs(h2t-ops): start connector freeze report (#155)"
    ```
 
-## T1 — MeetGeek Listed-Meeting 404 Triage / Fix (#156)
+## T1 — Completed: MeetGeek Listed-Meeting 404 Fix (#156)
 
-Commit: one code/test/docs commit if a code fix is needed; otherwise one report
-commit documenting the classification.
+Commit: `f363746 fix(meetgeek): preserve transcript output when metadata 404s (#156)`.
 
-Purpose: resolve or classify `list` → `get/transcript` 404 before freeze.
+Purpose: resolved `list` → `get/transcript` 404 before freeze.
+
+Outcome:
+
+- Markdown artifact commands no longer require `/v1/meeting/{id}` metadata.
+- `meetgeek get` falls back from `/v1/meeting/{id}` to the matching
+  `/v1/meetings` row when the listed meeting exists.
+- #156 is closed.
+- Regression tests were added in `tests/connectors/meetgeek/`.
+- Live E2E on `be7505e5-198c-4f10-a7c4-8fb697dd3711` passed for:
+  - `get --json`;
+  - `transcript --format md`;
+  - `transcript --format json --json`.
+
+Archived execution steps:
 
 Steps:
 
@@ -399,12 +413,11 @@ Steps:
 
 7. STOP for approval.
 
-   Do not push, close #155, close #156, or close #82 without explicit user
-   approval.
+   Do not push, close #155, or close #82 without explicit user approval.
 
 ## Final Success Criteria
 
-- #156 is fixed or classified.
+- #156 is fixed in `f363746` and closed.
 - #82 fix-now scope is implemented or explicitly narrowed.
 - #81/#146 are classified.
 - secrets/setup/Mac issues are classified.
