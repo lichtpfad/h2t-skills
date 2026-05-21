@@ -6,10 +6,11 @@ import re
 from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 
 import pytest
 
-from h2t_ops.core.errors import ConfigError, NetworkError, ProviderError, UsageError
+from h2t_ops.core.errors import AuthError, ConfigError, NetworkError, ProviderError, UsageError
 from h2t_ops.connectors.research import client
 
 
@@ -535,3 +536,194 @@ def test_research_client_search_network_failure_exit_code_3_raises_networkerror(
     assert details["provider_envelope"]["status"] == "FAILED"
     assert details["provider_envelope"]["telemetry"]["attempts"][0]["error"] == "exa_network_timeout"
     assert (tmp_path / "telemetry.jsonl").is_file()
+
+
+def _fetch_provider_envelope(
+    *,
+    status: str = "OK",
+    provider_used: str = "direct",
+    content_gate: str = "none",
+    raw_html_path: str | None = None,
+) -> dict:
+    return {
+        "status": status,
+        "url": "https://example.com",
+        "final_url": "https://example.com",
+        "provider_used": provider_used,
+        "content_type": "article" if content_gate == "none" else "gated",
+        "content_gate": content_gate,
+        "title": "Example" if status != "FAILED" else None,
+        "body_markdown": "Body" if status != "FAILED" else "",
+        "body_text": "Body" if status != "FAILED" else "",
+        "body_chars": 4 if status != "FAILED" else 0,
+        "links": [],
+        "metadata": {"raw_html_path": raw_html_path},
+        "telemetry": {
+            "attempts": [
+                {
+                    "provider": provider_used if provider_used != "none" else "direct",
+                    "http": 200 if status != "FAILED" else 401,
+                    "latency_ms": 10,
+                    "error": None
+                    if status != "FAILED"
+                    else f"fetch_gated_{content_gate}",
+                }
+            ],
+            "reason_for_degraded": None,
+            "reason_for_failed": None
+            if status != "FAILED"
+            else f"content_gate_{content_gate}",
+            "total_latency_ms": 10,
+            "providers_skipped": [],
+            "providers_skipped_reason": {},
+        },
+        "meta": {"primary_engine": "fetch_ladder", "envelope_version": "1"},
+    }
+
+
+def test_research_client_fetch_ok_writes_artifact(tmp_path):
+    provider_env = _fetch_provider_envelope()
+    with patch(
+        "h2t_ops.connectors.research.fetch.fetch_via_ladder",
+        return_value=provider_env,
+    ) as fetch_ladder:
+        result = client.ResearchClient(output_dir=tmp_path).fetch_url(
+            "https://example.com",
+        )
+
+    assert result["kind"] == "research_fetch_envelope"
+    assert result["status"] == "OK"
+    assert result["artifact"]["telemetry"]["providers"] == ["direct"]
+    assert result["artifact"]["telemetry"]["estimated_cost_usd"] == 0.0
+    assert result["artifact"]["telemetry"]["cost_basis"] == "zero"
+
+    refs = result["artifact"]["artifact_refs"]
+    assert (tmp_path / refs["sources_json"]).is_file()
+    assert (tmp_path / refs["partial_md"]).is_file()
+    assert json.loads((tmp_path / refs["artifact_json"]).read_text(encoding="utf-8")) == result["artifact"]
+    assert refs["raw_html"] is None
+    assert fetch_ladder.call_args.kwargs["url"] == "https://example.com"
+    assert fetch_ladder.call_args.kwargs["provider_choice"] == "auto"
+    assert fetch_ladder.call_args.kwargs["config"]["ladder"]["per_provider_timeout_ms"] == 15000
+    assert fetch_ladder.call_args.kwargs["config"]["ladder"]["min_body_chars"] == 200
+
+
+def test_research_client_fetch_timeout_updates_provider_configs_with_timeouts(tmp_path):
+    provider_env = _fetch_provider_envelope()
+    with patch(
+        "h2t_ops.connectors.research.fetch.fetch_via_ladder",
+        return_value=provider_env,
+    ) as fetch_ladder:
+        client.ResearchClient(output_dir=tmp_path).fetch_url(
+            "https://example.com",
+            timeout_ms=4321,
+        )
+
+    config = fetch_ladder.call_args.kwargs["config"]
+    assert config["ladder"]["per_provider_timeout_ms"] == 4321
+    assert config["providers"]["direct"]["timeout_ms"] == 4321
+    assert config["providers"]["jina"]["timeout_ms"] == 4321
+    assert config["providers"]["playwright"]["timeout_ms"] == 4321
+
+
+def test_research_client_fetch_timeout_updates_explicit_disabled_provider_config(
+    tmp_path,
+):
+    config_path = tmp_path / "fetch_config.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "providers": {
+                    "direct": {"enabled": False, "timeout_ms": 9999},
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    provider_env = _fetch_provider_envelope()
+
+    with patch(
+        "h2t_ops.connectors.research.fetch.fetch_via_ladder",
+        return_value=provider_env,
+    ) as fetch_ladder:
+        client.ResearchClient(output_dir=tmp_path).fetch_url(
+            "https://example.com",
+            provider="direct",
+            timeout_ms=1234,
+            config_path=str(config_path),
+        )
+
+    config = fetch_ladder.call_args.kwargs["config"]
+    assert fetch_ladder.call_args.kwargs["provider_choice"] == "direct"
+    assert config["providers"]["direct"]["enabled"] is False
+    assert config["providers"]["direct"]["timeout_ms"] == 1234
+
+
+def test_research_client_fetch_gated_maps_to_autherror(tmp_path):
+    provider_env = _fetch_provider_envelope(
+        status="FAILED",
+        provider_used="none",
+        content_gate="login_required",
+    )
+    with patch(
+        "h2t_ops.connectors.research.fetch.fetch_via_ladder",
+        return_value=provider_env,
+    ):
+        with pytest.raises(AuthError) as exc:
+            client.ResearchClient(output_dir=tmp_path).fetch_url(
+                "https://example.com/private",
+            )
+    assert exc.value.details["provider_envelope"]["content_gate"] == "login_required"
+    assert exc.value.details["provider_envelope"]["status"] == "FAILED"
+
+
+def test_research_client_fetch_keep_raw_maps_raw_html_ref(tmp_path):
+    raw_path = tmp_path / "example.raw.html"
+    raw_path.write_text("<html>raw</html>", encoding="utf-8")
+    provider_env = _fetch_provider_envelope(raw_html_path=str(raw_path))
+
+    with patch(
+        "h2t_ops.connectors.research.fetch.fetch_via_ladder",
+        return_value=provider_env,
+    ) as fetch_ladder:
+        result = client.ResearchClient(output_dir=tmp_path).fetch_url(
+            "https://example.com",
+            keep_raw=True,
+        )
+
+    assert fetch_ladder.call_args.kwargs["keep_raw"] is True
+    assert result["artifact"]["artifact_refs"]["raw_html"] == raw_path.name
+
+
+def test_research_client_fetch_keep_raw_redacts_url_secrets_in_raw_ref(tmp_path):
+    url = (
+        "https://example.com/private"
+        "?api_key=secret123&access_token=token456&safe=value"
+    )
+    captured: dict[str, Path] = {}
+
+    def fake_fetch_via_ladder(**kwargs):
+        raw_path = kwargs["output_paths"]["raw_html"]
+        captured["raw_html_path"] = raw_path
+        provider_env = _fetch_provider_envelope(raw_html_path=str(raw_path))
+        provider_env["url"] = url
+        return provider_env
+
+    with patch(
+        "h2t_ops.connectors.research.fetch.fetch_via_ladder",
+        side_effect=fake_fetch_via_ladder,
+    ):
+        result = client.ResearchClient(output_dir=tmp_path).fetch_url(
+            url,
+            keep_raw=True,
+        )
+
+    raw_path = captured["raw_html_path"]
+    raw_ref = result["artifact"]["artifact_refs"]["raw_html"]
+    assert raw_path.is_relative_to(tmp_path)
+    assert raw_ref == raw_path.name
+    assert "secret123" not in raw_path.name
+    assert "token456" not in raw_path.name
+    assert "secret123" not in raw_ref
+    assert "token456" not in raw_ref
+    assert "redacted" in raw_ref.lower()

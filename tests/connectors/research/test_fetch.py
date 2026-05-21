@@ -538,6 +538,32 @@ def test_load_config_overrides_with_user_file(tmp_path):
     assert config["ladder"]["per_provider_timeout_ms"] == 15000
 
 
+def test_ladder_single_provider_ok_returns_envelope():
+    html = _load_fixture("public_article.html").encode("utf-8")
+    config = fetch.load_config(None)
+    config["providers"]["jina"]["enabled"] = False
+    with patch("urllib.request.urlopen") as mock_urlopen:
+        mock_urlopen.return_value = _make_http_response(
+            html, url="https://example.com/pops-intro",
+        )
+        env = fetch.fetch_via_ladder(
+            url="https://example.com/pops-intro",
+            provider_choice="auto",
+            config=config,
+            user_agent="ua/test",
+            keep_raw=False,
+            min_body_chars=200,
+        )
+    assert env["status"] == "OK"
+    assert env["provider_used"] == "direct"
+    assert env["telemetry"]["attempts"][0]["provider"] == "direct"
+    assert env["telemetry"]["attempts"][0]["error"] is None
+    assert env["content_type"] == "article"
+    assert env["title"] == "POPs in TouchDesigner — Introduction"
+    assert env["body_chars"] > 200
+    assert env["telemetry"]["providers_skipped_reason"]["jina"] == "disabled_in_config"
+
+
 def test_ladder_direct_403_falls_through_to_jina():
     config = fetch.load_config(None)
     jina_md = _load_fixture("public_article_jina.md").encode("utf-8")
@@ -602,6 +628,153 @@ def test_ladder_gated_403_body_does_not_fall_through_to_jina():
     assert attempts[0]["provider"] == "direct"
     assert attempts[0]["http"] == 403
     assert attempts[0]["error"] == "fetch_gated_login_required"
+
+
+def test_ladder_login_wall_short_circuits_does_not_call_jina():
+    config = fetch.load_config(None)
+    html = _load_fixture("login_wall.html").encode("utf-8")
+    calls = {"saw_jina": False}
+
+    def fake_urlopen(req, timeout):
+        if req.full_url.startswith("https://r.jina.ai/"):
+            calls["saw_jina"] = True
+        return _make_http_response(html, url="https://example.com/article/x")
+
+    with patch("urllib.request.urlopen", side_effect=fake_urlopen):
+        env = fetch.fetch_via_ladder(
+            url="https://example.com/article/x",
+            provider_choice="auto",
+            config=config,
+            user_agent="ua/test",
+            keep_raw=False,
+        )
+    assert env["status"] == "FAILED"
+    assert env["content_gate"] == "login_required"
+    assert calls["saw_jina"] is False
+
+
+def test_ladder_paywall_short_circuits():
+    config = fetch.load_config(None)
+    html = _load_fixture("paywall.html").encode("utf-8")
+    with patch("urllib.request.urlopen") as mock_urlopen:
+        mock_urlopen.return_value = _make_http_response(
+            html, url="https://example.com/article/x",
+        )
+        env = fetch.fetch_via_ladder(
+            url="https://example.com/article/x",
+            provider_choice="auto",
+            config=config,
+            user_agent="ua/test",
+            keep_raw=False,
+        )
+    assert env["status"] == "FAILED"
+    assert env["content_gate"] == "paid"
+
+
+def test_ladder_all_active_providers_fail_returns_failed():
+    config = fetch.load_config(None)
+    with patch("urllib.request.urlopen") as mock_urlopen:
+        mock_urlopen.side_effect = _http_error(503)
+        env = fetch.fetch_via_ladder(
+            url="https://example.com/x",
+            provider_choice="auto",
+            config=config,
+            user_agent="ua/test",
+            keep_raw=False,
+        )
+    assert env["status"] == "FAILED"
+    assert env["provider_used"] == "none"
+    providers_attempted = [a["provider"] for a in env["telemetry"]["attempts"]]
+    assert providers_attempted == ["direct", "jina"]
+    assert env["telemetry"]["reason_for_failed"] == "all_providers_failed"
+
+
+def test_ladder_degraded_picks_best_candidate_by_body_chars():
+    config = fetch.load_config(None)
+    short_html = _load_fixture("short_body.html").encode("utf-8")
+    jina_short = b"Title: Tiny\n\nMarkdown Content:\nHi.\n"
+
+    def fake_urlopen(req, timeout):
+        if req.full_url.startswith("https://r.jina.ai/"):
+            return _make_http_response(
+                jina_short,
+                url="https://r.jina.ai/https://example.com/x",
+                headers={"Content-Type": "text/markdown"},
+            )
+        return _make_http_response(short_html, url="https://example.com/x")
+
+    with patch("urllib.request.urlopen", side_effect=fake_urlopen):
+        env = fetch.fetch_via_ladder(
+            url="https://example.com/x",
+            provider_choice="auto",
+            config=config,
+            user_agent="ua/test",
+            keep_raw=False,
+        )
+    assert env["status"] == "DEGRADED"
+    assert env["provider_used"] in ("direct", "jina")
+    assert env["telemetry"]["reason_for_degraded"] is not None
+
+
+def test_ladder_explicit_direct_does_not_fallback_to_jina():
+    config = fetch.load_config(None)
+    saw = {"jina": False}
+
+    def fake_urlopen(req, timeout):
+        if req.full_url.startswith("https://r.jina.ai/"):
+            saw["jina"] = True
+        raise _http_error(403)
+
+    with patch("urllib.request.urlopen", side_effect=fake_urlopen):
+        env = fetch.fetch_via_ladder(
+            url="https://example.com/x",
+            provider_choice="direct",
+            config=config,
+            user_agent="ua/test",
+            keep_raw=False,
+        )
+    assert env["status"] == "FAILED"
+    assert saw["jina"] is False
+    providers_attempted = [a["provider"] for a in env["telemetry"]["attempts"]]
+    assert providers_attempted == ["direct"]
+
+
+def test_ladder_stubs_skipped_with_reason_in_auto():
+    config = fetch.load_config(None)
+    html = _load_fixture("public_article.html").encode("utf-8")
+    with patch("urllib.request.urlopen") as mock_urlopen:
+        mock_urlopen.return_value = _make_http_response(
+            html, url="https://example.com/x",
+        )
+        env = fetch.fetch_via_ladder(
+            url="https://example.com/x",
+            provider_choice="auto",
+            config=config,
+            user_agent="ua/test",
+            keep_raw=False,
+        )
+    skipped_reason = env["telemetry"]["providers_skipped_reason"]
+    for stub in ("playwright", "crawl4ai", "firecrawl", "browserless"):
+        assert skipped_reason.get(stub) == "not_configured_stub"
+
+
+def test_ladder_jina_disabled_skipped_in_config():
+    config = fetch.load_config(None)
+    config["providers"]["jina"]["enabled"] = False
+    html = _load_fixture("public_article.html").encode("utf-8")
+    with patch("urllib.request.urlopen") as mock_urlopen:
+        mock_urlopen.return_value = _make_http_response(
+            html, url="https://example.com/x",
+        )
+        env = fetch.fetch_via_ladder(
+            url="https://example.com/x",
+            provider_choice="auto",
+            config=config,
+            user_agent="ua/test",
+            keep_raw=False,
+        )
+    assert env["telemetry"]["providers_skipped_reason"]["jina"] == "disabled_in_config"
+    assert "jina" not in [a["provider"] for a in env["telemetry"]["attempts"]]
 
 
 def test_ladder_cumulative_timeout_skips_remaining():
@@ -677,3 +850,95 @@ def test_ladder_uses_jina_provider_config_for_endpoint_and_timeout():
     assert env["status"] == "OK"
     assert captured["url"] == "https://reader.example/jina/https://example.com/pops-intro"
     assert captured["timeout"] == 24.68
+
+
+def test_ladder_alltd_collapse_falls_through_to_jina_then_degraded():
+    config = fetch.load_config(None)
+    homepage_html = (
+        "<html><body><article>"
+        "<h1>AllTouchDesigner</h1>"
+        "<p>" + ("Welcome to our tutorial library covering GLSL, POPs, CHOPs. " * 20)
+        + "</p></article></body></html>"
+    ).encode("utf-8")
+    jina_homepage_md = (
+        "Title: AllTouchDesigner\n\n"
+        "URL Source: https://www.alltd.org/\n\n"
+        "Markdown Content:\n"
+        + ("Welcome to AllTouchDesigner homepage listing. " * 30)
+    ).encode("utf-8")
+
+    def fake_urlopen(req, timeout):
+        if req.full_url.startswith("https://r.jina.ai/"):
+            return _make_http_response(
+                jina_homepage_md,
+                url="https://r.jina.ai/https://alltd.org/glsl-for-pops-lesson-0/",
+                headers={"Content-Type": "text/markdown; charset=utf-8"},
+            )
+        return _make_http_response(
+            homepage_html,
+            url="https://www.alltd.org/",
+            headers={"Content-Type": "text/html; charset=utf-8"},
+        )
+
+    with patch("urllib.request.urlopen", side_effect=fake_urlopen):
+        env = fetch.fetch_via_ladder(
+            url="https://alltd.org/glsl-for-pops-lesson-0/",
+            provider_choice="auto",
+            config=config,
+            user_agent="ua/test",
+            keep_raw=False,
+        )
+    assert env["status"] == "DEGRADED"
+    assert env["content_type"] == "redirect_collapsed"
+    assert env["telemetry"]["reason_for_degraded"] == "redirect_collapsed_to_homepage"
+    attempts = env["telemetry"]["attempts"]
+    direct_attempt = next(a for a in attempts if a["provider"] == "direct")
+    jina_attempt = next(a for a in attempts if a["provider"] == "jina")
+    assert direct_attempt["error"] == "fetch_redirect_collapsed"
+    assert jina_attempt["error"] == "fetch_redirect_collapsed"
+
+
+def test_ladder_alltd_collapse_recovers_via_jina():
+    config = fetch.load_config(None)
+    homepage_html = (
+        "<html><body><article>"
+        "<h1>AllTouchDesigner</h1>"
+        "<p>" + ("Welcome to our tutorial library covering GLSL, POPs, CHOPs. " * 20)
+        + "</p></article></body></html>"
+    ).encode("utf-8")
+    jina_real_article = (
+        "Title: GLSL for POPs - Lesson 0\n\n"
+        "URL Source: https://alltd.org/glsl-for-pops-lesson-0/\n\n"
+        "Markdown Content:\n"
+        "# GLSL for POPs - Lesson 0\n\n"
+        + ("Real lesson content discussing GLSL POPs setup in detail. " * 25)
+    ).encode("utf-8")
+
+    def fake_urlopen(req, timeout):
+        if req.full_url.startswith("https://r.jina.ai/"):
+            return _make_http_response(
+                jina_real_article,
+                url="https://r.jina.ai/https://alltd.org/glsl-for-pops-lesson-0/",
+                headers={"Content-Type": "text/markdown; charset=utf-8"},
+            )
+        return _make_http_response(
+            homepage_html,
+            url="https://www.alltd.org/",
+            headers={"Content-Type": "text/html; charset=utf-8"},
+        )
+
+    with patch("urllib.request.urlopen", side_effect=fake_urlopen):
+        env = fetch.fetch_via_ladder(
+            url="https://alltd.org/glsl-for-pops-lesson-0/",
+            provider_choice="auto",
+            config=config,
+            user_agent="ua/test",
+            keep_raw=False,
+        )
+    assert env["status"] == "OK"
+    assert env["provider_used"] == "jina"
+    attempts = env["telemetry"]["attempts"]
+    assert attempts[0]["provider"] == "direct"
+    assert attempts[0]["error"] == "fetch_redirect_collapsed"
+    assert attempts[1]["provider"] == "jina"
+    assert attempts[1]["error"] is None

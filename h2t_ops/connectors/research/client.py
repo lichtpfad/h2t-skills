@@ -16,7 +16,13 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qsl, quote, urlencode, urlsplit, urlunsplit
 
-from h2t_ops.core.errors import ConfigError, NetworkError, ProviderError, UsageError
+from h2t_ops.core.errors import (
+    AuthError,
+    ConfigError,
+    NetworkError,
+    ProviderError,
+    UsageError,
+)
 
 DEFAULT_OUTPUT_DIR = Path.home() / ".h2t" / "research"
 REDACTED = "[REDACTED]"
@@ -234,6 +240,22 @@ def build_research_artifact(
     }
 
 
+def _artifact_ref_for_path(
+    path: str | None,
+    *,
+    output_dir: Path,
+) -> str | None:
+    """Return a relative artifact ref only for files under output_dir."""
+    if not path:
+        return None
+    try:
+        target = Path(path).expanduser().resolve()
+        base = Path(output_dir).expanduser().resolve()
+        return target.relative_to(base).as_posix()
+    except (OSError, ValueError):
+        return None
+
+
 def write_json(path: Path, payload: Any) -> None:
     """Write UTF-8 JSON with deterministic formatting."""
     target = Path(path)
@@ -296,6 +318,7 @@ class ResearchClient:
         ledger_provider: str,
         ledger_endpoint: str,
         ledger_mode: str,
+        raw_html_path: str | None = None,
     ) -> dict[str, Any]:
         """Write provider result artifacts and best-effort telemetry."""
         safe_project = str(sanitize_details(project))
@@ -315,6 +338,10 @@ class ResearchClient:
             _render_partial_markdown(safe_provider_envelope),
             encoding="utf-8",
         )
+        raw_html_ref = _artifact_ref_for_path(
+            raw_html_path,
+            output_dir=self.output_dir,
+        )
 
         artifact = build_research_artifact(
             artifact_id=artifact_id(f"research-{kind}"),
@@ -324,7 +351,7 @@ class ResearchClient:
                 "sources_json": paths["sources_json"].name,
                 "partial_md": paths["partial_md"].name,
                 "artifact_json": paths["artifact_json"].name,
-                "raw_html": None,
+                "raw_html": raw_html_ref,
             },
             telemetry=telemetry,
         )
@@ -347,6 +374,100 @@ class ResearchClient:
             },
         )
         return artifact
+
+    def fetch_url(
+        self,
+        url: str,
+        *,
+        provider: str = "auto",
+        keep_raw: bool = False,
+        timeout_ms: int = 15000,
+        min_body_chars: int = 200,
+        user_agent: str | None = None,
+        project: str = "default",
+        config_path: str | None = None,
+    ) -> dict[str, Any]:
+        """Fetch one URL through the research provider ladder."""
+        from h2t_ops.connectors.research import fetch
+
+        config = fetch.load_config(config_path)
+        config["ladder"]["per_provider_timeout_ms"] = timeout_ms
+        config["ladder"]["min_body_chars"] = min_body_chars
+        for provider_config in (config.get("providers") or {}).values():
+            if (
+                isinstance(provider_config, dict)
+                and "timeout_ms" in provider_config
+            ):
+                provider_config["timeout_ms"] = timeout_ms
+        safe_slug_source = str(sanitize_details(url))
+        safe_project = str(sanitize_details(project))
+        provider_envelope = fetch.fetch_via_ladder(
+            url=url,
+            provider_choice=provider,
+            config=config,
+            user_agent=user_agent or fetch.DEFAULT_USER_AGENT,
+            keep_raw=keep_raw,
+            min_body_chars=min_body_chars,
+            output_paths=artifact_paths(
+                output_dir=self.output_dir,
+                project=safe_project,
+                slug_source=safe_slug_source,
+                kind="fetch",
+            ),
+        )
+
+        attempts = provider_envelope.get("telemetry", {}).get("attempts", [])
+        if not isinstance(attempts, list):
+            attempts = []
+        providers = sorted(
+            {
+                str(attempt.get("provider") or attempt.get("engine"))
+                for attempt in attempts
+                if isinstance(attempt, dict)
+                and (attempt.get("provider") or attempt.get("engine"))
+            }
+        )
+        provider_used = provider_envelope.get("provider_used")
+        if provider_used and provider_used != "none" and provider_used not in providers:
+            providers.append(str(provider_used))
+
+        telemetry = {
+            "calls": len(attempts),
+            "providers": providers,
+            "estimated_cost_usd": 0.0
+            if provider_envelope.get("provider_used") == "direct"
+            else None,
+            "cost_basis": "zero"
+            if provider_envelope.get("provider_used") == "direct"
+            else "unknown",
+        }
+        metadata = provider_envelope.get("metadata")
+        if not isinstance(metadata, dict):
+            metadata = {}
+        artifact = self._write_provider_artifacts(
+            kind="fetch",
+            slug_source=url,
+            project=project,
+            provider_envelope=provider_envelope,
+            telemetry=telemetry,
+            ledger_provider=provider_envelope.get("provider_used") or provider,
+            ledger_endpoint="fetch_ladder",
+            ledger_mode=provider,
+            raw_html_path=metadata.get("raw_html_path"),
+        )
+        result = {"kind": "research_fetch_envelope", **provider_envelope, "artifact": artifact}
+        if provider_envelope.get("status") != "FAILED":
+            return result
+
+        details = sanitize_details({"provider_envelope": provider_envelope})
+        gate = provider_envelope.get("content_gate")
+        if gate in {"login_required", "paid"}:
+            raise AuthError(f"Fetch gated: {gate}", details=details)
+
+        last_attempt = attempts[-1] if attempts and isinstance(attempts[-1], dict) else {}
+        if last_attempt.get("error") == "fetch_network_timeout":
+            raise NetworkError("Fetch failed: network timeout", details=details)
+        raise ProviderError("Fetch failed", details=details)
 
     def search(
         self,
