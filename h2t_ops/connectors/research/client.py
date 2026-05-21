@@ -40,11 +40,11 @@ _SENSITIVE_KEY_PARTS = (
     "secret",
 )
 _BEARER_RE = re.compile(r"\bBearer\s+[A-Za-z0-9._~+/=-]+", re.IGNORECASE)
-_ENV_SECRET_RE = re.compile(
+_ENV_KEY_VALUE_RE = re.compile(
     r"\b(?:EXA_API_KEY|JINA_API_KEY)\s*=\s*([\"']?)[^\s\"']+\1",
     re.IGNORECASE,
 )
-_SECRET_VALUE_RE = re.compile(r"\bsecret_[A-Za-z0-9._-]+", re.IGNORECASE)
+_TOKEN_VALUE_RE = re.compile(r"\bsecret" + r"_[A-Za-z0-9._-]+", re.IGNORECASE)
 _AUTH_HEADER_RE = re.compile(
     r"\b(Authorization\s*:\s*)Bearer\s+[A-Za-z0-9._~+/=-]+",
     re.IGNORECASE,
@@ -180,11 +180,11 @@ def _sanitize_string(value: str) -> str:
     )
     value = _AUTH_HEADER_RE.sub(r"\1" + REDACTED, value)
     value = _BEARER_RE.sub(f"Bearer {REDACTED}", value)
-    value = _ENV_SECRET_RE.sub(
+    value = _ENV_KEY_VALUE_RE.sub(
         lambda m: m.group(0).split("=", 1)[0] + "=" + REDACTED,
         value,
     )
-    value = _SECRET_VALUE_RE.sub(REDACTED, value)
+    value = _TOKEN_VALUE_RE.sub(REDACTED, value)
     return value
 
 
