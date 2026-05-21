@@ -1,6 +1,6 @@
 import json
 from h2t_ops.core.output import emit
-from h2t_ops.core.errors import AuthError
+from h2t_ops.core.errors import AuthError, ProviderError
 
 
 def test_emit_json_success(capsys):
@@ -86,6 +86,35 @@ def test_emit_encode_failure_is_nonzero(monkeypatch):
     monkeypatch.setattr(sys, "stdout", _Boom())
     code = emit("notion", result="Привет", fmt="human")
     assert code != 0
+
+
+def test_emit_json_includes_error_details(capsys):
+    code = emit(
+        "research",
+        exc=ProviderError(
+            "Exa failed",
+            details={"provider_envelope": {"status": "FAILED", "reason": "exa_4xx_nonretryable"}},
+        ),
+        fmt="json",
+    )
+    captured = capsys.readouterr()
+    payload = json.loads(captured.err)
+    assert code == 1
+    assert payload["error"]["details"] == {
+        "provider_envelope": {"status": "FAILED", "reason": "exa_4xx_nonretryable"}
+    }
+
+
+def test_emit_json_coerces_non_json_error_details(capsys):
+    code = emit(
+        "research",
+        exc=ProviderError("bad", details={"bad": {"x"}}),
+        fmt="json",
+    )
+    captured = capsys.readouterr()
+    payload = json.loads(captured.err)
+    assert code == 1
+    assert payload["error"]["details"] == {"bad": "{'x'}"}
 
 
 def test_emit_tier2_buffer_not_closed(monkeypatch):
