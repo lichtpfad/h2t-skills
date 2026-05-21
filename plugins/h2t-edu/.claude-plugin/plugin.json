@@ -1,7 +1,7 @@
 {
   "name": "h2t-edu",
   "description": "H2T Edu — education content pipeline: transcripts, YouTube, meeting conversion, lesson parsing",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "author": {
     "name": "lichtpfad"
   }
