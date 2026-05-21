@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -32,6 +33,55 @@ def _get_attr(obj: Any, name: str, default: Any = None) -> Any:
     return getattr(obj, name, default)
 
 
+def _iso(dt: Any) -> str:
+    if dt is None:
+        return ""
+    if isinstance(dt, datetime):
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.isoformat()
+    return str(dt)
+
+
+def _dialog_kind(entity: Any) -> str:
+    if bool(_get_attr(entity, "bot", False)):
+        return "bot"
+    if bool(_get_attr(entity, "megagroup", False)):
+        return "group"
+    if bool(_get_attr(entity, "broadcast", False)):
+        return "channel"
+    if _get_attr(entity, "username", None) is not None:
+        return "user"
+    return "unknown"
+
+
+def _sender_name(sender: Any) -> str:
+    if sender is None:
+        return ""
+    first = _get_attr(sender, "first_name", "") or ""
+    last = _get_attr(sender, "last_name", "") or ""
+    title = _get_attr(sender, "title", "") or ""
+    name = " ".join(part for part in (first, last) if part).strip()
+    return name or title
+
+
+def _extract_urls(msg: Any) -> list[str]:
+    text = _get_attr(msg, "text", "") or ""
+    urls: list[str] = []
+    for ent in _get_attr(msg, "entities", []) or []:
+        explicit = _get_attr(ent, "url", None)
+        if explicit:
+            urls.append(explicit)
+            continue
+        offset = _get_attr(ent, "offset", None)
+        length = _get_attr(ent, "length", None)
+        if isinstance(offset, int) and isinstance(length, int):
+            value = text[offset : offset + length]
+            if value.startswith(("http://", "https://")):
+                urls.append(value)
+    return urls
+
+
 class TelegramClientAdapter:
     """Pure Telegram/Telethon adapter."""
 
@@ -40,6 +90,7 @@ class TelegramClientAdapter:
         self.config_file = self.config_dir / "config.json"
         self.session_base = self.config_dir / "session"
         self.auth_state_file = self.config_dir / "auth_state.json"
+        self.dialogs_bootstrap_file = self.config_dir / "dialogs_bootstrapped"
 
     @property
     def session_file(self) -> str:
@@ -88,6 +139,16 @@ class TelegramClientAdapter:
                 hint="Install h2t-ops dependencies with telethon>=1.36,<1.43.",
             ) from exc
         return SessionPasswordNeededError
+
+    def _dialog_filters_request_class(self):
+        try:
+            from telethon.tl.functions.messages import GetDialogFiltersRequest
+        except ImportError as exc:
+            raise ConfigError(
+                "Telethon not installed.",
+                hint="Install h2t-ops dependencies with telethon>=1.36,<1.43.",
+            ) from exc
+        return GetDialogFiltersRequest
 
     def _client(self):
         cfg = self._load_config()
@@ -177,4 +238,154 @@ class TelegramClientAdapter:
             "first_name": first_name,
             "last_name": last_name,
             "name": " ".join(part for part in (first_name, last_name) if part),
+        }
+
+    def _dialog_row(self, dialog: Any) -> dict[str, Any]:
+        entity = _get_attr(dialog, "entity")
+        return {
+            "id": _get_attr(entity, "id"),
+            "title": _get_attr(dialog, "title", None) or _get_attr(dialog, "name", "") or "",
+            "username": _get_attr(entity, "username"),
+            "kind": _dialog_kind(entity),
+            "unread_count": int(_get_attr(dialog, "unread_count", 0) or 0),
+            "is_archived": bool(_get_attr(dialog, "archived", False)),
+        }
+
+    def _message_row(self, msg: Any) -> dict[str, Any]:
+        return {
+            "id": _get_attr(msg, "id"),
+            "chat_id": _get_attr(msg, "chat_id"),
+            "date": _iso(_get_attr(msg, "date")),
+            "sender_id": _get_attr(msg, "sender_id"),
+            "sender_name": _sender_name(_get_attr(msg, "sender")),
+            "text": _get_attr(msg, "text", "") or "",
+            "urls": _extract_urls(msg),
+            "reply_to_msg_id": _get_attr(msg, "reply_to_msg_id"),
+        }
+
+    def list_dialogs(
+        self,
+        *,
+        limit: int | None = None,
+        kind: str | None = None,
+    ) -> list[dict[str, Any]]:
+        try:
+            with self._client() as client:
+                rows = [self._dialog_row(dialog) for dialog in client.iter_dialogs(limit=limit)]
+        except (ValueError, sqlite3.OperationalError) as exc:
+            raise _session_incompatible_error(exc) from exc
+        if kind:
+            rows = [row for row in rows if row["kind"] == kind]
+        return rows
+
+    def list_messages(
+        self,
+        entity: str,
+        *,
+        limit: int | None = 200,
+        days: int | None = None,
+    ) -> list[dict[str, Any]]:
+        cutoff = None
+        if days is not None:
+            from datetime import timedelta
+
+            cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+        try:
+            with self._client() as client:
+                rows = []
+                for msg in client.iter_messages(entity, limit=limit):
+                    msg_date = _get_attr(msg, "date")
+                    if cutoff is not None and isinstance(msg_date, datetime) and msg_date < cutoff:
+                        continue
+                    rows.append(self._message_row(msg))
+        except (ValueError, sqlite3.OperationalError) as exc:
+            raise _session_incompatible_error(exc) from exc
+        return rows
+
+    def list_saved_messages(
+        self,
+        *,
+        limit: int | None = 200,
+        days: int | None = None,
+    ) -> list[dict[str, Any]]:
+        return self.list_messages("me", limit=limit, days=days)
+
+    def list_mentions(
+        self,
+        chat_ids: list[str],
+        *,
+        days: int | None = None,
+        limit: int | None = 500,
+    ) -> list[dict[str, Any]]:
+        cutoff = None
+        if days is not None:
+            from datetime import timedelta
+
+            cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+        try:
+            with self._client() as client:
+                me = client.get_me()
+                username = (_get_attr(me, "username", "") or "").lower()
+                needle = f"@{username}" if username else ""
+                rows: list[dict[str, Any]] = []
+                for chat_id in chat_ids:
+                    for msg in client.iter_messages(chat_id, limit=limit):
+                        msg_date = _get_attr(msg, "date")
+                        if cutoff is not None and isinstance(msg_date, datetime) and msg_date < cutoff:
+                            continue
+                        text = (_get_attr(msg, "text", "") or "").lower()
+                        if needle and needle in text:
+                            rows.append(self._message_row(msg))
+        except (ValueError, sqlite3.OperationalError) as exc:
+            raise _session_incompatible_error(exc) from exc
+        return rows
+
+    def list_folders(self) -> list[dict[str, Any]]:
+        request_cls = self._dialog_filters_request_class()
+        try:
+            with self._client() as client:
+                filters = client(request_cls())
+        except (ValueError, sqlite3.OperationalError) as exc:
+            raise _session_incompatible_error(exc) from exc
+        rows = []
+        for item in filters or []:
+            peer_ids = []
+            for peer in _get_attr(item, "include_peers", []) or []:
+                peer_id = (
+                    _get_attr(peer, "channel_id", None)
+                    or _get_attr(peer, "chat_id", None)
+                    or _get_attr(peer, "user_id", None)
+                )
+                if peer_id is not None:
+                    peer_ids.append(peer_id)
+            rows.append(
+                {
+                    "id": _get_attr(item, "id"),
+                    "title": _get_attr(item, "title", ""),
+                    "peer_ids": peer_ids,
+                }
+            )
+        return rows
+
+    def bootstrap_dialogs(self, *, force: bool = False) -> dict[str, Any]:
+        if self.dialogs_bootstrap_file.exists() and not force:
+            return {
+                "refreshed": False,
+                "count": 0,
+                "timestamp_path": str(self.dialogs_bootstrap_file),
+            }
+        try:
+            with self._client() as client:
+                count = sum(1 for _ in client.iter_dialogs(limit=None))
+        except (ValueError, sqlite3.OperationalError) as exc:
+            raise _session_incompatible_error(exc) from exc
+        self.config_dir.mkdir(parents=True, exist_ok=True)
+        self.dialogs_bootstrap_file.write_text(
+            str(datetime.now(timezone.utc).timestamp()),
+            encoding="utf-8",
+        )
+        return {
+            "refreshed": True,
+            "count": count,
+            "timestamp_path": str(self.dialogs_bootstrap_file),
         }

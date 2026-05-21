@@ -4,6 +4,7 @@ from __future__ import annotations
 import builtins
 import json
 import sqlite3
+from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -128,3 +129,156 @@ def test_auth_status_maps_authorized_user(tmp_path, monkeypatch):
     assert status["session_exists"] is True
     assert status["authorized"] is True
     assert status["user"]["username"] == "stan"
+
+
+class _CtxClient:
+    def __init__(self, inner):
+        self.inner = inner
+
+    def __enter__(self):
+        return self.inner
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+
+def test_list_dialogs_maps_dialog_rows(tmp_path, monkeypatch):
+    from h2t_ops.connectors.telegram import client as tmod
+
+    (tmp_path / "config.json").write_text(json.dumps({"api_id": 1, "api_hash": "h"}), encoding="utf-8")
+    dialog = SimpleNamespace(
+        entity=SimpleNamespace(id=11, username="chatname", bot=False, megagroup=True, broadcast=False),
+        name="Work Chat",
+        title="Work Chat",
+        unread_count=3,
+        archived=False,
+    )
+
+    class FakeInner:
+        def iter_dialogs(self, limit=None):
+            assert limit == 5
+            return [dialog]
+
+    monkeypatch.setattr(tmod.TelegramClientAdapter, "_client", lambda self: _CtxClient(FakeInner()))
+    rows = tmod.TelegramClientAdapter(config_dir=tmp_path).list_dialogs(limit=5)
+    assert rows == [{
+        "id": 11,
+        "title": "Work Chat",
+        "username": "chatname",
+        "kind": "group",
+        "unread_count": 3,
+        "is_archived": False,
+    }]
+
+
+def test_list_messages_maps_rows_and_urls(tmp_path, monkeypatch):
+    from h2t_ops.connectors.telegram import client as tmod
+
+    (tmp_path / "config.json").write_text(json.dumps({"api_id": 1, "api_hash": "h"}), encoding="utf-8")
+
+    class UrlEntity:
+        offset = 6
+        length = 19
+        url = None
+
+    msg = SimpleNamespace(
+        id=5,
+        chat_id=99,
+        date=datetime(2026, 5, 21, 10, 0, tzinfo=timezone.utc),
+        sender_id=7,
+        sender=SimpleNamespace(first_name="Ada", last_name="L"),
+        text="link: https://example.com",
+        entities=[UrlEntity()],
+        reply_to_msg_id=None,
+    )
+
+    class FakeInner:
+        def iter_messages(self, entity, limit=None):
+            assert entity == "chat"
+            assert limit == 10
+            return [msg]
+
+    monkeypatch.setattr(tmod.TelegramClientAdapter, "_client", lambda self: _CtxClient(FakeInner()))
+    rows = tmod.TelegramClientAdapter(config_dir=tmp_path).list_messages("chat", limit=10)
+    assert rows[0]["id"] == 5
+    assert rows[0]["sender_name"] == "Ada L"
+    assert rows[0]["text"] == "link: https://example.com"
+    assert rows[0]["urls"] == ["https://example.com"]
+
+
+def test_list_saved_messages_uses_me_entity(tmp_path, monkeypatch):
+    from h2t_ops.connectors.telegram import client as tmod
+
+    (tmp_path / "config.json").write_text(json.dumps({"api_id": 1, "api_hash": "h"}), encoding="utf-8")
+    seen = {}
+
+    class FakeInner:
+        def iter_messages(self, entity, limit=None):
+            seen["entity"] = entity
+            return []
+
+    monkeypatch.setattr(tmod.TelegramClientAdapter, "_client", lambda self: _CtxClient(FakeInner()))
+    rows = tmod.TelegramClientAdapter(config_dir=tmp_path).list_saved_messages(limit=3)
+    assert rows == []
+    assert seen["entity"] == "me"
+
+
+def test_list_mentions_filters_messages_with_me_marker(tmp_path, monkeypatch):
+    from h2t_ops.connectors.telegram import client as tmod
+
+    (tmp_path / "config.json").write_text(json.dumps({"api_id": 1, "api_hash": "h"}), encoding="utf-8")
+    msg_hit = SimpleNamespace(
+        id=1, chat_id=10, date=None, sender_id=None, sender=None,
+        text="hello @stan", entities=[], reply_to_msg_id=None,
+    )
+    msg_miss = SimpleNamespace(
+        id=2, chat_id=10, date=None, sender_id=None, sender=None,
+        text="hello", entities=[], reply_to_msg_id=None,
+    )
+
+    class FakeInner:
+        def get_me(self):
+            return SimpleNamespace(username="stan", id=7, first_name="Stan", last_name="")
+
+        def iter_messages(self, entity, limit=None):
+            return [msg_hit, msg_miss]
+
+    monkeypatch.setattr(tmod.TelegramClientAdapter, "_client", lambda self: _CtxClient(FakeInner()))
+    rows = tmod.TelegramClientAdapter(config_dir=tmp_path).list_mentions(["10"], limit=50)
+    assert [r["id"] for r in rows] == [1]
+
+
+def test_list_folders_uses_raw_dialog_filters_request(tmp_path, monkeypatch):
+    from h2t_ops.connectors.telegram import client as tmod
+
+    (tmp_path / "config.json").write_text(json.dumps({"api_id": 1, "api_hash": "h"}), encoding="utf-8")
+
+    class Filter:
+        id = 2
+        title = "Work"
+        include_peers = [SimpleNamespace(channel_id=1), SimpleNamespace(chat_id=2)]
+
+    class FakeInner:
+        def __call__(self, request):
+            return [Filter()]
+
+    monkeypatch.setattr(tmod.TelegramClientAdapter, "_dialog_filters_request_class", lambda self: object)
+    monkeypatch.setattr(tmod.TelegramClientAdapter, "_client", lambda self: _CtxClient(FakeInner()))
+    rows = tmod.TelegramClientAdapter(config_dir=tmp_path).list_folders()
+    assert rows == [{"id": 2, "title": "Work", "peer_ids": [1, 2]}]
+
+
+def test_bootstrap_dialogs_writes_timestamp_without_chats_yaml(tmp_path, monkeypatch):
+    from h2t_ops.connectors.telegram import client as tmod
+
+    (tmp_path / "config.json").write_text(json.dumps({"api_id": 1, "api_hash": "h"}), encoding="utf-8")
+
+    class FakeInner:
+        def iter_dialogs(self, limit=None):
+            return [SimpleNamespace(entity=SimpleNamespace(id=1))]
+
+    monkeypatch.setattr(tmod.TelegramClientAdapter, "_client", lambda self: _CtxClient(FakeInner()))
+    result = tmod.TelegramClientAdapter(config_dir=tmp_path).bootstrap_dialogs(force=True)
+    assert result["count"] == 1
+    assert (tmp_path / "dialogs_bootstrapped").exists()
+    assert not (tmp_path / "chats.yaml").exists()
