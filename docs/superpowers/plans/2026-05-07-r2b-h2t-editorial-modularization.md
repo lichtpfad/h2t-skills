@@ -1,3 +1,9 @@
+---
+title: "R2b — h2t-editorial deck + landing modularization plan"
+status: "draft"
+date: "2026-05-07"
+milestone: ""
+---
 # R2b — h2t-editorial deck + landing modularization plan
 
 > **⚠ Source Arbitration Reset — 2026-05-07.** Implementation through

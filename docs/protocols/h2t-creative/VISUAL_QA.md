@@ -66,7 +66,9 @@ Every issue must include:
 
 If a semantic recipe renders all blocks but the page reads as a technical proof, report:
 
-- Semantic pipeline: PASS
+- File generation: PASS
 - Landing/deck composition: FAIL or BLOCKED
 
 This distinction is mandatory.
+
+Do not call a renderer output a design-system success unless the human reviewer accepts the visual system, composition, mobile behavior, and page purpose.

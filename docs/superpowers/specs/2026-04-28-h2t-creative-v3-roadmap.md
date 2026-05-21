@@ -1,3 +1,10 @@
+---
+title: "h2t-creative v3 — Высокоуровневый Roadmap"
+status: "draft"
+owner: "Stanislav Glazov"
+date: "2026-04-28"
+milestone: ""
+---
 # h2t-creative v3 — Высокоуровневый Roadmap
 
 **Date:** 2026-04-28

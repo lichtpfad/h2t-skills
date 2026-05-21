@@ -38,6 +38,8 @@ Components are not semantic intent by themselves. A `stats` component can serve 
 
 ### 4. Semantic Layer
 
+Status: experimental and not a current product direction. The #119 pilot showed that adding a semantic abstraction before a proven concrete landing can produce a renderer demo rather than a usable landing or design system. Do not extend this layer unless a concrete, human-approved visual target already exists and the abstraction is extracted from that successful implementation.
+
 Semantic recipes use `blocks:` and declare intent. The canonical full vocabulary is encoded in `KNOWN_BLOCK_TYPES` (`plugins/h2t-creative/renderer/semantic_parser.py`):
 
 - `nav`
@@ -73,7 +75,7 @@ The runtime currently supports:
 - Semantic adapter that converts blocks to derived legacy sections
 - Existing assembler output path
 
-The current semantic renderer v0 is a technical proof that role -> skin -> component -> legacy renderer can work without breaking legacy recipes.
+The current semantic renderer v0 is not product proof. It is negative evidence for building the abstraction before a concrete page succeeds.
 
 ## Evidence Classification
 
@@ -83,9 +85,9 @@ The current semantic renderer v0 is a technical proof that role -> skin -> compo
 - R2a h2t-terminal deck recovery
 - R2b h2t-editorial deck recovery
 
-### Technical Proof
+### Rejected Research Direction
 
-- #119 semantic renderer v0 and editorial semantic pilot code path
+- #119 semantic renderer v0 and editorial semantic pilot code path. It may remain as historical code/test evidence, but it must not drive planning or new implementation.
 
 ### Negative Visual Evidence
 

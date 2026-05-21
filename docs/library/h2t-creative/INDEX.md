@@ -75,7 +75,7 @@ Human approval is required for new roles, new formats, and interactive primitive
 - h2t-mono: mature landing component library from R1.
 - h2t-terminal deck: mature deck component/layout library from R2a.
 - h2t-editorial deck: mature System B deck library from R2b.
-- h2t-editorial landing primitives: partial; current semantic landing candidate is not visually approved.
+- h2t-editorial landing primitives: partial evidence only; the #119 semantic landing candidate is rejected and must not be treated as a reusable semantic foundation.
 
 ## External Standards
 

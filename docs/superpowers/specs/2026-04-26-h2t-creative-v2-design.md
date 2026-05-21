@@ -1,3 +1,10 @@
+---
+title: "h2t-creative v2 Design Spec"
+status: "draft"
+owner: "Stanislav Glazov"
+date: "2026-04-26"
+milestone: ""
+---
 # h2t-creative v2 Design Spec
 
 **Date:** 2026-04-26
