@@ -197,10 +197,16 @@ def register(subparsers: Any) -> None:
 def run(args: Any) -> Any:
     """Dispatch a meetgeek subcommand. Returns result or raises core.errors."""
     from h2t_ops.connectors.meetgeek.client import MeetGeekClient  # lazy
-    from h2t_ops.core.errors import UsageError
+    from h2t_ops.core.errors import NotFoundError, UsageError
 
     client = MeetGeekClient()
     cmd = args.meetgeek_cmd
+
+    def meeting_for_markdown(meeting_id: str) -> dict:
+        try:
+            return client.get_meeting(meeting_id)
+        except NotFoundError:
+            return {"meeting_id": meeting_id}
 
     if cmd == "auth-check":
         return client.auth_check()
@@ -222,28 +228,28 @@ def run(args: Any) -> Any:
     if cmd == "transcript":
         transcript = client.get_transcript(args.meeting_id)
         if args.fmt == "md":
-            meeting = client.get_meeting(args.meeting_id)
+            meeting = meeting_for_markdown(args.meeting_id)
             return _fmt_transcript_md(meeting, transcript)
         return transcript
 
     if cmd == "summary":
         summary = client.get_summary(args.meeting_id)
         if args.fmt == "md":
-            meeting = client.get_meeting(args.meeting_id)
+            meeting = meeting_for_markdown(args.meeting_id)
             return _fmt_summary_md(meeting, summary)
         return summary
 
     if cmd == "highlights":
         highlights = client.get_highlights(args.meeting_id)
         if args.fmt == "md":
-            meeting = client.get_meeting(args.meeting_id)
+            meeting = meeting_for_markdown(args.meeting_id)
             return _fmt_highlights_md(meeting, highlights)
         return highlights
 
     if cmd == "insights":
         insights = client.get_insights(args.meeting_id)
         if args.fmt == "md":
-            meeting = client.get_meeting(args.meeting_id)
+            meeting = meeting_for_markdown(args.meeting_id)
             return _fmt_insights_md(meeting, insights)
         return insights
 

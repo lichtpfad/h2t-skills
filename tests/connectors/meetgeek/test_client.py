@@ -149,6 +149,32 @@ def test_get_meeting_returns_raw_response(client_obj):
     assert result is payload
 
 
+def test_get_meeting_falls_back_to_list_row_when_metadata_404s(client_obj):
+    payload = {"meetings": [{"id": "m1", "title": "Listed"}]}
+    client_obj._get = MagicMock(side_effect=[
+        NotFoundError("Not found: /v1/meeting/m1"),
+        payload,
+    ])
+
+    result = client_obj.get_meeting("m1")
+
+    assert result == payload["meetings"][0]
+    assert client_obj._get.call_args_list[0].args == ("/v1/meeting/m1",)
+    assert client_obj._get.call_args_list[1].args == ("/v1/meetings",)
+
+
+def test_get_meeting_raises_when_metadata_and_list_fallback_miss(client_obj):
+    client_obj._get = MagicMock(side_effect=[
+        NotFoundError("Not found: /v1/meeting/missing"),
+        {"meetings": []},
+    ])
+
+    with pytest.raises(NotFoundError) as ei:
+        client_obj.get_meeting("missing")
+
+    assert "metadata endpoint or list fallback" in str(ei.value)
+
+
 # ─── get_transcript ───────────────────────────────────────────────────────────
 
 def test_get_transcript_returns_combined_sentences(client_obj):

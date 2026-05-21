@@ -132,6 +132,46 @@ def test_transcript_dispatch_md_format_returns_string(monkeypatch):
     assert "Hello" in result
 
 
+def test_transcript_dispatch_md_format_does_not_require_get_meeting(monkeypatch):
+    from h2t_ops.core.errors import NotFoundError
+
+    stub = _stub_client(monkeypatch, {
+        "get_transcript": {"sentences": [{"speaker": "A", "text": "Hello", "timestamp": 0}]},
+    })
+    stub.get_meeting.side_effect = NotFoundError("Not found: /v1/meeting/m1")
+    from h2t_ops.connectors.meetgeek import commands as cmds
+    args = SimpleNamespace(meetgeek_cmd="transcript", meeting_id="m1", fmt="md", as_json=False)
+
+    result = cmds.run(args)
+
+    assert isinstance(result, str)
+    assert "meeting_id: m1" in result
+    assert "Hello" in result
+
+
+@pytest.mark.parametrize(
+    ("verb", "method", "payload", "expected"),
+    [
+        ("summary", "get_summary", {"summary": "Summary text"}, "Summary text"),
+        ("highlights", "get_highlights", {"highlights": [{"text": "Highlight"}]}, "Highlight"),
+        ("insights", "get_insights", {"score": 1}, '"score": 1'),
+    ],
+)
+def test_md_artifact_verbs_do_not_require_get_meeting(monkeypatch, verb, method, payload, expected):
+    from h2t_ops.core.errors import NotFoundError
+
+    stub = _stub_client(monkeypatch, {method: payload})
+    stub.get_meeting.side_effect = NotFoundError("Not found: /v1/meeting/m1")
+    from h2t_ops.connectors.meetgeek import commands as cmds
+    args = SimpleNamespace(meetgeek_cmd=verb, meeting_id="m1", fmt="md", as_json=False)
+
+    result = cmds.run(args)
+
+    assert isinstance(result, str)
+    assert "meeting_id: m1" in result
+    assert expected in result
+
+
 def test_download_url_dispatch_returns_envelope(monkeypatch):
     stub = _stub_client(monkeypatch, {
         "get_download_url": {"meeting_id": "m1", "download_url": "https://example.com/f.mp4"},
