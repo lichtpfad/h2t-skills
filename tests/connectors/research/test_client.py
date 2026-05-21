@@ -146,6 +146,7 @@ def test_validate_public_http_url_allows_public_http_url():
     "url",
     [
         "file:///C:/Users/stani/.dor/secrets.env",
+        "https://user:password@example.com/page",
         "https://localhost/private",
         "http://127.0.0.1:8080/",
         "http://10.0.0.5/",
@@ -157,6 +158,16 @@ def test_validate_public_http_url_allows_public_http_url():
 def test_validate_public_http_url_blocks_local_or_private_targets(url):
     with pytest.raises(UsageError):
         client.validate_public_http_url(url)
+
+
+def test_sanitize_details_removes_url_userinfo():
+    sanitized = client.sanitize_details(
+        {"url": "https://user:password@example.com/path?safe=value"}
+    )
+    text = json.dumps(sanitized)
+
+    assert "user:password" not in text
+    assert "https://example.com/path?safe=value" in text
 
 
 def test_sanitize_details_redacts_known_tokens():
