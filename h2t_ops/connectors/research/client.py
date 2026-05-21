@@ -135,6 +135,11 @@ def validate_public_http_url(url: str) -> str:
             "Research fetch URL must be an absolute http(s) URL",
             hint="Use a public https://... or http://... URL.",
         )
+    if parts.username or parts.password:
+        raise UsageError(
+            "Research fetch URL must not contain embedded credentials",
+            hint="Remove userinfo from the URL before passing it to research fetch/crawl.",
+        )
 
     host = parts.hostname.strip("[]").lower()
     try:
@@ -190,8 +195,16 @@ def _is_sensitive_key(key: str) -> bool:
 
 def _sanitize_url_query(value: str) -> str:
     parts = urlsplit(value)
+    netloc = parts.netloc
+    if parts.username or parts.password:
+        host = parts.hostname or ""
+        if ":" in host and not host.startswith("["):
+            host = f"[{host}]"
+        netloc = host
+        if parts.port:
+            netloc = f"{netloc}:{parts.port}"
     if not parts.query:
-        return value
+        return urlunsplit((parts.scheme, netloc, parts.path, "", parts.fragment))
 
     query = parse_qsl(parts.query, keep_blank_values=True)
     sanitized_query = [
@@ -201,7 +214,7 @@ def _sanitize_url_query(value: str) -> str:
     return urlunsplit(
         (
             parts.scheme,
-            parts.netloc,
+            netloc,
             parts.path,
             urlencode(sanitized_query, doseq=True, quote_via=quote),
             parts.fragment,
