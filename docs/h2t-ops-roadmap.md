@@ -6,7 +6,9 @@
 **Milestone tag:** `milestone/legacy-h2t-retired-2026-05-21`
 
 This roadmap tracks the remaining work needed to move `h2t-skills` from active
-connector migration into a cleaner maintenance mode.
+connector migration into a cleaner maintenance mode. The immediate preference is
+to fully freeze connector work first, then move to agent profiles and Mac
+portability with fewer moving parts.
 
 ## North Star
 
@@ -50,18 +52,107 @@ The M3 connector migration is complete.
 
 ### Active Critical Path
 
-The next work is not "more connectors". It is repo/runtime hygiene.
+The migration is done, but connector closure is not finished until the known
+provider gaps, secrets/setup assumptions, and Mac portability gates are
+triaged. That freeze happens before `h2t-core:agent-profile`.
 
 | Priority | Issue(s) | Work | Why it matters |
 | --- | --- | --- | --- |
-| 1 | #153 | `h2t-core:agent-profile` | Replace global everything-enabled plugin load with repo base profiles, task overlays, and sync between machines |
-| 2 | #148 | Harden tracked agent permissions and context packer | Prevent broad local-agent permissions and unpinned `npx repomix@latest` from becoming shipped policy |
-| 3 | #85 | Fix lib/unit tests broken in CI | Repo should not be called stable while CI has known infra failures |
-| 4 | issue sweep | Reclassify / close stale issues | Keep open issues as real near-term work, not historical noise |
+| 1 | #155 | h2t-ops connector freeze + Mac portability gate | Stop reopening connector migration work; make every remaining gap fixed, accepted backlog, or Mac/setup follow-up |
+| 2 | #82, #145 | Calendar closure | Fix the concrete CLI UX gap, then leave broader Calendar provider features as explicit backlog |
+| 3 | #81, #146 | Notion closure | Decide whether embedded DB / workspace graph is needed before freeze or accepted as backlog |
+| 4 | #107, #109, #110, #112, #94, #13 | Secrets/setup closure | Make connector credentials portable enough for the later Mac pass |
+| 5 | #53, #73, #85, #79 | Cross-platform / Mac readiness | Remove Windows-only assumptions from connector setup/tests where they block Mac usage |
+| 6 | #153 | `h2t-core:agent-profile` | Replace global everything-enabled plugin load with repo base profiles, task overlays, and sync between machines |
+| 7 | #148 | Harden tracked agent permissions and context packer | Prevent broad local-agent permissions and unpinned `npx repomix@latest` from becoming shipped policy |
 
 ## Critical Path Details
 
-### 1. `h2t-core:agent-profile` (#153)
+### 1. Connector Freeze + Mac Portability Gate (#155)
+
+Goal: finish connectors as a category before moving to profile/runtime work.
+
+This does not mean implementing every provider feature. It means every known
+connector issue is intentionally classified:
+
+- fix now;
+- accepted provider/product backlog;
+- Mac/setup portability follow-up;
+- stale/superseded and closed with evidence.
+
+Definition of done:
+
+- #82/#145 Calendar are resolved into a fix-now scope plus provider backlog;
+- #81/#146 Notion are resolved into fix-now or accepted backlog;
+- #107/#109/#110/#112/#94/#13 secrets/setup issues are consolidated enough that
+  connector credentials can be ported to Mac deliberately;
+- #53/#73/#85/#79 cross-platform issues are triaged against h2t-ops connector usage;
+- final read-only smoke matrix exists for all seven connectors;
+- roadmap no longer lists connector migration as active work.
+
+### 2. Calendar Closure (#82, #145)
+
+Goal: make `h2t-ops calendar` good enough for real day-to-day querying.
+
+Concrete fix-now candidate from #82:
+
+- arbitrary date window: `--from YYYY-MM-DD --to YYYY-MM-DD`;
+- configurable limit, default high enough to avoid silent truncation;
+- busy/transparency filtering, for example `--busy-only`;
+- possibly `free-time` if the implementation stays small.
+
+Broader #145 provider features can remain backlog unless pulled in explicitly:
+Meet links, recurrence, patch/reschedule, all-day, multi-calendar, reminders, and
+FreeBusy.
+
+### 3. Notion Closure (#81, #146)
+
+Goal: decide whether Notion needs one more connector pass before freeze.
+
+Known gaps:
+
+- child_database / embedded DB traversal (#81);
+- workspace discovery and parent graph (#146).
+
+If these are not required for immediate connector closure, mark them as accepted
+provider backlog rather than keeping them on the critical path.
+
+### 4. Secrets / Setup Closure
+
+Goal: make connector credentials understandable and portable before Mac work.
+
+Related issues:
+
+- #107 unified loader rollout;
+- #109 MeetGeek secrets migration;
+- #110 Telegram/Gemini secrets migration;
+- #112 setup wizard;
+- #94 canonical `~/.dor/secrets.env`;
+- #13 cross-machine credential sync.
+
+Do not let this expand into a full setup product unless needed for Mac
+portability. The connector-freeze requirement is narrower: each connector should
+have a documented credential source and a credible Mac transfer/setup path.
+
+### 5. Cross-Platform / Mac Readiness
+
+Goal: make a future Mac port a planned smoke pass, not another migration.
+
+Related issues:
+
+- #53 Mac install notes;
+- #73 cross-platform hook dispatch;
+- #85 CI/unit-test hygiene;
+- #79 per-machine config overrides.
+
+Connector gate:
+
+- normal connector usage cannot require Windows-only shell behavior;
+- tests should pass cross-platform or have explicit skip reasons;
+- setup instructions should work through `uv` on macOS;
+- token/session locations must be configurable or documented.
+
+### 6. `h2t-core:agent-profile` (#153)
 
 Goal: make plugin loading contextual.
 
@@ -82,7 +173,7 @@ Definition of done:
 - at least one real repo profile is applied and verified with `/context`;
 - rollback path is documented.
 
-### 2. Security / Dev Hygiene (#148)
+### 7. Security / Dev Hygiene (#148)
 
 Known findings to resolve:
 
@@ -100,7 +191,7 @@ Policy:
 This was intentionally deferred during connector migration. It is now part of
 the closure path.
 
-### 3. CI / Test Hygiene (#85)
+### 8. CI / Test Hygiene (#85)
 
 Fix known CI failures before calling the repo stable:
 
@@ -110,7 +201,7 @@ Fix known CI failures before calling the repo stable:
 
 This is infrastructure work, not connector feature work.
 
-### 4. Issue Sweep
+### 9. Issue Sweep
 
 Keep open issues only if they represent real future work.
 
@@ -118,9 +209,10 @@ Recommended triage:
 
 | Bucket | Issues | Treatment |
 | --- | --- | --- |
-| Secrets/setup | #107, #112, #94, #109, #110, #13 | Consolidate into a smaller setup/secrets roadmap; avoid piecemeal drift |
-| Calendar follow-up | #145, #82 | Keep open; #82 is concrete Calendar UX (`--from/--to`, limit, transparency), #145 is broader provider feature work |
-| Notion follow-up | #146, #81 | Keep as provider feature backlog |
+| Connector freeze umbrella | #155 | Immediate gate before agent profiles |
+| Secrets/setup | #107, #112, #94, #109, #110, #13 | Triage for connector Mac portability; avoid piecemeal drift |
+| Calendar follow-up | #145, #82 | #82 likely fix-now; #145 mostly provider backlog unless explicitly widened |
+| Notion follow-up | #146, #81 | Decide fix-now vs accepted provider backlog |
 | Research backlog | #98, #97, #99, #101, #105, #72, #71, #70 | Keep as research/product backlog, not repo-closure blockers |
 | Creative backlog | #119, #83, #88, #89, #90, #91, #92 | Move to creative roadmap; not h2t-ops closure |
 | Cross-platform / machine config | #79, #73 | Keep as h2t-core/platform backlog |
@@ -260,11 +352,14 @@ Important for finishing the repository:
 
 ## Practical Order
 
-1. Implement #153 `h2t-core:agent-profile`.
-2. Resolve #148 security/dev hygiene.
-3. Fix #85 CI/unit-test hygiene.
-4. Sweep issues into active / backlog / moved / stale-closed.
-5. Only then pick the next product stream: Calendar/Notion provider features, research
+1. Run #155 connector freeze triage.
+2. Implement the fix-now connector gaps, likely starting with #82 Calendar UX.
+3. Decide #81/#146 Notion and secrets/setup scope for Mac portability.
+4. Run or document the final read-only connector smoke matrix.
+5. Then implement #153 `h2t-core:agent-profile`.
+6. Resolve #148 security/dev hygiene and #85 CI/unit-test hygiene.
+7. Sweep remaining issues into active / backlog / moved / stale-closed.
+8. Only then pick the next product stream: Calendar/Notion provider features, research
    product backlog, creative recovery, or POS-side workflow contracts.
 
 ## Closure Forecast
@@ -274,23 +369,26 @@ Date: 2026-05-21
 Calibration note: the previous forecast assumed Telegram, Research/fetch, Daily Brief,
 legacy h2t retirement, profiles, and cleanup were still ahead. Since then, Telegram,
 Research/fetch, Drive `sync-meetings` retirement, legacy `h2t` retirement, and #121
-cleanup finished faster than expected. The remaining forecast is therefore only for
-repo closure/hygiene, not for product backlog.
+cleanup finished faster than expected. The remaining forecast now prioritizes a
+connector-freeze pass before agent profiles.
 
 | Remaining block | Optimistic | Realistic | Main risk |
 | --- | ---: | ---: | --- |
+| #155 connector freeze triage | 0.5 day | 1 day | Scope creep from "freeze" into all provider backlog |
+| #82 Calendar UX fix | 0.5-1 day | 1-2 days | Date/time edge cases and transparency semantics |
+| Notion/secrets/Mac portability decisions | 0.5-1 day | 1-2 days | Deciding what is fix-now vs accepted backlog |
+| Final connector smoke matrix | 0.5 day | 1 day | Live auth/provider flakiness |
 | #153 `h2t-core:agent-profile` | 1-2 days | 2-3 days | Profile merge semantics, temporary overlays, cross-machine sync |
 | #148 permissions / context packer hardening | 0.5-1 day | 1-2 days | Separating personal allowlists from tracked repo policy |
 | #85 CI/unit-test hygiene | 0.5-1 day | 1-2 days | Hidden platform assumptions |
 | Issue sweep / reclassification | 0.5-1 day | 1-2 days | Old issues that need careful "move vs close" decisions |
-| Secrets/setup consolidation triage | 0.5 day | 1-2 days if implemented | Scope creep into full setup wizard |
 
 Total estimate to maintenance/closure mode:
 
-- optimistic: 3-5 focused working days;
-- realistic: 5-8 focused working days;
-- with interruptions: 1-2 calendar weeks.
+- optimistic: 5-7 focused working days;
+- realistic: 8-12 focused working days;
+- with interruptions: 2-3 calendar weeks.
 
-This excludes Calendar/Notion provider enhancements, research product backlog, creative
-recovery, and POS-side workflow contracts. Those are legitimate next streams, but not
-required to close the h2t-ops migration chapter.
+This excludes broad Calendar/Notion provider enhancements, research product backlog,
+creative recovery, and POS-side workflow contracts. The connector-freeze pass may
+accept those as backlog, but should not silently absorb them.
