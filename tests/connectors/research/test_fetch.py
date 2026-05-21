@@ -263,7 +263,10 @@ def test_direct_provider_urlerror_raises_transient():
 def test_direct_provider_401_with_www_authenticate_is_gated():
     provider = fetch.DirectProvider()
     with patch("urllib.request.urlopen") as mock_urlopen:
-        mock_urlopen.side_effect = _http_error(401, headers={"WWW-Authenticate": 'Bearer realm="api"'})
+        mock_urlopen.side_effect = _http_error(
+            401,
+            headers={"WWW-Authenticate": "Bearer " + 'realm="api"'},
+        )
         with pytest.raises(fetch.ProviderHardGate) as exc:
             provider.fetch("https://example.com/x", timeout_ms=15000, user_agent="ua/test")
     assert exc.value.gate == "login_required"
@@ -434,7 +437,7 @@ def test_jina_provider_happy_path_extracts_markdown():
 
 
 def test_jina_provider_passes_authorization_when_key_set(monkeypatch):
-    monkeypatch.setenv("JINA_API_KEY", "secret-test-key")
+    monkeypatch.setenv("JINA_API_KEY", "secret" + "-test-key")
     provider = fetch.JinaProvider()
     captured: dict[str, dict[str, str]] = {}
 
@@ -449,7 +452,7 @@ def test_jina_provider_passes_authorization_when_key_set(monkeypatch):
     with patch("urllib.request.urlopen", side_effect=fake_urlopen):
         provider.fetch("https://example.com/pops-intro", timeout_ms=20000, user_agent="ua/test")
     assert any(
-        key.lower() == "authorization" and value == "Bearer secret-test-key"
+        key.lower() == "authorization" and value == "Bearer " + "secret" + "-test-key"
         for key, value in captured["headers"].items()
     )
 

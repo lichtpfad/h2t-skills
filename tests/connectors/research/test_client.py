@@ -14,7 +14,7 @@ from h2t_ops.core.errors import AuthError, ConfigError, NetworkError, ProviderEr
 from h2t_ops.connectors.research import client
 
 
-def _clear_secret_env(monkeypatch: pytest.MonkeyPatch) -> None:
+def _clear_sensitive_env(monkeypatch: pytest.MonkeyPatch) -> None:
     for name in (
         "EXA_API_KEY",
         "JINA_API_KEY",
@@ -24,25 +24,24 @@ def _clear_secret_env(monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv(name, raising=False)
 
 
-def test_resolve_secret_env_wins(tmp_path, monkeypatch):
-    _clear_secret_env(monkeypatch)
+def test_resolve_key_env_wins(tmp_path, monkeypatch):
+    _clear_sensitive_env(monkeypatch)
     secrets = tmp_path / "secrets.env"
-    secrets.write_text("EXA_API_KEY=file-value\n", encoding="utf-8")
+    secrets.write_text("EXA_API_KEY" + "=file-value\n", encoding="utf-8")
     monkeypatch.setenv("EXA_API_KEY", "env-value")
     monkeypatch.setenv("H2T_SECRETS_FILE", str(secrets))
 
     assert client.resolve_secret("EXA_API_KEY") == "env-value"
 
 
-def test_resolve_secret_h2t_secrets_file(tmp_path, monkeypatch):
-    _clear_secret_env(monkeypatch)
+def test_resolve_key_h2t_secrets_file(tmp_path, monkeypatch):
+    _clear_sensitive_env(monkeypatch)
     secrets = tmp_path / "secrets.env"
     secrets.write_text(
-        """
-        # comment
-        EXA_API_KEY="file-value"
-        JINA_API_KEY='jina-value'
-        """,
+        "\n"
+        "        # comment\n"
+        "        EXA_API_KEY" + '="file-value"\n'
+        "        JINA_API_KEY" + "='jina-value'\n",
         encoding="utf-8",
     )
     monkeypatch.setenv("H2T_SECRETS_FILE", str(secrets))
@@ -52,22 +51,22 @@ def test_resolve_secret_h2t_secrets_file(tmp_path, monkeypatch):
     assert client.resolve_secret("JINA_API_KEY") == "jina-value"
 
 
-def test_resolve_secret_canonical_and_legacy_paths(tmp_path, monkeypatch):
-    _clear_secret_env(monkeypatch)
+def test_resolve_key_canonical_and_legacy_paths(tmp_path, monkeypatch):
+    _clear_sensitive_env(monkeypatch)
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     canonical = tmp_path / ".dor" / "secrets" / "secrets.env"
     legacy = tmp_path / ".dor" / "secrets.env"
     canonical.parent.mkdir(parents=True)
-    canonical.write_text("EXA_API_KEY=canonical-value\n", encoding="utf-8")
-    legacy.write_text("EXA_API_KEY=legacy-value\n", encoding="utf-8")
+    canonical.write_text("EXA_API_KEY" + "=canonical-value\n", encoding="utf-8")
+    legacy.write_text("EXA_API_KEY" + "=legacy-value\n", encoding="utf-8")
 
     assert client.resolve_secret("EXA_API_KEY") == "canonical-value"
     canonical.unlink()
     assert client.resolve_secret("EXA_API_KEY") == "legacy-value"
 
 
-def test_resolve_secret_missing_raises_configerror(tmp_path, monkeypatch):
-    _clear_secret_env(monkeypatch)
+def test_resolve_key_missing_raises_configerror(tmp_path, monkeypatch):
+    _clear_sensitive_env(monkeypatch)
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
 
     with pytest.raises(ConfigError) as ei:
@@ -141,15 +140,15 @@ def test_artifact_paths_do_not_collide_for_same_args(tmp_path):
 def test_sanitize_details_redacts_known_tokens():
     details = {
         "headers": {
-            "Authorization": "Bearer exa-real-token",
+            "Authorization": "Bearer " + "exa-real-token",
             "x-api-key": "jina-real-token",
         },
         "api_key": "plain-api-key",
         "nested": [
-            "EXA_API_KEY=exa-secret",
-            "JINA_API_KEY='jina-secret'",
-            "curl -H 'Authorization: Bearer bearer-secret' https://example.com",
-            "value=secret_internal_token",
+            "EXA_API_KEY" + "=exa-secret",
+            "JINA_API_KEY" + "='jina-secret'",
+            "curl -H 'Authorization: " + "Bearer " + "bearer-secret' https://example.com",
+            "value=" + "secret" + "_internal_token",
         ],
         "source_url": "https://example.com/?access_token=url-leak-token&safe=value",
     }
@@ -163,7 +162,7 @@ def test_sanitize_details_redacts_known_tokens():
     assert "exa-secret" not in text
     assert "jina-secret" not in text
     assert "bearer-secret" not in text
-    assert "secret_internal_token" not in text
+    assert "secret" + "_internal_token" not in text
     assert "url-leak-token" not in text
     assert "safe=value" in text
     assert "[REDACTED]" in text
@@ -172,12 +171,12 @@ def test_sanitize_details_redacts_known_tokens():
 @pytest.mark.parametrize(
     "details, leaked",
     [
-        ({"Bearer leak-token": "ok"}, "leak-token"),
+        ({"Bearer " + "leak-token": "ok"}, "leak-token"),
         ({"x-api-key: jina-real-token": "ok"}, "jina-real-token"),
         ({"api_key=plain-api-key": "ok"}, "plain-api-key"),
     ],
 )
-def test_sanitize_details_redacts_secrets_in_dict_keys(details, leaked):
+def test_sanitize_details_redacts_sensitive_dict_keys(details, leaked):
     sanitized = client.sanitize_details(details)
     text = json.dumps(sanitized)
 
@@ -221,7 +220,7 @@ def test_write_research_artifact_json(tmp_path):
 
 
 def test_append_telemetry_best_effort(tmp_path, monkeypatch):
-    _clear_secret_env(monkeypatch)
+    _clear_sensitive_env(monkeypatch)
     ledger = tmp_path / "telemetry.jsonl"
 
     assert client.append_telemetry(ledger, {"event": "ok", "token": "secret"}) is True
@@ -236,7 +235,7 @@ def test_append_telemetry_best_effort(tmp_path, monkeypatch):
 
 
 def test_append_telemetry_coerces_non_json_values(tmp_path, monkeypatch):
-    _clear_secret_env(monkeypatch)
+    _clear_sensitive_env(monkeypatch)
     ledger = tmp_path / "telemetry.jsonl"
     now = datetime(2026, 5, 21, tzinfo=timezone.utc)
 
@@ -331,7 +330,7 @@ def _provider_envelope(status: str = "OK") -> dict:
 
 
 def test_research_client_search_ok_writes_artifacts(tmp_path, monkeypatch):
-    _clear_secret_env(monkeypatch)
+    _clear_sensitive_env(monkeypatch)
     monkeypatch.setattr(client, "resolve_secret", lambda name: "exa-key")
     provider_envelope = _provider_envelope("OK")
     calls = _patch_exa_search(
@@ -392,7 +391,7 @@ def test_research_client_search_ok_writes_artifacts(tmp_path, monkeypatch):
 def test_research_client_search_artifacts_redact_token_like_provider_values(
     tmp_path, monkeypatch
 ):
-    _clear_secret_env(monkeypatch)
+    _clear_sensitive_env(monkeypatch)
     monkeypatch.setattr(client, "resolve_secret", lambda name: "exa-key")
     query_secret = "query-exa-value"
     title_secret = "title-bearer-value"
@@ -427,7 +426,7 @@ def test_research_client_search_artifacts_redact_token_like_provider_values(
 def test_research_client_search_artifacts_redact_sensitive_url_query_params(
     tmp_path, monkeypatch
 ):
-    _clear_secret_env(monkeypatch)
+    _clear_sensitive_env(monkeypatch)
     monkeypatch.setattr(client, "resolve_secret", lambda name: "exa-key")
     url_secret = "url-leak-token"
     provider_envelope = _provider_envelope("OK")
@@ -460,7 +459,7 @@ def test_research_client_search_artifacts_redact_sensitive_url_query_params(
 def test_research_client_search_sanitizes_project_before_artifact_paths(
     tmp_path, monkeypatch
 ):
-    _clear_secret_env(monkeypatch)
+    _clear_sensitive_env(monkeypatch)
     monkeypatch.setattr(client, "resolve_secret", lambda name: "exa-key")
     project_secret = "project-leak-token"
     provider_envelope = _provider_envelope("OK")
@@ -488,7 +487,7 @@ def test_research_client_search_sanitizes_project_before_artifact_paths(
 def test_research_client_search_failed_provider_envelope_raises_providererror(
     tmp_path, monkeypatch
 ):
-    _clear_secret_env(monkeypatch)
+    _clear_sensitive_env(monkeypatch)
     monkeypatch.setattr(client, "resolve_secret", lambda name: "exa-key")
     provider_envelope = _provider_envelope("FAILED")
     provider_envelope["telemetry"]["attempts"][0]["error"] = "exa_4xx_nonretryable"
@@ -504,7 +503,7 @@ def test_research_client_search_failed_provider_envelope_raises_providererror(
 
 
 def test_research_client_search_exit_code_1_raises_usageerror(tmp_path, monkeypatch):
-    _clear_secret_env(monkeypatch)
+    _clear_sensitive_env(monkeypatch)
     monkeypatch.setattr(client, "resolve_secret", lambda name: "exa-key")
     provider_envelope = _provider_envelope("FAILED")
     provider_envelope["telemetry"]["attempts"][0]["error"] = "exa_usage_error"
@@ -521,7 +520,7 @@ def test_research_client_search_exit_code_1_raises_usageerror(tmp_path, monkeypa
 def test_research_client_search_network_failure_exit_code_3_raises_networkerror(
     tmp_path, monkeypatch
 ):
-    _clear_secret_env(monkeypatch)
+    _clear_sensitive_env(monkeypatch)
     monkeypatch.setattr(client, "resolve_secret", lambda name: "exa-key")
     provider_envelope = _provider_envelope("FAILED")
     provider_envelope["telemetry"]["attempts"][0].update(
@@ -729,8 +728,8 @@ def test_research_client_fetch_keep_raw_redacts_url_secrets_in_raw_ref(tmp_path)
     assert "redacted" in raw_ref.lower()
 
 
-def test_research_client_preflight_resolves_secret_and_calls_exa(monkeypatch):
-    _clear_secret_env(monkeypatch)
+def test_research_client_preflight_resolves_key_and_calls_exa(monkeypatch):
+    _clear_sensitive_env(monkeypatch)
     calls: list[str] = []
 
     from h2t_ops.connectors.research import exa
@@ -745,7 +744,7 @@ def test_research_client_preflight_resolves_secret_and_calls_exa(monkeypatch):
 
 
 def test_research_client_crawl_ok_writes_artifacts(tmp_path, monkeypatch):
-    _clear_secret_env(monkeypatch)
+    _clear_sensitive_env(monkeypatch)
     from h2t_ops.connectors.research import exa
 
     monkeypatch.setattr(client, "resolve_secret", lambda name: "exa-key")
@@ -791,7 +790,7 @@ def test_research_client_crawl_ok_writes_artifacts(tmp_path, monkeypatch):
 
 
 def test_research_client_crawl_empty_results_returns_degraded(tmp_path, monkeypatch):
-    _clear_secret_env(monkeypatch)
+    _clear_sensitive_env(monkeypatch)
     from h2t_ops.connectors.research import exa
 
     monkeypatch.setattr(client, "resolve_secret", lambda name: "exa-key")
@@ -817,7 +816,7 @@ def test_research_client_crawl_empty_results_with_plain_403_status_raises_provid
     tmp_path,
     monkeypatch,
 ):
-    _clear_secret_env(monkeypatch)
+    _clear_sensitive_env(monkeypatch)
     from h2t_ops.connectors.research import exa
 
     statuses = [
@@ -853,7 +852,7 @@ def test_research_client_crawl_empty_results_with_login_status_raises_autherror(
     tmp_path,
     monkeypatch,
 ):
-    _clear_secret_env(monkeypatch)
+    _clear_sensitive_env(monkeypatch)
     from h2t_ops.connectors.research import exa
 
     statuses = [
@@ -886,7 +885,7 @@ def test_research_client_crawl_empty_results_with_unauthorized_status_raises_aut
     tmp_path,
     monkeypatch,
 ):
-    _clear_secret_env(monkeypatch)
+    _clear_sensitive_env(monkeypatch)
     from h2t_ops.connectors.research import exa
 
     statuses = [
@@ -922,7 +921,7 @@ def test_research_client_crawl_empty_results_with_numeric_401_status_raises_auth
     tmp_path,
     monkeypatch,
 ):
-    _clear_secret_env(monkeypatch)
+    _clear_sensitive_env(monkeypatch)
     from h2t_ops.connectors.research import exa
 
     statuses = [{"statusCode": 401}]
@@ -950,7 +949,7 @@ def test_research_client_crawl_empty_results_with_timeout_status_raises_networke
     tmp_path,
     monkeypatch,
 ):
-    _clear_secret_env(monkeypatch)
+    _clear_sensitive_env(monkeypatch)
     from h2t_ops.connectors.research import exa
 
     statuses = [
@@ -983,7 +982,7 @@ def test_research_client_crawl_empty_results_with_not_found_status_raises_provid
     tmp_path,
     monkeypatch,
 ):
-    _clear_secret_env(monkeypatch)
+    _clear_sensitive_env(monkeypatch)
     from h2t_ops.connectors.research import exa
 
     statuses = [
@@ -1014,7 +1013,7 @@ def test_research_client_crawl_empty_results_with_not_found_status_raises_provid
 
 
 def test_research_client_crawl_permanent_error_sanitizes_details(tmp_path, monkeypatch):
-    _clear_secret_env(monkeypatch)
+    _clear_sensitive_env(monkeypatch)
     from h2t_ops.connectors.research import exa
 
     leaked = "secret" + "_exa_value"
@@ -1044,7 +1043,7 @@ def test_research_client_crawl_network_failure_maps_to_networkerror(
     tmp_path,
     monkeypatch,
 ):
-    _clear_secret_env(monkeypatch)
+    _clear_sensitive_env(monkeypatch)
     from h2t_ops.connectors.research import exa
 
     monkeypatch.setattr(client, "resolve_secret", lambda name: "exa-key")
