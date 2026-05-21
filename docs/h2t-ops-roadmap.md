@@ -516,3 +516,90 @@ collision.
   instead of mutating stores.
 - POS is not required for read-only connector usage. h2t-ops skills must degrade
   gracefully when POS journal commands are unavailable.
+
+## Outside h2t-ops
+
+This roadmap tracks operational connector migration. The adjacent work below matters for
+closing the repository cleanly, but it is outside `h2t-ops` connector scope.
+
+### 1. h2t-core
+
+`h2t-core` owns base project/session infrastructure:
+
+- `session-start`;
+- `handoff`;
+- `init-project`;
+- `scaffold-project`;
+- `setup`;
+- future `agent-profile` (#153).
+
+The plugin-profile idea also belongs here: repo base profile + task overlays + cross-machine
+sync. This is runtime hygiene, not connector work.
+
+### 2. POS / DOR boundary
+
+`h2t-ops` fetches provider artifacts. It does not own:
+
+- meeting interpretation;
+- transcript fusion;
+- journal writes;
+- captures/tasks/decisions;
+- POS intake;
+- `~/.dor/lake`, `~/.dor/context`, vault, or SQLite state.
+
+Example: MeetGeek local recovery can prepare/upload a recording and fetch provider artifacts,
+but POS decides how a transcript becomes evidence, tasks, decisions, or journal material.
+
+### 3. Workflow / coordinator layer
+
+Workflows that combine providers or write local operational state are not
+`h2t_ops/connectors/*`:
+
+- Drive `sync-meetings` (#147);
+- MeetGeek `convert`, `upload --from-file`, and recovery workflows;
+- Daily Brief;
+- Telegram `digest`, `tasks`, `research`, `students`;
+- batch/sync pipelines generally.
+
+These may live in skills/scripts or a future coordinator layer, but not in connector runtime.
+
+### 4. Legacy `h2t` monolith
+
+The legacy `h2t` plugin still contributes duplicate/overlapping entries:
+
+- `gmail`, `calendar`, `drive`, `notion`, `telegram`;
+- `deck`, `landing`, `design`;
+- `github-issues`, `pre-merge-check`, and related dev helpers.
+
+Retire/disable/keep-compat is a separate decision. Do it after Telegram, Research/fetch, and
+Daily Brief are stable, so old entrypoints are not removed too early.
+
+### 5. Creative / Arch / Edu / DCC
+
+These are separate plugin domains, not operational connectors:
+
+- `h2t-creative`: landing/deck/style/design work;
+- `h2t-arch`: DrawIO, diagrams, node research;
+- `h2t-edu`: transcripts, lessons, YouTube education pipeline;
+- `h2t-dcc`: TouchDesigner/Houdini in the separate `C:/dev/h2t-dcc` repo.
+
+Track their cleanup in separate roadmaps or issues. Do not mix them into connector closure.
+
+### 6. Repo / security / dev hygiene
+
+Important for finishing the repository, but not connector migration:
+
+- #148 tracked agent permissions + context packer hardening;
+- `.claude/settings*` dirty-tree cleanup;
+- stale `.bak`, `build/`, `.superpowers/` cleanup;
+- global/user skill bloat;
+- `h2t-core:setup`, secrets wizard, credential sync;
+- issue sweep and moving tasks to the correct repositories.
+
+### Practical Order
+
+1. Close `h2t-ops`: Telegram -> Research/fetch -> Daily Brief.
+2. Decide legacy `h2t` overlap.
+3. Implement `h2t-core:agent-profile`.
+4. Do final repo/security/issue cleanup.
+5. Run Creative/DCC/Edu as separate streams, not as connector-closure blockers.
