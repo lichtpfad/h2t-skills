@@ -50,21 +50,38 @@ class CalendarClient:
         self.service = build_google_service("calendar", "v3", creds)
 
     # ----- Read -----
-    def list_events(self, days: int = 1, max_results: int = 20) -> List[Dict[str, Any]]:
-        time_min = datetime.now(timezone.utc).isoformat()
-        time_max = (datetime.now(timezone.utc) + timedelta(days=days)).isoformat()
+    def list_events(
+        self,
+        days: int = 1,
+        max_results: int = 250,
+        *,
+        time_min: Optional[str] = None,
+        time_max: Optional[str] = None,
+        tz: Optional[str] = None,
+        busy_only: bool = False,
+    ) -> List[Dict[str, Any]]:
+        if time_min is None:
+            time_min = datetime.now(timezone.utc).isoformat()
+        if time_max is None:
+            time_max = (datetime.now(timezone.utc) + timedelta(days=days)).isoformat()
+        params: Dict[str, Any] = {
+            "calendarId": "primary",
+            "timeMin": time_min,
+            "timeMax": time_max,
+            "maxResults": max_results,
+            "singleEvents": True,
+            "orderBy": "startTime",
+        }
+        if tz:
+            params["timeZone"] = tz
         try:
-            res = self.service.events().list(
-                calendarId="primary",
-                timeMin=time_min,
-                timeMax=time_max,
-                maxResults=max_results,
-                singleEvents=True,
-                orderBy="startTime",
-            ).execute()
+            res = self.service.events().list(**params).execute()
         except Exception as e:
             raise _map_http_error(e, op="list events") from e
-        return [self._normalize_event(it) for it in res.get("items", [])]
+        items = res.get("items", [])
+        if busy_only:
+            items = [it for it in items if it.get("transparency") != "transparent"]
+        return [self._normalize_event(it) for it in items]
 
     def search_events(self, query: str, max_results: int = 10) -> List[Dict[str, Any]]:
         try:

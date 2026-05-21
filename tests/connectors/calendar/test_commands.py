@@ -38,6 +38,48 @@ def test_register_has_format_and_json_flags():
     assert ns2.fmt == "md"
 
 
+def test_list_parser_accepts_date_window_busy_only_tz_and_max():
+    parser = _build_parser()
+    ns = parser.parse_args([
+        "calendar", "list",
+        "--from", "2026-05-01",
+        "--to", "2026-05-21",
+        "--tz", "Asia/Jerusalem",
+        "--max", "250",
+        "--busy-only",
+        "--json",
+    ])
+    assert ns.from_date == "2026-05-01"
+    assert ns.to_date == "2026-05-21"
+    assert ns.tz == "Asia/Jerusalem"
+    assert ns.max == 250
+    assert ns.busy_only is True
+
+
+def test_date_window_bounds_are_inclusive_user_dates():
+    from h2t_ops.connectors.calendar.commands import _date_window_bounds
+
+    time_min, time_max = _date_window_bounds(
+        "2026-05-01",
+        "2026-05-21",
+        "Asia/Jerusalem",
+    )
+
+    assert time_min == "2026-05-01T00:00:00+03:00"
+    assert time_max == "2026-05-22T00:00:00+03:00"
+
+
+def test_calendar_timezone_resolution_prefers_arg_then_env(monkeypatch):
+    from h2t_ops.connectors.calendar.commands import _resolve_query_tz
+
+    monkeypatch.setenv("H2T_CALENDAR_TZ", "UTC")
+
+    assert _resolve_query_tz("Asia/Jerusalem") == "Asia/Jerusalem"
+    assert _resolve_query_tz(None) == "UTC"
+    monkeypatch.delenv("H2T_CALENDAR_TZ")
+    assert _resolve_query_tz(None) == "Asia/Jerusalem"
+
+
 def test_importing_commands_does_not_import_client(monkeypatch):
     import builtins
     real = builtins.__import__
@@ -73,7 +115,11 @@ def test_list_dispatch_json_returns_rows(monkeypatch):
     from h2t_ops.connectors.calendar import commands as cmds_mod
 
     class _Stub:
-        def list_events(self, days=1, max_results=20):
+        def list_events(self, **kwargs):
+            assert kwargs["days"] == 1
+            assert kwargs["max_results"] == 20
+            assert kwargs["time_min"] is None
+            assert kwargs["time_max"] is None
             return [{"id": "evt1", "summary": "M"}]
     monkeypatch.setattr(client_mod, "CalendarClient", lambda: _Stub())
     args = SimpleNamespace(
@@ -81,6 +127,68 @@ def test_list_dispatch_json_returns_rows(monkeypatch):
     )
     out = cmds_mod.run(args)
     assert out == [{"id": "evt1", "summary": "M"}]
+
+
+def test_list_dispatch_date_window_passes_explicit_bounds(monkeypatch):
+    import sys
+    import h2t_ops.connectors.calendar.client as client_mod
+    client_mod = sys.modules.get(
+        "h2t_ops.connectors.calendar.client", client_mod
+    )
+    from h2t_ops.connectors.calendar import commands as cmds_mod
+
+    calls = []
+
+    class _Stub:
+        def list_events(self, **kwargs):
+            calls.append(kwargs)
+            return []
+
+    monkeypatch.setattr(client_mod, "CalendarClient", lambda: _Stub())
+    args = SimpleNamespace(
+        calendar_cmd="list",
+        days=7,
+        from_date="2026-05-01",
+        to_date="2026-05-21",
+        tz="Asia/Jerusalem",
+        max=250,
+        busy_only=True,
+        as_json=True,
+        fmt="human",
+    )
+
+    out = cmds_mod.run(args)
+
+    assert out == []
+    assert calls == [{
+        "days": 7,
+        "max_results": 250,
+        "time_min": "2026-05-01T00:00:00+03:00",
+        "time_max": "2026-05-22T00:00:00+03:00",
+        "tz": "Asia/Jerusalem",
+        "busy_only": True,
+    }]
+
+
+def test_list_dispatch_rejects_partial_date_window(monkeypatch):
+    import h2t_ops.connectors.calendar.client as client_mod
+    from h2t_ops.connectors.calendar import commands as cmds_mod
+
+    monkeypatch.setattr(client_mod, "CalendarClient", lambda: object())
+    args = SimpleNamespace(
+        calendar_cmd="list",
+        days=1,
+        from_date="2026-05-01",
+        to_date=None,
+        tz=None,
+        max=250,
+        busy_only=False,
+        as_json=True,
+        fmt="human",
+    )
+
+    with pytest.raises(UsageError):
+        cmds_mod.run(args)
 
 
 def test_delete_dispatch_requires_confirm(monkeypatch):
