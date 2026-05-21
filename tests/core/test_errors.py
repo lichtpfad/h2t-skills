@@ -37,3 +37,16 @@ def test_hint_stored_and_defaults_none():
     assert e.hint == "run h2t-ops --help"
     assert str(e) == "bad arg"
     assert UsageError("x").hint is None
+
+
+def test_details_stored_and_defaults_none():
+    e = UsageError("bad arg", details={"field": "query", "reason": "missing"})
+    assert e.details == {"field": "query", "reason": "missing"}
+    assert UsageError("bad arg").details is None
+
+
+def test_details_do_not_change_message_or_hint():
+    e = ConfigError("missing key", hint="Set EXA_API_KEY", details={"key": "EXA_API_KEY"})
+    assert str(e) == "missing key"
+    assert e.hint == "Set EXA_API_KEY"
+    assert e.details == {"key": "EXA_API_KEY"}
