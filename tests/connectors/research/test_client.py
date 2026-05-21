@@ -137,6 +137,28 @@ def test_artifact_paths_do_not_collide_for_same_args(tmp_path):
     assert first["sources_json"] != second["sources_json"]
 
 
+def test_validate_public_http_url_allows_public_http_url():
+    assert client.validate_public_http_url("https://example.com/page") == "https://example.com/page"
+    assert client.validate_public_http_url("http://93.184.216.34/") == "http://93.184.216.34/"
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "file:///C:/Users/stani/.dor/secrets.env",
+        "https://localhost/private",
+        "http://127.0.0.1:8080/",
+        "http://10.0.0.5/",
+        "http://192.168.1.10/",
+        "http://intranet/",
+        "/relative/path",
+    ],
+)
+def test_validate_public_http_url_blocks_local_or_private_targets(url):
+    with pytest.raises(UsageError):
+        client.validate_public_http_url(url)
+
+
 def test_sanitize_details_redacts_known_tokens():
     details = {
         "headers": {
@@ -421,6 +443,10 @@ def test_research_client_search_artifacts_redact_token_like_provider_values(
     assert title_secret not in combined
     assert highlight_secret not in combined
     assert "[REDACTED]" in combined
+    result_text = json.dumps(result)
+    assert query_secret not in result_text
+    assert title_secret not in result_text
+    assert highlight_secret not in result_text
 
 
 def test_research_client_search_artifacts_redact_sensitive_url_query_params(
@@ -500,6 +526,21 @@ def test_research_client_search_failed_provider_envelope_raises_providererror(
     assert details["provider_envelope"]["status"] == "FAILED"
     assert details["provider_envelope"]["telemetry"]["attempts"][0]["error"] == "exa_4xx_nonretryable"
     assert (tmp_path / "telemetry.jsonl").is_file()
+
+
+def test_research_client_search_auth_error_raises_autherror(tmp_path, monkeypatch):
+    _clear_sensitive_env(monkeypatch)
+    monkeypatch.setattr(client, "resolve_secret", lambda name: "exa-key")
+    provider_envelope = _provider_envelope("FAILED")
+    provider_envelope["telemetry"]["attempts"][0].update(
+        {"http": 401, "error": "exa_auth_error"}
+    )
+    _patch_exa_search(monkeypatch, provider_envelope=provider_envelope, exit_code=2)
+
+    with pytest.raises(AuthError) as ei:
+        client.ResearchClient(output_dir=tmp_path).search(query="q")
+
+    assert ei.value.details["provider_envelope"]["telemetry"]["attempts"][0]["error"] == "exa_auth_error"
 
 
 def test_research_client_search_exit_code_1_raises_usageerror(tmp_path, monkeypatch):
@@ -726,6 +767,16 @@ def test_research_client_fetch_keep_raw_redacts_url_secrets_in_raw_ref(tmp_path)
     assert "secret123" not in raw_ref
     assert "token456" not in raw_ref
     assert "redacted" in raw_ref.lower()
+    result_text = json.dumps(result)
+    assert "secret123" not in result_text
+    assert "token456" not in result_text
+
+
+@pytest.mark.parametrize("method", ["fetch_url", "crawl"])
+def test_research_client_url_methods_reject_file_and_private_targets(tmp_path, method):
+    research = client.ResearchClient(output_dir=tmp_path)
+    with pytest.raises(UsageError):
+        getattr(research, method)("file:///C:/Users/stani/.dor/secrets.env")
 
 
 def test_research_client_preflight_resolves_key_and_calls_exa(monkeypatch):
