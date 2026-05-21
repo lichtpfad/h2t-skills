@@ -7,6 +7,7 @@ ResearchClient facade. Provider calls land in later tasks.
 from __future__ import annotations
 
 import json
+import ipaddress
 import os
 import re
 import uuid
@@ -123,6 +124,42 @@ def artifact_id(prefix: str = "research") -> str:
     """Return a compact unique artifact id."""
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     return f"{slugify(prefix, max_len=24)}_{stamp}_{uuid.uuid4().hex[:8]}"
+
+
+def validate_public_http_url(url: str) -> str:
+    """Accept only public http(s) URLs for provider fetch/crawl surfaces."""
+    raw = str(url or "").strip()
+    parts = urlsplit(raw)
+    if parts.scheme.lower() not in {"http", "https"} or not parts.netloc or not parts.hostname:
+        raise UsageError(
+            "Research fetch URL must be an absolute http(s) URL",
+            hint="Use a public https://... or http://... URL.",
+        )
+
+    host = parts.hostname.strip("[]").lower()
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        if host == "localhost" or host.endswith(".localhost") or "." not in host:
+            raise UsageError(
+                "Research fetch URL must target a public host",
+                hint="Localhost, single-label hosts, file paths, and private network URLs are blocked.",
+            )
+        return raw
+
+    if (
+        ip.is_private
+        or ip.is_loopback
+        or ip.is_link_local
+        or ip.is_multicast
+        or ip.is_reserved
+        or ip.is_unspecified
+    ):
+        raise UsageError(
+            "Research fetch URL must target a public host",
+            hint="Localhost, single-label hosts, file paths, and private network URLs are blocked.",
+        )
+    return raw
 
 
 def artifact_paths(
@@ -296,6 +333,8 @@ def _raise_for_provider_failure(
 
     if exit_code == 3 or last_error == "exa_network_timeout":
         raise NetworkError(message, details=details)
+    if last_error == "exa_auth_error":
+        raise AuthError(message, details=details)
     if exit_code == 1 or last_error == "exa_usage_error" or message.startswith("EXA_ERROR:ARGS"):
         raise UsageError(message, details=details)
     raise ProviderError(message, details=details)
@@ -318,6 +357,7 @@ class ResearchClient:
         """Fetch URL contents through Exa /contents and persist provider artifacts."""
         from h2t_ops.connectors.research import exa
 
+        url = validate_public_http_url(url)
         api_key = resolve_secret("EXA_API_KEY")
         body = {"urls": [url], "text": {"maxCharacters": 15000}}
         try:
@@ -414,9 +454,10 @@ class ResearchClient:
             ledger_endpoint="/contents",
             ledger_mode="crawl",
         )
+        safe_provider_envelope = sanitize_details(provider_envelope)
         return {
             "kind": "research_provider_envelope",
-            **provider_envelope,
+            **safe_provider_envelope,
             "artifact": artifact,
         }
 
@@ -503,6 +544,7 @@ class ResearchClient:
         """Fetch one URL through the research provider ladder."""
         from h2t_ops.connectors.research import fetch
 
+        url = validate_public_http_url(url)
         config = fetch.load_config(config_path)
         config["ladder"]["per_provider_timeout_ms"] = timeout_ms
         config["ladder"]["min_body_chars"] = min_body_chars
@@ -568,7 +610,8 @@ class ResearchClient:
             ledger_mode=provider,
             raw_html_path=metadata.get("raw_html_path"),
         )
-        result = {"kind": "research_fetch_envelope", **provider_envelope, "artifact": artifact}
+        safe_provider_envelope = sanitize_details(provider_envelope)
+        result = {"kind": "research_fetch_envelope", **safe_provider_envelope, "artifact": artifact}
         if provider_envelope.get("status") != "FAILED":
             return result
 
@@ -649,9 +692,10 @@ class ResearchClient:
                 exit_code,
             )
 
+        safe_provider_envelope = sanitize_details(provider_envelope)
         return {
             "kind": "research_provider_envelope",
-            **provider_envelope,
+            **safe_provider_envelope,
             "artifact": artifact,
         }
 

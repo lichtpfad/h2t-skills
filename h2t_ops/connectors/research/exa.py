@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from h2t_ops.core.errors import ConfigError, NetworkError, ProviderError, UsageError
+from h2t_ops.core.errors import AuthError, ConfigError, NetworkError, ProviderError, UsageError
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -226,13 +226,14 @@ def _classify_attempt_from_call(
             data,
         )
     except ExaPermanentError as exc:
+        label = "exa_auth_error" if exc.http_status in {401, 403} else "exa_4xx_nonretryable"
         return (
             {
                 "engine": "exa",
                 "endpoint": "/search",
                 "http": exc.http_status,
                 "latency_ms": exc.latency_ms,
-                "error": "exa_4xx_nonretryable",
+                "error": label,
             },
             None,
             None,
@@ -292,7 +293,7 @@ def search_with_retry(
 
         if error is None:
             break
-        if error in ("exa_4xx_nonretryable", "exa_malformed_json"):
+        if error in ("exa_auth_error", "exa_4xx_nonretryable", "exa_malformed_json"):
             break
         if index == max_attempts - 1:
             break
@@ -406,19 +407,37 @@ def call_exa(
 
 
 def preflight(api_key: str) -> None:
-    """Probe Exa connectivity. HTTPError means reachable; URLError is network failure."""
-    _ = api_key
-    req = urllib.request.Request(
-        f"{_EXA_API}/",
-        method="GET",
-        headers={"User-Agent": f"exa_search.py/{__version__} (h2t-ops:research)"},
-    )
+    """Validate Exa API credentials with a tiny authenticated search."""
+    body = {
+        "query": "h2t research connector preflight",
+        "type": "fast",
+        "numResults": 1,
+        "contents": {"highlights": {"maxCharacters": 1}},
+    }
     try:
-        urllib.request.urlopen(req, timeout=5)
-    except urllib.error.HTTPError:
-        return
-    except urllib.error.URLError as exc:
-        raise NetworkError(f"EXA_ERROR:NETWORK cannot reach {_EXA_API}: {exc.reason}") from exc
+        call_exa("/search", body, api_key, timeout=10)
+    except ExaPermanentError as exc:
+        if exc.http_status in {401, 403}:
+            raise AuthError(
+                f"EXA_ERROR:AUTH preflight failed: http {exc.http_status}",
+                details={"http_status": exc.http_status},
+            ) from exc
+        raise ProviderError(
+            f"EXA_ERROR:PROVIDER preflight failed: http {exc.http_status}",
+            details={"http_status": exc.http_status},
+        ) from exc
+    except ExaTransientError as exc:
+        if exc.http_status is None:
+            raise NetworkError(f"EXA_ERROR:NETWORK cannot reach {_EXA_API}: {exc}") from exc
+        raise ProviderError(
+            f"EXA_ERROR:PROVIDER preflight failed: http {exc.http_status}",
+            details={"http_status": exc.http_status},
+        ) from exc
+    except ExaMalformedResponseError as exc:
+        raise ProviderError(
+            f"EXA_ERROR:PROVIDER malformed preflight response: {exc}",
+            details={"latency_ms": exc.latency_ms},
+        ) from exc
 
 
 def load_system_prompt(mode: str) -> tuple[str, dict[str, Any]]:

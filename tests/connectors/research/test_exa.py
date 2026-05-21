@@ -12,7 +12,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from h2t_ops.core.errors import ConfigError, NetworkError, ProviderError, UsageError
+from h2t_ops.core.errors import AuthError, ConfigError, NetworkError, ProviderError, UsageError
 from h2t_ops.connectors.research import exa
 
 
@@ -333,26 +333,28 @@ def test_call_exa_sets_user_agent_header():
 
 
 def test_preflight_ok_is_silent(capsys):
-    err = urllib.error.HTTPError(
-        url="https://api.exa.ai/",
-        code=403,
-        msg="Forbidden",
-        hdrs=None,
-        fp=io.BytesIO(b""),
-    )
-
-    with patch("urllib.request.urlopen", side_effect=err):
+    with patch.object(exa, "call_exa", return_value=(200, {"results": []}, 10)) as call:
         exa.preflight("testkey")
 
+    assert call.call_args.args[0] == "/search"
+    assert call.call_args.args[2] == "testkey"
     captured = capsys.readouterr()
     assert captured.out == ""
     assert captured.err == ""
 
 
 def test_preflight_network_failure_raises_networkerror():
-    with patch("urllib.request.urlopen", side_effect=urllib.error.URLError("dns")):
+    err = exa.ExaTransientError("dns", http_status=None, latency_ms=10)
+    with patch.object(exa, "call_exa", side_effect=err):
         with pytest.raises(NetworkError):
             exa.preflight("testkey")
+
+
+def test_preflight_auth_failure_raises_autherror():
+    err = exa.ExaPermanentError("http 401", http_status=401, latency_ms=10)
+    with patch.object(exa, "call_exa", side_effect=err):
+        with pytest.raises(AuthError):
+            exa.preflight("badkey")
 
 
 def test_forbidden_cli_symbols_absent():
@@ -489,6 +491,18 @@ def test_search_with_retry_5xx_then_5xx_is_failed(monkeypatch):
     assert env["status"] == "FAILED"
     assert exit_code == 2
     assert all(a["error"] == "exa_5xx_retryable" for a in env["telemetry"]["attempts"])
+
+
+def test_search_with_retry_auth_error_is_failed_without_retry(monkeypatch):
+    _patch_no_sleep(monkeypatch)
+    err = exa.ExaPermanentError("http 401", http_status=401, latency_ms=40)
+    with patch.object(exa, "call_exa", side_effect=err) as call:
+        env, exit_code = exa.search_with_retry(body={"query": "x"}, api_key="k", retry=True)
+
+    assert call.call_count == 1
+    assert env["status"] == "FAILED"
+    assert exit_code == 2
+    assert env["telemetry"]["attempts"][0]["error"] == "exa_auth_error"
 
 
 def test_search_with_retry_urlerror_then_urlerror_is_failed(monkeypatch):
