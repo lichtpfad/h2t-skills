@@ -564,7 +564,8 @@ def run_cli(args: list, *, catalog_path: Path = None) -> dict:
 
     if mode == "diff":
         base = parsed.base or load_project_binding(cwd).get("base", "mixed")
-        overlays = [parsed.overlay] if parsed.overlay else load_project_binding(cwd).get("overlays", [])
+        ref = parsed.context or parsed.overlay
+        overlays = [ref] if ref else load_project_binding(cwd).get("overlays", [])
         result = apply_profile(cwd, base, overlays, dry_run=True, catalog_path=catalog_path)
         return result
 
@@ -572,7 +573,8 @@ def run_cli(args: list, *, catalog_path: Path = None) -> dict:
         base = parsed.base
         if not base:
             return _error("MISSING_ARG", "apply requires --base")
-        overlays = [parsed.overlay] if parsed.overlay else []
+        ref = parsed.context or parsed.overlay
+        overlays = [ref] if ref else []
         return apply_profile(cwd, base, overlays, dry_run=parsed.dry_run, catalog_path=catalog_path)
 
     if mode == "add":
