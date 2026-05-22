@@ -128,7 +128,8 @@ def resolve_effective_profile(catalog: dict, base: str, overlays: list) -> dict:
 
     _apply_layer(base_profiles[base])
     for wc in overlays:
-        layer, _ = _resolve_work_context(wc, catalog)
+        layer, _ = _resolve_work_context(wc, catalog)  # already validated above
+        assert isinstance(layer, dict), f"unexpected error from validated ref: {wc}"
         _apply_layer(layer)
 
     return {"enabled": sorted(enabled), "disabled": sorted(disabled)}
@@ -180,8 +181,8 @@ def write_project_settings(cwd: Path, settings: dict) -> None:
 
 # ── Core apply logic ─────────────────────────────────────────────────────────
 
-def _build_settings_patch(catalog: dict, base: str, overlays: list) -> dict | None:
-    """Return (enabled_plugins_dict, marker_dict) or None on error."""
+def _build_settings_patch(catalog: dict, base: str, overlays: list) -> dict:
+    """Return patch dict {enabledPlugins, marker} on success, or error dict on failure."""
     result = resolve_effective_profile(catalog, base, overlays)
     if "error" in result:
         return result
@@ -372,7 +373,6 @@ def run_cli(args: list, *, catalog_path: Path = None) -> dict:
             return result
         result["synced"] = True
         result["message"] = "Settings updated. Run /reload-plugins to apply."
-        result["enabledPlugins"] = result["enabledPlugins"]
         return result
 
     if mode == "doctor":
