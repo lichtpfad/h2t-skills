@@ -34,13 +34,91 @@ for _lib in [_cache_lib, _repo_lib]:
 from activity.writer import log_session_end
 from eval.session import SkillEval
 
+SUMMARY_LIMIT = 1200
+ITEM_LIMIT = 240
+MAX_ITEMS = 5
+MAX_ARTIFACTS = 10
+
 
 def default_markdown_dir(project: str) -> Path:
-    machine = os.environ.get("DOR_MACHINE_NAME", "")
+    root = Path(os.environ.get("H2T_SESSION_ROOT", str(Path.home() / ".h2t" / "sessions")))
+    machine = os.environ.get("H2T_MACHINE_NAME") or os.environ.get("DOR_MACHINE_NAME", "")
     if not machine:
         import platform
         machine = platform.node().lower().split(".")[0]
-    return Path.home() / ".dor" / "sessions" / machine / project
+    return root / machine / project
+
+
+def _truncate(text: str, limit: int) -> tuple[str, bool]:
+    text = " ".join(text.split())
+    if len(text) <= limit:
+        return text, False
+    marker = " ... [truncated]"
+    return text[: max(0, limit - len(marker))].rstrip() + marker, True
+
+
+def _clean_action(line: str) -> str:
+    line = line.strip()
+    prefixes = ("- [ ]", "- [x]", "- [X]", "- ", "* ", "1. ", "2. ", "3. ", "4. ", "5. ")
+    for prefix in prefixes:
+        if line.startswith(prefix):
+            return line[len(prefix):].strip()
+    return line
+
+
+def _extract_items(text: str, *, max_items: int = MAX_ITEMS) -> tuple[list[str], bool]:
+    items: list[str] = []
+    truncated = False
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        cleaned = _clean_action(line)
+        item, was_truncated = _truncate(cleaned, ITEM_LIMIT)
+        truncated = truncated or was_truncated
+        items.append(item)
+        if len(items) >= max_items:
+            remaining = [ln for ln in text.splitlines()[len(items):] if ln.strip()]
+            truncated = truncated or bool(remaining)
+            break
+    return items, truncated
+
+
+def _build_latest_index(
+    *,
+    session_id: str,
+    domain: str,
+    project: str,
+    what_done: str,
+    what_remains: str,
+    artifacts: list[dict],
+    markdown_path: Path,
+    updated_at: datetime,
+) -> dict:
+    summary_short, summary_truncated = _truncate(what_done, SUMMARY_LIMIT)
+    next_actions, actions_truncated = _extract_items(what_remains)
+    truncated = summary_truncated or actions_truncated
+    artifact_rows = artifacts[:MAX_ARTIFACTS]
+    truncated = truncated or len(artifacts) > MAX_ARTIFACTS
+    return {
+        "version": 1,
+        "session_id": session_id,
+        "project": project,
+        "domain": domain,
+        "updated_at": updated_at.isoformat(),
+        "summary_short": summary_short,
+        "next_actions": next_actions,
+        "blockers": [],
+        "artifacts": artifact_rows,
+        "markdown_path": str(markdown_path),
+        "truncated": truncated,
+    }
+
+
+def _write_json_atomic(path: Path, data: dict) -> None:
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    tmp.replace(path)
 
 
 def write_handoff(
@@ -98,6 +176,18 @@ def write_handoff(
 {artifacts_md}
 """
     md_path.write_text(md_content, encoding="utf-8")
+    latest = _build_latest_index(
+        session_id=session_id,
+        domain=domain,
+        project=project,
+        what_done=what_done,
+        what_remains=what_remains,
+        artifacts=parsed_artifacts,
+        markdown_path=md_path,
+        updated_at=now,
+    )
+    latest_path = md_dir / "latest.json"
+    _write_json_atomic(latest_path, latest)
 
     try:
         with SkillEval("handoff", domain=domain, project=project):
@@ -110,6 +200,7 @@ def write_handoff(
         "session_id": session_id,
         "spool": spool_path,
         "markdown": str(md_path),
+        "latest": str(latest_path),
         "artifacts": len(parsed_artifacts),
     }
 
