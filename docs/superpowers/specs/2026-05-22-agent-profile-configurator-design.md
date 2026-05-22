@@ -108,6 +108,34 @@ python apply_agent_profile.py catalog edit-overlay --name X --add-enable a --rem
 
 All modes output JSON. Catalog write modes return `{"ok": true, "diff": {...}}` or error.
 
+## Status and Observability
+
+`status` stays as-is (JSON for machines). Add `status --explain` as the primary
+human-readable observability tool.
+
+### `status --explain` output sections
+
+- Current base profile and active work contexts (overlays)
+- Effective enabled plugins (resolved from base + work contexts)
+- Effective disabled plugins
+- Drift: plugins expected by profile but missing from `settings.json enabledPlugins`
+- Drift: plugin IDs in `settings.json` not present in catalog (unknown/stale)
+- Preserved keys: confirms `permissions`, `hooks`, `mcpServers` are untouched
+- Suggested next commands: `add --overlay X`, `remove --overlay X`, `sync`, `/reload-plugins`
+
+### Enhanced `doctor`
+
+Extend `doctor` to detect drift between binding, settings, and resolved profile:
+
+- `binding_exists` — `.claude/agent-profile.json` present
+- `settings_exist` — `.claude/settings.json` with `enabledPlugins` present
+- `profile_resolvable` — base + work contexts resolve without error
+- `settings_matches_profile` — `enabledPlugins` in settings matches resolved profile (drift detection)
+- `no_unknown_plugin_ids` — all IDs in `settings.enabledPlugins` exist in current catalog
+- `marker_matches_binding` — `h2tAgentProfile` marker in settings matches binding file
+
+`doctor` remains report-only. No writes without explicit user approval.
+
 ## Tests to Add
 
 Merge semantics:
@@ -123,15 +151,22 @@ Catalog editor:
 - `test_catalog_edit_rejects_unknown_alias`
 - `test_catalog_write_is_atomic`
 
+Status/observability:
+- `test_status_explain_shows_drift_when_settings_mismatch_profile`
+- `test_status_explain_shows_unknown_plugin_ids`
+- `test_doctor_detects_settings_mismatch_with_resolved_profile`
+- `test_doctor_detects_unknown_plugin_ids_in_settings`
+- `test_doctor_detects_marker_mismatch`
+
 Sync safety:
 - `test_sync_preserves_permissions_and_hooks`
 
 ## Files Changed
 
 ```
-apply_agent_profile.py         — resolver fallback + catalog subcommands
+apply_agent_profile.py         — resolver fallback + catalog subcommands + status --explain + enhanced doctor
 test_apply_agent_profile.py    — new tests (TDD: tests first)
-SKILL.md                       — configure workflow + catalog editor section
+SKILL.md                       — configure workflow + catalog editor section + status --explain instructions
 profile-schema.md              — work contexts terminology
 ```
 
