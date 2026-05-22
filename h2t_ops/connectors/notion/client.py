@@ -225,6 +225,8 @@ class NotionClient:
     ) -> Dict[str, Any]:
         if limit is not None and limit < 0:
             raise UsageError("limit must be non-negative")
+        if limit == 0:
+            return {"kind": "notion_workspace_search/v1", "object": object_type, "results": []}
         query_filter = None
         if object_type in ("page", "database"):
             query_filter = {"property": "object", "value": object_type}
@@ -236,14 +238,14 @@ class NotionClient:
                 kwargs["filter"] = query_filter
             if start_cursor:
                 kwargs["start_cursor"] = start_cursor
-            if limit:
+            if limit is not None:
                 kwargs["page_size"] = min(limit - len(results), 100)
             try:
                 response = self.client.search(**kwargs)
             except Exception as e:
                 raise _map_sdk_exc(e, op="search workspace") from e
             results.extend(response.get("results", []))
-            if limit and len(results) >= limit:
+            if limit is not None and len(results) >= limit:
                 results = results[:limit]
                 break
             if not response.get("has_more"):

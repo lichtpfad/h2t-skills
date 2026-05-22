@@ -315,12 +315,12 @@ def test_search_workspace_json_uses_universal_envelope(monkeypatch, capsys):
     class _Stub:
         def search_workspace(self, object_type="all", *, limit=None):
             assert object_type == "page"
-            assert limit is None
+            assert limit == 0
             return {"kind": "notion_workspace_search/v1", "results": []}
 
     monkeypatch.setattr(client_mod, "NotionClient", lambda: _Stub())
 
-    code = dispatch(["notion", "search-workspace", "--object", "page", "--json"])
+    code = dispatch(["notion", "search-workspace", "--object", "page", "--limit", "0", "--json"])
 
     assert code == 0
     payload = json.loads(capsys.readouterr().out)

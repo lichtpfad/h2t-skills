@@ -413,3 +413,16 @@ def test_search_workspace_preserves_parent_shapes(conv):
 def test_search_workspace_rejects_negative_limit(conv):
     with pytest.raises(UsageError):
         conv.search_workspace(object_type="page", limit=-1)
+
+
+def test_search_workspace_zero_limit_returns_empty_without_search(conv):
+    class _Client:
+        def search(self, **kwargs):
+            raise AssertionError("limit=0 must not call Notion search")
+
+    conv.client = _Client()
+
+    result = conv.search_workspace(object_type="page", limit=0)
+
+    assert result["kind"] == "notion_workspace_search/v1"
+    assert result["results"] == []
