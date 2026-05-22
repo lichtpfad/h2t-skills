@@ -62,8 +62,9 @@ platform hardening rather than connector or product migration.
 | Priority | Issue(s) | Work | Classification |
 | --- | --- | --- | --- |
 | 1 | #153 | `h2t-core:agent-profile` | Active critical path |
-| 2 | #148, #85, #13, #94, #107, #109, #110, #112, #73, #79, #53 | Platform technical debt / hardening | Security-sensitive technical debt; keep tracked, but do not treat as connector migration |
-| 3 | #81, #146, #145 | Provider feature backlog | Product/provider backlog; pull only when explicitly scoped |
+| 2 | #148, #85, #13, #94, #107, #109, #110, #73, #79, #53 | Platform technical debt / hardening | Done or consolidated into policy; not connector migration |
+| 3 | #112 | Setup wizard backlog | Future onboarding UX, separate from closure |
+| 4 | #81, #146, #145 | Provider feature backlog | Product/provider backlog; pull only when explicitly scoped |
 
 ## Critical Path Details
 
@@ -160,9 +161,13 @@ Related issues:
 - #94 canonical `~/.dor/secrets.env`;
 - #13 cross-machine credential sync.
 
+Status: consolidated as platform technical debt. See
+`docs/credential-sync-policy.md`.
+
 Do not let this expand into a full setup product unless needed for Mac
-portability. The connector-freeze requirement is narrower: each connector should
-have a documented credential source and a credible Mac transfer/setup path.
+portability. The closure requirement is narrower: each connector should have a
+documented credential source and a credible Mac transfer/setup path. An
+interactive setup wizard remains future UX (#112), not connector migration.
 
 ### 6. Cross-Platform / Mac Readiness
 
@@ -181,6 +186,10 @@ Connector gate:
 - tests should pass cross-platform or have explicit skip reasons;
 - setup instructions should work through `uv` on macOS;
 - token/session locations must be configurable or documented.
+
+Status: policy captured in `docs/credential-sync-policy.md`; implementation
+work is no longer part of connector closure unless a concrete Mac smoke failure
+is found.
 
 ### 7. `h2t-core:agent-profile` (#153)
 
@@ -387,10 +396,8 @@ Important for finishing the repository:
 ## Practical Order
 
 1. Implement #153 `h2t-core:agent-profile`.
-2. Keep #148/#85/secrets/Mac items grouped as platform technical debt; handle
-   #148 first if production hardening or Mac rollout starts.
-3. Sweep remaining issues into active / backlog / moved / stale-closed.
-4. Only then pick the next product stream: Calendar/Notion provider features, research
+2. Sweep remaining issues into active / backlog / moved / stale-closed.
+3. Only then pick the next product stream: Calendar/Notion provider features, research
    product backlog, creative recovery, or POS-side workflow contracts.
 
 ## Closure Forecast
@@ -407,14 +414,13 @@ the final smoke gate passed, the `h2t-ops --help` regression was fixed in
 | Remaining block | Optimistic | Realistic | Main risk |
 | --- | ---: | ---: | --- |
 | #153 `h2t-core:agent-profile` | 1-2 days | 2-3 days | Profile merge semantics, temporary overlays, cross-machine sync |
-| Platform technical debt batch (#148/#85/secrets/Mac) | 2-3 days | 3-5 days | Separating true hardening from optional cleanup |
 | Issue sweep / reclassification | 0.5-1 day | 1-2 days | Old issues that need careful "move vs close" decisions |
 
 Remaining estimate to maintenance/closure mode:
 
-- optimistic: 3-5 focused working days;
-- realistic: 5-8 focused working days;
-- with interruptions: 1.5-2.5 calendar weeks.
+- optimistic: 2-3 focused working days;
+- realistic: 3-5 focused working days;
+- with interruptions: 1-2 calendar weeks.
 
 This excludes broad Calendar/Notion provider enhancements, research product backlog,
 creative recovery, and POS-side workflow contracts. Those remain explicit future
