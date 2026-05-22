@@ -50,27 +50,68 @@ def load_catalog(path: Path) -> dict:
     return data
 
 
+def _resolve_work_context(name: str, catalog: dict):
+    """Resolve a work context ref to (layer_dict, kind_str) or error dict.
+
+    Supports:
+      profile:<name>  — explicit base-profile context
+      overlay:<name>  — explicit overlay context
+      <bare-name>     — overlay-first, then base-profile fallback (legacy compat)
+    Returns tuple (layer_dict, kind_str) on success, or error dict on failure.
+    """
+    base_profiles = catalog.get("baseProfiles", {})
+    overlay_defs = catalog.get("overlays", {})
+
+    if name.startswith("profile:"):
+        key = name[8:]
+        if key not in base_profiles:
+            return _error("UNKNOWN_PROFILE_CONTEXT",
+                          f"Unknown profile context: '{key}'", ref=name,
+                          available=list(base_profiles.keys()))
+        return base_profiles[key], "profile"
+
+    if name.startswith("overlay:"):
+        key = name[8:]
+        if key not in overlay_defs:
+            return _error("UNKNOWN_OVERLAY",
+                          f"Unknown overlay: '{key}'", ref=name,
+                          available=list(overlay_defs.keys()))
+        return overlay_defs[key], "overlay"
+
+    # bare name: overlay-first for legacy compatibility
+    if name in overlay_defs:
+        return overlay_defs[name], "bare_overlay"
+    if name in base_profiles:
+        return base_profiles[name], "bare_profile"
+
+    return _error("UNKNOWN_WORK_CONTEXT",
+                  f"Unknown work context: '{name}'", ref=name,
+                  available_overlays=list(overlay_defs.keys()),
+                  available_profiles=list(base_profiles.keys()))
+
+
 def resolve_effective_profile(catalog: dict, base: str, overlays: list) -> dict:
     """Merge base profile + overlays into enabled/disabled plugin id sets.
 
     Returns error dict on unknown base or overlay names.
+    Supports profile:/overlay: prefixes and bare-name legacy fallback.
     Merge rules:
       1. Start from base enable/disable sets.
-      2. Apply overlays in order; later wins on conflict.
+      2. Apply work contexts in order; later wins on conflict.
       3. enable removes from disabled; disable removes from enabled.
     """
     base_profiles = catalog.get("baseProfiles", {})
-    overlay_defs = catalog.get("overlays", {})
     plugin_ids = catalog.get("pluginIds", {})
 
     if base not in base_profiles:
         return _error("UNKNOWN_PROFILE", f"Unknown base profile: '{base}'", base=base,
                       available=list(base_profiles.keys()))
 
-    for ov in overlays:
-        if ov not in overlay_defs:
-            return _error("UNKNOWN_OVERLAY", f"Unknown overlay: '{ov}'", overlay=ov,
-                          available=list(overlay_defs.keys()))
+    # Validate all work context refs up front
+    for wc in overlays:
+        result = _resolve_work_context(wc, catalog)
+        if isinstance(result, dict) and "error" in result:
+            return result
 
     enabled: set = set()
     disabled: set = set()
@@ -86,8 +127,9 @@ def resolve_effective_profile(catalog: dict, base: str, overlays: list) -> dict:
             enabled.discard(pid)
 
     _apply_layer(base_profiles[base])
-    for ov in overlays:
-        _apply_layer(overlay_defs[ov])
+    for wc in overlays:
+        layer, _ = _resolve_work_context(wc, catalog)
+        _apply_layer(layer)
 
     return {"enabled": sorted(enabled), "disabled": sorted(disabled)}
 

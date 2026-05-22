@@ -108,7 +108,7 @@ class TestResolveMerge(unittest.TestCase):
     def test_unknown_overlay_returns_error_payload(self):
         result = ap.resolve_effective_profile(MINIMAL_CATALOG, "pos", ["nosuchoverlay"])
         self.assertIn("error", result)
-        self.assertEqual(result["error"]["code"], "UNKNOWN_OVERLAY")
+        self.assertEqual(result["error"]["code"], "UNKNOWN_WORK_CONTEXT")
 
 
 # ── T2: Settings read/write ─────────────────────────────────────────────────
@@ -279,6 +279,87 @@ class TestCLIRecommend(unittest.TestCase):
     def test_cli_recommend_unknown_returns_mixed(self):
         result = ap.run_cli(["recommend", "--cwd", str(self.cwd)], catalog_path=self.catalog_path)
         self.assertEqual(result["recommended"], "mixed")
+
+
+class TestWorkContextRefs(unittest.TestCase):
+    """Tests for profile:/overlay: ref syntax and bare-name fallback."""
+
+    CATALOG_WITH_OVERLAP = {
+        "version": 1,
+        "pluginIds": {
+            "h2t-core": "h2t-core@lichtpfad",
+            "h2t-ops": "h2t-ops@lichtpfad",
+            "h2t-dev": "h2t-dev@lichtpfad",
+            "h2t-creative": "h2t-creative@lichtpfad",
+            "superpowers": "superpowers@superpowers-plugins",
+            "marketing-playbook": "marketing-playbook@marketing-playbook-plugins",
+            "lead-search": "lead-search@lead-search-plugins",
+        },
+        "baseProfiles": {
+            "dev": {
+                "description": "dev",
+                "enable": ["h2t-core", "h2t-dev", "superpowers"],
+                "disable": ["h2t-creative", "marketing-playbook"],
+            },
+            "creative": {
+                "description": "Full creative base profile",
+                "enable": ["h2t-core", "h2t-creative", "superpowers"],
+                "disable": ["marketing-playbook"],
+            },
+        },
+        "overlays": {
+            "creative": {
+                "description": "Light creative overlay",
+                "enable": ["h2t-creative"],
+                "disable": [],
+            },
+            "github-heavy": {
+                "description": "PR workflows",
+                "enable": ["h2t-dev"],
+                "disable": [],
+            },
+        },
+    }
+
+    def _resolve(self, base, overlays):
+        return ap.resolve_effective_profile(self.CATALOG_WITH_OVERLAP, base, overlays)
+
+    def test_profile_ref_resolves_base_profile(self):
+        result = self._resolve("dev", ["profile:creative"])
+        self.assertNotIn("error", result)
+        self.assertIn("h2t-core@lichtpfad", result["enabled"])
+        self.assertIn("h2t-creative@lichtpfad", result["enabled"])
+
+    def test_overlay_ref_resolves_overlay_only(self):
+        result = self._resolve("dev", ["overlay:creative"])
+        self.assertNotIn("error", result)
+        self.assertIn("h2t-creative@lichtpfad", result["enabled"])
+
+    def test_bare_name_prefers_overlay_over_base_profile(self):
+        result = self._resolve("dev", ["creative"])
+        self.assertNotIn("error", result)
+        self.assertIn("h2t-creative@lichtpfad", result["enabled"])
+
+    def test_profile_ref_for_missing_profile_returns_error(self):
+        result = self._resolve("dev", ["profile:nonexistent"])
+        self.assertIn("error", result)
+        self.assertEqual(result["error"]["code"], "UNKNOWN_PROFILE_CONTEXT")
+
+    def test_overlay_ref_for_missing_overlay_returns_error(self):
+        result = self._resolve("dev", ["overlay:nonexistent"])
+        self.assertIn("error", result)
+        self.assertEqual(result["error"]["code"], "UNKNOWN_OVERLAY")
+
+    def test_bare_unknown_name_returns_error(self):
+        result = self._resolve("dev", ["totallyunknown"])
+        self.assertIn("error", result)
+        self.assertEqual(result["error"]["code"], "UNKNOWN_WORK_CONTEXT")
+
+    def test_mixed_refs_resolve_in_order(self):
+        result = self._resolve("dev", ["profile:creative", "overlay:github-heavy"])
+        self.assertNotIn("error", result)
+        self.assertIn("h2t-creative@lichtpfad", result["enabled"])
+        self.assertIn("h2t-dev@lichtpfad", result["enabled"])
 
 
 if __name__ == "__main__":

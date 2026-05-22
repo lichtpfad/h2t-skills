@@ -85,11 +85,31 @@
                   "pm-data-analytics", "pm-marketing-growth", "pm-go-to-market", "pm-execution"]
     }
   },
-  "_overlayNote": "creative, marketing, product, dcc removed — collided with base profile names. Use base profiles directly as work contexts: overlays: ['creative', 'ops']",
   "overlays": {
     "plugin-dev": {
       "description": "Plugin, skill, hook, and MCP development",
       "enable": ["plugin-dev", "codex"],
+      "disable": []
+    },
+    "creative": {
+      "description": "Light visual/design addition. For full creative profile use profile:creative.",
+      "enable": ["h2t-creative", "h2t-arch", "frontend-design"],
+      "disable": []
+    },
+    "marketing": {
+      "description": "Light marketing addition. For full marketing profile use profile:marketing.",
+      "enable": ["marketing-playbook", "lead-search", "pm-marketing-growth", "pm-go-to-market"],
+      "disable": []
+    },
+    "product": {
+      "description": "Light product strategy addition. For full product profile use profile:product.",
+      "enable": ["creative-thinking", "pm-product-strategy", "pm-product-discovery",
+                 "pm-market-research", "pm-execution", "positioning"],
+      "disable": []
+    },
+    "dcc": {
+      "description": "Light DCC addition for non-dcc repos. For full DCC profile use profile:dcc.",
+      "enable": ["h2t-dcc"],
       "disable": []
     },
     "research": {
