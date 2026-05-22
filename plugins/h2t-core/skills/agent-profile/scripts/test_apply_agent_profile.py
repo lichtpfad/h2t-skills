@@ -524,5 +524,132 @@ class TestCatalogSubcommands(unittest.TestCase):
         self.assertEqual(result["error"]["code"], "CACHE_PATH")
 
 
+class TestStatusExplain(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.cwd = Path(self.tmp.name)
+        (self.cwd / ".claude").mkdir()
+        self.catalog_path = self.cwd / "catalog" / "agent-profiles.json"
+        self.catalog_path.parent.mkdir()
+        self.catalog_path.write_text(json.dumps(MINIMAL_CATALOG))
+        ap.apply_profile(self.cwd, "pos", [], catalog_path=self.catalog_path)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_status_explain_returns_configured(self):
+        result = ap.run_cli(["status", "--cwd", str(self.cwd), "--explain"],
+                            catalog_path=self.catalog_path)
+        self.assertEqual(result["status"], "configured")
+
+    def test_status_explain_lists_enabled_and_disabled(self):
+        result = ap.run_cli(["status", "--cwd", str(self.cwd), "--explain"],
+                            catalog_path=self.catalog_path)
+        self.assertIn("enabled_plugins", result)
+        self.assertIn("disabled_plugins", result)
+
+    def test_status_explain_shows_drift_when_settings_mismatch_profile(self):
+        settings_path = self.cwd / ".claude" / "settings.json"
+        settings = json.loads(settings_path.read_text())
+        first_enabled = next(k for k, v in settings["enabledPlugins"].items() if v)
+        del settings["enabledPlugins"][first_enabled]
+        settings_path.write_text(json.dumps(settings))
+
+        result = ap.run_cli(["status", "--cwd", str(self.cwd), "--explain"],
+                            catalog_path=self.catalog_path)
+        drift = result["drift"]
+        self.assertIn(first_enabled, drift["expected_not_in_settings"])
+
+    def test_status_explain_shows_unknown_plugin_ids(self):
+        settings_path = self.cwd / ".claude" / "settings.json"
+        settings = json.loads(settings_path.read_text())
+        settings["enabledPlugins"]["ghost@nowhere"] = True
+        settings_path.write_text(json.dumps(settings))
+
+        result = ap.run_cli(["status", "--cwd", str(self.cwd), "--explain"],
+                            catalog_path=self.catalog_path)
+        self.assertIn("ghost@nowhere", result["drift"]["settings_not_in_catalog"])
+
+    def test_status_explain_reports_preserved_keys(self):
+        settings_path = self.cwd / ".claude" / "settings.json"
+        settings = json.loads(settings_path.read_text())
+        settings["permissions"] = {"allow": ["Bash(git:*)"]}
+        settings_path.write_text(json.dumps(settings))
+
+        result = ap.run_cli(["status", "--cwd", str(self.cwd), "--explain"],
+                            catalog_path=self.catalog_path)
+        self.assertIn("permissions", result["preserved_keys"])
+
+
+class TestEnhancedDoctor(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.cwd = Path(self.tmp.name)
+        (self.cwd / ".claude").mkdir()
+        self.catalog_path = self.cwd / "catalog" / "agent-profiles.json"
+        self.catalog_path.parent.mkdir()
+        self.catalog_path.write_text(json.dumps(MINIMAL_CATALOG))
+        ap.apply_profile(self.cwd, "pos", [], catalog_path=self.catalog_path)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def _doctor(self):
+        return ap.run_cli(["doctor", "--cwd", str(self.cwd)], catalog_path=self.catalog_path)
+
+    def _check(self, result, name):
+        return next((c for c in result["checks"] if c["check"] == name), None)
+
+    def test_doctor_passes_clean_state(self):
+        result = self._doctor()
+        for c in result["checks"]:
+            self.assertTrue(c["ok"], f"Check failed: {c}")
+
+    def test_doctor_detects_settings_mismatch_with_resolved_profile(self):
+        settings_path = self.cwd / ".claude" / "settings.json"
+        settings = json.loads(settings_path.read_text())
+        first_enabled = next(k for k, v in settings["enabledPlugins"].items() if v)
+        del settings["enabledPlugins"][first_enabled]
+        settings_path.write_text(json.dumps(settings))
+
+        result = self._doctor()
+        check = self._check(result, "settings_matches_profile")
+        self.assertFalse(check["ok"])
+        self.assertIn(first_enabled, check["drift"])
+
+    def test_doctor_detects_unknown_plugin_ids_in_settings(self):
+        settings_path = self.cwd / ".claude" / "settings.json"
+        settings = json.loads(settings_path.read_text())
+        settings["enabledPlugins"]["stale@old-publisher"] = True
+        settings_path.write_text(json.dumps(settings))
+
+        result = self._doctor()
+        check = self._check(result, "no_unknown_plugin_ids")
+        self.assertFalse(check["ok"])
+        self.assertIn("stale@old-publisher", check["unknown"])
+
+    def test_doctor_detects_marker_mismatch(self):
+        settings_path = self.cwd / ".claude" / "settings.json"
+        settings = json.loads(settings_path.read_text())
+        settings["h2tAgentProfile"]["base"] = "wrong-base"
+        settings_path.write_text(json.dumps(settings))
+
+        result = self._doctor()
+        check = self._check(result, "marker_matches_binding")
+        self.assertFalse(check["ok"])
+
+    def test_sync_preserves_permissions_and_hooks(self):
+        settings_path = self.cwd / ".claude" / "settings.json"
+        settings = json.loads(settings_path.read_text())
+        settings["permissions"] = {"allow": ["Bash(git:*)"]}
+        settings["hooks"] = {"PreToolUse": []}
+        settings_path.write_text(json.dumps(settings))
+
+        ap.run_cli(["sync", "--cwd", str(self.cwd)], catalog_path=self.catalog_path)
+        updated = json.loads(settings_path.read_text())
+        self.assertEqual(updated["permissions"], {"allow": ["Bash(git:*)"]})
+        self.assertEqual(updated["hooks"], {"PreToolUse": []})
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

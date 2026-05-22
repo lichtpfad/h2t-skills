@@ -432,6 +432,62 @@ def catalog_edit_overlay(name: str, add_enable: list, add_disable: list,
     return {"ok": True, "diff": {"old": old, "new": {"enable": overlay["enable"], "disable": overlay["disable"]}}}
 
 
+# ── Status explain ───────────────────────────────────────────────────────────
+
+def _status_explain(cwd: Path, catalog: dict) -> dict:
+    binding = load_project_binding(cwd)
+    if not binding or "base" not in binding:
+        return {"status": "unconfigured", "suggestions": ["recommend", "apply --base <name>"]}
+
+    settings = load_project_settings(cwd)
+    base = binding["base"]
+    work_contexts = binding.get("overlays", [])
+
+    resolved = resolve_effective_profile(catalog, base, work_contexts)
+    if "error" in resolved:
+        return resolved
+
+    resolved_enabled = set(resolved["enabled"])
+    resolved_disabled = set(resolved["disabled"])
+
+    settings_plugins = settings.get("enabledPlugins", {})
+    settings_enabled = {k for k, v in settings_plugins.items() if v}
+    all_plugin_ids = set(catalog.get("pluginIds", {}).values())
+
+    drift = {
+        "expected_not_in_settings": sorted(resolved_enabled - settings_enabled),
+        "settings_not_in_catalog": sorted(set(settings_plugins.keys()) - all_plugin_ids),
+    }
+
+    context_details = []
+    for wc in work_contexts:
+        r = _resolve_work_context(wc, catalog)
+        if isinstance(r, tuple):
+            _, kind = r
+            context_details.append({"ref": wc, "kind": kind})
+        else:
+            context_details.append({"ref": wc, "kind": "error"})
+
+    preserved = [k for k in ("permissions", "hooks", "mcpServers") if k in settings]
+
+    suggestions = []
+    if drift["expected_not_in_settings"]:
+        suggestions.append("sync  # re-apply profile to fix drift")
+    suggestions.append("/reload-plugins  # after any change")
+
+    return {
+        "status": "configured",
+        "base": base,
+        "work_contexts": context_details,
+        "enabled_plugins": sorted(resolved_enabled),
+        "disabled_plugins": sorted(resolved_disabled),
+        "drift": drift,
+        "preserved_keys": preserved,
+        "suggestions": suggestions,
+        "cwd": str(cwd),
+    }
+
+
 # ── CLI modes ────────────────────────────────────────────────────────────────
 
 def _recommend(cwd: Path, catalog: dict) -> str:
@@ -468,6 +524,7 @@ def run_cli(args: list, *, catalog_path: Path = None) -> dict:
     parser.add_argument("--overlay", default=None)
     parser.add_argument("--context", default=None)
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--explain", action="store_true")
     parser.add_argument("--name", default=None)
     parser.add_argument("--description", default="")
     parser.add_argument("--enable", default="")
@@ -488,6 +545,8 @@ def run_cli(args: list, *, catalog_path: Path = None) -> dict:
     mode = parsed.mode
 
     if mode == "status":
+        if parsed.explain:
+            return _status_explain(cwd, catalog)
         binding = load_project_binding(cwd)
         if not binding or "base" not in binding:
             return {"status": "unconfigured", "cwd": str(cwd)}
@@ -547,20 +606,40 @@ def run_cli(args: list, *, catalog_path: Path = None) -> dict:
     if mode == "doctor":
         checks = []
         binding = load_project_binding(cwd)
+        settings = load_project_settings(cwd)
+
         has_binding = bool(binding and "base" in binding)
         checks.append({"check": "binding_exists", "ok": has_binding})
 
-        settings = load_project_settings(cwd)
         has_settings = bool(settings.get("enabledPlugins"))
         checks.append({"check": "settings_exist", "ok": has_settings})
 
         if has_binding:
             base = binding["base"]
-            overlays = binding.get("overlays", [])
-            resolve_result = resolve_effective_profile(catalog, base, overlays)
-            profile_ok = "error" not in resolve_result
-            checks.append({"check": "profile_resolvable", "ok": profile_ok,
-                           "detail": resolve_result.get("error", {}).get("message", "")})
+            work_contexts = binding.get("overlays", [])
+
+            resolved = resolve_effective_profile(catalog, base, work_contexts)
+            profile_ok = "error" not in resolved
+            checks.append({
+                "check": "profile_resolvable", "ok": profile_ok,
+                "detail": resolved.get("error", {}).get("message", "") if not profile_ok else "",
+            })
+
+            if profile_ok:
+                resolved_map = {pid: True for pid in resolved["enabled"]}
+                resolved_map.update({pid: False for pid in resolved["disabled"]})
+                settings_map = settings.get("enabledPlugins", {})
+                drift = {k: v for k, v in resolved_map.items() if settings_map.get(k) != v}
+                checks.append({"check": "settings_matches_profile", "ok": not drift, "drift": drift})
+
+            all_ids = set(catalog.get("pluginIds", {}).values())
+            unknown = [k for k in settings.get("enabledPlugins", {}) if k not in all_ids]
+            checks.append({"check": "no_unknown_plugin_ids", "ok": not unknown, "unknown": unknown})
+
+            marker = settings.get("h2tAgentProfile", {})
+            marker_ok = (marker.get("base") == binding.get("base") and
+                         marker.get("overlays") == binding.get("overlays"))
+            checks.append({"check": "marker_matches_binding", "ok": marker_ok})
 
         return {"checks": checks, "cwd": str(cwd)}
 
