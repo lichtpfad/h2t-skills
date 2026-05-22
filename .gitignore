@@ -25,3 +25,11 @@ docs/.artifacts/
 
 # Python build artifacts
 *.egg-info/
+build/
+
+# Local Claude/Codex agent state and machine-specific policy
+.claude/settings.local.json
+.claude/*.bak
+.claude/*.bak2
+.claude/worktrees/
+.superpowers/
