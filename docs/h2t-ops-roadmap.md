@@ -210,7 +210,8 @@ Known findings to resolve:
 - tracked `.claude/settings.local.json` grants overly broad local-agent access;
 - broad read access to user home should not ship as repo policy;
 - destructive commands must remain approval-gated;
-- `tools/pack-h2t-creative-context.ps1` runs `npx repomix@latest`, which is unpinned.
+- `tools/pack-h2t-creative-context.ps1` previously used an unpinned `npx`
+  fallback while staging private context.
 
 Policy:
 
