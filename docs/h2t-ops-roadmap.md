@@ -54,19 +54,17 @@ The M3 connector migration is complete.
 
 ### Active Critical Path
 
-The migration is done, but connector closure is not finished until the known
-provider gaps, secrets/setup assumptions, and Mac portability gates are
-triaged. That freeze happens before `h2t-core:agent-profile`.
+The migration and connector freeze are done. Known provider gaps, secrets/setup
+assumptions, and Mac portability work are classified as backlog/follow-up rather
+than active connector migration.
 
 | Priority | Issue(s) | Work | Why it matters |
 | --- | --- | --- | --- |
-| 1 | #155 | h2t-ops connector freeze + Mac portability gate | Stop reopening connector migration work; make every remaining gap fixed, accepted backlog, or Mac/setup follow-up |
-| 2 | #81, #146 | Notion closure | Accepted as provider discovery/graph backlog in the freeze report unless explicitly widened |
-| 3 | #107, #109, #110, #112, #94, #13 | Secrets/setup closure | Classified as setup/Mac follow-up in the freeze report |
-| 4 | #53, #73, #85, #79 | Cross-platform / Mac readiness | Classified as h2t-core/platform/repo hygiene, not connector code blockers |
-| 5 | #145 | Calendar provider backlog | Kept out of connector freeze unless explicitly pulled in |
-| 6 | #153 | `h2t-core:agent-profile` | Replace global everything-enabled plugin load with repo base profiles, task overlays, and sync between machines |
-| 7 | #148 | Harden tracked agent permissions and context packer | Prevent broad local-agent permissions and unpinned `npx repomix@latest` from becoming shipped policy |
+| 1 | #153 | `h2t-core:agent-profile` | Replace global everything-enabled plugin load with repo base profiles, task overlays, and sync between machines |
+| 2 | #148 | Harden tracked agent permissions and context packer | Prevent broad local-agent permissions and unpinned `npx repomix@latest` from becoming shipped policy |
+| 3 | #85 | CI/unit-test hygiene | Reduce hidden platform assumptions before Mac portability work |
+| 4 | #13, #107, #109, #110, #112, #94 | Setup / secrets / Mac portability backlog | Keep as a deliberate setup stream, not connector migration |
+| 5 | #81, #146, #145 | Provider feature backlog | Notion discovery/dump and Calendar provider expansion; do not silently absorb into maintenance work |
 
 ## Critical Path Details
 
@@ -91,6 +89,9 @@ Definition of done:
 - #53/#73/#85/#79 cross-platform issues are triaged against h2t-ops connector usage;
 - final read-only smoke matrix exists for all seven connectors;
 - roadmap no longer lists connector migration as active work.
+
+Status: done. Final T4 smoke passed on 2026-05-22; see
+`docs/reports/2026-05-21-h2t-ops-connector-freeze.md`.
 
 ### 2. Resolved: MeetGeek Listed-Meeting 404 (#156)
 
@@ -383,13 +384,11 @@ Important for finishing the repository:
 
 ## Practical Order
 
-1. Review and merge the #155 freeze report PR.
-2. Run or document the final read-only connector smoke matrix.
-3. Close #155 when the freeze report and issue dispositions are complete.
-4. Then implement #153 `h2t-core:agent-profile`.
-5. Resolve #148 security/dev hygiene and #85 CI/unit-test hygiene.
-6. Sweep remaining issues into active / backlog / moved / stale-closed.
-7. Only then pick the next product stream: Calendar/Notion provider features, research
+1. Close #155 with final T4 evidence.
+2. Implement #153 `h2t-core:agent-profile`.
+3. Resolve #148 security/dev hygiene and #85 CI/unit-test hygiene.
+4. Sweep remaining issues into active / backlog / moved / stale-closed.
+5. Only then pick the next product stream: Calendar/Notion provider features, research
    product backlog, creative recovery, or POS-side workflow contracts.
 
 ## Closure Forecast

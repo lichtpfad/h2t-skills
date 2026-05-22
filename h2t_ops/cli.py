@@ -95,6 +95,9 @@ def _run_connector(argv: list[str]) -> int:
 def dispatch(argv: list[str]) -> int:
     if argv and argv[0] == "dev":
         return _dev_main(argv[1:])
+    if argv and argv[0] in ("--help", "-h"):
+        build_parser().print_help()
+        return 0
     if argv and argv[0] in ("--version", "-V"):
         print(f"h2t-ops {h2t_ops.__version__}")
         return 0

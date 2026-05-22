@@ -2,18 +2,21 @@
 
 Date: 2026-05-22
 Issue: #155
-Status: draft PR evidence
+Status: final local evidence
 
 ## Summary
 
-The h2t-ops connector migration is done as a category. The remaining freeze work
-is classification and final smoke evidence, not more connector migration.
+The h2t-ops connector migration is done as a category. The remaining related
+work is classified as provider backlog, setup/Mac follow-up, or repo hygiene,
+not more connector migration.
 
 Fix-now items are resolved:
 
 - #156 MeetGeek listed-meeting 404: fixed in `f363746`, closed with E2E evidence.
 - #82 Calendar date-window / max / busy-only gap: fixed in `6631f57`, closed with
   E2E evidence.
+- Top-level `h2t-ops --help` regression discovered during final T4 smoke: fixed
+  in the final #155 closure commit with regression coverage.
 
 Remaining related issues are not connector-freeze blockers unless explicitly
 pulled back into scope. They are provider backlog, setup/Mac follow-ups, or repo
@@ -37,6 +40,7 @@ hygiene.
 | --- | --- | --- |
 | #156 | Fixed and closed | `f363746`; MeetGeek `get` fallback to list row; transcript markdown no longer requires metadata endpoint; live `get` and transcript E2E passed |
 | #82 | Fixed and closed | `6631f57`; `calendar list --from/--to`, `--tz`, `--max 250`, `--busy-only`; `tests/connectors` 404 passed; live Calendar E2E passed |
+| #155 T4 help regression | Fixed | `h2t-ops --help` now renders the `h2t-ops` parser instead of falling through to legacy `h2t`; `tests/cli/test_h2t_ops_cli.py` added |
 
 ## Accepted Provider / Product Backlog
 
@@ -66,37 +70,57 @@ hygiene.
 | #85 CI/unit-test hygiene | Repo hygiene follow-up | Important before calling the repo stable, but current connector tests pass locally. |
 | #79 machine.yaml overrides | h2t-core / agent-profile follow-up | Per-machine overrides belong with profile/setup work, not connector freeze. |
 
-## Smoke Evidence So Far
+## Final T4 Smoke Evidence
 
-Recent verified gates:
+Date: 2026-05-22
 
-```text
-uv run h2t-ops dev pytest tests/connectors -q
--> 404 passed
-
-uv run h2t-ops dev check lazy-registry
--> OK
-```
-
-Live read-only E2E already verified during fix work:
+Local gates:
 
 ```text
-MeetGeek:
-- auth-check OK
-- list target id present
-- get be7505e5-... --json exit 0
-- transcript be7505e5-... --format md exit 0
-- transcript be7505e5-... --format json --json exit 0
+uv.exe run h2t-ops --help
+-> exit 0; renders h2t-ops parser
 
-Calendar:
-- calendar --help exit 0
-- list --days 1 --max 10 --json OK
-- list --from 2026-05-22 --to 2026-05-22 --tz Asia/Jerusalem --max 10 --json OK
-- same window with --busy-only OK
-- partial --from without --to exits 2
+uv.exe run h2t-ops connectors
+-> exit 0; lists calendar, drive, gmail, meetgeek, notion, research, telegram
+
+uv.exe run h2t-ops dev check lazy-registry
+-> OK lazy-registry
+
+uv.exe run h2t-ops dev pytest tests/connectors tests/cli/test_h2t_ops_cli.py -q
+-> 406 passed
 ```
 
-Final #155 closure still needs a T4 smoke pass across all connectors.
+Provider help gates:
+
+```text
+notion --help      -> exit 0
+gmail --help       -> exit 0
+calendar --help    -> exit 0
+drive --help       -> exit 0
+meetgeek --help    -> exit 0
+telegram --help    -> exit 0
+research --help    -> exit 0
+```
+
+Live/read-only smoke matrix:
+
+```text
+notion blocks 10adbc1e61d04d13aa6f17210b77e0d3 --limit 1 --json -> PASS
+gmail list --max 1 --json                                           -> PASS
+calendar list --days 1 --max 10 --json                              -> PASS
+drive list --max 1 --json                                           -> PASS
+meetgeek auth-check --json                                          -> PASS
+telegram auth status --json                                         -> PASS
+telegram dialogs --limit 5 --json                                   -> PASS
+research fetch --url https://www.iana.org/domains/reserved \
+  --provider direct --timeout-ms 30000 --min-body-chars 20 --json    -> PASS
+research preflight --json                                           -> PASS
+```
+
+Note: `research fetch --url https://example.com --provider direct` timed out in
+this environment. The Research connector itself passed against IANA and Exa
+preflight, so the `example.com` timeout is treated as endpoint/network flake,
+not a connector freeze blocker.
 
 ## Mac Smoke Plan
 
@@ -125,9 +149,7 @@ Credential expectations:
 - Notion / MeetGeek / Research: environment or `~/.dor/secrets.env` /
   `~/.dor/secrets/secrets.env` as documented.
 
-## Remaining #155 Work
+## #155 Closure Disposition
 
-1. Merge this report PR.
-2. Run final T4 smoke matrix across all connectors.
-3. Update #155 with final status and close it if T4 is green or skipped with
-   explicit reasons.
+#155 can be closed after the final closure commit is pushed and this evidence is
+posted to the issue.
