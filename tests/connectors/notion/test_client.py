@@ -248,6 +248,17 @@ def test_iter_blocks_recursive_collects_child_permission_errors(conv):
     assert conv._last_traversal_errors == [{"block_id": "bad-child", "error": "restricted"}]
 
 
+def test_iter_blocks_recursive_root_listing_failure_raises(conv):
+    def _page(block_id, start_cursor=None):
+        raise ProviderError("root blocked")
+
+    conv._list_block_children_page = _page
+
+    with pytest.raises(ProviderError, match="root blocked"):
+        list(conv.iter_blocks_recursive("root", max_depth=2))
+    assert conv._last_traversal_errors == []
+
+
 def test_iter_blocks_recursive_rejects_negative_args(conv):
     with pytest.raises(UsageError):
         list(conv.iter_blocks_recursive("root", max_depth=-1))
@@ -335,6 +346,43 @@ def test_find_databases_row_limit_zero_queries_metadata_but_no_rows(conv):
     assert result["databases"][0]["rows"] == []
     assert result["databases"][0]["row_count"] == 0
     assert result["stats"]["databases_queried"] == 0
+
+
+def test_find_databases_with_rows_non_recursive_stays_shallow(conv):
+    calls = []
+    pages = {
+        "root": {
+            "results": [{"id": "child-page", "type": "child_page", "has_children": True}],
+            "has_more": False,
+            "next_cursor": None,
+        },
+        "child-page": {
+            "results": [
+                {
+                    "id": "nested-db",
+                    "type": "child_database",
+                    "child_database": {"title": "Nested"},
+                    "has_children": False,
+                },
+            ],
+            "has_more": False,
+            "next_cursor": None,
+        },
+    }
+
+    def _page(block_id, start_cursor=None):
+        calls.append(block_id)
+        return pages[block_id]
+
+    conv._list_block_children_page = _page
+    conv.query_database = lambda database_id, limit=None: pytest.fail("nested database must not be discovered")
+
+    result = conv.find_databases_on_page("root", recursive=False, with_rows=True, max_depth=3)
+
+    assert calls == ["root"]
+    assert result["recursive"] is False
+    assert result["max_depth"] == 1
+    assert result["databases"] == []
 
 
 def test_find_databases_rejects_negative_row_limit(conv):

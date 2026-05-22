@@ -147,6 +147,8 @@ class NotionClient:
                 try:
                     response = self._list_block_children_page(block_id, start_cursor=cursor)
                 except Exception as exc:
+                    if depth == 0:
+                        raise
                     self._last_traversal_errors.append({"block_id": block_id, "error": str(exc)})
                     return
                 for block in response.get("results", []):
@@ -265,10 +267,11 @@ class NotionClient:
         duplicate_refs = 0
         queried = 0
         rows_returned = 0
+        traversal_max_depth = max_depth if recursive else 1
 
         for item in self.iter_blocks_recursive(
             page_id,
-            max_depth=max_depth,
+            max_depth=traversal_max_depth,
             limit_blocks=limit_blocks,
         ):
             block = item["block"]
@@ -339,7 +342,7 @@ class NotionClient:
             "kind": "notion_database_discovery/v1",
             "root_page_id": page_id,
             "recursive": recursive,
-            "max_depth": max_depth,
+            "max_depth": traversal_max_depth,
             "databases": databases,
             "errors": errors + list(getattr(self, "_last_traversal_errors", [])),
             "stats": {
