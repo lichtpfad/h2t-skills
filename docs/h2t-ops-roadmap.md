@@ -55,16 +55,17 @@ The M3 connector migration is complete.
 ### Active Closure Streams
 
 The migration and connector freeze are done. Only `h2t-core:agent-profile` is
-on the active critical path. Security/dev hygiene, CI assumptions, secrets/setup,
-and Mac portability are real work, but they are classified as technical debt /
-platform hardening rather than connector or product migration.
+on the active critical path. The concrete #148 security/dev hygiene task and #85
+CI/unit-test hygiene task are closed. Remaining hygiene is routine maintenance,
+not a closure blocker and not connector or product migration.
 
 | Priority | Issue(s) | Work | Classification |
 | --- | --- | --- | --- |
 | 1 | #153 | `h2t-core:agent-profile` | Active critical path |
-| 2 | #148, #85, #13, #94, #107, #109, #110, #73, #79, #53 | Platform technical debt / hardening | Done or consolidated into policy; not connector migration |
-| 3 | #112 | Setup wizard backlog | Future onboarding UX, separate from closure |
-| 4 | #81, #146, #145 | Provider feature backlog | Product/provider backlog; pull only when explicitly scoped |
+| 2 | #148, #85 | Security/dev hygiene and CI/unit-test hygiene | Done; no active closure blocker |
+| 3 | #13, #94, #107, #109, #110, #73, #79, #53 | Platform portability / credential policy | Done or consolidated into policy; routine maintenance only |
+| 4 | #112 | Setup wizard backlog | Future onboarding UX, separate from closure |
+| 5 | #81, #146, #145 | Provider feature backlog | Product/provider backlog; pull only when explicitly scoped |
 
 ## Critical Path Details
 
@@ -212,15 +213,15 @@ Definition of done:
 - at least one real repo profile is applied and verified with `/context`;
 - rollback path is documented.
 
-### 8. Platform Technical Debt: Security / Dev Hygiene (#148)
+### 8. Closed: Security / Dev Hygiene (#148)
 
-Known findings to resolve:
+Resolved findings:
 
-- tracked `.claude/settings.local.json` grants overly broad local-agent access;
-- broad read access to user home should not ship as repo policy;
-- destructive commands must remain approval-gated;
-- `tools/pack-h2t-creative-context.ps1` previously used an unpinned `npx`
-  fallback while staging private context.
+- tracked `.claude/settings.local.json` no longer ships as repo policy;
+- broad local-agent allowlists are kept machine-local / untracked;
+- destructive command permissions remain approval-gated rather than tracked;
+- `tools/pack-h2t-creative-context.ps1` no longer runs an unpinned
+  `npx repomix@latest` fallback by default.
 
 Policy:
 
@@ -228,20 +229,18 @@ Policy:
 - keep tracked permission config narrow and repo-scoped;
 - pin or remove runtime execution of unreviewed `@latest` packages.
 
-This was intentionally deferred during connector migration. It is now classified
-as security-sensitive technical debt: it should be handled before broader
-production/Mac rollout, but it is not connector work and should not reopen
-provider migration scope.
+Status: closed. Future permission and packer reviews are routine maintenance,
+not active closure work.
 
-### 9. Platform Technical Debt: CI / Test Hygiene (#85)
+### 9. Closed: CI / Test Hygiene (#85)
 
-Fix known CI failures before calling the repo stable:
+Resolved scope:
 
-- hardcoded `~/.h2t/venv` assumptions;
-- stale stack assertions;
-- any Windows-only assumptions that break Linux/macOS CI.
+- removed hidden local venv and shell assumptions from the unit-test path;
+- kept Windows/macOS differences documented or guarded where needed;
+- current connector/core test suite passes in the active environment.
 
-This is infrastructure technical debt, not connector feature work.
+Status: closed. Future CI drift is routine maintenance, not connector migration.
 
 ### 10. Issue Sweep
 
@@ -384,13 +383,11 @@ Track these in their own roadmaps. They are not connector-closure blockers.
 
 ### 5. Repo / Security / Dev Hygiene
 
-Important for finishing the repository:
+Routine maintenance, not active closure blockers:
 
-- #148 tracked agent permissions + context packer hardening;
-- `.claude/settings*` dirty-tree cleanup;
-- stale `.bak`, `build/`, `.superpowers/` cleanup;
-- global/user skill bloat;
-- `h2t-core:setup`, secrets wizard, credential sync;
+- local untracked scratch files such as `.bak` artifacts;
+- global/user skill bloat outside this repo;
+- future `h2t-core:setup` / secrets wizard UX (#112);
 - issue sweep and moving tasks to the correct repositories.
 
 ## Practical Order
