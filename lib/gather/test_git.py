@@ -1,6 +1,6 @@
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-from gather.git import gather_git, _parse_owner_repo
+from gather.git import gather_git, _display_branch, _parse_owner_repo
 
 def test_gather_git_returns_expected_keys():
     result = gather_git()
@@ -11,6 +11,12 @@ def test_gather_git_branch_is_string():
     result = gather_git()
     assert isinstance(result["branch"], str)
     assert len(result["branch"]) > 0
+
+def test_display_branch_uses_branch_when_available():
+    assert _display_branch("main\n", "abc123\n") == "main"
+
+def test_display_branch_handles_detached_head():
+    assert _display_branch("\n", "abc123\n") == "detached:abc123"
 
 def test_parse_owner_repo_ssh():
     assert _parse_owner_repo("git@github.com:lichtpfad/h2t.git") == "lichtpfad/h2t"
@@ -27,6 +33,8 @@ def test_parse_owner_repo_empty():
 if __name__ == "__main__":
     test_gather_git_returns_expected_keys()
     test_gather_git_branch_is_string()
+    test_display_branch_uses_branch_when_available()
+    test_display_branch_handles_detached_head()
     test_parse_owner_repo_ssh()
     test_parse_owner_repo_https()
     test_parse_owner_repo_https_no_git()

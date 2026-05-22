@@ -1,4 +1,5 @@
 import argparse
+import json
 import sys
 import builtins
 from h2t_ops.connectors.notion.commands import register
@@ -228,3 +229,382 @@ def test_find_project_tasks_dispatch_markdown_uses_database_metadata(monkeypatch
     )
     out = cmds_mod.run(args)
     assert out == "# Tasks (1 rows)"
+
+
+def test_find_databases_parser_accepts_recursive_rows_limits_and_json():
+    ns = _parser().parse_args([
+        "notion", "find-databases", "PAGE",
+        "--recursive", "--max-depth", "4", "--limit-blocks", "200",
+        "--with-rows", "--row-limit", "5", "--json",
+    ])
+    assert ns.recursive is True
+    assert ns.max_depth == 4
+    assert ns.limit_blocks == 200
+    assert ns.with_rows is True
+    assert ns.row_limit == 5
+    assert ns.as_json is True
+
+
+def test_search_workspace_parser_accepts_object_limit_and_json():
+    ns = _parser().parse_args([
+        "notion", "search-workspace", "--object", "page", "--limit", "5", "--json",
+    ])
+    assert ns.notion_cmd == "search-workspace"
+    assert ns.object == "page"
+    assert ns.limit == 5
+    assert ns.as_json is True
+
+    ns2 = _parser().parse_args([
+        "notion", "search-workspace", "--object", "data_source", "--json",
+    ])
+    assert ns2.object == "data_source"
+
+
+def test_search_workspace_and_graph_parsers_registered():
+    parser = _parser()
+    ns = parser.parse_args([
+        "notion", "graph", "ROOT", "--max-depth", "2", "--include-databases", "--json",
+    ])
+    assert ns.notion_cmd == "graph"
+    assert ns.root_page_id == "ROOT"
+    assert ns.max_depth == 2
+    assert ns.include_databases is True
+    assert ns.as_json is True
+
+    ns2 = parser.parse_args(["notion", "graph", "ROOT", "--json"])
+    assert ns2.include_databases is True
+
+    ns3 = parser.parse_args(["notion", "graph", "ROOT", "--no-include-databases", "--json"])
+    assert ns3.include_databases is False
+
+
+def test_find_databases_dispatch_passes_recursive_options(monkeypatch):
+    import h2t_ops.connectors.notion.client as client_mod
+    from h2t_ops.connectors.notion import commands as cmds_mod
+    from types import SimpleNamespace
+
+    calls = []
+
+    class _Stub:
+        def find_databases_on_page(self, page_id, **kwargs):
+            calls.append((page_id, kwargs))
+            return {"kind": "notion_database_discovery/v1"}
+
+    monkeypatch.setattr(client_mod, "NotionClient", lambda: _Stub())
+
+    out = cmds_mod.run(SimpleNamespace(
+        notion_cmd="find-databases",
+        page_id="PAGE",
+        recursive=True,
+        max_depth=4,
+        limit_blocks=200,
+        with_rows=True,
+        row_limit=5,
+        as_json=True,
+        fmt="human",
+    ))
+
+    assert out == {"kind": "notion_database_discovery/v1"}
+    assert calls == [("PAGE", {
+        "recursive": True,
+        "max_depth": 4,
+        "limit_blocks": 200,
+        "with_rows": True,
+        "row_limit": 5,
+    })]
+
+
+def test_graph_dispatch_passes_options(monkeypatch):
+    import h2t_ops.connectors.notion.client as client_mod
+    from h2t_ops.connectors.notion import commands as cmds_mod
+    from types import SimpleNamespace
+
+    calls = []
+
+    class _Stub:
+        def graph_page(self, root_page_id, **kwargs):
+            calls.append((root_page_id, kwargs))
+            return {"kind": "notion_workspace_graph/v1"}
+
+    monkeypatch.setattr(client_mod, "NotionClient", lambda: _Stub())
+
+    out = cmds_mod.run(SimpleNamespace(
+        notion_cmd="graph",
+        root_page_id="ROOT",
+        max_depth=2,
+        include_databases=True,
+        root_label="KB",
+        as_json=True,
+        fmt="human",
+    ))
+
+    assert out == {"kind": "notion_workspace_graph/v1"}
+    assert calls == [("ROOT", {
+        "max_depth": 2,
+        "include_databases": True,
+        "root_label": "KB",
+    })]
+
+
+def test_find_databases_recursive_json_uses_universal_envelope(monkeypatch, capsys):
+    import h2t_ops.connectors.notion.client as client_mod
+
+    class _Stub:
+        def find_databases_on_page(self, page_id, **kwargs):
+            return {"kind": "notion_database_discovery/v1", "databases": []}
+
+    monkeypatch.setattr(client_mod, "NotionClient", lambda: _Stub())
+
+    code = dispatch(["notion", "find-databases", "PAGE", "--recursive", "--json"])
+
+    assert code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["ok"] is True
+    assert payload["provider"] == "notion"
+    assert payload["result"]["kind"] == "notion_database_discovery/v1"
+
+
+def test_search_workspace_json_uses_universal_envelope(monkeypatch, capsys):
+    import h2t_ops.connectors.notion.client as client_mod
+
+    class _Stub:
+        def search_workspace(self, object_type="all", *, limit=None):
+            assert object_type == "page"
+            assert limit == 0
+            return {"kind": "notion_workspace_search/v1", "results": []}
+
+    monkeypatch.setattr(client_mod, "NotionClient", lambda: _Stub())
+
+    code = dispatch(["notion", "search-workspace", "--object", "page", "--limit", "0", "--json"])
+
+    assert code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["ok"] is True
+    assert payload["result"]["kind"] == "notion_workspace_search/v1"
+
+
+def test_graph_json_uses_universal_envelope(monkeypatch, capsys):
+    import h2t_ops.connectors.notion.client as client_mod
+
+    class _Stub:
+        def graph_page(self, root_page_id, **kwargs):
+            assert root_page_id == "ROOT"
+            return {"kind": "notion_workspace_graph/v1", "nodes": []}
+
+    monkeypatch.setattr(client_mod, "NotionClient", lambda: _Stub())
+
+    code = dispatch(["notion", "graph", "ROOT", "--json"])
+
+    assert code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["ok"] is True
+    assert payload["result"]["kind"] == "notion_workspace_graph/v1"
+
+
+def test_search_workspace_json_default_limit_is_none(monkeypatch, capsys):
+    import h2t_ops.connectors.notion.client as client_mod
+
+    calls = []
+
+    class _Stub:
+        def search_workspace(self, object_type="all", *, limit=None):
+            calls.append({"object_type": object_type, "limit": limit})
+            return {"kind": "notion_workspace_search/v1", "results": []}
+
+    monkeypatch.setattr(client_mod, "NotionClient", lambda: _Stub())
+    cli_main = dispatch
+
+    code = cli_main(["notion", "search-workspace", "--object", "page", "--json"])
+
+    assert code == 0
+    assert calls == [{"object_type": "page", "limit": None}]
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["ok"] is True
+    assert payload["result"]["kind"] == "notion_workspace_search/v1"
+
+
+def test_sync_databases_json_without_include_databases_raises(tmp_path, monkeypatch):
+    import h2t_ops.connectors.notion.client as client_mod
+    from h2t_ops.connectors.notion import commands as cmds_mod
+    from types import SimpleNamespace
+
+    calls = []
+
+    class _Stub:
+        def get_blocks(self, page_id):
+            calls.append(("get_blocks", page_id))
+            raise AssertionError("get_blocks must not be called")
+
+    monkeypatch.setattr(client_mod, "NotionClient", lambda: _Stub())
+
+    with pytest.raises(UsageError):
+        cmds_mod.run(SimpleNamespace(
+            notion_cmd="sync",
+            page_id="P",
+            output_file=str(tmp_path / "page.md"),
+            preserve_metadata=False,
+            include_databases=False,
+            recursive=False,
+            max_depth=3,
+            row_limit=100,
+            databases_json=str(tmp_path / "sidecar.json"),
+            as_json=False,
+            fmt="human",
+        ))
+
+    assert calls == []
+
+
+def test_sync_databases_json_same_as_output_raises_before_client_io(tmp_path, monkeypatch):
+    import h2t_ops.connectors.notion.client as client_mod
+    from h2t_ops.connectors.notion import commands as cmds_mod
+    from types import SimpleNamespace
+    from pathlib import Path
+
+    calls = []
+    writes = []
+
+    class _Stub:
+        def get_blocks(self, page_id):
+            calls.append(("get_blocks", page_id))
+            raise AssertionError("get_blocks must not be called")
+
+        def find_databases_on_page(self, page_id, **kwargs):
+            calls.append(("find_databases_on_page", page_id, kwargs))
+            raise AssertionError("find_databases_on_page must not be called")
+
+    original_write_text = Path.write_text
+
+    def spy_write_text(self, *args, **kwargs):
+        writes.append(self)
+        return original_write_text(self, *args, **kwargs)
+
+    monkeypatch.setattr(client_mod, "NotionClient", lambda: _Stub())
+    monkeypatch.setattr(Path, "write_text", spy_write_text)
+    output = tmp_path / "page.md"
+
+    with pytest.raises(UsageError):
+        cmds_mod.run(SimpleNamespace(
+            notion_cmd="sync",
+            page_id="P",
+            output_file=str(output),
+            preserve_metadata=False,
+            include_databases=True,
+            recursive=False,
+            max_depth=3,
+            row_limit=100,
+            databases_json=str(output),
+            as_json=False,
+            fmt="human",
+        ))
+
+    assert calls == []
+    assert writes == []
+    assert not output.exists()
+
+
+def test_sync_include_databases_writes_markdown_and_json_sidecar(tmp_path, monkeypatch):
+    import h2t_ops.connectors.notion.client as client_mod
+    from h2t_ops.connectors.notion import commands as cmds_mod
+    from types import SimpleNamespace
+
+    calls = []
+
+    class _Stub:
+        def get_blocks(self, page_id):
+            return [{"id": "b1", "type": "paragraph"}]
+
+        def blocks_to_markdown(self, blocks):
+            return "Body\n"
+
+        def find_databases_on_page(self, page_id, **kwargs):
+            calls.append((page_id, kwargs))
+            return {
+                "kind": "notion_database_discovery/v1",
+                "databases": [
+                    {"title": "Tasks", "database_id": "db1", "type": "child_database",
+                     "row_count": 1},
+                ],
+                "stats": {"databases_found": 1},
+            }
+
+    monkeypatch.setattr(client_mod, "NotionClient", lambda: _Stub())
+    md = tmp_path / "page.md"
+    sidecar = tmp_path / "nested" / "sidecar.json"
+
+    out = cmds_mod.run(SimpleNamespace(
+        notion_cmd="sync",
+        page_id="P",
+        output_file=str(md),
+        preserve_metadata=False,
+        include_databases=True,
+        recursive=True,
+        max_depth=3,
+        row_limit=5,
+        databases_json=str(sidecar),
+        as_json=False,
+        fmt="human",
+    ))
+
+    assert "Synced to" in out
+    assert "## Embedded databases" in md.read_text(encoding="utf-8")
+    payload = json.loads(sidecar.read_text(encoding="utf-8"))
+    assert payload["kind"] == "notion_database_discovery/v1"
+    assert calls == [("P", {
+        "recursive": True,
+        "max_depth": 3,
+        "with_rows": True,
+        "row_limit": 5,
+    })]
+
+
+def test_sync_primary_markdown_write_failure_does_not_create_sidecar(tmp_path, monkeypatch):
+    import h2t_ops.connectors.notion.client as client_mod
+    from h2t_ops.connectors.notion import commands as cmds_mod
+    from types import SimpleNamespace
+    from pathlib import Path
+
+    class _Stub:
+        def get_blocks(self, page_id):
+            return [{"id": "b1", "type": "paragraph"}]
+
+        def blocks_to_markdown(self, blocks):
+            return "Body\n"
+
+        def find_databases_on_page(self, page_id, **kwargs):
+            return {
+                "kind": "notion_database_discovery/v1",
+                "databases": [
+                    {"title": "Tasks", "database_id": "db1", "type": "child_database",
+                     "row_count": 1},
+                ],
+            }
+
+    original_write_text = Path.write_text
+    md = tmp_path / "page.md"
+    sidecar = tmp_path / "sidecar.json"
+
+    def fail_primary_write_only(self, *args, **kwargs):
+        if self == md:
+            raise OSError("deterministic primary write failure")
+        return original_write_text(self, *args, **kwargs)
+
+    monkeypatch.setattr(client_mod, "NotionClient", lambda: _Stub())
+    monkeypatch.setattr(Path, "write_text", fail_primary_write_only)
+
+    with pytest.raises(OSError, match="deterministic primary write failure"):
+        cmds_mod.run(SimpleNamespace(
+            notion_cmd="sync",
+            page_id="P",
+            output_file=str(md),
+            preserve_metadata=False,
+            include_databases=True,
+            recursive=False,
+            max_depth=3,
+            row_limit=100,
+            databases_json=str(sidecar),
+            as_json=False,
+            fmt="human",
+        ))
+
+    assert not sidecar.exists()
