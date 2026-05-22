@@ -1,0 +1,97 @@
+---
+name: h2t-ops:connectors
+description: "Navigator for h2t-ops provider I/O connectors: Calendar, Gmail, Drive, Notion, Telegram, and MeetGeek. Use when the user asks which connector command to run, asks for provider data/actions, or hits missing connector functionality. Research and daily-brief are intentionally separate."
+compatibility: "Claude Code plugin skill with Codex/AGENTS-compatible portable core."
+metadata:
+  author: lichtpfad
+  version: 0.1.0
+---
+
+# h2t-ops Connectors
+
+Provider I/O router for `h2t-ops`.
+
+Use this skill for:
+
+- Google Calendar events, availability, and event writes;
+- Gmail search, read, draft, send, and labels;
+- Google Drive list, search, download, export, upload, and upload-folder;
+- Notion pages, blocks, databases, workspace search, graph, and sync;
+- Telegram auth, dialogs, messages, saved messages, mentions, and bootstrap;
+- MeetGeek teams, meetings, transcripts, summaries, highlights, insights, recording URLs, and submit-url.
+
+Do not use this skill for:
+
+- `h2t-ops:research`;
+- `h2t-ops:daily-brief`;
+- Telegram digest/tasks/research/students workflows;
+- meeting interpretation or POS transcript intake;
+- POS/DOR journal, vault, lake, or database writes.
+
+## Safety Boundary
+
+- Use the `h2t-ops` CLI for provider I/O.
+- Do not use raw provider APIs when a connector command is missing.
+- Missing provider functionality becomes a structured GitHub issue.
+- Do not include secrets, tokens, OAuth codes, cookies, private message bodies, transcript bodies, calendar descriptions, or raw provider payloads in issues or final output.
+- Write paths require explicit user intent.
+- Paid provider checks belong to `h2t-ops:research`, not this skill.
+- POS/DOR canonical state writes are out of scope.
+
+## Router
+
+| User intent | Connector | Load reference | CLI prefix |
+| --- | --- | --- | --- |
+| calendar, schedule, events, availability, FreeBusy, Google Meet links | Calendar | `references/calendar.md` | `h2t-ops calendar` |
+| email, inbox, Gmail search, read, draft, send, labels | Gmail | `references/gmail.md` | `h2t-ops gmail` |
+| Drive files, folders, Docs export, download, upload, upload folder | Drive | `references/drive.md` | `h2t-ops drive` |
+| Notion pages, blocks, databases, workspace graph, embedded DBs | Notion | `references/notion.md` | `h2t-ops notion` |
+| Telegram auth, dialogs, messages, saved messages, mentions | Telegram | `references/telegram.md` | `h2t-ops telegram` |
+| MeetGeek meetings, transcripts, summaries, recordings | MeetGeek | `references/meetgeek.md` | `h2t-ops meetgeek` |
+
+## Workflow
+
+1. Identify the provider and whether the user requested a read or write.
+2. Load only the matching reference file.
+3. Prefer JSON output for agent processing: add `--json` when supported.
+4. For write commands, restate the intended write and require explicit user approval unless the user already gave clear write intent.
+5. Run the `h2t-ops` command.
+6. Summarize results without dumping private provider bodies.
+7. If the command does not exist or provider behavior is wrong, use `references/issue-policy.md`.
+
+## Preflight
+
+Use these when the environment is unclear:
+
+```bash
+h2t-ops --version
+h2t-ops doctor
+h2t-ops connectors
+```
+
+For credential readiness, prefer the installed setup skill:
+
+```text
+/h2t-core:setup connectors-check
+```
+
+## Output Policy
+
+- Provide concise human summaries.
+- Keep provider IDs and artifact refs when useful.
+- Do not paste raw emails, chat logs, transcripts, calendar descriptions, or private Notion content unless the user explicitly asks to inspect that content.
+- For POS-relevant findings, emit a proposed capture rather than writing POS state directly.
+
+## References
+
+- `references/calendar.md`
+- `references/gmail.md`
+- `references/drive.md`
+- `references/notion.md`
+- `references/telegram.md`
+- `references/meetgeek.md`
+- `references/issue-policy.md`
+
+## Codex / AGENTS Adapter
+
+The portable core is the Safety Boundary, Router, Workflow, Preflight, and Output Policy sections. In Codex or AGENTS.md contexts, treat this file as repo guidance and call the same `h2t-ops` CLI commands. Claude Code frontmatter is optional metadata and is not required for the routing logic.
