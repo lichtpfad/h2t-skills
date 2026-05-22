@@ -409,5 +409,120 @@ class TestAddContextRef(unittest.TestCase):
         self.assertNotIn("error", result)
 
 
+class TestCatalogSubcommands(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.catalog_path = Path(self.tmp.name) / "agent-profiles.json"
+        self.catalog_path.write_text(json.dumps(MINIMAL_CATALOG))
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_catalog_list_returns_profile_and_overlay_names(self):
+        result = ap.catalog_list(catalog_path=self.catalog_path)
+        self.assertIn("baseProfiles", result)
+        self.assertIn("overlays", result)
+        self.assertIn("pos", result["baseProfiles"])
+
+    def test_catalog_list_plugins_returns_plugin_ids(self):
+        result = ap.catalog_list_plugins(catalog_path=self.catalog_path)
+        self.assertIn("pluginIds", result)
+        self.assertIn("h2t-core", result["pluginIds"])
+
+    def test_catalog_add_profile_writes_new_entry(self):
+        result = ap.catalog_add_profile(
+            name="test-profile",
+            description="Test",
+            enable=["h2t-core"],
+            disable=["h2t-creative"],
+            catalog_path=self.catalog_path,
+        )
+        self.assertTrue(result.get("ok"))
+        catalog = json.loads(self.catalog_path.read_text())
+        self.assertIn("test-profile", catalog["baseProfiles"])
+
+    def test_catalog_add_profile_rejects_unknown_alias(self):
+        result = ap.catalog_add_profile(
+            name="bad",
+            description="Test",
+            enable=["nonexistent-alias"],
+            disable=[],
+            catalog_path=self.catalog_path,
+        )
+        self.assertIn("error", result)
+        self.assertEqual(result["error"]["code"], "UNKNOWN_PLUGIN_ALIAS")
+
+    def test_catalog_add_profile_rejects_duplicate(self):
+        result = ap.catalog_add_profile(
+            name="pos",
+            description="dup",
+            enable=["h2t-core"],
+            disable=[],
+            catalog_path=self.catalog_path,
+        )
+        self.assertIn("error", result)
+        self.assertEqual(result["error"]["code"], "PROFILE_EXISTS")
+
+    def test_catalog_edit_profile_add_enable_removes_from_disable(self):
+        # pos has h2t-creative in disable; add-enable h2t-creative must remove it
+        result = ap.catalog_edit_profile(
+            name="pos",
+            add_enable=["h2t-creative"],
+            add_disable=[],
+            remove_enable=[],
+            remove_disable=[],
+            catalog_path=self.catalog_path,
+        )
+        self.assertTrue(result.get("ok"))
+        catalog = json.loads(self.catalog_path.read_text())
+        self.assertIn("h2t-creative", catalog["baseProfiles"]["pos"]["enable"])
+        self.assertNotIn("h2t-creative", catalog["baseProfiles"]["pos"]["disable"])
+
+    def test_catalog_edit_rejects_unknown_alias(self):
+        result = ap.catalog_edit_profile(
+            name="pos",
+            add_enable=["no-such-alias"],
+            add_disable=[],
+            remove_enable=[],
+            remove_disable=[],
+            catalog_path=self.catalog_path,
+        )
+        self.assertIn("error", result)
+
+    def test_catalog_add_overlay_writes_new_entry(self):
+        result = ap.catalog_add_overlay(
+            name="test-overlay",
+            description="Test overlay",
+            enable=["h2t-ops"],
+            disable=[],
+            catalog_path=self.catalog_path,
+        )
+        self.assertTrue(result.get("ok"))
+        catalog = json.loads(self.catalog_path.read_text())
+        self.assertIn("test-overlay", catalog["overlays"])
+
+    def test_catalog_write_is_atomic(self):
+        ap.catalog_add_profile(
+            name="atomic-test",
+            description="Test",
+            enable=["h2t-core"],
+            disable=[],
+            catalog_path=self.catalog_path,
+        )
+        tmp_path = self.catalog_path.with_suffix(".tmp")
+        self.assertFalse(tmp_path.exists())
+
+    def test_catalog_refuses_cache_path(self):
+        cache_path = Path(self.tmp.name) / "plugins" / "cache" / "agent-profiles.json"
+        cache_path.parent.mkdir(parents=True)
+        cache_path.write_text(json.dumps(MINIMAL_CATALOG))
+        result = ap.catalog_add_profile(
+            name="x", description="x", enable=[], disable=[],
+            catalog_path=cache_path,
+        )
+        self.assertIn("error", result)
+        self.assertEqual(result["error"]["code"], "CACHE_PATH")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

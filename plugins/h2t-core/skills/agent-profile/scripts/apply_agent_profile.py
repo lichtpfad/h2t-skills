@@ -284,6 +284,154 @@ def _compute_diff(old: dict, new: dict) -> dict:
     return {"changed": added, "removed": removed}
 
 
+# ── Catalog subcommands ──────────────────────────────────────────────────────
+
+def _is_cache_path(path: Path) -> bool:
+    parts = str(path).replace("\\", "/")
+    return "plugins/cache" in parts or ".claude/plugins" in parts
+
+
+def catalog_list(catalog_path: Path = None) -> dict:
+    catalog_path = catalog_path or _DEFAULT_CATALOG
+    catalog = load_catalog(catalog_path)
+    if "error" in catalog:
+        return catalog
+    return {
+        "baseProfiles": {k: v["description"] for k, v in catalog.get("baseProfiles", {}).items()},
+        "overlays": {k: v["description"] for k, v in catalog.get("overlays", {}).items()},
+        "pluginCount": len(catalog.get("pluginIds", {})),
+        "catalogPath": str(catalog_path),
+    }
+
+
+def catalog_list_plugins(catalog_path: Path = None) -> dict:
+    catalog_path = catalog_path or _DEFAULT_CATALOG
+    catalog = load_catalog(catalog_path)
+    if "error" in catalog:
+        return catalog
+    return {"pluginIds": catalog.get("pluginIds", {}), "count": len(catalog.get("pluginIds", {}))}
+
+
+def catalog_add_profile(name: str, description: str, enable: list, disable: list,
+                        catalog_path: Path = None) -> dict:
+    catalog_path = catalog_path or _DEFAULT_CATALOG
+    if _is_cache_path(catalog_path):
+        return _error("CACHE_PATH", "Catalog editor cannot write to plugin cache",
+                      path=str(catalog_path))
+    catalog = load_catalog(catalog_path)
+    if "error" in catalog:
+        return catalog
+    plugin_ids = catalog.get("pluginIds", {})
+    for alias in enable + disable:
+        if alias and alias not in plugin_ids:
+            return _error("UNKNOWN_PLUGIN_ALIAS", f"Unknown alias: '{alias}'", alias=alias)
+    if name in catalog.get("baseProfiles", {}):
+        return _error("PROFILE_EXISTS", f"Profile '{name}' already exists. Use edit-profile.")
+    catalog.setdefault("baseProfiles", {})[name] = {
+        "description": description, "enable": enable, "disable": disable,
+    }
+    write_json_atomic(catalog_path, catalog)
+    return {"ok": True, "diff": {"added": {f"baseProfiles.{name}": catalog["baseProfiles"][name]}}}
+
+
+def catalog_edit_profile(name: str, add_enable: list, add_disable: list,
+                         remove_enable: list, remove_disable: list,
+                         catalog_path: Path = None) -> dict:
+    catalog_path = catalog_path or _DEFAULT_CATALOG
+    if _is_cache_path(catalog_path):
+        return _error("CACHE_PATH", "Catalog editor cannot write to plugin cache",
+                      path=str(catalog_path))
+    catalog = load_catalog(catalog_path)
+    if "error" in catalog:
+        return catalog
+    if name not in catalog.get("baseProfiles", {}):
+        return _error("UNKNOWN_PROFILE", f"Profile '{name}' not found")
+    plugin_ids = catalog.get("pluginIds", {})
+    for alias in add_enable + add_disable + remove_enable + remove_disable:
+        if alias and alias not in plugin_ids:
+            return _error("UNKNOWN_PLUGIN_ALIAS", f"Unknown alias: '{alias}'", alias=alias)
+    profile = catalog["baseProfiles"][name]
+    old = {"enable": list(profile["enable"]), "disable": list(profile["disable"])}
+    for alias in add_enable:
+        if alias not in profile["enable"]:
+            profile["enable"].append(alias)
+        if alias in profile["disable"]:
+            profile["disable"].remove(alias)
+    for alias in add_disable:
+        if alias not in profile["disable"]:
+            profile["disable"].append(alias)
+        if alias in profile["enable"]:
+            profile["enable"].remove(alias)
+    for alias in remove_enable:
+        if alias in profile["enable"]:
+            profile["enable"].remove(alias)
+    for alias in remove_disable:
+        if alias in profile["disable"]:
+            profile["disable"].remove(alias)
+    write_json_atomic(catalog_path, catalog)
+    return {"ok": True, "diff": {"old": old, "new": {"enable": profile["enable"], "disable": profile["disable"]}}}
+
+
+def catalog_add_overlay(name: str, description: str, enable: list, disable: list,
+                        catalog_path: Path = None) -> dict:
+    catalog_path = catalog_path or _DEFAULT_CATALOG
+    if _is_cache_path(catalog_path):
+        return _error("CACHE_PATH", "Catalog editor cannot write to plugin cache",
+                      path=str(catalog_path))
+    catalog = load_catalog(catalog_path)
+    if "error" in catalog:
+        return catalog
+    plugin_ids = catalog.get("pluginIds", {})
+    for alias in enable + disable:
+        if alias and alias not in plugin_ids:
+            return _error("UNKNOWN_PLUGIN_ALIAS", f"Unknown alias: '{alias}'", alias=alias)
+    if name in catalog.get("overlays", {}):
+        return _error("OVERLAY_EXISTS", f"Overlay '{name}' already exists. Use edit-overlay.")
+    catalog.setdefault("overlays", {})[name] = {
+        "description": description, "enable": enable, "disable": disable,
+    }
+    write_json_atomic(catalog_path, catalog)
+    return {"ok": True, "diff": {"added": {f"overlays.{name}": catalog["overlays"][name]}}}
+
+
+def catalog_edit_overlay(name: str, add_enable: list, add_disable: list,
+                         remove_enable: list, remove_disable: list,
+                         catalog_path: Path = None) -> dict:
+    catalog_path = catalog_path or _DEFAULT_CATALOG
+    if _is_cache_path(catalog_path):
+        return _error("CACHE_PATH", "Catalog editor cannot write to plugin cache",
+                      path=str(catalog_path))
+    catalog = load_catalog(catalog_path)
+    if "error" in catalog:
+        return catalog
+    if name not in catalog.get("overlays", {}):
+        return _error("UNKNOWN_OVERLAY", f"Overlay '{name}' not found")
+    plugin_ids = catalog.get("pluginIds", {})
+    for alias in add_enable + add_disable + remove_enable + remove_disable:
+        if alias and alias not in plugin_ids:
+            return _error("UNKNOWN_PLUGIN_ALIAS", f"Unknown alias: '{alias}'", alias=alias)
+    overlay = catalog["overlays"][name]
+    old = {"enable": list(overlay["enable"]), "disable": list(overlay["disable"])}
+    for alias in add_enable:
+        if alias not in overlay["enable"]:
+            overlay["enable"].append(alias)
+        if alias in overlay["disable"]:
+            overlay["disable"].remove(alias)
+    for alias in add_disable:
+        if alias not in overlay["disable"]:
+            overlay["disable"].append(alias)
+        if alias in overlay["enable"]:
+            overlay["enable"].remove(alias)
+    for alias in remove_enable:
+        if alias in overlay["enable"]:
+            overlay["enable"].remove(alias)
+    for alias in remove_disable:
+        if alias in overlay["disable"]:
+            overlay["disable"].remove(alias)
+    write_json_atomic(catalog_path, catalog)
+    return {"ok": True, "diff": {"old": old, "new": {"enable": overlay["enable"], "disable": overlay["disable"]}}}
+
+
 # ── CLI modes ────────────────────────────────────────────────────────────────
 
 def _recommend(cwd: Path, catalog: dict) -> str:
@@ -303,16 +451,33 @@ def _recommend(cwd: Path, catalog: dict) -> str:
 
 def run_cli(args: list, *, catalog_path: Path = None) -> dict:
     """Parse CLI args and run the requested mode. Returns JSON-serialisable dict."""
+    # Extract optional catalog subcmd before argparse sees it
+    _args = list(args)
+    _subcmd = None
+    if _args and _args[0] == "catalog" and len(_args) > 1 and not _args[1].startswith("-"):
+        _subcmd = _args[1]
+        _args = [_args[0]] + _args[2:]
+
     parser = argparse.ArgumentParser(prog="apply_agent_profile")
     parser.add_argument("mode", choices=[
-        "status", "recommend", "diff", "apply", "add", "remove", "reset", "sync", "doctor"
+        "status", "recommend", "diff", "apply", "add", "remove", "reset", "sync", "doctor",
+        "catalog",
     ])
     parser.add_argument("--cwd", default=".")
     parser.add_argument("--base", default=None)
     parser.add_argument("--overlay", default=None)
     parser.add_argument("--context", default=None)
     parser.add_argument("--dry-run", action="store_true")
-    parsed = parser.parse_args(args)
+    parser.add_argument("--name", default=None)
+    parser.add_argument("--description", default="")
+    parser.add_argument("--enable", default="")
+    parser.add_argument("--disable", default="")
+    parser.add_argument("--add-enable", default="", dest="add_enable")
+    parser.add_argument("--add-disable", default="", dest="add_disable")
+    parser.add_argument("--remove-enable", default="", dest="remove_enable")
+    parser.add_argument("--remove-disable", default="", dest="remove_disable")
+    parsed = parser.parse_args(_args)
+    parsed.subcmd = _subcmd
 
     cwd = Path(parsed.cwd).resolve()
     catalog_path = catalog_path or _DEFAULT_CATALOG
@@ -398,6 +563,50 @@ def run_cli(args: list, *, catalog_path: Path = None) -> dict:
                            "detail": resolve_result.get("error", {}).get("message", "")})
 
         return {"checks": checks, "cwd": str(cwd)}
+
+    if mode == "catalog":
+        subcmd = parsed.subcmd
+        def _split(s): return [x.strip() for x in s.split(",") if x.strip()]
+
+        if subcmd == "list":
+            return catalog_list(catalog_path=catalog_path)
+        if subcmd == "list-plugins":
+            return catalog_list_plugins(catalog_path=catalog_path)
+        if subcmd == "add-profile":
+            if not parsed.name:
+                return _error("MISSING_ARG", "catalog add-profile requires --name")
+            return catalog_add_profile(
+                parsed.name, parsed.description,
+                _split(parsed.enable), _split(parsed.disable),
+                catalog_path=catalog_path,
+            )
+        if subcmd == "edit-profile":
+            if not parsed.name:
+                return _error("MISSING_ARG", "catalog edit-profile requires --name")
+            return catalog_edit_profile(
+                parsed.name,
+                _split(parsed.add_enable), _split(parsed.add_disable),
+                _split(parsed.remove_enable), _split(parsed.remove_disable),
+                catalog_path=catalog_path,
+            )
+        if subcmd == "add-overlay":
+            if not parsed.name:
+                return _error("MISSING_ARG", "catalog add-overlay requires --name")
+            return catalog_add_overlay(
+                parsed.name, parsed.description,
+                _split(parsed.enable), _split(parsed.disable),
+                catalog_path=catalog_path,
+            )
+        if subcmd == "edit-overlay":
+            if not parsed.name:
+                return _error("MISSING_ARG", "catalog edit-overlay requires --name")
+            return catalog_edit_overlay(
+                parsed.name,
+                _split(parsed.add_enable), _split(parsed.add_disable),
+                _split(parsed.remove_enable), _split(parsed.remove_disable),
+                catalog_path=catalog_path,
+            )
+        return _error("UNKNOWN_CATALOG_SUBCMD", f"Unknown catalog subcommand: '{subcmd}'")
 
     return _error("UNKNOWN_MODE", f"Unknown mode: {mode}")
 
