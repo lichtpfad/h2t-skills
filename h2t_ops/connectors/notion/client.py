@@ -253,6 +253,101 @@ class NotionClient:
             start_cursor = response.get("next_cursor")
         return {"kind": "notion_workspace_search/v1", "object": object_type, "results": results}
 
+    def _title_from_object(self, obj: Dict[str, Any]) -> str:
+        properties = obj.get("properties", {})
+        for prop in properties.values():
+            if prop.get("type") == "title":
+                return self._rich_text_to_markdown(prop.get("title", [])) or "Untitled"
+            if "title" in prop and isinstance(prop.get("title"), list):
+                return self._rich_text_to_markdown(prop.get("title", [])) or "Untitled"
+
+        obj_type = obj.get("type")
+        if obj_type == "child_database":
+            return obj.get("child_database", {}).get("title") or "Untitled"
+        if obj_type == "child_page":
+            return obj.get("child_page", {}).get("title") or "Untitled"
+        if obj_type and obj_type in obj:
+            typed = obj.get(obj_type, {})
+            if isinstance(typed, dict):
+                rich_text = typed.get("rich_text")
+                if isinstance(rich_text, list):
+                    return self._rich_text_to_markdown(rich_text) or obj_type
+        return obj.get("object") or obj_type or "Untitled"
+
+    def graph_page(
+        self,
+        root_page_id: str,
+        *,
+        max_depth: int = 3,
+        include_databases: bool = True,
+        root_label: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        nodes: List[Dict[str, Any]] = []
+        edges: List[Dict[str, Any]] = []
+        parent_map: Dict[str, str] = {}
+        children_map: Dict[str, List[str]] = {root_page_id: []}
+        errors: List[Dict[str, Any]] = []
+
+        root = self.get_page(root_page_id)
+        nodes.append({
+            "id": root_page_id,
+            "object": root.get("object", "page"),
+            "type": root.get("object", "page"),
+            "title": root_label or self._title_from_object(root),
+            "parent": root.get("parent", {}),
+            "parent_chain": [],
+            "source_ref": f"notion:page:{root_page_id}",
+            "notion_url": root.get("url", ""),
+            "created_time": root.get("created_time", ""),
+            "last_edited_time": root.get("last_edited_time", ""),
+        })
+
+        for item in self.iter_blocks_recursive(root_page_id, max_depth=max_depth):
+            block = item["block"]
+            block_id = block.get("id", "")
+            if not block_id:
+                continue
+            block_type = block.get("type", "")
+            if block_type == "child_database" and not include_databases:
+                continue
+
+            parent = block.get("parent", {})
+            parent_id = parent.get("page_id") or parent.get("block_id") or root_page_id
+            object_type = "database" if block_type == "child_database" else "block"
+
+            nodes.append({
+                "id": block_id,
+                "object": object_type,
+                "type": block_type,
+                "title": self._title_from_object(block),
+                "parent": parent,
+                "parent_chain": [root_page_id] + item.get("path", []),
+                "source_ref": f"notion:{object_type}:{block_id}",
+                "notion_url": block.get("url", ""),
+                "created_time": block.get("created_time", ""),
+                "last_edited_time": block.get("last_edited_time", ""),
+            })
+            parent_map[block_id] = parent_id
+            children_map.setdefault(parent_id, []).append(block_id)
+            children_map.setdefault(block_id, [])
+            edges.append({"from": parent_id, "to": block_id, "relation": "contains"})
+
+        return {
+            "kind": "notion_workspace_graph/v1",
+            "root_page_id": root_page_id,
+            "root_label": root_label,
+            "nodes": nodes,
+            "edges": edges,
+            "parent_map": parent_map,
+            "children_map": children_map,
+            "errors": errors + list(getattr(self, "_last_traversal_errors", [])),
+            "stats": {
+                "nodes": len(nodes),
+                "edges": len(edges),
+                "blocks_seen": len(parent_map),
+            },
+        }
+
     def find_databases_on_page(
         self,
         page_id: str,

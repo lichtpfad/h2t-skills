@@ -30,6 +30,16 @@ def register(subparsers: Any) -> None:
     sw.add_argument("--object", choices=["page", "database", "all"], default="all")
     sw.add_argument("--limit", type=int)
     add_fmt(sw)
+    gr = cmds.add_parser("graph", help="Build a page subtree graph")
+    gr.add_argument("root_page_id")
+    gr.add_argument("--max-depth", type=int, default=3)
+    db_group = gr.add_mutually_exclusive_group()
+    db_group.add_argument("--include-databases", dest="include_databases",
+                          action="store_true", default=True)
+    db_group.add_argument("--no-include-databases", dest="include_databases",
+                          action="store_false")
+    gr.add_argument("--root-label")
+    add_fmt(gr)
     fd = cmds.add_parser("find-databases", help="Find databases on a page")
     fd.add_argument("page_id")
     fd.add_argument("--recursive", action="store_true")
@@ -108,6 +118,13 @@ def run(args) -> Any:
             rows, client.get_database(args.database_id))
     if cmd == "search-workspace":
         return client.search_workspace(object_type=args.object, limit=args.limit)
+    if cmd == "graph":
+        return client.graph_page(
+            args.root_page_id,
+            max_depth=args.max_depth,
+            include_databases=args.include_databases,
+            root_label=args.root_label,
+        )
     if cmd == "find-databases":
         return client.find_databases_on_page(
             args.page_id,

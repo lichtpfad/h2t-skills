@@ -426,3 +426,71 @@ def test_search_workspace_zero_limit_returns_empty_without_search(conv):
 
     assert result["kind"] == "notion_workspace_search/v1"
     assert result["results"] == []
+
+
+def test_graph_page_returns_nodes_edges_and_maps(conv):
+    conv.get_page = lambda page_id: {
+        "id": page_id,
+        "object": "page",
+        "parent": {"type": "workspace"},
+        "url": "https://notion.so/root",
+        "created_time": "c",
+        "last_edited_time": "m",
+        "properties": {"title": {"type": "title", "title": [{"type": "text", "text": {"content": "Root"}}]}},
+    }
+    conv.iter_blocks_recursive = lambda page_id, max_depth=3, limit_blocks=None: iter([
+        {
+            "block": {
+                "id": "b1",
+                "type": "paragraph",
+                "parent": {"type": "page_id", "page_id": "root"},
+                "created_time": "c",
+                "last_edited_time": "m",
+            },
+            "depth": 1,
+            "path": ["Root"],
+        },
+        {
+            "block": {
+                "id": "db1",
+                "type": "child_database",
+                "parent": {"type": "page_id", "page_id": "root"},
+                "child_database": {"title": "Tasks"},
+                "created_time": "c",
+                "last_edited_time": "m",
+            },
+            "depth": 1,
+            "path": ["Root"],
+        },
+    ])
+
+    result = conv.graph_page("root", max_depth=2)
+
+    assert result["kind"] == "notion_workspace_graph/v1"
+    assert result["parent_map"]["b1"] == "root"
+    assert result["parent_map"]["db1"] == "root"
+    assert result["children_map"]["root"] == ["b1", "db1"]
+    assert result["edges"] == [
+        {"from": "root", "to": "b1", "relation": "contains"},
+        {"from": "root", "to": "db1", "relation": "contains"},
+    ]
+    assert result["nodes"][0]["source_ref"] == "notion:page:root"
+    assert result["nodes"][1]["source_ref"] == "notion:block:b1"
+    assert result["nodes"][2]["source_ref"] == "notion:database:db1"
+    assert result["nodes"][1]["parent"] == {"type": "page_id", "page_id": "root"}
+    assert result["nodes"][1]["parent_chain"] == ["root", "Root"]
+
+
+def test_graph_page_includes_traversal_permission_errors(conv):
+    conv.get_page = lambda page_id: {
+        "id": page_id,
+        "object": "page",
+        "parent": {"type": "workspace"},
+        "properties": {},
+    }
+    conv.iter_blocks_recursive = lambda page_id, max_depth=3, limit_blocks=None: iter([])
+    conv._last_traversal_errors = [{"block_id": "restricted", "error": "blocked"}]
+
+    result = conv.graph_page("root")
+
+    assert result["errors"] == [{"block_id": "restricted", "error": "blocked"}]

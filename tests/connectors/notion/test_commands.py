@@ -255,6 +255,24 @@ def test_search_workspace_parser_accepts_object_limit_and_json():
     assert ns.as_json is True
 
 
+def test_search_workspace_and_graph_parsers_registered():
+    parser = _parser()
+    ns = parser.parse_args([
+        "notion", "graph", "ROOT", "--max-depth", "2", "--include-databases", "--json",
+    ])
+    assert ns.notion_cmd == "graph"
+    assert ns.root_page_id == "ROOT"
+    assert ns.max_depth == 2
+    assert ns.include_databases is True
+    assert ns.as_json is True
+
+    ns2 = parser.parse_args(["notion", "graph", "ROOT", "--json"])
+    assert ns2.include_databases is True
+
+    ns3 = parser.parse_args(["notion", "graph", "ROOT", "--no-include-databases", "--json"])
+    assert ns3.include_databases is False
+
+
 def test_find_databases_dispatch_passes_recursive_options(monkeypatch):
     import h2t_ops.connectors.notion.client as client_mod
     from h2t_ops.connectors.notion import commands as cmds_mod
@@ -288,6 +306,38 @@ def test_find_databases_dispatch_passes_recursive_options(monkeypatch):
         "limit_blocks": 200,
         "with_rows": True,
         "row_limit": 5,
+    })]
+
+
+def test_graph_dispatch_passes_options(monkeypatch):
+    import h2t_ops.connectors.notion.client as client_mod
+    from h2t_ops.connectors.notion import commands as cmds_mod
+    from types import SimpleNamespace
+
+    calls = []
+
+    class _Stub:
+        def graph_page(self, root_page_id, **kwargs):
+            calls.append((root_page_id, kwargs))
+            return {"kind": "notion_workspace_graph/v1"}
+
+    monkeypatch.setattr(client_mod, "NotionClient", lambda: _Stub())
+
+    out = cmds_mod.run(SimpleNamespace(
+        notion_cmd="graph",
+        root_page_id="ROOT",
+        max_depth=2,
+        include_databases=True,
+        root_label="KB",
+        as_json=True,
+        fmt="human",
+    ))
+
+    assert out == {"kind": "notion_workspace_graph/v1"}
+    assert calls == [("ROOT", {
+        "max_depth": 2,
+        "include_databases": True,
+        "root_label": "KB",
     })]
 
 
@@ -326,6 +376,24 @@ def test_search_workspace_json_uses_universal_envelope(monkeypatch, capsys):
     payload = json.loads(capsys.readouterr().out)
     assert payload["ok"] is True
     assert payload["result"]["kind"] == "notion_workspace_search/v1"
+
+
+def test_graph_json_uses_universal_envelope(monkeypatch, capsys):
+    import h2t_ops.connectors.notion.client as client_mod
+
+    class _Stub:
+        def graph_page(self, root_page_id, **kwargs):
+            assert root_page_id == "ROOT"
+            return {"kind": "notion_workspace_graph/v1", "nodes": []}
+
+    monkeypatch.setattr(client_mod, "NotionClient", lambda: _Stub())
+
+    code = dispatch(["notion", "graph", "ROOT", "--json"])
+
+    assert code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["ok"] is True
+    assert payload["result"]["kind"] == "notion_workspace_graph/v1"
 
 
 def test_search_workspace_json_default_limit_is_none(monkeypatch, capsys):
