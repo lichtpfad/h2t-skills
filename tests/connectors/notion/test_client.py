@@ -545,6 +545,54 @@ def test_graph_block_parent_owner_chain_uses_retrieve_block(conv):
     assert result["owner_map"]["nested"]["owner_page_source_ref"] == "notion:page:root"
 
 
+def test_graph_block_parent_owner_chain_caches_shared_parent_lookup(conv):
+    conv.get_page = lambda page_id: {
+        "id": "root",
+        "object": "page",
+        "parent": {"type": "workspace"},
+        "properties": {},
+    }
+    calls = []
+
+    def _get_block(block_id):
+        calls.append(block_id)
+        return {
+            "id": block_id,
+            "type": "paragraph",
+            "parent": {"type": "page_id", "page_id": "root"},
+        }
+
+    conv.get_block = _get_block
+    conv.iter_blocks_recursive = lambda page_id, max_depth=3, limit_blocks=None: iter([
+        {
+            "block": {
+                "id": "nested-a",
+                "type": "paragraph",
+                "parent": {"type": "block_id", "block_id": "owner"},
+            },
+            "depth": 2,
+            "path": [],
+        },
+        {
+            "block": {
+                "id": "nested-b",
+                "type": "paragraph",
+                "parent": {"type": "block_id", "block_id": "owner"},
+            },
+            "depth": 2,
+            "path": [],
+        },
+    ])
+
+    result = conv.graph_page("root")
+
+    assert calls == ["owner"]
+    assert result["owner_map"]["nested-a"]["owner_page_id"] == "root"
+    assert result["owner_map"]["nested-b"]["owner_page_id"] == "root"
+    assert result["owner_map"]["nested-a"]["chain"] == ["owner"]
+    assert result["owner_map"]["nested-b"]["chain"] == ["owner"]
+
+
 def test_graph_block_parent_owner_resolution_error_keeps_node(conv):
     conv.get_page = lambda page_id: {
         "id": "root",
@@ -576,8 +624,72 @@ def test_graph_block_parent_owner_resolution_error_keeps_node(conv):
     assert result["owner_map"]["nested"]["owner_block_id"] == "owner"
     assert result["owner_map"]["nested"]["owner_page_id"] is None
     assert result["owner_map"]["nested"]["error"] == "restricted owner"
+    assert result["owner_map"]["nested"]["error_type"] == "ProviderError"
     assert result["errors"] == [
-        {"block_id": "nested", "owner_block_id": "owner", "error": "restricted owner"}
+        {
+            "block_id": "nested",
+            "owner_block_id": "owner",
+            "error": "restricted owner",
+            "error_type": "ProviderError",
+        }
+    ]
+
+
+def test_graph_block_parent_owner_resolution_error_caches_shared_parent_lookup(conv):
+    conv.get_page = lambda page_id: {
+        "id": "root",
+        "object": "page",
+        "parent": {"type": "workspace"},
+        "properties": {},
+    }
+    calls = []
+
+    def _blocked(block_id):
+        calls.append(block_id)
+        raise ProviderError("restricted owner")
+
+    conv.get_block = _blocked
+    conv.iter_blocks_recursive = lambda page_id, max_depth=3, limit_blocks=None: iter([
+        {
+            "block": {
+                "id": "nested-a",
+                "type": "paragraph",
+                "parent": {"type": "block_id", "block_id": "owner"},
+            },
+            "depth": 2,
+            "path": [],
+        },
+        {
+            "block": {
+                "id": "nested-b",
+                "type": "paragraph",
+                "parent": {"type": "block_id", "block_id": "owner"},
+            },
+            "depth": 2,
+            "path": [],
+        },
+    ])
+
+    result = conv.graph_page("root")
+
+    assert calls == ["owner"]
+    assert result["owner_map"]["nested-a"]["error"] == "restricted owner"
+    assert result["owner_map"]["nested-b"]["error"] == "restricted owner"
+    assert result["owner_map"]["nested-a"]["error_type"] == "ProviderError"
+    assert result["owner_map"]["nested-b"]["error_type"] == "ProviderError"
+    assert result["errors"] == [
+        {
+            "block_id": "nested-a",
+            "owner_block_id": "owner",
+            "error": "restricted owner",
+            "error_type": "ProviderError",
+        },
+        {
+            "block_id": "nested-b",
+            "owner_block_id": "owner",
+            "error": "restricted owner",
+            "error_type": "ProviderError",
+        },
     ]
 
 

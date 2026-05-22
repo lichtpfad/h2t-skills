@@ -329,6 +329,8 @@ class NotionClient:
         edges: List[Dict[str, Any]] = []
         parent_map: Dict[str, str] = {}
         owner_map: Dict[str, Dict[str, Any]] = {}
+        owner_cache: Dict[str, Dict[str, Any]] = {}
+        owner_error_keys: set[tuple[str, str, str, str]] = set()
         children_map: Dict[str, List[str]] = {}
         errors: List[Dict[str, Any]] = []
 
@@ -362,22 +364,47 @@ class NotionClient:
             object_type = "database" if block_type == "child_database" else "block"
             if parent.get("type") == "block_id" and parent.get("block_id"):
                 owner_block_id = parent["block_id"]
-                try:
-                    owner_map[block_id] = self._resolve_block_owner(owner_block_id)
-                except Exception as exc:
-                    owner_map[block_id] = {
-                        "owner_block_id": owner_block_id,
-                        "owner_page_id": None,
-                        "chain": [owner_block_id],
-                        "source_refs": [f"notion:block:{owner_block_id}"],
-                        "owner_page_source_ref": None,
-                        "error": str(exc),
-                    }
-                    errors.append({
+                if owner_block_id not in owner_cache:
+                    try:
+                        owner_cache[owner_block_id] = {
+                            "ok": True,
+                            "owner": self._resolve_block_owner(owner_block_id),
+                        }
+                    except Exception as exc:
+                        error_type = type(exc).__name__
+                        owner_cache[owner_block_id] = {
+                            "ok": False,
+                            "owner": {
+                                "owner_block_id": owner_block_id,
+                                "owner_page_id": None,
+                                "chain": [owner_block_id],
+                                "source_refs": [f"notion:block:{owner_block_id}"],
+                                "owner_page_source_ref": None,
+                                "error": str(exc),
+                                "error_type": error_type,
+                            },
+                            "error": str(exc),
+                            "error_type": error_type,
+                        }
+
+                cached_owner = owner_cache[owner_block_id]
+                owner_map[block_id] = dict(cached_owner["owner"])
+                if not cached_owner["ok"]:
+                    error_entry = {
                         "block_id": block_id,
                         "owner_block_id": owner_block_id,
-                        "error": str(exc),
-                    })
+                        "error": cached_owner["error"],
+                        "error_type": cached_owner["error_type"],
+                    }
+                    error_key = (
+                        block_id,
+                        owner_block_id,
+                        cached_owner["error"],
+                        cached_owner["error_type"],
+                    )
+                    if error_key not in owner_error_keys:
+                        owner_error_keys.add(error_key)
+                        errors.append(error_entry)
 
             nodes.append({
                 "id": block_id,
