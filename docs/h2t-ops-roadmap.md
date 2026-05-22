@@ -52,19 +52,18 @@ The M3 connector migration is complete.
 | Duplicate skill entries | #150, #152, #153 cleanup commits | Done for split plugins |
 | Legacy `h2t` marketplace plugin | #151 | Retired; split plugins are active entrypoints |
 
-### Active Critical Path
+### Active Closure Streams
 
-The migration and connector freeze are done. Known provider gaps, secrets/setup
-assumptions, and Mac portability work are classified as backlog/follow-up rather
-than active connector migration.
+The migration and connector freeze are done. Only `h2t-core:agent-profile` is
+on the active critical path. Security/dev hygiene, CI assumptions, secrets/setup,
+and Mac portability are real work, but they are classified as technical debt /
+platform hardening rather than connector or product migration.
 
-| Priority | Issue(s) | Work | Why it matters |
+| Priority | Issue(s) | Work | Classification |
 | --- | --- | --- | --- |
-| 1 | #153 | `h2t-core:agent-profile` | Replace global everything-enabled plugin load with repo base profiles, task overlays, and sync between machines |
-| 2 | #148 | Harden tracked agent permissions and context packer | Prevent broad local-agent permissions and unpinned `npx repomix@latest` from becoming shipped policy |
-| 3 | #85 | CI/unit-test hygiene | Reduce hidden platform assumptions before Mac portability work |
-| 4 | #13, #107, #109, #110, #112, #94 | Setup / secrets / Mac portability backlog | Keep as a deliberate setup stream, not connector migration |
-| 5 | #81, #146, #145 | Provider feature backlog | Notion discovery/dump and Calendar provider expansion; do not silently absorb into maintenance work |
+| 1 | #153 | `h2t-core:agent-profile` | Active critical path |
+| 2 | #148, #85, #13, #94, #107, #109, #110, #112, #73, #79, #53 | Platform technical debt / hardening | Security-sensitive technical debt; keep tracked, but do not treat as connector migration |
+| 3 | #81, #146, #145 | Provider feature backlog | Product/provider backlog; pull only when explicitly scoped |
 
 ## Critical Path Details
 
@@ -204,7 +203,7 @@ Definition of done:
 - at least one real repo profile is applied and verified with `/context`;
 - rollback path is documented.
 
-### 8. Security / Dev Hygiene (#148)
+### 8. Platform Technical Debt: Security / Dev Hygiene (#148)
 
 Known findings to resolve:
 
@@ -219,10 +218,12 @@ Policy:
 - keep tracked permission config narrow and repo-scoped;
 - pin or remove runtime execution of unreviewed `@latest` packages.
 
-This was intentionally deferred during connector migration. It is now part of
-the closure path.
+This was intentionally deferred during connector migration. It is now classified
+as security-sensitive technical debt: it should be handled before broader
+production/Mac rollout, but it is not connector work and should not reopen
+provider migration scope.
 
-### 9. CI / Test Hygiene (#85)
+### 9. Platform Technical Debt: CI / Test Hygiene (#85)
 
 Fix known CI failures before calling the repo stable:
 
@@ -230,7 +231,7 @@ Fix known CI failures before calling the repo stable:
 - stale stack assertions;
 - any Windows-only assumptions that break Linux/macOS CI.
 
-This is infrastructure work, not connector feature work.
+This is infrastructure technical debt, not connector feature work.
 
 ### 10. Issue Sweep
 
@@ -385,12 +386,10 @@ Important for finishing the repository:
 ## Practical Order
 
 1. Implement #153 `h2t-core:agent-profile`.
-2. Resolve #148 security/dev hygiene.
-3. Fix #85 CI/unit-test hygiene.
-4. Consolidate setup / secrets / Mac portability follow-ups into a deliberate
-   platform stream.
-5. Sweep remaining issues into active / backlog / moved / stale-closed.
-6. Only then pick the next product stream: Calendar/Notion provider features, research
+2. Keep #148/#85/secrets/Mac items grouped as platform technical debt; handle
+   #148 first if production hardening or Mac rollout starts.
+3. Sweep remaining issues into active / backlog / moved / stale-closed.
+4. Only then pick the next product stream: Calendar/Notion provider features, research
    product backlog, creative recovery, or POS-side workflow contracts.
 
 ## Closure Forecast
@@ -407,9 +406,7 @@ the final smoke gate passed, the `h2t-ops --help` regression was fixed in
 | Remaining block | Optimistic | Realistic | Main risk |
 | --- | ---: | ---: | --- |
 | #153 `h2t-core:agent-profile` | 1-2 days | 2-3 days | Profile merge semantics, temporary overlays, cross-machine sync |
-| #148 permissions / context packer hardening | 0.5-1 day | 1-2 days | Separating personal allowlists from tracked repo policy |
-| #85 CI/unit-test hygiene | 0.5-1 day | 1-2 days | Hidden platform assumptions |
-| Setup / secrets / Mac portability consolidation | 0.5-1 day | 1-2 days | Deciding what is platform work vs provider backlog |
+| Platform technical debt batch (#148/#85/secrets/Mac) | 2-3 days | 3-5 days | Separating true hardening from optional cleanup |
 | Issue sweep / reclassification | 0.5-1 day | 1-2 days | Old issues that need careful "move vs close" decisions |
 
 Remaining estimate to maintenance/closure mode:
