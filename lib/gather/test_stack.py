@@ -7,9 +7,9 @@ def test_detect_stack_returns_dict():
     assert isinstance(result, dict)
     assert "name" in result and "commands" in result
 
-def test_detect_stack_no_marker():
-    """Current repo has no package.json/pyproject.toml — should return 'none'."""
-    result = detect_stack(".")
+def test_detect_stack_no_marker(tmp_path):
+    """A directory with no stack markers should return 'none'."""
+    result = detect_stack(str(tmp_path))
     assert result["name"] == "none"
 
 if __name__ == "__main__":
