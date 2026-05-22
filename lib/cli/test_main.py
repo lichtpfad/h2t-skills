@@ -4,16 +4,14 @@ import subprocess
 import sys
 from pathlib import Path
 
-VENV_PYTHON = Path.home() / ".h2t" / "venv" / "Scripts" / "python.exe"
-if not VENV_PYTHON.exists():
-    VENV_PYTHON = Path.home() / ".h2t" / "venv" / "bin" / "python"
+TEST_PYTHON = sys.executable
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
 
 def run_h2t(*args):
     result = subprocess.run(
-        [str(VENV_PYTHON), "-m", "lib.cli.main", *args],
+        [TEST_PYTHON, "-m", "lib.cli.main", *args],
         capture_output=True, text=True, encoding="utf-8", cwd=str(REPO_ROOT)
     )
     return result.returncode, result.stdout, result.stderr
