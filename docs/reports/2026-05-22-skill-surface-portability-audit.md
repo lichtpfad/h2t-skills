@@ -10,6 +10,7 @@ Tracking issues:
 
 - #160 `h2t-core: setup/update delivery + lifecycle context budget`
 - #161 `h2t-ops: connector navigator + skill surface consolidation`
+- #162 `h2t-ops drive: recursive folder upload/mirror`
 
 ## Current State
 
@@ -167,6 +168,10 @@ Policy:
 - Prefer explicit user confirmation before creating GitHub issues unless the user has already asked to track the work.
 
 This belongs in the connector navigator or shared h2t-ops reference, not duplicated across every connector skill.
+
+Concrete example: uploading a folder of HTML, videos, and images to Google Drive
+should be `h2t-ops drive upload-folder` / `mirror`, not an ad-hoc Google API
+script written by the agent. Tracked by #162.
 
 ## Critical Path
 
