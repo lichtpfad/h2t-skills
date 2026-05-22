@@ -6,9 +6,9 @@
 **Milestone tag:** `milestone/legacy-h2t-retired-2026-05-21`
 
 This roadmap tracks the remaining work needed to move `h2t-skills` from active
-connector migration into a cleaner maintenance mode. The immediate preference is
-to fully freeze connector work first, then move to agent profiles and Mac
-portability with fewer moving parts.
+connector migration into a cleaner maintenance mode. The connector layer is now
+shippable; the remaining work is profile/context UX, issue hygiene, and future
+product streams.
 
 ## North Star
 
@@ -48,24 +48,35 @@ The M3 connector migration is complete.
 | Runtime smoke / UTF-8 fixes | #139, #141, #143 | Done |
 | MeetGeek local recovery | #149 | Done; kept as skill-layer recovery, not connector runtime |
 | MeetGeek listed-meeting 404 | #156 | Done; fixed in `f363746`, live `get` and `transcript` E2E passed |
+| Notion functional completion | #81, #146 | Done; fixed in `4c952d1`, embedded DB and workspace graph E2E passed |
+| Calendar provider completion | #145 | Done; fixed in `0acb44b`, CI and live E2E passed |
 | Drive `sync-meetings` | #147 | Retired from Drive; semantics moved to future POS/coordinator backlog |
 | Duplicate skill entries | #150, #152, #153 cleanup commits | Done for split plugins |
 | Legacy `h2t` marketplace plugin | #151 | Retired; split plugins are active entrypoints |
 
+### Shippable Handoff
+
+`h2t-ops` is shippable for POS/provider use as of 2026-05-22.
+
+The operator-facing handoff and quickstart are captured in
+`docs/reports/2026-05-22-h2t-ops-shippable-handoff.md`.
+
+POS can consume connector JSON/artifacts. POS still owns canonical state,
+interpretation, journal/task/decision acceptance, and long-term registries.
+
 ### Active Closure Streams
 
-The migration and connector freeze are done. Only `h2t-core:agent-profile` is
-on the active critical path. The concrete #148 security/dev hygiene task and #85
-CI/unit-test hygiene task are closed. Remaining hygiene is routine maintenance,
-not a closure blocker and not connector or product migration.
+The migration and connector freeze are done. No open h2t-skills issue blocks
+using `h2t-ops` from POS. The active path is now repo/product hygiene: profile
+UX, optional connector skill consolidation, and issue sweep.
 
 | Priority | Issue(s) | Work | Classification |
 | --- | --- | --- | --- |
-| 1 | #153 | `h2t-core:agent-profile` | Active critical path |
-| 2 | #148, #85 | Security/dev hygiene and CI/unit-test hygiene | Done; no active closure blocker |
-| 3 | #13, #94, #107, #109, #110, #73, #79, #53 | Platform portability / credential policy | Done or consolidated into policy; routine maintenance only |
-| 4 | #112 | Setup wizard backlog | Future onboarding UX, separate from closure |
-| 5 | #81, #146, #145 | Provider feature backlog | Product/provider backlog; pull only when explicitly scoped |
+| 1 | #153 | `h2t-core:agent-profile` configurator and repo profiles | Active repo UX path, not h2t-ops blocker |
+| 2 | New follow-up | Consolidate non-research connector skills into one skill + references | Context-budget UX, not connector blocker |
+| 3 | #148, #85 | Security/dev hygiene and CI/unit-test hygiene | Done; routine maintenance only |
+| 4 | #13, #94, #107, #109, #110, #73, #79, #53 | Platform portability / credential policy | Done or consolidated into policy; routine maintenance only |
+| 5 | #112 | Setup wizard backlog | Future onboarding UX, separate from closure |
 
 ## Critical Path Details
 
@@ -77,14 +88,15 @@ This does not mean implementing every provider feature. It means every known
 connector issue is intentionally classified:
 
 - fix now;
-- accepted provider/product backlog;
+- completed provider/product closure;
+- accepted future product backlog;
 - Mac/setup portability follow-up;
 - stale/superseded and closed with evidence.
 
 Definition of done:
 
-- #82/#145 Calendar are resolved into a fix-now scope plus provider backlog;
-- #81/#146 Notion are resolved into fix-now or accepted backlog;
+- #82/#145 Calendar are fixed and closed;
+- #81/#146 Notion are fixed and closed;
 - #107/#109/#110/#112/#94/#13 secrets/setup issues are consolidated enough that
   connector credentials can be ported to Mac deliberately;
 - #53/#73/#85/#79 cross-platform issues are triaged against h2t-ops connector usage;
@@ -126,28 +138,27 @@ next-day API bound, and query timezone resolves from `--tz` -> `H2T_CALENDAR_TZ`
 -> `Asia/Jerusalem`. `--busy-only` filters raw events before normalization:
 missing `transparency` means busy; `transparency: transparent` is excluded.
 
-Broader #145 provider features can remain backlog unless pulled in explicitly:
-Meet links, recurrence, patch/reschedule, all-day, multi-calendar, reminders, and
-FreeBusy. `free-time` is also backlog unless explicitly scoped later.
-
 Status:
 
 - #82 is fixed in `6631f57` and closed with E2E evidence.
 - E2E passed for old `--days`, explicit `--from/--to`, `--busy-only`, and
   partial-window validation.
-- #145 remains provider backlog, not connector-freeze critical path.
+- #145 is fixed in `0acb44b` and closed. CI passed, and live E2E passed for
+  calendar listing, FreeBusy, all-day events, Google Meet links, recurrence,
+  reminders, event update, and cleanup.
 
-### 4. Notion Closure (#81, #146)
+### 4. Resolved: Notion Closure (#81, #146)
 
-Goal: decide whether Notion needs one more connector pass before freeze.
+Goal: complete practical Notion provider functionality before handoff.
 
-Known gaps:
+Status: done in `4c952d1`; #81 and #146 are closed.
 
-- child_database / embedded DB traversal (#81);
-- workspace discovery and parent graph (#146).
+Resolution:
 
-If these are not required for immediate connector closure, mark them as accepted
-provider backlog rather than keeping them on the critical path.
+- recursive block scan discovers `child_database` blocks;
+- embedded database IDs can be queried and dumped;
+- workspace search/graph functionality is available for parent/child discovery;
+- sync emits sidecar metadata for machine-readable references.
 
 ### 5. Secrets / Setup Closure
 
@@ -253,8 +264,8 @@ Recommended triage:
 | Connector freeze umbrella | #155 | Closed; final smoke gate fixed in `494a947` |
 | MeetGeek follow-up | #156 | Closed; fixed in `f363746` |
 | Secrets/setup | #107, #112, #94, #109, #110, #13 | Classified as setup/Mac follow-up; avoid piecemeal drift |
-| Calendar follow-up | #82, #145 | #82 fixed in `6631f57`, pushed and closed; #145 remains provider backlog unless explicitly widened |
-| Notion follow-up | #146, #81 | Accepted provider discovery/dump backlog unless explicitly widened |
+| Calendar follow-up | #82, #145 | Closed; #82 fixed in `6631f57`, #145 fixed in `0acb44b` |
+| Notion follow-up | #146, #81 | Closed; fixed in `4c952d1` |
 | Research backlog | #98, #97, #99, #101, #105, #72, #71, #70 | Keep as research/product backlog, not repo-closure blockers |
 | Creative backlog | #119, #83, #88, #89, #90, #91, #92 | Move to creative roadmap; not h2t-ops closure |
 | Cross-platform / machine config | #79, #73 | Keep as h2t-core/platform backlog |
@@ -265,9 +276,9 @@ Recommended triage:
 
 | Connector | Active CLI | State | Notes |
 | --- | --- | --- | --- |
-| Notion | `h2t-ops notion ...` | Done | Provider gaps tracked separately in #146/#81 |
+| Notion | `h2t-ops notion ...` | Done | Embedded DB and workspace graph support complete |
 | Gmail | `h2t-ops gmail ...` | Done | Normal connector |
-| Calendar | `h2t-ops calendar ...` | Done | #82 fixed and closed; #145 remains provider backlog |
+| Calendar | `h2t-ops calendar ...` | Done | Calendar UX and provider feature closure complete |
 | Drive | `h2t-ops drive ...` | Done | `sync-meetings` retired from Drive in #147 |
 | MeetGeek | `h2t-ops meetgeek ...` | Done | #156 fixed; local recording recovery remains skill-layer (#149) |
 | Telegram | `h2t-ops telegram ...` | Done | Live auth verified; #121 closed |
@@ -392,33 +403,40 @@ Routine maintenance, not active closure blockers:
 
 ## Practical Order
 
-1. Implement #153 `h2t-core:agent-profile`.
-2. Sweep remaining issues into active / backlog / moved / stale-closed.
-3. Only then pick the next product stream: Calendar/Notion provider features, research
-   product backlog, creative recovery, or POS-side workflow contracts.
+1. Use the shippable handoff report when telling POS that the connector stage is
+   complete: `docs/reports/2026-05-22-h2t-ops-shippable-handoff.md`.
+2. Finish #153 `h2t-core:agent-profile` configurator enough to make repo
+   profiles practical.
+3. Decide whether to consolidate non-research connector skills into a single
+   `h2t-ops` connector skill with lazy references.
+4. Sweep remaining issues into active / backlog / moved / stale-closed.
+5. Pick the next product stream explicitly: research backlog, creative recovery,
+   setup wizard/Mac onboarding, or POS-side workflow contracts.
 
 ## Closure Forecast
 
 Date: 2026-05-22
 
-Calibration note: the previous forecast assumed Telegram, Research/fetch, Daily Brief,
-legacy h2t retirement, profiles, and cleanup were still ahead. Since then, Telegram,
-Research/fetch, Drive `sync-meetings` retirement, legacy `h2t` retirement, and #121
-cleanup finished faster than expected. #155 connector freeze is now also closed:
-the final smoke gate passed, the `h2t-ops --help` regression was fixed in
-`494a947`, and connector work is no longer the active migration track.
+Calibration note: the previous forecast assumed Telegram, Research/fetch,
+Daily Brief, legacy h2t retirement, profiles, cleanup, and broad Calendar/Notion
+features were still ahead. Since then, Telegram, Research/fetch, Drive
+`sync-meetings` retirement, legacy `h2t` retirement, #121 cleanup, #155
+connector freeze, Notion #81/#146, and Calendar #145 are complete.
+
+`h2t-ops` connector work is no longer the active migration track.
 
 | Remaining block | Optimistic | Realistic | Main risk |
 | --- | ---: | ---: | --- |
 | #153 `h2t-core:agent-profile` | 1-2 days | 2-3 days | Profile merge semantics, temporary overlays, cross-machine sync |
+| Connector skill consolidation | 0.5-1 day | 1-2 days | Preserving discoverability while reducing skill entries |
 | Issue sweep / reclassification | 0.5-1 day | 1-2 days | Old issues that need careful "move vs close" decisions |
 
 Remaining estimate to maintenance/closure mode:
 
-- optimistic: 2-3 focused working days;
-- realistic: 3-5 focused working days;
+- optimistic: 2-4 focused working days;
+- realistic: 4-6 focused working days;
 - with interruptions: 1-2 calendar weeks.
 
-This excludes broad Calendar/Notion provider enhancements, research product backlog,
-creative recovery, and POS-side workflow contracts. Those remain explicit future
-streams and should not be silently absorbed into closure work.
+This excludes research product backlog, creative recovery, setup wizard/Mac
+onboarding, and POS-side workflow contracts. Those remain explicit future
+streams and should not be silently absorbed into h2t-ops connector closure.
