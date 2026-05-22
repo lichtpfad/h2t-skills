@@ -233,21 +233,22 @@ def apply_profile(cwd: Path, base: str, overlays: list, *, dry_run: bool = False
             "enabledPlugins": patch["enabledPlugins"]}
 
 
-def add_overlay(cwd: Path, overlay: str, *, dry_run: bool = False,
+def add_overlay(cwd: Path, context_ref: str, *, dry_run: bool = False,
                 catalog_path: Path = None) -> dict:
     catalog_path = catalog_path or _DEFAULT_CATALOG
     catalog = load_catalog(catalog_path)
     if "error" in catalog:
         return catalog
 
-    if overlay not in catalog.get("overlays", {}):
-        return _error("UNKNOWN_OVERLAY", f"Unknown overlay: '{overlay}'", overlay=overlay)
+    resolved = _resolve_work_context(context_ref, catalog)
+    if isinstance(resolved, dict) and "error" in resolved:
+        return resolved
 
     binding = load_project_binding(cwd)
     base = binding.get("base", "mixed")
     overlays = list(binding.get("overlays", []))
-    if overlay not in overlays:
-        overlays.append(overlay)
+    if context_ref not in overlays:
+        overlays.append(context_ref)
 
     return apply_profile(cwd, base, overlays, dry_run=dry_run, catalog_path=catalog_path)
 
@@ -309,6 +310,7 @@ def run_cli(args: list, *, catalog_path: Path = None) -> dict:
     parser.add_argument("--cwd", default=".")
     parser.add_argument("--base", default=None)
     parser.add_argument("--overlay", default=None)
+    parser.add_argument("--context", default=None)
     parser.add_argument("--dry-run", action="store_true")
     parsed = parser.parse_args(args)
 
@@ -350,14 +352,16 @@ def run_cli(args: list, *, catalog_path: Path = None) -> dict:
         return apply_profile(cwd, base, overlays, dry_run=parsed.dry_run, catalog_path=catalog_path)
 
     if mode == "add":
-        if not parsed.overlay:
-            return _error("MISSING_ARG", "add requires --overlay")
-        return add_overlay(cwd, parsed.overlay, dry_run=parsed.dry_run, catalog_path=catalog_path)
+        ref = parsed.context or parsed.overlay
+        if not ref:
+            return _error("MISSING_ARG", "add requires --context or --overlay")
+        return add_overlay(cwd, ref, dry_run=parsed.dry_run, catalog_path=catalog_path)
 
     if mode == "remove":
-        if not parsed.overlay:
-            return _error("MISSING_ARG", "remove requires --overlay")
-        return remove_overlay(cwd, parsed.overlay, dry_run=parsed.dry_run, catalog_path=catalog_path)
+        ref = parsed.context or parsed.overlay
+        if not ref:
+            return _error("MISSING_ARG", "remove requires --context or --overlay")
+        return remove_overlay(cwd, ref, dry_run=parsed.dry_run, catalog_path=catalog_path)
 
     if mode == "reset":
         return reset_profile(cwd, dry_run=parsed.dry_run, catalog_path=catalog_path)
