@@ -300,10 +300,18 @@ def test_find_databases_recursive_json_uses_universal_envelope(monkeypatch, caps
 
 
 def test_sync_databases_json_without_include_databases_raises(tmp_path, monkeypatch):
+    import h2t_ops.connectors.notion.client as client_mod
     from h2t_ops.connectors.notion import commands as cmds_mod
     from types import SimpleNamespace
 
-    _patch_client(monkeypatch)
+    calls = []
+
+    class _Stub:
+        def get_blocks(self, page_id):
+            calls.append(("get_blocks", page_id))
+            raise AssertionError("get_blocks must not be called")
+
+    monkeypatch.setattr(client_mod, "NotionClient", lambda: _Stub())
 
     with pytest.raises(UsageError):
         cmds_mod.run(SimpleNamespace(
@@ -319,6 +327,56 @@ def test_sync_databases_json_without_include_databases_raises(tmp_path, monkeypa
             as_json=False,
             fmt="human",
         ))
+
+    assert calls == []
+
+
+def test_sync_databases_json_same_as_output_raises_before_client_io(tmp_path, monkeypatch):
+    import h2t_ops.connectors.notion.client as client_mod
+    from h2t_ops.connectors.notion import commands as cmds_mod
+    from types import SimpleNamespace
+    from pathlib import Path
+
+    calls = []
+    writes = []
+
+    class _Stub:
+        def get_blocks(self, page_id):
+            calls.append(("get_blocks", page_id))
+            raise AssertionError("get_blocks must not be called")
+
+        def find_databases_on_page(self, page_id, **kwargs):
+            calls.append(("find_databases_on_page", page_id, kwargs))
+            raise AssertionError("find_databases_on_page must not be called")
+
+    original_write_text = Path.write_text
+
+    def spy_write_text(self, *args, **kwargs):
+        writes.append(self)
+        return original_write_text(self, *args, **kwargs)
+
+    monkeypatch.setattr(client_mod, "NotionClient", lambda: _Stub())
+    monkeypatch.setattr(Path, "write_text", spy_write_text)
+    output = tmp_path / "page.md"
+
+    with pytest.raises(UsageError):
+        cmds_mod.run(SimpleNamespace(
+            notion_cmd="sync",
+            page_id="P",
+            output_file=str(output),
+            preserve_metadata=False,
+            include_databases=True,
+            recursive=False,
+            max_depth=3,
+            row_limit=100,
+            databases_json=str(output),
+            as_json=False,
+            fmt="human",
+        ))
+
+    assert calls == []
+    assert writes == []
+    assert not output.exists()
 
 
 def test_sync_include_databases_writes_markdown_and_json_sidecar(tmp_path, monkeypatch):
@@ -374,3 +432,55 @@ def test_sync_include_databases_writes_markdown_and_json_sidecar(tmp_path, monke
         "with_rows": True,
         "row_limit": 5,
     })]
+
+
+def test_sync_primary_markdown_write_failure_does_not_create_sidecar(tmp_path, monkeypatch):
+    import h2t_ops.connectors.notion.client as client_mod
+    from h2t_ops.connectors.notion import commands as cmds_mod
+    from types import SimpleNamespace
+    from pathlib import Path
+
+    class _Stub:
+        def get_blocks(self, page_id):
+            return [{"id": "b1", "type": "paragraph"}]
+
+        def blocks_to_markdown(self, blocks):
+            return "Body\n"
+
+        def find_databases_on_page(self, page_id, **kwargs):
+            return {
+                "kind": "notion_database_discovery/v1",
+                "databases": [
+                    {"title": "Tasks", "database_id": "db1", "type": "child_database",
+                     "row_count": 1},
+                ],
+            }
+
+    original_write_text = Path.write_text
+    md = tmp_path / "page.md"
+    sidecar = tmp_path / "sidecar.json"
+
+    def fail_primary_write_only(self, *args, **kwargs):
+        if self == md:
+            raise OSError("deterministic primary write failure")
+        return original_write_text(self, *args, **kwargs)
+
+    monkeypatch.setattr(client_mod, "NotionClient", lambda: _Stub())
+    monkeypatch.setattr(Path, "write_text", fail_primary_write_only)
+
+    with pytest.raises(OSError, match="deterministic primary write failure"):
+        cmds_mod.run(SimpleNamespace(
+            notion_cmd="sync",
+            page_id="P",
+            output_file=str(md),
+            preserve_metadata=False,
+            include_databases=True,
+            recursive=False,
+            max_depth=3,
+            row_limit=100,
+            databases_json=str(sidecar),
+            as_json=False,
+            fmt="human",
+        ))
+
+    assert not sidecar.exists()

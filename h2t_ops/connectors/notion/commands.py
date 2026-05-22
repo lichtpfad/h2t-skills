@@ -137,14 +137,21 @@ def run(args) -> Any:
             raise UsageError("update: specify --title, --append, or --file")
         return out
     if cmd == "sync":
+        out_path = Path(args.output_file)
+        sidecar = None
+        if getattr(args, "databases_json", None):
+            if not getattr(args, "include_databases", False):
+                raise UsageError("sync: --databases-json requires --include-databases")
+            sidecar = Path(args.databases_json)
+            if out_path.resolve() == sidecar.resolve():
+                raise UsageError("sync: output_file and --databases-json must be different paths")
         md = client.blocks_to_markdown(client.get_blocks(args.page_id))
         if args.preserve_metadata:
             pg = client.get_page(args.page_id)
             md = (f"---\nnotion_id: {args.page_id}\n"
                   f"created: {pg.get('created_time','')}\n"
                   f"modified: {pg.get('last_edited_time','')}\n---\n\n") + md
-        if getattr(args, "databases_json", None) and not getattr(args, "include_databases", False):
-            raise UsageError("sync: --databases-json requires --include-databases")
+        discovery = None
         if getattr(args, "include_databases", False):
             discovery = client.find_databases_on_page(
                 args.page_id,
@@ -161,16 +168,15 @@ def run(args) -> Any:
                     f"`{db.get('database_id', '')}` - rows: {db.get('row_count', 0)}\n"
                 )
             md += "".join(lines)
-            if getattr(args, "databases_json", None):
-                import json as _json
-                sidecar = Path(args.databases_json)
-                sidecar.parent.mkdir(parents=True, exist_ok=True)
-                sidecar.write_text(
-                    _json.dumps(discovery, ensure_ascii=False, indent=2),
-                    encoding="utf-8",
-                )
-        out_path = Path(args.output_file)
+        if sidecar is not None:
+            import json as _json
+            sidecar.parent.mkdir(parents=True, exist_ok=True)
         out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_text(md, encoding="utf-8")
+        if sidecar is not None:
+            sidecar.write_text(
+                _json.dumps(discovery, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
         return f"Synced to {out_path}"
     raise UsageError(f"unknown notion subcommand: {cmd}")
