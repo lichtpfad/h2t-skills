@@ -244,6 +244,113 @@ def test_upload_resolves_folder_by_name(client_obj, tmp_path, monkeypatch):
     assert files.create.call_args.kwargs["body"]["parents"] == ["folder1"]
 
 
+def test_upload_folder_dry_run_preserves_relative_paths(client_obj, tmp_path):
+    root = tmp_path / "deploy"
+    (root / "raw" / "videos").mkdir(parents=True)
+    (root / "raw" / "assets").mkdir(parents=True)
+    (root / "presentation.html").write_text("<video></video>", encoding="utf-8")
+    (root / "raw" / "videos" / "clip.mp4").write_bytes(b"mp4")
+    (root / "raw" / "assets" / "cover.png").write_bytes(b"png")
+
+    files = client_obj.service.files.return_value
+    files.list.return_value.execute.return_value = {"files": []}
+
+    result = client_obj.upload_folder(root, parent_id="drive-folder", dry_run=True)
+    entries = result["entries"]
+    by_rel = {entry["relative_path"]: entry for entry in entries}
+
+    assert by_rel["raw"]["action"] == "folder_create"
+    assert by_rel["raw/videos"]["action"] == "folder_create"
+    assert by_rel["raw/assets"]["action"] == "folder_create"
+    assert by_rel["presentation.html"]["action"] == "file_upload"
+    assert by_rel["raw/videos/clip.mp4"]["action"] == "file_upload"
+    assert by_rel["raw/assets/cover.png"]["action"] == "file_upload"
+    assert by_rel["presentation.html"]["mimeType"] == "text/html"
+    assert result["summary"]["total"] == 6
+    assert not files.create.called
+    assert not files.update.called
+
+
+def test_upload_folder_skips_existing_file_by_default(client_obj, tmp_path):
+    root = tmp_path / "deploy"
+    root.mkdir()
+    (root / "presentation.html").write_text("<html></html>", encoding="utf-8")
+
+    files = client_obj.service.files.return_value
+    files.list.return_value.execute.return_value = {
+        "files": [
+            {
+                "id": "existing1",
+                "name": "presentation.html",
+                "mimeType": "text/html",
+                "webViewLink": "https://drive/existing1",
+            },
+        ],
+    }
+
+    result = client_obj.upload_folder(root, parent_id="drive-folder")
+    entry = result["entries"][0]
+
+    assert entry["action"] == "file_skipped"
+    assert entry["file_id"] == "existing1"
+    assert not files.create.called
+    assert not files.update.called
+
+
+def test_upload_folder_updates_existing_file_when_requested(client_obj, tmp_path, monkeypatch):
+    from h2t_ops.connectors.drive import client as dmod
+
+    root = tmp_path / "deploy"
+    root.mkdir()
+    (root / "presentation.html").write_text("<html></html>", encoding="utf-8")
+    monkeypatch.setattr(dmod, "_media_file_upload", lambda: lambda *a, **k: "media")
+
+    files = client_obj.service.files.return_value
+    files.list.return_value.execute.return_value = {
+        "files": [
+            {
+                "id": "existing1",
+                "name": "presentation.html",
+                "mimeType": "text/html",
+            },
+        ],
+    }
+    files.update.return_value.execute.return_value = {
+        "id": "existing1",
+        "name": "presentation.html",
+        "mimeType": "text/html",
+        "webViewLink": "https://drive/existing1",
+    }
+
+    result = client_obj.upload_folder(
+        root,
+        parent_id="drive-folder",
+        update_existing=True,
+    )
+    entry = result["entries"][0]
+
+    assert entry["action"] == "file_updated"
+    assert entry["file_id"] == "existing1"
+    assert files.update.call_args.kwargs["fileId"] == "existing1"
+    assert files.update.call_args.kwargs["media_body"] == "media"
+    assert not files.create.called
+
+
+def test_upload_folder_requires_directory(client_obj, tmp_path):
+    src = tmp_path / "note.txt"
+    src.write_text("hello", encoding="utf-8")
+    with pytest.raises(UsageError):
+        client_obj.upload_folder(src, parent_id="drive-folder")
+
+
+def test_drive_upload_mime_fallbacks_cover_web_assets():
+    from h2t_ops.connectors.drive.client import _guess_mime
+
+    assert _guess_mime(Path("image.webp")) == "image/webp"
+    assert _guess_mime(Path("diagram.svg")) == "image/svg+xml"
+    assert _guess_mime(Path("clip.mkv")) == "video/x-matroska"
+
+
 def test_upload_ambiguous_folder_raises_usageerror(client_obj):
     files = client_obj.service.files.return_value
     files.list.return_value.execute.return_value = {

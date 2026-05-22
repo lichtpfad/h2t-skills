@@ -54,6 +54,28 @@ def register(subparsers: Any) -> None:
     up.add_argument("--no-convert", action="store_true")
     add_fmt(up)
 
+    ufp = cmds.add_parser(
+        "upload-folder",
+        help="Recursively upload a local folder to Drive preserving relative paths",
+    )
+    ufp.add_argument("local_dir", help="Local folder to upload recursively")
+    ufp.add_argument(
+        "--parent-id",
+        required=True,
+        help="Destination Drive folder id. Use the folder id from the Drive URL.",
+    )
+    ufp.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Plan folder/file actions without creating or uploading anything",
+    )
+    ufp.add_argument(
+        "--update-existing",
+        action="store_true",
+        help="Update same-name files under the same Drive folder instead of skipping",
+    )
+    add_fmt(ufp)
+
     p.set_defaults(_handler=run)
 
 
@@ -98,5 +120,12 @@ def run(args) -> Any:
     if cmd == "upload":
         return client.upload_file(
             args.file, folder=args.folder, no_convert=args.no_convert,
+        )
+    if cmd == "upload-folder":
+        return client.upload_folder(
+            args.local_dir,
+            parent_id=args.parent_id,
+            dry_run=args.dry_run,
+            update_existing=args.update_existing,
         )
     raise UsageError(f"unknown drive subcommand: {cmd}")
