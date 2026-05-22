@@ -328,6 +328,28 @@ def test_search_workspace_json_uses_universal_envelope(monkeypatch, capsys):
     assert payload["result"]["kind"] == "notion_workspace_search/v1"
 
 
+def test_search_workspace_json_default_limit_is_none(monkeypatch, capsys):
+    import h2t_ops.connectors.notion.client as client_mod
+
+    calls = []
+
+    class _Stub:
+        def search_workspace(self, object_type="all", *, limit=None):
+            calls.append({"object_type": object_type, "limit": limit})
+            return {"kind": "notion_workspace_search/v1", "results": []}
+
+    monkeypatch.setattr(client_mod, "NotionClient", lambda: _Stub())
+    cli_main = dispatch
+
+    code = cli_main(["notion", "search-workspace", "--object", "page", "--json"])
+
+    assert code == 0
+    assert calls == [{"object_type": "page", "limit": None}]
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["ok"] is True
+    assert payload["result"]["kind"] == "notion_workspace_search/v1"
+
+
 def test_sync_databases_json_without_include_databases_raises(tmp_path, monkeypatch):
     import h2t_ops.connectors.notion.client as client_mod
     from h2t_ops.connectors.notion import commands as cmds_mod
