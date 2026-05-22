@@ -1,10 +1,10 @@
 ---
 name: h2t-ops:drive
-description: "Google Drive file browser through h2t-ops drive. Use to list, search, download, export, and upload Drive files. Triggers: 'drive', 'google drive', 'google docs', 'h2t-ops:drive'"
+description: "Google Drive file browser through h2t-ops drive. Use to list, search, download, export, upload files, and upload folders while preserving relative paths. Triggers: 'drive', 'google drive', 'google docs', 'h2t-ops:drive'"
 compatibility: "Requires Google OAuth token with Drive scope. Bootstrap via the same flow as Gmail/Calendar."
 metadata:
   author: lichtpfad
-  version: 1.1.1
+  version: 1.1.2
 ---
 
 # Инструкции
@@ -70,6 +70,29 @@ h2t-ops drive upload <file> --folder "NAME" [--no-convert] [--json]
 `--folder` обязателен. Drive folder names are not unique: если найдено больше
 одной папки с таким именем, команда вернёт ошибку ambiguous folder.
 
+### Загрузить папку с сохранением структуры
+
+```bash
+h2t-ops drive upload-folder <local-dir> --parent-id <drive-folder-id> [--dry-run] [--update-existing] [--json]
+```
+
+Use this when the local folder contains relative assets, for example
+`presentation.html`, `raw/videos/*`, and `raw/assets/*`.
+
+Important behavior:
+
+- uploads files natively; `.html`, `.txt`, `.md`, etc. are not converted to
+  Google Docs;
+- creates missing Drive subfolders;
+- preserves local relative paths;
+- `--dry-run` performs read-only planning and returns a manifest;
+- by default, same-name existing files are skipped;
+- `--update-existing` updates same-name files under the same Drive folder.
+
+If an agent needs a provider operation that is missing from `h2t-ops drive`, it
+should create/propose a feature issue instead of writing an ad-hoc Google API
+script.
+
 ### Retired: синхронизация транскриптов
 
 `sync-meetings` retired in #147. It was a historical Drive-owned workaround
@@ -94,6 +117,7 @@ meeting backfill, use the POS/coordinator workflow when it exists.
 ## Обработка ошибок
 
 - Папка не найдена → `h2t-ops drive folders`
-- Ambiguous folder → уточни структуру Drive; `--folder-id` не входит в #133
+- Ambiguous folder → уточни структуру Drive; for recursive uploads prefer
+  `upload-folder --parent-id <id>`
 - OAuth scope missing → re-bootstrap Google OAuth with Drive scope
 - `export --format md` без `html2text` → установи optional dependency в h2t-ops environment

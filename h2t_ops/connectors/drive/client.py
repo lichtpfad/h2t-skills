@@ -22,6 +22,7 @@ from h2t_ops.core.google_auth import (
 )
 
 DRIVE_SCOPES = ["https://www.googleapis.com/auth/drive"]
+FOLDER_MIME = "application/vnd.google-apps.folder"
 
 GOOGLE_EXPORT_FORMATS = {
     "application/vnd.google-apps.document": {
@@ -67,6 +68,15 @@ UPLOAD_CONVERT_MAP = {
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         "application/vnd.google-apps.spreadsheet",
     ),
+}
+
+EXTRA_MIME_TYPES = {
+    ".css": "text/css",
+    ".js": "text/javascript",
+    ".mjs": "text/javascript",
+    ".svg": "image/svg+xml",
+    ".webp": "image/webp",
+    ".mkv": "video/x-matroska",
 }
 
 PRINT_ALLOWED_FORMATS = frozenset({"text", "csv", "md"})
@@ -120,6 +130,13 @@ def _map_http_error(e: Exception, *, op: str):
 
 def _escape_query_value(value: str) -> str:
     return value.replace("'", "\\'")
+
+
+def _guess_mime(path: Path) -> str:
+    return EXTRA_MIME_TYPES.get(
+        path.suffix.lower(),
+        mimetypes.guess_type(str(path))[0] or "application/octet-stream",
+    )
 
 
 def _row(file: Dict[str, Any]) -> Dict[str, Any]:
@@ -190,6 +207,185 @@ class DriveClient:
         if len(folders) > 1:
             raise UsageError(f"ambiguous folder: {folder_name}")
         return folders[0]["id"], folders[0].get("name", folder_name)
+
+    def _find_child_by_name(
+        self,
+        parent_id: str,
+        name: str,
+        *,
+        folder: Optional[bool] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """Find a single direct child by name under a parent id.
+
+        If duplicates exist for the requested kind, stop instead of guessing.
+        """
+        safe = _escape_query_value(name)
+        q = f"name='{safe}' and '{parent_id}' in parents and trashed=false"
+        resp = self.service.files().list(
+            q=q,
+            fields="files(id, name, mimeType, size, webViewLink)",
+            pageSize=10,
+        ).execute()
+        rows = resp.get("files", [])
+        if folder is True:
+            rows = [r for r in rows if r.get("mimeType") == FOLDER_MIME]
+        elif folder is False:
+            rows = [r for r in rows if r.get("mimeType") != FOLDER_MIME]
+        if not rows:
+            return None
+        if len(rows) > 1:
+            kind = "folder" if folder else "file" if folder is False else "child"
+            raise UsageError(f"ambiguous Drive {kind} under {parent_id}: {name}")
+        return rows[0]
+
+    @staticmethod
+    def _is_virtual_parent(parent_id: str) -> bool:
+        return parent_id.startswith("dry-run:")
+
+    @staticmethod
+    def _summary(entries: list[Dict[str, Any]]) -> Dict[str, int]:
+        counts: Dict[str, int] = {}
+        for entry in entries:
+            action = str(entry.get("action", "unknown"))
+            counts[action] = counts.get(action, 0) + 1
+        counts["total"] = len(entries)
+        return counts
+
+    def _ensure_child_folder(
+        self,
+        parent_id: str,
+        name: str,
+        *,
+        relative_path: str,
+        dry_run: bool,
+        entries: list[Dict[str, Any]],
+    ) -> str:
+        if self._is_virtual_parent(parent_id):
+            virtual_id = f"dry-run:{relative_path}"
+            entries.append({
+                "kind": "folder",
+                "action": "folder_create",
+                "relative_path": relative_path,
+                "name": name,
+                "parent_id": parent_id,
+                "file_id": virtual_id,
+                "mimeType": FOLDER_MIME,
+                "dry_run": True,
+            })
+            return virtual_id
+
+        existing = self._find_child_by_name(parent_id, name, folder=True)
+        if existing:
+            entries.append({
+                "kind": "folder",
+                "action": "folder_exists",
+                "relative_path": relative_path,
+                "name": name,
+                "parent_id": parent_id,
+                "file_id": existing.get("id", ""),
+                "mimeType": existing.get("mimeType", FOLDER_MIME),
+                "dry_run": dry_run,
+            })
+            return existing["id"]
+
+        if dry_run:
+            virtual_id = f"dry-run:{relative_path}"
+            entries.append({
+                "kind": "folder",
+                "action": "folder_create",
+                "relative_path": relative_path,
+                "name": name,
+                "parent_id": parent_id,
+                "file_id": virtual_id,
+                "mimeType": FOLDER_MIME,
+                "dry_run": True,
+            })
+            return virtual_id
+
+        res = self.service.files().create(
+            body={"name": name, "mimeType": FOLDER_MIME, "parents": [parent_id]},
+            fields="id, name, mimeType, webViewLink",
+        ).execute()
+        entries.append({
+            "kind": "folder",
+            "action": "folder_created",
+            "relative_path": relative_path,
+            "name": res.get("name", name),
+            "parent_id": parent_id,
+            "file_id": res.get("id", ""),
+            "mimeType": res.get("mimeType", FOLDER_MIME),
+            "web_view_link": res.get("webViewLink", ""),
+            "dry_run": False,
+        })
+        return res["id"]
+
+    def _upload_native_child_file(
+        self,
+        src: Path,
+        parent_id: str,
+        *,
+        relative_path: str,
+        dry_run: bool,
+        update_existing: bool,
+        entries: list[Dict[str, Any]],
+    ) -> None:
+        source_mime = _guess_mime(src)
+        size = src.stat().st_size
+        existing = None
+        if not self._is_virtual_parent(parent_id):
+            existing = self._find_child_by_name(parent_id, src.name, folder=False)
+
+        base = {
+            "kind": "file",
+            "relative_path": relative_path,
+            "local_path": str(src),
+            "name": src.name,
+            "parent_id": parent_id,
+            "mimeType": source_mime,
+            "size": size,
+            "dry_run": dry_run,
+        }
+
+        if existing and not update_existing:
+            entries.append({
+                **base,
+                "action": "file_skipped",
+                "file_id": existing.get("id", ""),
+                "existing_mimeType": existing.get("mimeType", ""),
+                "web_view_link": existing.get("webViewLink", ""),
+            })
+            return
+
+        if dry_run:
+            entries.append({
+                **base,
+                "action": "file_update" if existing and update_existing else "file_upload",
+                "file_id": existing.get("id", "") if existing else "",
+            })
+            return
+
+        media = _media_file_upload()(str(src), mimetype=source_mime, resumable=True)
+        if existing and update_existing:
+            res = self.service.files().update(
+                fileId=existing["id"],
+                media_body=media,
+                fields="id, name, mimeType, webViewLink",
+            ).execute()
+            action = "file_updated"
+        else:
+            res = self.service.files().create(
+                body={"name": src.name, "parents": [parent_id]},
+                media_body=media,
+                fields="id, name, mimeType, webViewLink",
+            ).execute()
+            action = "file_uploaded"
+        entries.append({
+            **base,
+            "action": action,
+            "file_id": res.get("id", ""),
+            "mimeType": res.get("mimeType", source_mime),
+            "web_view_link": res.get("webViewLink", ""),
+        })
 
     def list_files(
         self,
@@ -385,9 +581,7 @@ class DriveClient:
                 source_mime, target_mime = convert_info
                 dest_name = src.stem
             else:
-                source_mime = (
-                    mimetypes.guess_type(str(src))[0] or "application/octet-stream"
-                )
+                source_mime = _guess_mime(src)
                 target_mime = None
                 dest_name = src.name
             metadata: Dict[str, Any] = {"name": dest_name}
@@ -410,3 +604,69 @@ class DriveClient:
             }
         except Exception as e:
             raise _map_http_error(e, op=f"upload file {src}") from e
+
+    def upload_folder(
+        self,
+        local_dir: str | Path,
+        *,
+        parent_id: str,
+        dry_run: bool = False,
+        update_existing: bool = False,
+    ) -> Dict[str, Any]:
+        """Recursively upload a local folder to Drive preserving relative paths.
+
+        Folder upload is native by default: `.html`, `.txt`, `.md`, and other files
+        are uploaded as files, not converted to Google editor documents. This keeps
+        browser-relative paths usable for deploy/share folders.
+        """
+        root = Path(local_dir)
+        if not parent_id:
+            raise UsageError("drive upload-folder: --parent-id is required")
+        if not root.exists():
+            raise NotFoundError(f"folder not found: {root}")
+        if not root.is_dir():
+            raise UsageError(f"not a directory: {root}")
+
+        try:
+            entries: list[Dict[str, Any]] = []
+            folder_ids: Dict[Path, str] = {Path("."): parent_id}
+
+            all_paths = sorted(
+                root.rglob("*"),
+                key=lambda p: p.relative_to(root).as_posix().lower(),
+            )
+            for path in [p for p in all_paths if p.is_dir()]:
+                rel = path.relative_to(root)
+                parent_rel = rel.parent if rel.parent != Path("") else Path(".")
+                parent_drive_id = folder_ids[parent_rel]
+                folder_ids[rel] = self._ensure_child_folder(
+                    parent_drive_id,
+                    path.name,
+                    relative_path=rel.as_posix(),
+                    dry_run=dry_run,
+                    entries=entries,
+                )
+
+            for path in [p for p in all_paths if p.is_file()]:
+                rel = path.relative_to(root)
+                parent_rel = rel.parent if rel.parent != Path("") else Path(".")
+                parent_drive_id = folder_ids[parent_rel]
+                self._upload_native_child_file(
+                    path,
+                    parent_drive_id,
+                    relative_path=rel.as_posix(),
+                    dry_run=dry_run,
+                    update_existing=update_existing,
+                    entries=entries,
+                )
+
+            return {
+                "local_dir": str(root),
+                "parent_id": parent_id,
+                "dry_run": dry_run,
+                "update_existing": update_existing,
+                "entries": entries,
+                "summary": self._summary(entries),
+            }
+        except Exception as e:
+            raise _map_http_error(e, op=f"upload folder {root}") from e
