@@ -27,6 +27,19 @@ Each alias must be a lowercase kebab-case string. The value is the full marketpl
 | `enable` | string[] | Plugin aliases to enable. |
 | `disable` | string[] | Plugin aliases to disable. |
 
+## Work context refs
+
+Each element of the `overlays` array is a **work context ref**. Three forms are supported:
+
+| Form | Resolves from | Use case |
+|------|---------------|----------|
+| `profile:ops` | `baseProfiles["ops"]` | Add a full secondary base profile |
+| `overlay:github-heavy` | `overlays["github-heavy"]` | Add a small task overlay |
+| `creative` (bare) | `overlays["creative"]` first, then `baseProfiles["creative"]` | Legacy bindings |
+
+New configurator writes must use explicit `profile:` / `overlay:` refs. Bare names remain
+supported for backward compatibility only.
+
 ## Conflict resolution (merge semantics)
 
 Each repository has exactly one base profile plus an ordered list of zero or more
@@ -39,7 +52,7 @@ the repo's default work mode and overlays for temporary or secondary work types.
 4. `enable` removes an alias from the disabled set.
 5. `disable` removes an alias from the enabled set.
 6. Unknown alias → `UNKNOWN_PLUGIN_ALIAS` error.
-7. Unknown profile/overlay → `UNKNOWN_PROFILE` or `UNKNOWN_OVERLAY` error.
+7. Unknown ref → `UNKNOWN_WORK_CONTEXT`, `UNKNOWN_PROFILE_CONTEXT`, or `UNKNOWN_OVERLAY` error.
 
 ## Safety rules
 
