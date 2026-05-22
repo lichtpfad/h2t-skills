@@ -37,7 +37,7 @@ from gather.user import gather_user_context
 from gather.git import gather_git
 from gather.github import gather_github
 from gather.stack import detect_stack
-from gather.sessions import find_session_files, get_machine_name
+from gather.sessions import find_latest_session_index, find_session_files, get_machine_name
 from gather.briefing import format_briefing
 from eval.session import SkillEval
 
@@ -84,6 +84,7 @@ def main() -> None:
     github_remote = project.get("github") or git.get("owner_repo", "")
     repo_name = github_remote.split("/")[-1] if github_remote else Path(args.cwd).resolve().name
     sessions = find_session_files(repo_name)
+    latest_session = find_latest_session_index(repo_name)
 
     elapsed_ms = int((time.monotonic() - start) * 1000)
 
@@ -93,6 +94,7 @@ def main() -> None:
         "github": github,
         "stack": stack,
         "sessions": sessions,
+        "latest_session": latest_session,
         "machine": machine,
         "user": user,
         "session_id": "",  # set by user after GATE confirmation

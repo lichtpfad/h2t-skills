@@ -4,7 +4,7 @@ description: This skill should be used when the user says "handoff", "завер
 compatibility: "Claude Code"
 metadata:
   author: lichtpfad
-  version: 3.1.1
+  version: 3.1.2
 ---
 
 # Handoff v3.1
@@ -75,6 +75,11 @@ Display before writing. **Follow the format from `references/handoff-example.md`
 
 ### Step 6: Write handoff
 
+Writer stores:
+- full archival markdown under `H2T_SESSION_ROOT` or `~/.h2t/sessions/<machine>/<project>/`;
+- compact `latest.json` for bounded `session-start` context;
+- activity stream spool.
+
 ```bash
 "${H2T_PYTHON_CMD[@]}" "$WRITER" write \
   --session-id "<SESSION_NAME>" \
@@ -93,6 +98,7 @@ Replace all `<...>` with literal values (not shell variables).
 ✓ Сессия <SESSION_NAME> сохранена
 ✓ Activity stream: {spool_path}
 ✓ Markdown: {markdown_path}
+✓ Latest index: {latest_path}
 ✓ Артефактов: {N}
 ```
 

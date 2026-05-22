@@ -4,7 +4,7 @@ description: "Use at the start of any working session (dev, creative, personal).
 compatibility: "Claude Code"
 metadata:
   author: lichtpfad
-  version: 3.0.11
+  version: 3.0.12
 ---
 
 # Session Start v3
@@ -60,14 +60,22 @@ Display `_briefing` verbatim.
 
 If `_briefing` is missing: show `GATHER_ERROR — no briefing in output. Check plugin version.`
 
-### Step 3: Read last handoff
+### Step 3: Previous-session context
 
-If `GATHER_RESULT.sessions` is non-empty:
-- Read the file at path `GATHER_RESULT.sessions[0]` using the Read tool
-- Show section **"## What Remains"** verbatim under header `### Продолжение предыдущей сессии`
-- If no "What Remains" section: show first 40 lines of the file
+Do not read handoff markdown by default.
 
-If `GATHER_RESULT.sessions` is empty: skip this step silently.
+The briefing already includes a bounded `### Previous Session` section when
+`GATHER_RESULT.latest_session` is available. Full handoff markdown is archival
+context and may be read only if the user explicitly asks for details.
+
+If `GATHER_RESULT.sessions` is non-empty but `GATHER_RESULT.latest_session` is
+missing, show one short line:
+
+```
+Есть архивные handoff-файлы, но нет bounded latest summary. Продолжаю без чтения markdown.
+```
+
+If both are empty: skip this step silently.
 
 ### Step 4: ⛔ GATE — Session naming
 
