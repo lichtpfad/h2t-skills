@@ -50,7 +50,9 @@ Recommended target:
 
 - Keep `h2t-ops:research` separate because it has templates, telemetry, quality gates, and research artifact semantics.
 - Keep `h2t-ops:daily-brief` separate or move it to workflow/surface semantics. It is not a connector.
-- Consider replacing Calendar/Drive/Gmail/MeetGeek/Notion/Telegram skills with one `h2t-ops:connectors` skill plus lazy references.
+- Prototype replacing Calendar/Drive/Gmail/MeetGeek/Notion/Telegram skills with one `h2t-ops:connectors` skill plus lazy references.
+
+The product test is whether the agent still reliably chooses the correct connector and command from one navigator skill. The conceptual model is strong: `h2t-ops` exposes one CLI/API surface, and connectors are classes of provider I/O that require authorization. Do not collapse the active per-connector skills until this is tested in live sessions.
 
 ### Other Merge Candidates
 
@@ -98,7 +100,7 @@ Over time, handoff files become larger and more narrative. `session-start` shoul
 Recommended target:
 
 - Keep full markdown handoff as archival evidence.
-- Add a bounded machine-readable handoff summary:
+- Add a bounded handoff summary/index:
   - `summary_short`: max 1200 chars
   - `next_actions`: max 5
   - `blockers`: max 5
@@ -109,12 +111,24 @@ Recommended target:
 - Allow full handoff read only by explicit user request.
 - Add truncation and tests so `session-start` context cost cannot grow with session history.
 
-## Install and Sharing Model
+Open design point: `latest.json` is not valuable if it simply duplicates markdown in a more token-expensive format. It should be a compact routing/index artifact, not another narrative handoff. Handoff cleanup also needs retention semantics:
 
-Minimum install story for another user:
+- keep latest bounded summary hot;
+- keep full markdown archive available;
+- periodically archive older handoffs by project/date;
+- optionally distill long histories into a stable project memory;
+- never require POS/DOR for basic `session-start` and `handoff` operation.
+
+POS boundary: lifecycle skills may optionally publish to the personal OS, but their primary contract must work standalone. POS may consume handoff/session artifacts, but h2t-core must not require POS state to start or end a coding session.
+
+## Setup and Update Skill
+
+The install/share guide should not remain a passive document. It should be implemented as a `h2t-core:setup` / future `h2t-core:update` workflow.
+
+Minimum setup story for another user:
 
 1. Install `h2t-core`.
-2. Run `h2t-core:setup` or an equivalent doctor command.
+2. Run `h2t-core:setup`.
 3. Install `h2t-ops`.
 4. Run connector-specific auth/status checks:
    - Calendar/Gmail/Drive OAuth status.
@@ -125,7 +139,29 @@ Minimum install story for another user:
 5. Optional: configure POS/DOR integration.
 6. Optional: apply `h2t-core:agent-profile` to the repo.
 
-This should be documented without requiring the user's private `C:/dev` tree.
+This should work without requiring the user's private `C:/dev` tree.
+
+Required delivery work:
+
+- make `uv tool install` / `uvx` installation reliable for `h2t-ops`;
+- make setup check whether `h2t-ops` is installed and runnable;
+- add an update path for plugin/CLI refresh;
+- expose connector auth/status checks from one setup/update workflow;
+- separate required provider setup from optional POS/DOR integration.
+
+## Connector Issue Capture
+
+Connector skills should teach agents to file structured issues when they hit provider gaps.
+
+Policy:
+
+- If a bug is discovered, create or propose a bug issue in the relevant repository.
+- If provider functionality is needed but missing, create or propose a feature request.
+- The issue must include command, provider, observed behavior, expected behavior, sanitized error output, and whether it is read-only or write-path.
+- Do not auto-file secrets, tokens, private message bodies, transcript bodies, or personal data.
+- Prefer explicit user confirmation before creating GitHub issues unless the user has already asked to track the work.
+
+This belongs in the connector navigator or shared h2t-ops reference, not duplicated across every connector skill.
 
 ## Critical Path
 
@@ -135,11 +171,11 @@ This should be documented without requiring the user's private `C:/dev` tree.
 2. Archive or remove legacy `plugins/h2t/`.
    It is no longer active, but it keeps old assumptions and short names in the source tree.
 
-3. Write a public sharing/install guide.
-   This should cover split plugin install, connector setup, credential checks, and optional POS integration.
+3. Turn setup/install/share guidance into `h2t-core:setup` / `h2t-core:update`.
+   This should cover split plugin install, `uv` delivery for `h2t-ops`, connector setup, credential checks, and optional POS integration.
 
-4. Decide h2t-ops skill surface.
-   Either keep one skill per connector with shorter descriptions, or introduce `h2t-ops:connectors` with lazy references.
+4. Prototype h2t-ops connector navigator.
+   Test one `h2t-ops:connectors` skill plus lazy connector references before removing per-connector skills.
 
 5. Clean functional overlaps outside h2t-ops.
    Start with Arch node skills, Dev GitHub skills, Edu meeting/transcript skills, and Creative voice-eval.
@@ -154,6 +190,7 @@ The migration/cleanup stage is done when:
 - Active marketplace has only split plugins, no legacy `h2t`.
 - Source tree no longer presents legacy `plugins/h2t/` as an active plugin.
 - `session-start` reads bounded summary context, not free-form handoff bodies.
-- Connector install/auth documentation works for a new user without private H2T paths.
-- h2t-ops connector skills have an explicit long-term surface decision.
+- Setup/update workflow can install/check `h2t-ops` and connector auth without private H2T paths.
+- h2t-ops connector navigator has been tested or explicitly rejected.
+- Connector bug/feature issue capture policy exists.
 - Agent-profile remaining issues are tracked as follow-ups, not blockers for connector migration closure.
