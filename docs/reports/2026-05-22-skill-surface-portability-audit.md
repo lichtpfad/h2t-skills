@@ -6,6 +6,11 @@ Scope: closing audit after h2t-ops connector migration and h2t-core agent-profil
 
 This report separates migration closure from later agent-profile debugging. Connector migration can be treated as shippable, but the skill surface still needs one cleanup pass before the repository is comfortable to share with another user.
 
+Tracking issues:
+
+- #160 `h2t-core: setup/update delivery + lifecycle context budget`
+- #161 `h2t-ops: connector navigator + skill surface consolidation`
+
 ## Current State
 
 - `h2t-ops` connector layer is shippable: Calendar, Gmail, Drive, Notion, Telegram, MeetGeek, Research have provider-level CLI/skill coverage.
