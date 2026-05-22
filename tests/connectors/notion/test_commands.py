@@ -254,6 +254,11 @@ def test_search_workspace_parser_accepts_object_limit_and_json():
     assert ns.limit == 5
     assert ns.as_json is True
 
+    ns2 = _parser().parse_args([
+        "notion", "search-workspace", "--object", "data_source", "--json",
+    ])
+    assert ns2.object == "data_source"
+
 
 def test_search_workspace_and_graph_parsers_registered():
     parser = _parser()

@@ -234,8 +234,13 @@ class NotionClient:
         if limit == 0:
             return {"kind": "notion_workspace_search/v1", "object": object_type, "results": []}
         query_filter = None
-        if object_type in ("page", "database"):
-            query_filter = {"property": "object", "value": object_type}
+        if object_type in ("page", "database", "data_source"):
+            # Notion search API now filters databases as "data_source".
+            # Keep "database" as the CLI/user-facing compatibility alias.
+            filter_value = "data_source" if object_type == "database" else object_type
+            query_filter = {"property": "object", "value": filter_value}
+        elif object_type != "all":
+            raise UsageError("object_type must be one of: page, database, data_source, all")
         results = []
         start_cursor = None
         while True:

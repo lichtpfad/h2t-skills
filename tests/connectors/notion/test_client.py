@@ -410,6 +410,27 @@ def test_search_workspace_preserves_parent_shapes(conv):
     assert result["results"][0]["parent"] == {"type": "workspace"}
 
 
+def test_search_workspace_database_alias_uses_data_source_filter(conv):
+    data_source = {
+        "id": "db-1",
+        "object": "data_source",
+        "parent": {"type": "page_id", "page_id": "page-1"},
+    }
+
+    class _Client:
+        def search(self, **kwargs):
+            assert kwargs == {"filter": {"property": "object", "value": "data_source"}}
+            return {"results": [data_source], "has_more": False, "next_cursor": None}
+
+    conv.client = _Client()
+
+    result = conv.search_workspace(object_type="database")
+
+    assert result["object"] == "database"
+    assert result["results"][0]["object"] == "data_source"
+    assert result["results"][0]["parent"] == {"type": "page_id", "page_id": "page-1"}
+
+
 def test_search_workspace_rejects_negative_limit(conv):
     with pytest.raises(UsageError):
         conv.search_workspace(object_type="page", limit=-1)

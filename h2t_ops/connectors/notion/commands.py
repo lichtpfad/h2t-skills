@@ -27,7 +27,7 @@ def register(subparsers: Any) -> None:
     gd = cmds.add_parser("get-database", help="Database items")
     gd.add_argument("database_id"); gd.add_argument("--limit", type=int); add_fmt(gd)
     sw = cmds.add_parser("search-workspace", help="Search shared Notion workspace objects")
-    sw.add_argument("--object", choices=["page", "database", "all"], default="all")
+    sw.add_argument("--object", choices=["page", "database", "data_source", "all"], default="all")
     sw.add_argument("--limit", type=int)
     add_fmt(sw)
     gr = cmds.add_parser("graph", help="Build a page subtree graph")
