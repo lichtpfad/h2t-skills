@@ -1,11 +1,8 @@
-"""CalendarClient — Google Calendar adapter (re-wrapped, typed errors).
-
-API logic mirrors lib/clients/calendar.py; only side effects and error types
-changed per spec §10 (re-wrap not rewrite). Provider-feature expansion is
-tracked in #145 — this module is parity-only.
-"""
+"""CalendarClient — Google Calendar adapter (typed provider I/O)."""
 from __future__ import annotations
 
+import uuid
+from datetime import date as date_cls
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
@@ -18,43 +15,61 @@ from h2t_ops.core.google_auth import (
 )
 
 CALENDAR_SCOPES = ["https://www.googleapis.com/auth/calendar"]
+_CALENDAR_LIST_HINT = "Run `h2t-ops calendar calendars --json` to inspect calendar ids and access roles."
 
 
-def _map_http_error(e: Exception, *, op: str):
-    """Map googleapiclient.errors.HttpError to typed h2t_ops errors.
-
-    Mirrors h2t_ops/connectors/gmail/client.py:_map_http_error. Defensive:
-    google libs may be absent in test contexts, so we check duck-typed.
-    """
+def _map_http_error(e: Exception, *, op: str, hint: str | None = None):
+    """Map googleapiclient.errors.HttpError to typed h2t_ops errors."""
     if isinstance(e, H2TError):
         return e
     status = getattr(getattr(e, "resp", None), "status", None)
     msg = f"Failed to {op}: {e}"
     if status in (401, 403):
-        return AuthError(msg)
+        return AuthError(msg, hint=hint)
     if status == 404:
-        return NotFoundError(msg)
+        return NotFoundError(msg, hint=hint)
     if status is not None and status >= 500:
-        return ProviderError(msg)
+        return ProviderError(msg, hint=hint)
     s = str(e).lower()
     if "timeout" in s or "timed out" in s or "connection" in s or "network" in s:
-        return NetworkError(msg)
-    return ProviderError(msg)
+        return NetworkError(msg, hint=hint)
+    return ProviderError(msg, hint=hint)
 
 
 class CalendarClient:
-    """Google Calendar API client — primary calendar only (parity scope #132)."""
+    """Google Calendar API client."""
 
     def __init__(self) -> None:
         creds = resolve_google_credentials("calendar", CALENDAR_SCOPES)
         self.service = build_google_service("calendar", "v3", creds)
 
     # ----- Read -----
+    def list_calendars(self) -> Dict[str, Any]:
+        try:
+            res = self.service.calendarList().list().execute()
+        except Exception as e:
+            raise _map_http_error(e, op="list calendars") from e
+
+        calendars = []
+        for item in res.get("items", []):
+            access_role = item.get("accessRole", "")
+            calendars.append({
+                "id": item.get("id", ""),
+                "summary": item.get("summary", ""),
+                "primary": bool(item.get("primary", False)),
+                "access_role": access_role,
+                "time_zone": item.get("timeZone", ""),
+                "can_write": access_role in ("owner", "writer"),
+                "conference_properties": item.get("conferenceProperties", {}),
+            })
+        return {"kind": "calendar_list/v1", "calendars": calendars}
+
     def list_events(
         self,
         days: int = 1,
         max_results: int = 250,
         *,
+        calendar_id: str = "primary",
         time_min: Optional[str] = None,
         time_max: Optional[str] = None,
         tz: Optional[str] = None,
@@ -65,7 +80,7 @@ class CalendarClient:
         if time_max is None:
             time_max = (datetime.now(timezone.utc) + timedelta(days=days)).isoformat()
         params: Dict[str, Any] = {
-            "calendarId": "primary",
+            "calendarId": calendar_id,
             "timeMin": time_min,
             "timeMax": time_max,
             "maxResults": max_results,
@@ -77,77 +92,234 @@ class CalendarClient:
         try:
             res = self.service.events().list(**params).execute()
         except Exception as e:
-            raise _map_http_error(e, op="list events") from e
+            raise _map_http_error(e, op=f"list events on calendar {calendar_id!r}") from e
         items = res.get("items", [])
         if busy_only:
             items = [it for it in items if it.get("transparency") != "transparent"]
-        return [self._normalize_event(it) for it in items]
+        return [self._normalize_event(it, calendar_id=calendar_id) for it in items]
 
-    def search_events(self, query: str, max_results: int = 10) -> List[Dict[str, Any]]:
+    def search_events(
+        self,
+        query: str,
+        *,
+        calendar_id: str = "primary",
+        max_results: int = 10,
+    ) -> List[Dict[str, Any]]:
         try:
             res = self.service.events().list(
-                calendarId="primary",
+                calendarId=calendar_id,
                 q=query,
                 maxResults=max_results,
                 singleEvents=True,
                 orderBy="startTime",
             ).execute()
         except Exception as e:
-            raise _map_http_error(e, op="search events") from e
-        return [self._normalize_event(it) for it in res.get("items", [])]
+            raise _map_http_error(e, op=f"search events on calendar {calendar_id!r}") from e
+        return [self._normalize_event(it, calendar_id=calendar_id) for it in res.get("items", [])]
 
-    def get_event(self, event_id: str) -> Dict[str, Any]:
+    def get_event(self, event_id: str, *, calendar_id: str = "primary") -> Dict[str, Any]:
         try:
             return self.service.events().get(
-                calendarId="primary", eventId=event_id,
+                calendarId=calendar_id, eventId=event_id,
             ).execute()
         except Exception as e:
-            raise _map_http_error(e, op=f"get event {event_id}") from e
+            raise _map_http_error(e, op=f"get event {event_id} on calendar {calendar_id!r}") from e
 
-    # ----- Write (explicit user-intent CLI verbs per runbook §7) -----
+    # ----- Write -----
     def create_event(
         self,
         summary: str,
         date: str,
-        time: str,
+        time: Optional[str] = None,
         duration_min: int = 60,
         description: Optional[str] = None,
         attendees: Optional[str] = None,
         tz: str = "Asia/Jerusalem",
+        *,
+        calendar_id: str = "primary",
+        all_day: bool = False,
+        location: Optional[str] = None,
+        meet: bool = False,
+        rrule: Optional[str] = None,
+        reminder_minutes: Optional[List[int]] = None,
     ) -> Dict[str, Any]:
-        start_dt = datetime.strptime(f"{date} {time}", "%Y-%m-%d %H:%M")
-        end_dt = start_dt + timedelta(minutes=duration_min)
-        event: Dict[str, Any] = {
-            "summary": summary,
-            "start": {"dateTime": start_dt.isoformat(), "timeZone": tz},
-            "end": {"dateTime": end_dt.isoformat(), "timeZone": tz},
-        }
+        event = self._event_time_body(
+            summary=summary,
+            date=date,
+            time=time,
+            duration_min=duration_min,
+            all_day=all_day,
+            tz=tz,
+        )
         if description:
             event["description"] = description
-        if attendees:
-            event["attendees"] = [{"email": e.strip()} for e in attendees.split(",")]
-        send_updates = "all" if attendees else "none"
-        try:
-            return self.service.events().insert(
-                calendarId="primary", body=event, sendUpdates=send_updates,
-            ).execute()
-        except Exception as e:
-            raise _map_http_error(e, op=f"create event {summary!r}") from e
+        if location:
+            event["location"] = location
+        parsed_attendees = self._parse_attendees(attendees)
+        if parsed_attendees:
+            event["attendees"] = parsed_attendees
+        if meet:
+            event["conferenceData"] = self._meet_request()
+        if rrule:
+            event["recurrence"] = [self._validate_rrule(rrule)]
+        if reminder_minutes is not None:
+            event["reminders"] = self._reminders_body(reminder_minutes)
 
-    def delete_event(self, event_id: str) -> None:
+        kwargs: Dict[str, Any] = {
+            "calendarId": calendar_id,
+            "body": event,
+            "sendUpdates": "all" if parsed_attendees else "none",
+        }
+        if meet:
+            kwargs["conferenceDataVersion"] = 1
+        try:
+            created = self.service.events().insert(**kwargs).execute()
+        except Exception as e:
+            raise _map_http_error(
+                e,
+                op=f"create event {summary!r} on calendar {calendar_id!r}",
+                hint=_CALENDAR_LIST_HINT,
+            ) from e
+        return self._normalize_event(created, calendar_id=calendar_id)
+
+    def patch_event(
+        self,
+        event_id: str,
+        *,
+        calendar_id: str = "primary",
+        summary: Optional[str] = None,
+        date: Optional[str] = None,
+        time: Optional[str] = None,
+        duration_min: Optional[int] = None,
+        all_day: Optional[bool] = None,
+        description: Optional[str] = None,
+        location: Optional[str] = None,
+        replace_attendees: Optional[str] = None,
+        meet: bool = False,
+        replace_rrule: Optional[str] = None,
+        replace_reminder_minutes: Optional[List[int]] = None,
+        clear_reminders: bool = False,
+        tz: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        body: Dict[str, Any] = {}
+        if summary is not None:
+            body["summary"] = summary
+        if description is not None:
+            body["description"] = description
+        if location is not None:
+            body["location"] = location
+
+        wants_reschedule = date is not None or time is not None or all_day is not None
+        if wants_reschedule:
+            if all_day is True:
+                if not date:
+                    raise ValueError("all-day update requires --date")
+                if time:
+                    raise ValueError("all-day update rejects --time")
+                body.update(self._date_range(date))
+            else:
+                if not date or not time:
+                    raise ValueError("timed update requires --date and --time")
+                body.update(self._datetime_range(
+                    date,
+                    time,
+                    duration_min or 60,
+                    tz or "Asia/Jerusalem",
+                ))
+
+        if replace_attendees is not None:
+            body["attendees"] = self._parse_attendees(replace_attendees)
+        if meet:
+            body["conferenceData"] = self._meet_request()
+        if replace_rrule is not None:
+            body["recurrence"] = [self._validate_rrule(replace_rrule)]
+        if clear_reminders:
+            if replace_reminder_minutes is not None:
+                raise ValueError("--clear-reminders cannot be combined with --replace-reminders")
+            body["reminders"] = {"useDefault": False, "overrides": []}
+        elif replace_reminder_minutes is not None:
+            body["reminders"] = self._reminders_body(replace_reminder_minutes)
+
+        if not body:
+            raise ValueError("no update fields specified")
+
+        kwargs: Dict[str, Any] = {
+            "calendarId": calendar_id,
+            "eventId": event_id,
+            "body": body,
+            "sendUpdates": "all" if "attendees" in body else "none",
+        }
+        if meet:
+            kwargs["conferenceDataVersion"] = 1
+        try:
+            updated = self.service.events().patch(**kwargs).execute()
+        except Exception as e:
+            raise _map_http_error(
+                e,
+                op=f"patch event {event_id} on calendar {calendar_id!r}",
+                hint=_CALENDAR_LIST_HINT,
+            ) from e
+        return self._normalize_event(updated, calendar_id=calendar_id)
+
+    def delete_event(self, event_id: str, *, calendar_id: str = "primary") -> None:
         try:
             self.service.events().delete(
-                calendarId="primary", eventId=event_id,
+                calendarId=calendar_id, eventId=event_id,
             ).execute()
         except Exception as e:
-            raise _map_http_error(e, op=f"delete event {event_id}") from e
+            raise _map_http_error(
+                e,
+                op=f"delete event {event_id} on calendar {calendar_id!r}",
+                hint=_CALENDAR_LIST_HINT,
+            ) from e
+
+    def freebusy(
+        self,
+        time_min: str,
+        time_max: str,
+        *,
+        calendar_ids: List[str],
+        tz: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        body: Dict[str, Any] = {
+            "timeMin": time_min,
+            "timeMax": time_max,
+            "items": [{"id": cid} for cid in calendar_ids],
+        }
+        if tz:
+            body["timeZone"] = tz
+        try:
+            res = self.service.freebusy().query(body=body).execute()
+        except Exception as e:
+            raise _map_http_error(e, op="freebusy query") from e
+        calendars = [
+            {"id": cid, "busy": data.get("busy", []), "errors": data.get("errors", [])}
+            for cid, data in res.get("calendars", {}).items()
+        ]
+        has_errors = any(row["errors"] for row in calendars)
+        if calendars and all(row["errors"] for row in calendars):
+            raise ProviderError(f"FreeBusy failed for all calendars: {calendar_ids}")
+        return {
+            "kind": "calendar_freebusy/v1",
+            "time_min": time_min,
+            "time_max": time_max,
+            "calendars": calendars,
+            "has_errors": has_errors,
+        }
 
     # ----- Helpers -----
-    def _normalize_event(self, event: Dict[str, Any]) -> Dict[str, Any]:
-        """Verbatim port from lib/clients/calendar.py._normalize_event."""
-        start = event["start"].get("dateTime", event["start"].get("date"))
-        end = event["end"].get("dateTime", event["end"].get("date"))
-        if "T" in start:
+    def _normalize_event(
+        self,
+        event: Dict[str, Any],
+        *,
+        calendar_id: str = "primary",
+    ) -> Dict[str, Any]:
+        start_obj = event.get("start", {})
+        end_obj = event.get("end", {})
+        start = start_obj.get("dateTime", start_obj.get("date", ""))
+        end = end_obj.get("dateTime", end_obj.get("date", ""))
+        all_day = "date" in start_obj and "dateTime" not in start_obj
+        if start and "T" in start:
             start_dt = datetime.fromisoformat(start.replace("Z", "+00:00"))
             end_dt = datetime.fromisoformat(end.replace("Z", "+00:00"))
             time_str = start_dt.strftime("%H:%M")
@@ -157,13 +329,120 @@ class CalendarClient:
             time_str = "весь день"
             duration_min = None
             event_date = start
+
+        conference = event.get("conferenceData", {}) or {}
+        status = (
+            conference.get("createRequest", {})
+            .get("status", {})
+            .get("statusCode")
+        )
+        meet_link = event.get("hangoutLink", "")
+        if not meet_link:
+            for entry in conference.get("entryPoints", []) or []:
+                if entry.get("entryPointType") == "video":
+                    meet_link = entry.get("uri", "")
+                    break
+        meet_status = status or ("success" if meet_link else "none")
+
         return {
+            "kind": "calendar_event/v1",
             "id": event.get("id", ""),
+            "calendar_id": calendar_id,
             "summary": event.get("summary", "(без названия)"),
             "date": event_date,
             "time": time_str,
             "duration_min": duration_min,
+            "start": start_obj,
+            "end": end_obj,
+            "all_day": all_day,
             "location": event.get("location", ""),
             "description": (event.get("description") or "")[:200],
             "html_link": event.get("htmlLink", ""),
+            "meet_link": meet_link,
+            "meet_status": meet_status,
+            "recurrence": event.get("recurrence", []),
+            "attendees": event.get("attendees", []),
+            "reminders": event.get("reminders", {"useDefault": True, "overrides": []}),
+        }
+
+    def _event_time_body(
+        self,
+        *,
+        summary: str,
+        date: str,
+        time: Optional[str],
+        duration_min: int,
+        all_day: bool,
+        tz: str,
+    ) -> Dict[str, Any]:
+        event = {"summary": summary}
+        if all_day:
+            if time:
+                raise ValueError("all-day create rejects time")
+            event.update(self._date_range(date))
+            return event
+        if not time:
+            raise ValueError("timed create requires time")
+        event.update(self._datetime_range(date, time, duration_min, tz))
+        return event
+
+    def _datetime_range(
+        self,
+        date: str,
+        time: str,
+        duration_min: int,
+        tz: str,
+    ) -> Dict[str, Any]:
+        start_dt = datetime.strptime(f"{date} {time}", "%Y-%m-%d %H:%M")
+        end_dt = start_dt + timedelta(minutes=duration_min)
+        return {
+            "start": {"dateTime": start_dt.isoformat(), "timeZone": tz},
+            "end": {"dateTime": end_dt.isoformat(), "timeZone": tz},
+        }
+
+    def _date_range(self, event_date: str) -> Dict[str, Any]:
+        start_day = date_cls.fromisoformat(event_date)
+        end_day = start_day + timedelta(days=1)
+        return {
+            "start": {"date": start_day.isoformat()},
+            "end": {"date": end_day.isoformat()},
+        }
+
+    def _meet_request(self) -> Dict[str, Any]:
+        return {
+            "createRequest": {
+                "requestId": str(uuid.uuid4()),
+                "conferenceSolutionKey": {"type": "hangoutsMeet"},
+            }
+        }
+
+    def _validate_rrule(self, rrule: str) -> str:
+        if not rrule.startswith("RRULE:") or "\n" in rrule or "\r" in rrule:
+            raise ValueError("RRULE must start with RRULE: and fit on one line")
+        return rrule
+
+    def _parse_attendees(self, attendees: Optional[str]) -> List[Dict[str, str]]:
+        if not attendees:
+            return []
+        seen = set()
+        rows = []
+        for raw in attendees.split(","):
+            email = raw.strip()
+            if not email:
+                raise ValueError("attendees must not contain empty emails")
+            if email in seen:
+                continue
+            seen.add(email)
+            rows.append({"email": email})
+        return rows
+
+    def _reminders_body(self, minutes: List[int]) -> Dict[str, Any]:
+        if len(minutes) > 5:
+            raise ValueError("at most 5 reminder overrides are allowed")
+        for value in minutes:
+            if value < 0 or value > 40320:
+                raise ValueError("reminder minutes must be in range 0..40320")
+        return {
+            "useDefault": False,
+            "overrides": [{"method": "popup", "minutes": value} for value in minutes],
         }

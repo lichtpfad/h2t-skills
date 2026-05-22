@@ -35,14 +35,17 @@ def _build_parser():
     return parser
 
 
-def test_register_adds_5_calendar_subcommands():
+def test_register_adds_calendar_subcommands():
     parser = _build_parser()
     for cmd, extra in [
+        ("calendars", []),
         ("list", []),
         ("search", ["q"]),
         ("get", ["evtid"]),
         ("create", ["Title", "2026-04-06", "14:00"]),
+        ("update", ["evtid", "--summary", "New"]),
         ("delete", ["evtid"]),
+        ("freebusy", ["--from", "2026-05-01", "--to", "2026-05-02"]),
     ]:
         ns = parser.parse_args(["calendar", cmd, *extra])
         assert ns.calendar_cmd == cmd
@@ -130,7 +133,9 @@ def test_list_dispatch_json_returns_rows(monkeypatch):
             return [{"id": "evt1", "summary": "M"}]
     _patch_calendar_client(monkeypatch, lambda: _Stub())
     args = SimpleNamespace(
-        calendar_cmd="list", days=1, max=20, as_json=True, fmt="human",
+        calendar_cmd="list", days=1, max=20, calendar_id="primary",
+        from_date=None, to_date=None, tz=None, busy_only=False,
+        as_json=True, fmt="human",
     )
     out = cmds_mod.run(args)
     assert out == [{"id": "evt1", "summary": "M"}]
@@ -154,6 +159,7 @@ def test_list_dispatch_date_window_passes_explicit_bounds(monkeypatch):
         to_date="2026-05-21",
         tz="Asia/Jerusalem",
         max=250,
+        calendar_id="primary",
         busy_only=True,
         as_json=True,
         fmt="human",
@@ -165,6 +171,7 @@ def test_list_dispatch_date_window_passes_explicit_bounds(monkeypatch):
     assert calls == [{
         "days": 7,
         "max_results": 250,
+        "calendar_id": "primary",
         "time_min": "2026-05-01T00:00:00+03:00",
         "time_max": "2026-05-22T00:00:00+03:00",
         "tz": "Asia/Jerusalem",
@@ -183,6 +190,7 @@ def test_list_dispatch_rejects_partial_date_window(monkeypatch):
         to_date=None,
         tz=None,
         max=250,
+        calendar_id="primary",
         busy_only=False,
         as_json=True,
         fmt="human",
@@ -266,3 +274,186 @@ def test_ingest_calendar_shim_silent_on_json(monkeypatch, capsys):
     err = capsys.readouterr().err
     assert "deprecated" not in err.lower()
     assert rc == 0
+
+
+def test_calendar_provider_feature_parsers():
+    parser = _build_parser()
+    assert parser.parse_args(["calendar", "calendars", "--json"]).calendar_cmd == "calendars"
+
+    ns = parser.parse_args([
+        "calendar", "list", "--calendar-id", "team@example.com", "--json",
+    ])
+    assert ns.calendar_id == "team@example.com"
+
+    ns = parser.parse_args([
+        "calendar", "create", "Holiday", "2026-05-25", "--all-day",
+        "--calendar-id", "team@example.com", "--duration", "45",
+        "--location", "Berlin", "--meet", "--rrule", "RRULE:FREQ=WEEKLY;COUNT=2",
+        "--reminder-minutes", "10,60", "--json",
+    ])
+    assert ns.time is None
+    assert ns.all_day is True
+    assert ns.calendar_id == "team@example.com"
+    assert ns.duration_min == 45
+    assert ns.location == "Berlin"
+    assert ns.meet is True
+
+    ns = parser.parse_args([
+        "calendar", "update", "evt",
+        "--replace-attendees", "a@example.com,b@example.com",
+        "--replace-rrule", "RRULE:FREQ=DAILY;COUNT=2",
+        "--replace-reminders", "5,30",
+        "--json",
+    ])
+    assert ns.replace_attendees == "a@example.com,b@example.com"
+    assert ns.replace_rrule == "RRULE:FREQ=DAILY;COUNT=2"
+    assert ns.replace_reminders == "5,30"
+
+    ns = parser.parse_args([
+        "calendar", "freebusy", "--from", "2026-05-22", "--to", "2026-05-23",
+        "--calendar-id", "primary", "--calendar-id", "team@example.com", "--json",
+    ])
+    assert ns.calendar_id == ["primary", "team@example.com"]
+
+
+def test_calendars_dispatch(monkeypatch):
+    from h2t_ops.connectors.calendar import commands as cmds_mod
+
+    class _Stub:
+        def list_calendars(self):
+            return {"kind": "calendar_list/v1", "calendars": []}
+
+    _patch_calendar_client(monkeypatch, lambda: _Stub())
+
+    out = cmds_mod.run(SimpleNamespace(calendar_cmd="calendars", as_json=True, fmt="human"))
+
+    assert out["kind"] == "calendar_list/v1"
+
+
+def test_create_dispatch_passes_provider_features(monkeypatch):
+    from h2t_ops.connectors.calendar import commands as cmds_mod
+    calls = []
+
+    class _Stub:
+        def create_event(self, *args, **kwargs):
+            calls.append((args, kwargs))
+            return {"kind": "calendar_event/v1", "id": "evt"}
+
+    _patch_calendar_client(monkeypatch, lambda: _Stub())
+
+    cmds_mod.run(SimpleNamespace(
+        calendar_cmd="create",
+        summary="S",
+        date="2026-05-25",
+        time="14:00",
+        duration_min=45,
+        all_day=False,
+        description="D",
+        attendees="a@example.com",
+        location="Room A",
+        calendar_id="team@example.com",
+        meet=True,
+        rrule="RRULE:FREQ=WEEKLY;COUNT=2",
+        reminder_minutes="10,60",
+        tz="Asia/Jerusalem",
+        as_json=True,
+        fmt="human",
+    ))
+
+    kwargs = calls[0][1]
+    assert kwargs["calendar_id"] == "team@example.com"
+    assert kwargs["location"] == "Room A"
+    assert kwargs["meet"] is True
+    assert kwargs["rrule"] == "RRULE:FREQ=WEEKLY;COUNT=2"
+    assert kwargs["reminder_minutes"] == [10, 60]
+
+
+def test_create_dispatch_validates_all_day_and_timed_forms(monkeypatch):
+    from h2t_ops.connectors.calendar import commands as cmds_mod
+
+    _patch_calendar_client(monkeypatch, lambda: object())
+
+    with pytest.raises(UsageError):
+        cmds_mod.run(SimpleNamespace(
+            calendar_cmd="create", summary="S", date="2026-05-25", time=None,
+            all_day=False, duration_min=60, description=None, attendees=None,
+            location=None, calendar_id="primary", meet=False, rrule=None,
+            reminder_minutes=None, tz="Asia/Jerusalem", as_json=True, fmt="human",
+        ))
+
+    with pytest.raises(UsageError):
+        cmds_mod.run(SimpleNamespace(
+            calendar_cmd="create", summary="S", date="2026-05-25", time="14:00",
+            all_day=True, duration_min=60, description=None, attendees=None,
+            location=None, calendar_id="primary", meet=False, rrule=None,
+            reminder_minutes=None, tz="Asia/Jerusalem", as_json=True, fmt="human",
+        ))
+
+
+def test_update_dispatch_passes_replace_flags(monkeypatch):
+    from h2t_ops.connectors.calendar import commands as cmds_mod
+    calls = []
+
+    class _Stub:
+        def patch_event(self, *args, **kwargs):
+            calls.append((args, kwargs))
+            return {"kind": "calendar_event/v1", "id": "evt"}
+
+    _patch_calendar_client(monkeypatch, lambda: _Stub())
+
+    out = cmds_mod.run(SimpleNamespace(
+        calendar_cmd="update",
+        event_id="evt",
+        calendar_id="primary",
+        summary="New",
+        date="2026-05-25",
+        time="14:00",
+        duration_min=30,
+        all_day=None,
+        description=None,
+        location=None,
+        replace_attendees="a@example.com,b@example.com",
+        meet=True,
+        replace_rrule="RRULE:FREQ=DAILY;COUNT=2",
+        replace_reminders="10",
+        clear_reminders=False,
+        tz="Asia/Jerusalem",
+        as_json=True,
+        fmt="human",
+    ))
+
+    assert out["id"] == "evt"
+    kwargs = calls[0][1]
+    assert kwargs["replace_attendees"] == "a@example.com,b@example.com"
+    assert kwargs["replace_rrule"] == "RRULE:FREQ=DAILY;COUNT=2"
+    assert kwargs["replace_reminder_minutes"] == [10]
+
+
+def test_freebusy_dispatch_uses_date_window(monkeypatch):
+    from h2t_ops.connectors.calendar import commands as cmds_mod
+    calls = []
+
+    class _Stub:
+        def freebusy(self, time_min, time_max, *, calendar_ids, tz=None):
+            calls.append((time_min, time_max, calendar_ids, tz))
+            return {"kind": "calendar_freebusy/v1", "calendars": [], "has_errors": False}
+
+    _patch_calendar_client(monkeypatch, lambda: _Stub())
+
+    out = cmds_mod.run(SimpleNamespace(
+        calendar_cmd="freebusy",
+        from_date="2026-05-22",
+        to_date="2026-05-23",
+        tz="Asia/Jerusalem",
+        calendar_id=["primary", "team@example.com"],
+        as_json=True,
+        fmt="human",
+    ))
+
+    assert out["kind"] == "calendar_freebusy/v1"
+    assert calls[0] == (
+        "2026-05-22T00:00:00+03:00",
+        "2026-05-24T00:00:00+03:00",
+        ["primary", "team@example.com"],
+        "Asia/Jerusalem",
+    )

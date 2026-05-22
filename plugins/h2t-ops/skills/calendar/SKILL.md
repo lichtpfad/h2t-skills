@@ -27,42 +27,65 @@ CLI="h2t-ops calendar"
 
 ### Просмотр событий
 ```bash
-$CLI list [--days N] [--from YYYY-MM-DD --to YYYY-MM-DD] [--tz TZ] [--max N] [--busy-only] [--json]
+$CLI calendars --json
+$CLI list [--days N] [--from YYYY-MM-DD --to YYYY-MM-DD] [--tz TZ] [--max N] [--busy-only] [--calendar-id primary] [--json]
 ```
 
+- `calendars --json` — список доступных календарей, `access_role`, `can_write`, timezone
 - `--days 1` — события на сегодня (по умолчанию)
 - `--days 7` — события на неделю
 - `--from ... --to ...` — явное окно дат; `--to` включительно для пользователя
 - `--tz Asia/Jerusalem` — timezone для date-window; fallback: `H2T_CALENDAR_TZ`, затем `Asia/Jerusalem`
 - `--busy-only` — скрыть transparent/free события
 - `--max 250` — безопасный дефолт, чтобы не терять насыщенные дни
+- `--calendar-id` — календарь для read/write операций; default `primary`
 
 ### Поиск событий
 ```bash
-$CLI search "<query>" [--max N] [--json]
+$CLI search "<query>" [--max N] [--calendar-id primary] [--json]
 ```
 
 ### Создание события
 ```bash
-$CLI create "<summary>" <YYYY-MM-DD> <HH:MM> [--duration N] [--description "..."] [--attendees "a@b.com,c@d.com"] [--tz "Asia/Jerusalem"]
+$CLI create "<summary>" <YYYY-MM-DD> <HH:MM> [--duration-min N] [--description "..."] [--location "..."] [--attendees "a@b.com,c@d.com"] [--meet] [--rrule "RRULE:FREQ=WEEKLY;COUNT=4"] [--reminder-minutes 10,60] [--calendar-id primary] [--tz "Asia/Jerusalem"]
+$CLI create "<summary>" <YYYY-MM-DD> --all-day [--calendar-id primary] [--json]
 ```
 
 Примеры:
 ```bash
-$CLI create "Встреча" 2026-04-10 14:00 --duration 60
+$CLI create "Встреча" 2026-04-10 14:00 --duration-min 60 --meet
 $CLI create "Встреча" 2026-04-10 14:00 --duration 90 --description "Важная встреча"
+$CLI create "Holiday" 2026-04-10 --all-day --json
 ```
+
+`--duration` остаётся deprecated alias для старых workflow; новые команды должны
+использовать `--duration-min`.
+
+### Обновление события
+```bash
+$CLI update <event-id> [--summary "..."] [--date YYYY-MM-DD --time HH:MM --duration-min N] [--all-day --date YYYY-MM-DD] [--description "..."] [--location "..."] [--replace-attendees a@b.com,c@d.com] [--meet] [--replace-rrule "RRULE:..."] [--replace-reminders 10,60] [--clear-reminders] [--calendar-id primary] [--json]
+```
+
+`--replace-attendees`, `--replace-rrule`, and `--replace-reminders` replace
+Google Calendar array fields. Use them only when replacement is intended.
+
+### FreeBusy
+```bash
+$CLI freebusy --from YYYY-MM-DD --to YYYY-MM-DD [--tz TZ] [--calendar-id primary] [--calendar-id team@example.com] [--json]
+```
+
+Returns raw busy windows and visible per-calendar errors.
 
 ### Удаление события
 ```bash
-$CLI delete <event-id> [--confirm]
+$CLI delete <event-id> [--calendar-id primary] [--confirm]
 ```
 
-Без `--confirm` показывает детали события. С `--confirm` удаляет.
+Без `--confirm` команда не удаляет и возвращает usage error. С `--confirm` удаляет.
 
 ### Получение события
 ```bash
-$CLI get <event-id>
+$CLI get <event-id> [--calendar-id primary] [--json]
 ```
 
 ## Workflow
