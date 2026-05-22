@@ -285,18 +285,20 @@ class NotionClient:
         nodes: List[Dict[str, Any]] = []
         edges: List[Dict[str, Any]] = []
         parent_map: Dict[str, str] = {}
-        children_map: Dict[str, List[str]] = {root_page_id: []}
+        children_map: Dict[str, List[str]] = {}
         errors: List[Dict[str, Any]] = []
 
         root = self.get_page(root_page_id)
+        root_id = root.get("id", root_page_id)
+        children_map[root_id] = []
         nodes.append({
-            "id": root_page_id,
+            "id": root_id,
             "object": root.get("object", "page"),
             "type": root.get("object", "page"),
             "title": root_label or self._title_from_object(root),
             "parent": root.get("parent", {}),
             "parent_chain": [],
-            "source_ref": f"notion:page:{root_page_id}",
+            "source_ref": f"notion:page:{root_id}",
             "notion_url": root.get("url", ""),
             "created_time": root.get("created_time", ""),
             "last_edited_time": root.get("last_edited_time", ""),
@@ -312,7 +314,7 @@ class NotionClient:
                 continue
 
             parent = block.get("parent", {})
-            parent_id = parent.get("page_id") or parent.get("block_id") or root_page_id
+            parent_id = parent.get("page_id") or parent.get("block_id") or root_id
             object_type = "database" if block_type == "child_database" else "block"
 
             nodes.append({
@@ -321,7 +323,7 @@ class NotionClient:
                 "type": block_type,
                 "title": self._title_from_object(block),
                 "parent": parent,
-                "parent_chain": [root_page_id] + item.get("path", []),
+                "parent_chain": [root_id] + item.get("path", []),
                 "source_ref": f"notion:{object_type}:{block_id}",
                 "notion_url": block.get("url", ""),
                 "created_time": block.get("created_time", ""),
@@ -334,7 +336,8 @@ class NotionClient:
 
         return {
             "kind": "notion_workspace_graph/v1",
-            "root_page_id": root_page_id,
+            "root_page_id": root_id,
+            "requested_root_page_id": root_page_id,
             "root_label": root_label,
             "nodes": nodes,
             "edges": edges,

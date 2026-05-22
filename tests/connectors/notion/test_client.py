@@ -481,6 +481,72 @@ def test_graph_page_returns_nodes_edges_and_maps(conv):
     assert result["nodes"][1]["parent_chain"] == ["root", "Root"]
 
 
+def test_graph_page_uses_canonical_root_id_for_edges_and_maps(conv):
+    conv.get_page = lambda page_id: {
+        "id": "canonical",
+        "object": "page",
+        "parent": {"type": "workspace"},
+        "properties": {},
+    }
+    conv.iter_blocks_recursive = lambda page_id, max_depth=3, limit_blocks=None: iter([
+        {
+            "block": {
+                "id": "child",
+                "type": "paragraph",
+                "parent": {"type": "page_id", "page_id": "canonical"},
+            },
+            "depth": 1,
+            "path": [],
+        },
+    ])
+
+    result = conv.graph_page("compact")
+
+    assert result["root_page_id"] == "canonical"
+    assert result["requested_root_page_id"] == "compact"
+    assert result["nodes"][0]["id"] == "canonical"
+    assert result["nodes"][0]["source_ref"] == "notion:page:canonical"
+    assert result["children_map"]["canonical"] == ["child"]
+    assert result["parent_map"]["child"] == "canonical"
+    assert result["nodes"][1]["parent_chain"] == ["canonical"]
+
+
+def test_graph_page_can_exclude_child_databases(conv):
+    conv.get_page = lambda page_id: {
+        "id": page_id,
+        "object": "page",
+        "parent": {"type": "workspace"},
+        "properties": {},
+    }
+    conv.iter_blocks_recursive = lambda page_id, max_depth=3, limit_blocks=None: iter([
+        {
+            "block": {
+                "id": "db1",
+                "type": "child_database",
+                "parent": {"type": "page_id", "page_id": "root"},
+                "child_database": {"title": "Tasks"},
+            },
+            "depth": 1,
+            "path": [],
+        },
+        {
+            "block": {
+                "id": "b1",
+                "type": "paragraph",
+                "parent": {"type": "page_id", "page_id": "root"},
+            },
+            "depth": 1,
+            "path": [],
+        },
+    ])
+
+    result = conv.graph_page("root", include_databases=False)
+
+    assert [node["id"] for node in result["nodes"]] == ["root", "b1"]
+    assert result["children_map"]["root"] == ["b1"]
+    assert "db1" not in result["parent_map"]
+
+
 def test_graph_page_includes_traversal_permission_errors(conv):
     conv.get_page = lambda page_id: {
         "id": page_id,
