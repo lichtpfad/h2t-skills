@@ -245,6 +245,16 @@ def test_find_databases_parser_accepts_recursive_rows_limits_and_json():
     assert ns.as_json is True
 
 
+def test_search_workspace_parser_accepts_object_limit_and_json():
+    ns = _parser().parse_args([
+        "notion", "search-workspace", "--object", "page", "--limit", "5", "--json",
+    ])
+    assert ns.notion_cmd == "search-workspace"
+    assert ns.object == "page"
+    assert ns.limit == 5
+    assert ns.as_json is True
+
+
 def test_find_databases_dispatch_passes_recursive_options(monkeypatch):
     import h2t_ops.connectors.notion.client as client_mod
     from h2t_ops.connectors.notion import commands as cmds_mod
@@ -297,6 +307,25 @@ def test_find_databases_recursive_json_uses_universal_envelope(monkeypatch, caps
     assert payload["ok"] is True
     assert payload["provider"] == "notion"
     assert payload["result"]["kind"] == "notion_database_discovery/v1"
+
+
+def test_search_workspace_json_uses_universal_envelope(monkeypatch, capsys):
+    import h2t_ops.connectors.notion.client as client_mod
+
+    class _Stub:
+        def search_workspace(self, object_type="all", *, limit=None):
+            assert object_type == "page"
+            assert limit is None
+            return {"kind": "notion_workspace_search/v1", "results": []}
+
+    monkeypatch.setattr(client_mod, "NotionClient", lambda: _Stub())
+
+    code = dispatch(["notion", "search-workspace", "--object", "page", "--json"])
+
+    assert code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["ok"] is True
+    assert payload["result"]["kind"] == "notion_workspace_search/v1"
 
 
 def test_sync_databases_json_without_include_databases_raises(tmp_path, monkeypatch):

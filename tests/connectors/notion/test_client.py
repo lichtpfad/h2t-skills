@@ -388,3 +388,28 @@ def test_find_databases_with_rows_non_recursive_stays_shallow(conv):
 def test_find_databases_rejects_negative_row_limit(conv):
     with pytest.raises(UsageError):
         conv.find_databases_on_page("root", recursive=True, row_limit=-1)
+
+
+def test_search_workspace_preserves_parent_shapes(conv):
+    page = {
+        "id": "page-1",
+        "object": "page",
+        "parent": {"type": "workspace"},
+    }
+
+    class _Client:
+        def search(self, **kwargs):
+            assert kwargs == {"filter": {"property": "object", "value": "page"}}
+            return {"results": [page], "has_more": False, "next_cursor": None}
+
+    conv.client = _Client()
+
+    result = conv.search_workspace(object_type="page")
+
+    assert result["kind"] == "notion_workspace_search/v1"
+    assert result["results"][0]["parent"] == {"type": "workspace"}
+
+
+def test_search_workspace_rejects_negative_limit(conv):
+    with pytest.raises(UsageError):
+        conv.search_workspace(object_type="page", limit=-1)

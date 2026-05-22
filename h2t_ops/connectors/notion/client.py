@@ -217,6 +217,40 @@ class NotionClient:
         except Exception as e:
             raise _map_sdk_exc(e, op=f"get database {database_id}") from e
 
+    def search_workspace(
+        self,
+        object_type: str = "all",
+        *,
+        limit: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        if limit is not None and limit < 0:
+            raise UsageError("limit must be non-negative")
+        query_filter = None
+        if object_type in ("page", "database"):
+            query_filter = {"property": "object", "value": object_type}
+        results = []
+        start_cursor = None
+        while True:
+            kwargs = {}
+            if query_filter:
+                kwargs["filter"] = query_filter
+            if start_cursor:
+                kwargs["start_cursor"] = start_cursor
+            if limit:
+                kwargs["page_size"] = min(limit - len(results), 100)
+            try:
+                response = self.client.search(**kwargs)
+            except Exception as e:
+                raise _map_sdk_exc(e, op="search workspace") from e
+            results.extend(response.get("results", []))
+            if limit and len(results) >= limit:
+                results = results[:limit]
+                break
+            if not response.get("has_more"):
+                break
+            start_cursor = response.get("next_cursor")
+        return {"kind": "notion_workspace_search/v1", "object": object_type, "results": results}
+
     def find_databases_on_page(
         self,
         page_id: str,

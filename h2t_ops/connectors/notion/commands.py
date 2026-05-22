@@ -26,6 +26,10 @@ def register(subparsers: Any) -> None:
     s.add_argument("--filter-json"); s.add_argument("--limit", type=int); add_fmt(s)
     gd = cmds.add_parser("get-database", help="Database items")
     gd.add_argument("database_id"); gd.add_argument("--limit", type=int); add_fmt(gd)
+    sw = cmds.add_parser("search-workspace", help="Search shared Notion workspace objects")
+    sw.add_argument("--object", choices=["page", "database", "all"], default="all")
+    sw.add_argument("--limit", type=int)
+    add_fmt(sw)
     fd = cmds.add_parser("find-databases", help="Find databases on a page")
     fd.add_argument("page_id")
     fd.add_argument("--recursive", action="store_true")
@@ -102,6 +106,8 @@ def run(args) -> Any:
         rows = client.query_database(args.database_id, limit=args.limit)
         return rows if _fmt(args) == "json" else client.database_items_to_markdown(
             rows, client.get_database(args.database_id))
+    if cmd == "search-workspace":
+        return client.search_workspace(object_type=args.object, limit=args.limit)
     if cmd == "find-databases":
         return client.find_databases_on_page(
             args.page_id,
