@@ -6,7 +6,7 @@ download, sync, auth-check, teams.
 Bypasses broken Drive auto-sync (re-transcription bug, POS#80) by pulling
 originals directly from MeetGeek Public API.
 
-Auth: MEETGEEK_API_KEY env (loaded from ~/.dor/secrets.env if present).
+Auth: MEETGEEK_API_KEY env (loaded from ~/.dor/secrets/secrets.env if present).
 Base URL: MEETGEEK_BASE_URL env, default https://api.meetgeek.ai.
 """
 
@@ -29,11 +29,22 @@ except ImportError:
     print("ERROR: 'requests' not installed. Run: pip install requests", file=sys.stderr)
     sys.exit(2)
 
-try:
-    from dotenv import load_dotenv
-    load_dotenv(Path.home() / ".dor" / "secrets.env", override=False)
-except ImportError:
-    pass
+def _load_secret_env_files() -> None:
+    """Load canonical then legacy h2t secrets files without overriding env."""
+    try:
+        from dotenv import load_dotenv
+    except ImportError:
+        return
+    override = os.environ.get("H2T_SECRETS_FILE")
+    paths = [Path(override)] if override else [
+        Path.home() / ".dor" / "secrets" / "secrets.env",
+        Path.home() / ".dor" / "secrets.env",
+    ]
+    for path in paths:
+        load_dotenv(path, override=False)
+
+
+_load_secret_env_files()
 
 # ─── Recovery module ──────────────────────────────────────────────────────────
 import sys as _sys_r
@@ -81,7 +92,7 @@ def _headers() -> dict[str, str]:
     if not API_KEY:
         raise ApiError(
             "MEETGEEK_API_KEY not set.\n"
-            "Hint: export MEETGEEK_API_KEY=... or add to ~/.dor/secrets.env\n"
+            "Hint: export MEETGEEK_API_KEY=... or add to ~/.dor/secrets/secrets.env\n"
             "Registry: ~/.h2t/config/secrets/meetgeek.md",
             exit_code=1,
         )

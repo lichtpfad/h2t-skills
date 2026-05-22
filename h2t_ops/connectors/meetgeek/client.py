@@ -44,8 +44,11 @@ class MeetGeekClient:
         if not api_key:
             raise ConfigError(
                 "MEETGEEK_API_KEY not set.",
-                hint="Add MEETGEEK_API_KEY to ~/.dor/secrets.env or set in environment. "
-                     "Registry: ~/.h2t/config/secrets/meetgeek.md",
+                hint=(
+                    "Add MEETGEEK_API_KEY to ~/.dor/secrets/secrets.env "
+                    "(legacy fallback: ~/.dor/secrets.env) or set in environment. "
+                    "Registry: ~/.h2t/config/secrets/meetgeek.md"
+                ),
             )
         self._api_key = api_key
         self._base_url = os.environ.get(

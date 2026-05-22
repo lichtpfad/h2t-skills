@@ -20,15 +20,33 @@ import argparse
 from pathlib import Path
 from datetime import datetime, timezone, timedelta
 
-from dotenv import load_dotenv
 from telethon.sync import TelegramClient
 from telethon.errors import SessionPasswordNeededError
 from google import genai
 from google.genai import types as genai_types
 
-load_dotenv(Path.home() / '.dor' / 'secrets.env', override=False)
+def _load_secret_env_files() -> None:
+    """Load canonical then legacy h2t secrets files without overriding env."""
+    try:
+        from dotenv import load_dotenv
+    except ImportError:
+        return
+    override = os.environ.get("H2T_SECRETS_FILE")
+    paths = [Path(override)] if override else [
+        Path.home() / '.dor' / 'secrets' / 'secrets.env',
+        Path.home() / '.dor' / 'secrets.env',
+    ]
+    for path in paths:
+        load_dotenv(path, override=False)
+
+
+_load_secret_env_files()
 DOR_ROOT = Path(os.environ.get('DOR_ROOT', Path.home() / 'Projects' / 'DOR'))
-load_dotenv(DOR_ROOT / '.env', override=False)  # fallback
+try:
+    from dotenv import load_dotenv
+    load_dotenv(DOR_ROOT / '.env', override=False)  # fallback
+except ImportError:
+    pass
 
 # --- Пути ---
 CONFIG_DIR = Path.home() / '.config' / 'telegram'

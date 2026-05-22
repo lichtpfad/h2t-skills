@@ -27,12 +27,23 @@ except ImportError:
     print("ERROR: pyyaml not installed. Run: pip install pyyaml")
     raise
 
-try:
-    from dotenv import load_dotenv
-    load_dotenv(Path.home() / '.dor' / 'secrets.env', override=False)
+def _load_secret_env_files() -> None:
+    """Load canonical then legacy h2t secrets files without overriding env."""
+    try:
+        from dotenv import load_dotenv
+    except ImportError:
+        return  # python-dotenv optional — можно передать GEMINI_API_KEY вручную
+    override = os.environ.get("H2T_SECRETS_FILE")
+    paths = [Path(override)] if override else [
+        Path.home() / '.dor' / 'secrets' / 'secrets.env',
+        Path.home() / '.dor' / 'secrets.env',
+    ]
+    for path in paths:
+        load_dotenv(path, override=False)
     load_dotenv(override=False)  # fallback: .env in cwd
-except ImportError:
-    pass  # python-dotenv optional — можно передать GEMINI_API_KEY вручную
+
+
+_load_secret_env_files()
 
 import requests
 
