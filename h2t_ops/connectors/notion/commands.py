@@ -27,7 +27,13 @@ def register(subparsers: Any) -> None:
     gd = cmds.add_parser("get-database", help="Database items")
     gd.add_argument("database_id"); gd.add_argument("--limit", type=int); add_fmt(gd)
     fd = cmds.add_parser("find-databases", help="Find databases on a page")
-    fd.add_argument("page_id"); add_fmt(fd)
+    fd.add_argument("page_id")
+    fd.add_argument("--recursive", action="store_true")
+    fd.add_argument("--max-depth", type=int, default=3)
+    fd.add_argument("--limit-blocks", type=int)
+    fd.add_argument("--with-rows", action="store_true")
+    fd.add_argument("--row-limit", type=int, default=100)
+    add_fmt(fd)
     ft = cmds.add_parser("find-project-tasks",
                          help="List tasks whose Project relation points at <page_id>")
     ft.add_argument("project_page_id")
@@ -46,7 +52,13 @@ def register(subparsers: Any) -> None:
     u.add_argument("--replace", action="store_true"); add_fmt(u)
     sy = cmds.add_parser("sync", help="Sync page to a markdown file")
     sy.add_argument("page_id"); sy.add_argument("output_file")
-    sy.add_argument("--preserve-metadata", action="store_true"); add_fmt(sy)
+    sy.add_argument("--preserve-metadata", action="store_true")
+    sy.add_argument("--include-databases", action="store_true")
+    sy.add_argument("--recursive", action="store_true")
+    sy.add_argument("--max-depth", type=int, default=3)
+    sy.add_argument("--row-limit", type=int, default=100)
+    sy.add_argument("--databases-json")
+    add_fmt(sy)
 
     p.set_defaults(_handler=run)
 
@@ -91,7 +103,14 @@ def run(args) -> Any:
         return rows if _fmt(args) == "json" else client.database_items_to_markdown(
             rows, client.get_database(args.database_id))
     if cmd == "find-databases":
-        return client.find_databases_on_page(args.page_id)
+        return client.find_databases_on_page(
+            args.page_id,
+            recursive=getattr(args, "recursive", False),
+            max_depth=getattr(args, "max_depth", 3),
+            limit_blocks=getattr(args, "limit_blocks", None),
+            with_rows=getattr(args, "with_rows", False),
+            row_limit=getattr(args, "row_limit", 100),
+        )
     if cmd == "find-project-tasks":
         fdict = {"property": "Project", "relation": {"contains": args.project_page_id}}
         rows = client.query_database(args.database_id,
@@ -124,6 +143,32 @@ def run(args) -> Any:
             md = (f"---\nnotion_id: {args.page_id}\n"
                   f"created: {pg.get('created_time','')}\n"
                   f"modified: {pg.get('last_edited_time','')}\n---\n\n") + md
+        if getattr(args, "databases_json", None) and not getattr(args, "include_databases", False):
+            raise UsageError("sync: --databases-json requires --include-databases")
+        if getattr(args, "include_databases", False):
+            discovery = client.find_databases_on_page(
+                args.page_id,
+                recursive=getattr(args, "recursive", False),
+                max_depth=getattr(args, "max_depth", 3),
+                with_rows=True,
+                row_limit=getattr(args, "row_limit", 100),
+            )
+            lines = ["\n\n## Embedded databases\n\n"]
+            for db in discovery.get("databases", []):
+                lines.append(
+                    f"- **{db.get('title', 'Untitled')}** "
+                    f"({db.get('type', db.get('kind', 'database'))}) "
+                    f"`{db.get('database_id', '')}` - rows: {db.get('row_count', 0)}\n"
+                )
+            md += "".join(lines)
+            if getattr(args, "databases_json", None):
+                import json as _json
+                sidecar = Path(args.databases_json)
+                sidecar.parent.mkdir(parents=True, exist_ok=True)
+                sidecar.write_text(
+                    _json.dumps(discovery, ensure_ascii=False, indent=2),
+                    encoding="utf-8",
+                )
         out_path = Path(args.output_file)
         out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_text(md, encoding="utf-8")

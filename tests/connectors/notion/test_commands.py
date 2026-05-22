@@ -1,4 +1,5 @@
 import argparse
+import json
 import sys
 import builtins
 from h2t_ops.connectors.notion.commands import register
@@ -228,3 +229,148 @@ def test_find_project_tasks_dispatch_markdown_uses_database_metadata(monkeypatch
     )
     out = cmds_mod.run(args)
     assert out == "# Tasks (1 rows)"
+
+
+def test_find_databases_parser_accepts_recursive_rows_limits_and_json():
+    ns = _parser().parse_args([
+        "notion", "find-databases", "PAGE",
+        "--recursive", "--max-depth", "4", "--limit-blocks", "200",
+        "--with-rows", "--row-limit", "5", "--json",
+    ])
+    assert ns.recursive is True
+    assert ns.max_depth == 4
+    assert ns.limit_blocks == 200
+    assert ns.with_rows is True
+    assert ns.row_limit == 5
+    assert ns.as_json is True
+
+
+def test_find_databases_dispatch_passes_recursive_options(monkeypatch):
+    import h2t_ops.connectors.notion.client as client_mod
+    from h2t_ops.connectors.notion import commands as cmds_mod
+    from types import SimpleNamespace
+
+    calls = []
+
+    class _Stub:
+        def find_databases_on_page(self, page_id, **kwargs):
+            calls.append((page_id, kwargs))
+            return {"kind": "notion_database_discovery/v1"}
+
+    monkeypatch.setattr(client_mod, "NotionClient", lambda: _Stub())
+
+    out = cmds_mod.run(SimpleNamespace(
+        notion_cmd="find-databases",
+        page_id="PAGE",
+        recursive=True,
+        max_depth=4,
+        limit_blocks=200,
+        with_rows=True,
+        row_limit=5,
+        as_json=True,
+        fmt="human",
+    ))
+
+    assert out == {"kind": "notion_database_discovery/v1"}
+    assert calls == [("PAGE", {
+        "recursive": True,
+        "max_depth": 4,
+        "limit_blocks": 200,
+        "with_rows": True,
+        "row_limit": 5,
+    })]
+
+
+def test_find_databases_recursive_json_uses_universal_envelope(monkeypatch, capsys):
+    import h2t_ops.connectors.notion.client as client_mod
+
+    class _Stub:
+        def find_databases_on_page(self, page_id, **kwargs):
+            return {"kind": "notion_database_discovery/v1", "databases": []}
+
+    monkeypatch.setattr(client_mod, "NotionClient", lambda: _Stub())
+
+    code = dispatch(["notion", "find-databases", "PAGE", "--recursive", "--json"])
+
+    assert code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["ok"] is True
+    assert payload["provider"] == "notion"
+    assert payload["result"]["kind"] == "notion_database_discovery/v1"
+
+
+def test_sync_databases_json_without_include_databases_raises(tmp_path, monkeypatch):
+    from h2t_ops.connectors.notion import commands as cmds_mod
+    from types import SimpleNamespace
+
+    _patch_client(monkeypatch)
+
+    with pytest.raises(UsageError):
+        cmds_mod.run(SimpleNamespace(
+            notion_cmd="sync",
+            page_id="P",
+            output_file=str(tmp_path / "page.md"),
+            preserve_metadata=False,
+            include_databases=False,
+            recursive=False,
+            max_depth=3,
+            row_limit=100,
+            databases_json=str(tmp_path / "sidecar.json"),
+            as_json=False,
+            fmt="human",
+        ))
+
+
+def test_sync_include_databases_writes_markdown_and_json_sidecar(tmp_path, monkeypatch):
+    import h2t_ops.connectors.notion.client as client_mod
+    from h2t_ops.connectors.notion import commands as cmds_mod
+    from types import SimpleNamespace
+
+    calls = []
+
+    class _Stub:
+        def get_blocks(self, page_id):
+            return [{"id": "b1", "type": "paragraph"}]
+
+        def blocks_to_markdown(self, blocks):
+            return "Body\n"
+
+        def find_databases_on_page(self, page_id, **kwargs):
+            calls.append((page_id, kwargs))
+            return {
+                "kind": "notion_database_discovery/v1",
+                "databases": [
+                    {"title": "Tasks", "database_id": "db1", "type": "child_database",
+                     "row_count": 1},
+                ],
+                "stats": {"databases_found": 1},
+            }
+
+    monkeypatch.setattr(client_mod, "NotionClient", lambda: _Stub())
+    md = tmp_path / "page.md"
+    sidecar = tmp_path / "nested" / "sidecar.json"
+
+    out = cmds_mod.run(SimpleNamespace(
+        notion_cmd="sync",
+        page_id="P",
+        output_file=str(md),
+        preserve_metadata=False,
+        include_databases=True,
+        recursive=True,
+        max_depth=3,
+        row_limit=5,
+        databases_json=str(sidecar),
+        as_json=False,
+        fmt="human",
+    ))
+
+    assert "Synced to" in out
+    assert "## Embedded databases" in md.read_text(encoding="utf-8")
+    payload = json.loads(sidecar.read_text(encoding="utf-8"))
+    assert payload["kind"] == "notion_database_discovery/v1"
+    assert calls == [("P", {
+        "recursive": True,
+        "max_depth": 3,
+        "with_rows": True,
+        "row_limit": 5,
+    })]
