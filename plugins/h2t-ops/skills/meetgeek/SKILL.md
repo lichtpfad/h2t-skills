@@ -1,7 +1,7 @@
 ---
 name: h2t-ops:meetgeek
 description: "MeetGeek API: pull meetings, transcripts, summaries, highlights, insights, recordings. Bypasses broken Drive auto-sync (re-transcription bug, POS#80). Watch mode + webhook server. Triggers: 'meetgeek', 'sync transcripts', 'pull meetings', 'митинги', 'h2t-ops:meetgeek'."
-compatibility: "Requires MEETGEEK_API_KEY in ~/.dor/secrets.env or env var. Region-specific (EU/US) — key prefix indicates region."
+compatibility: "Requires MEETGEEK_API_KEY in ~/.dor/secrets/secrets.env, legacy ~/.dor/secrets.env, or env var. Region-specific (EU/US) — key prefix indicates region."
 metadata:
   author: lichtpfad
   version: 1.2.0
@@ -137,7 +137,8 @@ $LEGACY_CLI webhook-server --port 8765 --bind 127.0.0.1 --out ~/.dor/lake/meetge
 - `MEETGEEK_TIMEOUT` (default: 30s)
 - `MEETGEEK_MAX_PAGES` (default: 1000) — safety cap для list pagination
 
-Loaded from `~/.dor/secrets.env` если присутствует (`python-dotenv`), иначе из shell env.
+Loaded from `~/.dor/secrets/secrets.env` first, then legacy `~/.dor/secrets.env`
+if present (`python-dotenv`), otherwise from shell env.
 
 ## Обработка ошибок
 
