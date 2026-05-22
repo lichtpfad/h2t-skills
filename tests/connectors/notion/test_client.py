@@ -511,6 +511,76 @@ def test_graph_page_uses_canonical_root_id_for_edges_and_maps(conv):
     assert result["nodes"][1]["parent_chain"] == ["canonical"]
 
 
+def test_graph_block_parent_owner_chain_uses_retrieve_block(conv):
+    conv.get_page = lambda page_id: {
+        "id": "root",
+        "object": "page",
+        "parent": {"type": "workspace"},
+        "properties": {},
+    }
+    conv.get_block = lambda block_id: {
+        "id": "owner",
+        "type": "paragraph",
+        "parent": {"type": "page_id", "page_id": "root"},
+    }
+    conv.iter_blocks_recursive = lambda page_id, max_depth=3, limit_blocks=None: iter([
+        {
+            "block": {
+                "id": "nested",
+                "type": "paragraph",
+                "parent": {"type": "block_id", "block_id": "owner"},
+            },
+            "depth": 2,
+            "path": [],
+        },
+    ])
+
+    result = conv.graph_page("root")
+
+    assert result["parent_map"]["nested"] == "owner"
+    assert result["owner_map"]["nested"]["owner_block_id"] == "owner"
+    assert result["owner_map"]["nested"]["owner_page_id"] == "root"
+    assert result["owner_map"]["nested"]["chain"] == ["owner"]
+    assert result["owner_map"]["nested"]["source_refs"] == ["notion:block:owner"]
+    assert result["owner_map"]["nested"]["owner_page_source_ref"] == "notion:page:root"
+
+
+def test_graph_block_parent_owner_resolution_error_keeps_node(conv):
+    conv.get_page = lambda page_id: {
+        "id": "root",
+        "object": "page",
+        "parent": {"type": "workspace"},
+        "properties": {},
+    }
+
+    def _blocked(block_id):
+        raise ProviderError("restricted owner")
+
+    conv.get_block = _blocked
+    conv.iter_blocks_recursive = lambda page_id, max_depth=3, limit_blocks=None: iter([
+        {
+            "block": {
+                "id": "nested",
+                "type": "paragraph",
+                "parent": {"type": "block_id", "block_id": "owner"},
+            },
+            "depth": 2,
+            "path": [],
+        },
+    ])
+
+    result = conv.graph_page("root")
+
+    assert [node["id"] for node in result["nodes"]] == ["root", "nested"]
+    assert result["parent_map"]["nested"] == "owner"
+    assert result["owner_map"]["nested"]["owner_block_id"] == "owner"
+    assert result["owner_map"]["nested"]["owner_page_id"] is None
+    assert result["owner_map"]["nested"]["error"] == "restricted owner"
+    assert result["errors"] == [
+        {"block_id": "nested", "owner_block_id": "owner", "error": "restricted owner"}
+    ]
+
+
 def test_graph_page_can_exclude_child_databases(conv):
     conv.get_page = lambda page_id: {
         "id": page_id,

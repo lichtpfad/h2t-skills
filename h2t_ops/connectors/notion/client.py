@@ -85,6 +85,12 @@ class NotionClient:
         except Exception as e:
             raise _map_sdk_exc(e, op=f"get page {page_id}") from e
 
+    def get_block(self, block_id: str) -> Dict[str, Any]:
+        try:
+            return self.client.blocks.retrieve(block_id=block_id)
+        except Exception as e:
+            raise _map_sdk_exc(e, op=f"get block {block_id}") from e
+
     def get_blocks(self, page_id: str, limit: Optional[int] = None) -> List[Dict[str, Any]]:
         blocks: List[Dict[str, Any]] = []
         start_cursor = None
@@ -274,6 +280,43 @@ class NotionClient:
                     return self._rich_text_to_markdown(rich_text) or obj_type
         return obj.get("object") or obj_type or "Untitled"
 
+    def _resolve_block_owner(self, block_id: str) -> Dict[str, Any]:
+        seen: set[str] = set()
+        chain: List[str] = []
+        current_id = block_id
+
+        for _ in range(100):
+            if current_id in seen:
+                raise ProviderError(f"Cycle resolving Notion block owner at {current_id}")
+            seen.add(current_id)
+            chain.append(current_id)
+
+            block = self.get_block(current_id)
+            parent = block.get("parent", {})
+            parent_type = parent.get("type")
+            if parent_type == "page_id":
+                return {
+                    "owner_block_id": block_id,
+                    "owner_page_id": parent.get("page_id"),
+                    "chain": chain,
+                    "source_refs": [f"notion:block:{item}" for item in chain],
+                    "owner_page_source_ref": (
+                        f"notion:page:{parent.get('page_id')}" if parent.get("page_id") else None
+                    ),
+                }
+            if parent_type == "block_id" and parent.get("block_id"):
+                current_id = parent["block_id"]
+                continue
+            return {
+                "owner_block_id": block_id,
+                "owner_page_id": None,
+                "chain": chain,
+                "source_refs": [f"notion:block:{item}" for item in chain],
+                "owner_page_source_ref": None,
+            }
+
+        raise ProviderError(f"Exceeded Notion block owner chain limit at {current_id}")
+
     def graph_page(
         self,
         root_page_id: str,
@@ -285,6 +328,7 @@ class NotionClient:
         nodes: List[Dict[str, Any]] = []
         edges: List[Dict[str, Any]] = []
         parent_map: Dict[str, str] = {}
+        owner_map: Dict[str, Dict[str, Any]] = {}
         children_map: Dict[str, List[str]] = {}
         errors: List[Dict[str, Any]] = []
 
@@ -316,6 +360,24 @@ class NotionClient:
             parent = block.get("parent", {})
             parent_id = parent.get("page_id") or parent.get("block_id") or root_id
             object_type = "database" if block_type == "child_database" else "block"
+            if parent.get("type") == "block_id" and parent.get("block_id"):
+                owner_block_id = parent["block_id"]
+                try:
+                    owner_map[block_id] = self._resolve_block_owner(owner_block_id)
+                except Exception as exc:
+                    owner_map[block_id] = {
+                        "owner_block_id": owner_block_id,
+                        "owner_page_id": None,
+                        "chain": [owner_block_id],
+                        "source_refs": [f"notion:block:{owner_block_id}"],
+                        "owner_page_source_ref": None,
+                        "error": str(exc),
+                    }
+                    errors.append({
+                        "block_id": block_id,
+                        "owner_block_id": owner_block_id,
+                        "error": str(exc),
+                    })
 
             nodes.append({
                 "id": block_id,
@@ -342,6 +404,7 @@ class NotionClient:
             "nodes": nodes,
             "edges": edges,
             "parent_map": parent_map,
+            "owner_map": owner_map,
             "children_map": children_map,
             "errors": errors + list(getattr(self, "_last_traversal_errors", [])),
             "stats": {
