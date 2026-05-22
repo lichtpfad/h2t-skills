@@ -29,6 +29,10 @@ Each alias must be a lowercase kebab-case string. The value is the full marketpl
 
 ## Conflict resolution (merge semantics)
 
+Each repository has exactly one base profile plus an ordered list of zero or more
+task overlays. Do not model a repo as multiple base profiles. Use the base for
+the repo's default work mode and overlays for temporary or secondary work types.
+
 1. Start with base profile's `enable` and `disable` sets.
 2. Apply overlays in listed order.
 3. Later overlays win on direct conflicts.

@@ -37,7 +37,7 @@ python <script> <mode> --cwd <repo>
 | `remove --overlay <name>` | Remove overlay |
 | `reset` | Strip overlays, reapply base |
 | `sync` | Re-apply committed binding on current machine |
-| `doctor` | Report missing plugins, stale binding (report-only) |
+| `doctor` | Report binding/settings/profile-resolution health (report-only) |
 
 ## Base profiles
 
@@ -46,6 +46,19 @@ python <script> <mode> --cwd <repo>
 ## Task overlays
 
 `plugin-dev` · `creative` · `marketing` · `product` · `research` · `dcc` · `github-heavy` · `minimal`
+
+## Profile model
+
+Each repo has one base profile plus an ordered list of overlays:
+
+```
+base: dev
+overlays: [creative, marketing]
+```
+
+Use the base profile for the repo's normal work mode. Use overlays for temporary
+or secondary task types inside the same repo. Do not force a repo into multiple
+base profiles.
 
 ## Workflow
 
@@ -64,14 +77,25 @@ Always show diff output before writing.
 add --overlay <name>
 ```
 
+Repeat `add --overlay ...` to stack several work contexts in one repo:
+
+```
+add --overlay creative
+add --overlay marketing
+status
+```
+
+Use `remove --overlay <name>` to subtract one task context and `reset` to return
+to the base profile.
+
 **Syncing to another machine after `git pull`:**
 
 ```
 sync
 ```
 
-Then tell user: run `/plugin marketplace update`, `/plugin install` for any missing plugins
-listed in output, then `/reload-plugins`.
+Then tell user: run `/plugin marketplace update`, install any plugins Claude reports as
+missing, then `/reload-plugins`.
 
 ## Safety rules
 
@@ -81,6 +105,7 @@ listed in output, then `/reload-plugins`.
 4. Always show `diff` output before `apply`. If user did not request apply, stop at diff.
 5. Stop and ask before applying to a repo with an existing non-profile `.claude/settings.json`.
 6. `doctor` is report-only — no fixes without explicit user approval.
+7. `doctor` does not inspect the global marketplace/cache install state yet.
 
 ## Output
 

@@ -187,6 +187,20 @@ class TestSettingsReadWrite(unittest.TestCase):
         settings = json.loads((self.cwd / ".claude" / "settings.json").read_text())
         self.assertTrue(settings["enabledPlugins"].get("marketing-playbook@marketing-playbook-plugins"))
 
+    def test_add_multiple_overlays_stacks_work_contexts_for_one_repo(self):
+        self._apply("pos")
+        ap.add_overlay(self.cwd, "marketing", catalog_path=self.catalog_path)
+        ap.add_overlay(self.cwd, "creative", catalog_path=self.catalog_path)
+
+        binding = json.loads((self.cwd / ".claude" / "agent-profile.json").read_text())
+        self.assertEqual(binding["base"], "pos")
+        self.assertEqual(binding["overlays"], ["marketing", "creative"])
+
+        settings = json.loads((self.cwd / ".claude" / "settings.json").read_text())
+        self.assertTrue(settings["enabledPlugins"].get("marketing-playbook@marketing-playbook-plugins"))
+        self.assertTrue(settings["enabledPlugins"].get("lead-search@lead-search-plugins"))
+        self.assertTrue(settings["enabledPlugins"].get("h2t-creative@lichtpfad"))
+
     def test_remove_overlay_updates_binding_and_settings(self):
         self._apply("pos", ["marketing"])
         ap.remove_overlay(self.cwd, "marketing", catalog_path=self.catalog_path)
