@@ -124,6 +124,8 @@ def test_list_events_happy_path_returns_normalized_list(client_obj):
     assert isinstance(rows, list) and len(rows) == 1
     assert rows[0]["summary"] == "M"
     assert rows[0]["time"] == "14:00"
+    assert rows[0]["kind"] == "calendar_event/v1"
+    assert rows[0]["calendar_id"] == "primary"
 
 
 def test_list_events_accepts_explicit_time_bounds_and_timezone(client_obj):
@@ -172,6 +174,226 @@ def test_list_events_busy_only_filters_transparent_before_normalization(client_o
     rows = client_obj.list_events(busy_only=True)
 
     assert [row["id"] for row in rows] == ["busy"]
+
+
+def test_list_calendars_normalizes_access_role(client_obj):
+    client_obj.service.calendarList.return_value.list.return_value.execute.return_value = {
+        "items": [
+            {
+                "id": "primary",
+                "summary": "Primary",
+                "primary": True,
+                "accessRole": "owner",
+                "timeZone": "Asia/Jerusalem",
+                "conferenceProperties": {"allowedConferenceSolutionTypes": ["hangoutsMeet"]},
+            },
+            {
+                "id": "readonly@example.com",
+                "summary": "Read Only",
+                "accessRole": "reader",
+            },
+        ]
+    }
+
+    result = client_obj.list_calendars()
+
+    assert result["kind"] == "calendar_list/v1"
+    assert result["calendars"][0]["access_role"] == "owner"
+    assert result["calendars"][0]["can_write"] is True
+    assert result["calendars"][1]["can_write"] is False
+
+
+def test_read_methods_accept_calendar_id(client_obj):
+    client_obj.service.events.return_value.list.return_value.execute.return_value = {"items": []}
+
+    client_obj.list_events(calendar_id="team@example.com")
+    assert client_obj.service.events.return_value.list.call_args.kwargs["calendarId"] == "team@example.com"
+
+    client_obj.search_events("q", calendar_id="team@example.com")
+    assert client_obj.service.events.return_value.list.call_args.kwargs["calendarId"] == "team@example.com"
+
+    client_obj.service.events.return_value.get.return_value.execute.return_value = {"id": "evt"}
+    assert client_obj.get_event("evt", calendar_id="team@example.com") == {"id": "evt"}
+    assert client_obj.service.events.return_value.get.call_args.kwargs["calendarId"] == "team@example.com"
+
+
+def test_create_event_with_provider_features(client_obj, monkeypatch):
+    import h2t_ops.connectors.calendar.client as cal_client
+
+    monkeypatch.setattr(cal_client.uuid, "uuid4", lambda: "uuid-1")
+    client_obj.service.events.return_value.insert.return_value.execute.return_value = {
+        "id": "evt",
+        "summary": "M",
+        "start": {"dateTime": "2026-05-25T14:00:00+03:00"},
+        "end": {"dateTime": "2026-05-25T15:00:00+03:00"},
+        "hangoutLink": "https://meet.google.com/abc",
+        "recurrence": ["RRULE:FREQ=WEEKLY;COUNT=2"],
+        "attendees": [{"email": "a@example.com"}],
+        "reminders": {"useDefault": False, "overrides": [{"method": "popup", "minutes": 10}]},
+    }
+
+    result = client_obj.create_event(
+        "M",
+        "2026-05-25",
+        "14:00",
+        calendar_id="team@example.com",
+        location="Room A",
+        attendees="a@example.com,a@example.com",
+        meet=True,
+        rrule="RRULE:FREQ=WEEKLY;COUNT=2",
+        reminder_minutes=[10],
+    )
+
+    kwargs = client_obj.service.events.return_value.insert.call_args.kwargs
+    body = kwargs["body"]
+    assert kwargs["calendarId"] == "team@example.com"
+    assert kwargs["conferenceDataVersion"] == 1
+    assert body["location"] == "Room A"
+    assert body["conferenceData"]["createRequest"]["requestId"] == "uuid-1"
+    assert body["recurrence"] == ["RRULE:FREQ=WEEKLY;COUNT=2"]
+    assert body["attendees"] == [{"email": "a@example.com"}]
+    assert body["reminders"]["overrides"] == [{"method": "popup", "minutes": 10}]
+    assert result["meet_link"] == "https://meet.google.com/abc"
+    assert result["calendar_id"] == "team@example.com"
+
+
+def test_create_event_all_day_uses_date_fields(client_obj):
+    client_obj.service.events.return_value.insert.return_value.execute.return_value = {
+        "id": "ad",
+        "summary": "Holiday",
+        "start": {"date": "2026-05-25"},
+        "end": {"date": "2026-05-26"},
+    }
+
+    result = client_obj.create_event("Holiday", "2026-05-25", None, all_day=True)
+
+    body = client_obj.service.events.return_value.insert.call_args.kwargs["body"]
+    assert body["start"] == {"date": "2026-05-25"}
+    assert body["end"] == {"date": "2026-05-26"}
+    assert "timeZone" not in body["start"]
+    assert result["all_day"] is True
+
+
+def test_create_event_rejects_invalid_inputs(client_obj):
+    with pytest.raises(ValueError):
+        client_obj.create_event("Holiday", "2026-05-25", "14:00", all_day=True)
+    with pytest.raises(ValueError):
+        client_obj.create_event("Meeting", "2026-05-25", None)
+    with pytest.raises(ValueError):
+        client_obj.create_event("R", "2026-05-25", "14:00", rrule="FREQ=WEEKLY")
+    with pytest.raises(ValueError):
+        client_obj.create_event("R", "2026-05-25", "14:00", reminder_minutes=[-1])
+
+
+def test_patch_event_reschedule_replace_arrays_and_meet(client_obj, monkeypatch):
+    import h2t_ops.connectors.calendar.client as cal_client
+
+    monkeypatch.setattr(cal_client.uuid, "uuid4", lambda: "uuid-2")
+    client_obj.service.events.return_value.patch.return_value.execute.return_value = {
+        "id": "evt",
+        "summary": "New",
+        "start": {"dateTime": "2026-05-25T14:00:00+03:00"},
+        "end": {"dateTime": "2026-05-25T14:30:00+03:00"},
+    }
+
+    client_obj.patch_event(
+        "evt",
+        summary="New",
+        date="2026-05-25",
+        time="14:00",
+        duration_min=30,
+        replace_attendees="a@example.com,b@example.com",
+        meet=True,
+        replace_rrule="RRULE:FREQ=DAILY;COUNT=2",
+        replace_reminder_minutes=[10, 60],
+    )
+
+    kwargs = client_obj.service.events.return_value.patch.call_args.kwargs
+    body = kwargs["body"]
+    assert kwargs["calendarId"] == "primary"
+    assert kwargs["eventId"] == "evt"
+    assert kwargs["conferenceDataVersion"] == 1
+    assert body["attendees"] == [{"email": "a@example.com"}, {"email": "b@example.com"}]
+    assert body["conferenceData"]["createRequest"]["requestId"] == "uuid-2"
+    assert body["recurrence"] == ["RRULE:FREQ=DAILY;COUNT=2"]
+    assert body["reminders"]["overrides"][1]["minutes"] == 60
+
+
+def test_patch_event_noop_and_invalid_shapes_rejected(client_obj):
+    with pytest.raises(ValueError):
+        client_obj.patch_event("evt")
+    with pytest.raises(ValueError):
+        client_obj.patch_event("evt", date="2026-05-25")
+    with pytest.raises(ValueError):
+        client_obj.patch_event("evt", date="2026-05-25", time="14:00", all_day=True)
+    with pytest.raises(ValueError):
+        client_obj.patch_event("evt", clear_reminders=True, replace_reminder_minutes=[10])
+
+
+def test_patch_event_clear_reminders_and_omits_arrays_without_replace(client_obj):
+    client_obj.service.events.return_value.patch.return_value.execute.return_value = {
+        "id": "evt",
+        "summary": "New",
+        "start": {"date": "2026-05-25"},
+        "end": {"date": "2026-05-26"},
+    }
+
+    client_obj.patch_event("evt", summary="New")
+    body = client_obj.service.events.return_value.patch.call_args.kwargs["body"]
+    assert "attendees" not in body
+    assert "recurrence" not in body
+    assert "reminders" not in body
+
+    client_obj.patch_event("evt", clear_reminders=True)
+    body = client_obj.service.events.return_value.patch.call_args.kwargs["body"]
+    assert body["reminders"] == {"useDefault": False, "overrides": []}
+
+
+def test_delete_accepts_calendar_id(client_obj):
+    client_obj.service.events.return_value.delete.return_value.execute.return_value = {}
+
+    client_obj.delete_event("evt", calendar_id="team@example.com")
+
+    assert client_obj.service.events.return_value.delete.call_args.kwargs["calendarId"] == "team@example.com"
+
+
+def test_freebusy_normalizes_partial_errors(client_obj):
+    client_obj.service.freebusy.return_value.query.return_value.execute.return_value = {
+        "calendars": {
+            "primary": {"busy": [{"start": "s", "end": "e"}]},
+            "bad": {"errors": [{"reason": "notFound"}], "busy": []},
+        }
+    }
+
+    out = client_obj.freebusy("s", "e", calendar_ids=["primary", "bad"])
+
+    assert out["kind"] == "calendar_freebusy/v1"
+    assert out["has_errors"] is True
+    assert out["calendars"][1]["errors"][0]["reason"] == "notFound"
+
+
+def test_normalize_event_meet_pending_and_entrypoint(client_obj):
+    pending = client_obj._normalize_event({
+        "id": "evt",
+        "summary": "M",
+        "start": {"dateTime": "2026-05-25T14:00:00+03:00"},
+        "end": {"dateTime": "2026-05-25T15:00:00+03:00"},
+        "conferenceData": {"createRequest": {"status": {"statusCode": "pending"}}},
+    })
+    assert pending["meet_status"] == "pending"
+    assert pending["meet_link"] == ""
+
+    success = client_obj._normalize_event({
+        "id": "evt",
+        "summary": "M",
+        "start": {"dateTime": "2026-05-25T14:00:00+03:00"},
+        "end": {"dateTime": "2026-05-25T15:00:00+03:00"},
+        "conferenceData": {
+            "entryPoints": [{"entryPointType": "video", "uri": "https://meet.google.com/abc"}]
+        },
+    })
+    assert success["meet_status"] == "success"
+    assert success["meet_link"] == "https://meet.google.com/abc"
 
 
 # ---------- missing-libs / missing-creds path (re-checked via google_auth) ----------
