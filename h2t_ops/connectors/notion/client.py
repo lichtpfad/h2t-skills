@@ -6,10 +6,11 @@ types changed per spec §10 (re-wrap not rewrite).
 from __future__ import annotations
 
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterable, List, Optional
 
 from h2t_ops.core.errors import (
     AuthError, ConfigError, H2TError, NetworkError, NotFoundError, ProviderError,
+    UsageError,
 )
 from h2t_ops.core.secrets import resolve_notion_token
 
@@ -102,6 +103,78 @@ class NotionClient:
         except Exception as e:
             raise _map_sdk_exc(e, op=f"get blocks from {page_id}") from e
 
+    def _list_block_children_page(
+        self,
+        block_id: str,
+        *,
+        start_cursor: Optional[str] = None,
+        page_size: int = 100,
+    ) -> Dict[str, Any]:
+        try:
+            return self.client.blocks.children.list(
+                block_id=block_id,
+                start_cursor=start_cursor,
+                page_size=page_size,
+            )
+        except Exception as e:
+            raise _map_sdk_exc(e, op=f"list block children {block_id}") from e
+
+    def iter_blocks_recursive(
+        self,
+        root_page_id: str,
+        *,
+        max_depth: int = 3,
+        limit_blocks: Optional[int] = None,
+    ) -> Iterable[Dict[str, Any]]:
+        if max_depth < 0:
+            raise UsageError("max_depth must be non-negative")
+        if limit_blocks is not None and limit_blocks < 0:
+            raise UsageError("limit_blocks must be non-negative")
+
+        self._last_traversal_errors: List[Dict[str, str]] = []
+        if max_depth == 0:
+            return
+
+        seen: set[str] = set()
+        emitted = 0
+
+        def walk(block_id: str, depth: int, path: List[str]):
+            nonlocal emitted
+            if limit_blocks is not None and emitted >= limit_blocks:
+                return
+            cursor = None
+            while True:
+                try:
+                    response = self._list_block_children_page(block_id, start_cursor=cursor)
+                except Exception as exc:
+                    self._last_traversal_errors.append({"block_id": block_id, "error": str(exc)})
+                    return
+                for block in response.get("results", []):
+                    if limit_blocks is not None and emitted >= limit_blocks:
+                        return
+                    child_id = block.get("id", "")
+                    if child_id in seen:
+                        continue
+                    seen.add(child_id)
+                    emitted += 1
+                    emitted_depth = depth + 1
+                    yield {"block": block, "depth": emitted_depth, "path": list(path)}
+                    if limit_blocks is not None and emitted >= limit_blocks:
+                        return
+                    if block.get("has_children") and emitted_depth < max_depth:
+                        title = (
+                            block.get("child_page", {}).get("title")
+                            or block.get("child_database", {}).get("title")
+                            or block.get("type", "")
+                        )
+                        child_path = path + ([title] if title else [])
+                        yield from walk(child_id, emitted_depth, child_path)
+                if not response.get("has_more"):
+                    break
+                cursor = response.get("next_cursor")
+
+        yield from walk(root_page_id, 0, [])
+
     def query_database(
         self,
         database_id: str,
@@ -142,35 +215,142 @@ class NotionClient:
         except Exception as e:
             raise _map_sdk_exc(e, op=f"get database {database_id}") from e
 
-    def find_databases_on_page(self, page_id: str) -> List[Dict[str, Any]]:
-        try:
-            databases = []
-            blocks = self.get_blocks(page_id)
-            for block in blocks:
-                block_type = block.get("type")
-                block_id = block.get("id")
-                if block_type == "child_database":
-                    databases.append({
-                        "type": "child_database",
-                        "database_id": block_id,
-                        "title": block.get("child_database", {}).get("title", "Untitled"),
-                    })
-                elif block_type == "linked_database":
-                    db_id = block.get("linked_database", {}).get("database_id")
-                    if db_id:
-                        try:
-                            db_info = self.get_database(db_id)
-                            title = db_info.get("title", [{}])[0].get("plain_text", "Untitled")
-                        except Exception:
-                            title = "Unknown"
+    def find_databases_on_page(
+        self,
+        page_id: str,
+        *,
+        recursive: bool = False,
+        max_depth: int = 3,
+        limit_blocks: Optional[int] = None,
+        with_rows: bool = False,
+        row_limit: int = 100,
+    ):
+        if row_limit < 0:
+            raise UsageError("row_limit must be non-negative")
+
+        if not recursive and not with_rows:
+            try:
+                databases = []
+                blocks = self.get_blocks(page_id)
+                for block in blocks:
+                    block_type = block.get("type")
+                    block_id = block.get("id")
+                    if block_type == "child_database":
                         databases.append({
-                            "type": "linked_database",
-                            "database_id": db_id,
-                            "title": title,
+                            "type": "child_database",
+                            "database_id": block_id,
+                            "title": block.get("child_database", {}).get("title", "Untitled"),
                         })
-            return databases
-        except Exception as e:
-            raise _map_sdk_exc(e, op=f"find databases on page {page_id}") from e
+                    elif block_type == "linked_database":
+                        db_id = block.get("linked_database", {}).get("database_id")
+                        if db_id:
+                            try:
+                                db_info = self.get_database(db_id)
+                                title = db_info.get("title", [{}])[0].get("plain_text", "Untitled")
+                            except Exception:
+                                title = "Unknown"
+                            databases.append({
+                                "type": "linked_database",
+                                "database_id": db_id,
+                                "title": title,
+                            })
+                return databases
+            except Exception as e:
+                raise _map_sdk_exc(e, op=f"find databases on page {page_id}") from e
+
+        seen_databases: set[str] = set()
+        databases: List[Dict[str, Any]] = []
+        errors: List[Dict[str, Any]] = []
+        blocks_seen = 0
+        duplicate_refs = 0
+        queried = 0
+        rows_returned = 0
+
+        for item in self.iter_blocks_recursive(
+            page_id,
+            max_depth=max_depth,
+            limit_blocks=limit_blocks,
+        ):
+            block = item["block"]
+            blocks_seen += 1
+            block_type = block.get("type")
+            database_id = None
+            title = "Untitled"
+            kind = None
+            accessible = True
+            reason = None
+
+            if block_type == "child_database":
+                database_id = block.get("id")
+                title = block.get("child_database", {}).get("title", "Untitled")
+                kind = "child_database"
+            elif block_type == "linked_database":
+                database_id = block.get("linked_database", {}).get("database_id")
+                kind = "linked_database"
+                if database_id:
+                    try:
+                        metadata = self.get_database(database_id)
+                        title = metadata.get("title", [{}])[0].get("plain_text", "Untitled")
+                    except Exception as exc:
+                        title = "Unknown"
+                        accessible = False
+                        reason = str(exc)
+                        errors.append({"database_id": database_id, "error": reason})
+
+            if not database_id or not kind:
+                continue
+            if database_id in seen_databases:
+                duplicate_refs += 1
+                continue
+            seen_databases.add(database_id)
+
+            rows: List[Dict[str, Any]] = []
+            if with_rows:
+                if row_limit == 0:
+                    rows = []
+                else:
+                    try:
+                        rows = self.query_database(database_id, limit=row_limit)
+                        queried += 1
+                    except Exception as exc:
+                        accessible = False
+                        reason = str(exc)
+                        errors.append({"database_id": database_id, "error": reason})
+                rows_returned += len(rows)
+
+            databases.append({
+                "kind": kind,
+                "type": kind,
+                "database_id": database_id,
+                "title": title,
+                "source_block_id": block.get("id"),
+                "parent_page_id": block.get("parent", {}).get("page_id"),
+                "path": item.get("path", []),
+                "accessible": accessible,
+                "reason": reason,
+                "source_ref": f"notion:database:{database_id}",
+                "notion_url": block.get("url", ""),
+                "last_edited_time": block.get("last_edited_time", ""),
+                "rows": rows,
+                "row_count": len(rows),
+            })
+
+        return {
+            "kind": "notion_database_discovery/v1",
+            "root_page_id": page_id,
+            "recursive": recursive,
+            "max_depth": max_depth,
+            "databases": databases,
+            "errors": errors + list(getattr(self, "_last_traversal_errors", [])),
+            "stats": {
+                "blocks_seen": blocks_seen,
+                "blocks_skipped": 0,
+                "databases_found": len(databases),
+                "databases_queried": queried,
+                "duplicate_database_refs": duplicate_refs,
+                "rows_returned": rows_returned,
+            },
+        }
 
     # --- Write ---
 
