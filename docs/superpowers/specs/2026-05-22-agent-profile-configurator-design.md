@@ -1,7 +1,7 @@
 # h2t-core:agent-profile v0.2 — configurator design
 
 Date: 2026-05-22
-Status: approved
+Status: needs-fix → patched 2026-05-22
 Owner plugin: h2t-core
 Follows: docs/superpowers/specs/2026-05-21-h2t-core-agent-profile-design.md
 
@@ -13,21 +13,42 @@ additional work contexts.
 
 ## Merge Semantics v0.2
 
-Change `resolve_effective_profile` to look up each overlay name in two places:
+### Name collision fix (Codex finding #1)
 
-1. `catalog["overlays"]` — first priority (preserves current semantics)
+The original catalog contained overlays named `creative`, `marketing`, `product`, `dcc`
+that collide with identically named base profiles. With "overlays wins on collision"
+semantics, `overlays: ["creative"]` would apply the small overlay, not the full base
+profile — breaking the "add 2-3 profiles" use case.
+
+**Fix: remove the four colliding overlays from the catalog.** They were redundant once
+base profiles can be used as work contexts. Remaining unique overlays:
+`plugin-dev`, `research`, `github-heavy`, `minimal`.
+
+### Resolver change
+
+Change `resolve_effective_profile` to look up each work context name in two places:
+
+1. `catalog["overlays"]` — first priority
 2. `catalog["baseProfiles"]` — fallback if not found in overlays
 
-If the name exists in both, the `overlays` definition wins.
-If not found in either, return `UNKNOWN_OVERLAY` error as before.
-
-This allows stacking base profiles as additional work contexts without a schema change:
+With collisions removed, the fallback is unambiguous. If not found in either, return
+`UNKNOWN_OVERLAY` error as before.
 
 ```json
 { "base": "dev", "overlays": ["ops", "creative", "github-heavy"] }
 ```
 
+Here `ops` and `creative` resolve via baseProfiles; `github-heavy` resolves via overlays.
 Existing bindings remain valid. No migration needed.
+
+### add_overlay() validation fix (Codex finding #2)
+
+Current `add_overlay()` validates only `catalog["overlays"]`. Fix: also accept names
+found in `catalog["baseProfiles"]`. Same fallback logic as the resolver.
+
+Add tests:
+- `test_add_overlay_accepts_base_profile_as_work_context`
+- `test_cli_add_accepts_base_profile_as_work_context`
 
 ## Terminology
 
@@ -85,6 +106,16 @@ Skill extracts intent, validates aliases via `catalog list-plugins`, calls backe
 Skill always shows the resulting JSON diff and asks for explicit confirmation before writing.
 Skill labels all catalog edit output with `[EXPERIMENTAL — affects all repos after sync]`.
 
+### Catalog persistence (Codex finding #3)
+
+Default catalog path is script-relative — in installed plugin mode this points to the
+plugin cache, not the source repo. Edits to the cache are lost on reinstall.
+
+**Scope for v0.2:** catalog editor operates only on the source catalog inside the
+h2t-skills repo. The skill must detect `plugins/h2t-core/skills/agent-profile/references/`
+relative to the repo root and refuse to edit if running from the plugin cache.
+Document this limitation explicitly in SKILL.md under the `[EXPERIMENTAL]` label.
+
 ### Safety gates
 
 - Backend validates all aliases against `pluginIds` before writing.
@@ -92,6 +123,7 @@ Skill labels all catalog edit output with `[EXPERIMENTAL — affects all repos a
 - Skill shows diff of catalog JSON before any write.
 - Explicit user confirmation required before write.
 - No automatic backup in v0.2; diff-before-write is the safety guard.
+- Catalog editor refuses to write if catalog path is inside a plugin cache directory.
 
 ## New Script Modes
 
@@ -111,7 +143,8 @@ All modes output JSON. Catalog write modes return `{"ok": true, "diff": {...}}` 
 ## Status and Observability
 
 `status` stays as-is (JSON for machines). Add `status --explain` as the primary
-human-readable observability tool.
+observability tool. Per Codex finding #4: backend always returns structured JSON;
+SKILL.md instructs Claude to render it as prose. No mixed output contracts.
 
 ### `status --explain` output sections
 
@@ -140,9 +173,10 @@ Extend `doctor` to detect drift between binding, settings, and resolved profile:
 
 Merge semantics:
 - `test_overlay_fallback_to_base_profile` — `overlays: ["ops"]` resolves via baseProfiles
-- `test_overlay_wins_over_base_profile_when_both_exist` — overlays definition takes priority
-- `test_existing_binding_still_valid` — `{base:"dev", overlays:["creative"]}` works as before
+- `test_existing_binding_still_valid` — `{base:"dev", overlays:["creative"]}` resolves via baseProfiles (collision removed)
 - `test_unknown_name_not_in_overlays_or_baseprofiles_returns_error`
+- `test_add_overlay_accepts_base_profile_as_work_context`
+- `test_cli_add_accepts_base_profile_as_work_context`
 
 Catalog editor:
 - `test_catalog_add_profile_writes_new_entry`

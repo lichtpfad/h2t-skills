@@ -85,36 +85,16 @@
                   "pm-data-analytics", "pm-marketing-growth", "pm-go-to-market", "pm-execution"]
     }
   },
+  "_overlayNote": "creative, marketing, product, dcc removed — collided with base profile names. Use base profiles directly as work contexts: overlays: ['creative', 'ops']",
   "overlays": {
     "plugin-dev": {
       "description": "Plugin, skill, hook, and MCP development",
       "enable": ["plugin-dev", "codex"],
       "disable": []
     },
-    "creative": {
-      "description": "Visual and design work in a non-creative repo",
-      "enable": ["h2t-creative", "h2t-arch", "frontend-design"],
-      "disable": []
-    },
-    "marketing": {
-      "description": "Marketing, copy, lead-gen, and GTM work",
-      "enable": ["marketing-playbook", "lead-search", "pm-marketing-growth", "pm-go-to-market"],
-      "disable": []
-    },
-    "product": {
-      "description": "Product strategy and PM work",
-      "enable": ["creative-thinking", "pm-product-strategy", "pm-product-discovery",
-                 "pm-market-research", "pm-execution", "positioning"],
-      "disable": []
-    },
     "research": {
       "description": "Web and research-heavy sessions",
       "enable": ["h2t-ops"],
-      "disable": []
-    },
-    "dcc": {
-      "description": "TouchDesigner and Houdini work in another repo",
-      "enable": ["h2t-dcc"],
       "disable": []
     },
     "github-heavy": {
