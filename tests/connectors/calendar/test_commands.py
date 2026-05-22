@@ -9,6 +9,24 @@ import pytest
 from h2t_ops.core.errors import ConfigError, UsageError
 
 
+def _patch_calendar_client(monkeypatch, factory):
+    """Patch the exact calendar.client module object used by commands.run().
+
+    Some tests temporarily manipulate sys.modules for import-laziness checks.
+    After that, Python can leave the parent package attribute and sys.modules
+    pointing at different module objects. commands.run() imports from
+    sys.modules, so tests must patch that object rather than whichever object
+    `import h2t_ops.connectors.calendar.client` happens to return.
+    """
+    import importlib
+    import sys
+
+    module_name = "h2t_ops.connectors.calendar.client"
+    client_mod = importlib.import_module(module_name)
+    client_mod = sys.modules.get(module_name, client_mod)
+    monkeypatch.setattr(client_mod, "CalendarClient", factory)
+
+
 def _build_parser():
     from h2t_ops.connectors.calendar.commands import register
     parser = argparse.ArgumentParser()
@@ -101,17 +119,6 @@ def test_importing_commands_does_not_import_client(monkeypatch):
 
 def test_list_dispatch_json_returns_rows(monkeypatch):
     """Happy-path dispatch — stub CalendarClient, assert JSON path returns rows."""
-    import sys
-    import h2t_ops.connectors.calendar.client as client_mod
-    # Sync past the sys.modules-vs-package-attr desync that T2's
-    # test_init_with_missing_google_libs_raises_configerror can create: after
-    # that test restores sys.modules, `import ... as client_mod` resolves via
-    # the parent package attr (new module) while `from ... import CalendarClient`
-    # in run() reads sys.modules (original module). Both paths must patch the
-    # same object — force client_mod to the sys.modules reference.
-    client_mod = sys.modules.get(
-        "h2t_ops.connectors.calendar.client", client_mod
-    )
     from h2t_ops.connectors.calendar import commands as cmds_mod
 
     class _Stub:
@@ -121,7 +128,7 @@ def test_list_dispatch_json_returns_rows(monkeypatch):
             assert kwargs["time_min"] is None
             assert kwargs["time_max"] is None
             return [{"id": "evt1", "summary": "M"}]
-    monkeypatch.setattr(client_mod, "CalendarClient", lambda: _Stub())
+    _patch_calendar_client(monkeypatch, lambda: _Stub())
     args = SimpleNamespace(
         calendar_cmd="list", days=1, max=20, as_json=True, fmt="human",
     )
@@ -130,11 +137,6 @@ def test_list_dispatch_json_returns_rows(monkeypatch):
 
 
 def test_list_dispatch_date_window_passes_explicit_bounds(monkeypatch):
-    import sys
-    import h2t_ops.connectors.calendar.client as client_mod
-    client_mod = sys.modules.get(
-        "h2t_ops.connectors.calendar.client", client_mod
-    )
     from h2t_ops.connectors.calendar import commands as cmds_mod
 
     calls = []
@@ -144,7 +146,7 @@ def test_list_dispatch_date_window_passes_explicit_bounds(monkeypatch):
             calls.append(kwargs)
             return []
 
-    monkeypatch.setattr(client_mod, "CalendarClient", lambda: _Stub())
+    _patch_calendar_client(monkeypatch, lambda: _Stub())
     args = SimpleNamespace(
         calendar_cmd="list",
         days=7,
@@ -171,10 +173,9 @@ def test_list_dispatch_date_window_passes_explicit_bounds(monkeypatch):
 
 
 def test_list_dispatch_rejects_partial_date_window(monkeypatch):
-    import h2t_ops.connectors.calendar.client as client_mod
     from h2t_ops.connectors.calendar import commands as cmds_mod
 
-    monkeypatch.setattr(client_mod, "CalendarClient", lambda: object())
+    _patch_calendar_client(monkeypatch, lambda: object())
     args = SimpleNamespace(
         calendar_cmd="list",
         days=1,
@@ -193,9 +194,8 @@ def test_list_dispatch_rejects_partial_date_window(monkeypatch):
 
 def test_delete_dispatch_requires_confirm(monkeypatch):
     """delete without --confirm raises UsageError (parity with legacy)."""
-    import h2t_ops.connectors.calendar.client as client_mod
     from h2t_ops.connectors.calendar import commands as cmds_mod
-    monkeypatch.setattr(client_mod, "CalendarClient", lambda: object())
+    _patch_calendar_client(monkeypatch, lambda: object())
     args = SimpleNamespace(
         calendar_cmd="delete", event_id="evt1", confirm=False,
         as_json=True, fmt="human",
@@ -205,9 +205,8 @@ def test_delete_dispatch_requires_confirm(monkeypatch):
 
 
 def test_unknown_subcommand_raises_usageerror(monkeypatch):
-    import h2t_ops.connectors.calendar.client as client_mod
     from h2t_ops.connectors.calendar import commands as cmds_mod
-    monkeypatch.setattr(client_mod, "CalendarClient", lambda: object())
+    _patch_calendar_client(monkeypatch, lambda: object())
     args = SimpleNamespace(
         calendar_cmd="bogus", as_json=False, fmt="human",
     )
@@ -247,11 +246,9 @@ def test_missing_scopes_surfaces_as_configerror_with_neutral_hint(tmp_path, monk
 # ---------- Ingest calendar shim (mirror Gmail §10.2) ----------
 
 def test_ingest_calendar_shim_warns_on_human(monkeypatch, capsys):
-    from h2t_ops.connectors.calendar import commands as cmds_mod
-    import h2t_ops.connectors.calendar.client as client_mod
     class _Stub:
         def list_events(self, **_): return []
-    monkeypatch.setattr(client_mod, "CalendarClient", lambda: _Stub())
+    _patch_calendar_client(monkeypatch, lambda: _Stub())
     from h2t_ops.cli import dispatch
     rc = dispatch(["ingest", "calendar", "list", "--days", "1"])
     err = capsys.readouterr().err
@@ -261,11 +258,9 @@ def test_ingest_calendar_shim_warns_on_human(monkeypatch, capsys):
 
 
 def test_ingest_calendar_shim_silent_on_json(monkeypatch, capsys):
-    from h2t_ops.connectors.calendar import commands as cmds_mod
-    import h2t_ops.connectors.calendar.client as client_mod
     class _Stub:
         def list_events(self, **_): return []
-    monkeypatch.setattr(client_mod, "CalendarClient", lambda: _Stub())
+    _patch_calendar_client(monkeypatch, lambda: _Stub())
     from h2t_ops.cli import dispatch
     rc = dispatch(["ingest", "calendar", "list", "--format", "json"])
     err = capsys.readouterr().err

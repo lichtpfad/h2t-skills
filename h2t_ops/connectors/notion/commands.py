@@ -26,8 +26,28 @@ def register(subparsers: Any) -> None:
     s.add_argument("--filter-json"); s.add_argument("--limit", type=int); add_fmt(s)
     gd = cmds.add_parser("get-database", help="Database items")
     gd.add_argument("database_id"); gd.add_argument("--limit", type=int); add_fmt(gd)
+    sw = cmds.add_parser("search-workspace", help="Search shared Notion workspace objects")
+    sw.add_argument("--object", choices=["page", "database", "data_source", "all"], default="all")
+    sw.add_argument("--limit", type=int)
+    add_fmt(sw)
+    gr = cmds.add_parser("graph", help="Build a page subtree graph")
+    gr.add_argument("root_page_id")
+    gr.add_argument("--max-depth", type=int, default=3)
+    db_group = gr.add_mutually_exclusive_group()
+    db_group.add_argument("--include-databases", dest="include_databases",
+                          action="store_true", default=True)
+    db_group.add_argument("--no-include-databases", dest="include_databases",
+                          action="store_false")
+    gr.add_argument("--root-label")
+    add_fmt(gr)
     fd = cmds.add_parser("find-databases", help="Find databases on a page")
-    fd.add_argument("page_id"); add_fmt(fd)
+    fd.add_argument("page_id")
+    fd.add_argument("--recursive", action="store_true")
+    fd.add_argument("--max-depth", type=int, default=3)
+    fd.add_argument("--limit-blocks", type=int)
+    fd.add_argument("--with-rows", action="store_true")
+    fd.add_argument("--row-limit", type=int, default=100)
+    add_fmt(fd)
     ft = cmds.add_parser("find-project-tasks",
                          help="List tasks whose Project relation points at <page_id>")
     ft.add_argument("project_page_id")
@@ -46,7 +66,13 @@ def register(subparsers: Any) -> None:
     u.add_argument("--replace", action="store_true"); add_fmt(u)
     sy = cmds.add_parser("sync", help="Sync page to a markdown file")
     sy.add_argument("page_id"); sy.add_argument("output_file")
-    sy.add_argument("--preserve-metadata", action="store_true"); add_fmt(sy)
+    sy.add_argument("--preserve-metadata", action="store_true")
+    sy.add_argument("--include-databases", action="store_true")
+    sy.add_argument("--recursive", action="store_true")
+    sy.add_argument("--max-depth", type=int, default=3)
+    sy.add_argument("--row-limit", type=int, default=100)
+    sy.add_argument("--databases-json")
+    add_fmt(sy)
 
     p.set_defaults(_handler=run)
 
@@ -90,8 +116,24 @@ def run(args) -> Any:
         rows = client.query_database(args.database_id, limit=args.limit)
         return rows if _fmt(args) == "json" else client.database_items_to_markdown(
             rows, client.get_database(args.database_id))
+    if cmd == "search-workspace":
+        return client.search_workspace(object_type=args.object, limit=args.limit)
+    if cmd == "graph":
+        return client.graph_page(
+            args.root_page_id,
+            max_depth=args.max_depth,
+            include_databases=args.include_databases,
+            root_label=args.root_label,
+        )
     if cmd == "find-databases":
-        return client.find_databases_on_page(args.page_id)
+        return client.find_databases_on_page(
+            args.page_id,
+            recursive=getattr(args, "recursive", False),
+            max_depth=getattr(args, "max_depth", 3),
+            limit_blocks=getattr(args, "limit_blocks", None),
+            with_rows=getattr(args, "with_rows", False),
+            row_limit=getattr(args, "row_limit", 100),
+        )
     if cmd == "find-project-tasks":
         fdict = {"property": "Project", "relation": {"contains": args.project_page_id}}
         rows = client.query_database(args.database_id,
@@ -118,14 +160,46 @@ def run(args) -> Any:
             raise UsageError("update: specify --title, --append, or --file")
         return out
     if cmd == "sync":
+        out_path = Path(args.output_file)
+        sidecar = None
+        if getattr(args, "databases_json", None):
+            if not getattr(args, "include_databases", False):
+                raise UsageError("sync: --databases-json requires --include-databases")
+            sidecar = Path(args.databases_json)
+            if out_path.resolve() == sidecar.resolve():
+                raise UsageError("sync: output_file and --databases-json must be different paths")
         md = client.blocks_to_markdown(client.get_blocks(args.page_id))
         if args.preserve_metadata:
             pg = client.get_page(args.page_id)
             md = (f"---\nnotion_id: {args.page_id}\n"
                   f"created: {pg.get('created_time','')}\n"
                   f"modified: {pg.get('last_edited_time','')}\n---\n\n") + md
-        out_path = Path(args.output_file)
+        discovery = None
+        if getattr(args, "include_databases", False):
+            discovery = client.find_databases_on_page(
+                args.page_id,
+                recursive=getattr(args, "recursive", False),
+                max_depth=getattr(args, "max_depth", 3),
+                with_rows=True,
+                row_limit=getattr(args, "row_limit", 100),
+            )
+            lines = ["\n\n## Embedded databases\n\n"]
+            for db in discovery.get("databases", []):
+                lines.append(
+                    f"- **{db.get('title', 'Untitled')}** "
+                    f"({db.get('type', db.get('kind', 'database'))}) "
+                    f"`{db.get('database_id', '')}` - rows: {db.get('row_count', 0)}\n"
+                )
+            md += "".join(lines)
+        if sidecar is not None:
+            import json as _json
+            sidecar.parent.mkdir(parents=True, exist_ok=True)
         out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_text(md, encoding="utf-8")
+        if sidecar is not None:
+            sidecar.write_text(
+                _json.dumps(discovery, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
         return f"Synced to {out_path}"
     raise UsageError(f"unknown notion subcommand: {cmd}")

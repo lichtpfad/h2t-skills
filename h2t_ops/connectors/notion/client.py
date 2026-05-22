@@ -6,10 +6,11 @@ types changed per spec §10 (re-wrap not rewrite).
 from __future__ import annotations
 
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterable, List, Optional
 
 from h2t_ops.core.errors import (
     AuthError, ConfigError, H2TError, NetworkError, NotFoundError, ProviderError,
+    UsageError,
 )
 from h2t_ops.core.secrets import resolve_notion_token
 
@@ -84,6 +85,12 @@ class NotionClient:
         except Exception as e:
             raise _map_sdk_exc(e, op=f"get page {page_id}") from e
 
+    def get_block(self, block_id: str) -> Dict[str, Any]:
+        try:
+            return self.client.blocks.retrieve(block_id=block_id)
+        except Exception as e:
+            raise _map_sdk_exc(e, op=f"get block {block_id}") from e
+
     def get_blocks(self, page_id: str, limit: Optional[int] = None) -> List[Dict[str, Any]]:
         blocks: List[Dict[str, Any]] = []
         start_cursor = None
@@ -101,6 +108,80 @@ class NotionClient:
             return blocks[:limit] if limit else blocks
         except Exception as e:
             raise _map_sdk_exc(e, op=f"get blocks from {page_id}") from e
+
+    def _list_block_children_page(
+        self,
+        block_id: str,
+        *,
+        start_cursor: Optional[str] = None,
+        page_size: int = 100,
+    ) -> Dict[str, Any]:
+        try:
+            return self.client.blocks.children.list(
+                block_id=block_id,
+                start_cursor=start_cursor,
+                page_size=page_size,
+            )
+        except Exception as e:
+            raise _map_sdk_exc(e, op=f"list block children {block_id}") from e
+
+    def iter_blocks_recursive(
+        self,
+        root_page_id: str,
+        *,
+        max_depth: int = 3,
+        limit_blocks: Optional[int] = None,
+    ) -> Iterable[Dict[str, Any]]:
+        if max_depth < 0:
+            raise UsageError("max_depth must be non-negative")
+        if limit_blocks is not None and limit_blocks < 0:
+            raise UsageError("limit_blocks must be non-negative")
+
+        self._last_traversal_errors: List[Dict[str, str]] = []
+        if max_depth == 0:
+            return
+
+        seen: set[str] = set()
+        emitted = 0
+
+        def walk(block_id: str, depth: int, path: List[str]):
+            nonlocal emitted
+            if limit_blocks is not None and emitted >= limit_blocks:
+                return
+            cursor = None
+            while True:
+                try:
+                    response = self._list_block_children_page(block_id, start_cursor=cursor)
+                except Exception as exc:
+                    if depth == 0:
+                        raise
+                    self._last_traversal_errors.append({"block_id": block_id, "error": str(exc)})
+                    return
+                for block in response.get("results", []):
+                    if limit_blocks is not None and emitted >= limit_blocks:
+                        return
+                    child_id = block.get("id", "")
+                    if child_id in seen:
+                        continue
+                    seen.add(child_id)
+                    emitted += 1
+                    emitted_depth = depth + 1
+                    yield {"block": block, "depth": emitted_depth, "path": list(path)}
+                    if limit_blocks is not None and emitted >= limit_blocks:
+                        return
+                    if block.get("has_children") and emitted_depth < max_depth:
+                        title = (
+                            block.get("child_page", {}).get("title")
+                            or block.get("child_database", {}).get("title")
+                            or block.get("type", "")
+                        )
+                        child_path = path + ([title] if title else [])
+                        yield from walk(child_id, emitted_depth, child_path)
+                if not response.get("has_more"):
+                    break
+                cursor = response.get("next_cursor")
+
+        yield from walk(root_page_id, 0, [])
 
     def query_database(
         self,
@@ -142,35 +223,366 @@ class NotionClient:
         except Exception as e:
             raise _map_sdk_exc(e, op=f"get database {database_id}") from e
 
-    def find_databases_on_page(self, page_id: str) -> List[Dict[str, Any]]:
-        try:
-            databases = []
-            blocks = self.get_blocks(page_id)
-            for block in blocks:
-                block_type = block.get("type")
-                block_id = block.get("id")
-                if block_type == "child_database":
-                    databases.append({
-                        "type": "child_database",
-                        "database_id": block_id,
-                        "title": block.get("child_database", {}).get("title", "Untitled"),
-                    })
-                elif block_type == "linked_database":
-                    db_id = block.get("linked_database", {}).get("database_id")
-                    if db_id:
-                        try:
-                            db_info = self.get_database(db_id)
-                            title = db_info.get("title", [{}])[0].get("plain_text", "Untitled")
-                        except Exception:
-                            title = "Unknown"
+    def search_workspace(
+        self,
+        object_type: str = "all",
+        *,
+        limit: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        if limit is not None and limit < 0:
+            raise UsageError("limit must be non-negative")
+        if limit == 0:
+            return {"kind": "notion_workspace_search/v1", "object": object_type, "results": []}
+        query_filter = None
+        if object_type in ("page", "database", "data_source"):
+            # Notion search API now filters databases as "data_source".
+            # Keep "database" as the CLI/user-facing compatibility alias.
+            filter_value = "data_source" if object_type == "database" else object_type
+            query_filter = {"property": "object", "value": filter_value}
+        elif object_type != "all":
+            raise UsageError("object_type must be one of: page, database, data_source, all")
+        results = []
+        start_cursor = None
+        while True:
+            kwargs = {}
+            if query_filter:
+                kwargs["filter"] = query_filter
+            if start_cursor:
+                kwargs["start_cursor"] = start_cursor
+            if limit is not None:
+                kwargs["page_size"] = min(limit - len(results), 100)
+            try:
+                response = self.client.search(**kwargs)
+            except Exception as e:
+                raise _map_sdk_exc(e, op="search workspace") from e
+            results.extend(response.get("results", []))
+            if limit is not None and len(results) >= limit:
+                results = results[:limit]
+                break
+            if not response.get("has_more"):
+                break
+            start_cursor = response.get("next_cursor")
+        return {"kind": "notion_workspace_search/v1", "object": object_type, "results": results}
+
+    def _title_from_object(self, obj: Dict[str, Any]) -> str:
+        properties = obj.get("properties", {})
+        for prop in properties.values():
+            if prop.get("type") == "title":
+                return self._rich_text_to_markdown(prop.get("title", [])) or "Untitled"
+            if "title" in prop and isinstance(prop.get("title"), list):
+                return self._rich_text_to_markdown(prop.get("title", [])) or "Untitled"
+
+        obj_type = obj.get("type")
+        if obj_type == "child_database":
+            return obj.get("child_database", {}).get("title") or "Untitled"
+        if obj_type == "child_page":
+            return obj.get("child_page", {}).get("title") or "Untitled"
+        if obj_type and obj_type in obj:
+            typed = obj.get(obj_type, {})
+            if isinstance(typed, dict):
+                rich_text = typed.get("rich_text")
+                if isinstance(rich_text, list):
+                    return self._rich_text_to_markdown(rich_text) or obj_type
+        return obj.get("object") or obj_type or "Untitled"
+
+    def _resolve_block_owner(self, block_id: str) -> Dict[str, Any]:
+        seen: set[str] = set()
+        chain: List[str] = []
+        current_id = block_id
+
+        for _ in range(100):
+            if current_id in seen:
+                raise ProviderError(f"Cycle resolving Notion block owner at {current_id}")
+            seen.add(current_id)
+            chain.append(current_id)
+
+            block = self.get_block(current_id)
+            parent = block.get("parent", {})
+            parent_type = parent.get("type")
+            if parent_type == "page_id":
+                return {
+                    "owner_block_id": block_id,
+                    "owner_page_id": parent.get("page_id"),
+                    "chain": chain,
+                    "source_refs": [f"notion:block:{item}" for item in chain],
+                    "owner_page_source_ref": (
+                        f"notion:page:{parent.get('page_id')}" if parent.get("page_id") else None
+                    ),
+                }
+            if parent_type == "block_id" and parent.get("block_id"):
+                current_id = parent["block_id"]
+                continue
+            return {
+                "owner_block_id": block_id,
+                "owner_page_id": None,
+                "chain": chain,
+                "source_refs": [f"notion:block:{item}" for item in chain],
+                "owner_page_source_ref": None,
+            }
+
+        raise ProviderError(f"Exceeded Notion block owner chain limit at {current_id}")
+
+    def graph_page(
+        self,
+        root_page_id: str,
+        *,
+        max_depth: int = 3,
+        include_databases: bool = True,
+        root_label: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        nodes: List[Dict[str, Any]] = []
+        edges: List[Dict[str, Any]] = []
+        parent_map: Dict[str, str] = {}
+        owner_map: Dict[str, Dict[str, Any]] = {}
+        owner_cache: Dict[str, Dict[str, Any]] = {}
+        owner_error_keys: set[tuple[str, str, str, str]] = set()
+        children_map: Dict[str, List[str]] = {}
+        errors: List[Dict[str, Any]] = []
+
+        root = self.get_page(root_page_id)
+        root_id = root.get("id", root_page_id)
+        children_map[root_id] = []
+        nodes.append({
+            "id": root_id,
+            "object": root.get("object", "page"),
+            "type": root.get("object", "page"),
+            "title": root_label or self._title_from_object(root),
+            "parent": root.get("parent", {}),
+            "parent_chain": [],
+            "source_ref": f"notion:page:{root_id}",
+            "notion_url": root.get("url", ""),
+            "created_time": root.get("created_time", ""),
+            "last_edited_time": root.get("last_edited_time", ""),
+        })
+
+        for item in self.iter_blocks_recursive(root_page_id, max_depth=max_depth):
+            block = item["block"]
+            block_id = block.get("id", "")
+            if not block_id:
+                continue
+            block_type = block.get("type", "")
+            if block_type == "child_database" and not include_databases:
+                continue
+
+            parent = block.get("parent", {})
+            parent_id = parent.get("page_id") or parent.get("block_id") or root_id
+            object_type = "database" if block_type == "child_database" else "block"
+            if parent.get("type") == "block_id" and parent.get("block_id"):
+                owner_block_id = parent["block_id"]
+                if owner_block_id not in owner_cache:
+                    try:
+                        owner_cache[owner_block_id] = {
+                            "ok": True,
+                            "owner": self._resolve_block_owner(owner_block_id),
+                        }
+                    except Exception as exc:
+                        error_type = type(exc).__name__
+                        owner_cache[owner_block_id] = {
+                            "ok": False,
+                            "owner": {
+                                "owner_block_id": owner_block_id,
+                                "owner_page_id": None,
+                                "chain": [owner_block_id],
+                                "source_refs": [f"notion:block:{owner_block_id}"],
+                                "owner_page_source_ref": None,
+                                "error": str(exc),
+                                "error_type": error_type,
+                            },
+                            "error": str(exc),
+                            "error_type": error_type,
+                        }
+
+                cached_owner = owner_cache[owner_block_id]
+                owner_map[block_id] = dict(cached_owner["owner"])
+                if not cached_owner["ok"]:
+                    error_entry = {
+                        "block_id": block_id,
+                        "owner_block_id": owner_block_id,
+                        "error": cached_owner["error"],
+                        "error_type": cached_owner["error_type"],
+                    }
+                    error_key = (
+                        block_id,
+                        owner_block_id,
+                        cached_owner["error"],
+                        cached_owner["error_type"],
+                    )
+                    if error_key not in owner_error_keys:
+                        owner_error_keys.add(error_key)
+                        errors.append(error_entry)
+
+            nodes.append({
+                "id": block_id,
+                "object": object_type,
+                "type": block_type,
+                "title": self._title_from_object(block),
+                "parent": parent,
+                "parent_chain": [root_id] + item.get("path", []),
+                "source_ref": f"notion:{object_type}:{block_id}",
+                "notion_url": block.get("url", ""),
+                "created_time": block.get("created_time", ""),
+                "last_edited_time": block.get("last_edited_time", ""),
+            })
+            parent_map[block_id] = parent_id
+            children_map.setdefault(parent_id, []).append(block_id)
+            children_map.setdefault(block_id, [])
+            edges.append({"from": parent_id, "to": block_id, "relation": "contains"})
+
+        return {
+            "kind": "notion_workspace_graph/v1",
+            "root_page_id": root_id,
+            "requested_root_page_id": root_page_id,
+            "root_label": root_label,
+            "nodes": nodes,
+            "edges": edges,
+            "parent_map": parent_map,
+            "owner_map": owner_map,
+            "children_map": children_map,
+            "errors": errors + list(getattr(self, "_last_traversal_errors", [])),
+            "stats": {
+                "nodes": len(nodes),
+                "edges": len(edges),
+                "blocks_seen": len(parent_map),
+            },
+        }
+
+    def find_databases_on_page(
+        self,
+        page_id: str,
+        *,
+        recursive: bool = False,
+        max_depth: int = 3,
+        limit_blocks: Optional[int] = None,
+        with_rows: bool = False,
+        row_limit: int = 100,
+    ):
+        if row_limit < 0:
+            raise UsageError("row_limit must be non-negative")
+
+        if not recursive and not with_rows:
+            try:
+                databases = []
+                blocks = self.get_blocks(page_id)
+                for block in blocks:
+                    block_type = block.get("type")
+                    block_id = block.get("id")
+                    if block_type == "child_database":
                         databases.append({
-                            "type": "linked_database",
-                            "database_id": db_id,
-                            "title": title,
+                            "type": "child_database",
+                            "database_id": block_id,
+                            "title": block.get("child_database", {}).get("title", "Untitled"),
                         })
-            return databases
-        except Exception as e:
-            raise _map_sdk_exc(e, op=f"find databases on page {page_id}") from e
+                    elif block_type == "linked_database":
+                        db_id = block.get("linked_database", {}).get("database_id")
+                        if db_id:
+                            try:
+                                db_info = self.get_database(db_id)
+                                title = db_info.get("title", [{}])[0].get("plain_text", "Untitled")
+                            except Exception:
+                                title = "Unknown"
+                            databases.append({
+                                "type": "linked_database",
+                                "database_id": db_id,
+                                "title": title,
+                            })
+                return databases
+            except Exception as e:
+                raise _map_sdk_exc(e, op=f"find databases on page {page_id}") from e
+
+        seen_databases: set[str] = set()
+        databases: List[Dict[str, Any]] = []
+        errors: List[Dict[str, Any]] = []
+        blocks_seen = 0
+        duplicate_refs = 0
+        queried = 0
+        rows_returned = 0
+        traversal_max_depth = max_depth if recursive else 1
+
+        for item in self.iter_blocks_recursive(
+            page_id,
+            max_depth=traversal_max_depth,
+            limit_blocks=limit_blocks,
+        ):
+            block = item["block"]
+            blocks_seen += 1
+            block_type = block.get("type")
+            database_id = None
+            title = "Untitled"
+            kind = None
+            accessible = True
+            reason = None
+
+            if block_type == "child_database":
+                database_id = block.get("id")
+                title = block.get("child_database", {}).get("title", "Untitled")
+                kind = "child_database"
+            elif block_type == "linked_database":
+                database_id = block.get("linked_database", {}).get("database_id")
+                kind = "linked_database"
+                if database_id:
+                    try:
+                        metadata = self.get_database(database_id)
+                        title = metadata.get("title", [{}])[0].get("plain_text", "Untitled")
+                    except Exception as exc:
+                        title = "Unknown"
+                        accessible = False
+                        reason = str(exc)
+                        errors.append({"database_id": database_id, "error": reason})
+
+            if not database_id or not kind:
+                continue
+            if database_id in seen_databases:
+                duplicate_refs += 1
+                continue
+            seen_databases.add(database_id)
+
+            rows: List[Dict[str, Any]] = []
+            if with_rows:
+                if row_limit == 0:
+                    rows = []
+                else:
+                    try:
+                        rows = self.query_database(database_id, limit=row_limit)
+                        queried += 1
+                    except Exception as exc:
+                        accessible = False
+                        reason = str(exc)
+                        errors.append({"database_id": database_id, "error": reason})
+                rows_returned += len(rows)
+
+            databases.append({
+                "kind": kind,
+                "type": kind,
+                "database_id": database_id,
+                "title": title,
+                "source_block_id": block.get("id"),
+                "parent_page_id": block.get("parent", {}).get("page_id"),
+                "path": item.get("path", []),
+                "accessible": accessible,
+                "reason": reason,
+                "source_ref": f"notion:database:{database_id}",
+                "notion_url": block.get("url", ""),
+                "last_edited_time": block.get("last_edited_time", ""),
+                "rows": rows,
+                "row_count": len(rows),
+            })
+
+        return {
+            "kind": "notion_database_discovery/v1",
+            "root_page_id": page_id,
+            "recursive": recursive,
+            "max_depth": traversal_max_depth,
+            "databases": databases,
+            "errors": errors + list(getattr(self, "_last_traversal_errors", [])),
+            "stats": {
+                "blocks_seen": blocks_seen,
+                "blocks_skipped": 0,
+                "databases_found": len(databases),
+                "databases_queried": queried,
+                "duplicate_database_refs": duplicate_refs,
+                "rows_returned": rows_returned,
+            },
+        }
 
     # --- Write ---
 

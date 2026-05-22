@@ -36,21 +36,39 @@ Missing → exit 3 (`config`) with hint.
 | `h2t-ops notion blocks <page-id> [--limit N]` | raw/markdown blocks |
 | `h2t-ops notion search <database-id> [--filter "Status=Done"] [--filter-json '{...}'] [--limit N]` | query database |
 | `h2t-ops notion get-database <database-id> [--limit N]` | database items as markdown |
-| `h2t-ops notion find-databases <page-id>` | list databases on a page |
+| `h2t-ops notion find-databases <page-id> [--recursive] [--max-depth N] [--limit-blocks N] [--with-rows] [--row-limit N]` | discover embedded/linked databases |
 | `h2t-ops notion create <parent-id> "Title" [--content "md" \| --file f.md] [--database]` | create page |
 | `h2t-ops notion update <page-id> [--title T] [--append "md" \| --file f.md] [--replace]` | update page |
-| `h2t-ops notion sync <page-id> <out.md> [--preserve-metadata]` | write page to a file |
+| `h2t-ops notion sync <page-id> <out.md> [--include-databases] [--recursive] [--max-depth N] [--row-limit N] [--databases-json out.json] [--preserve-metadata]` | explicit page export; embedded DBs only when requested |
+| `h2t-ops notion search-workspace [--object page\|database\|all] [--limit N]` | search shared workspace objects |
+| `h2t-ops notion graph <root-page-id> [--max-depth N] [--no-include-databases]` | emit source-ref graph for a page subtree; databases included by default |
 
 Output flags (every command): `--json` (raw envelope), `--format md` (markdown/table),
 default = concise human text.
+
+Plain `sync` is not a complete workspace dump. If embedded databases matter, use
+`find-databases --recursive --max-depth N --with-rows --row-limit N --json` or
+`sync --include-databases --recursive --max-depth N --row-limit N` with an
+explicit `--databases-json` sidecar. Nested embedded databases require
+`--recursive`; otherwise only the directly embedded databases are exported.
+
+`graph` includes databases by default; pass `--no-include-databases` only when
+you need a page-only graph.
+
+Connector output is provider evidence/source metadata. POS/KB registration and
+promotion happen outside this skill.
 
 ## Examples
 
 ```bash
 h2t-ops notion get 1a2b3c4d --format md
 h2t-ops notion search 9f8e7d6c --filter "Status=In progress" --json
+h2t-ops notion find-databases 1a2b3c4d --recursive --max-depth 3 --limit-blocks 500 --with-rows --row-limit 25 --json
 h2t-ops notion create 1a2b3c4d "Sprint notes" --file notes.md
-h2t-ops notion sync 1a2b3c4d ./export/page.md --preserve-metadata
+h2t-ops notion sync 1a2b3c4d ./export/page.md --include-databases --recursive --max-depth 3 --row-limit 25 --databases-json ./export/page.databases.json --preserve-metadata
+h2t-ops notion search-workspace --object all --limit 25
+h2t-ops notion graph 1a2b3c4d --max-depth 3
+h2t-ops notion graph 1a2b3c4d --max-depth 3 --no-include-databases
 ```
 
 ## Exit codes
