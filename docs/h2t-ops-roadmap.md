@@ -1,7 +1,7 @@
 # H2T-SKILLS Roadmap
 
 **Status:** Active closure roadmap
-**Date:** 2026-05-21
+**Date:** 2026-05-22
 **Owner:** h2t-skills
 **Milestone tag:** `milestone/legacy-h2t-retired-2026-05-21`
 
@@ -68,7 +68,7 @@ than active connector migration.
 
 ## Critical Path Details
 
-### 1. Connector Freeze + Mac Portability Gate (#155)
+### Completed: Connector Freeze + Mac Portability Gate (#155)
 
 Goal: finish connectors as a category before moving to profile/runtime work.
 
@@ -240,7 +240,7 @@ Recommended triage:
 
 | Bucket | Issues | Treatment |
 | --- | --- | --- |
-| Connector freeze umbrella | #155 | Immediate gate before agent profiles |
+| Connector freeze umbrella | #155 | Closed; final smoke gate fixed in `494a947` |
 | MeetGeek follow-up | #156 | Closed; fixed in `f363746` |
 | Secrets/setup | #107, #112, #94, #109, #110, #13 | Classified as setup/Mac follow-up; avoid piecemeal drift |
 | Calendar follow-up | #82, #145 | #82 fixed in `6631f57`, pushed and closed; #145 remains provider backlog unless explicitly widened |
@@ -384,39 +384,40 @@ Important for finishing the repository:
 
 ## Practical Order
 
-1. Close #155 with final T4 evidence.
-2. Implement #153 `h2t-core:agent-profile`.
-3. Resolve #148 security/dev hygiene and #85 CI/unit-test hygiene.
-4. Sweep remaining issues into active / backlog / moved / stale-closed.
-5. Only then pick the next product stream: Calendar/Notion provider features, research
+1. Implement #153 `h2t-core:agent-profile`.
+2. Resolve #148 security/dev hygiene.
+3. Fix #85 CI/unit-test hygiene.
+4. Consolidate setup / secrets / Mac portability follow-ups into a deliberate
+   platform stream.
+5. Sweep remaining issues into active / backlog / moved / stale-closed.
+6. Only then pick the next product stream: Calendar/Notion provider features, research
    product backlog, creative recovery, or POS-side workflow contracts.
 
 ## Closure Forecast
 
-Date: 2026-05-21
+Date: 2026-05-22
 
 Calibration note: the previous forecast assumed Telegram, Research/fetch, Daily Brief,
 legacy h2t retirement, profiles, and cleanup were still ahead. Since then, Telegram,
 Research/fetch, Drive `sync-meetings` retirement, legacy `h2t` retirement, and #121
-cleanup finished faster than expected. The remaining forecast now prioritizes a
-connector-freeze pass before agent profiles.
+cleanup finished faster than expected. #155 connector freeze is now also closed:
+the final smoke gate passed, the `h2t-ops --help` regression was fixed in
+`494a947`, and connector work is no longer the active migration track.
 
 | Remaining block | Optimistic | Realistic | Main risk |
 | --- | ---: | ---: | --- |
-| #155 connector freeze triage | 0.5 day | 1 day | Scope creep from "freeze" into all provider backlog |
-| Notion/secrets/Mac portability decisions | 0.5-1 day | 1-2 days | Deciding what is fix-now vs accepted backlog |
-| Final connector smoke matrix | 0.5 day | 1 day | Live auth/provider flakiness |
 | #153 `h2t-core:agent-profile` | 1-2 days | 2-3 days | Profile merge semantics, temporary overlays, cross-machine sync |
 | #148 permissions / context packer hardening | 0.5-1 day | 1-2 days | Separating personal allowlists from tracked repo policy |
 | #85 CI/unit-test hygiene | 0.5-1 day | 1-2 days | Hidden platform assumptions |
+| Setup / secrets / Mac portability consolidation | 0.5-1 day | 1-2 days | Deciding what is platform work vs provider backlog |
 | Issue sweep / reclassification | 0.5-1 day | 1-2 days | Old issues that need careful "move vs close" decisions |
 
-Total estimate to maintenance/closure mode:
+Remaining estimate to maintenance/closure mode:
 
-- optimistic: 4-6 focused working days;
-- realistic: 6-9 focused working days;
-- with interruptions: 2-3 calendar weeks.
+- optimistic: 3-5 focused working days;
+- realistic: 5-8 focused working days;
+- with interruptions: 1.5-2.5 calendar weeks.
 
 This excludes broad Calendar/Notion provider enhancements, research product backlog,
-creative recovery, and POS-side workflow contracts. The connector-freeze pass may
-accept those as backlog, but should not silently absorb them.
+creative recovery, and POS-side workflow contracts. Those remain explicit future
+streams and should not be silently absorbed into closure work.
