@@ -1,0 +1,136 @@
+{
+  "version": 1,
+  "_note": "Draft catalog. Plugin membership is reviewable, not final product strategy.",
+  "pluginIds": {
+    "h2t-core": "h2t-core@lichtpfad",
+    "h2t-ops": "h2t-ops@lichtpfad",
+    "h2t-dev": "h2t-dev@lichtpfad",
+    "h2t-creative": "h2t-creative@lichtpfad",
+    "h2t-dcc": "h2t-dcc@lichtpfad",
+    "h2t-arch": "h2t-arch@lichtpfad",
+    "superpowers": "superpowers@superpowers-plugins",
+    "plugin-dev": "plugin-dev@plugin-dev-plugins",
+    "codex": "codex@codex-plugins",
+    "creative-thinking": "creative-thinking@creative-thinking-plugins",
+    "marketing-playbook": "marketing-playbook@marketing-playbook-plugins",
+    "lead-search": "lead-search@lead-search-plugins",
+    "frontend-design": "frontend-design@frontend-design-plugins",
+    "ru-text": "ru-text@ru-text-plugins",
+    "positioning": "positioning@positioning-plugins",
+    "pm-toolkit": "pm-toolkit@pm-toolkit-plugins",
+    "pm-product-strategy": "pm-product-strategy@pm-product-strategy-plugins",
+    "pm-product-discovery": "pm-product-discovery@pm-product-discovery-plugins",
+    "pm-market-research": "pm-market-research@pm-market-research-plugins",
+    "pm-data-analytics": "pm-data-analytics@pm-data-analytics-plugins",
+    "pm-marketing-growth": "pm-marketing-growth@pm-marketing-growth-plugins",
+    "pm-go-to-market": "pm-go-to-market@pm-go-to-market-plugins",
+    "pm-execution": "pm-execution@pm-execution-plugins"
+  },
+  "baseProfiles": {
+    "dev": {
+      "description": "Plugin and codebase development",
+      "enable": ["h2t-core", "h2t-dev", "superpowers", "plugin-dev", "codex"],
+      "disable": ["h2t-creative", "h2t-dcc", "marketing-playbook", "lead-search",
+                  "pm-product-strategy", "pm-product-discovery", "pm-market-research",
+                  "pm-data-analytics", "pm-marketing-growth", "pm-go-to-market", "pm-execution"]
+    },
+    "pos": {
+      "description": "Personal OS repository work",
+      "enable": ["h2t-core", "h2t-ops", "h2t-dev", "superpowers"],
+      "disable": ["h2t-creative", "h2t-dcc", "marketing-playbook", "lead-search",
+                  "pm-product-strategy", "pm-product-discovery", "pm-market-research",
+                  "pm-data-analytics", "pm-marketing-growth", "pm-go-to-market", "pm-execution"]
+    },
+    "ops": {
+      "description": "Personal operations and provider adapters",
+      "enable": ["h2t-core", "h2t-ops", "h2t-dev", "superpowers"],
+      "disable": ["h2t-creative", "h2t-dcc", "marketing-playbook",
+                  "pm-product-strategy", "pm-product-discovery", "pm-market-research",
+                  "pm-data-analytics", "pm-marketing-growth", "pm-go-to-market", "pm-execution"]
+    },
+    "creative": {
+      "description": "Landing pages, decks, design systems, visual QA",
+      "enable": ["h2t-core", "h2t-creative", "h2t-arch", "frontend-design", "superpowers"],
+      "disable": ["h2t-dcc", "marketing-playbook", "lead-search",
+                  "pm-product-strategy", "pm-product-discovery", "pm-market-research",
+                  "pm-data-analytics", "pm-marketing-growth", "pm-go-to-market", "pm-execution"]
+    },
+    "dcc": {
+      "description": "TouchDesigner and Houdini work",
+      "enable": ["h2t-core", "h2t-dcc", "superpowers"],
+      "disable": ["h2t-creative", "marketing-playbook", "lead-search",
+                  "pm-product-strategy", "pm-product-discovery", "pm-market-research",
+                  "pm-data-analytics", "pm-marketing-growth", "pm-go-to-market", "pm-execution"]
+    },
+    "product": {
+      "description": "Product strategy, roadmap, discovery, and positioning",
+      "enable": ["h2t-core", "superpowers", "creative-thinking", "h2t-arch",
+                 "pm-product-strategy", "pm-product-discovery", "pm-market-research",
+                 "pm-execution", "positioning"],
+      "disable": ["h2t-creative", "h2t-dcc", "marketing-playbook", "lead-search",
+                  "pm-data-analytics", "pm-marketing-growth", "pm-go-to-market"]
+    },
+    "marketing": {
+      "description": "Go-to-market, copy, lead-gen, and landing strategy",
+      "enable": ["h2t-core", "h2t-creative", "superpowers", "marketing-playbook",
+                 "lead-search", "positioning", "pm-marketing-growth", "pm-go-to-market"],
+      "disable": ["h2t-dcc", "pm-product-discovery", "pm-data-analytics",
+                  "pm-product-strategy", "pm-market-research", "pm-execution"]
+    },
+    "mixed": {
+      "description": "Fallback for repos with no strong profile — conservative defaults",
+      "enable": ["h2t-core", "superpowers"],
+      "disable": ["h2t-dcc", "marketing-playbook", "lead-search",
+                  "pm-product-strategy", "pm-product-discovery", "pm-market-research",
+                  "pm-data-analytics", "pm-marketing-growth", "pm-go-to-market", "pm-execution"]
+    }
+  },
+  "overlays": {
+    "plugin-dev": {
+      "description": "Plugin, skill, hook, and MCP development",
+      "enable": ["plugin-dev", "codex"],
+      "disable": []
+    },
+    "creative": {
+      "description": "Visual and design work in a non-creative repo",
+      "enable": ["h2t-creative", "h2t-arch", "frontend-design"],
+      "disable": []
+    },
+    "marketing": {
+      "description": "Marketing, copy, lead-gen, and GTM work",
+      "enable": ["marketing-playbook", "lead-search", "pm-marketing-growth", "pm-go-to-market"],
+      "disable": []
+    },
+    "product": {
+      "description": "Product strategy and PM work",
+      "enable": ["creative-thinking", "pm-product-strategy", "pm-product-discovery",
+                 "pm-market-research", "pm-execution", "positioning"],
+      "disable": []
+    },
+    "research": {
+      "description": "Web and research-heavy sessions",
+      "enable": ["h2t-ops"],
+      "disable": []
+    },
+    "dcc": {
+      "description": "TouchDesigner and Houdini work in another repo",
+      "enable": ["h2t-dcc"],
+      "disable": []
+    },
+    "github-heavy": {
+      "description": "PR, issue, and CI workflows",
+      "enable": ["h2t-dev", "codex"],
+      "disable": []
+    },
+    "minimal": {
+      "description": "Reduce to core and session tools only",
+      "enable": ["h2t-core", "superpowers"],
+      "disable": ["h2t-ops", "h2t-dev", "h2t-creative", "h2t-dcc", "h2t-arch",
+                  "marketing-playbook", "lead-search", "plugin-dev", "codex",
+                  "creative-thinking", "frontend-design", "ru-text", "positioning",
+                  "pm-toolkit", "pm-product-strategy", "pm-product-discovery",
+                  "pm-market-research", "pm-data-analytics", "pm-marketing-growth",
+                  "pm-go-to-market", "pm-execution"]
+    }
+  }
+}
