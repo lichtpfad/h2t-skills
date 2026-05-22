@@ -85,4 +85,4 @@ Agent Visual QA must check:
 
 ## Current #119 Classification
 
-The #119 semantic renderer pilot proves a technical path. The current landing candidate does not prove a landing composition. Treat the screenshots as negative evidence until a wireframe-driven candidate replaces them.
+#119 did not prove the semantic renderer as a product path. It generated files, but the result had no accepted design system, no convincing semantic blocks, and no valid landing composition. Treat the screenshots and candidate output as negative evidence for abstraction-first planning.

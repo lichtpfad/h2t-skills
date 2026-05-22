@@ -2,6 +2,8 @@
 
 This is the canonical index for reusable h2t-creative roles, components, layouts, formats, and extension rules.
 
+For post-reset reuse rules, see `docs/library/h2t-creative/RECOVERY_MAP.md`.
+
 ## Semantic Roles
 
 Initial universal roles:
