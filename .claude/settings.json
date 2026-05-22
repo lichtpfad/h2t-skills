@@ -1,4 +1,11 @@
 {
+  "permissions": {
+    "allow": [
+      "mcp__anysite__search_instagram_posts",
+      "mcp__plugin_context7_context7__resolve-library-id",
+      "mcp__plugin_context7_context7__query-docs"
+    ]
+  },
   "hooks": {
     "PreToolUse": [
       {
@@ -20,5 +27,29 @@
         ]
       }
     ]
+  },
+  "enabledPlugins": {
+    "codex@codex-plugins": true,
+    "h2t-core@lichtpfad": true,
+    "h2t-dev@lichtpfad": true,
+    "plugin-dev@plugin-dev-plugins": true,
+    "superpowers@superpowers-plugins": true,
+    "h2t-creative@lichtpfad": false,
+    "h2t-dcc@lichtpfad": false,
+    "lead-search@lead-search-plugins": false,
+    "marketing-playbook@marketing-playbook-plugins": false,
+    "pm-data-analytics@pm-data-analytics-plugins": false,
+    "pm-execution@pm-execution-plugins": false,
+    "pm-go-to-market@pm-go-to-market-plugins": false,
+    "pm-market-research@pm-market-research-plugins": false,
+    "pm-marketing-growth@pm-marketing-growth-plugins": false,
+    "pm-product-discovery@pm-product-discovery-plugins": false,
+    "pm-product-strategy@pm-product-strategy-plugins": false
+  },
+  "h2tAgentProfile": {
+    "base": "dev",
+    "overlays": [],
+    "managedBy": "h2t-core:agent-profile",
+    "updatedAt": "2026-05-22"
   }
 }
