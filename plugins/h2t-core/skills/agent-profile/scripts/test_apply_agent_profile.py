@@ -362,5 +362,52 @@ class TestWorkContextRefs(unittest.TestCase):
         self.assertIn("h2t-dev@lichtpfad", result["enabled"])
 
 
+class TestAddContextRef(unittest.TestCase):
+    """Tests for add_overlay() with work-context refs."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.cwd = Path(self.tmp.name)
+        (self.cwd / ".claude").mkdir()
+        self.catalog_path = self.cwd / "catalog" / "agent-profiles.json"
+        self.catalog_path.parent.mkdir()
+        self.catalog_path.write_text(json.dumps(MINIMAL_CATALOG))
+        # Set base profile first
+        ap.apply_profile(self.cwd, "pos", [], catalog_path=self.catalog_path)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_add_overlay_accepts_profile_ref(self):
+        # "profile:dev" should be accepted because dev is a valid base profile
+        result = ap.add_overlay(self.cwd, "profile:dev", catalog_path=self.catalog_path)
+        self.assertNotIn("error", result)
+        binding = json.loads((self.cwd / ".claude" / "agent-profile.json").read_text())
+        self.assertIn("profile:dev", binding["overlays"])
+
+    def test_add_overlay_accepts_bare_name_overlay(self):
+        result = ap.add_overlay(self.cwd, "marketing", catalog_path=self.catalog_path)
+        self.assertNotIn("error", result)
+
+    def test_add_overlay_rejects_unknown_ref(self):
+        result = ap.add_overlay(self.cwd, "profile:nonexistent", catalog_path=self.catalog_path)
+        self.assertIn("error", result)
+
+    def test_cli_add_accepts_context_flag(self):
+        result = ap.run_cli(
+            ["add", "--cwd", str(self.cwd), "--context", "profile:dev"],
+            catalog_path=self.catalog_path,
+        )
+        self.assertNotIn("error", result)
+
+    def test_cli_add_overlay_flag_still_works(self):
+        # --overlay backward compat
+        result = ap.run_cli(
+            ["add", "--cwd", str(self.cwd), "--overlay", "marketing"],
+            catalog_path=self.catalog_path,
+        )
+        self.assertNotIn("error", result)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
