@@ -1,0 +1,55 @@
+from __future__ import annotations
+
+import importlib.util
+import json
+from pathlib import Path
+
+
+def _load_writer():
+    path = Path(__file__).with_name("writer.py")
+    spec = importlib.util.spec_from_file_location("handoff_writer_under_test", path)
+    module = importlib.util.module_from_spec(spec)
+    assert spec and spec.loader
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_default_markdown_dir_uses_h2t_session_root(tmp_path, monkeypatch):
+    writer = _load_writer()
+    monkeypatch.setenv("H2T_SESSION_ROOT", str(tmp_path / "sessions"))
+    monkeypatch.setenv("H2T_MACHINE_NAME", "test-machine")
+
+    path = writer.default_markdown_dir("repo")
+
+    assert path == tmp_path / "sessions" / "test-machine" / "repo"
+    assert ".dor" not in str(path)
+
+
+def test_write_handoff_writes_bounded_latest_index(tmp_path, monkeypatch):
+    writer = _load_writer()
+    monkeypatch.setenv("H2T_SESSION_ROOT", str(tmp_path / "sessions"))
+    monkeypatch.setenv("H2T_MACHINE_NAME", "test-machine")
+    monkeypatch.setenv("H2T_ACTIVITY_SPOOL", str(tmp_path / "activity" / "spool.jsonl"))
+
+    long_done = "done " * 1000
+    long_remains = "\n".join(f"- [ ] item {i} " + ("x" * 500) for i in range(10))
+    result = writer.write_handoff(
+        session_id="dev-repo-test-2026-05-22",
+        domain="dev",
+        project="repo",
+        what_done=long_done,
+        what_remains=long_remains,
+        artifacts=[f"commit:{i}" for i in range(20)],
+    )
+
+    latest_path = Path(result["latest"])
+    latest = json.loads(latest_path.read_text(encoding="utf-8"))
+
+    assert latest_path == tmp_path / "sessions" / "test-machine" / "repo" / "latest.json"
+    assert Path(result["markdown"]).is_file()
+    assert latest["version"] == 1
+    assert len(latest["summary_short"]) <= writer.SUMMARY_LIMIT
+    assert len(latest["next_actions"]) == writer.MAX_ITEMS
+    assert all(len(item) <= writer.ITEM_LIMIT for item in latest["next_actions"])
+    assert len(latest["artifacts"]) == writer.MAX_ARTIFACTS
+    assert latest["truncated"] is True
