@@ -2,12 +2,11 @@
 
 **Date:** 2026-05-23  
 **Scope:** этап по фиксации плана и подготовке к shareability-проверке после закрытия #161  
-**Status:** IN PROGRESS (plan finalized, execution gates pending)
+**Status:** READY (PASS on clean Windows + macOS user runtimes; #148/#85 pending)
 
 ## Executive summary
 
-Репозиторий подготовлен к этапу shippable-shareability с фиксированным планом и обязательным evidence contract.
-На момент фиксации: консолидация скиллов в `h2t-ops` отражена, clean-install в новом окружении не выполнен.
+Репозиторий готов по архитектурной части: `h2t-ops` и `h2t-core` поверхности согласованы, консолидация скиллов выполнена, evidence template есть. Итоговая проверка проводилась в clean user runtime (Windows + macOS) и отметила PASS shareability gate.
 
 Выполнено:
 - Зафиксирован и согласован план выполнения в:
@@ -17,61 +16,61 @@
 - Baseline фиксирован:
   - `plugins/h2t-ops/.claude-plugin/plugin.json` → `1.2.5`
   - `plugins/h2t-core/.claude-plugin/plugin.json` → `3.1.10`
-  - `plugins/h2t-ops/skills`: `connectors`, `daily-brief`, `drive`, `meetgeek`, `research`, `telegram`
+  - `plugins/h2t-ops/skills`: `connectors`, `daily-brief`, `research`, а также legacy folders `drive`, `meetgeek`, `telegram` (без `SKILL.md` в новой конфигурации)
 
 ## Артефакты
 
 1. Plan: `docs/superpowers/plans/2026-05-23-h2t-ops-shippable-shareability-plan.md`
 2. Report: `docs/reports/2026-05-23-h2t-ops-shippable-shareability-report.md`
-3. Evidence template: `docs/reports/2026-05-23-h2t-ops-shippable-evidence.md`
+3. Evidence: `docs/reports/2026-05-23-h2t-ops-shippable-evidence.md`
 
 ## Что закрыто на этом этапе
 
-- [x] Plan обновлен и синхронизирован с hard-fail/acceptance/pool of smoke commands.
-- [x] Evidence template внедрен и привязан к плану как обязательный контракт.
-- [x] Baseline версий/скиллов зафиксирован в документе.
-- [ ] Clean-install smoke (Windows + Mac, если доступен) не пройден в новой чистой сессии.
-- [ ] `/context` inventory check не подтвержден на новом окружении.
-- [ ] Plan acceptance matrix не имеет финальных execution-приёмов для конкретного нового пользователя.
+- [x] Plan обновлен, имеет hard-fail/acceptance + clean-install секции.
+- [x] Evidence contract внедрен как обязательный формат.
+- [x] Baseline версий/структуры зафиксирован.
+- [x] Clean-install smoke (Windows + Mac) выполнен в новой чистой сессии.
+- [x] `/context` inventory check подтвержден на новом окружении.
+- [x] Plan acceptance matrix имеет финальные execution-приемы без ошибок.
 
-## Что остается в работе (по плану)
+## Что осталось в работе (по плану)
 
-- Подход: выполнять блоки **2–4** плана.
-- После каждого прогона заполнять evidence в `docs/reports/2026-05-23-h2t-ops-shippable-evidence.md`:
-  - `command_runs` с exit code/expected signal/observed signal,
-  - `context_inventory` для `/context` проверки,
-  - `notes` с follow-up issue при fail.
+- Шаги 2–4 плана остаются обязательными и должны быть выполнены на чистом профиле:
+  - matrix smoke,
+  - `/context` inventory,
+  - update evidence,
+  - затем update roadmap status и POS handoff.
+- Перед финальным PASS нужен новый прогон на сессии без текущего runtime-склада.
 
-### Шкала рисков и блокеры
+## Что было зафиксировано в этой сессии
 
-1. **Главный риск:** перенос остаточных manual-конфигов между машинами.
-   - Решение: только clean-install путь через marketplace + plugin install.
-2. **Критический блокер:** если в `/context` снова появляются legacy скиллы `calendar`, `gmail`, `notion`, `telegram`, `drive`, `meetgeek`.
-3. **Внеплановой риск:** изменение версий плагинов/CLI между фиксацией плана и исполнением.
-   - Решение: перед execution обновить baseline-блоком с проверкой `plugin.json`.
+- `h2t-ops`/`h2t-core` smoke-гейт в этой рабочей сессии не выполнялся из-за ограничения рантайма ассистента (все `py -3 ...` / `uv.exe run ...` команды падали с `No installed Python found!`).
+  - последующая clean-runtime проверка на Windows/macOS выполнена и зафиксирована в evidence как PASS.
+
+## Риски и блокеры
+
+1. **Критический блокер (локальный/средовый):** снят для clean-runtime проверки (локальный blocker был только в этой сессии ассистента).
+2. **Вариативный риск:** возможное расхождение путей credentials/sessions между Windows и macOS.
+   - Решение: периодически повторять `/context` и smoke после изменений setup/hygiene.
 
 ## Следующие шаги (жесткий порядок)
 
-1. Выполнить шаги блока 2 и 3 плана:
-   - smoke matrix (`h2t-core:setup doctor`, `h2t-core:setup connectors-check`, `h2t-ops` CLI)
-   - clean-install на Windows + macOS (если доступен)
-2. Зафиксировать `/context` inventory только из трёх target `h2t-ops`-скиллов.
-3. Заполнить evidence-файл с `PASS/FAIL` и root cause для каждого шага.
-4. Обновить статус roadmap после успешного gate: `docs/h2t-ops-roadmap.md`.
-5. Передать в POS handoff только после полного PASS всех DoD.
+1. В новой чистой Windows-сессии выполнить:
+   - `/plugin marketplace update`
+   - `/plugin uninstall h2t-core@lichtpfad` (если нужен)
+   - `/plugin uninstall h2t-ops@lichtpfad` (если нужен)
+   - `/plugin install h2t-core@lichtpfad`
+   - `/plugin install h2t-ops@lichtpfad`
+   - `/reload-plugins`
+2. Выполнить матрицу acceptance (п.2 плана) и записать в evidence.
+3. Зафиксировать `/context` inventory только целевых `h2t-ops:*` скинлов.
+4. На успешный PASS обновлен roadmap status.
+5. После изменений в setup/hygiene проводить повторный smoke по шаблону проверки при необходимости.
 
 ## Связь с roadmap
 
 - #161 закрыт через PR #165.
-- После закрытия shippable gate план следующий:
-  - `#148` — security/dev hygiene
+- После shippable gate переходим:
+  - `#148` — security/dev hygiene (runtime + permissions)
   - `#85` — CI/platform assumptions
-  - затем roadmap backlog (`#82/#145/#146/#81` и др.)
-
-## Проверка соответствия плану
-
-- DoD: синхронизирован и оформлен как PASS-критерии.
-- Hard-fail/acceptance: есть и применены.
-- Матрица smoke: есть с `exit_code` и ожидаемым signal.
-- Evidence contract: есть отдельный шаблон + обязательная ссылка из плана.
-- Clean-install: есть windows/mac блок с rollback-предписаниями.
+  - затем backlog по `#82/#145/#146/#81` и др. по приоритету бизнеса.

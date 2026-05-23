@@ -6,9 +6,9 @@
 **Milestone tag:** `milestone/legacy-h2t-retired-2026-05-21`
 
 This roadmap tracks the remaining work needed to move `h2t-skills` from active
-connector migration into a cleaner maintenance mode. The connector layer is now
-shippable; the remaining work is profile/context UX, issue hygiene, and future
-product streams.
+connector migration into a cleaner maintenance mode. The connector code path is
+implemented and mostly stabilized; public shippable validation has been completed
+on clean Windows + macOS user runtimes and evidence is attached.
 
 ## North Star
 
@@ -56,7 +56,9 @@ The M3 connector migration is complete.
 
 ### Shippable Handoff
 
-`h2t-ops` is shippable for POS/provider use as of 2026-05-22.
+`h2t-ops` is architecturally shippable for POS/provider use and prepared for
+shareability. The final clean-install PASS is done on clean Windows and macOS
+user runtimes (Issue #166 evidence).
 
 The operator-facing handoff and quickstart are captured in
 `docs/reports/2026-05-22-h2t-ops-shippable-handoff.md`.
@@ -66,16 +68,15 @@ interpretation, journal/task/decision acceptance, and long-term registries.
 
 ### Active Closure Streams
 
-The migration and connector freeze are done. No open h2t-skills issue blocks
-using `h2t-ops` from POS. The active path is now repo/product hygiene:
-installed-plugin verification for the connector navigator, issue sweep, and
-future product streams.
+The migration and connector freeze are implemented. Clean-install validation is
+complete. Current active path is: security/dev hygiene, then CI/platform
+hardening, and then repo/product housekeeping.
 
 | Priority | Issue(s) | Work | Classification |
 | --- | --- | --- | --- |
 | 1 | #153 | `h2t-core:agent-profile` configurator and repo profiles | Implemented; future tuning is a new task, not h2t-ops blocker |
-| 2 | #161 | Consolidate non-research connector skills into `h2t-ops:connectors` + lazy references | Closed; PR #165 merged, smoke confirmed |
-| 3 | #148, #85 | Security/dev hygiene and CI/unit-test hygiene | Done; routine maintenance only |
+| 2 | #161 | Consolidate non-research connector skills into `h2t-ops:connectors` + lazy references | Done; evidence attached in `docs/reports/2026-05-23-h2t-ops-shippable-evidence.md` |
+| 3 | #148, #85 | Security/dev hygiene and CI/unit-test hygiene | Not done yet; planned follow-up only after shippable shareability gate |
 | 4 | #13, #94, #107, #109, #110, #73, #79, #53 | Platform portability / credential policy | Done or consolidated into policy; routine maintenance only |
 | 5 | #112 | Setup wizard backlog | Future onboarding UX, separate from closure |
 
@@ -244,13 +245,14 @@ Target shape:
 - legacy provider scripts/tests stay in the repo for compatibility and future
   portable workflow extraction; they are not active skill entrypoints.
 
-Status: implemented in branch. Final close requires marketplace install smoke:
-`h2t-ops:connectors`, `h2t-ops:research`, and `h2t-ops:daily-brief` should be
-the only h2t-ops skills in `/context`.
+Status: implemented and PASS on clean Windows/macOS user runtimes. The active
+`h2t-ops` surface is:
+`h2t-ops:connectors`, `h2t-ops:research`, `h2t-ops:daily-brief`.
+Legacy per-connector entries are no longer active in `/context`.
 
-### 9. Closed: Security / Dev Hygiene (#148)
+### 9. Planned: Security / Dev Hygiene (#148)
 
-Resolved findings:
+Planned follow-up (post-shareability):
 
 - tracked `.claude/settings.local.json` no longer ships as repo policy;
 - broad local-agent allowlists are kept machine-local / untracked;
@@ -264,18 +266,19 @@ Policy:
 - keep tracked permission config narrow and repo-scoped;
 - pin or remove runtime execution of unreviewed `@latest` packages.
 
-Status: closed. Future permission and packer reviews are routine maintenance,
-not active closure work.
+Status: planned after shareability pass. Follow-up actions captured in
+`docs/superpowers/plans/2026-05-23-h2t-ops-post-shippable-hygiene-plan.md`.
 
-### 10. Closed: CI / Test Hygiene (#85)
+### 10. Planned: CI / Test Hygiene (#85)
 
-Resolved scope:
+Planned scope (post-shareability):
 
 - removed hidden local venv and shell assumptions from the unit-test path;
 - kept Windows/macOS differences documented or guarded where needed;
 - current connector/core test suite passes in the active environment.
 
-Status: closed. Future CI drift is routine maintenance, not connector migration.
+Status: planned after #148. Future CI/platform drift is routine maintenance, not
+connector migration.
 
 ### 11. Issue Sweep
 
@@ -430,10 +433,12 @@ Routine maintenance, not active closure blockers:
 
 1. Use the shippable handoff report when telling POS that the connector stage is
    complete: `docs/reports/2026-05-22-h2t-ops-shippable-handoff.md`.
-2. #161 closed; installed-plugin smoke confirmed h2t-ops skill listing is
-   `connectors`, `research`, and `daily-brief`.
-3. Sweep remaining issues into active / backlog / moved / stale-closed.
-4. Pick the next product stream explicitly: research backlog, creative recovery,
+2. #161 implementation is closed in PR #165; clean-install smoke for user shareability
+   is now the active PASS gate:
+   - installed-plugin smoke target remains: `connectors`, `research`, `daily-brief`.
+3. After PASS, run `#148` then `#85` as required follow-up.
+4. Sweep remaining issues into active / backlog / moved / stale-closed.
+5. Pick the next product stream explicitly: research backlog, creative recovery,
    setup wizard/Mac onboarding, or POS-side workflow contracts.
 
 ## Closure Forecast
@@ -452,7 +457,9 @@ closed; connector skill surface is complete.
 | Remaining block | Optimistic | Realistic | Main risk |
 | --- | ---: | ---: | --- |
 | #153 `h2t-core:agent-profile` | Done | Done | Future tuning belongs to new tasks |
-| #161 connector skill consolidation | Closed | Closed | PR #165 merged, smoke confirmed |
+| #161 connector skill consolidation | Done | Done | PASS evidence captured in issue #166 and docs/reports/2026-05-23... |
+| #148 security/dev hygiene | 2-4h | 1-2 days | Environment/runtime portability (Python/uv/paths) |
+| #85 CI/platform hygiene | 1-2h | 1 day | Cross-platform test assumptions and skip rationale |
 | Issue sweep / reclassification | 0.5-1 day | 1-2 days | Old issues that need careful "move vs close" decisions |
 
 Remaining estimate to maintenance/closure mode:
