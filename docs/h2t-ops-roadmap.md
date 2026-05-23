@@ -74,7 +74,7 @@ future product streams.
 | Priority | Issue(s) | Work | Classification |
 | --- | --- | --- | --- |
 | 1 | #153 | `h2t-core:agent-profile` configurator and repo profiles | Implemented; future tuning is a new task, not h2t-ops blocker |
-| 2 | #161 | Consolidate non-research connector skills into `h2t-ops:connectors` + lazy references | Implemented in branch; close after installed-plugin smoke |
+| 2 | #161 | Consolidate non-research connector skills into `h2t-ops:connectors` + lazy references | Closed; PR #165 merged, smoke confirmed |
 | 3 | #148, #85 | Security/dev hygiene and CI/unit-test hygiene | Done; routine maintenance only |
 | 4 | #13, #94, #107, #109, #110, #73, #79, #53 | Platform portability / credential policy | Done or consolidated into policy; routine maintenance only |
 | 5 | #112 | Setup wizard backlog | Future onboarding UX, separate from closure |
@@ -430,7 +430,7 @@ Routine maintenance, not active closure blockers:
 
 1. Use the shippable handoff report when telling POS that the connector stage is
    complete: `docs/reports/2026-05-22-h2t-ops-shippable-handoff.md`.
-2. Close #161 after installed-plugin smoke confirms the h2t-ops skill listing is
+2. #161 closed; installed-plugin smoke confirmed h2t-ops skill listing is
    `connectors`, `research`, and `daily-brief`.
 3. Sweep remaining issues into active / backlog / moved / stale-closed.
 4. Pick the next product stream explicitly: research backlog, creative recovery,
@@ -446,13 +446,13 @@ features were still ahead. Since then, Telegram, Research/fetch, Drive
 `sync-meetings` retirement, legacy `h2t` retirement, #121 cleanup, #155
 connector freeze, Notion #81/#146, and Calendar #145 are complete.
 
-`h2t-ops` connector work is no longer the active migration track. #153 is
-implemented, and #161 is at final install-smoke/PR closure.
+`h2t-ops` connector work is no longer the active migration track. #153 and #161 are
+closed; connector skill surface is complete.
 
 | Remaining block | Optimistic | Realistic | Main risk |
 | --- | ---: | ---: | --- |
 | #153 `h2t-core:agent-profile` | Done | Done | Future tuning belongs to new tasks |
-| #161 connector skill consolidation | Done in branch | Install smoke + close | Preserving discoverability while reducing skill entries |
+| #161 connector skill consolidation | Closed | Closed | PR #165 merged, smoke confirmed |
 | Issue sweep / reclassification | 0.5-1 day | 1-2 days | Old issues that need careful "move vs close" decisions |
 
 Remaining estimate to maintenance/closure mode:
