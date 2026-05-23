@@ -218,3 +218,21 @@ Installed-plugin smoke for #161 closure: confirmed `h2t-ops:connectors`, `h2t-op
 
 GH comment: https://github.com/lichtpfad/h2t-skills/issues/166#issuecomment-4526444273
 
+## Final subagent trigger smoke (2026-05-23)
+
+After resolving the previous "do not execute commands" lock, 5 real connector-trigger
+subagents were rerun and all passed.
+
+| Connector | tool_uses | Result |
+| --- | ---: | --- |
+| Gmail | 6 | Letters from Christina found; no fresh messages in the last week (`trigger test real`) |
+| Calendar | 5 | Tomorrow only Sveta's birthday event, otherwise free slots |
+| Notion | 10 | `Rejuve` not found in workspace, skill path executed successfully |
+| Telegram | 2 | 5 latest saved messages displayed |
+| MeetGeek | 4 | Transcript for meeting with Liia (ID `be7505e5-198c-4f10-a7c4-8fb697dd...`) downloaded |
+
+Impact:
+- connector trigger availability validated for all provider adapters;
+- MeetGeek workflow confirmed operational in the same run;
+- no test execution failures in this smoke pass.
+
