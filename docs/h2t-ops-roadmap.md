@@ -1,7 +1,7 @@
 # H2T-SKILLS Roadmap
 
 **Status:** Active closure roadmap
-**Date:** 2026-05-22
+**Date:** 2026-05-23
 **Owner:** h2t-skills
 **Milestone tag:** `milestone/legacy-h2t-retired-2026-05-21`
 
@@ -67,13 +67,14 @@ interpretation, journal/task/decision acceptance, and long-term registries.
 ### Active Closure Streams
 
 The migration and connector freeze are done. No open h2t-skills issue blocks
-using `h2t-ops` from POS. The active path is now repo/product hygiene: profile
-UX, optional connector skill consolidation, and issue sweep.
+using `h2t-ops` from POS. The active path is now repo/product hygiene:
+installed-plugin verification for the connector navigator, issue sweep, and
+future product streams.
 
 | Priority | Issue(s) | Work | Classification |
 | --- | --- | --- | --- |
-| 1 | #153 | `h2t-core:agent-profile` configurator and repo profiles | Active repo UX path, not h2t-ops blocker |
-| 2 | New follow-up | Consolidate non-research connector skills into one skill + references | Context-budget UX, not connector blocker |
+| 1 | #153 | `h2t-core:agent-profile` configurator and repo profiles | Implemented; future tuning is a new task, not h2t-ops blocker |
+| 2 | #161 | Consolidate non-research connector skills into `h2t-ops:connectors` + lazy references | Implemented in branch; close after installed-plugin smoke |
 | 3 | #148, #85 | Security/dev hygiene and CI/unit-test hygiene | Done; routine maintenance only |
 | 4 | #13, #94, #107, #109, #110, #73, #79, #53 | Platform portability / credential policy | Done or consolidated into policy; routine maintenance only |
 | 5 | #112 | Setup wizard backlog | Future onboarding UX, separate from closure |
@@ -203,7 +204,7 @@ Status: policy captured in `docs/credential-sync-policy.md`; implementation
 work is no longer part of connector closure unless a concrete Mac smoke failure
 is found.
 
-### 7. `h2t-core:agent-profile` (#153)
+### 7. Resolved: `h2t-core:agent-profile` (#153)
 
 Goal: make plugin loading contextual.
 
@@ -224,7 +225,30 @@ Definition of done:
 - at least one real repo profile is applied and verified with `/context`;
 - rollback path is documented.
 
-### 8. Closed: Security / Dev Hygiene (#148)
+Status: implemented in `h2t-core`. Follow-up testing and configurator
+refinements should be tracked as new UX/debug tasks, not as connector migration
+blockers.
+
+### 8. Connector Skill Surface (#161)
+
+Goal: reduce h2t-ops connector skill bloat without hiding provider capability.
+
+Target shape:
+
+- one active connector navigator skill: `h2t-ops:connectors`;
+- lazy references for Calendar, Gmail, Drive, Notion, Telegram, and MeetGeek;
+- `h2t-ops:research` remains separate because it has distinct research quality,
+  telemetry, template, and POS registration requirements;
+- `h2t-ops:daily-brief` remains separate because it is a workflow/surface, not a
+  provider connector;
+- legacy provider scripts/tests stay in the repo for compatibility and future
+  portable workflow extraction; they are not active skill entrypoints.
+
+Status: implemented in branch. Final close requires marketplace install smoke:
+`h2t-ops:connectors`, `h2t-ops:research`, and `h2t-ops:daily-brief` should be
+the only h2t-ops skills in `/context`.
+
+### 9. Closed: Security / Dev Hygiene (#148)
 
 Resolved findings:
 
@@ -243,7 +267,7 @@ Policy:
 Status: closed. Future permission and packer reviews are routine maintenance,
 not active closure work.
 
-### 9. Closed: CI / Test Hygiene (#85)
+### 10. Closed: CI / Test Hygiene (#85)
 
 Resolved scope:
 
@@ -253,7 +277,7 @@ Resolved scope:
 
 Status: closed. Future CI drift is routine maintenance, not connector migration.
 
-### 10. Issue Sweep
+### 11. Issue Sweep
 
 Keep open issues only if they represent real future work.
 
@@ -377,9 +401,10 @@ They should:
 
 The legacy `h2t` plugin is retired from the marketplace in #151.
 
-`plugins/h2t/` remains in the repository as rollback/archive source for now, but it
-is no longer an active production plugin. Do not restart migration work from that
-source unless a specific missing capability is identified.
+`plugins/h2t/` remains in the repository as rollback/archive source for now, but
+it no longer has an active plugin manifest and is no longer an active production
+plugin. Do not restart migration work from that source unless a specific missing
+capability is identified.
 
 ### 4. Creative / Arch / Edu / DCC
 
@@ -405,17 +430,15 @@ Routine maintenance, not active closure blockers:
 
 1. Use the shippable handoff report when telling POS that the connector stage is
    complete: `docs/reports/2026-05-22-h2t-ops-shippable-handoff.md`.
-2. Finish #153 `h2t-core:agent-profile` configurator enough to make repo
-   profiles practical.
-3. Decide whether to consolidate non-research connector skills into a single
-   `h2t-ops` connector skill with lazy references.
-4. Sweep remaining issues into active / backlog / moved / stale-closed.
-5. Pick the next product stream explicitly: research backlog, creative recovery,
+2. Close #161 after installed-plugin smoke confirms the h2t-ops skill listing is
+   `connectors`, `research`, and `daily-brief`.
+3. Sweep remaining issues into active / backlog / moved / stale-closed.
+4. Pick the next product stream explicitly: research backlog, creative recovery,
    setup wizard/Mac onboarding, or POS-side workflow contracts.
 
 ## Closure Forecast
 
-Date: 2026-05-22
+Date: 2026-05-23
 
 Calibration note: the previous forecast assumed Telegram, Research/fetch,
 Daily Brief, legacy h2t retirement, profiles, cleanup, and broad Calendar/Notion
@@ -423,19 +446,20 @@ features were still ahead. Since then, Telegram, Research/fetch, Drive
 `sync-meetings` retirement, legacy `h2t` retirement, #121 cleanup, #155
 connector freeze, Notion #81/#146, and Calendar #145 are complete.
 
-`h2t-ops` connector work is no longer the active migration track.
+`h2t-ops` connector work is no longer the active migration track. #153 is
+implemented, and #161 is at final install-smoke/PR closure.
 
 | Remaining block | Optimistic | Realistic | Main risk |
 | --- | ---: | ---: | --- |
-| #153 `h2t-core:agent-profile` | 1-2 days | 2-3 days | Profile merge semantics, temporary overlays, cross-machine sync |
-| Connector skill consolidation | 0.5-1 day | 1-2 days | Preserving discoverability while reducing skill entries |
+| #153 `h2t-core:agent-profile` | Done | Done | Future tuning belongs to new tasks |
+| #161 connector skill consolidation | Done in branch | Install smoke + close | Preserving discoverability while reducing skill entries |
 | Issue sweep / reclassification | 0.5-1 day | 1-2 days | Old issues that need careful "move vs close" decisions |
 
 Remaining estimate to maintenance/closure mode:
 
-- optimistic: 2-4 focused working days;
-- realistic: 4-6 focused working days;
-- with interruptions: 1-2 calendar weeks.
+- optimistic: 0.5-1 focused working day;
+- realistic: 1-2 focused working days;
+- with interruptions: 2-4 calendar days.
 
 This excludes research product backlog, creative recovery, setup wizard/Mac
 onboarding, and POS-side workflow contracts. Those remain explicit future
