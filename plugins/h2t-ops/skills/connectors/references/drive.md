@@ -8,6 +8,7 @@
 | search files | `h2t-ops drive search "presentation" --max 20 --json` |
 | list folders | `h2t-ops drive folders --json` |
 | download file | `h2t-ops drive download FILE_ID_FROM_SEARCH --dest ./downloads --json` |
+| list folder contents by URL | extract folder ID and run `h2t-ops drive list FOLDER_ID --json` |
 | export Google Doc | `h2t-ops drive export FILE_ID_FROM_SEARCH --format md --dest ./export.md --json` |
 | upload one file | `h2t-ops drive upload ./presentation.html --folder "Uploads" --no-convert --json` |
 | upload folder | `h2t-ops drive upload-folder ./deploy --parent-id DRIVE_FOLDER_ID --dry-run --json` |
@@ -23,10 +24,20 @@
 
 ```bash
 h2t-ops drive search "lecture" --max 20 --json
+h2t-ops drive list <folder_id_from_url> --json
 h2t-ops drive export FILE_ID_FROM_SEARCH --format md --dest ./lecture.md --json
 h2t-ops drive upload-folder ./deploy --parent-id DRIVE_FOLDER_ID --dry-run --json
 h2t-ops drive upload-folder ./deploy --parent-id DRIVE_FOLDER_ID --update-existing --json
 ```
+
+## URL helpers
+
+- Folder link pattern:
+  `https://drive.google.com/drive/folders/<FOLDER_ID>` -> folder id is the part after `/folders/`.
+- File link pattern:
+  `https://drive.google.com/file/d/<FILE_ID>/...` -> file id is the part after `/d/`.
+
+For folder links, there is no dedicated “download folder” command; enumerate entries via `list`, then download each file id with `download`.
 
 ## Auth
 

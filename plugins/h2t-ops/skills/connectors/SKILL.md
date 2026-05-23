@@ -1,6 +1,6 @@
 ---
 name: h2t-ops:connectors
-description: "Navigator for h2t-ops provider I/O connectors: Calendar, Gmail, Drive, Notion, Telegram, and MeetGeek. Use when the user asks which connector command to run, asks for provider data/actions, or hits missing connector functionality. Research and daily-brief are intentionally separate."
+description: "Navigator for h2t-ops provider I/O connectors: Calendar, Gmail, Drive, Notion, Telegram, and MeetGeek. Use when the user asks which connector command to run, asks to download from Google Drive, asks for provider data/actions, or hits missing connector functionality. Research and daily-brief are intentionally separate."
 compatibility: "Claude Code plugin skill with Codex/AGENTS-compatible portable core."
 metadata:
   author: lichtpfad
@@ -48,6 +48,22 @@ Do not use this skill for:
 | Notion pages, blocks, databases, workspace graph, embedded DBs | Notion | `references/notion.md` | `h2t-ops notion` |
 | Telegram auth, dialogs, messages, saved messages, mentions | Telegram | `references/telegram.md` | `h2t-ops telegram` |
 | MeetGeek meetings, transcripts, summaries, recordings | MeetGeek | `references/meetgeek.md` | `h2t-ops meetgeek` |
+
+### Drive-specific intent routing (important)
+
+- If a user asks to **download**, **browse**, or **open** a Drive artifact (including a shared folder/link), use this skill.
+- If the request contains a Drive URL (`drive.google.com/.../folders/...` or `drive.google.com/file/d/...`), extract the ID and use `h2t-ops drive list/search/download` as the first step.
+- For a folder URL, use `h2t-ops drive list <FOLDER_ID> --json`.
+- For a file URL, run `h2t-ops drive download <FILE_ID> --dest ./... --json`.
+
+Example:
+
+```text
+User: "скачать папку с этого линка"
+-> h2t-ops:connectors
+-> extract id: 1vlj3QaDXWmlpDM1RUDfzo53WwTyuW9x0
+-> h2t-ops drive list <id> --json
+```
 
 ## Workflow
 
