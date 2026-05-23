@@ -886,6 +886,22 @@ def test_cli_json_flag_prints_envelope(tmp_path, capsys):
     assert parsed["provider_used"] == "direct"
 
 
+def test_cli_json_flag_prints_envelope_for_degraded_short_body(tmp_path, capsys):
+    html = _load_fixture("short_body.html").encode("utf-8")
+    with patch("urllib.request.urlopen") as mock_urlopen:
+        mock_urlopen.return_value = _make_http_response(
+            html, url="https://example.com/x",
+        )
+        rc = fetch_url.main([
+            "fetch", "--url", "https://example.com/x", "--json",
+            "--output-dir", str(tmp_path), "--project", "test",
+        ])
+    out = capsys.readouterr().out
+    assert rc == 0
+    parsed = json.loads(out)
+    assert parsed["status"] == "DEGRADED"
+
+
 def test_cli_failed_no_json_prints_stderr_only(tmp_path, capsys):
     with patch("urllib.request.urlopen") as mock_urlopen:
         mock_urlopen.side_effect = _http_error(503)
