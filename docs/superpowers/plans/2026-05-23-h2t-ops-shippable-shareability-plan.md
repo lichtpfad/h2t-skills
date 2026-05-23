@@ -89,6 +89,9 @@ Claude Code), зафиксировать минимальный shareability pac
 ```
 
 Любой fail фиксируется отдельным item-ом с root cause и follow-up #.
+Если fail только технический (например отсутствие Python runtime в текущей сессии), этот пункт не
+блокирует саму стратегию, но блокирует shippable validation и требует повторного прогона на чистой
+машине с корректным runtime.
 
 ---
 
@@ -138,6 +141,10 @@ Get-Content plugins/h2t-core/.claude-plugin/plugin.json
 
 Если `--json` команда возвращает exit 0, но ожидаемый signal отсутствует/невалиден — статус FAIL.
 
+**Важно:** в текущей рабочей сессии на Windows 23/05/2026 CLI check блокируется отсутствием
+Python runtime (`No installed Python found!`). Это **not-eligible environment** для shippable PASS и
+не заменяет clean-user gate.
+
 ### 2.2 Минимальная проверка inventory (hard requirement)
 
 - [ ] `/context` показывает только целевые скиллы `h2t-ops:*`:
@@ -163,6 +170,12 @@ Get-Content plugins/h2t-core/.claude-plugin/plugin.json
   - `/reload-plugins`
 - [ ] Прогнать п.2 acceptance matrix полностью.
 - [ ] Зафиксировать, что базовый доступ работает без ручных изменений в проектах/репозитории.
+
+#### Blocker note (Current Session)
+
+- В этой сессии `py.exe` и `uv.exe run` не находят валидный установленный Python (`No installed Python found!`).
+- Поэтому текущий прогон не может быть использован как shippable PASS.
+- Дальше нужно выполнить те же шаги на машине/профиле, где установлен рабочий Python/uv runtime.
 
 Windows clean-install command set:
 
