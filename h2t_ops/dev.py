@@ -79,11 +79,18 @@ def _check(name: str) -> int:
             cwd=root, stdout=subprocess.DEVNULL).returncode
         print(("OK" if code == 0 else "FAIL") + f" gather-smoke (exit={code})")
         return 0 if code == 0 else 1
-    if name == "skill-md-notion":
-        f = root / "plugins" / "h2t-ops" / "skills" / "notion" / "SKILL.md"
-        t = f.read_text(encoding="utf-8")
-        ok = t.startswith("---") and "h2t-ops notion get" in t
-        print(("OK" if ok else "FAIL") + " skill-md-notion")
+    if name in {"skill-md-connectors", "skill-md-notion"}:
+        skill = root / "plugins" / "h2t-ops" / "skills" / "connectors" / "SKILL.md"
+        notion_ref = skill.parent / "references" / "notion.md"
+        t = skill.read_text(encoding="utf-8")
+        n = notion_ref.read_text(encoding="utf-8")
+        ok = (
+            t.startswith("---")
+            and "h2t-ops:connectors" in t
+            and "h2t-ops notion get" in n
+        )
+        label = "skill-md-connectors" if name == "skill-md-connectors" else "skill-md-notion"
+        print(("OK" if ok else "FAIL") + f" {label}")
         return 0 if ok else 1
     print(f"unknown check: {name}", file=sys.stderr)
     return 2
