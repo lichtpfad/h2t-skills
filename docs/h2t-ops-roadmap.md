@@ -293,7 +293,7 @@ Recommended triage:
 | Secrets/setup | #107, #112, #94, #109, #110, #13 | Classified as setup/Mac follow-up; avoid piecemeal drift |
 | Calendar follow-up | #82, #145 | Closed; #82 fixed in `6631f57`, #145 fixed in `0acb44b` |
 | Notion follow-up | #146, #81 | Closed; fixed in `4c952d1` |
-| Research backlog | #97, #99, #101, #105, #72, #71, #70 | Keep as research/product backlog; #98 closed as shared fetch-ladder contract baseline, not a repo-closure blocker |
+| Research backlog | #97, #99, #101, #105, #72, #71, #70 | Keep as research/product backlog; #98 is closure-ready as shared fetch-ladder baseline with evidence captured separately, not a repo-closure blocker |
 | Creative backlog | #119, #83, #88, #89, #90, #91, #92 | Move to creative roadmap; not h2t-ops closure |
 | Cross-platform / machine config | #79, #73 | Keep as h2t-core/platform backlog |
 | Old graph/session items | #54, #53, #21, #5 | Reclassify, move, or close if superseded |
