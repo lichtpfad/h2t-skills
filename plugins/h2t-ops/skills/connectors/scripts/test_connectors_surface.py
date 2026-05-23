@@ -1,10 +1,15 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
 SKILLS_ROOT = ROOT.parent
+REPO_ROOT = ROOT.parents[3]
+REMOVED_SKILL_ENTRYPOINT_RE = re.compile(
+    r"h2t-ops:(calendar|drive|gmail|meetgeek|notion|telegram)\b"
+)
 REQUIRED_REFERENCES = {
     "calendar.md",
     "gmail.md",
@@ -18,6 +23,16 @@ REQUIRED_REFERENCES = {
 
 def _text(path: Path) -> str:
     return path.read_text(encoding="utf-8")
+
+
+def test_active_runtime_surfaces_do_not_name_removed_skill_entrypoints():
+    runtime_surfaces = [
+        REPO_ROOT / "plugins" / "h2t-core" / "hooks-handlers" / "inject-h2t-context",
+        REPO_ROOT / "plugins" / "h2t-ops" / "skills" / "meetgeek" / "scripts" / "recovery.py",
+    ]
+    for path in runtime_surfaces:
+        assert path.is_file(), path
+        assert REMOVED_SKILL_ENTRYPOINT_RE.search(_text(path)) is None, path
 
 
 def test_connectors_skill_exists_and_is_bounded():
@@ -128,7 +143,10 @@ def test_telegram_reference_uses_chat_id_for_mentions_syntax():
     assert "h2t-ops telegram mentions --limit" not in text
 
 
-def test_connector_skill_inventory_transition_state():
-    active = {path.name for path in SKILLS_ROOT.iterdir() if path.is_dir()}
-    assert {"connectors", "daily-brief", "research"} <= active
-    assert {"calendar", "drive", "gmail", "meetgeek", "notion", "telegram"} <= active
+def test_final_skill_inventory_after_deprecation_gate():
+    active = {
+        path.name
+        for path in SKILLS_ROOT.iterdir()
+        if path.is_dir() and (path / "SKILL.md").is_file()
+    }
+    assert active == {"connectors", "daily-brief", "research"}

@@ -16,9 +16,8 @@ INDEX="H2T SKILLS — invoke with the Skill tool when relevant:
 
 Session:   h2t-core:session-start | h2t-core:handoff | h2t-core:init-project | h2t-core:scaffold-project
 Research:  h2t-ops:research        (Exa semantic search — use for any web/news/paper lookup)
-Notion:    h2t-ops:notion          (token: ~/.config/notion/token)
-Google:    h2t-ops:gmail | h2t-ops:calendar | h2t-ops:drive | h2t-ops:daily-brief
-Telegram:  h2t-ops:telegram
+Connectors: h2t-ops:connectors     (Google, Notion, Telegram, MeetGeek command map and safety)
+Daily:     h2t-ops:daily-brief     (daily ops brief from connected sources)
 Docs:      h2t-dev:docs-lint | h2t-dev:docs-init | h2t-dev:docs-sync-labels
 Diagrams:  h2t-arch:drawio | h2t-arch:diagram-node
 

@@ -188,7 +188,8 @@ def drive_service():
     if not DRIVE_TOKEN_FILE.exists():
         raise RecoveryError(
             f"Drive auth missing — token not at {DRIVE_TOKEN_FILE}. "
-            "Run /h2t-ops:drive list to trigger OAuth.",
+            "Run `h2t-ops drive list` to trigger OAuth. "
+            "Use `/h2t-core:setup connectors-check` to verify connector readiness.",
             exit_code=1,
         )
     try:
