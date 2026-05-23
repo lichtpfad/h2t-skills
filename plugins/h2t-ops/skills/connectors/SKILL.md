@@ -1,7 +1,7 @@
 ---
 name: h2t-ops:connectors
-description: "Navigator for h2t-ops provider I/O connectors: Calendar, Gmail, Drive, Notion, Telegram, and MeetGeek. Use when the user asks which connector command to run, asks to download from Google Drive, asks for provider data/actions, or hits missing connector functionality. Research and daily-brief are intentionally separate."
-compatibility: "Claude Code plugin skill with Codex/AGENTS-compatible portable core."
+description: "h2t-ops connector hub — load when the user mentions Calendar (events, schedule, FreeBusy, Google Meet), Gmail (email, inbox, draft, send, labels), Drive (files, folders, download, upload, any drive.google.com link), Notion (pages, databases, sync, workspace), Telegram (dialogs, messages, auth, mentions), or MeetGeek (meetings, transcripts, summaries, recordings). Also load for any provider I/O command lookup. Research and daily-brief are separate skills."
+compatibility: "CLI-first connector navigator. MCP/Playwright are optional and not required."
 metadata:
   author: lichtpfad
   version: 0.1.0
@@ -110,4 +110,6 @@ For credential readiness, prefer the installed setup skill:
 
 ## Codex / AGENTS Adapter
 
-The portable core is the Safety Boundary, Router, Workflow, Preflight, and Output Policy sections. In Codex or AGENTS.md contexts, treat this file as repo guidance and call the same `h2t-ops` CLI commands. Claude Code frontmatter is optional metadata and is not required for the routing logic.
+The portable core is the Safety Boundary, Router, Workflow, Preflight, and Output Policy sections.
+In any agent context, treat this file as repo guidance and execute the same `h2t-ops` CLI commands.
+MCP is not required for these flows.
