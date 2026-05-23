@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import io
 import mimetypes
+import re
 import socket
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -177,6 +178,8 @@ class DriveClient:
                 "fields": fields,
                 "pageSize": page_size,
                 "pageToken": page_token,
+                "supportsAllDrives": True,
+                "includeItemsFromAllDrives": True,
             }
             if order_by:
                 kwargs["orderBy"] = order_by
@@ -192,6 +195,17 @@ class DriveClient:
     def _resolve_folder_id(self, folder_name: str) -> tuple[Optional[str], str]:
         if not folder_name or folder_name == "root":
             return None, "root"
+        # Drive IDs are 25-50 chars of alphanumerics, hyphens, underscores — no spaces
+        if re.fullmatch(r"[A-Za-z0-9_\-]{20,}", folder_name):
+            try:
+                meta = self.service.files().get(
+                    fileId=folder_name,
+                    fields="id,name",
+                    supportsAllDrives=True,
+                ).execute()
+                return meta["id"], meta.get("name", folder_name)
+            except Exception:
+                raise NotFoundError(f"folder not found: {folder_name}")
         safe = _escape_query_value(folder_name)
         resp = self.service.files().list(
             q=(
@@ -200,6 +214,8 @@ class DriveClient:
             ),
             fields="files(id, name)",
             pageSize=5,
+            supportsAllDrives=True,
+            includeItemsFromAllDrives=True,
         ).execute()
         folders = resp.get("files", [])
         if not folders:
@@ -225,6 +241,8 @@ class DriveClient:
             q=q,
             fields="files(id, name, mimeType, size, webViewLink)",
             pageSize=10,
+            supportsAllDrives=True,
+            includeItemsFromAllDrives=True,
         ).execute()
         rows = resp.get("files", [])
         if folder is True:
