@@ -75,7 +75,7 @@ hardening, and then repo/product housekeeping.
 | Priority | Issue(s) | Work | Classification |
 | --- | --- | --- | --- |
 | 1 | #153 | `h2t-core:agent-profile` configurator and repo profiles | Implemented; future tuning is a new task, not h2t-ops blocker |
-| 2 | #161 | Consolidate non-research connector skills into `h2t-ops:connectors` + lazy references | Done; evidence attached in `docs/reports/2026-05-23-h2t-ops-shippable-evidence.md` |
+| 2 | #161 | Consolidate non-research connector skills into `h2t-ops:connectors` + lazy references | Done — installed-plugin smoke PASS on Mac 2026-05-23; shippable gate cleared |
 | 3 | #148, #85 | Security/dev hygiene and CI/unit-test hygiene | Not done yet; planned follow-up only after shippable shareability gate |
 | 4 | #13, #94, #107, #109, #110, #73, #79, #53 | Platform portability / credential policy | Done or consolidated into policy; routine maintenance only |
 | 5 | #112 | Setup wizard backlog | Future onboarding UX, separate from closure |
