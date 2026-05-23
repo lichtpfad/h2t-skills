@@ -19,7 +19,7 @@
 
 - Auth-check, teams, list, get, transcript, summary, highlights, insights, and download-url are provider reads.
 - Submit-url writes to MeetGeek and requires explicit user intent.
-- Local recording recovery remains skill/coordinator layer, not connector runtime.
+- Local recording recovery remains a legacy script/coordinator workflow, not connector runtime and not an active per-connector skill.
 - Do not include transcript bodies in GitHub issues.
 
 ## Commands
@@ -45,4 +45,4 @@ In Claude Code, check readiness through:
 
 - Listed meeting returns 404 from singular metadata endpoint: use current connector version with list fallback.
 - Transcript missing for a fresh meeting: wait for MeetGeek processing.
-- Local recording recovery request: use the MeetGeek recovery skill/workflow, not connector runtime.
+- Local recording recovery request: use the existing MeetGeek recovery script/workflow from this repo or a POS/coordinator adapter, not connector runtime.
