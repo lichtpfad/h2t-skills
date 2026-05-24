@@ -119,6 +119,14 @@ def run(args) -> Any:
         if fmt in {"docx", "xlsx", "pdf", "pptx"}:
             raise UsageError(f"drive export --print cannot use binary format: {fmt}")
 
+    if cmd == "share":
+        if args.get_link and args.role != "reader":
+            raise UsageError("--role cannot be used with --get-link")
+        if args.anyone and not args.confirm_public:
+            raise UsageError(
+                "--anyone requires --confirm-public to prevent accidental public exposure"
+            )
+
     from h2t_ops.connectors.drive.client import DriveClient  # lazy (spec §4.1)
 
     client = DriveClient()
@@ -154,12 +162,6 @@ def run(args) -> Any:
             update_existing=args.update_existing,
         )
     if cmd == "share":
-        if args.get_link and args.role != "reader":
-            raise UsageError("--role cannot be used with --get-link")
-        if args.anyone and not args.confirm_public:
-            raise UsageError(
-                "--anyone requires --confirm-public to prevent accidental public exposure"
-            )
         return client.share_file(
             args.file_id,
             email=args.email,

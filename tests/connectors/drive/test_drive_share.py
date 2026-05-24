@@ -1,6 +1,7 @@
 """Tests for DriveClient.share_file() — spec #168."""
 from __future__ import annotations
 
+import argparse
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -110,8 +111,6 @@ def test_get_link_excludes_granted_to_and_permission_id(sc):
 
 # --- command: parser registration ---
 
-import argparse
-
 
 def _build_parser():
     from h2t_ops.connectors.drive.commands import register
@@ -132,7 +131,7 @@ def test_no_mode_flag_exits_nonzero():
     parser = _build_parser()
     with pytest.raises(SystemExit) as exc:
         parser.parse_args(["drive", "share", "fid1"])
-    assert exc.value.code != 0
+    assert exc.value.code == 2
 
 
 def test_email_and_anyone_mutually_exclusive():
@@ -185,3 +184,21 @@ def test_anyone_without_confirm_public_raises_usage_error(monkeypatch):
     )
     with pytest.raises(UsageError, match="--confirm-public"):
         cmds_mod.run(args)
+
+
+def test_share_email_dispatches_to_share_file(monkeypatch):
+    import h2t_ops.connectors.drive.client as client_mod
+    from h2t_ops.connectors.drive import commands as cmds_mod
+
+    mock_client = MagicMock()
+    monkeypatch.setattr(client_mod, "DriveClient", lambda: mock_client)
+    args = SimpleNamespace(
+        drive_cmd="share", file_id="fid1",
+        email="a@b.com", anyone=False, get_link=False,
+        role="writer", confirm_public=False,
+        as_json=False, fmt="human",
+    )
+    cmds_mod.run(args)
+    mock_client.share_file.assert_called_once_with(
+        "fid1", email="a@b.com", role="writer", anyone=False, get_link=False,
+    )
