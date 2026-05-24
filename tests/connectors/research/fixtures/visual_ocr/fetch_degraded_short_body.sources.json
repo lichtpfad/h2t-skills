@@ -1,0 +1,14 @@
+{
+  "meta": {
+    "tool": "fetch_url.py",
+    "status": "DEGRADED"
+  },
+  "envelope": {
+    "status": "DEGRADED",
+    "url": "https://example.com/pops",
+    "content_gate": "none",
+    "telemetry": {
+      "reason_for_degraded": "all_providers_degraded_short_body"
+    }
+  }
+}
