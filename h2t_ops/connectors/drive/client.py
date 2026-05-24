@@ -195,8 +195,8 @@ class DriveClient:
     def _resolve_folder_id(self, folder_name: str) -> tuple[Optional[str], str]:
         if not folder_name or folder_name == "root":
             return None, "root"
-        # Drive IDs are 25-50 chars of alphanumerics, hyphens, underscores — no spaces
-        if re.fullmatch(r"[A-Za-z0-9_\-]{20,}", folder_name):
+        # Drive IDs: regular folders ~33 chars, shared drive roots ~19 chars — no spaces
+        if re.fullmatch(r"[A-Za-z0-9_\-]{15,}", folder_name):
             try:
                 meta = self.service.files().get(
                     fileId=folder_name,
