@@ -86,6 +86,16 @@ def register(subparsers: Any) -> None:
     fetch.add_argument("--config", dest="config_path")
     add_fmt(fetch)
 
+    visual_ocr = cmds.add_parser(
+        "visual-ocr",
+        help="Create a review-required OCR rescue artifact from one fetch sidecar and one page image",
+    )
+    visual_ocr.add_argument("--fetch-sidecar", required=True, dest="fetch_sidecar")
+    visual_ocr.add_argument("--image-path", required=True, dest="image_path")
+    visual_ocr.add_argument("--project", default="default")
+    visual_ocr.add_argument("--output-dir", dest="output_dir")
+    add_fmt(visual_ocr)
+
     p.set_defaults(_handler=run)
 
 
@@ -137,5 +147,11 @@ def run(args: Any) -> Any:
             user_agent=args.user_agent,
             project=args.project,
             config_path=args.config_path,
+        )
+    if cmd == "visual-ocr":
+        return client.visual_ocr(
+            fetch_sidecar=args.fetch_sidecar,
+            image_path=args.image_path,
+            project=args.project,
         )
     raise UsageError(f"unknown research subcommand: {cmd}")
