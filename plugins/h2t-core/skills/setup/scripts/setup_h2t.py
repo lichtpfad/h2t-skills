@@ -415,7 +415,7 @@ def secrets_skeleton(secrets_file: Path, registry: dict[str, dict[str, str]]) ->
     if new_lines:
         separator = "\n" if existing_content and not existing_content.endswith("\n") else ""
         full_content = existing_content + separator + "\n".join(new_lines)
-        tmp = secrets_file.with_suffix(".env.tmp")
+        tmp = secrets_file.parent / (secrets_file.name + ".tmp")
         tmp.write_text(full_content, encoding="utf-8")
         tmp.replace(secrets_file)
     return {

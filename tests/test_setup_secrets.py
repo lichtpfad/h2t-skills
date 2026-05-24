@@ -1,5 +1,4 @@
 """Tests for secrets skeleton and preflight in setup_h2t.py."""
-import json
 import sys
 from pathlib import Path
 
@@ -32,6 +31,22 @@ REGISTRY = {
         "connector": "meetgeek",
     },
 }
+
+
+# --- _load_known_secrets tests ---
+
+def test_load_known_secrets_file_not_found(tmp_path):
+    with pytest.raises(FileNotFoundError):
+        setup_h2t._load_known_secrets(tmp_path / "nonexistent.yaml")
+
+
+def test_load_known_secrets_starts_with_value(tmp_path):
+    yaml_content = 'NOTION_API_TOKEN:\n  validator: "starts_with:secret_"\n  connector: notion\n'
+    f = tmp_path / "known_secrets.yaml"
+    f.write_text(yaml_content)
+    result = setup_h2t._load_known_secrets(f)
+    assert result["NOTION_API_TOKEN"]["validator"] == "starts_with:secret_"
+    assert result["NOTION_API_TOKEN"]["connector"] == "notion"
 
 
 # --- secrets_skeleton tests ---
