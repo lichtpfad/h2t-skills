@@ -366,11 +366,50 @@ class ResearchClient:
         image_path: str,
         project: str = "default",
     ) -> dict[str, Any]:
-        """Temporary stub for the visual OCR surface in this slice."""
-        raise UsageError(
-            "visual-ocr is not implemented yet in this slice",
-            hint="This command surface is wired, but the client implementation lands in a later task.",
+        """Build a review-required visual OCR rescue artifact from one image."""
+        from h2t_ops.connectors.research import visual_ocr
+
+        sidecar = visual_ocr.load_fetch_sidecar(fetch_sidecar)
+        fetch_envelope = visual_ocr.load_fetch_envelope(sidecar)
+        visual_ocr.validate_visual_ocr_trigger(fetch_envelope)
+
+        extracted_text, visible_headings, ocr_confidence = visual_ocr.extract_text_from_image(
+            image_path
         )
+        reason = (
+            fetch_envelope.get("telemetry", {}).get("reason_for_failed")
+            or fetch_envelope.get("telemetry", {}).get("reason_for_degraded")
+        )
+        captured_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        ocr_envelope = visual_ocr.build_visual_ocr_envelope(
+            url=str(fetch_envelope.get("url") or ""),
+            source_fetch_status=str(fetch_envelope.get("status") or "UNKNOWN"),
+            source_fetch_reason=str(reason) if reason is not None else None,
+            captured_at=captured_at,
+            image_path=image_path,
+            extracted_text=extracted_text,
+            visible_headings=visible_headings,
+            ocr_confidence=ocr_confidence,
+        )
+        telemetry = {
+            "calls": 1,
+            "providers": ["visual_ocr"],
+            "estimated_cost_usd": 0.0,
+            "cost_basis": "local_ocr",
+            "captured_at": captured_at,
+        }
+        artifact = self._write_visual_ocr_artifacts(
+            slug_source=str(fetch_envelope.get("url") or image_path),
+            project=project,
+            ocr_envelope=ocr_envelope,
+            telemetry=telemetry,
+        )
+        safe_ocr_envelope = sanitize_details(ocr_envelope)
+        return {
+            "kind": "research_visual_ocr_envelope",
+            **safe_ocr_envelope,
+            "artifact": artifact,
+        }
 
     def preflight(self) -> dict[str, Any]:
         """Validate Exa credential resolution and provider connectivity."""
@@ -551,6 +590,64 @@ class ResearchClient:
                 "estimated_cost_usd": telemetry.get("estimated_cost_usd"),
                 "cost_basis": telemetry.get("cost_basis"),
                 "artifact_id": artifact["artifact_id"],
+            },
+        )
+        return artifact
+
+    def _write_visual_ocr_artifacts(
+        self,
+        *,
+        slug_source: str,
+        project: str,
+        ocr_envelope: dict[str, Any],
+        telemetry: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Write visual OCR artifacts with a non-canonical review-required summary."""
+        from h2t_ops.connectors.research import visual_ocr
+
+        safe_project = str(sanitize_details(project))
+        paths = visual_ocr.build_visual_ocr_artifact_paths(
+            output_dir=self.output_dir,
+            project=safe_project,
+            slug_source=str(sanitize_details(slug_source)),
+        )
+        safe_ocr_envelope = sanitize_details(ocr_envelope)
+        write_json(paths["sources_json"], safe_ocr_envelope)
+        paths["partial_md"].parent.mkdir(parents=True, exist_ok=True)
+        paths["partial_md"].write_text(
+            _render_visual_ocr_partial_markdown(safe_ocr_envelope),
+            encoding="utf-8",
+        )
+        artifact = build_research_artifact(
+            artifact_id=artifact_id("research-visual-ocr"),
+            provider_status=str(ocr_envelope.get("status", "FAILED")),
+            tool="h2t-ops research visual-ocr",
+            artifact_refs={
+                "sources_json": paths["sources_json"].name,
+                "partial_md": paths["partial_md"].name,
+                "artifact_json": paths["artifact_json"].name,
+                "raw_html": None,
+            },
+            telemetry=telemetry,
+        )
+        write_json(paths["artifact_json"], artifact)
+        append_telemetry(
+            self.output_dir / "telemetry.jsonl",
+            {
+                "kind": "research_telemetry",
+                "version": "v1",
+                "provider": "visual_ocr",
+                "endpoint": "visual_ocr",
+                "mode": "single_image",
+                "status": ocr_envelope.get("status"),
+                "artifact_id": artifact["artifact_id"],
+                "source_fetch_status": ocr_envelope.get("provenance", {}).get("source_fetch_status"),
+                "source_fetch_reason": ocr_envelope.get("provenance", {}).get("source_fetch_reason"),
+                "captured_at": ocr_envelope.get("provenance", {}).get("captured_at"),
+                "latency_ms": None,
+                "result_count": 1 if ocr_envelope.get("body_text_visual_ocr") else 0,
+                "estimated_cost_usd": telemetry.get("estimated_cost_usd"),
+                "cost_basis": telemetry.get("cost_basis"),
             },
         )
         return artifact
@@ -919,4 +1016,36 @@ def _render_partial_markdown(provider_envelope: dict[str, Any]) -> str:
         title = result.get("title") or result.get("url") or f"Source {index}"
         url = result.get("url") or ""
         lines.extend(["", f"{index}. {title}", f"   {url}"])
+    return "\n".join(lines) + "\n"
+
+
+def _render_visual_ocr_partial_markdown(ocr_envelope: dict[str, Any]) -> str:
+    provenance = ocr_envelope.get("provenance", {})
+    lines = [
+        "# Visual OCR Review Required",
+        "",
+        "This is non-canonical OCR recovery from a supplied page image. Review before quoting or reuse.",
+        "",
+        f"- status: {ocr_envelope.get('status')}",
+        f"- url: {ocr_envelope.get('url', '')}",
+        f"- source_fetch_status: {provenance.get('source_fetch_status', '')}",
+        f"- source_fetch_reason: {provenance.get('source_fetch_reason', '')}",
+        f"- captured_at: {provenance.get('captured_at', '')}",
+        f"- ocr_confidence: {ocr_envelope.get('ocr_confidence', '')}",
+        "",
+        "## Visible Headings",
+    ]
+    headings = ocr_envelope.get("visible_headings", [])
+    if isinstance(headings, list) and headings:
+        for heading in headings:
+            lines.append(f"- {heading}")
+    else:
+        lines.extend(["", "_No headings recovered._"])
+
+    lines.extend(["", "## OCR Text", ""])
+    body_text = str(ocr_envelope.get("body_text_visual_ocr") or "").strip()
+    if body_text:
+        lines.append(body_text)
+    else:
+        lines.append("_No OCR text recovered._")
     return "\n".join(lines) + "\n"
