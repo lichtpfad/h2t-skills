@@ -19,6 +19,8 @@ from typing import Any, Callable
 KIND_DOCTOR = "h2t_setup_doctor/v1"
 KIND_CONNECTORS = "h2t_connectors_check/v1"
 KIND_INSTALL = "h2t_ops_install/v1"
+KIND_SECRETS_SKELETON = "h2t_secrets_skeleton/v1"
+KIND_SECRETS_PREFLIGHT = "h2t_secrets_preflight/v1"
 CANONICAL_H2T_OPS_SOURCE = "git+https://github.com/lichtpfad/h2t-skills.git"
 SECRET_KEYS = {
     "notion": ["NOTION_API_TOKEN"],
@@ -360,6 +362,68 @@ def _human(obj: dict[str, Any]) -> str:
     if obj.get("kind") == KIND_INSTALL:
         return f"h2t-ops install: {obj['status']}\ncommand: {' '.join(obj.get('command', []))}\n"
     return json.dumps(obj, ensure_ascii=False, indent=2)
+
+
+def _load_known_secrets(registry_path: Path) -> dict[str, dict[str, str]]:
+    """Parse known_secrets.yaml without PyYAML — handles only this file's flat structure."""
+    if not registry_path.is_file():
+        raise FileNotFoundError(f"known_secrets.yaml not found: {registry_path}")
+    result: dict[str, dict[str, str]] = {}
+    current: str | None = None
+    for raw in registry_path.read_text(encoding="utf-8").splitlines():
+        line = raw.rstrip()
+        if not line or line.lstrip().startswith("#"):
+            continue
+        if not line[0].isspace():
+            current = line.rstrip(":").strip()
+            result[current] = {}
+        elif current and ":" in line:
+            k, _, v = line.strip().partition(":")
+            result[current][k.strip()] = v.strip().strip('"').strip("'")
+    return result
+
+
+def secrets_skeleton(secrets_file: Path, registry: dict[str, dict[str, str]]) -> dict[str, Any]:
+    """Create or extend secrets.env with placeholder KEY= lines for missing keys.
+
+    Uses atomic write (temp file + rename) so a crash leaves no partial state.
+    """
+    secrets_file.parent.mkdir(parents=True, exist_ok=True)
+    existing_content = ""
+    existing_keys: set[str] = set()
+    if secrets_file.is_file():
+        existing_content = secrets_file.read_text(encoding="utf-8")
+        for raw in existing_content.splitlines():
+            line = raw.strip()
+            if line and not line.startswith("#") and "=" in line:
+                existing_keys.add(line.split("=", 1)[0].strip())
+    added: list[str] = []
+    skipped: list[str] = []
+    new_lines: list[str] = []
+    for key, meta in registry.items():
+        if key in existing_keys:
+            skipped.append(key)
+        else:
+            desc = meta.get("description", "")
+            url = meta.get("url", "")
+            new_lines.append(f"# {desc}")
+            if url:
+                new_lines.append(f"# Get at: {url}")
+            new_lines.append(f"{key}=")
+            new_lines.append("")
+            added.append(key)
+    if new_lines:
+        separator = "\n" if existing_content and not existing_content.endswith("\n") else ""
+        full_content = existing_content + separator + "\n".join(new_lines)
+        tmp = secrets_file.with_suffix(".env.tmp")
+        tmp.write_text(full_content, encoding="utf-8")
+        tmp.replace(secrets_file)
+    return {
+        "kind": KIND_SECRETS_SKELETON,
+        "path": str(secrets_file),
+        "added": added,
+        "skipped": skipped,
+    }
 
 
 def build_parser() -> argparse.ArgumentParser:
