@@ -61,6 +61,21 @@ def test_validate_trigger_blocks_gated():
     assert "login_required" in str(ei.value)
 
 
+def test_validate_trigger_blocks_paid_gate():
+    envelope = {
+        "status": "FAILED",
+        "content_gate": "paid",
+        "telemetry": {
+            "reason_for_failed": "all_providers_failed",
+        },
+    }
+
+    with pytest.raises(UsageError) as ei:
+        visual_ocr.validate_visual_ocr_trigger(envelope)
+
+    assert "paid" in str(ei.value)
+
+
 def test_validate_trigger_allows_allowed_degraded_reason():
     sidecar = _load_sidecar("fetch_degraded_short_body.sources.json")
     envelope = visual_ocr.load_fetch_envelope(sidecar)
@@ -88,11 +103,11 @@ def test_build_visual_ocr_envelope_marks_output_non_canonical():
         url="https://example.com/pops",
         source_fetch_status="FAILED",
         source_fetch_reason="redirect_collapsed_to_homepage",
+        captured_at="2026-05-25T12:34:56+00:00",
         image_path="capture.png",
         extracted_text="POPs in TouchDesigner",
         visible_headings=["POPs in TouchDesigner"],
         ocr_confidence="medium",
-        captured_at="2026-05-25T12:34:56+00:00",
     )
 
     assert envelope["provider_used"] == "visual_ocr"
@@ -104,6 +119,22 @@ def test_build_visual_ocr_envelope_marks_output_non_canonical():
     assert envelope["review_status"] == "unreviewed"
     assert "visual_only" in envelope["limitations"]
     assert envelope["provenance"]["captured_at"] == "2026-05-25T12:34:56+00:00"
+
+
+def test_build_visual_ocr_envelope_rejects_missing_captured_at():
+    with pytest.raises(UsageError) as ei:
+        visual_ocr.build_visual_ocr_envelope(
+            url="https://example.com/pops",
+            source_fetch_status="FAILED",
+            source_fetch_reason="redirect_collapsed_to_homepage",
+            captured_at=None,
+            image_path="capture.png",
+            extracted_text="POPs in TouchDesigner",
+            visible_headings=["POPs in TouchDesigner"],
+            ocr_confidence="medium",
+        )
+
+    assert "captured_at" in str(ei.value)
 
 
 def test_build_visual_ocr_artifact_paths_returns_paths_under_output_dir(tmp_path):

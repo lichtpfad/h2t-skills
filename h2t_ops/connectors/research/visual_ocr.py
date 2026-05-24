@@ -141,14 +141,14 @@ def build_visual_ocr_envelope(
     url: str,
     source_fetch_status: str,
     source_fetch_reason: str | None,
+    captured_at: str,
     image_path: str,
     extracted_text: str,
     visible_headings: list[str],
     ocr_confidence: str,
-    captured_at: str | None = None,
 ) -> dict[str, Any]:
     status = "OK" if extracted_text.strip() else "FAILED"
-    if captured_at is None:
+    if not str(captured_at or "").strip():
         raise UsageError(
             "visual-ocr requires an explicit captured_at timestamp",
             hint="Pass the capture time from the caller so envelope creation stays deterministic.",
