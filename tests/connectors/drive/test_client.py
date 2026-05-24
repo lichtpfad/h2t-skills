@@ -230,7 +230,7 @@ def test_upload_resolves_folder_by_name(client_obj, tmp_path, monkeypatch):
 
     src = tmp_path / "note.md"
     src.write_text("# Note", encoding="utf-8")
-    monkeypatch.setattr(client_obj, "_resolve_folder_id", lambda folder: ("folder1", folder))
+    monkeypatch.setattr(client_obj, "_resolve_folder_id", lambda folder: ("folder1", folder, False))
     monkeypatch.setattr(dmod, "_media_file_upload", lambda: lambda *a, **k: "media")
     files = client_obj.service.files.return_value
     files.create.return_value.execute.return_value = {
