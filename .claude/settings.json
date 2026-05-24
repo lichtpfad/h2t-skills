@@ -28,24 +28,6 @@
       }
     ]
   },
-  "enabledPlugins": {
-    "codex@openai-codex": true,
-    "h2t-core@lichtpfad": true,
-    "h2t-dev@lichtpfad": true,
-    "plugin-dev@claude-plugins-official": true,
-    "superpowers@claude-plugins-official": true,
-    "h2t-creative@lichtpfad": false,
-    "h2t-dcc@h2t-dcc": false,
-    "lead-search@lead-search-marketplace": false,
-    "marketing-playbook@marketing-playbook-plugins": false,
-    "pm-data-analytics@pm-skills": false,
-    "pm-execution@pm-skills": false,
-    "pm-go-to-market@pm-skills": false,
-    "pm-market-research@pm-skills": false,
-    "pm-marketing-growth@pm-skills": false,
-    "pm-product-discovery@pm-skills": false,
-    "pm-product-strategy@pm-skills": false
-  },
   "h2tAgentProfile": {
     "base": "dev",
     "overlays": [],
