@@ -124,28 +124,37 @@ Wait for user: "Say 'done' when you've filled in the keys."
 ### Step 3 — Google OAuth
 
 Google OAuth is triggered lazily on first use. The wizard forces it by running a
-lightweight read command for each connector. Check `connectors-check --json` first;
-skip any connector that already has a valid token cache.
+lightweight read command for each connector. Do NOT use `connectors-check` to decide
+whether to skip — it only checks file presence, not scope validity or token freshness.
+Always attempt the trigger; if already authenticated, the command completes silently.
 
-For each connector without a token:
 ```bash
-h2t-ops calendar list --max 1    # triggers calendar OAuth
-h2t-ops gmail list --max 1       # triggers gmail OAuth
-h2t-ops drive folders --max 1    # triggers drive OAuth
+h2t-ops calendar list --max 1 --json    # triggers calendar OAuth if needed
+h2t-ops gmail list --max 1 --json       # triggers gmail OAuth if needed
+h2t-ops drive folders --max 1 --json    # triggers drive OAuth if needed
 ```
 
-Each opens a browser OAuth flow and waits for callback.
-
-Note: a dedicated `h2t-ops <connector> auth` subcommand may be added in a follow-up
-issue for a cleaner UX, but is not required for this wizard.
+Each opens a browser OAuth flow and waits for callback. If the token is already valid,
+no browser opens. Exit code 0 in both cases — only exit 4 (AuthError) means auth failed.
 
 ### Step 4 — Telegram Auth
 
+Telegram auth is a three-phase flow:
+
 ```bash
-h2t-ops telegram auth
+# Phase 1 — check current state
+h2t-ops telegram auth status
+
+# Phase 2 — request login code (only if status is not authenticated)
+h2t-ops telegram auth request-code --phone <phone>
+
+# Phase 3 — complete login
+h2t-ops telegram auth complete --code <code>
+# If 2FA is enabled, also: --password <password>
 ```
 
-Prompts phone number + OTP via CLI.
+The wizard drives each phase explicitly, waits for user input between phases, and
+re-checks `auth status` after `complete` to confirm success.
 
 ### Step 5 — Preflight
 
