@@ -78,6 +78,29 @@ def test_parser_registration_for_research_subcommands():
     assert fetch.provider == "crawl4ai"
 
 
+def test_parser_registration_for_research_visual_ocr():
+    parser = cli.build_parser()
+
+    parsed = parser.parse_args(
+        [
+            "research",
+            "visual-ocr",
+            "--fetch-sidecar",
+            "artifact.sources.json",
+            "--image-path",
+            "capture.png",
+            "--json",
+        ]
+    )
+
+    assert parsed.connector == "research"
+    assert parsed.research_cmd == "visual-ocr"
+    assert parsed.fetch_sidecar == "artifact.sources.json"
+    assert parsed.image_path == "capture.png"
+    assert parsed.as_json is True
+    assert parsed._handler is commands.run
+
+
 class FakeResearchClient:
     instances: list["FakeResearchClient"] = []
 
@@ -101,6 +124,10 @@ class FakeResearchClient:
     def fetch_url(self, url: str, **kwargs) -> dict:
         self.calls.append(("fetch", {"url": url, **kwargs}))
         return {"method": "fetch", "url": url, "kwargs": kwargs}
+
+    def visual_ocr(self, **kwargs) -> dict:
+        self.calls.append(("visual_ocr", kwargs))
+        return {"method": "visual_ocr", "kwargs": kwargs}
 
 
 def _patch_fake_client(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -196,6 +223,26 @@ def test_run_dispatches_fetch(monkeypatch):
         "user_agent": "agent",
         "project": "h2t skills",
         "config_path": "fetch.json",
+    }
+
+
+def test_run_dispatches_visual_ocr(monkeypatch):
+    _patch_fake_client(monkeypatch)
+    args = argparse.Namespace(
+        research_cmd="visual-ocr",
+        output_dir=None,
+        fetch_sidecar="artifact.sources.json",
+        image_path="capture.png",
+        project="demo",
+    )
+
+    result = commands.run(args)
+
+    assert result["method"] == "visual_ocr"
+    assert result["kwargs"] == {
+        "fetch_sidecar": "artifact.sources.json",
+        "image_path": "capture.png",
+        "project": "demo",
     }
 
 
