@@ -169,6 +169,7 @@ class DriveClient:
         page_size: int,
         order_by: Optional[str] = None,
         max_results: Optional[int] = None,
+        drive_id: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         rows: List[Dict[str, Any]] = []
         page_token = None
@@ -181,6 +182,9 @@ class DriveClient:
                 "supportsAllDrives": True,
                 "includeItemsFromAllDrives": True,
             }
+            if drive_id:
+                kwargs["corpora"] = "drive"
+                kwargs["driveId"] = drive_id
             if order_by:
                 kwargs["orderBy"] = order_by
             resp = self.service.files().list(**kwargs).execute()
@@ -192,9 +196,14 @@ class DriveClient:
             rows = rows[:max_results]
         return [_row(f) for f in rows]
 
-    def _resolve_folder_id(self, folder_name: str) -> tuple[Optional[str], str]:
+    def _resolve_folder_id(self, folder_name: str) -> tuple[Optional[str], str, bool]:
+        """Resolve folder name or ID to (folder_id, display_name, is_shared_drive).
+
+        is_shared_drive=True means the ID is a Shared Drive root — listing requires
+        corpora='drive' instead of a parent query.
+        """
         if not folder_name or folder_name == "root":
-            return None, "root"
+            return None, "root", False
         # Drive IDs: regular folders ~33 chars, shared drive roots ~19 chars — no spaces
         if re.fullmatch(r"[A-Za-z0-9_\-]{15,}", folder_name):
             try:
@@ -203,7 +212,16 @@ class DriveClient:
                     fields="id,name",
                     supportsAllDrives=True,
                 ).execute()
-                return meta["id"], meta.get("name", folder_name)
+                return meta["id"], meta.get("name", folder_name), False
+            except Exception:
+                pass
+            # files().get() fails for Shared Drive roots — try drives().get()
+            try:
+                drive_meta = self.service.drives().get(
+                    driveId=folder_name,
+                    fields="id,name",
+                ).execute()
+                return drive_meta["id"], drive_meta.get("name", folder_name), True
             except Exception:
                 raise NotFoundError(f"folder not found: {folder_name}")
         safe = _escape_query_value(folder_name)
@@ -411,9 +429,14 @@ class DriveClient:
         max_results: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
         try:
+            drive_id = None
             if folder:
-                folder_id, _ = self._resolve_folder_id(folder)
-                q = f"'{folder_id}' in parents and trashed=false"
+                folder_id, _, is_shared_drive = self._resolve_folder_id(folder)
+                if is_shared_drive:
+                    q = "trashed=false"
+                    drive_id = folder_id
+                else:
+                    q = f"'{folder_id}' in parents and trashed=false"
             else:
                 q = "'root' in parents and trashed=false"
             return self._list_paginated(
@@ -422,6 +445,7 @@ class DriveClient:
                 page_size=1000,
                 order_by="modifiedTime desc",
                 max_results=max_results,
+                drive_id=drive_id,
             )
         except Exception as e:
             raise _map_http_error(e, op="list files") from e
@@ -458,12 +482,17 @@ class DriveClient:
         max_results: int = 50,
     ) -> List[Dict[str, Any]]:
         try:
+            drive_id = None
             if parent:
-                parent_id, _ = self._resolve_folder_id(parent)
-                q = (
-                    f"'{parent_id}' in parents and "
-                    "mimeType='application/vnd.google-apps.folder' and trashed=false"
-                )
+                parent_id, _, is_shared_drive = self._resolve_folder_id(parent)
+                if is_shared_drive:
+                    q = "mimeType='application/vnd.google-apps.folder' and trashed=false"
+                    drive_id = parent_id
+                else:
+                    q = (
+                        f"'{parent_id}' in parents and "
+                        "mimeType='application/vnd.google-apps.folder' and trashed=false"
+                    )
             else:
                 q = (
                     "'root' in parents and "
@@ -475,6 +504,7 @@ class DriveClient:
                 page_size=max_results,
                 order_by="name",
                 max_results=max_results,
+                drive_id=drive_id,
             )
         except Exception as e:
             raise _map_http_error(e, op="list folders") from e
@@ -592,7 +622,7 @@ class DriveClient:
         if not src.exists():
             raise NotFoundError(f"file not found: {src}")
         try:
-            folder_id, folder_display = self._resolve_folder_id(folder)
+            folder_id, folder_display, _ = self._resolve_folder_id(folder)
             ext = src.suffix.lower()
             convert_info = None if no_convert else UPLOAD_CONVERT_MAP.get(ext)
             if convert_info:
