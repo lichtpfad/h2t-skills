@@ -10,7 +10,7 @@ import pytest
 
 from h2t_ops import cli
 from h2t_ops.connectors.research import commands
-from h2t_ops.core.errors import ProviderError
+from h2t_ops.core.errors import ProviderError, UsageError
 from h2t_ops.core.registry import discover
 
 
@@ -97,6 +97,7 @@ def test_parser_registration_for_research_visual_ocr():
     assert parsed.research_cmd == "visual-ocr"
     assert parsed.fetch_sidecar == "artifact.sources.json"
     assert parsed.image_path == "capture.png"
+    assert parsed.project == "default"
     assert parsed.as_json is True
     assert parsed._handler is commands.run
 
@@ -228,9 +229,10 @@ def test_run_dispatches_fetch(monkeypatch):
 
 def test_run_dispatches_visual_ocr(monkeypatch):
     _patch_fake_client(monkeypatch)
+    output_dir = str(Path.cwd() / "tmp" / "research-visual-ocr")
     args = argparse.Namespace(
         research_cmd="visual-ocr",
-        output_dir=None,
+        output_dir=output_dir,
         fetch_sidecar="artifact.sources.json",
         image_path="capture.png",
         project="demo",
@@ -238,12 +240,24 @@ def test_run_dispatches_visual_ocr(monkeypatch):
 
     result = commands.run(args)
 
+    assert FakeResearchClient.instances[0].output_dir == Path(output_dir)
     assert result["method"] == "visual_ocr"
     assert result["kwargs"] == {
         "fetch_sidecar": "artifact.sources.json",
         "image_path": "capture.png",
         "project": "demo",
     }
+
+
+def test_real_research_client_visual_ocr_stub_raises_usageerror(tmp_path):
+    from h2t_ops.connectors.research.client import ResearchClient
+
+    with pytest.raises(UsageError, match="not implemented yet"):
+        ResearchClient(output_dir=tmp_path).visual_ocr(
+            fetch_sidecar="artifact.sources.json",
+            image_path="capture.png",
+            project="demo",
+        )
 
 
 def test_dispatch_json_error_preserves_details(monkeypatch, capsys):
