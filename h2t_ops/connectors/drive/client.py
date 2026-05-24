@@ -663,10 +663,12 @@ class DriveClient:
         get_link: bool = False,
     ) -> Dict[str, Any]:
         try:
+            if not email and not anyone and not get_link:
+                raise UsageError("share_file: one of email, anyone, or get_link is required")
             if get_link:
                 meta = self.service.files().get(
                     fileId=file_id,
-                    fields="id,name,webViewLink",
+                    fields="webViewLink",
                     supportsAllDrives=True,
                 ).execute()
                 perms_resp = self.service.permissions().list(
