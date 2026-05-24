@@ -10,6 +10,7 @@ import argparse
 import json
 import os
 import platform
+import re
 import shutil
 import subprocess
 import sys
@@ -451,7 +452,6 @@ def _resolve_secret_value(key: str, home: Path) -> str:
 
 def _validate_key(value: str, validator: str) -> bool:
     """Apply format validator. Only called when value is non-empty."""
-    import re
     if validator == "uuid":
         return bool(re.fullmatch(
             r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
