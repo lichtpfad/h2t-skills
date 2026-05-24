@@ -523,6 +523,13 @@ def build_parser() -> argparse.ArgumentParser:
     ins.add_argument("--source", default="main")
     ins.add_argument("--dry-run", action="store_true")
     ins.add_argument("--json", action="store_true")
+    sk = sub.add_parser("secrets")
+    sk_sub = sk.add_subparsers(dest="secrets_cmd", required=True)
+    sk_skel = sk_sub.add_parser("skeleton")
+    sk_skel.add_argument("--json", action="store_true")
+    sk_pre = sk_sub.add_parser("preflight")
+    sk_pre.add_argument("--json", action="store_true")
+    sk_pre.add_argument("--live", action="store_true", help="Run live connector smoke tests")
     return parser
 
 
@@ -535,6 +542,22 @@ def main(argv: list[str] | None = None) -> int:
             result = connector_matrix(live=args.live, include_paid=args.include_paid)
         elif args.command == "install-h2t-ops":
             result = install_h2t_ops(args.source, dry_run=args.dry_run)
+        elif args.command == "secrets":
+            script_dir = Path(__file__).parent
+            registry_path = script_dir.parent / "known_secrets.yaml"
+            try:
+                registry = _load_known_secrets(registry_path)
+            except FileNotFoundError as exc:
+                result = {"kind": "h2t_setup_error/v1", "status": "error", "error": str(exc)}
+                print(json.dumps(result, ensure_ascii=False, indent=2))
+                return 3
+            secrets_file = _home() / ".dor" / "secrets" / "secrets.env"
+            if args.secrets_cmd == "skeleton":
+                result = secrets_skeleton(secrets_file, registry)
+            elif args.secrets_cmd == "preflight":
+                result = secrets_preflight(registry, live=args.live)
+            else:
+                raise AssertionError(args.secrets_cmd)
         else:
             raise AssertionError(args.command)
     except ValueError as exc:
