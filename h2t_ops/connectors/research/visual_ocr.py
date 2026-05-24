@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from h2t_ops.core.errors import ConfigError, UsageError
+from h2t_ops.core.errors import ConfigError, ProviderError, UsageError
 
 ALLOWED_DEGRADED_REASONS = {
     "redirect_collapsed_to_homepage",
@@ -16,9 +16,32 @@ ALLOWED_DEGRADED_REASONS = {
 
 
 def load_fetch_sidecar(path: str | Path) -> dict[str, Any]:
-    payload = json.loads(Path(path).expanduser().read_text(encoding="utf-8"))
+    sidecar_path = Path(path).expanduser()
+    try:
+        raw = sidecar_path.read_text(encoding="utf-8")
+    except FileNotFoundError as exc:
+        raise UsageError(
+            f"visual-ocr fetch sidecar not found: {sidecar_path}",
+            hint="Pass an existing .sources.json file produced by research fetch.",
+        ) from exc
+    except OSError as exc:
+        raise UsageError(
+            f"visual-ocr could not read fetch sidecar: {sidecar_path}",
+            hint="Check file permissions and path correctness.",
+        ) from exc
+
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise UsageError(
+            f"visual-ocr fetch sidecar is not valid JSON: {sidecar_path}",
+            hint="Use a valid research fetch .sources.json file.",
+        ) from exc
     if not isinstance(payload, dict) or "envelope" not in payload:
-        raise UsageError("visual-ocr requires a fetch .sources.json sidecar")
+        raise UsageError(
+            "visual-ocr requires a fetch .sources.json sidecar",
+            hint="Pass the full .sources.json output from research fetch.",
+        )
     return payload
 
 
@@ -49,16 +72,42 @@ def validate_visual_ocr_trigger(envelope: dict[str, Any]) -> None:
 
 
 def extract_text_from_image(image_path: str | Path) -> tuple[str, list[str], str]:
+    image = Path(image_path).expanduser()
+    if not image.is_file():
+        raise UsageError(
+            f"visual-ocr image not found: {image}",
+            hint="Pass an existing screenshot image path via --image-path.",
+        )
+
     try:
         from rapidocr_onnxruntime import RapidOCR
-    except Exception as exc:  # pragma: no cover
+    except ModuleNotFoundError as exc:  # pragma: no cover
         raise ConfigError(
             "rapidocr-onnxruntime is required for research visual-ocr",
             hint="Install project dependencies with uv sync / uv run.",
         ) from exc
+    except Exception as exc:  # pragma: no cover
+        raise ConfigError(
+            "rapidocr-onnxruntime could not be imported for research visual-ocr",
+            hint="Verify the project environment and installed dependencies.",
+        ) from exc
 
-    engine = RapidOCR()
-    result = engine(str(Path(image_path).expanduser()))
+    try:
+        engine = RapidOCR()
+    except Exception as exc:
+        raise ProviderError(
+            "visual-ocr could not initialize the OCR engine",
+            details={"image_path": str(image)},
+        ) from exc
+
+    try:
+        result = engine(str(image))
+    except Exception as exc:
+        raise ProviderError(
+            "visual-ocr failed while processing the image",
+            details={"image_path": str(image)},
+        ) from exc
+
     if isinstance(result, tuple) and len(result) == 2:
         ocr_result = result[0]
     else:
@@ -67,10 +116,19 @@ def extract_text_from_image(image_path: str | Path) -> tuple[str, list[str], str
     if not ocr_result:
         return "", [], "low"
 
+    if not isinstance(ocr_result, (list, tuple)):
+        raise UsageError(
+            "visual-ocr returned an unexpected OCR result shape",
+            hint="Confirm the OCR engine returns line items with text payloads.",
+        )
+
     lines: list[str] = []
     for item in ocr_result:
-        if isinstance(item, (list, tuple)) and len(item) > 1 and item[1]:
-            lines.append(str(item[1]).strip())
+        if not isinstance(item, (list, tuple)) or len(item) <= 1:
+            continue
+        text = str(item[1]).strip()
+        if text:
+            lines.append(text)
 
     text = "\n".join(line for line in lines if line).strip()
     headings = [line for line in lines[:5] if line.strip()]
@@ -120,11 +178,24 @@ def build_visual_ocr_artifact_paths(
     project: str,
     slug_source: str,
 ) -> dict[str, Path]:
-    from h2t_ops.connectors.research.client import artifact_paths
+    def _slugify(text: str) -> str:
+        slug = []
+        prev_dash = False
+        for char in text.lower():
+            if char.isalnum():
+                slug.append(char)
+                prev_dash = False
+            elif not prev_dash:
+                slug.append("-")
+                prev_dash = True
+        value = "".join(slug).strip("-")
+        return value or "research"
 
-    return artifact_paths(
-        output_dir=output_dir,
-        project=project,
-        slug_source=slug_source,
-        kind="visual-ocr",
-    )
+    base = f"{_slugify(project)}-{_slugify(slug_source)}-{_slugify('visual-ocr')}"
+    output_dir = Path(output_dir).expanduser()
+    return {
+        "partial_md": output_dir / f"{base}.partial.md",
+        "sources_json": output_dir / f"{base}.sources.json",
+        "artifact_json": output_dir / f"{base}.artifact.json",
+        "raw_html": output_dir / f"{base}.raw.html",
+    }
