@@ -93,7 +93,7 @@ def register(subparsers: Any) -> None:
     )
     shp.add_argument(
         "--role", choices=["reader", "writer", "commenter"], default="reader",
-        help="Permission role (default: reader); not valid with --get-link",
+        help="Permission role (default: reader); applies to --email and --anyone; not valid with --get-link",
     )
     shp.add_argument(
         "--confirm-public", action="store_true", dest="confirm_public",

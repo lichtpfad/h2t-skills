@@ -696,6 +696,7 @@ class DriveClient:
                 supportsAllDrives=True,
                 fields="id",
             ).execute()
+            # webViewLink fetch is best-effort; permission already granted above
             meta = self.service.files().get(
                 fileId=file_id,
                 fields="webViewLink",
