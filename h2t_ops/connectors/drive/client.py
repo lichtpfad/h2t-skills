@@ -653,6 +653,64 @@ class DriveClient:
         except Exception as e:
             raise _map_http_error(e, op=f"upload file {src}") from e
 
+    def share_file(
+        self,
+        file_id: str,
+        *,
+        email: Optional[str] = None,
+        role: str = "reader",
+        anyone: bool = False,
+        get_link: bool = False,
+    ) -> Dict[str, Any]:
+        try:
+            if get_link:
+                meta = self.service.files().get(
+                    fileId=file_id,
+                    fields="id,name,webViewLink",
+                    supportsAllDrives=True,
+                ).execute()
+                perms_resp = self.service.permissions().list(
+                    fileId=file_id,
+                    fields="permissions(type,role)",
+                    supportsAllDrives=True,
+                ).execute()
+                permissions = perms_resp.get("permissions", [])
+                has_anyone = any(p.get("type") == "anyone" for p in permissions)
+                return {
+                    "kind": "drive_share/v1",
+                    "file_id": file_id,
+                    "web_view_link": meta.get("webViewLink", ""),
+                    "type": "get-link",
+                    "has_anyone_permission": has_anyone,
+                }
+            perm_type = "user" if email else "anyone"
+            perm_body: Dict[str, Any] = {"type": perm_type, "role": role}
+            if email:
+                perm_body["emailAddress"] = email
+            perm = self.service.permissions().create(
+                fileId=file_id,
+                body=perm_body,
+                sendNotificationEmail=False,
+                supportsAllDrives=True,
+                fields="id",
+            ).execute()
+            meta = self.service.files().get(
+                fileId=file_id,
+                fields="webViewLink",
+                supportsAllDrives=True,
+            ).execute()
+            return {
+                "kind": "drive_share/v1",
+                "file_id": file_id,
+                "web_view_link": meta.get("webViewLink", ""),
+                "permission_id": perm.get("id", ""),
+                "role": role,
+                "type": perm_type,
+                "granted_to": email if email else "anyone",
+            }
+        except Exception as e:
+            raise _map_http_error(e, op=f"share file {file_id}") from e
+
     def upload_folder(
         self,
         local_dir: str | Path,
