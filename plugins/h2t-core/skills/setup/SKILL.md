@@ -147,3 +147,114 @@ the hint and ask whether to install/fix `uv`.
 
 If a connector returns `missing`, report the exact credential/config file or env
 var from the backend output.
+
+## Secrets Wizard
+
+Triggered by user intent: "setup secrets", "configure credentials", "h2t-core:setup --secrets",
+or when `connectors-check` reports any connector as `missing`.
+
+### Step 1 — Skeleton
+
+```bash
+python setup_h2t.py secrets skeleton --json
+```
+
+From the result, show the user:
+- Path to `secrets.env`
+- For each key in `added`: its description and URL from `known_secrets.yaml`
+
+### Step 2 — Fill API Keys
+
+Tell the user:
+
+> "Open `~/.dor/secrets/secrets.env` and paste your API keys. Here is where to get each one:
+> - **EXA_API_KEY** — https://dashboard.exa.ai/api-keys
+> - **NOTION_API_TOKEN** — https://www.notion.so/profile/integrations
+> - **MEETGEEK_API_KEY** — https://app.meetgeek.ai/settings/api"
+
+Open the file in an editor:
+
+```bash
+# macOS / Linux
+code ~/.dor/secrets/secrets.env
+
+# Windows
+code $env:USERPROFILE\.dor\secrets\secrets.env
+```
+
+Wait for user to say "done" or "готово" before proceeding.
+
+### Step 3 — Google OAuth
+
+First, check which Google connectors are actually missing:
+
+```bash
+python setup_h2t.py connectors-check --json
+```
+
+For each connector in `["calendar", "gmail", "drive"]` where status is `missing`:
+- Tell the user: "Connector **<name>** needs Google OAuth. This will open a browser window. Proceed? (yes/no)"
+- Only after explicit confirmation, run the trigger command for that specific connector:
+
+```bash
+# calendar missing → ask → if yes:
+h2t-ops calendar list --max 1 --json
+
+# gmail missing → ask → if yes:
+h2t-ops gmail list --max 1 --json
+
+# drive missing → ask → if yes:
+h2t-ops drive folders --json
+```
+
+Exit code 0 means authenticated. Exit code 4 (AuthError) means OAuth failed — report and
+ask user to retry. Skip any connector that is already `ready`.
+
+### Step 4 — Telegram Auth
+
+Phase 1 — check status:
+
+```bash
+h2t-ops telegram auth status
+```
+
+If already authenticated: skip to Step 5.
+
+Otherwise, ask user: "Telegram needs authentication. This will send a code to your phone. Proceed? (yes/no)"
+
+Phase 2 — request code (ask user for phone number first):
+
+```bash
+h2t-ops telegram auth request-code --phone <phone>
+```
+
+Phase 3 — complete login (ask user for the code from Telegram):
+
+```bash
+h2t-ops telegram auth complete --phone <phone> --code <code>
+```
+
+If 2FA is enabled, also ask for password:
+
+```bash
+h2t-ops telegram auth complete --phone <phone> --code <code> --password <password>
+```
+
+Confirm success by re-running `auth status`.
+
+### Step 5 — Preflight
+
+Default (format-only, free):
+
+```bash
+python setup_h2t.py secrets preflight --json
+```
+
+If user asks for a live check (costs Exa tokens — confirm first):
+
+```bash
+python setup_h2t.py secrets preflight --live --json
+```
+
+Show a summary table: key → found/valid/connector.
+Flag any `found: false` or `valid: false` with the URL from the registry.
