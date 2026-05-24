@@ -68,6 +68,21 @@ def test_validate_trigger_allows_allowed_degraded_reason():
     visual_ocr.validate_visual_ocr_trigger(envelope)
 
 
+def test_validate_trigger_blocks_unsupported_degraded_reason():
+    envelope = {
+        "status": "DEGRADED",
+        "content_gate": "none",
+        "telemetry": {
+            "reason_for_degraded": "all_providers_degraded_opaque_binary",
+        },
+    }
+
+    with pytest.raises(UsageError) as ei:
+        visual_ocr.validate_visual_ocr_trigger(envelope)
+
+    assert "allowed only after FAILED" in str(ei.value)
+
+
 def test_build_visual_ocr_envelope_marks_output_non_canonical():
     envelope = visual_ocr.build_visual_ocr_envelope(
         url="https://example.com/pops",
@@ -77,6 +92,7 @@ def test_build_visual_ocr_envelope_marks_output_non_canonical():
         extracted_text="POPs in TouchDesigner",
         visible_headings=["POPs in TouchDesigner"],
         ocr_confidence="medium",
+        captured_at="2026-05-25T12:34:56+00:00",
     )
 
     assert envelope["provider_used"] == "visual_ocr"
@@ -87,6 +103,7 @@ def test_build_visual_ocr_envelope_marks_output_non_canonical():
     assert envelope["needs_review"] is True
     assert envelope["review_status"] == "unreviewed"
     assert "visual_only" in envelope["limitations"]
+    assert envelope["provenance"]["captured_at"] == "2026-05-25T12:34:56+00:00"
 
 
 def test_build_visual_ocr_artifact_paths_returns_paths_under_output_dir(tmp_path):
