@@ -1,0 +1,14 @@
+{
+  "meta": {
+    "tool": "fetch_url.py",
+    "status": "FAILED"
+  },
+  "envelope": {
+    "status": "FAILED",
+    "url": "https://example.com/pops",
+    "content_gate": "none",
+    "telemetry": {
+      "reason_for_failed": "redirect_collapsed_to_homepage"
+    }
+  }
+}
