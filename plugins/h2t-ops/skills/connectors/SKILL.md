@@ -60,7 +60,11 @@ Do not use this skill for:
 
 - **Never pick a fallback folder on your own.** If the target folder is not found or not accessible, stop and ask: "Папка `<name>` не найдена. Куда загрузить?" Do NOT upload to a different folder without explicit user instruction.
 - **Confirm the destination before uploading.** State the folder name and path. Wait for "да" / "yes" / explicit confirmation before running `drive upload`.
-- **Missing `share` command.** Inviting collaborators via CLI is not yet supported (issue #168). After upload, show the Google Docs edit URL and instruct the user to share manually via Drive web UI.
+- **Sharing after upload.** Use `h2t-ops drive share <FILE_ID>`:
+  - Invite by email: `h2t-ops drive share <FILE_ID> --email user@example.com --role writer --json`
+  - Open link access: `h2t-ops drive share <FILE_ID> --anyone --confirm-public --json`
+  - Inspect permissions: `h2t-ops drive share <FILE_ID> --get-link --json`
+  - `--anyone` always requires `--confirm-public` (safety gate against accidental public exposure).
 
 Example:
 
