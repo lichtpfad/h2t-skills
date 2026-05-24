@@ -76,6 +76,31 @@ def register(subparsers: Any) -> None:
     )
     add_fmt(ufp)
 
+    shp = cmds.add_parser("share", help="Share a Drive file or inspect its permission state")
+    shp.add_argument("file_id", help="Drive file ID")
+    mode_group = shp.add_mutually_exclusive_group(required=True)
+    mode_group.add_argument(
+        "--email", metavar="ADDR",
+        help="Invite a specific user by email",
+    )
+    mode_group.add_argument(
+        "--anyone", action="store_true",
+        help="Open link access (anyone with the link); requires --confirm-public",
+    )
+    mode_group.add_argument(
+        "--get-link", action="store_true", dest="get_link",
+        help="Return webViewLink and permission state (read-only)",
+    )
+    shp.add_argument(
+        "--role", choices=["reader", "writer", "commenter"], default="reader",
+        help="Permission role (default: reader); not valid with --get-link",
+    )
+    shp.add_argument(
+        "--confirm-public", action="store_true", dest="confirm_public",
+        help="Required with --anyone; explicitly acknowledges public exposure",
+    )
+    add_fmt(shp)
+
     p.set_defaults(_handler=run)
 
 
@@ -127,5 +152,19 @@ def run(args) -> Any:
             parent_id=args.parent_id,
             dry_run=args.dry_run,
             update_existing=args.update_existing,
+        )
+    if cmd == "share":
+        if args.get_link and args.role != "reader":
+            raise UsageError("--role cannot be used with --get-link")
+        if args.anyone and not args.confirm_public:
+            raise UsageError(
+                "--anyone requires --confirm-public to prevent accidental public exposure"
+            )
+        return client.share_file(
+            args.file_id,
+            email=args.email,
+            role=args.role,
+            anyone=args.anyone,
+            get_link=args.get_link,
         )
     raise UsageError(f"unknown drive subcommand: {cmd}")
