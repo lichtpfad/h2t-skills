@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -83,13 +82,13 @@ def extract_text_from_image(image_path: str | Path) -> tuple[str, list[str], str
         from rapidocr_onnxruntime import RapidOCR
     except ModuleNotFoundError as exc:  # pragma: no cover
         raise ConfigError(
-            "rapidocr-onnxruntime is required for research visual-ocr",
-            hint="Install project dependencies with uv sync / uv run.",
+            "research visual-ocr environment is incomplete: rapidocr-onnxruntime is missing",
+            hint="Repair the project environment so the declared runtime dependency is installed.",
         ) from exc
     except Exception as exc:  # pragma: no cover
         raise ConfigError(
-            "rapidocr-onnxruntime could not be imported for research visual-ocr",
-            hint="Verify the project environment and installed dependencies.",
+            "research visual-ocr environment is broken: rapidocr-onnxruntime could not be imported",
+            hint="Verify the project environment and installed runtime dependencies.",
         ) from exc
 
     try:
@@ -146,8 +145,14 @@ def build_visual_ocr_envelope(
     extracted_text: str,
     visible_headings: list[str],
     ocr_confidence: str,
+    captured_at: str | None = None,
 ) -> dict[str, Any]:
     status = "OK" if extracted_text.strip() else "FAILED"
+    if captured_at is None:
+        raise UsageError(
+            "visual-ocr requires an explicit captured_at timestamp",
+            hint="Pass the capture time from the caller so envelope creation stays deterministic.",
+        )
     return {
         "status": status,
         "provider_used": "visual_ocr",
@@ -165,7 +170,7 @@ def build_visual_ocr_envelope(
             "capture_method": "external_image",
             "capture_tool": "user_supplied_image",
             "image_path": str(image_path),
-            "captured_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            "captured_at": captured_at,
             "source_fetch_status": source_fetch_status,
             "source_fetch_reason": source_fetch_reason,
         },
