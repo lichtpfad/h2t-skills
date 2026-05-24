@@ -54,6 +54,14 @@ def test_email_default_role_reader(sc):
     assert result["role"] == "reader"
 
 
+def test_email_role_writer_passed_to_api_and_result(sc):
+    _setup_create(sc)
+    result = sc.share_file("fid1", email="user@example.com", role="writer")
+    call = sc.service.permissions.return_value.create.call_args
+    assert call.kwargs["body"]["role"] == "writer"
+    assert result["role"] == "writer"
+
+
 def test_email_result_kind_and_type(sc):
     _setup_create(sc)
     result = sc.share_file("fid1", email="user@example.com")
