@@ -249,10 +249,10 @@ def test_run_dispatches_visual_ocr(monkeypatch):
     }
 
 
-def test_real_research_client_visual_ocr_stub_raises_usageerror(tmp_path):
+def test_real_research_client_visual_ocr_missing_sidecar_raises_usageerror(tmp_path):
     from h2t_ops.connectors.research.client import ResearchClient
 
-    with pytest.raises(UsageError, match="not implemented yet"):
+    with pytest.raises(UsageError, match="fetch sidecar not found"):
         ResearchClient(output_dir=tmp_path).visual_ocr(
             fetch_sidecar="artifact.sources.json",
             image_path="capture.png",
