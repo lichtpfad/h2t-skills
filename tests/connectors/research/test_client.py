@@ -1128,3 +1128,172 @@ def test_research_client_crawl_network_failure_maps_to_networkerror(
         "latency_ms": 101,
         "provider_error": None,
     }
+
+
+def test_research_client_visual_ocr_ok_writes_dedicated_artifacts(tmp_path, monkeypatch):
+    _clear_sensitive_env(monkeypatch)
+    fixed_now = datetime(2026, 5, 25, 12, 34, 56, tzinfo=timezone.utc)
+
+    class FixedDateTime:
+        @classmethod
+        def now(cls, tz=None):
+            assert tz is timezone.utc
+            return fixed_now
+
+    monkeypatch.setattr(client, "datetime", FixedDateTime)
+
+    from h2t_ops.connectors.research import visual_ocr
+
+    sidecar = {
+        "meta": {"tool": "fetch_url.py", "status": "FAILED"},
+        "envelope": {
+            "status": "FAILED",
+            "url": "https://example.com/pops",
+            "content_gate": "none",
+            "telemetry": {
+                "reason_for_failed": "redirect_collapsed_to_homepage",
+            },
+        },
+    }
+
+    monkeypatch.setattr(visual_ocr, "load_fetch_sidecar", lambda path: sidecar)
+    monkeypatch.setattr(visual_ocr, "load_fetch_envelope", lambda payload: payload["envelope"])
+    monkeypatch.setattr(visual_ocr, "validate_visual_ocr_trigger", lambda envelope: None)
+    monkeypatch.setattr(
+        visual_ocr,
+        "extract_text_from_image",
+        lambda image_path: (
+            "POPs in TouchDesigner\nAttribute lifecycle",
+            ["POPs in TouchDesigner", "Attribute lifecycle"],
+            "medium",
+        ),
+    )
+
+    result = client.ResearchClient(output_dir=tmp_path).visual_ocr(
+        fetch_sidecar="artifact.sources.json",
+        image_path="capture.png",
+        project="h2t skills",
+    )
+
+    assert result["kind"] == "research_visual_ocr_envelope"
+    assert result["status"] == "OK"
+    assert result["provider_used"] == "visual_ocr"
+    assert result["provenance"]["captured_at"] == fixed_now.isoformat()
+
+    artifact = result["artifact"]
+    refs = artifact["artifact_refs"]
+    sources_path = tmp_path / refs["sources_json"]
+    partial_path = tmp_path / refs["partial_md"]
+    artifact_path = tmp_path / refs["artifact_json"]
+
+    assert sources_path.is_file()
+    assert partial_path.is_file()
+    assert artifact_path.is_file()
+    assert json.loads(sources_path.read_text(encoding="utf-8")) == {
+        key: value
+        for key, value in result.items()
+        if key not in {"artifact", "kind"}
+    }
+
+    partial_text = partial_path.read_text(encoding="utf-8")
+    assert "Visual OCR Review Required" in partial_text
+    assert "non-canonical OCR recovery" in partial_text
+    assert "POPs in TouchDesigner" in partial_text
+    assert "Attribute lifecycle" in partial_text
+    assert "captured_at: 2026-05-25T12:34:56+00:00" in partial_text
+
+    assert json.loads(artifact_path.read_text(encoding="utf-8")) == artifact
+    assert artifact["provider_status"] == "OK"
+    assert artifact["tool"] == "h2t-ops research visual-ocr"
+    assert artifact["telemetry"]["providers"] == ["visual_ocr"]
+    assert artifact["telemetry"]["captured_at"] == fixed_now.isoformat()
+    assert artifact["telemetry"]["estimated_cost_usd"] == 0.0
+    assert artifact["telemetry"]["cost_basis"] == "local_ocr"
+
+    telemetry_lines = (tmp_path / "telemetry.jsonl").read_text(encoding="utf-8").splitlines()
+    assert len(telemetry_lines) == 1
+    telemetry = json.loads(telemetry_lines[0])
+    assert telemetry["provider"] == "visual_ocr"
+    assert telemetry["endpoint"] == "visual_ocr"
+    assert telemetry["mode"] == "single_image"
+    assert telemetry["captured_at"] == fixed_now.isoformat()
+    assert telemetry["latency_ms"] is None
+    assert telemetry["result_count"] == 1
+    assert telemetry["estimated_cost_usd"] == 0.0
+    assert telemetry["cost_basis"] == "local_ocr"
+
+
+def test_research_client_visual_ocr_artifacts_redact_sensitive_values(tmp_path, monkeypatch):
+    _clear_sensitive_env(monkeypatch)
+    fixed_now = datetime(2026, 5, 25, 12, 35, 0, tzinfo=timezone.utc)
+
+    class FixedDateTime:
+        @classmethod
+        def now(cls, tz=None):
+            assert tz is timezone.utc
+            return fixed_now
+
+    monkeypatch.setattr(client, "datetime", FixedDateTime)
+
+    from h2t_ops.connectors.research import visual_ocr
+
+    leaked_query = "ocr-url-secret"
+    leaked_text = "secret" + "_ocr_token"
+    sidecar = {
+        "meta": {"tool": "fetch_url.py", "status": "FAILED"},
+        "envelope": {
+            "status": "FAILED",
+            "url": f"https://example.com/pops?access_token={leaked_query}&safe=value",
+            "content_gate": "none",
+            "telemetry": {
+                "reason_for_failed": "redirect_collapsed_to_homepage",
+            },
+        },
+    }
+
+    monkeypatch.setattr(visual_ocr, "load_fetch_sidecar", lambda path: sidecar)
+    monkeypatch.setattr(visual_ocr, "load_fetch_envelope", lambda payload: payload["envelope"])
+    monkeypatch.setattr(visual_ocr, "validate_visual_ocr_trigger", lambda envelope: None)
+    monkeypatch.setattr(
+        visual_ocr,
+        "extract_text_from_image",
+        lambda image_path: (
+            "Authorization: Bearer token-123\n" + leaked_text,
+            ["Authorization: Bearer token-123"],
+            "medium",
+        ),
+    )
+
+    result = client.ResearchClient(output_dir=tmp_path).visual_ocr(
+        fetch_sidecar="artifact.sources.json",
+        image_path="capture.png",
+        project="access_token=project-secret",
+    )
+
+    refs = result["artifact"]["artifact_refs"]
+    combined = "\n".join(
+        [
+            (tmp_path / refs["sources_json"]).read_text(encoding="utf-8"),
+            (tmp_path / refs["partial_md"]).read_text(encoding="utf-8"),
+            (tmp_path / refs["artifact_json"]).read_text(encoding="utf-8"),
+            json.dumps(result),
+        ]
+    )
+    generated_names = "\n".join(path.name for path in tmp_path.iterdir())
+
+    assert leaked_query not in combined
+    assert leaked_text not in combined
+    assert "token-123" not in combined
+    assert "project-secret" not in combined
+    assert "safe=value" in combined
+    assert "[REDACTED]" in combined
+    assert "project-secret" not in generated_names
+    assert "redacted" in generated_names.lower()
+
+    telemetry = json.loads((tmp_path / "telemetry.jsonl").read_text(encoding="utf-8").splitlines()[0])
+    assert telemetry["endpoint"] == "visual_ocr"
+    assert telemetry["mode"] == "single_image"
+    assert telemetry["latency_ms"] is None
+    assert telemetry["result_count"] == 1
+    assert telemetry["estimated_cost_usd"] == 0.0
+    assert telemetry["cost_basis"] == "local_ocr"
