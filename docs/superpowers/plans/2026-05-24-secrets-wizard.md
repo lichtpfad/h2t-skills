@@ -263,10 +263,12 @@ git commit -m "feat(setup): add secrets_skeleton command and tests"
 # --- secrets_preflight tests ---
 
 def test_preflight_found_and_uuid_valid(tmp_path):
-    secrets_file = tmp_path / "secrets.env"
-    secrets_file.write_text("EXA_API_KEY=12345678-1234-1234-1234-123456789012\n")
+    # Write to canonical secrets path under tmp_path home
+    secrets_dir = tmp_path / ".dor" / "secrets"
+    secrets_dir.mkdir(parents=True)
+    (secrets_dir / "secrets.env").write_text("EXA_API_KEY=12345678-1234-1234-1234-123456789012\n")
     registry = {"EXA_API_KEY": {"validator": "uuid", "connector": "research", "description": "", "url": ""}}
-    result = setup_h2t.secrets_preflight(secrets_file, registry)
+    result = setup_h2t.secrets_preflight(registry, home=tmp_path)
     assert result["kind"] == "h2t_secrets_preflight/v1"
     r = result["results"][0]
     assert r["key"] == "EXA_API_KEY"
@@ -276,75 +278,100 @@ def test_preflight_found_and_uuid_valid(tmp_path):
 
 
 def test_preflight_invalid_uuid(tmp_path):
-    secrets_file = tmp_path / "secrets.env"
-    secrets_file.write_text("EXA_API_KEY=not-a-uuid\n")
+    secrets_dir = tmp_path / ".dor" / "secrets"
+    secrets_dir.mkdir(parents=True)
+    (secrets_dir / "secrets.env").write_text("EXA_API_KEY=not-a-uuid\n")
     registry = {"EXA_API_KEY": {"validator": "uuid", "connector": "research", "description": "", "url": ""}}
-    result = setup_h2t.secrets_preflight(secrets_file, registry)
+    result = setup_h2t.secrets_preflight(registry, home=tmp_path)
     assert result["results"][0]["found"] is True
     assert result["results"][0]["valid"] is False
 
 
 def test_preflight_starts_with_validator(tmp_path):
-    secrets_file = tmp_path / "secrets.env"
-    secrets_file.write_text("NOTION_API_TOKEN=secret_abc123\n")
+    secrets_dir = tmp_path / ".dor" / "secrets"
+    secrets_dir.mkdir(parents=True)
+    (secrets_dir / "secrets.env").write_text("NOTION_API_TOKEN=secret_abc123\n")
     registry = {"NOTION_API_TOKEN": {"validator": "starts_with:secret_", "connector": "notion", "description": "", "url": ""}}
-    result = setup_h2t.secrets_preflight(secrets_file, registry)
+    result = setup_h2t.secrets_preflight(registry, home=tmp_path)
     assert result["results"][0]["valid"] is True
 
 
 def test_preflight_starts_with_invalid(tmp_path):
-    secrets_file = tmp_path / "secrets.env"
-    secrets_file.write_text("NOTION_API_TOKEN=wrong_prefix\n")
+    secrets_dir = tmp_path / ".dor" / "secrets"
+    secrets_dir.mkdir(parents=True)
+    (secrets_dir / "secrets.env").write_text("NOTION_API_TOKEN=wrong_prefix\n")
     registry = {"NOTION_API_TOKEN": {"validator": "starts_with:secret_", "connector": "notion", "description": "", "url": ""}}
-    result = setup_h2t.secrets_preflight(secrets_file, registry)
+    result = setup_h2t.secrets_preflight(registry, home=tmp_path)
     assert result["results"][0]["valid"] is False
 
 
 def test_preflight_missing_key(tmp_path):
-    secrets_file = tmp_path / "secrets.env"
-    secrets_file.write_text("OTHER_KEY=value\n")
+    secrets_dir = tmp_path / ".dor" / "secrets"
+    secrets_dir.mkdir(parents=True)
+    (secrets_dir / "secrets.env").write_text("OTHER_KEY=value\n")
     registry = {"EXA_API_KEY": {"validator": "uuid", "connector": "research", "description": "", "url": ""}}
-    result = setup_h2t.secrets_preflight(secrets_file, registry)
+    result = setup_h2t.secrets_preflight(registry, home=tmp_path)
     assert result["results"][0]["found"] is False
     assert result["results"][0]["valid"] is False
+
+
+def test_preflight_honors_env_var(tmp_path, monkeypatch):
+    """Resolution chain: os.environ takes precedence over secrets file."""
+    monkeypatch.setenv("EXA_API_KEY", "12345678-1234-1234-1234-123456789012")
+    registry = {"EXA_API_KEY": {"validator": "uuid", "connector": "research", "description": "", "url": ""}}
+    result = setup_h2t.secrets_preflight(registry, home=tmp_path)
+    assert result["results"][0]["found"] is True
+    assert result["results"][0]["valid"] is True
+
+
+def test_preflight_honors_legacy_path(tmp_path):
+    """Resolution chain: legacy ~/.dor/secrets.env is a valid fallback."""
+    legacy = tmp_path / ".dor" / "secrets.env"
+    legacy.parent.mkdir(parents=True)
+    legacy.write_text("EXA_API_KEY=12345678-1234-1234-1234-123456789012\n")
+    registry = {"EXA_API_KEY": {"validator": "uuid", "connector": "research", "description": "", "url": ""}}
+    result = setup_h2t.secrets_preflight(registry, home=tmp_path)
+    assert result["results"][0]["found"] is True
 
 
 def test_preflight_no_values_in_output(tmp_path):
     """Security: key values must never appear in the result JSON."""
-    secrets_file = tmp_path / "secrets.env"
+    secrets_dir = tmp_path / ".dor" / "secrets"
+    secrets_dir.mkdir(parents=True)
     secret_value = "12345678-1234-1234-1234-123456789012"
-    secrets_file.write_text(f"EXA_API_KEY={secret_value}\n")
+    (secrets_dir / "secrets.env").write_text(f"EXA_API_KEY={secret_value}\n")
     registry = {"EXA_API_KEY": {"validator": "uuid", "connector": "research", "description": "", "url": ""}}
-    result = setup_h2t.secrets_preflight(secrets_file, registry)
+    result = setup_h2t.secrets_preflight(registry, home=tmp_path)
     assert secret_value not in json.dumps(result)
 
 
 def test_preflight_nonempty_validator(tmp_path):
-    secrets_file = tmp_path / "secrets.env"
-    secrets_file.write_text("MEETGEEK_API_KEY=anything\n")
+    secrets_dir = tmp_path / ".dor" / "secrets"
+    secrets_dir.mkdir(parents=True)
+    (secrets_dir / "secrets.env").write_text("MEETGEEK_API_KEY=anything\n")
     registry = {"MEETGEEK_API_KEY": {"validator": "nonempty", "connector": "meetgeek", "description": "", "url": ""}}
-    result = setup_h2t.secrets_preflight(secrets_file, registry)
+    result = setup_h2t.secrets_preflight(registry, home=tmp_path)
     assert result["results"][0]["valid"] is True
 
 
 def test_preflight_nonempty_fails_empty(tmp_path):
-    secrets_file = tmp_path / "secrets.env"
-    secrets_file.write_text("MEETGEEK_API_KEY=\n")
+    secrets_dir = tmp_path / ".dor" / "secrets"
+    secrets_dir.mkdir(parents=True)
+    (secrets_dir / "secrets.env").write_text("MEETGEEK_API_KEY=\n")
     registry = {"MEETGEEK_API_KEY": {"validator": "nonempty", "connector": "meetgeek", "description": "", "url": ""}}
-    result = setup_h2t.secrets_preflight(secrets_file, registry)
+    result = setup_h2t.secrets_preflight(registry, home=tmp_path)
     assert result["results"][0]["found"] is False
     assert result["results"][0]["valid"] is False
 
 
-def test_preflight_live_calls_runner(tmp_path):
-    secrets_file = tmp_path / "secrets.env"
-    secrets_file.write_text("EXA_API_KEY=12345678-1234-1234-1234-123456789012\n")
+def test_preflight_live_calls_runner(tmp_path, monkeypatch):
+    monkeypatch.setenv("EXA_API_KEY", "12345678-1234-1234-1234-123456789012")
     registry = {"EXA_API_KEY": {"validator": "uuid", "connector": "research", "description": "", "url": ""}}
     calls = []
     def fake_runner(cmd, timeout):
         calls.append(cmd)
         return {"exit_code": 0, "stdout": '{"ok": true}', "stderr": ""}
-    result = setup_h2t.secrets_preflight(secrets_file, registry, live=True, runner=fake_runner)
+    result = setup_h2t.secrets_preflight(registry, home=tmp_path, live=True, runner=fake_runner)
     assert result["results"][0]["live"]["status"] == "ok"
     assert any("research" in str(c) for c in calls)
 ```
@@ -362,18 +389,27 @@ Expected: `AttributeError: module 'setup_h2t' has no attribute 'secrets_prefligh
 Add after `secrets_skeleton`:
 
 ```python
-def _read_secrets_env(secrets_file: Path) -> dict[str, str]:
-    """Read KEY=VALUE pairs from secrets.env. Returns empty string for blank values."""
-    values: dict[str, str] = {}
-    if not secrets_file.is_file():
-        return values
-    for raw in secrets_file.read_text(encoding="utf-8").splitlines():
-        line = raw.strip()
-        if not line or line.startswith("#") or "=" not in line:
+def _resolve_secret_value(key: str, home: Path) -> str:
+    """Return actual secret value following full resolution chain: env > canonical > legacy.
+
+    Used only for local format validation — never returned in output.
+    """
+    env_val = os.environ.get(key)
+    if env_val:
+        return env_val
+    for path in _candidate_secret_files(home):
+        if not path.is_file():
             continue
-        key, _, val = line.partition("=")
-        values[key.strip()] = val.strip().strip('"').strip("'")
-    return values
+        try:
+            for raw in path.read_text(encoding="utf-8").splitlines():
+                line = raw.strip()
+                if line.startswith(f"{key}="):
+                    val = line.partition("=")[2].strip().strip('"').strip("'")
+                    if val:
+                        return val
+        except OSError:
+            continue
+    return ""
 
 
 def _validate_key(value: str, validator: str) -> bool:
@@ -394,23 +430,23 @@ def _validate_key(value: str, validator: str) -> bool:
 
 
 def secrets_preflight(
-    secrets_file: Path,
     registry: dict[str, dict[str, str]],
     *,
+    home: Path | None = None,
     live: bool = False,
     runner: Runner = _run,
 ) -> dict[str, Any]:
-    """Check each key in registry: present, non-empty, and format-valid. Never returns values.
+    """Check each key in registry using full resolution chain (env > canonical > legacy).
 
-    With live=True, also runs h2t-ops <connector> preflight for connectors that support it.
+    Never returns key values. With live=True, also runs connector smoke tests.
     """
+    home = home or _home()
     h2t_ops = resolve_h2t_ops()
     h2t_ops_path = h2t_ops.get("path", "")
-    env = _read_secrets_env(secrets_file)
     results: list[dict[str, Any]] = []
     live_commands = {"research": "research preflight --json"}
     for key, meta in registry.items():
-        value = env.get(key, "")
+        value = _resolve_secret_value(key, home)
         found = bool(value)
         valid = found and _validate_key(value, meta.get("validator", "nonempty"))
         entry: dict[str, Any] = {
@@ -490,7 +526,7 @@ In `main()`, add elif branch after the `install-h2t-ops` branch (before the `els
             if args.secrets_cmd == "skeleton":
                 result = secrets_skeleton(secrets_file, registry)
             elif args.secrets_cmd == "preflight":
-                result = secrets_preflight(secrets_file, registry, live=args.live)
+                result = secrets_preflight(registry, live=args.live)
             else:
                 raise AssertionError(args.secrets_cmd)
 ```
@@ -574,17 +610,29 @@ Wait for user to say "done" or "готово" before proceeding.
 
 ### Step 3 — Google OAuth
 
-Google OAuth is triggered lazily. Always run all three trigger commands — they complete
-silently if already authenticated (exit 0), or open a browser flow if not.
+First, check which Google connectors are actually missing:
 
 ```bash
-h2t-ops calendar list --max 1 --json
-h2t-ops gmail list --max 1 --json
-h2t-ops drive folders --max 1 --json
+python setup_h2t.py connectors-check --json
 ```
 
-If any returns exit code 4 (AuthError), report the specific connector and ask the user
-to re-run that connector's trigger manually.
+For each connector in `["calendar", "gmail", "drive"]` where status is `missing`:
+- Tell the user: "Connector **<name>** needs Google OAuth. This will open a browser window. Proceed? (yes/no)"
+- Only after explicit confirmation, run the trigger command for that specific connector:
+
+```bash
+# calendar missing → ask → if yes:
+h2t-ops calendar list --max 1 --json
+
+# gmail missing → ask → if yes:
+h2t-ops gmail list --max 1 --json
+
+# drive missing → ask → if yes:
+h2t-ops drive folders --json
+```
+
+Exit code 0 means authenticated. Exit code 4 (AuthError) means OAuth failed — report and
+ask user to retry. Skip any connector that is already `ready`.
 
 ### Step 4 — Telegram Auth
 
@@ -596,6 +644,8 @@ h2t-ops telegram auth status
 
 If already authenticated: skip to Step 5.
 
+Otherwise, ask user: "Telegram needs authentication. This will send a code to your phone. Proceed? (yes/no)"
+
 Phase 2 — request code (ask user for phone number first):
 
 ```bash
@@ -605,16 +655,16 @@ h2t-ops telegram auth request-code --phone <phone>
 Phase 3 — complete login (ask user for the code from Telegram):
 
 ```bash
-h2t-ops telegram auth complete --code <code>
+h2t-ops telegram auth complete --phone <phone> --code <code>
 ```
 
 If 2FA is enabled, also ask for password:
 
 ```bash
-h2t-ops telegram auth complete --code <code> --password <password>
+h2t-ops telegram auth complete --phone <phone> --code <code> --password <password>
 ```
 
-Confirm by re-running `auth status`.
+Confirm success by re-running `auth status`.
 
 ### Step 5 — Preflight
 
