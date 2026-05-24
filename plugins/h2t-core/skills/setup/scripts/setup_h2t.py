@@ -426,6 +426,89 @@ def secrets_skeleton(secrets_file: Path, registry: dict[str, dict[str, str]]) ->
     }
 
 
+def _resolve_secret_value(key: str, home: Path) -> str:
+    """Return actual secret value following full resolution chain: env > canonical > legacy.
+
+    Used only for local format validation — never returned in output.
+    """
+    env_val = os.environ.get(key)
+    if env_val:
+        return env_val
+    for path in _candidate_secret_files(home):
+        if not path.is_file():
+            continue
+        try:
+            for raw in path.read_text(encoding="utf-8").splitlines():
+                line = raw.strip()
+                if line.startswith(f"{key}="):
+                    val = line.partition("=")[2].strip().strip('"').strip("'")
+                    if val:
+                        return val
+        except OSError:
+            continue
+    return ""
+
+
+def _validate_key(value: str, validator: str) -> bool:
+    """Apply format validator. Only called when value is non-empty."""
+    import re
+    if validator == "uuid":
+        return bool(re.fullmatch(
+            r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
+            value,
+            re.IGNORECASE,
+        ))
+    if validator.startswith("starts_with:"):
+        prefix = validator[len("starts_with:"):]
+        return value.startswith(prefix)
+    if validator == "nonempty":
+        return bool(value)
+    return bool(value)  # unknown validator: treat as nonempty
+
+
+def secrets_preflight(
+    registry: dict[str, dict[str, str]],
+    *,
+    home: Path | None = None,
+    live: bool = False,
+    runner: Runner = _run,
+) -> dict[str, Any]:
+    """Check each key using full resolution chain. Never returns key values.
+
+    With live=True, also runs connector smoke tests.
+    """
+    home = home or _home()
+    h2t_ops = resolve_h2t_ops()
+    h2t_ops_path = h2t_ops.get("path", "") or "h2t-ops"
+    results: list[dict[str, Any]] = []
+    live_commands = {"research": "research preflight --json"}
+    for key, meta in registry.items():
+        value = _resolve_secret_value(key, home)
+        found = bool(value)
+        valid = found and _validate_key(value, meta.get("validator", "nonempty"))
+        entry: dict[str, Any] = {
+            "key": key,
+            "found": found,
+            "valid": valid,
+            "connector": meta.get("connector", ""),
+        }
+        if live and found:
+            connector = meta.get("connector", "")
+            live_cmd = live_commands.get(connector)
+            if live_cmd:
+                cmd = [h2t_ops_path] + live_cmd.split()
+                live_result = runner(cmd, 30)
+                entry["live"] = {
+                    "status": "ok" if live_result.get("exit_code") == 0 else "error",
+                    "exit_code": live_result.get("exit_code"),
+                }
+        results.append(entry)
+    return {
+        "kind": KIND_SECRETS_PREFLIGHT,
+        "results": results,
+    }
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="setup_h2t.py")
     sub = parser.add_subparsers(dest="command", required=True)
