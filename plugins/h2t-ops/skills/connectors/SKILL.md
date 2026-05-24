@@ -56,6 +56,12 @@ Do not use this skill for:
 - For a folder URL, use `h2t-ops drive list <FOLDER_ID> --json`.
 - For a file URL, run `h2t-ops drive download <FILE_ID> --dest ./... --json`.
 
+### Upload safety rules (mandatory)
+
+- **Never pick a fallback folder on your own.** If the target folder is not found or not accessible, stop and ask: "Папка `<name>` не найдена. Куда загрузить?" Do NOT upload to a different folder without explicit user instruction.
+- **Confirm the destination before uploading.** State the folder name and path. Wait for "да" / "yes" / explicit confirmation before running `drive upload`.
+- **Missing `share` command.** Inviting collaborators via CLI is not yet supported (issue #168). After upload, show the Google Docs edit URL and instruct the user to share manually via Drive web UI.
+
 Example:
 
 ```text
