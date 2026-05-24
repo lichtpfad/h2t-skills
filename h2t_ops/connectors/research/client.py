@@ -359,6 +359,19 @@ class ResearchClient:
     def __init__(self, *, output_dir: Path | None = None) -> None:
         self.output_dir = output_dir or DEFAULT_OUTPUT_DIR
 
+    def visual_ocr(
+        self,
+        *,
+        fetch_sidecar: str,
+        image_path: str,
+        project: str = "default",
+    ) -> dict[str, Any]:
+        """Temporary stub for the visual OCR surface in this slice."""
+        raise UsageError(
+            "visual-ocr is not implemented yet in this slice",
+            hint="This command surface is wired, but the client implementation lands in a later task.",
+        )
+
     def preflight(self) -> dict[str, Any]:
         """Validate Exa credential resolution and provider connectivity."""
         from h2t_ops.connectors.research import exa
