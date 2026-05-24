@@ -98,7 +98,8 @@ def test_skeleton_result_path_is_str(tmp_path):
 
 # --- secrets_preflight tests ---
 
-def test_preflight_found_and_uuid_valid(tmp_path):
+def test_preflight_found_and_uuid_valid(tmp_path, monkeypatch):
+    monkeypatch.delenv("EXA_API_KEY", raising=False)
     # Write to canonical secrets path under tmp_path home
     secrets_dir = tmp_path / ".dor" / "secrets"
     secrets_dir.mkdir(parents=True)
@@ -124,7 +125,8 @@ def test_preflight_invalid_uuid(tmp_path, monkeypatch):
     assert result["results"][0]["valid"] is False
 
 
-def test_preflight_starts_with_validator(tmp_path):
+def test_preflight_starts_with_validator(tmp_path, monkeypatch):
+    monkeypatch.delenv("NOTION_API_TOKEN", raising=False)
     secrets_dir = tmp_path / ".dor" / "secrets"
     secrets_dir.mkdir(parents=True)
     (secrets_dir / "secrets.env").write_text("NOTION_API_TOKEN=secret_abc123\n")
@@ -133,7 +135,8 @@ def test_preflight_starts_with_validator(tmp_path):
     assert result["results"][0]["valid"] is True
 
 
-def test_preflight_starts_with_invalid(tmp_path):
+def test_preflight_starts_with_invalid(tmp_path, monkeypatch):
+    monkeypatch.delenv("NOTION_API_TOKEN", raising=False)
     secrets_dir = tmp_path / ".dor" / "secrets"
     secrets_dir.mkdir(parents=True)
     (secrets_dir / "secrets.env").write_text("NOTION_API_TOKEN=wrong_prefix\n")
@@ -162,7 +165,8 @@ def test_preflight_honors_env_var(tmp_path, monkeypatch):
     assert result["results"][0]["valid"] is True
 
 
-def test_preflight_honors_legacy_path(tmp_path):
+def test_preflight_honors_legacy_path(tmp_path, monkeypatch):
+    monkeypatch.delenv("EXA_API_KEY", raising=False)
     """Resolution chain: legacy ~/.dor/secrets.env is a valid fallback."""
     legacy = tmp_path / ".dor" / "secrets.env"
     legacy.parent.mkdir(parents=True)
@@ -172,7 +176,8 @@ def test_preflight_honors_legacy_path(tmp_path):
     assert result["results"][0]["found"] is True
 
 
-def test_preflight_no_values_in_output(tmp_path):
+def test_preflight_no_values_in_output(tmp_path, monkeypatch):
+    monkeypatch.delenv("EXA_API_KEY", raising=False)
     """Security: key values must never appear in the result JSON."""
     import json
     secrets_dir = tmp_path / ".dor" / "secrets"
@@ -184,7 +189,8 @@ def test_preflight_no_values_in_output(tmp_path):
     assert secret_value not in json.dumps(result)
 
 
-def test_preflight_nonempty_validator(tmp_path):
+def test_preflight_nonempty_validator(tmp_path, monkeypatch):
+    monkeypatch.delenv("MEETGEEK_API_KEY", raising=False)
     secrets_dir = tmp_path / ".dor" / "secrets"
     secrets_dir.mkdir(parents=True)
     (secrets_dir / "secrets.env").write_text("MEETGEEK_API_KEY=anything\n")
@@ -193,7 +199,8 @@ def test_preflight_nonempty_validator(tmp_path):
     assert result["results"][0]["valid"] is True
 
 
-def test_preflight_nonempty_fails_empty(tmp_path):
+def test_preflight_nonempty_fails_empty(tmp_path, monkeypatch):
+    monkeypatch.delenv("MEETGEEK_API_KEY", raising=False)
     secrets_dir = tmp_path / ".dor" / "secrets"
     secrets_dir.mkdir(parents=True)
     (secrets_dir / "secrets.env").write_text("MEETGEEK_API_KEY=\n")
