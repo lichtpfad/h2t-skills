@@ -1,3 +1,10 @@
+---
+title: "h2t-core setup/update delivery + lifecycle context budget design"
+status: "draft"
+owner: "Stanislav Glazov"
+date: "2026-05-22"
+milestone: ""
+---
 # h2t-core setup/update delivery + lifecycle context budget design
 
 Date: 2026-05-22

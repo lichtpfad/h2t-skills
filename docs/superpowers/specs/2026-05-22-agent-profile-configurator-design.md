@@ -1,3 +1,10 @@
+---
+title: "h2t-core:agent-profile v0.2 — configurator design"
+status: "draft"
+owner: "Stanislav Glazov"
+date: "2026-05-22"
+milestone: ""
+---
 # h2t-core:agent-profile v0.2 — configurator design
 
 Date: 2026-05-22

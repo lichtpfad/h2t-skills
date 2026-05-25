@@ -1,18 +1,10 @@
 ---
 title: "h2t-ops Generic Recovery Layer Research Spike"
 status: "draft"
-owner: "lichtpfad"
+owner: "Stanislav Glazov"
 date: "2026-05-24"
-issue: "lichtpfad/h2t-skills#105"
-related:
-  - "lichtpfad/h2t-skills#98"
-  - "lichtpfad/h2t-skills#99"
-  - "lichtpfad/h2t-skills#136"
-  - "docs/superpowers/specs/2026-05-24-h2t-ops-research-fetch-ladder-closure-design.md"
-  - "plugins/h2t-ops/skills/research/scripts/fetch_url.py"
-supersedes_intent: "site-specific AllTouchDesigner adapter framing"
+milestone: ""
 ---
-
 # h2t-ops Generic Recovery Layer Research Spike
 
 ## Goal

@@ -1,3 +1,10 @@
+---
+title: "h2t-ops connectors skill surface design"
+status: "draft"
+owner: "Stanislav Glazov"
+date: "2026-05-23"
+milestone: ""
+---
 # h2t-ops connectors skill surface design
 
 Date: 2026-05-23

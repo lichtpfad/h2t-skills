@@ -1,3 +1,10 @@
+---
+title: "h2t-ops Notion Functional Completion - Design"
+status: "draft"
+owner: "Stanislav Glazov"
+date: "2026-05-22"
+milestone: ""
+---
 # h2t-ops Notion Functional Completion - Design
 
 Date: 2026-05-22

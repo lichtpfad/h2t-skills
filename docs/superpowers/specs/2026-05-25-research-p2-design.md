@@ -1,18 +1,10 @@
 ---
 title: "Research P2: YouTube Provider, Exa Extensions, Author Resolve, Visual OCR Auto-Capture"
 status: "draft"
-owner: "lichtpfad"
+owner: "Stanislav Glazov"
 date: "2026-05-25"
-issues:
-  - "lichtpfad/h2t-skills#182"
-  - "lichtpfad/h2t-skills#99"
-  - "lichtpfad/h2t-skills#105"
-related:
-  - "docs/superpowers/specs/2026-05-07-research-fetch-url-ladder.md"
-  - "docs/superpowers/specs/2026-05-25-h2t-ops-visual-ocr-fallback-design.md"
-  - "docs/h2t-ops-roadmap.md"
+milestone: ""
 ---
-
 # Research P2: YouTube Provider, Exa Extensions, Author Resolve, Visual OCR Auto-Capture
 
 ## Goal

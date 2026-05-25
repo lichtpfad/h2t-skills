@@ -1,3 +1,9 @@
+---
+title: "h2t-ops Shippable + Shareability Plan"
+status: "draft"
+date: "2026-05-23"
+milestone: ""
+---
 # h2t-ops Shippable + Shareability Plan
 
 **Date:** 2026-05-23  

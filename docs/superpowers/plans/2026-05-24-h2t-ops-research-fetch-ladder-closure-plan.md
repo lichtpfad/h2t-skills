@@ -1,17 +1,9 @@
 ---
 title: "h2t-ops Research Fetch Ladder Closure Plan"
 status: "draft"
-owner: "lichtpfad"
 date: "2026-05-24"
-issue: "lichtpfad/h2t-skills#98"
-spec: "docs/superpowers/specs/2026-05-24-h2t-ops-research-fetch-ladder-closure-design.md"
-related:
-  - "lichtpfad/h2t-skills#97"
-  - "lichtpfad/h2t-skills#99"
-  - "lichtpfad/h2t-skills#105"
-  - "lichtpfad/h2t-skills#136"
+milestone: ""
 ---
-
 # h2t-ops Research Fetch Ladder Closure Plan
 
 ## Objective
