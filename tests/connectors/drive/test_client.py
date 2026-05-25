@@ -320,6 +320,36 @@ def test_move_file_requires_non_empty_destination(client_obj):
     assert str(ei.value) == "drive move: destination folder is required"
 
 
+def test_move_file_strips_destination_before_resolving(client_obj, monkeypatch):
+    files = client_obj.service.files.return_value
+    resolved = {}
+
+    def fake_resolve(folder):
+        resolved["folder"] = folder
+        return None, "root", False
+
+    monkeypatch.setattr(client_obj, "_resolve_folder_id", fake_resolve)
+    files.get.return_value.execute.return_value = {
+        "id": "file1",
+        "name": "report.txt",
+        "mimeType": "text/plain",
+        "parents": ["parent1"],
+    }
+    files.update.return_value.execute.return_value = {
+        "id": "file1",
+        "name": "report.txt",
+        "mimeType": "text/plain",
+        "parents": [],
+        "webViewLink": "https://drive/file1",
+    }
+
+    result = client_obj.move_file("file1", destination_folder_id="  root  ")
+
+    assert resolved["folder"] == "root"
+    assert result["parents"] == []
+    assert files.update.call_args.kwargs["addParents"] == "root"
+
+
 def test_move_file_to_root_skips_folder_validation_fetch(client_obj, monkeypatch):
     files = client_obj.service.files.return_value
     monkeypatch.setattr(client_obj, "_resolve_folder_id", lambda folder: (None, "root", False))
