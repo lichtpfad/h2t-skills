@@ -493,14 +493,12 @@ def test_add_document_tab_returns_normalized(client_obj):
     client_obj._docs_service.documents.return_value.batchUpdate.return_value.execute.return_value = {
         "replies": [
             {
-                "createTab": {
-                    "tab": {
-                        "tabProperties": {
-                            "tabId": "new-tab-id",
-                            "title": "Methods",
-                            "index": 1,
-                            "nestingLevel": 0,
-                        }
+                "addDocumentTab": {
+                    "tabProperties": {
+                        "tabId": "new-tab-id",
+                        "title": "Methods",
+                        "index": 1,
+                        "nestingLevel": 0,
                     }
                 }
             }
@@ -511,7 +509,7 @@ def test_add_document_tab_returns_normalized(client_obj):
 
     req = client_obj._docs_service.documents.return_value.batchUpdate.call_args.kwargs
     assert req["documentId"] == "doc1"
-    assert req["body"]["requests"][0]["createTab"]["tabProperties"]["title"] == "Methods"
+    assert req["body"]["requests"][0]["addDocumentTab"]["tabProperties"]["title"] == "Methods"
     assert result["kind"] == "google_docs_tab/v1"
     assert result["tab_id"] == "new-tab-id"
     assert result["title"] == "Methods"
