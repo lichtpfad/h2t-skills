@@ -87,10 +87,16 @@ The current open work is feature/product backlog, not migration/closure.
 
 | Priority | Issue(s) | Workstream | Notes |
 | --- | --- | --- | --- |
-| P1 | #169, #172, #181, #182 | Provider capability gaps | Highest-value missing operations after connector closure |
-| P2 | #173, #174, #176, #177, #179, #180 | Provider capability follow-up | Useful parity/features, not closure blockers |
-| P2 | #99, #105 | Research workflow follow-up | Research helper backlog after fetch ladder baseline |
+| P1 | #169, #172, #181 | Provider capability gaps | Highest-value missing public operations after connector closure |
+| P2 | #170, #173, #174, #176, #177, #179, #180 | Provider capability follow-up | Useful parity/features, not closure blockers; `#176` should be read as RSVP/move follow-up because all-day + reminders already shipped |
+| P2 | #99, #105, #182 | Research workflow follow-up | Research helper/provider backlog after fetch ladder baseline |
+| P2 | #183 | Deploy/operator workflow backlog | New `h2t-ops deploy` surface; not a connector-closure task |
 | P3 | #101, #70, #71, #72 | Research product backlog | Broader research system evolution, not connector closure |
+
+All post-closure backlog issues are currently unmilestoned. Existing repo
+milestones (`M1`-`M7`) are migration-era buckets and no longer describe the
+current maintenance backlog cleanly, so priority labels are the source of truth
+until a new milestone set is created.
 
 ## Critical Path Details
 
@@ -306,7 +312,8 @@ Recommended triage:
 | Calendar follow-up | #82, #145 | Closed; #82 fixed in `6631f57`, #145 fixed in `0acb44b` |
 | Notion follow-up | #146, #81 | Closed; fixed in `4c952d1` |
 | Research backlog | #99, #101, #105, #182, #72, #71, #70 | Keep as research/product backlog; #98 is closed as shared fetch-ladder baseline, `visual-ocr` rescue landed in PR #171, and the heavier generic recovery rung remains deferred until the failing source corpus grows beyond AllTD |
-| Provider backlog | #169, #172, #173, #174, #176, #177, #179, #180, #181 | Keep as explicit post-closure provider feature/bug backlog; these are capability gaps, not migration blockers |
+| Provider backlog | #169, #170, #172, #173, #174, #176, #177, #179, #180, #181 | Keep as explicit post-closure provider feature/bug backlog; these are capability gaps, not migration blockers. Treat `#172` as "thread list/get + expose reply-in-thread on send" because internal thread support already exists, and treat `#176` as "RSVP + move-between-calendars" because all-day + reminders already ship today |
+| Deploy/operator backlog | #183 | Keep separate from connector closure; this is a new operator workflow surface, not unfinished provider migration |
 | Creative backlog | #119, #83, #88, #89, #90, #91, #92 | Move to creative roadmap; not h2t-ops closure |
 | Cross-platform / machine config | #79, #73 | Keep as h2t-core/platform backlog |
 | Old graph/session items | #54, #53, #21, #5 | Reclassify, move, or close if superseded |
