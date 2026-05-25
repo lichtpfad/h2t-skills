@@ -226,8 +226,10 @@ class DriveClient:
                     supportsAllDrives=True,
                 ).execute()
                 return meta["id"], meta.get("name", folder_name), False
-            except Exception:
-                pass
+            except Exception as e:
+                mapped = _map_http_error(e, op=f"resolve folder id {folder_name}")
+                if not isinstance(mapped, NotFoundError):
+                    raise mapped from e
             # files().get() fails for Shared Drive roots — try drives().get()
             try:
                 drive_meta = self.service.drives().get(
@@ -235,8 +237,11 @@ class DriveClient:
                     fields="id,name",
                 ).execute()
                 return drive_meta["id"], drive_meta.get("name", folder_name), True
-            except Exception:
-                raise NotFoundError(f"folder not found: {folder_name}")
+            except Exception as e:
+                mapped = _map_http_error(e, op=f"resolve shared drive id {folder_name}")
+                if isinstance(mapped, NotFoundError):
+                    raise NotFoundError(f"folder not found: {folder_name}") from e
+                raise mapped from e
         safe = _escape_query_value(folder_name)
         resp = self.service.files().list(
             q=(
