@@ -109,6 +109,7 @@ class _FakeService:
     def __init__(self, **resp): self._r = resp
     def users(self): return self
     def messages(self): return self
+    def threads(self): return self
     def labels(self): return self
     def list(self, **k): return _Exec(self._r.get("list", {}))
     def get(self, **k): return _Exec(self._r.get("get", {}))
@@ -149,6 +150,52 @@ def test_get_message_404_maps_notfound(monkeypatch):
     monkeypatch.setattr(gmod, "HttpError", _HttpErr)
     with pytest.raises(NotFoundError):
         c.get_message("missing")
+
+
+def test_get_thread_returns_parsed_messages():
+    payload = {
+        "id": "thr1",
+        "messages": [
+            {
+                "id": "m1",
+                "threadId": "thr1",
+                "labelIds": [],
+                "snippet": "hello",
+                "payload": {
+                    "headers": [
+                        {"name": "From", "value": "a@example.com"},
+                        {"name": "To", "value": "b@example.com"},
+                        {"name": "Subject", "value": "Subject"},
+                        {"name": "Date", "value": "Tue"},
+                    ],
+                    "body": {"data": "Qm9keQ=="},
+                },
+            }
+        ],
+    }
+
+    class _Svc(_FakeService):
+        def get(self, **kwargs):
+            return _Exec(payload)
+
+    c, _ = _client_with(_Svc())
+    out = c.get_thread("thr1")
+    assert out["id"] == "thr1"
+    assert out["messages"][0]["id"] == "m1"
+    assert out["messages"][0]["body"] == "Body"
+
+
+def test_list_threads_returns_thread_summaries():
+    class _Svc(_FakeService):
+        def list(self, **kwargs):
+            return _Exec({"threads": [{"id": "thr1"}]})
+
+        def get(self, **kwargs):
+            return _Exec({"id": "thr1", "messages": []})
+
+    c, _ = _client_with(_Svc())
+    out = c.list_threads(max_results=5, query="label:inbox")
+    assert out == [{"id": "thr1", "messages": []}]
 
 
 @pytest.mark.parametrize("status,exc_name", [
@@ -207,6 +254,26 @@ def test_draft_with_thread_and_reply_header():
     import base64
     raw = base64.urlsafe_b64decode(created["message"]["raw"]).decode()
     assert "In-Reply-To: <mid@x>" in raw and "References: <mid@x>" in raw
+
+
+def test_send_with_thread_id_uses_public_send_body():
+    sent = {}
+
+    class _Svc(_FakeService):
+        def send(self, userId, body):
+            sent.update(body)
+            return _Exec({"id": "m2"})
+
+        def messages(self):
+            return self
+
+        def users(self):
+            return self
+
+    c, _ = _client_with(_Svc())
+    out = c.send_message(to="a@b.com", subject="S", body="B", thread_id="T2")
+    assert out["id"] == "m2"
+    assert sent["threadId"] == "T2"
 
 
 def test_attachment_not_found_raises_usageerror():
