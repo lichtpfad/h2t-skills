@@ -272,6 +272,11 @@ def _normalize_script_output(
     stderr = (completed.stderr or "").strip()
 
     if completed.returncode != 0:
+        parsed_stdout = _try_parse_json_object(stdout)
+        if isinstance(parsed_stdout, Mapping) and parsed_stdout.get("ok") is False:
+            error = parsed_stdout.get("error")
+            raise _error_from_script_response(script_path, parsed_stdout, error)
+
         details = {"script": str(script_path), "returncode": completed.returncode}
         if stderr:
             details["stderr"] = stderr
@@ -288,13 +293,12 @@ def _normalize_script_output(
             details={"script": str(script_path)},
         )
 
-    try:
-        parsed = json.loads(stdout)
-    except json.JSONDecodeError as exc:
+    parsed = _try_parse_json_object(stdout)
+    if parsed is None:
         raise ProviderError(
             "Deploy script returned invalid JSON",
             details={"script": str(script_path), "stdout": stdout},
-        ) from exc
+        )
 
     if not isinstance(parsed, Mapping):
         raise ProviderError(
@@ -318,6 +322,13 @@ def _normalize_script_output(
         )
 
     normalized_result = dict(result)
+    for field in ("service", "target", "status"):
+        value = normalized_result.get(field)
+        if not isinstance(value, str) or not value.strip():
+            raise ProviderError(
+                f"Deploy script result missing required field: {field}",
+                details={"script": str(script_path), "response": dict(parsed)},
+            )
     if action == "status":
         status = normalized_result.get("status")
         if status not in _STATUS_VALUES:
@@ -353,3 +364,12 @@ def _error_from_script_response(
             hint = error["hint"]
 
     return exc_type(message, hint=hint, details=details)
+
+
+def _try_parse_json_object(stdout: str) -> Any | None:
+    if not stdout:
+        return None
+    try:
+        return json.loads(stdout)
+    except json.JSONDecodeError:
+        return None
