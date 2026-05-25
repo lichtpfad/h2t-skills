@@ -120,6 +120,18 @@ def register(subparsers: Any) -> None:
     add_calendar_id(up)
     add_fmt(up)
 
+    rsvp = cmds.add_parser("rsvp", help="Respond to an invited event")
+    rsvp.add_argument("event_id")
+    rsvp.add_argument("--status", required=True, choices=["accepted", "declined", "tentative"])
+    add_calendar_id(rsvp)
+    add_fmt(rsvp)
+
+    move = cmds.add_parser("move", help="Move an event between calendars")
+    move.add_argument("event_id")
+    move.add_argument("--to", dest="destination_calendar_id", required=True)
+    add_calendar_id(move)
+    add_fmt(move)
+
     dp = cmds.add_parser("delete", help="Delete an event by id")
     dp.add_argument("event_id")
     dp.add_argument("--confirm", action="store_true",
@@ -225,6 +237,21 @@ def run(args) -> Any:
             )
         except ValueError as exc:
             raise UsageError(f"calendar update: {exc}") from exc
+    if cmd == "rsvp":
+        try:
+            return client.rsvp_event(
+                args.event_id,
+                args.status,
+                calendar_id=args.calendar_id,
+            )
+        except ValueError as exc:
+            raise UsageError(f"calendar rsvp: {exc}") from exc
+    if cmd == "move":
+        return client.move_event(
+            args.event_id,
+            calendar_id=args.calendar_id,
+            destination_calendar_id=args.destination_calendar_id,
+        )
     if cmd == "delete":
         client.delete_event(args.event_id, calendar_id=args.calendar_id)
         return {"deleted": args.event_id, "calendar_id": args.calendar_id}

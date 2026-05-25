@@ -11,7 +11,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from h2t_ops.core.errors import (
-    AuthError, ConfigError, NetworkError, NotFoundError, ProviderError,
+    AuthError, ConfigError, NetworkError, NotFoundError, ProviderError, UsageError,
 )
 
 
@@ -347,6 +347,74 @@ def test_patch_event_clear_reminders_and_omits_arrays_without_replace(client_obj
     client_obj.patch_event("evt", clear_reminders=True)
     body = client_obj.service.events.return_value.patch.call_args.kwargs["body"]
     assert body["reminders"] == {"useDefault": False, "overrides": []}
+
+
+def test_rsvp_event_updates_self_attendee(client_obj):
+    client_obj.service.events.return_value.get.return_value.execute.return_value = {
+        "id": "evt",
+        "summary": "Invite",
+        "start": {"dateTime": "2026-05-25T14:00:00+03:00"},
+        "end": {"dateTime": "2026-05-25T15:00:00+03:00"},
+        "attendees": [
+            {"email": "other@example.com", "responseStatus": "accepted"},
+            {"email": "me@example.com", "self": True, "responseStatus": "needsAction"},
+        ],
+    }
+    client_obj.service.events.return_value.patch.return_value.execute.return_value = {
+        "id": "evt",
+        "summary": "Invite",
+        "start": {"dateTime": "2026-05-25T14:00:00+03:00"},
+        "end": {"dateTime": "2026-05-25T15:00:00+03:00"},
+        "attendees": [
+            {"email": "other@example.com", "responseStatus": "accepted"},
+            {"email": "me@example.com", "self": True, "responseStatus": "accepted"},
+        ],
+    }
+
+    result = client_obj.rsvp_event("evt", "accepted", calendar_id="team@example.com")
+
+    kwargs = client_obj.service.events.return_value.patch.call_args.kwargs
+    assert kwargs["calendarId"] == "team@example.com"
+    assert kwargs["eventId"] == "evt"
+    assert kwargs["sendUpdates"] == "all"
+    assert kwargs["body"]["attendees"][1]["responseStatus"] == "accepted"
+    assert result["attendees"][1]["responseStatus"] == "accepted"
+
+
+def test_rsvp_event_requires_self_attendee(client_obj):
+    client_obj.service.events.return_value.get.return_value.execute.return_value = {
+        "id": "evt",
+        "summary": "Invite",
+        "start": {"dateTime": "2026-05-25T14:00:00+03:00"},
+        "end": {"dateTime": "2026-05-25T15:00:00+03:00"},
+        "attendees": [{"email": "other@example.com", "responseStatus": "accepted"}],
+    }
+
+    with pytest.raises(UsageError):
+        client_obj.rsvp_event("evt", "accepted")
+
+
+def test_move_event_uses_destination_calendar(client_obj):
+    client_obj.service.events.return_value.move.return_value.execute.return_value = {
+        "id": "evt",
+        "summary": "Moved",
+        "start": {"dateTime": "2026-05-25T14:00:00+03:00"},
+        "end": {"dateTime": "2026-05-25T15:00:00+03:00"},
+    }
+
+    result = client_obj.move_event(
+        "evt",
+        calendar_id="source@example.com",
+        destination_calendar_id="dest@example.com",
+    )
+
+    kwargs = client_obj.service.events.return_value.move.call_args.kwargs
+    assert kwargs == {
+        "calendarId": "source@example.com",
+        "eventId": "evt",
+        "destination": "dest@example.com",
+    }
+    assert result["calendar_id"] == "dest@example.com"
 
 
 def test_delete_accepts_calendar_id(client_obj):
