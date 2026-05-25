@@ -558,3 +558,94 @@ def test_search_with_retry_no_retry_flag_disables_retries(monkeypatch):
     assert env["status"] == "DEGRADED"
     assert exit_code == 0
     assert len(env["telemetry"]["attempts"]) == 1
+
+
+# ── find_similar ────────────────────────────────────────────────────────────
+
+def test_find_similar_ok(monkeypatch):
+    _patch_no_sleep(monkeypatch)
+    response_body = {
+        "results": [
+            {"url": "https://example.com/a", "title": "Similar A"},
+            {"url": "https://example.com/b", "title": "Similar B"},
+        ],
+        "costDollars": {"total": 0.005},
+    }
+    monkeypatch.setattr(
+        exa,
+        "call_exa",
+        lambda endpoint, body, api_key, **kw: (200, response_body, 80),
+    )
+
+    envelope, exit_code = exa.find_similar(
+        "https://derivative.ca", api_key="test-key", num_results=5
+    )
+
+    assert exit_code == 0
+    assert envelope["status"] == "OK"
+    assert len(envelope["results"]) == 2
+    assert envelope["meta"]["source_url"] == "https://derivative.ca"
+    assert envelope["telemetry"]["total_cost_usd"] == pytest.approx(0.005)
+
+
+def test_find_similar_empty_results(monkeypatch):
+    _patch_no_sleep(monkeypatch)
+    monkeypatch.setattr(
+        exa,
+        "call_exa",
+        lambda endpoint, body, api_key, **kw: (200, {"results": [], "costDollars": {"total": 0.0}}, 60),
+    )
+
+    envelope, exit_code = exa.find_similar("https://example.com", api_key="k")
+
+    assert exit_code == 0
+    assert envelope["status"] == "DEGRADED"
+    assert envelope["results"] == []
+
+
+def test_find_similar_auth_error(monkeypatch):
+    def _raise(*a, **kw):
+        raise exa.ExaPermanentError("http 401", http_status=401, latency_ms=10)
+
+    monkeypatch.setattr(exa, "call_exa", _raise)
+
+    envelope, exit_code = exa.find_similar("https://example.com", api_key="bad")
+
+    assert exit_code == 4
+    assert envelope["status"] == "FAILED"
+
+
+# ── answer ──────────────────────────────────────────────────────────────────
+
+def test_answer_ok(monkeypatch):
+    response_body = {
+        "answer": "TouchDesigner supports GPU-based particle systems via POP networks.",
+        "citations": [
+            {"url": "https://derivative.ca/doc", "title": "TD Docs"},
+        ],
+    }
+    monkeypatch.setattr(
+        exa,
+        "call_exa",
+        lambda endpoint, body, api_key, **kw: (200, response_body, 120),
+    )
+
+    envelope, exit_code = exa.answer("TouchDesigner POP basics", api_key="k")
+
+    assert exit_code == 0
+    assert envelope["status"] == "OK"
+    assert "TouchDesigner" in envelope["answer_text"]
+    assert len(envelope["citations"]) == 1
+    assert envelope["meta"]["query"] == "TouchDesigner POP basics"
+
+
+def test_answer_auth_error(monkeypatch):
+    def _raise(*a, **kw):
+        raise exa.ExaPermanentError("http 403", http_status=403, latency_ms=10)
+
+    monkeypatch.setattr(exa, "call_exa", _raise)
+
+    envelope, exit_code = exa.answer("anything", api_key="bad")
+
+    assert exit_code == 4
+    assert envelope["status"] == "FAILED"
