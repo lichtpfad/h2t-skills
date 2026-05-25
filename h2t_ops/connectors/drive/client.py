@@ -509,6 +509,38 @@ class DriveClient:
         except Exception as e:
             raise _map_http_error(e, op="list folders") from e
 
+    def create_folder(
+        self,
+        name: str,
+        *,
+        parent: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        if not name or not name.strip():
+            raise UsageError("drive create-folder: name is required")
+        try:
+            parent_id = None
+            parent_name = "root"
+            if parent:
+                parent_id, parent_name, _ = self._resolve_folder_id(parent)
+            body: Dict[str, Any] = {"name": name.strip(), "mimeType": FOLDER_MIME}
+            if parent_id:
+                body["parents"] = [parent_id]
+            res = self.service.files().create(
+                body=body,
+                fields="id, name, mimeType, parents, webViewLink",
+                supportsAllDrives=True,
+            ).execute()
+            return {
+                "file_id": res.get("id", ""),
+                "name": res.get("name", name.strip()),
+                "mimeType": res.get("mimeType", FOLDER_MIME),
+                "parents": res.get("parents", []),
+                "web_view_link": res.get("webViewLink", ""),
+                "parent_name": parent_name,
+            }
+        except Exception as e:
+            raise _map_http_error(e, op=f"create folder {name.strip()!r}") from e
+
     def download_file(self, file_id: str, dest: Optional[str | Path] = None) -> Dict[str, Any]:
         try:
             meta = self.service.files().get(

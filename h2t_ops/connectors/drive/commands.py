@@ -35,6 +35,11 @@ def register(subparsers: Any) -> None:
     fp.add_argument("--max", type=int, default=50)
     add_fmt(fp)
 
+    cfp = cmds.add_parser("create-folder", help="Create a folder under Drive root or a parent folder")
+    cfp.add_argument("name")
+    cfp.add_argument("--parent")
+    add_fmt(cfp)
+
     dp = cmds.add_parser("download", help="Download a Drive file by id")
     dp.add_argument("file_id")
     dp.add_argument("--dest")
@@ -138,6 +143,8 @@ def run(args) -> Any:
         ))
     if cmd == "folders":
         return _rows(client.list_folders(parent=args.parent, max_results=args.max))
+    if cmd == "create-folder":
+        return client.create_folder(args.name, parent=args.parent)
     if cmd == "download":
         return client.download_file(args.file_id, dest=args.dest)
     if cmd == "export":
