@@ -411,6 +411,35 @@ class ResearchClient:
             "artifact": artifact,
         }
 
+    def visual_ocr_auto(self, url: str, *, project: str = "default") -> dict[str, Any]:
+        """Auto-capture a screenshot of url, run OCR, and persist artifacts."""
+        from h2t_ops.connectors.research import visual_ocr
+
+        output_dir = self.output_dir
+        envelope, _exit_code = visual_ocr.capture_and_ocr(
+            url, output_dir=output_dir, project=project
+        )
+        captured_at = envelope.get("provenance", {}).get("captured_at", "")
+        telemetry = {
+            "calls": 1,
+            "providers": ["visual_ocr"],
+            "estimated_cost_usd": 0.0,
+            "cost_basis": "local_ocr",
+            "captured_at": captured_at,
+        }
+        artifact = self._write_visual_ocr_artifacts(
+            slug_source=url,
+            project=project,
+            ocr_envelope=envelope,
+            telemetry=telemetry,
+        )
+        safe_ocr_envelope = sanitize_details(envelope)
+        return {
+            "kind": "research_visual_ocr_envelope",
+            **safe_ocr_envelope,
+            "artifact": artifact,
+        }
+
     def preflight(self) -> dict[str, Any]:
         """Validate Exa credential resolution and provider connectivity."""
         from h2t_ops.connectors.research import exa

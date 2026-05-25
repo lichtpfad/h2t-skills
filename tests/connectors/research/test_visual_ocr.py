@@ -4,6 +4,7 @@ import json
 import sys
 from types import SimpleNamespace
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -226,3 +227,113 @@ def test_extract_text_from_image_engine_failure_raises_provider_error(tmp_path, 
         visual_ocr.extract_text_from_image(image)
 
     assert "failed while processing the image" in str(ei.value)
+
+
+def test_capture_and_ocr_ok(monkeypatch, tmp_path):
+    """capture_and_ocr calls h2t-screenshot, copies screenshot to stable path, runs OCR."""
+    import shutil as _shutil
+    import subprocess
+    from unittest.mock import patch as _patch
+
+    monkeypatch.setattr(_shutil, "which", lambda cmd: "/usr/bin/h2t-screenshot")
+
+    fake_image = tmp_path / "tmp_screenshot" / "test.png"
+    fake_image.parent.mkdir()
+    fake_image.write_bytes(
+        b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
+        b"\x08\x02\x00\x00\x00\x90wS\xde\x00\x00\x00\x0cIDATx\x9cc\xf8\x0f\x00"
+        b"\x00\x01\x01\x00\x05\x18\xd8N\x00\x00\x00\x00IEND\xaeB`\x82"
+    )
+
+    fake_stdout = f"→ https://example.com\n  ✓ desktop: {fake_image}\n"
+
+    fake_run_result = MagicMock()
+    fake_run_result.returncode = 0
+    fake_run_result.stdout = fake_stdout
+    fake_run_result.stderr = ""
+
+    output_dir = tmp_path / "artifacts"
+    with _patch("subprocess.run", return_value=fake_run_result):
+        with _patch.object(
+            visual_ocr,
+            "extract_text_from_image",
+            return_value=("Recovered text from page", ["Heading One"], "medium"),
+        ):
+            envelope, exit_code = visual_ocr.capture_and_ocr(
+                "https://example.com",
+                output_dir=output_dir,
+                project="test",
+            )
+
+    assert exit_code == 0
+    assert envelope["status"] == "OK"
+    assert envelope["provider_used"] == "visual_ocr"
+    assert "Recovered text" in envelope["body_text_visual_ocr"]
+    assert envelope["needs_review"] is True
+    assert envelope["quote_safe"] is False
+    # Stable image must exist in output_dir (not in a deleted temp dir)
+    stable_image = Path(envelope["provenance"]["image_path"])
+    assert stable_image.is_file(), "screenshot must be copied to output_dir, not left in tmp"
+    assert str(output_dir) in str(stable_image)
+
+
+def test_capture_and_ocr_rejects_file_url(tmp_path):
+    """UsageError for file:// URLs — SSRF guard."""
+    from h2t_ops.core.errors import UsageError
+    with pytest.raises(UsageError):
+        visual_ocr.capture_and_ocr(
+            "file:///etc/passwd", output_dir=tmp_path, project="test"
+        )
+
+
+def test_capture_and_ocr_rejects_localhost(tmp_path):
+    """UsageError for localhost URLs — SSRF guard."""
+    from h2t_ops.core.errors import UsageError
+    with pytest.raises(UsageError):
+        visual_ocr.capture_and_ocr(
+            "http://localhost:8080/admin", output_dir=tmp_path, project="test"
+        )
+
+
+def test_capture_and_ocr_rejects_private_ip(tmp_path):
+    """UsageError for private IP ranges — SSRF guard."""
+    from h2t_ops.core.errors import UsageError
+    with pytest.raises(UsageError):
+        visual_ocr.capture_and_ocr(
+            "http://192.168.1.1/", output_dir=tmp_path, project="test"
+        )
+
+
+def test_capture_and_ocr_screenshot_not_on_path(monkeypatch, tmp_path):
+    """ConfigError when h2t-screenshot is not installed."""
+    import shutil as _shutil
+    monkeypatch.setattr(_shutil, "which", lambda cmd: None)
+
+    from h2t_ops.core.errors import ConfigError
+    with pytest.raises(ConfigError) as ei:
+        visual_ocr.capture_and_ocr(
+            "https://example.com", output_dir=tmp_path, project="test"
+        )
+
+    assert "h2t-screenshot" in str(ei.value)
+
+
+def test_capture_and_ocr_screenshot_fails(monkeypatch, tmp_path):
+    """ProviderError when h2t-screenshot returns non-zero."""
+    import shutil as _shutil
+    import subprocess
+    from unittest.mock import patch as _patch
+
+    monkeypatch.setattr(_shutil, "which", lambda cmd: "/usr/bin/h2t-screenshot")
+
+    fake_result = MagicMock()
+    fake_result.returncode = 1
+    fake_result.stdout = ""
+    fake_result.stderr = "browser launch failed"
+
+    with _patch("subprocess.run", return_value=fake_result):
+        from h2t_ops.core.errors import ProviderError
+        with pytest.raises(ProviderError):
+            visual_ocr.capture_and_ocr(
+                "https://example.com", output_dir=tmp_path, project="test"
+            )
