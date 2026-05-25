@@ -305,7 +305,15 @@ class GmailClient:
         try:
             self.service.users().threads().delete(userId="me", id=thread_id).execute()
         except HttpError as e:
-            raise _map_http_error(e, op=f"delete thread {thread_id}") from e
+            mapped = _map_http_error(e, op=f"delete thread {thread_id}")
+            if getattr(mapped, "hint", None) is None and "insufficientPermissions" in str(e):
+                from h2t_ops.core.errors import AuthError
+                raise AuthError(
+                    str(mapped),
+                    hint="Permanent delete requires 'gmail' OAuth scope. "
+                         "Re-authorize with full scope: delete the token file and re-run.",
+                ) from e
+            raise mapped from e
         return {"thread_id": thread_id, "subject": actual, "deleted": True}
 
     # --- Helpers ---
