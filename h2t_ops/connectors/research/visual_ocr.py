@@ -284,5 +284,18 @@ def capture_and_ocr(
     envelope["provenance"]["capture_method"] = "auto_screenshot"
     envelope["provenance"]["capture_tool"] = "h2t-screenshot"
 
+    sidecar = {
+        "envelope": envelope,
+        "meta": {
+            "status": envelope["status"],
+            "url": url,
+            "captured_at": captured_at,
+        },
+    }
+    artifact_paths["sources_json"].write_text(
+        json.dumps(sidecar, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
     exit_code = 0 if envelope["status"] in ("OK", "DEGRADED") else 1
     return envelope, exit_code
