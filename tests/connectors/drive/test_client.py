@@ -199,9 +199,17 @@ def test_copy_file_without_folder_copies_in_place(client_obj):
     assert files.copy.call_args.kwargs["supportsAllDrives"] is True
 
 
-def test_copy_file_with_name_and_folder_sets_body(client_obj, monkeypatch):
+def test_copy_file_with_name_and_folder_sets_body(client_obj):
     files = client_obj.service.files.return_value
-    monkeypatch.setattr(client_obj, "_resolve_folder_id", lambda folder: ("folder1", "Target", False))
+    files.list.return_value.execute.return_value = {
+        "files": [
+            {
+                "id": "folder1",
+                "name": "Target",
+                "mimeType": "application/vnd.google-apps.folder",
+            },
+        ],
+    }
     files.copy.return_value.execute.return_value = {
         "id": "copy1",
         "name": "copy.txt",
@@ -213,6 +221,9 @@ def test_copy_file_with_name_and_folder_sets_body(client_obj, monkeypatch):
     result = client_obj.copy_file("file1", new_name=" copy.txt ", folder="Target")
 
     assert result["parents"] == ["folder1"]
+    assert files.list.call_args.kwargs["q"] == (
+        "name='Target' and mimeType='application/vnd.google-apps.folder' and trashed=false"
+    )
     assert files.copy.call_args.kwargs["body"] == {
         "name": "copy.txt",
         "parents": ["folder1"],

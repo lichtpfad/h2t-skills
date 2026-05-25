@@ -253,7 +253,7 @@ class DriveClient:
             raise NotFoundError(f"folder not found: {folder_name}")
         if len(folders) > 1:
             raise UsageError(f"ambiguous folder: {folder_name}")
-        return folders[0]["id"], folders[0].get("name", folder_name)
+        return folders[0]["id"], folders[0].get("name", folder_name), False
 
     def _find_child_by_name(
         self,
