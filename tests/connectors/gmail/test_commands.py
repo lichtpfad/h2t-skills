@@ -62,6 +62,9 @@ class _FakeClient:
     def get_thread(self, tid): return {"id": tid, "messages": [{"id": "m1", "subject": "S", "from": "f", "to": "t", "date": "d", "labelIds": [], "body": "B"}]}
     def download_attachment(self, message_id, attachment_id, output): return {"message_id": message_id, "attachment_id": attachment_id, "saved_path": output, "size": 5}
     def send_message(self, **k): return {"id": "m1"}
+    def trash_thread(self, thread_id, confirm_subject): return {"thread_id": thread_id, "subject": confirm_subject, "trashed": True}
+    def untrash_thread(self, thread_id): return {"thread_id": thread_id, "trashed": False}
+    def delete_thread(self, thread_id, confirm_subject): return {"thread_id": thread_id, "subject": confirm_subject, "deleted": True}
 
 
 def _ns(**kw): return types.SimpleNamespace(**kw)
@@ -199,3 +202,55 @@ def test_ingest_gmail_shim_format_plain_dropped_warns(monkeypatch, capsys):
                         lambda a: "OK")
     code = dispatch(["ingest", "gmail", "list", "--format", "plain"])
     assert "deprecat" in capsys.readouterr().err.lower() and code == 0
+
+
+def test_trash_dispatch(monkeypatch):
+    _patch(monkeypatch)
+    from h2t_ops.connectors.gmail import commands as cmds_mod
+    out = cmds_mod.run(_ns(gmail_cmd="trash", thread_id="thr1",
+                           confirm_subject="Weekly Sync", as_json=True, fmt="human"))
+    assert out == {"thread_id": "thr1", "subject": "Weekly Sync", "trashed": True}
+
+
+def test_untrash_dispatch(monkeypatch):
+    _patch(monkeypatch)
+    from h2t_ops.connectors.gmail import commands as cmds_mod
+    out = cmds_mod.run(_ns(gmail_cmd="untrash", thread_id="thr1", as_json=True, fmt="human"))
+    assert out == {"thread_id": "thr1", "trashed": False}
+
+
+def test_delete_without_confirm_permanent_raises(monkeypatch):
+    _patch(monkeypatch)
+    from h2t_ops.connectors.gmail import commands as cmds_mod
+    from h2t_ops.core.errors import UsageError
+    with pytest.raises(UsageError, match="--confirm-permanent"):
+        cmds_mod.run(_ns(gmail_cmd="delete", thread_id="thr1",
+                         confirm_subject="Smoke", confirm_permanent=False,
+                         as_json=True, fmt="human"))
+
+
+def test_delete_dispatch_with_both_flags(monkeypatch):
+    _patch(monkeypatch)
+    from h2t_ops.connectors.gmail import commands as cmds_mod
+    out = cmds_mod.run(_ns(gmail_cmd="delete", thread_id="thr1",
+                           confirm_subject="Smoke Test", confirm_permanent=True,
+                           as_json=True, fmt="human"))
+    assert out == {"thread_id": "thr1", "subject": "Smoke Test", "deleted": True}
+
+
+def test_trash_parser_requires_confirm_subject():
+    import argparse
+    from h2t_ops.connectors.gmail.commands import register
+    p = argparse.ArgumentParser()
+    register(p.add_subparsers(dest="c"))
+    with pytest.raises(SystemExit):
+        p.parse_args(["gmail", "trash", "thr1"])  # missing --confirm-subject
+
+
+def test_delete_parser_has_confirm_permanent_flag():
+    import argparse
+    from h2t_ops.connectors.gmail.commands import register
+    p = argparse.ArgumentParser()
+    register(p.add_subparsers(dest="c"))
+    ns = p.parse_args(["gmail", "delete", "thr1", "--confirm-subject", "S", "--confirm-permanent"])
+    assert ns.confirm_permanent is True

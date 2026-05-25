@@ -60,6 +60,23 @@ def register(subparsers: Any) -> None:
     lm.add_argument("message_id"); lm.add_argument("--add", nargs="+")
     lm.add_argument("--remove", nargs="+"); add_fmt(lm)
 
+    trp = cmds.add_parser("trash", help="Move a thread to Trash (recoverable)")
+    trp.add_argument("thread_id")
+    trp.add_argument("--confirm-subject", dest="confirm_subject", required=True,
+                     help="Exact thread subject — must match to proceed")
+    add_fmt(trp)
+
+    utp = cmds.add_parser("untrash", help="Restore a thread from Trash")
+    utp.add_argument("thread_id"); add_fmt(utp)
+
+    dlp = cmds.add_parser("delete", help="Permanently delete a thread (irreversible)")
+    dlp.add_argument("thread_id")
+    dlp.add_argument("--confirm-subject", dest="confirm_subject", required=True,
+                     help="Exact thread subject — must match to proceed")
+    dlp.add_argument("--confirm-permanent", dest="confirm_permanent", action="store_true",
+                     help="Required — explicitly acknowledges permanent deletion")
+    add_fmt(dlp)
+
     p.set_defaults(_handler=run)
 
 
@@ -141,4 +158,14 @@ def run(args) -> Any:
         if _fmt(args) == "json":
             return {"labelIds": label_ids}
         return f"✓ Labels modified. Current: {', '.join(label_ids)}"
+    if cmd == "trash":
+        return client.trash_thread(args.thread_id, args.confirm_subject)
+    if cmd == "untrash":
+        return client.untrash_thread(args.thread_id)
+    if cmd == "delete":
+        if not args.confirm_permanent:
+            raise UsageError(
+                "gmail delete: --confirm-permanent required for irreversible deletion"
+            )
+        return client.delete_thread(args.thread_id, args.confirm_subject)
     raise UsageError(f"unknown gmail subcommand: {cmd}")

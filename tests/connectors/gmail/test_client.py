@@ -331,6 +331,93 @@ def test_download_attachment_writes_bytes(tmp_path):
 # --- Task 7: google deps declared in pyproject.toml ---
 
 
+def _thread_payload(thread_id, subject):
+    return {
+        "id": thread_id,
+        "messages": [{
+            "id": "m1", "threadId": thread_id, "labelIds": [], "snippet": "",
+            "payload": {"headers": [
+                {"name": "Subject", "value": subject},
+                {"name": "From", "value": "a@x.com"},
+                {"name": "To", "value": "b@x.com"},
+                {"name": "Date", "value": "Mon"},
+            ], "body": {"data": ""}},
+        }],
+    }
+
+
+def test_trash_thread_validates_subject_match():
+    calls = []
+
+    class _Svc(_FakeService):
+        def get(self, **k): return _Exec(_thread_payload("thr1", "Weekly Sync"))
+        def trash(self, **k): calls.append(k); return _Exec({})
+
+    c, _ = _client_with(_Svc())
+    result = c.trash_thread("thr1", "Weekly Sync")
+    assert result == {"thread_id": "thr1", "subject": "Weekly Sync", "trashed": True}
+    assert calls[0]["id"] == "thr1"
+
+
+def test_trash_thread_subject_case_insensitive():
+    calls = []
+
+    class _Svc(_FakeService):
+        def get(self, **k): return _Exec(_thread_payload("thr1", "Weekly Sync"))
+        def trash(self, **k): calls.append(k); return _Exec({})
+
+    c, _ = _client_with(_Svc())
+    c.trash_thread("thr1", "  weekly sync  ")
+    assert calls
+
+
+def test_trash_thread_subject_mismatch_raises():
+    from h2t_ops.core.errors import UsageError
+
+    class _Svc(_FakeService):
+        def get(self, **k): return _Exec(_thread_payload("thr1", "Weekly Sync"))
+
+    c, _ = _client_with(_Svc())
+    with pytest.raises(UsageError, match="subject mismatch"):
+        c.trash_thread("thr1", "Wrong Subject")
+
+
+def test_untrash_thread_no_subject_check():
+    calls = []
+
+    class _Svc(_FakeService):
+        def untrash(self, **k): calls.append(k); return _Exec({})
+
+    c, _ = _client_with(_Svc())
+    result = c.untrash_thread("thr1")
+    assert result == {"thread_id": "thr1", "trashed": False}
+    assert calls[0]["id"] == "thr1"
+
+
+def test_delete_thread_validates_subject_and_deletes():
+    calls = []
+
+    class _Svc(_FakeService):
+        def get(self, **k): return _Exec(_thread_payload("thr1", "Smoke Test"))
+        def delete(self, **k): calls.append(k); return _Exec(None)
+
+    c, _ = _client_with(_Svc())
+    result = c.delete_thread("thr1", "Smoke Test")
+    assert result == {"thread_id": "thr1", "subject": "Smoke Test", "deleted": True}
+    assert calls[0]["id"] == "thr1"
+
+
+def test_delete_thread_subject_mismatch_raises():
+    from h2t_ops.core.errors import UsageError
+
+    class _Svc(_FakeService):
+        def get(self, **k): return _Exec(_thread_payload("thr1", "Smoke Test"))
+
+    c, _ = _client_with(_Svc())
+    with pytest.raises(UsageError, match="subject mismatch"):
+        c.delete_thread("thr1", "Wrong")
+
+
 def test_google_deps_declared_in_pyproject():
     import tomllib
     from pathlib import Path
