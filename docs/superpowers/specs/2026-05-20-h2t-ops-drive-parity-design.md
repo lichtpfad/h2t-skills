@@ -1,3 +1,10 @@
+---
+title: "h2t-ops Drive Parity Migration — Design"
+status: "draft"
+owner: "Stanislav Glazov"
+date: "2026-05-20"
+milestone: ""
+---
 # h2t-ops Drive Parity Migration — Design
 
 **Status:** Draft for review

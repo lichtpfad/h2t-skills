@@ -1,3 +1,9 @@
+---
+title: "h2t-ops Local Runtime Smoke (#139) Implementation Plan"
+status: "draft"
+date: "2026-05-19"
+milestone: ""
+---
 # h2t-ops Local Runtime Smoke (#139) Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. **Execution must happen in an isolated worktree branched off `main`** (created via superpowers:using-git-worktrees) — NOT in the `feat+131-gmail-connector` worktree (this is runtime/infra scope, independent of PR #140's connector code; mixing them re-pollutes #140).

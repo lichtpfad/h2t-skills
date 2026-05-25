@@ -1,3 +1,10 @@
+---
+title: "h2t-ops Connector Freeze + Mac Portability Gate — Design"
+status: "draft"
+owner: "Stanislav Glazov"
+date: "2026-05-21"
+milestone: ""
+---
 # h2t-ops Connector Freeze + Mac Portability Gate — Design
 
 Status: active execution

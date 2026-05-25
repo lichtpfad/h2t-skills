@@ -1,3 +1,10 @@
+---
+title: "MeetGeek Local Recording Recovery — Design"
+status: "draft"
+owner: "Stanislav Glazov"
+date: "2026-05-20"
+milestone: ""
+---
 # MeetGeek Local Recording Recovery — Design
 
 **Issue:** #149

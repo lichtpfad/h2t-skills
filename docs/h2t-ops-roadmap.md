@@ -87,8 +87,8 @@ The current open work is feature/product backlog, not migration/closure.
 
 | Priority | Issue(s) | Workstream | Notes |
 | --- | --- | --- | --- |
-| P2 | #99, #105, #182 | Research workflow follow-up | Research helper/provider backlog after fetch ladder baseline |
-| P2 | #183 | Deploy/operator workflow backlog | New `h2t-ops deploy` surface; not a connector-closure task |
+| P2 | #99, #105, #182 | Research workflow follow-up | Done — Research P2 implemented and smoke-verified 2026-05-26; see below |
+| P2 | #183 | Deploy/operator workflow backlog | Implemented and proofed on branch `codex-deploy-profile-driven`; pending PR/merge |
 | P3 | #101, #70, #71, #72 | Research product backlog | Broader research system evolution, not connector closure |
 
 All post-closure backlog issues are currently unmilestoned. Existing repo
@@ -111,6 +111,18 @@ Validation status:
 | #173 | Gmail attachment download | Live PASS |
 | #181 | Telegram send | Live PASS |
 | #176 | Calendar RSVP + move | Closed as implementation-complete; `move` live PASS, RSVP live proof deferred due to lack of a safe invite |
+
+### Research P2 Smoke Evidence (2026-05-26)
+
+Issues #182, #99, #105 closed. Commits: `00f5bff` (exa), `6f32959` (youtube), `52f1941` (fetch dispatch), `67986e0` (author_resolve), `5657d70` (visual-ocr --url), `bf1cd6b` (sidecar fix), `c773e3a` (encoding fix). 822 unit tests pass.
+
+| Command | Result | Notes |
+| --- | --- | --- |
+| `research similar --url https://derivative.ca` | OK | 9 results, 718ms, Exa findSimilar |
+| `research answer --query "TouchDesigner POP operators"` | OK | Full answer + citations, Exa /answer |
+| `research fetch --url https://youtube.com/watch?v=dQw4w9WgXcQ` | OK | `provider_used: youtube_transcript`, 61 segments, en |
+| `research visual-ocr --url https://alltd.org/pop-starter-pack-touchdesigner/` | OK | screenshot captured, OCR medium confidence; encoding fix c773e3a applied |
+| `research resolve-author --name "Acidbourbon" --keywords "TouchDesigner"` | OK | `confidence: likely`, found via alltd.org/uploader/acidbourbon/ |
 
 ## Critical Path Details
 
@@ -325,9 +337,9 @@ Recommended triage:
 | Secrets/setup | #107, #112, #94, #109, #110, #13 | Classified as setup/Mac follow-up; avoid piecemeal drift |
 | Calendar follow-up | #82, #145 | Closed; #82 fixed in `6631f57`, #145 fixed in `0acb44b` |
 | Notion follow-up | #146, #81 | Closed; fixed in `4c952d1` |
-| Research backlog | #99, #101, #105, #182, #72, #71, #70 | Keep as research/product backlog; #98 is closed as shared fetch-ladder baseline, `visual-ocr` rescue landed in PR #171, and the heavier generic recovery rung remains deferred until the failing source corpus grows beyond AllTD |
+| Research backlog | #99, #101, #105, #182, #72, #71, #70 | #99/#105/#182 closed 2026-05-26 (Research P2); #101, #72, #71, #70 remain as product backlog |
 | Provider backlog | none | Connector/provider closure sweep is complete. The former provider items #169, #170, #172, #173, #174, #176, #177, #179, #180, and #181 are now closed; `#176` closed as implementation-complete with deferred RSVP live proof |
-| Deploy/operator backlog | #183 | Keep separate from connector closure; this is a new operator workflow surface, not unfinished provider migration |
+| Deploy/operator backlog | #183 | Keep separate from connector closure; implementation + dry-run/status proof now exist on branch `codex-deploy-profile-driven`, pending merge |
 | Creative backlog | #119, #83, #88, #89, #90, #91, #92 | Move to creative roadmap; not h2t-ops closure |
 | Cross-platform / machine config | #79, #73 | Keep as h2t-core/platform backlog |
 | Old graph/session items | #54, #53, #21, #5 | Reclassify, move, or close if superseded |
@@ -343,7 +355,7 @@ Recommended triage:
 | Drive | `h2t-ops drive ...` | Done | `sync-meetings` retired from Drive in #147 |
 | MeetGeek | `h2t-ops meetgeek ...` | Done | #156 fixed; local recording recovery remains skill-layer (#149) |
 | Telegram | `h2t-ops telegram ...` | Done | Live auth verified; #121 closed |
-| Research | `h2t-ops research ...` | Done | URL fetch ladder integrated |
+| Research | `h2t-ops research ...` | Done | URL fetch ladder + YouTube provider + Exa similar/answer + author resolve + visual-ocr --url |
 
 ## Boundaries
 

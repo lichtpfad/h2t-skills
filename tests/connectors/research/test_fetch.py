@@ -945,3 +945,28 @@ def test_ladder_alltd_collapse_recovers_via_jina():
     assert attempts[0]["error"] == "fetch_redirect_collapsed"
     assert attempts[1]["provider"] == "jina"
     assert attempts[1]["error"] is None
+
+
+def test_fetch_via_ladder_routes_youtube(monkeypatch):
+    """YouTube URLs must bypass the HTTP ladder and use the YouTube provider."""
+    called_with = {}
+
+    def fake_fetch_youtube(url, *, output_dir, project, **kw):
+        called_with["url"] = url
+        called_with["project"] = project
+        return {"status": "OK", "provider_used": "youtube_transcript", "body_text": "transcript"}, 0
+
+    monkeypatch.setattr(fetch, "_fetch_youtube_provider", fake_fetch_youtube)
+
+    cfg = fetch.load_config(None)
+    envelope = fetch.fetch_via_ladder(
+        url="https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+        provider_choice="auto",
+        config=cfg,
+        user_agent="test",
+        keep_raw=False,
+        output_paths=None,
+    )
+
+    assert envelope["provider_used"] == "youtube_transcript"
+    assert called_with["url"] == "https://www.youtube.com/watch?v=dQw4w9WgXcQ"

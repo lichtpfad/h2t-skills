@@ -1,3 +1,10 @@
+---
+title: "Telegram Send Command Design"
+status: "draft"
+owner: "Stanislav Glazov"
+date: "2026-05-25"
+milestone: ""
+---
 # Telegram Send Command Design
 
 **Date:** 2026-05-25  

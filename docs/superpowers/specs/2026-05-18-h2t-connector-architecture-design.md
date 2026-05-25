@@ -1,3 +1,10 @@
+---
+title: "ТЗ-0: H2T Connector Architecture Standard + Core Foundation + Notion Walking Skeleton"
+status: "draft"
+owner: "Stanislav Glazov"
+date: "2026-05-18"
+milestone: ""
+---
 # ТЗ-0: H2T Connector Architecture Standard + Core Foundation + Notion Walking Skeleton
 
 **Status:** Draft

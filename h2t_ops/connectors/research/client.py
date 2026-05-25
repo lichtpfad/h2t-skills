@@ -411,6 +411,35 @@ class ResearchClient:
             "artifact": artifact,
         }
 
+    def visual_ocr_auto(self, url: str, *, project: str = "default") -> dict[str, Any]:
+        """Auto-capture a screenshot of url, run OCR, and persist artifacts."""
+        from h2t_ops.connectors.research import visual_ocr
+
+        output_dir = self.output_dir
+        envelope, _exit_code = visual_ocr.capture_and_ocr(
+            url, output_dir=output_dir, project=project
+        )
+        captured_at = envelope.get("provenance", {}).get("captured_at", "")
+        telemetry = {
+            "calls": 1,
+            "providers": ["visual_ocr"],
+            "estimated_cost_usd": 0.0,
+            "cost_basis": "local_ocr",
+            "captured_at": captured_at,
+        }
+        artifact = self._write_visual_ocr_artifacts(
+            slug_source=url,
+            project=project,
+            ocr_envelope=envelope,
+            telemetry=telemetry,
+        )
+        safe_ocr_envelope = sanitize_details(envelope)
+        return {
+            "kind": "research_visual_ocr_envelope",
+            **safe_ocr_envelope,
+            "artifact": artifact,
+        }
+
     def preflight(self) -> dict[str, Any]:
         """Validate Exa credential resolution and provider connectivity."""
         from h2t_ops.connectors.research import exa
@@ -821,6 +850,98 @@ class ResearchClient:
             **safe_provider_envelope,
             "artifact": artifact,
         }
+
+    def similar(
+        self,
+        url: str,
+        *,
+        num_results: int | None = None,
+        include_domains: list[str] | None = None,
+        exclude_domains: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """Find pages similar to a URL via Exa /findSimilar."""
+        from h2t_ops.connectors.research.exa import find_similar
+
+        url = validate_public_http_url(url)
+        api_key = resolve_secret("EXA_API_KEY")
+        provider_envelope, exit_code = find_similar(
+            url,
+            api_key=api_key,
+            num_results=num_results or 10,
+            include_domains=include_domains,
+            exclude_domains=exclude_domains,
+        )
+        telemetry = _artifact_telemetry(provider_envelope)
+        artifact = self._write_provider_artifacts(
+            kind="similar",
+            slug_source=url,
+            project="default",
+            provider_envelope=provider_envelope,
+            telemetry=telemetry,
+            ledger_provider="exa",
+            ledger_endpoint="/findSimilar",
+            ledger_mode="similar",
+        )
+
+        if provider_envelope.get("status") == "FAILED":
+            _raise_for_provider_failure(
+                "Exa findSimilar failed",
+                provider_envelope,
+                exit_code,
+            )
+
+        safe_provider_envelope = sanitize_details(provider_envelope)
+        return {
+            "kind": "research_provider_envelope",
+            **safe_provider_envelope,
+            "artifact": artifact,
+        }
+
+    def answer(self, query: str) -> dict[str, Any]:
+        """Get a direct LLM-grounded answer from Exa /answer."""
+        from h2t_ops.connectors.research.exa import answer as _answer
+
+        api_key = resolve_secret("EXA_API_KEY")
+        envelope, exit_code = _answer(query, api_key=api_key)
+        telemetry = _artifact_telemetry(envelope)
+        artifact = self._write_provider_artifacts(
+            kind="answer",
+            slug_source=query,
+            project="default",
+            provider_envelope=envelope,
+            telemetry=telemetry,
+            ledger_provider="exa",
+            ledger_endpoint="/answer",
+            ledger_mode="answer",
+        )
+
+        if envelope.get("status") == "FAILED":
+            _raise_for_provider_failure(
+                "Exa answer failed",
+                envelope,
+                exit_code,
+            )
+
+        safe_envelope = sanitize_details(envelope)
+        return {
+            "kind": "research_answer_envelope",
+            **safe_envelope,
+            "artifact": artifact,
+        }
+
+    def resolve_author(
+        self,
+        name: str,
+        *,
+        keywords: list[str] | None = None,
+        hint: str | None = None,
+    ) -> dict[str, Any]:
+        """Resolve an author name to a channel URL."""
+        from h2t_ops.connectors.research.author_resolve import resolve_author as _resolve
+
+        api_key = resolve_secret("EXA_API_KEY")
+        result = _resolve(name, api_key=api_key, keywords=keywords, hint=hint)
+        return sanitize_details(result)
 
 
 def _artifact_telemetry(provider_envelope: dict[str, Any]) -> dict[str, Any]:

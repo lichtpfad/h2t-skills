@@ -1,3 +1,9 @@
+---
+title: "h2t-ops Connector Freeze + Mac Portability Gate — Implementation Plan (#155)"
+status: "draft"
+date: "2026-05-21"
+milestone: ""
+---
 # h2t-ops Connector Freeze + Mac Portability Gate — Implementation Plan (#155)
 
 Date: 2026-05-21

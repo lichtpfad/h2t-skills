@@ -1,3 +1,10 @@
+---
+title: "h2t-ops Telegram Parity Migration - Design (#135)"
+status: "draft"
+owner: "Stanislav Glazov"
+date: "2026-05-21"
+milestone: ""
+---
 # h2t-ops Telegram Parity Migration - Design (#135)
 
 **Status:** Draft - review-ready  
