@@ -40,6 +40,12 @@ def register(subparsers: Any) -> None:
     cfp.add_argument("--parent")
     add_fmt(cfp)
 
+    dtp = cmds.add_parser("docs-tab", help="Inspect Google Docs tabs")
+    dtcmds = dtp.add_subparsers(dest="docs_tab_cmd", required=True)
+    dtl = dtcmds.add_parser("list", help="List tabs in a Google Doc")
+    dtl.add_argument("document_id")
+    add_fmt(dtl)
+
     dp = cmds.add_parser("download", help="Download a Drive file by id")
     dp.add_argument("file_id")
     dp.add_argument("--dest")
@@ -145,6 +151,10 @@ def run(args) -> Any:
         return _rows(client.list_folders(parent=args.parent, max_results=args.max))
     if cmd == "create-folder":
         return client.create_folder(args.name, parent=args.parent)
+    if cmd == "docs-tab":
+        if args.docs_tab_cmd == "list":
+            return client.list_document_tabs(args.document_id)
+        raise UsageError(f"unknown drive docs-tab subcommand: {args.docs_tab_cmd}")
     if cmd == "download":
         return client.download_file(args.file_id, dest=args.dest)
     if cmd == "export":

@@ -109,6 +109,13 @@ def _map_http_error(e: Exception, *, op: str):
     """Map provider/network errors to typed h2t_ops errors."""
     if isinstance(e, H2TError):
         return e
+    text = str(e)
+    lowered = text.lower()
+    if "service_disabled" in lowered and "docs.googleapis.com" in lowered:
+        return ConfigError(
+            "Google Docs API is disabled for the current Google project.",
+            hint="Enable docs.googleapis.com for the active project, then retry.",
+        )
     status = getattr(getattr(e, "resp", None), "status", None)
     status = status or getattr(e, "status_code", 0)
     try:
@@ -123,8 +130,7 @@ def _map_http_error(e: Exception, *, op: str):
         return ProviderError(f"Drive server error (HTTP {status}) during {op}: {e}")
     if isinstance(e, (TimeoutError, socket.timeout)):
         return NetworkError(f"Drive network error during {op}: {e}")
-    s = str(e).lower()
-    if "timeout" in s or "timed out" in s or "connection" in s or "network" in s:
+    if "timeout" in lowered or "timed out" in lowered or "connection" in lowered or "network" in lowered:
         return NetworkError(f"Drive network error during {op}: {e}")
     return ProviderError(f"Failed to {op}: {e}")
 
@@ -159,7 +165,14 @@ class DriveClient:
 
     def __init__(self) -> None:
         creds = resolve_google_credentials("drive", DRIVE_SCOPES)
+        self._creds = creds
         self.service = build_google_service("drive", "v3", creds)
+        self._docs_service = None
+
+    def _docs(self):
+        if self._docs_service is None:
+            self._docs_service = build_google_service("docs", "v1", self._creds)
+        return self._docs_service
 
     def _list_paginated(
         self,
@@ -540,6 +553,50 @@ class DriveClient:
             }
         except Exception as e:
             raise _map_http_error(e, op=f"create folder {name.strip()!r}") from e
+
+    def list_document_tabs(self, document_id: str) -> Dict[str, Any]:
+        try:
+            meta = self.service.files().get(
+                fileId=document_id,
+                fields="id, name, mimeType, webViewLink",
+                supportsAllDrives=True,
+            ).execute()
+            mime = meta.get("mimeType", "")
+            if mime != "application/vnd.google-apps.document":
+                raise UsageError(
+                    f"file {meta.get('name', document_id)!r} is not a Google Docs editor file"
+                )
+            doc = self._docs().documents().get(documentId=document_id).execute()
+        except Exception as e:
+            raise _map_http_error(e, op=f"list document tabs for {document_id}") from e
+
+        def _flatten(tabs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+            rows: List[Dict[str, Any]] = []
+            for tab in tabs or []:
+                props = tab.get("tabProperties", {}) or {}
+                children = tab.get("childTabs", []) or []
+                rows.append({
+                    "tab_id": props.get("tabId", ""),
+                    "title": props.get("title", ""),
+                    "parent_tab_id": props.get("parentTabId", ""),
+                    "index": props.get("index"),
+                    "nesting_level": props.get("nestingLevel"),
+                    "icon_emoji": props.get("iconEmoji", ""),
+                    "has_children": bool(children),
+                })
+                rows.extend(_flatten(children))
+            return rows
+
+        tabs = _flatten(doc.get("tabs", []) or [])
+        return {
+            "kind": "google_docs_tabs/v1",
+            "document_id": document_id,
+            "title": doc.get("title") or meta.get("name", ""),
+            "mimeType": meta.get("mimeType", ""),
+            "web_view_link": meta.get("webViewLink", ""),
+            "tabs": tabs,
+            "count": len(tabs),
+        }
 
     def download_file(self, file_id: str, dest: Optional[str | Path] = None) -> Dict[str, Any]:
         try:

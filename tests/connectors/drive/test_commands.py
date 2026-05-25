@@ -26,6 +26,7 @@ def test_register_creates_subparsers_for_drive_verbs():
         ("search", ["query"]),
         ("folders", []),
         ("create-folder", ["New Folder"]),
+        ("docs-tab", ["list", "doc1"]),
         ("download", ["file1"]),
         ("export", ["file1"]),
         ("upload", ["note.md", "--folder", "Target"]),
@@ -43,6 +44,7 @@ def test_each_verb_supports_json_and_format_flags():
         ("search", ["query"]),
         ("folders", []),
         ("create-folder", ["New Folder"]),
+        ("docs-tab", ["list", "doc1"]),
         ("download", ["file1"]),
         ("upload", ["note.md", "--folder", "Target"]),
         ("upload-folder", ["deploy", "--parent-id", "folder1"]),
@@ -68,13 +70,15 @@ def test_help_exits_zero():
     with pytest.raises(SystemExit) as ei:
         parser.parse_args(["drive", "--help"])
     assert ei.value.code == 0
-    for cmd in ("list", "search", "folders", "create-folder", "download", "export", "upload", "upload-folder"):
+    for cmd in ("list", "search", "folders", "create-folder", "docs-tab", "download", "export", "upload", "upload-folder"):
         with pytest.raises(SystemExit) as sub_ei:
             argv = ["drive", cmd, "--help"]
             if cmd == "search":
                 argv = ["drive", cmd, "query", "--help"]
             elif cmd == "create-folder":
                 argv = ["drive", cmd, "New Folder", "--help"]
+            elif cmd == "docs-tab":
+                argv = ["drive", cmd, "list", "doc1", "--help"]
             elif cmd == "download":
                 argv = ["drive", cmd, "file1", "--help"]
             elif cmd == "export":
@@ -154,6 +158,36 @@ def test_create_folder_returns_envelope(monkeypatch, capsys):
     assert rc == 0
     assert out["result"]["file_id"] == "folder1"
     assert out["result"]["parent_name"] == "root"
+
+
+def test_docs_tab_list_returns_envelope(monkeypatch, capsys):
+    import h2t_ops.connectors.drive.client as client_mod
+    from h2t_ops.connectors.drive import commands as cmds_mod
+    from h2t_ops.core.output import emit
+
+    class _Stub:
+        def list_document_tabs(self, document_id):
+            return {
+                "kind": "google_docs_tabs/v1",
+                "document_id": document_id,
+                "title": "Doc",
+                "tabs": [{"tab_id": "tab1", "title": "Intro"}],
+                "count": 1,
+            }
+
+    monkeypatch.setattr(client_mod, "DriveClient", lambda: _Stub())
+    args = SimpleNamespace(
+        drive_cmd="docs-tab",
+        docs_tab_cmd="list",
+        document_id="doc1",
+        as_json=True,
+        fmt="human",
+    )
+    rc = emit("drive", result=cmds_mod.run(args), fmt="json")
+    out = json.loads(capsys.readouterr().out)
+    assert rc == 0
+    assert out["result"]["document_id"] == "doc1"
+    assert out["result"]["count"] == 1
 
 
 def test_upload_returns_envelope_with_web_view_link(monkeypatch, capsys):
