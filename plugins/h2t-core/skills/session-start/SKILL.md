@@ -14,10 +14,14 @@ metadata:
 ## Setup
 
 ```bash
-GATHER="${CLAUDE_PLUGIN_ROOT}/skills/session-start/scripts/gather.py"
-ACTIVITY_LOG="${CLAUDE_PLUGIN_ROOT}/lib/activity/writer.py"
-source "${CLAUDE_PLUGIN_ROOT}/scripts/resolve-h2t-python.sh"
-resolve_h2t_python || { echo "ERROR: no working Python found for h2t"; exit 1; }
+command -v h2t-gather >/dev/null 2>&1 || {
+  echo "ERROR: h2t-gather not found. Run: uv tool install --editable C:/dev/h2t-skills"
+  exit 1
+}
+command -v h2t-activity-log >/dev/null 2>&1 || {
+  echo "ERROR: h2t-activity-log not found. Run: uv tool install --editable C:/dev/h2t-skills"
+  exit 1
+}
 ```
 
 ## Pipeline
@@ -41,7 +45,7 @@ If `BRIEFING:` is present in your system context:
 If `BRIEFING:` is NOT in your context, run:
 
 ```bash
-"${H2T_PYTHON_CMD[@]}" "$GATHER" --cwd "$(pwd)" --format-briefing
+h2t-gather --cwd "$(pwd)" --format-briefing
 ```
 
 Parse the full JSON output as GATHER_RESULT.
@@ -100,7 +104,7 @@ Wait for user input. Accept:
 Substitute literal values from GATHER_RESULT and run:
 
 ```bash
-"${H2T_PYTHON_CMD[@]}" "$ACTIVITY_LOG" start \
+h2t-activity-log start \
   --session-id "<SESSION_NAME>" \
   --domain "<DOMAIN>" \
   --project "<PROJECT_ID>"
