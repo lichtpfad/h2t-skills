@@ -484,6 +484,59 @@ def test_list_document_tabs_requires_google_doc_mime(client_obj):
         client_obj.list_document_tabs("file1")
 
 
+def test_add_document_tab_returns_normalized(client_obj):
+    client_obj.service.files.return_value.get.return_value.execute.return_value = {
+        "id": "doc1",
+        "name": "Doc",
+        "mimeType": "application/vnd.google-apps.document",
+    }
+    client_obj._docs_service.documents.return_value.batchUpdate.return_value.execute.return_value = {
+        "replies": [
+            {
+                "createTab": {
+                    "tab": {
+                        "tabProperties": {
+                            "tabId": "new-tab-id",
+                            "title": "Methods",
+                            "index": 1,
+                            "nestingLevel": 0,
+                        }
+                    }
+                }
+            }
+        ]
+    }
+
+    result = client_obj.add_document_tab("doc1", "Methods")
+
+    req = client_obj._docs_service.documents.return_value.batchUpdate.call_args.kwargs
+    assert req["documentId"] == "doc1"
+    assert req["body"]["requests"][0]["createTab"]["tabProperties"]["title"] == "Methods"
+    assert result["kind"] == "google_docs_tab/v1"
+    assert result["tab_id"] == "new-tab-id"
+    assert result["title"] == "Methods"
+    assert result["index"] == 1
+
+
+def test_add_document_tab_requires_google_doc_mime(client_obj):
+    client_obj.service.files.return_value.get.return_value.execute.return_value = {
+        "id": "file1",
+        "name": "Sheet",
+        "mimeType": "application/vnd.google-apps.spreadsheet",
+    }
+
+    with pytest.raises(UsageError):
+        client_obj.add_document_tab("file1", "New Tab")
+
+
+def test_add_document_tab_maps_sdk_exc(client_obj):
+    from h2t_ops.core.errors import ProviderError
+    client_obj.service.files.return_value.get.return_value.execute.side_effect = RuntimeError("boom")
+
+    with pytest.raises(ProviderError):
+        client_obj.add_document_tab("doc1", "New Tab")
+
+
 def test_download_default_dest_is_cwd_with_original_name(client_obj, tmp_path, monkeypatch):
     from h2t_ops.connectors.drive import client as dmod
 

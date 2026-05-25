@@ -701,6 +701,38 @@ class DriveClient:
             "count": len(tabs),
         }
 
+    def add_document_tab(self, document_id: str, title: str) -> Dict[str, Any]:
+        try:
+            meta = self.service.files().get(
+                fileId=document_id,
+                fields="id, name, mimeType",
+                supportsAllDrives=True,
+            ).execute()
+            if meta.get("mimeType") != "application/vnd.google-apps.document":
+                raise UsageError(
+                    f"file {meta.get('name', document_id)!r} is not a Google Docs editor file"
+                )
+            response = self._docs().documents().batchUpdate(
+                documentId=document_id,
+                body={"requests": [{"createTab": {"tabProperties": {"title": title}}}]},
+            ).execute()
+        except Exception as e:
+            raise _map_http_error(e, op=f"add tab to document {document_id}") from e
+        props = (
+            response.get("replies", [{}])[0]
+            .get("createTab", {})
+            .get("tab", {})
+            .get("tabProperties", {})
+        )
+        return {
+            "kind": "google_docs_tab/v1",
+            "document_id": document_id,
+            "tab_id": props.get("tabId", ""),
+            "title": props.get("title", title),
+            "index": props.get("index"),
+            "nesting_level": props.get("nestingLevel"),
+        }
+
     def download_file(self, file_id: str, dest: Optional[str | Path] = None) -> Dict[str, Any]:
         try:
             meta = self.service.files().get(

@@ -417,3 +417,35 @@ def test_client_imported_lazily_inside_run():
     src = Path("h2t_ops/connectors/drive/commands.py").read_text(encoding="utf-8")
     top_level = [ln for ln in src.splitlines() if ln and not ln.startswith((" ", "\t"))]
     assert not any("h2t_ops.connectors.drive.client" in ln for ln in top_level)
+
+
+def test_docs_tab_add_returns_envelope(monkeypatch, capsys):
+    import h2t_ops.connectors.drive.client as client_mod
+    from h2t_ops.connectors.drive import commands as cmds_mod
+    from h2t_ops.core.output import emit
+
+    class _Stub:
+        def add_document_tab(self, document_id, title):
+            return {
+                "kind": "google_docs_tab/v1",
+                "document_id": document_id,
+                "tab_id": "new-tab",
+                "title": title,
+                "index": 1,
+                "nesting_level": 0,
+            }
+
+    monkeypatch.setattr(client_mod, "DriveClient", lambda: _Stub())
+    args = SimpleNamespace(
+        drive_cmd="docs-tab",
+        docs_tab_cmd="add",
+        document_id="doc1",
+        title="Methods",
+        as_json=True,
+        fmt="human",
+    )
+    rc = emit("drive", result=cmds_mod.run(args), fmt="json")
+    out = json.loads(capsys.readouterr().out)
+    assert rc == 0
+    assert out["result"]["tab_id"] == "new-tab"
+    assert out["result"]["title"] == "Methods"
