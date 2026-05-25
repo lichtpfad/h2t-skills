@@ -1,3 +1,10 @@
+---
+title: "Design: h2t-ops drive share (#168)"
+status: "draft"
+owner: "Stanislav Glazov"
+date: "2026-05-24"
+milestone: ""
+---
 # Design: h2t-ops drive share (#168)
 
 **Date:** 2026-05-24

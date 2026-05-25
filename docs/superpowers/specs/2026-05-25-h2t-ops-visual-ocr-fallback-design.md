@@ -1,15 +1,10 @@
 ---
 title: "h2t-ops Visual OCR Fallback for Research Fetch Failures"
 status: "draft"
-owner: "lichtpfad"
+owner: "Stanislav Glazov"
 date: "2026-05-25"
-related:
-  - "lichtpfad/h2t-skills#105"
-  - "lichtpfad/h2t-skills#98"
-  - "docs/reports/2026-05-24-h2t-ops-generic-recovery-layer-research.md"
-  - "plugins/h2t-ops/skills/research/scripts/fetch_url.py"
+milestone: ""
 ---
-
 # h2t-ops Visual OCR Fallback for Research Fetch Failures
 
 ## Goal

@@ -1,16 +1,9 @@
 ---
 title: "h2t-ops Generic Recovery Layer Research Plan"
 status: "draft"
-owner: "lichtpfad"
 date: "2026-05-24"
-issue: "lichtpfad/h2t-skills#105"
-spec: "docs/superpowers/specs/2026-05-24-h2t-ops-generic-recovery-layer-research-design.md"
-related:
-  - "lichtpfad/h2t-skills#98"
-  - "lichtpfad/h2t-skills#99"
-  - "lichtpfad/h2t-skills#136"
+milestone: ""
 ---
-
 # h2t-ops Generic Recovery Layer Research Plan
 
 ## Objective

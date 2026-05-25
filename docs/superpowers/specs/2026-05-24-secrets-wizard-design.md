@@ -1,3 +1,10 @@
+---
+title: "Design: h2t-core:setup Secrets Wizard (#112)"
+status: "draft"
+owner: "Stanislav Glazov"
+date: "2026-05-24"
+milestone: ""
+---
 # Design: h2t-core:setup Secrets Wizard (#112)
 
 **Date:** 2026-05-24

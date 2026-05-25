@@ -2,6 +2,10 @@
 from __future__ import annotations
 
 import json
+import shutil
+import subprocess
+import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -204,3 +208,99 @@ def build_visual_ocr_artifact_paths(
         "artifact_json": output_dir / f"{base}.artifact.json",
         "raw_html": output_dir / f"{base}.raw.html",
     }
+
+
+def _parse_screenshot_path(stdout: str) -> str | None:
+    """Extract the desktop image path from h2t-screenshot stdout."""
+    for line in stdout.splitlines():
+        stripped = line.strip()
+        # Match "✓ desktop:" or mojibake equivalent on Windows (cp1252 decode of UTF-8)
+        if "✓ desktop:" in stripped or "desktop:" in stripped and stripped.endswith(".png"):
+            for marker in ("✓ desktop:", "desktop:"):
+                if marker in stripped:
+                    return stripped.split(marker, 1)[1].strip()
+    return None
+
+
+def capture_and_ocr(
+    url: str,
+    *,
+    output_dir: Path,
+    project: str,
+) -> tuple[dict, int]:
+    """Auto-capture a screenshot of url and run OCR. No sidecar required."""
+    from h2t_ops.connectors.research.client import validate_public_http_url
+    validate_public_http_url(url)  # SSRF guard: reject file://, localhost, private IPs, credentials
+
+    if not shutil.which("h2t-screenshot"):
+        raise ConfigError(
+            "h2t-screenshot not found on PATH",
+            hint="Install with: uv tool install --editable C:/dev/h2t-tools",
+        )
+
+    # Build stable artifact paths — screenshot persists here alongside other artifacts
+    artifact_paths = build_visual_ocr_artifact_paths(
+        output_dir=Path(output_dir),
+        project=project,
+        slug_source=url,
+    )
+    artifact_paths["sources_json"].parent.mkdir(parents=True, exist_ok=True)
+    stable_image = artifact_paths["sources_json"].with_suffix(".capture.png")
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        result = subprocess.run(
+            ["h2t-screenshot", url, "--format", "desktop", "--out", tmp_dir],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=60,
+        )
+        if result.returncode != 0:
+            raise ProviderError(
+                f"h2t-screenshot failed for {url}",
+                details={"returncode": result.returncode, "stderr": result.stderr[:300]},
+            )
+
+        image_path_str = _parse_screenshot_path(result.stdout)
+        if not image_path_str or not Path(image_path_str).is_file():
+            raise ProviderError(
+                "h2t-screenshot did not produce a desktop image file",
+                details={"stdout": result.stdout[:300]},
+            )
+
+        # Copy to stable location before TemporaryDirectory is deleted
+        shutil.copy2(image_path_str, stable_image)
+
+    # Temp dir deleted — use stable_image for OCR and provenance
+    extracted_text, visible_headings, confidence = extract_text_from_image(stable_image)
+    captured_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+    envelope = build_visual_ocr_envelope(
+        url=url,
+        source_fetch_status="unknown",
+        source_fetch_reason=None,
+        captured_at=captured_at,
+        image_path=str(stable_image),
+        extracted_text=extracted_text,
+        visible_headings=visible_headings,
+        ocr_confidence=confidence,
+    )
+    envelope["provenance"]["capture_method"] = "auto_screenshot"
+    envelope["provenance"]["capture_tool"] = "h2t-screenshot"
+
+    sidecar = {
+        "envelope": envelope,
+        "meta": {
+            "status": envelope["status"],
+            "url": url,
+            "captured_at": captured_at,
+        },
+    }
+    artifact_paths["sources_json"].write_text(
+        json.dumps(sidecar, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+    exit_code = 0 if envelope["status"] in ("OK", "DEGRADED") else 1
+    return envelope, exit_code

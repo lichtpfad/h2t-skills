@@ -814,6 +814,20 @@ def _attempt_record(provider: str, http: int | None, latency_ms: int,
             "latency_ms": latency_ms, "error": error}
 
 
+def _is_youtube_url(url: str) -> bool:
+    """Return True if url is a YouTube video URL."""
+    from urllib.parse import urlparse
+    parsed = urlparse(url)
+    hostname = (parsed.hostname or "").lower().lstrip("www.")
+    return hostname in ("youtube.com", "youtu.be")
+
+
+def _fetch_youtube_provider(url: str, *, output_dir: Any, project: str, **_kw: Any) -> tuple[dict[str, Any], int]:
+    """Lazy import wrapper — avoids circular imports."""
+    from h2t_ops.connectors.research.youtube import fetch_youtube
+    return fetch_youtube(url, output_dir=output_dir, project=project)
+
+
 def fetch_via_ladder(
     *,
     url: str,
@@ -829,6 +843,15 @@ def fetch_via_ladder(
         min_body_chars = int(config["ladder"]["min_body_chars"])
     per_timeout = int(config["ladder"]["per_provider_timeout_ms"])
     cum_timeout = int(config["ladder"]["cumulative_timeout_ms"])
+
+    # URL-type dispatch: route to specialized providers before the HTTP ladder
+    if _is_youtube_url(url):
+        envelope_dict, _exit = _fetch_youtube_provider(
+            url,
+            output_dir=output_paths and output_paths.get("artifact_json", Path(".")).parent,
+            project="default",
+        )
+        return envelope_dict
 
     order: list[str]
     if provider_choice == "auto":

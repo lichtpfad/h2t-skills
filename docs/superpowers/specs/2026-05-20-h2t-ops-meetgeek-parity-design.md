@@ -1,3 +1,10 @@
+---
+title: "h2t-ops MeetGeek Parity Migration — Design (#134)"
+status: "draft"
+owner: "Stanislav Glazov"
+date: "2026-05-20"
+milestone: ""
+---
 # h2t-ops MeetGeek Parity Migration — Design (#134)
 
 **Status:** Draft — review-ready  

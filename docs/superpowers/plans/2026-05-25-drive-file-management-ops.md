@@ -1,3 +1,9 @@
+---
+title: "Drive File Management Ops Implementation Plan"
+status: "draft"
+date: "2026-05-25"
+milestone: ""
+---
 # Drive File Management Ops Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.

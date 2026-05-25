@@ -1,3 +1,9 @@
+---
+title: "h2t-creative semantic renderer v0 — implementation plan"
+status: "draft"
+date: "2026-05-08"
+milestone: ""
+---
 # h2t-creative semantic renderer v0 — implementation plan
 
 **Date:** 2026-05-08

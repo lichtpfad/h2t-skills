@@ -1,3 +1,9 @@
+---
+title: "h2t-core:agent-profile implementation plan"
+status: "draft"
+date: "2026-05-21"
+milestone: ""
+---
 # h2t-core:agent-profile implementation plan
 
 Date: 2026-05-21

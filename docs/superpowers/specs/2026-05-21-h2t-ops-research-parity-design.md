@@ -1,19 +1,10 @@
 ---
 title: "h2t-ops Research Parity + Fetch Ladder Design"
 status: "draft"
-owner: "lichtpfad"
+owner: "Stanislav Glazov"
 date: "2026-05-21"
-issues:
-  - "lichtpfad/h2t-skills#136"
-  - "lichtpfad/h2t-skills#137"
-related:
-  - "docs/h2t-ops-roadmap.md"
-  - "plugins/h2t-ops/references/h2t-connector-runbook.md"
-  - "plugins/h2t-ops/references/pos-operational-boundary.md"
-  - "docs/superpowers/specs/2026-05-07-research-provider-envelope.md"
-  - "docs/superpowers/specs/2026-05-07-research-fetch-url-ladder.md"
+milestone: ""
 ---
-
 # h2t-ops Research Parity + Fetch Ladder Design
 
 ## Goal

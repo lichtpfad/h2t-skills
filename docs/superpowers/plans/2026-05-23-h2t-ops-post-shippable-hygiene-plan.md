@@ -1,3 +1,9 @@
+---
+title: "H2T-ops Post-Shareable Hygiene Runbook"
+status: "draft"
+date: "2026-05-23"
+milestone: ""
+---
 # H2T-ops Post-Shareable Hygiene Runbook
 
 **Date:** 2026-05-23  

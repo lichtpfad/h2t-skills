@@ -1,3 +1,9 @@
+---
+title: "h2t-ops drive share Implementation Plan (#168)"
+status: "draft"
+date: "2026-05-24"
+milestone: ""
+---
 # h2t-ops drive share Implementation Plan (#168)
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.

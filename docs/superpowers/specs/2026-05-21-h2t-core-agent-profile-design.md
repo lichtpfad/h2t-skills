@@ -1,3 +1,10 @@
+---
+title: "h2t-core:agent-profile design"
+status: "draft"
+owner: "Stanislav Glazov"
+date: "2026-05-21"
+milestone: ""
+---
 # h2t-core:agent-profile design
 
 Date: 2026-05-21
