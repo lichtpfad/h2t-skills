@@ -222,12 +222,16 @@ class DriveClient:
             try:
                 meta = self.service.files().get(
                     fileId=folder_name,
-                    fields="id,name",
+                    fields="id,name,mimeType",
                     supportsAllDrives=True,
                 ).execute()
+                if meta.get("mimeType") != FOLDER_MIME:
+                    raise UsageError(f"target is not a Drive folder: {folder_name}")
                 return meta["id"], meta.get("name", folder_name), False
-            except Exception:
-                pass
+            except Exception as e:
+                mapped = _map_http_error(e, op=f"resolve folder id {folder_name}")
+                if not isinstance(mapped, NotFoundError):
+                    raise mapped from e
             # files().get() fails for Shared Drive roots — try drives().get()
             try:
                 drive_meta = self.service.drives().get(
@@ -235,8 +239,10 @@ class DriveClient:
                     fields="id,name",
                 ).execute()
                 return drive_meta["id"], drive_meta.get("name", folder_name), True
-            except Exception:
-                raise NotFoundError(f"folder not found: {folder_name}")
+            except Exception as e:
+                mapped = _map_http_error(e, op=f"resolve shared drive id {folder_name}")
+                if not isinstance(mapped, NotFoundError):
+                    raise mapped from e
         safe = _escape_query_value(folder_name)
         resp = self.service.files().list(
             q=(
@@ -253,7 +259,7 @@ class DriveClient:
             raise NotFoundError(f"folder not found: {folder_name}")
         if len(folders) > 1:
             raise UsageError(f"ambiguous folder: {folder_name}")
-        return folders[0]["id"], folders[0].get("name", folder_name)
+        return folders[0]["id"], folders[0].get("name", folder_name), False
 
     def _find_child_by_name(
         self,
@@ -554,6 +560,103 @@ class DriveClient:
         except Exception as e:
             raise _map_http_error(e, op=f"create folder {name.strip()!r}") from e
 
+    def rename_file(self, file_id: str, new_name: str) -> Dict[str, Any]:
+        if not new_name or not new_name.strip():
+            raise UsageError("drive rename: new name is required")
+        clean_name = new_name.strip()
+        try:
+            res = self.service.files().update(
+                fileId=file_id,
+                body={"name": clean_name},
+                fields="id, name, mimeType, webViewLink, modifiedTime",
+                supportsAllDrives=True,
+            ).execute()
+            return {
+                "file_id": res.get("id", file_id),
+                "name": res.get("name", clean_name),
+                "mimeType": res.get("mimeType", ""),
+                "web_view_link": res.get("webViewLink", ""),
+                "modifiedTime": res.get("modifiedTime", ""),
+            }
+        except Exception as e:
+            raise _map_http_error(e, op=f"rename file {file_id}") from e
+
+    def copy_file(
+        self,
+        file_id: str,
+        *,
+        new_name: Optional[str] = None,
+        folder: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        try:
+            body: Dict[str, Any] = {}
+            if new_name and new_name.strip():
+                body["name"] = new_name.strip()
+            if folder:
+                folder_id, _, _ = self._resolve_folder_id(folder)
+                if folder_id:
+                    body["parents"] = [folder_id]
+                else:
+                    body["parents"] = ["root"]
+            res = self.service.files().copy(
+                fileId=file_id,
+                body=body,
+                fields="id, name, mimeType, parents, webViewLink",
+                supportsAllDrives=True,
+            ).execute()
+            return {
+                "file_id": res.get("id", ""),
+                "source_file_id": file_id,
+                "name": res.get("name", ""),
+                "mimeType": res.get("mimeType", ""),
+                "parents": res.get("parents", []),
+                "web_view_link": res.get("webViewLink", ""),
+            }
+        except Exception as e:
+            raise _map_http_error(e, op=f"copy file {file_id}") from e
+
+    def move_file(self, file_id: str, *, destination_folder_id: str) -> Dict[str, Any]:
+        destination = destination_folder_id.strip() if destination_folder_id else ""
+        if not destination:
+            raise UsageError("drive move: destination folder is required")
+        try:
+            folder_id, _, is_shared_drive = self._resolve_folder_id(destination)
+            add_parents = "root" if not folder_id else folder_id
+            if folder_id and not is_shared_drive:
+                folder_meta = self.service.files().get(
+                    fileId=folder_id,
+                    fields="id, name, mimeType",
+                    supportsAllDrives=True,
+                ).execute()
+                if folder_meta.get("mimeType") != FOLDER_MIME:
+                    raise UsageError(
+                        f"destination {folder_meta.get('name', folder_id)!r} is not a Drive folder"
+                    )
+
+            file_meta = self.service.files().get(
+                fileId=file_id,
+                fields="id, name, mimeType, parents",
+                supportsAllDrives=True,
+            ).execute()
+            remove_parents = ",".join(file_meta.get("parents", []) or [])
+
+            res = self.service.files().update(
+                fileId=file_id,
+                addParents=add_parents,
+                removeParents=remove_parents,
+                fields="id, name, mimeType, parents, webViewLink",
+                supportsAllDrives=True,
+            ).execute()
+            return {
+                "file_id": res.get("id", file_id),
+                "name": res.get("name", file_meta.get("name", "")),
+                "mimeType": res.get("mimeType", file_meta.get("mimeType", "")),
+                "parents": res.get("parents", []),
+                "web_view_link": res.get("webViewLink", ""),
+            }
+        except Exception as e:
+            raise _map_http_error(e, op=f"move file {file_id}") from e
+
     def list_document_tabs(self, document_id: str) -> Dict[str, Any]:
         try:
             meta = self.service.files().get(
@@ -566,7 +669,9 @@ class DriveClient:
                 raise UsageError(
                     f"file {meta.get('name', document_id)!r} is not a Google Docs editor file"
                 )
-            doc = self._docs().documents().get(documentId=document_id).execute()
+            doc = self._docs().documents().get(
+                documentId=document_id, includeTabsContent=True,
+            ).execute()
         except Exception as e:
             raise _map_http_error(e, op=f"list document tabs for {document_id}") from e
 
@@ -596,6 +701,37 @@ class DriveClient:
             "web_view_link": meta.get("webViewLink", ""),
             "tabs": tabs,
             "count": len(tabs),
+        }
+
+    def add_document_tab(self, document_id: str, title: str) -> Dict[str, Any]:
+        try:
+            meta = self.service.files().get(
+                fileId=document_id,
+                fields="id, name, mimeType",
+                supportsAllDrives=True,
+            ).execute()
+            if meta.get("mimeType") != "application/vnd.google-apps.document":
+                raise UsageError(
+                    f"file {meta.get('name', document_id)!r} is not a Google Docs editor file"
+                )
+            response = self._docs().documents().batchUpdate(
+                documentId=document_id,
+                body={"requests": [{"addDocumentTab": {"tabProperties": {"title": title}}}]},
+            ).execute()
+        except Exception as e:
+            raise _map_http_error(e, op=f"add tab to document {document_id}") from e
+        props = (
+            response.get("replies", [{}])[0]
+            .get("addDocumentTab", {})
+            .get("tabProperties", {})
+        )
+        return {
+            "kind": "google_docs_tab/v1",
+            "document_id": document_id,
+            "tab_id": props.get("tabId", ""),
+            "title": props.get("title", title),
+            "index": props.get("index"),
+            "nesting_level": props.get("nestingLevel"),
         }
 
     def download_file(self, file_id: str, dest: Optional[str | Path] = None) -> Dict[str, Any]:

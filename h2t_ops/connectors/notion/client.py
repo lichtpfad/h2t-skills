@@ -642,6 +642,47 @@ class NotionClient:
         except Exception as e:
             raise _map_sdk_exc(e, op=f"replace page content for {page_id}") from e
 
+    # --- Comments ---
+
+    def _rich_text_to_plain(self, rich_text: List[Dict[str, Any]]) -> str:
+        return "".join(item.get("text", {}).get("content", "") for item in rich_text)
+
+    def _normalize_comment(self, comment: Dict[str, Any]) -> Dict[str, Any]:
+        return {
+            "id": comment.get("id", ""),
+            "text": self._rich_text_to_plain(comment.get("rich_text", [])),
+            "created_time": comment.get("created_time", ""),
+            "created_by_id": comment.get("created_by", {}).get("id", ""),
+        }
+
+    def list_comments(self, page_id: str) -> List[Dict[str, Any]]:
+        results: List[Dict[str, Any]] = []
+        start_cursor = None
+        try:
+            while True:
+                kwargs: Dict[str, Any] = {"block_id": page_id, "page_size": 100}
+                if start_cursor:
+                    kwargs["start_cursor"] = start_cursor
+                response = self.client.comments.list(**kwargs)
+                for c in response.get("results", []):
+                    results.append(self._normalize_comment(c))
+                if not response.get("has_more"):
+                    break
+                start_cursor = response.get("next_cursor")
+        except Exception as e:
+            raise _map_sdk_exc(e, op=f"list comments for {page_id}") from e
+        return results
+
+    def create_comment(self, page_id: str, body: str) -> Dict[str, Any]:
+        try:
+            result = self.client.comments.create(
+                parent={"page_id": page_id},
+                rich_text=[{"type": "text", "text": {"content": body}}],
+            )
+        except Exception as e:
+            raise _map_sdk_exc(e, op=f"create comment on {page_id}") from e
+        return self._normalize_comment(result)
+
     # --- Conversion ---
 
     def blocks_to_markdown(self, blocks: List[Dict[str, Any]]) -> str:

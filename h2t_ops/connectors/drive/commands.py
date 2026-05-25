@@ -40,11 +40,31 @@ def register(subparsers: Any) -> None:
     cfp.add_argument("--parent")
     add_fmt(cfp)
 
+    rp = cmds.add_parser("rename", help="Rename a Drive file in place")
+    rp.add_argument("file_id")
+    rp.add_argument("new_name")
+    add_fmt(rp)
+
+    cp = cmds.add_parser("copy", help="Copy a Drive file")
+    cp.add_argument("file_id")
+    cp.add_argument("--name", dest="new_name")
+    cp.add_argument("--folder")
+    add_fmt(cp)
+
+    mp = cmds.add_parser("move", help="Move a Drive file to another folder")
+    mp.add_argument("file_id")
+    mp.add_argument("--to", dest="destination_folder_id", required=True)
+    add_fmt(mp)
+
     dtp = cmds.add_parser("docs-tab", help="Inspect Google Docs tabs")
     dtcmds = dtp.add_subparsers(dest="docs_tab_cmd", required=True)
     dtl = dtcmds.add_parser("list", help="List tabs in a Google Doc")
     dtl.add_argument("document_id")
     add_fmt(dtl)
+    dta = dtcmds.add_parser("add", help="Add a new tab to a Google Doc")
+    dta.add_argument("document_id")
+    dta.add_argument("title")
+    add_fmt(dta)
 
     dp = cmds.add_parser("download", help="Download a Drive file by id")
     dp.add_argument("file_id")
@@ -151,9 +171,24 @@ def run(args) -> Any:
         return _rows(client.list_folders(parent=args.parent, max_results=args.max))
     if cmd == "create-folder":
         return client.create_folder(args.name, parent=args.parent)
+    if cmd == "rename":
+        return client.rename_file(args.file_id, args.new_name)
+    if cmd == "copy":
+        return client.copy_file(
+            args.file_id,
+            new_name=args.new_name,
+            folder=args.folder,
+        )
+    if cmd == "move":
+        return client.move_file(
+            args.file_id,
+            destination_folder_id=args.destination_folder_id,
+        )
     if cmd == "docs-tab":
         if args.docs_tab_cmd == "list":
             return client.list_document_tabs(args.document_id)
+        if args.docs_tab_cmd == "add":
+            return client.add_document_tab(args.document_id, args.title)
         raise UsageError(f"unknown drive docs-tab subcommand: {args.docs_tab_cmd}")
     if cmd == "download":
         return client.download_file(args.file_id, dest=args.dest)
