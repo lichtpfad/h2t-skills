@@ -23,6 +23,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--version", action="version", version=f"h2t-ops {h2t_ops.__version__}")
     sub = p.add_subparsers(dest="connector")
     sub.add_parser("connectors", help="List available connectors")
+    sub.add_parser("deploy", help="Profile-driven deploy commands")
     sub.add_parser("doctor", help="Installed CLI health (version, path, connectors, secrets)")
     for spec in discover():
         spec.register(sub)
@@ -92,9 +93,17 @@ def _run_connector(argv: list[str]) -> int:
         return emit(provider, exc=exc, fmt=fmt)
 
 
+def _deploy_dispatch(argv: list[str]) -> int:
+    from h2t_ops.deploy.commands import dispatch as deploy_dispatch
+
+    return deploy_dispatch(argv)
+
+
 def dispatch(argv: list[str]) -> int:
     if argv and argv[0] == "dev":
         return _dev_main(argv[1:])
+    if argv and argv[0] == "deploy":
+        return _deploy_dispatch(argv[1:])
     if argv and argv[0] in ("--help", "-h"):
         build_parser().print_help()
         return 0
