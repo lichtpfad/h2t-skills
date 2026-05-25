@@ -17,6 +17,12 @@ from h2t_ops.core.errors import (
 DRIVE_SCOPE = "https://www.googleapis.com/auth/drive"
 
 
+class FakeHttpError(Exception):
+    def __init__(self, status: int, message: str = "error"):
+        super().__init__(message)
+        self.resp = SimpleNamespace(status=status)
+
+
 @pytest.fixture
 def client_obj():
     """Construct a DriveClient WITHOUT running __init__ (no network / SDK)."""
@@ -560,6 +566,31 @@ def test_upload_missing_folder_raises_notfounderror(client_obj):
     files.list.return_value.execute.return_value = {"files": []}
     with pytest.raises(NotFoundError):
         client_obj._resolve_folder_id("Missing")
+
+
+def test_resolve_folder_id_like_missing_raises_notfounderror(client_obj):
+    folder_id = "1AbCdEfGhIjKlMn0"
+    files = client_obj.service.files.return_value
+    drives = client_obj.service.drives.return_value
+    files.get.return_value.execute.side_effect = FakeHttpError(404, "missing file")
+    drives.get.return_value.execute.side_effect = FakeHttpError(404, "missing drive")
+
+    with pytest.raises(NotFoundError) as ei:
+        client_obj._resolve_folder_id(folder_id)
+
+    assert str(ei.value) == f"folder not found: {folder_id}"
+
+
+def test_resolve_folder_id_like_auth_error_is_preserved(client_obj):
+    folder_id = "1AbCdEfGhIjKlMn0"
+    files = client_obj.service.files.return_value
+    drives = client_obj.service.drives.return_value
+    files.get.return_value.execute.side_effect = FakeHttpError(403, "forbidden")
+
+    with pytest.raises(AuthError):
+        client_obj._resolve_folder_id(folder_id)
+
+    drives.get.assert_not_called()
 
 
 def test_http_401_maps_to_autherror():
