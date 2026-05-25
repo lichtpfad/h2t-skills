@@ -182,6 +182,32 @@ class GmailClient:
         except HttpError as e:
             raise _map_http_error(e, op="list labels") from e
 
+    def download_attachment(
+        self,
+        message_id: str,
+        attachment_id: str,
+        output_path: str | Path,
+    ) -> Dict[str, Any]:
+        try:
+            result = self.service.users().messages().attachments().get(
+                userId="me", messageId=message_id, id=attachment_id
+            ).execute()
+            data = result.get("data", "")
+            payload = self._decode_base64_data(data)
+            target = Path(output_path)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(payload)
+            return {
+                "message_id": message_id,
+                "attachment_id": attachment_id,
+                "saved_path": str(target),
+                "size": len(payload),
+            }
+        except HttpError as e:
+            raise _map_http_error(
+                e, op=f"download attachment {attachment_id} from {message_id}"
+            ) from e
+
     # --- Write ---
 
     def send_message(
@@ -258,23 +284,48 @@ class GmailClient:
             "subject": headers.get("Subject", ""),
             "date": headers.get("Date", ""),
             "body": self._get_message_body(message["payload"]),
+            "attachments": self._collect_attachments(message["payload"]),
         }
 
     def _get_message_body(self, payload: Dict[str, Any]) -> str:
         if "body" in payload and "data" in payload["body"]:
-            return base64.urlsafe_b64decode(payload["body"]["data"]).decode("utf-8")
+            return self._decode_base64_data(payload["body"]["data"]).decode("utf-8")
         if "parts" in payload:
             for part in payload["parts"]:
                 if part["mimeType"] == "text/plain" and "data" in part["body"]:
-                    return base64.urlsafe_b64decode(part["body"]["data"]).decode("utf-8")
+                    return self._decode_base64_data(part["body"]["data"]).decode("utf-8")
                 elif part["mimeType"] == "text/html" and "data" in part["body"]:
-                    html = base64.urlsafe_b64decode(part["body"]["data"]).decode("utf-8")
+                    html = self._decode_base64_data(part["body"]["data"]).decode("utf-8")
                     return self._html_to_text(html)
                 elif "parts" in part:
                     body = self._get_message_body(part)
                     if body:
                         return body
         return ""
+
+    def _collect_attachments(self, payload: Dict[str, Any]) -> List[Dict[str, Any]]:
+        rows: List[Dict[str, Any]] = []
+        for part in payload.get("parts", []) or []:
+            filename = part.get("filename", "") or ""
+            body = part.get("body", {}) or {}
+            attachment_id = body.get("attachmentId")
+            if filename and attachment_id:
+                rows.append({
+                    "attachmentId": attachment_id,
+                    "filename": filename,
+                    "mimeType": part.get("mimeType", ""),
+                    "size": body.get("size", 0),
+                })
+            if part.get("parts"):
+                rows.extend(self._collect_attachments(part))
+        return rows
+
+    @staticmethod
+    def _decode_base64_data(data: str) -> bytes:
+        if not data:
+            return b""
+        padding = "=" * (-len(data) % 4)
+        return base64.urlsafe_b64decode(data + padding)
 
     def _html_to_text(self, html: str) -> str:
         text = re.sub(r"<script[^>]*>.*?</script>", "", html, flags=re.DOTALL | re.IGNORECASE)
@@ -331,6 +382,16 @@ def format_message_detail(message: Dict[str, Any]) -> str:
         "\n---\n",
         message["body"],
     ]
+    attachments = message.get("attachments", [])
+    if attachments:
+        lines.extend([
+            "\n---\n",
+            "**Attachments:**",
+        ])
+        lines.extend([
+            f"- {row['filename']} (ID: `{row['attachmentId']}`)"
+            for row in attachments
+        ])
     return "\n".join(lines)
 
 

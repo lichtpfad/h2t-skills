@@ -32,6 +32,12 @@ def register(subparsers: Any) -> None:
     thp = cmds.add_parser("thread", help="Read a thread")
     thp.add_argument("thread_id"); add_fmt(thp)
 
+    ap = cmds.add_parser("attachment", help="Download a message attachment")
+    ap.add_argument("message_id")
+    ap.add_argument("attachment_id")
+    ap.add_argument("--output", required=True)
+    add_fmt(ap)
+
     sp = cmds.add_parser("search", help="Search messages")
     sp.add_argument("query"); sp.add_argument("--max", type=int, default=10); add_fmt(sp)
 
@@ -95,6 +101,11 @@ def run(args) -> Any:
     if cmd == "thread":
         row = client.get_thread(args.thread_id)
         return row if _fmt(args) == "json" else format_thread_detail(row)
+    if cmd == "attachment":
+        result = client.download_attachment(args.message_id, args.attachment_id, args.output)
+        if _fmt(args) == "json":
+            return result
+        return f"✓ Attachment saved to {result['saved_path']}"
     if cmd in ("send", "draft"):
         body = _read_file(args.file) if args.file else args.body
         if not body:

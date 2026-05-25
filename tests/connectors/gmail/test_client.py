@@ -134,6 +134,7 @@ def test_list_messages_happy():
     c, _ = _client_with(svc)
     out = c.list_messages(max_results=1)
     assert out[0]["id"] == "1" and out[0]["subject"] == "S"
+    assert out[0]["attachments"] == []
 
 
 def test_get_message_404_maps_notfound(monkeypatch):
@@ -282,6 +283,49 @@ def test_attachment_not_found_raises_usageerror():
     with pytest.raises(UsageError):
         c.send_message(to="a@b.com", subject="S", body="B",
                        attachments=["/no/such/file.bin"])
+
+
+def test_parse_message_collects_attachment_metadata():
+    svc = _FakeService(get={
+        "id": "1",
+        "threadId": "t",
+        "labelIds": [],
+        "snippet": "",
+        "payload": {
+            "headers": [{"name": "Subject", "value": "S"}],
+            "parts": [
+                {
+                    "mimeType": "application/pdf",
+                    "filename": "report.pdf",
+                    "body": {"attachmentId": "att1", "size": 123},
+                }
+            ],
+        },
+    })
+    c, _ = _client_with(svc)
+    out = c.get_message("1")
+    assert out["attachments"] == [{
+        "attachmentId": "att1",
+        "filename": "report.pdf",
+        "mimeType": "application/pdf",
+        "size": 123,
+    }]
+
+
+def test_download_attachment_writes_bytes(tmp_path):
+    class _AttSvc(_FakeService):
+        def attachments(self):
+            return self
+
+        def get(self, **kwargs):
+            return _Exec({"data": "aGVsbG8"})
+
+    c, _ = _client_with(_AttSvc())
+    target = tmp_path / "hello.bin"
+    out = c.download_attachment("m1", "att1", target)
+    assert out["saved_path"] == str(target)
+    assert target.read_bytes() == b"hello"
+    assert out["size"] == 5
 
 
 # --- Task 7: google deps declared in pyproject.toml ---
