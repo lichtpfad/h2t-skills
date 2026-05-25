@@ -23,6 +23,8 @@ def client_obj():
     from h2t_ops.connectors.drive.client import DriveClient
     c = object.__new__(DriveClient)
     c.service = MagicMock()
+    c._docs_service = MagicMock()
+    c._creds = "creds"
     return c
 
 
@@ -149,6 +151,64 @@ def test_create_folder_resolves_parent(client_obj, monkeypatch):
 
     assert result["parent_name"] == "Target"
     assert files.create.call_args.kwargs["body"]["parents"] == ["parent1"]
+
+
+def test_list_document_tabs_flattens_nested_tabs(client_obj):
+    files = client_obj.service.files.return_value
+    files.get.return_value.execute.return_value = {
+        "id": "doc1",
+        "name": "Doc",
+        "mimeType": "application/vnd.google-apps.document",
+        "webViewLink": "https://docs.google.com/document/d/doc1/edit",
+    }
+    client_obj._docs_service.documents.return_value.get.return_value.execute.return_value = {
+        "documentId": "doc1",
+        "title": "Doc",
+        "tabs": [
+            {
+                "tabProperties": {
+                    "tabId": "tab-root",
+                    "title": "Root",
+                    "index": 0,
+                    "nestingLevel": 0,
+                },
+                "childTabs": [
+                    {
+                        "tabProperties": {
+                            "tabId": "tab-child",
+                            "title": "Child",
+                            "parentTabId": "tab-root",
+                            "index": 0,
+                            "nestingLevel": 1,
+                            "iconEmoji": "📄",
+                        },
+                    },
+                ],
+            },
+        ],
+    }
+
+    result = client_obj.list_document_tabs("doc1")
+
+    assert result["kind"] == "google_docs_tabs/v1"
+    assert result["document_id"] == "doc1"
+    assert result["count"] == 2
+    assert result["tabs"][0]["tab_id"] == "tab-root"
+    assert result["tabs"][0]["has_children"] is True
+    assert result["tabs"][1]["parent_tab_id"] == "tab-root"
+    assert result["tabs"][1]["icon_emoji"] == "📄"
+
+
+def test_list_document_tabs_requires_google_doc_mime(client_obj):
+    files = client_obj.service.files.return_value
+    files.get.return_value.execute.return_value = {
+        "id": "file1",
+        "name": "Sheet",
+        "mimeType": "application/vnd.google-apps.spreadsheet",
+    }
+
+    with pytest.raises(UsageError):
+        client_obj.list_document_tabs("file1")
 
 
 def test_download_default_dest_is_cwd_with_original_name(client_obj, tmp_path, monkeypatch):
@@ -416,6 +476,19 @@ def test_http_404_maps_to_notfounderror():
     from h2t_ops.connectors.drive.client import _map_http_error
     err = _map_http_error(SimpleNamespace(resp=SimpleNamespace(status=404)), op="get file")
     assert isinstance(err, NotFoundError)
+
+
+def test_docs_service_disabled_maps_to_configerror():
+    from h2t_ops.connectors.drive.client import _map_http_error
+
+    err = _map_http_error(
+        Exception(
+            'HttpError 403 ... "reason": "SERVICE_DISABLED" ... docs.googleapis.com ...'
+        ),
+        op="list document tabs",
+    )
+    assert isinstance(err, ConfigError)
+    assert "Docs API" in str(err)
 
 
 def test_http_500_maps_to_providererror():
