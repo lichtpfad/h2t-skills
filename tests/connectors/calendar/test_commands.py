@@ -44,6 +44,8 @@ def test_register_adds_calendar_subcommands():
         ("get", ["evtid"]),
         ("create", ["Title", "2026-04-06", "14:00"]),
         ("update", ["evtid", "--summary", "New"]),
+        ("rsvp", ["evtid", "--status", "accepted"]),
+        ("move", ["evtid", "--to", "dest@example.com"]),
         ("delete", ["evtid"]),
         ("freebusy", ["--from", "2026-05-01", "--to", "2026-05-02"]),
     ]:
@@ -315,6 +317,18 @@ def test_calendar_provider_feature_parsers():
     ])
     assert ns.calendar_id == ["primary", "team@example.com"]
 
+    ns = parser.parse_args([
+        "calendar", "rsvp", "evt", "--status", "tentative", "--calendar-id", "team@example.com", "--json",
+    ])
+    assert ns.status == "tentative"
+    assert ns.calendar_id == "team@example.com"
+
+    ns = parser.parse_args([
+        "calendar", "move", "evt", "--to", "dest@example.com", "--calendar-id", "source@example.com", "--json",
+    ])
+    assert ns.destination_calendar_id == "dest@example.com"
+    assert ns.calendar_id == "source@example.com"
+
 
 def test_calendars_dispatch(monkeypatch):
     from h2t_ops.connectors.calendar import commands as cmds_mod
@@ -427,6 +441,54 @@ def test_update_dispatch_passes_replace_flags(monkeypatch):
     assert kwargs["replace_attendees"] == "a@example.com,b@example.com"
     assert kwargs["replace_rrule"] == "RRULE:FREQ=DAILY;COUNT=2"
     assert kwargs["replace_reminder_minutes"] == [10]
+
+
+def test_rsvp_dispatch(monkeypatch):
+    from h2t_ops.connectors.calendar import commands as cmds_mod
+    calls = []
+
+    class _Stub:
+        def rsvp_event(self, event_id, status, *, calendar_id="primary"):
+            calls.append((event_id, status, calendar_id))
+            return {"kind": "calendar_event/v1", "id": event_id}
+
+    _patch_calendar_client(monkeypatch, lambda: _Stub())
+
+    out = cmds_mod.run(SimpleNamespace(
+        calendar_cmd="rsvp",
+        event_id="evt",
+        status="accepted",
+        calendar_id="team@example.com",
+        as_json=True,
+        fmt="human",
+    ))
+
+    assert out["id"] == "evt"
+    assert calls == [("evt", "accepted", "team@example.com")]
+
+
+def test_move_dispatch(monkeypatch):
+    from h2t_ops.connectors.calendar import commands as cmds_mod
+    calls = []
+
+    class _Stub:
+        def move_event(self, event_id, *, calendar_id="primary", destination_calendar_id):
+            calls.append((event_id, calendar_id, destination_calendar_id))
+            return {"kind": "calendar_event/v1", "id": event_id, "calendar_id": destination_calendar_id}
+
+    _patch_calendar_client(monkeypatch, lambda: _Stub())
+
+    out = cmds_mod.run(SimpleNamespace(
+        calendar_cmd="move",
+        event_id="evt",
+        calendar_id="source@example.com",
+        destination_calendar_id="dest@example.com",
+        as_json=True,
+        fmt="human",
+    ))
+
+    assert out["calendar_id"] == "dest@example.com"
+    assert calls == [("evt", "source@example.com", "dest@example.com")]
 
 
 def test_freebusy_dispatch_uses_date_window(monkeypatch):

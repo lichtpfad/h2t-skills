@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from h2t_ops.core.errors import (
-    AuthError, H2TError, NetworkError, NotFoundError, ProviderError,
+    AuthError, H2TError, NetworkError, NotFoundError, ProviderError, UsageError,
 )
 from h2t_ops.core.google_auth import (
     build_google_service,
@@ -260,6 +260,64 @@ class CalendarClient:
                 hint=_CALENDAR_LIST_HINT,
             ) from e
         return self._normalize_event(updated, calendar_id=calendar_id)
+
+    def rsvp_event(
+        self,
+        event_id: str,
+        status: str,
+        *,
+        calendar_id: str = "primary",
+    ) -> Dict[str, Any]:
+        normalized = status.lower()
+        if normalized not in {"accepted", "declined", "tentative"}:
+            raise ValueError("status must be accepted, declined, or tentative")
+        try:
+            event = self.service.events().get(
+                calendarId=calendar_id, eventId=event_id,
+            ).execute()
+            attendees = list(event.get("attendees", []) or [])
+            updated = False
+            for attendee in attendees:
+                if attendee.get("self") is True:
+                    attendee["responseStatus"] = normalized
+                    updated = True
+                    break
+            if not updated:
+                raise UsageError("event does not expose a self attendee to RSVP")
+            result = self.service.events().patch(
+                calendarId=calendar_id,
+                eventId=event_id,
+                body={"attendees": attendees},
+                sendUpdates="all",
+            ).execute()
+        except Exception as e:
+            raise _map_http_error(
+                e,
+                op=f"rsvp event {event_id} on calendar {calendar_id!r}",
+                hint=_CALENDAR_LIST_HINT,
+            ) from e
+        return self._normalize_event(result, calendar_id=calendar_id)
+
+    def move_event(
+        self,
+        event_id: str,
+        *,
+        calendar_id: str = "primary",
+        destination_calendar_id: str,
+    ) -> Dict[str, Any]:
+        try:
+            moved = self.service.events().move(
+                calendarId=calendar_id,
+                eventId=event_id,
+                destination=destination_calendar_id,
+            ).execute()
+        except Exception as e:
+            raise _map_http_error(
+                e,
+                op=f"move event {event_id} from {calendar_id!r} to {destination_calendar_id!r}",
+                hint=_CALENDAR_LIST_HINT,
+            ) from e
+        return self._normalize_event(moved, calendar_id=destination_calendar_id)
 
     def delete_event(self, event_id: str, *, calendar_id: str = "primary") -> None:
         try:
