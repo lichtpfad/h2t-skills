@@ -31,6 +31,9 @@ def test_register_creates_subparsers_for_drive_verbs():
         ("export", ["file1"]),
         ("upload", ["note.md", "--folder", "Target"]),
         ("upload-folder", ["deploy", "--parent-id", "folder1"]),
+        ("rename", ["file1", "renamed.txt"]),
+        ("copy", ["file1"]),
+        ("move", ["file1", "--to", "folder1"]),
     ]
     for cmd, extra in cases:
         ns = parser.parse_args(["drive", cmd, *extra])
@@ -48,6 +51,9 @@ def test_each_verb_supports_json_and_format_flags():
         ("download", ["file1"]),
         ("upload", ["note.md", "--folder", "Target"]),
         ("upload-folder", ["deploy", "--parent-id", "folder1"]),
+        ("rename", ["file1", "renamed.txt"]),
+        ("copy", ["file1"]),
+        ("move", ["file1", "--to", "folder1"]),
     ]
     for cmd, extra in non_export:
         ns = parser.parse_args(["drive", cmd, *extra, "--json"])
@@ -70,7 +76,20 @@ def test_help_exits_zero():
     with pytest.raises(SystemExit) as ei:
         parser.parse_args(["drive", "--help"])
     assert ei.value.code == 0
-    for cmd in ("list", "search", "folders", "create-folder", "docs-tab", "download", "export", "upload", "upload-folder"):
+    for cmd in (
+        "list",
+        "search",
+        "folders",
+        "create-folder",
+        "docs-tab",
+        "download",
+        "export",
+        "upload",
+        "upload-folder",
+        "rename",
+        "copy",
+        "move",
+    ):
         with pytest.raises(SystemExit) as sub_ei:
             argv = ["drive", cmd, "--help"]
             if cmd == "search":
@@ -87,6 +106,12 @@ def test_help_exits_zero():
                 argv = ["drive", cmd, "note.md", "--folder", "Target", "--help"]
             elif cmd == "upload-folder":
                 argv = ["drive", cmd, "deploy", "--parent-id", "folder1", "--help"]
+            elif cmd == "rename":
+                argv = ["drive", cmd, "file1", "renamed.txt", "--help"]
+            elif cmd == "copy":
+                argv = ["drive", cmd, "file1", "--help"]
+            elif cmd == "move":
+                argv = ["drive", cmd, "file1", "--to", "folder1", "--help"]
             parser.parse_args(argv)
         assert sub_ei.value.code == 0
 
@@ -158,6 +183,96 @@ def test_create_folder_returns_envelope(monkeypatch, capsys):
     assert rc == 0
     assert out["result"]["file_id"] == "folder1"
     assert out["result"]["parent_name"] == "root"
+
+
+def test_rename_returns_envelope(monkeypatch, capsys):
+    import h2t_ops.connectors.drive.client as client_mod
+    from h2t_ops.connectors.drive import commands as cmds_mod
+    from h2t_ops.core.output import emit
+
+    class _Stub:
+        def rename_file(self, file_id, new_name):
+            return {
+                "file_id": file_id,
+                "name": new_name,
+                "mimeType": "text/plain",
+                "web_view_link": "https://drive/file1",
+                "modifiedTime": "2026-05-25T18:00:00Z",
+            }
+
+    monkeypatch.setattr(client_mod, "DriveClient", lambda: _Stub())
+    args = SimpleNamespace(
+        drive_cmd="rename",
+        file_id="file1",
+        new_name="renamed.txt",
+        as_json=True,
+        fmt="human",
+    )
+    rc = emit("drive", result=cmds_mod.run(args), fmt="json")
+    out = json.loads(capsys.readouterr().out)
+    assert rc == 0
+    assert out["result"]["name"] == "renamed.txt"
+
+
+def test_copy_returns_envelope(monkeypatch, capsys):
+    import h2t_ops.connectors.drive.client as client_mod
+    from h2t_ops.connectors.drive import commands as cmds_mod
+    from h2t_ops.core.output import emit
+
+    class _Stub:
+        def copy_file(self, file_id, *, new_name=None, folder=None):
+            return {
+                "file_id": "copy1",
+                "source_file_id": file_id,
+                "name": new_name or "Copy of file",
+                "parents": [folder] if folder else [],
+                "mimeType": "text/plain",
+                "web_view_link": "https://drive/copy1",
+            }
+
+    monkeypatch.setattr(client_mod, "DriveClient", lambda: _Stub())
+    args = SimpleNamespace(
+        drive_cmd="copy",
+        file_id="file1",
+        new_name="copy.txt",
+        folder="folder1",
+        as_json=True,
+        fmt="human",
+    )
+    rc = emit("drive", result=cmds_mod.run(args), fmt="json")
+    out = json.loads(capsys.readouterr().out)
+    assert rc == 0
+    assert out["result"]["file_id"] == "copy1"
+    assert out["result"]["parents"] == ["folder1"]
+
+
+def test_move_returns_envelope(monkeypatch, capsys):
+    import h2t_ops.connectors.drive.client as client_mod
+    from h2t_ops.connectors.drive import commands as cmds_mod
+    from h2t_ops.core.output import emit
+
+    class _Stub:
+        def move_file(self, file_id, *, destination_folder_id):
+            return {
+                "file_id": file_id,
+                "name": "report.txt",
+                "parents": [destination_folder_id],
+                "mimeType": "text/plain",
+                "web_view_link": "https://drive/file1",
+            }
+
+    monkeypatch.setattr(client_mod, "DriveClient", lambda: _Stub())
+    args = SimpleNamespace(
+        drive_cmd="move",
+        file_id="file1",
+        destination_folder_id="folder1",
+        as_json=True,
+        fmt="human",
+    )
+    rc = emit("drive", result=cmds_mod.run(args), fmt="json")
+    out = json.loads(capsys.readouterr().out)
+    assert rc == 0
+    assert out["result"]["parents"] == ["folder1"]
 
 
 def test_docs_tab_list_returns_envelope(monkeypatch, capsys):
