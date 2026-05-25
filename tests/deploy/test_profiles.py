@@ -1,4 +1,5 @@
 from pathlib import Path
+from types import MappingProxyType
 
 import pytest
 
@@ -31,9 +32,37 @@ profiles:
     assert spec.name == "github-actions-dispatch"
     assert spec.contract_version == 1
     assert spec.kind == "script-bundle"
-    assert spec.inputs == ["repo", "workflow"]
+    assert spec.inputs == ("repo", "workflow")
     assert spec.deploy.run.endswith("deploy.ps1")
     assert spec.status.run.endswith("status.ps1")
+    assert isinstance(profiles, MappingProxyType)
+
+
+def test_load_profile_registry_returns_immutable_specs(tmp_path):
+    path = tmp_path / "profiles.yaml"
+    path.write_text(
+        """
+profiles:
+  github-actions-dispatch:
+    contract_version: 1
+    kind: script-bundle
+    inputs:
+      - repo
+    deploy:
+      run: scripts/deploy/github-actions-dispatch/deploy.ps1
+    status:
+      run: scripts/deploy/github-actions-dispatch/status.ps1
+""".strip(),
+        encoding="utf-8",
+    )
+
+    profiles = load_profile_registry(path)
+
+    with pytest.raises(TypeError):
+        profiles["ssh-shell"] = profiles["github-actions-dispatch"]
+
+    with pytest.raises(AttributeError):
+        profiles["github-actions-dispatch"].inputs.append("workflow")
 
 
 def test_load_profile_registry_uses_home_at_call_time(monkeypatch, tmp_path):
