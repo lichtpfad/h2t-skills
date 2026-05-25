@@ -214,8 +214,11 @@ def _parse_screenshot_path(stdout: str) -> str | None:
     """Extract the desktop image path from h2t-screenshot stdout."""
     for line in stdout.splitlines():
         stripped = line.strip()
-        if "✓ desktop:" in stripped:
-            return stripped.split("✓ desktop:", 1)[1].strip()
+        # Match "✓ desktop:" or mojibake equivalent on Windows (cp1252 decode of UTF-8)
+        if "✓ desktop:" in stripped or "desktop:" in stripped and stripped.endswith(".png"):
+            for marker in ("✓ desktop:", "desktop:"):
+                if marker in stripped:
+                    return stripped.split(marker, 1)[1].strip()
     return None
 
 
@@ -249,6 +252,8 @@ def capture_and_ocr(
             ["h2t-screenshot", url, "--format", "desktop", "--out", tmp_dir],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=60,
         )
         if result.returncode != 0:
