@@ -270,6 +270,44 @@ class GmailClient:
         except HttpError as e:
             raise _map_http_error(e, op=f"modify labels for {message_id}") from e
 
+    def _thread_subject(self, thread_id: str) -> str:
+        """Fetch first message subject — used for confirm-subject validation."""
+        thread = self.get_thread(thread_id)
+        messages = thread.get("messages", [])
+        return messages[0].get("subject", "") if messages else ""
+
+    def _validate_subject(self, thread_id: str, confirm_subject: str) -> str:
+        actual = self._thread_subject(thread_id)
+        if actual.strip().lower() != confirm_subject.strip().lower():
+            from h2t_ops.core.errors import UsageError
+            raise UsageError(
+                f"subject mismatch — got {actual!r}, confirm-subject was {confirm_subject!r}"
+            )
+        return actual
+
+    def trash_thread(self, thread_id: str, confirm_subject: str) -> Dict[str, Any]:
+        actual = self._validate_subject(thread_id, confirm_subject)
+        try:
+            self.service.users().threads().trash(userId="me", id=thread_id).execute()
+        except HttpError as e:
+            raise _map_http_error(e, op=f"trash thread {thread_id}") from e
+        return {"thread_id": thread_id, "subject": actual, "trashed": True}
+
+    def untrash_thread(self, thread_id: str) -> Dict[str, Any]:
+        try:
+            self.service.users().threads().untrash(userId="me", id=thread_id).execute()
+        except HttpError as e:
+            raise _map_http_error(e, op=f"untrash thread {thread_id}") from e
+        return {"thread_id": thread_id, "trashed": False}
+
+    def delete_thread(self, thread_id: str, confirm_subject: str) -> Dict[str, Any]:
+        actual = self._validate_subject(thread_id, confirm_subject)
+        try:
+            self.service.users().threads().delete(userId="me", id=thread_id).execute()
+        except HttpError as e:
+            raise _map_http_error(e, op=f"delete thread {thread_id}") from e
+        return {"thread_id": thread_id, "subject": actual, "deleted": True}
+
     # --- Helpers ---
 
     def _parse_message(self, message: Dict[str, Any]) -> Dict[str, Any]:
