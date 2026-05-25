@@ -985,6 +985,22 @@ def test_resolve_result_schema(monkeypatch):
 
     for key in ("name", "channel_url", "author_confirmed", "resolution_path", "confidence"):
         assert key in result, f"missing key: {key}"
+
+
+def test_resolve_exa_provider_error_returns_error_confidence(monkeypatch):
+    """ProviderError/AuthError from Exa returns confidence=error, not not_found."""
+    from h2t_ops.core.errors import ProviderError
+
+    def raise_provider_error(name, keywords, api_key):
+        raise ProviderError("Exa API unavailable", details={})
+
+    monkeypatch.setattr(author_resolve, "_exa_people_search", raise_provider_error)
+
+    result = author_resolve.resolve_author("AnyAuthor", api_key="k")
+
+    assert result["confidence"] == "error"
+    assert "provider error" in result["resolution_path"][0]
+    assert result["channel_url"] is None
 ```
 
 - [ ] **Step 2: Run tests — verify they fail**
@@ -1038,8 +1054,11 @@ def _exa_people_search(
         "numResults": 5,
         "contents": {"highlights": {"maxCharacters": 2000}},
     }
+    from h2t_ops.core.errors import AuthError, NetworkError, ProviderError as _ProviderError
     try:
         _status, data, _latency = call_exa("/search", body, api_key)
+    except (AuthError, NetworkError, _ProviderError):
+        raise  # Propagate typed errors — callers must distinguish from not_found
     except Exception:
         return None
 
@@ -1100,8 +1119,18 @@ def resolve_author(
     """
     resolution_path: list[str] = []
 
+    from h2t_ops.core.errors import AuthError, NetworkError, ProviderError as _ProviderError
     # Step 1: Exa people search
-    exa_url = _exa_people_search(name, keywords, api_key)
+    try:
+        exa_url = _exa_people_search(name, keywords, api_key)
+    except (AuthError, NetworkError, _ProviderError) as exc:
+        return {
+            "name": name,
+            "channel_url": None,
+            "author_confirmed": None,
+            "resolution_path": [f"exa_people: provider error — {type(exc).__name__}: {exc}"],
+            "confidence": "error",
+        }
     if exa_url:
         resolution_path.append(f"exa_people: found {exa_url}")
         return {
@@ -1175,7 +1204,8 @@ Add method to `ResearchClient`:
         from h2t_ops.connectors.research.author_resolve import resolve_author as _resolve
         api_key = resolve_secret("EXA_API_KEY")
         result = _resolve(name, api_key=api_key, keywords=keywords, hint=hint)
-        return self._emit(result, 0)
+        exit_code = 1 if result.get("confidence") == "error" else 0
+        return self._emit(result, exit_code)
 ```
 
 - [ ] **Step 6: Commit**
@@ -1200,12 +1230,15 @@ Append to `tests/connectors/research/test_visual_ocr.py`:
 
 ```python
 def test_capture_and_ocr_ok(monkeypatch, tmp_path):
-    """capture_and_ocr calls h2t-screenshot and runs existing OCR pipeline."""
+    """capture_and_ocr calls h2t-screenshot, copies screenshot to stable path, runs OCR."""
+    import shutil as _shutil
     import subprocess
     from unittest.mock import patch as _patch
 
-    fake_image = tmp_path / "test.png"
-    # Create a minimal 1x1 white PNG so path.is_file() passes
+    monkeypatch.setattr(_shutil, "which", lambda cmd: "/usr/bin/h2t-screenshot")
+
+    fake_image = tmp_path / "tmp_screenshot" / "test.png"
+    fake_image.parent.mkdir()
     fake_image.write_bytes(
         b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
         b"\x08\x02\x00\x00\x00\x90wS\xde\x00\x00\x00\x0cIDATx\x9cc\xf8\x0f\x00"
@@ -1219,6 +1252,7 @@ def test_capture_and_ocr_ok(monkeypatch, tmp_path):
     fake_run_result.stdout = fake_stdout
     fake_run_result.stderr = ""
 
+    output_dir = tmp_path / "artifacts"
     with _patch("subprocess.run", return_value=fake_run_result):
         with _patch.object(
             visual_ocr,
@@ -1227,7 +1261,7 @@ def test_capture_and_ocr_ok(monkeypatch, tmp_path):
         ):
             envelope, exit_code = visual_ocr.capture_and_ocr(
                 "https://example.com",
-                output_dir=tmp_path,
+                output_dir=output_dir,
                 project="test",
             )
 
@@ -1237,17 +1271,48 @@ def test_capture_and_ocr_ok(monkeypatch, tmp_path):
     assert "Recovered text" in envelope["body_text_visual_ocr"]
     assert envelope["needs_review"] is True
     assert envelope["quote_safe"] is False
+    # Stable image must exist in output_dir (not in a deleted temp dir)
+    stable_image = Path(envelope["provenance"]["image_path"])
+    assert stable_image.is_file(), "screenshot must be copied to output_dir, not left in tmp"
+    assert str(output_dir) in str(stable_image)
 
 
-def test_capture_and_ocr_screenshot_not_on_path(monkeypatch):
+def test_capture_and_ocr_rejects_file_url(tmp_path):
+    """UsageError for file:// URLs — SSRF guard."""
+    from h2t_ops.core.errors import UsageError
+    with pytest.raises(UsageError):
+        visual_ocr.capture_and_ocr(
+            "file:///etc/passwd", output_dir=tmp_path, project="test"
+        )
+
+
+def test_capture_and_ocr_rejects_localhost(tmp_path):
+    """UsageError for localhost URLs — SSRF guard."""
+    from h2t_ops.core.errors import UsageError
+    with pytest.raises(UsageError):
+        visual_ocr.capture_and_ocr(
+            "http://localhost:8080/admin", output_dir=tmp_path, project="test"
+        )
+
+
+def test_capture_and_ocr_rejects_private_ip(tmp_path):
+    """UsageError for private IP ranges — SSRF guard."""
+    from h2t_ops.core.errors import UsageError
+    with pytest.raises(UsageError):
+        visual_ocr.capture_and_ocr(
+            "http://192.168.1.1/", output_dir=tmp_path, project="test"
+        )
+
+
+def test_capture_and_ocr_screenshot_not_on_path(monkeypatch, tmp_path):
     """ConfigError when h2t-screenshot is not installed."""
-    import shutil
-    monkeypatch.setattr(shutil, "which", lambda cmd: None)
+    import shutil as _shutil
+    monkeypatch.setattr(_shutil, "which", lambda cmd: None)
 
     from h2t_ops.core.errors import ConfigError
     with pytest.raises(ConfigError) as ei:
         visual_ocr.capture_and_ocr(
-            "https://example.com", output_dir=Path("/tmp"), project="test"
+            "https://example.com", output_dir=tmp_path, project="test"
         )
 
     assert "h2t-screenshot" in str(ei.value)
@@ -1255,11 +1320,11 @@ def test_capture_and_ocr_screenshot_not_on_path(monkeypatch):
 
 def test_capture_and_ocr_screenshot_fails(monkeypatch, tmp_path):
     """ProviderError when h2t-screenshot returns non-zero."""
-    import shutil
+    import shutil as _shutil
     import subprocess
     from unittest.mock import patch as _patch
 
-    monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/h2t-screenshot")
+    monkeypatch.setattr(_shutil, "which", lambda cmd: "/usr/bin/h2t-screenshot")
 
     fake_result = MagicMock()
     fake_result.returncode = 1
@@ -1309,11 +1374,23 @@ def capture_and_ocr(
     project: str,
 ) -> tuple[dict, int]:
     """Auto-capture a screenshot of url and run OCR. No sidecar required."""
+    from h2t_ops.connectors.research.client import validate_public_http_url
+    validate_public_http_url(url)  # SSRF guard: reject file://, localhost, private IPs, credentials
+
     if not shutil.which("h2t-screenshot"):
         raise ConfigError(
             "h2t-screenshot not found on PATH",
             hint="Install with: uv tool install --editable C:/dev/h2t-tools",
         )
+
+    # Build stable artifact paths before temp dir — screenshot persists here
+    artifact_paths = build_visual_ocr_artifact_paths(
+        output_dir=Path(output_dir),
+        project=project,
+        slug_source=url,
+    )
+    artifact_paths["sources_json"].parent.mkdir(parents=True, exist_ok=True)
+    stable_image = artifact_paths["sources_json"].with_suffix(".capture.png")
 
     with tempfile.TemporaryDirectory() as tmp_dir:
         result = subprocess.run(
@@ -1335,29 +1412,25 @@ def capture_and_ocr(
                 details={"stdout": result.stdout[:300]},
             )
 
-        extracted_text, visible_headings, confidence = extract_text_from_image(image_path_str)
-        captured_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        # Copy to stable location before TemporaryDirectory is deleted
+        shutil.copy2(image_path_str, stable_image)
 
-        envelope = build_visual_ocr_envelope(
-            url=url,
-            source_fetch_status="unknown",
-            source_fetch_reason=None,
-            captured_at=captured_at,
-            image_path=image_path_str,
-            extracted_text=extracted_text,
-            visible_headings=visible_headings,
-            ocr_confidence=confidence,
-        )
-        # Override provenance to reflect auto-capture
-        envelope["provenance"]["capture_method"] = "auto_screenshot"
-        envelope["provenance"]["capture_tool"] = "h2t-screenshot"
+    # Temp dir deleted — use stable_image for OCR and provenance
+    extracted_text, visible_headings, confidence = extract_text_from_image(stable_image)
+    captured_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
 
-    artifact_paths = build_visual_ocr_artifact_paths(
-        output_dir=Path(output_dir),
-        project=project,
-        slug_source=url,
+    envelope = build_visual_ocr_envelope(
+        url=url,
+        source_fetch_status="unknown",
+        source_fetch_reason=None,
+        captured_at=captured_at,
+        image_path=str(stable_image),
+        extracted_text=extracted_text,
+        visible_headings=visible_headings,
+        ocr_confidence=confidence,
     )
-    artifact_paths["sources_json"].parent.mkdir(parents=True, exist_ok=True)
+    envelope["provenance"]["capture_method"] = "auto_screenshot"
+    envelope["provenance"]["capture_tool"] = "h2t-screenshot"
 
     import json as _json
     sidecar = {"envelope": envelope, "meta": {"status": envelope["status"]}}
