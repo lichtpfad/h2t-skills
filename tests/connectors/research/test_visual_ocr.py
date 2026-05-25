@@ -275,6 +275,13 @@ def test_capture_and_ocr_ok(monkeypatch, tmp_path):
     stable_image = Path(envelope["provenance"]["image_path"])
     assert stable_image.is_file(), "screenshot must be copied to output_dir, not left in tmp"
     assert str(output_dir) in str(stable_image)
+    # Sidecar JSON must be written by capture_and_ocr itself
+    import glob as _glob
+    sidecar_files = list(output_dir.rglob("*.sources.json"))
+    assert sidecar_files, "capture_and_ocr must write sources.json sidecar"
+    sidecar_data = json.loads(sidecar_files[0].read_text(encoding="utf-8"))
+    assert sidecar_data["meta"]["url"] == "https://example.com"
+    assert sidecar_data["envelope"]["status"] == "OK"
 
 
 def test_capture_and_ocr_rejects_file_url(tmp_path):
