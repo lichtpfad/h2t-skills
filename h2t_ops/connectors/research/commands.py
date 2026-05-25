@@ -88,10 +88,13 @@ def register(subparsers: Any) -> None:
 
     visual_ocr = cmds.add_parser(
         "visual-ocr",
-        help="Create a review-required OCR rescue artifact from one fetch sidecar and one page image",
+        help="Create a review-required OCR rescue artifact",
     )
-    visual_ocr.add_argument("--fetch-sidecar", required=True, dest="fetch_sidecar")
-    visual_ocr.add_argument("--image-path", required=True, dest="image_path")
+    # Manual mode (existing)
+    visual_ocr.add_argument("--fetch-sidecar", dest="fetch_sidecar")
+    visual_ocr.add_argument("--image-path", dest="image_path")
+    # Auto-capture mode (new)
+    visual_ocr.add_argument("--url", dest="visual_ocr_url")
     visual_ocr.add_argument("--project", default="default")
     visual_ocr.add_argument("--output-dir", dest="output_dir")
     add_fmt(visual_ocr)
@@ -166,6 +169,15 @@ def run(args: Any) -> Any:
             config_path=args.config_path,
         )
     if cmd == "visual-ocr":
+        if getattr(args, "visual_ocr_url", None):
+            return client.visual_ocr_auto(
+                args.visual_ocr_url,
+                project=args.project,
+            )
+        if not (args.fetch_sidecar and args.image_path):
+            raise UsageError(
+                "visual-ocr requires either --url or both --fetch-sidecar and --image-path"
+            )
         return client.visual_ocr(
             fetch_sidecar=args.fetch_sidecar,
             image_path=args.image_path,
