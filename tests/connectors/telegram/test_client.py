@@ -341,6 +341,32 @@ def test_list_folders_flattens_text_with_entities_title(tmp_path, monkeypatch):
     assert rows == [{"id": 5, "title": "Research", "peer_ids": []}]
 
 
+def test_send_message_returns_normalized_row(tmp_path, monkeypatch):
+    from h2t_ops.connectors.telegram import client as tmod
+
+    (tmp_path / "config.json").write_text(json.dumps({"api_id": 1, "api_hash": "h"}), encoding="utf-8")
+
+    sent = SimpleNamespace(
+        id=9,
+        chat_id=77,
+        date=datetime(2026, 5, 25, 10, 0, tzinfo=timezone.utc),
+        text="hello",
+    )
+
+    class FakeInner:
+        def send_message(self, entity, text):
+            assert entity == "me"
+            assert text == "hello"
+            return sent
+
+    monkeypatch.setattr(tmod.TelegramClientAdapter, "_client", lambda self: _CtxClient(FakeInner()))
+    out = tmod.TelegramClientAdapter(config_dir=tmp_path).send_message("me", "hello")
+    assert out["entity"] == "me"
+    assert out["message_id"] == 9
+    assert out["chat_id"] == 77
+    assert out["text"] == "hello"
+
+
 def test_bootstrap_dialogs_writes_timestamp_without_chats_yaml(tmp_path, monkeypatch):
     from h2t_ops.connectors.telegram import client as tmod
 
