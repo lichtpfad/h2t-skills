@@ -617,9 +617,9 @@ class DriveClient:
 
     def move_file(self, file_id: str, *, destination_folder_id: str) -> Dict[str, Any]:
         try:
-            folder_id, _, _ = self._resolve_folder_id(destination_folder_id)
+            folder_id, _, is_shared_drive = self._resolve_folder_id(destination_folder_id)
             add_parents = "root" if not folder_id else folder_id
-            if folder_id:
+            if folder_id and not is_shared_drive:
                 folder_meta = self.service.files().get(
                     fileId=folder_id,
                     fields="id, name, mimeType",

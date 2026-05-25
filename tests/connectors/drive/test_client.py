@@ -342,6 +342,53 @@ def test_move_file_to_root_skips_folder_validation_fetch(client_obj, monkeypatch
     )
 
 
+def test_move_file_to_shared_drive_root_skips_destination_file_validation(client_obj):
+    shared_drive_id = "0AExampleShared123"
+    files = client_obj.service.files.return_value
+    drives = client_obj.service.drives.return_value
+    files.get.return_value.execute.side_effect = [
+        FakeHttpError(404, "missing file"),
+        {
+            "id": "file1",
+            "name": "report.txt",
+            "mimeType": "text/plain",
+            "parents": ["parent1"],
+        },
+    ]
+    drives.get.return_value.execute.return_value = {
+        "id": shared_drive_id,
+        "name": "Shared Root",
+    }
+    files.update.return_value.execute.return_value = {
+        "id": "file1",
+        "name": "report.txt",
+        "mimeType": "text/plain",
+        "parents": [shared_drive_id],
+        "webViewLink": "https://drive/file1",
+    }
+
+    result = client_obj.move_file("file1", destination_folder_id=shared_drive_id)
+
+    assert result["parents"] == [shared_drive_id]
+    assert files.update.call_args.kwargs["addParents"] == shared_drive_id
+    assert files.update.call_args.kwargs["removeParents"] == "parent1"
+    assert files.get.call_count == 2
+    files.get.assert_any_call(
+        fileId=shared_drive_id,
+        fields="id,name,mimeType",
+        supportsAllDrives=True,
+    )
+    files.get.assert_any_call(
+        fileId="file1",
+        fields="id, name, mimeType, parents",
+        supportsAllDrives=True,
+    )
+    drives.get.assert_called_once_with(
+        driveId=shared_drive_id,
+        fields="id,name",
+    )
+
+
 def test_list_document_tabs_flattens_nested_tabs(client_obj):
     files = client_obj.service.files.return_value
     files.get.return_value.execute.return_value = {
