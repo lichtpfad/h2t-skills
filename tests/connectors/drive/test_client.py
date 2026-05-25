@@ -113,6 +113,44 @@ def test_list_folders_returns_folder_rows(client_obj):
     assert "mimeType='application/vnd.google-apps.folder'" in files.list.call_args.kwargs["q"]
 
 
+def test_create_folder_defaults_to_root(client_obj):
+    files = client_obj.service.files.return_value
+    files.create.return_value.execute.return_value = {
+        "id": "folder1",
+        "name": "Projects",
+        "mimeType": "application/vnd.google-apps.folder",
+        "parents": ["root"],
+        "webViewLink": "https://drive/folder1",
+    }
+
+    result = client_obj.create_folder("Projects")
+
+    assert result["file_id"] == "folder1"
+    assert result["parent_name"] == "root"
+    assert files.create.call_args.kwargs["body"] == {
+        "name": "Projects",
+        "mimeType": "application/vnd.google-apps.folder",
+    }
+    assert files.create.call_args.kwargs["supportsAllDrives"] is True
+
+
+def test_create_folder_resolves_parent(client_obj, monkeypatch):
+    files = client_obj.service.files.return_value
+    monkeypatch.setattr(client_obj, "_resolve_folder_id", lambda parent: ("parent1", "Target", False))
+    files.create.return_value.execute.return_value = {
+        "id": "folder2",
+        "name": "Archive",
+        "mimeType": "application/vnd.google-apps.folder",
+        "parents": ["parent1"],
+        "webViewLink": "https://drive/folder2",
+    }
+
+    result = client_obj.create_folder("Archive", parent="Target")
+
+    assert result["parent_name"] == "Target"
+    assert files.create.call_args.kwargs["body"]["parents"] == ["parent1"]
+
+
 def test_download_default_dest_is_cwd_with_original_name(client_obj, tmp_path, monkeypatch):
     from h2t_ops.connectors.drive import client as dmod
 

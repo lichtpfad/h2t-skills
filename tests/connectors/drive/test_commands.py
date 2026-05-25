@@ -25,6 +25,7 @@ def test_register_creates_subparsers_for_drive_verbs():
         ("list", []),
         ("search", ["query"]),
         ("folders", []),
+        ("create-folder", ["New Folder"]),
         ("download", ["file1"]),
         ("export", ["file1"]),
         ("upload", ["note.md", "--folder", "Target"]),
@@ -41,6 +42,7 @@ def test_each_verb_supports_json_and_format_flags():
         ("list", []),
         ("search", ["query"]),
         ("folders", []),
+        ("create-folder", ["New Folder"]),
         ("download", ["file1"]),
         ("upload", ["note.md", "--folder", "Target"]),
         ("upload-folder", ["deploy", "--parent-id", "folder1"]),
@@ -66,9 +68,22 @@ def test_help_exits_zero():
     with pytest.raises(SystemExit) as ei:
         parser.parse_args(["drive", "--help"])
     assert ei.value.code == 0
-    for cmd in ("list", "search", "folders", "download", "export", "upload", "upload-folder"):
+    for cmd in ("list", "search", "folders", "create-folder", "download", "export", "upload", "upload-folder"):
         with pytest.raises(SystemExit) as sub_ei:
-            parser.parse_args(["drive", cmd, "--help"])
+            argv = ["drive", cmd, "--help"]
+            if cmd == "search":
+                argv = ["drive", cmd, "query", "--help"]
+            elif cmd == "create-folder":
+                argv = ["drive", cmd, "New Folder", "--help"]
+            elif cmd == "download":
+                argv = ["drive", cmd, "file1", "--help"]
+            elif cmd == "export":
+                argv = ["drive", cmd, "file1", "--help"]
+            elif cmd == "upload":
+                argv = ["drive", cmd, "note.md", "--folder", "Target", "--help"]
+            elif cmd == "upload-folder":
+                argv = ["drive", cmd, "deploy", "--parent-id", "folder1", "--help"]
+            parser.parse_args(argv)
         assert sub_ei.value.code == 0
 
 
@@ -112,6 +127,33 @@ def test_download_returns_envelope_with_saved_path(monkeypatch, capsys):
     assert rc == 0
     assert out["result"]["saved_path"] == "out.txt"
     assert "size" not in out["result"]
+
+
+def test_create_folder_returns_envelope(monkeypatch, capsys):
+    import h2t_ops.connectors.drive.client as client_mod
+    from h2t_ops.connectors.drive import commands as cmds_mod
+    from h2t_ops.core.output import emit
+
+    class _Stub:
+        def create_folder(self, name, *, parent=None):
+            return {
+                "file_id": "folder1",
+                "name": name,
+                "mimeType": "application/vnd.google-apps.folder",
+                "parents": ["root"] if parent is None else ["parent1"],
+                "web_view_link": "https://drive/folder1",
+                "parent_name": parent or "root",
+            }
+
+    monkeypatch.setattr(client_mod, "DriveClient", lambda: _Stub())
+    args = SimpleNamespace(
+        drive_cmd="create-folder", name="Projects", parent=None, as_json=True, fmt="human",
+    )
+    rc = emit("drive", result=cmds_mod.run(args), fmt="json")
+    out = json.loads(capsys.readouterr().out)
+    assert rc == 0
+    assert out["result"]["file_id"] == "folder1"
+    assert out["result"]["parent_name"] == "root"
 
 
 def test_upload_returns_envelope_with_web_view_link(monkeypatch, capsys):
