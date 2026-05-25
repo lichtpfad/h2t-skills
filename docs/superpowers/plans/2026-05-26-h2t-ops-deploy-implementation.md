@@ -42,6 +42,20 @@ using:
 - live log tailing
 - multiple real profiles in the first implementation pass
 
+### Fixed v1 execution assumptions
+
+- profile script paths are **repo-local** in v1
+- profiles may reference only paths under:
+  - `scripts/deploy/`
+- arbitrary absolute script paths are out of scope for v1
+- target config values like `local_path` are machine-local operator config, not
+  portable repo defaults
+
+Reason:
+- keeps the first implementation testable and reviewable
+- avoids turning v1 into a generic local-code launcher
+- lets us validate one reference profile end-to-end from the repo itself
+
 ## Task breakdown
 
 ## T0. Baseline audit
@@ -110,6 +124,10 @@ Implement executor responsibilities:
 8. normalize stdout JSON
 9. map failures into standard error envelope
 
+Executor path rule:
+- resolve `deploy.run` / `status.run` relative to repo root
+- reject script paths outside `scripts/deploy/`
+
 Required payload shape:
 
 ```json
@@ -148,6 +166,39 @@ Behavior:
 - human output stays concise
 - `--json` returns normalized envelope
 
+`deploy list` output contract:
+- service
+- service_type
+- target
+- profile
+- whether target is default
+
+Failure semantics:
+- if registry/profile config is invalid, `deploy list` fails as a whole
+- v1 does not do partial-success row rendering for broken config
+- reason: list is also a diagnostic/config inspection surface, so hidden invalid
+  rows would be misleading
+
+Human mode should render a compact table.
+
+`--json` should return one entry per target, for example:
+
+```json
+{
+  "ok": true,
+  "provider": "deploy",
+  "result": [
+    {
+      "service": "h2t-graphs",
+      "service_type": "static-site",
+      "target": "arvixe-prod",
+      "profile": "arvixe-upload",
+      "is_default": true
+    }
+  ]
+}
+```
+
 Acceptance:
 - CLI parser tests
 - help surface checks
@@ -165,9 +216,18 @@ Reason:
 - easier dry-run
 - easier status semantics than arbitrary hosting panels
 
+Before implementation proceeds, select one concrete real fixture:
+- one real service
+- one real target
+- one real workflow name/repo pair
+
+Example shape:
+- `h2t-evals` + `github-actions-dispatch`
+
 Deliver:
 - example profile entry in fixture config
-- script bundle fixture or real script contract
+- one real repo-local script contract under `scripts/deploy/...`
+- fixture config for automated tests
 - real or mocked `status` mapping:
   - `healthy`
   - `failed`
@@ -175,7 +235,9 @@ Deliver:
   - `unsupported` if needed
 
 Acceptance:
+- one real profile contract exists in the repo
 - end-to-end test fixture passes through full profile resolution
+- T5 can run against that same real profile contract without redesign
 
 ## T5. Dry-run and status evidence
 
@@ -203,6 +265,17 @@ After implementation and evidence:
   - landed CLI surface
   - reference profile implemented
   - remaining follow-up for additional profiles
+
+## Commit hygiene
+
+The worktree may contain unrelated doc churn. For `#183` execution:
+
+- stage only deploy-related code, tests, and `#183` docs
+- do not use broad `git add .`
+- keep evidence/report updates in a separate, explicit commit when practical
+- verify `git diff --cached --stat` before each commit
+- treat unrelated modified `docs/superpowers/*` and `uv.lock` as read-only
+  background state unless a specific `#183` task explicitly owns them
 
 ## Test strategy
 
