@@ -554,6 +554,27 @@ class DriveClient:
         except Exception as e:
             raise _map_http_error(e, op=f"create folder {name.strip()!r}") from e
 
+    def rename_file(self, file_id: str, new_name: str) -> Dict[str, Any]:
+        if not new_name or not new_name.strip():
+            raise UsageError("drive rename: new name is required")
+        clean_name = new_name.strip()
+        try:
+            res = self.service.files().update(
+                fileId=file_id,
+                body={"name": clean_name},
+                fields="id, name, mimeType, webViewLink, modifiedTime",
+                supportsAllDrives=True,
+            ).execute()
+            return {
+                "file_id": res.get("id", file_id),
+                "name": res.get("name", clean_name),
+                "mimeType": res.get("mimeType", ""),
+                "web_view_link": res.get("webViewLink", ""),
+                "modifiedTime": res.get("modifiedTime", ""),
+            }
+        except Exception as e:
+            raise _map_http_error(e, op=f"rename file {file_id}") from e
+
     def list_document_tabs(self, document_id: str) -> Dict[str, Any]:
         try:
             meta = self.service.files().get(

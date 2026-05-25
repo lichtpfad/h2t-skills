@@ -153,6 +153,34 @@ def test_create_folder_resolves_parent(client_obj, monkeypatch):
     assert files.create.call_args.kwargs["body"]["parents"] == ["parent1"]
 
 
+def test_rename_file_updates_name_and_returns_metadata(client_obj):
+    files = client_obj.service.files.return_value
+    files.update.return_value.execute.return_value = {
+        "id": "file1",
+        "name": "renamed.txt",
+        "mimeType": "text/plain",
+        "webViewLink": "https://drive/file1",
+        "modifiedTime": "2026-05-25T18:00:00Z",
+    }
+
+    result = client_obj.rename_file("file1", "renamed.txt")
+
+    assert result["file_id"] == "file1"
+    assert result["name"] == "renamed.txt"
+    assert result["mimeType"] == "text/plain"
+    assert result["web_view_link"] == "https://drive/file1"
+    assert result["modifiedTime"] == "2026-05-25T18:00:00Z"
+    assert files.update.call_args.kwargs["fileId"] == "file1"
+    assert files.update.call_args.kwargs["body"] == {"name": "renamed.txt"}
+    assert files.update.call_args.kwargs["fields"] == "id, name, mimeType, webViewLink, modifiedTime"
+    assert files.update.call_args.kwargs["supportsAllDrives"] is True
+
+
+def test_rename_file_requires_non_empty_name(client_obj):
+    with pytest.raises(UsageError):
+        client_obj.rename_file("file1", "   ")
+
+
 def test_list_document_tabs_flattens_nested_tabs(client_obj):
     files = client_obj.service.files.return_value
     files.get.return_value.execute.return_value = {
