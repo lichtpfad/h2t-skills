@@ -87,7 +87,7 @@ The current open work is feature/product backlog, not migration/closure.
 
 | Priority | Issue(s) | Workstream | Notes |
 | --- | --- | --- | --- |
-| P2 | #170, #174, #176, #177, #179, #180 | Provider capability follow-up | Current provider backlog after the P1 sweep; `#176` should be read as RSVP/move follow-up because all-day + reminders already shipped |
+| P2 | #170, #174, #176, #177, #179, #180 | Provider capability follow-up | Current provider backlog after the P1 sweep; `#170` is now effectively "Docs tab list + remaining API/provider follow-up", and `#176` should be read as RSVP/move follow-up because all-day + reminders already shipped |
 | P2 | #99, #105, #182 | Research workflow follow-up | Research helper/provider backlog after fetch ladder baseline |
 | P2 | #183 | Deploy/operator workflow backlog | New `h2t-ops deploy` surface; not a connector-closure task |
 | P3 | #101, #70, #71, #72 | Research product backlog | Broader research system evolution, not connector closure |
@@ -97,23 +97,21 @@ milestones (`M1`-`M7`) are migration-era buckets and no longer describe the
 current maintenance backlog cleanly, so priority labels are the source of truth
 until a new milestone set is created.
 
-### Immediate Validation Gate
+### Recent Validation Gate
 
-Before broad P2 execution continues, run a recent-closure validation sweep for
-the latest provider follow-ups. The goal is to normalize evidence standards:
-some recent closures have focused unit/CLI proof, but not yet live smoke.
+The recent-closure validation sweep was run to normalize evidence standards
+after the fast P1/provider pass. Results are recorded in
+`docs/reports/2026-05-25-h2t-ops-recent-closure-validation-evidence.md`.
 
-Validation gate matrix:
+Validation status:
 
 | Issue(s) | Surface | Current state |
 | --- | --- | --- |
-| #169 | Drive `create-folder` | Code/tests landed; safe live smoke still pending |
-| #172 | Gmail thread operations | Code/tests landed; safe live smoke still pending |
-| #173 | Gmail attachment download | Code/tests landed; safe live smoke still pending |
-| #181 | Telegram send | Fully validated; safe live smoke already passed |
-| #176 | Calendar RSVP + move | Code/tests landed; do not close without live smoke |
-
-Reference: `docs/reports/2026-05-25-h2t-ops-recent-closure-validation-gate.md`.
+| #169 | Drive `create-folder` | Live PASS |
+| #172 | Gmail thread operations | Read-only live PASS; reply-in-thread still requires a prepared safe thread |
+| #173 | Gmail attachment download | Live PASS |
+| #181 | Telegram send | Live PASS |
+| #176 | Calendar RSVP + move | `move` live PASS; RSVP still deferred pending a safe invite |
 
 ## Critical Path Details
 
@@ -329,7 +327,7 @@ Recommended triage:
 | Calendar follow-up | #82, #145 | Closed; #82 fixed in `6631f57`, #145 fixed in `0acb44b` |
 | Notion follow-up | #146, #81 | Closed; fixed in `4c952d1` |
 | Research backlog | #99, #101, #105, #182, #72, #71, #70 | Keep as research/product backlog; #98 is closed as shared fetch-ladder baseline, `visual-ocr` rescue landed in PR #171, and the heavier generic recovery rung remains deferred until the failing source corpus grows beyond AllTD |
-| Provider backlog | #170, #174, #176, #177, #179, #180 | Keep as explicit post-closure provider feature/bug backlog; these are capability gaps, not migration blockers. The former P1 items #169, #172, #173, and #181 are now closed. Treat `#176` as "RSVP + move-between-calendars" because all-day + reminders already ship today |
+| Provider backlog | #170, #174, #176, #177, #179, #180 | Keep as explicit post-closure provider feature/bug backlog; these are capability gaps, not migration blockers. The former P1 items #169, #172, #173, and #181 are now closed. Treat `#170` as narrowed to Docs tab listing plus remaining provider/API follow-up, and `#176` as "RSVP + move-between-calendars" because all-day + reminders already ship today |
 | Deploy/operator backlog | #183 | Keep separate from connector closure; this is a new operator workflow surface, not unfinished provider migration |
 | Creative backlog | #119, #83, #88, #89, #90, #91, #92 | Move to creative roadmap; not h2t-ops closure |
 | Cross-platform / machine config | #79, #73 | Keep as h2t-core/platform backlog |
