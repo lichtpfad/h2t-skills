@@ -97,6 +97,24 @@ milestones (`M1`-`M7`) are migration-era buckets and no longer describe the
 current maintenance backlog cleanly, so priority labels are the source of truth
 until a new milestone set is created.
 
+### Immediate Validation Gate
+
+Before broad P2 execution continues, run a recent-closure validation sweep for
+the latest provider follow-ups. The goal is to normalize evidence standards:
+some recent closures have focused unit/CLI proof, but not yet live smoke.
+
+Validation gate matrix:
+
+| Issue(s) | Surface | Current state |
+| --- | --- | --- |
+| #169 | Drive `create-folder` | Code/tests landed; safe live smoke still pending |
+| #172 | Gmail thread operations | Code/tests landed; safe live smoke still pending |
+| #173 | Gmail attachment download | Code/tests landed; safe live smoke still pending |
+| #181 | Telegram send | Fully validated; safe live smoke already passed |
+| #176 | Calendar RSVP + move | Code/tests landed; do not close without live smoke |
+
+Reference: `docs/reports/2026-05-25-h2t-ops-recent-closure-validation-gate.md`.
+
 ## Critical Path Details
 
 ### Completed: Connector Freeze + Mac Portability Gate (#155)
@@ -456,10 +474,12 @@ Routine maintenance, not active closure blockers:
    backlog items.
 3. Sweep remaining issues into explicit streams: provider backlog, research backlog,
    creative backlog, or moved/stale-closed.
-4. Pick one next product stream explicitly instead of mixing them:
+4. Run the recent-closure validation gate before broad P2 work so write/read
+   evidence standards stay consistent.
+5. Pick one next product stream explicitly instead of mixing them:
    provider capability gaps, research workflow/product backlog, creative recovery,
    setup/onboarding UX, or POS-side workflow contracts.
-5. Keep roadmap language honest: open feature gaps are not “migration blockers”
+6. Keep roadmap language honest: open feature gaps are not “migration blockers”
    now that `h2t-ops` is already shippable.
 
 ## Closure Forecast
