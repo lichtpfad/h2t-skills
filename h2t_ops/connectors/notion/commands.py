@@ -64,6 +64,12 @@ def register(subparsers: Any) -> None:
     u.add_argument("page_id"); u.add_argument("--title")
     u.add_argument("--append"); u.add_argument("--file")
     u.add_argument("--replace", action="store_true"); add_fmt(u)
+    co = cmds.add_parser("comments", help="List top-level comments on a page")
+    co.add_argument("page_id"); add_fmt(co)
+    ca = cmds.add_parser("comment", help="Add a top-level comment to a page")
+    ca.add_argument("page_id")
+    ca.add_argument("--body", required=True, help="Comment text")
+    add_fmt(ca)
     sy = cmds.add_parser("sync", help="Sync page to a markdown file")
     sy.add_argument("page_id"); sy.add_argument("output_file")
     sy.add_argument("--preserve-metadata", action="store_true")
@@ -140,6 +146,10 @@ def run(args) -> Any:
                                      filter_dict=fdict, limit=args.limit)
         return rows if _fmt(args) == "json" else client.database_items_to_markdown(
             rows, client.get_database(args.database_id))
+    if cmd == "comments":
+        return client.list_comments(args.page_id)
+    if cmd == "comment":
+        return client.create_comment(args.page_id, args.body)
     if cmd == "create":
         content = _read_file(args.file) if args.file else args.content
         return client.create_page(args.parent_id, args.title,
