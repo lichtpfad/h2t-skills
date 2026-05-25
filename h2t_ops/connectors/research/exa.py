@@ -519,6 +519,128 @@ def _split_csv(raw: str | None) -> list[str] | None:
     return [x.strip() for x in raw.split(",") if x.strip()] if raw else None
 
 
+def find_similar(
+    url: str,
+    *,
+    api_key: str,
+    num_results: int = 10,
+    include_domains: list[str] | None = None,
+    exclude_domains: list[str] | None = None,
+) -> tuple[dict[str, Any], int]:
+    """Call Exa /findSimilar. Returns (envelope, exit_code)."""
+    body: dict[str, Any] = {
+        "url": url,
+        "numResults": num_results,
+        "contents": {"highlights": {"maxCharacters": 4000}},
+    }
+    if include_domains:
+        body["includeDomains"] = include_domains
+    if exclude_domains:
+        body["excludeDomains"] = exclude_domains
+
+    timestamp = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    try:
+        http_status, data, latency = call_exa("/findSimilar", body, api_key)
+    except ExaPermanentError as exc:
+        exit_code = 4 if exc.http_status in {401, 403} else 1
+        return {
+            "status": "FAILED",
+            "primary_engine": "exa",
+            "results": [],
+            "telemetry": {
+                "attempts": [{"engine": "exa", "endpoint": "/findSimilar", "http": exc.http_status, "latency_ms": exc.latency_ms, "error": "exa_auth_error" if exc.http_status in {401, 403} else "exa_4xx"}],
+                "total_latency_ms": exc.latency_ms,
+                "total_cost_usd": 0.0,
+            },
+            "meta": {"source_url": url, "envelope_version": ENVELOPE_VERSION, "timestamp": timestamp},
+        }, exit_code
+    except (ExaTransientError, ExaMalformedResponseError) as exc:
+        latency_ms = getattr(exc, "latency_ms", 0)
+        return {
+            "status": "FAILED",
+            "primary_engine": "exa",
+            "results": [],
+            "telemetry": {
+                "attempts": [{"engine": "exa", "endpoint": "/findSimilar", "http": getattr(exc, "http_status", None), "latency_ms": latency_ms, "error": "exa_network"}],
+                "total_latency_ms": latency_ms,
+                "total_cost_usd": 0.0,
+            },
+            "meta": {"source_url": url, "envelope_version": ENVELOPE_VERSION, "timestamp": timestamp},
+        }, 6
+
+    results = data.get("results", [])
+    cost = float((data.get("costDollars") or {}).get("total", 0.0))
+    status = "OK" if results else "DEGRADED"
+    return {
+        "status": status,
+        "primary_engine": "exa",
+        "results": results,
+        "telemetry": {
+            "attempts": [{"engine": "exa", "endpoint": "/findSimilar", "http": http_status, "latency_ms": latency, "error": None}],
+            "total_latency_ms": latency,
+            "total_cost_usd": cost,
+        },
+        "meta": {
+            "source_url": url,
+            "num_results_requested": num_results,
+            "num_results_returned": len(results),
+            "envelope_version": ENVELOPE_VERSION,
+            "timestamp": timestamp,
+        },
+    }, 0
+
+
+def answer(
+    query: str,
+    *,
+    api_key: str,
+) -> tuple[dict[str, Any], int]:
+    """Call Exa /answer. Returns (envelope, exit_code)."""
+    body: dict[str, Any] = {"query": query, "text": True}
+    timestamp = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    try:
+        http_status, data, latency = call_exa("/answer", body, api_key)
+    except ExaPermanentError as exc:
+        exit_code = 4 if exc.http_status in {401, 403} else 1
+        return {
+            "status": "FAILED",
+            "primary_engine": "exa",
+            "answer_text": "",
+            "citations": [],
+            "telemetry": {"attempts": [{"engine": "exa", "endpoint": "/answer", "http": exc.http_status, "latency_ms": exc.latency_ms, "error": "exa_auth_error" if exc.http_status in {401, 403} else "exa_4xx"}], "total_latency_ms": exc.latency_ms, "total_cost_usd": 0.0},
+            "meta": {"query": query, "envelope_version": ENVELOPE_VERSION, "timestamp": timestamp},
+        }, exit_code
+    except (ExaTransientError, ExaMalformedResponseError) as exc:
+        latency_ms = getattr(exc, "latency_ms", 0)
+        return {
+            "status": "FAILED",
+            "primary_engine": "exa",
+            "answer_text": "",
+            "citations": [],
+            "telemetry": {"attempts": [{"engine": "exa", "endpoint": "/answer", "http": getattr(exc, "http_status", None), "latency_ms": latency_ms, "error": "exa_network"}], "total_latency_ms": latency_ms, "total_cost_usd": 0.0},
+            "meta": {"query": query, "envelope_version": ENVELOPE_VERSION, "timestamp": timestamp},
+        }, 6
+
+    answer_text = data.get("answer", "")
+    citations = data.get("citations", [])
+    return {
+        "status": "OK",
+        "primary_engine": "exa",
+        "answer_text": answer_text,
+        "citations": citations,
+        "telemetry": {
+            "attempts": [{"engine": "exa", "endpoint": "/answer", "http": http_status, "latency_ms": latency, "error": None}],
+            "total_latency_ms": latency,
+            "total_cost_usd": 0.0,
+        },
+        "meta": {
+            "query": query,
+            "envelope_version": ENVELOPE_VERSION,
+            "timestamp": timestamp,
+        },
+    }, 0
+
+
 __all__ = [
     "__version__",
     "SCRIPT_DIR",
@@ -540,4 +662,6 @@ __all__ = [
     "load_system_prompt",
     "build_body",
     "validate_args",
+    "find_similar",
+    "answer",
 ]
