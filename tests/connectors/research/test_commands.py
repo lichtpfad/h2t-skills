@@ -10,7 +10,7 @@ import pytest
 
 from h2t_ops import cli
 from h2t_ops.connectors.research import commands
-from h2t_ops.core.errors import ProviderError
+from h2t_ops.core.errors import ProviderError, UsageError
 from h2t_ops.core.registry import discover
 
 
@@ -78,6 +78,30 @@ def test_parser_registration_for_research_subcommands():
     assert fetch.provider == "crawl4ai"
 
 
+def test_parser_registration_for_research_visual_ocr():
+    parser = cli.build_parser()
+
+    parsed = parser.parse_args(
+        [
+            "research",
+            "visual-ocr",
+            "--fetch-sidecar",
+            "artifact.sources.json",
+            "--image-path",
+            "capture.png",
+            "--json",
+        ]
+    )
+
+    assert parsed.connector == "research"
+    assert parsed.research_cmd == "visual-ocr"
+    assert parsed.fetch_sidecar == "artifact.sources.json"
+    assert parsed.image_path == "capture.png"
+    assert parsed.project == "default"
+    assert parsed.as_json is True
+    assert parsed._handler is commands.run
+
+
 class FakeResearchClient:
     instances: list["FakeResearchClient"] = []
 
@@ -101,6 +125,10 @@ class FakeResearchClient:
     def fetch_url(self, url: str, **kwargs) -> dict:
         self.calls.append(("fetch", {"url": url, **kwargs}))
         return {"method": "fetch", "url": url, "kwargs": kwargs}
+
+    def visual_ocr(self, **kwargs) -> dict:
+        self.calls.append(("visual_ocr", kwargs))
+        return {"method": "visual_ocr", "kwargs": kwargs}
 
 
 def _patch_fake_client(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -197,6 +225,39 @@ def test_run_dispatches_fetch(monkeypatch):
         "project": "h2t skills",
         "config_path": "fetch.json",
     }
+
+
+def test_run_dispatches_visual_ocr(monkeypatch):
+    _patch_fake_client(monkeypatch)
+    output_dir = str(Path.cwd() / "tmp" / "research-visual-ocr")
+    args = argparse.Namespace(
+        research_cmd="visual-ocr",
+        output_dir=output_dir,
+        fetch_sidecar="artifact.sources.json",
+        image_path="capture.png",
+        project="demo",
+    )
+
+    result = commands.run(args)
+
+    assert FakeResearchClient.instances[0].output_dir == Path(output_dir)
+    assert result["method"] == "visual_ocr"
+    assert result["kwargs"] == {
+        "fetch_sidecar": "artifact.sources.json",
+        "image_path": "capture.png",
+        "project": "demo",
+    }
+
+
+def test_real_research_client_visual_ocr_missing_sidecar_raises_usageerror(tmp_path):
+    from h2t_ops.connectors.research.client import ResearchClient
+
+    with pytest.raises(UsageError, match="fetch sidecar not found"):
+        ResearchClient(output_dir=tmp_path).visual_ocr(
+            fetch_sidecar="artifact.sources.json",
+            image_path="capture.png",
+            project="demo",
+        )
 
 
 def test_dispatch_json_error_preserves_details(monkeypatch, capsys):

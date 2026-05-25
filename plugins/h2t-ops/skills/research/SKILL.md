@@ -24,7 +24,16 @@ h2t-ops research preflight --json
 h2t-ops research search --query "..." --mode generic --num-results 10 --json
 h2t-ops research crawl --url "https://..." --json
 h2t-ops research fetch --url "https://..." --provider auto --json
+h2t-ops research visual-ocr --fetch-sidecar "...sources.json" --image-path "...png" --json
 ```
+
+`visual-ocr` is a rescue path after `research fetch` returns `FAILED` or specific
+degraded reasons. It creates a review-required artifact from one fetch sidecar and
+one existing page image.
+
+Screenshot capture is an operator concern, not a research connector concern.
+Preferred workflow: capture the page with `h2t-tools:screenshot`, then pass that
+image into `h2t-ops research visual-ocr`.
 
 ## References
 
@@ -45,16 +54,19 @@ Load only what the request needs:
 
 1. Pick a template if the request has a clear domain.
 2. Run the relevant `h2t-ops research ...` command.
-3. Inspect `result.status`; `exit 0` can still mean `DEGRADED`.
-4. Write final findings only with source URL + quote + confidence.
-5. Preserve artifact paths and telemetry.
-6. Fill `research_artifact_registration/v1` context while the session context is fresh.
-7. If POS intake exists, hand it the registration manifest; otherwise leave the manifest ready.
+3. For `visual-ocr`, first produce the fetch sidecar with `h2t-ops research fetch`,
+   then capture the page screenshot via `h2t-tools:screenshot`.
+4. Inspect `result.status`; `exit 0` can still mean `DEGRADED`.
+5. Write final findings only with source URL + quote + confidence.
+6. Preserve artifact paths and telemetry.
+7. Fill `research_artifact_registration/v1` context while the session context is fresh.
+8. If POS intake exists, hand it the registration manifest; otherwise leave the manifest ready.
 
 ## Antipatterns
 
 - No silent WebSearch/WebFetch fallback.
 - No paywall/login bypass.
+- No screenshot capture inside `h2t-ops research`; use `h2t-tools:screenshot`.
 - No POS DB/vault/lake/context writes.
 - No finding without URL + quote + confidence.
 - No automatic KB promotion.
