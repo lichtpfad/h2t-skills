@@ -236,23 +236,24 @@ def test_copy_file_with_name_and_folder_sets_body(client_obj):
     }
 
 
-def test_copy_file_to_root_sets_parents_field(client_obj, monkeypatch):
+def test_copy_file_to_explicit_root_sets_parents_field(client_obj, monkeypatch):
     files = client_obj.service.files.return_value
     monkeypatch.setattr(client_obj, "_resolve_folder_id", lambda folder: (None, "root", False))
     files.copy.return_value.execute.return_value = {
         "id": "copy-root",
         "name": "copy.txt",
         "mimeType": "text/plain",
-        "parents": [],
+        "parents": ["root"],
         "webViewLink": "https://drive/copy-root",
     }
 
-    client_obj.copy_file("file1", new_name=" copy.txt ", folder="root")
+    result = client_obj.copy_file("file1", new_name=" copy.txt ", folder="root")
 
     assert files.copy.call_args.kwargs["body"] == {
         "name": "copy.txt",
         "parents": ["root"],
     }
+    assert result["parents"] == ["root"]
 
 
 def test_list_document_tabs_flattens_nested_tabs(client_obj):
@@ -568,17 +569,47 @@ def test_upload_missing_folder_raises_notfounderror(client_obj):
         client_obj._resolve_folder_id("Missing")
 
 
-def test_resolve_folder_id_like_missing_raises_notfounderror(client_obj):
+def test_resolve_folder_id_like_missing_falls_back_to_name_search(client_obj):
     folder_id = "1AbCdEfGhIjKlMn0"
     files = client_obj.service.files.return_value
     drives = client_obj.service.drives.return_value
     files.get.return_value.execute.side_effect = FakeHttpError(404, "missing file")
     drives.get.return_value.execute.side_effect = FakeHttpError(404, "missing drive")
+    files.list.return_value.execute.return_value = {
+        "files": [
+            {
+                "id": "folder-by-name",
+                "name": folder_id,
+                "mimeType": "application/vnd.google-apps.folder",
+            },
+        ],
+    }
 
-    with pytest.raises(NotFoundError) as ei:
+    resolved_id, resolved_name, is_shared_drive = client_obj._resolve_folder_id(folder_id)
+
+    assert resolved_id == "folder-by-name"
+    assert resolved_name == folder_id
+    assert is_shared_drive is False
+    assert files.list.call_args.kwargs["q"] == (
+        f"name='{folder_id}' and mimeType='application/vnd.google-apps.folder' and trashed=false"
+    )
+
+
+def test_resolve_folder_id_like_regular_file_is_rejected(client_obj):
+    folder_id = "1AbCdEfGhIjKlMn0"
+    files = client_obj.service.files.return_value
+    files.get.return_value.execute.return_value = {
+        "id": folder_id,
+        "name": "notes.txt",
+        "mimeType": "text/plain",
+    }
+
+    with pytest.raises(UsageError) as ei:
         client_obj._resolve_folder_id(folder_id)
 
-    assert str(ei.value) == f"folder not found: {folder_id}"
+    assert str(ei.value) == f"target is not a Drive folder: {folder_id}"
+    client_obj.service.drives.return_value.get.assert_not_called()
+    files.list.assert_not_called()
 
 
 def test_resolve_folder_id_like_auth_error_is_preserved(client_obj):

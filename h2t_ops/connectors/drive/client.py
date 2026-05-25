@@ -222,9 +222,11 @@ class DriveClient:
             try:
                 meta = self.service.files().get(
                     fileId=folder_name,
-                    fields="id,name",
+                    fields="id,name,mimeType",
                     supportsAllDrives=True,
                 ).execute()
+                if meta.get("mimeType") != FOLDER_MIME:
+                    raise UsageError(f"target is not a Drive folder: {folder_name}")
                 return meta["id"], meta.get("name", folder_name), False
             except Exception as e:
                 mapped = _map_http_error(e, op=f"resolve folder id {folder_name}")
@@ -239,9 +241,8 @@ class DriveClient:
                 return drive_meta["id"], drive_meta.get("name", folder_name), True
             except Exception as e:
                 mapped = _map_http_error(e, op=f"resolve shared drive id {folder_name}")
-                if isinstance(mapped, NotFoundError):
-                    raise NotFoundError(f"folder not found: {folder_name}") from e
-                raise mapped from e
+                if not isinstance(mapped, NotFoundError):
+                    raise mapped from e
         safe = _escape_query_value(folder_name)
         resp = self.service.files().list(
             q=(
