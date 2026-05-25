@@ -615,6 +615,45 @@ class DriveClient:
         except Exception as e:
             raise _map_http_error(e, op=f"copy file {file_id}") from e
 
+    def move_file(self, file_id: str, *, destination_folder_id: str) -> Dict[str, Any]:
+        try:
+            folder_id, _, _ = self._resolve_folder_id(destination_folder_id)
+            add_parents = "root" if not folder_id else folder_id
+            if folder_id:
+                folder_meta = self.service.files().get(
+                    fileId=folder_id,
+                    fields="id, name, mimeType",
+                    supportsAllDrives=True,
+                ).execute()
+                if folder_meta.get("mimeType") != FOLDER_MIME:
+                    raise UsageError(
+                        f"destination {folder_meta.get('name', folder_id)!r} is not a Drive folder"
+                    )
+
+            file_meta = self.service.files().get(
+                fileId=file_id,
+                fields="id, name, mimeType, parents",
+                supportsAllDrives=True,
+            ).execute()
+            remove_parents = ",".join(file_meta.get("parents", []) or [])
+
+            res = self.service.files().update(
+                fileId=file_id,
+                addParents=add_parents,
+                removeParents=remove_parents,
+                fields="id, name, mimeType, parents, webViewLink",
+                supportsAllDrives=True,
+            ).execute()
+            return {
+                "file_id": res.get("id", file_id),
+                "name": res.get("name", file_meta.get("name", "")),
+                "mimeType": res.get("mimeType", file_meta.get("mimeType", "")),
+                "parents": res.get("parents", []),
+                "web_view_link": res.get("webViewLink", ""),
+            }
+        except Exception as e:
+            raise _map_http_error(e, op=f"move file {file_id}") from e
+
     def list_document_tabs(self, document_id: str) -> Dict[str, Any]:
         try:
             meta = self.service.files().get(
