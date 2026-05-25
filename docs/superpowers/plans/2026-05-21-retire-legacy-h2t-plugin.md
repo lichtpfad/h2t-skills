@@ -1,3 +1,9 @@
+---
+title: "Retire legacy h2t plugin"
+status: "draft"
+date: "2026-05-21"
+milestone: ""
+---
 # Retire legacy h2t plugin
 
 **Issue:** #151 — skills: register only namespaced aliases to eliminate duplicate entries in system prompt

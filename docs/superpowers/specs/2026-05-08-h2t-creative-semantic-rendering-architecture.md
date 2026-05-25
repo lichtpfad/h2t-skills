@@ -1,12 +1,10 @@
 ---
-title: h2t-creative Semantic Rendering Architecture
-status: superseded
-date: 2026-05-08
-scope: h2t-creative landing/deck/dashboard composition layer
-superseded_on: 2026-05-19
-superseded_reason: "#119 human browser review rejected the abstraction-first semantic renderer direction."
+title: "h2t-creative Semantic Rendering Architecture"
+status: "draft"
+owner: "Stanislav Glazov"
+date: "2026-05-08"
+milestone: ""
 ---
-
 # h2t-creative Semantic Rendering Architecture
 
 > **Status 2026-05-19:** superseded. This spec describes the semantic-CMS direction that produced the failed #119 editorial landing candidate. The human review found that the output had only fonts/colors, lacked a working design system, lacked meaningful semantic blocks, and was not a landing. Do not use this spec as an implementation plan. Treat it as negative evidence: concrete, human-approved visual output must precede reusable abstraction.

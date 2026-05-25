@@ -1,3 +1,9 @@
+---
+title: "h2t-ops MeetGeek Parity Migration — Implementation Plan (#134)"
+status: "draft"
+date: "2026-05-20"
+milestone: ""
+---
 # h2t-ops MeetGeek Parity Migration — Implementation Plan (#134)
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.

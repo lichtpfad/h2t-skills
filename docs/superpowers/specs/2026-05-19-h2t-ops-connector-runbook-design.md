@@ -1,3 +1,10 @@
+---
+title: "h2t-ops Connector Development Runbook — Design"
+status: "draft"
+owner: "Stanislav Glazov"
+date: "2026-05-19"
+milestone: ""
+---
 # h2t-ops Connector Development Runbook — Design
 
 **Status:** Draft for review

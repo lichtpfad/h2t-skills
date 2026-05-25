@@ -1,21 +1,10 @@
 ---
 title: "h2t-ops Research Fetch Ladder Closure Design"
 status: "draft"
-owner: "lichtpfad"
+owner: "Stanislav Glazov"
 date: "2026-05-24"
-issue: "lichtpfad/h2t-skills#98"
-related:
-  - "lichtpfad/h2t-skills#97"
-  - "lichtpfad/h2t-skills#99"
-  - "lichtpfad/h2t-skills#105"
-  - "lichtpfad/h2t-skills#136"
-  - "docs/superpowers/specs/2026-05-07-research-fetch-url-ladder.md"
-  - "docs/superpowers/specs/2026-05-21-h2t-ops-research-parity-design.md"
-  - "plugins/h2t-ops/skills/research/scripts/fetch_url.py"
-  - "plugins/h2t-ops/skills/research/tests/test_fetch_url.py"
-supersedes: "docs/superpowers/specs/2026-05-07-research-fetch-url-ladder.md"
+milestone: ""
 ---
-
 # h2t-ops Research Fetch Ladder Closure Design
 
 ## Goal

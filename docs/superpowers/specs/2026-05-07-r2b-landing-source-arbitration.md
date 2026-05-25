@@ -1,3 +1,10 @@
+---
+title: "R2b — Landing Source Arbitration Visual Gate (h2t-editorial landing, #88)"
+status: "draft"
+owner: "Stanislav Glazov"
+date: "2026-05-07"
+milestone: ""
+---
 # R2b — Landing Source Arbitration Visual Gate (h2t-editorial landing, #88)
 
 **Status:** Decision proposal — awaiting human approval before T1 implementation begins.

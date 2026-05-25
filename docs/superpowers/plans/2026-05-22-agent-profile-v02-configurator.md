@@ -1,3 +1,9 @@
+---
+title: "h2t-core:agent-profile v0.2 Configurator — Implementation Plan"
+status: "draft"
+date: "2026-05-22"
+milestone: ""
+---
 # h2t-core:agent-profile v0.2 Configurator — Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.

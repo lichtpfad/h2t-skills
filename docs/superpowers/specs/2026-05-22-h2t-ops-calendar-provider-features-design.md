@@ -1,3 +1,10 @@
+---
+title: "h2t-ops Calendar Provider Features - Design"
+status: "draft"
+owner: "lichtpfad"
+date: "2026-05-22"
+milestone: ""
+---
 # h2t-ops Calendar Provider Features - Design
 
 Date: 2026-05-22
