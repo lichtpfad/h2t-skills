@@ -61,6 +61,10 @@ def register(subparsers: Any) -> None:
     dtl = dtcmds.add_parser("list", help="List tabs in a Google Doc")
     dtl.add_argument("document_id")
     add_fmt(dtl)
+    dta = dtcmds.add_parser("add", help="Add a new tab to a Google Doc")
+    dta.add_argument("document_id")
+    dta.add_argument("title")
+    add_fmt(dta)
 
     dp = cmds.add_parser("download", help="Download a Drive file by id")
     dp.add_argument("file_id")
@@ -183,6 +187,8 @@ def run(args) -> Any:
     if cmd == "docs-tab":
         if args.docs_tab_cmd == "list":
             return client.list_document_tabs(args.document_id)
+        if args.docs_tab_cmd == "add":
+            return client.add_document_tab(args.document_id, args.title)
         raise UsageError(f"unknown drive docs-tab subcommand: {args.docs_tab_cmd}")
     if cmd == "download":
         return client.download_file(args.file_id, dest=args.dest)
