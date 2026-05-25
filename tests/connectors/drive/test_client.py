@@ -313,6 +313,13 @@ def test_move_file_requires_destination_to_be_folder(client_obj, monkeypatch):
     assert str(ei.value) == "destination 'Bad' is not a Drive folder"
 
 
+def test_move_file_requires_non_empty_destination(client_obj):
+    with pytest.raises(UsageError) as ei:
+        client_obj.move_file("file1", destination_folder_id="   ")
+
+    assert str(ei.value) == "drive move: destination folder is required"
+
+
 def test_move_file_to_root_skips_folder_validation_fetch(client_obj, monkeypatch):
     files = client_obj.service.files.return_value
     monkeypatch.setattr(client_obj, "_resolve_folder_id", lambda folder: (None, "root", False))
