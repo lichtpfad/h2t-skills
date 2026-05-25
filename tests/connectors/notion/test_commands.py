@@ -52,6 +52,8 @@ class _FakeClient:
     def get_blocks(self, page_id, limit=None): return [{"type": "paragraph", "id": "b1"}]
     def blocks_to_markdown(self, blocks): return "MD"
     def update_page(self, *a, **k): return {"id": "p"}
+    def list_comments(self, page_id): return [{"id": "c1", "text": "hi", "created_time": "2026-05-25T10:00:00.000Z", "created_by_id": "u1"}]
+    def create_comment(self, page_id, body): return {"id": "c2", "text": body, "created_time": "2026-05-25T10:00:00.000Z", "created_by_id": "u1"}
 
 
 def _ns(**kw):
@@ -138,6 +140,28 @@ def test_ingest_notion_shim_silent_on_json(monkeypatch, capsys):
     cap = capsys.readouterr()
     assert "deprecat" not in cap.err.lower()
     assert code == 0
+
+
+def test_register_adds_comments_subcommands():
+    p = _parser()
+    ns = p.parse_args(["notion", "comments", "PAGE1"])
+    assert ns.notion_cmd == "comments" and ns.page_id == "PAGE1"
+    ns = p.parse_args(["notion", "comment", "PAGE1", "--body", "Hello"])
+    assert ns.notion_cmd == "comment" and ns.page_id == "PAGE1" and ns.body == "Hello"
+
+
+def test_comments_dispatch(monkeypatch):
+    _patch_client(monkeypatch)
+    out = notion_cmds.run(_ns(notion_cmd="comments", page_id="page1", as_json=True, fmt="human"))
+    assert isinstance(out, list)
+    assert out[0]["id"] == "c1"
+
+
+def test_comment_dispatch(monkeypatch):
+    _patch_client(monkeypatch)
+    out = notion_cmds.run(_ns(notion_cmd="comment", page_id="page1", body="Hello", as_json=True, fmt="human"))
+    assert out["id"] == "c2"
+    assert out["text"] == "Hello"
 
 
 def test_connector_help_exits_zero(capsys):
