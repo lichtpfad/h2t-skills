@@ -14,12 +14,17 @@ def _parser():
 def test_register_adds_gmail_subcommands():
     ns = _parser().parse_args(["gmail", "list", "--max", "5"])
     assert ns.connector == "gmail" and ns.gmail_cmd == "list" and ns.max == 5
+    assert _parser().parse_args(["gmail", "threads", "--max", "5"]).gmail_cmd == "threads"
+    assert _parser().parse_args(["gmail", "thread", "T1"]).gmail_cmd == "thread"
 
 
 def test_register_has_format_and_json_flags():
     p = _parser()
     assert p.parse_args(["gmail", "list", "--json"]).as_json is True
     assert p.parse_args(["gmail", "read", "MID", "--format", "md"]).fmt == "md"
+    assert p.parse_args(
+        ["gmail", "send", "a", "s", "--thread-id", "T1", "--reply-to", "M1"]
+    ).thread_id == "T1"
 
 
 def test_importing_commands_does_not_import_client(monkeypatch):
@@ -50,8 +55,10 @@ from h2t_ops.core.errors import UsageError
 class _FakeClient:
     def list_messages(self, **k): return [{"id": "1", "subject": "S", "from": "f",
                                            "date": "d", "snippet": "x", "labelIds": []}]
+    def list_threads(self, **k): return [{"id": "t1", "messages": []}]
     def get_message(self, mid): return {"id": mid, "subject": "S", "from": "f",
                                         "to": "t", "date": "d", "labelIds": [], "body": "B"}
+    def get_thread(self, tid): return {"id": tid, "messages": [{"id": "m1", "subject": "S", "from": "f", "to": "t", "date": "d", "labelIds": [], "body": "B"}]}
     def send_message(self, **k): return {"id": "m1"}
 
 
@@ -81,11 +88,42 @@ def test_read_human_returns_detail(monkeypatch):
     assert "# S" in out and "B" in out
 
 
+def test_threads_json_returns_raw(monkeypatch):
+    _patch(monkeypatch)
+    out = gc.run(_ns(gmail_cmd="threads", max=10, unread=False, query=None,
+                     as_json=True, fmt="human"))
+    assert out == [{"id": "t1", "messages": []}]
+
+
+def test_thread_human_returns_detail(monkeypatch):
+    _patch(monkeypatch)
+    out = gc.run(_ns(gmail_cmd="thread", thread_id="T1", as_json=False, fmt="human"))
+    assert "Thread T1" in out and "Message ID" in out
+
+
 def test_send_no_body_raises_usageerror(monkeypatch):
     _patch(monkeypatch)
     with pytest.raises(UsageError):
         gc.run(_ns(gmail_cmd="send", to="a", subject="s", body=None, file=None,
                    attach=None, draft=False, as_json=False, fmt="human"))
+
+
+def test_send_dispatch_forwards_thread_flags(monkeypatch):
+    calls = {}
+
+    class _Stub(_FakeClient):
+        def send_message(self, **kwargs):
+            calls.update(kwargs)
+            return {"id": "m1"}
+
+    import h2t_ops.connectors.gmail.client as client_mod
+    monkeypatch.setattr(client_mod, "GmailClient", lambda: _Stub())
+    out = gc.run(_ns(gmail_cmd="send", to="a@example.com", subject="Subject", body="Body",
+                     file=None, attach=None, draft=False, thread_id="T1",
+                     reply_to="<mid@x>", as_json=True, fmt="human"))
+    assert out == {"id": "m1", "draft": False}
+    assert calls["thread_id"] == "T1"
+    assert calls["reply_to_message_id"] == "<mid@x>"
 
 
 from h2t_ops.cli import dispatch
@@ -98,6 +136,8 @@ def test_gmail_help_exits_zero(capsys):
 
 def test_gmail_subcommand_help_exits_zero():
     assert dispatch(["gmail", "list", "--help"]) == 0
+    assert dispatch(["gmail", "threads", "--help"]) == 0
+    assert dispatch(["gmail", "thread", "--help"]) == 0
 
 
 def test_connectors_list_includes_gmail_no_heavy_import(capsys, monkeypatch):

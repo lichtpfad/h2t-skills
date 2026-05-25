@@ -144,6 +144,37 @@ class GmailClient:
     def search_messages(self, query: str, max_results: int = 10) -> List[Dict[str, Any]]:
         return self.list_messages(max_results=max_results, query=query)
 
+    def list_threads(
+        self,
+        max_results: int = 10,
+        query: Optional[str] = None,
+        unread_only: bool = False,
+    ) -> List[Dict[str, Any]]:
+        try:
+            if unread_only and query:
+                query = f"is:unread {query}"
+            elif unread_only:
+                query = "is:unread"
+            results = self.service.users().threads().list(
+                userId="me", maxResults=max_results, q=query
+            ).execute()
+            threads = results.get("threads", [])
+            return [self.get_thread(row["id"]) for row in threads]
+        except HttpError as e:
+            raise _map_http_error(e, op="list threads") from e
+
+    def get_thread(self, thread_id: str) -> Dict[str, Any]:
+        try:
+            thread = self.service.users().threads().get(
+                userId="me", id=thread_id, format="full"
+            ).execute()
+            return {
+                "id": thread["id"],
+                "messages": [self._parse_message(msg) for msg in thread.get("messages", [])],
+            }
+        except HttpError as e:
+            raise _map_http_error(e, op=f"get thread {thread_id}") from e
+
     def list_labels(self) -> List[Dict[str, str]]:
         try:
             results = self.service.users().labels().list(userId="me").execute()
@@ -301,3 +332,40 @@ def format_message_detail(message: Dict[str, Any]) -> str:
         message["body"],
     ]
     return "\n".join(lines)
+
+
+def format_thread_list(threads: List[Dict[str, Any]]) -> str:
+    if not threads:
+        return "No threads found."
+    lines = [f"Found {len(threads)} thread(s):\n"]
+    for i, thread in enumerate(threads, 1):
+        messages = thread.get("messages", [])
+        latest = messages[-1] if messages else {}
+        unread = any("UNREAD" in msg.get("labelIds", []) for msg in messages)
+        mark = "📩 " if unread else "   "
+        lines += [
+            f"{mark}{i}. Thread `{thread['id']}`",
+            f"   Messages: {len(messages)}",
+            f"   Latest subject: {latest.get('subject', '')}",
+            f"   Latest from: {latest.get('from', '')}",
+            f"   Latest date: {latest.get('date', '')}",
+            "",
+        ]
+    return "\n".join(lines)
+
+
+def format_thread_detail(thread: Dict[str, Any]) -> str:
+    lines = [f"# Thread {thread['id']}", ""]
+    for msg in thread.get("messages", []):
+        lines.extend([
+            f"## {msg.get('subject', '')}",
+            f"**From:** {msg.get('from', '')}",
+            f"**To:** {msg.get('to', '')}",
+            f"**Date:** {msg.get('date', '')}",
+            f"**Labels:** {', '.join(msg.get('labelIds', []))}",
+            f"**Message ID:** `{msg.get('id', '')}`",
+            "",
+            msg.get("body", ""),
+            "",
+        ])
+    return "\n".join(lines).strip()

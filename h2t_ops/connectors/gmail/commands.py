@@ -24,12 +24,22 @@ def register(subparsers: Any) -> None:
     rp = cmds.add_parser("read", help="Read a message")
     rp.add_argument("message_id"); add_fmt(rp)
 
+    tp = cmds.add_parser("threads", help="List threads")
+    tp.add_argument("--max", type=int, default=10)
+    tp.add_argument("--unread", action="store_true")
+    tp.add_argument("--query", default=None); add_fmt(tp)
+
+    thp = cmds.add_parser("thread", help="Read a thread")
+    thp.add_argument("thread_id"); add_fmt(thp)
+
     sp = cmds.add_parser("search", help="Search messages")
     sp.add_argument("query"); sp.add_argument("--max", type=int, default=10); add_fmt(sp)
 
     snp = cmds.add_parser("send", help="Send a message")
     snp.add_argument("to"); snp.add_argument("subject"); snp.add_argument("body", nargs="?")
     snp.add_argument("--file"); snp.add_argument("--attach", nargs="+")
+    snp.add_argument("--thread-id", dest="thread_id")
+    snp.add_argument("--reply-to", dest="reply_to")
     snp.add_argument("--draft", action="store_true"); add_fmt(snp)
 
     dp = cmds.add_parser("draft", help="Create a draft")
@@ -55,6 +65,7 @@ def run(args) -> Any:
     """Dispatch a gmail subcommand. Returns a result or raises core.errors."""
     from h2t_ops.connectors.gmail.client import (  # lazy (spec §4.1)
         GmailClient, format_message_list, format_message_detail,
+        format_thread_list, format_thread_detail,
     )
     from h2t_ops.core.errors import UsageError
 
@@ -77,6 +88,13 @@ def run(args) -> Any:
     if cmd == "read":
         msg = client.get_message(args.message_id)
         return msg if _fmt(args) == "json" else format_message_detail(msg)
+    if cmd == "threads":
+        rows = client.list_threads(
+            max_results=args.max, query=args.query, unread_only=args.unread)
+        return rows if _fmt(args) == "json" else format_thread_list(rows)
+    if cmd == "thread":
+        row = client.get_thread(args.thread_id)
+        return row if _fmt(args) == "json" else format_thread_detail(row)
     if cmd in ("send", "draft"):
         body = _read_file(args.file) if args.file else args.body
         if not body:
