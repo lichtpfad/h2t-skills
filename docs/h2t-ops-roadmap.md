@@ -1,7 +1,7 @@
 # H2T-SKILLS Roadmap
 
 **Status:** Post-closure maintenance and backlog roadmap
-**Date:** 2026-05-25
+**Date:** 2026-05-26
 **Owner:** h2t-skills
 **Milestone tag:** `milestone/legacy-h2t-retired-2026-05-21`
 
@@ -85,16 +85,22 @@ research backlog streams.
 
 The current open work is feature/product backlog, not migration/closure.
 
-| Priority | Issue(s) | Workstream | Notes |
+| Milestone | Issue(s) | Workstream | Notes |
 | --- | --- | --- | --- |
-| P2 | #99, #105, #182 | Research workflow follow-up | Done — Research P2 implemented and smoke-verified 2026-05-26; see below |
-| P2 | #183 | Deploy/operator workflow backlog | Implemented and proofed on branch `codex-deploy-profile-driven`; pending PR/merge |
-| P3 | #101, #70, #71, #72 | Research product backlog | Broader research system evolution, not connector closure |
+| skills-release | #71, #185, #186 | Skills release follow-up | `#183` is complete; remaining open work is research ergonomics plus session-start/handoff and gather/writer packaging |
+| graphs-pos | #21, #54, #70, #72 | Graphs / POS backlog | Deferred graphs, evals, and POS integration stream |
+| creative-p2 | #83, #88, #89, #90, #91, #92, #119 | Creative recovery backlog | Separate creative/product stream |
+| M6: h2t-arch | #5 | Diagram-node docs enforcement | Legacy arch stream still open |
 
-All post-closure backlog issues are currently unmilestoned. Existing repo
-milestones (`M1`-`M7`) are migration-era buckets and no longer describe the
-current maintenance backlog cleanly, so priority labels are the source of truth
-until a new milestone set is created.
+The backlog is now milestone-driven again:
+
+- `skills-release`
+- `graphs-pos`
+- `creative-p2`
+- `M6: h2t-arch`
+
+Priority labels still matter, but milestone assignment is now the primary
+planning surface for open product work.
 
 ### Recent Validation Gate
 
@@ -337,9 +343,9 @@ Recommended triage:
 | Secrets/setup | #107, #112, #94, #109, #110, #13 | Classified as setup/Mac follow-up; avoid piecemeal drift |
 | Calendar follow-up | #82, #145 | Closed; #82 fixed in `6631f57`, #145 fixed in `0acb44b` |
 | Notion follow-up | #146, #81 | Closed; fixed in `4c952d1` |
-| Research backlog | #99, #101, #105, #182, #72, #71, #70 | #99/#105/#182 closed 2026-05-26 (Research P2); #101, #72, #71, #70 remain as product backlog |
+| Research backlog | #71, #72, #70, #101 | `#99/#105/#182` closed 2026-05-26 (Research P2). Remaining research work is now split between `skills-release` (`#71`) and `graphs-pos` / broader product backlog (`#70/#72/#101`) |
 | Provider backlog | none | Connector/provider closure sweep is complete. The former provider items #169, #170, #172, #173, #174, #176, #177, #179, #180, and #181 are now closed; `#176` closed as implementation-complete with deferred RSVP live proof |
-| Deploy/operator backlog | #183 | Keep separate from connector closure; implementation + dry-run/status proof now exist on branch `codex-deploy-profile-driven`, pending merge |
+| Deploy/operator backlog | #183 | Closed 2026-05-26. `h2t-ops deploy` landed with live `list`, `--dry-run`, and `status` proof plus `h2t-ops:deploy` skill instructions |
 | Creative backlog | #119, #83, #88, #89, #90, #91, #92 | Move to creative roadmap; not h2t-ops closure |
 | Cross-platform / machine config | #79, #73 | Keep as h2t-core/platform backlog |
 | Old graph/session items | #54, #53, #21, #5 | Reclassify, move, or close if superseded |
