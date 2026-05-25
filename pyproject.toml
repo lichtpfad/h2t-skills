@@ -21,6 +21,8 @@ dependencies = [
 
 [project.scripts]
 h2t-ops = "h2t_ops.cli:main"
+h2t-gather = "h2t_ops.gather_entry:main"
+h2t-activity-log = "h2t_ops.activity_log_entry:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
