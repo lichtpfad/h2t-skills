@@ -1,7 +1,7 @@
 # H2T-SKILLS Roadmap
 
-**Status:** Active closure roadmap
-**Date:** 2026-05-23
+**Status:** Post-closure maintenance and backlog roadmap
+**Date:** 2026-05-25
 **Owner:** h2t-skills
 **Milestone tag:** `milestone/legacy-h2t-retired-2026-05-21`
 
@@ -66,19 +66,31 @@ The operator-facing handoff and quickstart are captured in
 POS can consume connector JSON/artifacts. POS still owns canonical state,
 interpretation, journal/task/decision acceptance, and long-term registries.
 
-### Active Closure Streams
+### Closure Status
 
-The migration and connector freeze are implemented. Clean-install validation is
-complete. Current active path is: security/dev hygiene, then CI/platform
-hardening, and then repo/product housekeeping.
+The migration, connector freeze, clean-install validation, security/dev hygiene,
+and CI/platform hardening are complete. `h2t-ops` is no longer in an active
+closure phase. The repo is now in maintenance mode with explicit provider and
+research backlog streams.
 
 | Priority | Issue(s) | Work | Classification |
 | --- | --- | --- | --- |
 | 1 | #153 | `h2t-core:agent-profile` configurator and repo profiles | Implemented; future tuning is a new task, not h2t-ops blocker |
 | 2 | #161 | Consolidate non-research connector skills into `h2t-ops:connectors` + lazy references | Done — installed-plugin smoke PASS on Mac 2026-05-23; shippable gate cleared |
-| 3 | #148, #85 | Security/dev hygiene and CI/unit-test hygiene | Not done yet; planned follow-up only after shippable shareability gate |
+| 3 | #148, #85 | Security/dev hygiene and CI/unit-test hygiene | Done; no longer an active closure blocker |
 | 4 | #13, #94, #107, #109, #110, #73, #79, #53 | Platform portability / credential policy | Done or consolidated into policy; routine maintenance only |
-| 5 | #112 | Setup wizard backlog | Future onboarding UX, separate from closure |
+| 5 | #112 | Setup wizard backlog | Closed as separate UX/setup stream, not closure work |
+
+### Active Product Backlog
+
+The current open work is feature/product backlog, not migration/closure.
+
+| Priority | Issue(s) | Workstream | Notes |
+| --- | --- | --- | --- |
+| P1 | #169, #172, #175, #178, #181, #182 | Provider capability gaps | Highest-value missing operations after connector closure |
+| P2 | #173, #174, #176, #177, #179, #180 | Provider capability follow-up | Useful parity/features, not closure blockers |
+| P2 | #99, #105 | Research workflow follow-up | Research helper backlog after fetch ladder baseline |
+| P3 | #101, #70, #71, #72 | Research product backlog | Broader research system evolution, not connector closure |
 
 ## Critical Path Details
 
@@ -250,7 +262,7 @@ Status: implemented and PASS on clean Windows/macOS user runtimes. The active
 `h2t-ops:connectors`, `h2t-ops:research`, `h2t-ops:daily-brief`.
 Legacy per-connector entries are no longer active in `/context`.
 
-### 9. Planned: Security / Dev Hygiene (#148)
+### 9. Resolved: Security / Dev Hygiene (#148)
 
 Planned follow-up (post-shareability):
 
@@ -266,10 +278,10 @@ Policy:
 - keep tracked permission config narrow and repo-scoped;
 - pin or remove runtime execution of unreviewed `@latest` packages.
 
-Status: planned after shareability pass. Follow-up actions captured in
-`docs/superpowers/plans/2026-05-23-h2t-ops-post-shippable-hygiene-plan.md`.
+Status: closed. Follow-up actions were handled as post-shippable hygiene, not
+as an ongoing closure blocker.
 
-### 10. Planned: CI / Test Hygiene (#85)
+### 10. Resolved: CI / Test Hygiene (#85)
 
 Planned scope (post-shareability):
 
@@ -277,8 +289,8 @@ Planned scope (post-shareability):
 - kept Windows/macOS differences documented or guarded where needed;
 - current connector/core test suite passes in the active environment.
 
-Status: planned after #148. Future CI/platform drift is routine maintenance, not
-connector migration.
+Status: closed. Future CI/platform drift is routine maintenance, not connector
+migration.
 
 ### 11. Issue Sweep
 
@@ -293,7 +305,8 @@ Recommended triage:
 | Secrets/setup | #107, #112, #94, #109, #110, #13 | Classified as setup/Mac follow-up; avoid piecemeal drift |
 | Calendar follow-up | #82, #145 | Closed; #82 fixed in `6631f57`, #145 fixed in `0acb44b` |
 | Notion follow-up | #146, #81 | Closed; fixed in `4c952d1` |
-| Research backlog | #97, #99, #101, #105, #72, #71, #70 | Keep as research/product backlog; #98 is closed as shared fetch-ladder baseline, and the 2026-05-24 `#105` spike recommends deferring a heavier generic recovery rung until the failing source corpus grows beyond AllTD |
+| Research backlog | #99, #101, #105, #182, #72, #71, #70 | Keep as research/product backlog; #98 is closed as shared fetch-ladder baseline, `visual-ocr` rescue landed in PR #171, and the heavier generic recovery rung remains deferred until the failing source corpus grows beyond AllTD |
+| Provider backlog | #169, #172, #173, #174, #175, #176, #177, #178, #179, #180, #181 | Keep as explicit post-closure provider feature/bug backlog; these are capability gaps, not migration blockers |
 | Creative backlog | #119, #83, #88, #89, #90, #91, #92 | Move to creative roadmap; not h2t-ops closure |
 | Cross-platform / machine config | #79, #73 | Keep as h2t-core/platform backlog |
 | Old graph/session items | #54, #53, #21, #5 | Reclassify, move, or close if superseded |
@@ -433,17 +446,19 @@ Routine maintenance, not active closure blockers:
 
 1. Use the shippable handoff report when telling POS that the connector stage is
    complete: `docs/reports/2026-05-22-h2t-ops-shippable-handoff.md`.
-2. #161 implementation is closed in PR #165; clean-install smoke for user shareability
-   is now the active PASS gate:
-   - installed-plugin smoke target remains: `connectors`, `research`, `daily-brief`.
-3. After PASS, run `#148` then `#85` as required follow-up.
-4. Sweep remaining issues into active / backlog / moved / stale-closed.
-5. Pick the next product stream explicitly: research backlog, creative recovery,
-   setup wizard/Mac onboarding, or POS-side workflow contracts.
+2. Treat connector migration and closure as done; do not reopen it via piecemeal
+   backlog items.
+3. Sweep remaining issues into explicit streams: provider backlog, research backlog,
+   creative backlog, or moved/stale-closed.
+4. Pick one next product stream explicitly instead of mixing them:
+   provider capability gaps, research workflow/product backlog, creative recovery,
+   setup/onboarding UX, or POS-side workflow contracts.
+5. Keep roadmap language honest: open feature gaps are not “migration blockers”
+   now that `h2t-ops` is already shippable.
 
 ## Closure Forecast
 
-Date: 2026-05-23
+Date: 2026-05-25
 
 Calibration note: the previous forecast assumed Telegram, Research/fetch,
 Daily Brief, legacy h2t retirement, profiles, cleanup, and broad Calendar/Notion
@@ -451,22 +466,20 @@ features were still ahead. Since then, Telegram, Research/fetch, Drive
 `sync-meetings` retirement, legacy `h2t` retirement, #121 cleanup, #155
 connector freeze, Notion #81/#146, and Calendar #145 are complete.
 
-`h2t-ops` connector work is no longer the active migration track. #153 and #161 are
-closed; connector skill surface is complete.
+`h2t-ops` connector work is no longer the active migration track. #153, #161,
+#148, and #85 are closed; connector skill surface and post-shippable hygiene are complete.
 
 | Remaining block | Optimistic | Realistic | Main risk |
 | --- | ---: | ---: | --- |
 | #153 `h2t-core:agent-profile` | Done | Done | Future tuning belongs to new tasks |
 | #161 connector skill consolidation | Done | Done | PASS evidence captured in issue #166 and docs/reports/2026-05-23... |
-| #148 security/dev hygiene | 2-4h | 1-2 days | Environment/runtime portability (Python/uv/paths) |
-| #85 CI/platform hygiene | 1-2h | 1 day | Cross-platform test assumptions and skip rationale |
-| Issue sweep / reclassification | 0.5-1 day | 1-2 days | Old issues that need careful "move vs close" decisions |
+| #148 security/dev hygiene | Done | Done | Routine maintenance only |
+| #85 CI/platform hygiene | Done | Done | Routine maintenance only |
+| Issue sweep / reclassification | 0.5-1 day | 1 day | Old issues that need careful "move vs close" decisions |
 
 Remaining estimate to maintenance/closure mode:
 
-- optimistic: 0.5-1 focused working day;
-- realistic: 1-2 focused working days;
-- with interruptions: 2-4 calendar days.
+- achieved; repo is already in maintenance/closure mode.
 
 This excludes research product backlog, creative recovery, setup wizard/Mac
 onboarding, and POS-side workflow contracts. Those remain explicit future
