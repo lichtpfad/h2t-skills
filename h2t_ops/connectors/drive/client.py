@@ -616,10 +616,11 @@ class DriveClient:
             raise _map_http_error(e, op=f"copy file {file_id}") from e
 
     def move_file(self, file_id: str, *, destination_folder_id: str) -> Dict[str, Any]:
-        if not destination_folder_id or not destination_folder_id.strip():
+        destination = destination_folder_id.strip() if destination_folder_id else ""
+        if not destination:
             raise UsageError("drive move: destination folder is required")
         try:
-            folder_id, _, is_shared_drive = self._resolve_folder_id(destination_folder_id)
+            folder_id, _, is_shared_drive = self._resolve_folder_id(destination)
             add_parents = "root" if not folder_id else folder_id
             if folder_id and not is_shared_drive:
                 folder_meta = self.service.files().get(
