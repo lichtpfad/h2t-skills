@@ -348,6 +348,98 @@ def test_find_databases_row_limit_zero_queries_metadata_but_no_rows(conv):
     assert result["stats"]["databases_queried"] == 0
 
 
+# --- Comments ---
+
+def test_rich_text_to_plain_concatenates_content(conv):
+    rich = [
+        {"type": "text", "text": {"content": "Hello "}},
+        {"type": "text", "text": {"content": "world"}},
+    ]
+    assert conv._rich_text_to_plain(rich) == "Hello world"
+
+
+def test_rich_text_to_plain_empty(conv):
+    assert conv._rich_text_to_plain([]) == ""
+
+
+def test_list_comments_returns_normalized(conv):
+    from unittest.mock import MagicMock
+    conv.client = MagicMock()
+    conv.client.comments.list.return_value = {
+        "results": [
+            {
+                "id": "c1",
+                "rich_text": [{"type": "text", "text": {"content": "Nice page"}}],
+                "created_time": "2026-05-25T10:00:00.000Z",
+                "created_by": {"id": "user1"},
+            }
+        ],
+        "has_more": False,
+    }
+    result = conv.list_comments("page1")
+    assert result == [
+        {"id": "c1", "text": "Nice page", "created_time": "2026-05-25T10:00:00.000Z", "created_by_id": "user1"}
+    ]
+
+
+def test_list_comments_auto_paginates(conv):
+    from unittest.mock import MagicMock
+    conv.client = MagicMock()
+    conv.client.comments.list.side_effect = [
+        {"results": [{"id": "c1", "rich_text": [], "created_time": "", "created_by": {"id": "u"}}],
+         "has_more": True, "next_cursor": "cur1"},
+        {"results": [{"id": "c2", "rich_text": [], "created_time": "", "created_by": {"id": "u"}}],
+         "has_more": False},
+    ]
+    result = conv.list_comments("page1")
+    assert [r["id"] for r in result] == ["c1", "c2"]
+    assert conv.client.comments.list.call_count == 2
+    second_call_kwargs = conv.client.comments.list.call_args_list[1].kwargs
+    assert second_call_kwargs["start_cursor"] == "cur1"
+
+
+def test_list_comments_empty(conv):
+    from unittest.mock import MagicMock
+    conv.client = MagicMock()
+    conv.client.comments.list.return_value = {"results": [], "has_more": False}
+    assert conv.list_comments("page1") == []
+
+
+def test_list_comments_maps_sdk_exc(conv):
+    from unittest.mock import MagicMock
+    from h2t_ops.core.errors import ProviderError
+    conv.client = MagicMock()
+    conv.client.comments.list.side_effect = RuntimeError("boom")
+    with pytest.raises(ProviderError):
+        conv.list_comments("page1")
+
+
+def test_create_comment_wraps_text_in_rich_text(conv):
+    from unittest.mock import MagicMock
+    conv.client = MagicMock()
+    conv.client.comments.create.return_value = {
+        "id": "c1",
+        "rich_text": [{"type": "text", "text": {"content": "Hello"}}],
+        "created_time": "2026-05-25T10:00:00.000Z",
+        "created_by": {"id": "user1"},
+    }
+    result = conv.create_comment("page1", "Hello")
+    kw = conv.client.comments.create.call_args.kwargs
+    assert kw["parent"] == {"page_id": "page1"}
+    assert kw["rich_text"] == [{"type": "text", "text": {"content": "Hello"}}]
+    assert result["text"] == "Hello"
+    assert result["created_by_id"] == "user1"
+
+
+def test_create_comment_maps_sdk_exc(conv):
+    from unittest.mock import MagicMock
+    from h2t_ops.core.errors import ProviderError
+    conv.client = MagicMock()
+    conv.client.comments.create.side_effect = RuntimeError("boom")
+    with pytest.raises(ProviderError):
+        conv.create_comment("page1", "Hello")
+
+
 def test_find_databases_with_rows_non_recursive_stays_shallow(conv):
     calls = []
     pages = {

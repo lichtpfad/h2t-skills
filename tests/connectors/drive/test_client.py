@@ -17,6 +17,12 @@ from h2t_ops.core.errors import (
 DRIVE_SCOPE = "https://www.googleapis.com/auth/drive"
 
 
+class FakeHttpError(Exception):
+    def __init__(self, status: int, message: str = "error"):
+        super().__init__(message)
+        self.resp = SimpleNamespace(status=status)
+
+
 @pytest.fixture
 def client_obj():
     """Construct a DriveClient WITHOUT running __init__ (no network / SDK)."""
@@ -153,6 +159,273 @@ def test_create_folder_resolves_parent(client_obj, monkeypatch):
     assert files.create.call_args.kwargs["body"]["parents"] == ["parent1"]
 
 
+def test_rename_file_updates_name_and_returns_metadata(client_obj):
+    files = client_obj.service.files.return_value
+    files.update.return_value.execute.return_value = {
+        "id": "file1",
+        "name": "renamed.txt",
+        "mimeType": "text/plain",
+        "webViewLink": "https://drive/file1",
+        "modifiedTime": "2026-05-25T18:00:00Z",
+    }
+
+    result = client_obj.rename_file("file1", "renamed.txt")
+
+    assert result["file_id"] == "file1"
+    assert result["name"] == "renamed.txt"
+    assert result["mimeType"] == "text/plain"
+    assert result["web_view_link"] == "https://drive/file1"
+    assert result["modifiedTime"] == "2026-05-25T18:00:00Z"
+    assert files.update.call_args.kwargs["fileId"] == "file1"
+    assert files.update.call_args.kwargs["body"] == {"name": "renamed.txt"}
+    assert files.update.call_args.kwargs["fields"] == "id, name, mimeType, webViewLink, modifiedTime"
+    assert files.update.call_args.kwargs["supportsAllDrives"] is True
+
+
+def test_rename_file_requires_non_empty_name(client_obj):
+    with pytest.raises(UsageError):
+        client_obj.rename_file("file1", "   ")
+
+
+def test_copy_file_without_folder_copies_in_place(client_obj):
+    files = client_obj.service.files.return_value
+    files.copy.return_value.execute.return_value = {
+        "id": "copy1",
+        "name": "Copy of report.txt",
+        "mimeType": "text/plain",
+        "parents": ["parent1"],
+        "webViewLink": "https://drive/copy1",
+    }
+
+    result = client_obj.copy_file("file1")
+
+    assert result["file_id"] == "copy1"
+    assert result["source_file_id"] == "file1"
+    assert files.copy.call_args.kwargs["fileId"] == "file1"
+    assert files.copy.call_args.kwargs["supportsAllDrives"] is True
+
+
+def test_copy_file_with_name_and_folder_sets_body(client_obj):
+    files = client_obj.service.files.return_value
+    files.list.return_value.execute.return_value = {
+        "files": [
+            {
+                "id": "folder1",
+                "name": "Target",
+                "mimeType": "application/vnd.google-apps.folder",
+            },
+        ],
+    }
+    files.copy.return_value.execute.return_value = {
+        "id": "copy1",
+        "name": "copy.txt",
+        "mimeType": "text/plain",
+        "parents": ["folder1"],
+        "webViewLink": "https://drive/copy1",
+    }
+
+    result = client_obj.copy_file("file1", new_name=" copy.txt ", folder="Target")
+
+    assert result["parents"] == ["folder1"]
+    assert files.list.call_args.kwargs["q"] == (
+        "name='Target' and mimeType='application/vnd.google-apps.folder' and trashed=false"
+    )
+    assert files.copy.call_args.kwargs["body"] == {
+        "name": "copy.txt",
+        "parents": ["folder1"],
+    }
+
+
+def test_copy_file_to_explicit_root_sets_parents_field(client_obj, monkeypatch):
+    files = client_obj.service.files.return_value
+    monkeypatch.setattr(client_obj, "_resolve_folder_id", lambda folder: (None, "root", False))
+    files.copy.return_value.execute.return_value = {
+        "id": "copy-root",
+        "name": "copy.txt",
+        "mimeType": "text/plain",
+        "parents": ["root"],
+        "webViewLink": "https://drive/copy-root",
+    }
+
+    result = client_obj.copy_file("file1", new_name=" copy.txt ", folder="root")
+
+    assert files.copy.call_args.kwargs["body"] == {
+        "name": "copy.txt",
+        "parents": ["root"],
+    }
+    assert result["parents"] == ["root"]
+
+
+def test_move_file_replaces_existing_parents(client_obj, monkeypatch):
+    files = client_obj.service.files.return_value
+    monkeypatch.setattr(
+        client_obj,
+        "_resolve_folder_id",
+        lambda folder: ("folder2", "Archive", False),
+    )
+    files.get.return_value.execute.side_effect = [
+        {
+            "id": "folder2",
+            "name": "Archive",
+            "mimeType": "application/vnd.google-apps.folder",
+        },
+        {
+            "id": "file1",
+            "name": "report.txt",
+            "mimeType": "text/plain",
+            "parents": ["parent1", "parentA"],
+        },
+    ]
+    files.update.return_value.execute.return_value = {
+        "id": "file1",
+        "name": "report.txt",
+        "mimeType": "text/plain",
+        "parents": ["folder2"],
+        "webViewLink": "https://drive/file1",
+    }
+
+    result = client_obj.move_file("file1", destination_folder_id="Archive")
+
+    assert result["file_id"] == "file1"
+    assert result["parents"] == ["folder2"]
+    assert files.update.call_args.kwargs["addParents"] == "folder2"
+    assert files.update.call_args.kwargs["removeParents"] == "parent1,parentA"
+    assert files.update.call_args.kwargs["fields"] == "id, name, mimeType, parents, webViewLink"
+    assert files.update.call_args.kwargs["supportsAllDrives"] is True
+
+
+def test_move_file_requires_destination_to_be_folder(client_obj, monkeypatch):
+    files = client_obj.service.files.return_value
+    monkeypatch.setattr(
+        client_obj,
+        "_resolve_folder_id",
+        lambda folder: ("file-as-dest", "Bad", False),
+    )
+    files.get.return_value.execute.return_value = {
+        "id": "file-as-dest",
+        "name": "Bad",
+        "mimeType": "text/plain",
+    }
+
+    with pytest.raises(UsageError) as ei:
+        client_obj.move_file("file1", destination_folder_id="Bad")
+
+    assert str(ei.value) == "destination 'Bad' is not a Drive folder"
+
+
+def test_move_file_requires_non_empty_destination(client_obj):
+    with pytest.raises(UsageError) as ei:
+        client_obj.move_file("file1", destination_folder_id="   ")
+
+    assert str(ei.value) == "drive move: destination folder is required"
+
+
+def test_move_file_strips_destination_before_resolving(client_obj, monkeypatch):
+    files = client_obj.service.files.return_value
+    resolved = {}
+
+    def fake_resolve(folder):
+        resolved["folder"] = folder
+        return None, "root", False
+
+    monkeypatch.setattr(client_obj, "_resolve_folder_id", fake_resolve)
+    files.get.return_value.execute.return_value = {
+        "id": "file1",
+        "name": "report.txt",
+        "mimeType": "text/plain",
+        "parents": ["parent1"],
+    }
+    files.update.return_value.execute.return_value = {
+        "id": "file1",
+        "name": "report.txt",
+        "mimeType": "text/plain",
+        "parents": [],
+        "webViewLink": "https://drive/file1",
+    }
+
+    result = client_obj.move_file("file1", destination_folder_id="  root  ")
+
+    assert resolved["folder"] == "root"
+    assert result["parents"] == []
+    assert files.update.call_args.kwargs["addParents"] == "root"
+
+
+def test_move_file_to_root_skips_folder_validation_fetch(client_obj, monkeypatch):
+    files = client_obj.service.files.return_value
+    monkeypatch.setattr(client_obj, "_resolve_folder_id", lambda folder: (None, "root", False))
+    files.get.return_value.execute.return_value = {
+        "id": "file1",
+        "name": "report.txt",
+        "mimeType": "text/plain",
+        "parents": ["parent1"],
+    }
+    files.update.return_value.execute.return_value = {
+        "id": "file1",
+        "name": "report.txt",
+        "mimeType": "text/plain",
+        "parents": [],
+        "webViewLink": "https://drive/file1",
+    }
+
+    result = client_obj.move_file("file1", destination_folder_id="root")
+
+    assert result["parents"] == []
+    assert files.update.call_args.kwargs["addParents"] == "root"
+    assert files.update.call_args.kwargs["removeParents"] == "parent1"
+    files.get.assert_called_once_with(
+        fileId="file1",
+        fields="id, name, mimeType, parents",
+        supportsAllDrives=True,
+    )
+
+
+def test_move_file_to_shared_drive_root_skips_destination_file_validation(client_obj):
+    shared_drive_id = "0AExampleShared123"
+    files = client_obj.service.files.return_value
+    drives = client_obj.service.drives.return_value
+    files.get.return_value.execute.side_effect = [
+        FakeHttpError(404, "missing file"),
+        {
+            "id": "file1",
+            "name": "report.txt",
+            "mimeType": "text/plain",
+            "parents": ["parent1"],
+        },
+    ]
+    drives.get.return_value.execute.return_value = {
+        "id": shared_drive_id,
+        "name": "Shared Root",
+    }
+    files.update.return_value.execute.return_value = {
+        "id": "file1",
+        "name": "report.txt",
+        "mimeType": "text/plain",
+        "parents": [shared_drive_id],
+        "webViewLink": "https://drive/file1",
+    }
+
+    result = client_obj.move_file("file1", destination_folder_id=shared_drive_id)
+
+    assert result["parents"] == [shared_drive_id]
+    assert files.update.call_args.kwargs["addParents"] == shared_drive_id
+    assert files.update.call_args.kwargs["removeParents"] == "parent1"
+    assert files.get.call_count == 2
+    files.get.assert_any_call(
+        fileId=shared_drive_id,
+        fields="id,name,mimeType",
+        supportsAllDrives=True,
+    )
+    files.get.assert_any_call(
+        fileId="file1",
+        fields="id, name, mimeType, parents",
+        supportsAllDrives=True,
+    )
+    drives.get.assert_called_once_with(
+        driveId=shared_drive_id,
+        fields="id,name",
+    )
+
+
 def test_list_document_tabs_flattens_nested_tabs(client_obj):
     files = client_obj.service.files.return_value
     files.get.return_value.execute.return_value = {
@@ -209,6 +482,57 @@ def test_list_document_tabs_requires_google_doc_mime(client_obj):
 
     with pytest.raises(UsageError):
         client_obj.list_document_tabs("file1")
+
+
+def test_add_document_tab_returns_normalized(client_obj):
+    client_obj.service.files.return_value.get.return_value.execute.return_value = {
+        "id": "doc1",
+        "name": "Doc",
+        "mimeType": "application/vnd.google-apps.document",
+    }
+    client_obj._docs_service.documents.return_value.batchUpdate.return_value.execute.return_value = {
+        "replies": [
+            {
+                "addDocumentTab": {
+                    "tabProperties": {
+                        "tabId": "new-tab-id",
+                        "title": "Methods",
+                        "index": 1,
+                        "nestingLevel": 0,
+                    }
+                }
+            }
+        ]
+    }
+
+    result = client_obj.add_document_tab("doc1", "Methods")
+
+    req = client_obj._docs_service.documents.return_value.batchUpdate.call_args.kwargs
+    assert req["documentId"] == "doc1"
+    assert req["body"]["requests"][0]["addDocumentTab"]["tabProperties"]["title"] == "Methods"
+    assert result["kind"] == "google_docs_tab/v1"
+    assert result["tab_id"] == "new-tab-id"
+    assert result["title"] == "Methods"
+    assert result["index"] == 1
+
+
+def test_add_document_tab_requires_google_doc_mime(client_obj):
+    client_obj.service.files.return_value.get.return_value.execute.return_value = {
+        "id": "file1",
+        "name": "Sheet",
+        "mimeType": "application/vnd.google-apps.spreadsheet",
+    }
+
+    with pytest.raises(UsageError):
+        client_obj.add_document_tab("file1", "New Tab")
+
+
+def test_add_document_tab_maps_sdk_exc(client_obj):
+    from h2t_ops.core.errors import ProviderError
+    client_obj.service.files.return_value.get.return_value.execute.side_effect = RuntimeError("boom")
+
+    with pytest.raises(ProviderError):
+        client_obj.add_document_tab("doc1", "New Tab")
 
 
 def test_download_default_dest_is_cwd_with_original_name(client_obj, tmp_path, monkeypatch):
@@ -464,6 +788,61 @@ def test_upload_missing_folder_raises_notfounderror(client_obj):
     files.list.return_value.execute.return_value = {"files": []}
     with pytest.raises(NotFoundError):
         client_obj._resolve_folder_id("Missing")
+
+
+def test_resolve_folder_id_like_missing_falls_back_to_name_search(client_obj):
+    folder_id = "1AbCdEfGhIjKlMn0"
+    files = client_obj.service.files.return_value
+    drives = client_obj.service.drives.return_value
+    files.get.return_value.execute.side_effect = FakeHttpError(404, "missing file")
+    drives.get.return_value.execute.side_effect = FakeHttpError(404, "missing drive")
+    files.list.return_value.execute.return_value = {
+        "files": [
+            {
+                "id": "folder-by-name",
+                "name": folder_id,
+                "mimeType": "application/vnd.google-apps.folder",
+            },
+        ],
+    }
+
+    resolved_id, resolved_name, is_shared_drive = client_obj._resolve_folder_id(folder_id)
+
+    assert resolved_id == "folder-by-name"
+    assert resolved_name == folder_id
+    assert is_shared_drive is False
+    assert files.list.call_args.kwargs["q"] == (
+        f"name='{folder_id}' and mimeType='application/vnd.google-apps.folder' and trashed=false"
+    )
+
+
+def test_resolve_folder_id_like_regular_file_is_rejected(client_obj):
+    folder_id = "1AbCdEfGhIjKlMn0"
+    files = client_obj.service.files.return_value
+    files.get.return_value.execute.return_value = {
+        "id": folder_id,
+        "name": "notes.txt",
+        "mimeType": "text/plain",
+    }
+
+    with pytest.raises(UsageError) as ei:
+        client_obj._resolve_folder_id(folder_id)
+
+    assert str(ei.value) == f"target is not a Drive folder: {folder_id}"
+    client_obj.service.drives.return_value.get.assert_not_called()
+    files.list.assert_not_called()
+
+
+def test_resolve_folder_id_like_auth_error_is_preserved(client_obj):
+    folder_id = "1AbCdEfGhIjKlMn0"
+    files = client_obj.service.files.return_value
+    drives = client_obj.service.drives.return_value
+    files.get.return_value.execute.side_effect = FakeHttpError(403, "forbidden")
+
+    with pytest.raises(AuthError):
+        client_obj._resolve_folder_id(folder_id)
+
+    drives.get.assert_not_called()
 
 
 def test_http_401_maps_to_autherror():
