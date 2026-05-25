@@ -17,3 +17,11 @@ def test_short_top_level_help_uses_h2t_ops_parser(capsys):
     out = capsys.readouterr().out
     assert "usage: h2t-ops" in out
     assert "connectors" in out
+
+
+def test_research_help_lists_visual_ocr_subcommand(capsys):
+    assert dispatch(["research", "--help"]) == 0
+
+    out = capsys.readouterr().out
+    assert "visual-ocr" in out
+    assert "Create a review-required OCR rescue artifact" in out
