@@ -88,7 +88,7 @@ The current open work is feature/product backlog, not migration/closure.
 | Priority | Issue(s) | Workstream | Notes |
 | --- | --- | --- | --- |
 | P2 | #99, #105, #182 | Research workflow follow-up | Done — Research P2 implemented and smoke-verified 2026-05-26; see below |
-| P2 | #183 | Deploy/operator workflow backlog | New `h2t-ops deploy` surface; not a connector-closure task |
+| P2 | #183 | Deploy/operator workflow backlog | Implemented and proofed on branch `codex-deploy-profile-driven`; pending PR/merge |
 | P3 | #101, #70, #71, #72 | Research product backlog | Broader research system evolution, not connector closure |
 
 All post-closure backlog issues are currently unmilestoned. Existing repo
@@ -339,7 +339,7 @@ Recommended triage:
 | Notion follow-up | #146, #81 | Closed; fixed in `4c952d1` |
 | Research backlog | #99, #101, #105, #182, #72, #71, #70 | #99/#105/#182 closed 2026-05-26 (Research P2); #101, #72, #71, #70 remain as product backlog |
 | Provider backlog | none | Connector/provider closure sweep is complete. The former provider items #169, #170, #172, #173, #174, #176, #177, #179, #180, and #181 are now closed; `#176` closed as implementation-complete with deferred RSVP live proof |
-| Deploy/operator backlog | #183 | Keep separate from connector closure; this is a new operator workflow surface, not unfinished provider migration |
+| Deploy/operator backlog | #183 | Keep separate from connector closure; implementation + dry-run/status proof now exist on branch `codex-deploy-profile-driven`, pending merge |
 | Creative backlog | #119, #83, #88, #89, #90, #91, #92 | Move to creative roadmap; not h2t-ops closure |
 | Cross-platform / machine config | #79, #73 | Keep as h2t-core/platform backlog |
 | Old graph/session items | #54, #53, #21, #5 | Reclassify, move, or close if superseded |
