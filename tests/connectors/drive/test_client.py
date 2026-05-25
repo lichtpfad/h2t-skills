@@ -256,6 +256,92 @@ def test_copy_file_to_explicit_root_sets_parents_field(client_obj, monkeypatch):
     assert result["parents"] == ["root"]
 
 
+def test_move_file_replaces_existing_parents(client_obj, monkeypatch):
+    files = client_obj.service.files.return_value
+    monkeypatch.setattr(
+        client_obj,
+        "_resolve_folder_id",
+        lambda folder: ("folder2", "Archive", False),
+    )
+    files.get.return_value.execute.side_effect = [
+        {
+            "id": "folder2",
+            "name": "Archive",
+            "mimeType": "application/vnd.google-apps.folder",
+        },
+        {
+            "id": "file1",
+            "name": "report.txt",
+            "mimeType": "text/plain",
+            "parents": ["parent1", "parentA"],
+        },
+    ]
+    files.update.return_value.execute.return_value = {
+        "id": "file1",
+        "name": "report.txt",
+        "mimeType": "text/plain",
+        "parents": ["folder2"],
+        "webViewLink": "https://drive/file1",
+    }
+
+    result = client_obj.move_file("file1", destination_folder_id="Archive")
+
+    assert result["file_id"] == "file1"
+    assert result["parents"] == ["folder2"]
+    assert files.update.call_args.kwargs["addParents"] == "folder2"
+    assert files.update.call_args.kwargs["removeParents"] == "parent1,parentA"
+    assert files.update.call_args.kwargs["fields"] == "id, name, mimeType, parents, webViewLink"
+    assert files.update.call_args.kwargs["supportsAllDrives"] is True
+
+
+def test_move_file_requires_destination_to_be_folder(client_obj, monkeypatch):
+    files = client_obj.service.files.return_value
+    monkeypatch.setattr(
+        client_obj,
+        "_resolve_folder_id",
+        lambda folder: ("file-as-dest", "Bad", False),
+    )
+    files.get.return_value.execute.return_value = {
+        "id": "file-as-dest",
+        "name": "Bad",
+        "mimeType": "text/plain",
+    }
+
+    with pytest.raises(UsageError) as ei:
+        client_obj.move_file("file1", destination_folder_id="Bad")
+
+    assert str(ei.value) == "destination 'Bad' is not a Drive folder"
+
+
+def test_move_file_to_root_skips_folder_validation_fetch(client_obj, monkeypatch):
+    files = client_obj.service.files.return_value
+    monkeypatch.setattr(client_obj, "_resolve_folder_id", lambda folder: (None, "root", False))
+    files.get.return_value.execute.return_value = {
+        "id": "file1",
+        "name": "report.txt",
+        "mimeType": "text/plain",
+        "parents": ["parent1"],
+    }
+    files.update.return_value.execute.return_value = {
+        "id": "file1",
+        "name": "report.txt",
+        "mimeType": "text/plain",
+        "parents": [],
+        "webViewLink": "https://drive/file1",
+    }
+
+    result = client_obj.move_file("file1", destination_folder_id="root")
+
+    assert result["parents"] == []
+    assert files.update.call_args.kwargs["addParents"] == "root"
+    assert files.update.call_args.kwargs["removeParents"] == "parent1"
+    files.get.assert_called_once_with(
+        fileId="file1",
+        fields="id, name, mimeType, parents",
+        supportsAllDrives=True,
+    )
+
+
 def test_list_document_tabs_flattens_nested_tabs(client_obj):
     files = client_obj.service.files.return_value
     files.get.return_value.execute.return_value = {
