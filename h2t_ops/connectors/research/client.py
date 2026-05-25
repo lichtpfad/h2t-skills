@@ -912,15 +912,6 @@ class ResearchClient:
 
         api_key = resolve_secret("EXA_API_KEY")
         result = _resolve(name, api_key=api_key, keywords=keywords, hint=hint)
-        exit_code = 1 if result.get("confidence") == "error" else 0
-
-        if exit_code != 0:
-            _raise_for_provider_failure(
-                "Author resolution failed",
-                result,
-                exit_code,
-            )
-
         return sanitize_details(result)
 
 
