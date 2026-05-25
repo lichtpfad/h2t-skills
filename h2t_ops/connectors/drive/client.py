@@ -575,6 +575,40 @@ class DriveClient:
         except Exception as e:
             raise _map_http_error(e, op=f"rename file {file_id}") from e
 
+    def copy_file(
+        self,
+        file_id: str,
+        *,
+        new_name: Optional[str] = None,
+        folder: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        try:
+            body: Dict[str, Any] = {}
+            if new_name and new_name.strip():
+                body["name"] = new_name.strip()
+            if folder:
+                folder_id, _, _ = self._resolve_folder_id(folder)
+                if folder_id:
+                    body["parents"] = [folder_id]
+                else:
+                    body["parents"] = ["root"]
+            res = self.service.files().copy(
+                fileId=file_id,
+                body=body,
+                fields="id, name, mimeType, parents, webViewLink",
+                supportsAllDrives=True,
+            ).execute()
+            return {
+                "file_id": res.get("id", ""),
+                "source_file_id": file_id,
+                "name": res.get("name", ""),
+                "mimeType": res.get("mimeType", ""),
+                "parents": res.get("parents", []),
+                "web_view_link": res.get("webViewLink", ""),
+            }
+        except Exception as e:
+            raise _map_http_error(e, op=f"copy file {file_id}") from e
+
     def list_document_tabs(self, document_id: str) -> Dict[str, Any]:
         try:
             meta = self.service.files().get(

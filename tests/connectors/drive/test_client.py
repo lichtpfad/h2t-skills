@@ -181,6 +181,63 @@ def test_rename_file_requires_non_empty_name(client_obj):
         client_obj.rename_file("file1", "   ")
 
 
+def test_copy_file_without_folder_copies_in_place(client_obj):
+    files = client_obj.service.files.return_value
+    files.copy.return_value.execute.return_value = {
+        "id": "copy1",
+        "name": "Copy of report.txt",
+        "mimeType": "text/plain",
+        "parents": ["parent1"],
+        "webViewLink": "https://drive/copy1",
+    }
+
+    result = client_obj.copy_file("file1")
+
+    assert result["file_id"] == "copy1"
+    assert result["source_file_id"] == "file1"
+    assert files.copy.call_args.kwargs["fileId"] == "file1"
+    assert files.copy.call_args.kwargs["supportsAllDrives"] is True
+
+
+def test_copy_file_with_name_and_folder_sets_body(client_obj, monkeypatch):
+    files = client_obj.service.files.return_value
+    monkeypatch.setattr(client_obj, "_resolve_folder_id", lambda folder: ("folder1", "Target", False))
+    files.copy.return_value.execute.return_value = {
+        "id": "copy1",
+        "name": "copy.txt",
+        "mimeType": "text/plain",
+        "parents": ["folder1"],
+        "webViewLink": "https://drive/copy1",
+    }
+
+    result = client_obj.copy_file("file1", new_name=" copy.txt ", folder="Target")
+
+    assert result["parents"] == ["folder1"]
+    assert files.copy.call_args.kwargs["body"] == {
+        "name": "copy.txt",
+        "parents": ["folder1"],
+    }
+
+
+def test_copy_file_to_root_sets_parents_field(client_obj, monkeypatch):
+    files = client_obj.service.files.return_value
+    monkeypatch.setattr(client_obj, "_resolve_folder_id", lambda folder: (None, "root", False))
+    files.copy.return_value.execute.return_value = {
+        "id": "copy-root",
+        "name": "copy.txt",
+        "mimeType": "text/plain",
+        "parents": [],
+        "webViewLink": "https://drive/copy-root",
+    }
+
+    client_obj.copy_file("file1", new_name=" copy.txt ", folder="root")
+
+    assert files.copy.call_args.kwargs["body"] == {
+        "name": "copy.txt",
+        "parents": ["root"],
+    }
+
+
 def test_list_document_tabs_flattens_nested_tabs(client_obj):
     files = client_obj.service.files.return_value
     files.get.return_value.execute.return_value = {
