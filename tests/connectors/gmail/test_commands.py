@@ -16,6 +16,7 @@ def test_register_adds_gmail_subcommands():
     assert ns.connector == "gmail" and ns.gmail_cmd == "list" and ns.max == 5
     assert _parser().parse_args(["gmail", "threads", "--max", "5"]).gmail_cmd == "threads"
     assert _parser().parse_args(["gmail", "thread", "T1"]).gmail_cmd == "thread"
+    assert _parser().parse_args(["gmail", "attachment", "M1", "A1", "--output", "file.bin"]).gmail_cmd == "attachment"
 
 
 def test_register_has_format_and_json_flags():
@@ -57,8 +58,9 @@ class _FakeClient:
                                            "date": "d", "snippet": "x", "labelIds": []}]
     def list_threads(self, **k): return [{"id": "t1", "messages": []}]
     def get_message(self, mid): return {"id": mid, "subject": "S", "from": "f",
-                                        "to": "t", "date": "d", "labelIds": [], "body": "B"}
+                                        "to": "t", "date": "d", "labelIds": [], "body": "B", "attachments": []}
     def get_thread(self, tid): return {"id": tid, "messages": [{"id": "m1", "subject": "S", "from": "f", "to": "t", "date": "d", "labelIds": [], "body": "B"}]}
+    def download_attachment(self, message_id, attachment_id, output): return {"message_id": message_id, "attachment_id": attachment_id, "saved_path": output, "size": 5}
     def send_message(self, **k): return {"id": "m1"}
 
 
@@ -101,6 +103,13 @@ def test_thread_human_returns_detail(monkeypatch):
     assert "Thread T1" in out and "Message ID" in out
 
 
+def test_attachment_json_returns_saved_path(monkeypatch):
+    _patch(monkeypatch)
+    out = gc.run(_ns(gmail_cmd="attachment", message_id="M1", attachment_id="A1",
+                     output="file.bin", as_json=True, fmt="human"))
+    assert out["saved_path"] == "file.bin"
+
+
 def test_send_no_body_raises_usageerror(monkeypatch):
     _patch(monkeypatch)
     with pytest.raises(UsageError):
@@ -138,6 +147,7 @@ def test_gmail_subcommand_help_exits_zero():
     assert dispatch(["gmail", "list", "--help"]) == 0
     assert dispatch(["gmail", "threads", "--help"]) == 0
     assert dispatch(["gmail", "thread", "--help"]) == 0
+    assert dispatch(["gmail", "attachment", "--help"]) == 0
 
 
 def test_connectors_list_includes_gmail_no_heavy_import(capsys, monkeypatch):
