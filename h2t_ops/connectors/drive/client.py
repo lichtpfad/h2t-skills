@@ -669,7 +669,9 @@ class DriveClient:
                 raise UsageError(
                     f"file {meta.get('name', document_id)!r} is not a Google Docs editor file"
                 )
-            doc = self._docs().documents().get(documentId=document_id).execute()
+            doc = self._docs().documents().get(
+                documentId=document_id, includeTabsContent=True,
+            ).execute()
         except Exception as e:
             raise _map_http_error(e, op=f"list document tabs for {document_id}") from e
 
@@ -714,14 +716,13 @@ class DriveClient:
                 )
             response = self._docs().documents().batchUpdate(
                 documentId=document_id,
-                body={"requests": [{"createTab": {"tabProperties": {"title": title}}}]},
+                body={"requests": [{"addDocumentTab": {"tabProperties": {"title": title}}}]},
             ).execute()
         except Exception as e:
             raise _map_http_error(e, op=f"add tab to document {document_id}") from e
         props = (
             response.get("replies", [{}])[0]
-            .get("createTab", {})
-            .get("tab", {})
+            .get("addDocumentTab", {})
             .get("tabProperties", {})
         )
         return {
