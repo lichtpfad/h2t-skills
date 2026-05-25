@@ -96,6 +96,23 @@ def register(subparsers: Any) -> None:
     visual_ocr.add_argument("--output-dir", dest="output_dir")
     add_fmt(visual_ocr)
 
+    similar = cmds.add_parser("similar", help="Find pages similar to a URL using Exa")
+    similar.add_argument("--url", required=True, dest="url")
+    similar.add_argument("--num-results", type=int, dest="num_results")
+    similar.add_argument("--include-domains", dest="include_domains")
+    similar.add_argument("--exclude-domains", dest="exclude_domains")
+    add_fmt(similar)
+
+    answer_p = cmds.add_parser("answer", help="Get a direct LLM-grounded answer from Exa")
+    answer_p.add_argument("--query", required=True)
+    add_fmt(answer_p)
+
+    resolve_author = cmds.add_parser("resolve-author", help="Resolve an author name to a channel URL")
+    resolve_author.add_argument("--name", required=True)
+    resolve_author.add_argument("--keywords", dest="keywords")
+    resolve_author.add_argument("--hint", dest="hint")
+    add_fmt(resolve_author)
+
     p.set_defaults(_handler=run)
 
 
@@ -153,5 +170,20 @@ def run(args: Any) -> Any:
             fetch_sidecar=args.fetch_sidecar,
             image_path=args.image_path,
             project=args.project,
+        )
+    if cmd == "similar":
+        return client.similar(
+            args.url,
+            num_results=args.num_results,
+            include_domains=_split_csv(args.include_domains),
+            exclude_domains=_split_csv(args.exclude_domains),
+        )
+    if cmd == "answer":
+        return client.answer(args.query)
+    if cmd == "resolve-author":
+        return client.resolve_author(
+            args.name,
+            keywords=_split_csv(args.keywords),
+            hint=args.hint,
         )
     raise UsageError(f"unknown research subcommand: {cmd}")
