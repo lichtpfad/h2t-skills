@@ -1,6 +1,7 @@
 """Telegram CLI adapter. argparse only at module scope; client imported in run()."""
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 PROVIDER = "telegram"
@@ -58,6 +59,13 @@ def register(subparsers: Any) -> None:
     messages.add_argument("--limit", type=int, default=200)
     add_json(messages)
 
+    send = cmds.add_parser("send", help="Send a text message to an entity")
+    send.add_argument("entity")
+    group = send.add_mutually_exclusive_group(required=True)
+    group.add_argument("--message")
+    group.add_argument("--file")
+    add_json(send)
+
     saved = cmds.add_parser("saved-messages", help="Read raw Telegram Saved Messages")
     saved.add_argument("--days", type=int)
     saved.add_argument("--limit", type=int, default=200)
@@ -85,6 +93,12 @@ def run(args: Any) -> Any:
     from h2t_ops.core.errors import UsageError
     from h2t_ops.connectors.telegram.client import TelegramClientAdapter
 
+    def _read_file(path: str) -> str:
+        try:
+            return Path(path).read_text(encoding="utf-8")
+        except FileNotFoundError as exc:
+            raise UsageError(f"file not found: {path}") from exc
+
     client = TelegramClientAdapter()
     cmd = args.telegram_cmd
     if cmd == "auth-status":
@@ -99,6 +113,14 @@ def run(args: Any) -> Any:
         return _rows(client.list_folders())
     if cmd == "messages":
         return _rows(client.list_messages(args.entity, limit=args.limit, days=args.days))
+    if cmd == "send":
+        text = args.message if getattr(args, "message", None) is not None else _read_file(args.file)
+        if not text or not text.strip():
+            raise UsageError("telegram send: message text is required")
+        result = client.send_message(args.entity, text.strip())
+        if getattr(args, "as_json", False):
+            return result
+        return f"✓ Message sent (ID: {result['message_id']})"
     if cmd == "saved-messages":
         return _rows(client.list_saved_messages(limit=args.limit, days=args.days))
     if cmd == "mentions":

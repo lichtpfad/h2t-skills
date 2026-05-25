@@ -29,6 +29,7 @@ def test_parser_registers_all_leaf_verbs():
         ["telegram", "dialogs"],
         ["telegram", "folders"],
         ["telegram", "messages", "chat"],
+        ["telegram", "send", "me", "--message", "hello"],
         ["telegram", "saved-messages"],
         ["telegram", "mentions", "--chat-id", "1"],
         ["telegram", "bootstrap"],
@@ -47,6 +48,7 @@ def test_json_flag_available_on_all_leaf_verbs():
         ["telegram", "dialogs", "--json"],
         ["telegram", "folders", "--json"],
         ["telegram", "messages", "chat", "--json"],
+        ["telegram", "send", "me", "--message", "hello", "--json"],
         ["telegram", "saved-messages", "--json"],
         ["telegram", "mentions", "--chat-id", "1", "--json"],
         ["telegram", "bootstrap", "--json"],
@@ -86,10 +88,63 @@ def test_saved_messages_dispatch_is_distinct_from_legacy_saved(monkeypatch):
     assert result == {"rows": [{"id": 1, "text": "saved"}], "count": 1}
 
 
+def test_send_dispatch_returns_human_success(monkeypatch):
+    import h2t_ops.connectors.telegram.client as client_mod
+    from h2t_ops.connectors.telegram import commands as cmds
+
+    class Stub:
+        def send_message(self, entity, text):
+            assert entity == "me"
+            assert text == "hello"
+            return {"entity": entity, "message_id": 9, "chat_id": 77, "date": "", "text": text}
+
+    monkeypatch.setattr(client_mod, "TelegramClientAdapter", lambda: Stub())
+    args = SimpleNamespace(
+        telegram_cmd="send",
+        entity="me",
+        message="hello",
+        file=None,
+        as_json=False,
+        fmt="human",
+    )
+    result = cmds.run(args)
+    assert "Message sent" in result
+
+
+def test_send_dispatch_reads_utf8_file(monkeypatch, tmp_path):
+    import h2t_ops.connectors.telegram.client as client_mod
+    from h2t_ops.connectors.telegram import commands as cmds
+
+    message_file = tmp_path / "msg.txt"
+    message_file.write_text("hello", encoding="utf-8")
+
+    class Stub:
+        def send_message(self, entity, text):
+            return {"entity": entity, "message_id": 9, "chat_id": 77, "date": "", "text": text}
+
+    monkeypatch.setattr(client_mod, "TelegramClientAdapter", lambda: Stub())
+    args = SimpleNamespace(
+        telegram_cmd="send",
+        entity="me",
+        message=None,
+        file=str(message_file),
+        as_json=True,
+        fmt="human",
+    )
+    result = cmds.run(args)
+    assert result["text"] == "hello"
+
+
 def test_mentions_requires_explicit_chat_id():
     parser = _build_parser()
     with pytest.raises(SystemExit):
         parser.parse_args(["telegram", "mentions"])
+
+
+def test_send_requires_message_or_file():
+    parser = _build_parser()
+    with pytest.raises(SystemExit):
+        parser.parse_args(["telegram", "send", "me"])
 
 
 def test_error_envelope_contains_session_incompatible(monkeypatch, capsys):

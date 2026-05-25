@@ -398,6 +398,20 @@ class TelegramClientAdapter:
             )
         return rows
 
+    def send_message(self, entity: str, text: str) -> dict[str, Any]:
+        try:
+            with self._connected_client() as client:
+                msg = client.send_message(entity, text)
+        except (ValueError, sqlite3.OperationalError) as exc:
+            raise _session_incompatible_error(exc) from exc
+        return {
+            "entity": entity,
+            "message_id": _get_attr(msg, "id"),
+            "chat_id": _get_attr(msg, "chat_id"),
+            "date": _iso(_get_attr(msg, "date")),
+            "text": _get_attr(msg, "text", "") or text,
+        }
+
     def bootstrap_dialogs(self, *, force: bool = False) -> dict[str, Any]:
         if self.dialogs_bootstrap_file.exists() and not force:
             return {
