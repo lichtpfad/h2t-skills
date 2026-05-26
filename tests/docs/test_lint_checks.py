@@ -138,3 +138,47 @@ def test_repo_root_too_many_items(tmp_path):
         (tmp_path / f"item_{i}.txt").write_text("")
     result = check_repo_root(tmp_path)
     assert any("root has" in f for f in result)
+
+
+from lint import check_data_docs_boundary
+
+
+def test_data_docs_boundary_clean(tmp_path):
+    """Markdown in docs/, JSON in data/ → no failures."""
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "docs" / "README.md").write_text("# x")
+    (tmp_path / "data").mkdir()
+    (tmp_path / "data" / "registry.json").write_text("{}")
+    assert check_data_docs_boundary(tmp_path) == []
+
+
+def test_json_in_docs(tmp_path):
+    """JSON file in docs/ → failure."""
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "data.json").write_text("{}")
+    result = check_data_docs_boundary(tmp_path)
+    assert any("data.json" in f for f in result)
+
+
+def test_yaml_in_docs(tmp_path):
+    """YAML file in docs/ → failure."""
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "config.yaml").write_text("key: value")
+    result = check_data_docs_boundary(tmp_path)
+    assert any("config.yaml" in f for f in result)
+
+
+def test_markdown_in_data(tmp_path):
+    """Markdown file in data/ → failure."""
+    data = tmp_path / "data"
+    data.mkdir()
+    (data / "notes.md").write_text("# notes")
+    result = check_data_docs_boundary(tmp_path)
+    assert any("notes.md" in f for f in result)
+
+
+def test_data_docs_boundary_no_dirs(tmp_path):
+    """No docs/ or data/ dirs → no failures."""
+    assert check_data_docs_boundary(tmp_path) == []
