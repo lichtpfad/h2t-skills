@@ -115,10 +115,16 @@ def test_doctor_warns_for_missing_artifact_refs(tmp_path):
     result = maintenance.doctor(root)
 
     assert result["status"] == "warning"
-    codes = {finding["code"] for finding in result["findings"]}
-    assert "artifact_ref_missing" in codes
+    artifact_findings = [
+        finding for finding in result["findings"] if finding["code"] == "artifact_ref_missing"
+    ]
+    refs = {finding["ref"] for finding in artifact_findings}
+    assert "artifact_refs.metadata" in refs
+    assert "artifact_refs.normalized_text" in refs
+    assert "artifact_refs.markdown_mirror" in refs
+    assert "artifact_refs.citation_bundle" not in refs
     assert document["document_id"] in {
-        finding.get("object_id") for finding in result["findings"]
+        finding.get("object_id") for finding in artifact_findings
     }
 
 
