@@ -421,6 +421,162 @@ def test_research_client_search_ok_writes_artifacts(tmp_path, monkeypatch):
     ]
 
 
+def test_write_provider_artifacts_does_not_persist_document_generically(tmp_path):
+    rc = client.ResearchClient(output_dir=tmp_path)
+    provider_envelope = {
+        "status": "OK",
+        "results": [
+            {
+                "url": "https://example.com/post",
+                "title": "Example Post",
+                "text": "Example body text",
+            }
+        ],
+        "telemetry": {"attempts": []},
+        "meta": {"query": "https://example.com/post"},
+    }
+    telemetry = {
+        "calls": 1,
+        "providers": ["exa"],
+        "estimated_cost_usd": 0.0,
+        "cost_basis": "test",
+    }
+
+    artifact = rc._write_provider_artifacts(
+        kind="fetch",
+        slug_source="https://example.com/post",
+        project="demo",
+        provider_envelope=provider_envelope,
+        telemetry=telemetry,
+        ledger_provider="exa",
+        ledger_endpoint="/contents",
+        ledger_mode="fetch",
+    )
+
+    assert "research_refs" not in artifact
+    assert not (tmp_path / "objects" / "documents").exists()
+    assert not (tmp_path / "indexes" / "documents.index.json").exists()
+    assert not (tmp_path / "indexes" / "aliases.index.json").exists()
+
+
+def test_write_visual_ocr_artifacts_persists_document(tmp_path):
+    rc = client.ResearchClient(output_dir=tmp_path)
+    telemetry = {
+        "calls": 1,
+        "providers": ["visual_ocr"],
+        "estimated_cost_usd": 0.0,
+        "cost_basis": "local_ocr",
+    }
+    envelope = {
+        "kind": "research_visual_ocr_envelope",
+        "url": "https://example.com/post",
+        "body_text_visual_ocr": "Recovered visible text",
+        "visible_headings": ["Headline"],
+        "ocr_confidence": "medium",
+        "quote_safe": False,
+        "review_status": "unreviewed",
+        "provenance": {
+            "captured_at": "2026-05-26T09:00:00Z",
+            "image_path": "page.png",
+            "text_source": "visual_ocr",
+        },
+        "status": "OK",
+    }
+
+    artifact = rc._write_visual_ocr_artifacts(
+        slug_source="https://example.com/post",
+        project="demo",
+        ocr_envelope=envelope,
+        telemetry=telemetry,
+    )
+
+    document_path = Path(artifact["research_refs"]["document_json"])
+    document = json.loads(document_path.read_text(encoding="utf-8"))
+
+    assert document["provider"] == "visual_ocr"
+    assert document["artifact_refs"]["normalized_text"] is not None
+
+
+def test_search_persists_thread_and_run_artifacts(tmp_path, monkeypatch):
+    rc = client.ResearchClient(output_dir=tmp_path)
+    monkeypatch.setattr(client, "resolve_secret", lambda name: "test-secret")
+    _patch_exa_search(
+        monkeypatch,
+        provider_envelope={
+            "status": "OK",
+            "primary_engine": "exa",
+            "fallback_engine_used": None,
+            "results": [{"url": "https://example.com/post", "title": "Example Post"}],
+            "telemetry": {
+                "attempts": [{"engine": "exa", "endpoint": "/search", "http": 200, "latency_ms": 10, "error": None}],
+                "reason_for_fallback": None,
+                "total_latency_ms": 10,
+                "total_cost_usd": 0.0,
+            },
+            "meta": {
+                "query": "exa api",
+                "mode": "generic",
+                "num_results_requested": 10,
+                "num_results_returned": 1,
+                "envelope_version": "1",
+            },
+        },
+        exit_code=0,
+    )
+
+    result = rc.search(query="exa api", project="demo")
+
+    thread_path = Path(result["artifact"]["research_refs"]["thread_json"])
+    run_path = Path(result["artifact"]["research_refs"]["run_json"])
+
+    assert thread_path.is_file()
+    assert run_path.is_file()
+    assert "document_json" not in result["artifact"]["research_refs"]
+    assert not (tmp_path / "objects" / "documents").exists()
+
+
+def test_answer_persists_synthesis_artifact(tmp_path, monkeypatch):
+    rc = client.ResearchClient(output_dir=tmp_path)
+
+    monkeypatch.setattr(
+        "h2t_ops.connectors.research.exa.answer",
+        lambda *args, **kwargs: (
+            {
+                "status": "OK",
+                "primary_engine": "exa",
+                "fallback_engine_used": None,
+                "results": [{"answer": "Exa supports direct answers."}],
+                "telemetry": {
+                    "attempts": [{"engine": "exa", "endpoint": "/answer", "http": 200, "latency_ms": 10, "error": None}],
+                    "reason_for_fallback": None,
+                    "total_latency_ms": 10,
+                    "total_cost_usd": 0.0,
+                },
+                "meta": {
+                    "query": "what does exa answer do",
+                    "mode": "answer",
+                    "num_results_requested": 1,
+                    "num_results_returned": 1,
+                    "envelope_version": "1",
+                },
+            },
+            0,
+        ),
+    )
+    monkeypatch.setattr(client, "resolve_secret", lambda name: "test-secret")
+
+    result = rc.answer("what does exa answer do")
+
+    synthesis_path = Path(result["artifact"]["research_refs"]["synthesis_json"])
+    synthesis = json.loads(synthesis_path.read_text(encoding="utf-8"))
+    thread_path = Path(result["artifact"]["research_refs"]["thread_json"])
+    thread = json.loads(thread_path.read_text(encoding="utf-8"))
+
+    assert synthesis["status"] == "draft"
+    assert synthesis["summary"] == "Exa supports direct answers."
+    assert thread["latest_synthesis_id"] == synthesis["synthesis_id"]
+
+
 def test_research_client_search_artifacts_redact_token_like_provider_values(
     tmp_path, monkeypatch
 ):
@@ -653,10 +809,57 @@ def test_research_client_fetch_ok_writes_artifact(tmp_path):
     assert (tmp_path / refs["partial_md"]).is_file()
     assert json.loads((tmp_path / refs["artifact_json"]).read_text(encoding="utf-8")) == result["artifact"]
     assert refs["raw_html"] is None
+    document_path = Path(result["artifact"]["research_refs"]["document_json"])
+    document = json.loads(document_path.read_text(encoding="utf-8"))
+    assert document["canonical_url"] == "https://example.com"
+    assert document["provider"] == "direct"
     assert fetch_ladder.call_args.kwargs["url"] == "https://example.com"
     assert fetch_ladder.call_args.kwargs["provider_choice"] == "auto"
     assert fetch_ladder.call_args.kwargs["config"]["ladder"]["per_provider_timeout_ms"] == 15000
     assert fetch_ladder.call_args.kwargs["config"]["ladder"]["min_body_chars"] == 200
+
+
+def test_research_client_fetch_failed_does_not_persist_document(tmp_path):
+    provider_env = {
+        "status": "FAILED",
+        "url": "https://example.com",
+        "final_url": None,
+        "provider_used": "none",
+        "content_type": "unknown",
+        "content_gate": "none",
+        "title": None,
+        "body_markdown": "",
+        "body_text": "",
+        "body_chars": 0,
+        "links": [],
+        "metadata": {"canonical_url": None, "site": "example.com", "lang": None},
+        "telemetry": {
+            "attempts": [{"provider": "direct", "http": None, "latency_ms": 19, "error": "fetch_network_timeout"}],
+            "reason_for_degraded": None,
+            "reason_for_failed": "all_providers_failed",
+            "total_latency_ms": 19,
+            "providers_skipped": [],
+            "providers_skipped_reason": {},
+        },
+        "meta": {
+            "primary_engine": "fetch_ladder",
+            "envelope_version": "1",
+            "fetch_envelope_version": "1",
+            "timestamp": "2026-05-26T16:16:18+00:00",
+            "user_agent": "h2t-research-fetch/0.0.1",
+        },
+    }
+
+    with patch(
+        "h2t_ops.connectors.research.fetch.fetch_via_ladder",
+        return_value=provider_env,
+    ):
+        with pytest.raises(NetworkError):
+            client.ResearchClient(output_dir=tmp_path).fetch_url("https://example.com")
+
+    assert not (tmp_path / "objects" / "documents").exists()
+    assert not (tmp_path / "indexes" / "documents.index.json").exists()
+    assert not (tmp_path / "indexes" / "aliases.index.json").exists()
 
 
 def test_research_client_fetch_timeout_updates_provider_configs_with_timeouts(tmp_path):
@@ -849,6 +1052,10 @@ def test_research_client_crawl_ok_writes_artifacts(tmp_path, monkeypatch):
     refs = result["artifact"]["artifact_refs"]
     assert json.loads((tmp_path / refs["sources_json"]).read_text(encoding="utf-8")) == result["results"]
     assert json.loads((tmp_path / refs["artifact_json"]).read_text(encoding="utf-8")) == result["artifact"]
+    document_path = Path(result["artifact"]["research_refs"]["document_json"])
+    document = json.loads(document_path.read_text(encoding="utf-8"))
+    assert document["canonical_url"] == "https://example.com/page"
+    assert document["project_ids"] == ["project:h2t skills"]
 
 
 def test_research_client_crawl_empty_results_returns_degraded(tmp_path, monkeypatch):
