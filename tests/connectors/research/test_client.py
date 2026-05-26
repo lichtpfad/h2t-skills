@@ -1629,6 +1629,16 @@ def test_research_client_resolve_research_alias_url(tmp_path):
     assert result["matches"][0]["object_exists"] is True
 
 
+def test_research_client_list_research_index_propagates_navigation_error(tmp_path, monkeypatch):
+    def failing_list_index(*args, **kwargs):
+        raise UsageError("index helper failure")
+
+    monkeypatch.setattr(client.navigation, "list_index", failing_list_index)
+
+    with pytest.raises(UsageError, match="index helper failure"):
+        client.ResearchClient(output_dir=tmp_path).list_research_index("documents")
+
+
 def test_research_client_show_research_document_missing_raises_notfound(tmp_path):
     with pytest.raises(NotFoundError, match="research object not found"):
         client.ResearchClient(output_dir=tmp_path).show_research_object(
@@ -1642,4 +1652,16 @@ def test_research_client_show_research_unknown_type_raises_usageerror(tmp_path):
         client.ResearchClient(output_dir=tmp_path).show_research_object(
             "bad-type",
             "research-bad:abc",
+        )
+
+
+def test_research_client_resolve_research_alias_propagates_navigation_error(tmp_path, monkeypatch):
+    def failing_resolve_alias(*args, **kwargs):
+        raise ConfigError("alias helper failure")
+
+    monkeypatch.setattr(client.navigation, "resolve_alias", failing_resolve_alias)
+
+    with pytest.raises(ConfigError, match="alias helper failure"):
+        client.ResearchClient(output_dir=tmp_path).resolve_research_alias(
+            "https://example.com/missing",
         )
