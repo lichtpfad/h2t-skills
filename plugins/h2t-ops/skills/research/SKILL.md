@@ -21,8 +21,9 @@ source in this phase.
 
 `h2t-ops:research` now maintains a local JSON-first artifact layer:
 
-- canonical local truth = object JSON artifacts
-- Markdown = review/presentation mirror only
+- Canonical local truth = JSON object artifacts.
+- Indexes are rebuildable navigation caches.
+- Markdown = review/presentation mirror only.
 - shared navigation caches:
   - `threads.index.json`
   - `documents.index.json`
@@ -32,12 +33,33 @@ source in this phase.
 Agent lookup order:
 
 1. query shared index
-2. resolve object ids
-3. read canonical object JSON
+2. resolve object ids / aliases
+3. read canonical object JSON via `show`
 4. open Markdown mirror only for human review
 
-Index entries are rebuildable navigation caches, not canonical truth.
 If index and object disagree, object wins.
+
+## Navigation Commands
+
+Use the local navigation surface for deterministic lookups:
+
+```bash
+h2t-ops research index documents --project <project_id_or_context_id> --output-dir <dir> --json
+h2t-ops research index threads --output-dir <dir> --json
+h2t-ops research index syntheses --output-dir <dir> --json
+h2t-ops research show document <document_id> --output-dir <dir> --json
+h2t-ops research show thread <thread_id> --output-dir <dir> --json
+h2t-ops research show run <run_id> --output-dir <dir> --json
+h2t-ops research show synthesis <synthesis_id> --output-dir <dir> --json
+h2t-ops research resolve --url <url> --output-dir <dir> --json
+h2t-ops research resolve --alias <value> --alias-type <type> --output-dir <dir> --json
+```
+
+Core rule:
+
+- JSON object artifacts are the canonical truth.
+- Index files (`*.index.json`) are caches to locate object ids quickly and must not be treated as source truth.
+- Markdown mirrors are for human review only; do not treat them as authoritative for data extraction.
 
 ## Commands
 
