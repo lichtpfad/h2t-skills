@@ -49,3 +49,112 @@ def test_doctor_reports_schema_and_id_mismatch_as_errors(tmp_path):
     assert result["status"] == "error"
     assert "object_schema_mismatch" in codes
     assert "object_id_mismatch" in codes
+
+
+def _demo_document(root):
+    document = store.build_research_document(
+        canonical_url="https://example.com/post",
+        source_url="https://example.com/post",
+        provider="jina",
+        title="Example",
+        fetched_at="2026-05-27T10:00:00Z",
+        content_hash="abc",
+        artifact_refs={
+            "metadata": "artifact.json",
+            "normalized_text": "sources.json",
+            "citation_bundle": None,
+            "markdown_mirror": "post.partial.md",
+        },
+        project_ids=["project:demo"],
+        thread_ids=[],
+        entity_ids=[],
+    )
+    store.write_object(root, "documents", document["document_id"], document)
+    return document
+
+
+def test_doctor_warns_for_stale_document_index_ref(tmp_path):
+    root = tmp_path / "research"
+    store.write_json(
+        store.index_path(root, "documents"),
+        [{"document_id": "research-doc:missing", "project_ids": ["project:demo"]}],
+    )
+
+    result = maintenance.doctor(root)
+
+    assert result["status"] == "warning"
+    assert result["findings"][0]["code"] == "index_object_missing"
+    assert result["findings"][0]["object_id"] == "research-doc:missing"
+
+
+def test_doctor_warns_for_alias_target_missing(tmp_path):
+    root = tmp_path / "research"
+    store.upsert_alias_index(
+        root,
+        [
+            {
+                "alias_type": "url",
+                "alias_value": "https://example.com/missing",
+                "target_object_type": "document",
+                "target_id": "research-doc:missing",
+                "confidence": "high",
+            }
+        ],
+    )
+
+    result = maintenance.doctor(root)
+
+    assert result["status"] == "warning"
+    assert result["findings"][0]["code"] == "alias_target_missing"
+
+
+def test_doctor_warns_for_missing_artifact_refs(tmp_path):
+    root = tmp_path / "research"
+    document = _demo_document(root)
+
+    result = maintenance.doctor(root)
+
+    assert result["status"] == "warning"
+    codes = {finding["code"] for finding in result["findings"]}
+    assert "artifact_ref_missing" in codes
+    assert document["document_id"] in {
+        finding.get("object_id") for finding in result["findings"]
+    }
+
+
+def test_doctor_warns_for_missing_run_document_and_synthesis_refs(tmp_path):
+    root = tmp_path / "research"
+    thread = store.build_research_thread(
+        question="What is Exa?",
+        created_at="2026-05-27T10:00:00Z",
+        context_type="project",
+        context_id="project:demo",
+        domain="research",
+        topics=["answer"],
+    )
+    thread["latest_synthesis_id"] = "research-synthesis:missing"
+    run = store.build_research_run(
+        thread_id=thread["thread_id"],
+        created_at="2026-05-27T10:00:00Z",
+        query="What is Exa?",
+        provider_set=["exa"],
+        document_ids=["research-doc:missing"],
+    )
+    synthesis = store.build_research_synthesis(
+        thread_id="research-thread:missing",
+        run_ids=["research-run:missing"],
+        summary="Summary",
+        created_at="2026-05-27T10:00:00Z",
+    )
+    store.write_object(root, "threads", thread["thread_id"], thread)
+    store.write_object(root, "runs", run["run_id"], run)
+    store.write_object(root, "syntheses", synthesis["synthesis_id"], synthesis)
+
+    result = maintenance.doctor(root)
+
+    codes = {finding["code"] for finding in result["findings"]}
+    assert result["status"] == "warning"
+    assert "thread_latest_synthesis_missing" in codes
+    assert "run_document_missing" in codes
+    assert "synthesis_thread_missing" in codes
+    assert "synthesis_run_missing" in codes

@@ -190,6 +190,269 @@ def _load_objects(root: Path) -> tuple[dict[str, dict[str, dict[str, Any]]], lis
     return objects, findings
 
 
+def _read_index(root: Path, index_name: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    path = store.index_path(root, index_name)
+    if not path.is_file():
+        return [], []
+
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+        detail = getattr(exc, "msg", str(exc))
+        return [], [
+            _finding(
+                "error",
+                "index_json_invalid",
+                f"Invalid index JSON: {detail}",
+                path=path,
+            )
+        ]
+
+    if not isinstance(data, list):
+        return [], [
+            _finding(
+                "error",
+                "index_not_list",
+                "Research index JSON must be a list",
+                path=path,
+            )
+        ]
+
+    rows: list[dict[str, Any]] = []
+    findings: list[dict[str, Any]] = []
+    for row in data:
+        if isinstance(row, dict):
+            rows.append(row)
+            continue
+        findings.append(
+            _finding(
+                "error",
+                "index_row_not_mapping",
+                "Research index row must be an object",
+                path=path,
+            )
+        )
+    return rows, findings
+
+
+def _check_index_refs(
+    root: Path,
+    objects: dict[str, dict[str, dict[str, Any]]],
+) -> list[dict[str, Any]]:
+    checks = {
+        "documents": ("document", "document_id"),
+        "threads": ("thread", "thread_id"),
+        "syntheses": ("synthesis", "synthesis_id"),
+    }
+    findings: list[dict[str, Any]] = []
+    for index_name, (object_type, id_key) in checks.items():
+        path = store.index_path(root, index_name)
+        rows, index_findings = _read_index(root, index_name)
+        findings.extend(index_findings)
+        for row in rows:
+            object_id = row.get(id_key)
+            if not isinstance(object_id, str) or not object_id.strip():
+                continue
+            if object_id in objects[object_type]:
+                continue
+            findings.append(
+                _finding(
+                    "warning",
+                    "index_object_missing",
+                    "Index row points to a missing canonical object",
+                    path=path,
+                    object_type=object_type,
+                    object_id=object_id,
+                    ref=id_key,
+                )
+            )
+    return findings
+
+
+def _check_alias_refs(
+    root: Path,
+    objects: dict[str, dict[str, dict[str, Any]]],
+) -> list[dict[str, Any]]:
+    path = store.index_path(root, "aliases")
+    rows, findings = _read_index(root, "aliases")
+    for row in rows:
+        target_type = row.get("target_object_type")
+        target_id = row.get("target_id")
+        object_type = target_type if isinstance(target_type, str) else None
+        object_id = target_id if isinstance(target_id, str) else None
+
+        if object_type not in objects:
+            findings.append(
+                _finding(
+                    "error",
+                    "alias_target_type_unknown",
+                    "Alias target object type is unknown",
+                    path=path,
+                    object_type=object_type,
+                    object_id=object_id,
+                    ref="target_object_type",
+                )
+            )
+            continue
+        if not isinstance(target_id, str) or not target_id.strip():
+            findings.append(
+                _finding(
+                    "warning",
+                    "alias_target_missing",
+                    "Alias target object does not exist",
+                    path=path,
+                    object_type=target_type,
+                    object_id=object_id,
+                    ref="target_id",
+                )
+            )
+            continue
+        if target_id not in objects[target_type]:
+            findings.append(
+                _finding(
+                    "warning",
+                    "alias_target_missing",
+                    "Alias target object does not exist",
+                    path=path,
+                    object_type=target_type,
+                    object_id=target_id,
+                    ref="target_id",
+                )
+            )
+    return findings
+
+
+def _artifact_ref_path(root: Path, raw_ref: Any) -> Path | None:
+    if not isinstance(raw_ref, str) or not raw_ref.strip():
+        return None
+    path = Path(raw_ref)
+    if path.is_absolute():
+        return path
+    return Path(root) / path
+
+
+def _check_artifact_refs(
+    root: Path,
+    objects: dict[str, dict[str, dict[str, Any]]],
+) -> list[dict[str, Any]]:
+    findings: list[dict[str, Any]] = []
+    for object_type, typed_objects in objects.items():
+        id_key = OBJECTS[object_type]["id_key"]
+        for object_id, data in typed_objects.items():
+            refs: list[tuple[str, Any]] = []
+            artifact_refs = data.get("artifact_refs")
+            if isinstance(artifact_refs, dict):
+                refs.extend((f"artifact_refs.{key}", value) for key, value in artifact_refs.items())
+            refs.append(("notes_ref", data.get("notes_ref")))
+
+            for ref_key, raw_ref in refs:
+                ref_path = _artifact_ref_path(root, raw_ref)
+                if ref_path is None or ref_path.exists():
+                    continue
+                findings.append(
+                    _finding(
+                        "warning",
+                        "artifact_ref_missing",
+                        "Artifact reference points to a missing file",
+                        path=ref_path,
+                        object_type=object_type,
+                        object_id=data.get(id_key) if isinstance(data.get(id_key), str) else object_id,
+                        ref=ref_key,
+                    )
+                )
+    return findings
+
+
+def _check_cross_object_refs(
+    objects: dict[str, dict[str, dict[str, Any]]],
+) -> list[dict[str, Any]]:
+    findings: list[dict[str, Any]] = []
+
+    for thread_id, thread in objects["thread"].items():
+        synthesis_id = thread.get("latest_synthesis_id")
+        if not isinstance(synthesis_id, str) or not synthesis_id.strip():
+            continue
+        if synthesis_id not in objects["synthesis"]:
+            findings.append(
+                _finding(
+                    "warning",
+                    "thread_latest_synthesis_missing",
+                    "Thread latest synthesis does not exist",
+                    object_type="thread",
+                    object_id=thread_id,
+                    ref=synthesis_id,
+                )
+            )
+
+    for run_id, run in objects["run"].items():
+        thread_id = run.get("thread_id")
+        if isinstance(thread_id, str) and thread_id.strip() and thread_id not in objects["thread"]:
+            findings.append(
+                _finding(
+                    "warning",
+                    "run_thread_missing",
+                    "Run thread does not exist",
+                    object_type="run",
+                    object_id=run_id,
+                    ref=thread_id,
+                )
+            )
+
+        document_ids = run.get("document_ids")
+        if not isinstance(document_ids, list):
+            continue
+        for document_id in document_ids:
+            if not isinstance(document_id, str) or not document_id.strip():
+                continue
+            if document_id in objects["document"]:
+                continue
+            findings.append(
+                _finding(
+                    "warning",
+                    "run_document_missing",
+                    "Run document does not exist",
+                    object_type="run",
+                    object_id=run_id,
+                    ref=document_id,
+                )
+            )
+
+    for synthesis_id, synthesis in objects["synthesis"].items():
+        thread_id = synthesis.get("thread_id")
+        if isinstance(thread_id, str) and thread_id.strip() and thread_id not in objects["thread"]:
+            findings.append(
+                _finding(
+                    "warning",
+                    "synthesis_thread_missing",
+                    "Synthesis thread does not exist",
+                    object_type="synthesis",
+                    object_id=synthesis_id,
+                    ref=thread_id,
+                )
+            )
+
+        run_ids = synthesis.get("run_ids")
+        if not isinstance(run_ids, list):
+            continue
+        for run_id in run_ids:
+            if not isinstance(run_id, str) or not run_id.strip():
+                continue
+            if run_id in objects["run"]:
+                continue
+            findings.append(
+                _finding(
+                    "warning",
+                    "synthesis_run_missing",
+                    "Synthesis run does not exist",
+                    object_type="synthesis",
+                    object_id=synthesis_id,
+                    ref=run_id,
+                )
+            )
+
+    return findings
+
+
 def _status(findings: list[dict[str, Any]]) -> str:
     severities = {finding.get("severity") for finding in findings}
     if "error" in severities:
@@ -208,7 +471,12 @@ def _counts(findings: list[dict[str, Any]]) -> dict[str, int]:
 
 
 def doctor(root: Path) -> dict[str, Any]:
-    _, findings = _load_objects(Path(root))
+    root = Path(root)
+    objects, findings = _load_objects(root)
+    findings.extend(_check_index_refs(root, objects))
+    findings.extend(_check_alias_refs(root, objects))
+    findings.extend(_check_artifact_refs(root, objects))
+    findings.extend(_check_cross_object_refs(objects))
     return {
         "kind": "research_doctor",
         "root": str(root),
