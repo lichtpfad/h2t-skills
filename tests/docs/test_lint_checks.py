@@ -57,3 +57,43 @@ def test_check_legacy_dirs_handoffs_plural(tmp_path):
     (tmp_path / "docs" / "handoffs").mkdir(parents=True)
     result = check_legacy_dirs(tmp_path)
     assert any("handoffs" in f for f in result)
+
+
+from lint import check_naming_conventions
+
+
+def test_naming_clean(tmp_path):
+    """Dated specs and plans → no failures."""
+    specs = tmp_path / "docs" / "superpowers" / "specs"
+    specs.mkdir(parents=True)
+    (specs / "2026-05-27-my-feature-design.md").write_text("# x")
+    plans = tmp_path / "docs" / "superpowers" / "plans"
+    plans.mkdir(parents=True)
+    (plans / "2026-05-27-my-feature-plan.md").write_text("# x")
+    assert check_naming_conventions(tmp_path) == []
+
+
+def test_naming_spec_missing_date(tmp_path):
+    """Spec without date prefix → failure."""
+    specs = tmp_path / "docs" / "superpowers" / "specs"
+    specs.mkdir(parents=True)
+    (specs / "my-feature-design.md").write_text("# x")
+    result = check_naming_conventions(tmp_path)
+    assert any("my-feature-design.md" in f for f in result)
+
+
+def test_naming_plan_missing_date(tmp_path):
+    """Plan without date prefix → failure."""
+    plans = tmp_path / "docs" / "superpowers" / "plans"
+    plans.mkdir(parents=True)
+    (plans / "my-feature-plan.md").write_text("# x")
+    result = check_naming_conventions(tmp_path)
+    assert any("my-feature-plan.md" in f for f in result)
+
+
+def test_naming_readme_ignored(tmp_path):
+    """README.md in specs dir → not flagged."""
+    specs = tmp_path / "docs" / "superpowers" / "specs"
+    specs.mkdir(parents=True)
+    (specs / "README.md").write_text("# index")
+    assert check_naming_conventions(tmp_path) == []
