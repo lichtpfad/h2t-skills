@@ -18,13 +18,12 @@ personal OS — h2t должен вести проект по всему жиз�
 Создать → Зарегистрировать → Спланировать → Выполнить → Поддерживать → Закрыть
 ```
 
-**PM-бэкенд абстрактный** — сегодня GitHub, завтра Notion / Linear / другой.
+**PM-бэкенд сейчас — GitHub.** Notion / Linear — будущее рассмотрение, не scope этого рефакторинга.
 Даже нетехнические проекты идут через GitHub уже сейчас.
 
 **Что это значит для текущих скиллов:**
 - Они не "docs утилиты" — они фазы lifecycle
-- GitHub-специфика должна быть изолирована в backend-адаптере
-- Один вход (`project-lifecycle` или расширенный `scaffold-project`) вместо 13 разрозненных скиллов
+- Один вход на каждую фазу вместо 13 разрозненных скиллов
 
 ---
 
@@ -163,12 +162,12 @@ pre-merge-check → (merge)
 
 | Скилл | Обоснование |
 |-------|------------|
-| `docs-lint` | Вызывается в любой момент; ядро compliance |
+| `docs-lint` | Ядро compliance; расширяется in-place (не заменяется новым скиллом) |
 | `github-issues` | Создание/обновление issues |
 | `gh-memory` | **deprecated** — bridge до gbrain; не инвестировать |
 | `project-audit` | Periodic deep audit — не milestone-driven |
-| `setup` | Tooling install/repair |
-| `init-project` | Регистрация существующих репо |
+| `setup` | Tooling install/repair; **также устанавливает `latest/` symlink** |
+| `init-project` | Регистрация существующих репо (граница с scaffold: scaffold = новый проект, init = существующий) |
 
 ---
 
@@ -198,6 +197,8 @@ REPO_EXTRA_DIRS = {
 ```
 
 ## Улучшения docs-index (из docs-skills-v2.md)
+
+**Один скрипт** — вызывается и из milestone-closure и ad-hoc. P3 rewrite меняет шаблон вывода для обоих.
 
 Текущая проблема: генерирует инвентарь файлов вместо навигационного индекса.
 
@@ -272,11 +273,13 @@ REPO_EXTRA_DIRS = {
 | `research` | Исследовательский / нетехнический | GitHub / Notion | research/ |
 | `creative` | AV / медиа проект | GitHub | — |
 
+Шаблон — дополнительный слой поверх существующих типов scaffold (`code-github`, `code-local`, `docs`, `dcc`).
+Существующие зарегистрированные проекты не затрагиваются — шаблон применяется только при новом scaffold.
+
 Шаблон определяет:
 - Какие `docs/` директории создать
 - Какие labels синхронизировать
 - Какие hooks установить в `.claude/settings.json`
-- Тип PM-бэкенда (GitHub / Notion)
 
 ---
 
@@ -286,7 +289,7 @@ REPO_EXTRA_DIRS = {
 
 | Хук | Событие | Действие |
 |-----|---------|----------|
-| `PostToolUse: Bash(git commit)` | После каждого коммита | docs-lint quick check (только изменённые .md) |
+| `PostToolUse: Bash(git commit)` | После коммита с .md файлами | docs-lint quick check — **non-blocking, timeout 5s, только если changed files в docs/** |
 | `Stop` (session end) | Конец сессии | Проверить: все milestone issues закрыты? → предложить milestone-closure |
 | `PostToolUse: Bash(git push)` | После push в main | Обновить docs-index |
 | `PreToolUse: Bash(git merge)` | Перед merge | pre-merge-check gate |
@@ -315,7 +318,9 @@ Hook в `settings.json` не содержит логики — только вы
 - Логика живёт в плагине (`h2t-core/scripts/hooks/`)
 - Плагин обновился → все проекты автоматически получают новое поведение
 - В `settings.json` ничего менять не нужно после scaffold
-- `latest/` — symlink на текущую установленную версию плагина (устанавливается `h2t-core:setup`)
+- `latest/` — symlink (Linux/Mac) или junction (Windows, не требует прав) на текущую версию плагина
+- **`h2t-core:setup` обязан создавать/обновлять `latest/`** — это часть install pipeline, добавить в приоритеты
+- Fallback если `latest/` нет: `setup` пишет `~/.h2t/config/plugin-versions.json` → hook резолвит путь через него
 
 ---
 
@@ -333,13 +338,13 @@ Hook в `settings.json` не содержит логики — только вы
 
 ## Финальный инвентарь (целевой)
 
-### Скиллы (7 → 6 активных)
+### Скиллы (целевой список)
 
 | Скилл | Фаза | Поглощает |
 |-------|------|-----------|
 | `scaffold-project` (h2t-core) | INIT | docs-init + docs-sync-labels + hook install |
 | `github-issues` (h2t-dev) | PLAN | — |
-| `docs` (h2t-dev, новый unified) | MAINTAIN | docs-lint + docs-index + docs-sync-labels(fix) |
+| `docs-lint` (h2t-dev, расширенный in-place) | MAINTAIN | repo-root check; `--fix` → sync-labels |
 | `pre-merge-check` (h2t-dev) | REVIEW | — |
 | `milestone-closure` (h2t-dev) | CLOSE | docs-cleanup + docs-index |
 | `project-audit` (h2t-core) | AUDIT | — |
@@ -362,10 +367,11 @@ Hook в `settings.json` не содержит логики — только вы
 
 | P | Задача |
 |---|--------|
-| P0 | Расширить `docs-lint`: legacy dirs, repo-root, `--fix` → sync-labels |
-| P1 | `scaffold-project`: поглотить docs-init + docs-sync-labels + hook install |
-| P1 | `milestone-closure`: добавить шаги docs-cleanup + docs-index |
-| P2 | Создать unified `docs` скилл (lint + index) |
-| P2 | Hook `Stop`: milestone completeness check |
-| P3 | `docs-index`: переписать под navigation template |
+| P0 | Расширить `docs-lint`: legacy dirs, repo-root check, `--fix` → sync-labels |
+| P1 | `h2t-core:setup`: создавать `latest/` junction/symlink + `plugin-versions.json` fallback |
+| P1 | `scaffold-project`: поглотить docs-init + docs-sync-labels + hook install (thin wrappers) |
+| P1 | `milestone-closure`: добавить шаги docs-cleanup + docs-index (с dry-run gate) |
+| P2 | Hook `Stop`: non-blocking milestone completeness check → предложить closure |
+| P2 | Hook `PostToolUse(git commit)`: non-blocking docs-lint на изменённые docs/*.md, timeout 5s |
+| P3 | `docs-index`: переписать под navigation template (один скрипт, два вызывателя) |
 | P3 | Пометить `gh-memory` deprecated в plugin.json |
