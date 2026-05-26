@@ -153,6 +153,28 @@ def check_repo_root(rp: Path) -> list[str]:
     return failures
 
 
+_DATA_EXTS_IN_DOCS = {".json", ".yaml", ".yml", ".csv"}
+_DOC_EXTS_IN_DATA = {".md"}
+_DATA_DOCS_SKIP = {".pymarkdown.yaml", ".vale.ini"}
+
+
+def check_data_docs_boundary(rp: Path) -> list[str]:
+    failures = []
+    docs_dir = rp / "docs"
+    if docs_dir.exists():
+        for f in docs_dir.rglob("*"):
+            if f.is_file() and f.suffix in _DATA_EXTS_IN_DOCS and f.name not in _DATA_DOCS_SKIP:
+                rel = str(f.relative_to(rp)).replace("\\", "/")
+                failures.append(f"data in docs: {rel} — move to data/")
+    data_dir = rp / "data"
+    if data_dir.exists():
+        for f in data_dir.rglob("*"):
+            if f.is_file() and f.suffix in _DOC_EXTS_IN_DATA:
+                rel = str(f.relative_to(rp)).replace("\\", "/")
+                failures.append(f"doc in data: {rel} — move to docs/")
+    return failures
+
+
 def check_frontmatter(rp: Path) -> list[str]:
     failures = []
     docs_dir = rp / "docs"
@@ -342,6 +364,7 @@ def main() -> None:
             + check_legacy_dirs(rp, extra_dirs=extra)
             + check_naming_conventions(rp)
             + check_frontmatter(rp)
+            + check_data_docs_boundary(rp)
             + check_projects_yaml(rp, name, projects)
             + (check_repo_root(rp) if args.repo_root else [])
             + ([] if args.no_pymarkdown else run_pymarkdownlnt(rp))
