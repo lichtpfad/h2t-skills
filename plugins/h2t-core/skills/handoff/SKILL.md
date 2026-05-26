@@ -12,7 +12,10 @@ metadata:
 ## Setup
 
 ```bash
-WRITER="${CLAUDE_PLUGIN_ROOT}/skills/handoff/scripts/writer.py"
+command -v h2t-handoff >/dev/null 2>&1 || {
+  echo "ERROR: h2t-handoff not found. Run: uv tool install --editable C:/dev/h2t-skills"
+  exit 1
+}
 source "${CLAUDE_PLUGIN_ROOT}/scripts/resolve-h2t-python.sh"
 resolve_h2t_python || { echo "ERROR: no working Python found for h2t"; exit 1; }
 ```
@@ -81,7 +84,7 @@ Writer stores:
 - activity stream spool.
 
 ```bash
-"${H2T_PYTHON_CMD[@]}" "$WRITER" write \
+h2t-handoff write \
   --session-id "<SESSION_NAME>" \
   --domain "<DOMAIN>" \
   --project "<PROJECT_ID>" \
