@@ -27,6 +27,13 @@ REQUIRED_CORE_DIRS = [
     "docs/reports",
 ]
 
+# Extra dirs allowed per repo — not flagged by check_legacy_dirs or structure checks
+REPO_EXTRA_DIRS: dict[str, list[str]] = {
+    "h2t-evals":         ["ops", "contracts"],
+    "h2t-transcription": ["methodology", "diagrams"],
+    "h2t-vision":        ["presentation"],
+}
+
 STANDARDS_FILES = [
     "naming-conventions.md", "git-naming-conventions.md",
     "documentation-structure.md", "code-organization.md",

@@ -2,6 +2,7 @@
 name: h2t-dev:gh-memory
 description: "This skill should be used when GitHub Issues are needed as persistent agent memory. It creates task issues, tracks progress across sessions, filters by domain/type, and restores session context. Triggers: 'gh-memory', 'create issue', 'agent task', 'track task'."
 compatibility: "Claude Code. Requires: gh CLI authenticated to lichtpfad account."
+status: deprecated
 metadata:
   author: lichtpfad
   version: 1.0.0

@@ -15,7 +15,7 @@ for _lib in [_PLUGIN_ROOT / "lib", _PLUGIN_ROOT.parent.parent / "lib"]:
         break
 
 from docs.common import (
-    DEV_ROOT, REPO_MANIFEST, REQUIRED_CORE_DIRS, STANDARDS_FILES,
+    DEV_ROOT, REPO_MANIFEST, REQUIRED_CORE_DIRS, REPO_EXTRA_DIRS, STANDARDS_FILES,
     FRONTMATTER_RULES, ensure_dir, print_header, repo_path, parse_frontmatter,
 )
 
@@ -88,6 +88,90 @@ def check_adr_naming(rp: Path) -> list[str]:
     for adr in adr_dir.glob("[0-9]*.md"):
         if not re.match(r"^\d{4}-", adr.name):
             failures.append(f"ADR naming: {adr.name} (expected 4-digit prefix)")
+    return failures
+
+
+LEGACY_DIRS = [
+    "docs/plans",
+    "docs/specs",
+    "docs/handoff",
+    "docs/handoffs",
+    "docs/eval",
+]
+
+
+def check_legacy_dirs(rp: Path, extra_dirs: list[str] | None = None) -> list[str]:
+    skip = set(extra_dirs or [])
+    failures = []
+    for rel in LEGACY_DIRS:
+        dir_name = rel.split("/")[-1]
+        if dir_name in skip:
+            continue
+        if (rp / rel).exists():
+            failures.append(f"legacy dir: {rel}/ — migrate to docs/superpowers/ or docs/archive/")
+    return failures
+
+
+_DATE_PREFIX = re.compile(r"^\d{4}-\d{2}-\d{2}-")
+_NAMING_DIRS = ["docs/superpowers/specs", "docs/superpowers/plans"]
+_NAMING_SKIP = {"README.md", "index.md"}
+
+
+def check_naming_conventions(rp: Path) -> list[str]:
+    failures = []
+    for rel_dir in _NAMING_DIRS:
+        d = rp / rel_dir
+        if not d.exists():
+            continue
+        for md in d.glob("*.md"):
+            if md.name in _NAMING_SKIP:
+                continue
+            if not _DATE_PREFIX.match(md.name):
+                failures.append(
+                    f"naming: {rel_dir}/{md.name} — expected YYYY-MM-DD- prefix"
+                )
+    return failures
+
+
+_BANNED_ROOT_DIRS = {"temp", "old", "backup", "tmp", "archive_old"}
+_ROOT_MAX_ITEMS = 12
+_ROOT_SKIP = {".git", ".venv", "venv", "__pycache__", ".mypy_cache", ".pytest_cache",
+              "node_modules", ".ruff_cache", ".vscode", ".idea"}
+
+
+def check_repo_root(rp: Path) -> list[str]:
+    failures = []
+    items = [p for p in rp.iterdir() if p.name not in _ROOT_SKIP]
+    for item in items:
+        if item.is_dir() and item.name.lower() in _BANNED_ROOT_DIRS:
+            failures.append(f"repo root: banned dir '{item.name}/' — remove or archive via git mv")
+    visible = [p for p in items if not p.name.startswith(".")]
+    if len(visible) > _ROOT_MAX_ITEMS:
+        failures.append(
+            f"repo root has {len(visible)} items (max {_ROOT_MAX_ITEMS}) — consider consolidating"
+        )
+    return failures
+
+
+_DATA_EXTS_IN_DOCS = {".json", ".yaml", ".yml", ".csv"}
+_DOC_EXTS_IN_DATA = {".md"}
+_DATA_DOCS_SKIP = {".pymarkdown.yaml", ".vale.ini"}
+
+
+def check_data_docs_boundary(rp: Path) -> list[str]:
+    failures = []
+    docs_dir = rp / "docs"
+    if docs_dir.exists():
+        for f in docs_dir.rglob("*"):
+            if f.is_file() and f.suffix in _DATA_EXTS_IN_DOCS and f.name not in _DATA_DOCS_SKIP:
+                rel = str(f.relative_to(rp)).replace("\\", "/")
+                failures.append(f"data in docs: {rel} — move to data/")
+    data_dir = rp / "data"
+    if data_dir.exists():
+        for f in data_dir.rglob("*"):
+            if f.is_file() and f.suffix in _DOC_EXTS_IN_DATA:
+                rel = str(f.relative_to(rp)).replace("\\", "/")
+                failures.append(f"doc in data: {rel} — move to docs/")
     return failures
 
 
@@ -211,6 +295,25 @@ def fix_frontmatter(rp: Path) -> list[str]:
     return fixes
 
 
+_SYNC_LABELS_SCRIPT = Path(__file__).parents[2] / "docs-sync-labels" / "scripts" / "sync_labels.py"
+_H2T_PYTHON = (
+    Path.home() / ".h2t" / "venv" / "Scripts" / "python.exe"
+    if sys.platform == "win32"
+    else Path.home() / ".h2t" / "venv" / "bin" / "python"
+)
+
+
+def fix_labels(rp: Path, repo_name: str) -> str:
+    python = str(_H2T_PYTHON) if _H2T_PYTHON.exists() else sys.executable
+    result = subprocess.run(
+        [python, str(_SYNC_LABELS_SCRIPT), repo_name, "--apply"],
+        capture_output=True, text=True, cwd=str(rp),
+    )
+    if result.returncode == 0:
+        return f"labels synced for {repo_name}"
+    return f"label sync failed: {result.stderr.strip()[:120]}"
+
+
 def _detect_current_repo() -> str | None:
     """Detect repo name from cwd if it matches a known h2t-* repo."""
     cwd = Path.cwd()
@@ -228,7 +331,11 @@ def main() -> None:
     parser.add_argument("--fix", action="store_true", help="Create missing dirs")
     parser.add_argument("--fix-frontmatter", action="store_true",
                         help="Auto-add missing frontmatter (title from heading, date from filename)")
+    parser.add_argument("--fix-labels", action="store_true",
+                        help="Sync canonical GitHub labels (requires gh CLI)")
     parser.add_argument("--no-pymarkdown", action="store_true", help="Skip pymarkdownlnt")
+    parser.add_argument("--repo-root", action="store_true",
+                        help="Check repo root for banned dirs and item count")
     args = parser.parse_args()
 
     if args.repos:
@@ -271,11 +378,16 @@ def main() -> None:
             for f in fixes:
                 print(f"  FIX: {f}")
 
+        extra = REPO_EXTRA_DIRS.get(name, [])
         failures = (
             check_structure(rp)
             + check_adr_naming(rp)
+            + check_legacy_dirs(rp, extra_dirs=extra)
+            + check_naming_conventions(rp)
             + check_frontmatter(rp)
+            + check_data_docs_boundary(rp)
             + check_projects_yaml(rp, name, projects)
+            + (check_repo_root(rp) if args.repo_root else [])
             + ([] if args.no_pymarkdown else run_pymarkdownlnt(rp))
         )
         if failures:
@@ -284,6 +396,10 @@ def main() -> None:
             total_failures += len(failures)
         else:
             print("  OK: all checks passed")
+
+        if args.fix_labels:
+            msg = fix_labels(rp, name)
+            print(f"  FIX-LABELS: {msg}")
 
     print(f"\n{'=' * 60}")
     if total_failures:
