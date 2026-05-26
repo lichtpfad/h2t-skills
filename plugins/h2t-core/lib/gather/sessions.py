@@ -18,6 +18,7 @@ def _legacy_session_root() -> Path:
     return Path.home() / ".dor" / "sessions"
 
 
+# Archival markdown discovery stays separate from repo continuity lookup.
 def find_session_files(repo_name: str) -> list[str]:
     """Find handoff markdown files across h2t and legacy DOR session roots."""
     files = []
@@ -88,7 +89,9 @@ def _bound_latest_index(data: dict, path: Path) -> dict:
 
 
 def find_latest_session_index(repo_name: str) -> dict | None:
-    """Find newest bounded latest.json across canonical h2t session root."""
+    """Find newest bounded latest.json for a repo-scoped session."""
+    if not repo_name or "/" in repo_name or "\\" in repo_name:
+        return None
     root = _session_root()
     if not root.exists():
         return None

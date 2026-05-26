@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 from gather.sessions import (
@@ -33,6 +34,49 @@ def test_find_sessions_prefers_h2t_root_and_reads_legacy(tmp_path, monkeypatch):
 
     assert str(h2t_file) in files
     assert str(legacy_file) in files
+
+
+def test_find_latest_session_index_returns_none_when_only_markdown_exists(tmp_path, monkeypatch):
+    root = tmp_path / "sessions"
+    md = root / "machine-a" / "repo" / "old.md"
+    md.parent.mkdir(parents=True)
+    md.write_text("legacy handoff", encoding="utf-8")
+    monkeypatch.setenv("H2T_SESSION_ROOT", str(root))
+
+    result = find_latest_session_index("repo")
+
+    assert result is None
+
+
+def test_find_latest_session_index_uses_newest_latest_json_only(tmp_path, monkeypatch):
+    root = tmp_path / "sessions"
+    older = root / "machine-a" / "repo" / "latest.json"
+    newer = root / "machine-b" / "repo" / "latest.json"
+    older.parent.mkdir(parents=True)
+    newer.parent.mkdir(parents=True)
+    older.write_text(json.dumps({"version": 1, "session_id": "older"}), encoding="utf-8")
+    newer.write_text(json.dumps({"version": 1, "session_id": "newer"}), encoding="utf-8")
+    monkeypatch.setenv("H2T_SESSION_ROOT", str(root))
+
+    newer_stat = newer.stat()
+    os.utime(newer, (newer_stat.st_atime + 10, newer_stat.st_mtime + 10))
+
+    result = find_latest_session_index("repo")
+
+    assert result is not None
+    assert result["session_id"] == "newer"
+
+
+def test_find_latest_session_index_repo_lookup_is_v1_boundary(tmp_path, monkeypatch):
+    root = tmp_path / "sessions"
+    latest = root / "machine-a" / "project-only" / "latest.json"
+    latest.parent.mkdir(parents=True)
+    latest.write_text(json.dumps({"version": 1, "session_id": "s1"}), encoding="utf-8")
+    monkeypatch.setenv("H2T_SESSION_ROOT", str(root))
+
+    result = find_latest_session_index("non-repo-context")
+
+    assert result is None
 
 
 def test_find_latest_session_index_is_bounded(tmp_path, monkeypatch):

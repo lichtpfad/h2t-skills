@@ -84,6 +84,31 @@ def _extract_items(text: str, *, max_items: int = MAX_ITEMS) -> tuple[list[str],
     return items, truncated
 
 
+def _dedupe_preserving_order(values: list[str]) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for value in values:
+        if value in seen:
+            continue
+        seen.add(value)
+        result.append(value)
+    return result
+
+
+def _dedupe_artifacts(values: list[dict]) -> list[dict]:
+    seen: set[tuple[str, str]] = set()
+    result: list[dict] = []
+    for value in values:
+        artifact_type = str(value.get("type", "artifact"))
+        artifact_ref = str(value.get("ref", ""))
+        key = (artifact_type, artifact_ref)
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append({"type": artifact_type, "ref": artifact_ref})
+    return result
+
+
 def _build_latest_index(
     *,
     session_id: str,
@@ -92,13 +117,15 @@ def _build_latest_index(
     what_done: str,
     what_remains: str,
     artifacts: list[dict],
-    markdown_path: Path,
+    markdown_path: Path | None,
     updated_at: datetime,
 ) -> dict:
     summary_short, summary_truncated = _truncate(what_done, SUMMARY_LIMIT)
     next_actions, actions_truncated = _extract_items(what_remains)
+    next_actions = _dedupe_preserving_order(next_actions)
     truncated = summary_truncated or actions_truncated
-    artifact_rows = artifacts[:MAX_ARTIFACTS]
+    deduped_artifacts = _dedupe_artifacts(artifacts)
+    artifact_rows = deduped_artifacts[:MAX_ARTIFACTS]
     truncated = truncated or len(artifacts) > MAX_ARTIFACTS
     return {
         "version": 1,
@@ -110,7 +137,7 @@ def _build_latest_index(
         "next_actions": next_actions,
         "blockers": [],
         "artifacts": artifact_rows,
-        "markdown_path": str(markdown_path),
+        "markdown_path": str(markdown_path) if markdown_path else "",
         "truncated": truncated,
     }
 
@@ -175,7 +202,6 @@ def write_handoff(
 ## Artifacts
 {artifacts_md}
 """
-    md_path.write_text(md_content, encoding="utf-8")
     latest = _build_latest_index(
         session_id=session_id,
         domain=domain,
@@ -183,11 +209,22 @@ def write_handoff(
         what_done=what_done,
         what_remains=what_remains,
         artifacts=parsed_artifacts,
-        markdown_path=md_path,
+        markdown_path=None,
         updated_at=now,
     )
     latest_path = md_dir / "latest.json"
     _write_json_atomic(latest_path, latest)
+    markdown_failed = False
+    persisted_md_path: Path | None = None
+    try:
+        md_path.write_text(md_content, encoding="utf-8")
+        persisted_md_path = md_path
+    except OSError:
+        markdown_failed = True
+
+    if persisted_md_path is not None:
+        latest["markdown_path"] = str(persisted_md_path)
+        _write_json_atomic(latest_path, latest)
 
     try:
         with SkillEval("handoff", domain=domain, project=project):
@@ -196,12 +233,13 @@ def write_handoff(
         pass
 
     return {
-        "status": "ok",
+        "status": "degraded" if markdown_failed else "ok",
         "session_id": session_id,
         "spool": spool_path,
-        "markdown": str(md_path),
+        "markdown": str(md_path) if persisted_md_path else "",
         "latest": str(latest_path),
-        "artifacts": len(parsed_artifacts),
+        "artifacts": len(latest["artifacts"]),
+        "mirror_write_failed": markdown_failed,
     }
 
 
