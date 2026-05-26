@@ -13,9 +13,31 @@ Use `h2t-ops research` for provider-backed web research via Exa and the URL fetc
 
 ## Boundary
 
-Research artifacts are evidence, not canonical knowledge. This skill may create
-traceable research artifacts under `~/.h2t/research/`; POS owns indexing, dedupe,
-linking, and promotion into KB/journal/tasks/decisions.
+Research artifacts are evidence, not canonical accepted knowledge.
+POS may later ingest them, but local object JSON remains the canonical runtime
+source in this phase.
+
+## Local Artifact Model
+
+`h2t-ops:research` now maintains a local JSON-first artifact layer:
+
+- canonical local truth = object JSON artifacts
+- Markdown = review/presentation mirror only
+- shared navigation caches:
+  - `threads.index.json`
+  - `documents.index.json`
+  - `syntheses.index.json`
+  - `aliases.index.json`
+
+Agent lookup order:
+
+1. query shared index
+2. resolve object ids
+3. read canonical object JSON
+4. open Markdown mirror only for human review
+
+Index entries are rebuildable navigation caches, not canonical truth.
+If index and object disagree, object wins.
 
 ## Commands
 
