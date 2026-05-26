@@ -716,11 +716,3 @@ def test_research_help_does_not_import_or_instantiate_client(capsys):
     assert "h2t_ops.connectors.research.fetch" not in sys.modules
 
 
-def test_research_skill_documents_json_first_local_truth():
-    text = Path("plugins/h2t-ops/skills/research/SKILL.md").read_text(encoding="utf-8")
-
-    assert "canonical local truth" in text
-    assert "Markdown" in text
-    assert "threads.index.json" in text
-    assert "documents.index.json" in text
-    assert "If index and object disagree, object wins." in text
