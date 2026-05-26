@@ -91,6 +91,27 @@ def check_adr_naming(rp: Path) -> list[str]:
     return failures
 
 
+LEGACY_DIRS = [
+    "docs/plans",
+    "docs/specs",
+    "docs/handoff",
+    "docs/handoffs",
+    "docs/eval",
+]
+
+
+def check_legacy_dirs(rp: Path, extra_dirs: list[str] | None = None) -> list[str]:
+    skip = set(extra_dirs or [])
+    failures = []
+    for rel in LEGACY_DIRS:
+        dir_name = rel.split("/")[-1]
+        if dir_name in skip:
+            continue
+        if (rp / rel).exists():
+            failures.append(f"legacy dir: {rel}/ — migrate to docs/superpowers/ or docs/archive/")
+    return failures
+
+
 def check_frontmatter(rp: Path) -> list[str]:
     failures = []
     docs_dir = rp / "docs"
@@ -274,6 +295,7 @@ def main() -> None:
         failures = (
             check_structure(rp)
             + check_adr_naming(rp)
+            + check_legacy_dirs(rp)
             + check_frontmatter(rp)
             + check_projects_yaml(rp, name, projects)
             + ([] if args.no_pymarkdown else run_pymarkdownlnt(rp))
