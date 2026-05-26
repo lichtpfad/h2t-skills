@@ -716,3 +716,22 @@ def test_research_help_does_not_import_or_instantiate_client(capsys):
     assert "h2t_ops.connectors.research.fetch" not in sys.modules
 
 
+def test_research_skill_documentation_mentions_navigation_commands_and_json_truth():
+    text = Path("plugins/h2t-ops/skills/research/SKILL.md").read_text(encoding="utf-8")
+
+    assert "## Navigation Commands" in text
+    assert "h2t-ops research index documents" in text
+    assert "h2t-ops research index threads --output-dir" in text
+    assert "h2t-ops research index syntheses --output-dir" in text
+    assert "h2t-ops research show document" in text
+    assert "h2t-ops research show thread" in text
+    assert "h2t-ops research show run" in text
+    assert "h2t-ops research show synthesis" in text
+    assert "h2t-ops research resolve --url" in text
+    assert "h2t-ops research resolve --alias" in text
+    assert "JSON object artifacts are the canonical truth." in text
+    assert "Index files (`*.index.json`) are caches" in text
+    assert "open Markdown mirror only for human review" in text
+    assert "query shared index" in text
+    assert "resolve object ids / aliases" in text
+    assert "read canonical object JSON" in text
