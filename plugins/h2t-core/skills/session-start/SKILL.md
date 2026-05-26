@@ -22,6 +22,8 @@ command -v h2t-activity-log >/dev/null 2>&1 || {
   echo "ERROR: h2t-activity-log not found. Run: uv tool install --editable C:/dev/h2t-skills"
   exit 1
 }
+source "${CLAUDE_PLUGIN_ROOT}/scripts/resolve-h2t-python.sh"
+resolve_h2t_python || { echo "ERROR: no working Python found for h2t"; exit 1; }
 ```
 
 ## Pipeline
