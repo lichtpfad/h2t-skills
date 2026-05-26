@@ -133,6 +133,26 @@ def check_naming_conventions(rp: Path) -> list[str]:
     return failures
 
 
+_BANNED_ROOT_DIRS = {"temp", "old", "backup", "tmp", "archive_old"}
+_ROOT_MAX_ITEMS = 12
+_ROOT_SKIP = {".git", ".venv", "venv", "__pycache__", ".mypy_cache", ".pytest_cache",
+              "node_modules", ".ruff_cache", ".vscode", ".idea"}
+
+
+def check_repo_root(rp: Path) -> list[str]:
+    failures = []
+    items = [p for p in rp.iterdir() if p.name not in _ROOT_SKIP]
+    for item in items:
+        if item.is_dir() and item.name.lower() in _BANNED_ROOT_DIRS:
+            failures.append(f"repo root: banned dir '{item.name}/' — remove or archive via git mv")
+    visible = [p for p in items if not p.name.startswith(".")]
+    if len(visible) > _ROOT_MAX_ITEMS:
+        failures.append(
+            f"repo root has {len(visible)} items (max {_ROOT_MAX_ITEMS}) — consider consolidating"
+        )
+    return failures
+
+
 def check_frontmatter(rp: Path) -> list[str]:
     failures = []
     docs_dir = rp / "docs"
@@ -271,6 +291,8 @@ def main() -> None:
     parser.add_argument("--fix-frontmatter", action="store_true",
                         help="Auto-add missing frontmatter (title from heading, date from filename)")
     parser.add_argument("--no-pymarkdown", action="store_true", help="Skip pymarkdownlnt")
+    parser.add_argument("--repo-root", action="store_true",
+                        help="Check repo root for banned dirs and item count")
     args = parser.parse_args()
 
     if args.repos:
@@ -321,6 +343,7 @@ def main() -> None:
             + check_naming_conventions(rp)
             + check_frontmatter(rp)
             + check_projects_yaml(rp, name, projects)
+            + (check_repo_root(rp) if args.repo_root else [])
             + ([] if args.no_pymarkdown else run_pymarkdownlnt(rp))
         )
         if failures:
