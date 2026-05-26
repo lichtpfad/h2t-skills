@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from h2t_ops.connectors.research import store
-from h2t_ops.core.errors import ConfigError, UsageError
+from h2t_ops.core.errors import ConfigError, NotFoundError, UsageError
 
 
 INDEX_NAMES = {"documents", "threads", "syntheses", "aliases"}
@@ -76,4 +76,76 @@ def list_index(root: Path, index_name: str, *, project: str | None = None) -> di
         "root": str(root),
         "count": len(rows),
         "items": rows,
+    }
+
+
+def _object_path_for_type(root: Path, object_type: str, object_id: str) -> Path:
+    if object_type not in OBJECTS:
+        raise UsageError(f"unknown research object type: {object_type}")
+    directory, _schema, _id_key = OBJECTS[object_type]
+    return store.object_path(root, directory, object_id)
+
+
+def show_object(root: Path, object_type: str, object_id: str) -> dict[str, Any]:
+    root = Path(root)
+    path = _object_path_for_type(root, object_type, object_id)
+    if not path.is_file():
+        raise NotFoundError(f"research object not found: {object_type} {object_id} at {path}")
+    obj = _read_json(path)
+    if not isinstance(obj, dict):
+        raise ConfigError(f"research object is not a JSON object: {path}")
+    _directory, expected_schema, id_key = OBJECTS[object_type]
+    if obj.get("schema") != expected_schema:
+        raise ConfigError(
+            f"research object schema mismatch: expected {expected_schema}, got {obj.get('schema')}"
+        )
+    if obj.get(id_key) != object_id:
+        raise ConfigError(
+            f"research object id mismatch: expected {object_id}, got {obj.get(id_key)}"
+        )
+    return {
+        "kind": "research_object",
+        "object_type": object_type,
+        "object_id": object_id,
+        "root": str(root),
+        "object": obj,
+    }
+
+
+def _target_object_path(root: Path, target_type: str, target_id: str) -> Path:
+    if target_type in OBJECTS:
+        directory, _schema, _id_key = OBJECTS[target_type]
+        return store.object_path(root, directory, target_id)
+    return Path(root) / "objects" / target_type / f"{target_id}.json"
+
+
+def resolve_alias(
+    root: Path,
+    alias_value: str,
+    alias_type: str = "url",
+) -> dict[str, Any]:
+    root = Path(root)
+    value = str(alias_value).strip()
+    if not value:
+        raise UsageError("research resolve requires a non-empty alias value")
+    rows = [
+        row
+        for row in _read_index(root, "aliases")
+        if row.get("alias_type") == alias_type and row.get("alias_value") == value
+    ]
+    matches: list[dict[str, Any]] = []
+    for row in rows:
+        target_type = str(row.get("target_object_type") or "")
+        target_id = str(row.get("target_id") or "")
+        path = _target_object_path(root, target_type, target_id)
+        enriched = dict(row)
+        enriched["object_path"] = str(path)
+        enriched["object_exists"] = path.is_file()
+        matches.append(enriched)
+    return {
+        "kind": "research_resolution",
+        "root": str(root),
+        "query": {"alias_type": alias_type, "alias_value": value},
+        "count": len(matches),
+        "matches": matches,
     }
