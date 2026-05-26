@@ -15,7 +15,7 @@ for _lib in [_PLUGIN_ROOT / "lib", _PLUGIN_ROOT.parent.parent / "lib"]:
         break
 
 from docs.common import (
-    DEV_ROOT, REPO_MANIFEST, REQUIRED_CORE_DIRS, STANDARDS_FILES,
+    DEV_ROOT, REPO_MANIFEST, REQUIRED_CORE_DIRS, REPO_EXTRA_DIRS, STANDARDS_FILES,
     FRONTMATTER_RULES, ensure_dir, print_header, repo_path, parse_frontmatter,
 )
 
@@ -292,10 +292,11 @@ def main() -> None:
             for f in fixes:
                 print(f"  FIX: {f}")
 
+        extra = REPO_EXTRA_DIRS.get(name, [])
         failures = (
             check_structure(rp)
             + check_adr_naming(rp)
-            + check_legacy_dirs(rp)
+            + check_legacy_dirs(rp, extra_dirs=extra)
             + check_frontmatter(rp)
             + check_projects_yaml(rp, name, projects)
             + ([] if args.no_pymarkdown else run_pymarkdownlnt(rp))
