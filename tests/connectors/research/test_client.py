@@ -1619,7 +1619,7 @@ def test_research_client_resolve_research_alias_url(tmp_path):
     )
 
     result = client.ResearchClient(output_dir=tmp_path).resolve_research_alias(
-        alias_value="https://example.com/post",
+        "https://example.com/post",
         alias_type="url",
     )
 

@@ -1221,6 +1221,7 @@ class ResearchClient:
     def resolve_research_alias(
         self,
         alias_value: str,
+        *,
         alias_type: str = "url",
     ) -> dict[str, Any]:
         """Resolve aliases through the local aliases index."""
