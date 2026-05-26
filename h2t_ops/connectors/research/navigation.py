@@ -116,7 +116,7 @@ def _target_object_path(root: Path, target_type: str, target_id: str) -> Path:
     if target_type in OBJECTS:
         directory, _schema, _id_key = OBJECTS[target_type]
         return store.object_path(root, directory, target_id)
-    return Path(root) / "objects" / target_type / f"{target_id}.json"
+    raise ConfigError(f"unknown research target object type: {target_type}")
 
 
 def resolve_alias(

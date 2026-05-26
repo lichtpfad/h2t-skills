@@ -276,6 +276,25 @@ def test_resolve_alias_returns_stale_state(tmp_path):
     assert result["matches"][0]["object_path"].endswith("research-doc:missing.json")
 
 
+def test_resolve_alias_rejects_path_like_unknown_target_type(tmp_path):
+    root = tmp_path / "research"
+    store.upsert_alias_index(
+        root,
+        [
+            {
+                "alias_type": "url",
+                "alias_value": "https://example.com/post",
+                "target_object_type": "../secrets",
+                "target_id": "x",
+                "confidence": "high",
+            }
+        ],
+    )
+
+    with pytest.raises(ConfigError, match="unknown research target object type"):
+        navigation.resolve_alias(root, alias_value="https://example.com/post", alias_type="url")
+
+
 def test_resolve_alias_empty_value_raises_usageerror(tmp_path):
     with pytest.raises(UsageError, match="research resolve requires a non-empty alias value"):
         navigation.resolve_alias(tmp_path / "research", alias_value="")
