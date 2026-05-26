@@ -295,6 +295,25 @@ def fix_frontmatter(rp: Path) -> list[str]:
     return fixes
 
 
+_SYNC_LABELS_SCRIPT = Path(__file__).parents[2] / "docs-sync-labels" / "scripts" / "sync_labels.py"
+_H2T_PYTHON = (
+    Path.home() / ".h2t" / "venv" / "Scripts" / "python.exe"
+    if sys.platform == "win32"
+    else Path.home() / ".h2t" / "venv" / "bin" / "python"
+)
+
+
+def fix_labels(rp: Path, repo_name: str) -> str:
+    python = str(_H2T_PYTHON) if _H2T_PYTHON.exists() else sys.executable
+    result = subprocess.run(
+        [python, str(_SYNC_LABELS_SCRIPT), repo_name, "--apply"],
+        capture_output=True, text=True, cwd=str(rp),
+    )
+    if result.returncode == 0:
+        return f"labels synced for {repo_name}"
+    return f"label sync failed: {result.stderr.strip()[:120]}"
+
+
 def _detect_current_repo() -> str | None:
     """Detect repo name from cwd if it matches a known h2t-* repo."""
     cwd = Path.cwd()
@@ -312,6 +331,8 @@ def main() -> None:
     parser.add_argument("--fix", action="store_true", help="Create missing dirs")
     parser.add_argument("--fix-frontmatter", action="store_true",
                         help="Auto-add missing frontmatter (title from heading, date from filename)")
+    parser.add_argument("--fix-labels", action="store_true",
+                        help="Sync canonical GitHub labels (requires gh CLI)")
     parser.add_argument("--no-pymarkdown", action="store_true", help="Skip pymarkdownlnt")
     parser.add_argument("--repo-root", action="store_true",
                         help="Check repo root for banned dirs and item count")
@@ -375,6 +396,10 @@ def main() -> None:
             total_failures += len(failures)
         else:
             print("  OK: all checks passed")
+
+        if args.fix_labels:
+            msg = fix_labels(rp, name)
+            print(f"  FIX-LABELS: {msg}")
 
     print(f"\n{'=' * 60}")
     if total_failures:

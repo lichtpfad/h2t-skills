@@ -182,3 +182,26 @@ def test_markdown_in_data(tmp_path):
 def test_data_docs_boundary_no_dirs(tmp_path):
     """No docs/ or data/ dirs → no failures."""
     assert check_data_docs_boundary(tmp_path) == []
+
+
+import subprocess
+from unittest.mock import patch, MagicMock
+from lint import fix_labels
+
+
+def test_fix_labels_calls_sync(tmp_path):
+    """fix_labels runs sync_labels.py for the given repo."""
+    with patch("subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(returncode=0, stdout="synced 3", stderr="")
+        result = fix_labels(tmp_path, "h2t-skills")
+    mock_run.assert_called_once()
+    cmd = mock_run.call_args[0][0]
+    assert "sync_labels.py" in " ".join(str(c) for c in cmd)
+
+
+def test_fix_labels_returns_message(tmp_path):
+    """fix_labels returns a non-empty message on success."""
+    with patch("subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(returncode=0, stdout="synced 3", stderr="")
+        result = fix_labels(tmp_path, "h2t-skills")
+    assert result != ""
