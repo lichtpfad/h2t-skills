@@ -112,6 +112,27 @@ def check_legacy_dirs(rp: Path, extra_dirs: list[str] | None = None) -> list[str
     return failures
 
 
+_DATE_PREFIX = re.compile(r"^\d{4}-\d{2}-\d{2}-")
+_NAMING_DIRS = ["docs/superpowers/specs", "docs/superpowers/plans"]
+_NAMING_SKIP = {"README.md", "index.md"}
+
+
+def check_naming_conventions(rp: Path) -> list[str]:
+    failures = []
+    for rel_dir in _NAMING_DIRS:
+        d = rp / rel_dir
+        if not d.exists():
+            continue
+        for md in d.glob("*.md"):
+            if md.name in _NAMING_SKIP:
+                continue
+            if not _DATE_PREFIX.match(md.name):
+                failures.append(
+                    f"naming: {rel_dir}/{md.name} — expected YYYY-MM-DD- prefix"
+                )
+    return failures
+
+
 def check_frontmatter(rp: Path) -> list[str]:
     failures = []
     docs_dir = rp / "docs"
@@ -297,6 +318,7 @@ def main() -> None:
             check_structure(rp)
             + check_adr_naming(rp)
             + check_legacy_dirs(rp, extra_dirs=extra)
+            + check_naming_conventions(rp)
             + check_frontmatter(rp)
             + check_projects_yaml(rp, name, projects)
             + ([] if args.no_pymarkdown else run_pymarkdownlnt(rp))
