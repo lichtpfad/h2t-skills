@@ -97,3 +97,44 @@ def test_naming_readme_ignored(tmp_path):
     specs.mkdir(parents=True)
     (specs / "README.md").write_text("# index")
     assert check_naming_conventions(tmp_path) == []
+
+
+from lint import check_repo_root
+
+
+def test_repo_root_clean(tmp_path):
+    """Minimal clean root → no failures."""
+    for name in ["README.md", "pyproject.toml", ".gitignore", "CLAUDE.md"]:
+        (tmp_path / name).write_text("")
+    for d in ["src", "tests", "docs", "scripts"]:
+        (tmp_path / d).mkdir()
+    assert check_repo_root(tmp_path) == []
+
+
+def test_repo_root_temp_dir(tmp_path):
+    """temp/ in root → failure."""
+    (tmp_path / "temp").mkdir()
+    result = check_repo_root(tmp_path)
+    assert any("temp" in f for f in result)
+
+
+def test_repo_root_old_dir(tmp_path):
+    """old/ in root → failure."""
+    (tmp_path / "old").mkdir()
+    result = check_repo_root(tmp_path)
+    assert any("old" in f for f in result)
+
+
+def test_repo_root_backup_dir(tmp_path):
+    """backup/ in root → failure."""
+    (tmp_path / "backup").mkdir()
+    result = check_repo_root(tmp_path)
+    assert any("backup" in f for f in result)
+
+
+def test_repo_root_too_many_items(tmp_path):
+    """More than 12 items in root → failure."""
+    for i in range(13):
+        (tmp_path / f"item_{i}.txt").write_text("")
+    result = check_repo_root(tmp_path)
+    assert any("root has" in f for f in result)
