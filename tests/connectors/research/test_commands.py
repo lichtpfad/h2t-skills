@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from h2t_ops import cli
-from h2t_ops.connectors.research import commands
+from h2t_ops.connectors.research import commands, store
 from h2t_ops.core.errors import ProviderError, UsageError
 from h2t_ops.core.registry import discover
 
@@ -426,6 +426,211 @@ def test_run_dispatches_navigation_resolve_by_alias(monkeypatch):
     assert result["alias_type"] == "document-id"
 
 
+def test_cli_dispatch_navigates_research_index_documents(tmp_path, capsys):
+    root = tmp_path
+    doc_a = store.build_research_document(
+        canonical_url="https://example.com/first",
+        source_url="https://example.com/first",
+        provider="jina",
+        title="First",
+        fetched_at="2026-05-27T10:00:00Z",
+        content_hash="a",
+        artifact_refs={
+            "metadata": "artifact.json",
+            "normalized_text": "sources.json",
+            "citation_bundle": None,
+            "markdown_mirror": "partial.md",
+        },
+        project_ids=["project:demo"],
+        thread_ids=[],
+        entity_ids=[],
+    )
+    doc_b = store.build_research_document(
+        canonical_url="https://example.com/second",
+        source_url="https://example.com/second",
+        provider="jina",
+        title="Second",
+        fetched_at="2026-05-27T10:01:00Z",
+        content_hash="b",
+        artifact_refs={
+            "metadata": "artifact.json",
+            "normalized_text": "sources.json",
+            "citation_bundle": None,
+            "markdown_mirror": "partial.md",
+        },
+        project_ids=["project:other"],
+        thread_ids=[],
+        entity_ids=[],
+    )
+    store.write_object(root, "documents", doc_a["document_id"], doc_a)
+    store.write_object(root, "documents", doc_b["document_id"], doc_b)
+    store.upsert_document_index(root, doc_a)
+    store.upsert_document_index(root, doc_b)
+
+    code = cli.dispatch(
+        [
+            "research",
+            "index",
+            "documents",
+            "--project",
+            "project:demo",
+            "--output-dir",
+            str(root),
+            "--json",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+
+    assert code == 0
+    assert payload["ok"] is True
+    assert payload["result"]["kind"] == "research_index"
+    assert payload["result"]["count"] == 1
+    assert payload["result"]["items"][0]["document_id"] == doc_a["document_id"]
+
+
+def test_cli_dispatch_navigates_show_document_thread_run_synthesis(tmp_path, capsys):
+    root = tmp_path
+    document = store.build_research_document(
+        canonical_url="https://example.com/doc",
+        source_url="https://example.com/doc",
+        provider="jina",
+        title="Example Document",
+        fetched_at="2026-05-27T10:00:00Z",
+        content_hash="doc",
+        artifact_refs={
+            "metadata": "artifact.json",
+            "normalized_text": "sources.json",
+            "citation_bundle": None,
+            "markdown_mirror": "partial.md",
+        },
+        project_ids=["project:demo"],
+        thread_ids=[],
+        entity_ids=[],
+    )
+    thread = store.build_research_thread(
+        question="What is Exa?",
+        created_at="2026-05-27T10:01:00Z",
+        context_type="project",
+        context_id="project:demo",
+        domain="research",
+        topics=["exa"],
+    )
+    run = store.build_research_run(
+        thread_id=thread["thread_id"],
+        created_at="2026-05-27T10:02:00Z",
+        query="exa answer",
+        provider_set=["exa"],
+        document_ids=[document["document_id"]],
+    )
+    synthesis = store.build_research_synthesis(
+        thread_id=thread["thread_id"],
+        run_ids=[run["run_id"]],
+        summary="A grounded answer exists.",
+        created_at="2026-05-27T10:03:00Z",
+    )
+    store.write_object(root, "documents", document["document_id"], document)
+    store.write_object(root, "threads", thread["thread_id"], thread)
+    store.write_object(root, "runs", run["run_id"], run)
+    store.write_object(root, "syntheses", synthesis["synthesis_id"], synthesis)
+
+    code_doc = cli.dispatch(
+        [
+            "research",
+            "show",
+            "document",
+            document["document_id"],
+            "--output-dir",
+            str(root),
+            "--json",
+        ]
+    )
+    doc_payload = json.loads(capsys.readouterr().out)
+    assert code_doc == 0
+    assert doc_payload["result"]["object_type"] == "document"
+    assert doc_payload["result"]["object_id"] == document["document_id"]
+    assert doc_payload["result"]["object"]["title"] == document["title"]
+
+    code_thread = cli.dispatch(
+        [
+            "research",
+            "show",
+            "thread",
+            thread["thread_id"],
+            "--output-dir",
+            str(root),
+            "--json",
+        ]
+    )
+    thread_payload = json.loads(capsys.readouterr().out)
+    assert code_thread == 0
+    assert thread_payload["result"]["object_type"] == "thread"
+    assert thread_payload["result"]["object"]["thread_id"] == thread["thread_id"]
+
+    code_run = cli.dispatch(
+        [
+            "research",
+            "show",
+            "run",
+            run["run_id"],
+            "--output-dir",
+            str(root),
+            "--json",
+        ]
+    )
+    run_payload = json.loads(capsys.readouterr().out)
+    assert code_run == 0
+    assert run_payload["result"]["object_type"] == "run"
+    assert run_payload["result"]["object"]["run_id"] == run["run_id"]
+
+    code_synthesis = cli.dispatch(
+        [
+            "research",
+            "show",
+            "synthesis",
+            synthesis["synthesis_id"],
+            "--output-dir",
+            str(root),
+            "--json",
+        ]
+    )
+    synthesis_payload = json.loads(capsys.readouterr().out)
+    assert code_synthesis == 0
+    assert synthesis_payload["result"]["object_type"] == "synthesis"
+    assert synthesis_payload["result"]["object"]["synthesis_id"] == synthesis["synthesis_id"]
+
+
+def test_cli_dispatch_resolve_stale_alias(tmp_path, capsys):
+    root = tmp_path
+    store.upsert_alias_index(
+        root,
+        [
+            {
+                "alias_type": "url",
+                "alias_value": "https://example.com/missing",
+                "target_object_type": "document",
+                "target_id": "research-doc:missing",
+                "confidence": "high",
+            }
+        ],
+    )
+
+    code = cli.dispatch(
+        [
+            "research",
+            "resolve",
+            "--url",
+            "https://example.com/missing",
+            "--output-dir",
+            str(root),
+            "--json",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+
+    assert code == 0
+    assert payload["result"]["kind"] == "research_resolution"
+    assert payload["result"]["count"] == 1
+    assert payload["result"]["matches"][0]["object_exists"] is False
 def test_run_dispatches_visual_ocr(monkeypatch):
     _patch_fake_client(monkeypatch)
     output_dir = str(Path.cwd() / "tmp" / "research-visual-ocr")
