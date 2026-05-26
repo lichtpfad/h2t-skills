@@ -102,6 +102,114 @@ def test_parser_registration_for_research_visual_ocr():
     assert parsed._handler is commands.run
 
 
+def test_parser_registration_for_research_navigation_index():
+    parser = cli.build_parser()
+
+    parsed = parser.parse_args(
+        [
+            "research",
+            "index",
+            "documents",
+            "--project",
+            "project:demo",
+            "--output-dir",
+            "/tmp/research",
+        ]
+    )
+
+    assert parsed.research_cmd == "index"
+    assert parsed.index_name == "documents"
+    assert parsed.project == "project:demo"
+    assert parsed.output_dir == "/tmp/research"
+    assert parsed._handler is commands.run
+
+
+def test_parser_registration_for_research_navigation_show():
+    parser = cli.build_parser()
+
+    parsed = parser.parse_args(
+        [
+            "research",
+            "show",
+            "document",
+            "research-doc:abc",
+            "--output-dir",
+            "/tmp/research",
+            "--json",
+        ]
+    )
+
+    assert parsed.research_cmd == "show"
+    assert parsed.object_type == "document"
+    assert parsed.object_id == "research-doc:abc"
+    assert parsed.output_dir == "/tmp/research"
+    assert parsed.as_json is True
+    assert parsed._handler is commands.run
+
+
+def test_parser_registration_for_research_navigation_resolve_by_url():
+    parser = cli.build_parser()
+
+    parsed = parser.parse_args(
+        [
+            "research",
+            "resolve",
+            "--url",
+            "https://example.com/post",
+            "--output-dir",
+            "/tmp/research",
+        ]
+    )
+
+    assert parsed.research_cmd == "resolve"
+    assert parsed.url_value == "https://example.com/post"
+    assert parsed.alias_value is None
+    assert parsed.alias_type == "url"
+    assert parsed.output_dir == "/tmp/research"
+    assert parsed._handler is commands.run
+
+
+def test_parser_registration_for_research_navigation_resolve_by_alias_with_type():
+    parser = cli.build_parser()
+
+    parsed = parser.parse_args(
+        [
+            "research",
+            "resolve",
+            "--alias",
+            "abc-uuid",
+            "--alias-type",
+            "document-id",
+            "--output-dir",
+            "/tmp/research",
+        ]
+    )
+
+    assert parsed.research_cmd == "resolve"
+    assert parsed.alias_value == "abc-uuid"
+    assert parsed.alias_type == "document-id"
+    assert parsed.url_value is None
+
+
+def test_parser_registration_for_research_navigation_resolve_requires_one_of_url_or_alias():
+    parser = cli.build_parser()
+
+    with pytest.raises(SystemExit):
+        parser.parse_args(["research", "resolve"])
+
+    with pytest.raises(SystemExit):
+        parser.parse_args(
+            [
+                "research",
+                "resolve",
+                "--url",
+                "https://example.com",
+                "--alias",
+                "abc-uuid",
+            ]
+        )
+
+
 class FakeResearchClient:
     instances: list["FakeResearchClient"] = []
 
@@ -129,6 +237,27 @@ class FakeResearchClient:
     def visual_ocr(self, **kwargs) -> dict:
         self.calls.append(("visual_ocr", kwargs))
         return {"method": "visual_ocr", "kwargs": kwargs}
+
+    def list_research_index(self, index_name: str, project: str | None = None) -> dict:
+        self.calls.append(("list_research_index", {"index_name": index_name, "project": project}))
+        return {"method": "list_research_index", "index_name": index_name, "project": project}
+
+    def show_research_object(self, object_type: str, object_id: str) -> dict:
+        self.calls.append(("show_research_object", {"object_type": object_type, "object_id": object_id}))
+        return {"method": "show_research_object", "object_type": object_type, "object_id": object_id}
+
+    def resolve_research_alias(self, alias_value: str, alias_type: str = "url") -> dict:
+        self.calls.append(
+            (
+                "resolve_research_alias",
+                {"alias_value": alias_value, "alias_type": alias_type},
+            )
+        )
+        return {
+            "method": "resolve_research_alias",
+            "alias_value": alias_value,
+            "alias_type": alias_type,
+        }
 
 
 def _patch_fake_client(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -225,6 +354,76 @@ def test_run_dispatches_fetch(monkeypatch):
         "project": "h2t skills",
         "config_path": "fetch.json",
     }
+
+
+def test_run_dispatches_navigation_index(monkeypatch, tmp_path):
+    _patch_fake_client(monkeypatch)
+    args = argparse.Namespace(
+        research_cmd="index",
+        output_dir=str(tmp_path),
+        index_name="documents",
+        project="project:demo",
+    )
+
+    result = commands.run(args)
+
+    assert FakeResearchClient.instances[0].output_dir == tmp_path
+    assert result["method"] == "list_research_index"
+    assert result["index_name"] == "documents"
+    assert result["project"] == "project:demo"
+
+
+def test_run_dispatches_navigation_show(monkeypatch, tmp_path):
+    _patch_fake_client(monkeypatch)
+    args = argparse.Namespace(
+        research_cmd="show",
+        output_dir=str(tmp_path),
+        object_type="document",
+        object_id="research-doc:abc",
+    )
+
+    result = commands.run(args)
+
+    assert FakeResearchClient.instances[0].output_dir == tmp_path
+    assert result["method"] == "show_research_object"
+    assert result["object_type"] == "document"
+    assert result["object_id"] == "research-doc:abc"
+
+
+def test_run_dispatches_navigation_resolve_by_url(monkeypatch):
+    _patch_fake_client(monkeypatch)
+    args = argparse.Namespace(
+        research_cmd="resolve",
+        output_dir=None,
+        url_value="https://example.com/post",
+        alias_value=None,
+        alias_type="url",
+    )
+
+    result = commands.run(args)
+
+    assert FakeResearchClient.instances[0].output_dir is None
+    assert result["method"] == "resolve_research_alias"
+    assert result["alias_value"] == "https://example.com/post"
+    assert result["alias_type"] == "url"
+
+
+def test_run_dispatches_navigation_resolve_by_alias(monkeypatch):
+    _patch_fake_client(monkeypatch)
+    args = argparse.Namespace(
+        research_cmd="resolve",
+        output_dir=None,
+        url_value=None,
+        alias_value="abc-uuid",
+        alias_type="document-id",
+    )
+
+    result = commands.run(args)
+
+    assert FakeResearchClient.instances[0].output_dir is None
+    assert result["method"] == "resolve_research_alias"
+    assert result["alias_value"] == "abc-uuid"
+    assert result["alias_type"] == "document-id"
 
 
 def test_run_dispatches_visual_ocr(monkeypatch):

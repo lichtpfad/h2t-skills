@@ -106,6 +106,30 @@ def register(subparsers: Any) -> None:
     similar.add_argument("--exclude-domains", dest="exclude_domains")
     add_fmt(similar)
 
+    nav_index = cmds.add_parser("index", help="List canonical research index")
+    nav_index.add_argument("index_name", choices=["documents", "threads", "syntheses"])
+    nav_index.add_argument("--project", dest="project")
+    nav_index.add_argument("--output-dir", dest="output_dir")
+    add_fmt(nav_index)
+
+    nav_show = cmds.add_parser("show", help="Show a canonical research object")
+    nav_show.add_argument("object_type", choices=["document", "thread", "run", "synthesis"])
+    nav_show.add_argument("object_id")
+    nav_show.add_argument("--output-dir", dest="output_dir")
+    add_fmt(nav_show)
+
+    nav_resolve = cmds.add_parser("resolve", help="Resolve aliases to research objects")
+    nav_resolve.add_argument("--output-dir", dest="output_dir")
+    nav_resolve.add_argument(
+        "--alias-type",
+        dest="alias_type",
+        default="url",
+    )
+    alias_group = nav_resolve.add_mutually_exclusive_group(required=True)
+    alias_group.add_argument("--url", dest="url_value")
+    alias_group.add_argument("--alias", dest="alias_value")
+    add_fmt(nav_resolve)
+
     answer_p = cmds.add_parser("answer", help="Get a direct LLM-grounded answer from Exa")
     answer_p.add_argument("--query", required=True)
     add_fmt(answer_p)
@@ -190,6 +214,14 @@ def run(args: Any) -> Any:
             include_domains=_split_csv(args.include_domains),
             exclude_domains=_split_csv(args.exclude_domains),
         )
+    if cmd == "index":
+        return client.list_research_index(args.index_name, project=args.project)
+    if cmd == "show":
+        return client.show_research_object(args.object_type, args.object_id)
+    if cmd == "resolve":
+        if args.url_value is not None:
+            return client.resolve_research_alias(args.url_value, alias_type="url")
+        return client.resolve_research_alias(args.alias_value, alias_type=args.alias_type)
     if cmd == "answer":
         return client.answer(args.query)
     if cmd == "resolve-author":
