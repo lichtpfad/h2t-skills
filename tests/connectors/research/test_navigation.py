@@ -196,6 +196,23 @@ def test_show_object_schema_mismatch_raises_configerror(tmp_path):
         navigation.show_object(root, "document", "research-doc:bad")
 
 
+def test_show_object_id_mismatch_raises_configerror(tmp_path):
+    root = tmp_path / "research"
+    bad = {
+        "schema": "research_document/v0.1",
+        "document_id": "research-doc:other",
+    }
+    store.write_json(store.object_path(root, "documents", "research-doc:bad"), bad)
+
+    with pytest.raises(ConfigError, match="research object id mismatch"):
+        navigation.show_object(root, "document", "research-doc:bad")
+
+
+def test_show_object_unknown_type_raises_usageerror(tmp_path):
+    with pytest.raises(UsageError, match="unknown research object type"):
+        navigation.show_object(tmp_path / "research", "bad-type", "research-bad:abc")
+
+
 def test_show_object_loads_thread_run_and_synthesis(tmp_path):
     root = tmp_path / "research"
     thread = store.build_research_thread(
@@ -257,3 +274,8 @@ def test_resolve_alias_returns_stale_state(tmp_path):
     assert result["count"] == 1
     assert result["matches"][0]["object_exists"] is False
     assert result["matches"][0]["object_path"].endswith("research-doc:missing.json")
+
+
+def test_resolve_alias_empty_value_raises_usageerror(tmp_path):
+    with pytest.raises(UsageError, match="research resolve requires a non-empty alias value"):
+        navigation.resolve_alias(tmp_path / "research", alias_value="")
