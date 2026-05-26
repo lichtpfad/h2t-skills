@@ -1211,9 +1211,11 @@ class ResearchClient:
         return sanitize_details(result)
 
     def list_research_index(self, index_name: str, *, project: str | None = None) -> dict[str, Any]:
+        """List a research index through local navigation cache helpers."""
         return navigation.list_index(self.output_dir, index_name, project=project)
 
     def show_research_object(self, object_type: str, object_id: str) -> dict[str, Any]:
+        """Load a canonical research object by object type and id."""
         return navigation.show_object(self.output_dir, object_type, object_id)
 
     def resolve_research_alias(
@@ -1222,6 +1224,7 @@ class ResearchClient:
         alias_value: str,
         alias_type: str = "url",
     ) -> dict[str, Any]:
+        """Resolve aliases through the local aliases index."""
         return navigation.resolve_alias(
             self.output_dir,
             alias_value=alias_value,

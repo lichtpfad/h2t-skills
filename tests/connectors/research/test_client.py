@@ -1586,6 +1586,25 @@ def test_research_client_show_research_document(tmp_path):
 
 
 def test_research_client_resolve_research_alias_url(tmp_path):
+    document = store.build_research_document(
+        canonical_url="https://example.com/post",
+        source_url="https://example.com/post",
+        provider="jina",
+        title="Example",
+        fetched_at="2026-05-27T10:00:00Z",
+        content_hash="abc",
+        artifact_refs={
+            "metadata": "artifact.json",
+            "normalized_text": "sources.json",
+            "citation_bundle": None,
+            "markdown_mirror": "partial.md",
+        },
+        project_ids=["project:demo"],
+        thread_ids=[],
+        entity_ids=[],
+    )
+    store.write_object(tmp_path, "documents", document["document_id"], document)
+
     store.upsert_alias_index(
         tmp_path,
         [
@@ -1593,7 +1612,7 @@ def test_research_client_resolve_research_alias_url(tmp_path):
                 "alias_type": "url",
                 "alias_value": "https://example.com/post",
                 "target_object_type": "document",
-                "target_id": "research-doc:demo",
+                "target_id": document["document_id"],
                 "confidence": "high",
             }
         ],
@@ -1606,7 +1625,8 @@ def test_research_client_resolve_research_alias_url(tmp_path):
 
     assert result["kind"] == "research_resolution"
     assert result["count"] == 1
-    assert result["matches"][0]["target_id"] == "research-doc:demo"
+    assert result["matches"][0]["target_id"] == document["document_id"]
+    assert result["matches"][0]["object_exists"] is True
 
 
 def test_research_client_show_research_document_missing_raises_notfound(tmp_path):
