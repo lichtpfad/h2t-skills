@@ -62,11 +62,12 @@ def _finding(
 def _read_json_file(path: Path) -> tuple[Any | None, dict[str, Any] | None]:
     try:
         return json.loads(path.read_text(encoding="utf-8")), None
-    except json.JSONDecodeError as exc:
+    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+        detail = getattr(exc, "msg", str(exc))
         return None, _finding(
             "error",
             "object_json_invalid",
-            f"Invalid JSON: {exc.msg}",
+            f"Invalid JSON: {detail}",
             path=path,
         )
 
