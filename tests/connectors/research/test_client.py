@@ -10,8 +10,15 @@ from unittest.mock import patch
 
 import pytest
 
-from h2t_ops.core.errors import AuthError, ConfigError, NetworkError, ProviderError, UsageError
-from h2t_ops.connectors.research import client
+from h2t_ops.core.errors import (
+    AuthError,
+    ConfigError,
+    NetworkError,
+    NotFoundError,
+    ProviderError,
+    UsageError,
+)
+from h2t_ops.connectors.research import client, store
 
 
 def _clear_sensitive_env(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1504,3 +1511,115 @@ def test_research_client_visual_ocr_artifacts_redact_sensitive_values(tmp_path, 
     assert telemetry["result_count"] == 1
     assert telemetry["estimated_cost_usd"] == 0.0
     assert telemetry["cost_basis"] == "local_ocr"
+
+
+def test_research_client_list_research_documents_by_project(tmp_path):
+    root = tmp_path
+    rows = [
+        {
+            "document_id": "research-doc:demo",
+            "canonical_url": "https://demo.example",
+            "provider": "jina",
+            "title": "Demo",
+            "status": "indexed",
+            "review_status": "unreviewed",
+            "thread_ids": [],
+            "entity_ids": [],
+            "project_ids": ["project:demo"],
+            "updated_at": "2026-05-27T10:00:00Z",
+        },
+        {
+            "document_id": "research-doc:other",
+            "canonical_url": "https://other.example",
+            "provider": "jina",
+            "title": "Other",
+            "status": "indexed",
+            "review_status": "unreviewed",
+            "thread_ids": [],
+            "entity_ids": [],
+            "project_ids": ["project:other"],
+            "updated_at": "2026-05-27T10:00:00Z",
+        },
+    ]
+    store.write_json(store.index_path(root, "documents"), rows)
+
+    result = client.ResearchClient(output_dir=tmp_path).list_research_index(
+        "documents",
+        project="demo",
+    )
+
+    assert result["kind"] == "research_index"
+    assert result["index"] == "documents"
+    assert result["root"] == str(root)
+    assert result["count"] == 1
+    assert result["items"][0]["document_id"] == "research-doc:demo"
+
+
+def test_research_client_show_research_document(tmp_path):
+    document = store.build_research_document(
+        canonical_url="https://example.com/post",
+        source_url="https://example.com/post",
+        provider="jina",
+        title="Example",
+        fetched_at="2026-05-27T10:00:00Z",
+        content_hash="abc",
+        artifact_refs={
+            "metadata": "artifact.json",
+            "normalized_text": "sources.json",
+            "citation_bundle": None,
+            "markdown_mirror": "partial.md",
+        },
+        project_ids=["project:demo"],
+        thread_ids=[],
+        entity_ids=[],
+    )
+    store.write_object(tmp_path, "documents", document["document_id"], document)
+
+    result = client.ResearchClient(output_dir=tmp_path).show_research_object(
+        "document",
+        document["document_id"],
+    )
+
+    assert result["kind"] == "research_object"
+    assert result["object_type"] == "document"
+    assert result["object"]["document_id"] == document["document_id"]
+
+
+def test_research_client_resolve_research_alias_url(tmp_path):
+    store.upsert_alias_index(
+        tmp_path,
+        [
+            {
+                "alias_type": "url",
+                "alias_value": "https://example.com/post",
+                "target_object_type": "document",
+                "target_id": "research-doc:demo",
+                "confidence": "high",
+            }
+        ],
+    )
+
+    result = client.ResearchClient(output_dir=tmp_path).resolve_research_alias(
+        alias_value="https://example.com/post",
+        alias_type="url",
+    )
+
+    assert result["kind"] == "research_resolution"
+    assert result["count"] == 1
+    assert result["matches"][0]["target_id"] == "research-doc:demo"
+
+
+def test_research_client_show_research_document_missing_raises_notfound(tmp_path):
+    with pytest.raises(NotFoundError, match="research object not found"):
+        client.ResearchClient(output_dir=tmp_path).show_research_object(
+            "document",
+            "research-doc:missing",
+        )
+
+
+def test_research_client_show_research_unknown_type_raises_usageerror(tmp_path):
+    with pytest.raises(UsageError, match="unknown research object type"):
+        client.ResearchClient(output_dir=tmp_path).show_research_object(
+            "bad-type",
+            "research-bad:abc",
+        )
