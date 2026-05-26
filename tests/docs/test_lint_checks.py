@@ -43,3 +43,17 @@ def test_check_legacy_dirs_eval(tmp_path):
     (tmp_path / "docs" / "eval").mkdir(parents=True)
     result = check_legacy_dirs(tmp_path)
     assert any("eval" in f for f in result)
+
+
+def test_check_legacy_dirs_skips_whitelisted(tmp_path):
+    """Dir in extra_dirs whitelist is not flagged."""
+    (tmp_path / "docs" / "eval").mkdir(parents=True)
+    result = check_legacy_dirs(tmp_path, extra_dirs=["eval"])
+    assert result == []
+
+
+def test_check_legacy_dirs_handoffs_plural(tmp_path):
+    """docs/handoffs/ (plural) present → failure."""
+    (tmp_path / "docs" / "handoffs").mkdir(parents=True)
+    result = check_legacy_dirs(tmp_path)
+    assert any("handoffs" in f for f in result)
