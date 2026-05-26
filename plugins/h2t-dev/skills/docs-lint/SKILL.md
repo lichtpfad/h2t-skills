@@ -1,6 +1,10 @@
 ---
 name: h2t-dev:docs-lint
-description: "This skill should be used when the user asks to \"check docs\", \"lint documentation\", \"verify standards\", \"docs compliance\", \"are docs up to standard\", or wants to audit documentation structure and frontmatter across h2t repos."
+description: >-
+  Use when checking docs compliance, linting documentation, verifying standards,
+  or auditing documentation structure and frontmatter across h2t repos.
+  Flags: --repo-root (root dir audit), --fix-labels (sync GitHub labels),
+  --fix (create missing dirs), --fix-frontmatter (auto-add frontmatter).
 compatibility: "Claude Code"
 metadata:
   author: lichtpfad
