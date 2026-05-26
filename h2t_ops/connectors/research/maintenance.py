@@ -486,8 +486,164 @@ def doctor(root: Path) -> dict[str, Any]:
     }
 
 
-def rebuild_indexes(root: Path) -> None:
-    raise UsageError("research maintenance rebuild_indexes is not implemented yet")
+def _document_index_row(document: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "document_id": document["document_id"],
+        "canonical_url": document["canonical_url"] or None,
+        "provider": document["provider"],
+        "title": document["title"] or None,
+        "status": document["status"],
+        "review_status": document["review_status"],
+        "thread_ids": document["thread_ids"],
+        "entity_ids": document["entity_ids"],
+        "project_ids": document["project_ids"],
+        "updated_at": document["fetched_at"],
+    }
+
+
+def _thread_index_row(thread: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "thread_id": thread["thread_id"],
+        "question": thread["question"],
+        "status": thread["status"],
+        "owner_context": thread["owner_context"],
+        "topics": thread["topics"],
+        "latest_synthesis_id": thread["latest_synthesis_id"],
+        "updated_at": thread["created_at"],
+    }
+
+
+def _synthesis_project_ids(
+    synthesis: dict[str, Any],
+    objects: dict[str, dict[str, dict[str, Any]]],
+) -> list[str]:
+    thread_id = synthesis.get("thread_id")
+    if not isinstance(thread_id, str):
+        return []
+    thread = objects.get("thread", {}).get(thread_id)
+    if not isinstance(thread, dict):
+        return []
+    owner_context = thread.get("owner_context")
+    if not isinstance(owner_context, dict):
+        return []
+    context_id = owner_context.get("context_id")
+    if isinstance(context_id, str) and context_id.startswith("project:"):
+        return [context_id]
+    return []
+
+
+def _synthesis_index_row(
+    synthesis: dict[str, Any],
+    objects: dict[str, dict[str, dict[str, Any]]],
+) -> dict[str, Any]:
+    return {
+        "synthesis_id": synthesis["synthesis_id"],
+        "thread_id": synthesis["thread_id"],
+        "status": synthesis["status"],
+        "review_status": synthesis["review_status"],
+        "confidence_summary": None,
+        "has_open_questions": bool(synthesis["open_questions"]),
+        "project_ids": _synthesis_project_ids(synthesis, objects),
+        "updated_at": synthesis["created_at"],
+    }
+
+
+ALIAS_SORT_KEYS = ("alias_type", "alias_value", "target_object_type", "target_id")
+
+
+def _alias_rows(objects: dict[str, dict[str, dict[str, Any]]]) -> list[dict[str, Any]]:
+    keyed: dict[tuple[str, str, str, str], dict[str, Any]] = {}
+    for document_id, document in objects["document"].items():
+        values: set[str] = set()
+        for key in ("canonical_url", "source_url"):
+            value = document.get(key)
+            if isinstance(value, str) and value.strip():
+                values.add(value)
+        for alias_value in values:
+            row = {
+                "alias_type": "url",
+                "alias_value": alias_value,
+                "target_object_type": "document",
+                "target_id": document_id,
+                "confidence": "high",
+            }
+            keyed[
+                (
+                    row["alias_type"],
+                    row["alias_value"],
+                    row["target_object_type"],
+                    row["target_id"],
+                )
+            ] = row
+    return sorted(keyed.values(), key=lambda row: tuple(row[key] for key in ALIAS_SORT_KEYS))
+
+
+def _rebuild_counts(
+    objects: dict[str, dict[str, dict[str, Any]]],
+    alias_count: int,
+) -> dict[str, int]:
+    return {
+        "documents": len(objects["document"]),
+        "threads": len(objects["thread"]),
+        "runs": len(objects["run"]),
+        "syntheses": len(objects["synthesis"]),
+        "aliases": alias_count,
+    }
+
+
+def rebuild_indexes(root: Path) -> dict[str, Any]:
+    root = Path(root)
+    objects, findings = _load_objects(root)
+    if findings:
+        return {
+            "kind": "research_rebuild_indexes",
+            "root": str(root),
+            "status": "error",
+            "written": [],
+            "counts": {
+                "documents": 0,
+                "threads": 0,
+                "runs": 0,
+                "syntheses": 0,
+                "aliases": 0,
+            },
+            "findings": findings,
+        }
+
+    documents = [
+        _document_index_row(document)
+        for _, document in sorted(objects["document"].items())
+    ]
+    threads = [
+        _thread_index_row(thread)
+        for _, thread in sorted(objects["thread"].items())
+    ]
+    syntheses = [
+        _synthesis_index_row(synthesis, objects)
+        for _, synthesis in sorted(objects["synthesis"].items())
+    ]
+    aliases = _alias_rows(objects)
+
+    indexes = {
+        "documents": documents,
+        "threads": threads,
+        "syntheses": syntheses,
+        "aliases": aliases,
+    }
+    written: list[str] = []
+    for index_name, rows in indexes.items():
+        path = store.index_path(root, index_name)
+        store.write_json(path, rows)
+        written.append(str(path))
+
+    return {
+        "kind": "research_rebuild_indexes",
+        "root": str(root),
+        "status": "ok",
+        "written": written,
+        "counts": _rebuild_counts(objects, len(aliases)),
+        "findings": [],
+    }
 
 
 def cleanup(root: Path, dry_run: bool = True) -> None:

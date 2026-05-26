@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 from h2t_ops.connectors.research import maintenance, store
 
 
@@ -164,3 +166,99 @@ def test_doctor_warns_for_missing_run_document_and_synthesis_refs(tmp_path):
     assert "run_document_missing" in codes
     assert "synthesis_thread_missing" in codes
     assert "synthesis_run_missing" in codes
+
+
+def test_rebuild_indexes_writes_deterministic_indexes_from_objects(tmp_path):
+    root = tmp_path / "research"
+    document = _demo_document(root)
+    thread = store.build_research_thread(
+        question="What is Exa?",
+        created_at="2026-05-27T10:00:00Z",
+        context_type="project",
+        context_id="project:demo",
+        domain="research",
+        topics=["answer"],
+    )
+    run = store.build_research_run(
+        thread_id=thread["thread_id"],
+        created_at="2026-05-27T10:01:00Z",
+        query="What is Exa?",
+        provider_set=["exa"],
+        document_ids=[document["document_id"]],
+    )
+    synthesis = store.build_research_synthesis(
+        thread_id=thread["thread_id"],
+        run_ids=[run["run_id"]],
+        summary="Summary",
+        created_at="2026-05-27T10:02:00Z",
+    )
+    thread["latest_synthesis_id"] = synthesis["synthesis_id"]
+    store.write_object(root, "threads", thread["thread_id"], thread)
+    store.write_object(root, "runs", run["run_id"], run)
+    store.write_object(root, "syntheses", synthesis["synthesis_id"], synthesis)
+
+    result = maintenance.rebuild_indexes(root)
+
+    assert result["kind"] == "research_rebuild_indexes"
+    assert result["status"] == "ok"
+    assert result["counts"] == {
+        "documents": 1,
+        "threads": 1,
+        "runs": 1,
+        "syntheses": 1,
+        "aliases": 1,
+    }
+
+    documents = json.loads(store.index_path(root, "documents").read_text(encoding="utf-8"))
+    threads = json.loads(store.index_path(root, "threads").read_text(encoding="utf-8"))
+    syntheses = json.loads(store.index_path(root, "syntheses").read_text(encoding="utf-8"))
+    aliases = json.loads(store.index_path(root, "aliases").read_text(encoding="utf-8"))
+
+    assert documents == [maintenance._document_index_row(document)]
+    assert threads == [maintenance._thread_index_row(thread)]
+    assert syntheses == [
+        maintenance._synthesis_index_row(
+            synthesis,
+            {"thread": {thread["thread_id"]: thread}},
+        )
+    ]
+    assert aliases == [
+        {
+            "alias_type": "url",
+            "alias_value": "https://example.com/post",
+            "target_object_type": "document",
+            "target_id": document["document_id"],
+            "confidence": "high",
+        }
+    ]
+
+
+def test_rebuild_indexes_replaces_stale_rows(tmp_path):
+    root = tmp_path / "research"
+    document = _demo_document(root)
+    store.write_json(
+        store.index_path(root, "documents"),
+        [{"document_id": "research-doc:stale", "project_ids": ["project:stale"]}],
+    )
+
+    result = maintenance.rebuild_indexes(root)
+
+    documents = json.loads(store.index_path(root, "documents").read_text(encoding="utf-8"))
+    assert result["status"] == "ok"
+    assert documents == [maintenance._document_index_row(document)]
+
+
+def test_rebuild_indexes_with_malformed_object_does_not_overwrite_existing_indexes(tmp_path):
+    root = tmp_path / "research"
+    existing_rows = [{"document_id": "research-doc:existing", "project_ids": ["project:demo"]}]
+    store.write_json(store.index_path(root, "documents"), existing_rows)
+    malformed = store.object_path(root, "documents", "research-doc:bad")
+    malformed.parent.mkdir(parents=True, exist_ok=True)
+    malformed.write_text("{bad json", encoding="utf-8")
+    before = store.index_path(root, "documents").read_text(encoding="utf-8")
+
+    result = maintenance.rebuild_indexes(root)
+
+    assert result["status"] == "error"
+    assert result["written"] == []
+    assert store.index_path(root, "documents").read_text(encoding="utf-8") == before
