@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qsl, quote, urlencode, urlsplit, urlunsplit
 
+from h2t_ops.connectors.research import store
 from h2t_ops.core.errors import (
     AuthError,
     ConfigError,
@@ -331,6 +332,10 @@ def append_telemetry(path: Path, record: dict[str, Any]) -> bool:
     except (OSError, TypeError, ValueError):
         return False
 
+def _content_hash(*parts: Any) -> str:
+    payload = "||".join(str(part).strip() for part in parts if str(part).strip())
+    return store.sha256_text(payload)
+
 
 def _raise_for_provider_failure(
     message: str,
@@ -358,6 +363,127 @@ class ResearchClient:
 
     def __init__(self, *, output_dir: Path | None = None) -> None:
         self.output_dir = output_dir or DEFAULT_OUTPUT_DIR
+
+    def _research_root(self) -> Path:
+        return self.output_dir
+
+    def _persist_document_object(
+        self,
+        *,
+        project: str,
+        provider: str,
+        canonical_url: str,
+        source_url: str,
+        title: str,
+        fetched_at: str,
+        content_hash: str,
+        artifact_refs: dict[str, Any],
+    ) -> dict[str, str]:
+        root = self._research_root()
+        document = store.build_research_document(
+            canonical_url=canonical_url,
+            source_url=source_url,
+            provider=provider,
+            title=title,
+            fetched_at=fetched_at,
+            content_hash=content_hash,
+            artifact_refs=artifact_refs,
+            project_ids=[f"project:{project}"],
+            thread_ids=[],
+            entity_ids=[],
+        )
+        document_path = store.write_object(root, "documents", document["document_id"], document)
+        store.upsert_document_index(root, document)
+        store.upsert_alias_index(
+            root,
+            [
+                {
+                    "alias_type": "url",
+                    "alias_value": alias_value,
+                    "target_object_type": "document",
+                    "target_id": document["document_id"],
+                    "confidence": "high",
+                }
+                for alias_value in _dedupe_alias_values([canonical_url, source_url])
+            ]
+        )
+        return {"document_id": document["document_id"], "document_json": str(document_path)}
+
+    def _persist_thread_run(
+        self,
+        *,
+        project: str,
+        query: str,
+        provider: str,
+        topics: list[str],
+        document_ids: list[str],
+        created_at: str,
+    ) -> dict[str, str]:
+        root = self._research_root()
+        thread = store.build_research_thread(
+            question=query,
+            created_at=created_at,
+            context_type="project",
+            context_id=f"project:{project}",
+            domain="research",
+            topics=topics,
+        )
+        run = store.build_research_run(
+            thread_id=thread["thread_id"],
+            created_at=created_at,
+            query=query,
+            provider_set=[provider],
+            document_ids=document_ids,
+        )
+        thread_path = store.write_object(root, "threads", thread["thread_id"], thread)
+        run_path = store.write_object(root, "runs", run["run_id"], run)
+        store.upsert_thread_index(root, thread)
+        return {
+            "thread_id": thread["thread_id"],
+            "thread_json": str(thread_path),
+            "run_id": run["run_id"],
+            "run_json": str(run_path),
+        }
+
+    def _persist_synthesis(
+        self,
+        *,
+        thread_id: str,
+        run_id: str,
+        summary: str,
+        created_at: str,
+        project: str,
+    ) -> dict[str, str]:
+        root = self._research_root()
+        synthesis = store.build_research_synthesis(
+            thread_id=thread_id,
+            run_ids=[run_id],
+            summary=summary,
+            created_at=created_at,
+        )
+        path = store.write_object(root, "syntheses", synthesis["synthesis_id"], synthesis)
+        store.upsert_synthesis_index(root, synthesis, project_ids=[f"project:{project}"])
+        thread_path = store.object_path(root, "threads", thread_id)
+        if thread_path.exists():
+            thread = json.loads(thread_path.read_text(encoding="utf-8"))
+            if isinstance(thread, dict):
+                thread["latest_synthesis_id"] = synthesis["synthesis_id"]
+                store.write_object(root, "threads", thread_id, thread)
+                store.upsert_thread_index(root, thread)
+        return {"synthesis_id": synthesis["synthesis_id"], "synthesis_json": str(path)}
+
+    def _attach_research_refs(
+        self,
+        artifact: dict[str, Any],
+        research_refs: dict[str, str],
+    ) -> dict[str, Any]:
+        if not research_refs:
+            return artifact
+        artifact["research_refs"] = research_refs
+        artifact_json = artifact.get("artifact_refs", {}).get("artifact_json")
+        if isinstance(artifact_json, str) and artifact_json:
+            write_json(self.output_dir / artifact_json, artifact)
+        return artifact
 
     def visual_ocr(
         self,
@@ -548,6 +674,15 @@ class ResearchClient:
             ledger_endpoint="/contents",
             ledger_mode="crawl",
         )
+        artifact = self._attach_research_refs(
+            artifact,
+            self._persist_provider_document(
+                project=project,
+                provider_envelope=sanitize_details(provider_envelope),
+                artifact=artifact,
+                provider="exa",
+            ),
+        )
         safe_provider_envelope = sanitize_details(provider_envelope)
         return {
             "kind": "research_provider_envelope",
@@ -660,6 +795,14 @@ class ResearchClient:
             telemetry=telemetry,
         )
         write_json(paths["artifact_json"], artifact)
+        artifact = self._attach_research_refs(
+            artifact,
+            self._persist_visual_ocr_document(
+                project=project,
+                ocr_envelope=safe_ocr_envelope,
+                artifact=artifact,
+            ),
+        )
         append_telemetry(
             self.output_dir / "telemetry.jsonl",
             {
@@ -680,6 +823,84 @@ class ResearchClient:
             },
         )
         return artifact
+
+    def _persist_provider_document(
+        self,
+        *,
+        project: str,
+        provider_envelope: dict[str, Any],
+        artifact: dict[str, Any],
+        provider: str,
+    ) -> dict[str, str]:
+        if str(provider_envelope.get("status") or "").upper() != "OK":
+            return {}
+        results = provider_envelope.get("results", [])
+        first: dict[str, Any] = {}
+        source_url = str(provider_envelope.get("url") or provider_envelope.get("final_url") or "").strip()
+        title = str(provider_envelope.get("title") or source_url)
+        body_text = str(provider_envelope.get("body_text") or provider_envelope.get("body_markdown") or "")
+
+        if isinstance(results, list) and results:
+            candidate = results[0]
+            if isinstance(candidate, dict):
+                first = candidate
+                source_url = str(first.get("url") or provider_envelope.get("meta", {}).get("query") or source_url).strip()
+                title = str(first.get("title") or title or source_url)
+                body_text = str(first.get("text") or first.get("answer") or body_text)
+
+        canonical_url = str(provider_envelope.get("final_url") or source_url).strip()
+        if not canonical_url:
+            return {}
+        content_hash = _content_hash(canonical_url, title, body_text)
+        artifact_refs = {
+            "metadata": artifact["artifact_refs"]["artifact_json"],
+            "normalized_text": artifact["artifact_refs"]["sources_json"],
+            "citation_bundle": None,
+            "markdown_mirror": artifact["artifact_refs"]["partial_md"],
+        }
+        return self._persist_document_object(
+            project=project,
+            provider=provider,
+            canonical_url=canonical_url,
+            source_url=source_url,
+            title=title,
+            fetched_at=str(artifact["created_at"]),
+            content_hash=content_hash,
+            artifact_refs=artifact_refs,
+        )
+
+    def _persist_visual_ocr_document(
+        self,
+        *,
+        project: str,
+        ocr_envelope: dict[str, Any],
+        artifact: dict[str, Any],
+    ) -> dict[str, str]:
+        source_url = str(ocr_envelope.get("url") or "").strip()
+        if not source_url:
+            return {}
+        canonical_url = source_url
+        headings = ocr_envelope.get("visible_headings", [])
+        title = str(headings[0]) if isinstance(headings, list) and headings else canonical_url
+        body_text = str(ocr_envelope.get("body_text_visual_ocr") or "")
+        fetched_at = str(ocr_envelope.get("provenance", {}).get("captured_at") or artifact["created_at"])
+        content_hash = _content_hash(canonical_url, title, body_text)
+        artifact_refs = {
+            "metadata": artifact["artifact_refs"]["artifact_json"],
+            "normalized_text": artifact["artifact_refs"]["sources_json"],
+            "citation_bundle": None,
+            "markdown_mirror": artifact["artifact_refs"]["partial_md"],
+        }
+        return self._persist_document_object(
+            project=project,
+            provider="visual_ocr",
+            canonical_url=canonical_url,
+            source_url=source_url,
+            title=title,
+            fetched_at=fetched_at,
+            content_hash=content_hash,
+            artifact_refs=artifact_refs,
+        )
 
     def fetch_url(
         self,
@@ -762,6 +983,15 @@ class ResearchClient:
             ledger_mode=provider,
             raw_html_path=metadata.get("raw_html_path"),
         )
+        artifact = self._attach_research_refs(
+            artifact,
+            self._persist_provider_document(
+                project=project,
+                provider_envelope=sanitize_details(provider_envelope),
+                artifact=artifact,
+                provider=str(provider_envelope.get("provider_used") or provider),
+            ),
+        )
         safe_provider_envelope = sanitize_details(provider_envelope)
         result = {"kind": "research_fetch_envelope", **safe_provider_envelope, "artifact": artifact}
         if provider_envelope.get("status") != "FAILED":
@@ -836,6 +1066,15 @@ class ResearchClient:
             ledger_endpoint="/search",
             ledger_mode=mode,
         )
+        research_refs = self._persist_thread_run(
+            project=project,
+            query=query,
+            provider="exa",
+            topics=[mode],
+            document_ids=[],
+            created_at=artifact["created_at"],
+        )
+        artifact = self._attach_research_refs(artifact, research_refs)
 
         if provider_envelope.get("status") == "FAILED":
             _raise_for_provider_failure(
@@ -882,6 +1121,15 @@ class ResearchClient:
             ledger_endpoint="/findSimilar",
             ledger_mode="similar",
         )
+        research_refs = self._persist_thread_run(
+            project="default",
+            query=url,
+            provider="exa",
+            topics=["similar"],
+            document_ids=[],
+            created_at=artifact["created_at"],
+        )
+        artifact = self._attach_research_refs(artifact, research_refs)
 
         if provider_envelope.get("status") == "FAILED":
             _raise_for_provider_failure(
@@ -914,6 +1162,25 @@ class ResearchClient:
             ledger_endpoint="/answer",
             ledger_mode="answer",
         )
+        run_refs = self._persist_thread_run(
+            project="default",
+            query=query,
+            provider="exa",
+            topics=["answer"],
+            document_ids=[],
+            created_at=artifact["created_at"],
+        )
+        safe_results = sanitize_details(envelope).get("results") or [{}]
+        first_result = safe_results[0] if isinstance(safe_results, list) and safe_results else {}
+        summary_text = str(first_result.get("answer") or "") if isinstance(first_result, dict) else ""
+        synthesis_refs = self._persist_synthesis(
+            thread_id=run_refs["thread_id"],
+            run_id=run_refs["run_id"],
+            summary=summary_text,
+            created_at=artifact["created_at"],
+            project="default",
+        )
+        artifact = self._attach_research_refs(artifact, {**run_refs, **synthesis_refs})
 
         if envelope.get("status") == "FAILED":
             _raise_for_provider_failure(
@@ -960,6 +1227,18 @@ def _artifact_telemetry(provider_envelope: dict[str, Any]) -> dict[str, Any]:
         "estimated_cost_usd": provider_telemetry.get("total_cost_usd"),
         "cost_basis": "provider_reported",
     }
+
+
+def _dedupe_alias_values(values: list[str]) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for value in values:
+        normalized = value.strip()
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        result.append(normalized)
+    return result
 
 
 def _cost_from_exa_response(data: dict[str, Any]) -> float:
