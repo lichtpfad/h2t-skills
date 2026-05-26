@@ -205,3 +205,11 @@ def test_fix_labels_returns_message(tmp_path):
         mock_run.return_value = MagicMock(returncode=0, stdout="synced 3", stderr="")
         result = fix_labels(tmp_path, "h2t-skills")
     assert result != ""
+
+
+def test_fix_labels_failure_message(tmp_path):
+    """fix_labels returns error message on sync failure."""
+    with patch("subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="repo not found")
+        result = fix_labels(tmp_path, "h2t-unknown")
+    assert "failed" in result.lower() or "label sync" in result.lower()
