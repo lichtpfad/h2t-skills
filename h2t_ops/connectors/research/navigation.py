@@ -10,6 +10,8 @@ from h2t_ops.core.errors import ConfigError, UsageError
 
 INDEX_NAMES = {"documents", "threads", "syntheses", "aliases"}
 
+# Canonical object-type map for future Task 2 (show/resolve helpers): index name,
+# canonical schema version, and id key for each supported object type.
 OBJECTS = {
     "document": ("documents", "research_document/v0.1", "document_id"),
     "thread": ("threads", "research_thread/v0.1", "thread_id"),
@@ -28,7 +30,12 @@ def normalize_project(raw: str | None) -> str | None:
 
 
 def _read_json(path: Path) -> Any:
-    return json.loads(path.read_text(encoding="utf-8"))
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ConfigError(
+            f"cannot parse research index json: {path}"
+        ) from exc
 
 
 def _read_index(root: Path, index_name: str) -> list[dict[str, Any]]:
@@ -40,6 +47,8 @@ def _read_index(root: Path, index_name: str) -> list[dict[str, Any]]:
     data = _read_json(path)
     if not isinstance(data, list):
         raise ConfigError(f"research index is not a list: {path}")
+    if not all(isinstance(row, dict) for row in data):
+        raise ConfigError(f"research index row is not an object: {path}")
     return data
 
 

@@ -127,3 +127,21 @@ def test_list_index_non_list_raises_configerror(tmp_path):
 
     with pytest.raises(ConfigError, match="research index is not a list"):
         navigation.list_index(root, "documents")
+
+
+def test_list_index_invalid_json_raises_configerror(tmp_path):
+    root = tmp_path / "research"
+    path = store.index_path(root, "documents")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("{invalid json", encoding="utf-8")
+
+    with pytest.raises(ConfigError, match="cannot parse research index json"):
+        navigation.list_index(root, "documents")
+
+
+def test_list_index_non_object_row_raises_configerror(tmp_path):
+    root = tmp_path / "research"
+    store.write_json(store.index_path(root, "documents"), ["not-a-object"])
+
+    with pytest.raises(ConfigError, match="research index row is not an object"):
+        navigation.list_index(root, "documents")
