@@ -65,14 +65,14 @@ def register(subparsers: Any) -> None:
     trp = cmds.add_parser("trash", help="Move a Drive file to trash (recoverable)")
     trp.add_argument("file_id")
     trp.add_argument("--confirm-name", required=True, metavar="NAME",
-                     help="Exact name of the file to trash (safety guard)")
+                     help="Name of the file, case-insensitive (safety guard)")
     add_fmt(trp)
 
     # delete
     delp = cmds.add_parser("delete", help="Permanently delete a Drive file (irreversible)")
     delp.add_argument("file_id")
     delp.add_argument("--confirm-name", required=True, metavar="NAME",
-                      help="Exact name of the file to delete (safety guard)")
+                      help="Name of the file, case-insensitive (safety guard)")
     delp.add_argument("--confirm-permanent", action="store_true",
                       help="Acknowledge that deletion is permanent and irreversible")
     add_fmt(delp)

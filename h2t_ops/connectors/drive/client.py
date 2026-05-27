@@ -561,6 +561,7 @@ class DriveClient:
                 fileId=existing["id"],
                 media_body=media,
                 fields="id, name, mimeType, webViewLink",
+                supportsAllDrives=True,
             ).execute()
             action = "file_updated"
         else:
@@ -568,6 +569,7 @@ class DriveClient:
                 body={"name": src.name, "parents": [parent_id]},
                 media_body=media,
                 fields="id, name, mimeType, webViewLink",
+                supportsAllDrives=True,
             ).execute()
             action = "file_uploaded"
         entries.append({
@@ -1216,6 +1218,7 @@ class DriveClient:
                     fileId=existing["id"],
                     media_body=media,
                     fields="id, name, mimeType, webViewLink",
+                    supportsAllDrives=True,
                 ).execute()
                 action = "updated"
             else:
@@ -1223,6 +1226,7 @@ class DriveClient:
                     body=metadata,
                     media_body=media,
                     fields="id, name, mimeType, webViewLink",
+                    supportsAllDrives=True,
                 ).execute()
                 action = "created"
             return {
