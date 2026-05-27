@@ -80,6 +80,37 @@ def register(subparsers: Any) -> None:
     sy.add_argument("--databases-json")
     add_fmt(sy)
 
+    # P0 lifecycle ops
+    cdi = cmds.add_parser("create-db-item", help="Create a database row")
+    cdi.add_argument("database_id")
+    cdi.add_argument("--title", required=True, help="Item title")
+    cdi.add_argument("--property-json", help="JSON with additional Notion properties")
+    add_fmt(cdi)
+
+    udi = cmds.add_parser("update-db-item", help="Update database row properties")
+    udi.add_argument("page_id")
+    udi.add_argument("--property-json", required=True, help="JSON Notion properties patch")
+    add_fmt(udi)
+
+    ar = cmds.add_parser("archive", help="Archive a page (requires title confirmation)")
+    ar.add_argument("page_id")
+    ar.add_argument("--confirm-title", required=True,
+                    help="Exact page title — must match before archiving")
+    add_fmt(ar)
+
+    ab = cmds.add_parser("append-blocks", help="Append markdown file content as blocks")
+    ab.add_argument("page_id")
+    ab.add_argument("--content-file", required=True, help="Path to markdown file")
+    add_fmt(ab)
+
+    rc = cmds.add_parser("replace-content",
+                         help="Replace page blocks from file (title-verified, safe)")
+    rc.add_argument("page_id")
+    rc.add_argument("--content-file", required=True, help="Path to markdown file")
+    rc.add_argument("--confirm-title", required=True,
+                    help="Exact page title — must match before any mutation")
+    add_fmt(rc)
+
     p.set_defaults(_handler=run)
 
 
@@ -212,4 +243,21 @@ def run(args) -> Any:
                 encoding="utf-8",
             )
         return f"Synced to {out_path}"
+    if cmd == "create-db-item":
+        return client.create_db_item(
+            args.database_id,
+            title=args.title,
+            property_json=getattr(args, "property_json", None),
+        )
+    if cmd == "update-db-item":
+        return client.update_db_item(args.page_id, property_json=args.property_json)
+    if cmd == "archive":
+        return client.archive_page(args.page_id, confirm_title=args.confirm_title)
+    if cmd == "append-blocks":
+        return client.append_blocks_from_file(args.page_id, args.content_file)
+    if cmd == "replace-content":
+        client.replace_page_content_safe(
+            args.page_id, args.content_file, confirm_title=args.confirm_title
+        )
+        return {"status": "replaced", "page_id": args.page_id}
     raise UsageError(f"unknown notion subcommand: {cmd}")

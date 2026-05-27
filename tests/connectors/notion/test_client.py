@@ -855,3 +855,139 @@ def test_graph_page_includes_traversal_permission_errors(conv):
     result = conv.graph_page("root")
 
     assert result["errors"] == [{"block_id": "restricted", "error": "blocked"}]
+
+
+# --- P0 lifecycle client unit tests ---
+
+def test_create_db_item_builds_title_property(conv):
+    from unittest.mock import MagicMock
+    conv.client = MagicMock()
+    conv.client.pages.create.return_value = {"id": "new-page", "object": "page"}
+    result = conv.create_db_item("db1", title="My Task")
+    call_kwargs = conv.client.pages.create.call_args.kwargs
+    assert call_kwargs["parent"] == {"database_id": "db1"}
+    assert "Name" in call_kwargs["properties"]
+    assert call_kwargs["properties"]["Name"]["title"][0]["text"]["content"] == "My Task"
+    assert result["id"] == "new-page"
+
+
+def test_create_db_item_does_not_override_existing_title_property(conv):
+    from unittest.mock import MagicMock
+    conv.client = MagicMock()
+    conv.client.pages.create.return_value = {"id": "new-page"}
+    prop_json = '{"Name": {"title": [{"text": {"content": "Custom"}}]}}'
+    conv.create_db_item("db1", title="Ignored", property_json=prop_json)
+    call_kwargs = conv.client.pages.create.call_args.kwargs
+    # Name was already in property_json, should use custom value
+    assert call_kwargs["properties"]["Name"]["title"][0]["text"]["content"] == "Custom"
+
+
+def test_update_db_item_passes_properties_json(conv):
+    from unittest.mock import MagicMock
+    conv.client = MagicMock()
+    conv.client.pages.update.return_value = {"id": "page1"}
+    result = conv.update_db_item("page1", property_json='{"Status":{"select":{"name":"Done"}}}')
+    call_kwargs = conv.client.pages.update.call_args.kwargs
+    assert call_kwargs["page_id"] == "page1"
+    assert call_kwargs["properties"] == {"Status": {"select": {"name": "Done"}}}
+    assert result["id"] == "page1"
+
+
+def test_archive_confirms_title_before_update(conv):
+    from unittest.mock import MagicMock
+    conv.client = MagicMock()
+    conv.client.pages.retrieve.return_value = {
+        "id": "page1",
+        "properties": {"Name": {"type": "title", "title": [{"type": "text", "text": {"content": "My Task"}}]}},
+    }
+    conv.client.pages.update.return_value = {"id": "page1", "archived": True}
+    result = conv.archive_page("page1", confirm_title="My Task")
+    assert conv.client.pages.update.called
+    update_kwargs = conv.client.pages.update.call_args.kwargs
+    assert update_kwargs["archived"] is True
+
+
+def test_archive_mismatch_raises_usageerror_before_update(conv):
+    from unittest.mock import MagicMock
+    from h2t_ops.core.errors import UsageError
+    conv.client = MagicMock()
+    conv.client.pages.retrieve.return_value = {
+        "id": "page1",
+        "properties": {"Name": {"type": "title", "title": [{"type": "text", "text": {"content": "Real Title"}}]}},
+    }
+    with pytest.raises(UsageError, match="mismatch"):
+        conv.archive_page("page1", confirm_title="Wrong Title")
+    assert not conv.client.pages.update.called
+
+
+def test_append_blocks_uses_blocks_children_append(conv, tmp_path):
+    from unittest.mock import MagicMock
+    md_file = tmp_path / "content.md"
+    md_file.write_text("# Hello\n\nWorld.\n", encoding="utf-8")
+    conv.client = MagicMock()
+    conv.client.blocks.children.append.return_value = {"results": []}
+    conv.append_blocks_from_file("page1", str(md_file))
+    assert conv.client.blocks.children.append.called
+    call_kwargs = conv.client.blocks.children.append.call_args.kwargs
+    assert call_kwargs["block_id"] == "page1"
+    assert any(b["type"] == "heading_1" for b in call_kwargs["children"])
+
+
+def test_replace_content_deletes_existing_blocks_then_appends(conv, tmp_path):
+    from unittest.mock import MagicMock, call
+    md_file = tmp_path / "content.md"
+    md_file.write_text("New content.\n", encoding="utf-8")
+    conv.client = MagicMock()
+    conv.client.pages.retrieve.return_value = {
+        "id": "page1",
+        "properties": {"Name": {"type": "title", "title": [{"type": "text", "text": {"content": "Page Title"}}]}},
+    }
+    conv.client.blocks.children.list.return_value = {
+        "results": [{"id": "b1"}, {"id": "b2"}], "has_more": False
+    }
+    conv.client.blocks.delete.return_value = {}
+    conv.client.blocks.children.append.return_value = {"results": []}
+    conv.replace_page_content_safe("page1", str(md_file), confirm_title="Page Title")
+    # Verify delete was called for existing blocks
+    assert conv.client.blocks.delete.call_count == 2
+    assert conv.client.blocks.children.append.called
+
+
+def test_replace_content_mismatch_raises_before_delete(conv, tmp_path):
+    from unittest.mock import MagicMock
+    from h2t_ops.core.errors import UsageError
+    md_file = tmp_path / "content.md"
+    md_file.write_text("Replacement.\n", encoding="utf-8")
+    conv.client = MagicMock()
+    conv.client.pages.retrieve.return_value = {
+        "id": "page1",
+        "properties": {"Name": {"type": "title", "title": [{"type": "text", "text": {"content": "Actual Title"}}]}},
+    }
+    with pytest.raises(UsageError, match="mismatch"):
+        conv.replace_page_content_safe("page1", str(md_file), confirm_title="Wrong Title")
+    # CRITICAL: blocks.delete must NOT have been called
+    assert not conv.client.blocks.delete.called
+    assert not conv.client.blocks.children.list.called
+
+
+def test_replace_content_fails_fast_on_delete_error(conv, tmp_path):
+    """Verify that if block deletion fails, append is NOT called and error propagates."""
+    from unittest.mock import MagicMock
+    from h2t_ops.core.errors import ProviderError
+    md_file = tmp_path / "content.md"
+    md_file.write_text("New content.\n", encoding="utf-8")
+    conv.client = MagicMock()
+    conv.client.pages.retrieve.return_value = {
+        "id": "page1",
+        "properties": {"Name": {"type": "title", "title": [{"type": "text", "text": {"content": "Page Title"}}]}},
+    }
+    conv.client.blocks.children.list.return_value = {
+        "results": [{"id": "b1"}, {"id": "b2"}], "has_more": False
+    }
+    # Second block deletion fails
+    conv.client.blocks.delete.side_effect = [None, Exception("API error: block locked")]
+    # Assert that replace_page_content_safe raises and append is NOT called
+    with pytest.raises(ProviderError, match="API error"):
+        conv.replace_page_content_safe("page1", str(md_file), confirm_title="Page Title")
+    # CRITICAL: append must NOT have been called because deletion failed
+    assert not conv.client.blocks.children.append.called
