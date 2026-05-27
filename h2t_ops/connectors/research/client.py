@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qsl, quote, urlencode, urlsplit, urlunsplit
 
-from h2t_ops.connectors.research import maintenance, navigation, store
+from h2t_ops.connectors.research import maintenance, navigation, provider_routing, store
 from h2t_ops.core.errors import (
     AuthError,
     ConfigError,
@@ -1230,6 +1230,23 @@ class ResearchClient:
             alias_value=alias_value,
             alias_type=alias_type,
         )
+
+    def research_provider_status(
+        self,
+        *,
+        capability: str | None = None,
+    ) -> dict[str, Any]:
+        """Return local provider/key readiness without network calls."""
+        return provider_routing.provider_status(capability=capability)
+
+    def research_route(
+        self,
+        capability: str,
+        *,
+        provider: str | None = None,
+    ) -> dict[str, Any]:
+        """Select a configured provider route for a research capability."""
+        return provider_routing.select_route(capability, provider=provider)
 
     def research_doctor(self) -> dict[str, Any]:
         """Inspect local research store health without writing files."""

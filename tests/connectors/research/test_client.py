@@ -1678,6 +1678,49 @@ def test_research_client_cleanup_delegates_to_maintenance(tmp_path, monkeypatch)
     assert calls == [(tmp_path, True), (tmp_path, False)]
 
 
+def test_research_client_lists_provider_status(tmp_path, monkeypatch):
+    from h2t_ops.connectors.research import provider_routing
+
+    calls = []
+
+    def fake_status(*, capability=None):
+        calls.append(capability)
+        return {"kind": "research_provider_status", "capability": capability}
+
+    monkeypatch.setattr(provider_routing, "provider_status", fake_status)
+
+    result = client.ResearchClient(output_dir=tmp_path).research_provider_status(
+        capability="fetch"
+    )
+
+    assert result == {"kind": "research_provider_status", "capability": "fetch"}
+    assert calls == ["fetch"]
+
+
+def test_research_client_selects_provider_route(tmp_path, monkeypatch):
+    from h2t_ops.connectors.research import provider_routing
+
+    calls = []
+
+    def fake_select(capability, *, provider=None):
+        calls.append((capability, provider))
+        return {
+            "kind": "research_provider_route",
+            "capability": capability,
+            "selected_provider": provider or "exa",
+        }
+
+    monkeypatch.setattr(provider_routing, "select_route", fake_select)
+
+    result = client.ResearchClient(output_dir=tmp_path).research_route(
+        "search",
+        provider="exa",
+    )
+
+    assert result["selected_provider"] == "exa"
+    assert calls == [("search", "exa")]
+
+
 def test_research_client_list_research_index_propagates_navigation_error(tmp_path, monkeypatch):
     def failing_list_index(*args, **kwargs):
         raise UsageError("index helper failure")
