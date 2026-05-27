@@ -323,6 +323,32 @@ def test_submit_url_raises_autherror_on_401(client_obj):
         client_obj.submit_url("https://example.com/f.mp4")
 
 
+# ─── action_items ─────────────────────────────────────────────────────────────
+
+def test_action_items_returns_summary_action_items(client_obj):
+    summary_data = {
+        "summary": "Meeting summary text",
+        "action_items": [
+            {"owner": "Alice", "text": "Follow up with client"},
+            {"owner": "Bob", "text": "Update docs"},
+        ],
+    }
+    client_obj.get_summary = MagicMock(return_value=summary_data)
+    result = client_obj.action_items("m1")
+    assert result["meeting_id"] == "m1"
+    assert result["source"] == "summary"
+    assert len(result["action_items"]) == 2
+    assert result["action_items"][0]["owner"] == "Alice"
+    client_obj.get_summary.assert_called_once_with("m1")
+
+
+def test_action_items_returns_empty_list_when_no_action_items(client_obj):
+    client_obj.get_summary = MagicMock(return_value={"summary": "No action items here"})
+    result = client_obj.action_items("m2")
+    assert result["action_items"] == []
+    assert result["meeting_id"] == "m2"
+
+
 # ─── Error mapping (_raise_for_status) ────────────────────────────────────────
 
 def test_raise_for_status_401_autherror(client_obj):

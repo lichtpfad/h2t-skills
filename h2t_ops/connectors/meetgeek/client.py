@@ -245,6 +245,15 @@ class MeetGeekClient:
             raise ProviderError(f"No download URL in response for {meeting_id}: {info!r}")
         return {"meeting_id": meeting_id, "download_url": url}
 
+    def action_items(self, meeting_id: str) -> Dict[str, Any]:
+        """Return action items extracted from a meeting summary."""
+        summary = self.get_summary(meeting_id)
+        return {
+            "meeting_id": meeting_id,
+            "action_items": summary.get("action_items") or [],
+            "source": "summary",
+        }
+
     # ─── Write verb ───────────────────────────────────────────────────────────
 
     def submit_url(
