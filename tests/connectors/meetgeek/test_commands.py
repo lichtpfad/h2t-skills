@@ -19,6 +19,14 @@ def _build_parser():
     return parser
 
 
+def test_meetgeek_p0_parser_surface():
+    parser = _build_parser()
+    assert parser.parse_args(["meetgeek", "action-items", "meeting1"]).meetgeek_cmd == "action-items"
+    ns = parser.parse_args(["meetgeek", "list", "--from", "2026-05-01", "--to", "2026-05-27"])
+    assert ns.from_date == "2026-05-01"
+    assert ns.to_date == "2026-05-27"
+
+
 # ─── Registration ─────────────────────────────────────────────────────────────
 
 def test_register_creates_subparsers_for_ten_verbs():
@@ -221,6 +229,54 @@ def test_unknown_subcommand_raises_usageerror(monkeypatch):
     args = SimpleNamespace(meetgeek_cmd="bogus", as_json=False, fmt="human")
     with pytest.raises(UsageError):
         cmds.run(args)
+
+
+def test_list_date_range_filters_meetings(monkeypatch):
+    """list with --from and --to passes both to client."""
+    stub = _stub_client(monkeypatch, {
+        "list_meetings": {"rows": [{"meeting_id": "m1"}], "next_cursor": None},
+    })
+    from h2t_ops.connectors.meetgeek import commands as cmds
+    args = SimpleNamespace(
+        meetgeek_cmd="list", limit=None, cursor=None,
+        from_date="2026-05-01", to_date="2026-05-27",
+        as_json=True, fmt="human",
+    )
+    result = cmds.run(args)
+    stub.list_meetings.assert_called_once_with(
+        limit=None, cursor=None, from_date="2026-05-01", to_date="2026-05-27",
+    )
+    assert result["rows"][0]["meeting_id"] == "m1"
+
+
+def test_list_partial_date_window_raises(monkeypatch):
+    """list with only --from (no --to) must raise UsageError."""
+    _stub_client(monkeypatch, {})
+    from h2t_ops.connectors.meetgeek import commands as cmds
+    args = SimpleNamespace(
+        meetgeek_cmd="list", limit=None, cursor=None,
+        from_date="2026-05-01", to_date=None,
+        as_json=True, fmt="human",
+    )
+    with pytest.raises(UsageError):
+        cmds.run(args)
+
+
+def test_action_items_dispatch_returns_action_items(monkeypatch):
+    stub = _stub_client(monkeypatch, {
+        "action_items": {
+            "meeting_id": "m1",
+            "action_items": [{"owner": "Alice", "text": "Follow up"}],
+            "source": "summary",
+        },
+    })
+    from h2t_ops.connectors.meetgeek import commands as cmds
+    args = SimpleNamespace(meetgeek_cmd="action-items", meeting_id="m1", as_json=True, fmt="human")
+    result = cmds.run(args)
+    assert result["meeting_id"] == "m1"
+    assert result["source"] == "summary"
+    assert len(result["action_items"]) == 1
+    stub.action_items.assert_called_once_with("m1")
 
 
 # ─── Formatter helpers ────────────────────────────────────────────────────────

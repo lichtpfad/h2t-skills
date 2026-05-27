@@ -14,6 +14,8 @@
 | create all-day event | `h2t-ops calendar create "Travel" 2026-05-23 --all-day --json` |
 | update event | `h2t-ops calendar update EVENT_ID_FROM_LIST --summary "Updated title" --json` |
 | delete event | `h2t-ops calendar delete EVENT_ID_FROM_LIST --confirm --json` |
+| create new calendar | `h2t-ops calendar create-calendar "My Calendar" --timezone UTC --json` |
+| recurring event instances | `h2t-ops calendar instances EVENT_ID --from 2026-06-01 --to 2026-06-30 --json` |
 
 ## Safety
 
@@ -48,3 +50,30 @@ In Claude Code, check readiness through:
 - Missing token: run Google OAuth setup before Calendar commands.
 - Timezone error on Windows: ensure `tzdata` is installed in the `h2t-ops` environment.
 - Delete without `--confirm`: command should fail instead of deleting.
+
+## Manual E2E Smoke Recipe
+
+> `create-calendar` live smoke requires explicit manual approval — no automated calendar creation.
+> `instances` is read-only against an env-provided safe recurring event.
+
+### instances (safe, read-only)
+
+```python
+import subprocess
+result = subprocess.run(
+    ["h2t-ops", "calendar", "instances", event_id,
+     "--calendar-id", "primary", "--json"],
+    capture_output=True, text=True,
+)
+# Returns list of event instances
+```
+
+### create-calendar (manual approval required)
+
+Approve before running:
+
+```
+Command: h2t-ops calendar create-calendar "h2t-e2e-test-cal" --timezone "UTC"
+Effect: creates a new calendar in your Google account
+Rollback: delete the calendar from Google Calendar settings
+```
