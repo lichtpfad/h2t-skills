@@ -409,6 +409,70 @@ def test_cleanup_dry_run_does_not_propose_canonical_objects_or_indexes(tmp_path)
     assert str(index_partial) not in candidate_paths
 
 
+def test_cleanup_dry_run_blocks_when_canonical_object_load_has_errors(tmp_path):
+    root = tmp_path / "research"
+    malformed = store.object_path(root, "documents", "research-doc:bad")
+    malformed.parent.mkdir(parents=True, exist_ok=True)
+    malformed.write_text("{bad json", encoding="utf-8")
+    partial = root / "maybe-live.partial.md"
+    partial.write_text("# Maybe live\n", encoding="utf-8")
+
+    result = maintenance.cleanup(root, dry_run=True)
+
+    assert result["kind"] == "research_cleanup"
+    assert result["dry_run"] is True
+    assert result["status"] == "blocked"
+    assert result["count"] == 0
+    assert result["candidates"] == []
+    assert result["findings"][0]["code"] == "object_json_invalid"
+    assert "clean canonical object integrity" in result["message"]
+    assert partial.exists()
+
+
+def test_cleanup_dry_run_does_not_propose_notes_ref_partial_markdown(tmp_path):
+    root = tmp_path / "research"
+    run = store.build_research_run(
+        thread_id="research-thread:demo",
+        created_at="2026-05-27T10:00:00Z",
+        query="What is Exa?",
+        provider_set=["exa"],
+        document_ids=[],
+    )
+    run["notes_ref"] = "notes.partial.md"
+    store.write_object(root, "runs", run["run_id"], run)
+    notes = root / "notes.partial.md"
+    notes.write_text("# Notes\n", encoding="utf-8")
+
+    result = maintenance.cleanup(root, dry_run=True)
+
+    candidate_paths = {candidate["path"] for candidate in result["candidates"]}
+    assert str(notes) not in candidate_paths
+
+
+def test_referenced_artifact_paths_ignores_invalid_refs_and_resolves_valid_refs(tmp_path):
+    root = tmp_path / "research"
+    objects = {
+        "document": {
+            "research-doc:demo": {
+                "artifact_refs": {
+                    "none": None,
+                    "blank": " ",
+                    "number": 42,
+                    "valid": "valid.partial.md",
+                },
+                "notes_ref": "notes.partial.md",
+            }
+        }
+    }
+
+    paths = maintenance._referenced_artifact_paths(root, objects)
+
+    assert paths == {
+        (root / "valid.partial.md").resolve(),
+        (root / "notes.partial.md").resolve(),
+    }
+
+
 def test_cleanup_execute_mode_is_rejected_in_v1(tmp_path):
     root = tmp_path / "research"
 
