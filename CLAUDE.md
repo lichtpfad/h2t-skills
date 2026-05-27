@@ -35,6 +35,29 @@ python scripts/bump_plugin.py <plugin-name> <version>
 uv run h2t-ops <connector> <command>
 ```
 
+## Global CLI tools (uv tool install)
+
+`h2t-skills` exposes 4 global entry points: `h2t-ops`, `h2t-handoff`, `h2t-gather`, `h2t-activity-log`.
+
+**When to re-run:**
+- After `git pull` that adds or renames an entry point in `pyproject.toml`
+- After any session where `h2t-handoff` / `h2t-gather` is not found by `command -v`
+- Verify: `uv tool list` — all 4 should appear under one package
+
+```bash
+# Install / update all entry points from source
+uv tool install --editable C:/dev/h2t-skills
+
+# Verify
+uv tool list   # should show h2t-ops, h2t-handoff, h2t-gather, h2t-activity-log
+```
+
+If `uv tool install` conflicts with an existing `h2t-ops` version:
+```bash
+uv tool uninstall h2t-ops
+uv tool install --editable C:/dev/h2t-skills
+```
+
 ## Connector Standard
 
 New connectors: `ConnectorSpec` + lazy registry in `h2t_ops/connectors/`.
