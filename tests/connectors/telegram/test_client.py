@@ -381,3 +381,128 @@ def test_bootstrap_dialogs_writes_timestamp_without_chats_yaml(tmp_path, monkeyp
     assert result["count"] == 1
     assert (tmp_path / "dialogs_bootstrapped").exists()
     assert not (tmp_path / "chats.yaml").exists()
+
+
+# ── P0 Coverage: send_file / forward_message / delete_message ─────────────
+
+
+def test_send_file_returns_normalized_row(tmp_path, monkeypatch):
+    from h2t_ops.connectors.telegram import client as tmod
+
+    (tmp_path / "config.json").write_text(json.dumps({"api_id": 1, "api_hash": "h"}), encoding="utf-8")
+
+    sent = SimpleNamespace(
+        id=20,
+        chat_id=55,
+        date=datetime(2026, 5, 27, 12, 0, tzinfo=timezone.utc),
+        sender_id=7,
+        sender=SimpleNamespace(first_name="Stan", last_name="G"),
+        text="",
+        entities=[],
+        reply_to_msg_id=None,
+    )
+
+    class FakeInner:
+        def send_file(self, entity, path, caption=None):
+            assert entity == "me"
+            assert path == "/tmp/file.pdf"
+            assert caption == "my cap"
+            return sent
+
+    monkeypatch.setattr(tmod.TelegramClientAdapter, "_client", lambda self: _CtxClient(FakeInner()))
+    out = tmod.TelegramClientAdapter(config_dir=tmp_path).send_file("me", "/tmp/file.pdf", caption="my cap")
+    assert out["message_id"] == 20
+    assert out["chat_id"] == 55
+    assert out["entity"] == "me"
+
+
+def test_send_file_without_caption(tmp_path, monkeypatch):
+    from h2t_ops.connectors.telegram import client as tmod
+
+    (tmp_path / "config.json").write_text(json.dumps({"api_id": 1, "api_hash": "h"}), encoding="utf-8")
+
+    sent = SimpleNamespace(
+        id=21, chat_id=56, date=None,
+        sender_id=None, sender=None, text="", entities=[], reply_to_msg_id=None,
+    )
+
+    class FakeInner:
+        def send_file(self, entity, path, caption=None):
+            assert caption is None
+            return sent
+
+    monkeypatch.setattr(tmod.TelegramClientAdapter, "_client", lambda self: _CtxClient(FakeInner()))
+    out = tmod.TelegramClientAdapter(config_dir=tmp_path).send_file("chatname", "photo.jpg")
+    assert out["message_id"] == 21
+
+
+def test_forward_message_returns_normalized_row(tmp_path, monkeypatch):
+    from h2t_ops.connectors.telegram import client as tmod
+
+    (tmp_path / "config.json").write_text(json.dumps({"api_id": 1, "api_hash": "h"}), encoding="utf-8")
+
+    fwd = SimpleNamespace(
+        id=30,
+        chat_id=77,
+        date=datetime(2026, 5, 27, 12, 0, tzinfo=timezone.utc),
+        sender_id=None,
+        sender=None,
+        text="forwarded text",
+        entities=[],
+        reply_to_msg_id=None,
+    )
+
+    class FakeInner:
+        def forward_messages(self, to_entity, message_id, from_peer=None):
+            assert to_entity == "me"
+            assert message_id == 99
+            assert from_peer == "chatname"
+            return fwd
+
+    monkeypatch.setattr(tmod.TelegramClientAdapter, "_client", lambda self: _CtxClient(FakeInner()))
+    out = tmod.TelegramClientAdapter(config_dir=tmp_path).forward_message(
+        "me", from_entity="chatname", message_id=99
+    )
+    assert out["message_id"] == 30
+    assert out["entity"] == "me"
+
+
+def test_forward_message_normalizes_list_result(tmp_path, monkeypatch):
+    """Telethon may return a list when forwarding; we normalize to single message."""
+    from h2t_ops.connectors.telegram import client as tmod
+
+    (tmp_path / "config.json").write_text(json.dumps({"api_id": 1, "api_hash": "h"}), encoding="utf-8")
+
+    fwd = SimpleNamespace(
+        id=31, chat_id=78, date=None,
+        sender_id=None, sender=None, text="fwd", entities=[], reply_to_msg_id=None,
+    )
+
+    class FakeInner:
+        def forward_messages(self, to_entity, message_id, from_peer=None):
+            return [fwd]  # Telethon list return
+
+    monkeypatch.setattr(tmod.TelegramClientAdapter, "_client", lambda self: _CtxClient(FakeInner()))
+    out = tmod.TelegramClientAdapter(config_dir=tmp_path).forward_message(
+        "me", from_entity="chat", message_id=31
+    )
+    assert out["message_id"] == 31
+
+
+def test_delete_message_returns_deleted_dict(tmp_path, monkeypatch):
+    from h2t_ops.connectors.telegram import client as tmod
+
+    (tmp_path / "config.json").write_text(json.dumps({"api_id": 1, "api_hash": "h"}), encoding="utf-8")
+
+    class FakeInner:
+        def delete_messages(self, entity, message_ids):
+            assert entity == "me"
+            assert message_ids == [5]
+            return [SimpleNamespace(pts=1)]
+
+    monkeypatch.setattr(tmod.TelegramClientAdapter, "_client", lambda self: _CtxClient(FakeInner()))
+    out = tmod.TelegramClientAdapter(config_dir=tmp_path).delete_message("me", 5)
+    assert out["entity"] == "me"
+    assert out["message_id"] == 5
+    assert out["deleted"] is True
+    assert "raw" in out

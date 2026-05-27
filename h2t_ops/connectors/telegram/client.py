@@ -398,6 +398,63 @@ class TelegramClientAdapter:
             )
         return rows
 
+    def send_file(
+        self,
+        entity: str,
+        path: str,
+        *,
+        caption: str | None = None,
+    ) -> dict[str, Any]:
+        try:
+            with self._connected_client() as client:
+                msg = client.send_file(entity, path, caption=caption)
+        except (ValueError, sqlite3.OperationalError) as exc:
+            raise _session_incompatible_error(exc) from exc
+        row = self._message_row(msg)
+        return {
+            "entity": entity,
+            "message_id": row["id"],
+            "chat_id": row["chat_id"],
+            "date": row["date"],
+            "text": row["text"],
+        }
+
+    def forward_message(
+        self,
+        to_entity: str,
+        *,
+        from_entity: str,
+        message_id: int,
+    ) -> dict[str, Any]:
+        try:
+            with self._connected_client() as client:
+                result = client.forward_messages(to_entity, message_id, from_peer=from_entity)
+        except (ValueError, sqlite3.OperationalError) as exc:
+            raise _session_incompatible_error(exc) from exc
+        # Telethon may return a list; normalise to a single message
+        msg = result[0] if isinstance(result, list) else result
+        row = self._message_row(msg)
+        return {
+            "entity": to_entity,
+            "message_id": row["id"],
+            "chat_id": row["chat_id"],
+            "date": row["date"],
+            "text": row["text"],
+        }
+
+    def delete_message(self, entity: str, message_id: int) -> dict[str, Any]:
+        try:
+            with self._connected_client() as client:
+                result = client.delete_messages(entity, [message_id])
+        except (ValueError, sqlite3.OperationalError) as exc:
+            raise _session_incompatible_error(exc) from exc
+        return {
+            "entity": entity,
+            "message_id": message_id,
+            "deleted": True,
+            "raw": str(result),
+        }
+
     def send_message(self, entity: str, text: str) -> dict[str, Any]:
         try:
             with self._connected_client() as client:
