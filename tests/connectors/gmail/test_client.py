@@ -433,3 +433,286 @@ def test_google_deps_declared_in_pyproject():
     assert "google-api-python-client" in names
     assert "google-auth" in names
     assert "google-auth-oauthlib" in names
+
+
+# --- Task 3 P0: reply / forward / label lifecycle ---
+
+
+def _thread_with_message(thread_id, msg_id, subject, from_addr):
+    return {
+        "id": thread_id,
+        "messages": [{
+            "id": msg_id,
+            "threadId": thread_id,
+            "labelIds": [],
+            "snippet": "",
+            "from": from_addr,
+            "to": "me@example.com",
+            "subject": subject,
+            "date": "Mon",
+            "body": "Original body",
+            "attachments": [],
+        }],
+    }
+
+
+def _msg_payload(msg_id, thread_id, subject, from_addr, body_b64=""):
+    return {
+        "id": msg_id,
+        "threadId": thread_id,
+        "labelIds": [],
+        "snippet": "",
+        "payload": {
+            "headers": [
+                {"name": "Subject", "value": subject},
+                {"name": "From", "value": from_addr},
+                {"name": "To", "value": "me@example.com"},
+                {"name": "Date", "value": "Mon"},
+            ],
+            "body": {"data": body_b64},
+        },
+    }
+
+
+def test_reply_reads_thread_and_calls_send_with_thread_headers():
+    """Reply defaults to draft; check subject prefix and thread_id forwarded."""
+    import base64
+    created = {}
+
+    class _Svc(_FakeService):
+        def get(self, **k):
+            return _Exec(_thread_payload("thr1", "Hello"))
+
+        def drafts(self):
+            return self
+
+        def create(self, userId, body):
+            created.update(body)
+            return _Exec({"id": "d1"})
+
+    c, _ = _client_with(_Svc())
+    result = c.reply_to_thread("thr1", body="My reply")
+    assert result["id"] == "d1"
+    # subject should be prefixed with "Re: "
+    raw = base64.urlsafe_b64decode(created["message"]["raw"]).decode()
+    assert "Re: Hello" in raw
+    assert created["message"]["threadId"] == "thr1"
+
+
+def test_reply_prefixes_subject_with_re():
+    import base64
+    created = {}
+
+    class _Svc(_FakeService):
+        def get(self, **k):
+            return _Exec(_thread_payload("t1", "Standup"))
+
+        def drafts(self):
+            return self
+
+        def create(self, userId, body):
+            created.update(body)
+            return _Exec({"id": "d2"})
+
+    c, _ = _client_with(_Svc())
+    c.reply_to_thread("t1", body="OK")
+    raw = base64.urlsafe_b64decode(created["message"]["raw"]).decode()
+    assert raw.count("Re: ") == 1  # no double Re: Re:
+
+
+def test_reply_does_not_double_prefix_re():
+    import base64
+    created = {}
+
+    class _Svc(_FakeService):
+        def get(self, **k):
+            return _Exec(_thread_payload("t1", "Re: Standup"))
+
+        def drafts(self):
+            return self
+
+        def create(self, userId, body):
+            created.update(body)
+            return _Exec({"id": "d3"})
+
+    c, _ = _client_with(_Svc())
+    c.reply_to_thread("t1", body="OK")
+    raw = base64.urlsafe_b64decode(created["message"]["raw"]).decode()
+    # Subject should be "Re: Standup", not "Re: Re: Standup"
+    assert "Re: Re:" not in raw
+    assert "Re: Standup" in raw
+
+
+def test_reply_defaults_to_draft():
+    created = {}
+
+    class _Svc(_FakeService):
+        def get(self, **k):
+            return _Exec(_thread_payload("t1", "Ping"))
+
+        def drafts(self):
+            return self
+
+        def create(self, userId, body):
+            created.update(body)
+            return _Exec({"id": "d1"})
+
+    c, _ = _client_with(_Svc())
+    result = c.reply_to_thread("t1", body="Pong")
+    # Draft created, not sent
+    assert result["id"] == "d1"
+    assert "message" in created
+
+
+def test_reply_send_requires_confirm_send():
+    from h2t_ops.core.errors import UsageError
+
+    class _Svc(_FakeService):
+        def get(self, **k):
+            return _Exec(_thread_payload("t1", "Ping"))
+
+    c, _ = _client_with(_Svc())
+    with pytest.raises(UsageError, match="--confirm-send"):
+        c.reply_to_thread("t1", body="Pong", send=True, confirm_send=False)
+
+
+def test_forward_reads_message_and_sends_new_message():
+    import base64
+    created = {}
+
+    # Build a fake payload for get_message (returns a parsed dict via _parse_message)
+    _body_b64 = base64.urlsafe_b64encode(b"Original body").decode()
+
+    class _Svc(_FakeService):
+        def get(self, **k):
+            return _Exec(_msg_payload("m1", "t1", "Project Update", "sender@x.com", _body_b64))
+
+        def drafts(self):
+            return self
+
+        def create(self, userId, body):
+            created.update(body)
+            return _Exec({"id": "d2"})
+
+    c, _ = _client_with(_Svc())
+    result = c.forward_message("m1", to="colleague@example.com")
+    assert result["id"] == "d2"
+    raw = base64.urlsafe_b64decode(created["message"]["raw"]).decode()
+    assert "Fwd: Project Update" in raw
+    assert "colleague@example.com" in raw
+
+
+def test_forward_defaults_to_draft():
+    created = {}
+
+    class _Svc(_FakeService):
+        def get(self, **k):
+            return _Exec(_msg_payload("m1", "t1", "Topic", "a@x.com"))
+
+        def drafts(self):
+            return self
+
+        def create(self, userId, body):
+            created.update(body)
+            return _Exec({"id": "d3"})
+
+    c, _ = _client_with(_Svc())
+    result = c.forward_message("m1", to="b@x.com")
+    assert result["id"] == "d3"
+    assert "message" in created
+
+
+def test_forward_does_not_pass_thread_id():
+    """Forward creates a new thread — thread_id must NOT be forwarded."""
+    import base64
+    created = {}
+
+    class _Svc(_FakeService):
+        def get(self, **k):
+            return _Exec(_msg_payload("m1", "t1", "Topic", "a@x.com"))
+
+        def drafts(self):
+            return self
+
+        def create(self, userId, body):
+            created.update(body)
+            return _Exec({"id": "d4"})
+
+    c, _ = _client_with(_Svc())
+    c.forward_message("m1", to="b@x.com")
+    # The draft message body should not contain threadId
+    assert "threadId" not in created.get("message", {})
+
+
+def test_forward_send_requires_confirm_send():
+    from h2t_ops.core.errors import UsageError
+
+    class _Svc(_FakeService):
+        def get(self, **k):
+            return _Exec(_msg_payload("m1", "t1", "Topic", "a@x.com"))
+
+    c, _ = _client_with(_Svc())
+    with pytest.raises(UsageError, match="--confirm-send"):
+        c.forward_message("m1", to="b@x.com", send=True, confirm_send=False)
+
+
+def test_label_create_calls_gmail_labels_create():
+    created_body = {}
+
+    class _Svc(_FakeService):
+        def create(self, userId, body):
+            created_body.update(body)
+            return _Exec({"id": "Label_new", "name": "My Label"})
+
+        def labels(self):
+            return self
+
+        def users(self):
+            return self
+
+    c, _ = _client_with(_Svc())
+    result = c.create_label("My Label")
+    assert result["id"] == "Label_new"
+    assert created_body["name"] == "My Label"
+    assert created_body["labelListVisibility"] == "labelShow"
+
+
+def test_label_delete_requires_name_match_before_delete():
+    deleted = []
+
+    class _Svc(_FakeService):
+        def list(self, **k):
+            return _Exec({"labels": [{"id": "Label_1", "name": "Project X"}]})
+
+        def delete(self, **k):
+            deleted.append(k)
+            return _Exec(None)
+
+        def labels(self):
+            return self
+
+        def users(self):
+            return self
+
+    c, _ = _client_with(_Svc())
+    result = c.delete_label("Label_1", confirm_name="Project X")
+    assert result == {"label_id": "Label_1", "name": "Project X", "deleted": True}
+    assert deleted[0]["id"] == "Label_1"
+
+
+def test_label_delete_mismatch_raises_usageerror():
+    from h2t_ops.core.errors import UsageError
+
+    class _Svc(_FakeService):
+        def list(self, **k):
+            return _Exec({"labels": [{"id": "Label_1", "name": "Project X"}]})
+
+        def labels(self):
+            return self
+
+        def users(self):
+            return self
+
+    c, _ = _client_with(_Svc())
+    with pytest.raises(UsageError, match="label mismatch"):
+        c.delete_label("Label_1", confirm_name="Wrong Name")

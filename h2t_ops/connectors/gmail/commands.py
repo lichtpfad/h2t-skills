@@ -54,6 +54,32 @@ def register(subparsers: Any) -> None:
     dp.add_argument("--thread-id", dest="thread_id")
     dp.add_argument("--reply-to", dest="reply_to"); add_fmt(dp)
 
+    rep = cmds.add_parser("reply", help="Reply to a thread (draft by default)")
+    rep.add_argument("thread_id")
+    rep.add_argument("--body", dest="body", default=None)
+    rep.add_argument("--file", dest="file", default=None)
+    rep.add_argument("--send", dest="send", action="store_true")
+    rep.add_argument("--confirm-send", dest="confirm_send", action="store_true")
+    add_fmt(rep)
+
+    fwp = cmds.add_parser("forward", help="Forward a message (draft by default)")
+    fwp.add_argument("message_id")
+    fwp.add_argument("--to", dest="to", required=True)
+    fwp.add_argument("--body", dest="body", default=None)
+    fwp.add_argument("--send", dest="send", action="store_true")
+    fwp.add_argument("--confirm-send", dest="confirm_send", action="store_true")
+    add_fmt(fwp)
+
+    lcp = cmds.add_parser("label-create", help="Create a new Gmail label")
+    lcp.add_argument("name")
+    add_fmt(lcp)
+
+    ldp = cmds.add_parser("label-delete", help="Delete a Gmail label (requires exact name match)")
+    ldp.add_argument("label_id")
+    ldp.add_argument("--confirm-name", dest="confirm_name", required=True,
+                     help="Exact label name — must match to proceed")
+    add_fmt(ldp)
+
     lbl = cmds.add_parser("labels", help="List all labels"); add_fmt(lbl)
 
     lm = cmds.add_parser("label", help="Modify message labels")
@@ -141,6 +167,42 @@ def run(args) -> Any:
             return {"id": result["id"], "draft": as_draft}
         return (f"✓ {'Draft created' if as_draft else 'Message sent'} "
                 f"(ID: {result['id']})")
+    if cmd == "reply":
+        body = _read_file(args.file) if args.file else args.body
+        if not body:
+            raise UsageError("gmail reply: provide --body or --file")
+        result = client.reply_to_thread(
+            args.thread_id,
+            body=body,
+            send=getattr(args, "send", False),
+            confirm_send=getattr(args, "confirm_send", False),
+        )
+        if _fmt(args) == "json":
+            return {"id": result.get("id"), "draft": not getattr(args, "send", False)}
+        is_draft = not getattr(args, "send", False)
+        return f"✓ {'Draft reply created' if is_draft else 'Reply sent'} (ID: {result.get('id')})"
+    if cmd == "forward":
+        result = client.forward_message(
+            args.message_id,
+            to=args.to,
+            body=getattr(args, "body", None),
+            send=getattr(args, "send", False),
+            confirm_send=getattr(args, "confirm_send", False),
+        )
+        if _fmt(args) == "json":
+            return {"id": result.get("id"), "draft": not getattr(args, "send", False)}
+        is_draft = not getattr(args, "send", False)
+        return f"✓ {'Draft forward created' if is_draft else 'Message forwarded'} (ID: {result.get('id')})"
+    if cmd == "label-create":
+        result = client.create_label(args.name)
+        if _fmt(args) == "json":
+            return result
+        return f"✓ Label created: {result.get('name')} (ID: {result.get('id')})"
+    if cmd == "label-delete":
+        result = client.delete_label(args.label_id, confirm_name=args.confirm_name)
+        if _fmt(args) == "json":
+            return result
+        return f"✓ Label deleted: {result.get('name')} (ID: {result.get('label_id')})"
     if cmd == "labels":
         labels = client.list_labels()
         if _fmt(args) == "json":

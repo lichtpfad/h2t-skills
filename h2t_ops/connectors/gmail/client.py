@@ -270,6 +270,83 @@ class GmailClient:
         except HttpError as e:
             raise _map_http_error(e, op=f"modify labels for {message_id}") from e
 
+    def reply_to_thread(
+        self,
+        thread_id: str,
+        *,
+        body: str,
+        body_file: Optional[str] = None,
+        send: bool = False,
+        confirm_send: bool = False,
+    ) -> Dict[str, Any]:
+        if send and not confirm_send:
+            raise UsageError("gmail reply: --confirm-send is required with --send")
+        thread = self.get_thread(thread_id)
+        messages = thread.get("messages") or []
+        if not messages:
+            raise UsageError(f"gmail reply: thread has no messages: {thread_id}")
+        last = messages[-1]
+        subject = last.get("subject") or ""
+        to_addr = last.get("from") or ""
+        reply_body = Path(body_file).read_text(encoding="utf-8") if body_file else body
+        return self.send_message(
+            to=to_addr,
+            subject=subject if subject.lower().startswith("re:") else f"Re: {subject}",
+            body=reply_body,
+            thread_id=thread_id,
+            reply_to_message_id=last.get("id"),
+            as_draft=not send,
+        )
+
+    def forward_message(
+        self,
+        message_id: str,
+        *,
+        to: str,
+        body: Optional[str] = None,
+        send: bool = False,
+        confirm_send: bool = False,
+    ) -> Dict[str, Any]:
+        if send and not confirm_send:
+            raise UsageError("gmail forward: --confirm-send is required with --send")
+        msg = self.get_message(message_id)
+        subject = msg.get("subject") or ""
+        orig_body = msg.get("body") or ""
+        fwd_subject = subject if subject.lower().startswith("fwd:") else f"Fwd: {subject}"
+        quoted = "\n\n---------- Forwarded message ----------\n" + orig_body
+        fwd_body = (body + quoted) if body else quoted
+        return self.send_message(
+            to=to,
+            subject=fwd_subject,
+            body=fwd_body,
+            as_draft=not send,
+        )
+
+    def create_label(self, name: str) -> Dict[str, Any]:
+        try:
+            body = {
+                "name": name,
+                "labelListVisibility": "labelShow",
+                "messageListVisibility": "show",
+            }
+            return self.service.users().labels().create(userId="me", body=body).execute()
+        except HttpError as e:
+            raise _map_http_error(e, op=f"create label {name!r}") from e
+
+    def delete_label(self, label_id: str, *, confirm_name: str) -> Dict[str, Any]:
+        labels = self.list_labels()
+        match = next((lb for lb in labels if lb.get("id") == label_id), None)
+        actual = (match or {}).get("name", "")
+        if actual.strip().lower() != confirm_name.strip().lower():
+            raise UsageError(
+                f'label mismatch — expected "{confirm_name}", got "{actual}"'
+            )
+        try:
+            self.service.users().labels().delete(userId="me", id=label_id).execute()
+        except HttpError as e:
+            raise _map_http_error(e, op=f"delete label {label_id}") from e
+        return {"label_id": label_id, "name": actual, "deleted": True}
+
     def _thread_subject(self, thread_id: str) -> str:
         """Fetch first message subject — used for confirm-subject validation."""
         thread = self.get_thread(thread_id)
