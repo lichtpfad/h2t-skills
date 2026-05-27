@@ -81,6 +81,38 @@ def register(subparsers: Any) -> None:
     bootstrap.add_argument("--force", action="store_true")
     add_json(bootstrap)
 
+    send_file = cmds.add_parser("send-file", help="Send a file attachment to an entity")
+    send_file.add_argument("entity")
+    send_file.add_argument("path", help="local file path to send")
+    send_file.add_argument("--caption", default=None, help="optional caption for the file")
+    send_file.add_argument(
+        "--confirm-send",
+        action="store_true",
+        help="required safety flag to confirm file send",
+    )
+    add_json(send_file)
+
+    forward_msg = cmds.add_parser("forward-message", help="Forward a message to another entity")
+    forward_msg.add_argument("to_entity", help="destination entity (username, chat id, or 'me')")
+    forward_msg.add_argument("--from", dest="from_entity", required=True, help="source entity")
+    forward_msg.add_argument("--message-id", dest="message_id", type=int, required=True)
+    forward_msg.add_argument(
+        "--confirm-forward",
+        action="store_true",
+        help="required safety flag to confirm message forward",
+    )
+    add_json(forward_msg)
+
+    delete_msg = cmds.add_parser("delete-message", help="Delete a message (requires --confirm)")
+    delete_msg.add_argument("entity")
+    delete_msg.add_argument("message_id", type=int)
+    delete_msg.add_argument(
+        "--confirm",
+        action="store_true",
+        help="required safety flag to confirm deletion",
+    )
+    add_json(delete_msg)
+
     p.set_defaults(_handler=run)
 
 
@@ -127,4 +159,26 @@ def run(args: Any) -> Any:
         return _rows(client.list_mentions(args.chat_ids, days=args.days, limit=args.limit))
     if cmd == "bootstrap":
         return client.bootstrap_dialogs(force=args.force)
+    if cmd == "send-file":
+        if not getattr(args, "confirm_send", False):
+            raise UsageError(
+                "telegram send-file requires --confirm-send flag to prevent accidental sends"
+            )
+        return client.send_file(args.entity, args.path, caption=getattr(args, "caption", None))
+    if cmd == "forward-message":
+        if not getattr(args, "confirm_forward", False):
+            raise UsageError(
+                "telegram forward-message requires --confirm-forward flag to prevent accidental forwards"
+            )
+        return client.forward_message(
+            args.to_entity,
+            from_entity=args.from_entity,
+            message_id=args.message_id,
+        )
+    if cmd == "delete-message":
+        if not getattr(args, "confirm", False):
+            raise UsageError(
+                "telegram delete-message requires --confirm flag to prevent accidental deletion"
+            )
+        return client.delete_message(args.entity, args.message_id)
     raise UsageError(f"unknown telegram subcommand: {cmd}")
