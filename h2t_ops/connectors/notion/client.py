@@ -680,7 +680,7 @@ class NotionClient:
         except Exception as e:
             raise _map_sdk_exc(e, op=f"retrieve page {page_id} for archive") from e
         actual = self._title_from_object(page)
-        if actual.strip().lower() != confirm_title.strip().lower():
+        if actual != confirm_title:
             raise UsageError(
                 f'archive aborted: title mismatch — expected "{confirm_title}", got "{actual}"'
             )
@@ -709,7 +709,7 @@ class NotionClient:
         except Exception as e:
             raise _map_sdk_exc(e, op=f"retrieve page {page_id} for replace-content") from e
         actual = self._title_from_object(page)
-        if actual.strip().lower() != confirm_title.strip().lower():
+        if actual != confirm_title:
             raise UsageError(
                 f'replace-content aborted: title mismatch — expected "{confirm_title}", got "{actual}"'
             )
