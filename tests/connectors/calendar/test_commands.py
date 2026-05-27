@@ -520,6 +520,29 @@ def test_create_calendar_dispatch(monkeypatch):
     assert out["summary"] == "My New Calendar"
 
 
+def test_create_calendar_dispatches_summary_timezone(monkeypatch):
+    from h2t_ops.connectors.calendar import commands as cmds_mod
+    calls = []
+
+    class _Stub:
+        def create_calendar(self, summary, *, timezone=None):
+            calls.append((summary, timezone))
+            return {"id": "newcal@group.calendar.google.com", "summary": summary}
+
+    _patch_calendar_client(monkeypatch, lambda: _Stub())
+
+    out = cmds_mod.run(SimpleNamespace(
+        calendar_cmd="create-calendar",
+        summary="My New Calendar",
+        timezone="Asia/Jerusalem",
+        as_json=True,
+        fmt="human",
+    ))
+
+    assert calls == [("My New Calendar", "Asia/Jerusalem")]
+    assert out["id"] == "newcal@group.calendar.google.com"
+
+
 def test_instances_dispatch_passes_date_window(monkeypatch):
     from h2t_ops.connectors.calendar import commands as cmds_mod
     calls = []
