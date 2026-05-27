@@ -7,6 +7,7 @@ Usage:
 """
 import argparse
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -164,6 +165,12 @@ def cmd_create(args: argparse.Namespace) -> dict:
         else:
             actions.append(f"Initial commit skipped: {r2.stderr.strip()}")
 
+    if is_git and not args.dry_run:
+        di = run_docs_init(args.id, project_dir)
+        actions.append(f"docs-init: {di['status']}")
+        if di["status"] == "error":
+            return {"status": "error", "error": f"docs-init failed: {di['error']}"}
+
     return {"status": "ok", "path": str(project_dir), "actions": actions}
 
 
@@ -185,6 +192,26 @@ def cmd_github(args: argparse.Namespace) -> dict:
         url = r.stdout.strip() or f"https://github.com/{args.github}"
         return {"status": "ok", "repo": args.github, "url": url}
     return {"status": "error", "error": r.stderr.strip()}
+
+
+_PLUGIN_ROOT = Path(__file__).resolve().parents[3]
+_DEV_ROOT = Path(os.environ.get("H2T_DEV_ROOT", "C:/dev"))
+
+
+def run_docs_init(repo_name: str, project_dir: Path) -> dict:
+    # init.py resolves path as DEV_ROOT/repo_name; skip for non-standard locations
+    if project_dir.resolve() != (_DEV_ROOT / repo_name).resolve():
+        return {"status": "skip", "reason": "project not under DEV_ROOT — run docs-init manually"}
+    init_script = _PLUGIN_ROOT.parent / "h2t-dev" / "skills" / "docs-init" / "scripts" / "init.py"
+    if not init_script.exists():
+        return {"status": "skip", "reason": "docs-init script not found"}
+    r = subprocess.run(
+        [sys.executable, str(init_script), repo_name, "--apply"],
+        capture_output=True, text=True,
+    )
+    if r.returncode == 0:
+        return {"status": "ok", "output": r.stdout.strip()}
+    return {"status": "error", "error": r.stderr.strip()[:200]}
 
 
 def main() -> None:
