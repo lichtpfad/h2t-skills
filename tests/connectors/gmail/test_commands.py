@@ -62,6 +62,12 @@ class _FakeClient:
     def get_thread(self, tid): return {"id": tid, "messages": [{"id": "m1", "subject": "S", "from": "f", "to": "t", "date": "d", "labelIds": [], "body": "B"}]}
     def download_attachment(self, message_id, attachment_id, output): return {"message_id": message_id, "attachment_id": attachment_id, "saved_path": output, "size": 5}
     def send_message(self, **k): return {"id": "m1"}
+    def reply_to_thread(self, thread_id, *, body, body_file=None, send=False, confirm_send=False): return {"id": "reply1"}
+    def forward_message(self, message_id, *, to, body=None, send=False, confirm_send=False): return {"id": "fwd1"}
+    def create_label(self, name): return {"id": "Label_new", "name": name}
+    def delete_label(self, label_id, *, confirm_name): return {"label_id": label_id, "name": confirm_name, "deleted": True}
+    def modify_labels(self, message_id, add_labels=None, remove_labels=None): return {"labelIds": add_labels or []}
+    def list_labels(self): return [{"id": "INBOX", "name": "INBOX"}]
     def trash_thread(self, thread_id, confirm_subject): return {"thread_id": thread_id, "subject": confirm_subject, "trashed": True}
     def untrash_thread(self, thread_id): return {"thread_id": thread_id, "trashed": False}
     def delete_thread(self, thread_id, confirm_subject): return {"thread_id": thread_id, "subject": confirm_subject, "deleted": True}
@@ -254,3 +260,127 @@ def test_delete_parser_has_confirm_permanent_flag():
     register(p.add_subparsers(dest="c"))
     ns = p.parse_args(["gmail", "delete", "thr1", "--confirm-subject", "S", "--confirm-permanent"])
     assert ns.confirm_permanent is True
+
+
+# --- Task 3 P0: parser surface ---
+
+def test_gmail_p0_parser_surface():
+    p = _parser()
+    assert p.parse_args(["gmail", "reply", "T1", "--body", "ok"]).gmail_cmd == "reply"
+    assert p.parse_args(["gmail", "forward", "M1", "--to", "me@example.com"]).gmail_cmd == "forward"
+    assert p.parse_args(["gmail", "label-create", "Project X"]).gmail_cmd == "label-create"
+    assert p.parse_args(["gmail", "label-delete", "Label_1", "--confirm-name", "Project X"]).gmail_cmd == "label-delete"
+
+
+# --- Task 3 P0: command dispatch ---
+
+def test_reply_dispatch_defaults_to_draft(monkeypatch):
+    _patch(monkeypatch)
+    calls = {}
+
+    class _Stub(_FakeClient):
+        def reply_to_thread(self, thread_id, *, body, body_file=None, send=False, confirm_send=False):
+            calls["send"] = send
+            calls["confirm_send"] = confirm_send
+            return {"id": "reply1"}
+
+    import h2t_ops.connectors.gmail.client as client_mod
+    monkeypatch.setattr(client_mod, "GmailClient", lambda: _Stub())
+    out = gc.run(_ns(gmail_cmd="reply", thread_id="T1", body="OK", file=None,
+                     send=False, confirm_send=False, as_json=True, fmt="human"))
+    assert out["draft"] is True
+    assert calls["send"] is False
+
+
+def test_reply_requires_body(monkeypatch):
+    _patch(monkeypatch)
+    with pytest.raises(UsageError, match="body"):
+        gc.run(_ns(gmail_cmd="reply", thread_id="T1", body=None, file=None,
+                   send=False, confirm_send=False, as_json=False, fmt="human"))
+
+
+def test_reply_send_requires_confirm_send_dispatch(monkeypatch):
+    """Dispatch passes send/confirm_send flags to client; client raises UsageError."""
+    from h2t_ops.core.errors import UsageError as _UE
+
+    class _Stub(_FakeClient):
+        def reply_to_thread(self, thread_id, *, body, body_file=None, send=False, confirm_send=False):
+            if send and not confirm_send:
+                raise _UE("gmail reply: --confirm-send is required with --send")
+            return {"id": "r1"}
+
+    import h2t_ops.connectors.gmail.client as client_mod
+    monkeypatch.setattr(client_mod, "GmailClient", lambda: _Stub())
+    with pytest.raises(_UE, match="--confirm-send"):
+        gc.run(_ns(gmail_cmd="reply", thread_id="T1", body="Hi", file=None,
+                   send=True, confirm_send=False, as_json=False, fmt="human"))
+
+
+def test_forward_dispatch_defaults_to_draft(monkeypatch):
+    calls = {}
+
+    class _Stub(_FakeClient):
+        def forward_message(self, message_id, *, to, body=None, send=False, confirm_send=False):
+            calls["send"] = send
+            return {"id": "fwd1"}
+
+    import h2t_ops.connectors.gmail.client as client_mod
+    monkeypatch.setattr(client_mod, "GmailClient", lambda: _Stub())
+    out = gc.run(_ns(gmail_cmd="forward", message_id="M1", to="a@x.com", body=None,
+                     send=False, confirm_send=False, as_json=True, fmt="human"))
+    assert out["draft"] is True
+    assert calls["send"] is False
+
+
+def test_forward_send_requires_confirm_send_dispatch(monkeypatch):
+    from h2t_ops.core.errors import UsageError as _UE
+
+    class _Stub(_FakeClient):
+        def forward_message(self, message_id, *, to, body=None, send=False, confirm_send=False):
+            if send and not confirm_send:
+                raise _UE("gmail forward: --confirm-send is required with --send")
+            return {"id": "f1"}
+
+    import h2t_ops.connectors.gmail.client as client_mod
+    monkeypatch.setattr(client_mod, "GmailClient", lambda: _Stub())
+    with pytest.raises(_UE, match="--confirm-send"):
+        gc.run(_ns(gmail_cmd="forward", message_id="M1", to="a@x.com", body=None,
+                   send=True, confirm_send=False, as_json=False, fmt="human"))
+
+
+def test_label_create_dispatch(monkeypatch):
+    calls = {}
+
+    class _Stub(_FakeClient):
+        def create_label(self, name):
+            calls["name"] = name
+            return {"id": "Label_new", "name": name}
+
+    import h2t_ops.connectors.gmail.client as client_mod
+    monkeypatch.setattr(client_mod, "GmailClient", lambda: _Stub())
+    out = gc.run(_ns(gmail_cmd="label-create", name="Project X", as_json=True, fmt="human"))
+    assert out["name"] == "Project X"
+    assert calls["name"] == "Project X"
+
+
+def test_label_delete_dispatch(monkeypatch):
+    calls = {}
+
+    class _Stub(_FakeClient):
+        def delete_label(self, label_id, *, confirm_name):
+            calls["label_id"] = label_id
+            calls["confirm_name"] = confirm_name
+            return {"label_id": label_id, "name": confirm_name, "deleted": True}
+
+    import h2t_ops.connectors.gmail.client as client_mod
+    monkeypatch.setattr(client_mod, "GmailClient", lambda: _Stub())
+    out = gc.run(_ns(gmail_cmd="label-delete", label_id="Label_1",
+                     confirm_name="Project X", as_json=True, fmt="human"))
+    assert out["deleted"] is True
+    assert calls["confirm_name"] == "Project X"
+
+
+def test_label_delete_parser_requires_confirm_name():
+    p = _parser()
+    with pytest.raises(SystemExit):
+        p.parse_args(["gmail", "label-delete", "Label_1"])  # missing --confirm-name
