@@ -892,3 +892,261 @@ def test_missing_drive_scope_raises_configerror(tmp_path, monkeypatch):
     with pytest.raises(ConfigError) as ei:
         DriveClient()
     assert "Google OAuth bootstrap" in (ei.value.hint or "")
+
+
+# ---------------------------------------------------------------------------
+# P0 new client method tests
+# ---------------------------------------------------------------------------
+
+def test_get_file_returns_metadata(client_obj):
+    files = client_obj.service.files.return_value
+    files.get.return_value.execute.return_value = {
+        "id": "file1",
+        "name": "report.pdf",
+        "mimeType": "application/pdf",
+        "trashed": False,
+    }
+    result = client_obj.get_file("file1")
+    assert result["id"] == "file1"
+    assert result["name"] == "report.pdf"
+    assert files.get.call_args.kwargs["fileId"] == "file1"
+    assert files.get.call_args.kwargs["supportsAllDrives"] is True
+
+
+def test_trash_requires_confirm_name_match(client_obj):
+    files = client_obj.service.files.return_value
+    files.get.return_value.execute.return_value = {
+        "id": "file1",
+        "name": "actual-name.txt",
+        "mimeType": "text/plain",
+    }
+    with pytest.raises(UsageError) as ei:
+        client_obj.trash_file("file1", confirm_name="wrong-name.txt")
+    assert "name mismatch" in str(ei.value)
+    files.update.assert_not_called()
+
+
+def test_trash_file_sends_update_trashed_true(client_obj):
+    files = client_obj.service.files.return_value
+    files.get.return_value.execute.return_value = {
+        "id": "file1",
+        "name": "doc.txt",
+        "mimeType": "text/plain",
+    }
+    files.update.return_value.execute.return_value = {
+        "id": "file1",
+        "name": "doc.txt",
+        "trashed": True,
+    }
+    result = client_obj.trash_file("file1", confirm_name="doc.txt")
+    assert result["trashed"] is True
+    assert result["file_id"] == "file1"
+    assert files.update.call_args.kwargs["body"] == {"trashed": True}
+    assert files.update.call_args.kwargs["supportsAllDrives"] is True
+
+
+def test_delete_requires_confirm_name_match(client_obj):
+    files = client_obj.service.files.return_value
+    files.get.return_value.execute.return_value = {
+        "id": "file1",
+        "name": "actual.txt",
+        "mimeType": "text/plain",
+    }
+    with pytest.raises(UsageError) as ei:
+        client_obj.delete_file("file1", confirm_name="wrong.txt")
+    assert "name mismatch" in str(ei.value)
+    files.delete.assert_not_called()
+
+
+def test_delete_file_calls_files_delete(client_obj):
+    files = client_obj.service.files.return_value
+    files.get.return_value.execute.return_value = {
+        "id": "file1",
+        "name": "doc.txt",
+        "mimeType": "text/plain",
+    }
+    files.delete.return_value.execute.return_value = None
+    result = client_obj.delete_file("file1", confirm_name="doc.txt")
+    assert result["deleted"] is True
+    assert result["file_id"] == "file1"
+    files.delete.assert_called_once_with(fileId="file1", supportsAllDrives=True)
+
+
+def test_docs_create_calls_files_create_google_doc(client_obj):
+    files = client_obj.service.files.return_value
+    files.create.return_value.execute.return_value = {
+        "id": "doc1",
+        "name": "My Report",
+        "mimeType": "application/vnd.google-apps.document",
+        "webViewLink": "https://docs.google.com/doc1",
+    }
+    result = client_obj.create_document("My Report")
+    assert result["id"] == "doc1"
+    body = files.create.call_args.kwargs["body"]
+    assert body["name"] == "My Report"
+    assert body["mimeType"] == "application/vnd.google-apps.document"
+    assert "parents" not in body
+
+
+def test_docs_create_with_folder_id_sets_parents(client_obj):
+    files = client_obj.service.files.return_value
+    files.create.return_value.execute.return_value = {
+        "id": "doc2",
+        "name": "Nested",
+        "mimeType": "application/vnd.google-apps.document",
+        "parents": ["folder1"],
+    }
+    client_obj.create_document("Nested", folder_id="folder1")
+    body = files.create.call_args.kwargs["body"]
+    assert body["parents"] == ["folder1"]
+
+
+def test_upload_update_existing_uses_files_update(client_obj, tmp_path, monkeypatch):
+    from h2t_ops.connectors.drive import client as dmod
+
+    src = tmp_path / "note.md"
+    src.write_text("# Hello", encoding="utf-8")
+    monkeypatch.setattr(client_obj, "_resolve_folder_id", lambda folder: ("folder1", folder, False))
+    monkeypatch.setattr(dmod, "_media_file_upload", lambda: lambda *a, **k: "media")
+    files = client_obj.service.files.return_value
+    # _find_child_by_name returns existing file
+    files.list.return_value.execute.return_value = {
+        "files": [{"id": "existing1", "name": "note", "mimeType": "text/plain"}]
+    }
+    files.update.return_value.execute.return_value = {
+        "id": "existing1",
+        "name": "note",
+        "mimeType": "text/plain",
+        "webViewLink": "https://drive/existing1",
+    }
+
+    result = client_obj.upload_file(str(src), folder="Target", update_existing=True)
+    assert result["file_id"] == "existing1"
+    assert result["action"] == "updated"
+    assert files.update.call_args.kwargs["fileId"] == "existing1"
+    assert not files.create.called
+
+
+def test_upload_update_existing_rejects_duplicate_matches(client_obj, tmp_path, monkeypatch):
+    from h2t_ops.connectors.drive import client as dmod
+
+    src = tmp_path / "note.md"
+    src.write_text("# Hello", encoding="utf-8")
+    monkeypatch.setattr(client_obj, "_resolve_folder_id", lambda folder: ("folder1", folder, False))
+    monkeypatch.setattr(dmod, "_media_file_upload", lambda: lambda *a, **k: "media")
+    files = client_obj.service.files.return_value
+    # _find_child_by_name sees 2 files = raises UsageError("ambiguous Drive file …")
+    files.list.return_value.execute.return_value = {
+        "files": [
+            {"id": "a1", "name": "note", "mimeType": "text/plain"},
+            {"id": "a2", "name": "note", "mimeType": "text/plain"},
+        ]
+    }
+
+    with pytest.raises(UsageError):
+        client_obj.upload_file(str(src), folder="Target", update_existing=True)
+
+
+def test_docs_tab_write_clear_first_sends_delete_before_insert(client_obj):
+    """clear_first=True: deleteContentRange request precedes insertText."""
+    client_obj.service.files.return_value.get.return_value.execute.return_value = {
+        "id": "doc1",
+        "name": "Doc",
+        "mimeType": "application/vnd.google-apps.document",
+    }
+    # Simulate existing tab body with content ending at index 50
+    client_obj._docs_service.documents.return_value.get.return_value.execute.return_value = {
+        "tabs": [
+            {
+                "tabProperties": {"tabId": "t1"},
+                "documentTab": {
+                    "body": {
+                        "content": [
+                            {"endIndex": 50, "paragraph": {"elements": [{"textRun": {"content": "old"}}]}}
+                        ]
+                    }
+                },
+            }
+        ]
+    }
+    client_obj._docs_service.documents.return_value.batchUpdate.return_value.execute.return_value = {
+        "writeControl": {"requiredRevisionId": "rev1"}
+    }
+
+    client_obj.write_document_tab("doc1", "t1", "# New", clear_first=True)
+
+    call_body = client_obj._docs_service.documents.return_value.batchUpdate.call_args.kwargs["body"]
+    requests = call_body["requests"]
+    assert requests[0].get("deleteContentRange") is not None
+    del_range = requests[0]["deleteContentRange"]["range"]
+    assert del_range["startIndex"] == 1
+    assert del_range["endIndex"] == 49  # end_index - 1 = 50 - 1
+    assert del_range["tabId"] == "t1"
+    # insertText follows
+    assert any("insertText" in r for r in requests[1:])
+
+
+def test_docs_tab_read_extracts_text(client_obj):
+    client_obj.service.files.return_value.get.return_value.execute.return_value = {
+        "id": "doc1",
+        "name": "Doc",
+        "mimeType": "application/vnd.google-apps.document",
+    }
+    client_obj._docs_service.documents.return_value.get.return_value.execute.return_value = {
+        "tabs": [
+            {
+                "tabProperties": {"tabId": "tab1"},
+                "documentTab": {
+                    "body": {
+                        "content": [
+                            {
+                                "paragraph": {
+                                    "elements": [
+                                        {"textRun": {"content": "Hello "}},
+                                        {"textRun": {"content": "world\n"}},
+                                    ]
+                                }
+                            }
+                        ]
+                    }
+                },
+            }
+        ]
+    }
+
+    result = client_obj.read_tab("doc1", "tab1")
+    assert result["kind"] == "google_docs_tab_read/v1"
+    assert result["text"] == "Hello world\n"
+    assert result["document_id"] == "doc1"
+    assert result["tab_id"] == "tab1"
+
+
+def test_docs_tab_read_tab_not_found_raises(client_obj):
+    from h2t_ops.core.errors import NotFoundError
+    client_obj.service.files.return_value.get.return_value.execute.return_value = {
+        "id": "doc1",
+        "name": "Doc",
+        "mimeType": "application/vnd.google-apps.document",
+    }
+    client_obj._docs_service.documents.return_value.get.return_value.execute.return_value = {
+        "tabs": [{"tabProperties": {"tabId": "other-tab"}, "documentTab": {"body": {"content": []}}}]
+    }
+    with pytest.raises(NotFoundError):
+        client_obj.read_tab("doc1", "missing-tab")
+
+
+def test_md_to_docs_requests_inline_bold_italic_ranges():
+    from h2t_ops.connectors.drive.client import _md_to_docs_requests
+
+    reqs = _md_to_docs_requests("Hello **bold** and *italic* text", "t.abc")
+    style_reqs = [r for r in reqs if "updateTextStyle" in r]
+    assert len(style_reqs) == 2
+    bold_req = next(r for r in style_reqs if r["updateTextStyle"]["textStyle"].get("bold"))
+    italic_req = next(r for r in style_reqs if r["updateTextStyle"]["textStyle"].get("italic"))
+    # "Hello " = 6 chars, bold starts at index 1+6=7
+    assert bold_req["updateTextStyle"]["range"]["startIndex"] == 7
+    assert bold_req["updateTextStyle"]["range"]["endIndex"] == 7 + len("bold")
+    # After "bold" (4 chars) and " and " (5 chars), italic starts
+    # Text inserted: "Hello bold and italic text\n" => "italic" at pos 1+16=17
+    italic_start = bold_req["updateTextStyle"]["range"]["endIndex"] + len(" and ")
+    assert italic_req["updateTextStyle"]["range"]["startIndex"] == italic_start
