@@ -365,6 +365,32 @@ def test_rebuild_indexes_with_malformed_alias_index_does_not_overwrite_existing_
     } == before
 
 
+def test_rebuild_indexes_with_unknown_alias_target_type_does_not_overwrite_indexes(tmp_path):
+    root = tmp_path / "research"
+    before = _write_existing_indexes(root)
+    bad_alias = {
+        "alias_type": "topic",
+        "alias_value": "demo",
+        "target_object_type": "bogus",
+        "target_id": "research-bogus:demo",
+        "confidence": "low",
+    }
+    store.write_json(store.index_path(root, "aliases"), [bad_alias])
+    before["aliases"] = store.index_path(root, "aliases").read_text(encoding="utf-8")
+
+    result = maintenance.rebuild_indexes(root)
+
+    assert result["status"] == "error"
+    assert result["written"] == []
+    assert "alias_target_type_unknown" in {
+        finding["code"] for finding in result["findings"]
+    }
+    assert {
+        index_name: store.index_path(root, index_name).read_text(encoding="utf-8")
+        for index_name in before
+    } == before
+
+
 def test_cleanup_dry_run_reports_unreferenced_partial_markdown_without_deleting(tmp_path):
     root = tmp_path / "research"
     path = root / "orphan.partial.md"
