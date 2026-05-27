@@ -1007,3 +1007,42 @@ Recommended execution order:
    repos outside `C:/dev`?
 3. Which runtime adapter should be implemented first after Claude: Codex
    `AGENTS.md`, Cursor rules, or Gemini?
+
+## GSTACK REVIEW REPORT
+
+Reviewed by: plan-eng-review (gstack v1.48.0.0)
+Date: 2026-05-28
+Reviewer commit: ed25e87
+
+### Summary
+
+This spec passed architectural review with 11 decisions resolved (D1–D11).
+The contract is ready to drive #240 implementation.
+
+### Decisions Applied
+
+| ID | Decision | Applied |
+|----|----------|---------|
+| D1 | BFS orphan detection from docs/README.md | spec §Phase 6 |
+| D2 | Marker-based fix-index (preserve manual content) | spec §Phase 6 |
+| D3 | Map + deprecate legacy --fix flags (stderr warning) | T2 applied |
+| D4 | Configurable hook timeout (H2T_LINT_HOOK_TIMEOUT, 8s default) + mtime+HEAD cache | T3 applied |
+| D5 | Use spec as design doc, not impl plan | no spec change needed |
+| D6 | Python package: plugins/h2t-dev/lib/docs/ | noted for #240 impl plan |
+| D7 | TDD: unit tests + dogfood acceptance (h2t-skills + rejuve) | noted for #240 impl plan |
+| D8 | Cache invalidation: mtime+HEAD hash | T3 applied |
+| D9 | fix-index bootstrap: dry-run first, append with markers on --apply | T4 applied |
+| D10 | Concurrency: atomic tmp+os.rename, last-writer-wins v1 | T5 applied |
+| D11 | Config discovery: .claude/rules/docs-lint.yaml, fallback to defaults | T6 applied |
+
+Additional: T7 status enum — standardized `skipped_not_applicable` (was `not_applicable`).
+T1 (findings[] item schema) applied in previous commit ac7aa17.
+
+### Verdict
+
+**READY TO IMPLEMENT** — spec is the design source of truth for #240.
+
+Implementation tasks written to:
+`~/.gstack/projects/lichtpfad-h2t-skills/tasks-eng-review-*.jsonl`
+
+Execution order: #240 → #211 → #196 → #197
