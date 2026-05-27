@@ -1629,6 +1629,55 @@ def test_research_client_resolve_research_alias_url(tmp_path):
     assert result["matches"][0]["object_exists"] is True
 
 
+def test_research_client_doctor_delegates_to_maintenance(tmp_path, monkeypatch):
+    calls = []
+
+    def doctor(root):
+        calls.append(root)
+        return {"kind": "research_doctor", "ok": True}
+
+    monkeypatch.setattr(client.maintenance, "doctor", doctor)
+
+    result = client.ResearchClient(output_dir=tmp_path).research_doctor()
+
+    assert result == {"kind": "research_doctor", "ok": True}
+    assert calls == [tmp_path]
+
+
+def test_research_client_rebuild_indexes_delegates_to_maintenance(tmp_path, monkeypatch):
+    calls = []
+
+    def rebuild_indexes(root):
+        calls.append(root)
+        return {"kind": "research_rebuild_indexes", "rebuilt": ["documents"]}
+
+    monkeypatch.setattr(client.maintenance, "rebuild_indexes", rebuild_indexes)
+
+    result = client.ResearchClient(output_dir=tmp_path).rebuild_research_indexes()
+
+    assert result == {"kind": "research_rebuild_indexes", "rebuilt": ["documents"]}
+    assert calls == [tmp_path]
+
+
+def test_research_client_cleanup_delegates_to_maintenance(tmp_path, monkeypatch):
+    calls = []
+
+    def cleanup(root, *, dry_run=True):
+        calls.append((root, dry_run))
+        return {"kind": "research_cleanup", "dry_run": dry_run}
+
+    monkeypatch.setattr(client.maintenance, "cleanup", cleanup)
+
+    rc = client.ResearchClient(output_dir=tmp_path)
+
+    assert rc.cleanup_research() == {"kind": "research_cleanup", "dry_run": True}
+    assert rc.cleanup_research(dry_run=False) == {
+        "kind": "research_cleanup",
+        "dry_run": False,
+    }
+    assert calls == [(tmp_path, True), (tmp_path, False)]
+
+
 def test_research_client_list_research_index_propagates_navigation_error(tmp_path, monkeypatch):
     def failing_list_index(*args, **kwargs):
         raise UsageError("index helper failure")
