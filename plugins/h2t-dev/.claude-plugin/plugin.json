@@ -1,7 +1,7 @@
 {
   "name": "h2t-dev",
-  "description": "H2T Dev — development workflow tools: pre-merge-check, github-issues, gh-memory, milestone-closure",
-  "version": "1.0.7",
+  "description": "H2T Dev — development lifecycle pipeline: scaffold-project, github-issues, docs-lint, pre-merge-check, milestone-closure, project-audit",
+  "version": "1.0.8",
   "author": {
     "name": "lichtpfad"
   }
