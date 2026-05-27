@@ -92,8 +92,8 @@ sessions are not excluded, but their v1 contract is narrower:
 - `handoff` can write bounded local continuity;
 - project/task closure may not have a GitHub source of truth;
 - docs and milestone gates are skipped unless a repo/docs root exists;
-- machine reports must mark missing GitHub/docs state as `not_applicable`, not
-  `pass`.
+- machine reports must mark missing GitHub/docs state as `skipped_not_applicable`,
+  not `pass`.
 
 This prevents repo-centric code paths from silently misrepresenting non-code
 work.
@@ -145,7 +145,15 @@ For example:
   "repo_root": "C:/work/rejuve",
   "status": "warn",
   "summary": "9 orphan docs, 6 naming violations, README out of date",
-  "findings": [],
+  "findings": [
+    {
+      "type": "orphan",
+      "severity": "warn",
+      "path": "docs/old-design.md",
+      "message": "Not reachable from any README/index",
+      "safe_fix": null
+    }
+  ],
   "safe_next_action": "Run docs-lint plan before any rename/move",
   "evidence": {
     "git_head": "abc123",
@@ -669,6 +677,46 @@ Partial execution:
   model is dry-run, explicit apply, operation report, and idempotent recompute
   from canonical files.
 
+### fix-index Bootstrap
+
+When `fix-index` runs on a README or index file with no
+`<!-- h2t-index-start -->` / `<!-- h2t-index-end -->` markers:
+
+1. Compute the generated navigation section.
+2. Report the planned change as dry-run output without writing.
+3. On explicit `--apply`: append the generated section with markers at end of
+   file.
+4. Write an operation report with before/after state.
+
+First run is always dry-run unless `--apply` is given.
+
+### Backward Compatibility
+
+CLI flags from the legacy API are supported with a deprecation warning to
+stderr:
+
+| Legacy flag | v1 equivalent | Deprecation note |
+|-------------|---------------|------------------|
+| `--fix` | `fix-safe` | removed in v2 |
+| `--fix-frontmatter` | `fix-safe --only=frontmatter` | removed in v2 |
+
+Deprecation warnings must go to stderr only and must not affect structured
+JSON output.
+
+### Configuration Discovery
+
+`docs-lint` reads per-repo configuration from `.claude/rules/docs-lint.yaml`
+if it exists. If absent, built-in defaults apply.
+
+Configurable per-repo:
+
+- docs root (default: `docs/`)
+- required directories
+- naming convention exceptions
+- per-repo template overrides
+
+Configuration must not override core safety boundaries or gate policies.
+
 ### 7. Pre-Merge
 
 `pre-merge-check` is the PR readiness gate.
@@ -834,6 +882,24 @@ Recommended v1 hooks:
 
 Hook output must be short. Long reports should be written to files and linked.
 
+### Hook Timeout and Cache
+
+Hook-invoked `docs-lint` runs must not block the user session.
+
+Timeout:
+
+- Default: 8 seconds.
+- Override: `H2T_LINT_HOOK_TIMEOUT` environment variable (integer seconds).
+- On timeout: write `status: "error", message: "hook timeout"` to the report
+  and exit 0 to keep the hook non-blocking.
+
+Cache:
+
+- Cache file: `.h2t-lint-cache.json` at repo root.
+- Cache key per file: mtime of the `.md` file + current git HEAD hash.
+- Invalidate when any tracked `.md` mtime or git HEAD changes.
+- Cache applies only to hook invocations; direct CLI runs always recompute.
+
 ## Data Ownership
 
 | Data | v1 owner | Notes |
@@ -874,6 +940,18 @@ Recovery rules:
 - operation reports are evidence, not the only source of recovery truth;
 - incomplete generated files should be detected as findings on the next audit;
 - destructive operations should be last in any multi-step command.
+
+### Concurrency Policy
+
+Multiple commands or hooks may run concurrently against the same repo.
+
+v1 policy:
+
+- All writes use atomic tmp-file + `os.rename()` pattern.
+- Last-writer-wins is acceptable for report and cache files in v1.
+- No distributed lock is required for local-only commands.
+- If `os.rename()` fails, the command reports an error and exits without
+  partial writes.
 
 ## Acceptance Tests
 
