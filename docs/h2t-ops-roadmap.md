@@ -1,7 +1,7 @@
 # H2T-SKILLS Roadmap
 
 **Status:** Post-closure maintenance and backlog roadmap
-**Date:** 2026-05-26
+**Date:** 2026-05-27
 **Owner:** h2t-skills
 **Milestone tag:** `milestone/legacy-h2t-retired-2026-05-21`
 
@@ -87,10 +87,12 @@ The current open work is feature/product backlog, not migration/closure.
 
 | Milestone | Issue(s) | Workstream | Notes |
 | --- | --- | --- | --- |
-| skills-release | #71, #185, #186 | Skills release follow-up | `#183` is complete; remaining open work is research ergonomics plus session-start/handoff and gather/writer packaging |
+| skills-release | #195, #190, #71 | Skills release gate | `#183`, `#185`, `#186`, and research follow-ups `#192`-`#194` are complete; remaining release work is docs-lint enforcement, pre-release audit, and closing/splitting the residual #71 wording |
+| lifecycle-os | #196, #197 | Project lifecycle consolidation | Planned after #195; not required before the immediate skills-release gate unless #190 finds it blocks packaging |
 | graphs-pos | #21, #54, #70, #72 | Graphs / POS backlog | Deferred graphs, evals, and POS integration stream |
 | creative-p2 | #83, #88, #89, #90, #91, #92, #119 | Creative recovery backlog | Separate creative/product stream |
 | M6: h2t-arch | #5 | Diagram-node docs enforcement | Legacy arch stream still open |
+| Backlog | #208 | Drive MD to DOCX upload | P3 follow-up; complements docs-tab write, not a release blocker |
 
 The backlog is now milestone-driven again:
 
@@ -129,6 +131,21 @@ Issues #182, #99, #105 closed. Commits: `00f5bff` (exa), `6f32959` (youtube), `5
 | `research fetch --url https://youtube.com/watch?v=dQw4w9WgXcQ` | OK | `provider_used: youtube_transcript`, 61 segments, en |
 | `research visual-ocr --url https://alltd.org/pop-starter-pack-touchdesigner/` | OK | screenshot captured, OCR medium confidence; encoding fix c773e3a applied |
 | `research resolve-author --name "Acidbourbon" --keywords "TouchDesigner"` | OK | `confidence: likely`, found via alltd.org/uploader/acidbourbon/ |
+
+### Research Ergonomics Status (2026-05-27)
+
+Issue #71 has been split into concrete follow-ups. The core research substrate
+is now local, JSON-first, and navigable by agents.
+
+| Issue(s) | Surface | Current state |
+| --- | --- | --- |
+| #192 | local artifact navigation surface | Closed; `index`, `show`, and `resolve` commands landed with smoke evidence |
+| #193 | retention cleanup and index doctor | Closed; `doctor`, `rebuild-indexes`, and dry-run `cleanup` landed with smoke evidence |
+| #194 | provider/key readiness routing | Closed; `providers` and `route` commands landed; Exa-backed commands fail before side effects when `EXA_API_KEY` is missing |
+| #71 | original umbrella | Still open only because old wording mentions `--no-json` and literal project-specific multi-key routing; decide whether to close as superseded or split a narrow follow-up |
+
+Non-release research backlog remains in `graphs-pos`: #70 for eval/fork and
+h2t-evals integration, and #72 for broader provider/role-boundary design.
 
 ## Critical Path Details
 
@@ -343,7 +360,7 @@ Recommended triage:
 | Secrets/setup | #107, #112, #94, #109, #110, #13 | Classified as setup/Mac follow-up; avoid piecemeal drift |
 | Calendar follow-up | #82, #145 | Closed; #82 fixed in `6631f57`, #145 fixed in `0acb44b` |
 | Notion follow-up | #146, #81 | Closed; fixed in `4c952d1` |
-| Research backlog | #71, #72, #70, #101 | `#99/#105/#182` closed 2026-05-26 (Research P2). Remaining research work is now split between `skills-release` (`#71`) and `graphs-pos` / broader product backlog (`#70/#72/#101`) |
+| Research backlog | #71, #72, #70 | `#99/#105/#182` closed 2026-05-26; `#192/#193/#194` closed 2026-05-27. #71 needs final close/split decision; #70/#72 stay in `graphs-pos` |
 | Provider backlog | none | Connector/provider closure sweep is complete. The former provider items #169, #170, #172, #173, #174, #176, #177, #179, #180, and #181 are now closed; `#176` closed as implementation-complete with deferred RSVP live proof |
 | Deploy/operator backlog | #183 | Closed 2026-05-26. `h2t-ops deploy` landed with live `list`, `--dry-run`, and `status` proof plus `h2t-ops:deploy` skill instructions |
 | Creative backlog | #119, #83, #88, #89, #90, #91, #92 | Move to creative roadmap; not h2t-ops closure |
@@ -487,19 +504,18 @@ Routine maintenance, not active closure blockers:
    complete: `docs/reports/2026-05-22-h2t-ops-shippable-handoff.md`.
 2. Treat connector migration and closure as done; do not reopen it via piecemeal
    backlog items.
-3. Sweep remaining issues into explicit streams: provider backlog, research backlog,
-   creative backlog, or moved/stale-closed.
-4. Run the recent-closure validation gate before broad P2 work so write/read
-   evidence standards stay consistent.
-5. Pick one next product stream explicitly instead of mixing them:
-   provider capability gaps, research workflow/product backlog, creative recovery,
-   setup/onboarding UX, or POS-side workflow contracts.
+3. Finish the `skills-release` gate in this order: #195 docs-lint enforcement,
+   #190 pre-release audit, then close or split the residual #71 umbrella.
+4. Keep #196/#197 as lifecycle consolidation after #195 unless the pre-release
+   audit proves they block packaging.
+5. Keep research product work (#70/#72), creative recovery, and POS-side workflow
+   contracts out of the immediate release gate.
 6. Keep roadmap language honest: open feature gaps are not “migration blockers”
    now that `h2t-ops` is already shippable.
 
 ## Closure Forecast
 
-Date: 2026-05-25
+Date: 2026-05-27
 
 Calibration note: the previous forecast assumed Telegram, Research/fetch,
 Daily Brief, legacy h2t retirement, profiles, cleanup, and broad Calendar/Notion
@@ -508,7 +524,9 @@ features were still ahead. Since then, Telegram, Research/fetch, Drive
 connector freeze, Notion #81/#146, and Calendar #145 are complete.
 
 `h2t-ops` connector work is no longer the active migration track. #153, #161,
-#148, and #85 are closed; connector skill surface and post-shippable hygiene are complete.
+#148, and #85 are closed; connector skill surface and post-shippable hygiene are
+complete. The remaining release track is a skills-pack quality gate, not
+connector migration.
 
 | Remaining block | Optimistic | Realistic | Main risk |
 | --- | ---: | ---: | --- |
@@ -516,11 +534,14 @@ connector freeze, Notion #81/#146, and Calendar #145 are complete.
 | #161 connector skill consolidation | Done | Done | PASS evidence captured in issue #166 and docs/reports/2026-05-23... |
 | #148 security/dev hygiene | Done | Done | Routine maintenance only |
 | #85 CI/platform hygiene | Done | Done | Routine maintenance only |
-| Issue sweep / reclassification | 0.5-1 day | 1 day | Old issues that need careful "move vs close" decisions |
+| #195 docs-lint enhancement | 0.5 day | 1 day | Avoid broad docs churn; keep checks scoped and testable |
+| #190 pre-release audit | 0.5 day | 1 day | Legacy skill comparison may reveal real losses |
+| #71 final close/split | 0.25 day | 0.5 day | Decide whether literal project multi-key routing is release-blocking |
 
-Remaining estimate to maintenance/closure mode:
+Remaining estimate to skills-release readiness:
 
-- achieved; repo is already in maintenance/closure mode.
+- optimistic: 1-1.5 days;
+- realistic: 2-2.5 days.
 
 This excludes research product backlog, creative recovery, setup wizard/Mac
 onboarding, and POS-side workflow contracts. Those remain explicit future
