@@ -9,9 +9,23 @@ from pathlib import Path
 import pytest
 
 from h2t_ops import cli
-from h2t_ops.connectors.research import commands, store
+from h2t_ops.connectors.research import commands, provider_routing, store
 from h2t_ops.core.errors import ProviderError, UsageError
 from h2t_ops.core.registry import discover
+
+
+def _subparser(parser: argparse.ArgumentParser, name: str) -> argparse.ArgumentParser:
+    for action in parser._actions:
+        if isinstance(action, argparse._SubParsersAction):
+            return action.choices[name]
+    raise AssertionError(f"missing subparser {name!r}")
+
+
+def _option_choices(parser: argparse.ArgumentParser, option: str) -> set[str]:
+    for action in parser._actions:
+        if option in action.option_strings:
+            return set(action.choices)
+    raise AssertionError(f"missing option {option!r}")
 
 
 def _remove_research_provider_modules() -> None:
@@ -80,6 +94,8 @@ def test_parser_registration_for_research_subcommands():
 
 def test_parser_registration_for_research_provider_routing_commands():
     parser = cli.build_parser()
+    research_parser = _subparser(parser, "research")
+    expected_capabilities = set(provider_routing.CAPABILITIES)
 
     providers = parser.parse_args(
         [
@@ -109,6 +125,12 @@ def test_parser_registration_for_research_provider_routing_commands():
     assert route.capability == "search"
     assert route.provider == "exa"
     assert route.as_json is True
+    assert _option_choices(_subparser(research_parser, "providers"), "--capability") == (
+        expected_capabilities
+    )
+    assert _option_choices(_subparser(research_parser, "route"), "--capability") == (
+        expected_capabilities
+    )
 
 
 def test_parser_registration_for_research_visual_ocr():
