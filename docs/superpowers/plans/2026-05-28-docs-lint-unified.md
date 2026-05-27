@@ -21,11 +21,14 @@ milestone: "lifecycle-os"
 
 **New files:**
 - `plugins/h2t-dev/lib/docs/reporter.py` — `h2t_lifecycle_report/v0.1` envelope builder
+- `plugins/h2t-dev/lib/docs/fix_plan.py` — converts findings → `h2t_docs_fix_plan/v0.1` action list
+- `plugins/h2t-dev/lib/docs/apply_report.py` — writes `h2t_docs_fix_apply_report/v0.1` after fix runs
 - `plugins/h2t-dev/lib/docs/orphan.py` — BFS orphan detection from docs/README.md
 - `plugins/h2t-dev/lib/docs/naming.py` — extended naming checks across all docs/
 - `plugins/h2t-dev/lib/docs/config.py` — `.claude/rules/docs-lint.yaml` discovery
 - `plugins/h2t-dev/lib/docs/index_builder.py` — marker-based index with bootstrap
 - `tests/docs/test_reporter.py`
+- `tests/docs/test_fix_plan.py`
 - `tests/docs/test_orphan.py`
 - `tests/docs/test_naming_extended.py`
 - `tests/docs/test_config.py`
@@ -208,6 +211,332 @@ Expected: `7 passed`
 ```
 git -C C:/dev/h2t-skills/.claude/worktrees/lifecycle-skill-cleanup add plugins/h2t-dev/lib/docs/reporter.py tests/docs/test_reporter.py
 git -C C:/dev/h2t-skills/.claude/worktrees/lifecycle-skill-cleanup commit -m "feat(docs-lint): add reporter.py — h2t_lifecycle_report/v0.1 envelope builder"
+```
+
+---
+
+### Task 1.5: fix_plan.py + apply_report.py — execution tracking schemas
+
+Converts findings into a deterministic, stable action list (`h2t_docs_fix_plan/v0.1`) and records
+what was applied, skipped, failed, or waived (`h2t_docs_fix_apply_report/v0.1`).
+This is the audit trail layer that makes fix runs reproducible and comparable across runs.
+
+**Files:**
+- Create: `plugins/h2t-dev/lib/docs/fix_plan.py`
+- Create: `plugins/h2t-dev/lib/docs/apply_report.py`
+- Create: `tests/docs/test_fix_plan.py`
+
+- [ ] **Step 1: Write the failing tests**
+
+```python
+# tests/docs/test_fix_plan.py
+import sys
+from pathlib import Path
+
+_LIB = Path(__file__).parents[2] / "plugins/h2t-dev/lib"
+sys.path.insert(0, str(_LIB))
+
+from docs.fix_plan import build_fix_plan, _action_id, SCHEMA
+from docs.reporter import finding
+
+
+def test_build_fix_plan_schema():
+    plan = build_fix_plan(repo_root="/tmp/repo", findings=[])
+    assert plan["schema"] == SCHEMA
+    assert plan["schema_version"] == "0.1"
+    assert "plan_id" in plan
+    assert "generated_at" in plan
+    assert plan["generated_at"].endswith("Z")
+
+
+def test_action_id_is_stable():
+    """Same inputs → same action_id across calls."""
+    id1 = _action_id("add_frontmatter", "docs/foo.md")
+    id2 = _action_id("add_frontmatter", "docs/foo.md")
+    assert id1 == id2
+    assert id1.startswith("docs-action:")
+
+
+def test_action_id_differs_by_type():
+    id1 = _action_id("add_frontmatter", "docs/foo.md")
+    id2 = _action_id("rename_file", "docs/foo.md")
+    assert id1 != id2
+
+
+def test_orphan_finding_maps_to_add_to_index():
+    f = finding("orphan", "warn", "docs/old.md", "not reachable")
+    plan = build_fix_plan(repo_root="/tmp/repo", findings=[f])
+    assert len(plan["actions"]) == 1
+    action = plan["actions"][0]
+    assert action["type"] == "add_to_index"
+    assert action["risk"] == "review"
+    assert action["requires_confirmation"] is True
+    assert action["path"] == "docs/old.md"
+
+
+def test_naming_finding_maps_to_rename_file():
+    f = finding("naming", "warn", "docs/MyDoc.md", "not kebab-case",
+                safe_fix="rename to 'mydoc.md'")
+    plan = build_fix_plan(repo_root="/tmp/repo", findings=[f])
+    assert len(plan["actions"]) == 1
+    action = plan["actions"][0]
+    assert action["type"] == "rename_file"
+    assert action["risk"] == "review"
+    assert action["target_path"] == "mydoc.md"
+
+
+def test_missing_dir_finding_maps_to_create_dir():
+    f = finding("structure", "warn", "", "missing dir: docs/adr/")
+    plan = build_fix_plan(repo_root="/tmp/repo", findings=[f])
+    safe_actions = [a for a in plan["actions"] if a["type"] == "create_dir"]
+    assert len(safe_actions) == 1
+    assert safe_actions[0]["risk"] == "safe"
+    assert safe_actions[0]["requires_confirmation"] is False
+
+
+def test_frontmatter_finding_maps_to_add_frontmatter():
+    f = finding("frontmatter", "info", "docs/foo.md", "missing title")
+    plan = build_fix_plan(repo_root="/tmp/repo", findings=[f])
+    action = plan["actions"][0]
+    assert action["type"] == "add_frontmatter"
+    assert action["risk"] == "safe"
+    assert action["requires_confirmation"] is False
+
+
+def test_plan_id_is_deterministic_for_same_findings():
+    """Same findings → same plan_id (stable across runs)."""
+    findings = [finding("orphan", "warn", "docs/x.md", "msg")]
+    plan1 = build_fix_plan(repo_root="/tmp/repo", findings=findings)
+    plan2 = build_fix_plan(repo_root="/tmp/repo", findings=findings)
+    assert plan1["plan_id"] == plan2["plan_id"]
+
+
+def test_empty_findings_empty_actions():
+    plan = build_fix_plan(repo_root="/tmp/repo", findings=[])
+    assert plan["actions"] == []
+
+
+# --- apply_report ---
+
+from docs.apply_report import build_apply_report, action_result, file_hash, APPLY_SCHEMA
+
+
+def test_apply_report_schema():
+    report = build_apply_report(plan_id="p1", run_id="r1", actions=[])
+    assert report["schema"] == APPLY_SCHEMA
+    assert report["schema_version"] == "0.1"
+    assert "applied_at" in report
+
+
+def test_action_result_applied():
+    r = action_result("docs-action:abc", "applied", "created dir")
+    assert r["status"] == "applied"
+    assert r["action_id"] == "docs-action:abc"
+
+
+def test_action_result_waived():
+    r = action_result("docs-action:abc", "waived", "user declined rename")
+    assert r["status"] == "waived"
+
+
+def test_file_hash_empty_string_for_missing_file(tmp_path):
+    assert file_hash(tmp_path / "nonexistent.md") == ""
+
+
+def test_file_hash_stable(tmp_path):
+    f = tmp_path / "test.md"
+    f.write_text("# Hello")
+    h1 = file_hash(f)
+    h2 = file_hash(f)
+    assert h1 == h2
+    assert len(h1) == 16
+```
+
+- [ ] **Step 2: Run tests — verify they fail**
+
+```
+C:/dev/h2t-skills/.venv/Scripts/pytest tests/docs/test_fix_plan.py -v
+```
+
+Expected: `ModuleNotFoundError: No module named 'docs.fix_plan'`
+
+- [ ] **Step 3: Implement fix_plan.py**
+
+```python
+# plugins/h2t-dev/lib/docs/fix_plan.py
+"""Converts doc findings into h2t_docs_fix_plan/v0.1 action list."""
+from __future__ import annotations
+import datetime
+import hashlib
+
+SCHEMA = "h2t_docs_fix_plan/v0.1"
+
+
+def _action_id(action_type: str, path: str, target_path: str | None = None) -> str:
+    """Deterministic stable id from (type, path, target_path)."""
+    key = f"{action_type}:{path}:{target_path or ''}"
+    h = hashlib.sha256(key.encode()).hexdigest()[:16]
+    return f"docs-action:{h}"
+
+
+def _extract_rename_target(safe_fix: str) -> str | None:
+    """Extract target filename from safe_fix string like \"rename to 'foo.md'\"."""
+    import re
+    m = re.search(r"rename to '([^']+)'", safe_fix or "")
+    return m.group(1) if m else None
+
+
+def _findings_to_actions(findings: list[dict]) -> list[dict]:
+    actions = []
+    for f in findings:
+        t = f.get("type", "")
+        path = f.get("path", "")
+        msg = f.get("message", "")
+
+        if t == "orphan":
+            actions.append({
+                "action_id": _action_id("add_to_index", path),
+                "type": "add_to_index",
+                "status": "proposed",
+                "risk": "review",
+                "path": path,
+                "target_path": None,
+                "reason": msg,
+                "requires_confirmation": True,
+            })
+
+        elif t == "naming":
+            target = _extract_rename_target(f.get("safe_fix", ""))
+            actions.append({
+                "action_id": _action_id("rename_file", path, target),
+                "type": "rename_file",
+                "status": "proposed",
+                "risk": "review",
+                "path": path,
+                "target_path": target,
+                "reason": msg,
+                "requires_confirmation": True,
+            })
+
+        elif t == "structure":
+            if "missing dir:" in msg:
+                dir_name = msg.split("missing dir:")[-1].strip().rstrip("/")
+                actions.append({
+                    "action_id": _action_id("create_dir", dir_name),
+                    "type": "create_dir",
+                    "status": "proposed",
+                    "risk": "safe",
+                    "path": dir_name,
+                    "target_path": None,
+                    "reason": msg,
+                    "requires_confirmation": False,
+                })
+
+        elif t == "frontmatter":
+            actions.append({
+                "action_id": _action_id("add_frontmatter", path),
+                "type": "add_frontmatter",
+                "status": "proposed",
+                "risk": "safe",
+                "path": path,
+                "target_path": None,
+                "reason": msg,
+                "requires_confirmation": False,
+            })
+
+    return actions
+
+
+def build_fix_plan(
+    *,
+    repo_root: str,
+    findings: list[dict],
+    source_report_id: str = "",
+) -> dict:
+    """Build h2t_docs_fix_plan/v0.1 from a findings list."""
+    actions = _findings_to_actions(findings)
+    # plan_id is deterministic: sha256 of (repo_root, sorted action_ids)
+    id_key = repo_root + "|" + "|".join(
+        sorted(a["action_id"] for a in actions)
+    )
+    plan_id = "docs-fix-plan:" + hashlib.sha256(id_key.encode()).hexdigest()[:16]
+    return {
+        "schema": SCHEMA,
+        "schema_version": "0.1",
+        "plan_id": plan_id,
+        "repo_root": repo_root,
+        "generated_at": datetime.datetime.utcnow().isoformat() + "Z",
+        "source_report_id": source_report_id,
+        "actions": actions,
+    }
+```
+
+- [ ] **Step 4: Implement apply_report.py**
+
+```python
+# plugins/h2t-dev/lib/docs/apply_report.py
+"""Builds h2t_docs_fix_apply_report/v0.1 — audit trail of a fix run."""
+from __future__ import annotations
+import datetime
+import hashlib
+from pathlib import Path
+
+APPLY_SCHEMA = "h2t_docs_fix_apply_report/v0.1"
+
+
+def action_result(
+    action_id: str,
+    status: str,      # applied | skipped | failed | waived
+    message: str = "",
+    before_hash: str = "",
+    after_hash: str = "",
+) -> dict:
+    return {
+        "action_id": action_id,
+        "status": status,
+        "message": message,
+        "before_hash": before_hash,
+        "after_hash": after_hash,
+    }
+
+
+def file_hash(path: Path | str) -> str:
+    """SHA256 of file content (first 16 hex chars), empty string if absent."""
+    p = Path(path)
+    if not p.exists():
+        return ""
+    return hashlib.sha256(p.read_bytes()).hexdigest()[:16]
+
+
+def build_apply_report(
+    *,
+    plan_id: str,
+    run_id: str,
+    actions: list[dict],
+) -> dict:
+    return {
+        "schema": APPLY_SCHEMA,
+        "schema_version": "0.1",
+        "plan_id": plan_id,
+        "run_id": run_id,
+        "applied_at": datetime.datetime.utcnow().isoformat() + "Z",
+        "actions": actions,
+    }
+```
+
+- [ ] **Step 5: Run tests — verify they pass**
+
+```
+C:/dev/h2t-skills/.venv/Scripts/pytest tests/docs/test_fix_plan.py -v
+```
+
+Expected: `15 passed`
+
+- [ ] **Step 6: Commit**
+
+```
+git -C C:/dev/h2t-skills/.claude/worktrees/lifecycle-skill-cleanup add plugins/h2t-dev/lib/docs/fix_plan.py plugins/h2t-dev/lib/docs/apply_report.py tests/docs/test_fix_plan.py
+git -C C:/dev/h2t-skills/.claude/worktrees/lifecycle-skill-cleanup commit -m "feat(docs-lint): add fix_plan.py + apply_report.py — execution tracking schemas v0.1"
 ```
 
 ---
@@ -1975,6 +2304,263 @@ git -C C:/dev/h2t-skills/.claude/worktrees/lifecycle-skill-cleanup commit -m "fe
 
 ---
 
+### Task 6b: lint.py execution tracking — plan --json, fix-safe --plan, fix-index --plan
+
+Adds the execution tracking layer: `plan --json` outputs a deterministic action list, `fix-safe --plan FILE` applies it and writes an apply report, `fix-index --plan FILE --apply` does the same for index actions.
+
+**Files:**
+- Modify: `plugins/h2t-dev/skills/docs-lint/scripts/lint.py`
+- Create: `tests/docs/test_execution_tracking.py`
+
+- [ ] **Step 1: Write failing tests**
+
+```python
+# tests/docs/test_execution_tracking.py
+import json, sys
+from pathlib import Path
+import subprocess
+
+_LINT = Path(__file__).parents[2] / "plugins/h2t-dev/skills/docs-lint/scripts/lint.py"
+_PYTHON = Path(__file__).parents[2] / ".venv/Scripts/python.exe"
+
+
+def _run(args, cwd=None):
+    r = subprocess.run(
+        [str(_PYTHON), str(_LINT)] + args,
+        capture_output=True, text=True, cwd=cwd,
+    )
+    return r
+
+
+def test_plan_json_schema(tmp_path):
+    """plan --json emits h2t_docs_fix_plan/v0.1 envelope."""
+    docs = tmp_path / "docs" / "superpowers" / "specs"
+    docs.mkdir(parents=True)
+    (docs / "no-date-spec.md").write_text("---\ntitle: x\n---\n# x")
+    r = _run(["plan", "--root", str(tmp_path), "--json"])
+    assert r.returncode == 0, r.stderr
+    obj = json.loads(r.stdout)
+    assert obj["schema"] == "h2t_docs_fix_plan/v0.1"
+    assert isinstance(obj["actions"], list)
+    assert "plan_id" in obj
+
+
+def test_plan_json_action_ids_stable(tmp_path):
+    """Identical repo → same plan_id on repeated runs."""
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "docs" / "stray.md").write_text("# orphan")
+    r1 = _run(["plan", "--root", str(tmp_path), "--json"])
+    r2 = _run(["plan", "--root", str(tmp_path), "--json"])
+    assert json.loads(r1.stdout)["plan_id"] == json.loads(r2.stdout)["plan_id"]
+
+
+def test_fix_safe_plan_writes_apply_report(tmp_path):
+    """fix-safe --plan FILE writes h2t_docs_fix_apply_report/v0.1 to .h2t/."""
+    # Create a file with missing frontmatter — safe fix
+    (tmp_path / "docs" / "superpowers" / "specs").mkdir(parents=True)
+    f = tmp_path / "docs" / "superpowers" / "specs" / "2026-05-28-my-spec.md"
+    f.write_text("# No frontmatter here\n")
+
+    # Generate plan
+    plan_r = _run(["plan", "--root", str(tmp_path), "--json"])
+    plan_path = tmp_path / "plan.json"
+    plan_path.write_text(plan_r.stdout)
+
+    # Apply safe actions
+    r = _run(["fix-safe", "--root", str(tmp_path), "--plan", str(plan_path)])
+    assert r.returncode == 0, r.stderr
+
+    # Apply report must exist
+    reports = list((tmp_path / ".h2t").glob("lint-apply-*.json"))
+    assert len(reports) == 1
+    obj = json.loads(reports[0].read_text())
+    assert obj["schema"] == "h2t_docs_fix_apply_report/v0.1"
+    assert "plan_id" in obj
+    assert isinstance(obj["actions"], list)
+
+
+def test_fix_safe_plan_action_status_fields(tmp_path):
+    """Every action in apply report has status, action_id, message."""
+    (tmp_path / "docs" / "superpowers" / "specs").mkdir(parents=True)
+    (tmp_path / "docs" / "superpowers" / "specs" / "2026-05-28-x.md").write_text("# x")
+    plan_path = tmp_path / "plan.json"
+    plan_path.write_text(_run(["plan", "--root", str(tmp_path), "--json"]).stdout)
+    _run(["fix-safe", "--root", str(tmp_path), "--plan", str(plan_path)])
+    report = json.loads(list((tmp_path / ".h2t").glob("lint-apply-*.json"))[0].read_text())
+    for action in report["actions"]:
+        assert "action_id" in action
+        assert action["status"] in {"applied", "skipped", "failed", "waived"}
+        assert "message" in action
+
+
+def test_fix_index_plan_apply_writes_report(tmp_path):
+    """fix-index --plan FILE --apply writes apply report."""
+    readme = tmp_path / "docs" / "README.md"
+    (tmp_path / "docs").mkdir()
+    readme.write_text("# Docs\n")
+    (tmp_path / "docs" / "superpowers").mkdir()
+    plan_path = tmp_path / "plan.json"
+    plan_path.write_text(_run(["plan", "--root", str(tmp_path), "--json"]).stdout)
+
+    r = _run(["fix-index", "--root", str(tmp_path), "--plan", str(plan_path), "--apply"])
+    assert r.returncode == 0, r.stderr
+    reports = list((tmp_path / ".h2t").glob("lint-apply-*.json"))
+    assert len(reports) == 1
+    assert json.loads(reports[0].read_text())["schema"] == "h2t_docs_fix_apply_report/v0.1"
+
+
+def test_waived_actions_appear_in_report(tmp_path):
+    """Actions skipped due to requires_confirmation appear as waived, not missing."""
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "docs" / "orphan.md").write_text("# Orphan\n")
+    plan_path = tmp_path / "plan.json"
+    plan_path.write_text(_run(["plan", "--root", str(tmp_path), "--json"]).stdout)
+    _run(["fix-safe", "--root", str(tmp_path), "--plan", str(plan_path)])
+    report = json.loads(list((tmp_path / ".h2t").glob("lint-apply-*.json"))[0].read_text())
+    statuses = {a["status"] for a in report["actions"]}
+    # Orphan action is review-risk → waived by fix-safe
+    assert "waived" in statuses
+```
+
+- [ ] **Step 2: Run tests to confirm they fail**
+
+```
+C:/dev/h2t-skills/.venv/Scripts/pytest tests/docs/test_execution_tracking.py -v
+```
+
+Expected: ImportError or AttributeError (plan/fix-safe/fix-index sub-commands not yet wired).
+
+- [ ] **Step 3: Wire `plan --json` into lint.py**
+
+In `cmd_plan(args)` (or a new `cmd_plan` function), after collecting all findings:
+
+```python
+from docs.fix_plan import build_fix_plan
+
+def cmd_plan(args):
+    repo_root = _resolve_root(args)
+    findings = _collect_all_findings(repo_root)
+    if args.json:
+        plan = build_fix_plan(repo_root=repo_root, findings=findings)
+        print(json.dumps(plan, indent=2))
+        return
+    # ... existing human-readable plan output ...
+```
+
+Add `--json` flag to `plan` sub-parser:
+
+```python
+p_plan = sub.add_parser("plan", help="Show prioritised fix plan")
+p_plan.add_argument("--root", default=None)
+p_plan.add_argument("--json", action="store_true")
+```
+
+- [ ] **Step 4: Wire `fix-safe --plan FILE` into lint.py**
+
+```python
+from docs.apply_report import build_apply_report, action_result, file_hash
+import time, os
+
+def cmd_fix_safe(args):
+    repo_root = _resolve_root(args)
+
+    if args.plan:
+        plan = json.loads(Path(args.plan).read_text())
+        results = []
+        for act in plan["actions"]:
+            if act["risk"] in {"review", "destructive"} or act.get("requires_confirmation"):
+                results.append(action_result(act["action_id"], "waived",
+                                             "skipped: requires_confirmation or risk > safe"))
+                continue
+            bh = file_hash(act.get("path", ""))
+            try:
+                _apply_safe_action(repo_root, act)
+                ah = file_hash(act.get("path", ""))
+                results.append(action_result(act["action_id"], "applied",
+                                             before_hash=bh, after_hash=ah))
+            except Exception as exc:
+                results.append(action_result(act["action_id"], "failed", str(exc),
+                                             before_hash=bh))
+        report = build_apply_report(plan_id=plan["plan_id"],
+                                    run_id=f"fix-safe-{int(time.time())}",
+                                    actions=results)
+        report_dir = repo_root / ".h2t"
+        report_dir.mkdir(exist_ok=True)
+        report_path = report_dir / f"lint-apply-{int(time.time())}.json"
+        report_path.write_text(json.dumps(report, indent=2))
+        print(f"Apply report: {report_path}")
+        return
+    # ... existing fix-safe logic (no plan) ...
+```
+
+Add `--plan` flag to `fix-safe` sub-parser:
+
+```python
+p_fix_safe = sub.add_parser("fix-safe", help="Apply safe fixes (frontmatter, dirs)")
+p_fix_safe.add_argument("--root", default=None)
+p_fix_safe.add_argument("--plan", default=None, metavar="FILE")
+```
+
+- [ ] **Step 5: Wire `fix-index --plan FILE --apply` into lint.py**
+
+```python
+def cmd_fix_index(args):
+    repo_root = _resolve_root(args)
+    if args.plan and args.apply:
+        plan = json.loads(Path(args.plan).read_text())
+        index_actions = [a for a in plan["actions"] if a["action_type"] == "add_to_index"]
+        results = []
+        for act in index_actions:
+            try:
+                _apply_index_action(repo_root, act)
+                results.append(action_result(act["action_id"], "applied"))
+            except Exception as exc:
+                results.append(action_result(act["action_id"], "failed", str(exc)))
+        report = build_apply_report(plan_id=plan["plan_id"],
+                                    run_id=f"fix-index-{int(time.time())}",
+                                    actions=results)
+        report_dir = repo_root / ".h2t"
+        report_dir.mkdir(exist_ok=True)
+        (report_dir / f"lint-apply-{int(time.time())}.json").write_text(
+            json.dumps(report, indent=2))
+        return
+    # ... existing dry-run / --apply without --plan logic ...
+```
+
+Add `--plan` flag to `fix-index` sub-parser:
+
+```python
+p_fix_index = sub.add_parser("fix-index", help="Rebuild docs/README.md index")
+p_fix_index.add_argument("--root", default=None)
+p_fix_index.add_argument("--apply", action="store_true")
+p_fix_index.add_argument("--plan", default=None, metavar="FILE")
+```
+
+- [ ] **Step 6: Run tests — all must pass**
+
+```
+C:/dev/h2t-skills/.venv/Scripts/pytest tests/docs/test_execution_tracking.py -v
+```
+
+Expected: all 6 tests pass.
+
+- [ ] **Step 7: Run full docs test suite — no regressions**
+
+```
+C:/dev/h2t-skills/.venv/Scripts/pytest tests/docs/ -v
+```
+
+Expected: all tests pass.
+
+- [ ] **Step 8: Commit**
+
+```
+git -C C:/dev/h2t-skills/.claude/worktrees/lifecycle-skill-cleanup add plugins/h2t-dev/skills/docs-lint/scripts/lint.py plugins/h2t-dev/lib/docs/fix_plan.py plugins/h2t-dev/lib/docs/apply_report.py tests/docs/test_execution_tracking.py
+git -C C:/dev/h2t-skills/.claude/worktrees/lifecycle-skill-cleanup commit -m "feat(docs-lint): execution tracking — plan --json, fix-safe --plan, fix-index --plan + apply reports"
+```
+
+---
+
 ### Task 7: Update SKILL.md to new contract
 
 **Files:**
@@ -2141,9 +2727,9 @@ git -C C:/dev/h2t-skills/.claude/worktrees/lifecycle-skill-cleanup commit -m "do
 
 ### Task 8: Dogfood acceptance on h2t-skills and rejuve
 
-Verify the new contract works on real repos. No writes — audit and doctor only.
+Verify the full execution tracking cycle works on real repos: doctor → plan → fix-safe → doctor (confirm resolution).
 
-**Files:** None created. Evidence written to stdout (review manually).
+**Files:** None created. Apply reports land in `<repo>/.h2t/lint-apply-*.json`.
 
 - [ ] **Step 1: Run full test suite — all tests must pass**
 
@@ -2153,17 +2739,49 @@ C:/dev/h2t-skills/.venv/Scripts/pytest tests/docs/ -v
 
 Expected: all tests pass. Fix any regressions before proceeding.
 
-- [ ] **Step 2: Run doctor --json on h2t-skills**
+- [ ] **Step 2: doctor --json baseline on h2t-skills worktree**
 
 ```
 C:/dev/h2t-skills/.venv/Scripts/python plugins/h2t-dev/skills/docs-lint/scripts/lint.py doctor --root C:/dev/h2t-skills/.claude/worktrees/lifecycle-skill-cleanup --json
 ```
 
-Expected: valid JSON with `"schema": "h2t_lifecycle_report/v0.1"`. Check that:
-- `findings` list has typed entries (`orphan`, `naming`, `structure`, `frontmatter`)
-- `status` is `"ok"`, `"warn"`, or `"fail"` (not a crash)
+Expected: valid JSON with `"schema": "h2t_lifecycle_report/v0.1"`. Note the `"report_id"` and count of findings. Save baseline findings count.
 
-- [ ] **Step 3: Run doctor --json on rejuve (outside C:/dev)**
+- [ ] **Step 3: plan --json → save to file**
+
+```
+C:/dev/h2t-skills/.venv/Scripts/python plugins/h2t-dev/skills/docs-lint/scripts/lint.py plan --root C:/dev/h2t-skills/.claude/worktrees/lifecycle-skill-cleanup --json > /tmp/h2t-lint-plan.json
+```
+
+Expected: JSON file with `"schema": "h2t_docs_fix_plan/v0.1"`, `"plan_id"` field, and `"actions"` list. Verify plan_id is non-empty. Actions should have `action_id`, `risk`, `requires_confirmation` fields.
+
+- [ ] **Step 4: fix-safe --plan → apply safe actions**
+
+```
+C:/dev/h2t-skills/.venv/Scripts/python plugins/h2t-dev/skills/docs-lint/scripts/lint.py fix-safe --root C:/dev/h2t-skills/.claude/worktrees/lifecycle-skill-cleanup --plan /tmp/h2t-lint-plan.json
+```
+
+Expected:
+- Exits 0
+- Prints apply report path (e.g. `.h2t/lint-apply-1234567890.json`)
+- Apply report has `"schema": "h2t_docs_fix_apply_report/v0.1"`
+- `"actions"` list has entries with status `applied`, `skipped`, or `waived`
+- Waived entries (requires_confirmation or risk > safe) must appear in the list — NOT silently dropped
+
+- [ ] **Step 5: doctor --json after fix — verify resolution**
+
+```
+C:/dev/h2t-skills/.venv/Scripts/python plugins/h2t-dev/skills/docs-lint/scripts/lint.py doctor --root C:/dev/h2t-skills/.claude/worktrees/lifecycle-skill-cleanup --json
+```
+
+Expected: findings count is equal to or less than baseline from Step 2. Specifically:
+- Findings that were addressed by `applied` actions should no longer appear
+- Findings for `waived` actions may still appear (by design — they need manual review)
+- No new finding types introduced by the fix run
+
+If findings count did not decrease despite applied actions: investigate — a fix may have been applied but the check logic doesn't re-read from disk. Fix the check function, not the test.
+
+- [ ] **Step 6: Run doctor --json on rejuve (outside C:/dev)**
 
 ```
 C:/dev/h2t-skills/.venv/Scripts/python plugins/h2t-dev/skills/docs-lint/scripts/lint.py doctor --root C:/work/rejuve --json
@@ -2175,7 +2793,7 @@ Expected:
 
 If `C:/work/rejuve` does not exist, run against a sibling repo at a non-DEV_ROOT path instead.
 
-- [ ] **Step 4: Run plan on rejuve (human-readable output)**
+- [ ] **Step 7: Run plan on rejuve (human-readable output)**
 
 ```
 C:/dev/h2t-skills/.venv/Scripts/python plugins/h2t-dev/skills/docs-lint/scripts/lint.py plan --root C:/work/rejuve
@@ -2183,7 +2801,7 @@ C:/dev/h2t-skills/.venv/Scripts/python plugins/h2t-dev/skills/docs-lint/scripts/
 
 Expected: shows orphan and naming sections first (not frontmatter first).
 
-- [ ] **Step 5: Run fix-index dry-run on h2t-skills worktree**
+- [ ] **Step 8: Run fix-index dry-run on h2t-skills worktree**
 
 ```
 C:/dev/h2t-skills/.venv/Scripts/python plugins/h2t-dev/skills/docs-lint/scripts/lint.py fix-index --root C:/dev/h2t-skills/.claude/worktrees/lifecycle-skill-cleanup
@@ -2191,7 +2809,7 @@ C:/dev/h2t-skills/.venv/Scripts/python plugins/h2t-dev/skills/docs-lint/scripts/
 
 Expected: shows operation (append or replace), does NOT write README.md.
 
-- [ ] **Step 6: Commit acceptance evidence note**
+- [ ] **Step 9: Commit acceptance evidence note**
 
 ```
 git -C C:/dev/h2t-skills/.claude/worktrees/lifecycle-skill-cleanup commit --allow-empty -m "test(docs-lint): dogfood acceptance complete on h2t-skills + rejuve — closes #240"
@@ -2202,13 +2820,15 @@ git -C C:/dev/h2t-skills/.claude/worktrees/lifecycle-skill-cleanup commit --allo
 ## Checklist Summary
 
 - [ ] Task 1: reporter.py + tests (7 tests pass)
+- [ ] Task 1.5: fix_plan.py + apply_report.py + tests (15 tests pass)
 - [ ] Task 2: orphan.py + tests (8 tests pass)
 - [ ] Task 3: naming.py + tests (11 tests pass)
 - [ ] Task 4: config.py + tests (5 tests pass)
 - [ ] Task 5: index_builder.py + tests (9 tests pass)
 - [ ] Task 6: lint.py rewrite + backward-compat tests (all docs/ tests pass)
+- [ ] Task 6b: execution tracking — plan --json, fix-safe --plan, fix-index --plan + apply reports (6 tests pass)
 - [ ] Task 7: SKILL.md updated to v2.0.0
-- [ ] Task 8: Dogfood — doctor --json on h2t-skills + rejuve, plan output navigation-first
+- [ ] Task 8: Dogfood — doctor→plan→fix-safe→doctor cycle on h2t-skills (resolution verified) + rejuve audit
 
 ## Deferred (not in #240 scope)
 
