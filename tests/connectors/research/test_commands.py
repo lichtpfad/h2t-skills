@@ -260,6 +260,118 @@ def test_parser_registration_for_research_maintenance_commands():
         parser.parse_args(["research", "cleanup", "--output-dir", "/tmp/research"])
 
 
+def _run_cli_main(argv: list[str], monkeypatch: pytest.MonkeyPatch) -> int:
+    monkeypatch.setattr(sys, "argv", ["h2t-ops", *argv])
+    with pytest.raises(SystemExit) as exited:
+        cli.main()
+    code = exited.value.code
+    return code if isinstance(code, int) else 1
+
+
+def test_research_doctor_cli_reports_stale_alias(tmp_path, capsys, monkeypatch):
+    root = tmp_path / "research"
+    store.upsert_alias_index(
+        root,
+        [
+            {
+                "alias_type": "url",
+                "alias_value": "https://example.com/missing",
+                "target_object_type": "document",
+                "target_id": "research-doc:missing",
+                "confidence": "high",
+            }
+        ],
+    )
+
+    code = _run_cli_main(
+        [
+            "research",
+            "doctor",
+            "--output-dir",
+            str(root),
+            "--json",
+        ],
+        monkeypatch,
+    )
+    payload = json.loads(capsys.readouterr().out)
+
+    assert code == 0
+    assert payload["ok"] is True
+    assert payload["result"]["kind"] == "research_doctor"
+    assert payload["result"]["status"] == "warning"
+    assert any(
+        finding["code"] == "alias_target_missing"
+        for finding in payload["result"]["findings"]
+    )
+
+
+def test_research_rebuild_indexes_cli_writes_documents_index(tmp_path, capsys, monkeypatch):
+    root = tmp_path / "research"
+    document = store.build_research_document(
+        canonical_url="https://example.com/document",
+        source_url="https://example.com/document",
+        provider="jina",
+        title="Example Document",
+        fetched_at="2026-05-27T10:00:00Z",
+        content_hash="document",
+        artifact_refs={
+            "metadata": "artifact.json",
+            "normalized_text": "sources.json",
+            "citation_bundle": None,
+            "markdown_mirror": "partial.md",
+        },
+        project_ids=["project:demo"],
+        thread_ids=[],
+        entity_ids=[],
+    )
+    store.write_object(root, "documents", document["document_id"], document)
+
+    code = _run_cli_main(
+        [
+            "research",
+            "rebuild-indexes",
+            "--output-dir",
+            str(root),
+            "--json",
+        ],
+        monkeypatch,
+    )
+    payload = json.loads(capsys.readouterr().out)
+    rows = json.loads(store.index_path(root, "documents").read_text(encoding="utf-8"))
+
+    assert code == 0
+    assert payload["ok"] is True
+    assert payload["result"]["counts"]["documents"] == 1
+    assert rows[0]["document_id"] == document["document_id"]
+
+
+def test_research_cleanup_cli_dry_run_reports_orphan_partial(tmp_path, capsys, monkeypatch):
+    root = tmp_path / "research"
+    root.mkdir()
+    orphan = root / "orphan.partial.md"
+    orphan.write_text("# Orphan\n", encoding="utf-8")
+
+    code = _run_cli_main(
+        [
+            "research",
+            "cleanup",
+            "--dry-run",
+            "--output-dir",
+            str(root),
+            "--json",
+        ],
+        monkeypatch,
+    )
+    payload = json.loads(capsys.readouterr().out)
+
+    assert code == 0
+    assert payload["ok"] is True
+    assert payload["result"]["kind"] == "research_cleanup"
+    assert payload["result"]["count"] == 1
+    assert payload["result"]["candidates"][0]["path"] == str(orphan)
+    assert orphan.exists()
+
+
 class FakeResearchClient:
     instances: list["FakeResearchClient"] = []
 
