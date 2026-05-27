@@ -139,6 +139,19 @@ def register(subparsers: Any) -> None:
     add_calendar_id(dp)
     add_fmt(dp)
 
+    ccp = cmds.add_parser("create-calendar", help="Create a new calendar")
+    ccp.add_argument("summary", help="Calendar display name")
+    ccp.add_argument("--timezone", default=None, help="IANA timezone identifier")
+    add_fmt(ccp)
+
+    inp = cmds.add_parser("instances", help="List instances of a recurring event")
+    inp.add_argument("event_id")
+    inp.add_argument("--from", dest="from_date", metavar="YYYY-MM-DD")
+    inp.add_argument("--to", dest="to_date", metavar="YYYY-MM-DD")
+    inp.add_argument("--max", type=int, default=250)
+    add_calendar_id(inp)
+    add_fmt(inp)
+
     fb = cmds.add_parser("freebusy", help="Query raw calendar busy windows")
     fb.add_argument("--from", dest="from_date", required=True, metavar="YYYY-MM-DD")
     fb.add_argument("--to", dest="to_date", required=True, metavar="YYYY-MM-DD")
@@ -263,5 +276,25 @@ def run(args) -> Any:
             time_max,
             calendar_ids=args.calendar_id or ["primary"],
             tz=tz,
+        )
+    if cmd == "create-calendar":
+        return client.create_calendar(
+            args.summary,
+            timezone=args.timezone,
+        )
+    if cmd == "instances":
+        if bool(getattr(args, "from_date", None)) != bool(getattr(args, "to_date", None)):
+            raise UsageError("calendar instances: --from and --to must be used together")
+        time_min = None
+        time_max = None
+        if getattr(args, "from_date", None):
+            tz = _resolve_query_tz(None)
+            time_min, time_max = _date_window_bounds(args.from_date, args.to_date, tz)
+        return client.list_instances(
+            args.event_id,
+            calendar_id=args.calendar_id,
+            time_min=time_min,
+            time_max=time_max,
+            max_results=args.max,
         )
     raise UsageError(f"unknown calendar subcommand: {cmd}")
