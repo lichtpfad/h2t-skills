@@ -1678,6 +1678,127 @@ def test_research_client_cleanup_delegates_to_maintenance(tmp_path, monkeypatch)
     assert calls == [(tmp_path, True), (tmp_path, False)]
 
 
+def test_research_client_lists_provider_status(tmp_path, monkeypatch):
+    from h2t_ops.connectors.research import provider_routing
+
+    calls = []
+
+    def fake_status(*, capability=None):
+        calls.append(capability)
+        return {"kind": "research_provider_status", "capability": capability}
+
+    monkeypatch.setattr(provider_routing, "provider_status", fake_status)
+
+    result = client.ResearchClient(output_dir=tmp_path).research_provider_status(
+        capability="fetch"
+    )
+
+    assert result == {"kind": "research_provider_status", "capability": "fetch"}
+    assert calls == ["fetch"]
+
+
+def test_research_client_selects_provider_route(tmp_path, monkeypatch):
+    from h2t_ops.connectors.research import provider_routing
+
+    calls = []
+
+    def fake_select(capability, *, provider=None):
+        calls.append((capability, provider))
+        return {
+            "kind": "research_provider_route",
+            "capability": capability,
+            "selected_provider": provider or "exa",
+        }
+
+    monkeypatch.setattr(provider_routing, "select_route", fake_select)
+
+    result = client.ResearchClient(output_dir=tmp_path).research_route(
+        "search",
+        provider="exa",
+    )
+
+    assert result["selected_provider"] == "exa"
+    assert calls == [("search", "exa")]
+
+
+def test_search_missing_exa_key_fails_before_artifact_writes(tmp_path, monkeypatch):
+    from h2t_ops.connectors.research import provider_routing
+
+    monkeypatch.setattr(provider_routing, "_secret_available", lambda name: False)
+
+    with pytest.raises(UsageError, match="no configured research provider"):
+        client.ResearchClient(output_dir=tmp_path).search(query="missing key")
+
+    assert not any(tmp_path.iterdir())
+
+
+def test_answer_missing_exa_key_fails_before_artifact_writes(tmp_path, monkeypatch):
+    from h2t_ops.connectors.research import provider_routing
+
+    monkeypatch.setattr(provider_routing, "_secret_available", lambda name: False)
+
+    with pytest.raises(UsageError, match="no configured research provider"):
+        client.ResearchClient(output_dir=tmp_path).answer("missing key")
+
+    assert not any(tmp_path.iterdir())
+
+
+def test_similar_missing_exa_key_fails_before_artifact_writes(tmp_path, monkeypatch):
+    from h2t_ops.connectors.research import provider_routing
+
+    monkeypatch.setattr(provider_routing, "_secret_available", lambda name: False)
+
+    with pytest.raises(UsageError, match="no configured research provider"):
+        client.ResearchClient(output_dir=tmp_path).similar("https://example.com")
+
+    assert not any(tmp_path.iterdir())
+
+
+def test_crawl_missing_exa_key_fails_before_artifact_writes(tmp_path, monkeypatch):
+    from h2t_ops.connectors.research import provider_routing
+
+    monkeypatch.setattr(provider_routing, "_secret_available", lambda name: False)
+
+    with pytest.raises(UsageError, match="no configured research provider"):
+        client.ResearchClient(output_dir=tmp_path).crawl("https://example.com")
+
+    assert not any(tmp_path.iterdir())
+
+
+def test_resolve_author_missing_exa_key_fails_before_provider_call(tmp_path, monkeypatch):
+    from h2t_ops.connectors.research import author_resolve
+    from h2t_ops.connectors.research import provider_routing
+
+    monkeypatch.setattr(provider_routing, "_secret_available", lambda name: False)
+
+    def fail_if_called(*args, **kwargs):
+        raise AssertionError("author provider should not be called without route")
+
+    monkeypatch.setattr(author_resolve, "resolve_author", fail_if_called)
+
+    with pytest.raises(UsageError, match="no configured research provider"):
+        client.ResearchClient(output_dir=tmp_path).resolve_author("Ada Lovelace")
+
+    assert not any(tmp_path.iterdir())
+
+
+def test_preflight_missing_exa_key_fails_before_provider_call(tmp_path, monkeypatch):
+    from h2t_ops.connectors.research import exa
+    from h2t_ops.connectors.research import provider_routing
+
+    monkeypatch.setattr(provider_routing, "_secret_available", lambda name: False)
+
+    def fail_if_called(*args, **kwargs):
+        raise AssertionError("exa preflight should not be called without route")
+
+    monkeypatch.setattr(exa, "preflight", fail_if_called)
+
+    with pytest.raises(UsageError, match="no configured research provider"):
+        client.ResearchClient(output_dir=tmp_path).preflight()
+
+    assert not any(tmp_path.iterdir())
+
+
 def test_research_client_list_research_index_propagates_navigation_error(tmp_path, monkeypatch):
     def failing_list_index(*args, **kwargs):
         raise UsageError("index helper failure")
