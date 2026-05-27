@@ -123,11 +123,12 @@ def register(subparsers: Any) -> None:
 
     up = cmds.add_parser("upload", help="Upload a file to Drive")
     up.add_argument("file")
-    up.add_argument("--folder", required=True)
+    up.add_argument("--folder", default=None,
+                    help="Destination folder name (alternative to --parent-id)")
     up.add_argument("--no-convert", action="store_true")
     up.add_argument("--update-existing", action="store_true",
                     help="Update existing same-name file instead of skipping")
-    up.add_argument("--parent-id", dest="parent_id", metavar="ID",
+    up.add_argument("--parent-id", dest="parent_id", metavar="ID", default=None,
                     help="Destination folder id (alternative to --folder name)")
     add_fmt(up)
 
@@ -208,6 +209,12 @@ def run(args) -> Any:
         raise UsageError(
             "drive delete requires --confirm-permanent to acknowledge irreversible deletion"
         )
+
+    if cmd == "upload":
+        has_folder = bool(args.folder)
+        has_parent_id = bool(getattr(args, "parent_id", None))
+        if has_folder == has_parent_id:
+            raise UsageError("upload: provide exactly one of --folder or --parent-id")
 
     from h2t_ops.connectors.drive.client import DriveClient  # lazy (spec §4.1)
 

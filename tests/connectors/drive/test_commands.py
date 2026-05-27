@@ -363,10 +363,14 @@ def test_upload_folder_returns_manifest(monkeypatch, capsys):
     assert out["result"]["summary"]["total"] == 1
 
 
-def test_upload_without_folder_raises_usageerror():
+def test_upload_without_folder_no_parse_error():
+    """Parser should accept upload without --folder (validation in run())."""
     parser = _build_parser()
-    with pytest.raises(SystemExit):
-        parser.parse_args(["drive", "upload", "note.md"])
+    args = parser.parse_args(["drive", "upload", "note.md"])
+    assert args.drive_cmd == "upload"
+    assert args.file == "note.md"
+    assert args.folder is None
+    assert args.parent_id is None
 
 
 @pytest.mark.parametrize("fmt", ("docx", "xlsx", "pdf", "pptx"))
