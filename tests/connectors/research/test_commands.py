@@ -944,9 +944,18 @@ def test_research_skill_documentation_mentions_navigation_commands_and_json_trut
 def test_research_skill_documents_maintenance_commands_and_retention_policy():
     text = Path("plugins/h2t-ops/skills/research/SKILL.md").read_text(encoding="utf-8")
 
-    assert "h2t-ops research doctor" in text
-    assert "h2t-ops research rebuild-indexes" in text
-    assert "h2t-ops research cleanup --dry-run" in text
-    assert "Canonical object JSON is never deleted by default" in text
-    assert "doctor is read-only" in text
-    assert "indexes are rebuildable caches" in text
+    assert "h2t-ops research doctor --output-dir <dir> --json" in text
+    assert "h2t-ops research rebuild-indexes --output-dir <dir> --json" in text
+    assert "h2t-ops research cleanup --dry-run --output-dir <dir> --json" in text
+    assert "Canonical object JSON is never deleted by default." in text
+    assert "doctor is read-only." in text
+    assert "`rebuild-indexes` writes only `indexes/*.index.json`." in text
+    assert (
+        "`cleanup --dry-run` reports non-canonical cleanup candidates and does not delete files."
+        in text
+    )
+    assert "indexes are rebuildable caches; if an index and object disagree, object JSON wins." in text
+    assert (
+        "Markdown mirrors and `.partial.md` files are human/operator surfaces, not canonical knowledge."
+        in text
+    )
