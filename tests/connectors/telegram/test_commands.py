@@ -180,14 +180,39 @@ def test_cli_migrated_contains_telegram():
 
 def test_telegram_p0_parser_surface():
     parser = _build_parser()
-    ns1 = parser.parse_args(["telegram", "send-file", "me", "file.txt"])
+    ns1 = parser.parse_args(["telegram", "send-file", "me", "file.txt", "--confirm-send"])
     assert ns1.telegram_cmd == "send-file"
+    assert ns1.confirm_send is True
     ns2 = parser.parse_args(
-        ["telegram", "forward-message", "me", "--from", "chatname", "--message-id", "1"]
+        ["telegram", "forward-message", "me", "--from", "chatname", "--message-id", "1", "--confirm-forward"]
     )
     assert ns2.telegram_cmd == "forward-message"
+    assert ns2.confirm_forward is True
     ns3 = parser.parse_args(["telegram", "delete-message", "me", "1", "--confirm"])
     assert ns3.telegram_cmd == "delete-message"
+
+
+def test_send_file_requires_confirm_send(monkeypatch):
+    import h2t_ops.connectors.telegram.client as client_mod
+    from h2t_ops.connectors.telegram import commands as cmds
+    from h2t_ops.core.errors import UsageError
+
+    class Stub:
+        def send_file(self, entity, path, *, caption=None):
+            raise AssertionError("should not be called without --confirm-send")
+
+    monkeypatch.setattr(client_mod, "TelegramClientAdapter", lambda: Stub())
+    args = SimpleNamespace(
+        telegram_cmd="send-file",
+        entity="me",
+        path="file.txt",
+        caption=None,
+        confirm_send=False,
+        as_json=False,
+        fmt="human",
+    )
+    with pytest.raises(UsageError, match="--confirm-send"):
+        cmds.run(args)
 
 
 def test_send_file_dispatches_path_and_caption(monkeypatch):
@@ -209,6 +234,7 @@ def test_send_file_dispatches_path_and_caption(monkeypatch):
         entity="me",
         path="file.txt",
         caption="my caption",
+        confirm_send=True,
         as_json=True,
         fmt="human",
     )
@@ -217,6 +243,29 @@ def test_send_file_dispatches_path_and_caption(monkeypatch):
     assert calls["path"] == "file.txt"
     assert calls["caption"] == "my caption"
     assert result["message_id"] == 42
+
+
+def test_forward_message_requires_confirm_forward(monkeypatch):
+    import h2t_ops.connectors.telegram.client as client_mod
+    from h2t_ops.connectors.telegram import commands as cmds
+    from h2t_ops.core.errors import UsageError
+
+    class Stub:
+        def forward_message(self, to_entity, *, from_entity, message_id):
+            raise AssertionError("should not be called without --confirm-forward")
+
+    monkeypatch.setattr(client_mod, "TelegramClientAdapter", lambda: Stub())
+    args = SimpleNamespace(
+        telegram_cmd="forward-message",
+        to_entity="me",
+        from_entity="chatname",
+        message_id=99,
+        confirm_forward=False,
+        as_json=False,
+        fmt="human",
+    )
+    with pytest.raises(UsageError, match="--confirm-forward"):
+        cmds.run(args)
 
 
 def test_forward_message_dispatches_entities_and_message_id(monkeypatch):
@@ -238,6 +287,7 @@ def test_forward_message_dispatches_entities_and_message_id(monkeypatch):
         to_entity="me",
         from_entity="chatname",
         message_id=99,
+        confirm_forward=True,
         as_json=True,
         fmt="human",
     )

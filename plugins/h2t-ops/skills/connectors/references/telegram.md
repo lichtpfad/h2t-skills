@@ -13,8 +13,8 @@
 | read saved messages | `h2t-ops telegram saved-messages --limit 20 --json` |
 | read mentions | `h2t-ops telegram mentions --chat-id CHAT_ID_FROM_DIALOGS --days 7 --limit 20 --json` |
 | warm entity cache | `h2t-ops telegram bootstrap --json` |
-| send file attachment | `h2t-ops telegram send-file ENTITY /path/to/file --caption "optional" --json` |
-| forward message | `h2t-ops telegram forward-message TO_ENTITY --from FROM_ENTITY --message-id MSG_ID --json` |
+| send file attachment | `h2t-ops telegram send-file ENTITY /path/to/file --caption "optional" --confirm-send --json` |
+| forward message | `h2t-ops telegram forward-message TO_ENTITY --from FROM_ENTITY --message-id MSG_ID --confirm-forward --json` |
 | delete message | `h2t-ops telegram delete-message ENTITY MSG_ID --confirm --json` |
 
 ## Safety
@@ -22,6 +22,8 @@
 - Auth status, dialogs, folders, messages, saved messages, mentions, and bootstrap are provider reads.
 - Request-code and complete modify local Telegram session state and require explicit user intent.
 - `send-file`, `forward-message`, and `delete-message` are write/destructive operations. Require explicit user approval per command.
+- `send-file` requires `--confirm-send` flag; the CLI raises UsageError without it.
+- `forward-message` requires `--confirm-forward` flag; the CLI raises UsageError without it.
 - `delete-message` requires `--confirm` flag; the CLI raises UsageError without it.
 - `send-file` sends the file as a Telegram attachment (binary). The existing `send --file` command reads a local file as *text* and sends the text content — these are distinct operations.
 - Telegram digest/tasks/research/students workflows are not connector operations.
@@ -72,6 +74,6 @@ Rollback: delete message manually or N/A
 
 The following commands are verified by unit tests (mocked Telethon client):
 
-- `send-file` — dispatches entity, path, and optional caption to `client.send_file`
-- `forward-message` — dispatches to/from entities and message_id to `client.forward_messages`; normalizes list return
-- `delete-message` — requires `--confirm` flag (UsageError without it); dispatches to `client.delete_messages`
+- `send-file` — requires `--confirm-send` flag (UsageError without it); dispatches entity, path, and optional caption to `client.send_file`
+- `forward-message` — requires `--confirm-forward` flag (UsageError without it); dispatches to/from entities and message_id to `client.forward_message`
+- `delete-message` — requires `--confirm` flag (UsageError without it); dispatches to `client.delete_message`
