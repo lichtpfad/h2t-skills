@@ -1,5 +1,9 @@
 # h2t-dev Changelog
 
+## 1.0.8 — 2026-05-27
+- feat(lifecycle-os): demote docs-init, docs-sync-labels, docs-cleanup, docs-index to CLI-only (SKILL.md removed)
+- chore: update plugin description to reflect lifecycle pipeline architecture
+
 ## 1.0.7 — 2026-05-27
 - feat(milestone-closure): add docs-cleanup preview gate + docs-index rebuild steps
 
