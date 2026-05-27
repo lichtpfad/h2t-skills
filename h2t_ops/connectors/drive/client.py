@@ -162,12 +162,77 @@ def _row(file: Dict[str, Any]) -> Dict[str, Any]:
 
 _HEADING_NAMED_STYLE = {1: "HEADING_1", 2: "HEADING_2", 3: "HEADING_3"}
 
+_INLINE_BOLD_RE = re.compile(r'\*\*(.+?)\*\*')
+_INLINE_ITALIC_RE = re.compile(r'(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)')
+
+
+def _strip_inline(text: str) -> str:
+    """Strip bold/italic markers, returning plain text for insertion."""
+    text = _INLINE_BOLD_RE.sub(r'\1', text)
+    text = _INLINE_ITALIC_RE.sub(r'\1', text)
+    return text
+
+
+def _inline_style_requests(
+    plain_text: str,
+    raw_text: str,
+    base_index: int,
+    tab_id: str,
+) -> List[Dict[str, Any]]:
+    """Build updateTextStyle requests for bold/italic spans in raw_text.
+
+    *plain_text* is the text after marker stripping (what was inserted).
+    *raw_text* is the original markdown line text (before stripping).
+    *base_index* is the document index at which plain_text starts.
+    """
+    requests: List[Dict[str, Any]] = []
+    plain_offset = 0
+    raw_offset = 0
+    while raw_offset < len(raw_text):
+        # Try bold first (longer marker takes precedence)
+        m_bold = _INLINE_BOLD_RE.match(raw_text, raw_offset)
+        if m_bold:
+            inner = m_bold.group(1)
+            inner_plain = _INLINE_ITALIC_RE.sub(r'\1', inner)  # strip nested italic
+            start = base_index + plain_offset
+            end = start + len(inner_plain)
+            requests.append({
+                "updateTextStyle": {
+                    "range": {"startIndex": start, "endIndex": end, "tabId": tab_id},
+                    "textStyle": {"bold": True},
+                    "fields": "bold",
+                }
+            })
+            plain_offset += len(inner_plain)
+            raw_offset = m_bold.end()
+            continue
+        # Try italic (single *)
+        m_ital = _INLINE_ITALIC_RE.match(raw_text, raw_offset)
+        if m_ital:
+            inner = m_ital.group(1)
+            start = base_index + plain_offset
+            end = start + len(inner)
+            requests.append({
+                "updateTextStyle": {
+                    "range": {"startIndex": start, "endIndex": end, "tabId": tab_id},
+                    "textStyle": {"italic": True},
+                    "fields": "italic",
+                }
+            })
+            plain_offset += len(inner)
+            raw_offset = m_ital.end()
+            continue
+        # Plain character
+        plain_offset += 1
+        raw_offset += 1
+    return requests
+
 
 def _md_to_docs_requests(markdown_text: str, tab_id: str) -> List[Dict[str, Any]]:
     """Convert markdown to Docs API batchUpdate requests targeting *tab_id*.
 
     v1 scope: H1–H3 headings, paragraphs, unordered bullets (- or *).
-    Inline bold/italic not supported in v1.
+    Inline bold (**text**) and italic (*text*) emit updateTextStyle ranges.
 
     All text is inserted at index 1 (start of an empty tab body) in one
     insertText request, followed by style/bullet requests with pre-computed
@@ -177,13 +242,15 @@ def _md_to_docs_requests(markdown_text: str, tab_id: str) -> List[Dict[str, Any]
     for line in markdown_text.splitlines():
         m = re.match(r'^(#{1,3})\s+(.*)', line)
         if m:
-            paragraphs.append({"type": f"heading{len(m.group(1))}", "text": m.group(2)})
+            raw = m.group(2)
+            paragraphs.append({"type": f"heading{len(m.group(1))}", "text": _strip_inline(raw), "raw": raw})
             continue
         m = re.match(r'^[-*]\s+(.*)', line)
         if m:
-            paragraphs.append({"type": "bullet", "text": m.group(1)})
+            raw = m.group(1)
+            paragraphs.append({"type": "bullet", "text": _strip_inline(raw), "raw": raw})
             continue
-        paragraphs.append({"type": "paragraph", "text": line})
+        paragraphs.append({"type": "paragraph", "text": _strip_inline(line), "raw": line})
 
     if not paragraphs:
         return []
@@ -198,7 +265,9 @@ def _md_to_docs_requests(markdown_text: str, tab_id: str) -> List[Dict[str, Any]
 
     current = 1
     for p in paragraphs:
-        para_len = len(p["text"]) + 1  # +1 for \n
+        plain = p["text"]
+        raw = p.get("raw", plain)
+        para_len = len(plain) + 1  # +1 for \n
         start, end = current, current + para_len
         current = end
 
@@ -219,6 +288,10 @@ def _md_to_docs_requests(markdown_text: str, tab_id: str) -> List[Dict[str, Any]
                     "bulletPreset": "BULLET_DISC_CIRCLE_SQUARE",
                 }
             })
+
+        # Inline styles (bold/italic)
+        inline_reqs = _inline_style_requests(plain, raw, start, tab_id)
+        requests.extend(inline_reqs)
 
     return requests
 
@@ -488,6 +561,7 @@ class DriveClient:
                 fileId=existing["id"],
                 media_body=media,
                 fields="id, name, mimeType, webViewLink",
+                supportsAllDrives=True,
             ).execute()
             action = "file_updated"
         else:
@@ -495,6 +569,7 @@ class DriveClient:
                 body={"name": src.name, "parents": [parent_id]},
                 media_body=media,
                 fields="id, name, mimeType, webViewLink",
+                supportsAllDrives=True,
             ).execute()
             action = "file_uploaded"
         entries.append({
@@ -802,12 +877,14 @@ class DriveClient:
         document_id: str,
         tab_id: str,
         markdown_text: str,
+        *,
+        clear_first: bool = False,
     ) -> Dict[str, Any]:
         """Write markdown content to an existing Google Docs tab via batchUpdate.
 
         v1 scope: H1–H3 headings, paragraphs, unordered bullet lists.
-        Appends to the beginning of the tab body (index 1). Does not clear
-        existing content — call on a freshly created (empty) tab.
+        Inline bold (**text**) and italic (*text*) emit updateTextStyle ranges.
+        When *clear_first* is True, existing tab content is deleted before writing.
         """
         try:
             meta = self.service.files().get(
@@ -819,8 +896,35 @@ class DriveClient:
                 raise UsageError(
                     f"file {meta.get('name', document_id)!r} is not a Google Docs editor file"
                 )
+
+            all_reqs: List[Dict[str, Any]] = []
+
+            if clear_first:
+                # Fetch existing content to find the end index of the tab body
+                doc = self._docs().documents().get(
+                    documentId=document_id, includeTabsContent=True,
+                ).execute()
+                tab_body = self._find_tab_body(doc, tab_id)
+                if tab_body:
+                    content = tab_body.get("content", [])
+                    if content:
+                        end_index = content[-1].get("endIndex", 1)
+                        # Docs API won't allow deleting the final newline (index end-1 is the paragraph mark)
+                        if end_index > 1:
+                            all_reqs.append({
+                                "deleteContentRange": {
+                                    "range": {
+                                        "startIndex": 1,
+                                        "endIndex": end_index - 1,
+                                        "tabId": tab_id,
+                                    }
+                                }
+                            })
+
             reqs = _md_to_docs_requests(markdown_text, tab_id)
-            if not reqs:
+            all_reqs.extend(reqs)
+
+            if not all_reqs:
                 return {
                     "kind": "google_docs_tab_write/v1",
                     "document_id": document_id,
@@ -829,7 +933,7 @@ class DriveClient:
                 }
             response = self._docs().documents().batchUpdate(
                 documentId=document_id,
-                body={"requests": reqs},
+                body={"requests": all_reqs},
             ).execute()
         except Exception as e:
             raise _map_http_error(e, op=f"write tab {tab_id} in document {document_id}") from e
@@ -837,9 +941,135 @@ class DriveClient:
             "kind": "google_docs_tab_write/v1",
             "document_id": document_id,
             "tab_id": tab_id,
-            "requests_sent": len(reqs),
+            "requests_sent": len(all_reqs),
             "revision_id": (response.get("writeControl") or {}).get("requiredRevisionId", ""),
         }
+
+    @staticmethod
+    def _find_tab_body(doc: Dict[str, Any], tab_id: str) -> Optional[Dict[str, Any]]:
+        """Recursively find a tab's documentTab.body by tab_id."""
+        def _search(tabs: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+            for tab in tabs or []:
+                props = tab.get("tabProperties", {}) or {}
+                if props.get("tabId") == tab_id:
+                    return (tab.get("documentTab") or {}).get("body")
+                found = _search(tab.get("childTabs", []) or [])
+                if found is not None:
+                    return found
+            return None
+        return _search(doc.get("tabs", []) or [])
+
+    def read_tab(self, document_id: str, tab_id: str) -> Dict[str, Any]:
+        """Read and return the plain text content of a specific Google Docs tab."""
+        try:
+            meta = self.service.files().get(
+                fileId=document_id,
+                fields="id, name, mimeType",
+                supportsAllDrives=True,
+            ).execute()
+            if meta.get("mimeType") != "application/vnd.google-apps.document":
+                raise UsageError(
+                    f"file {meta.get('name', document_id)!r} is not a Google Docs editor file"
+                )
+            doc = self._docs().documents().get(
+                documentId=document_id, includeTabsContent=True,
+            ).execute()
+        except Exception as e:
+            raise _map_http_error(e, op=f"read tab {tab_id} in document {document_id}") from e
+
+        body = self._find_tab_body(doc, tab_id)
+        if body is None:
+            from h2t_ops.core.errors import NotFoundError
+            raise NotFoundError(f"tab {tab_id!r} not found in document {document_id}")
+
+        text_parts: List[str] = []
+        for block in body.get("content", []) or []:
+            para = block.get("paragraph")
+            if not para:
+                continue
+            for elem in para.get("elements", []) or []:
+                run = elem.get("textRun")
+                if run:
+                    text_parts.append(run.get("content", ""))
+        text = "".join(text_parts)
+
+        return {
+            "kind": "google_docs_tab_read/v1",
+            "document_id": document_id,
+            "tab_id": tab_id,
+            "text": text,
+        }
+
+    def get_file(self, file_id: str) -> Dict[str, Any]:
+        """Get metadata for a Drive file by id."""
+        try:
+            return self.service.files().get(
+                fileId=file_id,
+                fields="id,name,mimeType,parents,webViewLink,modifiedTime,size,trashed",
+                supportsAllDrives=True,
+            ).execute()
+        except Exception as e:
+            raise _map_http_error(e, op=f"get file {file_id}") from e
+
+    def _confirm_file_name(self, file_id: str, confirm_name: str) -> Dict[str, Any]:
+        """Fetch file metadata and verify the name matches confirm_name (case-insensitive)."""
+        meta = self.get_file(file_id)
+        actual = str(meta.get("name", "")).strip()
+        if actual.lower() != confirm_name.strip().lower():
+            raise UsageError(
+                f'name mismatch — expected "{confirm_name}", got "{actual}"'
+            )
+        return meta
+
+    def trash_file(self, file_id: str, *, confirm_name: str) -> Dict[str, Any]:
+        """Move a Drive file to trash after verifying the file name."""
+        meta = self._confirm_file_name(file_id, confirm_name)
+        try:
+            updated = self.service.files().update(
+                fileId=file_id,
+                body={"trashed": True},
+                fields="id,name,trashed",
+                supportsAllDrives=True,
+            ).execute()
+        except Exception as e:
+            raise _map_http_error(e, op=f"trash file {file_id}") from e
+        return {
+            "file_id": updated["id"],
+            "name": updated["name"],
+            "trashed": updated.get("trashed", True),
+            "previous": meta,
+        }
+
+    def delete_file(self, file_id: str, *, confirm_name: str) -> Dict[str, Any]:
+        """Permanently delete a Drive file after verifying the file name."""
+        meta = self._confirm_file_name(file_id, confirm_name)
+        try:
+            self.service.files().delete(fileId=file_id, supportsAllDrives=True).execute()
+        except Exception as e:
+            raise _map_http_error(e, op=f"delete file {file_id}") from e
+        return {"file_id": file_id, "name": meta.get("name"), "deleted": True}
+
+    def create_document(
+        self,
+        title: str,
+        *,
+        folder_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Create a new Google Doc with the given title, optionally inside a folder."""
+        body: Dict[str, Any] = {
+            "name": title,
+            "mimeType": "application/vnd.google-apps.document",
+        }
+        if folder_id:
+            body["parents"] = [folder_id]
+        try:
+            return self.service.files().create(
+                body=body,
+                fields="id,name,mimeType,webViewLink,parents",
+                supportsAllDrives=True,
+            ).execute()
+        except Exception as e:
+            raise _map_http_error(e, op=f"create document {title!r}") from e
 
     def download_file(self, file_id: str, dest: Optional[str | Path] = None) -> Dict[str, Any]:
         try:
@@ -947,14 +1177,21 @@ class DriveClient:
         file_path: str | Path,
         folder: Optional[str],
         no_convert: bool = False,
+        *,
+        update_existing: bool = False,
+        parent_id: Optional[str] = None,
     ) -> Dict[str, Any]:
-        if not folder:
+        if not folder and not parent_id:
             raise UsageError("drive upload: --folder is required")
         src = Path(file_path)
         if not src.exists():
             raise NotFoundError(f"file not found: {src}")
         try:
-            folder_id, folder_display, _ = self._resolve_folder_id(folder)
+            if parent_id:
+                folder_id = parent_id
+                folder_display = parent_id
+            else:
+                folder_id, folder_display, _ = self._resolve_folder_id(folder)
             ext = src.suffix.lower()
             convert_info = None if no_convert else UPLOAD_CONVERT_MAP.get(ext)
             if convert_info:
@@ -964,23 +1201,41 @@ class DriveClient:
                 source_mime = _guess_mime(src)
                 target_mime = None
                 dest_name = src.name
+
+            existing = None
+            if update_existing and folder_id and not self._is_virtual_parent(folder_id):
+                existing = self._find_child_by_name(folder_id, dest_name, folder=False)
+
             metadata: Dict[str, Any] = {"name": dest_name}
             if folder_id:
                 metadata["parents"] = [folder_id]
             if target_mime:
                 metadata["mimeType"] = target_mime
             media = _media_file_upload()(str(src), mimetype=source_mime, resumable=True)
-            res = self.service.files().create(
-                body=metadata,
-                media_body=media,
-                fields="id, name, mimeType, webViewLink",
-            ).execute()
+
+            if existing and update_existing:
+                res = self.service.files().update(
+                    fileId=existing["id"],
+                    media_body=media,
+                    fields="id, name, mimeType, webViewLink",
+                    supportsAllDrives=True,
+                ).execute()
+                action = "updated"
+            else:
+                res = self.service.files().create(
+                    body=metadata,
+                    media_body=media,
+                    fields="id, name, mimeType, webViewLink",
+                    supportsAllDrives=True,
+                ).execute()
+                action = "created"
             return {
                 "file_id": res.get("id", ""),
                 "name": res.get("name", ""),
                 "mimeType": res.get("mimeType", ""),
                 "web_view_link": res.get("webViewLink", ""),
                 "folder_name": folder_display,
+                "action": action,
             }
         except Exception as e:
             raise _map_http_error(e, op=f"upload file {src}") from e
