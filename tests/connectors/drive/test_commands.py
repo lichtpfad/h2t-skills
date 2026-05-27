@@ -311,7 +311,7 @@ def test_upload_returns_envelope_with_web_view_link(monkeypatch, capsys):
     from h2t_ops.core.output import emit
 
     class _Stub:
-        def upload_file(self, file, folder, no_convert=False):
+        def upload_file(self, file, folder, no_convert=False, *, update_existing=False, parent_id=None):
             return {"file_id": "new1", "name": "note", "mimeType": "text/plain",
                     "web_view_link": "https://drive/new1", "folder_name": folder}
 
@@ -363,10 +363,14 @@ def test_upload_folder_returns_manifest(monkeypatch, capsys):
     assert out["result"]["summary"]["total"] == 1
 
 
-def test_upload_without_folder_raises_usageerror():
+def test_upload_without_folder_no_parse_error():
+    """Parser should accept upload without --folder (validation in run())."""
     parser = _build_parser()
-    with pytest.raises(SystemExit):
-        parser.parse_args(["drive", "upload", "note.md"])
+    args = parser.parse_args(["drive", "upload", "note.md"])
+    assert args.drive_cmd == "upload"
+    assert args.file == "note.md"
+    assert args.folder is None
+    assert args.parent_id is None
 
 
 @pytest.mark.parametrize("fmt", ("docx", "xlsx", "pdf", "pptx"))
@@ -449,3 +453,181 @@ def test_docs_tab_add_returns_envelope(monkeypatch, capsys):
     assert rc == 0
     assert out["result"]["tab_id"] == "new-tab"
     assert out["result"]["title"] == "Methods"
+
+
+def test_drive_p0_parser_surface():
+    parser = _build_parser()
+    assert parser.parse_args(["drive", "get-file", "file1"]).drive_cmd == "get-file"
+    assert parser.parse_args(["drive", "trash", "file1", "--confirm-name", "A"]).drive_cmd == "trash"
+    assert parser.parse_args(["drive", "delete", "file1", "--confirm-name", "A", "--confirm-permanent"]).drive_cmd == "delete"
+    assert parser.parse_args(["drive", "docs", "create", "Title"]).drive_cmd == "docs"
+    assert parser.parse_args(["drive", "docs-tab", "read", "doc1", "tab1"]).docs_tab_cmd == "read"
+    ns = parser.parse_args(["drive", "docs-tab", "write", "doc1", "tab1", "--content-file", "x.md", "--clear-first"])
+    assert ns.clear_first is True
+    ns2 = parser.parse_args(["drive", "upload", "note.md", "--folder", "Folder", "--update-existing"])
+    assert ns2.update_existing is True
+
+
+# ---------------------------------------------------------------------------
+# P0 dispatch tests
+# ---------------------------------------------------------------------------
+
+def test_get_file_dispatch_returns_metadata(monkeypatch, capsys):
+    import h2t_ops.connectors.drive.client as client_mod
+    from h2t_ops.connectors.drive import commands as cmds_mod
+    from h2t_ops.core.output import emit
+
+    class _Stub:
+        def get_file(self, file_id):
+            return {"id": file_id, "name": "doc.txt", "mimeType": "text/plain",
+                    "trashed": False}
+
+    monkeypatch.setattr(client_mod, "DriveClient", lambda: _Stub())
+    args = SimpleNamespace(drive_cmd="get-file", file_id="file1", as_json=True, fmt="human")
+    rc = emit("drive", result=cmds_mod.run(args), fmt="json")
+    out = json.loads(capsys.readouterr().out)
+    assert rc == 0
+    assert out["result"]["id"] == "file1"
+
+
+def test_trash_dispatch_calls_trash_file(monkeypatch, capsys):
+    import h2t_ops.connectors.drive.client as client_mod
+    from h2t_ops.connectors.drive import commands as cmds_mod
+    from h2t_ops.core.output import emit
+
+    class _Stub:
+        def trash_file(self, file_id, *, confirm_name):
+            return {"file_id": file_id, "name": confirm_name, "trashed": True, "previous": {}}
+
+    monkeypatch.setattr(client_mod, "DriveClient", lambda: _Stub())
+    args = SimpleNamespace(drive_cmd="trash", file_id="file1", confirm_name="doc.txt",
+                           as_json=True, fmt="human")
+    rc = emit("drive", result=cmds_mod.run(args), fmt="json")
+    out = json.loads(capsys.readouterr().out)
+    assert rc == 0
+    assert out["result"]["trashed"] is True
+
+
+def test_delete_requires_confirm_permanent_flag(monkeypatch):
+    import h2t_ops.connectors.drive.client as client_mod
+    from h2t_ops.connectors.drive import commands as cmds_mod
+
+    class _Stub:
+        called = False
+        def delete_file(self, *a, **k):
+            self.called = True
+            return {}
+
+    stub = _Stub()
+    monkeypatch.setattr(client_mod, "DriveClient", lambda: stub)
+    args = SimpleNamespace(drive_cmd="delete", file_id="file1", confirm_name="doc.txt",
+                           confirm_permanent=False, as_json=True, fmt="human")
+    with pytest.raises(UsageError):
+        cmds_mod.run(args)
+    assert stub.called is False
+
+
+def test_delete_dispatch_calls_delete_file(monkeypatch, capsys):
+    import h2t_ops.connectors.drive.client as client_mod
+    from h2t_ops.connectors.drive import commands as cmds_mod
+    from h2t_ops.core.output import emit
+
+    class _Stub:
+        def delete_file(self, file_id, *, confirm_name):
+            return {"file_id": file_id, "name": confirm_name, "deleted": True}
+
+    monkeypatch.setattr(client_mod, "DriveClient", lambda: _Stub())
+    args = SimpleNamespace(drive_cmd="delete", file_id="file1", confirm_name="doc.txt",
+                           confirm_permanent=True, as_json=True, fmt="human")
+    rc = emit("drive", result=cmds_mod.run(args), fmt="json")
+    out = json.loads(capsys.readouterr().out)
+    assert rc == 0
+    assert out["result"]["deleted"] is True
+
+
+def test_docs_create_dispatch(monkeypatch, capsys):
+    import h2t_ops.connectors.drive.client as client_mod
+    from h2t_ops.connectors.drive import commands as cmds_mod
+    from h2t_ops.core.output import emit
+
+    class _Stub:
+        def create_document(self, title, *, folder_id=None):
+            return {"id": "doc1", "name": title, "mimeType": "application/vnd.google-apps.document",
+                    "webViewLink": "https://docs.google.com/doc1"}
+
+    monkeypatch.setattr(client_mod, "DriveClient", lambda: _Stub())
+    args = SimpleNamespace(drive_cmd="docs", docs_cmd="create", title="My Doc",
+                           folder_id=None, as_json=True, fmt="human")
+    rc = emit("drive", result=cmds_mod.run(args), fmt="json")
+    out = json.loads(capsys.readouterr().out)
+    assert rc == 0
+    assert out["result"]["name"] == "My Doc"
+
+
+def test_docs_tab_read_dispatch(monkeypatch, capsys):
+    import h2t_ops.connectors.drive.client as client_mod
+    from h2t_ops.connectors.drive import commands as cmds_mod
+    from h2t_ops.core.output import emit
+
+    class _Stub:
+        def read_tab(self, document_id, tab_id):
+            return {"kind": "google_docs_tab_read/v1", "document_id": document_id,
+                    "tab_id": tab_id, "text": "Hello world\n"}
+
+    monkeypatch.setattr(client_mod, "DriveClient", lambda: _Stub())
+    args = SimpleNamespace(drive_cmd="docs-tab", docs_tab_cmd="read",
+                           document_id="doc1", tab_id="tab1", as_json=True, fmt="human")
+    rc = emit("drive", result=cmds_mod.run(args), fmt="json")
+    out = json.loads(capsys.readouterr().out)
+    assert rc == 0
+    assert out["result"]["text"] == "Hello world\n"
+
+
+def test_docs_tab_write_clear_first_dispatch(monkeypatch, tmp_path, capsys):
+    import h2t_ops.connectors.drive.client as client_mod
+    from h2t_ops.connectors.drive import commands as cmds_mod
+    from h2t_ops.core.output import emit
+
+    calls = {}
+
+    class _Stub:
+        def write_document_tab(self, document_id, tab_id, content, *, clear_first=False):
+            calls["clear_first"] = clear_first
+            return {"kind": "google_docs_tab_write/v1", "document_id": document_id,
+                    "tab_id": tab_id, "requests_sent": 2}
+
+    content_file = tmp_path / "content.md"
+    content_file.write_text("# Hello", encoding="utf-8")
+
+    monkeypatch.setattr(client_mod, "DriveClient", lambda: _Stub())
+    args = SimpleNamespace(drive_cmd="docs-tab", docs_tab_cmd="write",
+                           document_id="doc1", tab_id="tab1",
+                           content_file=str(content_file), clear_first=True,
+                           as_json=True, fmt="human")
+    rc = emit("drive", result=cmds_mod.run(args), fmt="json")
+    out = json.loads(capsys.readouterr().out)
+    assert rc == 0
+    assert calls["clear_first"] is True
+
+
+def test_upload_update_existing_dispatch(monkeypatch, capsys):
+    import h2t_ops.connectors.drive.client as client_mod
+    from h2t_ops.connectors.drive import commands as cmds_mod
+    from h2t_ops.core.output import emit
+
+    calls = {}
+
+    class _Stub:
+        def upload_file(self, file, folder, no_convert=False, *, update_existing=False, parent_id=None):
+            calls["update_existing"] = update_existing
+            return {"file_id": "new1", "name": "note", "mimeType": "text/plain",
+                    "web_view_link": "https://drive/new1", "folder_name": folder, "action": "updated"}
+
+    monkeypatch.setattr(client_mod, "DriveClient", lambda: _Stub())
+    args = SimpleNamespace(drive_cmd="upload", file="note.md", folder="Target",
+                           no_convert=False, update_existing=True, parent_id=None,
+                           as_json=True, fmt="human")
+    rc = emit("drive", result=cmds_mod.run(args), fmt="json")
+    out = json.loads(capsys.readouterr().out)
+    assert rc == 0
+    assert calls["update_existing"] is True
