@@ -43,20 +43,23 @@ def _semver_key(name: str) -> tuple[int, int, int]:
 def create_latest_link(versioned_dir: Path, latest_path: Path) -> Path:
     if latest_path.exists() or latest_path.is_symlink():
         if sys.platform == "win32":
-            import subprocess as _sp
-            _sp.run(["cmd", "/c", "rmdir", str(latest_path)], capture_output=True)
+            subprocess.run(["cmd", "/c", "rmdir", str(latest_path)], capture_output=True)
         else:
             if latest_path.is_symlink():
                 latest_path.unlink()
             else:
                 latest_path.rmdir()
     if sys.platform == "win32":
-        import subprocess as _sp
-        r = _sp.run(
-            ["cmd", "/c", "mklink", "/J", str(latest_path), str(versioned_dir)],
-            capture_output=True,
-        )
-        if r.returncode != 0:
+        r_rm = subprocess.run(["cmd", "/c", "rmdir", str(latest_path)], capture_output=True)
+        if r_rm.returncode == 0 or not latest_path.exists():
+            r = subprocess.run(
+                ["cmd", "/c", "mklink", "/J", str(latest_path), str(versioned_dir)],
+                capture_output=True,
+            )
+            if r.returncode != 0:
+                latest_path.symlink_to(versioned_dir, target_is_directory=True)
+        else:
+            # rmdir failed (non-empty dir?), fallback to symlink
             latest_path.symlink_to(versioned_dir, target_is_directory=True)
     else:
         latest_path.symlink_to(versioned_dir, target_is_directory=True)
@@ -573,27 +576,27 @@ def main(argv: list[str] | None = None) -> int:
             result = connector_matrix(live=args.live, include_paid=args.include_paid)
         elif args.command == "install-h2t-ops":
             result = install_h2t_ops(args.source, dry_run=args.dry_run)
-            plugin_cache = Path.home() / ".claude" / "plugins" / "cache" / "lichtpfad" / "h2t-core"
-            if plugin_cache.exists():
-                versions = sorted(
-                    [d for d in plugin_cache.iterdir()
-                     if d.is_dir() and d.name != "latest" and _semver_key(d.name) != (0, 0, 0)],
-                    key=lambda p: _semver_key(p.name),
-                )
-                if versions:
-                    current = versions[-1]
-                    create_latest_link(current, plugin_cache / "latest")
-                    versions_file = Path.home() / ".h2t" / "config" / "plugin-versions.json"
-                    versions_file.parent.mkdir(parents=True, exist_ok=True)
-                    import json as _json
-                    _data = {}
-                    if versions_file.exists():
-                        try:
-                            _data = _json.loads(versions_file.read_text(encoding="utf-8"))
-                        except Exception:
-                            pass
-                    _data["h2t-core"] = str(current)
-                    versions_file.write_text(_json.dumps(_data, indent=2), encoding="utf-8")
+            if result.get("status") == "ok":
+                plugin_cache = _home() / ".claude" / "plugins" / "cache" / "lichtpfad" / "h2t-core"
+                if plugin_cache.exists():
+                    versions = sorted(
+                        [d for d in plugin_cache.iterdir()
+                         if d.is_dir() and d.name != "latest" and _semver_key(d.name) != (0, 0, 0)],
+                        key=lambda p: _semver_key(p.name),
+                    )
+                    if versions:
+                        current = versions[-1]
+                        create_latest_link(current, plugin_cache / "latest")
+                        versions_file = _home() / ".h2t" / "config" / "plugin-versions.json"
+                        versions_file.parent.mkdir(parents=True, exist_ok=True)
+                        _data = {}
+                        if versions_file.exists():
+                            try:
+                                _data = json.loads(versions_file.read_text(encoding="utf-8"))
+                            except Exception:
+                                pass
+                        _data["h2t-core"] = str(current)
+                        versions_file.write_text(json.dumps(_data, indent=2), encoding="utf-8")
         elif args.command == "secrets":
             script_dir = Path(__file__).parent
             registry_path = script_dir.parent / "known_secrets.yaml"
