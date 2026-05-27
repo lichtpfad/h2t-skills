@@ -7,6 +7,7 @@ Usage:
 """
 import argparse
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -164,6 +165,16 @@ def cmd_create(args: argparse.Namespace) -> dict:
         else:
             actions.append(f"Initial commit skipped: {r2.stderr.strip()}")
 
+    if is_git and not args.dry_run:
+        di = run_docs_init(args.id, project_dir)
+        actions.append(f"docs-init: {di['status']}")
+        if di["status"] == "error":
+            return {"status": "error", "error": f"docs-init failed: {di['error']}"}
+
+    if is_git and not args.dry_run:
+        ih = install_hooks(project_dir)
+        actions.append(f"install-hooks: {ih['status']}")
+
     return {"status": "ok", "path": str(project_dir), "actions": actions}
 
 
@@ -183,8 +194,75 @@ def cmd_github(args: argparse.Namespace) -> dict:
     r = _run(cmd)
     if r.returncode == 0:
         url = r.stdout.strip() or f"https://github.com/{args.github}"
-        return {"status": "ok", "repo": args.github, "url": url}
+        repo_name_only = args.github.split("/")[-1] if "/" in args.github else args.github
+        sl = run_sync_labels(repo_name_only)
+        return {"status": "ok", "repo": args.github, "url": url, "sync_labels": sl["status"]}
     return {"status": "error", "error": r.stderr.strip()}
+
+
+_PLUGIN_ROOT = Path(__file__).resolve().parents[3]
+_DEV_ROOT = Path(os.environ.get("H2T_DEV_ROOT", "C:/dev"))
+
+
+def run_docs_init(repo_name: str, project_dir: Path) -> dict:
+    # init.py resolves path as DEV_ROOT/repo_name; skip for non-standard locations
+    if project_dir.resolve() != (_DEV_ROOT / repo_name).resolve():
+        return {"status": "skip", "reason": "project not under DEV_ROOT — run docs-init manually"}
+    init_script = _PLUGIN_ROOT.parent / "h2t-dev" / "skills" / "docs-init" / "scripts" / "init.py"
+    if not init_script.exists():
+        return {"status": "skip", "reason": "docs-init script not found"}
+    r = subprocess.run(
+        [sys.executable, str(init_script), repo_name, "--apply"],
+        capture_output=True, text=True,
+    )
+    if r.returncode == 0:
+        return {"status": "ok", "output": r.stdout.strip()}
+    return {"status": "error", "error": r.stderr.strip()[:200]}
+
+
+def run_sync_labels(repo_name: str) -> dict:
+    if not repo_name:
+        return {"status": "skip", "reason": "no repo name"}
+    sync_script = _PLUGIN_ROOT.parent / "h2t-dev" / "skills" / "docs-sync-labels" / "scripts" / "sync_labels.py"
+    if not sync_script.exists():
+        return {"status": "skip", "reason": "sync_labels script not found"}
+    r = subprocess.run(
+        [sys.executable, str(sync_script), repo_name, "--apply"],
+        capture_output=True, text=True,
+    )
+    if r.returncode == 0:
+        return {"status": "ok", "output": r.stdout.strip()[:200]}
+    return {"status": "error", "error": r.stderr.strip()[:200]}
+
+
+_HOOK_BASE = "~/.claude/plugins/cache/lichtpfad/h2t-core/latest"
+
+_HOOK_ENTRIES = {
+    "Stop": [
+        {
+            "matcher": "",
+            "command": f"{_HOOK_BASE}/hooks-handlers/on-stop",
+        }
+    ],
+}
+
+
+def install_hooks(project_dir: Path) -> dict:
+    claude_dir = project_dir / ".claude"
+    claude_dir.mkdir(exist_ok=True)
+    settings_path = claude_dir / "settings.json"
+    if settings_path.exists():
+        data = json.loads(settings_path.read_text(encoding="utf-8"))
+    else:
+        data = {}
+    hooks = data.setdefault("hooks", {})
+    for event, entries in _HOOK_ENTRIES.items():
+        existing = hooks.setdefault(event, [])
+        for entry in entries:
+            if not any(entry["command"] in h.get("command", "") for h in existing):
+                existing.append(entry)
+    settings_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    return {"status": "ok", "path": str(settings_path)}
 
 
 def main() -> None:
