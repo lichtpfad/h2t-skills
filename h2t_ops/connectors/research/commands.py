@@ -4,6 +4,10 @@ from __future__ import annotations
 import argparse
 from typing import Any
 
+from h2t_ops.connectors.research.provider_routing import CAPABILITIES
+
+CAPABILITY_CHOICES = sorted(CAPABILITIES)
+
 FETCH_PROVIDERS = [
     "auto",
     "direct",
@@ -44,16 +48,7 @@ def register(subparsers: Any) -> None:
     providers = cmds.add_parser("providers", help="List research provider/key readiness")
     providers.add_argument(
         "--capability",
-        choices=[
-            "preflight",
-            "search",
-            "answer",
-            "similar",
-            "crawl",
-            "author",
-            "fetch",
-            "visual_ocr",
-        ],
+        choices=CAPABILITY_CHOICES,
     )
     add_fmt(providers)
 
@@ -61,16 +56,7 @@ def register(subparsers: Any) -> None:
     route.add_argument(
         "--capability",
         required=True,
-        choices=[
-            "preflight",
-            "search",
-            "answer",
-            "similar",
-            "crawl",
-            "author",
-            "fetch",
-            "visual_ocr",
-        ],
+        choices=CAPABILITY_CHOICES,
     )
     route.add_argument("--provider", dest="provider")
     add_fmt(route)
