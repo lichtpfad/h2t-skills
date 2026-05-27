@@ -2,6 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Execution note:** This document is the original implementation plan, not the live completion log.
+> Checkboxes remain as authored so future readers can see the intended execution sequence. Actual
+> completion evidence is recorded in the PR, commit history, tests, and
+> `docs/reports/2026-05-27-research-maintenance-smoke.md`.
+
 **Goal:** Add local maintenance commands for `h2t-ops research` that can inspect research store health, rebuild navigation indexes from canonical JSON objects, and report safe cleanup candidates without deleting canonical research objects.
 
 **Architecture:** Add a read-mostly `maintenance.py` module beside `store.py` and `navigation.py`. `doctor()` reports health findings, `rebuild_indexes()` regenerates cache indexes from canonical objects, and `cleanup()` returns a dry-run cleanup plan for non-canonical artifacts. `ResearchClient` and CLI commands expose these helpers without changing provider workflows.
