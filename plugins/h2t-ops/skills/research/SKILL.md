@@ -61,6 +61,25 @@ Core rule:
 - Index files (`*.index.json`) are caches to locate object ids quickly and must not be treated as source truth.
 - Markdown mirrors are for human review only; do not treat them as authoritative for data extraction.
 
+## Maintenance Commands
+
+Use maintenance commands to validate and refresh local research artifacts:
+
+```bash
+h2t-ops research doctor --output-dir <dir> --json
+h2t-ops research rebuild-indexes --output-dir <dir> --json
+h2t-ops research cleanup --dry-run --output-dir <dir> --json
+```
+
+Retention policy:
+
+- Canonical object JSON is never deleted by default.
+- doctor is read-only.
+- `rebuild-indexes` writes only `indexes/*.index.json`.
+- `cleanup --dry-run` reports non-canonical cleanup candidates and does not delete files.
+- indexes are rebuildable caches; if an index and object disagree, object JSON wins.
+- Markdown mirrors and `.partial.md` files are human/operator surfaces, not canonical knowledge.
+
 ## Commands
 
 ```bash

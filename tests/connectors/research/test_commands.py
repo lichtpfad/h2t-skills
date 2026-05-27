@@ -210,6 +210,168 @@ def test_parser_registration_for_research_navigation_resolve_requires_one_of_url
         )
 
 
+def test_parser_registration_for_research_maintenance_commands():
+    parser = cli.build_parser()
+
+    doctor = parser.parse_args(
+        [
+            "research",
+            "doctor",
+            "--output-dir",
+            "/tmp/research",
+            "--json",
+        ]
+    )
+    rebuild = parser.parse_args(
+        [
+            "research",
+            "rebuild-indexes",
+            "--output-dir",
+            "/tmp/research",
+            "--json",
+        ]
+    )
+    cleanup = parser.parse_args(
+        [
+            "research",
+            "cleanup",
+            "--dry-run",
+            "--output-dir",
+            "/tmp/research",
+            "--json",
+        ]
+    )
+
+    assert doctor.research_cmd == "doctor"
+    assert doctor.output_dir == "/tmp/research"
+    assert doctor.as_json is True
+    assert doctor._handler is commands.run
+    assert rebuild.research_cmd == "rebuild-indexes"
+    assert rebuild.output_dir == "/tmp/research"
+    assert rebuild.as_json is True
+    assert rebuild._handler is commands.run
+    assert cleanup.research_cmd == "cleanup"
+    assert cleanup.dry_run is True
+    assert cleanup.output_dir == "/tmp/research"
+    assert cleanup.as_json is True
+    assert cleanup._handler is commands.run
+
+    with pytest.raises(SystemExit):
+        parser.parse_args(["research", "cleanup", "--output-dir", "/tmp/research"])
+
+
+def _run_cli_main(argv: list[str], monkeypatch: pytest.MonkeyPatch) -> int:
+    monkeypatch.setattr(sys, "argv", ["h2t-ops", *argv])
+    with pytest.raises(SystemExit) as exited:
+        cli.main()
+    code = exited.value.code
+    return code if isinstance(code, int) else 1
+
+
+def test_research_doctor_cli_reports_stale_alias(tmp_path, capsys, monkeypatch):
+    root = tmp_path / "research"
+    store.upsert_alias_index(
+        root,
+        [
+            {
+                "alias_type": "url",
+                "alias_value": "https://example.com/missing",
+                "target_object_type": "document",
+                "target_id": "research-doc:missing",
+                "confidence": "high",
+            }
+        ],
+    )
+
+    code = _run_cli_main(
+        [
+            "research",
+            "doctor",
+            "--output-dir",
+            str(root),
+            "--json",
+        ],
+        monkeypatch,
+    )
+    payload = json.loads(capsys.readouterr().out)
+
+    assert code == 0
+    assert payload["ok"] is True
+    assert payload["result"]["kind"] == "research_doctor"
+    assert payload["result"]["status"] == "warning"
+    assert any(
+        finding["code"] == "alias_target_missing"
+        for finding in payload["result"]["findings"]
+    )
+
+
+def test_research_rebuild_indexes_cli_writes_documents_index(tmp_path, capsys, monkeypatch):
+    root = tmp_path / "research"
+    document = store.build_research_document(
+        canonical_url="https://example.com/document",
+        source_url="https://example.com/document",
+        provider="jina",
+        title="Example Document",
+        fetched_at="2026-05-27T10:00:00Z",
+        content_hash="document",
+        artifact_refs={
+            "metadata": "artifact.json",
+            "normalized_text": "sources.json",
+            "citation_bundle": None,
+            "markdown_mirror": "partial.md",
+        },
+        project_ids=["project:demo"],
+        thread_ids=[],
+        entity_ids=[],
+    )
+    store.write_object(root, "documents", document["document_id"], document)
+
+    code = _run_cli_main(
+        [
+            "research",
+            "rebuild-indexes",
+            "--output-dir",
+            str(root),
+            "--json",
+        ],
+        monkeypatch,
+    )
+    payload = json.loads(capsys.readouterr().out)
+    rows = json.loads(store.index_path(root, "documents").read_text(encoding="utf-8"))
+
+    assert code == 0
+    assert payload["ok"] is True
+    assert payload["result"]["counts"]["documents"] == 1
+    assert rows[0]["document_id"] == document["document_id"]
+
+
+def test_research_cleanup_cli_dry_run_reports_orphan_partial(tmp_path, capsys, monkeypatch):
+    root = tmp_path / "research"
+    root.mkdir()
+    orphan = root / "orphan.partial.md"
+    orphan.write_text("# Orphan\n", encoding="utf-8")
+
+    code = _run_cli_main(
+        [
+            "research",
+            "cleanup",
+            "--dry-run",
+            "--output-dir",
+            str(root),
+            "--json",
+        ],
+        monkeypatch,
+    )
+    payload = json.loads(capsys.readouterr().out)
+
+    assert code == 0
+    assert payload["ok"] is True
+    assert payload["result"]["kind"] == "research_cleanup"
+    assert payload["result"]["count"] == 1
+    assert payload["result"]["candidates"][0]["path"] == str(orphan)
+    assert orphan.exists()
+
+
 class FakeResearchClient:
     instances: list["FakeResearchClient"] = []
 
@@ -257,6 +419,22 @@ class FakeResearchClient:
             "method": "resolve_research_alias",
             "alias_value": alias_value,
             "alias_type": alias_type,
+        }
+
+    def research_doctor(self) -> dict:
+        self.calls.append(("research_doctor", {}))
+        return {"method": "research_doctor", "output_dir": str(self.output_dir)}
+
+    def rebuild_research_indexes(self) -> dict:
+        self.calls.append(("rebuild_research_indexes", {}))
+        return {"method": "rebuild_research_indexes", "output_dir": str(self.output_dir)}
+
+    def cleanup_research(self, *, dry_run: bool = True) -> dict:
+        self.calls.append(("cleanup_research", {"dry_run": dry_run}))
+        return {
+            "method": "cleanup_research",
+            "dry_run": dry_run,
+            "output_dir": str(self.output_dir),
         }
 
 
@@ -424,6 +602,32 @@ def test_run_dispatches_navigation_resolve_by_alias(monkeypatch):
     assert result["method"] == "resolve_research_alias"
     assert result["alias_value"] == "abc-uuid"
     assert result["alias_type"] == "document-id"
+
+
+def test_run_dispatches_research_maintenance_commands(monkeypatch, tmp_path):
+    research_client_module = importlib.import_module("h2t_ops.connectors.research.client")
+    FakeResearchClient.instances = []
+    monkeypatch.setattr(research_client_module, "ResearchClient", FakeResearchClient)
+
+    doctor_result = commands.run(
+        argparse.Namespace(research_cmd="doctor", output_dir=str(tmp_path))
+    )
+    rebuild_result = commands.run(
+        argparse.Namespace(research_cmd="rebuild-indexes", output_dir=str(tmp_path))
+    )
+    cleanup_result = commands.run(
+        argparse.Namespace(research_cmd="cleanup", output_dir=str(tmp_path), dry_run=True)
+    )
+
+    assert doctor_result["method"] == "research_doctor"
+    assert rebuild_result["method"] == "rebuild_research_indexes"
+    assert cleanup_result["method"] == "cleanup_research"
+    assert cleanup_result["dry_run"] is True
+    assert FakeResearchClient.instances[0].calls == [("research_doctor", {})]
+    assert FakeResearchClient.instances[1].calls == [("rebuild_research_indexes", {})]
+    assert FakeResearchClient.instances[2].calls == [
+        ("cleanup_research", {"dry_run": True})
+    ]
 
 
 def test_cli_dispatch_navigates_research_index_documents(tmp_path, capsys):
@@ -735,3 +939,23 @@ def test_research_skill_documentation_mentions_navigation_commands_and_json_trut
     assert "query shared index" in text
     assert "resolve object ids / aliases" in text
     assert "read canonical object JSON" in text
+
+
+def test_research_skill_documents_maintenance_commands_and_retention_policy():
+    text = Path("plugins/h2t-ops/skills/research/SKILL.md").read_text(encoding="utf-8")
+
+    assert "h2t-ops research doctor --output-dir <dir> --json" in text
+    assert "h2t-ops research rebuild-indexes --output-dir <dir> --json" in text
+    assert "h2t-ops research cleanup --dry-run --output-dir <dir> --json" in text
+    assert "Canonical object JSON is never deleted by default." in text
+    assert "doctor is read-only." in text
+    assert "`rebuild-indexes` writes only `indexes/*.index.json`." in text
+    assert (
+        "`cleanup --dry-run` reports non-canonical cleanup candidates and does not delete files."
+        in text
+    )
+    assert "indexes are rebuildable caches; if an index and object disagree, object JSON wins." in text
+    assert (
+        "Markdown mirrors and `.partial.md` files are human/operator surfaces, not canonical knowledge."
+        in text
+    )

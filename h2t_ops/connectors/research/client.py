@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qsl, quote, urlencode, urlsplit, urlunsplit
 
-from h2t_ops.connectors.research import navigation, store
+from h2t_ops.connectors.research import maintenance, navigation, store
 from h2t_ops.core.errors import (
     AuthError,
     ConfigError,
@@ -1230,6 +1230,18 @@ class ResearchClient:
             alias_value=alias_value,
             alias_type=alias_type,
         )
+
+    def research_doctor(self) -> dict[str, Any]:
+        """Inspect local research store health without writing files."""
+        return maintenance.doctor(self.output_dir)
+
+    def rebuild_research_indexes(self) -> dict[str, Any]:
+        """Rebuild research navigation indexes from canonical object JSON."""
+        return maintenance.rebuild_indexes(self.output_dir)
+
+    def cleanup_research(self, *, dry_run: bool = True) -> dict[str, Any]:
+        """Return a cleanup plan for non-canonical research artifacts."""
+        return maintenance.cleanup(self.output_dir, dry_run=dry_run)
 
 
 def _artifact_telemetry(provider_envelope: dict[str, Any]) -> dict[str, Any]:
