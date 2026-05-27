@@ -17,6 +17,15 @@ def test_register_adds_notion_subcommands():
     assert ns.connector == "notion" and ns.notion_cmd == "get" and ns.page_id == "PAGEID"
 
 
+def test_notion_p0_parser_surface():
+    p = _parser()
+    assert p.parse_args(["notion", "create-db-item", "db1", "--title", "Task"]).notion_cmd == "create-db-item"
+    assert p.parse_args(["notion", "update-db-item", "page1", "--property-json", '{"Status":{"select":{"name":"Done"}}}']).notion_cmd == "update-db-item"
+    assert p.parse_args(["notion", "archive", "page1", "--confirm-title", "Task"]).notion_cmd == "archive"
+    assert p.parse_args(["notion", "append-blocks", "page1", "--content-file", "x.md"]).notion_cmd == "append-blocks"
+    assert p.parse_args(["notion", "replace-content", "page1", "--content-file", "x.md", "--confirm-title", "Task"]).notion_cmd == "replace-content"
+
+
 def test_register_has_format_and_json_flags():
     p = _parser()
     assert p.parse_args(["notion", "get", "PID", "--json"]).as_json is True
@@ -632,3 +641,129 @@ def test_sync_primary_markdown_write_failure_does_not_create_sidecar(tmp_path, m
         ))
 
     assert not sidecar.exists()
+
+
+# --- P0 lifecycle command dispatch tests ---
+
+def test_create_db_item_dispatch(monkeypatch, tmp_path):
+    import h2t_ops.connectors.notion.client as client_mod
+    from h2t_ops.connectors.notion import commands as cmds_mod
+    from types import SimpleNamespace
+
+    calls = []
+
+    class _Stub:
+        def create_db_item(self, database_id, *, title, property_json=None):
+            calls.append(("create_db_item", database_id, title, property_json))
+            return {"id": "new-page"}
+
+    monkeypatch.setattr(client_mod, "NotionClient", lambda: _Stub())
+    out = cmds_mod.run(SimpleNamespace(
+        notion_cmd="create-db-item",
+        database_id="db1",
+        title="My Task",
+        property_json=None,
+        as_json=True,
+        fmt="human",
+    ))
+    assert out == {"id": "new-page"}
+    assert calls == [("create_db_item", "db1", "My Task", None)]
+
+
+def test_update_db_item_dispatch(monkeypatch):
+    import h2t_ops.connectors.notion.client as client_mod
+    from h2t_ops.connectors.notion import commands as cmds_mod
+    from types import SimpleNamespace
+
+    calls = []
+
+    class _Stub:
+        def update_db_item(self, page_id, *, property_json):
+            calls.append(("update_db_item", page_id, property_json))
+            return {"id": page_id}
+
+    monkeypatch.setattr(client_mod, "NotionClient", lambda: _Stub())
+    out = cmds_mod.run(SimpleNamespace(
+        notion_cmd="update-db-item",
+        page_id="page1",
+        property_json='{"Status":{"select":{"name":"Done"}}}',
+        as_json=True,
+        fmt="human",
+    ))
+    assert out == {"id": "page1"}
+    assert calls[0][0] == "update_db_item"
+
+
+def test_archive_dispatch(monkeypatch):
+    import h2t_ops.connectors.notion.client as client_mod
+    from h2t_ops.connectors.notion import commands as cmds_mod
+    from types import SimpleNamespace
+
+    calls = []
+
+    class _Stub:
+        def archive_page(self, page_id, *, confirm_title):
+            calls.append(("archive", page_id, confirm_title))
+            return {"id": page_id, "archived": True}
+
+    monkeypatch.setattr(client_mod, "NotionClient", lambda: _Stub())
+    out = cmds_mod.run(SimpleNamespace(
+        notion_cmd="archive",
+        page_id="page1",
+        confirm_title="My Page",
+        as_json=True,
+        fmt="human",
+    ))
+    assert out["archived"] is True
+    assert calls == [("archive", "page1", "My Page")]
+
+
+def test_append_blocks_dispatch(monkeypatch, tmp_path):
+    import h2t_ops.connectors.notion.client as client_mod
+    from h2t_ops.connectors.notion import commands as cmds_mod
+    from types import SimpleNamespace
+
+    md_file = tmp_path / "content.md"
+    md_file.write_text("# Hello\n", encoding="utf-8")
+    calls = []
+
+    class _Stub:
+        def append_blocks_from_file(self, page_id, content_file):
+            calls.append(("append", page_id, content_file))
+            return {"results": []}
+
+    monkeypatch.setattr(client_mod, "NotionClient", lambda: _Stub())
+    out = cmds_mod.run(SimpleNamespace(
+        notion_cmd="append-blocks",
+        page_id="page1",
+        content_file=str(md_file),
+        as_json=True,
+        fmt="human",
+    ))
+    assert calls == [("append", "page1", str(md_file))]
+
+
+def test_replace_content_dispatch(monkeypatch, tmp_path):
+    import h2t_ops.connectors.notion.client as client_mod
+    from h2t_ops.connectors.notion import commands as cmds_mod
+    from types import SimpleNamespace
+
+    md_file = tmp_path / "content.md"
+    md_file.write_text("Replacement.\n", encoding="utf-8")
+    calls = []
+
+    class _Stub:
+        def replace_page_content_safe(self, page_id, content_file, *, confirm_title):
+            calls.append(("replace", page_id, content_file, confirm_title))
+
+    monkeypatch.setattr(client_mod, "NotionClient", lambda: _Stub())
+    out = cmds_mod.run(SimpleNamespace(
+        notion_cmd="replace-content",
+        page_id="page1",
+        content_file=str(md_file),
+        confirm_title="My Page",
+        as_json=True,
+        fmt="human",
+    ))
+    assert out == {"status": "replaced", "page_id": "page1"}
+    assert calls == [("replace", "page1", str(md_file), "My Page")]

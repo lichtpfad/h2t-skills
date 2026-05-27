@@ -642,6 +642,97 @@ class NotionClient:
         except Exception as e:
             raise _map_sdk_exc(e, op=f"replace page content for {page_id}") from e
 
+    # --- P0 lifecycle ops ---
+
+    def create_db_item(
+        self,
+        database_id: str,
+        *,
+        title: str,
+        property_json: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        import json
+        properties: Dict[str, Any] = json.loads(property_json) if property_json else {}
+        # Add Name/title property if no title-type property provided
+        if "Name" not in properties and "title" not in {k.lower() for k in properties}:
+            properties["Name"] = {"title": [{"text": {"content": title}}]}
+        try:
+            return self.client.pages.create(
+                parent={"database_id": database_id},
+                properties=properties,
+            )
+        except Exception as e:
+            raise _map_sdk_exc(e, op=f"create db item in {database_id}") from e
+
+    def update_db_item(self, page_id: str, *, property_json: str) -> Dict[str, Any]:
+        import json
+        try:
+            return self.client.pages.update(
+                page_id=page_id,
+                properties=json.loads(property_json),
+            )
+        except Exception as e:
+            raise _map_sdk_exc(e, op=f"update db item {page_id}") from e
+
+    def archive_page(self, page_id: str, *, confirm_title: str) -> Dict[str, Any]:
+        try:
+            page = self.client.pages.retrieve(page_id=page_id)
+        except Exception as e:
+            raise _map_sdk_exc(e, op=f"retrieve page {page_id} for archive") from e
+        actual = self._title_from_object(page)
+        if actual.strip().lower() != confirm_title.strip().lower():
+            raise UsageError(
+                f'archive aborted: title mismatch — expected "{confirm_title}", got "{actual}"'
+            )
+        try:
+            return self.client.pages.update(page_id=page_id, archived=True)
+        except Exception as e:
+            raise _map_sdk_exc(e, op=f"archive page {page_id}") from e
+
+    def append_blocks_from_file(self, page_id: str, content_file: str) -> Dict[str, Any]:
+        from pathlib import Path as _P
+        markdown = _P(content_file).read_text(encoding="utf-8")
+        blocks = self.markdown_to_blocks(markdown)
+        try:
+            return self.client.blocks.children.append(block_id=page_id, children=blocks)
+        except Exception as e:
+            raise _map_sdk_exc(e, op=f"append blocks to {page_id}") from e
+
+    def replace_page_content_safe(
+        self, page_id: str, content_file: str, *, confirm_title: str
+    ) -> None:
+        """Replace page content with title verification before any mutation."""
+        from pathlib import Path as _P
+        # 1. Verify title BEFORE any mutation
+        try:
+            page = self.client.pages.retrieve(page_id=page_id)
+        except Exception as e:
+            raise _map_sdk_exc(e, op=f"retrieve page {page_id} for replace-content") from e
+        actual = self._title_from_object(page)
+        if actual.strip().lower() != confirm_title.strip().lower():
+            raise UsageError(
+                f'replace-content aborted: title mismatch — expected "{confirm_title}", got "{actual}"'
+            )
+        # 2. Read file
+        markdown = _P(content_file).read_text(encoding="utf-8")
+        # 3. Delete existing blocks
+        try:
+            existing = self.get_blocks(page_id)
+            for block in existing:
+                try:
+                    self.delete_block(block["id"])
+                except Exception:
+                    pass
+        except Exception as e:
+            raise _map_sdk_exc(e, op=f"clear blocks for {page_id}") from e
+        # 4. Append new blocks
+        new_blocks = self.markdown_to_blocks(markdown)
+        try:
+            for i in range(0, len(new_blocks), 100):
+                self.append_blocks(page_id, new_blocks[i : i + 100])
+        except Exception as e:
+            raise _map_sdk_exc(e, op=f"append new blocks for {page_id}") from e
+
     # --- Comments ---
 
     def _rich_text_to_plain(self, rich_text: List[Dict[str, Any]]) -> str:
