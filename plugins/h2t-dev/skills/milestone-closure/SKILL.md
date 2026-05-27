@@ -43,6 +43,33 @@ Report contains:
 5. Candidates for next phase
 6. Test coverage added
 
+### Step 3a: Archive Stale Plans — docs-cleanup
+
+First run in dry-run mode (default) to preview what will be archived:
+
+```bash
+~/.h2t/venv/Scripts/python plugins/h2t-dev/skills/docs-cleanup/scripts/cleanup.py <repo-name>
+```
+
+**STOP if unexpected files are listed.** Confirm with user before proceeding.
+
+If the preview is acceptable, run with `--apply` to execute git mv + commit.
+Replace `<M>` with the milestone number (e.g. `M6`):
+
+```bash
+~/.h2t/venv/Scripts/python plugins/h2t-dev/skills/docs-cleanup/scripts/cleanup.py <repo-name> --apply --milestone <M>
+```
+
+### Step 3b: Rebuild docs/README.md — docs-index
+
+Regenerate the navigation index after archival:
+
+```bash
+~/.h2t/venv/Scripts/python plugins/h2t-dev/skills/docs-index/scripts/index.py <repo-name> --apply
+```
+
+Commit the updated `docs/README.md` separately if not already committed by cleanup step.
+
 ### Step 4: Update Project Docs
 
 1. **roadmap.md:** Move phase from active to "Completed Phases" table
@@ -69,6 +96,8 @@ All {closed_issues} issues resolved."
 - [ ] All milestone issues = closed
 - [ ] `h2t-dev:pre-merge-check` = all gates pass
 - [ ] Phase report written to `docs/reports/`
+- [ ] Stale plans archived (`cleanup.py <repo>` previewed, then `--apply` executed)
+- [ ] `docs/README.md` rebuilt via `index.py <repo> --apply`
 - [ ] `docs/roadmap.md` updated (phase → completed)
 - [ ] `CLAUDE.md` updated (completed phases table)
 - [ ] GitHub milestone state = closed
