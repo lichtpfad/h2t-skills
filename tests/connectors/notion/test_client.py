@@ -968,3 +968,26 @@ def test_replace_content_mismatch_raises_before_delete(conv, tmp_path):
     # CRITICAL: blocks.delete must NOT have been called
     assert not conv.client.blocks.delete.called
     assert not conv.client.blocks.children.list.called
+
+
+def test_replace_content_fails_fast_on_delete_error(conv, tmp_path):
+    """Verify that if block deletion fails, append is NOT called and error propagates."""
+    from unittest.mock import MagicMock
+    from h2t_ops.core.errors import ProviderError
+    md_file = tmp_path / "content.md"
+    md_file.write_text("New content.\n", encoding="utf-8")
+    conv.client = MagicMock()
+    conv.client.pages.retrieve.return_value = {
+        "id": "page1",
+        "properties": {"Name": {"type": "title", "title": [{"type": "text", "text": {"content": "Page Title"}}]}},
+    }
+    conv.client.blocks.children.list.return_value = {
+        "results": [{"id": "b1"}, {"id": "b2"}], "has_more": False
+    }
+    # Second block deletion fails
+    conv.client.blocks.delete.side_effect = [None, Exception("API error: block locked")]
+    # Assert that replace_page_content_safe raises and append is NOT called
+    with pytest.raises(ProviderError, match="API error"):
+        conv.replace_page_content_safe("page1", str(md_file), confirm_title="Page Title")
+    # CRITICAL: append must NOT have been called because deletion failed
+    assert not conv.client.blocks.children.append.called

@@ -715,17 +715,14 @@ class NotionClient:
             )
         # 2. Read file
         markdown = _P(content_file).read_text(encoding="utf-8")
-        # 3. Delete existing blocks
+        # 3. Delete existing blocks — fail-fast: any error stops immediately, no append
         try:
             existing = self.get_blocks(page_id)
             for block in existing:
-                try:
-                    self.delete_block(block["id"])
-                except Exception:
-                    pass
+                self.delete_block(block["id"])
         except Exception as e:
             raise _map_sdk_exc(e, op=f"clear blocks for {page_id}") from e
-        # 4. Append new blocks
+        # 4. Append new blocks (only if all deletions succeeded)
         new_blocks = self.markdown_to_blocks(markdown)
         try:
             for i in range(0, len(new_blocks), 100):
