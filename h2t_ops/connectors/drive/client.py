@@ -160,6 +160,69 @@ def _row(file: Dict[str, Any]) -> Dict[str, Any]:
     return row
 
 
+_HEADING_NAMED_STYLE = {1: "HEADING_1", 2: "HEADING_2", 3: "HEADING_3"}
+
+
+def _md_to_docs_requests(markdown_text: str, tab_id: str) -> List[Dict[str, Any]]:
+    """Convert markdown to Docs API batchUpdate requests targeting *tab_id*.
+
+    v1 scope: H1–H3 headings, paragraphs, unordered bullets (- or *).
+    Inline bold/italic not supported in v1.
+
+    All text is inserted at index 1 (start of an empty tab body) in one
+    insertText request, followed by style/bullet requests with pre-computed
+    stable indices.
+    """
+    paragraphs: List[Dict[str, Any]] = []
+    for line in markdown_text.splitlines():
+        m = re.match(r'^(#{1,3})\s+(.*)', line)
+        if m:
+            paragraphs.append({"type": f"heading{len(m.group(1))}", "text": m.group(2)})
+            continue
+        m = re.match(r'^[-*]\s+(.*)', line)
+        if m:
+            paragraphs.append({"type": "bullet", "text": m.group(1)})
+            continue
+        paragraphs.append({"type": "paragraph", "text": line})
+
+    if not paragraphs:
+        return []
+
+    full_text = "".join(p["text"] + "\n" for p in paragraphs)
+    requests: List[Dict[str, Any]] = [{
+        "insertText": {
+            "location": {"index": 1, "tabId": tab_id},
+            "text": full_text,
+        }
+    }]
+
+    current = 1
+    for p in paragraphs:
+        para_len = len(p["text"]) + 1  # +1 for \n
+        start, end = current, current + para_len
+        current = end
+
+        ptype = p["type"]
+        if ptype.startswith("heading"):
+            level = int(ptype[-1])
+            requests.append({
+                "updateParagraphStyle": {
+                    "range": {"startIndex": start, "endIndex": end, "tabId": tab_id},
+                    "paragraphStyle": {"namedStyleType": _HEADING_NAMED_STYLE[level]},
+                    "fields": "namedStyleType",
+                }
+            })
+        elif ptype == "bullet":
+            requests.append({
+                "createParagraphBullets": {
+                    "range": {"startIndex": start, "endIndex": end, "tabId": tab_id},
+                    "bulletPreset": "BULLET_DISC_CIRCLE_SQUARE",
+                }
+            })
+
+    return requests
+
+
 class DriveClient:
     """Google Drive API client — parity scope #133."""
 
@@ -732,6 +795,50 @@ class DriveClient:
             "title": props.get("title", title),
             "index": props.get("index"),
             "nesting_level": props.get("nestingLevel"),
+        }
+
+    def write_document_tab(
+        self,
+        document_id: str,
+        tab_id: str,
+        markdown_text: str,
+    ) -> Dict[str, Any]:
+        """Write markdown content to an existing Google Docs tab via batchUpdate.
+
+        v1 scope: H1–H3 headings, paragraphs, unordered bullet lists.
+        Appends to the beginning of the tab body (index 1). Does not clear
+        existing content — call on a freshly created (empty) tab.
+        """
+        try:
+            meta = self.service.files().get(
+                fileId=document_id,
+                fields="id, name, mimeType",
+                supportsAllDrives=True,
+            ).execute()
+            if meta.get("mimeType") != "application/vnd.google-apps.document":
+                raise UsageError(
+                    f"file {meta.get('name', document_id)!r} is not a Google Docs editor file"
+                )
+            reqs = _md_to_docs_requests(markdown_text, tab_id)
+            if not reqs:
+                return {
+                    "kind": "google_docs_tab_write/v1",
+                    "document_id": document_id,
+                    "tab_id": tab_id,
+                    "requests_sent": 0,
+                }
+            response = self._docs().documents().batchUpdate(
+                documentId=document_id,
+                body={"requests": reqs},
+            ).execute()
+        except Exception as e:
+            raise _map_http_error(e, op=f"write tab {tab_id} in document {document_id}") from e
+        return {
+            "kind": "google_docs_tab_write/v1",
+            "document_id": document_id,
+            "tab_id": tab_id,
+            "requests_sent": len(reqs),
+            "revision_id": (response.get("writeControl") or {}).get("requiredRevisionId", ""),
         }
 
     def download_file(self, file_id: str, dest: Optional[str | Path] = None) -> Dict[str, Any]:
