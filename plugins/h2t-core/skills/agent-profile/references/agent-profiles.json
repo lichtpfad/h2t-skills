@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "_note": "Draft catalog. Plugin membership is reviewable, not final product strategy. Plugin ids mirror observed Claude Code enabledPlugins ids as of 2026-05-22.",
+  "_note": "Draft catalog. Plugin membership is reviewable, not final product strategy. Plugin ids mirror observed Claude Code enabledPlugins ids as of 2026-05-27. h2t-dev skills: docs-init/sync-labels/cleanup/index demoted to CLI (lifecycle OS refactor complete).",
   "pluginIds": {
     "h2t-core": "h2t-core@lichtpfad",
     "h2t-ops": "h2t-ops@lichtpfad",
