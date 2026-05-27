@@ -65,6 +65,12 @@ def register(subparsers: Any) -> None:
     dta.add_argument("document_id")
     dta.add_argument("title")
     add_fmt(dta)
+    dtw = dtcmds.add_parser("write", help="Write markdown content to an existing tab")
+    dtw.add_argument("document_id")
+    dtw.add_argument("tab_id")
+    dtw.add_argument("--content-file", required=True, metavar="PATH",
+                     help="Path to a markdown file whose content is written into the tab")
+    add_fmt(dtw)
 
     dp = cmds.add_parser("download", help="Download a Drive file by id")
     dp.add_argument("file_id")
@@ -189,6 +195,10 @@ def run(args) -> Any:
             return client.list_document_tabs(args.document_id)
         if args.docs_tab_cmd == "add":
             return client.add_document_tab(args.document_id, args.title)
+        if args.docs_tab_cmd == "write":
+            from pathlib import Path as _Path
+            content = _Path(args.content_file).read_text(encoding="utf-8")
+            return client.write_document_tab(args.document_id, args.tab_id, content)
         raise UsageError(f"unknown drive docs-tab subcommand: {args.docs_tab_cmd}")
     if cmd == "download":
         return client.download_file(args.file_id, dest=args.dest)
