@@ -939,3 +939,14 @@ def test_research_skill_documentation_mentions_navigation_commands_and_json_trut
     assert "query shared index" in text
     assert "resolve object ids / aliases" in text
     assert "read canonical object JSON" in text
+
+
+def test_research_skill_documents_maintenance_commands_and_retention_policy():
+    text = Path("plugins/h2t-ops/skills/research/SKILL.md").read_text(encoding="utf-8")
+
+    assert "h2t-ops research doctor" in text
+    assert "h2t-ops research rebuild-indexes" in text
+    assert "h2t-ops research cleanup --dry-run" in text
+    assert "Canonical object JSON is never deleted by default" in text
+    assert "doctor is read-only" in text
+    assert "indexes are rebuildable caches" in text
