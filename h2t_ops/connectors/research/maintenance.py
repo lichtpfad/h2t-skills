@@ -550,6 +550,39 @@ def _synthesis_index_row(
 
 ALIAS_SORT_KEYS = ("alias_type", "alias_value", "target_object_type", "target_id")
 
+REBUILD_REQUIRED_FIELDS = {
+    "document": (
+        "document_id",
+        "canonical_url",
+        "provider",
+        "title",
+        "status",
+        "review_status",
+        "thread_ids",
+        "entity_ids",
+        "project_ids",
+        "fetched_at",
+    ),
+    "thread": (
+        "thread_id",
+        "question",
+        "status",
+        "owner_context",
+        "topics",
+        "latest_synthesis_id",
+        "created_at",
+    ),
+    "run": ("run_id", "thread_id", "document_ids"),
+    "synthesis": (
+        "synthesis_id",
+        "thread_id",
+        "status",
+        "review_status",
+        "open_questions",
+        "created_at",
+    ),
+}
+
 
 def _alias_rows(objects: dict[str, dict[str, dict[str, Any]]]) -> list[dict[str, Any]]:
     keyed: dict[tuple[str, str, str, str], dict[str, Any]] = {}
@@ -578,6 +611,49 @@ def _alias_rows(objects: dict[str, dict[str, dict[str, Any]]]) -> list[dict[str,
     return sorted(keyed.values(), key=lambda row: tuple(row[key] for key in ALIAS_SORT_KEYS))
 
 
+def _preserved_alias_rows(root: Path) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    rows, findings = _read_index(root, "aliases")
+    if findings:
+        return [], findings
+    preserved = [
+        row
+        for row in rows
+        if row.get("alias_type") != "url" or row.get("target_object_type") != "document"
+    ]
+    return sorted(
+        preserved,
+        key=lambda row: tuple(str(row.get(key, "")) for key in ALIAS_SORT_KEYS),
+    ), []
+
+
+def _validate_rebuild_objects(
+    root: Path,
+    objects: dict[str, dict[str, dict[str, Any]]],
+) -> list[dict[str, Any]]:
+    findings: list[dict[str, Any]] = []
+    for object_type, typed_objects in objects.items():
+        required_fields = REBUILD_REQUIRED_FIELDS[object_type]
+        id_key = OBJECTS[object_type]["id_key"]
+        directory = OBJECTS[object_type]["directory"]
+        for object_id, data in typed_objects.items():
+            for field in required_fields:
+                if field in data:
+                    continue
+                declared_id = data.get(id_key)
+                findings.append(
+                    _finding(
+                        "error",
+                        "object_required_field_missing",
+                        f"Canonical object is missing required field {field!r}",
+                        path=store.object_path(root, directory, object_id),
+                        object_type=object_type,
+                        object_id=declared_id if isinstance(declared_id, str) else object_id,
+                        ref=field,
+                    )
+                )
+    return findings
+
+
 def _rebuild_counts(
     objects: dict[str, dict[str, dict[str, Any]]],
     alias_count: int,
@@ -591,24 +667,41 @@ def _rebuild_counts(
     }
 
 
+def _empty_rebuild_counts() -> dict[str, int]:
+    return {
+        "documents": 0,
+        "threads": 0,
+        "runs": 0,
+        "syntheses": 0,
+        "aliases": 0,
+    }
+
+
+def _rebuild_error_envelope(
+    root: Path,
+    findings: list[dict[str, Any]],
+) -> dict[str, Any]:
+    return {
+        "kind": "research_rebuild_indexes",
+        "root": str(root),
+        "status": "error",
+        "written": [],
+        "counts": _empty_rebuild_counts(),
+        "findings": findings,
+    }
+
+
 def rebuild_indexes(root: Path) -> dict[str, Any]:
     root = Path(root)
     objects, findings = _load_objects(root)
     if findings:
-        return {
-            "kind": "research_rebuild_indexes",
-            "root": str(root),
-            "status": "error",
-            "written": [],
-            "counts": {
-                "documents": 0,
-                "threads": 0,
-                "runs": 0,
-                "syntheses": 0,
-                "aliases": 0,
-            },
-            "findings": findings,
-        }
+        return _rebuild_error_envelope(root, findings)
+
+    findings = _validate_rebuild_objects(root, objects)
+    preserved_aliases, alias_findings = _preserved_alias_rows(root)
+    findings.extend(alias_findings)
+    if findings:
+        return _rebuild_error_envelope(root, findings)
 
     documents = [
         _document_index_row(document)
@@ -622,7 +715,10 @@ def rebuild_indexes(root: Path) -> dict[str, Any]:
         _synthesis_index_row(synthesis, objects)
         for _, synthesis in sorted(objects["synthesis"].items())
     ]
-    aliases = _alias_rows(objects)
+    aliases = sorted(
+        [*preserved_aliases, *_alias_rows(objects)],
+        key=lambda row: tuple(str(row.get(key, "")) for key in ALIAS_SORT_KEYS),
+    )
 
     indexes = {
         "documents": documents,

@@ -75,6 +75,29 @@ def _demo_document(root):
     return document
 
 
+def _write_existing_indexes(root):
+    rows = {
+        "documents": [{"document_id": "research-doc:existing", "project_ids": ["project:demo"]}],
+        "threads": [{"thread_id": "research-thread:existing", "topics": ["demo"]}],
+        "syntheses": [{"synthesis_id": "research-synthesis:existing", "project_ids": ["project:demo"]}],
+        "aliases": [
+            {
+                "alias_type": "topic",
+                "alias_value": "demo",
+                "target_object_type": "thread",
+                "target_id": "research-thread:existing",
+                "confidence": "medium",
+            }
+        ],
+    }
+    for index_name, index_rows in rows.items():
+        store.write_json(store.index_path(root, index_name), index_rows)
+    return {
+        index_name: store.index_path(root, index_name).read_text(encoding="utf-8")
+        for index_name in rows
+    }
+
+
 def test_doctor_warns_for_stale_document_index_ref(tmp_path):
     root = tmp_path / "research"
     store.write_json(
@@ -248,17 +271,95 @@ def test_rebuild_indexes_replaces_stale_rows(tmp_path):
     assert documents == [maintenance._document_index_row(document)]
 
 
+def test_rebuild_indexes_preserves_non_url_alias_rows(tmp_path):
+    root = tmp_path / "research"
+    document = _demo_document(root)
+    preserved_alias = {
+        "alias_type": "topic",
+        "alias_value": "demo",
+        "target_object_type": "thread",
+        "target_id": "research-thread:demo",
+        "confidence": "medium",
+    }
+    stale_url_alias = {
+        "alias_type": "url",
+        "alias_value": "https://example.com/stale",
+        "target_object_type": "document",
+        "target_id": "research-doc:stale",
+        "confidence": "high",
+    }
+    store.write_json(store.index_path(root, "aliases"), [stale_url_alias, preserved_alias])
+
+    result = maintenance.rebuild_indexes(root)
+
+    aliases = json.loads(store.index_path(root, "aliases").read_text(encoding="utf-8"))
+    assert result["status"] == "ok"
+    assert aliases == [
+        preserved_alias,
+        {
+            "alias_type": "url",
+            "alias_value": "https://example.com/post",
+            "target_object_type": "document",
+            "target_id": document["document_id"],
+            "confidence": "high",
+        },
+    ]
+
+
 def test_rebuild_indexes_with_malformed_object_does_not_overwrite_existing_indexes(tmp_path):
     root = tmp_path / "research"
-    existing_rows = [{"document_id": "research-doc:existing", "project_ids": ["project:demo"]}]
-    store.write_json(store.index_path(root, "documents"), existing_rows)
+    before = _write_existing_indexes(root)
     malformed = store.object_path(root, "documents", "research-doc:bad")
     malformed.parent.mkdir(parents=True, exist_ok=True)
     malformed.write_text("{bad json", encoding="utf-8")
-    before = store.index_path(root, "documents").read_text(encoding="utf-8")
 
     result = maintenance.rebuild_indexes(root)
 
     assert result["status"] == "error"
     assert result["written"] == []
-    assert store.index_path(root, "documents").read_text(encoding="utf-8") == before
+    assert {
+        index_name: store.index_path(root, index_name).read_text(encoding="utf-8")
+        for index_name in before
+    } == before
+
+
+def test_rebuild_indexes_with_incomplete_object_does_not_overwrite_existing_indexes(tmp_path):
+    root = tmp_path / "research"
+    before = _write_existing_indexes(root)
+    document_id = "research-doc:incomplete"
+    store.write_json(
+        store.object_path(root, "documents", document_id),
+        {
+            "schema": "research_document/v0.1",
+            "document_id": document_id,
+        },
+    )
+
+    result = maintenance.rebuild_indexes(root)
+
+    assert result["status"] == "error"
+    assert result["written"] == []
+    assert "object_required_field_missing" in {
+        finding["code"] for finding in result["findings"]
+    }
+    assert {
+        index_name: store.index_path(root, index_name).read_text(encoding="utf-8")
+        for index_name in before
+    } == before
+
+
+def test_rebuild_indexes_with_malformed_alias_index_does_not_overwrite_existing_indexes(tmp_path):
+    root = tmp_path / "research"
+    before = _write_existing_indexes(root)
+    store.index_path(root, "aliases").write_text("{bad json", encoding="utf-8")
+    before["aliases"] = store.index_path(root, "aliases").read_text(encoding="utf-8")
+
+    result = maintenance.rebuild_indexes(root)
+
+    assert result["status"] == "error"
+    assert result["written"] == []
+    assert result["findings"][0]["code"] == "index_json_invalid"
+    assert {
+        index_name: store.index_path(root, index_name).read_text(encoding="utf-8")
+        for index_name in before
+    } == before
