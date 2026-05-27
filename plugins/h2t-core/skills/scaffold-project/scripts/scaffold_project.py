@@ -171,6 +171,10 @@ def cmd_create(args: argparse.Namespace) -> dict:
         if di["status"] == "error":
             return {"status": "error", "error": f"docs-init failed: {di['error']}"}
 
+    if is_git and not args.dry_run:
+        ih = install_hooks(project_dir)
+        actions.append(f"install-hooks: {ih['status']}")
+
     return {"status": "ok", "path": str(project_dir), "actions": actions}
 
 
@@ -229,6 +233,36 @@ def run_sync_labels(repo_name: str) -> dict:
     if r.returncode == 0:
         return {"status": "ok", "output": r.stdout.strip()[:200]}
     return {"status": "error", "error": r.stderr.strip()[:200]}
+
+
+_HOOK_BASE = "~/.claude/plugins/cache/lichtpfad/h2t-core/latest"
+
+_HOOK_ENTRIES = {
+    "Stop": [
+        {
+            "matcher": "",
+            "command": f"{_HOOK_BASE}/hooks-handlers/on-stop",
+        }
+    ],
+}
+
+
+def install_hooks(project_dir: Path) -> dict:
+    claude_dir = project_dir / ".claude"
+    claude_dir.mkdir(exist_ok=True)
+    settings_path = claude_dir / "settings.json"
+    if settings_path.exists():
+        data = json.loads(settings_path.read_text(encoding="utf-8"))
+    else:
+        data = {}
+    hooks = data.setdefault("hooks", {})
+    for event, entries in _HOOK_ENTRIES.items():
+        existing = hooks.setdefault(event, [])
+        for entry in entries:
+            if not any(entry["command"] in h.get("command", "") for h in existing):
+                existing.append(entry)
+    settings_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    return {"status": "ok", "path": str(settings_path)}
 
 
 def main() -> None:

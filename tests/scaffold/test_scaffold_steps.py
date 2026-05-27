@@ -115,3 +115,42 @@ def test_run_sync_labels_error_on_failure():
         mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="gh not found")
         result = run_sync_labels("h2t-skills")
     assert result["status"] == "error"
+
+
+import json
+from scaffold_project import install_hooks
+
+
+def test_install_hooks_creates_settings(tmp_path):
+    """Creates .claude/settings.json with Stop hook."""
+    install_hooks(tmp_path)
+    settings_path = tmp_path / ".claude" / "settings.json"
+    assert settings_path.exists()
+
+
+def test_install_hooks_has_stop_hook(tmp_path):
+    """Stop hook entry references on-stop handler."""
+    install_hooks(tmp_path)
+    data = json.loads((tmp_path / ".claude" / "settings.json").read_text())
+    stop_hooks = data.get("hooks", {}).get("Stop", [])
+    assert any("on-stop" in h.get("command", "") for h in stop_hooks)
+
+
+def test_install_hooks_stop_hook_points_to_latest(tmp_path):
+    """Stop hook path starts with ~ (portable) and references latest/ junction."""
+    install_hooks(tmp_path)
+    data = json.loads((tmp_path / ".claude" / "settings.json").read_text())
+    stop_hooks = data.get("hooks", {}).get("Stop", [])
+    cmd = stop_hooks[0]["command"]
+    assert cmd.startswith("~")
+    assert "latest" in cmd
+
+
+def test_install_hooks_idempotent(tmp_path):
+    """Calling twice does not duplicate hooks."""
+    install_hooks(tmp_path)
+    install_hooks(tmp_path)
+    data = json.loads((tmp_path / ".claude" / "settings.json").read_text())
+    stop_hooks = data.get("hooks", {}).get("Stop", [])
+    on_stop = [h for h in stop_hooks if "on-stop" in h.get("command", "")]
+    assert len(on_stop) == 1
