@@ -1,7 +1,7 @@
 ---
 name: h2t-ops:research
-description: "Semantic web research via Exa API. Modes: fast / generic / news / academic / competitor / people / deep. Transparent telemetry, fail-loud protocol. Use for web search, news tracking, academic papers, competitor intel, people research. NOT for LinkedIn lead-gen (use /search-leads from BayramAnnakov plugin). Triggers: 'research', 'find out', 'look up', 'исследуй', 'h2t:research'."
-compatibility: "Requires h2t-ops CLI with the research connector and EXA_API_KEY configured via env, H2T_SECRETS_FILE, ~/.dor/secrets/secrets.env, or ~/.dor/secrets.env. Optional JINA_API_KEY enables authenticated Jina Reader fetches. URL fetch uses direct and Jina providers by default; Playwright/Crawl4AI/Firecrawl/Browserless are stubbed follow-ups."
+description: "Provider-routed web research via Exa-backed search/crawl and URL fetch providers. Modes: fast / generic / news / academic / competitor / people / deep. Transparent telemetry, fail-loud protocol. Use for web search, news tracking, academic papers, competitor intel, people research, and direct URL fetch. NOT for LinkedIn lead-gen (use /search-leads from BayramAnnakov plugin). Triggers: 'research', 'find out', 'look up', 'исследуй', 'h2t:research'."
+compatibility: "Requires h2t-ops CLI with the research connector. Direct URL fetch works without a provider key. Optional JINA_API_KEY enables authenticated Jina Reader fetches. EXA_API_KEY is required only for Exa-backed capabilities such as search, answer, similar, crawl, and author resolution. Keys may be configured via env, H2T_SECRETS_FILE, ~/.dor/secrets/secrets.env, or ~/.dor/secrets.env. Playwright/Crawl4AI/Firecrawl/Browserless are stubbed follow-ups."
 metadata:
   author: lichtpfad
   version: 0.1.2
@@ -89,6 +89,26 @@ h2t-ops research crawl --url "https://..." --json
 h2t-ops research fetch --url "https://..." --provider auto --json
 h2t-ops research visual-ocr --fetch-sidecar "...sources.json" --image-path "...png" --json
 ```
+
+## Provider Key Routing
+
+Use provider routing before dispatching provider-backed research when key availability is uncertain:
+
+```bash
+h2t-ops research providers --json
+h2t-ops research providers --capability fetch --json
+h2t-ops research route --capability search --json
+h2t-ops research route --capability fetch --json
+```
+
+Rules:
+
+- EXA_API_KEY is required for search, answer, similar, crawl, and author resolution.
+- JINA_API_KEY is optional for fetch.
+- direct fetch is available without a provider key.
+- Routing checks are local and do not call provider networks.
+- Missing required provider keys fail before artifact writes.
+- If routing reports no configured provider, fix keys/configuration before running the provider command.
 
 `visual-ocr` is a rescue path after `research fetch` returns `FAILED` or specific
 degraded reasons. It creates a review-required artifact from one fetch sidecar and

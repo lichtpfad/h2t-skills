@@ -4,6 +4,10 @@ from __future__ import annotations
 import argparse
 from typing import Any
 
+from h2t_ops.connectors.research.provider_routing import CAPABILITIES
+
+CAPABILITY_CHOICES = sorted(CAPABILITIES)
+
 FETCH_PROVIDERS = [
     "auto",
     "direct",
@@ -40,6 +44,22 @@ def register(subparsers: Any) -> None:
 
     preflight = cmds.add_parser("preflight", help="Validate Exa credentials and connectivity")
     add_fmt(preflight)
+
+    providers = cmds.add_parser("providers", help="List research provider/key readiness")
+    providers.add_argument(
+        "--capability",
+        choices=CAPABILITY_CHOICES,
+    )
+    add_fmt(providers)
+
+    route = cmds.add_parser("route", help="Select a configured research provider route")
+    route.add_argument(
+        "--capability",
+        required=True,
+        choices=CAPABILITY_CHOICES,
+    )
+    route.add_argument("--provider", dest="provider")
+    add_fmt(route)
 
     search = cmds.add_parser("search", help="Search the web with Exa")
     search.add_argument("--query", required=True)
@@ -180,6 +200,10 @@ def run(args: Any) -> Any:
     cmd = args.research_cmd
     if cmd == "preflight":
         return client.preflight()
+    if cmd == "providers":
+        return client.research_provider_status(capability=args.capability)
+    if cmd == "route":
+        return client.research_route(args.capability, provider=args.provider)
     if cmd == "search":
         return client.search(
             query=args.query,

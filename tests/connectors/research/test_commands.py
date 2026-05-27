@@ -9,9 +9,23 @@ from pathlib import Path
 import pytest
 
 from h2t_ops import cli
-from h2t_ops.connectors.research import commands, store
+from h2t_ops.connectors.research import commands, provider_routing, store
 from h2t_ops.core.errors import ProviderError, UsageError
 from h2t_ops.core.registry import discover
+
+
+def _subparser(parser: argparse.ArgumentParser, name: str) -> argparse.ArgumentParser:
+    for action in parser._actions:
+        if isinstance(action, argparse._SubParsersAction):
+            return action.choices[name]
+    raise AssertionError(f"missing subparser {name!r}")
+
+
+def _option_choices(parser: argparse.ArgumentParser, option: str) -> set[str]:
+    for action in parser._actions:
+        if option in action.option_strings:
+            return set(action.choices)
+    raise AssertionError(f"missing option {option!r}")
 
 
 def _remove_research_provider_modules() -> None:
@@ -76,6 +90,47 @@ def test_parser_registration_for_research_subcommands():
     assert fetch.research_cmd == "fetch"
     assert fetch.fmt == "md"
     assert fetch.provider == "crawl4ai"
+
+
+def test_parser_registration_for_research_provider_routing_commands():
+    parser = cli.build_parser()
+    research_parser = _subparser(parser, "research")
+    expected_capabilities = set(provider_routing.CAPABILITIES)
+
+    providers = parser.parse_args(
+        [
+            "research",
+            "providers",
+            "--capability",
+            "fetch",
+            "--json",
+        ]
+    )
+    route = parser.parse_args(
+        [
+            "research",
+            "route",
+            "--capability",
+            "search",
+            "--provider",
+            "exa",
+            "--json",
+        ]
+    )
+
+    assert providers.research_cmd == "providers"
+    assert providers.capability == "fetch"
+    assert providers.as_json is True
+    assert route.research_cmd == "route"
+    assert route.capability == "search"
+    assert route.provider == "exa"
+    assert route.as_json is True
+    assert _option_choices(_subparser(research_parser, "providers"), "--capability") == (
+        expected_capabilities
+    )
+    assert _option_choices(_subparser(research_parser, "route"), "--capability") == (
+        expected_capabilities
+    )
 
 
 def test_parser_registration_for_research_visual_ocr():
@@ -384,6 +439,14 @@ class FakeResearchClient:
         self.calls.append(("preflight", {}))
         return {"method": "preflight", "output_dir": str(self.output_dir)}
 
+    def research_provider_status(self, *, capability: str | None = None) -> dict:
+        self.calls.append(("research_provider_status", {"capability": capability}))
+        return {"method": "research_provider_status", "capability": capability}
+
+    def research_route(self, capability: str, *, provider: str | None = None) -> dict:
+        self.calls.append(("research_route", {"capability": capability, "provider": provider}))
+        return {"method": "research_route", "capability": capability, "provider": provider}
+
     def search(self, **kwargs) -> dict:
         self.calls.append(("search", kwargs))
         return {"method": "search", "kwargs": kwargs, "output_dir": str(self.output_dir)}
@@ -452,6 +515,29 @@ def test_run_dispatches_preflight(monkeypatch):
 
     assert result == {"method": "preflight", "output_dir": "None"}
     assert FakeResearchClient.instances[0].calls == [("preflight", {})]
+
+
+def test_run_dispatches_provider_routing_commands(monkeypatch):
+    _patch_fake_client(monkeypatch)
+
+    providers = commands.run(
+        argparse.Namespace(
+            research_cmd="providers",
+            output_dir=None,
+            capability="fetch",
+        )
+    )
+    route = commands.run(
+        argparse.Namespace(
+            research_cmd="route",
+            output_dir=None,
+            capability="search",
+            provider="exa",
+        )
+    )
+
+    assert providers == {"method": "research_provider_status", "capability": "fetch"}
+    assert route == {"method": "research_route", "capability": "search", "provider": "exa"}
 
 
 def test_run_dispatches_search_and_splits_csv(monkeypatch, tmp_path):
@@ -835,6 +921,76 @@ def test_cli_dispatch_resolve_stale_alias(tmp_path, capsys):
     assert payload["result"]["kind"] == "research_resolution"
     assert payload["result"]["count"] == 1
     assert payload["result"]["matches"][0]["object_exists"] is False
+
+
+def test_cli_dispatch_lists_research_provider_status(monkeypatch, capsys):
+    from h2t_ops.connectors.research import provider_routing
+
+    monkeypatch.setattr(provider_routing, "_secret_available", lambda name: name == "EXA_API_KEY")
+
+    code = cli.dispatch(
+        [
+            "research",
+            "providers",
+            "--capability",
+            "search",
+            "--json",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+
+    assert code == 0
+    assert payload["ok"] is True
+    assert payload["result"]["kind"] == "research_provider_status"
+    assert payload["result"]["capability"] == "search"
+    assert payload["result"]["providers"][0]["provider"] == "exa"
+    assert payload["result"]["providers"][0]["configured"] is True
+
+
+def test_cli_dispatch_routes_fetch_without_keys(monkeypatch, capsys):
+    from h2t_ops.connectors.research import provider_routing
+
+    monkeypatch.setattr(provider_routing, "_secret_available", lambda name: False)
+
+    code = cli.dispatch(
+        [
+            "research",
+            "route",
+            "--capability",
+            "fetch",
+            "--json",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+
+    assert code == 0
+    assert payload["ok"] is True
+    assert payload["result"]["kind"] == "research_provider_route"
+    assert payload["result"]["selected_provider"] == "direct"
+
+
+def test_cli_dispatch_route_missing_exa_key_returns_usage_error(monkeypatch, capsys):
+    from h2t_ops.connectors.research import provider_routing
+
+    monkeypatch.setattr(provider_routing, "_secret_available", lambda name: False)
+
+    code = cli.dispatch(
+        [
+            "research",
+            "route",
+            "--capability",
+            "search",
+            "--json",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().err)
+
+    assert code == 2
+    assert payload["ok"] is False
+    assert payload["error"]["type"] == "usage"
+    assert "no configured research provider" in payload["error"]["message"]
+
+
 def test_run_dispatches_visual_ocr(monkeypatch):
     _patch_fake_client(monkeypatch)
     output_dir = str(Path.cwd() / "tmp" / "research-visual-ocr")
@@ -959,3 +1115,18 @@ def test_research_skill_documents_maintenance_commands_and_retention_policy():
         "Markdown mirrors and `.partial.md` files are human/operator surfaces, not canonical knowledge."
         in text
     )
+
+
+def test_research_skill_documents_provider_key_routing():
+    text = Path("plugins/h2t-ops/skills/research/SKILL.md").read_text(encoding="utf-8")
+
+    assert "## Provider Key Routing" in text
+    assert "h2t-ops research providers --json" in text
+    assert "h2t-ops research providers --capability fetch --json" in text
+    assert "h2t-ops research route --capability search --json" in text
+    assert "h2t-ops research route --capability fetch --json" in text
+    assert "EXA_API_KEY is required for search, answer, similar, crawl, and author resolution." in text
+    assert "JINA_API_KEY is optional for fetch." in text
+    assert "direct fetch is available without a provider key." in text
+    assert "Routing checks are local and do not call provider networks." in text
+    assert "Missing required provider keys fail before artifact writes." in text
