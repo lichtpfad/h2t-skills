@@ -1115,3 +1115,15 @@ def test_research_skill_documents_maintenance_commands_and_retention_policy():
         "Markdown mirrors and `.partial.md` files are human/operator surfaces, not canonical knowledge."
         in text
     )
+
+
+def test_research_skill_documents_provider_key_routing():
+    text = Path("plugins/h2t-ops/skills/research/SKILL.md").read_text(encoding="utf-8")
+
+    assert "## Provider Key Routing" in text
+    assert "h2t-ops research providers --json" in text
+    assert "h2t-ops research route --capability search --json" in text
+    assert "EXA_API_KEY is required for search, answer, similar, crawl, and author resolution." in text
+    assert "JINA_API_KEY is optional for fetch." in text
+    assert "Routing checks are local and do not call provider networks." in text
+    assert "Missing required provider keys fail before artifact writes." in text

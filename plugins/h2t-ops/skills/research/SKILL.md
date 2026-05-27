@@ -90,6 +90,26 @@ h2t-ops research fetch --url "https://..." --provider auto --json
 h2t-ops research visual-ocr --fetch-sidecar "...sources.json" --image-path "...png" --json
 ```
 
+## Provider Key Routing
+
+Use provider routing before dispatching provider-backed research when key availability is uncertain:
+
+```bash
+h2t-ops research providers --json
+h2t-ops research providers --capability fetch --json
+h2t-ops research route --capability search --json
+h2t-ops research route --capability fetch --json
+```
+
+Rules:
+
+- EXA_API_KEY is required for search, answer, similar, crawl, and author resolution.
+- JINA_API_KEY is optional for fetch.
+- `direct` fetch is available without a provider key.
+- Routing checks are local and do not call provider networks.
+- Missing required provider keys fail before artifact writes.
+- If routing reports no configured provider, fix keys/configuration before running the provider command.
+
 `visual-ocr` is a rescue path after `research fetch` returns `FAILED` or specific
 degraded reasons. It creates a review-required artifact from one fetch sidecar and
 one existing page image.
