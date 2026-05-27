@@ -14,6 +14,11 @@
 | create page | `h2t-ops notion create PAGE_ID "Title" --content "Body" --json` |
 | update page | `h2t-ops notion update PAGE_ID --title "Updated title" --json` |
 | sync page to markdown | `h2t-ops notion sync PAGE_ID ./notion-page.md --json` |
+| create database row | `h2t-ops notion create-db-item DB_ID --title "Task" --json` |
+| update database row properties | `h2t-ops notion update-db-item PAGE_ID --property-json '{"Status":{"select":{"name":"Done"}}}' --json` |
+| archive page (safe, title-verified) | `h2t-ops notion archive PAGE_ID --confirm-title "Exact Title" --json` |
+| append markdown file as blocks | `h2t-ops notion append-blocks PAGE_ID --content-file ./content.md --json` |
+| replace page content (safe, title-verified) | `h2t-ops notion replace-content PAGE_ID --content-file ./content.md --confirm-title "Exact Title" --json` |
 
 ## Safety
 
@@ -48,3 +53,53 @@ In Claude Code, check readiness through:
 - Search returns no databases but page contains child databases: use `find-databases PAGE_ID`.
 - Permission error: share the Notion page/database with the integration.
 - Task creation request: confirm whether the user wants a Notion provider write or a POS/coordinator proposal.
+
+## Manual E2E Smoke Recipe
+
+> Automated live E2E never archives pages without explicit user approval.
+> Run only with `$env:H2T_E2E_CONNECTORS="1"`.
+
+### Create/update DB item (safe, no archive)
+
+```python
+import subprocess, json
+
+db_id = "<your-database-id>"
+
+# Create item
+result = subprocess.run(
+    ["h2t-ops", "notion", "create-db-item", db_id,
+     "--title", "h2t-e2e-connector-api-notion", "--json"],
+    capture_output=True, text=True, check=True,
+)
+page = json.loads(result.stdout)["result"]
+page_id = page["id"]
+
+# Update properties
+subprocess.run(
+    ["h2t-ops", "notion", "update-db-item", page_id,
+     "--property-json", '{"Name":{"title":[{"text":{"content":"h2t-e2e-updated"}}]}}',
+     "--json"],
+    check=True,
+)
+
+# Append blocks
+subprocess.run(
+    ["h2t-ops", "notion", "append-blocks", page_id,
+     "--content-file", "./smoke-append.md", "--json"],
+    check=True,
+)
+```
+
+Cleanup: Archive the created page manually after smoke.
+Archive command (requires exact title confirmation):
+
+```bash
+h2t-ops notion archive <page_id> --confirm-title "h2t-e2e-updated" --json
+```
+
+Replace-content (requires exact title confirmation):
+
+```bash
+h2t-ops notion replace-content <page_id> --content-file ./new-content.md --confirm-title "h2t-e2e-updated" --json
+```
