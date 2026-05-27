@@ -363,3 +363,62 @@ def test_rebuild_indexes_with_malformed_alias_index_does_not_overwrite_existing_
         index_name: store.index_path(root, index_name).read_text(encoding="utf-8")
         for index_name in before
     } == before
+
+
+def test_cleanup_dry_run_reports_unreferenced_partial_markdown_without_deleting(tmp_path):
+    root = tmp_path / "research"
+    path = root / "orphan.partial.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("# Orphan\n", encoding="utf-8")
+
+    result = maintenance.cleanup(root, dry_run=True)
+
+    assert result["kind"] == "research_cleanup"
+    assert result["dry_run"] is True
+    assert result["count"] == 1
+    assert result["candidates"] == [
+        {
+            "path": str(path),
+            "reason": "unreferenced_partial_markdown",
+            "action": "would_delete",
+        }
+    ]
+    assert path.exists()
+
+
+def test_cleanup_dry_run_does_not_propose_canonical_objects_or_indexes(tmp_path):
+    root = tmp_path / "research"
+    document = _demo_document(root)
+    document_path = store.object_path(root, "documents", document["document_id"])
+    index_path = store.index_path(root, "documents")
+    store.write_json(index_path, [maintenance._document_index_row(document)])
+    referenced_mirror = root / "post.partial.md"
+    referenced_mirror.write_text("# Referenced\n", encoding="utf-8")
+    canonical_partial = document_path.parent / "canonical.partial.md"
+    canonical_partial.write_text("# Canonical\n", encoding="utf-8")
+    index_partial = index_path.parent / "index.partial.md"
+    index_partial.write_text("# Index\n", encoding="utf-8")
+
+    result = maintenance.cleanup(root, dry_run=True)
+
+    candidate_paths = {candidate["path"] for candidate in result["candidates"]}
+    assert str(document_path) not in candidate_paths
+    assert str(index_path) not in candidate_paths
+    assert str(referenced_mirror) not in candidate_paths
+    assert str(canonical_partial) not in candidate_paths
+    assert str(index_partial) not in candidate_paths
+
+
+def test_cleanup_execute_mode_is_rejected_in_v1(tmp_path):
+    root = tmp_path / "research"
+
+    result = maintenance.cleanup(root, dry_run=False)
+
+    assert result["kind"] == "research_cleanup"
+    assert result["dry_run"] is False
+    assert result["status"] == "blocked"
+    assert result["candidates"] == []
+    assert (
+        result["message"]
+        == "cleanup execution is intentionally disabled in v1; rerun with dry_run=True"
+    )

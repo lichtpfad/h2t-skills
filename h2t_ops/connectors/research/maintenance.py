@@ -6,7 +6,6 @@ from pathlib import Path
 from typing import Any
 
 from h2t_ops.connectors.research import store
-from h2t_ops.core.errors import UsageError
 
 
 OBJECTS = {
@@ -329,6 +328,43 @@ def _artifact_ref_path(root: Path, raw_ref: Any) -> Path | None:
     if path.is_absolute():
         return path
     return Path(root) / path
+
+
+def _referenced_artifact_paths(
+    root: Path,
+    objects: dict[str, dict[str, dict[str, Any]]],
+) -> set[Path]:
+    paths: set[Path] = set()
+    for typed_objects in objects.values():
+        for data in typed_objects.values():
+            artifact_refs = data.get("artifact_refs")
+            if not isinstance(artifact_refs, dict):
+                continue
+            for raw_ref in artifact_refs.values():
+                ref_path = _artifact_ref_path(root, raw_ref)
+                if ref_path is not None:
+                    paths.add(ref_path.resolve())
+    return paths
+
+
+def _path_is_relative_to(path: Path, base: Path) -> bool:
+    try:
+        path.relative_to(base)
+    except ValueError:
+        return False
+    return True
+
+
+def _is_inside_canonical_area(root: Path, path: Path) -> bool:
+    resolved_path = path.resolve()
+    resolved_root = Path(root).resolve()
+    return _path_is_relative_to(
+        resolved_path,
+        resolved_root / "objects",
+    ) or _path_is_relative_to(
+        resolved_path,
+        resolved_root / "indexes",
+    )
 
 
 def _check_artifact_refs(
@@ -742,5 +778,49 @@ def rebuild_indexes(root: Path) -> dict[str, Any]:
     }
 
 
-def cleanup(root: Path, dry_run: bool = True) -> None:
-    raise UsageError("research maintenance cleanup is not implemented yet")
+def cleanup(root: Path, dry_run: bool = True) -> dict[str, Any]:
+    root = Path(root)
+    policy = {
+        "delete_canonical_objects": False,
+        "delete_indexes": False,
+        "delete_unreferenced_partial_md": True,
+    }
+
+    if not dry_run:
+        return {
+            "kind": "research_cleanup",
+            "root": str(root),
+            "dry_run": False,
+            "status": "blocked",
+            "policy": policy,
+            "count": 0,
+            "candidates": [],
+            "message": "cleanup execution is intentionally disabled in v1; rerun with dry_run=True",
+        }
+
+    objects, _ = _load_objects(root)
+    referenced_paths = _referenced_artifact_paths(root, objects)
+    candidates: list[dict[str, str]] = []
+    if root.exists():
+        for path in sorted(root.rglob("*.partial.md")):
+            if _is_inside_canonical_area(root, path):
+                continue
+            if path.resolve() in referenced_paths:
+                continue
+            candidates.append(
+                {
+                    "path": str(path),
+                    "reason": "unreferenced_partial_markdown",
+                    "action": "would_delete",
+                }
+            )
+
+    return {
+        "kind": "research_cleanup",
+        "root": str(root),
+        "dry_run": True,
+        "status": "ok",
+        "policy": policy,
+        "count": len(candidates),
+        "candidates": candidates,
+    }
