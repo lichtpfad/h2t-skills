@@ -330,6 +330,15 @@ def _artifact_ref_path(root: Path, raw_ref: Any) -> Path | None:
     return Path(root) / path
 
 
+def _artifact_ref_values(data: dict[str, Any]) -> list[tuple[str, Any]]:
+    refs: list[tuple[str, Any]] = []
+    artifact_refs = data.get("artifact_refs")
+    if isinstance(artifact_refs, dict):
+        refs.extend((f"artifact_refs.{key}", value) for key, value in artifact_refs.items())
+    refs.append(("notes_ref", data.get("notes_ref")))
+    return refs
+
+
 def _referenced_artifact_paths(
     root: Path,
     objects: dict[str, dict[str, dict[str, Any]]],
@@ -337,10 +346,7 @@ def _referenced_artifact_paths(
     paths: set[Path] = set()
     for typed_objects in objects.values():
         for data in typed_objects.values():
-            artifact_refs = data.get("artifact_refs")
-            if not isinstance(artifact_refs, dict):
-                continue
-            for raw_ref in artifact_refs.values():
+            for _, raw_ref in _artifact_ref_values(data):
                 ref_path = _artifact_ref_path(root, raw_ref)
                 if ref_path is not None:
                     paths.add(ref_path.resolve())
@@ -375,13 +381,7 @@ def _check_artifact_refs(
     for object_type, typed_objects in objects.items():
         id_key = OBJECTS[object_type]["id_key"]
         for object_id, data in typed_objects.items():
-            refs: list[tuple[str, Any]] = []
-            artifact_refs = data.get("artifact_refs")
-            if isinstance(artifact_refs, dict):
-                refs.extend((f"artifact_refs.{key}", value) for key, value in artifact_refs.items())
-            refs.append(("notes_ref", data.get("notes_ref")))
-
-            for ref_key, raw_ref in refs:
+            for ref_key, raw_ref in _artifact_ref_values(data):
                 ref_path = _artifact_ref_path(root, raw_ref)
                 if ref_path is None or ref_path.exists():
                     continue
@@ -798,7 +798,20 @@ def cleanup(root: Path, dry_run: bool = True) -> dict[str, Any]:
             "message": "cleanup execution is intentionally disabled in v1; rerun with dry_run=True",
         }
 
-    objects, _ = _load_objects(root)
+    objects, findings = _load_objects(root)
+    if any(finding.get("severity") == "error" for finding in findings):
+        return {
+            "kind": "research_cleanup",
+            "root": str(root),
+            "dry_run": True,
+            "status": "blocked",
+            "policy": policy,
+            "count": 0,
+            "candidates": [],
+            "findings": findings,
+            "message": "cleanup requires clean canonical object integrity; run doctor and fix object errors first",
+        }
+
     referenced_paths = _referenced_artifact_paths(root, objects)
     candidates: list[dict[str, str]] = []
     if root.exists():
