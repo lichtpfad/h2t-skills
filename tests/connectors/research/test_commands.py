@@ -921,6 +921,76 @@ def test_cli_dispatch_resolve_stale_alias(tmp_path, capsys):
     assert payload["result"]["kind"] == "research_resolution"
     assert payload["result"]["count"] == 1
     assert payload["result"]["matches"][0]["object_exists"] is False
+
+
+def test_cli_dispatch_lists_research_provider_status(monkeypatch, capsys):
+    from h2t_ops.connectors.research import provider_routing
+
+    monkeypatch.setattr(provider_routing, "_secret_available", lambda name: name == "EXA_API_KEY")
+
+    code = cli.dispatch(
+        [
+            "research",
+            "providers",
+            "--capability",
+            "search",
+            "--json",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+
+    assert code == 0
+    assert payload["ok"] is True
+    assert payload["result"]["kind"] == "research_provider_status"
+    assert payload["result"]["capability"] == "search"
+    assert payload["result"]["providers"][0]["provider"] == "exa"
+    assert payload["result"]["providers"][0]["configured"] is True
+
+
+def test_cli_dispatch_routes_fetch_without_keys(monkeypatch, capsys):
+    from h2t_ops.connectors.research import provider_routing
+
+    monkeypatch.setattr(provider_routing, "_secret_available", lambda name: False)
+
+    code = cli.dispatch(
+        [
+            "research",
+            "route",
+            "--capability",
+            "fetch",
+            "--json",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+
+    assert code == 0
+    assert payload["ok"] is True
+    assert payload["result"]["kind"] == "research_provider_route"
+    assert payload["result"]["selected_provider"] == "direct"
+
+
+def test_cli_dispatch_route_missing_exa_key_returns_usage_error(monkeypatch, capsys):
+    from h2t_ops.connectors.research import provider_routing
+
+    monkeypatch.setattr(provider_routing, "_secret_available", lambda name: False)
+
+    code = cli.dispatch(
+        [
+            "research",
+            "route",
+            "--capability",
+            "search",
+            "--json",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().err)
+
+    assert code == 2
+    assert payload["ok"] is False
+    assert payload["error"]["type"] == "usage"
+    assert "no configured research provider" in payload["error"]["message"]
+
+
 def test_run_dispatches_visual_ocr(monkeypatch):
     _patch_fake_client(monkeypatch)
     output_dir = str(Path.cwd() / "tmp" / "research-visual-ocr")
