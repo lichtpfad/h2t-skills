@@ -491,6 +491,107 @@ def test_move_dispatch(monkeypatch):
     assert calls == [("evt", "source@example.com", "dest@example.com")]
 
 
+def test_calendar_p0_parser_surface():
+    parser = _build_parser()
+    assert parser.parse_args(["calendar", "create-calendar", "Test Calendar"]).calendar_cmd == "create-calendar"
+    assert parser.parse_args(["calendar", "instances", "event1", "--calendar-id", "primary"]).calendar_cmd == "instances"
+
+
+def test_create_calendar_dispatch(monkeypatch):
+    from h2t_ops.connectors.calendar import commands as cmds_mod
+    calls = []
+
+    class _Stub:
+        def create_calendar(self, summary, *, timezone=None):
+            calls.append((summary, timezone))
+            return {"id": "newcal@group.calendar.google.com", "summary": summary}
+
+    _patch_calendar_client(monkeypatch, lambda: _Stub())
+
+    out = cmds_mod.run(SimpleNamespace(
+        calendar_cmd="create-calendar",
+        summary="My New Calendar",
+        timezone="UTC",
+        as_json=True,
+        fmt="human",
+    ))
+
+    assert calls == [("My New Calendar", "UTC")]
+    assert out["summary"] == "My New Calendar"
+
+
+def test_create_calendar_dispatches_summary_timezone(monkeypatch):
+    from h2t_ops.connectors.calendar import commands as cmds_mod
+    calls = []
+
+    class _Stub:
+        def create_calendar(self, summary, *, timezone=None):
+            calls.append((summary, timezone))
+            return {"id": "newcal@group.calendar.google.com", "summary": summary}
+
+    _patch_calendar_client(monkeypatch, lambda: _Stub())
+
+    out = cmds_mod.run(SimpleNamespace(
+        calendar_cmd="create-calendar",
+        summary="My New Calendar",
+        timezone="Asia/Jerusalem",
+        as_json=True,
+        fmt="human",
+    ))
+
+    assert calls == [("My New Calendar", "Asia/Jerusalem")]
+    assert out["id"] == "newcal@group.calendar.google.com"
+
+
+def test_instances_dispatch_passes_date_window(monkeypatch):
+    from h2t_ops.connectors.calendar import commands as cmds_mod
+    calls = []
+
+    class _Stub:
+        def list_instances(self, event_id, *, calendar_id, time_min, time_max, max_results):
+            calls.append((event_id, calendar_id, time_min, time_max, max_results))
+            return [{"id": "inst1"}]
+
+    _patch_calendar_client(monkeypatch, lambda: _Stub())
+
+    out = cmds_mod.run(SimpleNamespace(
+        calendar_cmd="instances",
+        event_id="event1",
+        calendar_id="primary",
+        from_date="2026-06-01",
+        to_date="2026-06-30",
+        max=50,
+        as_json=True,
+        fmt="human",
+    ))
+
+    assert len(calls) == 1
+    assert calls[0][0] == "event1"
+    assert calls[0][1] == "primary"
+    assert calls[0][2] is not None  # time_min set
+    assert calls[0][3] is not None  # time_max set
+    assert calls[0][4] == 50
+    assert out == [{"id": "inst1"}]
+
+
+def test_instances_rejects_partial_date_window(monkeypatch):
+    from h2t_ops.connectors.calendar import commands as cmds_mod
+
+    _patch_calendar_client(monkeypatch, lambda: object())
+
+    with pytest.raises(UsageError):
+        cmds_mod.run(SimpleNamespace(
+            calendar_cmd="instances",
+            event_id="event1",
+            calendar_id="primary",
+            from_date="2026-06-01",
+            to_date=None,
+            max=250,
+            as_json=True,
+            fmt="human",
+        ))
+
+
 def test_freebusy_dispatch_uses_date_window(monkeypatch):
     from h2t_ops.connectors.calendar import commands as cmds_mod
     calls = []

@@ -464,6 +464,53 @@ def test_normalize_event_meet_pending_and_entrypoint(client_obj):
     assert success["meet_link"] == "https://meet.google.com/abc"
 
 
+# ---------- P0: create_calendar and list_instances ----------
+
+def test_create_calendar_dispatches_summary_timezone(client_obj):
+    client_obj.service.calendars.return_value.insert.return_value.execute.return_value = {
+        "id": "newcal@group.calendar.google.com",
+        "summary": "Test Calendar",
+        "timeZone": "UTC",
+    }
+
+    result = client_obj.create_calendar("Test Calendar", timezone="UTC")
+
+    call_kwargs = client_obj.service.calendars.return_value.insert.call_args.kwargs
+    assert call_kwargs["body"]["summary"] == "Test Calendar"
+    assert call_kwargs["body"]["timeZone"] == "UTC"
+    assert result["summary"] == "Test Calendar"
+
+
+def test_instances_dispatches_date_window_and_max(client_obj):
+    client_obj.service.events.return_value.instances.return_value.execute.return_value = {
+        "items": [
+            {
+                "id": "evt_20260601",
+                "summary": "Weekly Meeting",
+                "start": {"dateTime": "2026-06-01T14:00:00+03:00"},
+                "end": {"dateTime": "2026-06-01T15:00:00+03:00"},
+            }
+        ]
+    }
+
+    result = client_obj.list_instances(
+        "event1",
+        calendar_id="primary",
+        time_min="2026-06-01T00:00:00+00:00",
+        time_max="2026-07-01T00:00:00+00:00",
+        max_results=50,
+    )
+
+    call_kwargs = client_obj.service.events.return_value.instances.call_args.kwargs
+    assert call_kwargs["calendarId"] == "primary"
+    assert call_kwargs["eventId"] == "event1"
+    assert call_kwargs["timeMin"] == "2026-06-01T00:00:00+00:00"
+    assert call_kwargs["timeMax"] == "2026-07-01T00:00:00+00:00"
+    assert call_kwargs["maxResults"] == 50
+    assert isinstance(result, list)
+    assert len(result) == 1
+
+
 # ---------- missing-libs / missing-creds path (re-checked via google_auth) ----------
 
 def test_init_with_missing_google_libs_raises_configerror(monkeypatch):

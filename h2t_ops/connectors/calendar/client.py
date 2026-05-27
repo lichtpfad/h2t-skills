@@ -331,6 +331,43 @@ class CalendarClient:
                 hint=_CALENDAR_LIST_HINT,
             ) from e
 
+    def create_calendar(self, summary: str, *, timezone: Optional[str] = None) -> dict:
+        body: Dict[str, Any] = {"summary": summary}
+        if timezone:
+            body["timeZone"] = timezone
+        try:
+            return self.service.calendars().insert(body=body).execute()
+        except Exception as e:
+            raise _map_http_error(e, op=f"create calendar {summary!r}") from e
+
+    def list_instances(
+        self,
+        event_id: str,
+        *,
+        calendar_id: str = "primary",
+        time_min: Optional[str] = None,
+        time_max: Optional[str] = None,
+        max_results: int = 250,
+    ) -> List[Dict[str, Any]]:
+        params: Dict[str, Any] = {
+            "calendarId": calendar_id,
+            "eventId": event_id,
+            "maxResults": max_results,
+        }
+        if time_min is not None:
+            params["timeMin"] = time_min
+        if time_max is not None:
+            params["timeMax"] = time_max
+        try:
+            res = self.service.events().instances(**params).execute()
+        except Exception as e:
+            raise _map_http_error(
+                e,
+                op=f"list instances of event {event_id} on calendar {calendar_id!r}",
+                hint=_CALENDAR_LIST_HINT,
+            ) from e
+        return res.get("items", [])
+
     def freebusy(
         self,
         time_min: str,

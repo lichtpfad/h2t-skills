@@ -159,8 +159,8 @@ def register(subparsers: Any) -> None:
     lp = cmds.add_parser("list", help="List meetings")
     lp.add_argument("--limit", type=int, default=None)
     lp.add_argument("--cursor", default=None)
-    lp.add_argument("--from-date", dest="from_date", default=None, metavar="YYYY-MM-DD")
-    lp.add_argument("--to-date", dest="to_date", default=None, metavar="YYYY-MM-DD")
+    lp.add_argument("--from-date", "--from", dest="from_date", default=None, metavar="YYYY-MM-DD")
+    lp.add_argument("--to-date", "--to", dest="to_date", default=None, metavar="YYYY-MM-DD")
     add_fmt(lp)
 
     # get
@@ -189,6 +189,11 @@ def register(subparsers: Any) -> None:
     su.add_argument("--template", dest="template_name", default=None)
     su.add_argument("--json", dest="as_json", action="store_true")
 
+    # action-items
+    aip = cmds.add_parser("action-items", help="Get action items from a meeting summary")
+    aip.add_argument("meeting_id")
+    add_fmt(aip)
+
     p.set_defaults(_handler=run)
 
 
@@ -215,11 +220,15 @@ def run(args: Any) -> Any:
         return client.get_teams()
 
     if cmd == "list":
+        from_date = getattr(args, "from_date", None)
+        to_date = getattr(args, "to_date", None)
+        if bool(from_date) != bool(to_date):
+            raise UsageError("meetgeek list: --from and --to must be used together")
         return client.list_meetings(
             limit=args.limit,
             cursor=args.cursor,
-            from_date=args.from_date,
-            to_date=args.to_date,
+            from_date=from_date,
+            to_date=to_date,
         )
 
     if cmd == "get":
@@ -263,5 +272,8 @@ def run(args: Any) -> Any:
             language_code=args.language_code,
             template_name=args.template_name,
         )
+
+    if cmd == "action-items":
+        return client.action_items(args.meeting_id)
 
     raise UsageError(f"unknown meetgeek subcommand: {cmd}")
