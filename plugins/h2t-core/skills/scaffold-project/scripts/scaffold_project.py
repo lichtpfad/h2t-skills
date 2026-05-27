@@ -190,7 +190,9 @@ def cmd_github(args: argparse.Namespace) -> dict:
     r = _run(cmd)
     if r.returncode == 0:
         url = r.stdout.strip() or f"https://github.com/{args.github}"
-        return {"status": "ok", "repo": args.github, "url": url}
+        repo_name_only = args.github.split("/")[-1] if "/" in args.github else args.github
+        sl = run_sync_labels(repo_name_only)
+        return {"status": "ok", "repo": args.github, "url": url, "sync_labels": sl["status"]}
     return {"status": "error", "error": r.stderr.strip()}
 
 
@@ -211,6 +213,21 @@ def run_docs_init(repo_name: str, project_dir: Path) -> dict:
     )
     if r.returncode == 0:
         return {"status": "ok", "output": r.stdout.strip()}
+    return {"status": "error", "error": r.stderr.strip()[:200]}
+
+
+def run_sync_labels(repo_name: str) -> dict:
+    if not repo_name:
+        return {"status": "skip", "reason": "no repo name"}
+    sync_script = _PLUGIN_ROOT.parent / "h2t-dev" / "skills" / "docs-sync-labels" / "scripts" / "sync_labels.py"
+    if not sync_script.exists():
+        return {"status": "skip", "reason": "sync_labels script not found"}
+    r = subprocess.run(
+        [sys.executable, str(sync_script), repo_name, "--apply"],
+        capture_output=True, text=True,
+    )
+    if r.returncode == 0:
+        return {"status": "ok", "output": r.stdout.strip()[:200]}
     return {"status": "error", "error": r.stderr.strip()[:200]}
 
 

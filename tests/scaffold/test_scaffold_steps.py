@@ -81,3 +81,37 @@ def test_run_docs_init_skips_when_script_not_found(tmp_path, monkeypatch):
     project_dir.mkdir()
     result = run_docs_init("my-repo", project_dir)
     assert result["status"] == "skip"
+
+
+from scaffold_project import run_sync_labels
+
+
+def test_run_sync_labels_passes_apply_flag(tmp_path):
+    """--apply is required to actually sync labels; must be present."""
+    with patch("scaffold_project.subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(returncode=0, stdout="synced", stderr="")
+        run_sync_labels("h2t-skills")
+    cmd = mock_run.call_args[0][0]
+    assert "--apply" in cmd
+
+
+def test_run_sync_labels_passes_repo_name(tmp_path):
+    """repo name is passed as a positional argument."""
+    with patch("scaffold_project.subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+        run_sync_labels("h2t-skills")
+    cmd = mock_run.call_args[0][0]
+    assert "h2t-skills" in cmd
+
+
+def test_run_sync_labels_skip_if_no_repo_name():
+    """Returns skip status when repo name is empty."""
+    result = run_sync_labels("")
+    assert result["status"] == "skip"
+
+
+def test_run_sync_labels_error_on_failure():
+    with patch("scaffold_project.subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="gh not found")
+        result = run_sync_labels("h2t-skills")
+    assert result["status"] == "error"
