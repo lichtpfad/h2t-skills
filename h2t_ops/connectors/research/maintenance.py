@@ -32,6 +32,10 @@ OBJECTS = {
 }
 
 
+def _empty_objects() -> dict[str, dict[str, dict[str, Any]]]:
+    return {object_type: {} for object_type in OBJECTS}
+
+
 def _finding(
     severity: str,
     code: str,
@@ -651,6 +655,10 @@ def _preserved_alias_rows(root: Path) -> tuple[list[dict[str, Any]], list[dict[s
     rows, findings = _read_index(root, "aliases")
     if findings:
         return [], findings
+    alias_integrity_findings = _check_alias_refs(root, _empty_objects())
+    errors = [finding for finding in alias_integrity_findings if finding["severity"] == "error"]
+    if errors:
+        return [], errors
     preserved = [
         row
         for row in rows
