@@ -130,6 +130,25 @@ def register(subparsers: Any) -> None:
     alias_group.add_argument("--alias", dest="alias_value")
     add_fmt(nav_resolve)
 
+    doctor = cmds.add_parser("doctor", help="Inspect local research store health")
+    doctor.add_argument("--output-dir", dest="output_dir")
+    add_fmt(doctor)
+
+    rebuild = cmds.add_parser(
+        "rebuild-indexes",
+        help="Rebuild research indexes from canonical object JSON",
+    )
+    rebuild.add_argument("--output-dir", dest="output_dir")
+    add_fmt(rebuild)
+
+    cleanup = cmds.add_parser(
+        "cleanup",
+        help="Report safe cleanup candidates for local research artifacts",
+    )
+    cleanup.add_argument("--output-dir", dest="output_dir")
+    cleanup.add_argument("--dry-run", action="store_true", required=True, dest="dry_run")
+    add_fmt(cleanup)
+
     answer_p = cmds.add_parser("answer", help="Get a direct LLM-grounded answer from Exa")
     answer_p.add_argument("--query", required=True)
     add_fmt(answer_p)
@@ -222,6 +241,12 @@ def run(args: Any) -> Any:
         if args.url_value is not None:
             return client.resolve_research_alias(args.url_value, alias_type="url")
         return client.resolve_research_alias(args.alias_value, alias_type=args.alias_type)
+    if cmd == "doctor":
+        return client.research_doctor()
+    if cmd == "rebuild-indexes":
+        return client.rebuild_research_indexes()
+    if cmd == "cleanup":
+        return client.cleanup_research(dry_run=args.dry_run)
     if cmd == "answer":
         return client.answer(args.query)
     if cmd == "resolve-author":
