@@ -78,6 +78,39 @@ def test_parser_registration_for_research_subcommands():
     assert fetch.provider == "crawl4ai"
 
 
+def test_parser_registration_for_research_provider_routing_commands():
+    parser = cli.build_parser()
+
+    providers = parser.parse_args(
+        [
+            "research",
+            "providers",
+            "--capability",
+            "fetch",
+            "--json",
+        ]
+    )
+    route = parser.parse_args(
+        [
+            "research",
+            "route",
+            "--capability",
+            "search",
+            "--provider",
+            "exa",
+            "--json",
+        ]
+    )
+
+    assert providers.research_cmd == "providers"
+    assert providers.capability == "fetch"
+    assert providers.as_json is True
+    assert route.research_cmd == "route"
+    assert route.capability == "search"
+    assert route.provider == "exa"
+    assert route.as_json is True
+
+
 def test_parser_registration_for_research_visual_ocr():
     parser = cli.build_parser()
 
@@ -384,6 +417,14 @@ class FakeResearchClient:
         self.calls.append(("preflight", {}))
         return {"method": "preflight", "output_dir": str(self.output_dir)}
 
+    def research_provider_status(self, *, capability: str | None = None) -> dict:
+        self.calls.append(("research_provider_status", {"capability": capability}))
+        return {"method": "research_provider_status", "capability": capability}
+
+    def research_route(self, capability: str, *, provider: str | None = None) -> dict:
+        self.calls.append(("research_route", {"capability": capability, "provider": provider}))
+        return {"method": "research_route", "capability": capability, "provider": provider}
+
     def search(self, **kwargs) -> dict:
         self.calls.append(("search", kwargs))
         return {"method": "search", "kwargs": kwargs, "output_dir": str(self.output_dir)}
@@ -452,6 +493,29 @@ def test_run_dispatches_preflight(monkeypatch):
 
     assert result == {"method": "preflight", "output_dir": "None"}
     assert FakeResearchClient.instances[0].calls == [("preflight", {})]
+
+
+def test_run_dispatches_provider_routing_commands(monkeypatch):
+    _patch_fake_client(monkeypatch)
+
+    providers = commands.run(
+        argparse.Namespace(
+            research_cmd="providers",
+            output_dir=None,
+            capability="fetch",
+        )
+    )
+    route = commands.run(
+        argparse.Namespace(
+            research_cmd="route",
+            output_dir=None,
+            capability="search",
+            provider="exa",
+        )
+    )
+
+    assert providers == {"method": "research_provider_status", "capability": "fetch"}
+    assert route == {"method": "research_route", "capability": "search", "provider": "exa"}
 
 
 def test_run_dispatches_search_and_splits_csv(monkeypatch, tmp_path):
