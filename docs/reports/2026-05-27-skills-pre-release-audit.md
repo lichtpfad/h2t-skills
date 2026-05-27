@@ -1,6 +1,6 @@
 ---
 title: "Skills Pre-release Audit"
-status: "draft"
+status: "accepted"
 date: "2026-05-27"
 milestone: "skills-release"
 ---
@@ -14,8 +14,8 @@ Scope: read-only audit of active split plugins against the retired legacy
 
 ## Executive Summary
 
-The split plugin pack is structurally releasable after the active connector API
-P0 work (#212-#231) lands. The legacy `h2t` plugin is no longer an active
+The split plugin pack is structurally releasable. The connector API P0 work
+(#212-#231) has landed in `main` through PRs #233-#238. The legacy `h2t` plugin is no longer an active
 marketplace plugin and has no `.claude-plugin/plugin.json`; its remaining
 `SKILL.md` files function as archive/rollback source.
 
@@ -29,10 +29,10 @@ provider I/O and routes workflow interpretation to future portable/POS layers.
 
 | Legacy skill | Current equivalent | Status | Notes |
 | --- | --- | --- | --- |
-| `plugins/h2t/skills/calendar` | `h2t-ops:connectors` + `references/calendar.md` | OK, pending P0 gaps | Active surface is richer than legacy: calendars, list windows, search, get, create, update, RSVP, move, delete, freebusy. P0 plan adds create-calendar and recurring instances. |
-| `plugins/h2t/skills/gmail` | `h2t-ops:connectors` + `references/gmail.md` | OK, pending P0 gaps | Active surface covers list/read/search/send/draft/labels/attachments/thread/trash/delete guardrails. P0 plan adds reply, forward, label create/delete. |
-| `plugins/h2t/skills/notion` | `h2t-ops:connectors` + `references/notion.md` | OK, pending P0 gaps | Active surface covers get/blocks/search/get-database/workspace graph/find-databases/create/update/sync/comments. P0 plan adds DB row CRUD, archive, append/replace content. |
-| `plugins/h2t/skills/telegram` | `h2t-ops:connectors` + `references/telegram.md` | Degraded by design | Provider I/O is covered or in P0 plan. Legacy workflows `saved/digest/tasks/research/students/sync` are intentionally not connector operations and need a separate workflow/POS follow-up if still desired. |
+| `plugins/h2t/skills/calendar` | `h2t-ops:connectors` + `references/calendar.md` | OK | Active surface is richer than legacy: calendars, list windows, search, get, create, update, RSVP, move, delete, freebusy, create-calendar, recurring instances. |
+| `plugins/h2t/skills/gmail` | `h2t-ops:connectors` + `references/gmail.md` | OK | Active surface covers list/read/search/send/draft/labels/attachments/thread/trash/delete guardrails, reply, forward, label create/delete. |
+| `plugins/h2t/skills/notion` | `h2t-ops:connectors` + `references/notion.md` | OK | Active surface covers get/blocks/search/get-database/workspace graph/find-databases/create/update/sync/comments, DB row create/update, archive, append/replace content. |
+| `plugins/h2t/skills/telegram` | `h2t-ops:connectors` + `references/telegram.md` | Provider I/O OK; workflows degraded by design | Provider I/O is covered, including send-file, forward-message, and guarded delete-message. Legacy workflows `saved/digest/tasks/research/students/sync` are intentionally not connector operations and need a separate workflow/POS follow-up if still desired. |
 | `plugins/h2t/skills/daily-brief` | `h2t-ops:daily-brief` | OK | Active skill preserves the briefing workflow but adds POS boundary language and uses connector commands rather than legacy sibling scripts. |
 | `plugins/h2t/skills/voice-eval` | `h2t-creative:voice-eval` | OK / duplicate archive | Current active skill is effectively the same capability in the correct creative plugin. Legacy copy is archive duplication. |
 
@@ -60,17 +60,24 @@ provider I/O and routes workflow interpretation to future portable/POS layers.
 
 ## Release Blockers
 
-1. Connector API P0 plan must land: #212-#231.
-2. Deprecated `h2t-dev:gh-memory` must be confirmed excluded from routing/release docs or explicitly accepted as deprecated.
-3. Decide whether legacy Telegram workflow loss is acceptable for this release.
+No remaining release blocker was found in this audit after connector API P0
+landed.
+
+Release decisions accepted:
+
+1. Connector API P0 plan landed: #212-#231 are closed.
+2. Deprecated `h2t-dev:gh-memory` is accepted as deprecated and must not be
+   promoted in release docs.
+3. Legacy Telegram workflow loss is accepted for connector release because those
+   flows cross into interpretation/POS workflow territory.
 
 ## Follow-up Recommendations
 
 ### Required Before Release
 
-- Complete connector API coverage P0 (#212-#231).
+- Merge this audit/evidence PR.
 - Verify marketplace/package build excludes retired `plugins/h2t` legacy plugin.
-- Verify deprecated skills are either hidden from active routing or clearly marked.
+- Keep deprecated skills either hidden from active routing or clearly marked.
 
 ### Suggested Follow-up Issue
 
@@ -102,7 +109,7 @@ skills-release follow-up / POS workflow backlog.
 
 ## Release Recommendation
 
-Do not release until #212-#231 land. After that, this audit does not identify a
-second connector-blocking loss. The only product decision is Telegram workflows:
-either accept their removal from the connector release or create a separate
-workflow/POS follow-up before announcing parity with the old monolith.
+Release can proceed after this audit/evidence PR lands. The audit does not
+identify a connector-blocking loss. The only accepted product delta is Telegram
+workflows: do not announce full semantic parity with the old monolith unless
+those workflows are recreated later as portable workflow/POS features.

@@ -1,7 +1,7 @@
 # H2T-SKILLS Roadmap
 
 **Status:** Post-closure maintenance and backlog roadmap
-**Date:** 2026-05-27
+**Date:** 2026-05-28
 **Owner:** h2t-skills
 **Milestone tag:** `milestone/legacy-h2t-retired-2026-05-21`
 
@@ -87,9 +87,9 @@ The current open work is feature/product backlog, not migration/closure.
 
 | Milestone | Issue(s) | Workstream | Notes |
 | --- | --- | --- | --- |
-| skills-release | #190 | Skills release gate | `#183`, `#185`, `#186`, `#195`, and research follow-ups `#192`-`#194` are complete; #71 is closed as release-ready/superseded |
+| skills-release | #190 | Skills release gate | `#183`, `#185`, `#186`, `#195`, research follow-ups `#192`-`#194`, and connector API P0 `#212`-`#231` are complete; #71 is closed as release-ready/superseded |
 | lifecycle-os | #196, #197 | Project lifecycle consolidation | Planned after #195; not required before the immediate skills-release gate unless #190 finds it blocks packaging |
-| connector-api-gaps | #212-#231, #208 | Connector API coverage backlog | Explicit API gap audit across Drive, Gmail, Notion, Telegram, MeetGeek, and Calendar; #212 upload upsert is the only current P0 |
+| connector-api-gaps | #208 | Future connector enhancement backlog | Connector API P0 #212-#231 is complete; #208 remains non-release Drive conversion backlog |
 | graphs-pos | #21, #54, #70, #72 | Graphs / POS backlog | Deferred graphs, evals, and POS integration stream |
 | creative-p2 | #83, #88, #89, #90, #91, #92, #119 | Creative recovery backlog | Separate creative/product stream |
 | M6: h2t-arch | #5 | Diagram-node docs enforcement | Legacy arch stream still open |
@@ -163,9 +163,9 @@ against common provider API workflows and created explicit gap issues.
 | MeetGeek | #230, #231 | action-items, date-range list filter |
 | Calendar | #224, #228 | create-calendar, list recurring event instances |
 
-These are product coverage gaps, not connector migration blockers. #212 is P0
-because live usage hit duplicate-file behavior; the rest should be prioritized
-by active workflow need.
+These were product coverage gaps, not connector migration blockers. P0 coverage
+for #212-#231 is now complete in PRs #233-#238. Remaining connector enhancements,
+including #208, should be prioritized by active workflow need.
 
 ## Critical Path Details
 
@@ -526,8 +526,8 @@ Routine maintenance, not active closure blockers:
 2. Treat connector migration and closure as done; do not reopen it via piecemeal
    backlog items.
 3. Finish the `skills-release` gate with #190 pre-release audit.
-4. Pick #212 next if Drive duplicate upload behavior is blocking active work;
-   otherwise finish #190 before expanding connector API coverage.
+4. Finish #190 by merging the pre-release audit and final connector API P0
+   evidence.
 5. Keep #196/#197 as lifecycle consolidation after #195 unless the pre-release
    audit proves they block packaging.
 6. Keep research product work (#70/#72), creative recovery, and POS-side workflow
@@ -558,12 +558,12 @@ connector migration.
 | #85 CI/platform hygiene | Done | Done | Routine maintenance only |
 | #195 docs-lint enhancement | Done | Done | Closed 2026-05-27 |
 | #71 research ergonomics | Done | Done | Closed 2026-05-27; multi-key is deferred unless it becomes operationally important |
-| #190 pre-release audit | 0.5 day | 1 day | Legacy skill comparison may reveal real losses |
+| #190 pre-release audit | In review | In review | Final evidence PR closes the release gate |
 
 Remaining estimate to skills-release readiness:
 
-- optimistic: 0.5 day;
-- realistic: 1 day.
+- optimistic: merge current evidence PR;
+- realistic: merge current evidence PR after one final review pass.
 
 This excludes connector API coverage gaps, research product backlog, creative
 recovery, setup wizard/Mac onboarding, and POS-side workflow contracts. Those
