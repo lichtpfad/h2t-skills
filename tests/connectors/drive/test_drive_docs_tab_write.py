@@ -6,7 +6,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from h2t_ops.connectors.drive.client import _md_to_docs_requests
+from h2t_ops.connectors.drive.client import _md_to_docs_requests, _utf16_len
 from h2t_ops.core.errors import UsageError
 
 
@@ -131,19 +131,37 @@ def dc():
     return c
 
 
-def _setup_doc(dc, doc_id="docid1"):
+def _empty_tab_doc(doc_id: str, tab_id: str, revision: str = "rev42") -> dict:
+    return {
+        "documentId": doc_id,
+        "revisionId": revision,
+        "tabs": [{
+            "tabProperties": {"tabId": tab_id},
+            "documentTab": {
+                "body": {
+                    "content": [{"endIndex": 1}],
+                }
+            },
+        }],
+    }
+
+
+def _setup_doc(dc, doc_id="docid1", tab_id="t.tab1", revision="rev42"):
     dc.service.files.return_value.get.return_value.execute.return_value = {
         "id": doc_id,
         "name": "Test Doc",
         "mimeType": "application/vnd.google-apps.document",
     }
+    dc._docs_service.documents.return_value.get.return_value.execute.return_value = (
+        _empty_tab_doc(doc_id, tab_id, revision)
+    )
     dc._docs_service.documents.return_value.batchUpdate.return_value.execute.return_value = {
-        "writeControl": {"requiredRevisionId": "rev42"}
+        "writeControl": {"requiredRevisionId": revision}
     }
 
 
 def test_write_tab_calls_batch_update(dc):
-    _setup_doc(dc)
+    _setup_doc(dc, tab_id="t.tab1")
     result = dc.write_document_tab("docid1", "t.tab1", "# Hello\nWorld")
     assert dc._docs_service.documents.return_value.batchUpdate.called
     assert result["kind"] == "google_docs_tab_write/v1"
@@ -153,7 +171,7 @@ def test_write_tab_calls_batch_update(dc):
 
 
 def test_write_tab_empty_content_skips_batch_update(dc):
-    _setup_doc(dc)
+    _setup_doc(dc, tab_id="t.tab1")
     result = dc.write_document_tab("docid1", "t.tab1", "")
     assert not dc._docs_service.documents.return_value.batchUpdate.called
     assert result["requests_sent"] == 0
@@ -170,13 +188,13 @@ def test_write_tab_non_doc_raises_usage_error(dc):
 
 
 def test_write_tab_returns_revision_id(dc):
-    _setup_doc(dc)
+    _setup_doc(dc, tab_id="t.tab1")
     result = dc.write_document_tab("docid1", "t.tab1", "# Title")
     assert result["revision_id"] == "rev42"
 
 
 def test_write_tab_batch_update_body_contains_insert_and_style(dc):
-    _setup_doc(dc)
+    _setup_doc(dc, tab_id="t.tab1")
     dc.write_document_tab("docid1", "t.tab1", "# Head\nParagraph")
     call_body = dc._docs_service.documents.return_value.batchUpdate.call_args.kwargs["body"]
     requests = call_body["requests"]
@@ -184,3 +202,68 @@ def test_write_tab_batch_update_body_contains_insert_and_style(dc):
     has_style = any("updateParagraphStyle" in r for r in requests)
     assert has_insert
     assert has_style
+
+
+def test_write_tab_sends_write_control(dc):
+    """batchUpdate body must include writeControl.requiredRevisionId."""
+    _setup_doc(dc, tab_id="t.tab1", revision="rev99")
+    dc.write_document_tab("docid1", "t.tab1", "# Hello")
+    call_body = dc._docs_service.documents.return_value.batchUpdate.call_args.kwargs["body"]
+    assert call_body["writeControl"] == {"requiredRevisionId": "rev99"}
+
+
+def test_write_tab_non_empty_raises_usage_error(dc):
+    """write_document_tab rejects tabs with endIndex > 1 (already has content)."""
+    _setup_doc(dc, tab_id="t.tab1")
+    dc._docs_service.documents.return_value.get.return_value.execute.return_value = {
+        "documentId": "docid1",
+        "revisionId": "rev1",
+        "tabs": [{
+            "tabProperties": {"tabId": "t.tab1"},
+            "documentTab": {"body": {"content": [{"endIndex": 42}]}},
+        }],
+    }
+    with pytest.raises(UsageError, match="not empty"):
+        dc.write_document_tab("docid1", "t.tab1", "# Hello")
+
+
+def test_write_tab_missing_tab_raises_usage_error(dc):
+    """write_document_tab raises when the tab_id is not found in document tabs."""
+    _setup_doc(dc, tab_id="t.other")
+    with pytest.raises(UsageError, match="not found"):
+        dc.write_document_tab("docid1", "t.tab1", "# Hello")
+
+
+# ---------------------------------------------------------------------------
+# UTF-16 offset correctness
+# ---------------------------------------------------------------------------
+
+def test_utf16_len_ascii():
+    assert _utf16_len("Hello") == 5
+
+
+def test_utf16_len_emoji():
+    # 🎉 is U+1F389, a supplementary character → 2 UTF-16 units
+    assert _utf16_len("🎉") == 2
+
+
+def test_emoji_before_heading_correct_offset():
+    """Emoji in preceding paragraph must not shift heading style range."""
+    md = "🎉 Party\n# Title"
+    reqs = _md_to_docs_requests(md, "t.abc")
+    styles = [r for r in reqs if "updateParagraphStyle" in r]
+    assert len(styles) == 1
+    # "🎉 Party\n" = _utf16_len("🎉 Party") + 1 = (2+1+5) + 1 = 9 units
+    # heading starts at 1 + 9 = 10
+    emoji_para_len = _utf16_len("🎉 Party") + 1
+    assert styles[0]["updateParagraphStyle"]["range"]["startIndex"] == 1 + emoji_para_len
+
+
+def test_emoji_before_bullet_correct_offset():
+    """Emoji in preceding text must not shift bullet range."""
+    md = "🎉 intro\n- item"
+    reqs = _md_to_docs_requests(md, "t.abc")
+    bullets = [r for r in reqs if "createParagraphBullets" in r]
+    assert len(bullets) == 1
+    emoji_para_len = _utf16_len("🎉 intro") + 1
+    assert bullets[0]["createParagraphBullets"]["range"]["startIndex"] == 1 + emoji_para_len

@@ -228,6 +228,25 @@ def _inline_style_requests(
     return requests
 
 
+def _utf16_len(text: str) -> int:
+    """Return the number of UTF-16 code units in *text* (without BOM).
+
+    Google Docs API indices are measured in UTF-16 code units, not Python
+    code-points. Supplementary-plane characters (emoji, etc.) consume 2 units.
+    """
+    return len(text.encode("utf-16-le")) // 2
+
+
+def _find_tab_end_index(doc: Dict[str, Any], tab_id: str) -> Optional[int]:
+    """Return the endIndex of *tab_id*'s body, or None if the tab is not found."""
+    for tab in doc.get("tabs", []):
+        if tab.get("tabProperties", {}).get("tabId") == tab_id:
+            content = tab.get("documentTab", {}).get("body", {}).get("content", [])
+            if content:
+                return content[-1].get("endIndex")
+    return None
+
+
 def _md_to_docs_requests(markdown_text: str, tab_id: str) -> List[Dict[str, Any]]:
     """Convert markdown to Docs API batchUpdate requests targeting *tab_id*.
 
@@ -267,7 +286,7 @@ def _md_to_docs_requests(markdown_text: str, tab_id: str) -> List[Dict[str, Any]
     for p in paragraphs:
         plain = p["text"]
         raw = p.get("raw", plain)
-        para_len = len(plain) + 1  # +1 for \n
+        para_len = _utf16_len(plain) + 1  # +1 for \n (always BMP → 1 unit)
         start, end = current, current + para_len
         current = end
 
@@ -899,11 +918,13 @@ class DriveClient:
 
             all_reqs: List[Dict[str, Any]] = []
 
+            doc = self._docs().documents().get(
+                documentId=document_id, includeTabsContent=True,
+            ).execute()
+            revision_id = doc.get("revisionId", "")
+
             if clear_first:
                 # Fetch existing content to find the end index of the tab body
-                doc = self._docs().documents().get(
-                    documentId=document_id, includeTabsContent=True,
-                ).execute()
                 tab_body = self._find_tab_body(doc, tab_id)
                 if tab_body:
                     content = tab_body.get("content", [])
@@ -920,6 +941,17 @@ class DriveClient:
                                     }
                                 }
                             })
+            else:
+                tab_end = _find_tab_end_index(doc, tab_id)
+                if tab_end is None:
+                    raise UsageError(
+                        f"tab {tab_id!r} not found in document {document_id!r}"
+                    )
+                if tab_end > 1:
+                    raise UsageError(
+                        f"tab {tab_id!r} in document {document_id!r} is not empty "
+                        f"(endIndex={tab_end}); write_document_tab only writes to fresh tabs"
+                    )
 
             reqs = _md_to_docs_requests(markdown_text, tab_id)
             all_reqs.extend(reqs)
@@ -933,7 +965,10 @@ class DriveClient:
                 }
             response = self._docs().documents().batchUpdate(
                 documentId=document_id,
-                body={"requests": all_reqs},
+                body={
+                    "requests": all_reqs,
+                    "writeControl": {"requiredRevisionId": revision_id},
+                },
             ).execute()
         except Exception as e:
             raise _map_http_error(e, op=f"write tab {tab_id} in document {document_id}") from e
