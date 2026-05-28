@@ -475,18 +475,18 @@ scripts, interpret structured output, and ask the user before unsafe operations.
 
 ## Lifecycle Phases
 
-| Phase | Trigger | User-facing skill | Current issue |
-|-------|---------|-------------------|---------------|
-| Register / Inventory | existing repo, unknown cwd | `init-project`, `project-audit` | no first-class inventory contract |
-| Project Init | new repo/project | `scaffold-project` | `DEV_ROOT`-centric |
+| Phase | Trigger | User-facing skill | Status |
+|-------|---------|-------------------|--------|
+| Register / Inventory | existing repo, unknown cwd | `init-project`, `project-audit` | open: no first-class inventory contract |
+| Project Init | new repo/project | `scaffold-project` | open: `DEV_ROOT`-centric |
 | Session Start | new session | `session-start` | works, but bounded context remains mandatory |
 | Plan Work | feature/research task | superpowers plans | not lifecycle-native yet |
 | Execute | branch/worktree work | superpowers execution | works outside Lifecycle OS |
-| Docs Health | any time, pre-merge, close | `docs-lint` | wrong main job today |
-| Pre-Merge | PR ready | `pre-merge-check` | no docs health gate |
-| Milestone Close | milestone done | `milestone-closure` | separate `docs-index`, broken `gh milestone` assumption |
-| Handoff | session end | `handoff` | "what remains" not sourced from live GitHub |
-| Periodic Audit | weekly / on demand | `project-audit` | boundary with `docs-lint` not explicit |
+| Docs Health | any time, pre-merge, close | `docs-lint` | implemented by #240 / PR #241 |
+| Pre-Merge | PR ready | `pre-merge-check` | open: no docs health gate |
+| Milestone Close | milestone done | `milestone-closure` | open: separate `docs-index`, broken `gh milestone` assumption |
+| Handoff | session end | `handoff` | implemented by #211 / PR #239 |
+| Periodic Audit | weekly / on demand | `project-audit` | open: boundary with `docs-lint` not explicit |
 
 ## Phase Contracts
 
@@ -976,20 +976,18 @@ Required evidence:
 
 ## Issue Mapping
 
-| Issue | Contract slice |
-|-------|----------------|
-| #240 | `docs-lint` unified docs health, navigation, index, plan, JSON doctor |
-| #211 | `handoff` reads real GitHub open P0/P1/blocker issues |
-| #196 | `scaffold-project`, project init, milestone closure integration |
-| #197 | lifecycle hooks and `gh-memory` deprecation |
+| Issue | Contract slice | Status |
+|-------|----------------|--------|
+| #240 | `docs-lint` unified docs health, navigation, index, plan, JSON doctor | done: PR #241, merge `51a0563` |
+| #211 | `handoff` reads real GitHub open P0/P1/blocker issues | done: PR #239, merge `22bea49` |
+| #196 | `scaffold-project`, project init, milestone closure integration | open |
+| #197 | lifecycle hooks and `gh-memory` deprecation | open |
 
-Recommended execution order:
+Current execution order after #240/#211:
 
-1. Update specs/plans/issues to reference this contract.
-2. Implement #240 first; it is the docs health foundation.
-3. Implement #211; it is small and fixes stale handoff state.
-4. Implement #196 using `docs-lint` as the docs/index surface.
-5. Implement #197 after stable report contracts exist.
+1. Implement #196 using `docs-lint` as the docs/index surface.
+2. Implement #197 after #196 defines stable lifecycle hook entrypoints.
+3. Revisit `project-audit` / lifecycle-native planning after #196/#197.
 
 ## Non-Goals
 
@@ -1016,8 +1014,9 @@ Reviewer commit: ed25e87
 
 ### Summary
 
-This spec passed architectural review with 11 decisions resolved (D1–D11).
-The contract is ready to drive #240 implementation.
+This spec passed architectural review with 11 decisions resolved (D1-D11).
+#240 and #211 have since shipped; the contract now primarily drives #196 and
+#197.
 
 ### Decisions Applied
 
@@ -1040,9 +1039,10 @@ T1 (findings[] item schema) applied in previous commit ac7aa17.
 
 ### Verdict
 
-**READY TO IMPLEMENT** — spec is the design source of truth for #240.
+**PARTIALLY IMPLEMENTED** — #240 and #211 are complete. The remaining Lifecycle
+OS work is #196 followed by #197.
 
-Implementation tasks written to:
+Historical implementation tasks were written to:
 `~/.gstack/projects/lichtpfad-h2t-skills/tasks-eng-review-*.jsonl`
 
-Execution order: #240 → #211 → #196 → #197
+Current execution order: #196 → #197
