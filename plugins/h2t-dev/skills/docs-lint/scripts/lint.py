@@ -404,7 +404,8 @@ def _collect_all_findings(rp: Path, no_pymarkdown: bool = False) -> list[dict]:
     ):
         all_findings.append(finding("structure", "warn", "", msg))
     for msg in check_frontmatter(rp):
-        all_findings.append(finding("frontmatter", "info", "", msg))
+        path = msg.split(":")[0].strip() if ":" in msg else ""
+        all_findings.append(finding("frontmatter", "info", path, msg))
     return all_findings
 
 
@@ -430,7 +431,7 @@ def _run_audit(rp: Path, no_pymarkdown: bool = False) -> None:
         ("Naming", naming, lambda f: f"  WARN: [{f['type']}] {f['path']} — {f['message']}"),
         ("Structure", [finding("structure", "warn", "", m) for m in structure_msgs],
          lambda f: f"  WARN: {f['message']}"),
-        ("Metadata / Frontmatter", [finding("frontmatter", "info", "", m) for m in frontmatter_msgs],
+        ("Metadata / Frontmatter", [finding("frontmatter", "info", m.split(":")[0].strip() if ":" in m else "", m) for m in frontmatter_msgs],
          lambda f: f"  INFO: {f['message']}"),
     ]
 

@@ -119,3 +119,15 @@ def test_file_hash_stable(tmp_path):
     h2 = file_hash(f)
     assert h1 == h2
     assert len(h1) == 16
+
+
+def test_multiple_frontmatter_findings_have_distinct_action_ids():
+    """Multiple frontmatter findings for different files → unique action_ids."""
+    findings = [
+        {"type": "frontmatter", "severity": "info", "path": "docs/a.md", "message": "docs/a.md: missing title"},
+        {"type": "frontmatter", "severity": "info", "path": "docs/b.md", "message": "docs/b.md: missing title"},
+        {"type": "frontmatter", "severity": "info", "path": "docs/c.md", "message": "docs/c.md: missing title"},
+    ]
+    plan = build_fix_plan(repo_root="/tmp", findings=findings)
+    ids = [a["action_id"] for a in plan["actions"]]
+    assert len(ids) == len(set(ids)), f"Colliding action_ids: {ids}"
