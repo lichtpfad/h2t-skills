@@ -213,3 +213,74 @@ def test_fix_labels_failure_message(tmp_path):
         mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="repo not found")
         result = fix_labels(tmp_path, "h2t-unknown")
     assert "failed" in result.lower() or "label sync" in result.lower()
+
+
+# --- Backward compatibility ---
+
+import subprocess as _sp
+import sys as _sys
+
+_LINT_SCRIPT = str(
+    Path(__file__).parents[2]
+    / "plugins/h2t-dev/skills/docs-lint/scripts/lint.py"
+)
+
+
+def test_legacy_fix_with_root_is_rejected(tmp_path):
+    """--fix combined with --root is rejected (ambiguous target). Exits non-zero."""
+    result = _sp.run(
+        [_sys.executable, _LINT_SCRIPT, "--root", str(tmp_path), "--fix"],
+        capture_output=True, text=True,
+    )
+    assert result.returncode != 0
+    assert "--root" in result.stderr or "incompatible" in result.stderr.lower()
+
+
+def test_new_audit_subcommand_exits_cleanly(tmp_path):
+    """audit subcommand with --root on empty repo exits without crash."""
+    result = _sp.run(
+        [_sys.executable, _LINT_SCRIPT, "audit", "--root", str(tmp_path)],
+        capture_output=True, text=True,
+    )
+    assert result.returncode in (0, 1)
+
+
+def test_doctor_json_produces_schema(tmp_path):
+    """doctor --json outputs valid h2t_lifecycle_report/v0.1 schema."""
+    import json as _json
+    result = _sp.run(
+        [_sys.executable, _LINT_SCRIPT, "doctor", "--root", str(tmp_path), "--json"],
+        capture_output=True, text=True,
+    )
+    assert result.returncode in (0, 1)
+    data = _json.loads(result.stdout)
+    assert data["schema"] == "h2t_lifecycle_report/v0.1"
+
+
+def test_fix_index_dry_run_no_file_created(tmp_path):
+    """fix-index without --apply does not create README.md."""
+    (tmp_path / "docs").mkdir()
+    result = _sp.run(
+        [_sys.executable, _LINT_SCRIPT, "fix-index", "--root", str(tmp_path)],
+        capture_output=True, text=True,
+    )
+    assert result.returncode == 0
+    assert not (tmp_path / "docs" / "README.md").exists()
+
+
+def test_fix_safe_preserves_existing_frontmatter_keys(tmp_path):
+    """fix-safe does not drop custom/unknown frontmatter keys when adding missing required ones."""
+    specs = tmp_path / "docs" / "superpowers" / "specs"
+    specs.mkdir(parents=True)
+    md = specs / "2026-05-28-test-spec.md"
+    md.write_text(
+        '---\ntitle: "My Spec"\ncustom_tag: "keep-me"\n---\n# Content\n'
+    )
+    _sp.run(
+        [_sys.executable, _LINT_SCRIPT, "fix-safe", "--root", str(tmp_path),
+         "--only", "frontmatter"],
+        capture_output=True, text=True,
+    )
+    result = md.read_text(encoding="utf-8")
+    assert 'custom_tag: "keep-me"' in result
+    assert "status:" in result
