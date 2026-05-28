@@ -1,7 +1,21 @@
 #!/usr/bin/env python3
-"""Documentation standards linter for h2t repos."""
+"""docs-lint: Documentation health check and fix tool.
+
+Sub-commands:
+  audit       Run all checks and show findings (default)
+  plan        Show human-readable cleanup plan without writing
+  fix-safe    Apply only safe mechanical fixes (dirs, frontmatter)
+  fix-index   Rebuild docs/README.md navigation index
+  doctor      Output machine-readable h2t_lifecycle_report/v0.1 JSON
+
+Legacy flags (deprecated, use sub-commands instead):
+  --fix                 → fix-safe (emits deprecation warning)
+  --fix-frontmatter     → fix-safe --only=frontmatter (emits deprecation warning)
+"""
 
 import argparse
+import json
+import os
 import re
 import shutil
 import subprocess
@@ -18,6 +32,13 @@ from docs.common import (
     DEV_ROOT, REPO_MANIFEST, REQUIRED_CORE_DIRS, REPO_EXTRA_DIRS, STANDARDS_FILES,
     FRONTMATTER_RULES, ensure_dir, print_header, repo_path, parse_frontmatter,
 )
+from docs.orphan import find_orphan_files
+from docs.naming import check_naming_all_docs
+from docs.reporter import build_report, status_from_findings, finding
+from docs.config import load_config
+from docs.index_builder import write_index
+
+_SUBCOMMANDS = frozenset({"audit", "plan", "fix-safe", "fix-index", "doctor"})
 
 PROJECTS_YAML_PATH = DEV_ROOT / "h2t-landings" / "projects.yaml"
 
@@ -91,13 +112,7 @@ def check_adr_naming(rp: Path) -> list[str]:
     return failures
 
 
-LEGACY_DIRS = [
-    "docs/plans",
-    "docs/specs",
-    "docs/handoff",
-    "docs/handoffs",
-    "docs/eval",
-]
+LEGACY_DIRS = ["docs/plans", "docs/specs", "docs/handoff", "docs/handoffs", "docs/eval"]
 
 
 def check_legacy_dirs(rp: Path, extra_dirs: list[str] | None = None) -> list[str]:
@@ -109,27 +124,6 @@ def check_legacy_dirs(rp: Path, extra_dirs: list[str] | None = None) -> list[str
             continue
         if (rp / rel).exists():
             failures.append(f"legacy dir: {rel}/ — migrate to docs/superpowers/ or docs/archive/")
-    return failures
-
-
-_DATE_PREFIX = re.compile(r"^\d{4}-\d{2}-\d{2}-")
-_NAMING_DIRS = ["docs/superpowers/specs", "docs/superpowers/plans"]
-_NAMING_SKIP = {"README.md", "index.md"}
-
-
-def check_naming_conventions(rp: Path) -> list[str]:
-    failures = []
-    for rel_dir in _NAMING_DIRS:
-        d = rp / rel_dir
-        if not d.exists():
-            continue
-        for md in d.glob("*.md"):
-            if md.name in _NAMING_SKIP:
-                continue
-            if not _DATE_PREFIX.match(md.name):
-                failures.append(
-                    f"naming: {rel_dir}/{md.name} — expected YYYY-MM-DD- prefix"
-                )
     return failures
 
 
@@ -172,6 +166,23 @@ def check_data_docs_boundary(rp: Path) -> list[str]:
             if f.is_file() and f.suffix in _DOC_EXTS_IN_DATA:
                 rel = str(f.relative_to(rp)).replace("\\", "/")
                 failures.append(f"doc in data: {rel} — move to docs/")
+    return failures
+
+
+def check_naming_conventions(rp: Path) -> list[str]:
+    """Legacy naming check (specs/plans date prefix only). Preserved for existing tests."""
+    failures = []
+    for rel_dir in ["docs/superpowers/specs", "docs/superpowers/plans"]:
+        d = rp / rel_dir
+        if not d.exists():
+            continue
+        for md in d.glob("*.md"):
+            if md.name in {"README.md", "index.md"}:
+                continue
+            if not re.match(r"^\d{4}-\d{2}-\d{2}-", md.name):
+                failures.append(
+                    f"naming: {rel_dir}/{md.name} — expected YYYY-MM-DD- prefix"
+                )
     return failures
 
 
@@ -228,7 +239,6 @@ def _extract_title(text: str, filename: str) -> str:
         m = re.match(r"^#\s+(.+)", line)
         if m:
             return m.group(1).strip()
-    # fallback: strip date prefix and extension
     name = re.sub(r"^\d{4}-\d{2}-\d{2}-?", "", filename)
     return name.replace("-", " ").replace("_", " ").strip(".md")
 
@@ -253,7 +263,23 @@ def _git_author(rp: Path, filepath: Path) -> str:
     return lines[0] if lines else "lichtpfad"
 
 
-def fix_frontmatter(rp: Path) -> list[str]:
+def _frontmatter_value(field: str, md_file: Path, text: str, rp: Path) -> str:
+    """Derive a default value for a single missing frontmatter field."""
+    if field == "title":
+        return f'"{_extract_title(text, md_file.stem)}"'
+    if field == "status":
+        return '"draft"'
+    if field == "owner":
+        return f'"{_git_author(rp, md_file)}"'
+    if field == "date":
+        return f'"{_extract_date(md_file.name)}"'
+    if field == "milestone":
+        return f'"{_extract_milestone(md_file.name)}"'
+    return '""'
+
+
+def fix_frontmatter_action(rp: Path) -> list[str]:
+    """Add only missing required frontmatter fields. Preserves existing keys."""
     fixes = []
     docs_dir = rp / "docs"
     if not docs_dir.exists():
@@ -261,6 +287,7 @@ def fix_frontmatter(rp: Path) -> list[str]:
     for md_file in docs_dir.rglob("*.md"):
         rel = str(md_file.relative_to(rp)).replace("\\", "/")
         matched_pattern = None
+        required_fields_for_pattern: list[str] = []
         for dir_pattern, required_fields in FRONTMATTER_RULES.items():
             if dir_pattern in rel and required_fields:
                 matched_pattern = dir_pattern
@@ -272,27 +299,52 @@ def fix_frontmatter(rp: Path) -> list[str]:
         fm = parse_frontmatter(text)
         if fm is not None and all(f in fm for f in required_fields_for_pattern):
             continue
-        # Build frontmatter
-        title = _extract_title(text, md_file.stem)
-        date = _extract_date(md_file.name)
-        milestone = _extract_milestone(md_file.name)
-        lines = ["---", f'title: "{title}"', 'status: "draft"']
-        if "owner" in required_fields_for_pattern:
-            owner = _git_author(rp, md_file)
-            lines.append(f'owner: "{owner}"')
-        lines.append(f'date: "{date}"')
-        if "milestone" in required_fields_for_pattern:
-            lines.append(f'milestone: "{milestone}"')
-        lines += ["---", ""]
-        header = "\n".join(lines)
-        # Strip existing frontmatter if partial
-        if text.startswith("---"):
+
+        missing = [f for f in required_fields_for_pattern if not (fm and f in fm)]
+
+        if fm is not None and text.startswith("---"):
             parts = text.split("---", 2)
             if len(parts) >= 3:
-                text = parts[2].lstrip("\n")
-        md_file.write_text(header + text, encoding="utf-8")
-        fixes.append(f"added frontmatter: {rel}")
+                fm_block = parts[1].rstrip("\n")
+                body = parts[2]
+                extra = "\n".join(
+                    f"{f}: {_frontmatter_value(f, md_file, text, rp)}"
+                    for f in missing
+                )
+                new_text = "---\n" + fm_block.lstrip("\n") + "\n" + extra + "\n---" + body
+            else:
+                continue
+        else:
+            lines = ["---"]
+            for f in required_fields_for_pattern:
+                lines.append(f"{f}: {_frontmatter_value(f, md_file, text, rp)}")
+            lines += ["---", ""]
+            body_text = text if not text.startswith("---") else text
+            new_text = "\n".join(lines) + body_text
+
+        import tempfile as _tmpmod
+        dir_ = md_file.parent
+        with _tmpmod.NamedTemporaryFile(
+            mode="w", encoding="utf-8", dir=dir_, delete=False, suffix=".tmp"
+        ) as tf:
+            tf.write(new_text)
+            tmp = tf.name
+        try:
+            os.replace(tmp, md_file)
+        except Exception:
+            try:
+                Path(tmp).unlink(missing_ok=True)
+            except OSError:
+                pass
+            raise
+        fixes.append(f"added frontmatter fields {missing}: {rel}")
     return fixes
+
+
+# Legacy alias used by existing --fix-frontmatter flag path
+def fix_frontmatter(rp: Path) -> list[str]:
+    """Legacy wrapper: delegates to fix_frontmatter_action."""
+    return fix_frontmatter_action(rp)
 
 
 _SYNC_LABELS_SCRIPT = Path(__file__).parents[2] / "docs-sync-labels" / "scripts" / "sync_labels.py"
@@ -314,30 +366,332 @@ def fix_labels(rp: Path, repo_name: str) -> str:
     return f"label sync failed: {result.stderr.strip()[:120]}"
 
 
-def _detect_current_repo() -> str | None:
-    """Detect repo name from cwd if it matches a known h2t-* repo."""
+def _get_git_head(rp: Path) -> str:
+    result = subprocess.run(
+        ["git", "-C", str(rp), "rev-parse", "--short", "HEAD"],
+        capture_output=True, text=True,
+    )
+    return result.stdout.strip() if result.returncode == 0 else ""
+
+
+def _resolve_root(root_arg: str | None) -> Path:
+    if root_arg:
+        return Path(root_arg).resolve()
     cwd = Path.cwd()
     for part in [cwd] + list(cwd.parents):
-        name = part.name
-        if name in REPO_MANIFEST:
-            return name
+        if part.name in REPO_MANIFEST:
+            return part
+    return cwd
+
+
+def _repo_name_from_root(rp: Path) -> str:
+    return rp.name
+
+
+def _collect_all_findings(rp: Path, no_pymarkdown: bool = False) -> list[dict]:
+    """Run all checks and return findings list (navigation first, metadata last)."""
+    all_findings = []
+    all_findings.extend(find_orphan_files(rp))
+    all_findings.extend(check_naming_all_docs(rp))
+    extra = REPO_EXTRA_DIRS.get(_repo_name_from_root(rp), [])
+    for msg in (
+        check_structure(rp)
+        + check_adr_naming(rp)
+        + check_legacy_dirs(rp, extra_dirs=extra)
+        + check_data_docs_boundary(rp)
+        + check_repo_root(rp)
+        + ([] if no_pymarkdown else run_pymarkdownlnt(rp))
+    ):
+        all_findings.append(finding("structure", "warn", "", msg))
+    for msg in check_frontmatter(rp):
+        path = msg.split(":")[0].strip() if ":" in msg else ""
+        all_findings.append(finding("frontmatter", "info", path, msg))
+    return all_findings
+
+
+def _run_audit(rp: Path, no_pymarkdown: bool = False) -> None:
+    repo_name = _repo_name_from_root(rp)
+    print_header(f"docs-lint audit: {rp}")
+
+    orphans = find_orphan_files(rp)
+    naming = check_naming_all_docs(rp)
+    extra = REPO_EXTRA_DIRS.get(repo_name, [])
+    structure_msgs = (
+        check_structure(rp)
+        + check_adr_naming(rp)
+        + check_legacy_dirs(rp, extra_dirs=extra)
+        + check_data_docs_boundary(rp)
+        + check_repo_root(rp)
+        + ([] if no_pymarkdown else run_pymarkdownlnt(rp))
+    )
+    frontmatter_msgs = check_frontmatter(rp)
+
+    sections = [
+        ("Navigation / Orphans", orphans, lambda f: f"  WARN: [{f['type']}] {f['path']} — {f['message']}"),
+        ("Naming", naming, lambda f: f"  WARN: [{f['type']}] {f['path']} — {f['message']}"),
+        ("Structure", [finding("structure", "warn", "", m) for m in structure_msgs],
+         lambda f: f"  WARN: {f['message']}"),
+        ("Metadata / Frontmatter", [finding("frontmatter", "info", m.split(":")[0].strip() if ":" in m else "", m) for m in frontmatter_msgs],
+         lambda f: f"  INFO: {f['message']}"),
+    ]
+
+    total = 0
+    for section_name, items, fmt in sections:
+        if items:
+            print(f"\n--- {section_name} ({len(items)}) ---")
+            for item in items:
+                print(fmt(item))
+            total += len(items)
+
+    print(f"\n{'=' * 60}")
+    if total:
+        print(f"  RESULT: {total} finding(s) — run 'docs-lint plan' for cleanup steps")
+        sys.exit(1)
+    else:
+        print("  RESULT: all checks passed")
+
+
+def _run_plan(rp: Path, json_output: bool = False) -> None:
+    all_findings = _collect_all_findings(rp, no_pymarkdown=True)
+
+    if json_output:
+        from docs.fix_plan import build_fix_plan
+        plan = build_fix_plan(repo_root=str(rp), findings=all_findings)
+        print(json.dumps(plan, indent=2))
+        return
+
+    print_header(f"docs-lint plan: {rp}")
+    orphans = [f for f in all_findings if f["type"] == "orphan"]
+    naming = [f for f in all_findings if f["type"] == "naming"]
+    structure = [f for f in all_findings if f["type"] == "structure"]
+
+    if orphans:
+        print("\n## Orphan Files (not linked from any README/index)\n")
+        for f in orphans:
+            print(f"  - {f['path']}")
+        print("\n  Action: link from a relevant README, move to archive/, or delete after review.")
+
+    if naming:
+        print("\n## Naming Convention Fixes\n")
+        for f in naming:
+            fix = f.get("safe_fix", "")
+            print(f"  - {f['path']}: {f['message']}")
+            if fix:
+                print(f"    → {fix}")
+
+    if structure:
+        print("\n## Structure Issues\n")
+        for f in structure:
+            print(f"  - {f['message']}")
+
+    if not orphans and not naming and not structure:
+        print("\n  No cleanup needed.")
+    else:
+        print(f"\n  Run 'docs-lint fix-safe' for auto-fixable items.")
+        print(f"  Run 'docs-lint fix-index' for README/index rebuild.")
+
+
+def _run_fix_safe(rp: Path, only: str = "all", plan_file: str | None = None) -> None:
+    if plan_file:
+        from docs.fix_plan import build_fix_plan
+        from docs.apply_report import build_apply_report, action_result, file_hash
+        import time
+
+        plan = json.loads(Path(plan_file).read_text())
+        results = []
+        for act in plan["actions"]:
+            if act.get("risk") in {"review", "destructive"} or act.get("requires_confirmation"):
+                results.append(action_result(act["action_id"], "waived",
+                                             "skipped: requires_confirmation or risk > safe"))
+                continue
+            bh = file_hash(rp / act.get("path", "")) if act.get("path") else ""
+            try:
+                _apply_safe_action(rp, act)
+                ah = file_hash(rp / act.get("path", "")) if act.get("path") else ""
+                results.append(action_result(act["action_id"], "applied",
+                                             before_hash=bh, after_hash=ah))
+            except Exception as exc:
+                results.append(action_result(act["action_id"], "failed", str(exc),
+                                             before_hash=bh))
+        report = build_apply_report(plan_id=plan["plan_id"],
+                                    run_id=f"fix-safe-{int(time.time())}",
+                                    actions=results)
+        report_dir = rp / ".h2t"
+        report_dir.mkdir(exist_ok=True)
+        ts = int(time.time())
+        report_path = report_dir / f"lint-apply-{ts}.json"
+        report_path.write_text(json.dumps(report, indent=2))
+        print(f"Apply report: {report_path}")
+        return
+
+    print_header(f"docs-lint fix-safe [{only}]: {rp}")
+    if only in ("all", "dirs"):
+        fixes = fix_structure(rp)
+        for f in fixes:
+            print(f"  FIX: {f}")
+    if only in ("all", "frontmatter"):
+        fixes = fix_frontmatter_action(rp)
+        for f in fixes:
+            print(f"  FIX: {f}")
+    print("  Done. Renames/moves require 'docs-lint plan' review and manual action.")
+
+
+def _apply_safe_action(rp: Path, act: dict) -> None:
+    """Apply a single safe action from a fix plan."""
+    action_type = act.get("type", "")
+    path = act.get("path", "")
+    if action_type == "create_dir":
+        (rp / path).mkdir(parents=True, exist_ok=True)
+    elif action_type == "add_frontmatter":
+        target = rp / path
+        if target.exists():
+            fix_frontmatter_action_single(rp, target)
+
+
+def fix_frontmatter_action_single(rp: Path, md_file: Path) -> None:
+    """Apply frontmatter fix to a single file (used by plan mode)."""
+    rel = str(md_file.relative_to(rp)).replace("\\", "/")
+    for dir_pattern, required_fields in FRONTMATTER_RULES.items():
+        if dir_pattern not in rel or not required_fields:
+            continue
+        text = md_file.read_text(encoding="utf-8", errors="replace")
+        fm = parse_frontmatter(text)
+        if fm is not None and all(f in fm for f in required_fields):
+            return
+        missing = [f for f in required_fields if not (fm and f in fm)]
+        if fm is not None and text.startswith("---"):
+            parts = text.split("---", 2)
+            if len(parts) >= 3:
+                fm_block = parts[1].rstrip("\n")
+                body = parts[2]
+                extra = "\n".join(
+                    f"{f}: {_frontmatter_value(f, md_file, text, rp)}" for f in missing
+                )
+                new_text = "---\n" + fm_block.lstrip("\n") + "\n" + extra + "\n---" + body
+            else:
+                return
+        else:
+            lines = ["---"]
+            for f in required_fields:
+                lines.append(f"{f}: {_frontmatter_value(f, md_file, text, rp)}")
+            lines += ["---", ""]
+            body_text = text if not text.startswith("---") else text
+            new_text = "\n".join(lines) + body_text
+        import tempfile as _tmpmod
+        with _tmpmod.NamedTemporaryFile(
+            mode="w", encoding="utf-8", dir=md_file.parent, delete=False, suffix=".tmp"
+        ) as tf:
+            tf.write(new_text)
+            tmp = tf.name
+        try:
+            os.replace(tmp, md_file)
+        except Exception:
+            Path(tmp).unlink(missing_ok=True)
+            raise
+        break
+
+
+def _safe_generate(repo_root: Path, repo_name: str) -> str:
+    """Generate index content, falling back gracefully if docs-index script is unavailable."""
+    # Try the canonical docs-index script first
+    _index_dir = Path(__file__).resolve().parents[3] / "skills" / "docs-index" / "scripts"
+    if _index_dir.exists():
+        _orig_path = list(sys.path)
+        try:
+            if str(_index_dir) not in sys.path:
+                sys.path.insert(0, str(_index_dir))
+            from index import build_navigation_index  # noqa: PLC0415
+            return build_navigation_index(repo_root, repo_name)
+        except Exception:
+            sys.path[:] = _orig_path
+    # Fallback: minimal stub index
+    return f"# {repo_name} Documentation Index\n\n> Auto-generated by docs-lint fix-index\n"
+
+
+def _run_fix_index(rp: Path, apply: bool = False, plan_file: str | None = None) -> None:
+    if plan_file and apply:
+        from docs.apply_report import build_apply_report, action_result
+        import time
+
+        plan = json.loads(Path(plan_file).read_text())
+        index_actions = [a for a in plan["actions"] if a.get("type") == "add_to_index"]
+        results = []
+        repo_name = _repo_name_from_root(rp)
+        try:
+            report = write_index(rp, repo_name, apply=True, generate=_safe_generate)
+            for act in index_actions:
+                results.append(action_result(act["action_id"], "applied"))
+            if not index_actions:
+                results.append(action_result("index-rebuild", "applied", "README index rebuilt"))
+        except Exception as exc:
+            for act in index_actions:
+                results.append(action_result(act["action_id"], "failed", str(exc)))
+
+        apply_report = build_apply_report(
+            plan_id=plan["plan_id"],
+            run_id=f"fix-index-{int(time.time())}",
+            actions=results,
+        )
+        report_dir = rp / ".h2t"
+        report_dir.mkdir(exist_ok=True)
+        ts = int(time.time())
+        (report_dir / f"lint-apply-{ts}.json").write_text(json.dumps(apply_report, indent=2))
+        return
+
+    repo_name = _repo_name_from_root(rp)
+    mode = "APPLY" if apply else "DRY-RUN"
+    print_header(f"docs-lint fix-index [{mode}]: {rp}")
+    report = write_index(rp, repo_name, apply=apply, generate=_safe_generate)
+    print(f"  operation: {report['operation']}")
+    print(f"  has_markers: {report['has_markers']}")
+    print(f"  readme_path: {report['readme_path']}")
+    print(f"  status: {report['status']}")
+    if not apply and not report["has_markers"]:
+        print("  Note: README has no markers — run with --apply to append index section.")
+
+
+def _run_doctor(rp: Path, json_output: bool = False, no_pymarkdown: bool = False) -> None:
+    all_findings = _collect_all_findings(rp, no_pymarkdown=no_pymarkdown)
+    status = status_from_findings(all_findings)
+    orphans = [f for f in all_findings if f["type"] == "orphan"]
+    naming = [f for f in all_findings if f["type"] == "naming"]
+    structure = [f for f in all_findings if f["type"] == "structure"]
+    frontmatter = [f for f in all_findings if f["type"] == "frontmatter"]
+    total = len(all_findings)
+    summary = (
+        f"{len(orphans)} orphan(s), {len(naming)} naming issue(s), "
+        f"{len(structure)} structure issue(s), {len(frontmatter)} metadata issue(s)"
+    )
+    safe_next = "Run 'docs-lint plan' for cleanup plan" if total else "No issues found"
+    report = build_report(
+        command="docs-lint doctor",
+        repo_root=str(rp),
+        status=status,
+        summary=summary,
+        findings=all_findings,
+        safe_next_action=safe_next,
+        git_head=_get_git_head(rp),
+    )
+
+    if json_output:
+        print(json.dumps(report, indent=2))
+    else:
+        print_header(f"docs-lint doctor: {rp}")
+        print(f"  status: {status}")
+        print(f"  {summary}")
+        if total:
+            sys.exit(1)
+
+
+def _detect_current_repo() -> str | None:
+    cwd = Path.cwd()
+    for part in [cwd] + list(cwd.parents):
+        if part.name in REPO_MANIFEST:
+            return part.name
     return None
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description="Lint documentation standards")
-    parser.add_argument("repos", nargs="*", help="Repos to check (default: current repo)")
-    parser.add_argument("--all", action="store_true", help="Check all 16 repos")
-    parser.add_argument("--fix", action="store_true", help="Create missing dirs")
-    parser.add_argument("--fix-frontmatter", action="store_true",
-                        help="Auto-add missing frontmatter (title from heading, date from filename)")
-    parser.add_argument("--fix-labels", action="store_true",
-                        help="Sync canonical GitHub labels (requires gh CLI)")
-    parser.add_argument("--no-pymarkdown", action="store_true", help="Skip pymarkdownlnt")
-    parser.add_argument("--repo-root", action="store_true",
-                        help="Check repo root for banned dirs and item count")
-    args = parser.parse_args()
-
+def _legacy_main(args: argparse.Namespace) -> None:
     if args.repos:
         targets = args.repos
     elif args.all:
@@ -345,8 +699,8 @@ def main() -> None:
     else:
         detected = _detect_current_repo()
         targets = [detected] if detected else REPO_MANIFEST
-    print_header(f"docs-lint: checking {len(targets)} repos")
 
+    print_header(f"docs-lint: checking {len(targets)} repos")
     projects = _load_projects_yaml()
 
     print("\n--- Global Standards ---")
@@ -365,16 +719,14 @@ def main() -> None:
         if not rp.exists():
             print(f"\n--- {name} ---\n  SKIP: repo not found at {rp}")
             continue
-
         print(f"\n--- {name} ---")
 
         if args.fix:
             fixes = fix_structure(rp)
             for f in fixes:
                 print(f"  FIX: {f}")
-
         if args.fix_frontmatter:
-            fixes = fix_frontmatter(rp)
+            fixes = fix_frontmatter_action(rp)
             for f in fixes:
                 print(f"  FIX: {f}")
 
@@ -407,6 +759,87 @@ def main() -> None:
         sys.exit(1)
     else:
         print(f"  RESULT: all {len(targets)} repos compliant")
+
+
+def main() -> None:
+    raw = sys.argv[1:]
+
+    legacy_flags = {"--fix", "--fix-frontmatter"}
+    is_legacy_flags = bool(set(raw) & legacy_flags)
+
+    first_pos = next((a for a in raw if not a.startswith("-")), None)
+    is_subcommand = first_pos in _SUBCOMMANDS
+
+    if is_legacy_flags:
+        if "--root" in raw:
+            print(
+                "ERROR: '--root' is incompatible with deprecated '--fix'/'--fix-frontmatter'. "
+                "Use 'docs-lint fix-safe --root PATH' instead.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        for flag in legacy_flags & set(raw):
+            if flag == "--fix":
+                print(
+                    "DEPRECATED: '--fix' is deprecated. Use 'docs-lint fix-safe' instead. "
+                    "Will be removed in v2.",
+                    file=sys.stderr,
+                )
+            if flag == "--fix-frontmatter":
+                print(
+                    "DEPRECATED: '--fix-frontmatter' is deprecated. "
+                    "Use 'docs-lint fix-safe --only=frontmatter' instead. Will be removed in v2.",
+                    file=sys.stderr,
+                )
+        parser = argparse.ArgumentParser()
+        parser.add_argument("repos", nargs="*")
+        parser.add_argument("--all", action="store_true")
+        parser.add_argument("--fix", action="store_true")
+        parser.add_argument("--fix-frontmatter", dest="fix_frontmatter", action="store_true")
+        parser.add_argument("--fix-labels", dest="fix_labels", action="store_true")
+        parser.add_argument("--no-pymarkdown", dest="no_pymarkdown", action="store_true")
+        parser.add_argument("--repo-root", dest="repo_root", action="store_true")
+        args = parser.parse_args(raw)
+        _legacy_main(args)
+        return
+
+    if is_subcommand or (first_pos is None and "--root" in raw):
+        parser = argparse.ArgumentParser(prog="docs-lint")
+        parser.add_argument("command", nargs="?", default="audit",
+                            choices=list(_SUBCOMMANDS))
+        parser.add_argument("--root", default=None)
+        parser.add_argument("--apply", action="store_true")
+        parser.add_argument("--only", default="all", choices=["all", "frontmatter", "dirs"])
+        parser.add_argument("--json", dest="json_output", action="store_true")
+        parser.add_argument("--no-pymarkdown", dest="no_pymarkdown", action="store_true")
+        parser.add_argument("--plan", default=None, metavar="FILE")
+        args = parser.parse_args(raw)
+        rp = _resolve_root(args.root)
+
+        cmd = args.command or "audit"
+        if cmd == "audit":
+            _run_audit(rp, no_pymarkdown=args.no_pymarkdown)
+        elif cmd == "plan":
+            _run_plan(rp, json_output=args.json_output)
+        elif cmd == "fix-safe":
+            _run_fix_safe(rp, only=args.only, plan_file=args.plan)
+        elif cmd == "fix-index":
+            _run_fix_index(rp, apply=args.apply, plan_file=args.plan)
+        elif cmd == "doctor":
+            _run_doctor(rp, json_output=args.json_output, no_pymarkdown=args.no_pymarkdown)
+        return
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("repos", nargs="*")
+    parser.add_argument("--all", action="store_true")
+    parser.add_argument("--fix", action="store_true")
+    parser.add_argument("--fix-frontmatter", dest="fix_frontmatter", action="store_true")
+    parser.add_argument("--fix-labels", dest="fix_labels", action="store_true")
+    parser.add_argument("--no-pymarkdown", dest="no_pymarkdown", action="store_true")
+    parser.add_argument("--repo-root", dest="repo_root", action="store_true")
+    parser.add_argument("--root", default=None)
+    args = parser.parse_args(raw)
+    _legacy_main(args)
 
 
 if __name__ == "__main__":

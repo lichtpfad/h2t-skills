@@ -33,3 +33,6 @@ build/
 .claude/*.bak2
 .claude/worktrees/
 .superpowers/
+
+# docs-lint runtime artifacts
+.h2t/lint-apply-*.json
