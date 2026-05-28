@@ -4,7 +4,7 @@ description: This skill should be used when the user says "handoff", "завер
 compatibility: "Claude Code"
 metadata:
   author: lichtpfad
-  version: 3.1.2
+  version: 3.1.3
 ---
 
 # Handoff v3.1
@@ -45,6 +45,17 @@ DO NOT ask the user. Infer from:
 1. Open issues mentioned in this conversation
 2. TODOs or next steps discussed but not completed
 3. Known blockers or pending decisions from conversation
+4. **Pull open P0/blocker issues from GitHub** (run silently, merge with above):
+
+```bash
+REPO=$(git remote get-url origin 2>/dev/null | sed 's|.*github\.com[:/]\(.*\)\.git$|\1|;s|.*github\.com[:/]\(.*\)$|\1|')
+gh issue list --repo "$REPO" --label "priority:p0" --state open --json number,title --limit 20 2>/dev/null
+gh issue list --repo "$REPO" --label "status:blocked" --state open --json number,title --limit 20 2>/dev/null
+```
+
+If `gh` is unavailable, auth fails, or the repo cannot be resolved — skip silently without error.
+Add any issues not already covered by items 1–3 as additional checkboxes: `- [ ] #N — <title>`.
+Optionally also include `priority:p1` issues if the milestone context makes them relevant.
 
 Write 2–5 items as **checkboxes** (`- [ ] ...`). If nothing clear — write `- [ ] Нет явных следующих шагов.`
 Store as WHAT_REMAINS.
