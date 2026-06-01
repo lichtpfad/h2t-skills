@@ -10,6 +10,7 @@ import io
 import mimetypes
 import re
 import socket
+from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -54,6 +55,89 @@ GOOGLE_EXPORT_FORMATS = {
         "default": "pdf",
     },
 }
+
+EXPORT_FORMAT_ALIASES = {
+    "txt": "text",
+    "markdown": "md",
+}
+
+
+def normalize_export_format(fmt: Optional[str]) -> Optional[str]:
+    if fmt is None:
+        return None
+    return EXPORT_FORMAT_ALIASES.get(fmt, fmt)
+
+
+class _MarkdownHTMLParser(HTMLParser):
+    """Small stdlib fallback for Google Docs HTML export."""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self._parts: list[str] = []
+        self._href_stack: list[str | None] = []
+
+    def _ensure_newline(self) -> None:
+        if self._parts and not self._parts[-1].endswith("\n"):
+            self._parts.append("\n")
+
+    def _ensure_blank_line(self) -> None:
+        self._ensure_newline()
+        if len(self._parts) < 2 or not self._parts[-2].endswith("\n"):
+            self._parts.append("\n")
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        tag = tag.lower()
+        if tag in {"h1", "h2", "h3", "h4", "h5", "h6"}:
+            self._ensure_blank_line()
+            level = int(tag[1])
+            self._parts.append(f"{'#' * level} ")
+        elif tag in {"p", "div", "section", "article"}:
+            self._ensure_blank_line()
+        elif tag == "br":
+            self._ensure_newline()
+        elif tag == "li":
+            self._ensure_newline()
+            self._parts.append("- ")
+        elif tag == "a":
+            href = dict(attrs).get("href")
+            self._href_stack.append(href)
+
+    def handle_endtag(self, tag: str) -> None:
+        tag = tag.lower()
+        if tag in {"h1", "h2", "h3", "h4", "h5", "h6", "p", "div", "li"}:
+            self._ensure_newline()
+        elif tag == "a":
+            href = self._href_stack.pop() if self._href_stack else None
+            if href:
+                self._parts.append(f" ({href})")
+
+    def handle_data(self, data: str) -> None:
+        if data:
+            self._parts.append(data)
+
+    def markdown(self) -> str:
+        text = "".join(self._parts)
+        text = re.sub(r"[ \t]+\n", "\n", text)
+        text = re.sub(r"\n{3,}", "\n\n", text)
+        return text.strip() + "\n"
+
+
+def html_to_markdown(html: str) -> str:
+    parser = _MarkdownHTMLParser()
+    parser.feed(html)
+    parser.close()
+    return parser.markdown()
+
+
+def convert_html_to_markdown(html: str) -> str:
+    try:
+        import html2text
+    except ImportError:
+        return html_to_markdown(html)
+    h = html2text.HTML2Text()
+    h.ignore_links = False
+    h.body_width = 0
+    return h.handle(html)
 
 UPLOAD_CONVERT_MAP = {
     ".md": ("text/markdown", "application/vnd.google-apps.document"),
@@ -1140,8 +1224,9 @@ class DriveClient:
         dest: Optional[str | Path] = None,
         to_stdout: bool = False,
     ) -> Dict[str, Any]:
-        if to_stdout and fmt in {"docx", "xlsx", "pdf", "pptx"}:
-            raise UsageError(f"drive export --print cannot use binary format: {fmt}")
+        chosen_fmt = normalize_export_format(fmt)
+        if to_stdout and chosen_fmt in {"docx", "xlsx", "pdf", "pptx"}:
+            raise UsageError(f"drive export --print cannot use binary format: {chosen_fmt}")
         try:
             meta = self.service.files().get(
                 fileId=file_id, fields="name, mimeType",
@@ -1153,7 +1238,7 @@ class DriveClient:
                 raise UsageError(
                     f"file {name!r} is not a Google Docs editor file; use download",
                 )
-            chosen = fmt or formats["default"]
+            chosen = chosen_fmt or formats["default"]
             if chosen not in formats or chosen == "default":
                 available = ", ".join(k for k in formats if k != "default")
                 raise UsageError(
@@ -1165,18 +1250,8 @@ class DriveClient:
                 fileId=file_id, mimeType=export_mime,
             ).execute()
             if chosen == "md":
-                try:
-                    import html2text
-                except ImportError as e:
-                    raise ConfigError(
-                        "html2text is required for Drive markdown export.",
-                        hint="Install html2text in the h2t-ops environment.",
-                    ) from e
-                h = html2text.HTML2Text()
-                h.ignore_links = False
-                h.body_width = 0
                 html = content.decode("utf-8") if isinstance(content, bytes) else content
-                content = h.handle(html).encode("utf-8")
+                content = convert_html_to_markdown(html).encode("utf-8")
 
             text = content.decode("utf-8") if isinstance(content, bytes) else content
             result: Dict[str, Any] = {

@@ -981,7 +981,7 @@ Required evidence:
 | #240 | `docs-lint` unified docs health, navigation, index, plan, JSON doctor | done: PR #241, merge `51a0563` |
 | #211 | `handoff` reads real GitHub open P0/P1/blocker issues | done: PR #239, merge `22bea49` |
 | #196 | `scaffold-project`, project init, milestone closure integration | open |
-| #197 | lifecycle hooks and `gh-memory` deprecation | open |
+| #197 | lifecycle hooks and `gh-memory` deprecation | implemented by PR for this plan |
 
 Current execution order after #240/#211:
 
