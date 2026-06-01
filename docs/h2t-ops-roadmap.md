@@ -81,22 +81,26 @@ research backlog streams.
 | 4 | #13, #94, #107, #109, #110, #73, #79, #53 | Platform portability / credential policy | Done or consolidated into policy; routine maintenance only |
 | 5 | #112 | Setup wizard backlog | Closed as separate UX/setup stream, not closure work |
 
+### Completed Milestones
+
+| Milestone | Version | Closed | Notes |
+| --- | --- | --- | --- |
+| skills-release | v2.15.0 | 2026-06-02 | 29 issues; connector P0, session-start/handoff, docs-lint unified, deploy connector |
+| lifecycle-os | v2.15.0 | 2026-06-02 | #196 scaffold/init + milestone-closure; #197 PostToolUse hook + gh-memory deprecation |
+
 ### Active Product Backlog
 
 The current open work is feature/product backlog, not migration/closure.
 
 | Milestone | Issue(s) | Workstream | Notes |
 | --- | --- | --- | --- |
-| skills-release | #190 | Skills release gate | `#183`, `#185`, `#186`, `#195`, research follow-ups `#192`-`#194`, and connector API P0 `#212`-`#231` are complete; #71 is closed as release-ready/superseded |
-| lifecycle-os | #196, #197 | Project lifecycle consolidation | Planned after #195; not required before the immediate skills-release gate unless #190 finds it blocks packaging |
-| connector-api-gaps | #208 | Future connector enhancement backlog | Connector API P0 #212-#231 is complete; #208 remains non-release Drive conversion backlog |
+| connector-api-gaps | #208 | Future connector enhancement backlog | P3 — Drive md-to-docx via pandoc |
 | graphs-pos | #21, #54, #70, #72 | Graphs / POS backlog | Deferred graphs, evals, and POS integration stream |
 | creative-p2 | #83, #88, #89, #90, #91, #92, #119 | Creative recovery backlog | Separate creative/product stream |
 | M6: h2t-arch | #5 | Diagram-node docs enforcement | Legacy arch stream still open |
 
-The backlog is now milestone-driven again:
+The backlog is now milestone-driven:
 
-- `skills-release`
 - `graphs-pos`
 - `creative-p2`
 - `M6: h2t-arch`
