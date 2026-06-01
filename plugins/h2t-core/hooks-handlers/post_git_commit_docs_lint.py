@@ -171,53 +171,56 @@ def _load_payload() -> dict[str, Any]:
 
 
 def main() -> int:
-    repo_root = Path.cwd().resolve()
-    payload = _load_payload()
-    if payload and not is_git_commit_payload(payload):
-        return 0
+    try:
+        repo_root = Path.cwd().resolve()
+        payload = _load_payload()
+        if payload and not is_git_commit_payload(payload):
+            return 0
 
-    changed_docs = changed_docs_from_head(repo_root)
-    if not changed_docs:
+        changed_docs = changed_docs_from_head(repo_root)
+        if not changed_docs:
+            write_report(
+                repo_root,
+                build_hook_report(
+                    repo_root=repo_root,
+                    status="skipped",
+                    changed_docs=[],
+                    docs_lint=None,
+                    message="no docs markdown changed in latest commit",
+                ),
+            )
+            return 0
+
+        lint_script = find_docs_lint_script()
+        if lint_script is None:
+            write_report(
+                repo_root,
+                build_hook_report(
+                    repo_root=repo_root,
+                    status="error",
+                    changed_docs=changed_docs,
+                    docs_lint=None,
+                    message="docs-lint script not found",
+                ),
+            )
+            return 0
+
+        timeout = hook_timeout_seconds()
+        docs_lint = run_docs_lint_doctor(repo_root, lint_script, timeout=timeout)
+        status = "ok" if docs_lint.get("status") in {"ok", "warn"} else "error"
         write_report(
             repo_root,
             build_hook_report(
                 repo_root=repo_root,
-                status="skipped",
-                changed_docs=[],
-                docs_lint=None,
-                message="no docs markdown changed in latest commit",
-            ),
-        )
-        return 0
-
-    lint_script = find_docs_lint_script()
-    if lint_script is None:
-        write_report(
-            repo_root,
-            build_hook_report(
-                repo_root=repo_root,
-                status="error",
+                status=status,
                 changed_docs=changed_docs,
-                docs_lint=None,
-                message="docs-lint script not found",
+                docs_lint=docs_lint,
+                message="docs-lint doctor completed",
             ),
         )
         return 0
-
-    timeout = hook_timeout_seconds()
-    docs_lint = run_docs_lint_doctor(repo_root, lint_script, timeout=timeout)
-    status = "ok" if docs_lint.get("status") in {"ok", "warn"} else "error"
-    write_report(
-        repo_root,
-        build_hook_report(
-            repo_root=repo_root,
-            status=status,
-            changed_docs=changed_docs,
-            docs_lint=docs_lint,
-            message="docs-lint doctor completed",
-        ),
-    )
-    return 0
+    except Exception:
+        return 0
 
 
 if __name__ == "__main__":
