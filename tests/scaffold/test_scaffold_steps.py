@@ -137,6 +137,15 @@ import json
 from scaffold_project import install_hooks
 
 
+def _hook_commands(entries):
+    return [
+        command["command"]
+        for entry in entries
+        for command in entry.get("hooks", [])
+        if command.get("type") == "command"
+    ]
+
+
 def test_install_hooks_creates_settings(tmp_path):
     """Creates .claude/settings.json with Stop hook."""
     install_hooks(tmp_path)
@@ -149,7 +158,8 @@ def test_install_hooks_has_stop_hook(tmp_path):
     install_hooks(tmp_path)
     data = json.loads((tmp_path / ".claude" / "settings.json").read_text())
     stop_hooks = data.get("hooks", {}).get("Stop", [])
-    assert any("on-stop" in h.get("command", "") for h in stop_hooks)
+    stop_commands = _hook_commands(stop_hooks)
+    assert any("on-stop" in cmd for cmd in stop_commands)
 
 
 def test_install_hooks_stop_hook_points_to_latest(tmp_path):
@@ -157,7 +167,8 @@ def test_install_hooks_stop_hook_points_to_latest(tmp_path):
     install_hooks(tmp_path)
     data = json.loads((tmp_path / ".claude" / "settings.json").read_text())
     stop_hooks = data.get("hooks", {}).get("Stop", [])
-    cmd = stop_hooks[0]["command"]
+    stop_commands = _hook_commands(stop_hooks)
+    cmd = stop_commands[0]
     assert cmd.startswith("~")
     assert "latest" in cmd
 
@@ -168,8 +179,8 @@ def test_install_hooks_idempotent(tmp_path):
     install_hooks(tmp_path)
     data = json.loads((tmp_path / ".claude" / "settings.json").read_text())
     stop_hooks = data.get("hooks", {}).get("Stop", [])
-    on_stop = [h for h in stop_hooks if "on-stop" in h.get("command", "")]
-    assert len(on_stop) == 1
+    on_stop_cmds = [cmd for cmd in _hook_commands(stop_hooks) if "on-stop" in cmd]
+    assert len(on_stop_cmds) == 1
 
 
 def test_run_docs_init_passes_repo_root_for_docs_type(tmp_path, monkeypatch):
@@ -187,6 +198,48 @@ def test_run_docs_init_passes_repo_root_for_docs_type(tmp_path, monkeypatch):
     assert "--repo-root" in cmd
     assert "--template" in cmd
     assert "research_project" in cmd
+
+
+def test_install_hooks_has_posttooluse_git_commit_hook(tmp_path):
+    """PostToolUse hook runs docs-lint after git commit."""
+    install_hooks(tmp_path)
+    data = json.loads((tmp_path / ".claude" / "settings.json").read_text())
+    hooks = data.get("hooks", {}).get("PostToolUse", [])
+    commands = _hook_commands(hooks)
+    assert any("post-git-commit-docs-lint" in command for command in commands)
+
+
+def test_install_hooks_posttooluse_matcher_targets_bash_git_commit(tmp_path):
+    install_hooks(tmp_path)
+    data = json.loads((tmp_path / ".claude" / "settings.json").read_text())
+    hooks = data.get("hooks", {}).get("PostToolUse", [])
+    matching = [
+        entry for entry in hooks
+        if any("post-git-commit-docs-lint" in command for command in _hook_commands([entry]))
+    ]
+    assert matching
+    assert "Bash" in matching[0].get("matcher", "")
+    assert "git commit" in matching[0].get("matcher", "")
+
+
+def test_install_hooks_posttooluse_idempotent(tmp_path):
+    install_hooks(tmp_path)
+    install_hooks(tmp_path)
+    data = json.loads((tmp_path / ".claude" / "settings.json").read_text())
+    hooks = data.get("hooks", {}).get("PostToolUse", [])
+    matching = [
+        entry for entry in hooks
+        if any("post-git-commit-docs-lint" in command for command in _hook_commands([entry]))
+    ]
+    assert len(matching) == 1
+
+
+def test_install_hooks_ignores_lifecycle_report_cache(tmp_path):
+    git_info = tmp_path / ".git" / "info"
+    git_info.mkdir(parents=True)
+    install_hooks(tmp_path)
+    exclude = git_info / "exclude"
+    assert ".h2t/lifecycle/*.json" in exclude.read_text(encoding="utf-8")
 
 
 from scaffold_project import write_setup_report, template_for_type
