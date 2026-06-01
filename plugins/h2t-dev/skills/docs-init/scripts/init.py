@@ -70,6 +70,22 @@ MinAlertLevel = warning
 BasedOnStyles = Vale
 """
 
+DOCS_LINT_CONFIG = """\
+schema: h2t_docs_lint_config/v0.1
+docs_root: docs
+template: {template}
+exceptions: []
+"""
+
+TEMPLATE_EXTRA_DIRS: dict[str, list[str]] = {
+    "code_repo": [],
+    "client_project": ["docs/ops", "docs/research", "docs/deliverables"],
+    "research_project": ["docs/research", "docs/reports"],
+    "creative_project": ["docs/briefs", "docs/assets", "docs/reviews"],
+    "personal_os": ["docs/notes", "docs/sessions"],
+    "ops_workflow": ["docs/runbooks", "docs/logs"],
+}
+
 
 def _load_project(name: str) -> dict:
     if not PROJECTS_YAML_PATH.exists():
@@ -83,10 +99,28 @@ def _load_project(name: str) -> dict:
         return {}
 
 
-def init_repo(name: str, *, dry_run: bool = True, commit: bool = False) -> list[str] | None:
-    rp = repo_path(name)
+def init_repo(
+    name: str,
+    *,
+    repo_root: Path | None = None,
+    dry_run: bool = True,
+    commit: bool = False,
+    template: str = "code_repo",
+) -> list[str] | None:
+    rp = repo_root.expanduser().resolve() if repo_root else repo_path(name)
     if not rp.exists():
         print(f"  ERROR: {rp} not found")
+        return None
+    # Guard against accidental writes to system paths
+    _HOME = Path.home().resolve()
+    _DANGER = (
+        rp == _HOME
+        or rp == _HOME.parent
+        or len(rp.parts) <= 1
+        or (len(rp.parts) == 2 and rp.drive and rp.parts[1] == "\\")  # Windows root C:\
+    )
+    if _DANGER:
+        print(f"  ERROR: {rp} is a system path — pass a project subdirectory")
         return None
 
     project_data = _load_project(name)
@@ -100,6 +134,15 @@ def init_repo(name: str, *, dry_run: bool = True, commit: bool = False) -> list[
             if not dry_run:
                 ensure_dir(d)
             print(f"  {action}: {rel_dir}/")
+            changes.append(rel_dir)
+
+    # Template extra dirs
+    for rel_dir in TEMPLATE_EXTRA_DIRS.get(template, []):
+        d = rp / rel_dir
+        if not d.exists():
+            if not dry_run:
+                ensure_dir(d)
+            print(f"  {action}: {rel_dir}/ (from template {template})")
             changes.append(rel_dir)
 
     # Conditional dirs from projects.yaml
@@ -133,6 +176,18 @@ def init_repo(name: str, *, dry_run: bool = True, commit: bool = False) -> list[
             rules_file.write_text(RULES_TEMPLATE, encoding="utf-8")
         print(f"  {action}: .claude/rules/documentation.md")
         changes.append(".claude/rules/documentation.md")
+
+    # .claude/rules/docs-lint.yaml
+    docs_lint_cfg = rp / ".claude" / "rules" / "docs-lint.yaml"
+    if not docs_lint_cfg.exists():
+        if not dry_run:
+            docs_lint_cfg.parent.mkdir(parents=True, exist_ok=True)
+            docs_lint_cfg.write_text(
+                DOCS_LINT_CONFIG.format(template=template),
+                encoding="utf-8",
+            )
+        print(f"  {action}: .claude/rules/docs-lint.yaml")
+        changes.append(".claude/rules/docs-lint.yaml")
 
     # .pymarkdown.yaml
     pm = rp / ".pymarkdown.yaml"
@@ -173,13 +228,24 @@ def main() -> None:
     parser.add_argument("repo", help="Repo name (e.g. h2t-graphs)")
     parser.add_argument("--apply", action="store_true", help="Actually create files (default: dry-run)")
     parser.add_argument("--commit", action="store_true", help="Git commit after apply")
+    parser.add_argument("--repo-root", default=None, help="Explicit repo root path; bypasses DEV_ROOT/repo resolution")
+    parser.add_argument("--template", default="code_repo", choices=[
+        "code_repo", "client_project", "research_project",
+        "creative_project", "personal_os", "ops_workflow",
+    ])
     args = parser.parse_args()
 
     if args.commit and not args.apply:
         print("WARNING: --commit has no effect without --apply")
     mode = "APPLY" if args.apply else "DRY-RUN"
     print_header(f"docs-init [{mode}]: {args.repo}")
-    changes = init_repo(args.repo, dry_run=not args.apply, commit=args.commit)
+    changes = init_repo(
+        args.repo,
+        repo_root=Path(args.repo_root) if args.repo_root else None,
+        dry_run=not args.apply,
+        commit=args.commit,
+        template=args.template,
+    )
 
     if changes is None:
         sys.exit(1)
