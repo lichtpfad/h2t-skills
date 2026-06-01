@@ -1,5 +1,10 @@
 # h2t-dev Changelog
 
+## Unreleased
+
+- feat(milestone-closure): add gh-api dry-run backend and structured closure report
+- docs(milestone-closure): replace standalone docs-index/docs-cleanup flow with unified docs-lint
+
 ## 1.0.8 — 2026-05-27
 - feat(lifecycle-os): demote docs-init, docs-sync-labels, docs-cleanup, docs-index to CLI-only (SKILL.md removed)
 - chore: update plugin description to reflect lifecycle pipeline architecture
