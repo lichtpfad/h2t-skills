@@ -137,3 +137,10 @@ def test_run_docs_lint_doctor_timeout(tmp_path):
         result = hook.run_docs_lint_doctor(tmp_path, lint, timeout=3)
     assert result["status"] == "error"
     assert result["message"] == "hook timeout"
+
+
+def test_wrapper_exists_and_references_backend():
+    wrapper = Path(__file__).parents[2] / "plugins/h2t-core/hooks-handlers/post-git-commit-docs-lint"
+    text = wrapper.read_text(encoding="utf-8")
+    assert "post_git_commit_docs_lint" in text
+    assert "raise SystemExit" in text
