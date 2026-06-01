@@ -305,10 +305,45 @@ _HOOK_ENTRIES = {
     "Stop": [
         {
             "matcher": "",
-            "command": f"{_HOOK_BASE}/hooks-handlers/on-stop",
+            "hooks": [
+                {
+                    "type": "command",
+                    "command": f"{_HOOK_BASE}/hooks-handlers/on-stop",
+                }
+            ],
+        }
+    ],
+    "PostToolUse": [
+        {
+            "matcher": "Bash(git commit*)",
+            "hooks": [
+                {
+                    "type": "command",
+                    "command": f"{_HOOK_BASE}/hooks-handlers/post-git-commit-docs-lint",
+                }
+            ],
         }
     ],
 }
+
+
+def _entry_commands(entry: dict) -> list[str]:
+    return [
+        command.get("command", "")
+        for command in entry.get("hooks", [])
+        if command.get("type") == "command"
+    ]
+
+
+def ensure_hook_report_cache_ignored(project_dir: Path) -> None:
+    exclude = project_dir / ".git" / "info" / "exclude"
+    if not exclude.parent.exists():
+        return
+    existing = exclude.read_text(encoding="utf-8") if exclude.exists() else ""
+    line = ".h2t/lifecycle/*.json"
+    if line not in existing.splitlines():
+        suffix = "" if existing.endswith("\n") or not existing else "\n"
+        exclude.write_text(existing + suffix + line + "\n", encoding="utf-8")
 
 
 def install_hooks(project_dir: Path) -> dict:
@@ -323,9 +358,15 @@ def install_hooks(project_dir: Path) -> dict:
     for event, entries in _HOOK_ENTRIES.items():
         existing = hooks.setdefault(event, [])
         for entry in entries:
-            if not any(entry["command"] in h.get("command", "") for h in existing):
+            desired_commands = set(_entry_commands(entry))
+            already_present = any(
+                desired_commands.intersection(_entry_commands(existing_entry))
+                for existing_entry in existing
+            )
+            if not already_present:
                 existing.append(entry)
     settings_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    ensure_hook_report_cache_ignored(project_dir)
     return {"status": "ok", "path": str(settings_path)}
 
 

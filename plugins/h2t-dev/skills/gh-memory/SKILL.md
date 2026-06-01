@@ -1,53 +1,28 @@
 ---
 name: h2t-dev:gh-memory
-description: "This skill should be used when GitHub Issues are needed as persistent agent memory. It creates task issues, tracks progress across sessions, filters by domain/type, and restores session context. Triggers: 'gh-memory', 'create issue', 'agent task', 'track task'."
-compatibility: "Claude Code. Requires: gh CLI authenticated to lichtpfad account."
+description: "Deprecated compatibility shim for old GitHub-Issues-as-memory workflows. Prefer h2t-core:session-start and h2t-core:handoff for session continuity; prefer project GitHub issues for real task state."
+compatibility: "Claude Code. Requires: gh CLI authenticated to the target GitHub account."
 status: deprecated
 metadata:
   author: lichtpfad
-  version: 1.0.0
+  version: 1.0.1
 ---
 
-# gh-memory — GitHub Issues as Agent Memory
+# gh-memory — Deprecated Compatibility Shim
 
-**Purpose:** Persistent cross-session memory via `lichtpfad/DOR` GitHub Issues.
-Each Issue = one task/decision with full context, progress log, and outcome.
+`gh-memory` is deprecated as agent memory.
 
-## Taxonomy
+Use instead:
 
-Labels come from `context/domains.yaml` — always sync with that file as SSOT.
+- `h2t-core:session-start` for bounded session context.
+- `h2t-core:handoff` for confirmed session summary and live GitHub what-remains.
+- Project-local GitHub issues for task truth.
+- POS later for accepted long-term session/project memory.
 
-### domain: labels
-| Label | Описание |
-|-------|----------|
-| `domain:dev` | Dev & Tech (crypto-etl, dor, lms-dev, newsengine) |
-| `domain:art` | AV Art & Music (qatalyiqtol, retouch, music, open-calls-art) |
-| `domain:photo` | Photography (photo-production, photo-social) |
-| `domain:hou2touch` | Hou2Touch бизнес (brand, teaching, lms-product) |
-| `domain:learning` | Обучение (ai-mindset-lab, research, self-study) |
-| `domain:life` | Life & Admin (taxes, citizenship, logistics) |
+This skill remains only as a compatibility shim for old workflows that stored
+agent tasks in `lichtpfad/DOR` issues. Do not use it for new Lifecycle OS work.
 
-> `personal` домен (coaching, health, relationships) — **никогда не в GitHub Issues**.
-> Личный контент идёт в `vault/800 Personal/` (gitignored).
-
-### type: labels
-| Label | Когда |
-|-------|-------|
-| `type:feature` | Новая функция / фича |
-| `type:bug` | Ошибка, регрессия |
-| `type:research` | Исследование, изучение |
-| `type:automation` | Скрипт, skill, автоматизация |
-| `type:decision` | Фиксация решения для памяти |
-| `agent-task` | Задача поставленная/выполненная агентом |
-
-### project: labels (создавать по необходимости)
-Значения строго из `context/domains.yaml` поле `id`:
-`qatalyiqtol`, `retouch`, `crypto-etl`, `dor`, `hou2touch-brand`, `hou2touch-teaching`,
-`lms-dev`, `lms-product`, `music`, `photo-production`, `ai-mindset-lab` и др.
-
----
-
-## Команды
+## Legacy Commands
 
 ### Создать задачу
 ```bash
@@ -93,43 +68,4 @@ gh issue list --repo lichtpfad/DOR --search "<keyword>" --state all
 ### Восстановить контекст сессии
 ```bash
 gh issue view <number> --repo lichtpfad/DOR --comments
-```
-
----
-
-## State Machine
-
-```
-[open] → add label "in-progress" → [active]
-[active] → remove "in-progress" + close → [closed]
-[active] → add label "blocked" → [blocked]
-```
-
-Hook `session-start-memory.sh` показывает Issues с `in-progress` первыми.
-
----
-
-## Когда создавать Issue
-
-**Создать:**
-- Начало сложной задачи (>30 мин)
-- Фиксация важного решения (type:decision)
-- Исследование, которое продолжится в следующей сессии
-
-**НЕ создавать:**
-- Простые однострочные правки
-- Личные/коучинговые темы (→ vault/800 Personal/)
-- Дублирование задач уже трекнутых в Notion GTD
-
----
-
-## Session Start Protocol
-
-```bash
-# Читать в начале каждой сложной сессии:
-gh issue list --repo lichtpfad/DOR --label "in-progress" --state open
-gh issue list --repo lichtpfad/DOR --label "agent-task" --state open --limit 5
-
-# Восстановить контекст:
-gh issue view <n> --repo lichtpfad/DOR --comments
 ```

@@ -67,6 +67,8 @@ def test_each_verb_supports_json_and_format_flags():
     assert ns.as_json is True
     ns_exp = parser.parse_args(["drive", "export", "file1", "--format", "text"])
     assert ns_exp.export_format == "text"
+    ns_exp_txt = parser.parse_args(["drive", "export", "file1", "--format", "txt"])
+    assert ns_exp_txt.export_format == "txt"
     with pytest.raises(SystemExit):
         parser.parse_args(["drive", "list", "--format", "json"])
 
@@ -415,6 +417,27 @@ def test_export_print_allows_text_formats(monkeypatch, fmt):
     )
     assert cmds_mod.run(args) == "hello"
     assert calls["args"] == ("file1", fmt, None, True)
+
+
+def test_export_normalizes_alias_formats(monkeypatch):
+    import h2t_ops.connectors.drive.client as client_mod
+    from h2t_ops.connectors.drive import commands as cmds_mod
+
+    calls = {}
+
+    class _Stub:
+        def export_file(self, file_id, fmt=None, dest=None, to_stdout=False):
+            calls["args"] = (file_id, fmt, dest, to_stdout)
+            return {"text": "hello", "format": fmt}
+
+    monkeypatch.setattr(client_mod, "DriveClient", lambda: _Stub())
+    args = SimpleNamespace(
+        drive_cmd="export", file_id="file1", dest=None, export_format="txt",
+        print_stdout=True, as_json=False,
+    )
+
+    assert cmds_mod.run(args) == "hello"
+    assert calls["args"] == ("file1", "text", None, True)
 
 
 def test_client_imported_lazily_inside_run():

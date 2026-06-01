@@ -1,6 +1,6 @@
 ---
 name: h2t-ops:connectors
-description: "h2t-ops connector hub — load when the user mentions Calendar (events, schedule, FreeBusy, Google Meet), Gmail (email, inbox, draft, send, labels), Drive (files, folders, download, upload, any drive.google.com link), Notion (pages, databases, sync, workspace), Telegram (dialogs, messages, auth, mentions), or MeetGeek (meetings, transcripts, summaries, recordings). Also load for any provider I/O command lookup. Research and daily-brief are separate skills."
+description: "h2t-ops connector hub — load when the user mentions Calendar (events, schedule, FreeBusy, Google Meet), Gmail (email, inbox, draft, send, labels), Drive/Google Docs/Sheets/Slides (files, folders, documents, download, export, upload, any drive.google.com/docs.google.com/sheets.google.com/slides.google.com link), Notion (pages, databases, sync, workspace), Telegram (dialogs, messages, auth, mentions), or MeetGeek (meetings, transcripts, summaries, recordings). Also load for any provider-owned URL or provider I/O command lookup. Research and daily-brief are separate skills."
 compatibility: "CLI-first connector navigator. MCP/Playwright are optional and not required."
 metadata:
   author: lichtpfad
@@ -40,6 +40,21 @@ Do not use this skill for:
 
 ## Router
 
+### Provider URL trigger contract
+
+Load this skill whenever the user provides a provider-owned URL, even if they do not name the provider explicitly.
+
+| URL/domain pattern | Connector | First action |
+| --- | --- | --- |
+| `drive.google.com/...`, `docs.google.com/document/d/...`, `spreadsheets.google.com/...`, `docs.google.com/spreadsheets/d/...`, `slides.google.com/...`, `docs.google.com/presentation/d/...` | Drive | Extract the object ID and use `h2t-ops drive list/download/export` |
+| `calendar.google.com/...`, `meet.google.com/...` | Calendar | Use `h2t-ops calendar` for events/availability; keep Meet links as event artifacts |
+| `mail.google.com/...`, `gmail.com/...` | Gmail | Use `h2t-ops gmail` for message/search/draft/send flows |
+| `notion.so/...`, `notion.site/...` | Notion | Extract page/database ID when present and use `h2t-ops notion` |
+| `t.me/...`, `telegram.me/...` | Telegram | Use `h2t-ops telegram`; do not scrape Telegram URLs directly |
+| MeetGeek recording/transcript/share URLs | MeetGeek | Use `h2t-ops meetgeek` |
+
+Do not use Fetch/WebFetch/Playwright as the primary path for these URLs when an `h2t-ops` connector command exists.
+
 | User intent | Connector | Load reference | CLI prefix |
 | --- | --- | --- | --- |
 | calendar, schedule, events, availability, FreeBusy, Google Meet links | Calendar | `references/calendar.md` | `h2t-ops calendar` |
@@ -52,9 +67,10 @@ Do not use this skill for:
 ### Drive-specific intent routing (important)
 
 - If a user asks to **download**, **browse**, or **open** a Drive artifact (including a shared folder/link), use this skill.
-- If the request contains a Drive URL (`drive.google.com/.../folders/...` or `drive.google.com/file/d/...`), extract the ID and use `h2t-ops drive list/search/download` as the first step.
+- If the request contains a Drive or Google Docs editor URL (`drive.google.com/.../folders/...`, `drive.google.com/file/d/...`, `docs.google.com/document/d/...`, `docs.google.com/spreadsheets/d/...`, or `docs.google.com/presentation/d/...`), extract the ID and use `h2t-ops drive list/download/export` as the first step.
 - For a folder URL, use `h2t-ops drive list <FOLDER_ID> --json`.
 - For a file URL, run `h2t-ops drive download <FILE_ID> --dest ./... --json`.
+- For a Google Doc URL that the user asks to read, run `h2t-ops drive export <DOC_ID> --format text --dest ./... --json`; use `--format md` when Markdown structure is useful.
 
 ### Upload safety rules (mandatory)
 
@@ -73,6 +89,11 @@ User: "скачать папку с этого линка"
 -> h2t-ops:connectors
 -> extract id: 1vlj3QaDXWmlpDM1RUDfzo53WwTyuW9x0
 -> h2t-ops drive list <id> --json
+
+User: "почитай документ https://docs.google.com/document/d/159Iero..."
+-> h2t-ops:connectors
+-> extract id: 159Iero...
+-> h2t-ops drive export <id> --format text --dest ./document.txt --json
 ```
 
 ## Workflow

@@ -1,0 +1,11 @@
+#!/usr/bin/env python3
+"""Thin wrapper for post_git_commit_docs_lint.py."""
+from pathlib import Path
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import post_git_commit_docs_lint
+
+if __name__ == "__main__":
+    raise SystemExit(post_git_commit_docs_lint.main())
