@@ -3,10 +3,11 @@ name: h2t-core:scaffold-project
 description: >
   Create and register a new project in h2t ecosystem via interactive wizard.
   Triggers on "/scaffold-project", "scaffold", "новый проект", "new project".
-  After creation: calls docs-init to scaffold docs/ structure (DEV_ROOT projects only),
-  installs on-stop hook into .claude/settings.json.
-  After GitHub creation: syncs labels via docs-sync-labels.
-  NOT for registering existing repos (use /h2t-core:init-project for that).
+  After creation: calls docs-init with explicit --repo-root, writes docs-lint
+  template config, writes a machine-readable setup report, installs on-stop
+  hook into .claude/settings.json. After GitHub creation: syncs labels via
+  docs-sync-labels. NOT for registering existing repos (use
+  /h2t-core:init-project for that).
 compatibility: "Claude Code"
 metadata:
   author: lichtpfad
