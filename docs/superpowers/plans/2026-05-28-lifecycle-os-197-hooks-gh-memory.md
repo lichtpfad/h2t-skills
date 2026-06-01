@@ -183,6 +183,28 @@ def test_run_docs_lint_doctor_uses_timeout(tmp_path):
 def test_hook_timeout_seconds_falls_back_on_invalid_env(monkeypatch):
     monkeypatch.setenv("H2T_LINT_HOOK_TIMEOUT", "bad")
     assert hook.hook_timeout_seconds() == 8
+
+
+def test_main_writes_error_report_when_lint_script_not_found(tmp_path, monkeypatch):
+    monkeypatch.setattr(hook, "changed_docs_from_head", lambda _: ["docs/a.md"])
+    monkeypatch.setattr(hook, "find_docs_lint_script", lambda: None)
+    monkeypatch.chdir(tmp_path)
+    hook.main()
+    report_path = tmp_path / ".h2t" / "lifecycle" / "post-git-commit-docs-lint.json"
+    assert report_path.exists()
+    data = json.loads(report_path.read_text(encoding="utf-8"))
+    assert data["status"] == "error"
+    assert "not found" in data["summary"]
+
+
+def test_run_docs_lint_doctor_error_on_nonzero_exit(tmp_path):
+    lint = tmp_path / "lint.py"
+    lint.write_text("# lint", encoding="utf-8")
+    with patch.object(hook.subprocess, "run") as mock_run:
+        mock_run.return_value = MagicMock(returncode=1, stdout="some output", stderr="some error")
+        result = hook.run_docs_lint_doctor(tmp_path, lint, timeout=3)
+    assert result["status"] == "error"
+    assert result["exit_code"] == 1
 ```
 
 - [ ] **Step 2: Run tests and verify failure**
@@ -268,7 +290,6 @@ def find_docs_lint_script() -> Path | None:
 
     candidates = [
         Path.cwd() / "plugins" / "h2t-dev" / "skills" / "docs-lint" / "scripts" / "lint.py",
-        Path("C:/dev/h2t-skills/plugins/h2t-dev/skills/docs-lint/scripts/lint.py"),
         Path.home() / ".claude" / "plugins" / "cache" / "lichtpfad" / "h2t-dev" / "latest" / "skills" / "docs-lint" / "scripts" / "lint.py",
     ]
     for candidate in candidates:
@@ -820,13 +841,13 @@ git commit -m "docs(gh-memory): mark as deprecated compatibility shim"
 In `plugins/h2t-core/.claude-plugin/plugin.json`, change:
 
 ```json
-"version": "3.2.1"
+"version": "3.2.2"
 ```
 
 to:
 
 ```json
-"version": "3.2.2"
+"version": "3.2.3"
 ```
 
 - [ ] **Step 2: Bump h2t-dev patch version**
@@ -834,13 +855,13 @@ to:
 In `plugins/h2t-dev/.claude-plugin/plugin.json`, change:
 
 ```json
-"version": "1.0.8"
+"version": "1.0.9"
 ```
 
 to:
 
 ```json
-"version": "1.0.9"
+"version": "1.0.10"
 ```
 
 - [ ] **Step 3: Update lifecycle spec issue mapping**
@@ -977,9 +998,9 @@ Known deliberate deferrals:
 |--------|---------|-----|------|--------|----------|
 | CEO Review | `/plan-ceo-review` | Scope & strategy | 0 | not run | Not required for hook/deprecation maintenance plan |
 | Codex Review | `/codex review` | Independent 2nd opinion | 0 | not run | Not requested |
-| Eng Review | `/plan-eng-review` | Architecture & tests | 1 | patched | 4 findings applied: nested Claude hook shape, lifecycle report schema, dirty-state guard, extra payload tests |
+| Eng Review | `/plan-eng-review` | Architecture & tests | 2 | clear | Pass 1: 4 findings (hook shape, schema, dirty-state, payload tests). Pass 2: 3 findings applied: hardcoded C:/dev path removed, Task 5 versions updated (3.2.2→3.2.3 / 1.0.9→1.0.10), +2 tests (lint_script=None, returncode!=0) |
 | Design Review | `/plan-design-review` | UI/UX gaps | 0 | not applicable | No UI changes |
 | DX Review | `/plan-devex-review` | Developer experience gaps | 0 | not run | Not required before implementation |
 
-- **UNRESOLVED:** 0 for this review pass.
-- **VERDICT:** ENG PATCHED — ready for #196 merge, then implementation.
+- **UNRESOLVED:** 0.
+- **VERDICT:** ENG CLEARED — 2 review passes complete, all findings applied. Ready to implement.
