@@ -123,3 +123,17 @@ def test_run_docs_lint_doctor_error_on_nonzero_exit(tmp_path):
         result = hook.run_docs_lint_doctor(tmp_path, lint, timeout=3)
     assert result["status"] == "error"
     assert result["exit_code"] == 1
+
+
+def test_run_docs_lint_doctor_timeout(tmp_path):
+    import subprocess as _subprocess
+    lint = tmp_path / "lint.py"
+    lint.write_text("# lint", encoding="utf-8")
+    with patch.object(hook.subprocess, "run") as mock_run:
+        exc = _subprocess.TimeoutExpired(cmd=["python"], timeout=3)
+        exc.stdout = "partial output"
+        exc.stderr = ""
+        mock_run.side_effect = exc
+        result = hook.run_docs_lint_doctor(tmp_path, lint, timeout=3)
+    assert result["status"] == "error"
+    assert result["message"] == "hook timeout"
