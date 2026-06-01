@@ -70,7 +70,7 @@ docs-sync-labels h2t-graphs --apply # Create missing labels
 
 ## Other Skills
 
-- **gh-memory** — GitHub Issues persistent memory
+- **gh-memory** — deprecated compatibility shim; use `h2t-core:session-start` / `h2t-core:handoff` for continuity and project GitHub issues for task truth
 - **github-issues** — Create and update issues
 - **milestone-closure** — Close GitHub milestones with closure.py backend; uses docs-lint plan before cleanup decisions and docs-lint fix-index after approved cleanup. Standalone docs-index is deprecated as a user-facing flow.
 - **pre-merge-check** — Validate PR readiness
