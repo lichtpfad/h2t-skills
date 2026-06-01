@@ -39,6 +39,7 @@
 h2t-ops drive search "lecture" --max 20 --json
 h2t-ops drive list <folder_id_from_url> --json
 h2t-ops drive export FILE_ID_FROM_SEARCH --format md --dest ./lecture.md --json
+h2t-ops drive export FILE_ID_FROM_SEARCH --format text --dest ./lecture.txt --json
 h2t-ops drive upload-folder ./deploy --parent-id DRIVE_FOLDER_ID --dry-run --json
 h2t-ops drive upload-folder ./deploy --parent-id DRIVE_FOLDER_ID --update-existing --json
 
@@ -70,6 +71,12 @@ h2t-ops drive docs-tab write DOC_ID TAB_ID --content-file ./notes.md --clear-fir
   `https://drive.google.com/drive/folders/<FOLDER_ID>` -> folder id is the part after `/folders/`.
 - File link pattern:
   `https://drive.google.com/file/d/<FILE_ID>/...` -> file id is the part after `/d/`.
+- Google Doc link pattern:
+  `https://docs.google.com/document/d/<DOC_ID>/...` -> export with `h2t-ops drive export <DOC_ID> --format text --json`.
+- Google Sheet link pattern:
+  `https://docs.google.com/spreadsheets/d/<SHEET_ID>/...` -> export with `h2t-ops drive export <SHEET_ID> --format csv --json` or `--format xlsx`.
+- Google Slides link pattern:
+  `https://docs.google.com/presentation/d/<SLIDES_ID>/...` -> export with `h2t-ops drive export <SLIDES_ID> --format pdf --json` or `--format pptx`.
 
 For folder links, there is no dedicated “download folder” command; enumerate entries via `list`, then download each file id with `download`.
 
@@ -85,6 +92,8 @@ In Claude Code, check readiness through:
 
 ## Common Failures
 
+- `--format txt` is accepted as an alias for `--format text`; `--format markdown` is accepted as an alias for `--format md`.
+- Markdown export works without optional `html2text`; when `html2text` is not installed, h2t-ops uses a smaller stdlib HTML-to-Markdown fallback.
 - Ambiguous folder name: use `upload-folder --parent-id` or inspect folders first.
 - Existing same-name file: default is skip; use `--update-existing` only when replacement is intended.
 - Cloud HTML deployment: preserve relative paths with `upload-folder`, not single-file upload.

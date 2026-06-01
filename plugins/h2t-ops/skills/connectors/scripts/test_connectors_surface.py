@@ -47,6 +47,20 @@ def test_connectors_skill_exists_and_is_bounded():
     assert "Do not use raw provider APIs" in text
     assert "CLAUDE_PLUGIN_ROOT" not in text
     assert "CLAUDE_SKILL_DIR" not in text
+    assert "Provider URL trigger contract" in text
+    for domain in (
+        "drive.google.com",
+        "docs.google.com/document/d/",
+        "docs.google.com/spreadsheets/d/",
+        "docs.google.com/presentation/d/",
+        "calendar.google.com",
+        "meet.google.com",
+        "mail.google.com",
+        "notion.so",
+        "t.me",
+    ):
+        assert domain in text
+    assert "Do not use Fetch/WebFetch/Playwright as the primary path" in text
 
 
 def test_connector_references_exist():
@@ -149,4 +163,4 @@ def test_final_skill_inventory_after_deprecation_gate():
         for path in SKILLS_ROOT.iterdir()
         if path.is_dir() and (path / "SKILL.md").is_file()
     }
-    assert active == {"connectors", "daily-brief", "research"}
+    assert active == {"connectors", "daily-brief", "research", "deploy"}

@@ -621,17 +621,35 @@ def test_export_text_format_returns_text(client_obj):
     assert result["format"] == "text"
 
 
-def test_export_md_requires_html2text(client_obj):
+def test_export_md_falls_back_without_html2text(client_obj):
     files = client_obj.service.files.return_value
     files.get.return_value.execute.return_value = {
         "name": "Doc",
         "mimeType": "application/vnd.google-apps.document",
     }
-    files.export.return_value.execute.return_value = b"<h1>Hello</h1>"
+    files.export.return_value.execute.return_value = b"<h1>Hello</h1><p>Body</p>"
     with pytest.MonkeyPatch.context() as mp:
         mp.setitem(sys.modules, "html2text", None)
-        with pytest.raises(ConfigError):
-            client_obj.export_file("doc1", fmt="md")
+        result = client_obj.export_file("doc1", fmt="md", to_stdout=True)
+
+    assert result["format"] == "md"
+    assert "# Hello" in result["text"]
+    assert "Body" in result["text"]
+
+
+def test_export_txt_alias_returns_text(client_obj):
+    files = client_obj.service.files.return_value
+    files.get.return_value.execute.return_value = {
+        "name": "Doc",
+        "mimeType": "application/vnd.google-apps.document",
+    }
+    files.export.return_value.execute.return_value = b"hello"
+
+    result = client_obj.export_file("doc1", fmt="txt", to_stdout=True)
+
+    assert result["text"] == "hello"
+    assert result["export_mime"] == "text/plain"
+    assert result["format"] == "text"
 
 
 @pytest.mark.parametrize("fmt", ("docx", "xlsx", "pdf", "pptx"))

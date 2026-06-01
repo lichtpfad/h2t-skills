@@ -5,8 +5,8 @@ from typing import Any
 
 PROVIDER = "drive"
 
-EXPORT_FORMATS = ("text", "csv", "md", "docx", "xlsx", "pdf", "pptx")
-PRINT_ALLOWED_FORMATS = frozenset({"text", "csv", "md"})
+EXPORT_FORMATS = ("text", "txt", "csv", "md", "markdown", "docx", "xlsx", "pdf", "pptx")
+PRINT_ALLOWED_FORMATS = frozenset({"text", "txt", "csv", "md", "markdown"})
 
 
 def register(subparsers: Any) -> None:
@@ -189,11 +189,12 @@ def _rows(rows):
 def run(args) -> Any:
     """Dispatch a drive subcommand. Returns a result or raises core.errors."""
     from h2t_ops.core.errors import UsageError
+    from h2t_ops.connectors.drive.client import normalize_export_format
 
     cmd = args.drive_cmd
 
     if cmd == "export" and getattr(args, "print_stdout", False):
-        fmt = getattr(args, "export_format", None)
+        fmt = normalize_export_format(getattr(args, "export_format", None))
         if fmt in {"docx", "xlsx", "pdf", "pptx"}:
             raise UsageError(f"drive export --print cannot use binary format: {fmt}")
 
@@ -275,7 +276,7 @@ def run(args) -> Any:
     if cmd == "export":
         result = client.export_file(
             args.file_id,
-            fmt=args.export_format,
+            fmt=normalize_export_format(args.export_format),
             dest=args.dest,
             to_stdout=args.print_stdout,
         )
