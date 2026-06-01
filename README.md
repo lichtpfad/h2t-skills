@@ -1,122 +1,125 @@
-# Claude Agent Skills
+# H2T Skills
 
-Two Claude Code plugins for personal AI-assisted workflow: **h2t** (dev workflow + integrations) and **creative-thinking** (creative problem-solving).
+Claude Code plugin suite for H2T workflows: lifecycle context, provider connectors, docs/dev automation, architecture diagrams, creative assets, and education tooling.
 
-## Install
+## Plugins
+
+| Plugin | Main skills | Purpose |
+| --- | --- | --- |
+| `h2t-core` | `h2t-core:setup`, `session-start`, `handoff`, `init-project`, `scaffold-project`, `agent-profile` | Session lifecycle, setup, project registration, local context continuity |
+| `h2t-ops` | `h2t-ops:connectors`, `h2t-ops:research`, `h2t-ops:daily-brief` | Provider I/O through `h2t-ops`: Drive, Gmail, Calendar, Notion, Telegram, MeetGeek, research |
+| `h2t-dev` | `docs-lint`, `pre-merge-check`, `milestone-closure`, `github-issues` | Development and documentation lifecycle automation |
+| `h2t-arch` | `drawio`, `diagram-node`, `node-researcher` | Architecture and diagram workflows |
+| `h2t-creative` | `deck`, `landing`, `design`, `style-create`, `style-validate` | Landing pages, decks, and visual asset generation |
+| `h2t-edu` | education/transcript skills | Education content and transcript workflows |
+
+## Install For A User
+
+The repository is currently private. External users need GitHub read access to `lichtpfad/h2t-skills` before installing.
+
+In Claude Code:
+
+```text
+/plugin marketplace add lichtpfad/h2t-skills
+/plugin install h2t-core@lichtpfad
+/plugin install h2t-ops@lichtpfad
+/reload-plugins
+```
+
+Then run setup:
+
+```text
+/h2t-core:setup doctor
+/h2t-core:setup install h2t-ops
+/h2t-core:setup connectors-check
+```
+
+CLI smoke:
 
 ```bash
-claude plugin install h2t@lichtpfad
-claude plugin install creative-thinking@lichtpfad
+h2t-ops --version
+h2t-ops connectors
+h2t-ops drive --help
 ```
 
-After install: `/h2t:setup` to create `~/.h2t/venv` and install Python dependencies.
+For external install troubleshooting, use [H2T Ops External Install + Debug Log](docs/h2t-ops-external-install-debug.md).
 
-## h2t Plugin
+## h2t-ops Connectors
 
-Dev workflow, Google integrations, content processing, and project management.
+`h2t-ops:connectors` is the provider I/O hub. It should be loaded for provider-owned URLs and provider tasks:
 
-### Dev Workflow
+- Google Drive / Docs / Sheets / Slides links;
+- Google Calendar and Meet links;
+- Gmail / mail.google.com links;
+- Notion links;
+- Telegram links;
+- MeetGeek meetings, transcripts, summaries, recordings.
 
-| Skill | Trigger | What it does |
-|-------|---------|-------------|
-| `dev-session-start` | `/session-start`, start session | Load project context, show issues/milestones, name session |
-| `handoff` | `/handoff`, session end | Save session state to `~/.dor/sessions/`, post GitHub comment |
-| `dev-overview` | project overview, weekly review | Cross-project dashboard with progress bars |
-| `pre-merge-check` | ready to merge | Security audit, tests, build, plan compliance gates |
-| `milestone-closure` | close milestone | Close milestone, generate report |
-| `github-issues` | create issue | Structured issues with Context/What/Why sections |
-| `gh-memory` | create issue, agent task | GitHub Issues as persistent agent memory |
+Agents should use the `h2t-ops` CLI instead of raw provider APIs when a connector command exists.
 
-### Google Integrations
+Examples:
 
-| Skill | Trigger | What it does |
-|-------|---------|-------------|
-| `gmail` | check email, inbox | Read/send Gmail via OAuth |
-| `calendar` | schedule, events | Read/create Google Calendar events |
-| `drive` | google drive, meetgeek | Browse Drive, sync MeetGeek transcripts |
-| `notion` | notion, tasks, GTD | Read/write Notion pages and databases |
-| `telegram` | telegram, saved messages | Read channels, save digests, extract tasks |
-
-### Content & Diagrams
-
-| Skill | Trigger | What it does |
-|-------|---------|-------------|
-| `drawio` | create diagram | Generate styled .drawio architecture diagrams |
-| `diagram-node` | document node | Research + annotate diagram nodes |
-| `node-researcher` | research node | Deep research via Exa API for diagram nodes |
-| `deck` | create presentation | HTML presentations (terminal or editorial style) |
-| `design` | HUD design | Tactical dashboard design system |
-| `lesson-parser` | parse tutorial | Extract topology from procedural tutorial transcripts |
-
-### Processing
-
-| Skill | Trigger | What it does |
-|-------|---------|-------------|
-| `daily-brief` | daily brief, план на день | Morning briefing: Calendar + Gmail + Notion |
-| `convert-meeting-transcript` | convert transcript | DOCX meeting transcripts to Markdown |
-| `process-transcripts` | process transcripts | LLM-enrichment of MeetGeek transcripts |
-| `youtube-transcript` | youtube, video transcript | Extract YouTube transcripts with chapters |
-| `ceo-council` | council, стратегический анализ | Strategic AI advisor council with personas |
-
-### Agents
-
-| Agent | What it does |
-|-------|-------------|
-| `research-agent` | Web search + URL extraction for skill context |
-
-## creative-thinking Plugin
-
-Creative problem-solving using 57 frameworks from Dmitriy Chernyshov's course.
-
-| Component | What it does |
-|-----------|-------------|
-| `/creative-think` | Full pipeline: understand → lookup → research → generate → evaluate |
-| `framework-agent` | Applies one framework to generate 3-5 ideas |
-| `evaluator-agent` | Scores ideas against 8 Chernyshov criteria (1-10) |
-
-Modes: `generate`, `evaluate`, `session` (full cycle), `funnel` (filter & refine).
-
-## Gather Framework (`lib/gather/`)
-
-Parallel context collection for skills. One Python call replaces 10+ sequential tool calls.
-
-```
-lib/gather/
-  runner.py      ThreadPoolExecutor parallel runner
-  project.py     Project identity from any directory
-  user.py        User context (about-me, domain-dependent)
-  git.py         Git state (remote, branch, log, status)
-  github.py      GitHub issues, milestones, PRs
-  stack.py       Stack detection (JS/Python/Rust/Go)
-  sessions.py    Session file discovery across machines
-  eval.py        Automatic metrics tracking
+```bash
+h2t-ops drive export DOC_ID --format text --dest ./doc.txt --json
+h2t-ops gmail search "from:person@example.com" --max 10 --json
+h2t-ops calendar list --max 10 --json
+h2t-ops notion get PAGE_ID --format md
+h2t-ops telegram auth status
+h2t-ops meetgeek transcript MEETING_ID --format md
 ```
 
-See `lib/gather/README.md` for API docs and `docs/adr/001-gather-framework.md` for architecture.
+## Setup Notes
+
+- `h2t-core:setup` owns install, repair, doctor, and connector readiness checks.
+- `h2t-ops` is installed as a Python CLI via `uv tool install --reinstall git+https://github.com/lichtpfad/h2t-skills.git`.
+- POS/DOR configuration is optional for connector I/O.
+- Google connectors require a local OAuth token store.
+- Notion, MeetGeek, and Exa use API keys in `~/.dor/secrets/secrets.env` or environment variables.
+- Telegram requires `~/.config/telegram/config.json` with `api_id` / `api_hash`, then `h2t-ops telegram auth`.
+
+## Development
+
+```bash
+uv sync
+uv run pytest
+uv run h2t-ops --help
+```
+
+Useful checks:
+
+```bash
+uv run pytest tests/connectors -q
+uv run pytest plugins/h2t-core/skills/setup/scripts/test_setup_h2t.py -q
+python scripts/check_marketplace_sync.py
+```
 
 ## Structure
 
-```
+```text
+.claude-plugin/marketplace.json
 plugins/
-  h2t/                          Main plugin
-    .claude-plugin/plugin.json  Manifest
-    skills/                     25 skills
-    agents/                     1 agent
-    hooks/                      SessionStart hook
-    lib/gather/                 Context Assembly Framework
-  creative-thinking/            Creative thinking plugin
-    skills/                     1 skill
-    agents/                     2 agents
-    hooks/                      PostToolUse + Stop hooks
-hooks/                          Root-level hooks
+  h2t-core/
+  h2t-ops/
+  h2t-dev/
+  h2t-arch/
+  h2t-creative/
+  h2t-edu/
+h2t_ops/
+  cli.py
+  connectors/
 docs/
-  adr/                          Architecture Decision Records
-  plans/                        Implementation plans
+  h2t-ops-external-install-debug.md
+  h2t-ops-testing-plan.md
+  reports/
+  superpowers/
 ```
 
 ## Requirements
 
 - Claude Code
-- Python 3.10+ with `~/.h2t/venv/`
-- `gh` CLI (authenticated)
-- Google OAuth tokens (for gmail/calendar/drive)
+- GitHub access to `lichtpfad/h2t-skills`
+- `git`
+- `uv`
+- Python 3.11+
+- `gh` CLI for GitHub-backed dev workflows
+
