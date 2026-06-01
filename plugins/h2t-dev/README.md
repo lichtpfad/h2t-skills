@@ -24,10 +24,11 @@ Checks all 16 h2t repos for:
 
 **Usage:**
 ```bash
-docs-lint                    # Check all repos
-docs-lint h2t-graphs h2t-ai # Check specific repos
-docs-lint --fix              # Create missing dirs
-docs-lint --no-pymarkdown    # Skip markdown linting
+docs-lint audit --root .           # Show docs health findings
+docs-lint plan --root .            # Show cleanup plan
+docs-lint fix-safe --root .        # Apply safe mechanical fixes only
+docs-lint fix-index --root .       # Dry-run README/navigation rebuild
+docs-lint doctor --root . --json   # Machine-readable report
 ```
 
 ### docs-init
@@ -71,5 +72,5 @@ docs-sync-labels h2t-graphs --apply # Create missing labels
 
 - **gh-memory** — GitHub Issues persistent memory
 - **github-issues** — Create and update issues
-- **milestone-closure** — Finalize milestones
+- **milestone-closure** — Close GitHub milestones with closure.py backend; uses docs-lint plan before cleanup decisions and docs-lint fix-index after approved cleanup. Standalone docs-index is deprecated as a user-facing flow.
 - **pre-merge-check** — Validate PR readiness
