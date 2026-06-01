@@ -53,10 +53,26 @@ def test_run_docs_init_passes_apply_flag(tmp_path, monkeypatch):
     assert "--apply" in cmd
 
 
-def test_run_docs_init_skips_non_dev_root(tmp_path):
-    """Skips gracefully when project is not under DEV_ROOT."""
-    result = run_docs_init("my-repo", tmp_path / "elsewhere" / "my-repo")
-    assert result["status"] == "skip"
+def test_run_docs_init_passes_repo_root_for_non_dev_project(tmp_path, monkeypatch):
+    """run_docs_init supports repos outside DEV_ROOT via --repo-root."""
+    import scaffold_project
+
+    plugin_root = _make_fake_init(tmp_path)
+    monkeypatch.setattr(scaffold_project, "_DEV_ROOT", tmp_path / "dev")
+    monkeypatch.setattr(scaffold_project, "_PLUGIN_ROOT", plugin_root)
+    project_dir = tmp_path / "work" / "my-repo"
+    project_dir.mkdir(parents=True)
+
+    with patch("scaffold_project.subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+        result = run_docs_init("my-repo", project_dir, template="client_project")
+
+    cmd = [str(x) for x in mock_run.call_args[0][0]]
+    assert result["status"] == "ok"
+    assert "--repo-root" in cmd
+    assert str(project_dir) in cmd
+    assert "--template" in cmd
+    assert "client_project" in cmd
 
 
 def test_run_docs_init_returns_error_on_failure(tmp_path, monkeypatch):
@@ -154,3 +170,43 @@ def test_install_hooks_idempotent(tmp_path):
     stop_hooks = data.get("hooks", {}).get("Stop", [])
     on_stop = [h for h in stop_hooks if "on-stop" in h.get("command", "")]
     assert len(on_stop) == 1
+
+
+def test_run_docs_init_passes_repo_root_for_docs_type(tmp_path, monkeypatch):
+    """docs-type project (not is_git) also gets docs-init via --repo-root."""
+    import scaffold_project
+    plugin_root = _make_fake_init(tmp_path)
+    monkeypatch.setattr(scaffold_project, "_PLUGIN_ROOT", plugin_root)
+    project_dir = tmp_path / "my-docs"
+    project_dir.mkdir()
+    with patch("scaffold_project.subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+        result = run_docs_init("my-docs", project_dir, template="research_project")
+    assert result["status"] == "ok"
+    cmd = [str(x) for x in mock_run.call_args[0][0]]
+    assert "--repo-root" in cmd
+    assert "--template" in cmd
+    assert "research_project" in cmd
+
+
+from scaffold_project import write_setup_report, template_for_type
+
+
+def test_template_for_type_maps_client_docs():
+    assert template_for_type("docs") == "research_project"
+    assert template_for_type("code-github") == "code_repo"
+
+
+def test_write_setup_report_creates_machine_readable_file(tmp_path):
+    report = write_setup_report(
+        project_dir=tmp_path,
+        project_id="example",
+        template="client_project",
+        status="ok",
+        actions=["created docs"],
+    )
+
+    assert report["schema"] == "h2t_project_setup_report/v0.1"
+    report_path = tmp_path / ".h2t" / "project-setup-report.json"
+    assert report_path.exists()
+    assert "client_project" in report_path.read_text(encoding="utf-8")

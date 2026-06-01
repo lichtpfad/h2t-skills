@@ -9,105 +9,78 @@ metadata:
 
 # Milestone Closure
 
-Checklist for closing a development phase milestone. Ensures documentation, tests, and GitHub state are all consistent.
+Close a GitHub milestone as a Lifecycle OS phase boundary.
 
-## When to Use
+This skill is a thin orchestrator. Deterministic state is gathered by
+`skills/milestone-closure/scripts/closure.py`.
 
-- All issues in a milestone are closed
-- Phase work is complete and merged to main
-- User says "close milestone" or "phase X complete"
+## Variables
+
+```bash
+H2T_PYTHON="${H2T_PYTHON:-}"
+[ -z "$H2T_PYTHON" ] && [ -f "$HOME/.h2t/venv/Scripts/python.exe" ] && H2T_PYTHON="$HOME/.h2t/venv/Scripts/python.exe"
+[ -z "$H2T_PYTHON" ] && [ -f "$HOME/.h2t/venv/bin/python" ] && H2T_PYTHON="$HOME/.h2t/venv/bin/python"
+CLOSURE="$CLAUDE_PLUGIN_ROOT/skills/milestone-closure/scripts/closure.py"
+```
 
 ## Procedure
 
-### Step 1: Verify All Issues Closed
+### Step 1: Identify milestone
+
+Ask the user for the milestone title or GitHub milestone API number if it is not
+already explicit.
+
+### Step 2: Dry-run closure report
 
 ```bash
-gh api repos/{owner}/{repo}/milestones/{number} --jq '{title, open_issues, closed_issues}'
+$H2T_PYTHON "$CLOSURE" --repo-root "$(pwd)" --milestone "{milestone}" --json
 ```
 
-**STOP if open_issues > 0.** List remaining issues and ask user what to do (close, move to next milestone, or defer).
+Read the JSON:
 
-### Step 2: Run Pre-Merge Check
+- If `status == "blocked"`: show open-issue count and stop.
+- If `status == "error"`: show error and stop.
+- If `docs_lint.status != "ok"`: summarize docs-lint plan and ask what to do.
 
-Invoke `h2t-dev:pre-merge-check` if not already run. All gates must pass.
+### Step 3: Documentation gate
 
-### Step 3: Write Phase Report
-
-Create: `docs/reports/{plan-name}-report.md`
-
-Report contains:
-1. Link to plan and PR(s)
-2. What was implemented (by task, with issue numbers)
-3. Key architectural decisions made during the phase
-4. List of changed files (summarized by area)
-5. Candidates for next phase
-6. Test coverage added
-
-### Step 3a: Archive Stale Plans — docs-cleanup
-
-First run in dry-run mode (default) to preview what will be archived:
+Run docs cleanup manually through unified docs-lint:
 
 ```bash
-~/.h2t/venv/Scripts/python plugins/h2t-dev/skills/docs-cleanup/scripts/cleanup.py <repo-name>
+$H2T_PYTHON "$CLAUDE_PLUGIN_ROOT/skills/docs-lint/scripts/lint.py" plan --root "$(pwd)"
+$H2T_PYTHON "$CLAUDE_PLUGIN_ROOT/skills/docs-lint/scripts/lint.py" fix-index --root "$(pwd)"
 ```
 
-**STOP if unexpected files are listed.** Confirm with user before proceeding.
+`fix-index` without `--apply` is dry-run. Ask before using `--apply`.
 
-If the preview is acceptable, run with `--apply` to execute git mv + commit.
-Replace `<M>` with the milestone number (e.g. `M6`):
+Do not call standalone `docs-index`. It is no longer user-facing.
+Do not archive, move, delete, or rename files without explicit user approval.
+
+### Step 4: Close milestone only with confirmation
+
+Ask the user to confirm the exact milestone title.
 
 ```bash
-~/.h2t/venv/Scripts/python plugins/h2t-dev/skills/docs-cleanup/scripts/cleanup.py <repo-name> --apply --milestone <M>
+$H2T_PYTHON "$CLOSURE" --repo-root "$(pwd)" --milestone "{milestone}" --close --confirm-title "{exact title}" --json
 ```
 
-### Step 3b: Rebuild docs/README.md — docs-index
+If `status == "partial"`: the GitHub API PATCH failed — show `close_result.stderr` from the report and stop. Do not treat partial as success.
 
-Regenerate the navigation index after archival:
+### Step 5: Report outcome
 
-```bash
-~/.h2t/venv/Scripts/python plugins/h2t-dev/skills/docs-index/scripts/index.py <repo-name> --apply
-```
+Show:
 
-Commit the updated `docs/README.md` separately if not already committed by cleanup step.
+- report JSON path from `refs`;
+- milestone status;
+- docs-lint summary;
+- `next_open_items` from real GitHub state if available.
 
-### Step 4: Update Project Docs
+## Checklist
 
-1. **roadmap.md:** Move phase from active to "Completed Phases" table
-2. **CLAUDE.md:** Add phase to completed phases table with plan + report links
-
-### Step 5: Close Milestone on GitHub
-
-```bash
-gh api repos/{owner}/{repo}/milestones/{number} -X PATCH -f state=closed
-```
-
-### Step 6: Session Handoff Note
-
-Post a summary comment on the milestone (if supported) or on the last closed issue:
-
-```bash
-gh issue comment {last-issue-number} --body "Milestone closed: {milestone-title}
-Report: docs/reports/{report-name}.md
-All {closed_issues} issues resolved."
-```
-
-## Checklist Summary
-
-- [ ] All milestone issues = closed
-- [ ] `h2t-dev:pre-merge-check` = all gates pass
-- [ ] Phase report written to `docs/reports/`
-- [ ] Stale plans archived (`cleanup.py <repo>` previewed, then `--apply` executed)
-- [ ] `docs/README.md` rebuilt via `index.py <repo> --apply`
-- [ ] `docs/roadmap.md` updated (phase → completed)
-- [ ] `CLAUDE.md` updated (completed phases table)
-- [ ] GitHub milestone state = closed
-- [ ] Handoff comment posted
-
-## Common Mistakes
-
-| Mistake | Fix |
-|---------|-----|
-| Closing milestone with open issues | ALWAYS check open_issues count first |
-| Forgetting the report | Report is MANDATORY per project rules (see CLAUDE.md) |
-| Not updating roadmap.md | Roadmap must reflect current state |
-| Skipping pre-merge check | Even if "everything works", run the gates |
+- [ ] Dry-run closure report generated
+- [ ] Open issue count is zero or explicitly handled
+- [ ] docs-lint plan reviewed
+- [ ] docs-lint fix-index dry-run reviewed
+- [ ] Any write/destructive step explicitly confirmed
+- [ ] GitHub milestone closed only after exact-title confirmation
+- [ ] Next open items reviewed from closure report

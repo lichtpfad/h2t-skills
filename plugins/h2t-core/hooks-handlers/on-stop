@@ -1,25 +1,58 @@
 #!/usr/bin/env python3
-"""Stop hook: suggest milestone-closure when all milestone issues are closed."""
+"""Stop hook: suggest milestone-closure when an open milestone has no open issues."""
+import json
 import subprocess
 import sys
 
 
-def _check_milestones() -> None:
-    # gh milestone list auto-resolves owner/repo from current git remote
+def _resolve_repo_slug() -> str:
     r = subprocess.run(
-        ["gh", "milestone", "list", "--json", "title,openIssues",
-         "--jq", ".[] | select(.openIssues == 0) | .title"],
-        capture_output=True, text=True,
+        ["gh", "repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner"],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+    if r.returncode != 0:
+        return ""
+    return r.stdout.strip()
+
+
+def _closed_ready_milestones(repo_slug: str) -> list[str]:
+    if not repo_slug:
+        return []
+    r = subprocess.run(
+        ["gh", "api", f"repos/{repo_slug}/milestones?state=open"],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
     )
     if r.returncode != 0 or not r.stdout.strip():
+        return []
+    try:
+        milestones = json.loads(r.stdout)
+    except json.JSONDecodeError:
+        return []
+    return [
+        str(m["title"])
+        for m in milestones
+        if int(m.get("open_issues", 0)) == 0
+    ]
+
+
+def _check_milestones() -> None:
+    try:
+        repo_slug = _resolve_repo_slug()
+        for title in _closed_ready_milestones(repo_slug):
+            print(
+                f"[h2t] Milestone '{title}' has no open issues -- "
+                "consider /h2t-dev:milestone-closure"
+            )
+    except Exception:
         return
-    for title in r.stdout.strip().splitlines():
-        print(f"[h2t] Milestone '{title}' has no open issues — consider /h2t-dev:milestone-closure")
 
 
 if __name__ == "__main__":
-    try:
-        _check_milestones()
-    except Exception:
-        pass  # non-blocking: never fail the session
+    _check_milestones()
     sys.exit(0)
