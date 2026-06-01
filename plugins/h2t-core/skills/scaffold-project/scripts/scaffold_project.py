@@ -90,6 +90,51 @@ DIR_STRUCTURE: dict[str, list[str]] = {
     "directory": [],
 }
 
+TYPE_TO_TEMPLATE = {
+    "code-github": "code_repo",
+    "code-local": "code_repo",
+    "docs": "research_project",
+    "dcc": "creative_project",
+    "directory": "ops_workflow",
+}
+
+
+def template_for_type(project_type: str) -> str:
+    return TYPE_TO_TEMPLATE.get(project_type, "code_repo")
+
+
+def write_setup_report(
+    *,
+    project_dir: Path,
+    project_id: str,
+    template: str,
+    status: str,
+    actions: list[str],
+) -> dict:
+    import datetime
+
+    report = {
+        "schema": "h2t_project_setup_report/v0.1",
+        "schema_version": "0.1",
+        "producer": "h2t-core/scaffold-project",
+        "produced_at": datetime.datetime.utcnow().isoformat() + "Z",
+        "project_id": project_id,
+        "template": template,
+        "repo_root": str(project_dir),
+        "status": status,
+        "actions": actions,
+        "safe_next_action": "Run h2t-core:session-start in the project directory",
+        "evidence": {
+            "project_dir_exists": project_dir.exists(),
+        },
+    }
+    out = project_dir / ".h2t" / "project-setup-report.json"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    tmp = out.with_suffix(out.suffix + ".tmp")
+    tmp.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    tmp.replace(out)
+    return report
+
 
 def _run(cmd: list[str], cwd: str | None = None) -> subprocess.CompletedProcess:
     return subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, encoding="utf-8")
@@ -99,6 +144,7 @@ def cmd_create(args: argparse.Namespace) -> dict:
     base = Path(args.dir).expanduser().resolve()
     project_dir = base / args.id
     type_base = args.type.split("-")[0]  # "code-github" -> "code"
+    template = template_for_type(args.type)
     dirs = DIR_STRUCTURE.get(type_base, [])
     is_git = args.type in ("code-github", "code-local")
 
@@ -165,8 +211,8 @@ def cmd_create(args: argparse.Namespace) -> dict:
         else:
             actions.append(f"Initial commit skipped: {r2.stderr.strip()}")
 
-    if is_git and not args.dry_run:
-        di = run_docs_init(args.id, project_dir)
+    if not args.dry_run:
+        di = run_docs_init(args.id, project_dir, template=template)
         actions.append(f"docs-init: {di['status']}")
         if di["status"] == "error":
             return {"status": "error", "error": f"docs-init failed: {di['error']}"}
@@ -174,6 +220,15 @@ def cmd_create(args: argparse.Namespace) -> dict:
     if is_git and not args.dry_run:
         ih = install_hooks(project_dir)
         actions.append(f"install-hooks: {ih['status']}")
+
+    if not args.dry_run:
+        write_setup_report(
+            project_dir=project_dir,
+            project_id=args.id,
+            template=template,
+            status="ok",
+            actions=actions,
+        )
 
     return {"status": "ok", "path": str(project_dir), "actions": actions}
 
@@ -204,20 +259,29 @@ _PLUGIN_ROOT = Path(__file__).resolve().parents[3]
 _DEV_ROOT = Path(os.environ.get("H2T_DEV_ROOT", "C:/dev"))
 
 
-def run_docs_init(repo_name: str, project_dir: Path) -> dict:
-    # init.py resolves path as DEV_ROOT/repo_name; skip for non-standard locations
-    if project_dir.resolve() != (_DEV_ROOT / repo_name).resolve():
-        return {"status": "skip", "reason": "project not under DEV_ROOT — run docs-init manually"}
+def run_docs_init(repo_name: str, project_dir: Path, *, template: str = "code_repo") -> dict:
     init_script = _PLUGIN_ROOT.parent / "h2t-dev" / "skills" / "docs-init" / "scripts" / "init.py"
     if not init_script.exists():
         return {"status": "skip", "reason": "docs-init script not found"}
     r = subprocess.run(
-        [sys.executable, str(init_script), repo_name, "--apply"],
-        capture_output=True, text=True,
+        [
+            sys.executable,
+            str(init_script),
+            repo_name,
+            "--repo-root",
+            str(project_dir),
+            "--template",
+            template,
+            "--apply",
+        ],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
     )
     if r.returncode == 0:
-        return {"status": "ok", "output": r.stdout.strip()}
-    return {"status": "error", "error": r.stderr.strip()[:200]}
+        return {"status": "ok", "output": r.stdout.strip()[:400]}
+    return {"status": "error", "error": r.stderr.strip()[:400] or r.stdout.strip()[:400]}
 
 
 def run_sync_labels(repo_name: str) -> dict:
