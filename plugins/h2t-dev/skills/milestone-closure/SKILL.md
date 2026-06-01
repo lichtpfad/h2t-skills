@@ -64,6 +64,8 @@ Ask the user to confirm the exact milestone title.
 $H2T_PYTHON "$CLOSURE" --repo-root "$(pwd)" --milestone "{milestone}" --close --confirm-title "{exact title}" --json
 ```
 
+If `status == "partial"`: the GitHub API PATCH failed — show `close_result.stderr` from the report and stop. Do not treat partial as success.
+
 ### Step 5: Report outcome
 
 Show:

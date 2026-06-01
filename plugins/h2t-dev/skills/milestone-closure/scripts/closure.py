@@ -86,8 +86,15 @@ def close_milestone(repo: str, milestone: dict, *, confirm_title: str) -> dict:
             "exit_code": None,
             "error": f"confirmation mismatch: expected {title!r}, got {confirm_title!r}",
         }
+    number = milestone.get("number")
+    if number is None:
+        return {
+            "status": "error",
+            "exit_code": None,
+            "error": "milestone dict missing 'number' field",
+        }
     r = _run([
-        "gh", "api", f"repos/{repo}/milestones/{milestone['number']}",
+        "gh", "api", f"repos/{repo}/milestones/{number}",
         "-X", "PATCH", "-f", "state=closed",
     ])
     return {
