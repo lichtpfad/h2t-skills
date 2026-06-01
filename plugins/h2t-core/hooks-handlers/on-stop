@@ -22,7 +22,7 @@ def _closed_ready_milestones(repo_slug: str) -> list[str]:
     if not repo_slug:
         return []
     r = subprocess.run(
-        ["gh", "api", f"repos/{repo_slug}/milestones", "-f", "state=open"],
+        ["gh", "api", f"repos/{repo_slug}/milestones?state=open"],
         capture_output=True,
         text=True,
         encoding="utf-8",

@@ -31,7 +31,8 @@ def test_closed_milestones_uses_gh_api():
         assert mod._closed_ready_milestones("lichtpfad/h2t-skills") == ["M1"]
     cmd = mock_run.call_args[0][0]
     assert cmd[:2] == ["gh", "api"]
-    assert "repos/lichtpfad/h2t-skills/milestones" in cmd
+    assert any("repos/lichtpfad/h2t-skills/milestones?state=open" in str(c) for c in cmd)
+    assert "-f" not in cmd
 
 
 def test_check_milestones_never_raises_on_gh_error(capsys):
