@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import datetime
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -82,6 +83,7 @@ def close_milestone(repo: str, milestone: dict, *, confirm_title: str) -> dict:
     if confirm_title.strip() != title:
         return {
             "status": "error",
+            "exit_code": None,
             "error": f"confirmation mismatch: expected {title!r}, got {confirm_title!r}",
         }
     r = _run([
@@ -132,7 +134,7 @@ def build_report(
 def write_report(repo_root: Path, report: dict) -> Path:
     out_dir = repo_root / ".h2t" / "lifecycle"
     out_dir.mkdir(parents=True, exist_ok=True)
-    safe_title = str(report["milestone"]["title"]).lower().replace(" ", "-")
+    safe_title = re.sub(r"[^\w\-]", "-", str(report["milestone"]["title"]).lower())
     out = out_dir / f"milestone-closure-{safe_title}.json"
     tmp = out.with_suffix(out.suffix + ".tmp")
     tmp.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -149,6 +151,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--confirm-title", default="", help="required with --close")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
+
+    if args.close and not args.confirm_title:
+        parser.error("--confirm-title is required with --close")
 
     repo_root = Path(args.repo_root).expanduser().resolve()
     try:
