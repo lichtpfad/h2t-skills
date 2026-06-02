@@ -44,6 +44,9 @@ def _iso(dt: Any) -> str:
     return str(dt)
 
 
+_CHANNEL_OFFSET = 10 ** 12
+
+
 def _peer_candidates(entity: str) -> list[Any]:
     """Return int candidates for a numeric peer ID string.
 
@@ -54,6 +57,44 @@ def _peer_candidates(entity: str) -> list[Any]:
         return [entity]
     n = abs(int(entity))
     return [-n, n, int(f"-100{n}")]
+
+
+def _input_peer_from_sqlite(session_file: Path, peer_id: int) -> Any | None:
+    """Build InputPeer directly from Telethon's SQLite session, no API call.
+
+    Telethon stores channels as -(10^12 + peer_id) and legacy groups as -peer_id.
+    Reading the session DB lets us build InputPeerChannel / InputPeerChat without
+    triggering get_entity() → GetContactsRequest → FloodWait.
+    """
+    if not session_file.exists():
+        return None
+    try:
+        from telethon.tl.types import InputPeerChannel, InputPeerChat
+    except ImportError:
+        return None
+    n = abs(peer_id)
+    candidates = [
+        -(_CHANNEL_OFFSET + n),  # channel: stored as -(10^12 + peer_id)
+        -n,                       # legacy group: stored as -peer_id
+    ]
+    try:
+        conn = sqlite3.connect(str(session_file))
+        try:
+            for stored_id in candidates:
+                row = conn.execute(
+                    "SELECT id, hash FROM entities WHERE id=?", (stored_id,)
+                ).fetchone()
+                if row is not None:
+                    entity_id, access_hash = row
+                    if abs(entity_id) > _CHANNEL_OFFSET:
+                        channel_id = abs(entity_id) - _CHANNEL_OFFSET
+                        return InputPeerChannel(channel_id=channel_id, access_hash=access_hash)
+                    return InputPeerChat(chat_id=abs(entity_id))
+        finally:
+            conn.close()
+    except sqlite3.Error:
+        return None
+    return None
 
 
 def _dialog_kind(entity: Any) -> str:
@@ -332,7 +373,14 @@ class TelegramClientAdapter:
             from datetime import timedelta
 
             cutoff = datetime.now(timezone.utc) - timedelta(days=days)
-        candidates = _peer_candidates(entity) if isinstance(entity, str) else [entity]
+        # Prefer direct InputPeer from SQLite session to avoid get_entity() API calls
+        # that trigger GetContactsRequest → FloodWait on uncached entities.
+        if isinstance(entity, str) and entity.lstrip("-").isdigit():
+            input_peer = _input_peer_from_sqlite(self.session_sqlite_file, int(entity))
+        else:
+            input_peer = None
+
+        candidates: list[Any] = [input_peer] if input_peer is not None else _peer_candidates(entity) if isinstance(entity, str) else [entity]
         try:
             with self._connected_client() as client:
                 rows = []
