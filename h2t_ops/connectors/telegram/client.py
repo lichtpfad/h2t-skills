@@ -320,10 +320,11 @@ class TelegramClientAdapter:
             from datetime import timedelta
 
             cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+        resolved: Any = int(entity) if isinstance(entity, str) and entity.lstrip("-").isdigit() else entity
         try:
             with self._connected_client() as client:
                 rows = []
-                for msg in client.iter_messages(entity, limit=limit):
+                for msg in client.iter_messages(resolved, limit=limit):
                     msg_date = _get_attr(msg, "date")
                     if cutoff is not None and isinstance(msg_date, datetime) and msg_date < cutoff:
                         continue
@@ -443,9 +444,10 @@ class TelegramClientAdapter:
         }
 
     def delete_message(self, entity: str, message_id: int) -> dict[str, Any]:
+        resolved: Any = int(entity) if entity.lstrip("-").isdigit() else entity
         try:
             with self._connected_client() as client:
-                result = client.delete_messages(entity, [message_id])
+                result = client.delete_messages(resolved, [message_id])
         except (ValueError, sqlite3.OperationalError) as exc:
             raise _session_incompatible_error(exc) from exc
         return {
@@ -456,9 +458,10 @@ class TelegramClientAdapter:
         }
 
     def send_message(self, entity: str, text: str) -> dict[str, Any]:
+        resolved: Any = int(entity) if entity.lstrip("-").isdigit() else entity
         try:
             with self._connected_client() as client:
-                msg = client.send_message(entity, text)
+                msg = client.send_message(resolved, text)
         except (ValueError, sqlite3.OperationalError) as exc:
             raise _session_incompatible_error(exc) from exc
         return {
