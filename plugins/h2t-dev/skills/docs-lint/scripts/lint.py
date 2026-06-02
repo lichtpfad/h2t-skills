@@ -698,7 +698,11 @@ def _legacy_main(args: argparse.Namespace) -> None:
         targets = REPO_MANIFEST
     else:
         detected = _detect_current_repo()
-        targets = [detected] if detected else REPO_MANIFEST
+        if detected:
+            targets = [detected]
+        else:
+            _run_audit(Path.cwd())
+            return
 
     print_header(f"docs-lint: checking {len(targets)} repos")
     projects = _load_projects_yaml()
