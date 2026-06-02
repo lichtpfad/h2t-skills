@@ -39,12 +39,10 @@ Use the `scripts/setup_h2t.py` file bundled next to this `SKILL.md`.
 Run it with any available Python 3.11+:
 
 ```bash
-python scripts/setup_h2t.py doctor --json
-```
+# macOS / Linux
+python3 scripts/setup_h2t.py doctor --json
 
-On Windows, `py -3` or an existing project/uv Python is also acceptable:
-
-```powershell
+# Windows
 py -3 .\scripts\setup_h2t.py doctor --json
 ```
 
