@@ -129,21 +129,43 @@ def resolve_uv(which: Callable[[str], str | None] = shutil.which, home: Path | N
     }
 
 
-def resolve_h2t_ops(which: Callable[[str], str | None] = shutil.which, home: Path | None = None) -> dict[str, Any]:
+ENTRY_POINT_NAMES = ["h2t-ops", "h2t-gather", "h2t-activity-log", "h2t-handoff"]
+
+
+def _resolve_cli(name: str, which: Callable[[str], str | None] = shutil.which, home: Path | None = None) -> dict[str, Any]:
     home = home or _home()
-    for name in (["h2t-ops.exe", "h2t-ops"] if sys.platform.startswith("win") else ["h2t-ops", "h2t-ops.exe"]):
-        found = which(name)
+    is_win = sys.platform.startswith("win")
+    names = [f"{name}.exe", name] if is_win else [name, f"{name}.exe"]
+    for n in names:
+        found = which(n)
         if found:
             return {"status": "ready", "path": found, "source": "PATH"}
-    candidate = home / ".local" / "bin" / ("h2t-ops.exe" if sys.platform.startswith("win") else "h2t-ops")
+    candidate = home / ".local" / "bin" / (f"{name}.exe" if is_win else name)
     if candidate.is_file():
         return {"status": "ready", "path": str(candidate), "source": "~/.local/bin"}
-    return {
-        "status": "missing",
-        "path": "",
-        "source": "not-found",
-        "hint": "Run setup_h2t.py install-h2t-ops --source main",
-    }
+    return {"status": "missing", "path": "", "source": "not-found"}
+
+
+def resolve_h2t_ops(which: Callable[[str], str | None] = shutil.which, home: Path | None = None) -> dict[str, Any]:
+    result = _resolve_cli("h2t-ops", which, home)
+    if result["status"] == "missing":
+        result["hint"] = "Run setup_h2t.py install-h2t-ops --source main"
+    return result
+
+
+def resolve_entry_points(which: Callable[[str], str | None] = shutil.which, home: Path | None = None) -> dict[str, Any]:
+    commands = {name: _resolve_cli(name, which, home) for name in ENTRY_POINT_NAMES}
+    statuses = [v["status"] for v in commands.values()]
+    if all(s == "ready" for s in statuses):
+        overall = "ready"
+    elif any(s == "ready" for s in statuses):
+        overall = "partial"
+    else:
+        overall = "missing"
+    result: dict[str, Any] = {"status": overall, "commands": commands}
+    if overall != "ready":
+        result["hint"] = "Run setup_h2t.py install-h2t-ops --source main (or --source /path/to/h2t-skills for local checkout)"
+    return result
 
 
 def _run(args: list[str], timeout: int = 15) -> dict[str, Any]:
@@ -257,6 +279,7 @@ def doctor(runner: Runner = _run) -> dict[str, Any]:
         "platform": detect_platform(),
         "uv": resolve_uv(),
         "h2t_ops": h2t_ops,
+        "entry_points": resolve_entry_points(),
         "plugin_cache": plugin_cache_status(),
         "optional_pos": optional_pos_status(),
         "boundaries": {
@@ -362,12 +385,17 @@ def install_h2t_ops(source: str, *, dry_run: bool = False, runner: Runner = _run
     if uv["status"] != "ready":
         return {"kind": KIND_INSTALL, "status": "missing_uv", "uv": uv, "command": []}
     normalized = normalize_source(source)
-    command = [uv["path"], "tool", "install", "--reinstall", normalized]
+    is_local = Path(normalized).is_dir()
+    if is_local:
+        command = [uv["path"], "tool", "install", "--editable", normalized]
+    else:
+        command = [uv["path"], "tool", "install", "--reinstall", normalized]
     if dry_run:
         return {
             "kind": KIND_INSTALL,
             "status": "dry_run",
             "source": normalized,
+            "editable": is_local,
             "command": command,
             "root_h2t_touched": False,
         }
@@ -376,6 +404,7 @@ def install_h2t_ops(source: str, *, dry_run: bool = False, runner: Runner = _run
         "kind": KIND_INSTALL,
         "status": "ok" if result.get("exit_code") == 0 else "error",
         "source": normalized,
+        "editable": is_local,
         "command": command,
         "result": result,
         "root_h2t_touched": False,
@@ -384,11 +413,16 @@ def install_h2t_ops(source: str, *, dry_run: bool = False, runner: Runner = _run
 
 def _human(obj: dict[str, Any]) -> str:
     if obj.get("kind") == KIND_DOCTOR:
+        ep = obj.get("entry_points", {})
+        ep_status = ep.get("status", "unknown")
+        missing_eps = [name for name, info in ep.get("commands", {}).items() if info.get("status") != "ready"]
+        ep_detail = f" (missing: {', '.join(missing_eps)})" if missing_eps else ""
         return (
             f"h2t setup doctor\n"
             f"- platform: {obj['platform']['name']}\n"
             f"- uv: {obj['uv']['status']} {obj['uv'].get('path', '')}\n"
             f"- h2t-ops: {obj['h2t_ops']['status']} {obj['h2t_ops'].get('version', '')}\n"
+            f"- entry points: {ep_status}{ep_detail}\n"
             f"- optional POS/DOR: {obj['optional_pos']['status']}\n"
         )
     if obj.get("kind") == KIND_CONNECTORS:
