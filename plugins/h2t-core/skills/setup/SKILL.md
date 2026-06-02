@@ -68,8 +68,11 @@ Report:
 - platform;
 - `uv` status and path;
 - `h2t-ops` status, path, version;
+- `entry_points` status — all four CLIs (`h2t-ops`, `h2t-gather`, `h2t-activity-log`, `h2t-handoff`);
 - optional POS/DOR status;
 - whether plugin cache is visible.
+
+If `entry_points.status` is `partial` or `missing`, proceed to Step 3 to install or reinstall.
 
 POS/DOR absence is not an error. Phrase it as:
 
@@ -95,10 +98,11 @@ Real install:
 python scripts/setup_h2t.py install-h2t-ops --source main --json
 ```
 
-If installing from a local checkout:
+If installing from a local checkout (uses `--editable` automatically):
 
 ```bash
 python scripts/setup_h2t.py install-h2t-ops --source C:/dev/h2t-skills --json
+# macOS: --source ~/dev/h2t-skills
 ```
 
 ### Step 4: Connector readiness
