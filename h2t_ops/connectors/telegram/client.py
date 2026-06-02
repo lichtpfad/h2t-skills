@@ -44,6 +44,18 @@ def _iso(dt: Any) -> str:
     return str(dt)
 
 
+def _peer_candidates(entity: str) -> list[Any]:
+    """Return int candidates for a numeric peer ID string.
+
+    Telethon requires int for peer lookup; groups/channels are negative.
+    folders() returns positive IDs, so we try: -abs, abs, -100abs (supergroup).
+    """
+    if not entity.lstrip("-").isdigit():
+        return [entity]
+    n = abs(int(entity))
+    return [-n, n, int(f"-100{n}")]
+
+
 def _dialog_kind(entity: Any) -> str:
     if bool(_get_attr(entity, "bot", False)):
         return "bot"
@@ -320,15 +332,24 @@ class TelegramClientAdapter:
             from datetime import timedelta
 
             cutoff = datetime.now(timezone.utc) - timedelta(days=days)
-        resolved: Any = int(entity) if isinstance(entity, str) and entity.lstrip("-").isdigit() else entity
+        candidates = _peer_candidates(entity) if isinstance(entity, str) else [entity]
         try:
             with self._connected_client() as client:
                 rows = []
-                for msg in client.iter_messages(resolved, limit=limit):
-                    msg_date = _get_attr(msg, "date")
-                    if cutoff is not None and isinstance(msg_date, datetime) and msg_date < cutoff:
-                        continue
-                    rows.append(self._message_row(msg))
+                last_exc: Exception | None = None
+                for candidate in candidates:
+                    try:
+                        for msg in client.iter_messages(candidate, limit=limit):
+                            msg_date = _get_attr(msg, "date")
+                            if cutoff is not None and isinstance(msg_date, datetime) and msg_date < cutoff:
+                                continue
+                            rows.append(self._message_row(msg))
+                        last_exc = None
+                        break
+                    except ValueError as exc:
+                        last_exc = exc
+                if last_exc is not None:
+                    raise last_exc
         except (ValueError, sqlite3.OperationalError) as exc:
             raise _session_incompatible_error(exc) from exc
         return rows
