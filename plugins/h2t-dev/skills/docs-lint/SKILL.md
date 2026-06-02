@@ -31,14 +31,11 @@ Check is ordered: navigation → naming → structure → metadata.
 ### audit (default): show all findings
 
 ```bash
-# Current repo (auto-detect from cwd):
-$H2T_PYTHON "$LINT" audit
+# Current repo (always pass --root . — avoids legacy 16-repo fallback):
+$H2T_PYTHON "$LINT" audit --root .
 
-# Explicit path (for repos outside C:/dev):
+# Explicit path (for repos outside cwd):
 $H2T_PYTHON "$LINT" audit --root C:/work/rejuve
-
-# Named repo:
-$H2T_PYTHON "$LINT" audit --root C:/dev/h2t-skills
 ```
 
 ### plan: human-readable cleanup plan

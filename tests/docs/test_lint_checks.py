@@ -184,6 +184,35 @@ def test_data_docs_boundary_no_dirs(tmp_path):
     assert check_data_docs_boundary(tmp_path) == []
 
 
+def test_legacy_main_unknown_repo_uses_cwd_not_all_repos(tmp_path, monkeypatch):
+    """When called without args from an unknown repo, must NOT fall back to all 16 repos."""
+    import argparse
+    import lint as _lint
+
+    audit_calls = []
+
+    def fake_run_audit(rp, **kwargs):
+        audit_calls.append(rp)
+
+    monkeypatch.setattr(_lint, "_run_audit", fake_run_audit)
+    monkeypatch.chdir(tmp_path)
+
+    args = argparse.Namespace(
+        repos=[],
+        all=False,
+        fix=False,
+        fix_frontmatter=False,
+        fix_labels=False,
+        no_pymarkdown=False,
+        repo_root=False,
+        root=None,
+    )
+    _lint._legacy_main(args)
+
+    assert len(audit_calls) == 1
+    assert audit_calls[0] == tmp_path.resolve()
+
+
 import subprocess
 from unittest.mock import patch, MagicMock
 from lint import fix_labels
