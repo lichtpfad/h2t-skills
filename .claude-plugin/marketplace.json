@@ -20,7 +20,7 @@
     {
       "name": "h2t-ops",
       "description": "H2T Ops — provider I/O connector navigator, daily-brief, and research (Exa).",
-      "version": "1.2.9",
+      "version": "1.2.10",
       "author": {
         "name": "lichtpfad"
       },
