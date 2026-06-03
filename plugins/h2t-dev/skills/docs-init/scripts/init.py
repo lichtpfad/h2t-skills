@@ -14,6 +14,7 @@ for _lib in [_PLUGIN_ROOT / "lib", _PLUGIN_ROOT.parent.parent / "lib"]:
 from docs.common import (
     DEV_ROOT, REQUIRED_CORE_DIRS, ensure_dir, git_add_commit, print_header, repo_path,
 )
+from docs.project_types import PROJECT_TYPES
 
 PROJECTS_YAML_PATH = DEV_ROOT / "h2t-landings" / "projects.yaml"
 
@@ -77,15 +78,6 @@ template: {template}
 exceptions: []
 """
 
-TEMPLATE_EXTRA_DIRS: dict[str, list[str]] = {
-    "code_repo": [],
-    "client_project": ["docs/ops", "docs/research", "docs/deliverables"],
-    "research_project": ["docs/research", "docs/reports"],
-    "creative_project": ["docs/briefs", "docs/assets", "docs/reviews"],
-    "personal_os": ["docs/notes", "docs/sessions"],
-    "ops_workflow": ["docs/runbooks", "docs/logs"],
-}
-
 
 def _load_project(name: str) -> dict:
     if not PROJECTS_YAML_PATH.exists():
@@ -137,7 +129,7 @@ def init_repo(
             changes.append(rel_dir)
 
     # Template extra dirs
-    for rel_dir in TEMPLATE_EXTRA_DIRS.get(template, []):
+    for rel_dir in PROJECT_TYPES.get(template, {}).get("docs_dirs", []):
         d = rp / rel_dir
         if not d.exists():
             if not dry_run:
@@ -229,10 +221,7 @@ def main() -> None:
     parser.add_argument("--apply", action="store_true", help="Actually create files (default: dry-run)")
     parser.add_argument("--commit", action="store_true", help="Git commit after apply")
     parser.add_argument("--repo-root", default=None, help="Explicit repo root path; bypasses DEV_ROOT/repo resolution")
-    parser.add_argument("--template", default="code_repo", choices=[
-        "code_repo", "client_project", "research_project",
-        "creative_project", "personal_os", "ops_workflow",
-    ])
+    parser.add_argument("--template", default="code_repo", choices=list(PROJECT_TYPES))
     args = parser.parse_args()
 
     if args.commit and not args.apply:
