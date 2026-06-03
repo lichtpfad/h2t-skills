@@ -12,6 +12,20 @@ import subprocess
 import sys
 from pathlib import Path
 
+# lib path: plugins/h2t-core → plugins → h2t-dev/lib (sibling plugin lib)
+_SCAFFOLD_SCRIPT = Path(__file__).resolve()
+_H2T_DEV_LIB = _SCAFFOLD_SCRIPT.parents[3].parent / "h2t-dev" / "lib"
+if _H2T_DEV_LIB.exists() and str(_H2T_DEV_LIB) not in sys.path:
+    sys.path.insert(0, str(_H2T_DEV_LIB))
+
+try:
+    from docs.project_types import PROJECT_TYPES, SCAFFOLD_TYPE_TO_TEMPLATE
+    _PROJECT_TYPES_AVAILABLE = True
+except ImportError:
+    _PROJECT_TYPES_AVAILABLE = False
+    PROJECT_TYPES = {}
+    SCAFFOLD_TYPE_TO_TEMPLATE = {}
+
 
 GITIGNORE_TEMPLATES: dict[str, str] = {
     "python": """\
@@ -83,14 +97,16 @@ CLAUDE_MD_TEMPLATE = """\
 
 README_TEMPLATE = "# {id}\n\n{description}\n"
 
-DIR_STRUCTURE: dict[str, list[str]] = {
+# Local fallbacks — exact copy of old DIR_STRUCTURE/TYPE_TO_TEMPLATE
+# Used only when project_types lib is unavailable (stale cache run)
+_DIR_STRUCTURE_FALLBACK: dict[str, list[str]] = {
     "code": ["src", "tests", "docs"],
     "docs": ["docs", "research"],
     "dcc": ["assets", "scripts", "exports"],
     "directory": [],
 }
 
-TYPE_TO_TEMPLATE = {
+_TYPE_TO_TEMPLATE_FALLBACK: dict[str, str] = {
     "code-github": "code_repo",
     "code-local": "code_repo",
     "docs": "research_project",
@@ -100,7 +116,8 @@ TYPE_TO_TEMPLATE = {
 
 
 def template_for_type(project_type: str) -> str:
-    return TYPE_TO_TEMPLATE.get(project_type, "code_repo")
+    mapping = SCAFFOLD_TYPE_TO_TEMPLATE if _PROJECT_TYPES_AVAILABLE else _TYPE_TO_TEMPLATE_FALLBACK
+    return mapping.get(project_type, "code_repo")
 
 
 def write_setup_report(
@@ -143,9 +160,12 @@ def _run(cmd: list[str], cwd: str | None = None) -> subprocess.CompletedProcess:
 def cmd_create(args: argparse.Namespace) -> dict:
     base = Path(args.dir).expanduser().resolve()
     project_dir = base / args.id
-    type_base = args.type.split("-")[0]  # "code-github" -> "code"
+    type_base = args.type.split("-")[0]   # keep for .gitignore selection (DCC_GITIGNORE)
     template = template_for_type(args.type)
-    dirs = DIR_STRUCTURE.get(type_base, [])
+    if _PROJECT_TYPES_AVAILABLE:
+        dirs = PROJECT_TYPES.get(template, {}).get("root_dirs", [])
+    else:
+        dirs = _DIR_STRUCTURE_FALLBACK.get(type_base, [])
     is_git = args.type in ("code-github", "code-local")
 
     if args.dry_run:

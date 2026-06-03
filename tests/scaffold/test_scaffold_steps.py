@@ -263,3 +263,63 @@ def test_write_setup_report_creates_machine_readable_file(tmp_path):
     report_path = tmp_path / ".h2t" / "project-setup-report.json"
     assert report_path.exists()
     assert "client_project" in report_path.read_text(encoding="utf-8")
+
+
+def test_cmd_create_code_repo_root_dirs(tmp_path, monkeypatch):
+    """code-github creates src, tests, docs, scripts at root."""
+    import scaffold_project
+    monkeypatch.setattr(scaffold_project, "_PROJECT_TYPES_AVAILABLE", True)
+    monkeypatch.setattr(scaffold_project, "PROJECT_TYPES", {
+        "code_repo": {"root_dirs": ["src", "tests", "docs", "scripts"], "docs_dirs": [], "root_files_required": []},
+    })
+    monkeypatch.setattr(scaffold_project, "SCAFFOLD_TYPE_TO_TEMPLATE", {"code-github": "code_repo"})
+    with patch("scaffold_project.run_docs_init", return_value={"status": "skip"}):
+        with patch("scaffold_project.install_hooks", return_value={"status": "ok"}):
+            with patch("scaffold_project.subprocess.run") as mock_run:
+                mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+                import argparse
+                args = argparse.Namespace(
+                    id="test-proj", type="code-github", stack="python",
+                    dir=str(tmp_path), description="test", dry_run=False,
+                )
+                result = scaffold_project.cmd_create(args)
+    assert result["status"] == "ok"
+    proj = tmp_path / "test-proj"
+    assert (proj / "src").exists()
+    assert (proj / "tests").exists()
+    assert (proj / "scripts").exists()
+
+
+def test_cmd_create_dcc_uses_dcc_gitignore(tmp_path, monkeypatch):
+    """dcc type uses DCC_GITIGNORE (*.cache, *.bak), not python gitignore."""
+    import scaffold_project
+    monkeypatch.setattr(scaffold_project, "_PROJECT_TYPES_AVAILABLE", True)
+    monkeypatch.setattr(scaffold_project, "PROJECT_TYPES", {
+        "creative_project": {"root_dirs": ["assets", "scripts", "exports", "docs"], "docs_dirs": [], "root_files_required": []},
+    })
+    monkeypatch.setattr(scaffold_project, "SCAFFOLD_TYPE_TO_TEMPLATE", {"dcc": "creative_project"})
+    with patch("scaffold_project.run_docs_init", return_value={"status": "skip"}):
+        import argparse
+        args = argparse.Namespace(
+            id="my-dcc", type="dcc", stack="none",
+            dir=str(tmp_path), description="dcc project", dry_run=False,
+        )
+        result = scaffold_project.cmd_create(args)
+    assert result["status"] == "ok"
+    gitignore = (tmp_path / "my-dcc" / ".gitignore").read_text(encoding="utf-8")
+    assert "*.cache" in gitignore
+    assert "*.pyc" not in gitignore
+
+
+def test_cmd_create_dry_run_lists_would_create(tmp_path):
+    """dry-run returns would_create list without touching disk."""
+    import scaffold_project
+    import argparse
+    args = argparse.Namespace(
+        id="dry-proj", type="code-local", stack="python",
+        dir=str(tmp_path), description="", dry_run=True,
+    )
+    result = scaffold_project.cmd_create(args)
+    assert result["status"] == "dry-run"
+    assert any("dry-proj" in item for item in result["would_create"])
+    assert not (tmp_path / "dry-proj").exists()
