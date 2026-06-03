@@ -38,6 +38,13 @@ from docs.reporter import build_report, status_from_findings, finding
 from docs.config import load_config
 from docs.index_builder import write_index
 
+try:
+    from docs.project_types import PROJECT_TYPES
+    _PROJECT_TYPES_AVAILABLE = True
+except ImportError:
+    PROJECT_TYPES = {}
+    _PROJECT_TYPES_AVAILABLE = False
+
 _SUBCOMMANDS = frozenset({"audit", "plan", "fix-safe", "fix-index", "doctor"})
 
 PROJECTS_YAML_PATH = DEV_ROOT / "h2t-landings" / "projects.yaml"
@@ -144,6 +151,46 @@ def check_repo_root(rp: Path) -> list[str]:
         failures.append(
             f"repo root has {len(visible)} items (max {_ROOT_MAX_ITEMS}) — consider consolidating"
         )
+    return failures
+
+
+def check_project_structure_typed(rp: Path, template: str) -> list[str]:
+    """Check type-specific root + docs dirs from PROJECT_TYPES (dirs only).
+
+    Scope: directory existence only. root_files_required is not checked here.
+    Only called when docs-lint.yaml has an explicit non-empty str template field.
+    Returns [] for unknown templates (graceful no-op).
+
+    Findings include '(template: X)' suffix in message AND are tagged with
+    a 'template' key on the finding dict — filterable by machine consumers.
+
+    Note: root_dirs/docs_dirs don't overlap with REQUIRED_CORE_DIRS by design.
+    If a future template entry adds a dir already in REQUIRED_CORE_DIRS,
+    check_structure() will already report it and this function will produce
+    a duplicate. Fix: dedup by message in _collect_all_findings() at that time.
+
+    Assumes PROJECT_TYPES entries contain trusted internal POSIX relative paths.
+    """
+    spec = PROJECT_TYPES.get(template)
+    if spec is None:
+        return []
+    failures = []
+    for d in spec.get("root_dirs", []):
+        p = rp / d
+        if p.is_dir():
+            continue
+        if p.exists():
+            failures.append(f"path exists but is not a dir: {d}/ (template: {template})")
+        else:
+            failures.append(f"missing required dir: {d}/ (template: {template})")
+    for d in spec.get("docs_dirs", []):
+        p = rp / d
+        if p.is_dir():
+            continue
+        if p.exists():
+            failures.append(f"path exists but is not a dir: {d}/ (template: {template})")
+        else:
+            failures.append(f"missing template dir: {d}/ (template: {template})")
     return failures
 
 
