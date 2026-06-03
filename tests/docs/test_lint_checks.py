@@ -431,3 +431,111 @@ def test_collect_findings_unknown_template_no_crash(tmp_path):
     findings = _lint_module._collect_all_findings(tmp_path, no_pymarkdown=True)
     typed = [f for f in findings if f.get("template")]
     assert typed == []
+
+
+import json as _json_module
+import subprocess as _subprocess
+
+from lint import fix_structure
+
+
+def test_fix_structure_creates_typed_dirs_for_code_repo(tmp_path):
+    """fix_structure creates root_dirs from PROJECT_TYPES when template is set."""
+    (tmp_path / ".claude" / "rules").mkdir(parents=True)
+    (tmp_path / ".claude" / "rules" / "docs-lint.yaml").write_text(
+        "schema: h2t_docs_lint_config/v0.1\ntemplate: code_repo\n",
+        encoding="utf-8",
+    )
+    fixes = fix_structure(tmp_path)
+    assert (tmp_path / "src").is_dir()
+    assert (tmp_path / "tests").is_dir()
+    assert any("src" in f for f in fixes), fixes
+
+
+def test_fix_structure_noop_without_template(tmp_path):
+    """fix_structure without template creates only REQUIRED_CORE_DIRS, no typed dirs."""
+    fixes = fix_structure(tmp_path)
+    assert not any("template:" in f for f in fixes), fixes
+
+
+def test_fix_structure_noop_unknown_template(tmp_path):
+    """fix_structure with unknown template doesn't crash, creates no typed dirs."""
+    (tmp_path / ".claude" / "rules").mkdir(parents=True)
+    (tmp_path / ".claude" / "rules" / "docs-lint.yaml").write_text(
+        "schema: h2t_docs_lint_config/v0.1\ntemplate: nonexistent_type\n",
+        encoding="utf-8",
+    )
+    fixes = fix_structure(tmp_path)
+    assert not any("template:" in f for f in fixes), fixes
+
+
+def test_fix_structure_does_not_move_existing_files(tmp_path):
+    """fix_structure never moves or deletes files — even in wrong-location dirs."""
+    (tmp_path / ".claude" / "rules").mkdir(parents=True)
+    (tmp_path / ".claude" / "rules" / "docs-lint.yaml").write_text(
+        "schema: h2t_docs_lint_config/v0.1\ntemplate: code_repo\n",
+        encoding="utf-8",
+    )
+    # Pre-create a file at an unexpected location
+    old_dir = tmp_path / "old_scripts"
+    old_dir.mkdir()
+    sentinel = old_dir / "important.py"
+    sentinel.write_text("# do not touch", encoding="utf-8")
+    fix_structure(tmp_path)
+    # File must still be exactly where it was
+    assert sentinel.exists()
+    assert sentinel.read_text(encoding="utf-8") == "# do not touch"
+    assert (tmp_path / "old_scripts").is_dir()
+
+
+def test_fix_structure_creates_parents_for_docs_dirs(tmp_path):
+    """fix_structure creates parent dirs recursively for docs_dirs like docs/research."""
+    (tmp_path / ".claude" / "rules").mkdir(parents=True)
+    (tmp_path / ".claude" / "rules" / "docs-lint.yaml").write_text(
+        "schema: h2t_docs_lint_config/v0.1\ntemplate: research_project\n",
+        encoding="utf-8",
+    )
+    fix_structure(tmp_path)
+    assert (tmp_path / "docs" / "research").is_dir()
+
+
+def test_doctor_json_output_schema(tmp_path):
+    """docs-lint doctor --json produces h2t_lifecycle_report/v0.1 with expected keys."""
+    import sys as _sys
+    lint_script = getattr(_lint_module, "__file__", None)
+    if lint_script is None:
+        return  # skip if can't find script
+    result = _subprocess.run(
+        [_sys.executable, lint_script, "doctor", "--root", str(tmp_path),
+         "--json", "--no-pymarkdown"],
+        capture_output=True, text=True, encoding="utf-8",
+    )
+    assert result.returncode == 0, result.stderr
+    data = _json_module.loads(result.stdout)
+    assert data["schema"] == "h2t_lifecycle_report/v0.1"
+    assert "status" in data
+    assert isinstance(data["findings"], list)
+
+
+def test_doctor_json_typed_finding_has_template_field(tmp_path):
+    """doctor --json with template: code_repo → typed findings have 'template' key."""
+    import sys as _sys
+    (tmp_path / ".claude" / "rules").mkdir(parents=True)
+    (tmp_path / ".claude" / "rules" / "docs-lint.yaml").write_text(
+        "schema: h2t_docs_lint_config/v0.1\ntemplate: code_repo\n",
+        encoding="utf-8",
+    )
+    lint_script = getattr(_lint_module, "__file__", None)
+    if lint_script is None:
+        return
+    result = _subprocess.run(
+        [_sys.executable, lint_script, "doctor", "--root", str(tmp_path),
+         "--json", "--no-pymarkdown"],
+        capture_output=True, text=True, encoding="utf-8",
+    )
+    assert result.returncode == 0, result.stderr
+    data = _json_module.loads(result.stdout)
+    typed = [f for f in data["findings"] if f.get("template")]
+    assert typed, "expected at least one typed finding in doctor JSON output"
+    for f in typed:
+        assert f["template"] == "code_repo"
