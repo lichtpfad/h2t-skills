@@ -1,7 +1,7 @@
 {
   "name": "h2t-dev",
   "description": "H2T Dev — development workflow: docs-lint, github-issues, pre-merge-check, milestone-closure",
-  "version": "1.0.10",
+  "version": "1.0.11",
   "author": {
     "name": "lichtpfad"
   }
