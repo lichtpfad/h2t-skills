@@ -313,3 +313,59 @@ def test_fix_safe_preserves_existing_frontmatter_keys(tmp_path):
     result = md.read_text(encoding="utf-8")
     assert 'custom_tag: "keep-me"' in result
     assert "status:" in result
+
+
+from lint import check_project_structure_typed
+
+
+def test_check_typed_code_repo_missing_src(tmp_path):
+    result = check_project_structure_typed(tmp_path, "code_repo")
+    assert any("src" in m for m in result), result
+
+
+def test_check_typed_code_repo_all_present(tmp_path):
+    for d in ["src", "tests", "docs", "scripts"]:
+        (tmp_path / d).mkdir()
+    assert check_project_structure_typed(tmp_path, "code_repo") == []
+
+
+def test_check_typed_client_project_missing_deliverables(tmp_path):
+    for d in ["docs", "data", "scripts"]:
+        (tmp_path / d).mkdir()
+    result = check_project_structure_typed(tmp_path, "client_project")
+    assert any("deliverables" in m for m in result), result
+
+
+def test_check_typed_unknown_template_returns_empty(tmp_path):
+    assert check_project_structure_typed(tmp_path, "nonexistent_type") == []
+
+
+def test_check_typed_research_project_missing_docs_subdir(tmp_path):
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "data").mkdir()
+    result = check_project_structure_typed(tmp_path, "research_project")
+    assert any("docs/research" in m for m in result), result
+
+
+def test_check_typed_research_project_fully_present(tmp_path):
+    for d in ["docs", "data", "docs/research"]:
+        (tmp_path / d).mkdir(parents=True)
+    assert check_project_structure_typed(tmp_path, "research_project") == []
+
+
+def test_check_typed_creative_project_missing_assets(tmp_path):
+    result = check_project_structure_typed(tmp_path, "creative_project")
+    assert any("assets" in m for m in result), result
+
+
+def test_check_typed_messages_include_template_name(tmp_path):
+    result = check_project_structure_typed(tmp_path, "code_repo")
+    assert all("code_repo" in m for m in result), result
+
+
+def test_check_typed_file_at_dir_path_is_collision(tmp_path):
+    """A file occupying a required dir path → 'not a dir' message, not 'missing'."""
+    (tmp_path / "src").write_text("oops")  # file, not dir
+    result = check_project_structure_typed(tmp_path, "code_repo")
+    src_msgs = [m for m in result if "src" in m]
+    assert any("not a dir" in m for m in src_msgs), src_msgs
