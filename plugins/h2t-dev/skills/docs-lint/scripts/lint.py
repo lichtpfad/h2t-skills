@@ -441,15 +441,24 @@ def _collect_all_findings(rp: Path, no_pymarkdown: bool = False) -> list[dict]:
     all_findings.extend(find_orphan_files(rp))
     all_findings.extend(check_naming_all_docs(rp))
     extra = REPO_EXTRA_DIRS.get(_repo_name_from_root(rp), [])
+    cfg = load_config(rp)
+    # Coerce to str | None — YAML could set template to a non-string value
+    _raw = cfg.get("template")
+    template = _raw if isinstance(_raw, str) and _raw.strip() else None
+    typed_msgs = check_project_structure_typed(rp, template) if template else []
     for msg in (
         check_structure(rp)
+        + typed_msgs
         + check_adr_naming(rp)
         + check_legacy_dirs(rp, extra_dirs=extra)
         + check_data_docs_boundary(rp)
         + check_repo_root(rp)
         + ([] if no_pymarkdown else run_pymarkdownlnt(rp))
     ):
-        all_findings.append(finding("structure", "warn", "", msg))
+        f = finding("structure", "warn", "", msg)
+        if template and "(template:" in msg:
+            f["template"] = template
+        all_findings.append(f)
     for msg in check_frontmatter(rp):
         path = msg.split(":")[0].strip() if ":" in msg else ""
         all_findings.append(finding("frontmatter", "info", path, msg))
@@ -463,8 +472,13 @@ def _run_audit(rp: Path, no_pymarkdown: bool = False) -> None:
     orphans = find_orphan_files(rp)
     naming = check_naming_all_docs(rp)
     extra = REPO_EXTRA_DIRS.get(repo_name, [])
+    cfg = load_config(rp)
+    _raw = cfg.get("template")
+    template = _raw if isinstance(_raw, str) and _raw.strip() else None
+    typed_msgs = check_project_structure_typed(rp, template) if template else []
     structure_msgs = (
         check_structure(rp)
+        + typed_msgs
         + check_adr_naming(rp)
         + check_legacy_dirs(rp, extra_dirs=extra)
         + check_data_docs_boundary(rp)
