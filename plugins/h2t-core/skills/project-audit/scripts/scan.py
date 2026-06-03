@@ -18,7 +18,10 @@ from pathlib import Path
 
 def run(cmd: list[str], cwd: str, timeout: int = 10) -> str:
     try:
-        r = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, timeout=timeout)
+        r = subprocess.run(
+            cmd, cwd=cwd, capture_output=True,
+            encoding="utf-8", errors="replace", timeout=timeout,
+        )
         return r.stdout.strip()
     except (subprocess.TimeoutExpired, FileNotFoundError):
         return ""
@@ -240,6 +243,32 @@ def load_project_card(projects_yaml: Path, repo_id: str) -> dict | None:
     return None
 
 
+def docs_lint_health(repo: Path) -> dict | None:
+    """Run docs-lint doctor --json for deterministic structural health.
+
+    Returns the h2t_lifecycle_report/v0.1 dict, or None if docs-lint unavailable.
+    Fields callers care about: status ("ok"/"warning"/"error"), total_findings (int).
+    """
+    _self = Path(__file__).resolve()
+    candidates = [
+        _self.parents[3].parent / "h2t-dev" / "skills" / "docs-lint" / "scripts" / "lint.py",
+        _self.parents[5] / "plugins" / "h2t-dev" / "skills" / "docs-lint" / "scripts" / "lint.py",
+    ]
+    lint_script = next((p for p in candidates if p.exists()), None)
+    if lint_script is None:
+        return None
+    try:
+        r = subprocess.run(
+            [sys.executable, str(lint_script), "doctor", "--root", str(repo), "--json"],
+            capture_output=True, encoding="utf-8", errors="replace", timeout=30,
+        )
+        if r.returncode == 0 and r.stdout.strip():
+            return json.loads(r.stdout)
+    except Exception:
+        pass
+    return None
+
+
 def scan(repo_path: str, projects_yaml: str | None = None) -> dict:
     repo = Path(repo_path).resolve()
     if not repo.is_dir():
@@ -283,6 +312,18 @@ def scan(repo_path: str, projects_yaml: str | None = None) -> dict:
     if result["recent_commits"]:
         result["last_commit_date"] = result["recent_commits"][0]["date"]
     result["open_issue_count"] = len(result["open_issues"])
+
+    # Deterministic structural health via docs-lint doctor --json
+    # Adds: docs_lint_health.status, docs_lint_health.total_findings
+    dh = docs_lint_health(repo)
+    if dh is not None:
+        result["docs_lint_health"] = {
+            "status": dh.get("status", "unknown"),
+            "total_findings": dh.get("total_findings", 0),
+            "findings": dh.get("findings", []),
+        }
+    else:
+        result["docs_lint_health"] = None
 
     return result
 
