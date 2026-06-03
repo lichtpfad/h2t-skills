@@ -369,3 +369,65 @@ def test_check_typed_file_at_dir_path_is_collision(tmp_path):
     result = check_project_structure_typed(tmp_path, "code_repo")
     src_msgs = [m for m in result if "src" in m]
     assert any("not a dir" in m for m in src_msgs), src_msgs
+
+
+import lint as _lint_module
+
+
+def test_collect_findings_no_typed_check_without_template(tmp_path):
+    """Without docs-lint.yaml, no typed findings appear."""
+    findings = _lint_module._collect_all_findings(tmp_path, no_pymarkdown=True)
+    typed = [f for f in findings if f.get("template")]
+    assert typed == []
+
+
+def test_collect_findings_typed_check_fires_when_template_set(tmp_path):
+    """template: code_repo in yaml → missing src/ appears as a typed structure finding."""
+    (tmp_path / ".claude" / "rules").mkdir(parents=True)
+    (tmp_path / ".claude" / "rules" / "docs-lint.yaml").write_text(
+        "schema: h2t_docs_lint_config/v0.1\ntemplate: code_repo\n",
+        encoding="utf-8",
+    )
+    findings = _lint_module._collect_all_findings(tmp_path, no_pymarkdown=True)
+    typed = [f for f in findings if f.get("template") == "code_repo"]
+    assert any("src" in f["message"] for f in typed), [f["message"] for f in typed]
+
+
+def test_collect_findings_typed_check_has_template_field(tmp_path):
+    """Typed findings have 'template' key set — machine-readable, not just in message."""
+    (tmp_path / ".claude" / "rules").mkdir(parents=True)
+    (tmp_path / ".claude" / "rules" / "docs-lint.yaml").write_text(
+        "schema: h2t_docs_lint_config/v0.1\ntemplate: code_repo\n",
+        encoding="utf-8",
+    )
+    findings = _lint_module._collect_all_findings(tmp_path, no_pymarkdown=True)
+    typed = [f for f in findings if f.get("template")]
+    assert typed, "expected at least one typed finding"
+    for f in typed:
+        assert f["template"] == "code_repo"
+
+
+def test_collect_findings_typed_check_silent_when_all_present(tmp_path):
+    """code_repo with all root_dirs present → no typed findings."""
+    (tmp_path / ".claude" / "rules").mkdir(parents=True)
+    (tmp_path / ".claude" / "rules" / "docs-lint.yaml").write_text(
+        "schema: h2t_docs_lint_config/v0.1\ntemplate: code_repo\n",
+        encoding="utf-8",
+    )
+    for d in ["src", "tests", "docs", "scripts"]:
+        (tmp_path / d).mkdir()
+    findings = _lint_module._collect_all_findings(tmp_path, no_pymarkdown=True)
+    typed = [f for f in findings if f.get("template") == "code_repo"]
+    assert typed == []
+
+
+def test_collect_findings_unknown_template_no_crash(tmp_path):
+    """template: nonexistent_type in yaml → no typed findings, no exception."""
+    (tmp_path / ".claude" / "rules").mkdir(parents=True)
+    (tmp_path / ".claude" / "rules" / "docs-lint.yaml").write_text(
+        "schema: h2t_docs_lint_config/v0.1\ntemplate: nonexistent_type\n",
+        encoding="utf-8",
+    )
+    findings = _lint_module._collect_all_findings(tmp_path, no_pymarkdown=True)
+    typed = [f for f in findings if f.get("template")]
+    assert typed == []
