@@ -292,6 +292,31 @@ Show final eval to user:
 
 Generate standardized documentation from templates.
 
+### 4-pre: Structural health check
+
+Gate is based on **machine-readable fields from `scan_result.docs_lint_health`** — not prose from JUDGE.
+
+Check `scan_result.docs_lint_health`:
+
+| Condition | Action |
+|-----------|--------|
+| `docs_lint_health` is null | docs-lint unavailable — skip gate, proceed |
+| `status == "ok"` | proceed |
+| `total_findings > 0` | show findings, ask user |
+
+If findings exist:
+
+```
+⚠ STRUCTURAL ISSUES: {total_findings} findings (docs-lint doctor)
+
+{list up to 10 findings from docs_lint_health.findings}
+
+Generating docs for a structurally broken project may produce misleading documentation.
+Proceed anyway? (yes / skip-docs)
+```
+
+Wait for user response. On `skip-docs` → jump to Stage 5 with `files_written = []`.
+
 ### 4a: Determine what to generate
 
 Based on scan_result:
@@ -320,6 +345,10 @@ RULES:
 - CLI/API: derive from README or pyproject.toml entry points
 - Current Focus: derive from recent commits and open issues
 - Keep total under 60 lines
+
+CRITICAL: Return ONLY the file content as plain text in your response.
+DO NOT use the Write tool. DO NOT create files on disk.
+Stage 4c handles writing after human confirmation.
 ```
 
 **README.md generation:**
@@ -337,6 +366,10 @@ RULES:
 - Status table: use scan data for real statuses
 - Related Projects: use existing_card.serves/depends_on/enables
 - Keep total under 80 lines
+
+CRITICAL: Return ONLY the file content as plain text in your response.
+DO NOT use the Write tool. DO NOT create files on disk.
+Stage 4c handles writing after human confirmation.
 ```
 
 ### 4c: Human gate
@@ -436,6 +469,7 @@ When `--tier product` is specified:
 |---------|-----|
 | Running scan manually (file reads) | Use scan.py script — faster, structured output |
 | Writing docs without human gate | ALWAYS show and wait for confirmation at Stage 4c |
+| Gating Stage 4 on JUDGE prose | Use `scan_result.docs_lint_health.total_findings` — a number, not substring match |
 | Using sonnet for JUDGE | Use opus — evaluation needs strong reasoning |
 | Using opus for COUNCIL | Use haiku — positioning from facts doesn't need deep reasoning |
 | Skipping REPORT after dry-run | Still update projects.yaml if scan found existing docs |
