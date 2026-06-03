@@ -4,7 +4,11 @@
 
 **Goal:** Add `check_project_structure_typed(rp, template)` to `docs-lint`, wire it into `_collect_all_findings()` so that repos with an explicit `template:` in `docs-lint.yaml` are checked against their type-specific directory structure from `PROJECT_TYPES`.
 
-**Architecture:** `lint.py` already imports `load_config(rp)` which reads `.claude/rules/docs-lint.yaml` and returns `{"template": str|None, ...}`. We import `PROJECT_TYPES` from `docs.project_types` (prerequisite), add one pure function `check_project_structure_typed()`, wire it into `_collect_all_findings()`, and extend `fix_structure()` with a matching scaffolding path. Each piece has its own task and commit.
+**Architecture:** `lint.py` already imports `load_config(rp)` which reads `.claude/rules/docs-lint.yaml` and returns `{"template": str|None, ...}`. We import `PROJECT_TYPES` from `docs.project_types` (prerequisite), add one pure function `check_project_structure_typed()`, wire it into `_collect_all_findings()` **and** `_run_audit()` (which has its own chain and must be updated separately — see Task 2), and extend `fix_structure()` with a matching scaffolding path. Each piece has its own task and commit.
+
+**Scope:** directory existence checks only. `root_files_required` from `PROJECT_TYPES` is explicitly out of scope for this plan — file-level compliance is a separate feature. `_legacy_main()` (the old multi-repo CLI path) is also out of scope.
+
+**`build_report()` extra-field tolerance:** `build_report()` accepts `findings: list[dict]` and passes it through verbatim — extra keys like `"template"` on finding dicts are safe.
 
 **`PROJECT_TYPES` contract** (from prerequisite `project_types.py`):
 ```python
@@ -188,20 +192,23 @@ After `from docs.config import load_config`, add:
 
 ```python
 try:
-    from docs.project_types import PROJECT_TYPES as _PROJECT_TYPES
+    from docs.project_types import PROJECT_TYPES
     _PROJECT_TYPES_AVAILABLE = True
 except ImportError:
-    _PROJECT_TYPES = {}
+    PROJECT_TYPES = {}
     _PROJECT_TYPES_AVAILABLE = False
 ```
+
+**Important:** import as `PROJECT_TYPES` (the module exports this exact name). Do NOT alias to `_PROJECT_TYPES` — that would shadow the real import and the fallback `{}` would make typed checks silently no-op.
 
 After `check_repo_root()` and before `check_data_docs_boundary()`, add:
 
 ```python
 def check_project_structure_typed(rp: Path, template: str) -> list[str]:
-    """Check type-specific root + docs dirs from PROJECT_TYPES.
+    """Check type-specific root + docs dirs from PROJECT_TYPES (dirs only).
 
-    Only called when docs-lint.yaml has an explicit non-empty template field.
+    Scope: directory existence only. root_files_required is not checked here.
+    Only called when docs-lint.yaml has an explicit non-empty str template field.
     Returns [] for unknown templates (graceful no-op).
 
     Findings include '(template: X)' suffix in message AND are tagged with
@@ -214,7 +221,7 @@ def check_project_structure_typed(rp: Path, template: str) -> list[str]:
 
     Assumes PROJECT_TYPES entries contain trusted internal POSIX relative paths.
     """
-    spec = _PROJECT_TYPES.get(template)
+    spec = PROJECT_TYPES.get(template)
     if spec is None:
         return []
     failures = []
@@ -335,9 +342,9 @@ C:/dev/h2t-skills/.venv/Scripts/pytest tests/docs/test_lint_checks.py -k "collec
 
 Expected: `test_collect_findings_typed_check_fires_when_template_set` and `test_collect_findings_typed_check_has_template_field` fail (typed check not yet wired).
 
-- [ ] **Step 3: Wire into `_collect_all_findings()`**
+- [ ] **Step 3: Wire into `_collect_all_findings()` and `_run_audit()`**
 
-Replace the `_collect_all_findings()` function in `lint.py`:
+**3a.** Replace the `_collect_all_findings()` function in `lint.py`:
 
 ```python
 def _collect_all_findings(rp: Path, no_pymarkdown: bool = False) -> list[dict]:
@@ -347,8 +354,9 @@ def _collect_all_findings(rp: Path, no_pymarkdown: bool = False) -> list[dict]:
     all_findings.extend(check_naming_all_docs(rp))
     extra = REPO_EXTRA_DIRS.get(_repo_name_from_root(rp), [])
     cfg = load_config(rp)
-    # template is set only when docs-lint.yaml has an explicit non-empty template field
-    template = cfg.get("template") or None
+    # Coerce to str | None — YAML could set template to a non-string value
+    _raw = cfg.get("template")
+    template = _raw if isinstance(_raw, str) and _raw.strip() else None
     typed_msgs = check_project_structure_typed(rp, template) if template else []
     for msg in (
         check_structure(rp)
@@ -368,6 +376,28 @@ def _collect_all_findings(rp: Path, no_pymarkdown: bool = False) -> list[dict]:
         all_findings.append(finding("frontmatter", "info", path, msg))
     return all_findings
 ```
+
+**3b.** `_run_audit()` has its own duplicate check chain that does NOT use `_collect_all_findings()`. It must also get typed checks. In `_run_audit()`, find the `structure_msgs` assignment block (around line 419) and add typed_msgs:
+
+```python
+# In _run_audit(), after: repo_name = _repo_name_from_root(rp)
+cfg = load_config(rp)
+_raw = cfg.get("template")
+template = _raw if isinstance(_raw, str) and _raw.strip() else None
+typed_msgs = check_project_structure_typed(rp, template) if template else []
+extra = REPO_EXTRA_DIRS.get(repo_name, [])
+structure_msgs = (
+    check_structure(rp)
+    + typed_msgs
+    + check_adr_naming(rp)
+    + check_legacy_dirs(rp, extra_dirs=extra)
+    + check_data_docs_boundary(rp)
+    + check_repo_root(rp)
+    + ([] if no_pymarkdown else run_pymarkdownlnt(rp))
+)
+```
+
+Note: `_legacy_main()` is explicitly **out of scope** — it is the deprecated multi-repo CLI path and is not used by doctor/plan/audit subcommands. Leave it unchanged.
 
 - [ ] **Step 4: Run integration tests**
 
@@ -494,13 +524,17 @@ def fix_structure(rp: Path) -> list[str]:
         if ensure_dir(d):
             fixes.append(f"created: {rel_dir}/")
     cfg = load_config(rp)
-    template = cfg.get("template") or None
+    _raw = cfg.get("template")
+    template = _raw if isinstance(_raw, str) and _raw.strip() else None
     if template:
-        spec = _PROJECT_TYPES.get(template)
+        spec = PROJECT_TYPES.get(template)
         if spec:
             for rel_dir in spec.get("root_dirs", []) + spec.get("docs_dirs", []):
                 d = rp / rel_dir
-                already_exists = d.exists()
+                if d.exists() and not d.is_dir():
+                    # File collision — skip silently (check_project_structure_typed reports it)
+                    continue
+                already_exists = d.is_dir()
                 d.mkdir(parents=True, exist_ok=True)
                 if not already_exists:
                     fixes.append(f"created: {rel_dir}/ (template: {template})")
@@ -515,21 +549,23 @@ C:/dev/h2t-skills/.venv/Scripts/pytest tests/docs/test_lint_checks.py -k "fix_st
 
 Expected: all 5 PASSED.
 
-- [ ] **Step 5: Add doctor JSON CLI test**
+- [ ] **Step 5: Add doctor JSON CLI tests**
 
-Append to `tests/docs/test_lint_checks.py`:
+First, check that `tests/docs/test_lint_checks.py` has a module-level `import json`. The file currently only has `import json as _json` inside a single test function (line 279). Add `import json` at the top of the file (with other module imports), then append the CLI tests:
 
 ```python
+# Add at module level (top of file, with other imports):
+import json
 import subprocess as _subprocess
+```
 
+Then append the test functions:
 
+```python
 def test_doctor_json_output_schema(tmp_path):
     """docs-lint doctor --json produces h2t_lifecycle_report/v0.1 with expected keys."""
     import sys as _sys
-    lint_script = (
-        _lint_module_path if (_lint_module_path := getattr(_lint_module, "__file__", None))
-        else None
-    )
+    lint_script = getattr(_lint_module, "__file__", None)
     if lint_script is None:
         return  # skip if can't find script
     result = _subprocess.run(
@@ -546,7 +582,7 @@ def test_doctor_json_output_schema(tmp_path):
 
 
 def test_doctor_json_typed_finding_has_template_field(tmp_path):
-    """doctor --json findings with template: have 'template' key in JSON."""
+    """doctor --json with template: code_repo → typed findings have 'template' key."""
     import sys as _sys
     (tmp_path / ".claude" / "rules").mkdir(parents=True)
     (tmp_path / ".claude" / "rules" / "docs-lint.yaml").write_text(
@@ -569,7 +605,7 @@ def test_doctor_json_typed_finding_has_template_field(tmp_path):
         assert f["template"] == "code_repo"
 ```
 
-**Note:** `test_doctor_json_output_schema` requires `import json` at top of test file. Verify it's already imported (it's in the existing test module — check before adding a duplicate).
+**Note:** `test_doctor_json_typed_finding_has_template_field` uses a `tmp_path` fixture (empty repo with config only) — this guarantees typed dirs are missing and findings will appear regardless of the actual repo state. This is the behavioral validation test.
 
 - [ ] **Step 6: Run all new tests**
 
@@ -587,19 +623,18 @@ C:/dev/h2t-skills/.venv/Scripts/pytest tests/docs/ -v --ignore=tests/docs/test_e
 
 Expected: all PASSED.
 
-- [ ] **Step 8: Smoke test on real repo (no-crash + live detection)**
+- [ ] **Step 8: No-crash smoke test on real repo**
 
 ```
 C:/dev/h2t-skills/.venv/Scripts/python.exe plugins/h2t-dev/skills/docs-lint/scripts/lint.py doctor --root C:/dev/h2t-skills --json --no-pymarkdown
 ```
 
-Parse output manually and verify:
-- `schema == "h2t_lifecycle_report/v0.1"` ✓
-- `status` is `"ok"` or `"warning"` (not error, no exception)
-- Any finding with `"template"` key → typed check is live
-- Print: `"typed findings: N"` where N = count of findings with `"template"` field
+Verify only:
+- Exit code 0 (no crash)
+- `schema == "h2t_lifecycle_report/v0.1"`
+- `status` is `"ok"` or `"warning"` (not `"error"`)
 
-If repo is missing typed dirs, typed findings prove detection works. If none → repo is compliant.
+This is a no-crash check only — behavioral validation is done by `test_doctor_json_typed_finding_has_template_field` above. h2t-skills may already have all typed dirs present, so absence of typed findings here is expected and not a failure.
 
 - [ ] **Step 9: Version bump**
 
@@ -630,18 +665,18 @@ git -C C:/dev/h2t-skills commit -m "feat(docs-lint): extend fix_structure for ty
 - [x] Smoke test on real repo — Task 3 Step 8
 - [x] Version bump — Task 3 Step 9
 
-**Codex 20-issue checklist:**
+**Codex v1 checklist (20 issues):**
 - [x] #1 Task split: 3 separate tasks, each with own commit
 - [x] #2 Wrong count framing: use `-k` selectors, not absolute counts
 - [x] #3 Unknown template in wired path: `test_collect_findings_unknown_template_no_crash`
 - [x] #4 Shape validation: `.get("root_dirs", [])` / `.get("docs_dirs", [])` in both check and fix
 - [x] #5 Path normalization: assumption documented — internal trusted POSIX paths only
 - [x] #6 Duplicate findings: documented in function docstring — no overlap with REQUIRED_CORE_DIRS by design
-- [x] #7 "template is set" defined: `cfg.get("template") or None` — falsy (empty string, None, whitespace) treated as no-template
+- [x] #7 "template is set" defined: `isinstance(_raw, str) and _raw.strip()` — coerced, whitespace/non-str rejected
 - [x] #8 fix_structure() spec: calls load_config(rp), no-op without template, no-op unknown, parents=True, returns list
 - [x] #9 fix_structure() tests: 5 dedicated tests in Task 3 Step 1
 - [x] #10 "never moves files" test: `test_fix_structure_does_not_move_existing_files` with file at unexpected path
-- [x] #11 Smoke test: fixture-based CLI tests for behavior; h2t-skills for no-crash + live
+- [x] #11 Smoke test: fixture-based CLI tests for behavior; h2t-skills for no-crash only
 - [x] #12 Commit timing: Task 1 commit after function+tests; Task 2 commit after wiring; Task 3 after everything
 - [x] #13 Import cycle: verified in Prerequisites section
 - [x] #14 Finding format: uses existing `finding()` dict, `"template"` key added post-creation
@@ -650,4 +685,16 @@ git -C C:/dev/h2t-skills commit -m "feat(docs-lint): extend fix_structure for ty
 - [x] #17 JSON template field: `f["template"] = template` on finding dict — machine-readable, not only in message
 - [x] #18 Template semantics: verified in Prerequisites (load_config on h2t-skills confirms code_repo)
 - [x] #19 Import fail = stop: Prerequisites section has explicit stop instruction
-- [x] #20 chaos workflow output: `_run_fix_safe` message covers "Renames/moves require manual action" (existing) — typed check doesn't change this; smoke test output shows live findings
+- [x] #20 chaos workflow output: `_run_fix_safe` message covers "Renames/moves require manual action" (existing)
+
+**Codex v2 checklist (10 new issues):**
+- [x] C1 Import alias: `from docs.project_types import PROJECT_TYPES` (not `_PROJECT_TYPES`) — Task 1 Step 4
+- [x] C2 `import json` missing: added explicitly at module level — Task 3 Step 5
+- [x] C3 `_collect_all_findings()` chain: confirmed real change, covered in Task 2 Step 3a
+- [x] C4 `_run_audit()` inconsistency: Task 2 Step 3b wires typed checks into `_run_audit()` too
+- [x] C5 Template type coercion: `isinstance(_raw, str) and _raw.strip()` in both `_collect_all_findings` and `fix_structure`
+- [x] C6 ensure_dir() file collision: `fix_structure()` guards with `if d.exists() and not d.is_dir(): continue`
+- [x] C7 root_files_required scope: stated as explicitly out of scope in Architecture section
+- [x] C8 build_report extra fields: `build_report()` passes `findings` list verbatim — extra keys tolerated; noted in Architecture
+- [x] C9 Smoke test insufficient: `test_doctor_json_typed_finding_has_template_field` uses tmp_path fixture for behavioral validation; h2t-skills is no-crash only
+- [x] C10 `_legacy_main()` out of scope: stated explicitly in Task 2 Step 3b note
