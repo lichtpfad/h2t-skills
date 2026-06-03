@@ -273,11 +273,32 @@ def run_pymarkdownlnt(rp: Path) -> list[str]:
 
 
 def fix_structure(rp: Path) -> list[str]:
+    """Create missing dirs (scaffolding only). Does NOT move files — use git mv for that.
+
+    Creates REQUIRED_CORE_DIRS always, plus PROJECT_TYPES[template] dirs when template: is set.
+    Idempotent: existing dirs are left unchanged.
+    Returns list of "created: <path>/" strings for newly created dirs only.
+    """
     fixes = []
     for rel_dir in REQUIRED_CORE_DIRS:
         d = rp / rel_dir
         if ensure_dir(d):
             fixes.append(f"created: {rel_dir}/")
+    cfg = load_config(rp)
+    _raw = cfg.get("template")
+    template = _raw if isinstance(_raw, str) and _raw.strip() else None
+    if template:
+        spec = PROJECT_TYPES.get(template)
+        if spec:
+            for rel_dir in spec.get("root_dirs", []) + spec.get("docs_dirs", []):
+                d = rp / rel_dir
+                if d.exists() and not d.is_dir():
+                    # File collision — skip silently (check_project_structure_typed reports it)
+                    continue
+                already_exists = d.is_dir()
+                d.mkdir(parents=True, exist_ok=True)
+                if not already_exists:
+                    fixes.append(f"created: {rel_dir}/ (template: {template})")
     return fixes
 
 
