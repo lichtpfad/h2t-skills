@@ -510,7 +510,7 @@ def test_delete_message_returns_deleted_dict(tmp_path, monkeypatch):
 
 from contextlib import contextmanager
 
-from h2t_ops.core.errors import ConfigError, ProviderError
+from h2t_ops.core.errors import ProviderError
 
 
 # ── search helpers ────────────────────────────────────────────────────────────
