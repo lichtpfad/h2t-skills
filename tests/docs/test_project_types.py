@@ -71,3 +71,11 @@ def test_no_docs_dir_duplicates_required_core():
             assert d not in required, (
                 f"{name}.docs_dirs contains {d} which is already in REQUIRED_CORE_DIRS"
             )
+
+
+def test_client_project_does_not_require_docs_deliverables():
+    """docs/deliverables/ was a false positive on projects with root-level deliverables/."""
+    spec = PROJECT_TYPES["client_project"]
+    assert "docs/deliverables" not in spec["docs_dirs"], (
+        "docs/deliverables should not be required — projects use root-level deliverables/ instead"
+    )
