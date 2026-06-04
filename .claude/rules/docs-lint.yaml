@@ -1,0 +1,5 @@
+schema: h2t_docs_lint_config/v0.2
+project_checks: true
+custom_root_dirs:
+  - h2t_ops
+  - hooks-handlers

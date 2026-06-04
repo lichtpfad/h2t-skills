@@ -10,11 +10,11 @@ STANDARD_ALLOWLIST: frozenset[str] = frozenset({
     ".claude", ".editorconfig", ".h2t",
     # Standard project dirs (required or near-universal)
     "docs", "data", "src", "tests", "test", "scripts", "assets",
-    "dist", "build",
+    "dist", "build", "lib", "plugins", "tools", "evals", "hooks",
     # Tool config files required by check_structure / docs-lint itself
     ".pymarkdown.yaml", ".vale.ini",
     # Project docs
-    "README.md", "CLAUDE.md", "CHANGELOG.md", "LICENSE",
+    "README.md", "CLAUDE.md", "CHANGELOG.md", "LICENSE", "TODOS.md",
     "docs-lint-plan.yaml",
     # Python
     "pyproject.toml", "setup.py", "setup.cfg", "requirements.txt",
@@ -25,8 +25,10 @@ STANDARD_ALLOWLIST: frozenset[str] = frozenset({
     "tsconfig.json", "tsconfig.base.json",
     # Rust / Go
     "Cargo.toml", "go.mod",
-    # Build
-    "Makefile", "Dockerfile", "docker-compose.yml",
+    # Build / scripts
+    "Makefile", "Dockerfile", "docker-compose.yml", "setup.sh",
+    # Superpowers / Claude worktrees
+    ".worktrees", ".superpowers", ".claude-plugin",
     # Misc
     ".env.example",
 })
@@ -43,6 +45,9 @@ _ALWAYS_SKIP: frozenset[str] = frozenset({
     ".git", ".venv", "venv", "__pycache__", ".mypy_cache",
     ".pytest_cache", "node_modules", ".ruff_cache", ".vscode", ".idea",
 })
+
+# Glob patterns for items that are always build/tool artifacts — checked with fnmatch.
+_ALWAYS_SKIP_GLOBS: tuple[str, ...] = ("*.egg-info", "*.dist-info")
 
 
 def check_root_structure(
@@ -70,6 +75,8 @@ def check_root_structure(
     for item in sorted(rp.iterdir()):
         name = item.name
         if name in _ALWAYS_SKIP:
+            continue
+        if any(fnmatch.fnmatch(name, pat) for pat in _ALWAYS_SKIP_GLOBS):
             continue
         if name.lower() in _LEGACY_BANNED:
             continue
