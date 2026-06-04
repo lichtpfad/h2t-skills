@@ -19,6 +19,7 @@ _DEFAULTS: dict[str, Any] = {
     "template": None,
     "custom_root_dirs": [],
     "project_checks": False,
+    "deliverables_dir": "deliverables",
 }
 
 

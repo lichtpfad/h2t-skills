@@ -77,3 +77,18 @@ def test_project_checks_configurable(tmp_path):
     (rules_dir / "docs-lint.yaml").write_text("project_checks: true\n")
     cfg = load_config(tmp_path)
     assert cfg["project_checks"] is True
+
+
+def test_deliverables_dir_default(tmp_path):
+    cfg = load_config(tmp_path)
+    assert cfg["deliverables_dir"] == "deliverables"
+
+
+def test_deliverables_dir_override_from_yaml(tmp_path):
+    rules = tmp_path / ".claude" / "rules"
+    rules.mkdir(parents=True)
+    (rules / "docs-lint.yaml").write_text(
+        "schema: h2t_docs_lint_config/v0.2\ndeliverables_dir: outputs\n"
+    )
+    cfg = load_config(tmp_path)
+    assert cfg["deliverables_dir"] == "outputs"
