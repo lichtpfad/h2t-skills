@@ -231,7 +231,7 @@ def check_data_docs_boundary(rp: Path) -> list[str]:
     data_dir = rp / "data"
     if data_dir.exists():
         for f in data_dir.rglob("*"):
-            if f.is_file() and f.suffix in _DOC_EXTS_IN_DATA:
+            if f.is_file() and f.suffix in _DOC_EXTS_IN_DATA and f.name.lower() != "readme.md":
                 rel = str(f.relative_to(rp)).replace("\\", "/")
                 failures.append(f"doc in data: {rel} — move to docs/")
     return failures
