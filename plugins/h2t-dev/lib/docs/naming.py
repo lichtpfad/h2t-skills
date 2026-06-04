@@ -1,5 +1,6 @@
 """Extended naming convention checks for all docs/ markdown files."""
 from __future__ import annotations
+import fnmatch
 import re
 from pathlib import Path
 
@@ -17,7 +18,7 @@ def _requires_date_prefix(rel_path: str) -> bool:
     return any(d in rel_path for d in _DATE_REQUIRED_SUBDIRS)
 
 
-def check_naming_all_docs(repo_root: Path, exclude_dirs: list[str] | None = None) -> list[dict]:
+def check_naming_all_docs(repo_root: Path, exclude_dirs: list[str] | None = None, naming_exceptions: list[str] | None = None) -> list[dict]:
     """
     Check all .md files in docs/ for:
     1. lowercase kebab-case (spaces, uppercase, underscores → finding)
@@ -44,6 +45,9 @@ def check_naming_all_docs(repo_root: Path, exclude_dirs: list[str] | None = None
         if name in _ALLOWED_NAMES:
             continue
         rel = str(md_file.relative_to(repo_root)).replace("\\", "/")
+        rel_posix = rel
+        if any(fnmatch.fnmatch(rel_posix, pat) for pat in (naming_exceptions or [])):
+            continue
 
         if not _KEBAB_RE.match(name):
             proposed = re.sub(r"[\s_]+", "-", name).lower()

@@ -15,6 +15,7 @@ _DEFAULTS: dict[str, Any] = {
     ],
     "exceptions": [],
     "exclude_dirs": [],
+    "naming_exceptions": [],
     "template": None,
 }
 
