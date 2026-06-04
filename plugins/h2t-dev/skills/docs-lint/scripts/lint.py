@@ -608,19 +608,29 @@ def _run_audit(rp: Path, no_pymarkdown: bool = False) -> None:
         print("  RESULT: all checks passed")
 
 
-def _run_plan(rp: Path, json_output: bool = False) -> None:
+def _run_plan(
+    rp: Path,
+    json_output: bool = False,
+    save_file: str | None = None,
+) -> None:
     all_findings = _collect_all_findings(rp, no_pymarkdown=True)
 
-    if json_output:
+    if json_output or save_file:
         from docs.fix_plan import build_fix_plan
         plan = build_fix_plan(repo_root=str(rp), findings=all_findings)
-        print(json.dumps(plan, indent=2))
+        output = json.dumps(plan, indent=2)
+        if save_file:
+            Path(save_file).write_text(output, encoding="utf-8")
+            print(f"Plan saved: {save_file}")
+            return
+        print(output)
         return
 
     print_header(f"docs-lint plan: {rp}")
     orphans = [f for f in all_findings if f["type"] == "orphan"]
     naming = [f for f in all_findings if f["type"] == "naming"]
     structure = [f for f in all_findings if f["type"] == "structure"]
+    misplaced = [f for f in all_findings if f["type"] == "misplaced_deliverable"]
     project = [f for f in all_findings if f["type"] in {
         "root_structure", "root_readmes", "gitignore_hygiene", "agent_instructions"
     }]
@@ -644,12 +654,19 @@ def _run_plan(rp: Path, json_output: bool = False) -> None:
         for f in structure:
             print(f"  - {f['message']}")
 
+    if misplaced:
+        print("\n## Misplaced Deliverable Files\n")
+        for f in misplaced:
+            tracked_note = "" if f.get("is_tracked") else " (untracked — move manually)"
+            print(f"  - {f['path']} → {f['target_path']}{tracked_note}")
+        print("\n  Action: run 'docs-lint fix-safe' to git mv tracked files.")
+
     if project:
         print("\n## Project Layer\n")
         for f in project:
             print(f"  - [{f['type']}] {f['path']}: {f['message']}")
 
-    if not orphans and not naming and not structure and not project:
+    if not orphans and not naming and not structure and not misplaced and not project:
         print("\n  No cleanup needed.")
     else:
         print(f"\n  Run 'docs-lint fix-safe' for auto-fixable items.")
@@ -873,7 +890,8 @@ def _run_doctor(rp: Path, json_output: bool = False, no_pymarkdown: bool = False
     structure = [f for f in all_findings if f["type"] == "structure"]
     frontmatter = [f for f in all_findings if f["type"] == "frontmatter"]
     project = [f for f in all_findings if f["type"] in {
-        "root_structure", "root_readmes", "gitignore_hygiene", "agent_instructions"
+        "root_structure", "root_readmes", "gitignore_hygiene", "agent_instructions",
+        "misplaced_deliverable",
     }]
     total = len(all_findings)
     summary = (
@@ -1032,8 +1050,10 @@ def main() -> None:
                             choices=list(_SUBCOMMANDS))
         parser.add_argument("--root", default=None)
         parser.add_argument("--apply", action="store_true")
-        parser.add_argument("--only", default="all", choices=["all", "frontmatter", "dirs"])
+        parser.add_argument("--only", default="all", choices=["all", "frontmatter", "dirs", "moves"])
         parser.add_argument("--json", dest="json_output", action="store_true")
+        parser.add_argument("--save", default=None, metavar="FILE",
+                            help="Save fix plan JSON to FILE (plan command only)")
         parser.add_argument("--no-pymarkdown", dest="no_pymarkdown", action="store_true")
         parser.add_argument("--plan", default=None, metavar="FILE")
         args = parser.parse_args(raw)
@@ -1043,7 +1063,7 @@ def main() -> None:
         if cmd == "audit":
             _run_audit(rp, no_pymarkdown=args.no_pymarkdown)
         elif cmd == "plan":
-            _run_plan(rp, json_output=args.json_output)
+            _run_plan(rp, json_output=args.json_output, save_file=args.save)
         elif cmd == "fix-safe":
             _run_fix_safe(rp, only=args.only, plan_file=args.plan)
         elif cmd == "fix-index":
