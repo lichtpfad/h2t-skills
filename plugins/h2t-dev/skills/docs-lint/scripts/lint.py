@@ -656,6 +656,37 @@ def _run_plan(rp: Path, json_output: bool = False) -> None:
         print(f"  Run 'docs-lint fix-index' for README/index rebuild.")
 
 
+def _apply_misplaced_moves(rp: Path, cfg: dict) -> list[str]:
+    """Detect misplaced deliverable files and git mv tracked ones."""
+    if not _MISPLACED_FILES_AVAILABLE:
+        return []
+    deliverables_dir = cfg.get("deliverables_dir", "deliverables")
+    findings = check_misplaced_deliverables(rp, deliverables_dir)
+    fixes: list[str] = []
+    for f in findings:
+        if not f.get("is_tracked"):
+            fixes.append(f"SKIP: {f['path']} is untracked — move manually with: git mv")
+            continue
+        tgt_path = f.get("target_path", "")
+        dst = rp / tgt_path
+        if not dst.parent.exists():
+            fixes.append(f"SKIP: {f['path']} — target dir missing: {tgt_path.split('/')[0]}/")
+            continue
+        src = rp / f["path"]
+        if dst.exists():
+            fixes.append(f"SKIP: {f['path']} — destination already exists: {tgt_path}")
+            continue
+        result = subprocess.run(
+            ["git", "mv", str(src), str(dst)],
+            cwd=str(rp), capture_output=True, text=True,
+        )
+        if result.returncode == 0:
+            fixes.append(f"git mv {f['path']} → {tgt_path}")
+        else:
+            fixes.append(f"FAILED: git mv {f['path']}: {result.stderr.strip()[:80]}")
+    return fixes
+
+
 def _run_fix_safe(rp: Path, only: str = "all", plan_file: str | None = None) -> None:
     if plan_file:
         from docs.fix_plan import build_fix_plan
@@ -672,7 +703,9 @@ def _run_fix_safe(rp: Path, only: str = "all", plan_file: str | None = None) -> 
             bh = file_hash(rp / act.get("path", "")) if act.get("path") else ""
             try:
                 _apply_safe_action(rp, act)
-                ah = file_hash(rp / act.get("path", "")) if act.get("path") else ""
+                # move_file: after-hash is at target_path (src is gone after git mv)
+                _hash_path = act.get("target_path") if act.get("type") == "move_file" else act.get("path", "")
+                ah = file_hash(rp / _hash_path) if _hash_path else ""
                 results.append(action_result(act["action_id"], "applied",
                                              before_hash=bh, after_hash=ah))
             except Exception as exc:
@@ -700,11 +733,14 @@ def _run_fix_safe(rp: Path, only: str = "all", plan_file: str | None = None) -> 
             print(f"  FIX: {f}")
     if _PROJECT_LAYER_AVAILABLE:
         _cfg = load_config(rp)
-        if _cfg.get("project_checks") and only in ("all",):
+        if _cfg.get("project_checks") and only in ("all", "moves"):
             gi_fixes = fix_gitignore_hygiene(rp)
             for fx in gi_fixes:
                 print(f"  FIX: {fx}")
-    print("  Done. Renames/moves require 'docs-lint plan' review and manual action.")
+            move_fixes = _apply_misplaced_moves(rp, _cfg)
+            for fx in move_fixes:
+                print(f"  FIX: {fx}")
+    print("  Done.")
 
 
 def _apply_safe_action(rp: Path, act: dict) -> None:
@@ -717,6 +753,14 @@ def _apply_safe_action(rp: Path, act: dict) -> None:
         target = rp / path
         if target.exists():
             fix_frontmatter_action_single(rp, target)
+    elif action_type == "move_file":
+        src = rp / path
+        dst = rp / (act.get("target_path") or "")
+        if src.exists() and dst.parent.exists() and not dst.exists():
+            subprocess.run(
+                ["git", "mv", str(src), str(dst)],
+                cwd=str(rp), check=True, capture_output=True,
+            )
 
 
 def fix_frontmatter_action_single(rp: Path, md_file: Path) -> None:

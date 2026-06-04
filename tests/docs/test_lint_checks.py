@@ -324,6 +324,44 @@ def test_fix_safe_preserves_existing_frontmatter_keys(tmp_path):
     assert "status:" in result
 
 
+def test_fix_safe_moves_tracked_html(tmp_path, monkeypatch):
+    """fix-safe with project_checks=true moves tracked HTML via git mv."""
+    import lint
+    from unittest.mock import patch, MagicMock
+    from pathlib import Path
+
+    (tmp_path / ".claude" / "rules").mkdir(parents=True)
+    (tmp_path / ".claude" / "rules" / "docs-lint.yaml").write_text(
+        "schema: h2t_docs_lint_config/v0.2\nproject_checks: true\n"
+    )
+    (tmp_path / "docs" / "research").mkdir(parents=True)
+    html = tmp_path / "docs" / "research" / "deck.html"
+    html.write_text("<html/>")
+    (tmp_path / "deliverables").mkdir()
+    dst = tmp_path / "deliverables" / "deck.html"
+
+    calls = []
+
+    def fake_run(cmd, **kwargs):
+        calls.append(cmd)
+        if isinstance(cmd, list) and len(cmd) >= 4 and cmd[0] == "git" and cmd[1] == "mv":
+            src = Path(cmd[2])
+            dst_p = Path(cmd[3])
+            dst_p.write_bytes(src.read_bytes())
+            src.unlink()
+        m = MagicMock()
+        m.returncode = 0
+        m.stderr = ""
+        return m
+
+    with patch("docs.misplaced_files._is_tracked", return_value=True):
+        with patch("subprocess.run", side_effect=fake_run):
+            lint._run_fix_safe(tmp_path, only="all")
+
+    assert dst.exists()
+    assert not html.exists()
+
+
 from lint import check_project_structure_typed
 
 
