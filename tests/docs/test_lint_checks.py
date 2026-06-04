@@ -590,3 +590,53 @@ def test_exclude_dirs_empty_list_changes_nothing(tmp_path):
     findings = _lint_module._collect_all_findings(tmp_path, no_pymarkdown=True)
     naming_paths = [f["path"] for f in findings if f["type"] == "naming"]
     assert any("superpowers" in p for p in naming_paths), "expected naming finding without exclusion"
+
+
+def test_naming_exceptions_suppresses_date_prefix_finding(tmp_path):
+    """Files listed in naming_exceptions skip the date-prefix check."""
+    (tmp_path / "docs" / "superpowers" / "plans").mkdir(parents=True)
+    (tmp_path / "docs" / "README.md").write_text("# Docs\n", encoding="utf-8")
+    living_log = tmp_path / "docs" / "superpowers" / "plans" / "my-log.md"
+    living_log.write_text("# Living log\n", encoding="utf-8")
+    (tmp_path / ".claude" / "rules").mkdir(parents=True)
+    (tmp_path / ".claude" / "rules" / "docs-lint.yaml").write_text(
+        "schema: h2t_docs_lint_config/v0.1\n"
+        "naming_exceptions:\n"
+        "  - docs/superpowers/plans/my-log.md\n",
+        encoding="utf-8",
+    )
+    findings = _lint_module._collect_all_findings(tmp_path, no_pymarkdown=True)
+    naming = [f for f in findings if f["type"] == "naming" and "my-log" in f["path"]]
+    assert naming == [], f"expected no naming finding for excepted file, got: {naming}"
+
+
+def test_naming_exceptions_glob_pattern(tmp_path):
+    """naming_exceptions supports fnmatch glob patterns."""
+    (tmp_path / "docs" / "superpowers" / "plans").mkdir(parents=True)
+    (tmp_path / "docs" / "README.md").write_text("# Docs\n", encoding="utf-8")
+    (tmp_path / "docs" / "superpowers" / "plans" / "skill-log.md").write_text(
+        "# Log\n", encoding="utf-8"
+    )
+    (tmp_path / ".claude" / "rules").mkdir(parents=True)
+    (tmp_path / ".claude" / "rules" / "docs-lint.yaml").write_text(
+        "schema: h2t_docs_lint_config/v0.1\n"
+        "naming_exceptions:\n"
+        "  - docs/superpowers/plans/*-log.md\n",
+        encoding="utf-8",
+    )
+    findings = _lint_module._collect_all_findings(tmp_path, no_pymarkdown=True)
+    naming = [f for f in findings if f["type"] == "naming" and "skill-log" in f["path"]]
+    assert naming == [], f"expected glob pattern to suppress finding, got: {naming}"
+
+
+def test_naming_exceptions_empty_list_changes_nothing(tmp_path):
+    """naming_exceptions: [] (default) still enforces date prefix."""
+    (tmp_path / "docs" / "superpowers" / "plans").mkdir(parents=True)
+    (tmp_path / "docs" / "README.md").write_text("# Docs\n", encoding="utf-8")
+    (tmp_path / "docs" / "superpowers" / "plans" / "my-log.md").write_text(
+        "# Log\n", encoding="utf-8"
+    )
+    # No docs-lint.yaml → no exceptions
+    findings = _lint_module._collect_all_findings(tmp_path, no_pymarkdown=True)
+    naming = [f for f in findings if f["type"] == "naming" and "my-log" in f["path"]]
+    assert naming, "expected naming finding without exception config"
