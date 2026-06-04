@@ -81,6 +81,11 @@ def register(subparsers: Any) -> None:
     bootstrap.add_argument("--force", action="store_true")
     add_json(bootstrap)
 
+    search = cmds.add_parser("search", help="Discover public channels/users by keyword")
+    search.add_argument("query", nargs="+", help="search keyword (multi-word: telegram search real estate defi)")
+    search.add_argument("--limit", type=int, default=20, help="max results (default 20)")
+    add_json(search)
+
     send_file = cmds.add_parser("send-file", help="Send a file attachment to an entity")
     send_file.add_argument("entity")
     send_file.add_argument("path", help="local file path to send")
@@ -181,4 +186,6 @@ def run(args: Any) -> Any:
                 "telegram delete-message requires --confirm flag to prevent accidental deletion"
             )
         return client.delete_message(args.entity, args.message_id)
+    if cmd == "search":
+        return _rows(client.search_channels(" ".join(args.query), limit=args.limit))
     raise UsageError(f"unknown telegram subcommand: {cmd}")
