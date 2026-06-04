@@ -439,63 +439,71 @@ def test_no_temp_files_no_findings(tmp_path):
     assert result == []
 
 
-def test_temp_file_in_gitignore_no_finding(tmp_path):
-    """Temp file exists but pattern is already in .gitignore → no finding."""
-    (tmp_path / "session_analysis.txt").write_text("")
-    (tmp_path / ".gitignore").write_text("*_analysis.txt\n")
-    result = check_gitignore_hygiene(tmp_path)
+def test_temp_file_git_ignored_no_finding(tmp_path):
+    """Temp file is effectively ignored by git (via git check-ignore) → no finding."""
+    from unittest.mock import patch
+    (tmp_path / "scratch.tmp").write_text("")
+    # Mock _is_ignored_by_git to return True (file already ignored)
+    with patch("docs.gitignore_hygiene._is_ignored_by_git", return_value=True):
+        result = check_gitignore_hygiene(tmp_path)
     assert result == []
 
 
-def test_temp_file_not_in_gitignore_produces_finding(tmp_path):
-    """Temp file at root, pattern not in .gitignore → single finding."""
+def test_temp_file_not_git_ignored_produces_finding(tmp_path):
+    """Temp file at root, not ignored by git → single finding."""
     (tmp_path / "cryo_items.txt").write_text("")
-    (tmp_path / ".gitignore").write_text("*.py\n")
-    result = check_gitignore_hygiene(tmp_path)
+    # Mock _is_ignored_by_git to return False (not ignored)
+    from unittest.mock import patch
+    with patch("docs.gitignore_hygiene._is_ignored_by_git", return_value=False):
+        result = check_gitignore_hygiene(tmp_path)
     assert len(result) == 1
     assert result[0]["type"] == "gitignore_hygiene"
     assert result[0]["severity"] == "info"
     assert "cryo_*.txt" in result[0]["message"]
 
 
+def test_no_temp_files_no_finding(tmp_path):
+    """No temp files at root → no findings regardless of gitignore."""
+    result = check_gitignore_hygiene(tmp_path)
+    assert result == []
+
+
 def test_multiple_missing_patterns_one_finding(tmp_path):
     """Multiple unignored temp files → single consolidated finding."""
     (tmp_path / "scratch.tmp").write_text("")
     (tmp_path / "session_x.txt").write_text("")
-    result = check_gitignore_hygiene(tmp_path)
-    assert len(result) == 1
-    assert "2" in result[0]["message"] or "*.tmp" in result[0]["message"]
-
-
-def test_no_gitignore_file_temp_files_flagged(tmp_path):
-    """No .gitignore at all but temp files present → finding."""
-    (tmp_path / "scratch.tmp").write_text("")
-    result = check_gitignore_hygiene(tmp_path)
+    from unittest.mock import patch
+    with patch("docs.gitignore_hygiene._is_ignored_by_git", return_value=False):
+        result = check_gitignore_hygiene(tmp_path)
     assert len(result) == 1
 
 
 def test_fix_appends_missing_patterns(tmp_path):
     """fix_gitignore_hygiene appends unignored patterns to .gitignore."""
     (tmp_path / "scratch.tmp").write_text("")
-    (tmp_path / ".gitignore").write_text("*.py\n")
-    changes = fix_gitignore_hygiene(tmp_path)
+    from unittest.mock import patch
+    with patch("docs.gitignore_hygiene._is_ignored_by_git", return_value=False):
+        changes = fix_gitignore_hygiene(tmp_path)
     assert len(changes) >= 1
     content = (tmp_path / ".gitignore").read_text()
     assert "*.tmp" in content
 
 
-def test_fix_no_op_when_already_ignored(tmp_path):
-    """fix_gitignore_hygiene does nothing if pattern already in .gitignore."""
+def test_fix_no_op_when_already_git_ignored(tmp_path):
+    """fix_gitignore_hygiene does nothing if git already ignores the file."""
     (tmp_path / "scratch.tmp").write_text("")
-    (tmp_path / ".gitignore").write_text("*.tmp\n")
-    changes = fix_gitignore_hygiene(tmp_path)
+    from unittest.mock import patch
+    with patch("docs.gitignore_hygiene._is_ignored_by_git", return_value=True):
+        changes = fix_gitignore_hygiene(tmp_path)
     assert changes == []
 
 
 def test_fix_creates_gitignore_if_missing(tmp_path):
     """fix_gitignore_hygiene creates .gitignore if it doesn't exist."""
     (tmp_path / "scratch.tmp").write_text("")
-    fix_gitignore_hygiene(tmp_path)
+    from unittest.mock import patch
+    with patch("docs.gitignore_hygiene._is_ignored_by_git", return_value=False):
+        fix_gitignore_hygiene(tmp_path)
     assert (tmp_path / ".gitignore").exists()
     content = (tmp_path / ".gitignore").read_text()
     assert "*.tmp" in content
@@ -505,11 +513,30 @@ def test_fix_preserves_existing_content(tmp_path):
     """fix_gitignore_hygiene preserves pre-existing .gitignore content."""
     (tmp_path / "scratch.tmp").write_text("")
     (tmp_path / ".gitignore").write_text("*.pyc\n__pycache__/\n")
-    fix_gitignore_hygiene(tmp_path)
+    from unittest.mock import patch
+    with patch("docs.gitignore_hygiene._is_ignored_by_git", return_value=False):
+        fix_gitignore_hygiene(tmp_path)
     content = (tmp_path / ".gitignore").read_text()
     assert "*.pyc" in content
     assert "__pycache__/" in content
     assert "*.tmp" in content
+
+
+def test_fix_write_is_atomic(tmp_path):
+    """fix_gitignore_hygiene uses atomic write (temp + os.replace), not in-place."""
+    import os
+    (tmp_path / "scratch.tmp").write_text("")
+    (tmp_path / ".gitignore").write_text("*.py\n")
+    original_replace = os.replace
+    calls = []
+    def tracking_replace(src, dst):
+        calls.append((src, dst))
+        return original_replace(src, dst)
+    from unittest.mock import patch
+    with patch("docs.gitignore_hygiene._is_ignored_by_git", return_value=False):
+        with patch("os.replace", side_effect=tracking_replace):
+            fix_gitignore_hygiene(tmp_path)
+    assert calls, "os.replace should have been called (atomic write)"
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
@@ -523,36 +550,43 @@ Expected: FAIL with `ModuleNotFoundError: No module named 'docs.gitignore_hygien
 - [ ] **Step 3: Create `plugins/h2t-dev/lib/docs/gitignore_hygiene.py`**
 
 ```python
-"""Gitignore hygiene checks: temp files at repo root not covered by .gitignore."""
+"""Gitignore hygiene checks: temp files at repo root not effectively git-ignored."""
 from __future__ import annotations
-import fnmatch
+import os
+import subprocess
+import tempfile
 from pathlib import Path
 
 from docs.root_structure import TEMP_PATTERNS
 
 
-def _read_gitignore_patterns(rp: Path) -> list[str]:
-    gi = rp / ".gitignore"
-    if not gi.exists():
-        return []
-    return [
-        line.strip()
-        for line in gi.read_text(encoding="utf-8").splitlines()
-        if line.strip() and not line.strip().startswith("#")
-    ]
+def _is_ignored_by_git(rp: Path, filename: str) -> bool:
+    """Return True if git considers `filename` (relative to rp) to be ignored.
+
+    Uses git check-ignore which respects all gitignore rules (patterns, negations,
+    anchored rules, inline comments, etc.). Falls back to False if git is unavailable.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "check-ignore", "-q", filename],
+            cwd=str(rp), capture_output=True, timeout=5,
+        )
+        return result.returncode == 0
+    except Exception:
+        return False  # git unavailable — assume not ignored
 
 
 def check_gitignore_hygiene(rp: Path) -> list[dict]:
     """Return a single consolidated finding if temp-pattern files exist at root
-    but their pattern is absent from .gitignore."""
+    but are not effectively ignored by git (any gitignore rule, not just exact match)."""
     from docs.reporter import finding as make_finding
 
-    existing = set(_read_gitignore_patterns(rp))
     missing: list[str] = []
     for pat in TEMP_PATTERNS:
-        if pat in existing:
+        matches = list(rp.glob(pat))
+        if not matches:
             continue
-        if list(rp.glob(pat)):
+        if any(not _is_ignored_by_git(rp, m.name) for m in matches):
             missing.append(pat)
 
     if not missing:
@@ -561,18 +595,19 @@ def check_gitignore_hygiene(rp: Path) -> list[dict]:
     pattern_list = ", ".join(f'"{p}"' for p in missing)
     return [make_finding(
         "gitignore_hygiene", "info", ".gitignore",
-        f"{len(missing)} temp pattern(s) not in .gitignore: {pattern_list} — run fix-safe to add",
+        f"{len(missing)} temp pattern(s) not covered by .gitignore: {pattern_list} — run fix-safe to add",
     )]
 
 
 def fix_gitignore_hygiene(rp: Path) -> list[str]:
-    """Append missing temp patterns to .gitignore. Returns list of 'added: <pat>' strings."""
-    existing = set(_read_gitignore_patterns(rp))
+    """Append missing temp patterns to .gitignore. Atomic write (temp + os.replace).
+    Only adds patterns for files that are NOT already ignored by any gitignore rule."""
     missing: list[str] = []
     for pat in TEMP_PATTERNS:
-        if pat in existing:
+        matches = list(rp.glob(pat))
+        if not matches:
             continue
-        if list(rp.glob(pat)):
+        if any(not _is_ignored_by_git(rp, m.name) for m in matches):
             missing.append(pat)
 
     if not missing:
@@ -583,7 +618,18 @@ def fix_gitignore_hygiene(rp: Path) -> list[str]:
     if text and not text.endswith("\n"):
         text += "\n"
     text += "\n# docs-lint: temp files\n" + "\n".join(missing) + "\n"
-    gi.write_text(text, encoding="utf-8")
+
+    # Atomic write: write to temp file first, then replace (same pattern as fix_frontmatter_action)
+    with tempfile.NamedTemporaryFile(
+        mode="w", encoding="utf-8", dir=gi.parent, delete=False, suffix=".tmp"
+    ) as tf:
+        tf.write(text)
+        tmp_name = tf.name
+    try:
+        os.replace(tmp_name, gi)
+    except Exception:
+        Path(tmp_name).unlink(missing_ok=True)
+        raise
     return [f"added to .gitignore: {p}" for p in missing]
 ```
 
@@ -678,13 +724,25 @@ def test_stale_absolute_path_in_rules_flagged(tmp_path):
     """Absolute path in backtick code span that doesn't exist → stale path finding."""
     rules = tmp_path / ".claude" / "rules"
     rules.mkdir(parents=True)
+    # Use a subpath of tmp_path that we guarantee does not exist
+    nonexistent = str(tmp_path / "does_not_exist_subdir" / "check.py").replace("\\", "/")
     (rules / "documentation.md").write_text(
-        "# Docs\n\nRun `C:/dev/nonexistent-repo/scripts/check.py` to verify.\n"
+        f"# Docs\n\nRun `{nonexistent}` to verify.\n"
     )
     (rules / "linting.md").write_text("")
     result = check_agent_instructions(tmp_path)
     stale = [f for f in result if "stale path" in f["message"]]
     assert stale, f"Expected stale path finding, got: {result}"
+
+
+def test_rules_dir_absent_required_files_still_flagged(tmp_path):
+    """.claude/ exists but .claude/rules/ doesn't → required files still flagged."""
+    (tmp_path / ".claude").mkdir()
+    # No rules/ subdir created
+    result = check_agent_instructions(tmp_path)
+    msgs = [f["message"] for f in result]
+    assert any("documentation.md" in m for m in msgs), f"Expected documentation.md finding: {msgs}"
+    assert any("linting.md" in m for m in msgs), f"Expected linting.md finding: {msgs}"
 
 
 def test_existing_absolute_path_not_flagged(tmp_path):
@@ -760,7 +818,8 @@ _KEBAB_RE = re.compile(r'^[a-z0-9][a-z0-9-]*\.md$')
 # Relative paths are skipped — they can't be reliably resolved without knowing
 # the working directory context. See issue #258 for v4 enhancement.
 _CODE_SPAN_RE = re.compile(r'`([^`\n]{4,200})`')
-_ABS_PATH_RE = re.compile(r'^[A-Za-z]:[\\/]|^/[a-z]')
+# Matches Windows absolute paths (C:\, C:/) and POSIX absolute paths (/Users, /home, //server)
+_ABS_PATH_RE = re.compile(r'^[A-Za-z]:[\\/]|^//|^/[A-Za-z]')
 _SECTION_RE = re.compile(r'^#{1,3}\s+(Key\s+Commands?|Commands?)\b', re.MULTILINE)
 
 
@@ -805,7 +864,14 @@ def check_agent_instructions(rp: Path) -> list[dict]:
         return []
 
     rules_dir = claude_dir / "rules"
-    if rules_dir.exists():
+    # Always check required files — whether rules_dir exists or not
+    if not rules_dir.exists():
+        for req in sorted(_REQUIRED_RULES):
+            findings.append(make_finding(
+                "agent_instructions", "warn", f".claude/rules/{req}",
+                f"missing required rules file: .claude/rules/{req} (rules/ dir absent)",
+            ))
+    else:
         # Required files
         for req in sorted(_REQUIRED_RULES):
             if not (rules_dir / req).exists():
@@ -883,7 +949,13 @@ try:
     from docs.gitignore_hygiene import check_gitignore_hygiene, fix_gitignore_hygiene
     from docs.agent_instructions import check_agent_instructions
     _PROJECT_LAYER_AVAILABLE = True
-except ImportError:
+except ImportError as _e:
+    import warnings as _warnings
+    _warnings.warn(
+        f"docs-lint project layer unavailable (import failed: {_e}). "
+        "Run: uv tool install --editable C:/dev/h2t-skills",
+        RuntimeWarning, stacklevel=1,
+    )
     _PROJECT_LAYER_AVAILABLE = False
 ```
 
@@ -1032,6 +1104,29 @@ def test_agent_instructions_finding_in_collect(tmp_path):
     assert ai, "Expected agent_instructions finding for missing required rules files"
 
 
+def test_fix_safe_cli_adds_gitignore_patterns_when_project_checks_enabled(tmp_path):
+    """fix-safe CLI with project_checks: true adds missing temp patterns to .gitignore."""
+    import sys as _sys
+    import subprocess as _sp3
+    (tmp_path / ".claude" / "rules").mkdir(parents=True)
+    (tmp_path / ".claude" / "rules" / "docs-lint.yaml").write_text(
+        "project_checks: true\n"
+    )
+    # Temp file at root — not git-ignored (no git repo in tmp_path, git check-ignore → fail → not ignored)
+    (tmp_path / "scratch.tmp").write_text("")
+    lint_script = getattr(_lint_module, "__file__", None)
+    if lint_script is None:
+        return
+    result = _sp3.run(
+        [_sys.executable, lint_script, "fix-safe", "--root", str(tmp_path)],
+        capture_output=True, text=True, encoding="utf-8",
+    )
+    assert result.returncode == 0, f"fix-safe should exit 0, got: {result.returncode}. stderr: {result.stderr}"
+    assert (tmp_path / ".gitignore").exists(), ".gitignore should be created by fix-safe"
+    content = (tmp_path / ".gitignore").read_text()
+    assert "*.tmp" in content, ".gitignore should contain *.tmp pattern"
+
+
 def test_doctor_json_summary_includes_project_count(tmp_path):
     """doctor --json summary string includes project issue count when project_checks enabled."""
     import json as _json
@@ -1048,6 +1143,9 @@ def test_doctor_json_summary_includes_project_count(tmp_path):
         [_sys.executable, lint_script, "doctor", "--root", str(tmp_path),
          "--json", "--no-pymarkdown"],
         capture_output=True, text=True, encoding="utf-8",
+    )
+    assert result.returncode in (0, 1), (
+        f"doctor should exit 0 or 1, got {result.returncode}. stderr: {result.stderr[:200]}"
     )
     data = _json.loads(result.stdout)
     assert "project issue" in data["summary"], (
@@ -1247,7 +1345,7 @@ git -C C:/dev/h2t-skills commit -m "feat(docs-lint): wire project-layer checks i
 - [ ] **Step 1: Run bump script**
 
 ```
-python C:/dev/h2t-skills/scripts/bump_plugin.py h2t-dev 1.0.14
+C:/dev/h2t-skills/.venv/Scripts/python C:/dev/h2t-skills/scripts/bump_plugin.py h2t-dev 1.0.14
 ```
 
 Expected output: `h2t-dev bumped to 1.0.14`.
@@ -1255,7 +1353,7 @@ Expected output: `h2t-dev bumped to 1.0.14`.
 - [ ] **Step 2: Verify version in plugin.json**
 
 ```
-python -c "import json; d=json.load(open('C:/dev/h2t-skills/plugins/h2t-dev/.claude-plugin/plugin.json')); print(d['version'])"
+C:/dev/h2t-skills/.venv/Scripts/python -c "import json; d=json.load(open('C:/dev/h2t-skills/plugins/h2t-dev/.claude-plugin/plugin.json')); print(d['version'])"
 ```
 
 Expected: `1.0.14`
@@ -1307,4 +1405,6 @@ git -C C:/dev/h2t-skills commit -m "chore(h2t-dev): bump to v1.0.14 — project-
 
 - **Stale path detection** is conservative: only absolute paths in backtick code spans are checked. Relative paths are not checked (working directory ambiguity). This is intentional for v1 to avoid false positives. See #258 for v4 enhancement.
 - **`_LEGACY_BANNED` skip**: items like `temp/`, `old/` are already caught by `check_repo_root` and skipped in `check_root_structure` to avoid duplicate findings.
-- **`_run_audit` refactor not done**: `_run_audit` currently duplicates some logic from `_collect_all_findings`. A full refactor to make `_run_audit` call `_collect_all_findings` is a separate cleanup — not included here to minimize blast radius.
+- **`_run_audit` duplication (intentional)**: `_run_audit` has always duplicated check calls from `_collect_all_findings` — this is pre-existing design, not introduced here. The new project-layer code follows the same pattern. Future refactor: make `_run_audit` call `_collect_all_findings` and filter by type. Integration test for the audit CLI output is NOT included in this plan — cover it in a follow-up or dogfood run.
+- **gitignore parsing**: `_is_ignored_by_git` uses `git check-ignore` which correctly handles all gitignore rule forms. If git is unavailable (non-git dir), falls back to `False` (assumes not ignored) — meaning findings will be emitted even if a manual .gitignore exists. This is acceptable for v1.
+- **stale path detection**: Only checks absolute paths in backtick code spans. Relative paths are skipped (working directory ambiguity). False positives possible for example paths; false negatives possible for paths not in code spans. See #258 for v4 enhancement.
