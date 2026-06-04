@@ -17,7 +17,7 @@ def _requires_date_prefix(rel_path: str) -> bool:
     return any(d in rel_path for d in _DATE_REQUIRED_SUBDIRS)
 
 
-def check_naming_all_docs(repo_root: Path) -> list[dict]:
+def check_naming_all_docs(repo_root: Path, exclude_dirs: list[str] | None = None) -> list[dict]:
     """
     Check all .md files in docs/ for:
     1. lowercase kebab-case (spaces, uppercase, underscores → finding)
@@ -30,8 +30,16 @@ def check_naming_all_docs(repo_root: Path) -> list[dict]:
     if not docs_dir.exists():
         return []
 
+    _excluded = {(repo_root / d).resolve() for d in (exclude_dirs or [])}
+
+    def _is_excluded(p: Path) -> bool:
+        rp = p.resolve()
+        return any(rp == ex or ex in rp.parents for ex in _excluded)
+
     findings = []
     for md_file in docs_dir.rglob("*.md"):
+        if _is_excluded(md_file):
+            continue
         name = md_file.name
         if name in _ALLOWED_NAMES:
             continue

@@ -28,7 +28,7 @@ def _parse_md_links(text: str, base_dir: Path, docs_dir: Path) -> list[Path]:
     return links
 
 
-def find_orphan_files(repo_root: Path) -> list[dict]:
+def find_orphan_files(repo_root: Path, exclude_dirs: list[str] | None = None) -> list[dict]:
     """
     BFS from docs/README.md. Returns finding dicts for unreachable .md files.
     """
@@ -38,9 +38,15 @@ def find_orphan_files(repo_root: Path) -> list[dict]:
     if not docs_dir.exists():
         return []
 
+    _excluded = {(repo_root / d).resolve() for d in (exclude_dirs or [])}
+
+    def _is_excluded(p: Path) -> bool:
+        rp = p.resolve()
+        return any(rp == ex or ex in rp.parents for ex in _excluded)
+
     readme = docs_dir / "README.md"
     if not readme.exists():
-        orphans = sorted(docs_dir.rglob("*.md"))
+        orphans = [f for f in sorted(docs_dir.rglob("*.md")) if not _is_excluded(f)]
         return [
             make_finding(
                 "orphan",
@@ -69,7 +75,11 @@ def find_orphan_files(repo_root: Path) -> list[dict]:
                 visited.add(resolved)
                 queue.append(resolved)
 
-    all_docs = {f.resolve() for f in docs_dir.rglob("*.md")}
+    all_docs = {
+        f.resolve()
+        for f in docs_dir.rglob("*.md")
+        if not _is_excluded(f)
+    }
     orphans_abs = all_docs - visited
 
     findings = []

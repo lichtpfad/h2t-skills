@@ -14,6 +14,7 @@ _DEFAULTS: dict[str, Any] = {
         "docs/reports",
     ],
     "exceptions": [],
+    "exclude_dirs": [],
     "template": None,
 }
 

@@ -539,3 +539,54 @@ def test_doctor_json_typed_finding_has_template_field(tmp_path):
     assert typed, "expected at least one typed finding in doctor JSON output"
     for f in typed:
         assert f["template"] == "code_repo"
+
+
+def test_exclude_dirs_suppresses_orphan_findings(tmp_path):
+    """Files under excluded dirs don't appear as orphans."""
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "docs" / "README.md").write_text("# Docs\n", encoding="utf-8")
+    (tmp_path / "docs" / "superpowers").mkdir()
+    (tmp_path / "docs" / "superpowers" / "plan.md").write_text(
+        "# Plan\n", encoding="utf-8"
+    )
+    (tmp_path / ".claude" / "rules").mkdir(parents=True)
+    (tmp_path / ".claude" / "rules" / "docs-lint.yaml").write_text(
+        "schema: h2t_docs_lint_config/v0.1\nexclude_dirs:\n  - docs/superpowers\n",
+        encoding="utf-8",
+    )
+    findings = _lint_module._collect_all_findings(tmp_path, no_pymarkdown=True)
+    orphan_paths = [f["path"] for f in findings if f["type"] == "orphan"]
+    assert not any("superpowers" in p for p in orphan_paths), orphan_paths
+
+
+def test_exclude_dirs_suppresses_naming_findings(tmp_path):
+    """Files under excluded dirs don't get naming-convention findings."""
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "docs" / "README.md").write_text("# Docs\n", encoding="utf-8")
+    (tmp_path / "docs" / "superpowers" / "plans").mkdir(parents=True)
+    # Filename without date prefix — would normally trigger naming finding
+    (tmp_path / "docs" / "superpowers" / "plans" / "my-log.md").write_text(
+        "# Log\n", encoding="utf-8"
+    )
+    (tmp_path / ".claude" / "rules").mkdir(parents=True)
+    (tmp_path / ".claude" / "rules" / "docs-lint.yaml").write_text(
+        "schema: h2t_docs_lint_config/v0.1\nexclude_dirs:\n  - docs/superpowers\n",
+        encoding="utf-8",
+    )
+    findings = _lint_module._collect_all_findings(tmp_path, no_pymarkdown=True)
+    naming_paths = [f["path"] for f in findings if f["type"] == "naming"]
+    assert not any("superpowers" in p for p in naming_paths), naming_paths
+
+
+def test_exclude_dirs_empty_list_changes_nothing(tmp_path):
+    """exclude_dirs: [] (default) does not suppress any findings."""
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "docs" / "README.md").write_text("# Docs\n", encoding="utf-8")
+    (tmp_path / "docs" / "superpowers" / "plans").mkdir(parents=True)
+    (tmp_path / "docs" / "superpowers" / "plans" / "my-log.md").write_text(
+        "# Log\n", encoding="utf-8"
+    )
+    # No docs-lint.yaml → exclude_dirs defaults to []
+    findings = _lint_module._collect_all_findings(tmp_path, no_pymarkdown=True)
+    naming_paths = [f["path"] for f in findings if f["type"] == "naming"]
+    assert any("superpowers" in p for p in naming_paths), "expected naming finding without exclusion"
