@@ -10,7 +10,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from h2t_ops.core.errors import AuthError, ConfigError
+from contextlib import contextmanager
+
+from h2t_ops.core.errors import AuthError, ConfigError, ProviderError
 
 
 def test_module_has_no_module_level_telethon_import():
@@ -506,11 +508,6 @@ def test_delete_message_returns_deleted_dict(tmp_path, monkeypatch):
     assert out["message_id"] == 5
     assert out["deleted"] is True
     assert "raw" in out
-
-
-from contextlib import contextmanager
-
-from h2t_ops.core.errors import ProviderError
 
 
 # ── search helpers ────────────────────────────────────────────────────────────
