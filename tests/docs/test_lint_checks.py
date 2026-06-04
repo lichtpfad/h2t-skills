@@ -184,6 +184,15 @@ def test_data_docs_boundary_no_dirs(tmp_path):
     assert check_data_docs_boundary(tmp_path) == []
 
 
+def test_data_docs_boundary_readme_in_data_not_flagged(tmp_path):
+    """README.md in data/ is a directory index, not a misplaced doc — should not be flagged."""
+    data = tmp_path / "data"
+    data.mkdir()
+    (data / "README.md").write_text("# Data\n")
+    result = check_data_docs_boundary(tmp_path)
+    assert result == [], f"README.md in data/ should not be flagged, got: {result}"
+
+
 def test_legacy_main_unknown_repo_uses_cwd_not_all_repos(tmp_path, monkeypatch):
     """When called without args from an unknown repo, must NOT fall back to all 16 repos."""
     import argparse
