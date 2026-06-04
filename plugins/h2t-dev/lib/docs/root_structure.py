@@ -27,8 +27,9 @@ STANDARD_ALLOWLIST: frozenset[str] = frozenset({
     "Cargo.toml", "go.mod",
     # Build / scripts
     "Makefile", "Dockerfile", "docker-compose.yml", "setup.sh",
-    # Superpowers / Claude worktrees
+    # Superpowers / Claude / tool state dirs
     ".worktrees", ".superpowers", ".claude-plugin",
+    ".gstack", ".playwright-mcp", ".artifacts",
     # Misc
     ".env.example",
 })
