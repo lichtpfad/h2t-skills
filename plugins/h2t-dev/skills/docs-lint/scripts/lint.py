@@ -647,7 +647,7 @@ def _run_plan(
             fix = f.get("safe_fix", "")
             print(f"  - {f['path']}: {f['message']}")
             if fix:
-                print(f"    → {fix}")
+                print(f"    -> {fix}")
 
     if structure:
         print("\n## Structure Issues\n")
@@ -658,7 +658,7 @@ def _run_plan(
         print("\n## Misplaced Deliverable Files\n")
         for f in misplaced:
             tracked_note = "" if f.get("is_tracked") else " (untracked — move manually)"
-            print(f"  - {f['path']} → {f['target_path']}{tracked_note}")
+            print(f"  - {f['path']} -> {f['target_path']}{tracked_note}")
         print("\n  Action: run 'docs-lint fix-safe' to git mv tracked files.")
 
     if project:
@@ -698,7 +698,7 @@ def _apply_misplaced_moves(rp: Path, cfg: dict) -> list[str]:
             cwd=str(rp), capture_output=True, text=True,
         )
         if result.returncode == 0:
-            fixes.append(f"git mv {f['path']} → {tgt_path}")
+            fixes.append(f"git mv {f['path']} -> {tgt_path}")
         else:
             fixes.append(f"FAILED: git mv {f['path']}: {result.stderr.strip()[:80]}")
     return fixes
