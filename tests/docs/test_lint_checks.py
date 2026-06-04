@@ -792,3 +792,21 @@ def test_doctor_json_summary_includes_project_count(tmp_path):
         "root_structure", "root_readmes", "gitignore_hygiene", "agent_instructions"
     }]
     assert project_findings, "Expected project layer findings with project_checks: true"
+
+
+def test_collect_all_findings_detects_html_in_docs(tmp_path, monkeypatch):
+    """_collect_all_findings returns misplaced_deliverable finding for HTML in docs/."""
+    import lint
+    from unittest.mock import patch
+
+    (tmp_path / ".claude" / "rules").mkdir(parents=True)
+    yaml_content = "schema: h2t_docs_lint_config/v0.2\nproject_checks: true\n"
+    (tmp_path / ".claude" / "rules" / "docs-lint.yaml").write_text(yaml_content)
+    (tmp_path / "docs" / "research").mkdir(parents=True)
+    (tmp_path / "docs" / "research" / "report.html").write_text("<html/>")
+
+    with patch("docs.misplaced_files._is_tracked", return_value=True):
+        findings = lint._collect_all_findings(tmp_path, no_pymarkdown=True)
+
+    types = [f["type"] for f in findings]
+    assert "misplaced_deliverable" in types

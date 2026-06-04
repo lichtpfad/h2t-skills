@@ -59,6 +59,12 @@ except ImportError as _e:
     )
     _PROJECT_LAYER_AVAILABLE = False
 
+try:
+    from docs.misplaced_files import check_misplaced_deliverables
+    _MISPLACED_FILES_AVAILABLE = True
+except ImportError:
+    _MISPLACED_FILES_AVAILABLE = False
+
 _SUBCOMMANDS = frozenset({"audit", "plan", "fix-safe", "fix-index", "doctor"})
 
 PROJECTS_YAML_PATH = DEV_ROOT / "h2t-landings" / "projects.yaml"
@@ -529,6 +535,10 @@ def _collect_all_findings(rp: Path, no_pymarkdown: bool = False) -> list[dict]:
         all_findings.extend(check_gitignore_hygiene(rp))
         all_findings.extend(check_agent_instructions(rp))
 
+    if _MISPLACED_FILES_AVAILABLE and cfg.get("project_checks"):
+        deliverables_dir = cfg.get("deliverables_dir", "deliverables")
+        all_findings.extend(check_misplaced_deliverables(rp, deliverables_dir))
+
     return all_findings
 
 
@@ -567,11 +577,13 @@ def _run_audit(rp: Path, no_pymarkdown: bool = False) -> None:
 
     if _PROJECT_LAYER_AVAILABLE and cfg.get("project_checks"):
         custom_root_dirs = cfg.get("custom_root_dirs") or []
+        _deliverables_dir = cfg.get("deliverables_dir", "deliverables")
         project_findings = (
             check_root_structure(rp, template=template, custom_root_dirs=custom_root_dirs)
             + (check_root_readmes(rp, template) if template else [])
             + check_gitignore_hygiene(rp)
             + check_agent_instructions(rp)
+            + (check_misplaced_deliverables(rp, _deliverables_dir) if _MISPLACED_FILES_AVAILABLE else [])
         )
     else:
         project_findings = []
