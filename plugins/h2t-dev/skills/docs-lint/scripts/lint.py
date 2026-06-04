@@ -146,10 +146,31 @@ def check_repo_root(rp: Path) -> list[str]:
     for item in items:
         if item.is_dir() and item.name.lower() in _BANNED_ROOT_DIRS:
             failures.append(f"repo root: banned dir '{item.name}/' — remove or archive via git mv")
-    visible = [p for p in items if not p.name.startswith(".")]
-    if len(visible) > _ROOT_MAX_ITEMS:
+    # Count only git-tracked top-level items; fall back to filesystem if not a git repo
+    try:
+        result = subprocess.run(
+            ["git", "ls-files", "--cached", "--", "."],
+            cwd=str(rp),
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode == 0:
+            # Count unique top-level names (first path component) of tracked files
+            tracked = {
+                line.split("/")[0]
+                for line in result.stdout.splitlines()
+                if line and not line.startswith(".")
+            }
+            visible_count = len(tracked)
+        else:
+            raise RuntimeError("git failed")
+    except Exception:
+        # Not a git repo or git unavailable — fall back to filesystem count
+        visible_count = len([p for p in items if not p.name.startswith(".")])
+    if visible_count > _ROOT_MAX_ITEMS:
         failures.append(
-            f"repo root has {len(visible)} items (max {_ROOT_MAX_ITEMS}) — consider consolidating"
+            f"repo root has {visible_count} items (max {_ROOT_MAX_ITEMS}) — consider consolidating"
         )
     return failures
 

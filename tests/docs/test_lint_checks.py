@@ -640,3 +640,35 @@ def test_naming_exceptions_empty_list_changes_nothing(tmp_path):
     findings = _lint_module._collect_all_findings(tmp_path, no_pymarkdown=True)
     naming = [f for f in findings if f["type"] == "naming" and "my-log" in f["path"]]
     assert naming, "expected naming finding without exception config"
+
+
+def test_check_repo_root_excludes_gitignored_files(tmp_path):
+    """Root item count uses git-tracked files, not raw filesystem count."""
+    import subprocess as _sp
+    # Init a git repo
+    _sp.run(["git", "init", str(tmp_path)], capture_output=True)
+    _sp.run(["git", "-C", str(tmp_path), "config", "user.email", "test@test.com"], capture_output=True)
+    _sp.run(["git", "-C", str(tmp_path), "config", "user.name", "Test"], capture_output=True)
+    # Create 8 tracked files
+    for name in ["README.md", "CLAUDE.md", "a.md", "b.md", "c.md", "d.md", "e.md", "f.md"]:
+        (tmp_path / name).write_text("x", encoding="utf-8")
+        _sp.run(["git", "-C", str(tmp_path), "add", name], capture_output=True)
+    _sp.run(["git", "-C", str(tmp_path), "commit", "-m", "init"], capture_output=True)
+    # Create 10 gitignored temp files that push filesystem count above limit
+    (tmp_path / ".gitignore").write_text("*.tmp\n", encoding="utf-8")
+    for i in range(10):
+        (tmp_path / f"temp_{i}.tmp").write_text("x", encoding="utf-8")
+    # Should not trigger "root has N items" since tracked count is 8 (< 12)
+    from lint import check_repo_root
+    result = check_repo_root(tmp_path)
+    count_msgs = [m for m in result if "items (max" in m]
+    assert count_msgs == [], f"expected no count warning, got: {count_msgs}"
+
+
+def test_check_repo_root_fallback_without_git(tmp_path):
+    """Outside a git repo, check_repo_root falls back to filesystem count (no crash)."""
+    from lint import check_repo_root
+    # tmp_path is not a git repo — should not raise
+    result = check_repo_root(tmp_path)
+    # Result is a list (possibly empty), no exception
+    assert isinstance(result, list)
