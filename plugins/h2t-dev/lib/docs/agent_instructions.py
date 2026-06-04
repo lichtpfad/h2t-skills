@@ -16,6 +16,10 @@ def _extract_absolute_code_span_paths(text: str) -> list[str]:
     for m in _CODE_SPAN_RE.finditer(text):
         s = m.group(1).strip()
         if _ABS_PATH_RE.match(s) and ('/' in s or '\\' in s):
+            # Skip POSIX single-segment paths — these are slash commands (/skill, /h2t-ops:cmd),
+            # not filesystem paths. Real POSIX paths have at least two segments (/dir/file).
+            if s.startswith('/') and not s.startswith('//') and s.count('/') < 2:
+                continue
             s = s.rstrip('.,;:)')
             results.append(s)
     return results
