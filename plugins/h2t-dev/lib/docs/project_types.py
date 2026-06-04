@@ -25,7 +25,7 @@ PROJECT_TYPES: dict[str, ProjectTypeSpec] = {
     },
     "client_project": {
         "root_dirs": ["docs", "data", "deliverables", "scripts"],
-        "docs_dirs": ["docs/ops", "docs/research", "docs/deliverables"],
+        "docs_dirs": ["docs/ops", "docs/research"],
         "root_files_required": ["README.md", "CLAUDE.md"],
     },
     "research_project": {
