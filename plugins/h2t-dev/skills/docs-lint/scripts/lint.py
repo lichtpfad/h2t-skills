@@ -458,11 +458,12 @@ def _repo_name_from_root(rp: Path) -> str:
 
 def _collect_all_findings(rp: Path, no_pymarkdown: bool = False) -> list[dict]:
     """Run all checks and return findings list (navigation first, metadata last)."""
-    all_findings = []
-    all_findings.extend(find_orphan_files(rp))
-    all_findings.extend(check_naming_all_docs(rp))
-    extra = REPO_EXTRA_DIRS.get(_repo_name_from_root(rp), [])
     cfg = load_config(rp)
+    exclude_dirs = cfg.get("exclude_dirs") or []
+    all_findings = []
+    all_findings.extend(find_orphan_files(rp, exclude_dirs=exclude_dirs))
+    all_findings.extend(check_naming_all_docs(rp, exclude_dirs=exclude_dirs))
+    extra = REPO_EXTRA_DIRS.get(_repo_name_from_root(rp), [])
     # Coerce to str | None — YAML could set template to a non-string value
     _raw = cfg.get("template")
     template = _raw if isinstance(_raw, str) and _raw.strip() else None
@@ -490,10 +491,11 @@ def _run_audit(rp: Path, no_pymarkdown: bool = False) -> None:
     repo_name = _repo_name_from_root(rp)
     print_header(f"docs-lint audit: {rp}")
 
-    orphans = find_orphan_files(rp)
-    naming = check_naming_all_docs(rp)
-    extra = REPO_EXTRA_DIRS.get(repo_name, [])
     cfg = load_config(rp)
+    exclude_dirs = cfg.get("exclude_dirs") or []
+    orphans = find_orphan_files(rp, exclude_dirs=exclude_dirs)
+    naming = check_naming_all_docs(rp, exclude_dirs=exclude_dirs)
+    extra = REPO_EXTRA_DIRS.get(repo_name, [])
     _raw = cfg.get("template")
     template = _raw if isinstance(_raw, str) and _raw.strip() else None
     typed_msgs = check_project_structure_typed(rp, template) if template else []
