@@ -681,3 +681,114 @@ def test_check_repo_root_fallback_without_git(tmp_path):
     result = check_repo_root(tmp_path)
     # Result is a list (possibly empty), no exception
     assert isinstance(result, list)
+
+
+# --- Project layer integration ---
+
+def test_project_layer_disabled_by_default(tmp_path):
+    """Without project_checks: true, no project-layer findings appear."""
+    (tmp_path / "mystery-tool").mkdir()
+    findings = _lint_module._collect_all_findings(tmp_path, no_pymarkdown=True)
+    project = [f for f in findings if f["type"] in {
+        "root_structure", "root_readmes", "gitignore_hygiene", "agent_instructions"
+    }]
+    assert project == [], f"Project layer should be off by default: {project}"
+
+
+def test_project_layer_enabled_when_config_set(tmp_path):
+    """project_checks: true in docs-lint.yaml enables project-layer findings."""
+    (tmp_path / ".claude" / "rules").mkdir(parents=True)
+    (tmp_path / ".claude" / "rules" / "docs-lint.yaml").write_text(
+        "project_checks: true\n"
+    )
+    (tmp_path / "mystery-tool").mkdir()
+    findings = _lint_module._collect_all_findings(tmp_path, no_pymarkdown=True)
+    project = [f for f in findings if f["type"] == "root_structure"]
+    assert project, "Expected root_structure finding for unknown dir"
+
+
+def test_custom_root_dirs_respected_in_collect(tmp_path):
+    """custom_root_dirs in config suppress root_structure findings for listed items."""
+    (tmp_path / ".claude" / "rules").mkdir(parents=True)
+    (tmp_path / ".claude" / "rules" / "docs-lint.yaml").write_text(
+        "project_checks: true\ncustom_root_dirs:\n  - my-tool\n"
+    )
+    (tmp_path / "my-tool").mkdir()
+    findings = _lint_module._collect_all_findings(tmp_path, no_pymarkdown=True)
+    project = [f for f in findings if f["type"] == "root_structure"]
+    assert project == [], f"my-tool should be allowed via custom_root_dirs: {project}"
+
+
+def test_gitignore_hygiene_finding_in_collect(tmp_path):
+    """Temp file at root with project_checks: true → gitignore_hygiene finding."""
+    (tmp_path / ".claude" / "rules").mkdir(parents=True)
+    (tmp_path / ".claude" / "rules" / "docs-lint.yaml").write_text(
+        "project_checks: true\n"
+    )
+    (tmp_path / "scratch.tmp").write_text("")
+    findings = _lint_module._collect_all_findings(tmp_path, no_pymarkdown=True)
+    gi = [f for f in findings if f["type"] == "gitignore_hygiene"]
+    assert gi, "Expected gitignore_hygiene finding for unignored .tmp file"
+
+
+def test_agent_instructions_finding_in_collect(tmp_path):
+    """Missing .claude/rules/documentation.md with project_checks: true → agent_instructions finding."""
+    (tmp_path / ".claude" / "rules").mkdir(parents=True)
+    (tmp_path / ".claude" / "rules" / "docs-lint.yaml").write_text(
+        "project_checks: true\n"
+    )
+    findings = _lint_module._collect_all_findings(tmp_path, no_pymarkdown=True)
+    ai = [f for f in findings if f["type"] == "agent_instructions"]
+    assert ai, "Expected agent_instructions finding for missing required rules files"
+
+
+def test_fix_safe_cli_adds_gitignore_patterns_when_project_checks_enabled(tmp_path):
+    """fix-safe CLI with project_checks: true adds missing temp patterns to .gitignore."""
+    import sys as _sys
+    import subprocess as _sp3
+    (tmp_path / ".claude" / "rules").mkdir(parents=True)
+    (tmp_path / ".claude" / "rules" / "docs-lint.yaml").write_text(
+        "project_checks: true\n"
+    )
+    (tmp_path / "scratch.tmp").write_text("")
+    lint_script = getattr(_lint_module, "__file__", None)
+    if lint_script is None:
+        return
+    result = _sp3.run(
+        [_sys.executable, lint_script, "fix-safe", "--root", str(tmp_path)],
+        capture_output=True, text=True, encoding="utf-8",
+    )
+    assert result.returncode == 0, f"fix-safe should exit 0, got: {result.returncode}. stderr: {result.stderr}"
+    assert (tmp_path / ".gitignore").exists(), ".gitignore should be created by fix-safe"
+    content = (tmp_path / ".gitignore").read_text()
+    assert "*.tmp" in content, ".gitignore should contain *.tmp pattern"
+
+
+def test_doctor_json_summary_includes_project_count(tmp_path):
+    """doctor --json summary string includes project issue count when project_checks enabled."""
+    import json as _json
+    import sys as _sys
+    import subprocess as _sp2
+    (tmp_path / ".claude" / "rules").mkdir(parents=True)
+    (tmp_path / ".claude" / "rules" / "docs-lint.yaml").write_text(
+        "project_checks: true\n"
+    )
+    lint_script = getattr(_lint_module, "__file__", None)
+    if lint_script is None:
+        return
+    result = _sp2.run(
+        [_sys.executable, lint_script, "doctor", "--root", str(tmp_path),
+         "--json", "--no-pymarkdown"],
+        capture_output=True, text=True, encoding="utf-8",
+    )
+    assert result.returncode in (0, 1), (
+        f"doctor should exit 0 or 1, got {result.returncode}. stderr: {result.stderr[:200]}"
+    )
+    data = _json.loads(result.stdout)
+    assert "project issue" in data["summary"], (
+        f"doctor summary should include project count: {data['summary']}"
+    )
+    project_findings = [f for f in data["findings"] if f["type"] in {
+        "root_structure", "root_readmes", "gitignore_hygiene", "agent_instructions"
+    }]
+    assert project_findings, "Expected project layer findings with project_checks: true"

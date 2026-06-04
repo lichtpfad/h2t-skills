@@ -45,6 +45,20 @@ except ImportError:
     PROJECT_TYPES = {}
     _PROJECT_TYPES_AVAILABLE = False
 
+try:
+    from docs.root_structure import check_root_structure, check_root_readmes
+    from docs.gitignore_hygiene import check_gitignore_hygiene, fix_gitignore_hygiene
+    from docs.agent_instructions import check_agent_instructions
+    _PROJECT_LAYER_AVAILABLE = True
+except ImportError as _e:
+    import warnings as _warnings
+    _warnings.warn(
+        f"docs-lint project layer unavailable (import failed: {_e}). "
+        "Run: uv tool install --editable C:/dev/h2t-skills",
+        RuntimeWarning, stacklevel=1,
+    )
+    _PROJECT_LAYER_AVAILABLE = False
+
 _SUBCOMMANDS = frozenset({"audit", "plan", "fix-safe", "fix-index", "doctor"})
 
 PROJECTS_YAML_PATH = DEV_ROOT / "h2t-landings" / "projects.yaml"
@@ -506,6 +520,15 @@ def _collect_all_findings(rp: Path, no_pymarkdown: bool = False) -> list[dict]:
     for msg in check_frontmatter(rp):
         path = msg.split(":")[0].strip() if ":" in msg else ""
         all_findings.append(finding("frontmatter", "info", path, msg))
+
+    if _PROJECT_LAYER_AVAILABLE and cfg.get("project_checks"):
+        custom_root_dirs = cfg.get("custom_root_dirs") or []
+        all_findings.extend(check_root_structure(rp, template=template, custom_root_dirs=custom_root_dirs))
+        if template:
+            all_findings.extend(check_root_readmes(rp, template))
+        all_findings.extend(check_gitignore_hygiene(rp))
+        all_findings.extend(check_agent_instructions(rp))
+
     return all_findings
 
 
@@ -542,6 +565,21 @@ def _run_audit(rp: Path, no_pymarkdown: bool = False) -> None:
          lambda f: f"  INFO: {f['message']}"),
     ]
 
+    if _PROJECT_LAYER_AVAILABLE and cfg.get("project_checks"):
+        custom_root_dirs = cfg.get("custom_root_dirs") or []
+        project_findings = (
+            check_root_structure(rp, template=template, custom_root_dirs=custom_root_dirs)
+            + (check_root_readmes(rp, template) if template else [])
+            + check_gitignore_hygiene(rp)
+            + check_agent_instructions(rp)
+        )
+    else:
+        project_findings = []
+    sections.append(
+        ("Project Layer", project_findings,
+         lambda f: f"  {f['severity'].upper()}: [{f['type']}] {f['path']} — {f['message']}"),
+    )
+
     total = 0
     for section_name, items, fmt in sections:
         if items:
@@ -571,6 +609,9 @@ def _run_plan(rp: Path, json_output: bool = False) -> None:
     orphans = [f for f in all_findings if f["type"] == "orphan"]
     naming = [f for f in all_findings if f["type"] == "naming"]
     structure = [f for f in all_findings if f["type"] == "structure"]
+    project = [f for f in all_findings if f["type"] in {
+        "root_structure", "root_readmes", "gitignore_hygiene", "agent_instructions"
+    }]
 
     if orphans:
         print("\n## Orphan Files (not linked from any README/index)\n")
@@ -591,7 +632,12 @@ def _run_plan(rp: Path, json_output: bool = False) -> None:
         for f in structure:
             print(f"  - {f['message']}")
 
-    if not orphans and not naming and not structure:
+    if project:
+        print("\n## Project Layer\n")
+        for f in project:
+            print(f"  - [{f['type']}] {f['path']}: {f['message']}")
+
+    if not orphans and not naming and not structure and not project:
         print("\n  No cleanup needed.")
     else:
         print(f"\n  Run 'docs-lint fix-safe' for auto-fixable items.")
@@ -640,6 +686,12 @@ def _run_fix_safe(rp: Path, only: str = "all", plan_file: str | None = None) -> 
         fixes = fix_frontmatter_action(rp)
         for f in fixes:
             print(f"  FIX: {f}")
+    if _PROJECT_LAYER_AVAILABLE:
+        _cfg = load_config(rp)
+        if _cfg.get("project_checks") and only in ("all",):
+            gi_fixes = fix_gitignore_hygiene(rp)
+            for fx in gi_fixes:
+                print(f"  FIX: {fx}")
     print("  Done. Renames/moves require 'docs-lint plan' review and manual action.")
 
 
@@ -764,10 +816,14 @@ def _run_doctor(rp: Path, json_output: bool = False, no_pymarkdown: bool = False
     naming = [f for f in all_findings if f["type"] == "naming"]
     structure = [f for f in all_findings if f["type"] == "structure"]
     frontmatter = [f for f in all_findings if f["type"] == "frontmatter"]
+    project = [f for f in all_findings if f["type"] in {
+        "root_structure", "root_readmes", "gitignore_hygiene", "agent_instructions"
+    }]
     total = len(all_findings)
     summary = (
         f"{len(orphans)} orphan(s), {len(naming)} naming issue(s), "
-        f"{len(structure)} structure issue(s), {len(frontmatter)} metadata issue(s)"
+        f"{len(structure)} structure issue(s), {len(frontmatter)} metadata issue(s), "
+        f"{len(project)} project issue(s)"
     )
     safe_next = "Run 'docs-lint plan' for cleanup plan" if total else "No issues found"
     report = build_report(
