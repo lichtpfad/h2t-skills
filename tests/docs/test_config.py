@@ -48,3 +48,32 @@ def test_empty_config_file_returns_defaults(tmp_path):
     (rules_dir / "docs-lint.yaml").write_text("")
     cfg = load_config(tmp_path)
     assert cfg["docs_root"] == "docs"
+
+
+def test_custom_root_dirs_default_empty(tmp_path):
+    cfg = load_config(tmp_path)
+    assert cfg["custom_root_dirs"] == []
+
+
+def test_project_checks_default_false(tmp_path):
+    cfg = load_config(tmp_path)
+    assert cfg["project_checks"] is False
+
+
+def test_custom_root_dirs_configurable(tmp_path):
+    rules_dir = tmp_path / ".claude" / "rules"
+    rules_dir.mkdir(parents=True)
+    (rules_dir / "docs-lint.yaml").write_text(
+        "custom_root_dirs:\n  - nimbalyst-local\n  - client-tools\n"
+    )
+    cfg = load_config(tmp_path)
+    assert "nimbalyst-local" in cfg["custom_root_dirs"]
+    assert "client-tools" in cfg["custom_root_dirs"]
+
+
+def test_project_checks_configurable(tmp_path):
+    rules_dir = tmp_path / ".claude" / "rules"
+    rules_dir.mkdir(parents=True)
+    (rules_dir / "docs-lint.yaml").write_text("project_checks: true\n")
+    cfg = load_config(tmp_path)
+    assert cfg["project_checks"] is True
