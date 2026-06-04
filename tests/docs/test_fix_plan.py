@@ -5,7 +5,7 @@ from pathlib import Path
 _LIB = Path(__file__).parents[2] / "plugins/h2t-dev/lib"
 sys.path.insert(0, str(_LIB))
 
-from docs.fix_plan import build_fix_plan, _action_id, SCHEMA
+from docs.fix_plan import build_fix_plan, _action_id, SCHEMA, _findings_to_actions
 from docs.reporter import finding
 
 
@@ -131,3 +131,52 @@ def test_multiple_frontmatter_findings_have_distinct_action_ids():
     plan = build_fix_plan(repo_root="/tmp", findings=findings)
     ids = [a["action_id"] for a in plan["actions"]]
     assert len(ids) == len(set(ids)), f"Colliding action_ids: {ids}"
+
+
+def test_misplaced_deliverable_tracked_produces_safe_move_action():
+    findings = [{
+        "type": "misplaced_deliverable",
+        "severity": "warn",
+        "path": "docs/research/report.html",
+        "message": "deliverable file in docs/: docs/research/report.html — move to deliverables/report.html",
+        "target_path": "deliverables/report.html",
+        "is_tracked": True,
+    }]
+    plan = build_fix_plan(repo_root="/tmp/myrepo", findings=findings)
+    assert len(plan["actions"]) == 1
+    a = plan["actions"][0]
+    assert a["type"] == "move_file"
+    assert a["path"] == "docs/research/report.html"
+    assert a["target_path"] == "deliverables/report.html"
+    assert a["risk"] == "safe"
+    assert a["requires_confirmation"] is False
+
+
+def test_misplaced_deliverable_untracked_produces_review_action():
+    findings = [{
+        "type": "misplaced_deliverable",
+        "severity": "warn",
+        "path": "docs/foo.pdf",
+        "message": "deliverable file in docs/: docs/foo.pdf — move to deliverables/foo.pdf",
+        "target_path": "deliverables/foo.pdf",
+        "is_tracked": False,
+    }]
+    plan = build_fix_plan(repo_root="/tmp/myrepo", findings=findings)
+    assert len(plan["actions"]) == 1
+    a = plan["actions"][0]
+    assert a["risk"] == "review"
+    assert a["requires_confirmation"] is True
+
+
+def test_build_fix_plan_includes_move_file_action():
+    findings = [{
+        "type": "misplaced_deliverable",
+        "severity": "warn",
+        "path": "docs/deck.html",
+        "message": "deliverable file in docs/: docs/deck.html — move to deliverables/deck.html",
+        "target_path": "deliverables/deck.html",
+        "is_tracked": True,
+    }]
+    plan = build_fix_plan(repo_root="/tmp/myrepo", findings=findings)
+    assert plan["schema"] == SCHEMA
+    assert any(a["type"] == "move_file" for a in plan["actions"])

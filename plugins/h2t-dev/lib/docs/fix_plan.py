@@ -79,6 +79,20 @@ def _findings_to_actions(findings: list[dict]) -> list[dict]:
                 "requires_confirmation": False,
             })
 
+        elif t == "misplaced_deliverable":
+            target = f.get("target_path")
+            is_tracked = f.get("is_tracked", False)
+            actions.append({
+                "action_id": _action_id("move_file", path, target),
+                "type": "move_file",
+                "status": "proposed",
+                "risk": "safe" if is_tracked else "review",
+                "path": path,
+                "target_path": target,
+                "reason": msg,
+                "requires_confirmation": not is_tracked,
+            })
+
     return actions
 
 
