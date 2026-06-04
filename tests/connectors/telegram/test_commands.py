@@ -33,6 +33,7 @@ def test_parser_registers_all_leaf_verbs():
         ["telegram", "saved-messages"],
         ["telegram", "mentions", "--chat-id", "1"],
         ["telegram", "bootstrap"],
+        ["telegram", "search", "keyword"],
     ]
     for argv in cases:
         ns = parser.parse_args(argv)
@@ -52,6 +53,7 @@ def test_json_flag_available_on_all_leaf_verbs():
         ["telegram", "saved-messages", "--json"],
         ["telegram", "mentions", "--chat-id", "1", "--json"],
         ["telegram", "bootstrap", "--json"],
+        ["telegram", "search", "keyword", "--json"],
     ]
     for argv in cases:
         ns = parser.parse_args(argv)
@@ -345,3 +347,58 @@ def test_delete_message_dispatches_after_confirm(monkeypatch):
     assert calls["entity"] == "me"
     assert calls["message_id"] == 5
     assert result["deleted"] is True
+
+
+def test_parser_registers_search_verb():
+    parser = _build_parser()
+    # nargs="+" joins multi-word queries without shell quoting
+    ns = parser.parse_args(["telegram", "search", "real", "estate", "defi"])
+    assert ns.telegram_cmd == "search"
+    assert ns.query == ["real", "estate", "defi"]
+
+
+def test_search_default_limit_is_20():
+    parser = _build_parser()
+    ns = parser.parse_args(["telegram", "search", "crypto"])
+    assert ns.limit == 20
+
+
+def test_search_accepts_limit_override():
+    parser = _build_parser()
+    ns = parser.parse_args(["telegram", "search", "crypto", "--limit", "5"])
+    assert ns.limit == 5
+
+
+def test_search_json_flag():
+    parser = _build_parser()
+    ns = parser.parse_args(["telegram", "search", "crypto", "--json"])
+    assert ns.as_json is True
+
+
+def test_search_dispatches_to_client(monkeypatch):
+    import h2t_ops.connectors.telegram.client as client_mod
+    from h2t_ops.connectors.telegram import commands as cmds
+
+    calls = {}
+
+    class Stub:
+        def search_channels(self, query, *, limit=20):
+            calls["query"] = query
+            calls["limit"] = limit
+            return [{"type": "channel", "id": 1, "username": "ch", "title": "Ch",
+                      "participants_count": None, "is_channel": True,
+                      "is_megagroup": False, "verified": False}]
+
+    monkeypatch.setattr(client_mod, "TelegramClientAdapter", lambda: Stub())
+    args = SimpleNamespace(
+        telegram_cmd="search",
+        query=["defi", "channels"],  # list from nargs="+"
+        limit=10,
+        as_json=True,
+        fmt="human",
+    )
+    result = cmds.run(args)
+    assert calls["query"] == "defi channels"  # joined by run()
+    assert calls["limit"] == 10
+    assert result["count"] == 1
+    assert result["rows"][0]["type"] == "channel"
