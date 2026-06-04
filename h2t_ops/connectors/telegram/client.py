@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterator
 
-from h2t_ops.core.errors import AuthError, ConfigError
+from h2t_ops.core.errors import AuthError, ConfigError, ProviderError
 
 
 DEFAULT_CONFIG_DIR = Path.home() / ".config" / "telegram"
@@ -212,6 +212,26 @@ class TelegramClientAdapter:
                 hint="Install h2t-ops dependencies with telethon>=1.36,<1.43.",
             ) from exc
         return GetDialogFiltersRequest
+
+    def _search_request_class(self):
+        try:
+            from telethon.tl.functions.contacts import SearchRequest
+        except ImportError as exc:
+            raise ConfigError(
+                "Telethon not installed.",
+                hint="Install h2t-ops dependencies with telethon>=1.36,<1.43.",
+            ) from exc
+        return SearchRequest
+
+    def _flood_wait_error_class(self):
+        try:
+            from telethon.errors import FloodWaitError
+        except ImportError as exc:
+            raise ConfigError(
+                "Telethon not installed.",
+                hint="Install h2t-ops dependencies with telethon>=1.36,<1.43.",
+            ) from exc
+        return FloodWaitError
 
     def _client(self):
         cfg = self._load_config()
@@ -563,3 +583,58 @@ class TelegramClientAdapter:
             "count": count,
             "timestamp_path": str(self.dialogs_bootstrap_file),
         }
+
+    def search_channels(
+        self,
+        query: str,
+        *,
+        limit: int = 20,
+    ) -> list[dict[str, Any]]:
+        """Search public channels/users by keyword via contacts.SearchRequest.
+
+        Fails loud on FloodWait — raises ProviderError with wait_seconds in details.
+        participants_count is None when Telegram returns a partial Channel object.
+        is_channel means broadcast channel (not megagroup); is_megagroup covers supergroups.
+        """
+        search_req_cls = self._search_request_class()
+        flood_wait_cls = self._flood_wait_error_class()
+        try:
+            with self._connected_client() as client:
+                try:
+                    result = client(search_req_cls(q=query, limit=limit))
+                except flood_wait_cls as exc:
+                    wait = getattr(exc, "seconds", 0)
+                    raise ProviderError(
+                        f"FLOOD_WAIT: Telegram requires {wait}s wait before next search",
+                        details={"wait_seconds": wait},
+                    ) from exc
+        except (ValueError, sqlite3.OperationalError) as exc:
+            raise _session_incompatible_error(exc) from exc
+
+        rows: list[dict[str, Any]] = []
+        for chat in (_get_attr(result, "chats", []) or []):
+            is_mega = bool(_get_attr(chat, "megagroup", False))
+            rows.append({
+                "type": "group" if is_mega else "channel",
+                "id": _get_attr(chat, "id"),
+                "username": _get_attr(chat, "username"),
+                "title": _get_attr(chat, "title", "") or "",
+                "participants_count": _get_attr(chat, "participants_count"),  # None = unknown
+                "is_channel": bool(_get_attr(chat, "broadcast", False)),
+                "is_megagroup": is_mega,
+                "verified": bool(_get_attr(chat, "verified", False)),
+            })
+        for user in (_get_attr(result, "users", []) or []):
+            first = _get_attr(user, "first_name", "") or ""
+            last = _get_attr(user, "last_name", "") or ""
+            rows.append({
+                "type": "user",
+                "id": _get_attr(user, "id"),
+                "username": _get_attr(user, "username"),
+                "title": " ".join(p for p in (first, last) if p),
+                "participants_count": None,  # users never have participants_count
+                "is_channel": False,
+                "is_megagroup": False,
+                "verified": bool(_get_attr(user, "verified", False)),
+            })
+        return rows

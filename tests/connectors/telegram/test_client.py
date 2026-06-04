@@ -506,3 +506,185 @@ def test_delete_message_returns_deleted_dict(tmp_path, monkeypatch):
     assert out["message_id"] == 5
     assert out["deleted"] is True
     assert "raw" in out
+
+
+from contextlib import contextmanager
+
+from h2t_ops.core.errors import ConfigError, ProviderError
+
+
+# ── search helpers ────────────────────────────────────────────────────────────
+
+def test_missing_telethon_raises_configerror_for_search_request(tmp_path, monkeypatch):
+    from h2t_ops.connectors.telegram.client import TelegramClientAdapter
+
+    (tmp_path / "config.json").write_text(
+        json.dumps({"api_id": 123, "api_hash": "hash"}), encoding="utf-8"
+    )
+    real_import = builtins.__import__
+
+    def fake_import(name, *args, **kwargs):
+        if name == "telethon.tl.functions.contacts":
+            raise ImportError("missing telethon")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+    client = TelegramClientAdapter(config_dir=tmp_path)
+    with pytest.raises(ConfigError) as ei:
+        client._search_request_class()
+    assert "Telethon" in str(ei.value)
+
+
+def test_missing_telethon_raises_configerror_for_flood_wait(tmp_path, monkeypatch):
+    from h2t_ops.connectors.telegram.client import TelegramClientAdapter
+
+    (tmp_path / "config.json").write_text(
+        json.dumps({"api_id": 123, "api_hash": "hash"}), encoding="utf-8"
+    )
+    real_import = builtins.__import__
+
+    def fake_import(name, *args, **kwargs):
+        if name == "telethon.errors":
+            raise ImportError("missing telethon")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+    client = TelegramClientAdapter(config_dir=tmp_path)
+    with pytest.raises(ConfigError) as ei:
+        client._flood_wait_error_class()
+    assert "Telethon" in str(ei.value)
+
+
+# ── search_channels ───────────────────────────────────────────────────────────
+
+def _make_adapter_with_fake_connection(tmp_path, monkeypatch, fake_client):
+    from h2t_ops.connectors.telegram.client import TelegramClientAdapter
+
+    (tmp_path / "config.json").write_text(
+        json.dumps({"api_id": 123, "api_hash": "hash"}), encoding="utf-8"
+    )
+    adapter = TelegramClientAdapter(config_dir=tmp_path)
+
+    @contextmanager
+    def fake_connected():
+        yield fake_client
+
+    monkeypatch.setattr(adapter, "_connected_client", fake_connected)
+    return adapter
+
+
+def test_search_channels_returns_shaped_rows(tmp_path, monkeypatch):
+    chan = SimpleNamespace(
+        id=100, username="testchan", title="Test Channel",
+        participants_count=500, broadcast=True, megagroup=False, verified=False,
+    )
+    user_obj = SimpleNamespace(
+        id=200, username="testuser", first_name="John", last_name="Doe", verified=True,
+    )
+    fake_result = SimpleNamespace(chats=[chan], users=[user_obj])
+
+    class FakeClient:
+        def __call__(self, req):
+            return fake_result
+
+    class FakeSearchReq:
+        def __init__(self, q, limit):
+            self.q = q
+
+    class FakeFloodWait(Exception):
+        seconds = 0
+
+    adapter = _make_adapter_with_fake_connection(tmp_path, monkeypatch, FakeClient())
+    monkeypatch.setattr(adapter, "_search_request_class", lambda: FakeSearchReq)
+    monkeypatch.setattr(adapter, "_flood_wait_error_class", lambda: FakeFloodWait)
+
+    rows = adapter.search_channels("test query", limit=10)
+    assert len(rows) == 2
+
+    ch = next(r for r in rows if r["id"] == 100)
+    assert ch["type"] == "channel"
+    assert ch["username"] == "testchan"
+    assert ch["title"] == "Test Channel"
+    assert ch["participants_count"] == 500  # attribute present → returned as-is
+    assert ch["is_channel"] is True
+    assert ch["is_megagroup"] is False
+    assert ch["verified"] is False
+
+    usr = next(r for r in rows if r["id"] == 200)
+    assert usr["type"] == "user"
+    assert usr["title"] == "John Doe"
+    assert usr["participants_count"] is None  # users never have participants_count
+    assert usr["is_channel"] is False
+    assert usr["verified"] is True
+
+
+def test_search_channels_megagroup_type(tmp_path, monkeypatch):
+    grp = SimpleNamespace(
+        id=300, username="mygroup", title="My Group",
+        participants_count=None, broadcast=False, megagroup=True, verified=False,
+    )
+    fake_result = SimpleNamespace(chats=[grp], users=[])
+
+    class FakeClient:
+        def __call__(self, req):
+            return fake_result
+
+    class FakeSearchReq:
+        def __init__(self, q, limit): pass
+
+    class FakeFloodWait(Exception):
+        seconds = 0
+
+    adapter = _make_adapter_with_fake_connection(tmp_path, monkeypatch, FakeClient())
+    monkeypatch.setattr(adapter, "_search_request_class", lambda: FakeSearchReq)
+    monkeypatch.setattr(adapter, "_flood_wait_error_class", lambda: FakeFloodWait)
+
+    rows = adapter.search_channels("group")
+    assert rows[0]["type"] == "group"
+    assert rows[0]["is_megagroup"] is True
+    assert rows[0]["is_channel"] is False
+    assert rows[0]["participants_count"] is None  # absent attribute → None, not 0
+
+
+def test_search_channels_raises_provider_error_on_flood_wait(tmp_path, monkeypatch):
+    class FakeFloodWait(Exception):
+        def __init__(self):
+            super().__init__()
+            self.seconds = 42  # instance attribute, matching real Telethon FloodWaitError
+
+    class FakeClient:
+        def __call__(self, req):
+            raise FakeFloodWait()
+
+    class FakeSearchReq:
+        def __init__(self, q, limit): pass
+
+    adapter = _make_adapter_with_fake_connection(tmp_path, monkeypatch, FakeClient())
+    monkeypatch.setattr(adapter, "_search_request_class", lambda: FakeSearchReq)
+    monkeypatch.setattr(adapter, "_flood_wait_error_class", lambda: FakeFloodWait)
+
+    with pytest.raises(ProviderError) as ei:
+        adapter.search_channels("flood test")
+    assert "FLOOD_WAIT" in str(ei.value)
+    assert ei.value.details["wait_seconds"] == 42
+
+
+def test_search_channels_flood_wait_missing_seconds_fallback(tmp_path, monkeypatch):
+    class FakeFloodWait(Exception):
+        pass  # no .seconds attribute — graceful fallback
+
+    class FakeClient:
+        def __call__(self, req):
+            raise FakeFloodWait()
+
+    class FakeSearchReq:
+        def __init__(self, q, limit): pass
+
+    adapter = _make_adapter_with_fake_connection(tmp_path, monkeypatch, FakeClient())
+    monkeypatch.setattr(adapter, "_search_request_class", lambda: FakeSearchReq)
+    monkeypatch.setattr(adapter, "_flood_wait_error_class", lambda: FakeFloodWait)
+
+    with pytest.raises(ProviderError) as ei:
+        adapter.search_channels("flood test")
+    assert "FLOOD_WAIT" in str(ei.value)
+    assert ei.value.details["wait_seconds"] == 0  # fallback when .seconds absent
