@@ -257,12 +257,72 @@ project_checks: true    # NEW: enable project/* layer (default: true)
 
 ---
 
+## Implementation Phases (Codex review 2026-06-04)
+
+Codex review flagged scope overload — split into phases to ship safely:
+
+| Phase | Scope | Notes |
+|-------|-------|-------|
+| **v1 (this plan)** | Deterministic project-layer findings only — no LLM, no apply, no commits | Safe to ship |
+| **v2** | `plan --save` — generate plan file, no execution | Read-only, reviewable |
+| **v3** | `plan --apply` — modify worktree only, no auto-commit; `--commit` explicit flag | Needs dirty-worktree guard |
+| **v4** | LLM advisory mode — disabled by default, `--llm` opt-in; includes agent instructions clarity | Needs provider/timeout/fallback spec |
+| **v5** | Harvest loop — append-only telemetry; `harvest-review` after real data accumulates | Do NOT auto-apply rules |
+
 ## What Is NOT in v1
 
+- `plan --apply` / `plan --save` — deferred to v2/v3
+- LLM judge for unknown root items — deferred to v4; v1 shows unknown items as findings only
+- Agent instructions clarity scoring — deferred to v4
+- Auto-commit behavior — v3+ only, behind explicit `--commit` flag
+- Harvest auto-application to project_types.py / config.py — v5 only
 - Cross-repo batch audit (`--tier product`) — existing h2t-core:project-audit owns this
-- Clarity scoring for non-.claude files (agent prompts, skill SKILL.md)
-- Auto-merge harvest without human approval
 - CI integration / pre-commit hook
+
+## Deferred Design Decisions (preserve context)
+
+Issues flagged by Codex review that must be resolved before v3+:
+
+**plan --apply (v3):**
+- dirty-worktree policy: check `git status --porcelain` before any mutation; abort or `--force` flag
+- plan file path: pick ONE — recommend `docs-lint-plan.yaml` at repo root (in STANDARD_ALLOWLIST, not .claude/)
+- Reject: absolute paths, `..`, symlinks escaping repo, paths under `.git/`
+- Delete actions: require explicit `--allow-delete` flag, never via fix-safe
+- Missing error handling to spec before implementing: duplicate destinations, source-not-exists, case-only rename on Windows/macOS, commit hooks, GPG signing, no git identity
+
+**LLM judge (v4):**
+- Specify: provider (Anthropic Claude haiku for cost), model, timeout (10s), offline fallback (skip + warn)
+- Confidence threshold redesign: 0.8 is fake precision — use structured verdict without numeric confidence
+- Interactive gate: `--interactive` flag required for human escalation; noninteractive default = finding only, no pause
+- Privacy: auditing .claude/* may read sensitive policy — explicit opt-in required
+
+**STANDARD_ALLOWLIST (v1 — fix now):**
+Current list is too small. Before implementing, extend with:
+```python
+# common files
+".editorconfig", ".prettierrc", ".prettierrc.json", ".eslintrc.json",
+"tsconfig.json", "tsconfig.base.json", "pnpm-lock.yaml", "uv.lock",
+"requirements.txt", "setup.py", "setup.cfg", "Cargo.toml", "go.mod",
+"Dockerfile", "docker-compose.yml", ".env.example",
+# common dirs
+"src", "tests", "test", "scripts", "assets", "dist", "build",
+"node_modules", ".venv", ".pytest_cache", "__pycache__",
+```
+Allowlist must distinguish files vs dirs (currently mixes both).
+
+**project_checks default (v1 — fix now):**
+Default must be `false`, not `true`. Opt-in per project via `project_checks: true` in docs-lint.yaml.
+Rationale: changes behavior for all existing projects; validate on opt-in projects first.
+
+**harvest.jsonl location (v5):**
+- Must be per-project (in docs/superpowers/ of audited repo, not shared)
+- Cross-project harvest-review needs explicit glob config, privacy boundary
+- Provenance required: project_id, tool_version, config_version, template_version, human_confirmed
+
+**Stale path regex (v4):**
+Current regex misses backslashes, escaped paths, URLs, env-var paths.
+Replace with: extract markdown link targets + inline code spans; check each against fs.
+Cannot distinguish examples from required paths — needs heuristic (links in "Required:" sections only?).
 
 ---
 
