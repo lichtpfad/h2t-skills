@@ -848,3 +848,75 @@ def test_collect_all_findings_detects_html_in_docs(tmp_path, monkeypatch):
 
     types = [f["type"] for f in findings]
     assert "misplaced_deliverable" in types
+
+
+def test_plan_save_writes_json_file(tmp_path):
+    """plan --save writes fix plan JSON to disk."""
+    import lint
+    import json
+    from unittest.mock import patch
+
+    (tmp_path / ".claude" / "rules").mkdir(parents=True)
+    (tmp_path / ".claude" / "rules" / "docs-lint.yaml").write_text(
+        "schema: h2t_docs_lint_config/v0.2\nproject_checks: true\n"
+    )
+    (tmp_path / "docs" / "research").mkdir(parents=True)
+    (tmp_path / "docs" / "research" / "deck.html").write_text("<html/>")
+
+    plan_file = tmp_path / "plan.json"
+
+    with patch("docs.misplaced_files._is_tracked", return_value=True):
+        lint._run_plan(tmp_path, save_file=str(plan_file))
+
+    assert plan_file.exists()
+    plan = json.loads(plan_file.read_text())
+    assert plan["schema"] == "h2t_docs_fix_plan/v0.1"
+    assert any(a["type"] == "move_file" for a in plan["actions"])
+
+
+def test_run_plan_human_readable_shows_misplaced(tmp_path, capsys):
+    """_run_plan human output shows Misplaced Deliverable Files section."""
+    import lint
+    from unittest.mock import patch
+
+    (tmp_path / ".claude" / "rules").mkdir(parents=True)
+    (tmp_path / ".claude" / "rules" / "docs-lint.yaml").write_text(
+        "schema: h2t_docs_lint_config/v0.2\nproject_checks: true\n"
+    )
+    (tmp_path / "docs" / "research").mkdir(parents=True)
+    (tmp_path / "docs" / "research" / "report.html").write_text("<html/>")
+
+    with patch("docs.misplaced_files._is_tracked", return_value=True):
+        lint._run_plan(tmp_path)
+
+    captured = capsys.readouterr()
+    assert "Misplaced" in captured.out
+    assert "report.html" in captured.out
+
+
+def test_doctor_counts_misplaced_deliverable(tmp_path, capsys):
+    """doctor JSON output counts misplaced_deliverable in project issues."""
+    import lint
+    import json
+    from unittest.mock import patch
+
+    (tmp_path / ".claude" / "rules").mkdir(parents=True)
+    (tmp_path / ".claude" / "rules" / "docs-lint.yaml").write_text(
+        "schema: h2t_docs_lint_config/v0.2\nproject_checks: true\n"
+    )
+    (tmp_path / ".claude" / "rules" / "documentation.md").write_text("# Docs\n")
+    (tmp_path / ".claude" / "rules" / "linting.md").write_text("# Lint\n")
+    (tmp_path / "docs" / "research").mkdir(parents=True)
+    (tmp_path / "docs" / "research" / "report.html").write_text("<html/>")
+
+    with patch("docs.misplaced_files._is_tracked", return_value=True):
+        lint._run_doctor(tmp_path, json_output=True, no_pymarkdown=True)
+
+    captured = capsys.readouterr()
+    report = json.loads(captured.out)
+    project_findings = [
+        f for f in report["findings"]
+        if f["type"] == "misplaced_deliverable"
+    ]
+    assert len(project_findings) == 1
+    assert "1 project issue" in report["summary"]
