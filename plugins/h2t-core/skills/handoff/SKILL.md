@@ -80,26 +80,27 @@ Scan for agent behavioral rules discovered this session. These become candidates
 
 **What does NOT count:** project architecture/tech decisions (→ ADR), one-off requests, business logic.
 
-**Optional JSONL scan** — catches rules from compacted early-session context:
+**JSONL scan** — catches rules from compacted early-session context (grep-only, no full dump):
 
 ```bash
 python -c "
-import os, pathlib, json, sys
+import os, pathlib, json, re
+TRIGGERS = re.compile(r'не делай|не используй|стоп|запомни|договорились|принято|всегда|никогда|правило:|протокол:|важно:|запрет|нельзя|не надо', re.I)
 cwd = os.getcwd().replace('\\\\', '-').replace('/', '-').replace(':', '-').lstrip('-')
 proj = pathlib.Path.home() / '.claude' / 'projects' / cwd
 files = sorted(proj.glob('*.jsonl'), key=os.path.getmtime, reverse=True)
-if not files: sys.exit(0)
-msgs = []
+if not files: exit(0)
+hits = []
 with open(files[0], encoding='utf-8', errors='replace') as f:
     for line in f:
         try:
             obj = json.loads(line)
             if obj.get('type') == 'user':
                 c = obj.get('message', {}).get('content', '')
-                if isinstance(c, str) and len(c) > 10 and not c.startswith('<'):
-                    msgs.append(c[:300])
+                if isinstance(c, str) and TRIGGERS.search(c):
+                    hits.append(c[:200])
         except: pass
-print('\n---\n'.join(msgs[-60:]))
+print('\n---\n'.join(hits))
 " 2>/dev/null || true
 ```
 
