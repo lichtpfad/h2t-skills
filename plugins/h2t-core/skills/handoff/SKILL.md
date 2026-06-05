@@ -4,7 +4,7 @@ description: This skill should be used when the user says "handoff", "завер
 compatibility: "Claude Code"
 metadata:
   author: lichtpfad
-  version: 3.1.3
+  version: 3.1.4
 ---
 
 # Handoff v3.1
@@ -68,6 +68,50 @@ Build ARTIFACT_LIST from session context:
 - Files created: `file:{path}`
 - PRs opened: `pr:{number}`
 
+### Step 4b: Rule promotion scan
+
+Scan for agent behavioral rules discovered this session. These become candidates for `.claude/rules/` (current project only — no global CLAUDE.md writes).
+
+**What counts as a rule candidate:**
+- User corrections about agent behavior: "не делай", "стоп", "не используй X", repeated 1+ times
+- Explicit protocol agreements: "договорились", "принято", "запомни", "всегда", "никогда"
+- Behavioral feedback crystallized into a pattern (same issue corrected ≥2 times)
+- Explicit rule statements: "правило:", "протокол:", "важно:" followed by actionable text
+
+**What does NOT count:** project architecture/tech decisions (→ ADR), one-off requests, business logic.
+
+**Optional JSONL scan** — catches rules from compacted early-session context:
+
+```bash
+python -c "
+import os, pathlib, json, sys
+cwd = os.getcwd().replace('\\\\', '-').replace('/', '-').replace(':', '-').lstrip('-')
+proj = pathlib.Path.home() / '.claude' / 'projects' / cwd
+files = sorted(proj.glob('*.jsonl'), key=os.path.getmtime, reverse=True)
+if not files: sys.exit(0)
+msgs = []
+with open(files[0], encoding='utf-8', errors='replace') as f:
+    for line in f:
+        try:
+            obj = json.loads(line)
+            if obj.get('type') == 'user':
+                c = obj.get('message', {}).get('content', '')
+                if isinstance(c, str) and len(c) > 10 and not c.startswith('<'):
+                    msgs.append(c[:300])
+        except: pass
+print('\n---\n'.join(msgs[-60:]))
+" 2>/dev/null || true
+```
+
+Cross-reference against existing `.claude/rules/*.md` — skip rules already captured there.
+
+For each candidate, record:
+- Concise rule text (1–2 sentences, imperative)
+- Target file: existing file to append to, or new `{category}.md` to create
+- Action: `append` | `create`
+
+Store as RULE_CANDIDATES. If nothing found → empty list (skip Steps 6b–6c entirely).
+
 ### Step 5: Show summary to user
 
 Display before writing. **Follow the format from `references/handoff-example.md` exactly** — use `##` for session name, `###` for sections, bullet list for "Что сделано", checkboxes (`- [ ]`) for "Что передаём", dash list for "Артефакты".
@@ -106,6 +150,36 @@ h2t-handoff write \
 
 Replace all `<...>` with literal values (not shell variables).
 
+### Step 6b: Rule promotion gate
+
+Skip this step if RULE_CANDIDATES is empty.
+
+Show each candidate with exact content and target:
+
+```
+### Rule Promotion — {N} кандидатов
+
+**1.** Не использовать `&&` в Bash tool calls  
+   → append `.claude/rules/bash.md`
+
+**2.** Всегда использовать `git mv`, не `mv`  
+   → create `.claude/rules/git.md`
+
+[ADR-кандидат] Перейти на PostgreSQL — не rule, отложить как ADR
+
+Подтвердить: `all` / `1,2` / `none` — или исправьте текст кандидата
+```
+
+⛔ GATE — wait for user selection before writing any rules.
+
+### Step 6c: Write confirmed rules
+
+For each confirmed rule:
+1. Read target file if it exists — check the rule is not already there (skip duplicates).
+2. If file exists: append `\n{rule_text}\n` after the last line.
+3. If file does not exist: create with header `# {Category} Rules\n\n{rule_text}\n`.
+4. Use Edit/Write tools to make changes; do NOT use shell redirection.
+
 ### Step 7: Confirm
 
 ```
@@ -114,6 +188,7 @@ Replace all `<...>` with literal values (not shell variables).
 ✓ Markdown: {markdown_path}
 ✓ Latest index: {latest_path}
 ✓ Артефактов: {N}
+✓ Правил промотировано: {M} (или "Правил не промотировано" если 0)
 ```
 
 ## Graph Integration
