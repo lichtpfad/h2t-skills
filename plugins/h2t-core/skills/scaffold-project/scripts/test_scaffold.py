@@ -47,15 +47,20 @@ def test_merge_does_not_overwrite_existing_readme(tmp_path):
 
 
 def test_dry_run_merge_shows_merge_flag(tmp_path):
-    (tmp_path / "myproj").mkdir()
+    proj = tmp_path / "myproj"
+    proj.mkdir()
     result = _run("create", "--id", "myproj", "--type", "code-local",
                   "--stack", "python", "--dir", str(tmp_path), "--merge", "--dry-run")
     assert result["status"] == "dry-run"
     assert result.get("merge") is True
+    # dry-run must not create any files
+    assert not (proj / "src").exists()
+    assert not (proj / "README.md").exists()
 
 
 def test_merge_does_not_commit_preexisting_files(tmp_path):
     """In merge mode: only newly scaffolded files are committed, not pre-existing ones."""
+    import subprocess as sp
     proj = tmp_path / "myproj"
     proj.mkdir()
     secret = proj / "secret.txt"
@@ -63,11 +68,10 @@ def test_merge_does_not_commit_preexisting_files(tmp_path):
     _run("create", "--id", "myproj", "--type", "code-local",
          "--stack", "python", "--dir", str(tmp_path), "--merge")
     git_dir = proj / ".git"
-    if git_dir.exists():
-        import subprocess as sp
-        r = sp.run(["git", "-C", str(proj), "show", "--name-only", "HEAD"],
-                   capture_output=True, text=True)
-        assert "secret.txt" not in r.stdout
+    assert git_dir.exists(), "code-local type must always run git init"
+    r = sp.run(["git", "-C", str(proj), "show", "--name-only", "HEAD"],
+               capture_output=True, text=True)
+    assert "secret.txt" not in r.stdout
 
 
 def test_merge_skips_dir_that_is_a_file(tmp_path):
