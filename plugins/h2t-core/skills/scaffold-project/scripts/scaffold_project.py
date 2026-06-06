@@ -12,9 +12,19 @@ import subprocess
 import sys
 from pathlib import Path
 
-# lib path: plugins/h2t-core → plugins → h2t-dev/lib (sibling plugin lib)
+# lib path: source sibling plugins/h2t-dev/lib OR cache lichtpfad/h2t-dev/{latest}/lib
 _SCAFFOLD_SCRIPT = Path(__file__).resolve()
-_H2T_DEV_LIB = _SCAFFOLD_SCRIPT.parents[3].parent / "h2t-dev" / "lib"
+_PLUGIN_ROOT_EARLY = _SCAFFOLD_SCRIPT.parents[3]
+_H2T_DEV_LIB = _PLUGIN_ROOT_EARLY.parent / "h2t-dev" / "lib"  # source
+if not _H2T_DEV_LIB.exists():
+    # Cache: go up to lichtpfad/, find latest h2t-dev version
+    _cache_base = _PLUGIN_ROOT_EARLY.parent.parent / "h2t-dev"
+    if _cache_base.exists():
+        _versions = sorted([p for p in _cache_base.iterdir() if p.is_dir()], reverse=True)
+        for _v in _versions:
+            if (_v / "lib").exists():
+                _H2T_DEV_LIB = _v / "lib"
+                break
 if _H2T_DEV_LIB.exists() and str(_H2T_DEV_LIB) not in sys.path:
     sys.path.insert(0, str(_H2T_DEV_LIB))
 
@@ -243,7 +253,9 @@ def cmd_create(args: argparse.Namespace) -> dict:
             r = _run(["git", "init"], cwd=str(project_dir))
             if r.returncode != 0:
                 return {"status": "error", "error": f"git init failed: {r.stderr.strip()}"}
-            actions.append("git init")
+            # Force main branch regardless of system default
+            _run(["git", "symbolic-ref", "HEAD", "refs/heads/main"], cwd=str(project_dir))
+            actions.append("git init (branch: main)")
 
         if is_merge:
             if created_files:
@@ -310,8 +322,33 @@ _PLUGIN_ROOT = Path(__file__).resolve().parents[3]
 _DEV_ROOT = Path(os.environ.get("H2T_DEV_ROOT", "C:/dev"))
 
 
+def _find_h2t_dev_root() -> Path | None:
+    """Find h2t-dev plugin root — works from source tree and installed cache.
+
+    Source layout:  plugins/h2t-core/../h2t-dev  (sibling under plugins/)
+    Cache layout:   cache/lichtpfad/h2t-core/{ver}/ → cache/lichtpfad/h2t-dev/{latest}/
+    """
+    # Source: _PLUGIN_ROOT.parent is plugins/
+    candidate = _PLUGIN_ROOT.parent / "h2t-dev"
+    if (candidate / "skills").exists():
+        return candidate
+    # Cache: _PLUGIN_ROOT.parent is h2t-core/ (all versions), go up to lichtpfad/
+    cache_base = _PLUGIN_ROOT.parent.parent / "h2t-dev"
+    if cache_base.exists():
+        versions = sorted([p for p in cache_base.iterdir() if p.is_dir()], reverse=True)
+        for v in versions:
+            if (v / "skills").exists():
+                return v
+    return None
+
+
+_H2T_DEV_ROOT = _find_h2t_dev_root()
+
+
 def run_docs_init(repo_name: str, project_dir: Path, *, template: str = "code_repo") -> dict:
-    init_script = _PLUGIN_ROOT.parent / "h2t-dev" / "skills" / "docs-init" / "scripts" / "init.py"
+    if _H2T_DEV_ROOT is None:
+        return {"status": "skip", "reason": "h2t-dev plugin not found"}
+    init_script = _H2T_DEV_ROOT / "skills" / "docs-init" / "scripts" / "init.py"
     if not init_script.exists():
         return {"status": "skip", "reason": "docs-init script not found"}
     r = subprocess.run(
@@ -338,7 +375,9 @@ def run_docs_init(repo_name: str, project_dir: Path, *, template: str = "code_re
 def run_sync_labels(repo_name: str) -> dict:
     if not repo_name:
         return {"status": "skip", "reason": "no repo name"}
-    sync_script = _PLUGIN_ROOT.parent / "h2t-dev" / "skills" / "docs-sync-labels" / "scripts" / "sync_labels.py"
+    if _H2T_DEV_ROOT is None:
+        return {"status": "skip", "reason": "h2t-dev plugin not found"}
+    sync_script = _H2T_DEV_ROOT / "skills" / "docs-sync-labels" / "scripts" / "sync_labels.py"
     if not sync_script.exists():
         return {"status": "skip", "reason": "sync_labels script not found"}
     r = subprocess.run(
