@@ -109,9 +109,24 @@ $H2T_PYTHON "$SCAFFOLD" create \
 Show the `would_create` list from JSON output as a bullet list.
 If `"merge": true` in output → note: "Существующие файлы не будут перезаписаны. Только новые файлы войдут в коммит."
 
-Then ask: "Создаём? (y / да / .)"
+⛔ **HARD GATE — call AskUserQuestion tool now. Do NOT run Step 4 until the user selects "Создать".**
 
-**Do NOT proceed until user confirms.**
+Call AskUserQuestion with:
+```json
+{
+  "questions": [{
+    "question": "Создать проект {id} по плану выше?",
+    "header": "Подтверждение",
+    "options": [
+      {"label": "Создать", "description": "Запустить scaffolding — создать структуру и зарегистрировать"},
+      {"label": "Отмена", "description": "Остановиться, ничего не создавать"}
+    ],
+    "multiSelect": false
+  }]
+}
+```
+
+If user selects "Отмена" — stop immediately. Do NOT continue to Step 4.
 
 ---
 
