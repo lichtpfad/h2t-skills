@@ -1,6 +1,6 @@
 ---
 name: h2t-core:handoff
-description: This skill should be used when the user says "handoff", "завершить сессию", "конец сессии", "wrap up", "закончим", "сохрани сессию", or asks to close/end the current working session. Reconstructs what was done and what remains from conversation context and git history, shows a summary for confirmation, then writes the session record.
+description: This skill should be used when the user says "handoff", "завершить сессию", "конец сессии", "wrap up", "закончим", "сохрани сессию", or asks to close/end the current working session. Reconstructs what was done and what remains from conversation context and git history, shows summary, then writes the session record immediately (no confirmation gate).
 compatibility: "Claude Code"
 metadata:
   author: lichtpfad
@@ -113,9 +113,10 @@ For each candidate, record:
 
 Store as RULE_CANDIDATES. If nothing found → empty list (skip Steps 6b–6c entirely).
 
-### Step 5: Show summary to user
+### Step 5: Show summary + write immediately
 
-Display before writing. **Follow the format from `references/handoff-example.md` exactly** — use `##` for session name, `###` for sections, bullet list for "Что сделано", checkboxes (`- [ ]`) for "Что передаём", dash list for "Артефакты".
+Display summary (no confirmation gate — write immediately after showing).
+**Follow the format from `references/handoff-example.md` exactly** — use `##` for session name, `###` for sections, bullet list for "Что сделано", checkboxes (`- [ ]`) for "Что передаём", dash list for "Артефакты".
 
 ```
 ## Handoff: {SESSION_NAME}
@@ -130,7 +131,7 @@ Display before writing. **Follow the format from `references/handoff-example.md`
 {ARTIFACT_LIST}
 ```
 
-⛔ GATE — Do NOT proceed to Step 6 until user confirms or corrects.
+Proceed immediately to Step 6 — do NOT ask for confirmation.
 
 ### Step 6: Write handoff
 
