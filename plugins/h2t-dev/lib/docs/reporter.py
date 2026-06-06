@@ -20,6 +20,7 @@ def finding(
         "severity": severity,
         "path": path,
         "message": message,
+        "id": f"{type_}:{path}" if path else type_,
     }
     if safe_fix is not None:
         result["safe_fix"] = safe_fix
