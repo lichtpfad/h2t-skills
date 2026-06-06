@@ -190,7 +190,7 @@ def cmd_create(args: argparse.Namespace) -> dict:
         return {"status": "exists", "path": str(project_dir),
                 "message": f"Directory {project_dir} already exists"}
 
-    is_merge = project_dir.exists()
+    is_merge = project_dir.exists() and args.merge
     if not is_merge:
         project_dir.mkdir(parents=True)
         actions = [f"Created {project_dir}"]
