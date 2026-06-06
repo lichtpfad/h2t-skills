@@ -108,3 +108,19 @@ def test_exception_warnings_not_capped(tmp_path):
     )
     msgs = [f["message"] for f in _collect_all_findings(repo)]
     assert any("stale" in m for m in msgs), "stale exception warning was capped away"
+
+
+def test_audit_applies_vendor_filter(tmp_path, capsys):
+    """_run_audit must not output vendor paths."""
+    import sys
+    sys.path.insert(0, str(Path("plugins/h2t-dev/skills/docs-lint/scripts")))
+    from lint import _run_audit
+    repo = _make_repo(tmp_path)
+    (repo / ".venv" / "lib").mkdir(parents=True)
+    (repo / ".venv" / "lib" / "README.md").write_text("vendor\n")
+    try:
+        _run_audit(repo)
+    except SystemExit:
+        pass
+    captured = capsys.readouterr()
+    assert ".venv" not in captured.out, ".venv path leaked into audit output"

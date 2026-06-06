@@ -634,61 +634,37 @@ def _collect_all_findings(rp: Path, no_pymarkdown: bool = False) -> list[dict]:
 
 
 def _run_audit(rp: Path, no_pymarkdown: bool = False) -> None:
-    repo_name = _repo_name_from_root(rp)
     print_header(f"docs-lint audit: {rp}")
+    all_findings = _collect_all_findings(rp, no_pymarkdown=no_pymarkdown)
 
-    cfg = load_config(rp)
-    exclude_dirs = cfg.get("exclude_dirs") or []
-    naming_exceptions = cfg.get("naming_exceptions") or []
-    orphans = find_orphan_files(rp, exclude_dirs=exclude_dirs)
-    naming = check_naming_all_docs(rp, exclude_dirs=exclude_dirs, naming_exceptions=naming_exceptions)
-    extra = REPO_EXTRA_DIRS.get(repo_name, [])
-    _raw = cfg.get("template")
-    template = _raw if isinstance(_raw, str) and _raw.strip() else None
-    typed_msgs = check_project_structure_typed(rp, template) if template else []
-    structure_msgs = (
-        check_structure(rp)
-        + typed_msgs
-        + check_adr_naming(rp)
-        + check_legacy_dirs(rp, extra_dirs=extra)
-        + check_data_docs_boundary(rp)
-        + check_repo_root(rp)
-        + ([] if no_pymarkdown else run_pymarkdownlnt(rp))
-    )
-    frontmatter_msgs = check_frontmatter(rp)
+    orphans   = [f for f in all_findings if f["type"] == "orphan"]
+    naming    = [f for f in all_findings if f["type"] == "naming"]
+    structure = [f for f in all_findings if f["type"] == "structure"]
+    frontmatter = [f for f in all_findings if f["type"] == "frontmatter"]
+    project   = [f for f in all_findings if f["type"] in {
+        "root_structure", "root_readmes", "gitignore_hygiene",
+        "agent_instructions", "misplaced_deliverable",
+    }]
+
+    def _fmt(f: dict) -> str:
+        sev = f.get("severity", "low").upper()[:4]
+        path = f.get("path", "")
+        msg = f.get("message", "")
+        return f"  [{sev}] {path}: {msg}" if path else f"  [{sev}] {msg}"
 
     sections = [
-        ("Navigation / Orphans", orphans, lambda f: f"  WARN: [{f['type']}] {f['path']} — {f['message']}"),
-        ("Naming", naming, lambda f: f"  WARN: [{f['type']}] {f['path']} — {f['message']}"),
-        ("Structure", [finding("structure", "warn", "", m) for m in structure_msgs],
-         lambda f: f"  WARN: {f['message']}"),
-        ("Metadata / Frontmatter", [finding("frontmatter", "info", m.split(":")[0].strip() if ":" in m else "", m) for m in frontmatter_msgs],
-         lambda f: f"  INFO: {f['message']}"),
+        ("Navigation / Orphans", orphans),
+        ("Naming", naming),
+        ("Structure", structure),
+        ("Metadata / Frontmatter", frontmatter),
+        ("Project Layer", project),
     ]
-
-    if _PROJECT_LAYER_AVAILABLE and cfg.get("project_checks"):
-        custom_root_dirs = cfg.get("custom_root_dirs") or []
-        _deliverables_dir = cfg.get("deliverables_dir", "deliverables")
-        project_findings = (
-            check_root_structure(rp, template=template, custom_root_dirs=custom_root_dirs)
-            + (check_root_readmes(rp, template) if template else [])
-            + check_gitignore_hygiene(rp)
-            + check_agent_instructions(rp)
-            + (check_misplaced_deliverables(rp, _deliverables_dir) if _MISPLACED_FILES_AVAILABLE else [])
-        )
-    else:
-        project_findings = []
-    sections.append(
-        ("Project Layer", project_findings,
-         lambda f: f"  {f['severity'].upper()}: [{f['type']}] {f['path']} — {f['message']}"),
-    )
-
     total = 0
-    for section_name, items, fmt in sections:
+    for title, items in sections:
         if items:
-            print(f"\n--- {section_name} ({len(items)}) ---")
+            print(f"\n--- {title} ({len(items)}) ---")
             for item in items:
-                print(fmt(item))
+                print(_fmt(item))
             total += len(items)
 
     print(f"\n{'=' * 60}")
