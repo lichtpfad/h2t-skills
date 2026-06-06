@@ -64,19 +64,27 @@ def detect_template(repo_root: Path) -> str:
     """Detect project template name for an existing repo.
 
     Priority:
-    1. .claude/rules/docs-lint.yaml template field (written by docs-init)
-    2. File-presence heuristics
-    3. Default: code_repo
+    1. .h2t/docs-lint.yaml  project_type field  (v2 — written by scaffold-project)
+    2. .claude/rules/docs-lint.yaml  template field  (legacy — written by docs-init)
+    3. File-presence heuristics
+    4. Default: code_repo
     """
-    cfg = repo_root / ".claude" / "rules" / "docs-lint.yaml"
-    if cfg.exists():
-        # Minimal parse: handles plain/quoted values and inline comments
-        for line in cfg.read_text(encoding="utf-8").splitlines():
-            if line.startswith("template:"):
-                name = line.split(":", 1)[1].strip()
-                name = name.split("#")[0].strip().strip('"\'')
-                if name in PROJECT_TYPES:
-                    return name
+    def _parse_yaml_field(path: Path, field: str) -> str | None:
+        if not path.exists():
+            return None
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if line.startswith(f"{field}:"):
+                val = line.split(":", 1)[1].strip().split("#")[0].strip().strip('"\'')
+                return val if val in PROJECT_TYPES else None
+        return None
+
+    result = _parse_yaml_field(repo_root / ".h2t" / "docs-lint.yaml", "project_type")
+    if result:
+        return result
+
+    result = _parse_yaml_field(repo_root / ".claude" / "rules" / "docs-lint.yaml", "template")
+    if result:
+        return result
 
     if (repo_root / "pyproject.toml").exists() or (repo_root / "setup.py").exists():
         return "code_repo"
