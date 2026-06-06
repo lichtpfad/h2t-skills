@@ -160,7 +160,7 @@ def _run(cmd: list[str], cwd: str | None = None) -> subprocess.CompletedProcess:
 def cmd_create(args: argparse.Namespace) -> dict:
     base = Path(args.dir).expanduser().resolve()
     project_dir = base / args.id
-    type_base = args.type.split("-")[0]   # keep for .gitignore selection (DCC_GITIGNORE)
+    type_base = args.type.split("-")[0]
     template = template_for_type(args.type)
     if _PROJECT_TYPES_AVAILABLE:
         dirs = PROJECT_TYPES.get(template, {}).get("root_dirs", [])
@@ -169,88 +169,119 @@ def cmd_create(args: argparse.Namespace) -> dict:
     is_git = args.type in ("code-github", "code-local")
 
     if args.dry_run:
-        items = [f"mkdir {project_dir}"]
-        items += [f"mkdir {project_dir / d}" for d in dirs]
-        items.append(f"write {project_dir / '.gitignore'}")
-        items.append(f"write {project_dir / 'README.md'}")
-        items.append(f"write {project_dir / 'CLAUDE.md'}")
-        if is_git:
+        items = [f"mkdir {project_dir}"] if not project_dir.exists() else []
+        for d in dirs:
+            if not (project_dir / d).exists():
+                items.append(f"mkdir {project_dir / d}")
+        for fname in (".gitignore", "README.md", "CLAUDE.md"):
+            if not (project_dir / fname).exists():
+                items.append(f"write {project_dir / fname}")
+        if is_git and not (project_dir / ".git").exists():
             items.append(f"git init {project_dir}")
-            items.append("initial commit (chore: initial scaffold)")
-        return {"status": "dry-run", "path": str(project_dir), "would_create": items}
+            items.append("initial commit (chore: initial scaffold) — new files only")
+        return {
+            "status": "dry-run",
+            "merge": project_dir.exists(),
+            "path": str(project_dir),
+            "would_create": items,
+        }
 
-    # Check if already exists
-    if project_dir.exists():
+    if project_dir.exists() and not args.merge:
         return {"status": "exists", "path": str(project_dir),
                 "message": f"Directory {project_dir} already exists"}
 
-    project_dir.mkdir(parents=True)
-    actions = [f"Created {project_dir}"]
+    is_merge = project_dir.exists()
+    if not is_merge:
+        project_dir.mkdir(parents=True)
+        actions = [f"Created {project_dir}"]
+        status_key = "ok"
+    else:
+        actions = [f"Merging into existing {project_dir}"]
+        status_key = "merged"
+
+    created_files: list[str] = []
 
     for d in dirs:
-        (project_dir / d).mkdir(exist_ok=True)
+        dp = project_dir / d
+        if dp.is_dir():
+            continue
+        if dp.exists():
+            actions.append(f"Skipped {d}/ — path exists as file, not dir")
+            continue
+        dp.mkdir(exist_ok=True)
         actions.append(f"Created {project_dir / d}")
 
-    # .gitignore
-    if type_base == "dcc":
-        gitignore_content = DCC_GITIGNORE
-    else:
-        gitignore_content = GITIGNORE_TEMPLATES.get(args.stack or "none",
-                                                     GITIGNORE_TEMPLATES["none"])
-    (project_dir / ".gitignore").write_text(gitignore_content, encoding="utf-8")
-    actions.append("Created .gitignore")
+    gi_path = project_dir / ".gitignore"
+    if not gi_path.exists():
+        gi_content = DCC_GITIGNORE if type_base == "dcc" else GITIGNORE_TEMPLATES.get(
+            args.stack or "none", GITIGNORE_TEMPLATES["none"]
+        )
+        gi_path.write_text(gi_content, encoding="utf-8")
+        actions.append("Created .gitignore")
+        created_files.append(".gitignore")
 
-    # README.md
     desc = args.description or "TODO"
-    (project_dir / "README.md").write_text(
-        README_TEMPLATE.format(id=args.id, description=desc), encoding="utf-8"
-    )
-    actions.append("Created README.md")
+    readme_path = project_dir / "README.md"
+    if not readme_path.exists():
+        readme_path.write_text(README_TEMPLATE.format(id=args.id, description=desc), encoding="utf-8")
+        actions.append("Created README.md")
+        created_files.append("README.md")
 
-    # CLAUDE.md
-    stack_display = args.stack if (args.stack and args.stack != "none") else "N/A"
-    (project_dir / "CLAUDE.md").write_text(
-        CLAUDE_MD_TEMPLATE.format(
-            id=args.id, description=desc, stack_display=stack_display
-        ),
-        encoding="utf-8",
-    )
-    actions.append("Created CLAUDE.md")
+    claude_path = project_dir / "CLAUDE.md"
+    if not claude_path.exists():
+        stack_display = args.stack if (args.stack and args.stack != "none") else "N/A"
+        claude_path.write_text(
+            CLAUDE_MD_TEMPLATE.format(id=args.id, description=desc, stack_display=stack_display),
+            encoding="utf-8",
+        )
+        actions.append("Created CLAUDE.md")
+        created_files.append("CLAUDE.md")
 
-    # git init + initial commit
     if is_git:
-        r = _run(["git", "init"], cwd=str(project_dir))
-        if r.returncode != 0:
-            return {"status": "error", "error": f"git init failed: {r.stderr.strip()}"}
-        actions.append("git init")
+        needs_init = not (project_dir / ".git").exists()
+        if needs_init:
+            r = _run(["git", "init"], cwd=str(project_dir))
+            if r.returncode != 0:
+                return {"status": "error", "error": f"git init failed: {r.stderr.strip()}"}
+            actions.append("git init")
 
-        _run(["git", "add", "."], cwd=str(project_dir))
-        r2 = _run(["git", "commit", "-m", "chore: initial scaffold"], cwd=str(project_dir))
-        if r2.returncode == 0:
-            actions.append("Initial commit: chore: initial scaffold")
+        if is_merge:
+            if created_files:
+                _run(["git", "add", "--"] + created_files, cwd=str(project_dir))
+                r2 = _run(["git", "commit", "-m", "chore: scaffold merge — add missing files"],
+                          cwd=str(project_dir))
+                if r2.returncode == 0:
+                    actions.append("Committed scaffold files (merge — new files only)")
+                else:
+                    actions.append(f"Commit skipped: {r2.stderr.strip()}")
+            else:
+                actions.append("No new files — commit skipped")
         else:
-            actions.append(f"Initial commit skipped: {r2.stderr.strip()}")
+            _run(["git", "add", "."], cwd=str(project_dir))
+            r2 = _run(["git", "commit", "-m", "chore: initial scaffold"], cwd=str(project_dir))
+            if r2.returncode == 0:
+                actions.append("Initial commit: chore: initial scaffold")
+            else:
+                actions.append(f"Initial commit skipped: {r2.stderr.strip()}")
 
-    if not args.dry_run:
-        di = run_docs_init(args.id, project_dir, template=template)
-        actions.append(f"docs-init: {di['status']}")
-        if di["status"] == "error":
-            return {"status": "error", "error": f"docs-init failed: {di['error']}"}
+    di = run_docs_init(args.id, project_dir, template=template)
+    actions.append(f"docs-init: {di['status']}")
+    if di["status"] == "error":
+        return {"status": "error", "error": f"docs-init failed: {di['error']}"}
 
-    if is_git and not args.dry_run:
+    if is_git:
         ih = install_hooks(project_dir)
         actions.append(f"install-hooks: {ih['status']}")
 
-    if not args.dry_run:
-        write_setup_report(
-            project_dir=project_dir,
-            project_id=args.id,
-            template=template,
-            status="ok",
-            actions=actions,
-        )
+    write_setup_report(
+        project_dir=project_dir,
+        project_id=args.id,
+        template=template,
+        status=status_key,
+        actions=actions,
+    )
 
-    return {"status": "ok", "path": str(project_dir), "actions": actions}
+    return {"status": status_key, "path": str(project_dir), "actions": actions}
 
 
 def cmd_github(args: argparse.Namespace) -> dict:
@@ -371,7 +402,10 @@ def install_hooks(project_dir: Path) -> dict:
     claude_dir.mkdir(exist_ok=True)
     settings_path = claude_dir / "settings.json"
     if settings_path.exists():
-        data = json.loads(settings_path.read_text(encoding="utf-8"))
+        try:
+            data = json.loads(settings_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            data = {}
     else:
         data = {}
     hooks = data.setdefault("hooks", {})
@@ -403,6 +437,8 @@ def main() -> None:
     p_create.add_argument("--dir", required=True)
     p_create.add_argument("--description", default="")
     p_create.add_argument("--dry-run", action="store_true")
+    p_create.add_argument("--merge", action="store_true",
+                          help="Supplement existing directory — idempotent, skip existing files")
 
     p_gh = sub.add_parser("github")
     p_gh.add_argument("--github", required=True, help="owner/repo")
