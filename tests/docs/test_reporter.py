@@ -67,3 +67,19 @@ def test_status_from_findings_error():
     assert status_from_findings(
         [finding("broken", "error", "x.md", "msg")]
     ) == "fail"
+
+
+def test_finding_has_id_with_path():
+    f = finding("orphan", "warn", "docs/plans/foo.md", "orphan file")
+    assert f["id"] == "orphan:docs/plans/foo.md"
+
+
+def test_finding_has_id_without_path():
+    f = finding("structure", "warn", "", "missing dir: docs/adr/")
+    assert f["id"] == "structure"
+
+
+def test_finding_id_stable_across_calls():
+    f1 = finding("naming", "warn", "docs/adr/_foo.md", "underscore")
+    f2 = finding("naming", "warn", "docs/adr/_foo.md", "underscore")
+    assert f1["id"] == f2["id"]
