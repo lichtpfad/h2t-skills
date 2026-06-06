@@ -114,7 +114,7 @@ def _apply_exceptions(findings: list[dict], exceptions: list) -> list[dict]:
     for f in findings:
         fp = f.get("path", "").rstrip("/")
         covered = any(
-            fp == ep or fp.startswith(ep + "/") or fp.startswith(ep)
+            fp == ep or fp.startswith(ep + "/")
             for ep in exception_paths if ep
         )
         if not covered:
