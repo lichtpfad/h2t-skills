@@ -67,6 +67,80 @@ except ImportError:
 
 _SUBCOMMANDS = frozenset({"audit", "plan", "fix-safe", "fix-index", "doctor"})
 
+_VENDOR_EXCLUDE = {
+    ".venv", "venv", "node_modules", "__pycache__", "dist", "build",
+    ".git", ".mypy_cache", ".pytest_cache", ".ruff_cache",
+}
+_DIM_LIMIT = 50
+
+_SEVERITY_MAP = {
+    "error": "critical",
+    "warn": "important",
+    "info": "low",
+    "critical": "critical",
+    "important": "important",
+    "low": "low",
+}
+
+
+def _is_vendor_path(path: str) -> bool:
+    if not path:
+        return False
+    return any(part in _VENDOR_EXCLUDE for part in Path(path).parts)
+
+
+def _is_vendor_message(message: str) -> bool:
+    """Catch vendor paths embedded in message when path field is empty."""
+    return any(f"/{v}/" in message or message.startswith(v + "/")
+               for v in _VENDOR_EXCLUDE)
+
+
+def _apply_exceptions(findings: list[dict], exceptions: list) -> list[dict]:
+    """Remove findings whose path matches a documented exception.
+
+    Handles both dict exceptions (new) and string exceptions (legacy).
+    """
+    exception_paths: set[str] = set()
+    for exc in exceptions:
+        if isinstance(exc, str):
+            exception_paths.add(exc.rstrip("/"))
+        elif isinstance(exc, dict):
+            p = exc.get("path", "").rstrip("/")
+            if p:
+                exception_paths.add(p)
+    if not exception_paths:
+        return findings
+    result = []
+    for f in findings:
+        fp = f.get("path", "").rstrip("/")
+        covered = any(
+            fp == ep or fp.startswith(ep + "/") or fp.startswith(ep)
+            for ep in exception_paths if ep
+        )
+        if not covered:
+            result.append(f)
+    return result
+
+
+def _cap_by_dimension(findings: list[dict], limit: int = _DIM_LIMIT) -> list[dict]:
+    """Keep at most `limit` findings per type, preserving order."""
+    counts: dict[str, int] = {}
+    result = []
+    for f in findings:
+        t = f["type"]
+        if counts.get(t, 0) < limit:
+            result.append(f)
+            counts[t] = counts.get(t, 0) + 1
+    return result
+
+
+def _normalize_severities(findings: list[dict]) -> list[dict]:
+    """Map legacy severity values (warn/info/error) to spec values (critical/important/low)."""
+    for f in findings:
+        f["severity"] = _SEVERITY_MAP.get(f.get("severity", "info"), "low")
+    return findings
+
+
 PROJECTS_YAML_PATH = DEV_ROOT / "h2t-landings" / "projects.yaml"
 
 YAML_FLAG_CHECKS: dict[str, str] = {
@@ -539,6 +613,23 @@ def _collect_all_findings(rp: Path, no_pymarkdown: bool = False) -> list[dict]:
         deliverables_dir = cfg.get("deliverables_dir", "deliverables")
         all_findings.extend(check_misplaced_deliverables(rp, deliverables_dir))
 
+    # Post-processing pipeline
+    # 1. Severity normalization (warn/info → important/low)
+    _normalize_severities(all_findings)
+    # 2. Vendor path filter — by path field AND by message content
+    all_findings = [
+        f for f in all_findings
+        if not _is_vendor_path(f.get("path", ""))
+        and not (not f.get("path") and _is_vendor_message(f.get("message", "")))
+    ]
+    # 3. Exception filter (dict and string exceptions)
+    cfg_exceptions = cfg.get("exceptions") or []
+    all_findings = _apply_exceptions(all_findings, cfg_exceptions)
+    # 4. Dimension cap (exception warnings appended after cap so they survive)
+    all_findings = _cap_by_dimension(all_findings)
+    # 5. Exception warnings — appended AFTER cap so they are never dropped
+    from docs.config import get_exception_warnings
+    all_findings.extend(get_exception_warnings(cfg_exceptions, rp))
     return all_findings
 
 
