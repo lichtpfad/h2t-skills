@@ -3,6 +3,7 @@ title: "docs-lint v2: Full Audit + Maintenance Pipeline"
 status: approved
 owner: stanislav
 date: 2026-06-06
+revised: 2026-06-06
 ---
 
 # docs-lint v2: Full Audit + Maintenance Pipeline
@@ -23,6 +24,22 @@ A single skill invocation that:
 3. Either runs a full multi-angle audit → plan → issues → fixes, or runs maintenance lint
 4. Validates results with a script gate, not the model
 
+## Scope
+
+**This skill is scoped to h2t-stack repos** — projects using Claude Code, `.claude/rules/`,
+`docs/superpowers/`, and h2t standards. It is not a general-purpose docs linter.
+
+**In scope:**
+- Rewrite of `SKILL.md` — new pipeline instructions
+- Extension of `lint.py` — stable finding IDs, `.h2t/docs-lint.yaml` exceptions, per-dimension limits
+- New `references/non-standard-resolution.md` — decision tree doc for model
+
+**Out of scope:**
+- lint.py rewrite from scratch — extend only; existing checks stay unchanged
+- Standards changes — ADD PROJECT TYPE outcome creates a PR proposal, doesn't auto-merge
+- CI integration — future milestone
+- Non-Claude-Code / non-h2t repos
+
 ---
 
 ## Architecture
@@ -39,7 +56,7 @@ A single skill invocation that:
        │
        ▼
   [Gate — ONE question]
-  «Стадия: (1) наводим порядок  (2) зрелый проект»
+  Stage: (1) cleanup  (2) mature  (3) greenfield  (4) archived/read-only
        │
       / \
      /   \
@@ -47,7 +64,7 @@ A single skill invocation that:
 [Full   [Maintenance]
 Audit]   lint.py audit
          safe-fixes авто
-         show delta vs last .h2t-lint-state.jsonl
+         show delta vs last .h2t/lint-state.jsonl
          done
     │
     ▼
@@ -60,7 +77,10 @@ Audit]   lint.py audit
 [Write plan + commit]
     │
     ▼
-[Create GitHub issues]   — immediately, not "later"
+[Pre-flight checks]      — before any writes or issues
+    │
+    ▼
+[Create GitHub issues]   — critical + important only
     │
     ▼
 [Apply safe-fixes auto, destructive with confirm]
@@ -69,7 +89,7 @@ Audit]   lint.py audit
 [Validation Gate]        — script, not model
     │
     ▼
-[Append .h2t-lint-state.jsonl]
+[Append .h2t/lint-state.jsonl]
 ```
 
 ---
@@ -87,18 +107,34 @@ Sources read automatically (no user input):
 | `.claude/rules/` | Agent instructions presence |
 | `lint.py doctor --json` | Mechanical findings in ~2s |
 
-Model outputs exactly 3 lines:
+**Project type autodetect precedence** (first match wins):
+1. `.h2t/docs-lint.yaml` `project_type` field — explicit override
+2. `CLAUDE.md` — look for `type:` or project description keywords
+3. `pyproject.toml` / `package.json` — stack type
+4. Directory structure heuristics (presence of `plugins/`, `src/`, `hta/`, etc.)
+5. Default: `unknown`
+
+**Lifecycle stage gate options** — model suggests, user confirms one:
+- `(1) cleanup` — organic-grow, structural chaos, needs full audit
+- `(2) mature` — stable structure, maintenance lint only
+- `(3) greenfield` — new repo, minimal content, setup-focused audit
+- `(4) archived` — read-only, skip destructive suggestions entirely
+
+Model outputs exactly 3 lines before the gate question:
 ```
 Тип: Python-инструмент, organic-grow
 Состояние: docs частичные, code layout нестандартный, agent instructions отсутствуют
-Сигнал: хаос → рекомендую full audit
+Сигнал: хаос → рекомендую (1) cleanup
 ```
 
 ---
 
 ## Audit Dimensions (Full mode)
 
-Model loads references from `references/` on demand. All 8 dimensions run:
+Model loads references from `references/` on demand. Per-dimension limits: max 50
+findings per dimension, skip binary/vendor/generated paths (`.venv/`, `node_modules/`,
+`__pycache__/`, `*.pyc`, `dist/`, `build/`). Timeout per dimension: 30s script, no
+model timeout (model reads pre-fetched data).
 
 | # | Dimension | Source | What it checks |
 |---|---|---|---|
@@ -117,11 +153,14 @@ Model adds **semantic layer on top of scripts** — e.g. "CLAUDE.md mentions Pha
 current but git log shows it closed 3 weeks ago" or "docs/README.md exists but 5 of 9
 plans are unindexed."
 
+If references are missing from `references/`, the model skips that dimension and logs:
+`[dim-N] reference missing — skipped`.
+
 ---
 
 ## Non-Standard Dirs/Files (Dimension 8)
 
-Everything not in the standard project template is evaluated:
+Everything not in the standard project template for the detected project type is evaluated:
 
 ```
 Found non-standard path
@@ -130,7 +169,7 @@ Found non-standard path
    Is it needed?
    (git activity last 30d + content scan)
        / \
-     Yes   No → DELETE (confirm)
+     Yes   No → DELETE (confirm, archived stage: skip)
      │
      ▼
   Covered by standard?
@@ -140,32 +179,180 @@ Found non-standard path
     ▼          ▼
  Misplaced   Project-specific?
  → MOVE           / \
-   (confirm)    Yes   No → repeats across repos?
-                │              │
-                ▼              ▼
-           EXCEPTION      ADD PROJECT TYPE
-           (.h2t/         (PR to h2t-skills
-           docs-lint.yaml) standards/)
+   (confirm +    Yes   No → repeats across h2t repos?
+    dep check)   │              │
+                 ▼              ▼
+            EXCEPTION      ADD PROJECT TYPE
+            (.h2t/         (PR proposal only,
+            docs-lint.yaml) not auto-merged)
 ```
 
-Four outcomes: **DELETE / MOVE / EXCEPTION / ADD PROJECT TYPE**
+**MOVE pre-checks before confirming:**
+- `grep -r "path" .` import/reference search (skip if > 1000 results)
+- Check if file is generated (in .gitignore, build output)
+- Check for symlinks, submodules
 
-EXCEPTION is stored in `.h2t/docs-lint.yaml` (machine-readable, parsed by lint.py):
+**EXCEPTION format** in `.h2t/docs-lint.yaml`:
 
 ```yaml
 # .h2t/docs-lint.yaml
+project_type: td-tool   # override if autodetect wrong
+
 exceptions:
   - path: benchmark_results/
     reason: "TD performance operational data, updated live"
     type: operational_data
+    reviewed: 2026-06-06   # updated each time exception is confirmed
   - path: setlists/
     reason: "performance setlists archive"
     type: archive
-
-project_type: td-tool   # override if autodetect wrong
+    reviewed: 2026-06-06
 ```
 
-lint.py reads this file and skips documented exceptions silently.
+lint.py reads `.h2t/docs-lint.yaml` and skips documented exceptions. Exceptions without
+`reviewed` field within last 90 days emit a `[P2] stale exception` warning. Exceptions
+whose `path` no longer exists emit `[P1] orphan exception — remove from config`.
+
+---
+
+## Pre-flight Checks (before any writes)
+
+Before writing plan file, creating issues, or applying fixes:
+
+```bash
+# 1. Dirty worktree check
+git status --porcelain | grep -v '^??' | head -1
+# If non-empty: warn "Uncommitted changes detected — plan file will be committed
+# alongside existing changes. Continue? (y/n)"
+
+# 2. gh auth check (only if GitHub issues requested)
+gh auth status 2>/dev/null || echo "GH_AUTH_FAILED"
+# If failed: skip GitHub issues, note in report
+
+# 3. Branch check
+git branch --show-current
+# If main/master: warn "About to commit to main. Continue? (y/n)"
+
+# 4. Duplicate issue check (only if GH auth ok)
+gh issue list --label "type:docs-lint" --json number,title --limit 20 2>/dev/null
+# If similar title found: show existing issue, ask "Update existing or create new?"
+```
+
+---
+
+## GitHub Issues
+
+Created for `critical` and `important` findings only. One issue per dimension (grouped).
+
+**Label spec:**
+- `type:docs-lint` — always applied (created if missing: `gh label create "type:docs-lint" --color "0075ca"`)
+- `priority:p0` for critical, `priority:p1` for important
+- Standard h2t labels from `docs/standards/labels.json` — if label missing, create it
+
+**Issue title format:** `{repo-short}: [docs-lint] {dimension} — {N} findings`
+
+**Dry-run mode:** if `--dry-run` flag passed to skill, print issues to stdout instead
+of creating them.
+
+---
+
+## Safe Fixes — Invariants
+
+Applied automatically (no confirmation needed):
+
+| Fix | Idempotency rule |
+|---|---|
+| Create missing dirs | `mkdir -p` — no-op if exists |
+| Add frontmatter | Only if file has no `---` block at line 1; never overwrites existing |
+| fix-index rebuild | Only touches content between `<!-- h2t-index-start -->` markers |
+
+**Not safe** (always require confirmation): rename, move, delete, rewrite README outside markers.
+
+---
+
+## Validation Gate
+
+lint.py exposes stable finding IDs in `doctor --json` output:
+```json
+{"findings": [{"id": "orphan:docs/plans/foo.md", "severity": "important", ...}]}
+```
+
+IDs are `{check_type}:{path}` — deterministic, stable across runs.
+
+```bash
+# Before fixes
+lint.py doctor --json --root . > .h2t/lint-before.json
+
+# safe-fixes applied by lint.py fix-safe + model-guided destructive actions
+
+# After fixes — jq delta using stable IDs
+jq -n \
+  --slurpfile before .h2t/lint-before.json \
+  --slurpfile after .h2t/lint-after.json \
+  '($before[0].findings | map(.id)) as $b_ids |
+   ($after[0].findings | map(.id)) as $a_ids |
+   {
+     fixed:     ($b_ids - $a_ids | length),
+     remaining: ($after[0].findings | length),
+     new:       ($a_ids - $b_ids),
+     pass:      (($a_ids - $b_ids | length) == 0)
+   }'
+```
+
+`pass: true` requires zero new findings. Severity regressions (same count, different
+severity) are surfaced via `new` list — gate fails if any `critical` IDs appear in `new`.
+
+Temp files `.h2t/lint-before.json` and `.h2t/lint-after.json` are deleted after append.
+
+---
+
+## State File
+
+Location: `.h2t/lint-state.jsonl` (consistent with `.h2t/docs-lint.yaml` namespace).
+
+**First-run behavior:** if file missing, maintenance mode falls back to full audit
+with a note: `No previous state found — running full audit instead`.
+
+**Schema versioning:** each line includes `"schema": 1`. Reader ignores lines with
+unknown schema version.
+
+**Corruption handling:** if last line is not valid JSON, skip it and use the
+previous valid line. If all lines corrupt, fall back to full audit.
+
+```json
+{"schema":1,"ts":"2026-06-06T14:00:00Z","mode":"full","project_type":"td-tool","findings_before":12,"findings_after":4,"fixed":8,"new":[],"pass":true}
+```
+
+---
+
+## Maintenance Mode
+
+Triggered by stage `(2) mature`.
+
+1. Read last valid entry from `.h2t/lint-state.jsonl` (schema=1, handle corrupt/missing)
+2. Run `lint.py audit --root .`
+3. Compare finding IDs: show **only delta** (new IDs not in last state)
+4. Apply safe-fixes automatically (idempotent)
+5. Append new state entry to `.h2t/lint-state.jsonl`
+
+No deep analysis, no GitHub issues, no plan file.
+
+---
+
+## Delegation Model
+
+| Layer | Responsibility | Tools |
+|---|---|---|
+| **Scripts** | Deterministic mechanical checks, stable finding IDs | `lint.py doctor --json` |
+| **Model** | Semantic analysis: meaningfulness, context, staleness | git ls-files + references |
+| **Validation** | Post-fix state comparison | `lint.py doctor --json` + `jq` |
+
+Scripts are ground truth for **mechanical** checks (orphan, naming, frontmatter).
+Model is ground truth for **semantic** checks (non-standard dirs, CLAUDE.md staleness,
+agent accessibility quality). The two domains don't overlap.
+
+Model never approves destructive actions unilaterally. Pre-flight gates run before
+any writes. Validation gate confirms net improvement.
 
 ---
 
@@ -190,88 +377,5 @@ lint.py reads this file and skips documented exceptions silently.
 - Добавлен frontmatter: td-scene-v0-implementation.md
 
 ### Validation gate
-findings_before: 12  findings_after: 4  fixed: 8  new: 0  PASS
+findings_before: 12  findings_after: 4  fixed: 8  new: []  PASS
 ```
-
----
-
-## Output Pipeline
-
-1. **Plan file** → `docs/superpowers/plans/YYYY-MM-DD-docs-audit.md` + commit
-2. **GitHub issues** → created immediately for critical + important findings
-   - One issue per dimension with multiple findings grouped
-   - Label: `type:docs`, priority from severity
-3. **Safe fixes** → applied automatically (create dirs, add frontmatter, fix-index)
-4. **Destructive actions** → confirm before: rename, move, delete
-5. **Validation gate** → `lint.py doctor --json` after fixes, jq delta comparison
-6. **State append** → `.h2t-lint-state.jsonl` (one line per run, used by maintenance delta)
-
----
-
-## Maintenance Mode
-
-Triggered when user answers "зрелый" at the gate.
-
-1. Read last entry from `.h2t-lint-state.jsonl`
-2. Run `lint.py audit`
-3. Compare: show **only delta** (new findings since last run)
-4. Apply safe-fixes automatically
-5. Append new state to `.h2t-lint-state.jsonl`
-
-No deep analysis, no GitHub issues, no plan file — just clean up accumulation.
-
----
-
-## Delegation Model
-
-| Layer | What it does | Tools |
-|---|---|---|
-| **Scripts** | Deterministic mechanical checks | lint.py doctor --json, jq |
-| **Model** | Semantic analysis, meaningfulness, context | Reads git ls-files + references |
-| **Validation** | Post-fix gate | lint.py doctor --json + jq delta |
-
-Model never makes final calls on destructive actions. Scripts provide ground truth.
-Model provides interpretation. Validation confirms state change.
-
----
-
-## Validation Gate Detail
-
-```bash
-# Before fixes — capture state
-lint.py doctor --json --root . > .h2t-lint-before.json
-
-# safe-fixes applied by lint.py fix-safe + model-guided destructive actions
-
-# After fixes — compare
-lint.py doctor --json --root . > .h2t-lint-after.json
-
-jq -n \
-  --slurpfile before .h2t-lint-before.json \
-  --slurpfile after .h2t-lint-after.json \
-  '{
-    fixed: ($before[0].findings | length) - ($after[0].findings | length),
-    remaining: ($after[0].findings | length),
-    new: [($after[0].findings[].id) - ($before[0].findings[].id)],
-    pass: (($after[0].findings | length) < ($before[0].findings | length))
-  }'
-```
-
-Result appended to `.h2t-lint-state.jsonl`:
-```json
-{"ts":"2026-06-06T14:00:00Z","mode":"full","findings_before":12,"findings_after":4,"fixed":8,"new":0,"pass":true}
-```
-
----
-
-## Scope
-
-**In scope:**
-- Rewrite of `SKILL.md` — new pipeline instructions
-- Extension of `lint.py` — read `.h2t/docs-lint.yaml` exceptions, expose findings IDs for jq delta
-- New `references/non-standard-resolution.md` — decision tree doc for model
-
-**Out of scope:**
-- lint.py rewrite — extend only
-- Standards changes — ADD PROJECT TYPE outcome creates a PR proposal, doesn't auto-merge
-- CI integration — future milestone
