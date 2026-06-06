@@ -9,6 +9,8 @@ metadata:
 
 # Instructions
 
+> **Manual project setup?** Use `/h2t-core:scaffold-project` — it handles new repos, existing dirs, and registration in one wizard. This skill (`init-project`) is for **automated** registration triggered by `session-start` when a project is discovered but not yet registered.
+
 Register the current directory as a project in the h2t ecosystem. The PreToolUse hook has already detected the project type, domain, and task tracker.
 
 ## Variables
