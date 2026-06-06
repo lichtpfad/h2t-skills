@@ -215,8 +215,9 @@ def _meeting_pick(m: dict) -> dict:
                 or m.get("start_time")
                 or m.get("created_at"))
     end_ts = m.get("timestamp_end_utc") or m.get("end_time")
+    mid = m.get("id") or m.get("meeting_id")
     return {
-        "meeting_id": m.get("id") or m.get("meeting_id"),
+        "meeting_id": mid,
         "title": m.get("title") or m.get("name") or "",
         "attendees": [n for n in names if n],
         "date": (start_ts or "")[:10],
@@ -224,6 +225,7 @@ def _meeting_pick(m: dict) -> dict:
         "timestamp_end_utc": end_ts,
         "duration_seconds": m.get("duration") or m.get("duration_seconds"),
         "language": m.get("language") or m.get("language_code"),
+        "provider_url": f"https://app2.meetgeek.ai/meeting/{mid}" if mid else None,
     }
 
 
