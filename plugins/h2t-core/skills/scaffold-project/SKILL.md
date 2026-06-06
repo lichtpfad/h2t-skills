@@ -6,8 +6,8 @@ description: >
   After creation: calls docs-init with explicit --repo-root, writes docs-lint
   template config, writes a machine-readable setup report, installs on-stop
   hook into .claude/settings.json. After GitHub creation: syncs labels via
-  docs-sync-labels. NOT for registering existing repos (use
-  /h2t-core:init-project for that).
+  docs-sync-labels. Handles all states: new repo, existing dir without git (--merge), existing git repo
+  (registration only). init-project is for automated session-start hook use only.
 compatibility: "Claude Code"
 metadata:
   author: lichtpfad
@@ -26,8 +26,14 @@ H2T_PYTHON="${H2T_PYTHON:-}"
 [ -z "$H2T_PYTHON" ] && [ -f "$HOME/.h2t/venv/Scripts/python.exe" ] && H2T_PYTHON="$HOME/.h2t/venv/Scripts/python.exe"
 [ -z "$H2T_PYTHON" ] && [ -f "$HOME/.h2t/venv/bin/python" ] && H2T_PYTHON="$HOME/.h2t/venv/bin/python"
 
-SCAFFOLD="$CLAUDE_PLUGIN_ROOT/skills/scaffold-project/scripts/scaffold_project.py"
-APPLY_REG="$CLAUDE_PLUGIN_ROOT/skills/init-project/scripts/apply_registration.py"
+# Resolve h2t-core plugin root — $CLAUDE_PLUGIN_ROOT is not always exported to bash
+if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ]; then
+    _CORE_ROOT="$CLAUDE_PLUGIN_ROOT"
+else
+    _CORE_ROOT=$(ls -dt "$HOME/.claude/plugins/cache/lichtpfad/h2t-core"/[0-9]* 2>/dev/null | head -1)
+fi
+SCAFFOLD="$_CORE_ROOT/skills/scaffold-project/scripts/scaffold_project.py"
+APPLY_REG="$_CORE_ROOT/skills/init-project/scripts/apply_registration.py"
 CONFIG_ROOT="$HOME/.h2t/config"
 ```
 
@@ -59,30 +65,49 @@ Parse the user's answer. Ask follow-up only for any missing required fields.
 
 ---
 
-## Step 2: Confirm Base Directory
+## Step 2: Confirm Base Directory + Detect State
 
-Ask: "Где создать директорию? (по умолчанию: C:/dev/{id})"
+Ask: "Где создать/дополнить директорию? (по умолчанию: C:/dev/{id})"
 
 Accept:
 - Enter / `.` / `да` → use `C:/dev/{id}`
-- A path → use that path exactly (e.g. `C:/work/new-thing`)
+- A path → use that path exactly
 
-Resolve the final path: if user gave a relative path, prepend `C:/dev/`.
+Resolve `project_dir` = `{base_dir}/{id}` (prepend `C:/dev/` if relative).
+
+Run state detection:
+
+```bash
+[ -d "{project_dir}" ] && echo "EXISTS" || echo "NEW"
+```
+```bash
+git -C "{project_dir}" rev-parse --git-dir 2>/dev/null && echo "HAS_GIT" || echo "NO_GIT"
+```
+
+| State | Meaning | Next |
+|-------|---------|------|
+| NEW | Directory doesn't exist | Step 3: dry-run without --merge |
+| EXISTS + NO_GIT | Existing dir, no git | Step 3: dry-run with --merge |
+| EXISTS + HAS_GIT | Already a git repo | Skip to Step 5 (registration only) |
+
+Show detected state in one line, e.g. `Состояние: EXISTS+NO_GIT → дополняем`.
 
 ---
 
 ## Step 3: Dry-Run Preview (GATE)
 
-Run:
+Run (add `--merge` only if state is EXISTS+NO_GIT):
 
 ```bash
 $H2T_PYTHON "$SCAFFOLD" create \
   --id "{id}" --type "{type}" --stack "{stack}" \
   --dir "{base_dir}" --description "{description}" \
+  [--merge]   # only if state is EXISTS+NO_GIT
   --dry-run
 ```
 
 Show the `would_create` list from JSON output as a bullet list.
+If `"merge": true` in output → note: "Существующие файлы не будут перезаписаны. Только новые файлы войдут в коммит."
 
 Then ask: "Создаём? (y / да / .)"
 
@@ -90,19 +115,20 @@ Then ask: "Создаём? (y / да / .)"
 
 ---
 
-## Step 4: Create Structure
+## Step 4: Create / Supplement Structure
 
-Run (without --dry-run):
+Run (add `--merge` only if state is EXISTS+NO_GIT):
 
 ```bash
 $H2T_PYTHON "$SCAFFOLD" create \
   --id "{id}" --type "{type}" --stack "{stack}" \
-  --dir "{base_dir}" --description "{description}"
+  --dir "{base_dir}" --description "{description}" \
+  [--merge]   # only if state is EXISTS+NO_GIT
 ```
 
 Parse JSON. If `"status": "error"` — show error and stop.
 
-Show actions list as checkmarks. Note `"path"` from JSON — this is the project root.
+Show `actions` list as checkmarks. Note `"path"` — this is the project root.
 
 ---
 
