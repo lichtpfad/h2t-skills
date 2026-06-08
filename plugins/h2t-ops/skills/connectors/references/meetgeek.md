@@ -43,6 +43,31 @@ In Claude Code, check readiness through:
 /h2t-core:setup connectors-check
 ```
 
+## Local File Upload Flow
+
+MeetGeek API accepts only **public URLs** — not local files. For local `.webm` / `.mp4` recordings:
+
+1. Upload to Drive and make public:
+   ```bash
+   h2t-ops drive upload PATH_TO_FILE.webm
+   # then share → Anyone with link → Viewer
+   ```
+2. Submit the public Drive URL to MeetGeek:
+   ```bash
+   h2t-ops meetgeek submit-url "https://drive.google.com/file/d/FILE_ID/view" --json
+   ```
+3. Keep the Drive link public until MeetGeek finishes processing (check with `h2t-ops meetgeek list`).
+4. Fetch transcript once processing is complete:
+   ```bash
+   h2t-ops meetgeek transcript MEETING_ID --format md
+   ```
+
+**Multiple files:** upload and submit one at a time.
+
+**MeetGeek rejects webm as "corrupt":** known MeetGeek bug — retry or convert to mp4 first.
+
+**Do NOT** route local recording files to `h2t-transcription` — that pipeline is for Vimeo/course content, not meeting recordings.
+
 ## Common Failures
 
 - Listed meeting returns 404 from singular metadata endpoint: use current connector version with list fallback.
