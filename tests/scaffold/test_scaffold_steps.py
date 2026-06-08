@@ -99,6 +99,27 @@ def test_run_docs_init_skips_when_script_not_found(tmp_path, monkeypatch):
     assert result["status"] == "skip"
 
 
+def test_gitignore_python_includes_lint_temp_files():
+    """scaffold .gitignore must exclude docs-lint temp files from day 0."""
+    from scaffold_project import GITIGNORE_TEMPLATES
+    gi = GITIGNORE_TEMPLATES["python"]
+    assert ".h2t/lint-before.json" in gi
+    assert ".h2t/lint-after.json" in gi
+
+
+def test_gitignore_none_includes_lint_temp_files():
+    from scaffold_project import GITIGNORE_TEMPLATES
+    gi = GITIGNORE_TEMPLATES["none"]
+    assert ".h2t/lint-before.json" in gi
+    assert ".h2t/lint-after.json" in gi
+
+
+def test_gitignore_dcc_includes_lint_temp_files():
+    from scaffold_project import DCC_GITIGNORE
+    assert ".h2t/lint-before.json" in DCC_GITIGNORE
+    assert ".h2t/lint-after.json" in DCC_GITIGNORE
+
+
 from scaffold_project import run_sync_labels
 
 
