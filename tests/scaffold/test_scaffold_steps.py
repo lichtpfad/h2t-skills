@@ -301,7 +301,7 @@ def test_cmd_create_code_repo_root_dirs(tmp_path, monkeypatch):
                 import argparse
                 args = argparse.Namespace(
                     id="test-proj", type="code-github", stack="python",
-                    dir=str(tmp_path), description="test", dry_run=False,
+                    dir=str(tmp_path), description="test", dry_run=False, merge=False,
                 )
                 result = scaffold_project.cmd_create(args)
     assert result["status"] == "ok"
@@ -344,3 +344,64 @@ def test_cmd_create_dry_run_lists_would_create(tmp_path):
     assert result["status"] == "dry-run"
     assert any("dry-proj" in item for item in result["would_create"])
     assert not (tmp_path / "dry-proj").exists()
+
+
+def test_cmd_create_fails_when_docs_init_ok_but_paths_missing(tmp_path, monkeypatch):
+    """scaffold returns error if docs-init reports ok but critical docs paths are absent.
+
+    This catches the silent-skip case where docs-init returns status='ok' but
+    didn't actually write any files (e.g. script path mismatch).
+    """
+    import scaffold_project
+    import argparse
+    monkeypatch.setattr(scaffold_project, "_PROJECT_TYPES_AVAILABLE", True)
+    monkeypatch.setattr(scaffold_project, "PROJECT_TYPES", {
+        "code_repo": {"root_dirs": ["src", "tests", "docs", "scripts"], "docs_dirs": [], "root_files_required": []},
+    })
+    monkeypatch.setattr(scaffold_project, "SCAFFOLD_TYPE_TO_TEMPLATE", {"code-github": "code_repo"})
+    with patch("scaffold_project.run_docs_init", return_value={"status": "ok", "output": ""}):
+        with patch("scaffold_project.install_hooks", return_value={"status": "ok"}):
+            with patch("scaffold_project.subprocess.run") as mock_run:
+                mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+                args = argparse.Namespace(
+                    id="test-proj", type="code-github", stack="python",
+                    dir=str(tmp_path), description="test", dry_run=False, merge=False,
+                )
+                result = scaffold_project.cmd_create(args)
+
+    # docs-init reported ok but docs/README.md was never created
+    assert result["status"] == "error"
+    assert "docs-init" in result["error"].lower() or "missing" in result["error"].lower()
+
+
+def test_cmd_create_succeeds_when_docs_init_ok_and_paths_present(tmp_path, monkeypatch):
+    """scaffold succeeds when docs-init ok AND critical paths exist."""
+    import scaffold_project
+    import argparse
+    monkeypatch.setattr(scaffold_project, "_PROJECT_TYPES_AVAILABLE", True)
+    monkeypatch.setattr(scaffold_project, "PROJECT_TYPES", {
+        "code_repo": {"root_dirs": ["src", "tests", "docs", "scripts"], "docs_dirs": [], "root_files_required": []},
+    })
+    monkeypatch.setattr(scaffold_project, "SCAFFOLD_TYPE_TO_TEMPLATE", {"code-github": "code_repo"})
+
+    def fake_docs_init(repo_name, project_dir, *, template="code_repo"):
+        # Simulate real docs-init: create critical paths matching REQUIRED_CORE_DIRS
+        (project_dir / "docs" / "README.md").parent.mkdir(parents=True, exist_ok=True)
+        (project_dir / "docs" / "README.md").write_text("# docs\n")
+        (project_dir / "docs" / "adr").mkdir(exist_ok=True)
+        (project_dir / "docs" / "reports").mkdir(exist_ok=True)
+        (project_dir / "docs" / "superpowers" / "specs").mkdir(parents=True, exist_ok=True)
+        (project_dir / "docs" / "superpowers" / "plans").mkdir(parents=True, exist_ok=True)
+        return {"status": "ok", "output": ""}
+
+    with patch("scaffold_project.run_docs_init", side_effect=fake_docs_init):
+        with patch("scaffold_project.install_hooks", return_value={"status": "ok"}):
+            with patch("scaffold_project.subprocess.run") as mock_run:
+                mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+                args = argparse.Namespace(
+                    id="test-proj2", type="code-github", stack="python",
+                    dir=str(tmp_path), description="test", dry_run=False, merge=False,
+                )
+                result = scaffold_project.cmd_create(args)
+
+    assert result["status"] == "ok"
