@@ -67,3 +67,15 @@ def test_init_repo_rejects_home_directory(monkeypatch, tmp_path):
     monkeypatch.setattr(Path, "home", staticmethod(lambda: tmp_path))
     result = init_repo("home", repo_root=tmp_path, dry_run=True)
     assert result is None
+
+
+def test_init_repo_adds_lint_temp_files_to_gitignore(tmp_path):
+    """docs-init appends .h2t/lint-before.json and lint-after.json to .gitignore."""
+    repo = tmp_path / "my-repo"
+    repo.mkdir()
+
+    init_repo("my-repo", repo_root=repo, dry_run=False, commit=False)
+
+    gi = (repo / ".gitignore").read_text(encoding="utf-8")
+    assert ".h2t/lint-before.json" in gi
+    assert ".h2t/lint-after.json" in gi

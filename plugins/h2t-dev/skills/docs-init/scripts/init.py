@@ -197,16 +197,25 @@ def init_repo(
         print(f"  {action}: .vale.ini")
         changes.append(".vale.ini")
 
-    # .gitignore — create if missing, append entry if needed
+    # .gitignore — create if missing, append missing entries
     gi = rp / ".gitignore"
-    gi_entry = "docs/.artifacts/"
     gi_content = gi.read_text(encoding="utf-8") if gi.exists() else ""
-    if gi_entry not in gi_content:
-        if not dry_run:
-            with open(gi, "a", encoding="utf-8") as f:
-                f.write(f"\n# Documentation artifacts\n{gi_entry}\n")
-        print(f"  {action}: .gitignore entry for {gi_entry}")
-        changes.append(".gitignore")
+    _gi_entries = [
+        ("docs/.artifacts/", "# Documentation artifacts"),
+        (".h2t/lint-before.json", "# docs-lint temp files"),
+        (".h2t/lint-after.json", None),
+    ]
+    for gi_entry, gi_comment in _gi_entries:
+        if gi_entry not in gi_content:
+            if not dry_run:
+                with open(gi, "a", encoding="utf-8") as f:
+                    if gi_comment:
+                        f.write(f"\n{gi_comment}\n")
+                    f.write(f"{gi_entry}\n")
+                gi_content += f"\n{gi_entry}\n"
+            print(f"  {action}: .gitignore entry for {gi_entry}")
+            if ".gitignore" not in changes:
+                changes.append(".gitignore")
 
     if changes and not dry_run and commit:
         git_add_commit(rp, ["docs/", ".claude/", ".pymarkdown.yaml", ".vale.ini", ".gitignore"],

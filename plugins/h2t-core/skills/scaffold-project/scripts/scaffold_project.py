@@ -37,6 +37,12 @@ except ImportError:
     SCAFFOLD_TYPE_TO_TEMPLATE = {}
 
 
+_H2T_LINT_ENTRIES = """\
+# docs-lint temp files
+.h2t/lint-before.json
+.h2t/lint-after.json
+"""
+
 GITIGNORE_TEMPLATES: dict[str, str] = {
     "python": """\
 .venv/
@@ -49,7 +55,7 @@ build/
 *.egg-info/
 .env
 .env.*
-""",
+""" + _H2T_LINT_ENTRIES,
     "js": """\
 node_modules/
 dist/
@@ -57,7 +63,7 @@ dist/
 .env.*
 *.log
 .DS_Store
-""",
+""" + _H2T_LINT_ENTRIES,
     "ts": """\
 node_modules/
 dist/
@@ -66,17 +72,17 @@ dist/
 *.log
 *.js.map
 .DS_Store
-""",
+""" + _H2T_LINT_ENTRIES,
     "rust": """\
 target/
 .env
 .env.*
-""",
+""" + _H2T_LINT_ENTRIES,
     "none": """\
 .env
 .env.*
 *.log
-""",
+""" + _H2T_LINT_ENTRIES,
 }
 
 DCC_GITIGNORE = """\
@@ -85,7 +91,7 @@ DCC_GITIGNORE = """\
 Backup/
 .env
 .env.*
-"""
+""" + _H2T_LINT_ENTRIES
 
 CLAUDE_MD_TEMPLATE = """\
 # {id}
