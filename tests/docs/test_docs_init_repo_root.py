@@ -79,3 +79,14 @@ def test_init_repo_adds_lint_temp_files_to_gitignore(tmp_path):
     gi = (repo / ".gitignore").read_text(encoding="utf-8")
     assert ".h2t/lint-before.json" in gi
     assert ".h2t/lint-after.json" in gi
+
+
+def test_init_repo_creates_h2t_lint_state(tmp_path):
+    """docs-init creates .h2t/lint-state.jsonl so it's tracked from day 0."""
+    repo = tmp_path / "my-repo"
+    repo.mkdir()
+
+    init_repo("my-repo", repo_root=repo, dry_run=False, commit=False)
+
+    lint_state = repo / ".h2t" / "lint-state.jsonl"
+    assert lint_state.exists(), ".h2t/lint-state.jsonl must be created by docs-init"
