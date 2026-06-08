@@ -285,7 +285,25 @@ def cmd_create(args: argparse.Namespace) -> dict:
     di = run_docs_init(args.id, project_dir, template=template)
     actions.append(f"docs-init: {di['status']}")
     if di["status"] == "error":
-        return {"status": "error", "error": f"docs-init failed: {di['error']}"}
+        return {"status": "error", "error": f"docs-init failed: {di.get('error', '')}"}
+    if di["status"] == "ok":
+        _critical_files = ["docs/README.md"]
+        _critical_dirs = [
+            "docs/adr", "docs/reports",
+            "docs/superpowers/specs", "docs/superpowers/plans",
+        ]
+        _missing = [
+            p for p in _critical_files if not (project_dir / p).is_file()
+        ] + [
+            p for p in _critical_dirs if not (project_dir / p).is_dir()
+        ]
+        if _missing:
+            return {
+                "status": "error",
+                "error": f"docs-init reported ok but critical paths missing: {_missing}",
+            }
+    if di["status"] == "skip":
+        actions.append("WARNING: docs-init skipped — docs structure may be incomplete")
 
     if is_git:
         ih = install_hooks(project_dir)
