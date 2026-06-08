@@ -197,6 +197,15 @@ def init_repo(
         print(f"  {action}: .vale.ini")
         changes.append(".vale.ini")
 
+    # .h2t/lint-state.jsonl — initialize empty so it's trackable from day 0
+    lint_state = rp / ".h2t" / "lint-state.jsonl"
+    if not lint_state.exists():
+        if not dry_run:
+            lint_state.parent.mkdir(parents=True, exist_ok=True)
+            lint_state.write_text("", encoding="utf-8")
+        print(f"  {action}: .h2t/lint-state.jsonl")
+        changes.append(".h2t/lint-state.jsonl")
+
     # .gitignore — create if missing, append missing entries
     gi = rp / ".gitignore"
     gi_content = gi.read_text(encoding="utf-8") if gi.exists() else ""
@@ -218,7 +227,7 @@ def init_repo(
                 changes.append(".gitignore")
 
     if changes and not dry_run and commit:
-        git_add_commit(rp, ["docs/", ".claude/", ".pymarkdown.yaml", ".vale.ini", ".gitignore"],
+        git_add_commit(rp, ["docs/", ".claude/", ".h2t/", ".pymarkdown.yaml", ".vale.ini", ".gitignore"],
                        "docs: scaffold standard documentation structure")
 
     return changes
