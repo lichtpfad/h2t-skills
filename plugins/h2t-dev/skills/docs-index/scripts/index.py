@@ -86,24 +86,49 @@ def _status_badge(status: str) -> str:
     return mapping.get(status.lower(), status) if status else ""
 
 
-_SECTION_MAP = [
-    ("superpowers", "Specs & Plans", "Design specs and implementation plans"),
-    ("reports",     "Reports",       "Milestone reports"),
-    ("guides",      "Guides",        "How-to documentation"),
-    ("api",         "API",           "API reference"),
-]
+# Known section metadata — anchor → (title, description)
+_KNOWN_SECTIONS: dict[str, tuple[str, str]] = {
+    "superpowers": ("Specs & Plans", "Design specs and implementation plans"),
+    "reports":     ("Reports",       "Milestone reports"),
+    "guides":      ("Guides",        "How-to documentation"),
+    "api":         ("API",           "API reference"),
+    "research":    ("Research",      "Research documents"),
+    "product":     ("Product",       "Product documentation"),
+    "marketing":   ("Marketing",     "Marketing documentation"),
+    "architecture":("Architecture",  "Architecture documentation"),
+    "client":      ("Client",        "Client documentation"),
+}
+
+# These dirs have dedicated sections in the index — exclude from Quick Links
+_QUICK_LINKS_EXCLUDE = {"adr", ".artifacts"}
+
+
+def _discover_sections(docs_dir: Path) -> list[tuple[str, str, str]]:
+    """Return (anchor, title, description) for all docs/ subdirs that have .md files."""
+    if not docs_dir.exists():
+        return []
+    result = []
+    for d in sorted(docs_dir.iterdir()):
+        if not d.is_dir():
+            continue
+        if d.name in _QUICK_LINKS_EXCLUDE or d.name.startswith("."):
+            continue
+        if not any(d.rglob("*.md")):
+            continue
+        anchor = d.name
+        title, desc = _KNOWN_SECTIONS.get(
+            anchor, (anchor.replace("-", " ").title(), f"{anchor.title()} documents")
+        )
+        result.append((anchor, title, desc))
+    return result
 
 
 def build_navigation_index(rp: Path, repo_name: str) -> str:
     docs_dir = rp / "docs"
     lines = [f"# {repo_name} Documentation", ""]
 
-    # Quick Links — only when at least one section dir exists (adr excluded: has own table)
-    present = [
-        (anchor, title, desc)
-        for anchor, title, desc in _SECTION_MAP
-        if (docs_dir / anchor).exists()
-    ]
+    # Quick Links — dynamic: scan all docs/ subdirs with .md content
+    present = _discover_sections(docs_dir)
     if present:
         lines += ["## Quick Links", ""]
         lines += ["| Section | Description |", "|---------|-------------|"]
@@ -148,6 +173,19 @@ def build_navigation_index(rp: Path, repo_name: str) -> str:
         for r in reports:
             lines.append(f"| [{r['title']}](reports/{r['file']}) | {r['date']} |")
         lines.append("")
+
+    # Dynamic sections — generate individual file links so orphan detector can follow them
+    _HANDLED_SECTIONS = {"superpowers", "adr", "reports"}
+    for anchor, title, _desc in present:
+        if anchor in _HANDLED_SECTIONS:
+            continue
+        section_files = _collect_dir(rp, anchor)
+        if section_files:
+            lines += [f"## {title}", ""]
+            lines += ["| Title | Date |", "|-------|------|"]
+            for r in section_files:
+                lines.append(f"| [{r['title']}]({anchor}/{r['file']}) | {r['date']} |")
+            lines.append("")
 
     # Preserve custom sections from existing README (## Notes, ## Team, ## Links)
     readme = rp / "docs" / "README.md"

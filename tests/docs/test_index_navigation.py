@@ -18,8 +18,10 @@ def test_build_navigation_index_has_repo_title(tmp_path):
 
 
 def test_build_navigation_index_has_quick_links(tmp_path):
-    """Quick Links section present when superpowers/ exists."""
-    (tmp_path / "docs" / "superpowers" / "specs").mkdir(parents=True)
+    """Quick Links section present when superpowers/ exists with content."""
+    specs_dir = tmp_path / "docs" / "superpowers" / "specs"
+    specs_dir.mkdir(parents=True)
+    (specs_dir / "2026-01-01-test.md").write_text("# Test\n")
     result = build_navigation_index(tmp_path, "my-repo")
     assert "## Quick Links" in result
 
@@ -59,3 +61,50 @@ def test_build_navigation_index_no_quick_links_when_no_sections(tmp_path):
     (tmp_path / "docs").mkdir()
     result = build_navigation_index(tmp_path, "my-repo")
     assert "## Quick Links" not in result
+
+
+def test_build_navigation_index_includes_research_dir_in_quick_links(tmp_path):
+    """docs/research/ dir with content must appear in Quick Links."""
+    research_dir = tmp_path / "docs" / "research"
+    research_dir.mkdir(parents=True)
+    (research_dir / "2026-06-01-analysis.md").write_text("# Analysis\n")
+
+    result = build_navigation_index(tmp_path, "my-repo")
+
+    assert "## Quick Links" in result
+    assert "research" in result.lower()
+
+
+def test_build_navigation_index_includes_unknown_dir_in_quick_links(tmp_path):
+    """Any docs/ subdir with .md files appears in Quick Links, even if not in known list."""
+    custom_dir = tmp_path / "docs" / "custom-section"
+    custom_dir.mkdir(parents=True)
+    (custom_dir / "notes.md").write_text("# Notes\n")
+
+    result = build_navigation_index(tmp_path, "my-repo")
+
+    assert "custom-section" in result
+
+
+def test_build_navigation_index_excludes_empty_dirs_from_quick_links(tmp_path):
+    """Dirs with no .md files do not appear in Quick Links."""
+    empty_dir = tmp_path / "docs" / "empty-section"
+    empty_dir.mkdir(parents=True)
+
+    result = build_navigation_index(tmp_path, "my-repo")
+
+    assert "empty-section" not in result
+
+
+def test_build_navigation_index_excludes_adr_from_quick_links(tmp_path):
+    """adr/ has its own table — must not also appear in Quick Links."""
+    adr_dir = tmp_path / "docs" / "adr"
+    adr_dir.mkdir(parents=True)
+    (adr_dir / "0001-test.md").write_text("# Test\n")
+
+    result = build_navigation_index(tmp_path, "my-repo")
+
+    # ADR appears in Architecture Decisions table, not Quick Links
+    assert "## Architecture Decisions" in result
+    # No Quick Links row pointing to adr/
+    assert not any("[adr]" in l.lower() for l in result.splitlines())
