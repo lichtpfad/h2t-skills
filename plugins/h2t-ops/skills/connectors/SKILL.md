@@ -63,6 +63,7 @@ Do not use Fetch/WebFetch/Playwright as the primary path for these URLs when an 
 | Notion pages, blocks, databases, workspace graph, embedded DBs | Notion | `references/notion.md` | `h2t-ops notion` |
 | Telegram auth, dialogs, messages, saved messages, mentions | Telegram | `references/telegram.md` | `h2t-ops telegram` |
 | MeetGeek meetings, transcripts, summaries, recordings | MeetGeek | `references/meetgeek.md` | `h2t-ops meetgeek` |
+| local .webm / .mp4 recording files to upload to MeetGeek | MeetGeek + Drive | `references/meetgeek.md` → "Local File Upload Flow" | `h2t-ops drive upload` then `h2t-ops meetgeek submit-url` |
 
 ### Drive-specific intent routing (important)
 
