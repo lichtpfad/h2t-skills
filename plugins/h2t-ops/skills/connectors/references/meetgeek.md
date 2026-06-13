@@ -47,14 +47,14 @@ In Claude Code, check readiness through:
 
 MeetGeek API accepts only **public URLs** — not local files. For local `.webm` / `.mp4` recordings:
 
-1. Upload to Drive and make public:
+1. Upload to Drive with explicit parent folder and make public:
    ```bash
-   h2t-ops drive upload PATH_TO_FILE.webm
-   # then share → Anyone with link → Viewer
+   h2t-ops drive upload PATH_TO_FILE.webm --parent-id DRIVE_FOLDER_ID --no-convert --json
+   h2t-ops drive share FILE_ID --anyone --confirm-public --json
    ```
-2. Submit the public Drive URL to MeetGeek:
+2. Submit the public Drive URL to MeetGeek — **must use `&confirm=t`** for files >100 MB:
    ```bash
-   h2t-ops meetgeek submit-url "https://drive.google.com/file/d/FILE_ID/view" --json
+   h2t-ops meetgeek submit-url "https://drive.google.com/uc?export=download&id=FILE_ID&confirm=t" --json
    ```
 3. Keep the Drive link public until MeetGeek finishes processing (check with `h2t-ops meetgeek list`).
 4. Fetch transcript once processing is complete:
@@ -64,7 +64,9 @@ MeetGeek API accepts only **public URLs** — not local files. For local `.webm`
 
 **Multiple files:** upload and submit one at a time.
 
-**MeetGeek rejects webm as "corrupt":** known MeetGeek bug — retry or convert to mp4 first.
+**MeetGeek rejects webm as "corrupt":** known MeetGeek bug — the Drive URL workaround (step 2) bypasses it.
+
+**Do NOT** use `https://drive.google.com/file/d/FILE_ID/view` — that is a viewer URL, not a download URL.
 
 **Do NOT** route local recording files to `h2t-transcription` — that pipeline is for Vimeo/course content, not meeting recordings.
 
@@ -73,6 +75,7 @@ MeetGeek API accepts only **public URLs** — not local files. For local `.webm`
 - Listed meeting returns 404 from singular metadata endpoint: use current connector version with list fallback.
 - Transcript missing for a fresh meeting: wait for MeetGeek processing.
 - Local recording recovery request: use the existing MeetGeek recovery script/workflow from this repo or a POS/coordinator adapter, not connector runtime.
+- **MeetGeek silently drops submitted recording (no error, but never appears in list):** Drive returns an HTML confirmation page instead of the file for uploads >100 MB. Fix: use `&confirm=t` in the URL — `https://drive.google.com/uc?export=download&id=FILE_ID&confirm=t`. Without this, MeetGeek accepts the submission but downloads HTML and drops the job silently.
 
 ## Manual E2E Smoke Recipe
 
