@@ -701,7 +701,9 @@ def _build_parser() -> argparse.ArgumentParser:
     s.add_argument("--full-text", action="store_true", dest="full_text")
     s.add_argument("--output-dir", default=str(Path.home() / ".h2t" / "research"),
                    dest="output_dir")
-    s.add_argument("--project", default="default")
+    s.add_argument("--project", required=True,
+                   help="Project id from session context (GATHER_RESULT.project.id). "
+                        "Required — no default. Use the active project id, e.g. 'rejuve', 'h2t-skills'.")
     s.add_argument("--envelope", action="store_true",
                    help="Print JSON envelope to stdout instead of markdown summary.")
     s.add_argument("--no-retry", action="store_true", dest="no_retry",
@@ -711,7 +713,8 @@ def _build_parser() -> argparse.ArgumentParser:
     c.add_argument("--url", required=True)
     c.add_argument("--output-dir", default=str(Path.home() / ".h2t" / "research"),
                    dest="output_dir")
-    c.add_argument("--project", default="default")
+    c.add_argument("--project", required=True,
+                   help="Project id from session context. Required — no default.")
 
     return parser
 

@@ -1060,7 +1060,8 @@ def test_warn_emitted_when_budget_exhausted(monkeypatch, capsys):
 # --- CLI flags --envelope, --no-retry (Task 6) ---
 
 def _make_search_argv(extra: list[str] | None = None) -> list[str]:
-    argv = ["search", "--query", "anything", "--mode", "generic", "--num-results", "3"]
+    argv = ["search", "--query", "anything", "--mode", "generic", "--num-results", "3",
+            "--project", "p"]
     if extra:
         argv.extend(extra)
     return argv

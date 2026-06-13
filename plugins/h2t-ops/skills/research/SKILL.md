@@ -80,12 +80,26 @@ Retention policy:
 - indexes are rebuildable caches; if an index and object disagree, object JSON wins.
 - Markdown mirrors and `.partial.md` files are human/operator surfaces, not canonical knowledge.
 
+## Project Context (REQUIRED)
+
+**Always resolve `RESEARCH_PROJECT` before any search or crawl command.**
+
+```bash
+# From session-start output (preferred):
+RESEARCH_PROJECT="<GATHER_RESULT.project.id>"   # e.g. "rejuve", "h2t-skills", "crypto-orchestrator"
+
+# Fallback if no session context:
+RESEARCH_PROJECT=$(git remote get-url origin 2>/dev/null | sed 's|.*/||;s|\.git$||')
+```
+
+`--project default` is **forbidden**. If project cannot be resolved — ask the user before running.
+
 ## Commands
 
 ```bash
 h2t-ops research preflight --json
-h2t-ops research search --query "..." --mode generic --num-results 10 --json
-h2t-ops research crawl --url "https://..." --json
+h2t-ops research search --query "..." --mode generic --num-results 10 --project "$RESEARCH_PROJECT" --json
+h2t-ops research crawl --url "https://..." --project "$RESEARCH_PROJECT" --json
 h2t-ops research fetch --url "https://..." --provider auto --json
 h2t-ops research visual-ocr --fetch-sidecar "...sources.json" --image-path "...png" --json
 ```
@@ -147,6 +161,7 @@ Load only what the request needs:
 
 ## Antipatterns
 
+- No `--project default` — forbidden. Always pass real project id from session context.
 - No silent WebSearch/WebFetch fallback.
 - No paywall/login bypass.
 - No screenshot capture inside `h2t-ops research`; use `h2t-tools:screenshot`.
