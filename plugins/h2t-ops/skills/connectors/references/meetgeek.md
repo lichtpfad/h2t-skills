@@ -52,9 +52,9 @@ MeetGeek API accepts only **public URLs** — not local files. For local `.webm`
    h2t-ops drive upload PATH_TO_FILE.webm --parent-id DRIVE_FOLDER_ID --no-convert --json
    h2t-ops drive share FILE_ID --anyone --confirm-public --json
    ```
-2. Submit the public Drive URL to MeetGeek — **must use `&confirm=t`** for files >100 MB:
+2. Submit the public Drive URL to MeetGeek — **use `drive.usercontent.google.com`**, not `drive.google.com`:
    ```bash
-   h2t-ops meetgeek submit-url "https://drive.google.com/uc?export=download&id=FILE_ID&confirm=t" --json
+   h2t-ops meetgeek submit-url "https://drive.usercontent.google.com/download?id=FILE_ID&export=download&confirm=t" --json
    ```
 3. Keep the Drive link public until MeetGeek finishes processing (check with `h2t-ops meetgeek list`).
 4. Fetch transcript once processing is complete:
@@ -75,7 +75,7 @@ MeetGeek API accepts only **public URLs** — not local files. For local `.webm`
 - Listed meeting returns 404 from singular metadata endpoint: use current connector version with list fallback.
 - Transcript missing for a fresh meeting: wait for MeetGeek processing.
 - Local recording recovery request: use the existing MeetGeek recovery script/workflow from this repo or a POS/coordinator adapter, not connector runtime.
-- **MeetGeek silently drops submitted recording (no error, but never appears in list):** Drive returns an HTML confirmation page instead of the file for uploads >100 MB. Fix: use `&confirm=t` in the URL — `https://drive.google.com/uc?export=download&id=FILE_ID&confirm=t`. Without this, MeetGeek accepts the submission but downloads HTML and drops the job silently.
+- **MeetGeek silently drops submitted recording (no error, but never appears in list):** `drive.google.com/uc?export=download` returns HTML (confirmation page or quota error) instead of the file. Fix: use `drive.usercontent.google.com` — `https://drive.usercontent.google.com/download?id=FILE_ID&export=download&confirm=t`. This is Google's dedicated file-delivery endpoint and bypasses all intermediate pages. `drive.google.com` URLs are unreliable for MeetGeek submissions regardless of `&confirm=t`.
 
 ## Manual E2E Smoke Recipe
 
