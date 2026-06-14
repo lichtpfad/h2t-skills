@@ -1,0 +1,23 @@
+# Structure guard configuration for h2t-skills
+# Used by plugins/h2t-core/hooks-handlers/structure_guard.py
+
+allowed_root_dirs:
+  - plugins/
+  - docs/
+  - h2t_ops/
+  - lib/
+  - scripts/
+  - tests/
+  - .h2t/
+  - .claude/
+
+forbidden_patterns:
+  - "tmp_*"
+  - "*_tmp.*"
+  - "*_v2.*"
+  - "*_copy.*"
+  - "*_backup.*"
+
+plan_dirs:
+  - path: "docs/superpowers/plans/"
+    pattern: "^\d{4}-\d{2}-\d{2}-.+\.md$"
