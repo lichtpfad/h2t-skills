@@ -157,6 +157,47 @@ def test_load_config_and_check_file_integration(tmp_path):
     assert code == 2
 
 
+def test_h2t_structure_yaml_exists():
+    repo_root = Path(__file__).parents[2]
+    structure_yaml = repo_root / ".h2t" / "structure.yaml"
+    assert structure_yaml.exists(), ".h2t/structure.yaml not found in repo root"
+
+
+def test_h2t_structure_yaml_is_valid():
+    guard = _load_guard()
+    repo_root = Path(__file__).parents[2]
+    config = guard.load_config(repo_root)
+    assert config is not None
+    assert "allowed_root_dirs" in config
+    assert "forbidden_patterns" in config
+    assert len(config["allowed_root_dirs"]) >= 4
+    assert "tmp_*" in config["forbidden_patterns"]
+
+
+def test_h2t_structure_yaml_blocks_tmp(tmp_path):
+    guard = _load_guard()
+    repo_root = Path(__file__).parents[2]
+    config = guard.load_config(repo_root)
+    code, _ = guard.check_file("tmp_foo.txt", config)
+    assert code == 2
+
+
+def test_h2t_structure_yaml_blocks_bad_plan_name(tmp_path):
+    guard = _load_guard()
+    repo_root = Path(__file__).parents[2]
+    config = guard.load_config(repo_root)
+    code, _ = guard.check_file("docs/superpowers/plans/my-plan.md", config)
+    assert code == 2
+
+
+def test_h2t_structure_yaml_allows_dated_plan():
+    guard = _load_guard()
+    repo_root = Path(__file__).parents[2]
+    config = guard.load_config(repo_root)
+    code, _ = guard.check_file("docs/superpowers/plans/2026-06-14-my-plan.md", config)
+    assert code == 0
+
+
 def test_hooks_json_has_structure_guard_entry():
     import json as _json
     hooks_path = Path(__file__).parents[2] / "plugins" / "h2t-core" / "hooks" / "hooks.json"
