@@ -155,3 +155,19 @@ def test_load_config_and_check_file_integration(tmp_path):
     # Bad plan dir name from real file
     code, _ = guard.check_file("docs/superpowers/plans/foo.md", config)
     assert code == 2
+
+
+def test_hooks_json_has_structure_guard_entry():
+    import json as _json
+    hooks_path = Path(__file__).parents[2] / "plugins" / "h2t-core" / "hooks" / "hooks.json"
+    data = _json.loads(hooks_path.read_text(encoding="utf-8"))
+    pre_tool = data.get("hooks", {}).get("PreToolUse", [])
+    commands = [
+        hook["command"]
+        for entry in pre_tool
+        for hook in entry.get("hooks", [])
+        if hook.get("type") == "command"
+    ]
+    assert any("structure-guard" in cmd for cmd in commands), (
+        f"structure-guard not found in PreToolUse hooks. Commands: {commands}"
+    )
