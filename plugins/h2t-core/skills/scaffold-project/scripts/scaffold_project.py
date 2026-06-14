@@ -173,6 +173,41 @@ def _run(cmd: list[str], cwd: str | None = None) -> subprocess.CompletedProcess:
     return subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, encoding="utf-8")
 
 
+_STRUCTURE_YAML_TEMPLATE = """\
+# Structure guard configuration — managed by h2t-core:scaffold-project
+# Used by plugins/h2t-core/hooks-handlers/structure_guard.py
+
+allowed_root_dirs:
+  - src/
+  - tests/
+  - docs/
+  - scripts/
+  - .h2t/
+  - .claude/
+
+forbidden_patterns:
+  - "tmp_*"
+  - "*_tmp.*"
+  - "*_v2.*"
+  - "*_copy.*"
+  - "*_backup.*"
+
+plan_dirs:
+  - path: "docs/superpowers/plans/"
+    pattern: "^\\d{4}-\\d{2}-\\d{2}-.+\\.md$"
+"""
+
+
+def write_structure_yaml(project_dir: Path) -> bool:
+    """Write .h2t/structure.yaml if it doesn't exist. Returns True if written."""
+    yaml_path = project_dir / ".h2t" / "structure.yaml"
+    if yaml_path.exists():
+        return False
+    yaml_path.parent.mkdir(parents=True, exist_ok=True)
+    yaml_path.write_text(_STRUCTURE_YAML_TEMPLATE, encoding="utf-8")
+    return True
+
+
 def cmd_create(args: argparse.Namespace) -> dict:
     base = Path(args.dir).expanduser().resolve()
     project_dir = base / args.id
@@ -252,6 +287,12 @@ def cmd_create(args: argparse.Namespace) -> dict:
         )
         actions.append("Created CLAUDE.md")
         created_files.append("CLAUDE.md")
+
+    # Generate .h2t/structure.yaml (idempotent — skip if exists)
+    if write_structure_yaml(project_dir):
+        actions.append("Created .h2t/structure.yaml")
+        if is_git:
+            created_files.append(".h2t/structure.yaml")
 
     if is_git:
         needs_init = not (project_dir / ".git").exists()
