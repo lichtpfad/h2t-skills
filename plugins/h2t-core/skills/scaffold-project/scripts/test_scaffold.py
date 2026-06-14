@@ -83,3 +83,35 @@ def test_merge_skips_dir_that_is_a_file(tmp_path):
                   "--stack", "python", "--dir", str(tmp_path), "--merge")
     assert result["status"] == "merged"
     assert any("src" in a and "file" in a.lower() for a in result["actions"])
+
+
+def test_create_generates_structure_yaml(tmp_path):
+    result = _run("create", "--id", "myproj", "--type", "code-local",
+                  "--stack", "python", "--dir", str(tmp_path))
+    structure_yaml = tmp_path / "myproj" / ".h2t" / "structure.yaml"
+    assert structure_yaml.exists(), f"Expected .h2t/structure.yaml at {structure_yaml}"
+    content = structure_yaml.read_text(encoding="utf-8")
+    assert "allowed_root_dirs" in content
+    assert "forbidden_patterns" in content
+    assert "tmp_*" in content
+
+
+def test_merge_generates_structure_yaml_if_missing(tmp_path):
+    (tmp_path / "myproj").mkdir()
+    result = _run("create", "--id", "myproj", "--type", "code-local",
+                  "--stack", "python", "--dir", str(tmp_path), "--merge")
+    structure_yaml = tmp_path / "myproj" / ".h2t" / "structure.yaml"
+    assert structure_yaml.exists()
+
+
+def test_structure_yaml_idempotent_on_merge(tmp_path):
+    # First scaffold
+    _run("create", "--id", "myproj", "--type", "code-local",
+         "--stack", "python", "--dir", str(tmp_path))
+    # Read original content
+    yaml_path = tmp_path / "myproj" / ".h2t" / "structure.yaml"
+    original = yaml_path.read_text(encoding="utf-8")
+    # Second merge — should not overwrite
+    _run("create", "--id", "myproj", "--type", "code-local",
+         "--stack", "python", "--dir", str(tmp_path), "--merge")
+    assert yaml_path.read_text(encoding="utf-8") == original
