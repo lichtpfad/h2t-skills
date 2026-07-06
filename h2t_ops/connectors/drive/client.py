@@ -1253,7 +1253,6 @@ class DriveClient:
                 html = content.decode("utf-8") if isinstance(content, bytes) else content
                 content = convert_html_to_markdown(html).encode("utf-8")
 
-            text = content.decode("utf-8") if isinstance(content, bytes) else content
             result: Dict[str, Any] = {
                 "file_id": file_id,
                 "name": name,
@@ -1262,7 +1261,11 @@ class DriveClient:
                 "format": chosen,
             }
             if to_stdout:
-                result["text"] = text
+                # Binary formats are rejected for --print above, so any content
+                # reaching here is text and safe to decode.
+                result["text"] = (
+                    content.decode("utf-8") if isinstance(content, bytes) else content
+                )
                 return result
 
             if dest:
