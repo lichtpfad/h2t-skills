@@ -659,6 +659,24 @@ def test_export_print_rejects_binary_formats(client_obj, fmt):
     assert not client_obj.service.files.return_value.export.called
 
 
+@pytest.mark.parametrize("fmt", ("pdf", "docx"))
+def test_export_binary_format_writes_bytes_verbatim(client_obj, tmp_path, fmt):
+    # Binary export body with a non-UTF-8 byte (0xd3) must not be decoded.
+    payload = b"%PDF-1.4\n\xd3\xd3binary\x00body"
+    files = client_obj.service.files.return_value
+    files.get.return_value.execute.return_value = {
+        "name": "Doc",
+        "mimeType": "application/vnd.google-apps.document",
+    }
+    files.export.return_value.execute.return_value = payload
+    dest = tmp_path / f"out.{fmt}"
+    result = client_obj.export_file("doc1", fmt=fmt, dest=dest)
+    assert dest.read_bytes() == payload
+    assert result["saved_path"] == str(dest)
+    assert result["size"] == len(payload)
+    assert "text" not in result
+
+
 @pytest.mark.parametrize("folder", (None, ""))
 def test_upload_requires_folder_name(client_obj, folder):
     with pytest.raises(UsageError):
