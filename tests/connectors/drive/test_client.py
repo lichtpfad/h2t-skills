@@ -988,7 +988,27 @@ def test_docs_service_disabled_maps_to_configerror():
         op="list document tabs",
     )
     assert isinstance(err, ConfigError)
-    assert "Docs API" in str(err)
+    assert "docs.googleapis.com" in str(err)
+
+
+def test_sheets_service_disabled_maps_to_configerror_not_auth():
+    from h2t_ops.connectors.drive.client import _map_http_error
+
+    msg = (
+        'HttpError 403 when requesting '
+        'https://sheets.googleapis.com/v4/spreadsheets/ID/values/A1 returned '
+        '"Google Sheets API has not been used in project 645225611930 before or it '
+        'is disabled." Details: "[{\'reason\': \'SERVICE_DISABLED\', '
+        '\'service\': \'sheets.googleapis.com\'}]"'
+    )
+    # status=403 present → proves SERVICE_DISABLED is caught before the 403→auth branch.
+    err = _map_http_error(FakeHttpError(403, msg), op="update sheet ID range A1")
+    # SERVICE_DISABLED is a setup/config problem, NOT auth — must not become AuthError.
+    assert isinstance(err, ConfigError)
+    assert not isinstance(err, AuthError)
+    assert "sheets.googleapis.com" in str(err)
+    assert "disabled" in str(err).lower()
+    assert "enable" in (getattr(err, "hint", "") or "").lower()
 
 
 def test_http_500_maps_to_providererror():

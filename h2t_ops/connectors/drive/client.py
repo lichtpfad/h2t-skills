@@ -195,10 +195,16 @@ def _map_http_error(e: Exception, *, op: str):
         return e
     text = str(e)
     lowered = text.lower()
-    if "service_disabled" in lowered and "docs.googleapis.com" in lowered:
+    if "service_disabled" in lowered:
+        # Any Google API not enabled in the OAuth client's GCP project. This is a
+        # setup/config problem, NOT auth — surface it as ConfigError (it would
+        # otherwise fall through to the 403 → AuthError branch and mislead).
+        m = re.search(r"([a-z0-9-]+\.googleapis\.com)", text)
+        service = m.group(1) if m else "the required Google API"
         return ConfigError(
-            "Google Docs API is disabled for the current Google project.",
-            hint="Enable docs.googleapis.com for the active project, then retry.",
+            f"Google API {service} is disabled for the current Google Cloud project.",
+            hint=(f"Enable {service} for the active project in the Google Cloud "
+                  "console, then retry (allow ~1-2 min to propagate)."),
         )
     status = getattr(getattr(e, "resp", None), "status", None)
     status = status or getattr(e, "status_code", 0)
