@@ -11,6 +11,7 @@
 | list folder contents by URL | extract folder ID and run `h2t-ops drive list FOLDER_ID --json` |
 | export Google Doc | `h2t-ops drive export FILE_ID_FROM_SEARCH --format md --dest ./export.md --json` |
 | upload one file | `h2t-ops drive upload ./presentation.html --folder "Uploads" --no-convert --json` |
+| markdown to a new Google Doc | `h2t-ops drive upload ./brief.md --parent-id DRIVE_FOLDER_ID --title "Interview Guide" --json` |
 | upload folder | `h2t-ops drive upload-folder ./deploy --parent-id DRIVE_FOLDER_ID --dry-run --json` |
 | list tabs in a Google Doc | `h2t-ops drive docs-tab list DOC_ID --json` |
 | add a new tab to a Google Doc | `h2t-ops drive docs-tab add DOC_ID "Tab Title" --json` |
@@ -93,6 +94,8 @@ In Claude Code, check readiness through:
 ## Common Failures
 
 - `--format txt` is accepted as an alias for `--format text`; `--format markdown` is accepted as an alias for `--format md`.
+- Binary export formats (`pdf`, `docx`, `xlsx`, `pptx`) write raw bytes to `--dest`; they cannot be used with `--print`.
+- Markdown → Google Doc: `upload ./brief.md` converts natively via Drive (`.md`/`.docx`/`.html` are in the convert map) — no pandoc dependency. Use `--title` to name the resulting doc; without it the filename stem is used.
 - Markdown export works without optional `html2text`; when `html2text` is not installed, h2t-ops uses a smaller stdlib HTML-to-Markdown fallback.
 - Ambiguous folder name: use `upload-folder --parent-id` or inspect folders first.
 - Existing same-name file: default is skip; use `--update-existing` only when replacement is intended.

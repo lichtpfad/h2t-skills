@@ -1293,6 +1293,7 @@ class DriveClient:
         *,
         update_existing: bool = False,
         parent_id: Optional[str] = None,
+        title: Optional[str] = None,
     ) -> Dict[str, Any]:
         if not folder and not parent_id:
             raise UsageError("drive upload: --folder is required")
@@ -1314,6 +1315,8 @@ class DriveClient:
                 source_mime = _guess_mime(src)
                 target_mime = None
                 dest_name = src.name
+            if title:
+                dest_name = title
 
             existing = None
             if update_existing and folder_id and not self._is_virtual_parent(folder_id):

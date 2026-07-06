@@ -130,6 +130,9 @@ def register(subparsers: Any) -> None:
                     help="Update existing same-name file instead of skipping")
     up.add_argument("--parent-id", dest="parent_id", metavar="ID", default=None,
                     help="Destination folder id (alternative to --folder name)")
+    up.add_argument("--title", default=None,
+                    help="Override the uploaded file/doc name (default: filename). "
+                         "With markdown/docx this names the resulting Google Doc.")
     add_fmt(up)
 
     ufp = cmds.add_parser(
@@ -290,6 +293,7 @@ def run(args) -> Any:
             no_convert=args.no_convert,
             update_existing=getattr(args, "update_existing", False),
             parent_id=getattr(args, "parent_id", None),
+            title=getattr(args, "title", None),
         )
     if cmd == "upload-folder":
         return client.upload_folder(
