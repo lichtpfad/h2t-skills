@@ -644,6 +644,44 @@ class NotionClient:
 
     # --- P0 lifecycle ops ---
 
+    def _default_data_source_id(self, database_id: str) -> str:
+        """Return the first data source id of a database (API 2025-09-03).
+
+        Databases no longer carry ``properties`` directly; the schema lives on
+        one or more data sources. Most databases have exactly one.
+        """
+        db = self.get_database(database_id)
+        sources = db.get("data_sources") or []
+        if not sources:
+            raise UsageError(
+                f"database {database_id} has no data sources — cannot resolve schema"
+            )
+        return sources[0]["id"]
+
+    def _resolve_title_property_name(self, database_id: str) -> str:
+        """Resolve the name of the title-typed property (the DB has exactly one).
+
+        The title column can be renamed in Notion, so it must be looked up by
+        ``type == "title"`` rather than assumed to be ``"Name"``.
+        """
+        ds_id = self._default_data_source_id(database_id)
+        try:
+            ds = self.client.data_sources.retrieve(data_source_id=ds_id)
+        except Exception as e:
+            raise _map_sdk_exc(e, op=f"retrieve data source {ds_id}") from e
+        for name, prop in (ds.get("properties") or {}).items():
+            if prop.get("type") == "title":
+                return name
+        raise UsageError(
+            f"data source {ds_id} has no title-typed property"
+        )
+
+    @staticmethod
+    def _has_title_property(properties: Dict[str, Any]) -> bool:
+        return any(
+            isinstance(v, dict) and "title" in v for v in properties.values()
+        )
+
     def create_db_item(
         self,
         database_id: str,
@@ -653,9 +691,11 @@ class NotionClient:
     ) -> Dict[str, Any]:
         import json
         properties: Dict[str, Any] = json.loads(property_json) if property_json else {}
-        # Add Name/title property if no title-type property provided
-        if "Name" not in properties and "title" not in {k.lower() for k in properties}:
-            properties["Name"] = {"title": [{"text": {"content": title}}]}
+        # Resolve the title property by type (it may be renamed from "Name").
+        # Only hit the API when the caller did not already supply a title value.
+        if not self._has_title_property(properties):
+            title_prop = self._resolve_title_property_name(database_id)
+            properties[title_prop] = {"title": [{"text": {"content": title}}]}
         try:
             return self.client.pages.create(
                 parent={"database_id": database_id},
@@ -663,6 +703,54 @@ class NotionClient:
             )
         except Exception as e:
             raise _map_sdk_exc(e, op=f"create db item in {database_id}") from e
+
+    def create_database(
+        self,
+        parent_page_id: str,
+        *,
+        title: str,
+        properties: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Create a typed database under a page (API 2025-09-03).
+
+        ``properties`` is a Notion properties map and must include exactly one
+        title-typed property (``{"<name>": {"title": {}}}``). Columns are passed
+        through ``initial_data_source`` per the current API shape.
+        """
+        if not self._has_title_property(properties):
+            raise UsageError(
+                "create-database: properties must include one title property, "
+                'e.g. {"Name": {"title": {}}}'
+            )
+        try:
+            return self.client.databases.create(
+                parent={"type": "page_id", "page_id": parent_page_id},
+                title=[{"type": "text", "text": {"content": title}}],
+                initial_data_source={"properties": properties},
+            )
+        except Exception as e:
+            raise _map_sdk_exc(e, op=f"create database under {parent_page_id}") from e
+
+    def patch_db_schema(
+        self,
+        database_id: str,
+        *,
+        properties: Dict[str, Any],
+        data_source_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Add/rename/remove columns on a database's data source (API 2025-09-03).
+
+        Schema changes now target the data source, not the database. When
+        ``data_source_id`` is omitted the database's first data source is used.
+        """
+        ds_id = data_source_id or self._default_data_source_id(database_id)
+        try:
+            return self.client.data_sources.update(
+                data_source_id=ds_id,
+                properties=properties,
+            )
+        except Exception as e:
+            raise _map_sdk_exc(e, op=f"patch schema of data source {ds_id}") from e
 
     def update_db_item(self, page_id: str, *, property_json: str) -> Dict[str, Any]:
         import json

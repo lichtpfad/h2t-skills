@@ -859,16 +859,33 @@ def test_graph_page_includes_traversal_permission_errors(conv):
 
 # --- P0 lifecycle client unit tests ---
 
-def test_create_db_item_builds_title_property(conv):
+def test_create_db_item_resolves_renamed_title_property(conv):
     from unittest.mock import MagicMock
     conv.client = MagicMock()
+    # Database schema whose title column was renamed away from "Name".
+    conv.client.databases.retrieve.return_value = {"data_sources": [{"id": "ds1"}]}
+    conv.client.data_sources.retrieve.return_value = {
+        "properties": {"Task name": {"type": "title"}, "Score": {"type": "number"}}
+    }
     conv.client.pages.create.return_value = {"id": "new-page", "object": "page"}
     result = conv.create_db_item("db1", title="My Task")
     call_kwargs = conv.client.pages.create.call_args.kwargs
     assert call_kwargs["parent"] == {"database_id": "db1"}
-    assert "Name" in call_kwargs["properties"]
-    assert call_kwargs["properties"]["Name"]["title"][0]["text"]["content"] == "My Task"
+    # Title written to the resolved property, not the hardcoded "Name".
+    assert "Name" not in call_kwargs["properties"]
+    assert call_kwargs["properties"]["Task name"]["title"][0]["text"]["content"] == "My Task"
     assert result["id"] == "new-page"
+
+
+def test_create_db_item_skips_schema_lookup_when_title_supplied(conv):
+    from unittest.mock import MagicMock
+    conv.client = MagicMock()
+    conv.client.pages.create.return_value = {"id": "new-page"}
+    prop_json = '{"Task name": {"title": [{"text": {"content": "Custom"}}]}}'
+    conv.create_db_item("db1", title="Ignored", property_json=prop_json)
+    # No schema round-trip when caller already provided a title-typed property.
+    conv.client.databases.retrieve.assert_not_called()
+    conv.client.data_sources.retrieve.assert_not_called()
 
 
 def test_create_db_item_does_not_override_existing_title_property(conv):
@@ -880,6 +897,53 @@ def test_create_db_item_does_not_override_existing_title_property(conv):
     call_kwargs = conv.client.pages.create.call_args.kwargs
     # Name was already in property_json, should use custom value
     assert call_kwargs["properties"]["Name"]["title"][0]["text"]["content"] == "Custom"
+
+
+def test_create_database_wraps_properties_in_initial_data_source(conv):
+    from unittest.mock import MagicMock
+    conv.client = MagicMock()
+    conv.client.databases.create.return_value = {"id": "db-new", "object": "database"}
+    props = {"Company": {"title": {}}, "Score": {"number": {}}}
+    result = conv.create_database("parent1", title="Partners", properties=props)
+    call_kwargs = conv.client.databases.create.call_args.kwargs
+    assert call_kwargs["parent"] == {"type": "page_id", "page_id": "parent1"}
+    assert call_kwargs["title"][0]["text"]["content"] == "Partners"
+    # 2025-09-03: columns go under initial_data_source, not a flat properties map.
+    assert call_kwargs["initial_data_source"]["properties"] == props
+    assert "properties" not in call_kwargs
+    assert result["id"] == "db-new"
+
+
+def test_create_database_requires_title_property(conv):
+    from unittest.mock import MagicMock
+    from h2t_ops.core.errors import UsageError
+    conv.client = MagicMock()
+    with pytest.raises(UsageError):
+        conv.create_database("parent1", title="X", properties={"Score": {"number": {}}})
+    conv.client.databases.create.assert_not_called()
+
+
+def test_patch_db_schema_targets_default_data_source(conv):
+    from unittest.mock import MagicMock
+    conv.client = MagicMock()
+    conv.client.databases.retrieve.return_value = {"data_sources": [{"id": "ds1"}]}
+    conv.client.data_sources.update.return_value = {"id": "ds1", "object": "data_source"}
+    props = {"Website": {"url": {}}}
+    result = conv.patch_db_schema("db1", properties=props)
+    call_kwargs = conv.client.data_sources.update.call_args.kwargs
+    assert call_kwargs["data_source_id"] == "ds1"
+    assert call_kwargs["properties"] == props
+    assert result["id"] == "ds1"
+
+
+def test_patch_db_schema_honors_explicit_data_source(conv):
+    from unittest.mock import MagicMock
+    conv.client = MagicMock()
+    conv.client.data_sources.update.return_value = {"id": "ds9"}
+    conv.patch_db_schema("db1", properties={"X": {"number": {}}}, data_source_id="ds9")
+    # Explicit data source skips the database lookup.
+    conv.client.databases.retrieve.assert_not_called()
+    assert conv.client.data_sources.update.call_args.kwargs["data_source_id"] == "ds9"
 
 
 def test_update_db_item_passes_properties_json(conv):
