@@ -63,6 +63,10 @@ class _FakeClient:
     def update_page(self, *a, **k): return {"id": "p"}
     def list_comments(self, page_id): return [{"id": "c1", "text": "hi", "created_time": "2026-05-25T10:00:00.000Z", "created_by_id": "u1"}]
     def create_comment(self, page_id, body): return {"id": "c2", "text": body, "created_time": "2026-05-25T10:00:00.000Z", "created_by_id": "u1"}
+    def create_database(self, parent_page_id, *, title, properties):
+        return {"id": "db-new", "object": "database", "_title": title, "_props": properties}
+    def patch_db_schema(self, database_id, *, properties, data_source_id=None):
+        return {"id": "ds1", "object": "data_source", "_props": properties, "_ds": data_source_id}
 
 
 def _ns(**kw):
@@ -171,6 +175,49 @@ def test_comment_dispatch(monkeypatch):
     out = notion_cmds.run(_ns(notion_cmd="comment", page_id="page1", body="Hello", as_json=True, fmt="human"))
     assert out["id"] == "c2"
     assert out["text"] == "Hello"
+
+
+def test_create_database_and_patch_schema_parser_surface():
+    p = _parser()
+    cd = p.parse_args(["notion", "create-database", "parent1",
+                       "--title", "Partners", "--properties-file", "s.json"])
+    assert cd.notion_cmd == "create-database" and cd.parent_page_id == "parent1"
+    assert cd.title == "Partners" and cd.properties_file == "s.json"
+    ps = p.parse_args(["notion", "patch-db-schema", "db1",
+                       "--properties-file", "s.json", "--data-source-id", "ds9"])
+    assert ps.notion_cmd == "patch-db-schema" and ps.database_id == "db1"
+    assert ps.data_source_id == "ds9"
+
+
+def test_create_database_dispatch_reads_properties_file(monkeypatch, tmp_path):
+    _patch_client(monkeypatch)
+    f = tmp_path / "schema.json"
+    f.write_text('{"Company": {"title": {}}, "Score": {"number": {}}}', encoding="utf-8")
+    out = notion_cmds.run(_ns(notion_cmd="create-database", parent_page_id="parent1",
+                              title="Partners", properties_file=str(f),
+                              as_json=True, fmt="human"))
+    assert out["id"] == "db-new"
+    assert out["_title"] == "Partners"
+    assert out["_props"]["Company"] == {"title": {}}
+
+
+def test_patch_db_schema_dispatch_reads_properties_file(monkeypatch, tmp_path):
+    _patch_client(monkeypatch)
+    f = tmp_path / "schema.json"
+    f.write_text('{"Website": {"url": {}}}', encoding="utf-8")
+    out = notion_cmds.run(_ns(notion_cmd="patch-db-schema", database_id="db1",
+                              properties_file=str(f), data_source_id=None,
+                              as_json=True, fmt="human"))
+    assert out["id"] == "ds1"
+    assert out["_props"] == {"Website": {"url": {}}}
+
+
+def test_patch_db_schema_dispatch_missing_file_raises_usageerror(monkeypatch):
+    _patch_client(monkeypatch)
+    with pytest.raises(UsageError):
+        notion_cmds.run(_ns(notion_cmd="patch-db-schema", database_id="db1",
+                            properties_file="nonexistent.json", data_source_id=None,
+                            as_json=True, fmt="human"))
 
 
 def test_connector_help_exits_zero(capsys):

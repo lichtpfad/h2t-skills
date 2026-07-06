@@ -14,6 +14,8 @@
 | create page | `h2t-ops notion create PAGE_ID "Title" --content "Body" --json` |
 | update page | `h2t-ops notion update PAGE_ID --title "Updated title" --json` |
 | sync page to markdown | `h2t-ops notion sync PAGE_ID ./notion-page.md --json` |
+| create typed database | `h2t-ops notion create-database PARENT_PAGE_ID --title "Partners" --properties-file schema.json --json` |
+| add/rename/remove columns | `h2t-ops notion patch-db-schema DB_ID --properties-file schema.json --json` |
 | create database row | `h2t-ops notion create-db-item DB_ID --title "Task" --json` |
 | update database row properties | `h2t-ops notion update-db-item PAGE_ID --property-json '{"Status":{"select":{"name":"Done"}}}' --json` |
 | archive page (safe, title-verified) | `h2t-ops notion archive PAGE_ID --confirm-title "Exact Title" --json` |
@@ -48,11 +50,30 @@ In Claude Code, check readiness through:
 /h2t-core:setup connectors-check
 ```
 
+## Database schema ops (API 2025-09-03)
+
+The SDK targets Notion API `2025-09-03`, where a database owns one or more
+**data sources** and the column schema lives on the data source, not the
+database. This shapes the write commands:
+
+- `create-database` wraps the properties map in `initial_data_source` (not a
+  flat top-level `properties`). The map must include exactly one title-typed
+  property, e.g. `{"Company": {"title": {}}}`.
+- `patch-db-schema` resolves the database's first data source and calls
+  `data_sources.update`; pass `--data-source-id` to target a specific one on a
+  multi-source database. Rename the title column in the same call with
+  `{"OldName": {"name": "NewName"}}`.
+- `create-db-item` resolves the title property **by type** from the data source
+  schema, so it works after the title column is renamed away from `Name`.
+
+`--properties-file` is a JSON file holding the Notion `properties` map.
+
 ## Common Failures
 
 - Search returns no databases but page contains child databases: use `find-databases PAGE_ID`.
 - Permission error: share the Notion page/database with the integration.
 - Task creation request: confirm whether the user wants a Notion provider write or a POS/coordinator proposal.
+- `create-database` needs a **page** parent, not a database — a database cannot parent another database directly.
 
 ## Manual E2E Smoke Recipe
 

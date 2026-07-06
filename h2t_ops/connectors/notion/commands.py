@@ -92,6 +92,23 @@ def register(subparsers: Any) -> None:
     udi.add_argument("--property-json", required=True, help="JSON Notion properties patch")
     add_fmt(udi)
 
+    cd = cmds.add_parser("create-database", help="Create a typed database under a page")
+    cd.add_argument("parent_page_id")
+    cd.add_argument("--title", required=True, help="Database title")
+    cd.add_argument("--properties-file", required=True,
+                    help="Path to JSON file with a Notion properties map "
+                         "(must include one title property)")
+    add_fmt(cd)
+
+    ps = cmds.add_parser("patch-db-schema",
+                         help="Add/rename/remove columns on a database's data source")
+    ps.add_argument("database_id")
+    ps.add_argument("--properties-file", required=True,
+                    help="Path to JSON file with a Notion properties map")
+    ps.add_argument("--data-source-id",
+                    help="Target a specific data source (default: the DB's first)")
+    add_fmt(ps)
+
     ar = cmds.add_parser("archive", help="Archive a page (requires title confirmation)")
     ar.add_argument("page_id")
     ar.add_argument("--confirm-title", required=True,
@@ -251,6 +268,17 @@ def run(args) -> Any:
         )
     if cmd == "update-db-item":
         return client.update_db_item(args.page_id, property_json=args.property_json)
+    if cmd == "create-database":
+        import json as _json
+        properties = _json.loads(_read_file(args.properties_file))
+        return client.create_database(
+            args.parent_page_id, title=args.title, properties=properties)
+    if cmd == "patch-db-schema":
+        import json as _json
+        properties = _json.loads(_read_file(args.properties_file))
+        return client.patch_db_schema(
+            args.database_id, properties=properties,
+            data_source_id=getattr(args, "data_source_id", None))
     if cmd == "archive":
         return client.archive_page(args.page_id, confirm_title=args.confirm_title)
     if cmd == "append-blocks":
