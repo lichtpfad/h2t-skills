@@ -313,7 +313,7 @@ def test_upload_returns_envelope_with_web_view_link(monkeypatch, capsys):
     from h2t_ops.core.output import emit
 
     class _Stub:
-        def upload_file(self, file, folder, no_convert=False, *, update_existing=False, parent_id=None):
+        def upload_file(self, file, folder, no_convert=False, *, update_existing=False, parent_id=None, title=None):
             return {"file_id": "new1", "name": "note", "mimeType": "text/plain",
                     "web_view_link": "https://drive/new1", "folder_name": folder}
 
@@ -641,7 +641,7 @@ def test_upload_update_existing_dispatch(monkeypatch, capsys):
     calls = {}
 
     class _Stub:
-        def upload_file(self, file, folder, no_convert=False, *, update_existing=False, parent_id=None):
+        def upload_file(self, file, folder, no_convert=False, *, update_existing=False, parent_id=None, title=None):
             calls["update_existing"] = update_existing
             return {"file_id": "new1", "name": "note", "mimeType": "text/plain",
                     "web_view_link": "https://drive/new1", "folder_name": folder, "action": "updated"}

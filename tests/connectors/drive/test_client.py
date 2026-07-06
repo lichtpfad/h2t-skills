@@ -702,6 +702,27 @@ def test_upload_resolves_folder_by_name(client_obj, tmp_path, monkeypatch):
     assert files.create.call_args.kwargs["body"]["parents"] == ["folder1"]
 
 
+def test_upload_title_overrides_document_name(client_obj, tmp_path, monkeypatch):
+    from h2t_ops.connectors.drive import client as dmod
+
+    src = tmp_path / "brief.md"
+    src.write_text("# Brief", encoding="utf-8")
+    monkeypatch.setattr(dmod, "_media_file_upload", lambda: lambda *a, **k: "media")
+    files = client_obj.service.files.return_value
+    files.create.return_value.execute.return_value = {
+        "id": "new2", "name": "Interview Guide",
+        "mimeType": "application/vnd.google-apps.document",
+        "webViewLink": "https://drive/new2",
+    }
+    client_obj.upload_file(str(src), folder=None, parent_id="folder1",
+                           title="Interview Guide")
+    body = files.create.call_args.kwargs["body"]
+    # --title overrides the filename-derived name.
+    assert body["name"] == "Interview Guide"
+    # Still converts markdown to a native Google Doc.
+    assert body["mimeType"] == "application/vnd.google-apps.document"
+
+
 def test_upload_folder_dry_run_preserves_relative_paths(client_obj, tmp_path):
     root = tmp_path / "deploy"
     (root / "raw" / "videos").mkdir(parents=True)
