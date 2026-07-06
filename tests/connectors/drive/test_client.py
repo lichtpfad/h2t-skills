@@ -702,6 +702,70 @@ def test_upload_resolves_folder_by_name(client_obj, tmp_path, monkeypatch):
     assert files.create.call_args.kwargs["body"]["parents"] == ["folder1"]
 
 
+def _sheets_values_mock(client_obj):
+    client_obj._sheets_service = MagicMock()
+    return client_obj._sheets_service.spreadsheets.return_value.values.return_value
+
+
+def test_sheets_read_returns_values(client_obj):
+    values = _sheets_values_mock(client_obj)
+    values.get.return_value.execute.return_value = {
+        "range": "Sheet1!A1:B2", "values": [["a", "b"], ["c", "d"]],
+    }
+    result = client_obj.sheets_read("sheet1", cell_range="Sheet1!A1:B2")
+    assert values.get.call_args.kwargs == {
+        "spreadsheetId": "sheet1", "range": "Sheet1!A1:B2",
+    }
+    assert result["values"] == [["a", "b"], ["c", "d"]]
+    assert result["range"] == "Sheet1!A1:B2"
+
+
+def test_sheets_update_single_value_uses_raw_and_wraps_2d(client_obj):
+    values = _sheets_values_mock(client_obj)
+    values.update.return_value.execute.return_value = {
+        "updatedRange": "Sheet1!B12", "updatedCells": 1,
+        "updatedRows": 1, "updatedColumns": 1,
+    }
+    result = client_obj.sheets_update("sheet1", cell_range="Sheet1!B12", value="hi")
+    kwargs = values.update.call_args.kwargs
+    assert kwargs["spreadsheetId"] == "sheet1"
+    assert kwargs["range"] == "Sheet1!B12"
+    assert kwargs["valueInputOption"] == "RAW"
+    assert kwargs["body"] == {"values": [["hi"]]}  # single value wrapped to 2D
+    assert result["updated_cells"] == 1
+
+
+def test_sheets_update_values_file_reads_2d_array(client_obj, tmp_path):
+    values = _sheets_values_mock(client_obj)
+    values.update.return_value.execute.return_value = {"updatedRange": "Sheet1!B12:C12"}
+    f = tmp_path / "cells.json"
+    f.write_text('[["x", "y"]]', encoding="utf-8")
+    client_obj.sheets_update("sheet1", cell_range="Sheet1!B12:C12", values_file=str(f))
+    assert values.update.call_args.kwargs["body"] == {"values": [["x", "y"]]}
+
+
+def test_sheets_update_requires_exactly_one_of_value_or_file(client_obj):
+    _sheets_values_mock(client_obj)
+    with pytest.raises(UsageError):
+        client_obj.sheets_update("sheet1", cell_range="A1")  # neither
+    with pytest.raises(UsageError):
+        client_obj.sheets_update("sheet1", cell_range="A1", value="v", values_file="f.json")
+
+
+def test_sheets_update_rejects_non_2d_values_file(client_obj, tmp_path):
+    _sheets_values_mock(client_obj)
+    f = tmp_path / "bad.json"
+    f.write_text('["flat", "list"]', encoding="utf-8")  # 1D, not 2D
+    with pytest.raises(UsageError):
+        client_obj.sheets_update("sheet1", cell_range="A1", values_file=str(f))
+
+
+def test_sheets_update_missing_values_file_raises_usageerror(client_obj):
+    _sheets_values_mock(client_obj)
+    with pytest.raises(UsageError):
+        client_obj.sheets_update("sheet1", cell_range="A1", values_file="nonexistent.json")
+
+
 def test_upload_title_overrides_document_name(client_obj, tmp_path, monkeypatch):
     from h2t_ops.connectors.drive import client as dmod
 

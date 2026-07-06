@@ -307,6 +307,61 @@ def test_docs_tab_list_returns_envelope(monkeypatch, capsys):
     assert out["result"]["count"] == 1
 
 
+def test_sheets_parser_surface():
+    parser = _build_parser()
+    r = parser.parse_args(["drive", "sheets", "read", "sh1", "--range", "Sheet1!A1:B2"])
+    assert r.drive_cmd == "sheets" and r.sheets_cmd == "read" and r.range == "Sheet1!A1:B2"
+    u = parser.parse_args(
+        ["drive", "sheets", "update", "sh1", "--range", "Sheet1!B12", "--value", "hi"])
+    assert u.sheets_cmd == "update" and u.sheet_id == "sh1" and u.value == "hi"
+    uf = parser.parse_args(
+        ["drive", "sheets", "update", "sh1", "--range", "A1", "--values-file", "c.json"])
+    assert uf.values_file == "c.json"
+
+
+def test_sheets_update_dispatch_calls_client(monkeypatch, capsys):
+    import h2t_ops.connectors.drive.client as client_mod
+    from h2t_ops.connectors.drive import commands as cmds_mod
+    from h2t_ops.core.output import emit
+
+    calls = {}
+
+    class _Stub:
+        def sheets_update(self, sheet_id, *, cell_range, value=None, values_file=None):
+            calls.update(sheet_id=sheet_id, cell_range=cell_range,
+                         value=value, values_file=values_file)
+            return {"sheet_id": sheet_id, "updated_cells": 1, "updated_range": cell_range}
+
+    monkeypatch.setattr(client_mod, "DriveClient", lambda: _Stub())
+    args = SimpleNamespace(drive_cmd="sheets", sheets_cmd="update", sheet_id="sh1",
+                           range="Sheet1!B12", value="hi", values_file=None,
+                           as_json=True, fmt="human")
+    rc = emit("drive", result=cmds_mod.run(args), fmt="json")
+    out = json.loads(capsys.readouterr().out)
+    assert rc == 0
+    assert calls == {"sheet_id": "sh1", "cell_range": "Sheet1!B12",
+                     "value": "hi", "values_file": None}
+    assert out["result"]["updated_cells"] == 1
+
+
+def test_sheets_read_dispatch_calls_client(monkeypatch, capsys):
+    import h2t_ops.connectors.drive.client as client_mod
+    from h2t_ops.connectors.drive import commands as cmds_mod
+    from h2t_ops.core.output import emit
+
+    class _Stub:
+        def sheets_read(self, sheet_id, *, cell_range):
+            return {"sheet_id": sheet_id, "range": cell_range, "values": [["a"]]}
+
+    monkeypatch.setattr(client_mod, "DriveClient", lambda: _Stub())
+    args = SimpleNamespace(drive_cmd="sheets", sheets_cmd="read", sheet_id="sh1",
+                           range="Sheet1!A1:B2", as_json=True, fmt="human")
+    rc = emit("drive", result=cmds_mod.run(args), fmt="json")
+    out = json.loads(capsys.readouterr().out)
+    assert rc == 0
+    assert out["result"]["values"] == [["a"]]
+
+
 def test_upload_returns_envelope_with_web_view_link(monkeypatch, capsys):
     import h2t_ops.connectors.drive.client as client_mod
     from h2t_ops.connectors.drive import commands as cmds_mod

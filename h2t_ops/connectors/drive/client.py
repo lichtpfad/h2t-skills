@@ -407,11 +407,77 @@ class DriveClient:
         self._creds = creds
         self.service = build_google_service("drive", "v3", creds)
         self._docs_service = None
+        self._sheets_service = None
 
     def _docs(self):
         if self._docs_service is None:
             self._docs_service = build_google_service("docs", "v1", self._creds)
         return self._docs_service
+
+    def _sheets(self):
+        if self._sheets_service is None:
+            self._sheets_service = build_google_service("sheets", "v4", self._creds)
+        return self._sheets_service
+
+    def sheets_read(self, sheet_id: str, *, cell_range: str) -> Dict[str, Any]:
+        """Read a cell range from a Google Sheet (values only)."""
+        try:
+            resp = self._sheets().spreadsheets().values().get(
+                spreadsheetId=sheet_id, range=cell_range,
+            ).execute()
+        except Exception as e:
+            raise _map_http_error(e, op=f"read sheet {sheet_id} range {cell_range}") from e
+        return {
+            "sheet_id": sheet_id,
+            "range": resp.get("range", cell_range),
+            "values": resp.get("values", []),
+        }
+
+    def sheets_update(
+        self,
+        sheet_id: str,
+        *,
+        cell_range: str,
+        value: Optional[str] = None,
+        values_file: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Write values into a range in place via Sheets ``values.update``.
+
+        Values-only update (``valueInputOption=RAW``) — cell/column formatting,
+        merges, and frozen rows are preserved (unlike a full-file re-upload).
+        """
+        import json
+        if (value is None) == (not values_file):
+            raise UsageError("sheets update: specify exactly one of --value or --values-file")
+        if values_file:
+            try:
+                raw = Path(values_file).read_text(encoding="utf-8")
+            except FileNotFoundError as e:
+                raise UsageError(f"file not found: {values_file}") from e
+            try:
+                values = json.loads(raw)
+            except json.JSONDecodeError as e:
+                raise UsageError(f"values-file is not valid JSON: {e}") from e
+            if not isinstance(values, list) or not all(isinstance(row, list) for row in values):
+                raise UsageError('values-file must be a JSON 2D array, e.g. [["a","b"],["c","d"]]')
+        else:
+            values = [[value]]
+        try:
+            resp = self._sheets().spreadsheets().values().update(
+                spreadsheetId=sheet_id,
+                range=cell_range,
+                valueInputOption="RAW",
+                body={"values": values},
+            ).execute()
+        except Exception as e:
+            raise _map_http_error(e, op=f"update sheet {sheet_id} range {cell_range}") from e
+        return {
+            "sheet_id": sheet_id,
+            "updated_range": resp.get("updatedRange"),
+            "updated_cells": resp.get("updatedCells"),
+            "updated_rows": resp.get("updatedRows"),
+            "updated_columns": resp.get("updatedColumns"),
+        }
 
     def _list_paginated(
         self,
