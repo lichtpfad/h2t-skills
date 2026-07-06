@@ -108,6 +108,24 @@ def register(subparsers: Any) -> None:
                      help="Delete existing tab content before writing (replaces instead of append)")
     add_fmt(dtw)
 
+    shp = cmds.add_parser("sheets", help="Read/update Google Sheets cell values (formatting-safe)")
+    shcmds = shp.add_subparsers(dest="sheets_cmd", required=True)
+    shr = shcmds.add_parser("read", help="Read a cell range from a Sheet")
+    shr.add_argument("sheet_id")
+    shr.add_argument("--range", required=True, metavar="A1",
+                     help='A1 range, e.g. "Sheet1!A1:H20"')
+    add_fmt(shr)
+    shu = shcmds.add_parser(
+        "update",
+        help="Write values to a range in place (values only; formatting preserved)")
+    shu.add_argument("sheet_id")
+    shu.add_argument("--range", required=True, metavar="A1",
+                     help='A1 range, e.g. "Sheet1!B12" or "Sheet1!B12:H12"')
+    shu.add_argument("--value", help="Single cell value (RAW)")
+    shu.add_argument("--values-file", metavar="PATH",
+                     help="JSON file with a 2D array of values, e.g. [[\"a\",\"b\"]]")
+    add_fmt(shu)
+
     dp = cmds.add_parser("download", help="Download a Drive file by id")
     dp.add_argument("file_id")
     dp.add_argument("--dest")
@@ -274,6 +292,17 @@ def run(args) -> Any:
                 args.document_id, args.tab_id, content, clear_first=clear_first,
             )
         raise UsageError(f"unknown drive docs-tab subcommand: {args.docs_tab_cmd}")
+    if cmd == "sheets":
+        if args.sheets_cmd == "read":
+            return client.sheets_read(args.sheet_id, cell_range=args.range)
+        if args.sheets_cmd == "update":
+            return client.sheets_update(
+                args.sheet_id,
+                cell_range=args.range,
+                value=getattr(args, "value", None),
+                values_file=getattr(args, "values_file", None),
+            )
+        raise UsageError(f"unknown drive sheets subcommand: {args.sheets_cmd}")
     if cmd == "download":
         return client.download_file(args.file_id, dest=args.dest)
     if cmd == "export":

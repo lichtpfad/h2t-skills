@@ -12,6 +12,9 @@
 | export Google Doc | `h2t-ops drive export FILE_ID_FROM_SEARCH --format md --dest ./export.md --json` |
 | upload one file | `h2t-ops drive upload ./presentation.html --folder "Uploads" --no-convert --json` |
 | markdown to a new Google Doc | `h2t-ops drive upload ./brief.md --parent-id DRIVE_FOLDER_ID --title "Interview Guide" --json` |
+| read Sheet cell range | `h2t-ops drive sheets read SHEET_ID --range "Sheet1!A1:H20" --json` |
+| update Sheet cell (in place, keeps formatting) | `h2t-ops drive sheets update SHEET_ID --range "Sheet1!B12" --value "text" --json` |
+| update Sheet range from JSON 2D array | `h2t-ops drive sheets update SHEET_ID --range "Sheet1!B12:H12" --values-file cells.json --json` |
 | upload folder | `h2t-ops drive upload-folder ./deploy --parent-id DRIVE_FOLDER_ID --dry-run --json` |
 | list tabs in a Google Doc | `h2t-ops drive docs-tab list DOC_ID --json` |
 | add a new tab to a Google Doc | `h2t-ops drive docs-tab add DOC_ID "Tab Title" --json` |
@@ -96,6 +99,8 @@ In Claude Code, check readiness through:
 - `--format txt` is accepted as an alias for `--format text`; `--format markdown` is accepted as an alias for `--format md`.
 - Binary export formats (`pdf`, `docx`, `xlsx`, `pptx`) write raw bytes to `--dest`; they cannot be used with `--print`.
 - Markdown → Google Doc: `upload ./brief.md` converts natively via Drive (`.md`/`.docx`/`.html` are in the convert map) — no pandoc dependency. Use `--title` to name the resulting doc; without it the filename stem is used.
+- Editing a Sheet: use `sheets update` (in-place `values.update`, `valueInputOption=RAW`) — it preserves formatting/merges/frozen rows. Do NOT `upload --update-existing` a CSV/XLSX to edit cells; that replaces the whole file and wipes formatting. `--value` writes one cell; `--values-file` takes a JSON 2D array for a range.
+- Sheets requires the Google Sheets API enabled in the OAuth client's GCP project (the `drive` scope is sufficient — no re-auth). If disabled: `SERVICE_DISABLED` error with an activation URL.
 - Markdown export works without optional `html2text`; when `html2text` is not installed, h2t-ops uses a smaller stdlib HTML-to-Markdown fallback.
 - Ambiguous folder name: use `upload-folder --parent-id` or inspect folders first.
 - Existing same-name file: default is skip; use `--update-existing` only when replacement is intended.
