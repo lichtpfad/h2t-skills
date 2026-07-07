@@ -16,6 +16,7 @@ PLUGIN_ROOT = parent.parent.parent.parent of this file
 """
 
 import argparse
+import json
 import sys
 import time
 from pathlib import Path
@@ -42,10 +43,24 @@ from gather.briefing import format_briefing
 from eval.session import SkillEval
 
 
+def _print_text(text: str) -> None:
+    """Write plain text to stdout, UTF-8 safe on Windows (avoids cp1252 crash)."""
+    import io
+    out = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", newline="")
+    out.write(text if text.endswith("\n") else text + "\n")
+    out.flush()
+    out.detach()  # don't close underlying buffer
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--cwd", default=".")
     parser.add_argument("--format-briefing", action="store_true")
+    parser.add_argument(
+        "--briefing-only",
+        action="store_true",
+        help="Emit hook-format 'BRIEFING:/GATHER_META:' text instead of full JSON (small, UTF-8 safe)",
+    )
     args = parser.parse_args()
 
     start = time.monotonic()
@@ -105,7 +120,7 @@ def main() -> None:
         },
     }
 
-    if args.format_briefing:
+    if args.format_briefing or args.briefing_only:
         briefing, meta = format_briefing(data)
         data["_briefing"] = briefing
         data["_meta"].update(meta)
@@ -121,7 +136,13 @@ def main() -> None:
     except Exception:
         pass
 
-    output_json(data)
+    if args.briefing_only:
+        # Hook-identical injection format: small, UTF-8 safe, nothing to post-process.
+        b = data.get("_briefing", "")
+        m = json.dumps(data.get("_meta", {}), ensure_ascii=False)
+        _print_text(f"BRIEFING:\n{b}\n\nGATHER_META: {m}")
+    else:
+        output_json(data)
 
 
 if __name__ == "__main__":

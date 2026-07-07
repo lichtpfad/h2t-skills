@@ -63,7 +63,7 @@ def test_session_start_skill_uses_installable_entrypoints():
     assert "command -v h2t-activity-log" in text
     assert 'source "${CLAUDE_PLUGIN_ROOT}/scripts/resolve-h2t-python.sh"' in text
     assert "resolve_h2t_python ||" in text
-    assert 'h2t-gather --cwd "$(pwd)" --format-briefing' in text
+    assert 'h2t-gather --cwd "$(pwd)" --briefing-only' in text
     assert "h2t-activity-log start \\" in text
     assert "${CLAUDE_PLUGIN_ROOT}/skills/session-start/scripts/gather.py" not in text
     assert "${CLAUDE_PLUGIN_ROOT}/lib/activity/writer.py" not in text
