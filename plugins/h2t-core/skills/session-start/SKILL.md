@@ -47,10 +47,17 @@ If `BRIEFING:` is present in your system context:
 If `BRIEFING:` is NOT in your context, run:
 
 ```bash
-h2t-gather --cwd "$(pwd)" --format-briefing
+h2t-gather --cwd "$(pwd)" --briefing-only
 ```
 
-Parse the full JSON output as GATHER_RESULT.
+This prints the **same `BRIEFING:` / `GATHER_META:` format** the hook injects — parse it
+exactly as above (text between `BRIEFING:\n` and `\n\nGATHER_META:` → `_briefing`;
+`GATHER_META` JSON → `GATHER_RESULT._meta`, with `.project` / `.sessions` / `.machine`).
+
+⛔ The output is already in your context. Read `_briefing` and the `GATHER_META` fields
+**directly** from it. Do NOT pipe, grep, `Select-String`, `jq`, or run `python`/`h2t-python`
+on it — those are a Windows cp1252 / wrong-shell trap and produce nothing the plain output
+doesn't already give you. One command, then read.
 
 ### Step 2: Show briefing
 

@@ -33,6 +33,21 @@ def test_gather_with_format_briefing_includes_briefing():
     assert len(data["_briefing"]) > 0
 
 
+def test_gather_briefing_only_outputs_injection_format():
+    code, out, err = run_h2t(
+        "gather", "session-start", "--cwd", str(REPO_ROOT), "--briefing-only"
+    )
+    assert code == 0, f"Expected exit 0. stderr: {err}"
+    # Not the giant raw JSON — hook-identical injection format instead.
+    assert not out.lstrip().startswith("{"), "briefing-only must not emit raw JSON"
+    assert out.startswith("BRIEFING:\n"), "must start with BRIEFING: marker"
+    assert "\n\nGATHER_META: " in out, "must carry a GATHER_META line"
+    meta_json = out.split("\n\nGATHER_META: ", 1)[1]
+    meta = json.loads(meta_json)
+    assert "project" in meta, "GATHER_META must carry project for steps 5/7"
+    assert meta["project"].get("domain"), "project.domain needed for activity-log"
+
+
 def test_gather_handoff_returns_json():
     code, out, err = run_h2t("gather", "handoff", "--cwd", str(REPO_ROOT))
     assert code == 0, f"Expected exit 0. stderr: {err}"

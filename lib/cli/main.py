@@ -34,7 +34,16 @@ from eval.session import SkillEval
 # gather subcommand
 # ---------------------------------------------------------------------------
 
-def _run_gather(skill: str, cwd: str, format_briefing_flag: bool) -> None:
+def _print_text(text: str) -> None:
+    """Write plain text to stdout, UTF-8 safe on Windows (avoids cp1252 crash)."""
+    import io
+    out = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", newline="")
+    out.write(text if text.endswith("\n") else text + "\n")
+    out.flush()
+    out.detach()  # don't close underlying buffer
+
+
+def _run_gather(skill: str, cwd: str, format_briefing_flag: bool, briefing_only: bool = False) -> None:
     start = time.monotonic()
     sources_used: list[str] = []
     sources_failed: list[str] = []
@@ -84,7 +93,7 @@ def _run_gather(skill: str, cwd: str, format_briefing_flag: bool) -> None:
         },
     }
 
-    if format_briefing_flag:
+    if format_briefing_flag or briefing_only:
         briefing, meta = format_briefing(data)
         data["_briefing"] = briefing
         data["_meta"].update(meta)
@@ -99,14 +108,25 @@ def _run_gather(skill: str, cwd: str, format_briefing_flag: bool) -> None:
     except Exception:
         pass
 
-    output_json(data)
+    if briefing_only:
+        # Hook-identical injection format: small, UTF-8 safe, nothing to post-process.
+        b = data.get("_briefing", "")
+        m = json.dumps(data.get("_meta", {}), ensure_ascii=False)
+        _print_text(f"BRIEFING:\n{b}\n\nGATHER_META: {m}")
+    else:
+        output_json(data)
 
 
 def _cmd_gather(args: argparse.Namespace) -> int:
     if not args.skill:
         print("error: gather requires a skill name (e.g. session-start, handoff)", file=sys.stderr)
         return 2
-    _run_gather(skill=args.skill, cwd=args.cwd, format_briefing_flag=args.format_briefing)
+    _run_gather(
+        skill=args.skill,
+        cwd=args.cwd,
+        format_briefing_flag=args.format_briefing,
+        briefing_only=args.briefing_only,
+    )
     return 0
 
 
@@ -564,6 +584,11 @@ def main() -> None:
     gather_parser.add_argument("skill", nargs="?", default="")
     gather_parser.add_argument("--cwd", default=".")
     gather_parser.add_argument("--format-briefing", action="store_true")
+    gather_parser.add_argument(
+        "--briefing-only",
+        action="store_true",
+        help="Emit hook-format 'BRIEFING:/GATHER_META:' text instead of full JSON (small, UTF-8 safe)",
+    )
 
     # ingest
     _add_ingest_subparser(subparsers)
