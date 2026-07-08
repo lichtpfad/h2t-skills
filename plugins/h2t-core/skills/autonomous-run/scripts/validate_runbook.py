@@ -1,7 +1,13 @@
-"""Sealed post-generation validator. Splits the artifact into H2 sections and reports
-every missing required section, every safety marker absent FROM ITS OWN SECTION, and any
-unresolved <<TOKEN>>. Run after generation AND after model weaving, so weaving cannot
-silently gut a section or drop safety text (spec § Architecture step 3; codex-plan-gate-1 P1)."""
+"""Post-generation drift-guard for the runbook artifact. Splits into H2 sections and
+reports missing/duplicate/empty required sections, safety markers absent FROM THEIR OWN
+SECTION, missing pipeline steps, and unresolved <<TOKEN>>. Run after generation AND after
+model weaving (spec § Architecture step 3).
+
+SCOPE (honest, codex-gate-M1): this defends against *accidental drift* — a weaving model
+silently gutting or dropping a safety section. It is NOT an adversarial sandbox: a
+malicious agent could bypass by never calling the validator. Duplicate-heading and
+empty-body checks close the realistic accidental-bypass paths; line-scoped marker matching
+reduces (does not eliminate) unrelated-prose false-accepts."""
 from __future__ import annotations
 import re
 import sys
@@ -15,8 +21,13 @@ class RunbookInvalid(Exception):
 _H2 = re.compile(r"^## (.+?)\s*$", re.MULTILINE)
 
 
+def _headings(text: str) -> list[str]:
+    return ["## " + m.group(1).strip() for m in _H2.finditer(text)]
+
+
 def split_sections(text: str) -> dict[str, str]:
-    """Map each '## Heading' -> body text up to the next H2 (or EOF)."""
+    """Map each '## Heading' -> body text up to the next H2 (or EOF). On duplicate
+    headings the last body wins; `validate` rejects duplicates so that never certifies."""
     out: dict[str, str] = {}
     matches = list(_H2.finditer(text))
     for i, m in enumerate(matches):
@@ -27,16 +38,30 @@ def split_sections(text: str) -> dict[str, str]:
     return out
 
 
+def _marker_on_a_line(marker: str, body: str) -> bool:
+    return any(marker in line for line in body.splitlines())
+
+
 def validate(text: str) -> list[str]:
     """Return human-readable problems; empty list == valid."""
     problems: list[str] = []
+    headings = _headings(text)
     secs = split_sections(text)
     for h in S.REQUIRED_SECTIONS:
-        if h not in secs:
+        n = headings.count(h)
+        if n == 0:
             problems.append(f"missing required section: {h}")
+        elif n > 1:
+            problems.append(f"duplicate required section (bypass risk): {h}")
+        elif not secs.get(h, "").strip():
+            problems.append(f"empty body in required section: {h}")
     for marker, section in S.MARKER_SECTION.items():
-        if marker not in secs.get(section, ""):
+        if not _marker_on_a_line(marker, secs.get(section, "")):
             problems.append(f"safety marker {marker!r} missing from section {section}")
+    pipe = secs.get("## Pipeline steps", "")
+    for step in S.PIPELINE_STEPS:
+        if f"**{step}**" not in pipe:
+            problems.append(f"pipeline step missing from Pipeline steps: {step}")
     if "<<" in text or ">>" in text:
         problems.append("unresolved <<TOKEN>> placeholder remains")
     return problems

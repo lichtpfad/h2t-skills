@@ -25,6 +25,11 @@ MARKER_SECTION: dict[str, str] = {
     "Money / budget": "## Decision-protocol",
     "Scope / architecture change": "## Decision-protocol",
     "Gate not fixable in": "## Decision-protocol",
+    # cover the remaining safety sections so gutting them is caught too (codex-gate-M1 P1)
+    "pre-merge-check": "## Gates",
+    "N_gate_attempts": "## Gates",
+    "One command per Bash call": "## Execution principles",
+    "force a broken merge": "## Blocker / fail-safe protocol",
 }
 
 # Ordered pipeline; each renders as a CHECKBOX list item with the per-step contract.
