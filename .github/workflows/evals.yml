@@ -26,6 +26,9 @@ jobs:
       - name: Run h2t-ops connector tests
         run: python -m pytest tests/core tests/connectors -q
 
+      - name: Run autonomous-run skill tests
+        run: python -m pytest plugins/h2t-core/skills/autonomous-run/scripts -q
+
   eval-gate:
     name: h2t-evals validate-repo
     runs-on: ubuntu-latest
