@@ -1,6 +1,6 @@
 ---
 name: h2t-ops:research
-description: "Provider-routed web research via Exa-backed search/crawl and URL fetch providers. Modes: fast / generic / news / academic / competitor / people / deep. Transparent telemetry, fail-loud protocol. Use for web search, news tracking, academic papers, competitor intel, people research, and direct URL fetch. NOT for LinkedIn lead-gen (use /search-leads from BayramAnnakov plugin). Triggers: 'research', 'find out', 'look up', 'исследуй', 'h2t:research'."
+description: "Provider-routed web research via Exa-backed search/crawl and URL fetch providers. Modes: instant / fast / generic / news / academic / competitor / people / deep-lite / deep / deep-reasoning. Transparent telemetry, fail-loud protocol. Use for web search, news tracking, academic papers, competitor intel, people research, and direct URL fetch. NOT for LinkedIn lead-gen (use /search-leads from BayramAnnakov plugin). Triggers: 'research', 'find out', 'look up', 'исследуй', 'h2t:research'."
 compatibility: "Requires h2t-ops CLI with the research connector. Direct URL fetch works without a provider key. Optional JINA_API_KEY enables authenticated Jina Reader fetches. EXA_API_KEY is required only for Exa-backed capabilities such as search, answer, similar, crawl, and author resolution. Keys may be configured via env, H2T_SECRETS_FILE, ~/.dor/secrets/secrets.env, or ~/.dor/secrets.env. Playwright/Crawl4AI/Firecrawl/Browserless are stubbed follow-ups."
 metadata:
   author: lichtpfad

@@ -576,6 +576,25 @@ def test_run_dispatches_search_and_splits_csv(monkeypatch, tmp_path):
     assert kwargs["no_retry"] is True
 
 
+@pytest.mark.parametrize(
+    "mode",
+    ["instant", "fast", "generic", "news", "academic", "competitor", "people",
+     "deep-lite", "deep", "deep-reasoning"],
+)
+def test_search_parser_accepts_all_modes(mode):
+    parser = argparse.ArgumentParser()
+    commands.register(parser.add_subparsers(dest="cmd"))
+    args = parser.parse_args(["research", "search", "--query", "q", "--mode", mode])
+    assert args.mode == mode
+
+
+def test_search_parser_accepts_max_age_hours_zero():
+    parser = argparse.ArgumentParser()
+    commands.register(parser.add_subparsers(dest="cmd"))
+    args = parser.parse_args(["research", "search", "--query", "q", "--max-age-hours", "0"])
+    assert args.max_age_hours == 0
+
+
 def test_run_dispatches_crawl(monkeypatch):
     _patch_fake_client(monkeypatch)
     args = argparse.Namespace(
