@@ -558,6 +558,7 @@ def test_run_dispatches_search_and_splits_csv(monkeypatch, tmp_path):
         exclude_text="beta,gamma",
         country="US",
         full_text=True,
+        max_age_hours=48,
         project="h2t skills",
         no_retry=True,
     )
@@ -571,6 +572,7 @@ def test_run_dispatches_search_and_splits_csv(monkeypatch, tmp_path):
     assert kwargs["include_domains"] == ["example.com", "h2t.ai"]
     assert kwargs["exclude_text"] == ["beta", "gamma"]
     assert kwargs["full_text"] is True
+    assert kwargs["max_age_hours"] == 48
     assert kwargs["no_retry"] is True
 
 

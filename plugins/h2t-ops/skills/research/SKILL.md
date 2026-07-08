@@ -18,23 +18,35 @@ grounded synthesis** over black-box synthesis for client deliverables.
 
 | Request shape | Use | Notes |
 |---|---|---|
+| Single known fact, lowest latency | `search --mode instant` | Exa `instant`, sub-second |
 | Quick lookup, "what's the latest", single fact | `search --mode fast` | shallow, ~1–4 s |
 | General topic, mixed sources | `search --mode generic` | default web search |
 | News tracking, recent events | `search --mode news` | category=news |
 | Academic papers, citations | `search --mode academic` | category=research paper |
 | Competitor / company intel | `search --mode competitor` | category=company |
 | People research | `search --mode people` | category=people |
+| Structured dig, budget-conscious | `search --mode deep-lite` + `--schema` | lighter synthesis, cheaper than `deep` |
 | One-shot structured deep dig | `search --mode deep` + `--schema` | synchronous, ~4 s |
+| Genuine multi-step reasoning in one call | `search --mode deep-reasoning` + `--schema` | Exa `deep-reasoning`, ~13 s, real multi-hop |
 | Multi-hop deep dig, "разберись в теме X" | `research --instructions "..."` | async Exa Research API, ~20–120 s, cited report |
 | Pull raw text of a known URL | `fetch` / `crawl` | fetch ladder / Exa contents |
 | Find pages like a known URL | `similar` | Exa /findSimilar |
 | Direct grounded answer + citations | `answer` | short answer, cited |
 | Rescue OCR after failed fetch | `visual-ocr` | needs fetch sidecar + screenshot |
 
-**When to prefer `search --mode deep` vs `research`:** `deep` is a synchronous one-shot
-structured extraction where you already know the output shape (`--schema`, ~4 s). For a
-genuine multi-hop investigation (plan → many searches → crawl → cited synthesis) use the
-`research` capability (async, see below).
+**Type ladder (fast → deep):** `instant → fast → auto (generic/news/…) → deep-lite → deep
+→ deep-reasoning`. Higher rungs cost more latency/budget for more synthesis. `deep` and
+`deep-reasoning` run their own reasoning, so with `--schema` their highlights are collapsed
+to save tokens.
+
+**When to prefer `search --mode deep*` vs `research`:** the `deep*` modes are synchronous
+one-shot structured extractions where you already know the output shape (`--schema`).
+`deep` ≈ ~4 s; `deep-reasoning` ≈ ~13 s with real multi-step reasoning; `deep-lite` is the
+budget option. For a genuine multi-hop investigation (plan → many searches → crawl → cited
+synthesis) use the `research` capability (async, see below).
+
+**Freshness:** `--max-age-hours N` caps content age; `--max-age-hours 0` forces a live
+crawl (Exa `maxAgeHours`). Use it when recency matters (breaking news, prices, live status).
 
 ## Research mode (async deep dig)
 
