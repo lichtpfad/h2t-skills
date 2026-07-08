@@ -125,6 +125,41 @@ deterministically:
 The generator stamps skill / done-criterion / failure-path / re-entry for the fixed
 pipeline; the model fills `input` paths from the run's "where things are".
 
+## Conditional end-to-end (e2e) step
+
+Not every task has an end-to-end surface, but some do — and they are exactly the tasks
+where unit-green is a false-green (this point was not covered in the initial design).
+Some tasks expose a real integration/behavioral path (e.g. archetype-D/E registered real
+frames and ran them through `run_frame` for real fail-closed verdicts); many don't (a
+pure library, refactor, or docs change). The pipeline therefore carries **e2e as a
+conditional step**:
+
+- **Applicability decision (recorded).** At plan time the run classifies the task: does
+  the spec define an externally-observable behavioral surface that unit tests do not
+  exercise end-to-end? The decision + reason is written into the runbook (Where things
+  are / Decision-log) so a fresh session does not re-litigate it.
+- **When e2e applies:** the step exercises the real path end-to-end (register the real
+  inputs, run the real entrypoint); its done-criterion is a real run producing the
+  expected or fail-closed output — not merely green unit tests. An INCONCLUSIVE /
+  fail-closed verdict is an **acceptable** e2e outcome **only when the step's objective
+  is wiring-validation** (machinery wired + fail-closed path exercised, as in E's
+  INCONCLUSIVE); when the objective is a specific behavioral result, INCONCLUSIVE
+  **fails** the e2e step (codex-round-2 P2).
+- **Three terminal states, never a silent skip (codex-round-2 P2):**
+  - `e2e: DONE` — ran, done-criterion met.
+  - `e2e: N/A (no integration surface)` — the task has no externally-observable
+    behavioral path; checked off without a run.
+  - `e2e: BLOCKED/DEFERRED (<reason>)` — an integration surface exists but is not
+    runnable in the current environment (missing service, GPU, credential, data). This
+    is **not** N/A: record the reason and route to handoff or an explicit operator gate;
+    do not check it off as passed.
+  The generator stamps the e2e step unconditionally; the skill/model assigns one of the
+  three states from the spec — it is never silently dropped.
+
+For this orchestrator's own build (§ Implementation phasing), e2e **applies**: the M1
+generator + validator have a real end-to-end path — generate a runbook from a real spec,
+then assert the produced artifact passes the sealed validator.
+
 ## Components
 
 | File | Role |
@@ -155,7 +190,8 @@ Written to `docs/superpowers/plans/YYYY-MM-DD-<slug>-runbook.md`:
 2. **Where things are** — branch, spec path, issue, venv + test command.
 3. **Pipeline steps** — ordered checkboxes, each carrying the § Per-step execution
    contract fields: write-spec → review-spec → write-plan → **plan-gate** →
-   subagent-driven-dev → gates → e2e → PR → handoff.
+   subagent-driven-dev → gates → **e2e (conditional, § Conditional end-to-end)** →
+   PR → handoff.
 4. **Gates** — codex review-gate (per checkpoint + final), council finish-gate,
    pre-merge-check; gate commands inline. `N_gate_attempts` (default **2**) defined here.
 5. **Decision-protocol** — research→decide→log allow-list; the 4 fail-safe hard-stops.
@@ -175,9 +211,13 @@ Written to `docs/superpowers/plans/YYYY-MM-DD-<slug>-runbook.md`:
 - Durable artifact checkboxes (§ schema 3) = **source of truth**.
 - TodoWrite/Task list = **live mirror**, derived from the artifact.
 - **Update ordering (one-way, codex-round-1 P1):** on step completion, write the
-  artifact checkbox **first**, then mark the TodoWrite item. Never the reverse. A crash
-  between the two leaves the artifact behind-but-correct (the step re-runs, idempotent
-  per its re-entry field) rather than the artifact ahead-and-lying.
+  artifact checkbox **first** (durable source of truth), then mark the TodoWrite item.
+  A crash after the artifact write but before the TodoWrite update is harmless — on
+  resume the mirror is rebuilt from the artifact, so "artifact leads TodoWrite" is
+  exactly the recoverable state. The reverse ordering (TodoWrite first) is forbidden: it
+  can mark a step done in the live mirror while the durable record still shows it
+  pending, so a non-idempotent step could be skipped or double-run depending on which
+  track is trusted.
 - **Reconciliation on resume:** the artifact is authoritative. Rebuild the TodoWrite
   list from the artifact's unchecked steps; discard any stale in-session TodoWrite. A
   step whose done-criterion is already satisfied (e.g. the PR exists) is checked without
@@ -261,6 +301,12 @@ allow-list (§ Decision-protocol), sealed generation via post-gen validator (§ 
 step 3, § Testing); **P2** "blocker" redefined (hard-stop/unresolvable, not *any*),
 untracked-file exception for own artifacts, WIP-commit eligibility checklist, scope
 phased into M1–M3 (§ Implementation phasing).
+
+**codex-round-2 (PASS — no P1).** All 6 round-1 P1s verified resolved. 3 P2 folded:
+two-track update-ordering wording corrected (§ Two-track state model); e2e gains a
+third terminal state `BLOCKED/DEFERRED` so an unrunnable integration surface is never
+silently marked N/A (§ Conditional end-to-end); INCONCLUSIVE acceptable only when the
+e2e objective is wiring-validation (§ Conditional end-to-end).
 
 ## Self-review
 
