@@ -825,6 +825,27 @@ def test_research_task_poll_error_is_failed(monkeypatch):
     assert env["telemetry"]["reason_for_fallback"] == "exa_poll_failed"
 
 
+def test_research_task_poll_404_retries_then_completes(monkeypatch):
+    monkeypatch.setattr(exa, "sleep_with_jitter", lambda s: None)
+    monkeypatch.setattr(
+        exa, "create_research",
+        lambda instructions, *, model, output_schema, api_key: {"researchId": "r_1", "status": "running"},
+    )
+    calls = {"n": 0}
+
+    def fake_get(rid, *, api_key):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise exa.ExaPermanentError("http 404", http_status=404, latency_ms=10)
+        return {"researchId": "r_1", "status": "completed", "output": {"content": "ok"}, "citations": []}
+
+    monkeypatch.setattr(exa, "get_research", fake_get)
+    env, exit_code = exa.research_task("Q", api_key="k", wait=True, poll_interval=0.0, timeout_s=10.0)
+    assert exit_code == 0
+    assert env["status"] == "OK"
+    assert calls["n"] == 2
+
+
 def test_research_task_poll_backoff_grows(monkeypatch):
     intervals = []
     monkeypatch.setattr(exa, "sleep_with_jitter", lambda s: intervals.append(s))

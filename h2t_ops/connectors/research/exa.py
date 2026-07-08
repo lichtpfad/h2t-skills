@@ -800,84 +800,64 @@ def research_task(
         )
         return env, 0
 
+    def _fail_env(reason: str) -> dict[str, Any]:
+        return build_research_envelope(
+            status="FAILED", research_id=research_id, model=model, instructions=instructions,
+            output=None, citations=[], attempts=attempts, cost=0.0,
+            num_searches=None, num_pages=None, reasoning_tokens=None,
+            reason_for_fallback=reason,
+        )
+
     start = time.monotonic()
     current_interval = min(poll_interval, RESEARCH_POLL_INTERVAL_CAP_SECONDS)
     while True:
+        # A 404 right after create (201) is eventual consistency, not a real miss;
+        # transient 5xx/network hiccups are also retryable since the task exists.
+        # Retry both until the deadline; only auth / other 4xx are fatal.
+        poll_error: str | None = None
         try:
             data = get_research(research_id, api_key=api_key)
         except ExaPermanentError as exc:
             if exc.http_status in {401, 403}:
-                err_label, code = "exa_auth_error", 4
-            else:
-                err_label, code = "exa_poll_failed", 1
-            attempts.append(
-                {
-                    "engine": "exa",
-                    "endpoint": f"/research/v1/{research_id}",
-                    "http": exc.http_status,
-                    "latency_ms": exc.latency_ms,
-                    "error": err_label,
-                }
-            )
-            env = build_research_envelope(
-                status="FAILED", research_id=research_id, model=model, instructions=instructions,
-                output=None, citations=[], attempts=attempts, cost=0.0,
-                num_searches=None, num_pages=None, reasoning_tokens=None,
-                reason_for_fallback=err_label,
-            )
-            return env, code
-        except (ExaTransientError, ExaMalformedResponseError) as exc:
-            attempts.append(
-                {
-                    "engine": "exa",
-                    "endpoint": f"/research/v1/{research_id}",
-                    "http": getattr(exc, "http_status", None),
-                    "latency_ms": getattr(exc, "latency_ms", 0),
-                    "error": "exa_network",
-                }
-            )
-            env = build_research_envelope(
-                status="FAILED", research_id=research_id, model=model, instructions=instructions,
-                output=None, citations=[], attempts=attempts, cost=0.0,
-                num_searches=None, num_pages=None, reasoning_tokens=None,
-                reason_for_fallback="exa_network",
-            )
-            return env, 6
+                attempts.append({"engine": "exa", "endpoint": f"/research/v1/{research_id}",
+                                 "http": exc.http_status, "latency_ms": exc.latency_ms,
+                                 "error": "exa_auth_error"})
+                return _fail_env("exa_auth_error"), 4
+            if exc.http_status != 404:
+                attempts.append({"engine": "exa", "endpoint": f"/research/v1/{research_id}",
+                                 "http": exc.http_status, "latency_ms": exc.latency_ms,
+                                 "error": "exa_poll_failed"})
+                return _fail_env("exa_poll_failed"), 1
+            poll_error = "exa_poll_not_ready"
+        except (ExaTransientError, ExaMalformedResponseError):
+            poll_error = "exa_poll_transient"
 
-        state = str(data.get("status", "running"))
-        attempts.append(
-            {
-                "engine": "exa",
-                "endpoint": f"/research/v1/{research_id}",
-                "http": 200,
-                "latency_ms": 0,
-                "error": None,
-            }
-        )
-        if state == "completed":
-            cost, n_search, n_pages, r_tokens = _research_cost(data)
-            env = build_research_envelope(
-                status="OK", research_id=research_id, model=model, instructions=instructions,
-                output=data.get("output"), citations=data.get("citations", []), attempts=attempts,
-                cost=cost, num_searches=n_search, num_pages=n_pages, reasoning_tokens=r_tokens,
-            )
-            return env, 0
-        if state == "failed":
-            env = build_research_envelope(
-                status="FAILED", research_id=research_id, model=model, instructions=instructions,
-                output=data.get("output"), citations=[], attempts=attempts, cost=0.0,
-                num_searches=None, num_pages=None, reasoning_tokens=None,
-                reason_for_fallback=str(data.get("error") or "research_failed"),
-            )
-            return env, 1
+        if poll_error is None:
+            state = str(data.get("status", "running"))
+            attempts.append({"engine": "exa", "endpoint": f"/research/v1/{research_id}",
+                             "http": 200, "latency_ms": 0, "error": None})
+            if state == "completed":
+                cost, n_search, n_pages, r_tokens = _research_cost(data)
+                env = build_research_envelope(
+                    status="OK", research_id=research_id, model=model, instructions=instructions,
+                    output=data.get("output"), citations=data.get("citations", []), attempts=attempts,
+                    cost=cost, num_searches=n_search, num_pages=n_pages, reasoning_tokens=r_tokens,
+                )
+                return env, 0
+            if state == "failed":
+                env = build_research_envelope(
+                    status="FAILED", research_id=research_id, model=model, instructions=instructions,
+                    output=data.get("output"), citations=[], attempts=attempts, cost=0.0,
+                    num_searches=None, num_pages=None, reasoning_tokens=None,
+                    reason_for_fallback=str(data.get("error") or "research_failed"),
+                )
+                return env, 1
+
         if time.monotonic() - start > timeout_s:
-            env = build_research_envelope(
-                status="FAILED", research_id=research_id, model=model, instructions=instructions,
-                output=None, citations=[], attempts=attempts, cost=0.0,
-                num_searches=None, num_pages=None, reasoning_tokens=None,
-                reason_for_fallback="research_timeout",
-            )
-            return env, 1
+            reason = poll_error or "research_timeout"
+            attempts.append({"engine": "exa", "endpoint": f"/research/v1/{research_id}",
+                             "http": None, "latency_ms": 0, "error": reason})
+            return _fail_env(reason), 1
         sleep_with_jitter(current_interval)
         current_interval = min(
             current_interval * RESEARCH_POLL_BACKOFF_FACTOR, RESEARCH_POLL_INTERVAL_CAP_SECONDS
