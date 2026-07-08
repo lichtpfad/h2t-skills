@@ -4,7 +4,7 @@ description: "Provider-routed web research via Exa-backed search/crawl and URL f
 compatibility: "Requires h2t-ops CLI with the research connector. Direct URL fetch works without a provider key. Optional JINA_API_KEY enables authenticated Jina Reader fetches. EXA_API_KEY is required only for Exa-backed capabilities such as search, answer, similar, crawl, and author resolution. Keys may be configured via env, H2T_SECRETS_FILE, ~/.dor/secrets/secrets.env, or ~/.dor/secrets.env. Playwright/Crawl4AI/Firecrawl/Browserless are stubbed follow-ups."
 metadata:
   author: lichtpfad
-  version: 0.1.2
+  version: 0.1.3
 ---
 
 # h2t-ops:research
