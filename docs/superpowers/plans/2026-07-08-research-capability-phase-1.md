@@ -925,3 +925,99 @@ gh issue close 277 --repo lichtpfad/h2t-skills --comment "Implemented in <hash> 
 - **`call_exa` endpoint hardcode:** the spec's "parameterize call_exa by endpoint" is satisfied — `call_exa` already takes `endpoint`; T1 adds the missing `method` axis needed for polling. `_classify_attempt_from_call` stays search-only and is untouched.
 - **Type consistency:** `research_task` returns `(envelope, exit_code)` matching `answer`/`find_similar`; envelope keys (`status`, `output`, `citations`, `results`, `telemetry`, `meta`) are used identically in T5.
 - **Cost defensiveness:** `_research_cost` tolerates missing `costDollars` (confirmed absent in fast-model probe without `events=true`).
+
+---
+
+## Gate review fixes (applied 2026-07-08 after council + codex)
+
+The plan-review gate (2 judges + codex) returned FAIL. These deltas are now authoritative — where they conflict with a task above, the delta wins.
+
+**F1 (blocking) — failure→exception mapping.** Do NOT reuse `_raise_for_provider_failure` in `research()` (its exit-code semantics are search-specific: exit 3→NetworkError makes a poll timeout look like a network error, and no path yields `ProviderError`). Replace the raise block in Task 5 with explicit mapping:
+
+```python
+        if envelope.get("status") == "FAILED":
+            details = sanitize_details({"provider_envelope": envelope})
+            attempts = envelope.get("telemetry", {}).get("attempts", [])
+            last_error = attempts[-1].get("error") if attempts else None
+            if last_error == "exa_auth_error" or exit_code == 4:
+                raise AuthError("Exa research failed: auth", details=details)
+            if last_error == "exa_network":
+                raise NetworkError("Exa research failed: network", details=details)
+            reason = envelope.get("telemetry", {}).get("reason_for_fallback")
+            raise ProviderError(f"Exa research failed: {reason}", details=details)
+```
+
+Now `test_client_research_failed_raises` (timeout, exit 3) correctly raises `ProviderError` — the test stands as written. (`AuthError`, `NetworkError`, `ProviderError` are already imported at top of client.py.)
+
+**F2 (blocking) — poll backoff (AC1).** In `research_task`, replace the constant sleep with bounded exponential backoff:
+
+```python
+    start = time.monotonic()
+    current_interval = poll_interval
+    while True:
+        ...  # (get_research, state handling, timeout check unchanged)
+        sleep_with_jitter(current_interval)
+        current_interval = min(current_interval * 1.5, 30.0)
+```
+
+Add this test to `test_exa.py`:
+
+```python
+def test_research_task_poll_backoff_grows(monkeypatch):
+    intervals = []
+    monkeypatch.setattr(exa, "sleep_with_jitter", lambda s: intervals.append(s))
+    monkeypatch.setattr(exa, "create_research",
+        lambda instructions, *, model, output_schema, api_key: {"researchId": "r_1", "status": "running"})
+    polls = iter([
+        {"researchId": "r_1", "status": "running"},
+        {"researchId": "r_1", "status": "running"},
+        {"researchId": "r_1", "status": "completed", "output": {"content": "ok"}, "citations": []},
+    ])
+    monkeypatch.setattr(exa, "get_research", lambda rid, *, api_key: next(polls))
+    exa.research_task("Q", api_key="k", wait=True, poll_interval=2.0, timeout_s=1000.0)
+    assert intervals == [2.0, 3.0]  # 2.0, then 2.0*1.5
+```
+
+**F3 (blocking) — poll-loop resilience (codex NEW#3).** Wrap `get_research` in the loop in try/except so provider errors during polling become a FAILED envelope instead of escaping:
+
+```python
+        try:
+            data = get_research(research_id, api_key=api_key)
+        except (ExaPermanentError, ExaTransientError, ExaMalformedResponseError) as exc:
+            attempts.append({"engine": "exa", "endpoint": f"/research/v1/{research_id}",
+                             "http": getattr(exc, "http_status", None),
+                             "latency_ms": getattr(exc, "latency_ms", 0), "error": "exa_poll_failed"})
+            env = build_research_envelope(status="FAILED", research_id=research_id, model=model,
+                                          instructions=instructions, output=None, citations=[], attempts=attempts,
+                                          cost=0.0, num_searches=None, num_pages=None, reasoning_tokens=None,
+                                          reason_for_fallback="exa_poll_failed")
+            return env, 1
+```
+
+Add a test asserting a poll-time `ExaPermanentError` yields `status=="FAILED"`, exit 1.
+
+**F4 (blocking) — schema-validation test (AC7).** Add to `test_commands.py`:
+
+```python
+def test_load_schema_invalid_json_raises():
+    from h2t_ops.connectors.research import commands as research_commands
+    from h2t_ops.core.errors import UsageError
+    with pytest.raises(UsageError):
+        research_commands._load_schema("{not valid json")
+```
+
+**F5 (nit) — synthesis None guard (codex NEW#5).** In Task 5, guard against `str(None)`:
+
+```python
+        output = envelope.get("output")
+        content = output.get("content") if isinstance(output, dict) else None
+        summary_text = str(content) if content else ""
+```
+
+**F6 (nit) — meta.query (codex NEW#4 / judge nit).** In `build_research_envelope`, add `"query": instructions` alongside `"instructions": instructions` in `meta`, so `_render_partial_markdown` (reads `meta.query`) renders correctly.
+
+**F7 (nit) — SKILL.md prose.** In Task 7, also fix the now-stale "planned" cross-references (the "use the **planned** `research` capability below" line and the "For **both** planned modes" line) so only `agent` remains described as planned.
+
+**F8 (nit) — version bump.** Final-verification bump is **patch**, not minor (semver rule: minor only after live confirmation). Use the next patch of the current h2t-ops plugin version, and only bump minor after live smoke passes in a real session.
+
+**Accepted deviations (non-blocking, no change):** AC2 literal `/search` hardcode in `_classify_attempt_from_call` stays (research builds its own attempts; intent met). Test files distributed across existing suites instead of one `test_research_task.py` (better coverage).
