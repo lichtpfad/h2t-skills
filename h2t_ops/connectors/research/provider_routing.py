@@ -15,6 +15,7 @@ CAPABILITIES = {
     "author",
     "fetch",
     "visual_ocr",
+    "research",
 }
 
 
@@ -35,6 +36,7 @@ PROVIDER_CAPABILITIES: tuple[ProviderCapability, ...] = (
     ProviderCapability("exa", "similar", required_secrets=("EXA_API_KEY",), priority=10),
     ProviderCapability("exa", "crawl", required_secrets=("EXA_API_KEY",), priority=10),
     ProviderCapability("exa", "author", required_secrets=("EXA_API_KEY",), priority=10),
+    ProviderCapability("exa", "research", required_secrets=("EXA_API_KEY",), priority=10),
     ProviderCapability("direct", "fetch", priority=10),
     ProviderCapability(
         "jina",
