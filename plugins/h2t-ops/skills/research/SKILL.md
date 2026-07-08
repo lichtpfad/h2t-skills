@@ -1,6 +1,6 @@
 ---
 name: h2t-ops:research
-description: "Provider-routed web research via Exa-backed search/crawl and URL fetch providers. Modes: instant / fast / generic / news / academic / competitor / people / deep-lite / deep / deep-reasoning. Transparent telemetry, fail-loud protocol. Use for web search, news tracking, academic papers, competitor intel, people research, and direct URL fetch. NOT for LinkedIn lead-gen (use /search-leads from BayramAnnakov plugin). Triggers: 'research', 'find out', 'look up', 'исследуй', 'h2t:research'."
+description: "Provider-routed web research via Exa-backed search/crawl and URL fetch providers. Search modes: instant / fast / generic / news / academic / competitor / people / deep-lite / deep / deep-reasoning. Also: async research (deep dig) and agent (premium data-source fusion for LeadGen/enrichment). Transparent telemetry + cost logging, fail-loud protocol. Use for web search, news tracking, academic papers, competitor intel, people research, and direct URL fetch. NOT for LinkedIn lead-gen (use /search-leads from BayramAnnakov plugin). Triggers: 'research', 'find out', 'look up', 'исследуй', 'h2t:research'."
 compatibility: "Requires h2t-ops CLI with the research connector. Direct URL fetch works without a provider key. Optional JINA_API_KEY enables authenticated Jina Reader fetches. EXA_API_KEY is required only for Exa-backed capabilities such as search, answer, similar, crawl, and author resolution. Keys may be configured via env, H2T_SECRETS_FILE, ~/.dor/secrets/secrets.env, or ~/.dor/secrets.env. Playwright/Crawl4AI/Firecrawl/Browserless are stubbed follow-ups."
 metadata:
   author: lichtpfad
@@ -29,6 +29,7 @@ grounded synthesis** over black-box synthesis for client deliverables.
 | One-shot structured deep dig | `search --mode deep` + `--schema` | synchronous, ~4 s |
 | Genuine multi-step reasoning in one call | `search --mode deep-reasoning` + `--schema` | Exa `deep-reasoning`, ~13 s, real multi-hop |
 | Multi-hop deep dig, "разберись в теме X" | `research --instructions "..."` | async Exa Research API, ~20–120 s, cited report |
+| LeadGen / enrichment / invest from premium sources | `agent --query "..." --schema ...` | Exa Agent API, schema+citations; paid providers via `--data-source` (see Agent mode) |
 | Pull raw text of a known URL | `fetch` / `crawl` | fetch ladder / Exa contents |
 | Find pages like a known URL | `similar` | Exa /findSimilar |
 | Direct grounded answer + citations | `answer` | short answer, cited |
@@ -66,19 +67,49 @@ h2t-ops research research-get --id r_xxx --project "$RESEARCH_PROJECT" --json   
   `evidence-grounded-synthesis` over shipping the black-box `output.content` verbatim for
   client deliverables.
 
-### Planned capabilities (not yet available — do not call)
+## Agent mode (premium data-source fusion)
 
-Tracked in `docs/superpowers/specs/2026-07-08-exa-research-capability.md`. Until the
-command exists, use the modes above; do not invent flags.
+LeadGen / enrichment / invest. The Exa Agent API fuses premium data partners + web
+search into one schema-validated output with per-field citations (`output.grounding`).
+Synchronous (runs ~4–13 s); `POST /agent/runs` → poll `GET /agent/runs/{id}`.
 
-- **`agent`** (Exa Agent API, async) — LeadGen / enrichment / invest: fuses premium
-  data partners (Fiber.ai contacts, Similarweb traffic, Baselayer US-business,
-  Financial Datasets, Particle podcasts) + web into one structured output. Paid
-  per-provider — enable only with an explicit data-source flag.
+```bash
+# Web-only (no paid providers) — cheap, use for a schema-shaped structured dig
+h2t-ops research agent --query "Profile Anthropic: HQ, founded year" \
+  --schema schema.json --project "$RESEARCH_PROJECT" --json
 
-For the planned `agent` mode the intended pattern is also **retrieval-first**: let Exa
-return structured, cited data, then do the final synthesis under our
-`evidence-grounded-synthesis` discipline rather than shipping the black-box answer.
+# With premium providers (PAID — each --data-source adds per-provider cost)
+h2t-ops research agent --query "Profile Anthropic: funding + monthly web traffic" \
+  --data-source fiber_ai --data-source similar_web --schema schema.json --json
+```
+
+**Cost gate:** paid providers run **only** when you pass `--data-source`. Omit it →
+web-only (agentCompute + search only; a trivial query costs ~$0). Providers are
+pass-through: an unknown name returns a clean `400 INVALID_DATA_SOURCE` **before any
+charge**.
+
+**Provider catalog** (per-provider base cost, as of 2026-07 — verify at
+<https://exa.ai/pricing>; the code catalog is `exa.AGENT_PROVIDERS`):
+
+| `--data-source` | Returns | ~Base cost |
+|---|---|---|
+| `fiber_ai` | B2B contact data (emails, titles) | $0.02 |
+| `similar_web` | website traffic estimates | $0.03 |
+| `baselayer` | US business verification | $0.022 |
+| `financial_datasets` | company financials | $0.01 |
+| `particle_news` | podcast transcripts / news | $0.015 |
+
+**Cost logging:** Exa has **no** pre-execution cost endpoint. The envelope telemetry
+reports `total_cost_usd` + `cost_breakdown` (agentCompute / search / emails /
+phoneNumbers / dataSources) and `usage` from the response. When paid providers are
+requested, `estimated_floor_usd` is a **floor** (sum of catalog base prices only —
+excludes variable agentCompute + search); `estimated_unknown_providers` flags names not
+in the catalog. Control scope/cost with `maxItems` in the output schema.
+
+**Retrieval-first:** take `output.structured` + `output.grounding` citations and do the
+final synthesis under `evidence-grounded-synthesis`, rather than shipping the black-box
+answer for client deliverables. Positioning vs `mcp__anysite` / `/search-leads`:
+schema-driven fusion of several premium sources in one call, not a replacement.
 
 ## Boundary
 
