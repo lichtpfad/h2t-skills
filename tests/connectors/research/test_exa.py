@@ -649,3 +649,194 @@ def test_answer_auth_error(monkeypatch):
 
     assert exit_code == 4
     assert envelope["status"] == "FAILED"
+
+
+# ── research (Exa Research API) ───────────────────────────────────────────────
+
+def test_call_exa_get_sends_no_body():
+    seen = {}
+
+    def fake_urlopen(req, timeout):
+        seen["method"] = req.get_method()
+        seen["data"] = req.data
+        return _mock_urlopen_response(200, {"status": "running"})
+
+    with patch("urllib.request.urlopen", side_effect=fake_urlopen):
+        status, data, latency = exa.call_exa(
+            "/research/v1/r_x", {}, api_key="testkey", method="GET"
+        )
+
+    assert seen["method"] == "GET"
+    assert seen["data"] is None
+    assert data["status"] == "running"
+
+
+def test_research_models_and_default():
+    assert exa.RESEARCH_MODELS == ("exa-research-fast", "exa-research", "exa-research-pro")
+    assert exa.RESEARCH_DEFAULT_MODEL == "exa-research-fast"
+
+
+def test_create_research_posts_instructions_and_model(monkeypatch):
+    seen = {}
+
+    def fake_call(endpoint, body, api_key, **kw):
+        seen["endpoint"] = endpoint
+        seen["body"] = body
+        seen["method"] = kw.get("method", "POST")
+        return (201, {"researchId": "r_1", "status": "running", "model": body["model"]}, 30)
+
+    monkeypatch.setattr(exa, "call_exa", fake_call)
+    data = exa.create_research(
+        "Summarize X", model="exa-research", output_schema={"type": "object"}, api_key="k"
+    )
+
+    assert seen["endpoint"] == "/research/v1"
+    assert seen["method"] == "POST"
+    assert seen["body"]["instructions"] == "Summarize X"
+    assert seen["body"]["model"] == "exa-research"
+    assert seen["body"]["outputSchema"] == {"type": "object"}
+    assert data["researchId"] == "r_1"
+
+
+def test_create_research_omits_schema_when_absent(monkeypatch):
+    seen = {}
+
+    def fake_call(endpoint, body, api_key, **kw):
+        seen["body"] = body
+        return (201, {"researchId": "r_2", "status": "running"}, 20)
+
+    monkeypatch.setattr(exa, "call_exa", fake_call)
+    exa.create_research("Q", model="exa-research-fast", output_schema=None, api_key="k")
+    assert "outputSchema" not in seen["body"]
+
+
+def test_get_research_uses_path_param_and_get(monkeypatch):
+    seen = {}
+
+    def fake_call(endpoint, body, api_key, **kw):
+        seen["endpoint"] = endpoint
+        seen["method"] = kw.get("method")
+        return (200, {"researchId": "r_1", "status": "completed", "output": {"content": "done"}}, 15)
+
+    monkeypatch.setattr(exa, "call_exa", fake_call)
+    data = exa.get_research("r_1", api_key="k")
+
+    assert seen["endpoint"] == "/research/v1/r_1"
+    assert seen["method"] == "GET"
+    assert data["status"] == "completed"
+
+
+def test_research_task_async_returns_running(monkeypatch):
+    monkeypatch.setattr(
+        exa, "create_research",
+        lambda instructions, *, model, output_schema, api_key: {"researchId": "r_9", "status": "running"},
+    )
+    env, exit_code = exa.research_task("Q", api_key="k", wait=False)
+    assert exit_code == 0
+    assert env["status"] == "RUNNING"
+    assert env["research_id"] == "r_9"
+    assert env["model"] == exa.RESEARCH_DEFAULT_MODEL
+
+
+def test_research_task_wait_completes(monkeypatch):
+    monkeypatch.setattr(exa, "sleep_with_jitter", lambda s: None)
+    monkeypatch.setattr(
+        exa, "create_research",
+        lambda instructions, *, model, output_schema, api_key: {"researchId": "r_1", "status": "running"},
+    )
+    polls = iter([
+        {"researchId": "r_1", "status": "running"},
+        {"researchId": "r_1", "status": "completed",
+         "output": {"content": "Answer.", "costDollars": {"total": 0.02, "numSearches": 3, "numPages": 5, "reasoningTokens": 900}},
+         "citations": [{"url": "https://x", "title": "X"}]},
+    ])
+    monkeypatch.setattr(exa, "get_research", lambda rid, *, api_key: next(polls))
+
+    env, exit_code = exa.research_task("Q", api_key="k", wait=True, poll_interval=0.0, timeout_s=10.0)
+
+    assert exit_code == 0
+    assert env["status"] == "OK"
+    assert env["output"]["content"] == "Answer."
+    assert env["results"] == [{"url": "https://x", "title": "X"}]
+    assert env["telemetry"]["total_cost_usd"] == 0.02
+    assert env["telemetry"]["num_searches"] == 3
+    assert env["telemetry"]["num_pages"] == 5
+    assert env["telemetry"]["reasoning_tokens"] == 900
+    assert env["meta"]["query"] == "Q"
+
+
+def test_research_task_failed_status(monkeypatch):
+    monkeypatch.setattr(exa, "sleep_with_jitter", lambda s: None)
+    monkeypatch.setattr(
+        exa, "create_research",
+        lambda instructions, *, model, output_schema, api_key: {"researchId": "r_1", "status": "running"},
+    )
+    monkeypatch.setattr(
+        exa, "get_research",
+        lambda rid, *, api_key: {"researchId": "r_1", "status": "failed", "error": "boom"},
+    )
+    env, exit_code = exa.research_task("Q", api_key="k", wait=True, poll_interval=0.0, timeout_s=10.0)
+    assert env["status"] == "FAILED"
+    assert exit_code == 1
+    assert env["telemetry"]["reason_for_fallback"] == "boom"
+
+
+def test_research_task_timeout(monkeypatch):
+    monkeypatch.setattr(exa, "sleep_with_jitter", lambda s: None)
+    ticks = iter([0.0, 5.0, 20.0])
+    monkeypatch.setattr(exa.time, "monotonic", lambda: next(ticks))
+    monkeypatch.setattr(
+        exa, "create_research",
+        lambda instructions, *, model, output_schema, api_key: {"researchId": "r_1", "status": "running"},
+    )
+    monkeypatch.setattr(
+        exa, "get_research",
+        lambda rid, *, api_key: {"researchId": "r_1", "status": "running"},
+    )
+    env, exit_code = exa.research_task("Q", api_key="k", wait=True, poll_interval=0.0, timeout_s=10.0)
+    assert env["status"] == "FAILED"
+    assert exit_code == 3
+    assert env["telemetry"]["reason_for_fallback"] == "research_timeout"
+
+
+def test_research_task_create_auth_error(monkeypatch):
+    def _raise(instructions, *, model, output_schema, api_key):
+        raise exa.ExaPermanentError("http 401", http_status=401, latency_ms=10)
+    monkeypatch.setattr(exa, "create_research", _raise)
+    env, exit_code = exa.research_task("Q", api_key="bad", wait=True)
+    assert env["status"] == "FAILED"
+    assert exit_code == 4
+
+
+def test_research_task_poll_error_is_failed(monkeypatch):
+    monkeypatch.setattr(exa, "sleep_with_jitter", lambda s: None)
+    monkeypatch.setattr(
+        exa, "create_research",
+        lambda instructions, *, model, output_schema, api_key: {"researchId": "r_1", "status": "running"},
+    )
+
+    def _raise(rid, *, api_key):
+        raise exa.ExaPermanentError("http 500", http_status=500, latency_ms=10)
+
+    monkeypatch.setattr(exa, "get_research", _raise)
+    env, exit_code = exa.research_task("Q", api_key="k", wait=True, poll_interval=0.0, timeout_s=10.0)
+    assert env["status"] == "FAILED"
+    assert exit_code == 1
+    assert env["telemetry"]["reason_for_fallback"] == "exa_poll_failed"
+
+
+def test_research_task_poll_backoff_grows(monkeypatch):
+    intervals = []
+    monkeypatch.setattr(exa, "sleep_with_jitter", lambda s: intervals.append(s))
+    monkeypatch.setattr(
+        exa, "create_research",
+        lambda instructions, *, model, output_schema, api_key: {"researchId": "r_1", "status": "running"},
+    )
+    polls = iter([
+        {"researchId": "r_1", "status": "running"},
+        {"researchId": "r_1", "status": "running"},
+        {"researchId": "r_1", "status": "completed", "output": {"content": "ok"}, "citations": []},
+    ])
+    monkeypatch.setattr(exa, "get_research", lambda rid, *, api_key: next(polls))
+    exa.research_task("Q", api_key="k", wait=True, poll_interval=2.0, timeout_s=1000.0)
+    assert intervals == [2.0, 3.0]

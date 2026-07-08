@@ -47,6 +47,13 @@ CATEGORY_BLOCKS: dict[str, set[str]] = {
 MODES = list(MODE_CONFIG.keys())
 _EXA_API = "https://api.exa.ai"
 
+RESEARCH_MODELS = ("exa-research-fast", "exa-research", "exa-research-pro")
+RESEARCH_DEFAULT_MODEL = "exa-research-fast"
+RESEARCH_POLL_INTERVAL_SECONDS = 2.0
+RESEARCH_TIMEOUT_SECONDS = 180.0
+RESEARCH_POLL_BACKOFF_FACTOR = 1.5
+RESEARCH_POLL_INTERVAL_CAP_SECONDS = 30.0
+
 
 def validate_args(args: Any) -> None:
     """Fail-fast validation to prevent known Exa HTTP 400 combinations."""
@@ -347,18 +354,20 @@ def call_exa(
     body: dict[str, Any],
     api_key: str,
     timeout: int = 60,
+    method: str = "POST",
 ) -> tuple[int, dict[str, Any], int]:
-    """POST to Exa and return (http_status, response_json, latency_ms)."""
+    """POST/GET to Exa and return (http_status, response_json, latency_ms)."""
+    data = None if method == "GET" else json.dumps(body).encode("utf-8")
     req = urllib.request.Request(
         f"{_EXA_API}{endpoint}",
-        data=json.dumps(body).encode("utf-8"),
+        data=data,
         headers={
             "x-api-key": api_key,
             "Content-Type": "application/json",
             "Accept": "application/json",
             "User-Agent": f"exa_search.py/{__version__} (h2t-ops:research)",
         },
-        method="POST",
+        method=method,
     )
     start = time.monotonic()
     try:
@@ -641,6 +650,219 @@ def answer(
     }, 0
 
 
+def create_research(
+    instructions: str,
+    *,
+    model: str,
+    output_schema: dict[str, Any] | None,
+    api_key: str,
+) -> dict[str, Any]:
+    """POST /research/v1 to create an async research task."""
+    body: dict[str, Any] = {"instructions": instructions, "model": model}
+    if output_schema:
+        body["outputSchema"] = output_schema
+    _status, data, _latency = call_exa("/research/v1", body, api_key)
+    return data
+
+
+def get_research(research_id: str, *, api_key: str) -> dict[str, Any]:
+    """GET /research/v1/{id} to poll a research task."""
+    _status, data, _latency = call_exa(
+        f"/research/v1/{research_id}", {}, api_key, method="GET"
+    )
+    return data
+
+
+def _research_cost(data: dict[str, Any]) -> tuple[float, int | None, int | None, int | None]:
+    """Extract cost breakdown defensively (may be absent without events=true)."""
+    output = data.get("output")
+    cost_block = output.get("costDollars", {}) if isinstance(output, dict) else {}
+    if not isinstance(cost_block, dict):
+        cost_block = {}
+    try:
+        total = float(cost_block.get("total", 0.0) or 0.0)
+    except (TypeError, ValueError):
+        total = 0.0
+    return (
+        total,
+        cost_block.get("numSearches"),
+        cost_block.get("numPages"),
+        cost_block.get("reasoningTokens"),
+    )
+
+
+def build_research_envelope(
+    *,
+    status: str,
+    research_id: str,
+    model: str,
+    instructions: str,
+    output: Any,
+    citations: list[Any],
+    attempts: list[dict[str, Any]],
+    cost: float,
+    num_searches: int | None,
+    num_pages: int | None,
+    reasoning_tokens: int | None,
+    reason_for_fallback: str | None = None,
+) -> dict[str, Any]:
+    """Assemble the research provider envelope (artifact-writer compatible)."""
+    timestamp = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    total_latency_ms = sum(a.get("latency_ms", 0) for a in attempts)
+    return {
+        "status": status,
+        "primary_engine": "exa",
+        "research_id": research_id,
+        "model": model,
+        "output": output,
+        "citations": citations,
+        "results": citations,  # artifact writer treats these as sources
+        "telemetry": {
+            "attempts": attempts,
+            "reason_for_fallback": reason_for_fallback,
+            "total_latency_ms": total_latency_ms,
+            "total_cost_usd": cost,
+            "num_searches": num_searches,
+            "num_pages": num_pages,
+            "reasoning_tokens": reasoning_tokens,
+        },
+        "meta": {
+            "query": instructions,
+            "instructions": instructions,
+            "model": model,
+            "timestamp": timestamp,
+            "envelope_version": ENVELOPE_VERSION,
+        },
+    }
+
+
+def research_task(
+    instructions: str,
+    *,
+    api_key: str,
+    model: str = RESEARCH_DEFAULT_MODEL,
+    output_schema: dict[str, Any] | None = None,
+    wait: bool = True,
+    poll_interval: float = RESEARCH_POLL_INTERVAL_SECONDS,
+    timeout_s: float = RESEARCH_TIMEOUT_SECONDS,
+) -> tuple[dict[str, Any], int]:
+    """Create an Exa research task and (optionally) poll to completion."""
+    attempts: list[dict[str, Any]] = []
+    try:
+        created = create_research(
+            instructions, model=model, output_schema=output_schema, api_key=api_key
+        )
+    except ExaPermanentError as exc:
+        attempts.append(
+            {
+                "engine": "exa",
+                "endpoint": "/research/v1",
+                "http": exc.http_status,
+                "latency_ms": exc.latency_ms,
+                "error": "exa_auth_error" if exc.http_status in {401, 403} else "exa_4xx",
+            }
+        )
+        env = build_research_envelope(
+            status="FAILED", research_id="", model=model, instructions=instructions,
+            output=None, citations=[], attempts=attempts, cost=0.0,
+            num_searches=None, num_pages=None, reasoning_tokens=None,
+            reason_for_fallback="exa_create_failed",
+        )
+        return env, (4 if exc.http_status in {401, 403} else 1)
+    except (ExaTransientError, ExaMalformedResponseError) as exc:
+        attempts.append(
+            {
+                "engine": "exa",
+                "endpoint": "/research/v1",
+                "http": getattr(exc, "http_status", None),
+                "latency_ms": getattr(exc, "latency_ms", 0),
+                "error": "exa_network",
+            }
+        )
+        env = build_research_envelope(
+            status="FAILED", research_id="", model=model, instructions=instructions,
+            output=None, citations=[], attempts=attempts, cost=0.0,
+            num_searches=None, num_pages=None, reasoning_tokens=None,
+            reason_for_fallback="exa_create_failed",
+        )
+        return env, 6
+
+    research_id = str(created.get("researchId", ""))
+    attempts.append(
+        {"engine": "exa", "endpoint": "/research/v1", "http": 201, "latency_ms": 0, "error": None}
+    )
+
+    if not wait:
+        env = build_research_envelope(
+            status="RUNNING", research_id=research_id, model=model, instructions=instructions,
+            output=None, citations=[], attempts=attempts, cost=0.0,
+            num_searches=None, num_pages=None, reasoning_tokens=None,
+        )
+        return env, 0
+
+    start = time.monotonic()
+    current_interval = poll_interval
+    while True:
+        try:
+            data = get_research(research_id, api_key=api_key)
+        except (ExaPermanentError, ExaTransientError, ExaMalformedResponseError) as exc:
+            attempts.append(
+                {
+                    "engine": "exa",
+                    "endpoint": f"/research/v1/{research_id}",
+                    "http": getattr(exc, "http_status", None),
+                    "latency_ms": getattr(exc, "latency_ms", 0),
+                    "error": "exa_poll_failed",
+                }
+            )
+            env = build_research_envelope(
+                status="FAILED", research_id=research_id, model=model, instructions=instructions,
+                output=None, citations=[], attempts=attempts, cost=0.0,
+                num_searches=None, num_pages=None, reasoning_tokens=None,
+                reason_for_fallback="exa_poll_failed",
+            )
+            return env, 1
+
+        state = str(data.get("status", "running"))
+        attempts.append(
+            {
+                "engine": "exa",
+                "endpoint": f"/research/v1/{research_id}",
+                "http": 200,
+                "latency_ms": 0,
+                "error": None,
+            }
+        )
+        if state == "completed":
+            cost, n_search, n_pages, r_tokens = _research_cost(data)
+            env = build_research_envelope(
+                status="OK", research_id=research_id, model=model, instructions=instructions,
+                output=data.get("output"), citations=data.get("citations", []), attempts=attempts,
+                cost=cost, num_searches=n_search, num_pages=n_pages, reasoning_tokens=r_tokens,
+            )
+            return env, 0
+        if state == "failed":
+            env = build_research_envelope(
+                status="FAILED", research_id=research_id, model=model, instructions=instructions,
+                output=data.get("output"), citations=[], attempts=attempts, cost=0.0,
+                num_searches=None, num_pages=None, reasoning_tokens=None,
+                reason_for_fallback=str(data.get("error") or "research_failed"),
+            )
+            return env, 1
+        if time.monotonic() - start > timeout_s:
+            env = build_research_envelope(
+                status="FAILED", research_id=research_id, model=model, instructions=instructions,
+                output=None, citations=[], attempts=attempts, cost=0.0,
+                num_searches=None, num_pages=None, reasoning_tokens=None,
+                reason_for_fallback="research_timeout",
+            )
+            return env, 3
+        sleep_with_jitter(current_interval)
+        current_interval = min(
+            current_interval * RESEARCH_POLL_BACKOFF_FACTOR, RESEARCH_POLL_INTERVAL_CAP_SECONDS
+        )
+
+
 __all__ = [
     "__version__",
     "SCRIPT_DIR",
@@ -664,4 +886,10 @@ __all__ = [
     "validate_args",
     "find_similar",
     "answer",
+    "RESEARCH_MODELS",
+    "RESEARCH_DEFAULT_MODEL",
+    "create_research",
+    "get_research",
+    "build_research_envelope",
+    "research_task",
 ]
