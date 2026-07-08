@@ -1187,3 +1187,35 @@ def test_load_schema_invalid_json_raises():
 
     with pytest.raises(UsageError):
         research_commands._load_schema("{not valid json")
+
+
+def test_research_get_subparser_registered():
+    parser = cli.build_parser()
+    ns = parser.parse_args(["research", "research-get", "--id", "r_1", "--json"])
+    assert ns.research_cmd == "research-get"
+    assert ns.research_id == "r_1"
+
+
+def test_research_get_dispatch_calls_client(monkeypatch):
+    from types import SimpleNamespace
+    from h2t_ops.connectors.research import commands as research_commands
+
+    seen = {}
+
+    class FakeClient:
+        def __init__(self, **kw):
+            pass
+
+        def research_get(self, research_id, **kw):
+            seen["id"] = research_id
+            seen.update(kw)
+            return {"kind": "research_provider_envelope", "status": "RUNNING"}
+
+    monkeypatch.setattr("h2t_ops.connectors.research.client.ResearchClient", FakeClient)
+    args = SimpleNamespace(
+        research_cmd="research-get", research_id="r_9", project="h2t-skills", output_dir=None,
+    )
+    result = research_commands.run(args)
+    assert result["status"] == "RUNNING"
+    assert seen["id"] == "r_9"
+    assert seen["project"] == "h2t-skills"

@@ -22,6 +22,7 @@ from h2t_ops.core.errors import (
     AuthError,
     ConfigError,
     NetworkError,
+    NotFoundError,
     ProviderError,
     UsageError,
 )
@@ -1282,6 +1283,73 @@ class ResearchClient:
                 raise NetworkError("Exa research failed: network", details=details)
             reason = envelope.get("telemetry", {}).get("reason_for_fallback")
             raise ProviderError(f"Exa research failed: {reason}", details=details)
+
+        safe_envelope = sanitize_details(envelope)
+        return {
+            "kind": "research_provider_envelope",
+            **safe_envelope,
+            "artifact": artifact,
+        }
+
+    def research_get(self, research_id: str, *, project: str = "default") -> dict[str, Any]:
+        """Redeem a --no-wait researchId: fetch status/result and persist if completed."""
+        from h2t_ops.connectors.research import exa
+
+        self._require_research_route("research", provider="exa")
+        api_key = resolve_secret("EXA_API_KEY")
+        envelope, exit_code = exa.research_status(research_id, api_key=api_key)
+
+        status = envelope.get("status")
+        if status == "RUNNING":
+            return {"kind": "research_provider_envelope", **sanitize_details(envelope)}
+
+        instructions = envelope.get("meta", {}).get("instructions") or research_id
+        telemetry = _artifact_telemetry(envelope)
+        artifact = self._write_provider_artifacts(
+            kind="research",
+            slug_source=instructions,
+            project=project,
+            provider_envelope=envelope,
+            telemetry=telemetry,
+            ledger_provider="exa",
+            ledger_endpoint="/research/v1",
+            ledger_mode=str(envelope.get("model", "research")),
+        )
+        run_refs = self._persist_thread_run(
+            project=project,
+            query=instructions,
+            provider="exa",
+            topics=["research"],
+            document_ids=[],
+            created_at=artifact["created_at"],
+        )
+        output = envelope.get("output")
+        content = output.get("content") if isinstance(output, dict) else None
+        summary_text = str(content) if content else ""
+        if summary_text:
+            synthesis_refs = self._persist_synthesis(
+                thread_id=run_refs["thread_id"],
+                run_id=run_refs["run_id"],
+                summary=summary_text,
+                created_at=artifact["created_at"],
+                project=project,
+            )
+            artifact = self._attach_research_refs(artifact, {**run_refs, **synthesis_refs})
+        else:
+            artifact = self._attach_research_refs(artifact, run_refs)
+
+        if status == "FAILED":
+            details = sanitize_details({"provider_envelope": envelope})
+            attempts = envelope.get("telemetry", {}).get("attempts", [])
+            last_error = attempts[-1].get("error") if attempts else None
+            if last_error == "exa_auth_error" or exit_code == 4:
+                raise AuthError("Exa research get failed: auth", details=details)
+            if last_error == "exa_network":
+                raise NetworkError("Exa research get failed: network", details=details)
+            if last_error == "exa_not_found" or exit_code == 5:
+                raise NotFoundError(f"Research id not found: {research_id}", details=details)
+            reason = envelope.get("telemetry", {}).get("reason_for_fallback")
+            raise ProviderError(f"Exa research get failed: {reason}", details=details)
 
         safe_envelope = sanitize_details(envelope)
         return {

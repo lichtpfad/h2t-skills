@@ -674,9 +674,8 @@ def get_research(research_id: str, *, api_key: str) -> dict[str, Any]:
 
 
 def _research_cost(data: dict[str, Any]) -> tuple[float, int | None, int | None, int | None]:
-    """Extract cost breakdown defensively (may be absent without events=true)."""
-    output = data.get("output")
-    cost_block = output.get("costDollars", {}) if isinstance(output, dict) else {}
+    """Extract cost breakdown. Live-verified: costDollars is top-level on the GET response."""
+    cost_block = data.get("costDollars", {})
     if not isinstance(cost_block, dict):
         cost_block = {}
     try:
@@ -724,7 +723,8 @@ def build_research_envelope(
             "total_cost_usd": cost,
             "num_searches": num_searches,
             "num_pages": num_pages,
-            "reasoning_tokens": reasoning_tokens,
+            # NB: key avoids the substring "token" so sanitize_details() does not redact it.
+            "reasoning_units": reasoning_tokens,
         },
         "meta": {
             "query": instructions,
@@ -788,6 +788,17 @@ def research_task(
         return env, 6
 
     research_id = str(created.get("researchId", ""))
+    if not research_id:
+        attempts.append(
+            {"engine": "exa", "endpoint": "/research/v1", "http": 201, "latency_ms": 0, "error": "exa_no_research_id"}
+        )
+        env = build_research_envelope(
+            status="FAILED", research_id="", model=model, instructions=instructions,
+            output=None, citations=[], attempts=attempts, cost=0.0,
+            num_searches=None, num_pages=None, reasoning_tokens=None,
+            reason_for_fallback="exa_no_research_id",
+        )
+        return env, 1
     attempts.append(
         {"engine": "exa", "endpoint": "/research/v1", "http": 201, "latency_ms": 0, "error": None}
     )
@@ -864,6 +875,72 @@ def research_task(
         )
 
 
+def research_status(
+    research_id: str,
+    *,
+    api_key: str,
+    model: str = "",
+    instructions: str = "",
+) -> tuple[dict[str, Any], int]:
+    """Fetch a research task's current envelope by id (redeems a --no-wait researchId)."""
+    attempts: list[dict[str, Any]] = []
+    try:
+        data = get_research(research_id, api_key=api_key)
+    except ExaPermanentError as exc:
+        if exc.http_status in {401, 403}:
+            err_label, code = "exa_auth_error", 4
+        elif exc.http_status == 404:
+            err_label, code = "exa_not_found", 5
+        else:
+            err_label, code = "exa_get_failed", 1
+        attempts.append({"engine": "exa", "endpoint": f"/research/v1/{research_id}",
+                         "http": exc.http_status, "latency_ms": exc.latency_ms, "error": err_label})
+        env = build_research_envelope(
+            status="FAILED", research_id=research_id, model=model, instructions=instructions,
+            output=None, citations=[], attempts=attempts, cost=0.0,
+            num_searches=None, num_pages=None, reasoning_tokens=None, reason_for_fallback=err_label,
+        )
+        return env, code
+    except (ExaTransientError, ExaMalformedResponseError) as exc:
+        attempts.append({"engine": "exa", "endpoint": f"/research/v1/{research_id}",
+                         "http": getattr(exc, "http_status", None),
+                         "latency_ms": getattr(exc, "latency_ms", 0), "error": "exa_network"})
+        env = build_research_envelope(
+            status="FAILED", research_id=research_id, model=model, instructions=instructions,
+            output=None, citations=[], attempts=attempts, cost=0.0,
+            num_searches=None, num_pages=None, reasoning_tokens=None, reason_for_fallback="exa_network",
+        )
+        return env, 6
+
+    state = str(data.get("status", "running"))
+    resolved_model = str(data.get("model") or model)
+    resolved_instructions = str(data.get("instructions") or instructions)
+    attempts.append({"engine": "exa", "endpoint": f"/research/v1/{research_id}",
+                     "http": 200, "latency_ms": 0, "error": None})
+    if state == "completed":
+        cost, n_search, n_pages, r_tokens = _research_cost(data)
+        env = build_research_envelope(
+            status="OK", research_id=research_id, model=resolved_model, instructions=resolved_instructions,
+            output=data.get("output"), citations=data.get("citations", []), attempts=attempts,
+            cost=cost, num_searches=n_search, num_pages=n_pages, reasoning_tokens=r_tokens,
+        )
+        return env, 0
+    if state == "failed":
+        env = build_research_envelope(
+            status="FAILED", research_id=research_id, model=resolved_model, instructions=resolved_instructions,
+            output=data.get("output"), citations=[], attempts=attempts, cost=0.0,
+            num_searches=None, num_pages=None, reasoning_tokens=None,
+            reason_for_fallback=str(data.get("error") or "research_failed"),
+        )
+        return env, 1
+    env = build_research_envelope(
+        status="RUNNING", research_id=research_id, model=resolved_model, instructions=resolved_instructions,
+        output=None, citations=[], attempts=attempts, cost=0.0,
+        num_searches=None, num_pages=None, reasoning_tokens=None,
+    )
+    return env, 0
+
+
 __all__ = [
     "__version__",
     "SCRIPT_DIR",
@@ -893,4 +970,5 @@ __all__ = [
     "get_research",
     "build_research_envelope",
     "research_task",
+    "research_status",
 ]

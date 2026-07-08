@@ -40,12 +40,16 @@ genuine multi-hop investigation (plan → many searches → crawl → cited synt
 
 ```bash
 h2t-ops research research --instructions "..." --model exa-research-fast --project "$RESEARCH_PROJECT" --json
-h2t-ops research research --instructions "..." --no-wait --json   # returns researchId, poll later
+h2t-ops research research --instructions "..." --no-wait --json      # returns researchId
+h2t-ops research research-get --id r_xxx --project "$RESEARCH_PROJECT" --json   # redeem it later
 ```
 
 - Models: `exa-research-fast` (default) / `exa-research` / `exa-research-pro` (deeper, pricier).
-- `--wait` (default) blocks and polls with backoff; `--no-wait` returns the `researchId` immediately.
-- Telemetry reports `num_searches` / `num_pages` / `reasoning_tokens` alongside cost.
+- `--wait` (default) blocks and polls with backoff; `--no-wait` returns the `researchId`
+  immediately — redeem it later with `research-get --id <researchId>` (status `RUNNING`
+  until done, then `OK` with the result + artifacts).
+- Telemetry reports `num_searches` / `num_pages` / `reasoning_units` (reasoning token
+  count) and `total_cost_usd` (top-level `costDollars` on the completed task).
 - Retrieval-first: prefer taking the returned `citations` and synthesizing under
   `evidence-grounded-synthesis` over shipping the black-box `output.content` verbatim for
   client deliverables.

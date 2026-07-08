@@ -189,6 +189,14 @@ def register(subparsers: Any) -> None:
     research_p.add_argument("--output-dir", dest="output_dir")
     add_fmt(research_p)
 
+    research_get_p = cmds.add_parser(
+        "research-get", help="Redeem a researchId from a --no-wait research run"
+    )
+    research_get_p.add_argument("--id", required=True, dest="research_id")
+    research_get_p.add_argument("--project", default="default")
+    research_get_p.add_argument("--output-dir", dest="output_dir")
+    add_fmt(research_get_p)
+
     resolve_author = cmds.add_parser("resolve-author", help="Resolve an author name to a channel URL")
     resolve_author.add_argument("--name", required=True)
     resolve_author.add_argument("--keywords", dest="keywords")
@@ -213,8 +221,11 @@ def _load_schema(raw: str | None) -> dict[str, Any] | None:
 
     from h2t_ops.core.errors import UsageError
 
-    candidate = Path(raw).expanduser()
-    text = candidate.read_text(encoding="utf-8") if candidate.is_file() else raw
+    try:
+        candidate = Path(raw).expanduser()
+        text = candidate.read_text(encoding="utf-8") if candidate.is_file() else raw
+    except OSError:
+        text = raw
     try:
         parsed = json.loads(text)
     except json.JSONDecodeError as exc:
@@ -319,6 +330,8 @@ def run(args: Any) -> Any:
             timeout_s=getattr(args, "timeout_s", None),
             project=args.project,
         )
+    if cmd == "research-get":
+        return client.research_get(args.research_id, project=args.project)
     if cmd == "resolve-author":
         return client.resolve_author(
             args.name,

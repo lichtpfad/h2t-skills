@@ -1887,3 +1887,72 @@ def test_client_research_failed_raises(monkeypatch, tmp_path):
     client = client_mod.ResearchClient(output_dir=tmp_path)
     with pytest.raises(ProviderError):
         client.research(instructions="Q", project="h2t-skills")
+
+
+def test_client_research_get_completed(monkeypatch, tmp_path):
+    from h2t_ops.connectors.research import client as client_mod
+    from h2t_ops.connectors.research import exa
+
+    monkeypatch.setattr(client_mod, "resolve_secret", lambda name: "k")
+    monkeypatch.setattr(
+        client_mod.ResearchClient, "_require_research_route",
+        lambda self, cap, provider=None: {"selected_provider": "exa"},
+    )
+    envelope = exa.build_research_envelope(
+        status="OK", research_id="r_1", model="exa-research-fast", instructions="Q",
+        output={"content": "Answer."}, citations=[{"url": "https://x", "title": "X"}],
+        attempts=[{"engine": "exa", "endpoint": "/research/v1/r_1", "http": 200, "latency_ms": 0, "error": None}],
+        cost=0.01, num_searches=1, num_pages=1, reasoning_tokens=10,
+    )
+    monkeypatch.setattr(exa, "research_status", lambda rid, **kw: (envelope, 0))
+
+    client = client_mod.ResearchClient(output_dir=tmp_path)
+    result = client.research_get("r_1", project="h2t-skills")
+    assert result["status"] == "OK"
+    assert "artifact" in result
+
+
+def test_client_research_get_running_no_artifact(monkeypatch, tmp_path):
+    from h2t_ops.connectors.research import client as client_mod
+    from h2t_ops.connectors.research import exa
+
+    monkeypatch.setattr(client_mod, "resolve_secret", lambda name: "k")
+    monkeypatch.setattr(
+        client_mod.ResearchClient, "_require_research_route",
+        lambda self, cap, provider=None: {"selected_provider": "exa"},
+    )
+    envelope = exa.build_research_envelope(
+        status="RUNNING", research_id="r_1", model="exa-research-fast", instructions="Q",
+        output=None, citations=[], attempts=[], cost=0.0,
+        num_searches=None, num_pages=None, reasoning_tokens=None,
+    )
+    monkeypatch.setattr(exa, "research_status", lambda rid, **kw: (envelope, 0))
+
+    client = client_mod.ResearchClient(output_dir=tmp_path)
+    result = client.research_get("r_1")
+    assert result["status"] == "RUNNING"
+    assert "artifact" not in result
+
+
+def test_client_research_get_not_found_raises(monkeypatch, tmp_path):
+    from h2t_ops.connectors.research import client as client_mod
+    from h2t_ops.connectors.research import exa
+    from h2t_ops.core.errors import NotFoundError
+
+    monkeypatch.setattr(client_mod, "resolve_secret", lambda name: "k")
+    monkeypatch.setattr(
+        client_mod.ResearchClient, "_require_research_route",
+        lambda self, cap, provider=None: {"selected_provider": "exa"},
+    )
+    envelope = exa.build_research_envelope(
+        status="FAILED", research_id="r_x", model="", instructions="",
+        output=None, citations=[],
+        attempts=[{"engine": "exa", "endpoint": "/research/v1/r_x", "http": 404, "latency_ms": 0, "error": "exa_not_found"}],
+        cost=0.0, num_searches=None, num_pages=None, reasoning_tokens=None,
+        reason_for_fallback="exa_not_found",
+    )
+    monkeypatch.setattr(exa, "research_status", lambda rid, **kw: (envelope, 5))
+
+    client = client_mod.ResearchClient(output_dir=tmp_path)
+    with pytest.raises(NotFoundError):
+        client.research_get("r_x")
