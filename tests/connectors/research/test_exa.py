@@ -795,7 +795,7 @@ def test_research_task_timeout(monkeypatch):
     )
     env, exit_code = exa.research_task("Q", api_key="k", wait=True, poll_interval=0.0, timeout_s=10.0)
     assert env["status"] == "FAILED"
-    assert exit_code == 3
+    assert exit_code == 1
     assert env["telemetry"]["reason_for_fallback"] == "research_timeout"
 
 

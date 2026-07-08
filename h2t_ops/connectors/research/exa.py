@@ -801,27 +801,48 @@ def research_task(
         return env, 0
 
     start = time.monotonic()
-    current_interval = poll_interval
+    current_interval = min(poll_interval, RESEARCH_POLL_INTERVAL_CAP_SECONDS)
     while True:
         try:
             data = get_research(research_id, api_key=api_key)
-        except (ExaPermanentError, ExaTransientError, ExaMalformedResponseError) as exc:
+        except ExaPermanentError as exc:
+            if exc.http_status in {401, 403}:
+                err_label, code = "exa_auth_error", 4
+            else:
+                err_label, code = "exa_poll_failed", 1
             attempts.append(
                 {
                     "engine": "exa",
                     "endpoint": f"/research/v1/{research_id}",
-                    "http": getattr(exc, "http_status", None),
-                    "latency_ms": getattr(exc, "latency_ms", 0),
-                    "error": "exa_poll_failed",
+                    "http": exc.http_status,
+                    "latency_ms": exc.latency_ms,
+                    "error": err_label,
                 }
             )
             env = build_research_envelope(
                 status="FAILED", research_id=research_id, model=model, instructions=instructions,
                 output=None, citations=[], attempts=attempts, cost=0.0,
                 num_searches=None, num_pages=None, reasoning_tokens=None,
-                reason_for_fallback="exa_poll_failed",
+                reason_for_fallback=err_label,
             )
-            return env, 1
+            return env, code
+        except (ExaTransientError, ExaMalformedResponseError) as exc:
+            attempts.append(
+                {
+                    "engine": "exa",
+                    "endpoint": f"/research/v1/{research_id}",
+                    "http": getattr(exc, "http_status", None),
+                    "latency_ms": getattr(exc, "latency_ms", 0),
+                    "error": "exa_network",
+                }
+            )
+            env = build_research_envelope(
+                status="FAILED", research_id=research_id, model=model, instructions=instructions,
+                output=None, citations=[], attempts=attempts, cost=0.0,
+                num_searches=None, num_pages=None, reasoning_tokens=None,
+                reason_for_fallback="exa_network",
+            )
+            return env, 6
 
         state = str(data.get("status", "running"))
         attempts.append(
@@ -856,7 +877,7 @@ def research_task(
                 num_searches=None, num_pages=None, reasoning_tokens=None,
                 reason_for_fallback="research_timeout",
             )
-            return env, 3
+            return env, 1
         sleep_with_jitter(current_interval)
         current_interval = min(
             current_interval * RESEARCH_POLL_BACKOFF_FACTOR, RESEARCH_POLL_INTERVAL_CAP_SECONDS
