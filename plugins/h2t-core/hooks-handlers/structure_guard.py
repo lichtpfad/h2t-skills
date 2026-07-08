@@ -116,6 +116,44 @@ def check_file(file_path: str, config: dict) -> tuple[int, str]:
     return 0, ""
 
 
+_FM_EXEMPT_NAMES = {"readme.md", "index.md"}
+
+
+def _has_frontmatter(content: str) -> bool:
+    """True if *content* opens with a `---` … `---` YAML frontmatter block."""
+    s = content.lstrip("﻿")
+    lines = s.splitlines()
+    if not lines or lines[0].strip() != "---":
+        return False
+    return any(line.strip() == "---" for line in lines[1:])
+
+
+def check_frontmatter_presence(
+    file_path: str, content: str, config: dict
+) -> tuple[int, str]:
+    """Warn (code 1) when a Markdown file under a frontmatter_dir is written
+    without a frontmatter block. Presence-only — field-level validation stays
+    in docs-lint's check_frontmatter. Returns (0, "") when not applicable.
+    """
+    dirs = config.get("frontmatter_dirs", [])
+    if not dirs:
+        return 0, ""
+    norm = file_path.replace("\\", "/")
+    name = Path(norm).name
+    if not name.lower().endswith(".md") or name.lower() in _FM_EXEMPT_NAMES:
+        return 0, ""
+    if not any(norm.startswith(d) for d in dirs):
+        return 0, ""
+    if _has_frontmatter(content):
+        return 0, ""
+    return 1, (
+        f"WARNING: {norm!r} без frontmatter. Создайте через "
+        f"`docs-lint new <plan|spec|adr> <slug>` (сгенерирует поля), "
+        f"либо добавьте блок --- вручную, либо после записи прогоните "
+        f"`docs-lint fix-safe --only=frontmatter`."
+    )
+
+
 def _load_payload() -> dict:
     try:
         raw = sys.stdin.read()
@@ -149,13 +187,27 @@ def main() -> int:
         return 0  # outside repo — not our concern
 
     exit_code, message = check_file(norm, config)
-
-    if message:
+    if exit_code == 2:
+        # Blocking beats any warning — surface it and stop.
         print(message, file=sys.stderr)
+        return 2
 
-    # check_file code 1 = warn intent: print to stderr but EXIT 0
-    # (Claude Code exit 1 semantics in PreToolUse are undefined — safer to exit 0)
-    return 2 if exit_code == 2 else 0
+    messages = [message] if message else []
+
+    # Frontmatter presence — only Write carries the full file content.
+    if tool_name == "Write":
+        _, fm_msg = check_frontmatter_presence(
+            norm, tool_input.get("content", ""), config
+        )
+        if fm_msg:
+            messages.append(fm_msg)
+
+    if messages:
+        print("\n".join(messages), file=sys.stderr)
+
+    # code 1 (warn) prints to stderr but EXITs 0 — Claude Code exit 1 semantics
+    # in PreToolUse are undefined, so we never block on a warning.
+    return 0
 
 
 if __name__ == "__main__":

@@ -198,6 +198,120 @@ def test_h2t_structure_yaml_allows_dated_plan():
     assert code == 0
 
 
+# ── frontmatter presence enforcement (#264 follow-up) ────────────────────────
+
+FM_CONFIG = {
+    "frontmatter_dirs": [
+        "docs/superpowers/plans/",
+        "docs/superpowers/specs/",
+        "docs/adr/",
+    ],
+}
+
+
+def test_has_frontmatter_true():
+    guard = _load_guard()
+    assert guard._has_frontmatter("---\ntitle: X\n---\n\n# X\n") is True
+
+
+def test_has_frontmatter_false_no_block():
+    guard = _load_guard()
+    assert guard._has_frontmatter("# X\n\nsome body\n") is False
+
+
+def test_has_frontmatter_false_no_closing():
+    guard = _load_guard()
+    assert guard._has_frontmatter("---\ntitle: X\n\n# body no close\n") is False
+
+
+def test_has_frontmatter_true_with_bom():
+    guard = _load_guard()
+    assert guard._has_frontmatter("﻿---\ntitle: X\n---\n") is True
+
+
+def test_plan_write_without_frontmatter_warns():
+    guard = _load_guard()
+    code, msg = guard.check_frontmatter_presence(
+        "docs/superpowers/plans/2026-07-08-foo.md", "# Foo\n\nbody\n", FM_CONFIG
+    )
+    assert code == 1
+    assert "frontmatter" in msg.lower() or "docs-lint new" in msg
+
+
+def test_plan_write_with_frontmatter_ok():
+    guard = _load_guard()
+    code, msg = guard.check_frontmatter_presence(
+        "docs/superpowers/plans/2026-07-08-foo.md",
+        "---\ntitle: Foo\nstatus: draft\ndate: 2026-07-08\nmilestone: \"\"\n---\n\n# Foo\n",
+        FM_CONFIG,
+    )
+    assert code == 0
+
+
+def test_spec_write_without_frontmatter_warns():
+    guard = _load_guard()
+    code, _ = guard.check_frontmatter_presence(
+        "docs/superpowers/specs/2026-07-08-bar.md", "# Bar\n", FM_CONFIG
+    )
+    assert code == 1
+
+
+def test_adr_write_without_frontmatter_warns():
+    guard = _load_guard()
+    code, _ = guard.check_frontmatter_presence(
+        "docs/adr/0007-thing.md", "# Thing\n", FM_CONFIG
+    )
+    assert code == 1
+
+
+def test_readme_in_frontmatter_dir_exempt():
+    guard = _load_guard()
+    code, _ = guard.check_frontmatter_presence(
+        "docs/adr/README.md", "# ADR index\n", FM_CONFIG
+    )
+    assert code == 0
+
+
+def test_index_in_frontmatter_dir_exempt():
+    guard = _load_guard()
+    code, _ = guard.check_frontmatter_presence(
+        "docs/superpowers/plans/index.md", "# Plans\n", FM_CONFIG
+    )
+    assert code == 0
+
+
+def test_non_markdown_not_checked():
+    guard = _load_guard()
+    code, _ = guard.check_frontmatter_presence(
+        "docs/superpowers/plans/data.json", "{}", FM_CONFIG
+    )
+    assert code == 0
+
+
+def test_path_outside_frontmatter_dirs_not_checked():
+    guard = _load_guard()
+    code, _ = guard.check_frontmatter_presence(
+        "docs/reports/2026-07-08-report.md", "# Report\n", FM_CONFIG
+    )
+    assert code == 0
+
+
+def test_frontmatter_check_no_config_key_returns_zero():
+    guard = _load_guard()
+    code, _ = guard.check_frontmatter_presence(
+        "docs/superpowers/plans/2026-07-08-foo.md", "# Foo\n", {}
+    )
+    assert code == 0
+
+
+def test_repo_structure_yaml_has_frontmatter_dirs():
+    guard = _load_guard()
+    repo_root = Path(__file__).parents[2]
+    config = guard.load_config(repo_root)
+    assert "frontmatter_dirs" in config
+    assert "docs/superpowers/plans/" in config["frontmatter_dirs"]
+
+
 def test_hooks_json_has_structure_guard_entry():
     import json as _json
     hooks_path = Path(__file__).parents[2] / "plugins" / "h2t-core" / "hooks" / "hooks.json"
