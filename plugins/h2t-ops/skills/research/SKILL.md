@@ -25,31 +25,43 @@ grounded synthesis** over black-box synthesis for client deliverables.
 | Competitor / company intel | `search --mode competitor` | category=company |
 | People research | `search --mode people` | category=people |
 | One-shot structured deep dig | `search --mode deep` + `--schema` | synchronous, ~4 s |
+| Multi-hop deep dig, "разберись в теме X" | `research --instructions "..."` | async Exa Research API, ~20–120 s, cited report |
 | Pull raw text of a known URL | `fetch` / `crawl` | fetch ladder / Exa contents |
 | Find pages like a known URL | `similar` | Exa /findSimilar |
 | Direct grounded answer + citations | `answer` | short answer, cited |
 | Rescue OCR after failed fetch | `visual-ocr` | needs fetch sidecar + screenshot |
 
-**When to prefer `search --mode deep` vs a quick mode:** deep is for one-shot
-structured extraction where you already know the output shape (`--schema`). It is
-**not** a multi-step research agent — for genuine multi-hop research use the planned
-`research` capability below.
+**When to prefer `search --mode deep` vs `research`:** `deep` is a synchronous one-shot
+structured extraction where you already know the output shape (`--schema`, ~4 s). For a
+genuine multi-hop investigation (plan → many searches → crawl → cited synthesis) use the
+`research` capability (async, see below).
+
+## Research mode (async deep dig)
+
+```bash
+h2t-ops research research --instructions "..." --model exa-research-fast --project "$RESEARCH_PROJECT" --json
+h2t-ops research research --instructions "..." --no-wait --json   # returns researchId, poll later
+```
+
+- Models: `exa-research-fast` (default) / `exa-research` / `exa-research-pro` (deeper, pricier).
+- `--wait` (default) blocks and polls with backoff; `--no-wait` returns the `researchId` immediately.
+- Telemetry reports `num_searches` / `num_pages` / `reasoning_tokens` alongside cost.
+- Retrieval-first: prefer taking the returned `citations` and synthesizing under
+  `evidence-grounded-synthesis` over shipping the black-box `output.content` verbatim for
+  client deliverables.
 
 ### Planned capabilities (not yet available — do not call)
 
 Tracked in `docs/superpowers/specs/2026-07-08-exa-research-capability.md`. Until the
-commands exist, use the modes above; do not invent flags.
+command exists, use the modes above; do not invent flags.
 
-- **`research`** (Exa Research API, async) — real multi-hop agent: plan → many
-  searches → crawl pages → synthesized report with citations. For "разберись глубоко
-  в теме X". Models `exa-research-fast` / `exa-research` / `exa-research-pro`.
 - **`agent`** (Exa Agent API, async) — LeadGen / enrichment / invest: fuses premium
   data partners (Fiber.ai contacts, Similarweb traffic, Baselayer US-business,
   Financial Datasets, Particle podcasts) + web into one structured output. Paid
   per-provider — enable only with an explicit data-source flag.
 
-For both planned modes the intended pattern is **retrieval-first**: let Exa return
-structured, cited data, then do the final synthesis under our
+For the planned `agent` mode the intended pattern is also **retrieval-first**: let Exa
+return structured, cited data, then do the final synthesis under our
 `evidence-grounded-synthesis` discipline rather than shipping the black-box answer.
 
 ## Boundary
