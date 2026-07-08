@@ -21,6 +21,17 @@ MADR in `docs/adr/NNNN-kebab-case.md` (4-digit, gaps allowed)
 ### Docs Structure
 Required: `docs/superpowers/{specs,plans}/`, `docs/adr/`, `docs/reports/`
 
+### Creating plan/spec/adr files (MUST)
+Do **not** hand-write frontmatter. Generate the file with the correct dated name
+and required fields:
+```
+docs-lint new plan <slug> [--milestone M3]   # docs/superpowers/plans/YYYY-MM-DD-<slug>.md
+docs-lint new spec <slug> [--milestone M3]   # docs/superpowers/specs/YYYY-MM-DD-<slug>.md
+docs-lint new adr  <slug>                     # docs/adr/NNNN-<slug>.md
+```
+If a file already exists without frontmatter, backfill it deterministically:
+`docs-lint fix-safe --only=frontmatter`.
+
 ## Full Standards References
 - Directory structure: C:/dev/docs/standards/documentation-structure.md
 - Naming: C:/dev/docs/standards/naming-conventions.md

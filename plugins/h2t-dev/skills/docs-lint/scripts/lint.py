@@ -14,6 +14,7 @@ Legacy flags (deprecated, use sub-commands instead):
 """
 
 import argparse
+import datetime
 import json
 import os
 import re
@@ -65,7 +66,7 @@ try:
 except ImportError:
     _MISPLACED_FILES_AVAILABLE = False
 
-_SUBCOMMANDS = frozenset({"audit", "plan", "fix-safe", "fix-index", "doctor"})
+_SUBCOMMANDS = frozenset({"audit", "plan", "fix-safe", "fix-index", "doctor", "new"})
 
 _VENDOR_EXCLUDE = {
     ".venv", "venv", "node_modules", "__pycache__", "dist", "build",
@@ -1069,6 +1070,35 @@ def _legacy_main(args: argparse.Namespace) -> None:
         print(f"  RESULT: all {len(targets)} repos compliant")
 
 
+def _run_new(raw: list[str]) -> None:
+    """Create a plan/spec/adr file with correct frontmatter (`docs-lint new`)."""
+    from docs.new_doc import create_doc
+
+    p = argparse.ArgumentParser(prog="docs-lint new")
+    p.add_argument("_new")  # consumes the 'new' token
+    p.add_argument("kind", choices=["plan", "spec", "adr"])
+    p.add_argument("slug", help="short kebab/free-text name (normalized to a slug)")
+    p.add_argument("--milestone", default="", help="milestone tag, e.g. M3 (plans/specs)")
+    p.add_argument("--title", default=None, help="override the derived H1/title")
+    p.add_argument("--root", default=None)
+    args = p.parse_args(raw)
+    rp = _resolve_root(args.root)
+    today = datetime.date.today().isoformat()
+    try:
+        path = create_doc(
+            rp, args.kind, args.slug,
+            today=today, milestone=args.milestone, title=args.title,
+        )
+    except FileExistsError as e:
+        print(f"ERROR: file already exists: {e}", file=sys.stderr)
+        sys.exit(1)
+    except ValueError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        sys.exit(2)
+    rel = str(path.relative_to(rp)).replace("\\", "/")
+    print(f"created: {rel}")
+
+
 def main() -> None:
     raw = sys.argv[1:]
 
@@ -1109,6 +1139,10 @@ def main() -> None:
         parser.add_argument("--repo-root", dest="repo_root", action="store_true")
         args = parser.parse_args(raw)
         _legacy_main(args)
+        return
+
+    if first_pos == "new":
+        _run_new(raw)
         return
 
     if is_subcommand or (first_pos is None and "--root" in raw):
