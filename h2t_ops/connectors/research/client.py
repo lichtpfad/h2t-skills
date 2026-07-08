@@ -1035,6 +1035,7 @@ class ResearchClient:
         exclude_text: list[str] | None = None,
         country: str | None = None,
         full_text: bool = False,
+        max_age_hours: int | None = None,
         project: str = "default",
         no_retry: bool = False,
     ) -> dict[str, Any]:
@@ -1057,6 +1058,7 @@ class ResearchClient:
             exclude_text=exclude_text,
             country=country,
             full_text=full_text,
+            max_age_hours=max_age_hours,
         )
 
         exa.validate_args(args)
