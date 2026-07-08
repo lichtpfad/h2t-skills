@@ -214,6 +214,23 @@ def register(subparsers: Any) -> None:
     research_get_p.add_argument("--output-dir", dest="output_dir")
     add_fmt(research_get_p)
 
+    agent_p = cmds.add_parser(
+        "agent", help="Run an Exa Agent run (premium data-source fusion, synchronous)"
+    )
+    agent_p.add_argument("--query", required=True)
+    agent_p.add_argument(
+        "--data-source",
+        dest="data_sources",
+        action="append",
+        help="Premium provider (repeatable, PAID). Omit for web-only. e.g. --data-source fiber_ai",
+    )
+    agent_p.add_argument("--schema", dest="schema", help="path to a JSON schema file, or inline JSON")
+    agent_p.add_argument("--effort", dest="effort")
+    agent_p.add_argument("--timeout-s", type=float, dest="timeout_s")
+    agent_p.add_argument("--project", default="default")
+    agent_p.add_argument("--output-dir", dest="output_dir")
+    add_fmt(agent_p)
+
     resolve_author = cmds.add_parser("resolve-author", help="Resolve an author name to a channel URL")
     resolve_author.add_argument("--name", required=True)
     resolve_author.add_argument("--keywords", dest="keywords")
@@ -350,6 +367,15 @@ def run(args: Any) -> Any:
         )
     if cmd == "research-get":
         return client.research_get(args.research_id, project=args.project)
+    if cmd == "agent":
+        return client.agent(
+            query=args.query,
+            data_sources=args.data_sources,
+            output_schema=_load_schema(getattr(args, "schema", None)),
+            effort=getattr(args, "effort", None),
+            timeout_s=getattr(args, "timeout_s", None),
+            project=args.project,
+        )
     if cmd == "resolve-author":
         return client.resolve_author(
             args.name,

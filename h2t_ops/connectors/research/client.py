@@ -1360,6 +1360,81 @@ class ResearchClient:
             "artifact": artifact,
         }
 
+    def agent(
+        self,
+        *,
+        query: str,
+        data_sources: list[str] | None = None,
+        output_schema: dict[str, Any] | None = None,
+        effort: str | None = None,
+        wait: bool = True,
+        poll_interval: float | None = None,
+        timeout_s: float | None = None,
+        project: str = "default",
+    ) -> dict[str, Any]:
+        """Run an Exa Agent API run (premium data-source fusion) and persist artifacts.
+
+        Cost gate: paid providers only run when explicitly requested via `data_sources`;
+        with none, the agent is web-only (cheap). The response's costDollars is logged;
+        a floor estimate is attached when paid providers are requested.
+        """
+        from h2t_ops.connectors.research import exa
+
+        self._require_research_route("agent", provider="exa")
+        api_key = resolve_secret("EXA_API_KEY")
+        kwargs: dict[str, Any] = {
+            "api_key": api_key,
+            "data_sources": data_sources,
+            "output_schema": output_schema,
+            "wait": wait,
+        }
+        if effort is not None:
+            kwargs["effort"] = effort
+        if poll_interval is not None:
+            kwargs["poll_interval"] = poll_interval
+        if timeout_s is not None:
+            kwargs["timeout_s"] = timeout_s
+        envelope, exit_code = exa.agent_run(query, **kwargs)
+
+        telemetry = _artifact_telemetry(envelope)
+        artifact = self._write_provider_artifacts(
+            kind="agent",
+            slug_source=query,
+            project=project,
+            provider_envelope=envelope,
+            telemetry=telemetry,
+            ledger_provider="exa",
+            ledger_endpoint="/agent/runs",
+            ledger_mode="agent",
+        )
+        run_refs = self._persist_thread_run(
+            project=project,
+            query=query,
+            provider="exa",
+            topics=["agent"],
+            document_ids=[],
+            created_at=artifact["created_at"],
+        )
+        artifact = self._attach_research_refs(artifact, run_refs)
+
+        if envelope.get("status") == "FAILED":
+            details = sanitize_details({"provider_envelope": envelope})
+            attempts = envelope.get("telemetry", {}).get("attempts", [])
+            last_error = attempts[-1].get("error") if attempts else None
+            if last_error == "exa_auth_error" or exit_code == 4:
+                raise AuthError("Exa agent failed: auth", details=details)
+            if last_error == "exa_network":
+                raise NetworkError("Exa agent failed: network", details=details)
+            reason = envelope.get("telemetry", {}).get("reason_for_fallback")
+            raise ProviderError(f"Exa agent failed: {reason}", details=details)
+
+        safe_envelope = sanitize_details(envelope)
+        return {
+            "kind": "research_provider_envelope",
+            **safe_envelope,
+            "artifact": artifact,
+        }
+
     def resolve_author(
         self,
         name: str,

@@ -66,3 +66,14 @@ def test_research_capability_routes_to_exa(monkeypatch):
     assert route["selected_provider"] == "exa"
     assert route["configured"] is True
     assert "research" in provider_routing.CAPABILITIES
+
+
+def test_agent_capability_routes_to_exa(monkeypatch):
+    from h2t_ops.connectors.research import provider_routing
+
+    monkeypatch.setattr(provider_routing, "_secret_available", lambda name: name == "EXA_API_KEY")
+    route = provider_routing.select_route("agent")
+
+    assert route["selected_provider"] == "exa"
+    assert route["configured"] is True
+    assert "agent" in provider_routing.CAPABILITIES
