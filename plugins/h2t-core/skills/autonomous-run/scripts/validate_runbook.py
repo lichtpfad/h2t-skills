@@ -60,8 +60,9 @@ def validate(text: str) -> list[str]:
             problems.append(f"safety marker {marker!r} missing from section {section}")
     pipe = secs.get("## Pipeline steps", "")
     for step in S.PIPELINE_STEPS:
-        if f"**{step}**" not in pipe:
-            problems.append(f"pipeline step missing from Pipeline steps: {step}")
+        # require the checkbox+bold form the resume parser reads, not a bare substring
+        if not re.search(r"(?m)^- \[[ xX]\] \*\*" + re.escape(step) + r"\*\*", pipe):
+            problems.append(f"pipeline step missing/malformed in Pipeline steps: {step}")
     if "<<" in text or ">>" in text:
         problems.append("unresolved <<TOKEN>> placeholder remains")
     return problems
