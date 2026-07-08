@@ -9,8 +9,10 @@ _SKILL = Path(__file__).resolve().parents[1] / "SKILL.md"
 @pytest.mark.skipif(not (_REF / "decision-protocol.md").exists(), reason="M3 not built yet")
 def test_decision_protocol_lists_all_hard_stops():
     text = (_REF / "decision-protocol.md").read_text(encoding="utf-8")
-    for marker in S.MARKER_SECTION:
-        if marker != "hard-stop or unresolvable blocker":
+    # only the Decision-protocol-mapped markers (the 4 hard-stops) belong here,
+    # not the Gates/Execution/Blocker markers added to MARKER_SECTION in M1
+    for marker, sec in S.MARKER_SECTION.items():
+        if sec == "## Decision-protocol":
             assert marker in text
 
 

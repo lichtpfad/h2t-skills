@@ -9,8 +9,37 @@ description: Launch or resume an autonomous, unattended plan-execution run after
 > the constituent skills — it generates a durable runbook artifact, tracks two-track state,
 > and hands off per step. Full design: `docs/superpowers/specs/2026-07-09-autonomous-run-orchestrator.md`.
 
-<!-- Launch procedure (preconditions → generate → sealed-validate → materialize TodoWrite
-     → hand off) is added in M3. -->
+## When to use
+
+Post-brainstorm. The operator finishes the interactive brainstorm (the agent has no remaining
+questions), then triggers the run. This skill owns everything from **spec-write onward**:
+write-spec → review-spec → write-plan → plan-gate → subagent-driven-dev → gates → e2e → PR →
+handoff. Brainstorm itself stays interactive with the operator.
+
+## Launch
+
+1. **Preconditions.** Resolve and record: branch, venv + test command, issue, spec (exists, or
+   write it as the first pipeline step).
+2. **Classify e2e applicability** (spec § Conditional e2e): does the task expose an
+   externally-observable behavioral surface unit tests don't exercise end-to-end?
+   → `applies` / `N/A (no integration surface)` / `BLOCKED-DEFERRED (<reason>)`. Record it.
+3. **Generate** the durable runbook artifact with `scripts/new_runbook.create_runbook(...)`:
+   `docs/superpowers/plans/<date>-<slug>-runbook.md`. Fields (`RUN_FIELDS`) come from the run's
+   "where things are". Generation calls the sealed validator on emit — a runbook that fails
+   validation is never written.
+4. **Materialize TodoWrite** mirroring the runbook's pipeline steps.
+5. **Hand off.** Follow the runbook's checkboxed steps in order, invoking the constituent skill
+   named in each step's per-step contract. This skill does not conduct step-by-step — the
+   artifact is the source of truth.
+
+## Protocols (portable references)
+
+- **Decisions:** `references/decision-protocol.md` — auto-resolve allow-list (deny-by-default) +
+  the 4 hard-stops. Escalate anything not on the allow-list.
+- **Gates:** `references/gates.md` — codex review-gate (per checkpoint + final), council
+  finish-gate, pre-merge-check, `N_gate_attempts` = 2.
+- **On a hard-stop or unresolvable blocker → `h2t-core:handoff`** (record blocker + eligible
+  WIP-commit first). Not on a default-shaped decision — those are auto-resolved.
 
 ## Resume & state (two-track)
 
