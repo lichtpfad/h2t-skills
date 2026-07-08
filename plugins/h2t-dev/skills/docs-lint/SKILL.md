@@ -304,6 +304,23 @@ jq -n \
 
 ---
 
+## Creating plan/spec/adr files — `new`
+
+Generate a correctly-named file with required frontmatter (fields sourced from
+`FRONTMATTER_RULES`, so the output never drifts from the validator). Prefer this
+over hand-writing — hand-written files trigger frontmatter findings.
+
+```bash
+"$H2T_PYTHON" "$LINT" new plan <slug> --root . [--milestone M3] [--title "..."]
+"$H2T_PYTHON" "$LINT" new spec <slug> --root . [--milestone M3]
+"$H2T_PYTHON" "$LINT" new adr  <slug> --root .
+```
+
+- `plan`/`spec` → `docs/superpowers/{plans,specs}/YYYY-MM-DD-<slug>.md` (date = today)
+- `adr` → `docs/adr/NNNN-<slug>.md` (next 4-digit number, `status: proposed`)
+- Never overwrites an existing file (exit 1). Reactive backfill for legacy files:
+  `fix-safe --only=frontmatter`.
+
 ## Legacy sub-commands (still work)
 
 ```bash
