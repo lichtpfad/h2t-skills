@@ -91,8 +91,9 @@ def test_run_docs_init_returns_error_on_failure(tmp_path, monkeypatch):
 def test_run_docs_init_skips_when_script_not_found(tmp_path, monkeypatch):
     """Skips gracefully when docs-init script is not found."""
     import scaffold_project
-    monkeypatch.setattr(scaffold_project, "_DEV_ROOT", tmp_path)
-    monkeypatch.setattr(scaffold_project, "_PLUGIN_ROOT", tmp_path / "nonexistent")
+    # run_docs_init reads the module-level _H2T_DEV_ROOT (resolved once at import),
+    # not _DEV_ROOT/_PLUGIN_ROOT — point it at a dir with no docs-init script.
+    monkeypatch.setattr(scaffold_project, "_H2T_DEV_ROOT", tmp_path / "nonexistent")
     project_dir = tmp_path / "my-repo"
     project_dir.mkdir()
     result = run_docs_init("my-repo", project_dir)
