@@ -234,6 +234,57 @@ def test_write_tab_missing_tab_raises_usage_error(dc):
         dc.write_document_tab("docid1", "t.tab1", "# Hello")
 
 
+def _tab_doc_with_end(doc_id: str, tab_id: str, end_index: int, revision: str = "rev1") -> dict:
+    return {
+        "documentId": doc_id,
+        "revisionId": revision,
+        "tabs": [{
+            "tabProperties": {"tabId": tab_id},
+            "documentTab": {"body": {"content": [{"endIndex": end_index}]}},
+        }],
+    }
+
+
+def test_write_tab_fresh_endindex2_allows_write(dc):
+    """A freshly-added tab has one empty paragraph (endIndex=2) — must be writable (#246)."""
+    _setup_doc(dc, tab_id="t.tab1")
+    dc._docs_service.documents.return_value.get.return_value.execute.return_value = (
+        _tab_doc_with_end("docid1", "t.tab1", 2)
+    )
+    result = dc.write_document_tab("docid1", "t.tab1", "# Hello")
+    assert dc._docs_service.documents.return_value.batchUpdate.called
+    assert result["requests_sent"] > 0
+
+
+def test_write_tab_clear_first_endindex2_skips_delete(dc):
+    """clear_first on a fresh tab (endIndex=2) must skip deleteContentRange
+    (range would be empty → Docs API 400) but still insert content (#246)."""
+    _setup_doc(dc, tab_id="t.tab1")
+    dc._docs_service.documents.return_value.get.return_value.execute.return_value = (
+        _tab_doc_with_end("docid1", "t.tab1", 2)
+    )
+    dc.write_document_tab("docid1", "t.tab1", "# Hello", clear_first=True)
+    body = dc._docs_service.documents.return_value.batchUpdate.call_args.kwargs["body"]
+    requests = body["requests"]
+    assert not any("deleteContentRange" in r for r in requests)
+    assert any("insertText" in r for r in requests)
+
+
+def test_write_tab_clear_first_with_content_deletes(dc):
+    """clear_first on a tab with real content (endIndex>2) emits deleteContentRange (1, end-1) (#246)."""
+    _setup_doc(dc, tab_id="t.tab1")
+    dc._docs_service.documents.return_value.get.return_value.execute.return_value = (
+        _tab_doc_with_end("docid1", "t.tab1", 42)
+    )
+    dc.write_document_tab("docid1", "t.tab1", "# Hello", clear_first=True)
+    body = dc._docs_service.documents.return_value.batchUpdate.call_args.kwargs["body"]
+    dels = [r for r in body["requests"] if "deleteContentRange" in r]
+    assert len(dels) == 1
+    rng = dels[0]["deleteContentRange"]["range"]
+    assert rng["startIndex"] == 1
+    assert rng["endIndex"] == 41
+
+
 # ---------------------------------------------------------------------------
 # UTF-16 offset correctness
 # ---------------------------------------------------------------------------
