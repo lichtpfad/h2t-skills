@@ -22,11 +22,14 @@ handoff. Brainstorm itself stays interactive with the operator.
    write it as the first pipeline step).
 2. **Classify e2e applicability** (spec § Conditional e2e): does the task expose an
    externally-observable behavioral surface unit tests don't exercise end-to-end?
-   → `applies` / `N/A (no integration surface)` / `BLOCKED-DEFERRED (<reason>)`. Record it.
+   → applicability at launch is `applies` / `N/A (no integration surface)` /
+   `BLOCKED-DEFERRED (<reason>)`. Record it. (Completion of the e2e step later is `DONE`,
+   or stays `N/A` / `BLOCKED-DEFERRED` — applicability ≠ completion.)
 3. **Generate** the durable runbook artifact with `scripts/new_runbook.create_runbook(...)`:
-   `docs/superpowers/plans/<date>-<slug>-runbook.md`. Fields (`RUN_FIELDS`) come from the run's
-   "where things are". Generation calls the sealed validator on emit — a runbook that fails
-   validation is never written.
+   `docs/superpowers/plans/<date>-<slug>-runbook.md`. Fields (`runbook_schema.RUN_FIELDS`:
+   title, today, runbook_path, branch, spec_path, issue, venv_test, e2e_state) come from the
+   run's "where things are". Generation calls the sealed validator on emit — a runbook that
+   fails validation is never written.
 4. **Materialize TodoWrite** mirroring the runbook's pipeline steps.
 5. **Hand off.** Follow the runbook's checkboxed steps in order, invoking the constituent skill
    named in each step's per-step contract. This skill does not conduct step-by-step — the
