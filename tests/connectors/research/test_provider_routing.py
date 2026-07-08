@@ -55,3 +55,14 @@ def test_select_route_raises_usage_error_when_required_key_missing(monkeypatch):
 def test_select_route_rejects_unknown_capability():
     with pytest.raises(UsageError, match="unknown research capability"):
         provider_routing.select_route("unknown")
+
+
+def test_research_capability_routes_to_exa(monkeypatch):
+    from h2t_ops.connectors.research import provider_routing
+
+    monkeypatch.setattr(provider_routing, "_secret_available", lambda name: name == "EXA_API_KEY")
+    route = provider_routing.select_route("research")
+
+    assert route["selected_provider"] == "exa"
+    assert route["configured"] is True
+    assert "research" in provider_routing.CAPABILITIES
