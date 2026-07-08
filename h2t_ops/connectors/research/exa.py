@@ -35,8 +35,20 @@ MODE_CONFIG: dict[str, dict[str, Any]] = {
         "num_results": 10,
     },
     "people": {"type": "auto", "category": "people", "highlight_chars": 3000, "num_results": 10},
+    "instant": {"type": "instant", "category": None, "highlight_chars": 2000, "num_results": 10},
+    "deep-lite": {"type": "deep-lite", "category": None, "highlight_chars": 5000, "num_results": 10},
     "deep": {"type": "deep", "category": None, "highlight_chars": 5000, "num_results": 10},
+    "deep-reasoning": {
+        "type": "deep-reasoning",
+        "category": None,
+        "highlight_chars": 5000,
+        "num_results": 10,
+    },
 }
+
+# Deep-family modes run their own synthesis; with a schema, highlights are redundant
+# and collapsed to save tokens (see build_body).
+DEEP_MODES = frozenset({"deep-lite", "deep", "deep-reasoning"})
 
 CATEGORY_BLOCKS: dict[str, set[str]] = {
     "company": {"start_date", "end_date", "include_domains", "exclude_domains"},
@@ -517,9 +529,12 @@ def build_body(
         body["excludeText"] = list(args.exclude_text)
     if args.country:
         body["userLocation"] = args.country
+    max_age_hours = getattr(args, "max_age_hours", None)
+    if max_age_hours is not None:
+        body["maxAgeHours"] = max_age_hours
     if args.full_text:
         body["contents"]["text"] = {"maxCharacters": 15000}
-    if args.mode == "deep" and output_schema:
+    if args.mode in DEEP_MODES and output_schema:
         body["contents"]["highlights"] = {"maxCharacters": 1}
     return body
 

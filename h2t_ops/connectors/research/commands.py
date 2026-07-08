@@ -66,9 +66,26 @@ def register(subparsers: Any) -> None:
     search.add_argument(
         "--mode",
         default="generic",
-        choices=["fast", "generic", "news", "academic", "competitor", "people", "deep"],
+        choices=[
+            "instant",
+            "fast",
+            "generic",
+            "news",
+            "academic",
+            "competitor",
+            "people",
+            "deep-lite",
+            "deep",
+            "deep-reasoning",
+        ],
     )
     search.add_argument("--depth")
+    search.add_argument(
+        "--max-age-hours",
+        type=int,
+        dest="max_age_hours",
+        help="Max content age in hours; 0 forces a live crawl (Exa maxAgeHours).",
+    )
     search.add_argument("--num-results", type=int, dest="num_results")
     search.add_argument("--additional-queries", dest="additional_queries")
     search.add_argument("--start-date", dest="start_date")
@@ -266,6 +283,7 @@ def run(args: Any) -> Any:
             exclude_text=_split_csv(args.exclude_text),
             country=args.country,
             full_text=args.full_text,
+            max_age_hours=args.max_age_hours,
             project=args.project,
             no_retry=args.no_retry,
         )

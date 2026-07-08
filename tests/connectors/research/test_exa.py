@@ -12,7 +12,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from h2t_ops.core.errors import AuthError, ConfigError, NetworkError, ProviderError, UsageError
+from h2t_ops.core.errors import AuthError, ConfigError, NetworkError, UsageError
 from h2t_ops.connectors.research import exa
 
 
@@ -44,6 +44,7 @@ def _full_args(**kwargs):
         exclude_text=None,
         country=None,
         full_text=False,
+        max_age_hours=None,
     )
     defaults.update(kwargs)
     return SimpleNamespace(**defaults)
@@ -79,9 +80,39 @@ def _patch_no_sleep(monkeypatch):
     monkeypatch.setattr(exa, "sleep_with_jitter", lambda s: None)
 
 
-def test_mode_config_has_all_seven_modes():
-    expected = {"fast", "generic", "news", "academic", "competitor", "people", "deep"}
+def test_mode_config_has_all_ten_modes():
+    expected = {
+        "fast",
+        "generic",
+        "news",
+        "academic",
+        "competitor",
+        "people",
+        "deep",
+        "instant",
+        "deep-lite",
+        "deep-reasoning",
+    }
     assert set(exa.MODE_CONFIG.keys()) == expected
+
+
+def test_mode_config_deep_reasoning_uses_deep_reasoning_type():
+    cfg = exa.MODE_CONFIG["deep-reasoning"]
+    assert cfg["type"] == "deep-reasoning"
+    assert cfg["category"] is None
+    assert cfg["num_results"] == 10
+
+
+def test_mode_config_instant_uses_instant_type():
+    cfg = exa.MODE_CONFIG["instant"]
+    assert cfg["type"] == "instant"
+    assert cfg["category"] is None
+
+
+def test_mode_config_deep_lite_uses_deep_lite_type():
+    cfg = exa.MODE_CONFIG["deep-lite"]
+    assert cfg["type"] == "deep-lite"
+    assert cfg["category"] is None
 
 
 def test_mode_config_competitor_uses_company_category():
@@ -193,6 +224,13 @@ def test_load_system_prompt_missing_file_raises_configerror(tmp_path, monkeypatc
         exa.load_system_prompt("missing")
 
 
+@pytest.mark.parametrize("mode", sorted(exa.MODE_CONFIG.keys()))
+def test_every_mode_has_loadable_system_prompt(mode):
+    """Every MODE_CONFIG entry must ship a systemprompts/{mode}.md file."""
+    body, _schema = exa.load_system_prompt(mode)
+    assert body.strip()
+
+
 def test_build_body_generic_minimal():
     body = exa.build_body(_full_args(mode="generic"), "SP", {})
     assert body["query"] == "Rejuve.bio Switzerland"
@@ -246,6 +284,38 @@ def test_build_body_with_schema_sets_structuredoutput():
 def test_build_body_num_results_override():
     body = exa.build_body(_full_args(mode="academic", num_results=25), "SP", {})
     assert body["numResults"] == 25
+
+
+def test_build_body_deep_reasoning_type():
+    body = exa.build_body(_full_args(mode="deep-reasoning"), "SP", {})
+    assert body["type"] == "deep-reasoning"
+
+
+def test_build_body_max_age_hours_passthrough():
+    body = exa.build_body(_full_args(mode="generic", max_age_hours=24), "SP", {})
+    assert body["maxAgeHours"] == 24
+
+
+def test_build_body_max_age_hours_zero_forces_live_crawl():
+    body = exa.build_body(_full_args(mode="generic", max_age_hours=0), "SP", {})
+    assert body["maxAgeHours"] == 0
+
+
+def test_build_body_no_max_age_hours_omitted():
+    body = exa.build_body(_full_args(mode="generic"), "SP", {})
+    assert "maxAgeHours" not in body
+
+
+def test_build_body_deep_reasoning_with_schema_collapses_highlights():
+    schema = {"type": "object", "properties": {"name": {"type": "string"}}}
+    body = exa.build_body(_full_args(mode="deep-reasoning"), "SP", schema)
+    assert body["contents"]["highlights"] == {"maxCharacters": 1}
+
+
+def test_build_body_deep_lite_with_schema_collapses_highlights():
+    schema = {"type": "object", "properties": {"name": {"type": "string"}}}
+    body = exa.build_body(_full_args(mode="deep-lite"), "SP", schema)
+    assert body["contents"]["highlights"] == {"maxCharacters": 1}
 
 
 def test_call_exa_returns_tuple_on_success():
