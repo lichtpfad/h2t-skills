@@ -195,6 +195,13 @@ forbidden_patterns:
 plan_dirs:
   - path: "docs/superpowers/plans/"
     pattern: "^\\d{4}-\\d{2}-\\d{2}-.+\\.md$"
+
+# Dirs whose Markdown files must open with a --- frontmatter block.
+# Presence-only warn (structure_guard); field-level validation is docs-lint's job.
+frontmatter_dirs:
+  - docs/superpowers/plans/
+  - docs/superpowers/specs/
+  - docs/adr/
 """
 
 
