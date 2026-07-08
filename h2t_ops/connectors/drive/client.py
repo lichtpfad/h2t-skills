@@ -1086,8 +1086,10 @@ class DriveClient:
                     content = tab_body.get("content", [])
                     if content:
                         end_index = content[-1].get("endIndex", 1)
-                        # Docs API won't allow deleting the final newline (index end-1 is the paragraph mark)
-                        if end_index > 1:
+                        # A fresh tab holds one empty paragraph (endIndex=2): the delete
+                        # range (1, end-1) would be empty and the Docs API rejects it, so
+                        # skip the delete and just insert. Only clear real content (end>2).
+                        if end_index > 2:
                             all_reqs.append({
                                 "deleteContentRange": {
                                     "range": {
@@ -1103,10 +1105,13 @@ class DriveClient:
                     raise UsageError(
                         f"tab {tab_id!r} not found in document {document_id!r}"
                     )
-                if tab_end > 1:
+                # Google creates a new tab with one empty paragraph (endIndex=2),
+                # so treat endIndex <= 2 as a fresh/empty tab.
+                if tab_end > 2:
                     raise UsageError(
                         f"tab {tab_id!r} in document {document_id!r} is not empty "
-                        f"(endIndex={tab_end}); write_document_tab only writes to fresh tabs"
+                        f"(endIndex={tab_end}); write_document_tab only writes to fresh tabs "
+                        f"(use --clear-first to overwrite existing content)"
                     )
 
             reqs = _md_to_docs_requests(markdown_text, tab_id)
