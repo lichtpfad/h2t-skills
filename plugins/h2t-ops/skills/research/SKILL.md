@@ -11,6 +11,47 @@ metadata:
 
 Use `h2t-ops research` for provider-backed web research via Exa and the URL fetch ladder.
 
+## Capability decision guide
+
+Pick the narrowest capability that answers the request. Prefer **retrieval + your own
+grounded synthesis** over black-box synthesis for client deliverables.
+
+| Request shape | Use | Notes |
+|---|---|---|
+| Quick lookup, "what's the latest", single fact | `search --mode fast` | shallow, ~1–4 s |
+| General topic, mixed sources | `search --mode generic` | default web search |
+| News tracking, recent events | `search --mode news` | category=news |
+| Academic papers, citations | `search --mode academic` | category=research paper |
+| Competitor / company intel | `search --mode competitor` | category=company |
+| People research | `search --mode people` | category=people |
+| One-shot structured deep dig | `search --mode deep` + `--schema` | synchronous, ~4 s |
+| Pull raw text of a known URL | `fetch` / `crawl` | fetch ladder / Exa contents |
+| Find pages like a known URL | `similar` | Exa /findSimilar |
+| Direct grounded answer + citations | `answer` | short answer, cited |
+| Rescue OCR after failed fetch | `visual-ocr` | needs fetch sidecar + screenshot |
+
+**When to prefer `search --mode deep` vs a quick mode:** deep is for one-shot
+structured extraction where you already know the output shape (`--schema`). It is
+**not** a multi-step research agent — for genuine multi-hop research use the planned
+`research` capability below.
+
+### Planned capabilities (not yet available — do not call)
+
+Tracked in `docs/superpowers/specs/2026-07-08-exa-research-capability.md`. Until the
+commands exist, use the modes above; do not invent flags.
+
+- **`research`** (Exa Research API, async) — real multi-hop agent: plan → many
+  searches → crawl pages → synthesized report with citations. For "разберись глубоко
+  в теме X". Models `exa-research-fast` / `exa-research` / `exa-research-pro`.
+- **`agent`** (Exa Agent API, async) — LeadGen / enrichment / invest: fuses premium
+  data partners (Fiber.ai contacts, Similarweb traffic, Baselayer US-business,
+  Financial Datasets, Particle podcasts) + web into one structured output. Paid
+  per-provider — enable only with an explicit data-source flag.
+
+For both planned modes the intended pattern is **retrieval-first**: let Exa return
+structured, cited data, then do the final synthesis under our
+`evidence-grounded-synthesis` discipline rather than shipping the black-box answer.
+
 ## Boundary
 
 Research artifacts are evidence, not canonical accepted knowledge.
