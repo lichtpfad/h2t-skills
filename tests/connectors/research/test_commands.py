@@ -1130,3 +1130,60 @@ def test_research_skill_documents_provider_key_routing():
     assert "direct fetch is available without a provider key." in text
     assert "Routing checks are local and do not call provider networks." in text
     assert "Missing required provider keys fail before artifact writes." in text
+
+
+def test_research_subparser_registered():
+    parser = cli.build_parser()
+    ns = parser.parse_args([
+        "research", "research",
+        "--instructions", "Summarize AI safety",
+        "--model", "exa-research",
+        "--no-wait",
+    ])
+    assert ns.research_cmd == "research"
+    assert ns.instructions == "Summarize AI safety"
+    assert ns.model == "exa-research"
+    assert ns.wait is False
+
+
+def test_research_model_choices():
+    parser = cli.build_parser()
+    research_parent = _subparser(parser, "research")
+    research_sub = _subparser(research_parent, "research")
+    assert _option_choices(research_sub, "--model") == {
+        "exa-research-fast", "exa-research", "exa-research-pro",
+    }
+
+
+def test_research_dispatch_calls_client(monkeypatch):
+    from types import SimpleNamespace
+    from h2t_ops.connectors.research import commands as research_commands
+
+    seen = {}
+
+    class FakeClient:
+        def __init__(self, **kw):
+            pass
+
+        def research(self, **kw):
+            seen.update(kw)
+            return {"kind": "research_provider_envelope", "status": "OK"}
+
+    monkeypatch.setattr("h2t_ops.connectors.research.client.ResearchClient", FakeClient)
+    args = SimpleNamespace(
+        research_cmd="research", instructions="Q", model="exa-research-fast",
+        schema=None, wait=True, poll_interval=None, timeout_s=None,
+        project="h2t-skills", output_dir=None,
+    )
+    result = research_commands.run(args)
+    assert result["status"] == "OK"
+    assert seen["instructions"] == "Q"
+    assert seen["project"] == "h2t-skills"
+
+
+def test_load_schema_invalid_json_raises():
+    from h2t_ops.connectors.research import commands as research_commands
+    from h2t_ops.core.errors import UsageError
+
+    with pytest.raises(UsageError):
+        research_commands._load_schema("{not valid json")

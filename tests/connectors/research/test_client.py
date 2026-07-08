@@ -1835,3 +1835,55 @@ def test_research_client_resolve_research_alias_propagates_navigation_error(tmp_
         client.ResearchClient(output_dir=tmp_path).resolve_research_alias(
             "https://example.com/missing",
         )
+
+
+def test_client_research_ok(monkeypatch, tmp_path):
+    from h2t_ops.connectors.research import client as client_mod
+    from h2t_ops.connectors.research import exa
+
+    monkeypatch.setattr(client_mod, "resolve_secret", lambda name: "k")
+    monkeypatch.setattr(
+        client_mod.ResearchClient, "_require_research_route",
+        lambda self, cap, provider=None: {"selected_provider": "exa"},
+    )
+
+    envelope = exa.build_research_envelope(
+        status="OK", research_id="r_1", model="exa-research-fast", instructions="Q",
+        output={"content": "Answer."}, citations=[{"url": "https://x", "title": "X"}],
+        attempts=[{"engine": "exa", "endpoint": "/research/v1", "http": 201, "latency_ms": 0, "error": None}],
+        cost=0.02, num_searches=3, num_pages=5, reasoning_tokens=900,
+    )
+    monkeypatch.setattr(exa, "research_task", lambda instructions, **kw: (envelope, 0))
+
+    client = client_mod.ResearchClient(output_dir=tmp_path)
+    result = client.research(instructions="Q", project="h2t-skills")
+
+    assert result["kind"] == "research_provider_envelope"
+    assert result["status"] == "OK"
+    assert result["output"]["content"] == "Answer."
+    assert "artifact" in result
+
+
+def test_client_research_failed_raises(monkeypatch, tmp_path):
+    from h2t_ops.connectors.research import client as client_mod
+    from h2t_ops.connectors.research import exa
+    from h2t_ops.core.errors import ProviderError
+
+    monkeypatch.setattr(client_mod, "resolve_secret", lambda name: "k")
+    monkeypatch.setattr(
+        client_mod.ResearchClient, "_require_research_route",
+        lambda self, cap, provider=None: {"selected_provider": "exa"},
+    )
+
+    envelope = exa.build_research_envelope(
+        status="FAILED", research_id="r_1", model="exa-research-fast", instructions="Q",
+        output=None, citations=[],
+        attempts=[{"engine": "exa", "endpoint": "/research/v1", "http": 201, "latency_ms": 0, "error": None}],
+        cost=0.0, num_searches=None, num_pages=None, reasoning_tokens=None,
+        reason_for_fallback="research_timeout",
+    )
+    monkeypatch.setattr(exa, "research_task", lambda instructions, **kw: (envelope, 1))
+
+    client = client_mod.ResearchClient(output_dir=tmp_path)
+    with pytest.raises(ProviderError):
+        client.research(instructions="Q", project="h2t-skills")

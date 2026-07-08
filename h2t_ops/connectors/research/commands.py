@@ -173,6 +173,22 @@ def register(subparsers: Any) -> None:
     answer_p.add_argument("--query", required=True)
     add_fmt(answer_p)
 
+    research_p = cmds.add_parser("research", help="Run a deep async research task via Exa Research API")
+    research_p.add_argument("--instructions", required=True)
+    research_p.add_argument(
+        "--model",
+        default="exa-research-fast",
+        choices=["exa-research-fast", "exa-research", "exa-research-pro"],
+    )
+    research_p.add_argument("--schema", dest="schema", help="path to a JSON schema file, or inline JSON")
+    research_p.add_argument("--wait", dest="wait", action="store_true", default=True)
+    research_p.add_argument("--no-wait", dest="wait", action="store_false")
+    research_p.add_argument("--poll-interval", type=float, dest="poll_interval")
+    research_p.add_argument("--timeout-s", type=float, dest="timeout_s")
+    research_p.add_argument("--project", default="default")
+    research_p.add_argument("--output-dir", dest="output_dir")
+    add_fmt(research_p)
+
     resolve_author = cmds.add_parser("resolve-author", help="Resolve an author name to a channel URL")
     resolve_author.add_argument("--name", required=True)
     resolve_author.add_argument("--keywords", dest="keywords")
@@ -186,6 +202,26 @@ def _split_csv(raw: str | None) -> list[str] | None:
     if not raw:
         return None
     return [item.strip() for item in raw.split(",") if item.strip()]
+
+
+def _load_schema(raw: str | None) -> dict[str, Any] | None:
+    """Load an output schema from a file path or inline JSON string."""
+    if not raw:
+        return None
+    import json
+    from pathlib import Path
+
+    from h2t_ops.core.errors import UsageError
+
+    candidate = Path(raw).expanduser()
+    text = candidate.read_text(encoding="utf-8") if candidate.is_file() else raw
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise UsageError(f"--schema is neither a readable file nor valid JSON: {exc}") from exc
+    if not isinstance(parsed, dict):
+        raise UsageError("--schema must be a JSON object")
+    return parsed
 
 
 def run(args: Any) -> Any:
@@ -273,6 +309,16 @@ def run(args: Any) -> Any:
         return client.cleanup_research(dry_run=args.dry_run)
     if cmd == "answer":
         return client.answer(args.query)
+    if cmd == "research":
+        return client.research(
+            instructions=args.instructions,
+            model=args.model,
+            output_schema=_load_schema(getattr(args, "schema", None)),
+            wait=args.wait,
+            poll_interval=getattr(args, "poll_interval", None),
+            timeout_s=getattr(args, "timeout_s", None),
+            project=args.project,
+        )
     if cmd == "resolve-author":
         return client.resolve_author(
             args.name,
