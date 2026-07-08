@@ -455,6 +455,10 @@ class FakeResearchClient:
         self.calls.append(("crawl", {"url": url, **kwargs}))
         return {"method": "crawl", "url": url, "kwargs": kwargs}
 
+    def agent(self, **kwargs) -> dict:
+        self.calls.append(("agent", kwargs))
+        return {"method": "agent", "kwargs": kwargs}
+
     def fetch_url(self, url: str, **kwargs) -> dict:
         self.calls.append(("fetch", {"url": url, **kwargs}))
         return {"method": "fetch", "url": url, "kwargs": kwargs}
@@ -593,6 +597,43 @@ def test_search_parser_accepts_max_age_hours_zero():
     commands.register(parser.add_subparsers(dest="cmd"))
     args = parser.parse_args(["research", "search", "--query", "q", "--max-age-hours", "0"])
     assert args.max_age_hours == 0
+
+
+def test_agent_parser_accepts_repeatable_data_sources():
+    parser = argparse.ArgumentParser()
+    commands.register(parser.add_subparsers(dest="cmd"))
+    args = parser.parse_args(
+        ["research", "agent", "--query", "Profile X",
+         "--data-source", "fiber_ai", "--data-source", "similar_web"]
+    )
+    assert args.query == "Profile X"
+    assert args.data_sources == ["fiber_ai", "similar_web"]
+
+
+def test_agent_parser_web_only_has_no_data_sources():
+    parser = argparse.ArgumentParser()
+    commands.register(parser.add_subparsers(dest="cmd"))
+    args = parser.parse_args(["research", "agent", "--query", "Q"])
+    assert args.data_sources is None
+
+
+def test_run_dispatches_agent(monkeypatch):
+    _patch_fake_client(monkeypatch)
+    args = argparse.Namespace(
+        research_cmd="agent",
+        output_dir=None,
+        query="Profile X",
+        data_sources=["fiber_ai"],
+        schema=None,
+        effort=None,
+        timeout_s=None,
+        project="leadgen",
+    )
+    result = commands.run(args)
+    assert result["method"] == "agent"
+    assert result["kwargs"]["query"] == "Profile X"
+    assert result["kwargs"]["data_sources"] == ["fiber_ai"]
+    assert result["kwargs"]["project"] == "leadgen"
 
 
 def test_run_dispatches_crawl(monkeypatch):

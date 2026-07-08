@@ -956,6 +956,270 @@ def research_status(
     return env, 0
 
 
+# ── agent (Exa Agent API) ─────────────────────────────────────────────────────
+# Live-verified contract (2026-07-08): POST /agent/runs returns the run object with
+# `id` (not runId); statuses are lowercase queued/running/completed/failed; output is
+# {text, structured, grounding[]}; costDollars/usage are top-level on the run object.
+AGENT_POLL_INTERVAL_SECONDS = 3.0
+AGENT_TIMEOUT_SECONDS = 300.0
+AGENT_POLL_BACKOFF_FACTOR = 1.5
+AGENT_POLL_INTERVAL_CAP_SECONDS = 30.0
+AGENT_DEFAULT_EFFORT = "auto"
+
+# Informational catalog for the cost floor-estimate and the skill decision-guide.
+# Prices are per-provider base estimates as of 2026-07; verify at https://exa.ai/pricing.
+# Providers are pass-through — unknown names still reach Exa (clean 400 INVALID_DATA_SOURCE
+# before any charge), so this catalog gates nothing; it only powers estimation + docs.
+AGENT_PROVIDERS: dict[str, dict[str, Any]] = {
+    "fiber_ai": {"est_cost_usd": 0.02, "returns": "B2B contact data (emails, titles)"},
+    "similar_web": {"est_cost_usd": 0.03, "returns": "website traffic estimates"},
+    "baselayer": {"est_cost_usd": 0.022, "returns": "US business verification"},
+    "financial_datasets": {"est_cost_usd": 0.01, "returns": "company financials"},
+    "particle_news": {"est_cost_usd": 0.015, "returns": "podcast transcripts / news"},
+}
+
+
+def estimate_agent_cost(data_sources: list[str] | None) -> tuple[float, list[str]]:
+    """Floor cost estimate from the provider catalog.
+
+    Returns (floor_usd, unknown_providers). The floor is the sum of known per-provider
+    base prices ONLY — it excludes the variable agentCompute + search components, which
+    Exa reports only after the run. There is no Exa pre-execution cost endpoint.
+    """
+    if not data_sources:
+        return 0.0, []
+    floor = 0.0
+    unknown: list[str] = []
+    for provider in data_sources:
+        entry = AGENT_PROVIDERS.get(provider)
+        if entry is None:
+            unknown.append(provider)
+        else:
+            floor += float(entry["est_cost_usd"])
+    return round(floor, 4), unknown
+
+
+def create_agent_run(
+    query: str,
+    *,
+    data_sources: list[str] | None,
+    output_schema: dict[str, Any] | None,
+    api_key: str,
+    effort: str = AGENT_DEFAULT_EFFORT,
+) -> dict[str, Any]:
+    """POST /agent/runs to create an async agent run."""
+    body: dict[str, Any] = {"query": query, "effort": effort}
+    if output_schema:
+        body["outputSchema"] = output_schema
+    if data_sources:
+        body["dataSources"] = [{"provider": p} for p in data_sources]
+    _status, data, _latency = call_exa("/agent/runs", body, api_key)
+    return data
+
+
+def get_agent_run(run_id: str, *, api_key: str) -> dict[str, Any]:
+    """GET /agent/runs/{id} to poll an agent run."""
+    _status, data, _latency = call_exa(f"/agent/runs/{run_id}", {}, api_key, method="GET")
+    return data
+
+
+def _agent_cost(data: dict[str, Any]) -> dict[str, Any]:
+    """Extract the costDollars breakdown from an agent run object (top-level)."""
+    block = data.get("costDollars")
+    if not isinstance(block, dict):
+        block = {}
+    try:
+        total = float(block.get("total", 0.0) or 0.0)
+    except (TypeError, ValueError):
+        total = 0.0
+    return {
+        "total": total,
+        "agentCompute": block.get("agentCompute"),
+        "search": block.get("search"),
+        "emails": block.get("emails"),
+        "phoneNumbers": block.get("phoneNumbers"),
+        "dataSources": block.get("dataSources"),
+    }
+
+
+def _agent_usage(data: dict[str, Any]) -> dict[str, Any]:
+    """Extract the usage block from an agent run object (top-level)."""
+    block = data.get("usage")
+    if not isinstance(block, dict):
+        block = {}
+    return {
+        "agentComputeUnits": block.get("agentComputeUnits"),
+        "searches": block.get("searches"),
+        "emails": block.get("emails"),
+        "phoneNumbers": block.get("phoneNumbers"),
+    }
+
+
+def _flatten_grounding(grounding: Any) -> list[dict[str, Any]]:
+    """Flatten output.grounding[].citations[] into a de-duplicated sources list."""
+    sources: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    if not isinstance(grounding, list):
+        return sources
+    for entry in grounding:
+        if not isinstance(entry, dict):
+            continue
+        for cit in entry.get("citations", []) or []:
+            if not isinstance(cit, dict):
+                continue
+            url = cit.get("url")
+            if url and url not in seen:
+                seen.add(url)
+                sources.append({"url": url, "title": cit.get("title", "")})
+    return sources
+
+
+def build_agent_envelope(
+    *,
+    status: str,
+    run_id: str,
+    query: str,
+    output: Any,
+    grounding: list[Any],
+    attempts: list[dict[str, Any]],
+    cost: dict[str, Any],
+    usage: dict[str, Any],
+    data_sources: list[str],
+    estimated_floor: float | None = None,
+    unknown_providers: list[str] | None = None,
+    reason_for_fallback: str | None = None,
+) -> dict[str, Any]:
+    """Assemble the agent provider envelope (artifact-writer compatible)."""
+    timestamp = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    total_latency_ms = sum(a.get("latency_ms", 0) for a in attempts)
+    citations = _flatten_grounding(grounding)
+    return {
+        "status": status,
+        "primary_engine": "exa",
+        "run_id": run_id,
+        "output": output,
+        "grounding": grounding,
+        "citations": citations,
+        "results": citations,  # artifact writer treats these as sources
+        "telemetry": {
+            "attempts": attempts,
+            "reason_for_fallback": reason_for_fallback,
+            "total_latency_ms": total_latency_ms,
+            "total_cost_usd": cost.get("total", 0.0),
+            "cost_breakdown": cost,
+            "usage": usage,
+            "estimated_floor_usd": estimated_floor,
+            "estimated_unknown_providers": unknown_providers or [],
+            "data_sources": data_sources,
+        },
+        "meta": {
+            "query": query,
+            "timestamp": timestamp,
+            "envelope_version": ENVELOPE_VERSION,
+        },
+    }
+
+
+def agent_run(
+    query: str,
+    *,
+    api_key: str,
+    data_sources: list[str] | None = None,
+    output_schema: dict[str, Any] | None = None,
+    effort: str = AGENT_DEFAULT_EFFORT,
+    wait: bool = True,
+    poll_interval: float = AGENT_POLL_INTERVAL_SECONDS,
+    timeout_s: float = AGENT_TIMEOUT_SECONDS,
+) -> tuple[dict[str, Any], int]:
+    """Create an Exa agent run and (optionally) poll to completion."""
+    data_sources = list(data_sources or [])
+    estimated_floor, unknown_providers = estimate_agent_cost(data_sources)
+    attempts: list[dict[str, Any]] = []
+    empty_cost = _agent_cost({})
+    empty_usage = _agent_usage({})
+
+    def _env(status: str, *, run_id: str = "", output: Any = None,
+             grounding: list[Any] | None = None, cost: dict[str, Any] | None = None,
+             usage: dict[str, Any] | None = None, reason: str | None = None) -> dict[str, Any]:
+        return build_agent_envelope(
+            status=status, run_id=run_id, query=query, output=output,
+            grounding=grounding or [], attempts=attempts, cost=cost or empty_cost,
+            usage=usage or empty_usage, data_sources=data_sources,
+            estimated_floor=estimated_floor, unknown_providers=unknown_providers,
+            reason_for_fallback=reason,
+        )
+
+    try:
+        created = create_agent_run(
+            query, data_sources=data_sources, output_schema=output_schema,
+            api_key=api_key, effort=effort,
+        )
+    except ExaPermanentError as exc:
+        code = 4 if exc.http_status in {401, 403} else 1
+        attempts.append({"engine": "exa", "endpoint": "/agent/runs", "http": exc.http_status,
+                         "latency_ms": exc.latency_ms,
+                         "error": "exa_auth_error" if code == 4 else "exa_4xx"})
+        return _env("FAILED", reason="exa_create_failed"), code
+    except (ExaTransientError, ExaMalformedResponseError) as exc:
+        attempts.append({"engine": "exa", "endpoint": "/agent/runs",
+                         "http": getattr(exc, "http_status", None),
+                         "latency_ms": getattr(exc, "latency_ms", 0), "error": "exa_network"})
+        return _env("FAILED", reason="exa_create_failed"), 6
+
+    run_id = str(created.get("id", ""))
+    if not run_id:
+        attempts.append({"engine": "exa", "endpoint": "/agent/runs", "http": 200,
+                         "latency_ms": 0, "error": "exa_no_run_id"})
+        return _env("FAILED", reason="exa_no_run_id"), 1
+    attempts.append({"engine": "exa", "endpoint": "/agent/runs", "http": 200,
+                     "latency_ms": 0, "error": None})
+
+    if not wait:
+        return _env("RUNNING", run_id=run_id), 0
+
+    start = time.monotonic()
+    current_interval = min(poll_interval, AGENT_POLL_INTERVAL_CAP_SECONDS)
+    while True:
+        poll_error: str | None = None
+        try:
+            data = get_agent_run(run_id, api_key=api_key)
+        except ExaPermanentError as exc:
+            if exc.http_status in {401, 403}:
+                attempts.append({"engine": "exa", "endpoint": f"/agent/runs/{run_id}",
+                                 "http": exc.http_status, "latency_ms": exc.latency_ms,
+                                 "error": "exa_auth_error"})
+                return _env("FAILED", run_id=run_id, reason="exa_auth_error"), 4
+            if exc.http_status != 404:
+                attempts.append({"engine": "exa", "endpoint": f"/agent/runs/{run_id}",
+                                 "http": exc.http_status, "latency_ms": exc.latency_ms,
+                                 "error": "exa_poll_failed"})
+                return _env("FAILED", run_id=run_id, reason="exa_poll_failed"), 1
+            poll_error = "exa_poll_not_ready"
+        except (ExaTransientError, ExaMalformedResponseError):
+            poll_error = "exa_poll_transient"
+
+        if poll_error is None:
+            state = str(data.get("status", "running"))
+            attempts.append({"engine": "exa", "endpoint": f"/agent/runs/{run_id}",
+                             "http": 200, "latency_ms": 0, "error": None})
+            if state == "completed":
+                output = data.get("output") or {}
+                return _env("OK", run_id=run_id, output=output,
+                            grounding=output.get("grounding", []) if isinstance(output, dict) else [],
+                            cost=_agent_cost(data), usage=_agent_usage(data)), 0
+            if state == "failed":
+                return _env("FAILED", run_id=run_id, cost=_agent_cost(data),
+                            usage=_agent_usage(data),
+                            reason=str(data.get("stopReason") or "agent_failed")), 1
+
+        if time.monotonic() - start > timeout_s:
+            return _env("FAILED", run_id=run_id, reason=poll_error or "agent_timeout"), 1
+        sleep_with_jitter(current_interval)
+        current_interval = min(
+            current_interval * AGENT_POLL_BACKOFF_FACTOR, AGENT_POLL_INTERVAL_CAP_SECONDS
+        )
+
+
 __all__ = [
     "__version__",
     "SCRIPT_DIR",
@@ -986,4 +1250,11 @@ __all__ = [
     "build_research_envelope",
     "research_task",
     "research_status",
+    "AGENT_PROVIDERS",
+    "AGENT_DEFAULT_EFFORT",
+    "estimate_agent_cost",
+    "create_agent_run",
+    "get_agent_run",
+    "build_agent_envelope",
+    "agent_run",
 ]

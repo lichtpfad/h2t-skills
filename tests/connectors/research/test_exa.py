@@ -982,3 +982,217 @@ def test_research_status_not_found(monkeypatch):
     assert env["status"] == "FAILED"
     assert code == 5
     assert env["telemetry"]["reason_for_fallback"] == "exa_not_found"
+
+
+# ── agent (Exa Agent API) ─────────────────────────────────────────────────────
+
+def test_agent_providers_catalog_shape():
+    for provider, entry in exa.AGENT_PROVIDERS.items():
+        assert isinstance(provider, str)
+        assert isinstance(entry["est_cost_usd"], float)
+        assert entry["returns"]
+    assert "fiber_ai" in exa.AGENT_PROVIDERS
+
+
+def test_estimate_agent_cost_sums_known_providers():
+    floor, unknown = exa.estimate_agent_cost(["fiber_ai", "financial_datasets"])
+    assert floor == 0.03  # 0.02 + 0.01
+    assert unknown == []
+
+
+def test_estimate_agent_cost_flags_unknown_providers():
+    floor, unknown = exa.estimate_agent_cost(["fiber_ai", "__bogus__"])
+    assert floor == 0.02
+    assert unknown == ["__bogus__"]
+
+
+def test_estimate_agent_cost_empty_is_zero():
+    assert exa.estimate_agent_cost(None) == (0.0, [])
+    assert exa.estimate_agent_cost([]) == (0.0, [])
+
+
+def test_create_agent_run_posts_query_schema_and_datasources(monkeypatch):
+    seen = {}
+
+    def fake_call(endpoint, body, api_key, **kw):
+        seen["endpoint"] = endpoint
+        seen["body"] = body
+        seen["method"] = kw.get("method", "POST")
+        return (200, {"id": "agent_run_1", "status": "running"}, 30)
+
+    monkeypatch.setattr(exa, "call_exa", fake_call)
+    data = exa.create_agent_run(
+        "Profile X", data_sources=["fiber_ai", "similar_web"],
+        output_schema={"type": "object"}, api_key="k",
+    )
+
+    assert seen["endpoint"] == "/agent/runs"
+    assert seen["method"] == "POST"
+    assert seen["body"]["query"] == "Profile X"
+    assert seen["body"]["effort"] == "auto"
+    assert seen["body"]["outputSchema"] == {"type": "object"}
+    assert seen["body"]["dataSources"] == [{"provider": "fiber_ai"}, {"provider": "similar_web"}]
+    assert data["id"] == "agent_run_1"
+
+
+def test_create_agent_run_omits_datasources_when_web_only(monkeypatch):
+    seen = {}
+
+    def fake_call(endpoint, body, api_key, **kw):
+        seen["body"] = body
+        return (200, {"id": "agent_run_2", "status": "running"}, 20)
+
+    monkeypatch.setattr(exa, "call_exa", fake_call)
+    exa.create_agent_run("Q", data_sources=None, output_schema=None, api_key="k")
+    assert "dataSources" not in seen["body"]
+
+
+def test_get_agent_run_uses_get(monkeypatch):
+    seen = {}
+
+    def fake_call(endpoint, body, api_key, **kw):
+        seen["endpoint"] = endpoint
+        seen["method"] = kw.get("method")
+        return (200, {"id": "agent_run_3", "status": "completed"}, 10)
+
+    monkeypatch.setattr(exa, "call_exa", fake_call)
+    data = exa.get_agent_run("agent_run_3", api_key="k")
+    assert seen["endpoint"] == "/agent/runs/agent_run_3"
+    assert seen["method"] == "GET"
+    assert data["status"] == "completed"
+
+
+def test_flatten_grounding_dedups_by_url():
+    grounding = [
+        {"field": "a", "citations": [{"url": "https://x", "title": "X"}]},
+        {"field": "b", "citations": [{"url": "https://x", "title": "X dup"},
+                                      {"url": "https://y", "title": "Y"}]},
+    ]
+    sources = exa._flatten_grounding(grounding)
+    assert sources == [{"url": "https://x", "title": "X"}, {"url": "https://y", "title": "Y"}]
+
+
+def test_agent_run_async_returns_running(monkeypatch):
+    monkeypatch.setattr(
+        exa, "create_agent_run",
+        lambda query, *, data_sources, output_schema, api_key, effort: {
+            "id": "agent_run_9", "status": "running"},
+    )
+    env, code = exa.agent_run("Q", api_key="k", wait=False)
+    assert code == 0
+    assert env["status"] == "RUNNING"
+    assert env["run_id"] == "agent_run_9"
+
+
+def test_agent_run_wait_completes(monkeypatch):
+    monkeypatch.setattr(exa, "sleep_with_jitter", lambda s: None)
+    monkeypatch.setattr(
+        exa, "create_agent_run",
+        lambda query, *, data_sources, output_schema, api_key, effort: {
+            "id": "agent_run_1", "status": "running"},
+    )
+    polls = iter([
+        {"id": "agent_run_1", "status": "running"},
+        {"id": "agent_run_1", "status": "completed",
+         "output": {"text": "Lisbon.", "structured": {"capital": "Lisbon"},
+                    "grounding": [{"field": "structured.capital",
+                                   "citations": [{"url": "https://x", "title": "X"}]}]},
+         "usage": {"agentComputeUnits": 2, "searches": 1, "emails": 0, "phoneNumbers": 0},
+         "costDollars": {"total": 0.05, "agentCompute": 0.03, "search": 0.02,
+                         "emails": 0, "phoneNumbers": 0}},
+    ])
+    monkeypatch.setattr(exa, "get_agent_run", lambda rid, *, api_key: next(polls))
+
+    env, code = exa.agent_run(
+        "Q", api_key="k", data_sources=["fiber_ai"], wait=True,
+        poll_interval=0.0, timeout_s=10.0,
+    )
+
+    assert code == 0
+    assert env["status"] == "OK"
+    assert env["output"]["structured"] == {"capital": "Lisbon"}
+    assert env["results"] == [{"url": "https://x", "title": "X"}]
+    assert env["telemetry"]["total_cost_usd"] == 0.05
+    assert env["telemetry"]["cost_breakdown"]["agentCompute"] == 0.03
+    assert env["telemetry"]["usage"]["agentComputeUnits"] == 2
+    assert env["telemetry"]["estimated_floor_usd"] == 0.02
+    assert env["telemetry"]["data_sources"] == ["fiber_ai"]
+
+
+def test_agent_run_failed_status(monkeypatch):
+    monkeypatch.setattr(exa, "sleep_with_jitter", lambda s: None)
+    monkeypatch.setattr(
+        exa, "create_agent_run",
+        lambda query, *, data_sources, output_schema, api_key, effort: {
+            "id": "agent_run_1", "status": "running"},
+    )
+    monkeypatch.setattr(
+        exa, "get_agent_run",
+        lambda rid, *, api_key: {"id": "agent_run_1", "status": "failed", "stopReason": "boom"},
+    )
+    env, code = exa.agent_run("Q", api_key="k", wait=True, poll_interval=0.0, timeout_s=10.0)
+    assert env["status"] == "FAILED"
+    assert code == 1
+    assert env["telemetry"]["reason_for_fallback"] == "boom"
+
+
+def test_agent_run_create_auth_error(monkeypatch):
+    def _raise(query, *, data_sources, output_schema, api_key, effort):
+        raise exa.ExaPermanentError("http 401", http_status=401, latency_ms=10)
+
+    monkeypatch.setattr(exa, "create_agent_run", _raise)
+    env, code = exa.agent_run("Q", api_key="bad", wait=True)
+    assert env["status"] == "FAILED"
+    assert code == 4
+
+
+def test_agent_run_no_id_fails(monkeypatch):
+    monkeypatch.setattr(
+        exa, "create_agent_run",
+        lambda query, *, data_sources, output_schema, api_key, effort: {"status": "running"},
+    )
+    env, code = exa.agent_run("Q", api_key="k", wait=True)
+    assert env["status"] == "FAILED"
+    assert code == 1
+    assert env["telemetry"]["reason_for_fallback"] == "exa_no_run_id"
+
+
+def test_agent_run_timeout(monkeypatch):
+    monkeypatch.setattr(exa, "sleep_with_jitter", lambda s: None)
+    ticks = iter([0.0, 5.0, 20.0])
+    monkeypatch.setattr(exa.time, "monotonic", lambda: next(ticks))
+    monkeypatch.setattr(
+        exa, "create_agent_run",
+        lambda query, *, data_sources, output_schema, api_key, effort: {
+            "id": "agent_run_1", "status": "running"},
+    )
+    monkeypatch.setattr(
+        exa, "get_agent_run",
+        lambda rid, *, api_key: {"id": "agent_run_1", "status": "running"},
+    )
+    env, code = exa.agent_run("Q", api_key="k", wait=True, poll_interval=0.0, timeout_s=10.0)
+    assert env["status"] == "FAILED"
+    assert code == 1
+    assert env["telemetry"]["reason_for_fallback"] == "agent_timeout"
+
+
+def test_agent_run_poll_404_retries_then_completes(monkeypatch):
+    monkeypatch.setattr(exa, "sleep_with_jitter", lambda s: None)
+    monkeypatch.setattr(
+        exa, "create_agent_run",
+        lambda query, *, data_sources, output_schema, api_key, effort: {
+            "id": "agent_run_1", "status": "running"},
+    )
+    calls = {"n": 0}
+
+    def fake_get(rid, *, api_key):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise exa.ExaPermanentError("http 404", http_status=404, latency_ms=5)
+        return {"id": "agent_run_1", "status": "completed", "output": {"structured": {"ok": 1}}}
+
+    monkeypatch.setattr(exa, "get_agent_run", fake_get)
+    env, code = exa.agent_run("Q", api_key="k", wait=True, poll_interval=0.0, timeout_s=10.0)
+    assert code == 0
+    assert env["status"] == "OK"
+    assert calls["n"] == 2
