@@ -63,7 +63,7 @@ def validate(text: str) -> list[str]:
         # require the checkbox+bold form the resume parser reads, not a bare substring
         if not re.search(r"(?m)^- \[[ xX]\] \*\*" + re.escape(step) + r"\*\*", pipe):
             problems.append(f"pipeline step missing/malformed in Pipeline steps: {step}")
-    if "<<" in text or ">>" in text:
+    if re.search(r"<<\w+>>", text):  # only real unresolved tokens, not a stray `>>` redirect
         problems.append("unresolved <<TOKEN>> placeholder remains")
     return problems
 

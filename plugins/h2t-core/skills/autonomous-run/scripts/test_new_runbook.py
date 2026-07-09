@@ -45,6 +45,12 @@ def test_tampered_output_is_rejected():
         validate_or_raise(text.replace("Irreversible / destructive", ""))
 
 
+def test_shell_redirect_in_venv_test_not_a_token_residue():
+    # a `>>` in a field value must not trip the token-residue check (codex-council Lens A)
+    text = render(**{**_FIELDS, "venv_test": "pytest x >> log.txt"})
+    assert validate(text) == []
+
+
 def test_e2e_generate_real_runbook_and_validate(tmp_path):
     out = tmp_path / "2026-07-09-autonomous-run-orchestrator-runbook.md"
     p = create_runbook(

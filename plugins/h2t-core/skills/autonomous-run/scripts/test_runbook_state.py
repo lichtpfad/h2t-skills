@@ -1,6 +1,6 @@
 import runbook_schema as S
 from new_runbook import render
-from runbook_state import parse_steps, unchecked_steps
+from runbook_state import parse_steps, unchecked_steps, is_active
 
 
 def _rendered_with_two_done() -> str:
@@ -24,6 +24,14 @@ def test_all_checked_returns_empty():
     for step in S.PIPELINE_STEPS:
         text = text.replace(f"- [ ] **{step}**", f"- [x] **{step}**")
     assert unchecked_steps(text) == []
+
+
+def test_is_active_reflects_unchecked_steps():
+    assert is_active(_rendered_with_two_done()) is True
+    done = _rendered_with_two_done()
+    for step in S.PIPELINE_STEPS:
+        done = done.replace(f"- [ ] **{step}**", f"- [x] **{step}**")
+    assert is_active(done) is False
 
 
 def test_decoy_checkbox_outside_pipeline_ignored():

@@ -68,6 +68,24 @@ Build ARTIFACT_LIST from session context:
 - Files created: `file:{path}`
 - PRs opened: `pr:{number}`
 
+### Step 4a: Active autonomous-run runbook (resume pointer)
+
+If an autonomous-run is in progress, record its resume pointer so the next session can
+auto-resume across compaction (spec `autonomous-run` § Resume trigger, mechanism-1). Detect:
+the newest `docs/superpowers/plans/*-runbook.md` whose pipeline still has an unchecked step
+(an `- [ ] **step**` line — bold unchecked checkboxes appear only in `## Pipeline steps`):
+
+```bash
+_RB=$(ls -t docs/superpowers/plans/*-runbook.md 2>/dev/null | head -1)
+[ -n "$_RB" ] && grep -q '^- \[ \] \*\*' "$_RB" && echo "ACTIVE_RUNBOOK: $_RB"
+```
+
+If it prints `ACTIVE_RUNBOOK: <path>`, the run is unfinished:
+- add to ARTIFACT_LIST: `runbook:{path}`
+- add to WHAT_REMAINS a checkbox: `- [ ] Автономный прогон не завершён → autonomous-run resume {path}`
+
+If there is no runbook or nothing prints, skip silently.
+
 ### Step 4b: Rule promotion scan
 
 Scan for agent behavioral rules discovered this session. These become candidates for `.claude/rules/` (current project only — no global CLAUDE.md writes).

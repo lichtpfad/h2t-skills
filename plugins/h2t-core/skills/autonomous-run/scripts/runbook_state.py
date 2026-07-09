@@ -4,6 +4,7 @@ section and filtered to known step names, so gate checklists and decision-log bu
 leak into resume state (codex-plan-gate-1 P1)."""
 from __future__ import annotations
 import re
+import sys
 import runbook_schema as S
 from validate_runbook import split_sections
 
@@ -24,3 +25,21 @@ def parse_steps(text: str) -> list[tuple[str, bool]]:
 
 def unchecked_steps(text: str) -> list[str]:
     return [name for name, checked in parse_steps(text) if not checked]
+
+
+def is_active(text: str) -> bool:
+    """A runbook is an active (resumable) run iff it has >=1 unchecked pipeline step."""
+    return bool(unchecked_steps(text))
+
+
+def _main(argv: list[str]) -> int:
+    if len(argv) != 2:
+        print("usage: runbook_state.py <runbook.md>", file=sys.stderr)
+        return 2
+    left = unchecked_steps(open(argv[1], encoding="utf-8").read())
+    print("\n".join(left) if left else "(complete)")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(_main(sys.argv))
