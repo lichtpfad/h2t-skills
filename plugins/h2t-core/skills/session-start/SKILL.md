@@ -90,6 +90,17 @@ missing, show one short line:
 
 If both are empty: skip this step silently.
 
+**Active autonomous-run check** (spec `autonomous-run` § Resume trigger, mechanism-1) — run
+this separately from the verbatim briefing, so an unfinished run resumes across compaction:
+
+```bash
+_RB=$(ls -t docs/superpowers/plans/*-runbook.md 2>/dev/null | head -1)
+[ -n "$_RB" ] && grep -q '^- \[ \] \*\*' "$_RB" && echo "ACTIVE_RUNBOOK: $_RB"
+```
+
+If it prints `ACTIVE_RUNBOOK: <path>`, surface exactly one line and offer to resume:
+`Незавершённый автономный прогон: <path> → autonomous-run resume <path>`. Otherwise skip.
+
 ### Step 4: ⛔ GATE — Session naming
 
 Propose session name in this exact format:
