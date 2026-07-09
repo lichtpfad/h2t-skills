@@ -37,10 +37,14 @@ else
   PLUGIN_ROOT="$REPO_ROOT/plugins/h2t-core"
 fi
 
-# Find Python
+# Find Python. Resolve from REPO_ROOT so the probe runs in the same directory as
+# the gather exec below: "import lib.cli.main" then rejects any interpreter that
+# cannot import the package (e.g. a ~/.h2t/venv missing the h2t install), failing
+# loud here instead of a silent "returned no output" crash downstream.
+cd "$REPO_ROOT"
 source "$PLUGIN_ROOT/scripts/resolve-h2t-python.sh"
-if ! resolve_h2t_python; then
-  echo '{"systemMessage": "GATHER_ERROR: no working Python found for h2t. Recreate ~/.h2t/venv or set H2T_PYTHON."}'
+if ! resolve_h2t_python "import lib.cli.main"; then
+  echo '{"systemMessage": "GATHER_ERROR: no Python with the h2t package (lib.cli.main) found. Install it into ~/.h2t/venv (pip install -e <h2t-skills>) or set H2T_PYTHON."}'
   exit 0
 fi
 
@@ -48,7 +52,7 @@ fi
 ARGS=("$skill" "--cwd" "$cwd")
 [[ "$skill" == *session-start* ]] && ARGS+=("--format-briefing")
 
-RESULT=$(cd "$REPO_ROOT" && "${H2T_PYTHON_CMD[@]}" -m lib.cli.main gather "${ARGS[@]}" 2>/dev/null) || true
+RESULT=$("${H2T_PYTHON_CMD[@]}" -m lib.cli.main gather "${ARGS[@]}" 2>/dev/null) || true
 
 if [ -z "$RESULT" ]; then
   echo '{"systemMessage": "GATHER_ERROR: h2t gather returned no output. Check Python resolution or recreate ~/.h2t/venv."}'

@@ -4,13 +4,21 @@ set -euo pipefail
 
 H2T_PYTHON_CMD=()
 
+# Probe module used to validate a candidate interpreter. Default is the trivial
+# "import sys" (any Python passes). Callers that need a specific package present
+# (e.g. the gather hook, which runs `-m lib.cli.main`) pass a stricter probe as
+# the first argument to resolve_h2t_python so a package-less interpreter is
+# rejected and resolution fails loudly instead of a downstream silent crash.
+_H2T_PYTHON_PROBE="import sys"
+
 _h2t_try_python() {
-  "$@" -c "import sys" >/dev/null 2>&1 || return 1
+  "$@" -c "$_H2T_PYTHON_PROBE" >/dev/null 2>&1 || return 1
   H2T_PYTHON_CMD=("$@")
   return 0
 }
 
 resolve_h2t_python() {
+  local _H2T_PYTHON_PROBE="${1:-import sys}"
   H2T_PYTHON_CMD=()
 
   if [ -n "${H2T_PYTHON:-}" ]; then
