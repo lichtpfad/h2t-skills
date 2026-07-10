@@ -36,3 +36,8 @@ build/
 
 # docs-lint runtime artifacts
 .h2t/lint-apply-*.json
+
+# Practice harvest raw corpus artifacts + synthesis intermediates
+docs/reports/*-practice-harvest-corpus.json
+docs/reports/_*.json
+docs/reports/_build_registry.py
