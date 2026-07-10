@@ -5,6 +5,7 @@
   ],
   "generated": "2026-07-10",
   "examined_no_lift": [
+    "client-auto",
     "h2t-recorder",
     "qatalyiqtol"
   ],
@@ -81,16 +82,14 @@
       "practice": "Run destructive/bulk-rewrite operations on an isolated branch and gate the result with an empirical diff (git diff --stat + eyeball 2-3 files + lint) before committing; never commit an unverified corpus mutation",
       "track": "process",
       "lineage_sources": [
-        "quant-kb",
-        "crypto-regime-spike"
+        "quant-kb"
       ],
-      "recurrence": 2,
+      "recurrence": 1,
       "domain_independence": "high",
       "current_location": ".claude/rules/destructive-ops.md",
       "lift_verdict": "append:branching.md",
       "source_paths": [
-        "C:/dev/quant-kb/.claude/rules/destructive-ops.md",
-        "C:/dev/crypto-regime-spike/.claude/rules/data-junction-cleanup.md"
+        "C:/dev/quant-kb/.claude/rules/destructive-ops.md"
       ]
     },
     {
@@ -457,267 +456,25 @@
       ]
     },
     {
-      "practice": "LLM extraction to distillation with a faithfulness/judge gate (quote-binding + stable evidence IDs)",
+      "practice": "Faithfulness-gated quote-grounding for LLM extraction (LLM emits locators, code owns quotes; fail-closed on divergence)",
       "track": "technical",
       "lineage_sources": [
+        "rejuve",
         "quant-kb",
-        "POS",
-        "rejuve"
-      ],
-      "recurrence": 3,
-      "domain_independence": "high",
-      "current_location": "POS src/pos_meetings/ (Pass0->Pass2->Judge) + quant-kb pipeline/scoring/",
-      "lift_verdict": "append:evidence-grounded-synthesis.md",
-      "source_paths": [
-        "C:/dev/POS/docs/superpowers/specs/2026-06-07-meeting-graph-layer-v0-1.md",
-        "C:/Users/stani/.h2t/sessions/AUTOMATA/quant-kb/quant-quant-kb-research-intake-pipeline-2026-07-05.md",
-        "C:/work/rejuve/docs/superpowers/plans/2026-07-03-jtbd-segmentation.md"
-      ]
-    },
-    {
-      "practice": "Council / multi-judge dual-model adjudication (Opus + Codex, cross-panel divergence, reconcile) as a finish-gate",
-      "track": "technical",
-      "lineage_sources": [
-        "crypto-regime-spike",
-        "quant-kb",
-        "rejuve"
-      ],
-      "recurrence": 3,
-      "domain_independence": "high",
-      "current_location": "crypto-regime-spike reports/*-council-validation-*.md + .claude/rules/autonomous-execution.md",
-      "lift_verdict": "new-standard",
-      "source_paths": [
-        "C:/dev/crypto-regime-spike/docs/superpowers/plans/2026-07-08-archetype-e-council-blocker-fixes.md",
-        "C:/Users/stani/.h2t/sessions/AUTOMATA/quant-kb/quant-quant-kb-vendor-council-2026-07-10.md",
-        "C:/work/rejuve/docs/superpowers/plans/2026-07-03-jtbd-segmentation.md"
-      ]
-    },
-    {
-      "practice": "SSoT-JSON corpus to deterministic build to acceptance/validation/freshness gates + drift-hash (numbers in one place, artifacts regenerated not hand-edited)",
-      "track": "technical",
-      "lineage_sources": [
-        "claudeworking",
-        "rejuve"
-      ],
-      "recurrence": 2,
-      "domain_independence": "high",
-      "current_location": "claudeworking/scripts/{validate_corpus,acceptance_gate,check_grants_fresh,build_grants_tool}.py",
-      "lift_verdict": "new-standard",
-      "source_paths": [
-        "C:/work/claudeworking/docs/superpowers/plans/2026-07-04-grants-phase2-cards-and-explorer.md",
-        "C:/work/rejuve/docs/superpowers/plans/2026-07-04-target-audience-dashboard.md",
-        "C:/work/rejuve/docs/superpowers/plans/2026-06-16-flow-map-as-is-to-be.md"
-      ]
-    },
-    {
-      "practice": "Per-field evidence grounding / anti-false-verified (record is verified only when EVERY required field is anchored to a primary source with URL+quote+accessed)",
-      "track": "technical",
-      "lineage_sources": [
-        "claudeworking",
-        "crypto-regime-spike"
-      ],
-      "recurrence": 2,
-      "domain_independence": "high",
-      "current_location": "claudeworking/data/grants-corpus.json per-field evidence schema; spike passport target-label spec",
-      "lift_verdict": "append:evidence-grounded-synthesis.md",
-      "source_paths": [
-        "C:/work/claudeworking/docs/superpowers/specs/2026-07-04-grants-phase2-cards-and-explorer-design.md",
-        "C:/dev/crypto-regime-spike/docs/superpowers/specs/2026-06-15-passport-conventions-v2.md"
-      ]
-    },
-    {
-      "practice": "Shared truth-layer / gate kernel with per-repo adapters + fixture-conformance runner (fixture success is not workflow success)",
-      "track": "technical",
-      "lineage_sources": [
-        "rejuve"
-      ],
-      "recurrence": 1,
-      "domain_independence": "high",
-      "current_location": "C:/dev/docs/standards/research_gates/ + rejuve scripts/{repo.yaml,tasks/*.yaml}",
-      "lift_verdict": "append:research-pipeline-runbook.md",
-      "source_paths": [
-        "C:/work/rejuve/docs/superpowers/plans/2026-06-06-research-pipeline-v2.md"
-      ]
-    },
-    {
-      "practice": "Research-intake / retrieval pipeline: collection-mode funnel (pilot-STOP preflight, band-check, source-eval, fail-loud, evidence per claim)",
-      "track": "technical",
-      "lineage_sources": [
-        "claudeworking",
-        "quant-kb",
-        "h2t-skills"
-      ],
-      "recurrence": 3,
-      "domain_independence": "high",
-      "current_location": "C:/dev/docs/standards/research-pipeline-runbook.md (v1.5) + h2t_ops/connectors/research/",
-      "lift_verdict": "skip",
-      "source_paths": [
-        "C:/work/claudeworking/docs/superpowers/plans/2026-07-04-grants-research-phase1.md",
-        "C:/Users/stani/.h2t/sessions/AUTOMATA/quant-kb/quant-quant-kb-research-intake-pipeline-2026-07-05.md",
-        "C:/dev/h2t-skills/docs/superpowers/specs/2026-07-08-exa-research-capability.md"
-      ]
-    },
-    {
-      "practice": "Retrieval-first orchestration of an external deep-research/agent API (wrap not reinvent; own only input/bounds/output-schema + final synthesis + cost/telemetry audit)",
-      "track": "technical",
-      "lineage_sources": [
-        "h2t-skills"
-      ],
-      "recurrence": 1,
-      "domain_independence": "medium",
-      "current_location": "h2t-skills/h2t_ops/connectors/research/exa.py",
-      "lift_verdict": "append:research-pipeline-runbook.md",
-      "source_paths": [
-        "C:/dev/h2t-skills/docs/superpowers/specs/2026-07-08-exa-research-capability.md"
-      ]
-    },
-    {
-      "practice": "Two-gate verdict split (research-support x freeze-readiness) with label-efficient judge calibration + dormant-until-N-cal activation",
-      "track": "technical",
-      "lineage_sources": [
-        "quant-kb"
-      ],
-      "recurrence": 1,
-      "domain_independence": "medium",
-      "current_location": "quant-kb pipeline (council_gate.canonical_verdict, freeze_readiness scorer, anchors.jsonl)",
-      "lift_verdict": "deferred:code",
-      "source_paths": [
-        "C:/Users/stani/.h2t/sessions/AUTOMATA/quant-kb/quant-quant-kb-plan16-two-gate-verdict-2026-07-10.md"
-      ]
-    },
-    {
-      "practice": "LLM-extraction model/config benchmarking (extract x judge cross-model, harness-floor vs raw-codex token cost, faithfulness-gate insures cheap models, per-stage routing table)",
-      "track": "technical",
-      "lineage_sources": [
-        "quant-kb"
-      ],
-      "recurrence": 1,
-      "domain_independence": "high",
-      "current_location": "quant-kb benchmark driver+scorer (report gist a98acf06); Plan 18 telemetry/run-ledger",
-      "lift_verdict": "deferred:code",
-      "source_paths": [
-        "C:/Users/stani/.h2t/sessions/AUTOMATA/quant-kb/quant-kb-ingest-model-benchmark-2026-07-09.md"
-      ]
-    },
-    {
-      "practice": "Validation-library / acceptance-gate scripts that CALL the real production gate code (bookkeeping in script, interpretation by agent; never re-implement the gate under test)",
-      "track": "technical",
-      "lineage_sources": [
-        "crypto-regime-spike"
-      ],
-      "recurrence": 1,
-      "domain_independence": "high",
-      "current_location": "crypto-regime-spike src/regime_spike/validation/ + scripts/pipeline_power_control_v2.py",
-      "lift_verdict": "new-standard",
-      "source_paths": [
-        "C:/dev/crypto-regime-spike/docs/superpowers/specs/2026-06-16-pipeline-validation-spec.md",
-        "C:/Users/stani/.h2t/sessions/AUTOMATA/crypto-regime-spike/crypto-regime-spike-validation-library-2026-06-16.md"
-      ]
-    },
-    {
-      "practice": "Fail-closed verdict emission (mde=None never KILL, capacity=False never TRADEABLE, INCONCLUSIVE is acceptable; machine only filters, never a false GO)",
-      "track": "technical",
-      "lineage_sources": [
-        "crypto-regime-spike"
-      ],
-      "recurrence": 1,
-      "domain_independence": "medium",
-      "current_location": "crypto-regime-spike src/regime_spike/validation/verdict.py (emit_verdict)",
-      "lift_verdict": "deferred:code",
-      "source_paths": [
-        "C:/Users/stani/.h2t/sessions/AUTOMATA/crypto-regime-spike/dev-crypto-regime-spike-adjudication-wiring-2026-06-25.md",
-        "C:/dev/crypto-regime-spike/docs/superpowers/specs/2026-06-25-trustworthy-pipeline-completion-spec.md"
-      ]
-    },
-    {
-      "practice": "Pre-registration before seeing results: pre-committed feature set + thresholds + target-label spec (horizon/holding/execution/cooldown) declared before any run, to eliminate researcher DoF",
-      "track": "technical",
-      "lineage_sources": [
-        "crypto-regime-spike"
-      ],
-      "recurrence": 1,
-      "domain_independence": "medium",
-      "current_location": "crypto-regime-spike docs/hypotheses/_template.md + passport-conventions",
-      "lift_verdict": "new-standard",
-      "source_paths": [
-        "C:/dev/crypto-regime-spike/docs/superpowers/specs/2026-06-10-h1-oi-preregistration.md",
-        "C:/dev/crypto-regime-spike/docs/superpowers/specs/2026-06-15-passport-conventions-v2.md"
-      ]
-    },
-    {
-      "practice": "Cheaper-tier gate chain: each pre-gate cheaper than the next and gates it (state-audit to existence to HMM; hard-STOP phase boundary forbids downstream verdicts before gate passes)",
-      "track": "technical",
-      "lineage_sources": [
-        "crypto-regime-spike"
-      ],
-      "recurrence": 1,
-      "domain_independence": "high",
-      "current_location": "crypto-regime-spike plans (SA to H1 to H4; Phase-1 diagnostics HARD STOP)",
-      "lift_verdict": "append:research-pipeline-runbook.md",
-      "source_paths": [
-        "C:/dev/crypto-regime-spike/docs/superpowers/plans/2026-06-10-oi-macro-regime-test.md"
-      ]
-    },
-    {
-      "practice": "Autonomous durable-runbook spine (survives compaction, resumes from artifact; pipeline steps as checkboxes; gates + decision-protocol embedded; always-handoff terminal)",
-      "track": "technical",
-      "lineage_sources": [
-        "crypto-regime-spike",
-        "h2t-skills"
-      ],
-      "recurrence": 2,
-      "domain_independence": "high",
-      "current_location": "plugins/h2t-core/skills/autonomous-run/ + .claude/rules/autonomous-execution.md",
-      "lift_verdict": "skip",
-      "source_paths": [
-        "C:/dev/crypto-regime-spike/docs/superpowers/plans/2026-07-08-archetype-e-autonomous-runbook.md",
-        "C:/dev/h2t-skills/docs/superpowers/plans/2026-07-10-cross-repo-practice-harvest.md"
-      ]
-    },
-    {
-      "practice": "Sealed schema-validator for a non-code artifact (deterministic structure + source-path existence check keeps an interpretive/LLM output honest)",
-      "track": "technical",
-      "lineage_sources": [
-        "h2t-skills"
-      ],
-      "recurrence": 1,
-      "domain_independence": "high",
-      "current_location": "plugins/h2t-core/skills/autonomous-run/scripts/validate_runbook.py + lib/practice_harvest/validate_registry.py",
-      "lift_verdict": "deferred:code",
-      "source_paths": [
-        "C:/dev/h2t-skills/docs/superpowers/plans/2026-07-10-cross-repo-practice-harvest.md"
-      ]
-    },
-    {
-      "practice": "PreToolUse structure-guard enforcement (block file writes to forbidden names/unregistered dirs before write; preventive not reactive validation)",
-      "track": "technical",
-      "lineage_sources": [
-        "h2t-skills"
-      ],
-      "recurrence": 1,
-      "domain_independence": "medium",
-      "current_location": "plugins/h2t-core/hooks-handlers/structure_guard.py",
-      "lift_verdict": "deferred:code",
-      "source_paths": [
-        "C:/dev/h2t-skills/docs/superpowers/plans/2026-06-14-lifecycle-os-v2-structure-guard.md"
-      ]
-    },
-    {
-      "practice": "Deterministic structural graph import: extract-once-granularly (pre-judge) vs curated selection (post-judge); node-ID contract; idempotent bulk REST import",
-      "track": "technical",
-      "lineage_sources": [
         "POS"
       ],
-      "recurrence": 1,
-      "domain_independence": "medium",
-      "current_location": "POS src/pos_meetings/{graph_client,graph_import}.py to h2t-graphs",
-      "lift_verdict": "deferred:code",
+      "recurrence": 3,
+      "domain_independence": "high",
+      "current_location": "C:/work/rejuve/docs/superpowers/plans/2026-07-03-jtbd-segmentation.md",
+      "lift_verdict": "append:evidence-grounded-synthesis.md",
       "source_paths": [
+        "C:/work/rejuve/docs/superpowers/plans/2026-07-03-jtbd-segmentation.md",
+        "C:/Users/stani/.h2t/sessions/AUTOMATA/quant-kb/quant-quant-kb-plan5-llm-extraction-2026-07-06.md",
         "C:/dev/POS/docs/superpowers/plans/2026-06-07-meeting-graph-v0-3.md"
       ]
     },
     {
-      "practice": "KB three-layer WikiPattern (raw sources / wiki prose+YAML frontmatter / schema) with source_quality counts + append-only ingest log",
+      "practice": "Two-gate / staged verdict split (cheap screen gate then confirm gate, distinct verdict per gate)",
       "track": "technical",
       "lineage_sources": [
         "crypto-regime-spike",
@@ -725,26 +482,169 @@
       ],
       "recurrence": 2,
       "domain_independence": "high",
-      "current_location": "quant-kb/{wiki,index.md,log.md,CLAUDE.md}",
-      "lift_verdict": "deferred:skill",
+      "current_location": "C:/dev/crypto-regime-spike/docs/superpowers/plans/2026-06-27-plan4-statistical-multiplicity-oos.md",
+      "lift_verdict": "deferred:code",
       "source_paths": [
-        "C:/dev/crypto-regime-spike/docs/superpowers/specs/2026-06-13-quant-kb-design.md"
+        "C:/dev/crypto-regime-spike/docs/superpowers/plans/2026-06-27-plan4-statistical-multiplicity-oos.md",
+        "C:/Users/stani/.h2t/sessions/AUTOMATA/quant-kb/quant-quant-kb-plan16-two-gate-verdict-2026-07-10.md"
       ]
     },
     {
-      "practice": "Human-in-loop template+prompt methodology pipeline (each step = template.md + prompt.md; deterministic Python side-utilities gate ID-chaining; expert validates content)",
+      "practice": "Deterministic validation-library / acceptance-gate DRY-reused between the gate and its tests (fixture success is not workflow success); crypto variant additionally calls the real production gate code rather than reimplementing it",
       "track": "technical",
       "lineage_sources": [
-        "h2t-business",
-        "client-auto"
+        "crypto-regime-spike",
+        "claudeworking",
+        "h2t-business"
+      ],
+      "recurrence": 3,
+      "domain_independence": "high",
+      "current_location": "C:/dev/crypto-regime-spike/docs/superpowers/specs/2026-06-16-pipeline-validation-spec.md",
+      "lift_verdict": "deferred:code",
+      "source_paths": [
+        "C:/work/claudeworking/docs/superpowers/plans/2026-07-04-grants-phase2-cards-and-explorer.md",
+        "C:/dev/h2t-business/docs/superpowers/plans/2026-07-08-course-design-framework.md",
+        "C:/dev/crypto-regime-spike/docs/superpowers/specs/2026-06-16-pipeline-validation-spec.md"
+      ]
+    },
+    {
+      "practice": "Corpus-as-SSOT JSON with per-field evidence provenance + drift-hash (single source of numbers, HTML/report is a regenerated artifact)",
+      "track": "technical",
+      "lineage_sources": [
+        "claudeworking",
+        "quant-kb",
+        "rejuve"
+      ],
+      "recurrence": 3,
+      "domain_independence": "high",
+      "current_location": "C:/work/claudeworking/docs/superpowers/specs/2026-07-04-grants-phase2-cards-and-explorer-design.md",
+      "lift_verdict": "append:research-pipeline-runbook.md",
+      "source_paths": [
+        "C:/work/claudeworking/docs/superpowers/specs/2026-07-04-grants-phase2-cards-and-explorer-design.md",
+        "C:/Users/stani/.h2t/sessions/AUTOMATA/quant-kb/quant-kb-plan6-typization-2026-07-06.md",
+        "C:/Users/stani/.h2t/sessions/AUTOMATA/rejuve/analytics-rejuve-audience-dashboard-2026-07-04.md"
+      ]
+    },
+    {
+      "practice": "Multi-judge consensus panel for adjudicating extracted claims (parallel judges, majority vote, aggregated deterministically)",
+      "track": "technical",
+      "lineage_sources": [
+        "quant-kb",
+        "rejuve"
+      ],
+      "recurrence": 2,
+      "domain_independence": "high",
+      "current_location": "C:/Users/stani/.h2t/sessions/AUTOMATA/quant-kb/quant-kb-plan9-council-rekey-2026-07-07.md",
+      "lift_verdict": "deferred:code",
+      "source_paths": [
+        "C:/Users/stani/.h2t/sessions/AUTOMATA/quant-kb/quant-kb-plan9-council-rekey-2026-07-07.md",
+        "C:/work/rejuve/docs/superpowers/plans/2026-07-03-jtbd-segmentation.md"
+      ]
+    },
+    {
+      "practice": "Pre-registration / freeze-before-run + append-only immutable ledger for honest multiplicity accounting (no post-hoc denominator inflation)",
+      "track": "technical",
+      "lineage_sources": [
+        "crypto-regime-spike",
+        "quant-kb"
       ],
       "recurrence": 2,
       "domain_independence": "medium",
-      "current_location": "h2t-business docs/product/course-framework/ + scripts/{pain_pack,chaining_check}.py",
+      "current_location": "C:/dev/crypto-regime-spike/docs/superpowers/specs/2026-06-27-multiplicity-denominator.md",
+      "lift_verdict": "deferred:code",
+      "source_paths": [
+        "C:/Users/stani/.h2t/sessions/AUTOMATA/crypto-regime-spike/crypto-regime-spike-multiplicity-denominator-2026-06-27.md",
+        "C:/Users/stani/.h2t/sessions/AUTOMATA/quant-kb/quant-kb-operator-freeze-2026-07-08.md"
+      ]
+    },
+    {
+      "practice": "Known-answer / byte-identical golden anchor pinned as a mutation-detecting regression tripwire across every merge",
+      "track": "technical",
+      "lineage_sources": [
+        "crypto-regime-spike",
+        "quant-kb"
+      ],
+      "recurrence": 2,
+      "domain_independence": "high",
+      "current_location": "C:/Users/stani/.h2t/sessions/AUTOMATA/crypto-regime-spike/crypto-regime-spike-money-hypoth-plan4-2026-06-27.md",
+      "lift_verdict": "deferred:code",
+      "source_paths": [
+        "C:/Users/stani/.h2t/sessions/AUTOMATA/crypto-regime-spike/crypto-regime-spike-money-hypoth-plan4-2026-06-27.md",
+        "C:/Users/stani/.h2t/sessions/AUTOMATA/quant-kb/quant-kb-plan6-typization-2026-07-06.md"
+      ]
+    },
+    {
+      "practice": "Per-run telemetry / cost run-ledger emitted from real usage (shared by benchmark + production runs, not estimates)",
+      "track": "technical",
+      "lineage_sources": [
+        "crypto-regime-spike",
+        "quant-kb"
+      ],
+      "recurrence": 2,
+      "domain_independence": "high",
+      "current_location": "C:/Users/stani/.h2t/sessions/AUTOMATA/crypto-regime-spike/crypto-regime-spike-pr76-merge-2026-07-09.md",
+      "lift_verdict": "deferred:code",
+      "source_paths": [
+        "C:/Users/stani/.h2t/sessions/AUTOMATA/crypto-regime-spike/crypto-regime-spike-pr76-merge-2026-07-09.md",
+        "C:/Users/stani/.h2t/sessions/AUTOMATA/quant-kb/quant-kb-plan19-sonnet-extract-2026-07-09.md"
+      ]
+    },
+    {
+      "practice": "Durable runbook artifact + sealed section-scoped drift-guard validator (survives compaction, two-track resume)",
+      "track": "technical",
+      "lineage_sources": [
+        "h2t-skills"
+      ],
+      "recurrence": 1,
+      "domain_independence": "high",
+      "current_location": "C:/dev/h2t-skills/docs/superpowers/specs/2026-07-09-autonomous-run-orchestrator.md",
       "lift_verdict": "deferred:skill",
       "source_paths": [
-        "C:/dev/h2t-business/docs/superpowers/plans/2026-07-08-course-design-framework.md",
-        "C:/Users/stani/.h2t/sessions/AUTOMATA/client-auto/hou2touch-client-auto-course-framework-2026-07-08.md"
+        "C:/dev/h2t-skills/docs/superpowers/specs/2026-07-09-autonomous-run-orchestrator.md",
+        "C:/dev/h2t-skills/docs/superpowers/plans/2026-07-10-cross-repo-practice-harvest.md"
+      ]
+    },
+    {
+      "practice": "LLM-extraction model/config benchmarking with golden-ref scoring + per-stage evaluability (faithfulness gate insures cheap models, per-stage routing table)",
+      "track": "technical",
+      "lineage_sources": [
+        "quant-kb"
+      ],
+      "recurrence": 1,
+      "domain_independence": "high",
+      "current_location": "C:/Users/stani/.h2t/sessions/AUTOMATA/quant-kb/quant-kb-plan19-benchmark-2026-07-09.md",
+      "lift_verdict": "deferred:code",
+      "source_paths": [
+        "C:/Users/stani/.h2t/sessions/AUTOMATA/quant-kb/quant-kb-plan19-benchmark-2026-07-09.md",
+        "C:/Users/stani/.h2t/sessions/AUTOMATA/quant-kb/quant-kb-ingest-model-benchmark-2026-07-09.md"
+      ]
+    },
+    {
+      "practice": "Fail-closed autonomy guard: autonomous agent capped to a status ceiling (MACHINE_CANDIDATE/KILL) with mechanical never-false-GO asserts + frozen manifest",
+      "track": "technical",
+      "lineage_sources": [
+        "crypto-regime-spike"
+      ],
+      "recurrence": 1,
+      "domain_independence": "medium",
+      "current_location": "C:/Users/stani/.h2t/sessions/AUTOMATA/crypto-regime-spike/crypto-regime-spike-money-hypoth-phase1-2026-07-04.md",
+      "lift_verdict": "deferred:code",
+      "source_paths": [
+        "C:/Users/stani/.h2t/sessions/AUTOMATA/crypto-regime-spike/crypto-regime-spike-money-hypoth-phase1-2026-07-04.md"
+      ]
+    },
+    {
+      "practice": "PIT / look-ahead temporal-leakage guard: explicit available_time convention + pin-test that a value on date D uses only data known by D",
+      "track": "technical",
+      "lineage_sources": [
+        "crypto-regime-spike"
+      ],
+      "recurrence": 1,
+      "domain_independence": "medium",
+      "current_location": "C:/Users/stani/.h2t/sessions/AUTOMATA/crypto-regime-spike/crypto-regime-spike-money-hypoth-phaseB-2026-07-03.md",
+      "lift_verdict": "deferred:code",
+      "source_paths": [
+        "C:/Users/stani/.h2t/sessions/AUTOMATA/crypto-regime-spike/crypto-regime-spike-money-hypoth-phaseB-2026-07-03.md"
       ]
     }
   ]
