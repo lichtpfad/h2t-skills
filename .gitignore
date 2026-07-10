@@ -36,3 +36,6 @@ build/
 
 # docs-lint runtime artifacts
 .h2t/lint-apply-*.json
+
+# Practice harvest raw corpus artifacts
+docs/reports/*-practice-harvest-corpus.json
