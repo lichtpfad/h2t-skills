@@ -32,6 +32,9 @@ include = ["h2t_ops*", "lib*"]
 [tool.setuptools.package-data]
 "h2t_ops.connectors.research" = ["systemprompts/*.md"]
 
+[tool.pytest.ini_options]
+pythonpath = ["."]
+
 # PEP 735 — provisioned by `uv run`/`uv sync`; ignored by bare `pip install`.
 [dependency-groups]
 dev = [
