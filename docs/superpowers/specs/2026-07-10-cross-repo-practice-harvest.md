@@ -77,7 +77,11 @@ implementation-план даёт следующий шаг (writing-plans).
   выдумают «кросс-репо паттерн» из одного репо ×N. (Это entity-normalization из стандарта.)
 - **Исключить `documentation.md`** — синхронный шаблон (docs-sync-labels), не находка;
   повторяется в ~20 репо как артефакт синхронизации, а не как практика.
-- **Dedup** (exact + near-dup) rule-файлов между lineage.
+- **Dedup** rule-файлов: **exact (sha256) + fork-collapse**. Near-dup (MinHash/shingling)
+  сознательно отложен — это тяжёлая часть аппарата, которую §5 как раз облегчает; для
+  rules/session-корпуса реальные дубли = клоны форков (ловятся exact+collapse). Ввести
+  near-dup только если реальный корпус покажет near-дубли (YAGNI). *(уточнено на plan-gate,
+  codex 2026-07-10)*
 
 ### 2. Два трека извлечения (раздельно)
 
@@ -105,7 +109,10 @@ implementation-план даёт следующий шаг (writing-plans).
 `code-organization`, `adr-process`, `api-contracts`, `linting`) — база сравнения.
 Вердикт по каждому кандидату:
 
-`{ new-standard | append-to-existing:<file> | already-covered → skip }`
+`{ new-standard | append:<file> | skip (already-covered) | deferred:code | deferred:skill }`
+
+(Целевые `docs/standards/` живут в infra-репо `C:/dev/docs`; этот прогон генерит **черновики**
+в `docs/reports/proposed-standards/` внутри h2t-skills — перенос в infra вручную оператором.)
 
 Иначе выход наплодит дубли уже существующих гайдбуков.
 
@@ -146,8 +153,11 @@ current-location · lift-verdict`
 
 ## Deliverables
 
-1. `scripts/` — детерминированный агрегатор корпуса (окно + lineage-collapse + dedup).
-2. Реестр находок (`docs/reports/YYYY-MM-DD-practice-harvest-registry.{md,json}`).
-3. Черновые гайдбуки / append-патчи в `docs/standards/` для подтверждённых кандидатов.
+1. `lib/practice_harvest/` — детерминированный агрегатор корпуса (окно + lineage-collapse
+   + exact-dedup) + sealed-валидатор реестра. (Пакет в `lib/`, а не `scripts/` — importable
+   под pytest; уточнено на plan-gate.)
+2. Реестр находок (`docs/reports/2026-07-10-practice-harvest-registry.{md,json}`).
+3. Черновые гайдбуки / append-патчи в `docs/reports/proposed-standards/` (перенос в
+   `C:/dev/docs/standards/` — вручную оператором) для подтверждённых кандидатов.
 4. `deferred`-список code/skill-кандидатов для стадии 2.
 

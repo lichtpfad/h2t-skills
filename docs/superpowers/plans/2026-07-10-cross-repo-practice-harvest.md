@@ -44,9 +44,19 @@ milestone: ""
 ### Task 1: Lineage canonicalization
 
 **Files:**
+- Modify: `pyproject.toml` (pytest pythonpath — упрочнить импорт `lib.*`)
 - Create: `lib/practice_harvest/__init__.py`
 - Create: `lib/practice_harvest/lineage.py`
 - Test: `tests/practice_harvest/test_lineage.py`
+
+- [ ] **Step 0: Гарантировать импорт `lib.*` под pytest**
+
+Проверить `pyproject.toml` на секцию `[tool.pytest.ini_options]`. Если `pythonpath` не задан — добавить (иначе резолв `lib.practice_harvest` зависит от editable-venv, codex P2):
+```toml
+[tool.pytest.ini_options]
+pythonpath = ["."]
+```
+Если секция уже есть с другими ключами — добавить `pythonpath = ["."]`, не трогая остальное. (Эмпирически импорт работает и через rootdir-insertion, но явный pythonpath убирает завязку на окружение.)
 
 - [ ] **Step 1: Write the failing test**
 
@@ -63,6 +73,10 @@ def test_h2t_skills_variants_collapse():
     assert canonical_lineage("agent-skills") == "h2t-skills"
     assert canonical_lineage("h2t-skills-119-editorial-pilot") == "h2t-skills"
     assert canonical_lineage("h2t-skills-editorial-wireframe") == "h2t-skills"
+
+def test_memory_project_bucket_collapses():
+    # ~/.claude/projects/C--dev-h2t-skills/memory → h2t-skills, не отдельный lineage
+    assert canonical_lineage("C--dev-h2t-skills") == "h2t-skills"
 
 def test_unknown_passthrough():
     assert canonical_lineage("quant-kb") == "quant-kb"
@@ -99,6 +113,7 @@ LINEAGE_MAP: dict[str, list[str]] = {
         "agent-skills",
         "h2t-skills-119-editorial-pilot",
         "h2t-skills-editorial-wireframe",
+        "C--dev-h2t-skills",  # ~/.claude/projects/<slug>/memory bucket name
     ],
 }
 
@@ -123,7 +138,7 @@ def canonical_lineage(name: str) -> str:
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `C:/dev/h2t-skills/.venv/Scripts/pytest tests/practice_harvest/test_lineage.py -v`
-Expected: PASS (4 passed)
+Expected: PASS (5 passed)
 
 - [ ] **Step 5: Commit**
 
@@ -374,6 +389,8 @@ git commit -m "feat(practice-harvest): source collection + kind/track classifica
 
 Идентичные rule-файлы, размноженные форками, — один источник после collapse. Dedup по `(canonical_lineage, kind, content-hash)`: если один и тот же контент уже учтён для того же lineage — отбросить дубль.
 
+**Dedup = exact (sha256) + fork-collapse; near-dup (MinHash/shingling) сознательно отложен.** Спека §5 облегчает анти-галлюц-аппарат; near-dup — как раз тяжёлая часть. Для rules/session-корпуса реальные дубли — это клоны форков (ловятся exact+collapse) либо содержательно разные файлы. near-dup вводить только если реальный корпус покажет near-дубли (YAGNI). Расхождение со спекой §5 («exact + near-dup») устранено правкой спеки в этом же прогоне (Decision-log runbook).
+
 - [ ] **Step 1: Write the failing test**
 
 ```python
@@ -552,6 +569,8 @@ def build_corpus(
     records: list[SourceRecord] = []
 
     def add(path: Path, lineage: str):
+        if not path.is_file():
+            return  # опциональный файл (напр. репо без CLAUDE.md) — тихо пропустить
         kind = classify_kind(path)
         if kind is None:
             return
@@ -566,22 +585,36 @@ def build_corpus(
             return
         records.append(SourceRecord.from_path(path, lineage, kind))
 
-    # repo snapshot: rules, CLAUDE.md, specs, plans
+    # repo snapshot: только целевые пути (точечно, без широкого rglob —
+    # иначе подхватятся вложенные CLAUDE.md/.claude/rules из vendor/docs; codex P2)
     for root in repo_roots:
+        if not root.is_dir():
+            raise FileNotFoundError(f"repo-root missing: {root}")
         lineage = lineage_of(root.name)
-        for f in root.rglob("*.md"):
-            if "/.worktrees/" in f.as_posix() or "/.claude/worktrees/" in f.as_posix():
-                continue  # worktree-копии пропускаем целиком
-            add(f, lineage)
+        rules_dir = root / ".claude" / "rules"
+        if rules_dir.is_dir():
+            for f in rules_dir.glob("*.md"):
+                add(f, lineage)
+        add(root / "CLAUDE.md", lineage)  # add() пропустит, если файла нет
+        for sub in ("specs", "plans"):
+            d = root / "docs" / "superpowers" / sub
+            if d.is_dir():
+                for f in d.glob("*.md"):
+                    add(f, lineage)
 
     # sessions: <root>/<project>/*.md
     for root in session_roots:
+        if not root.is_dir():
+            raise FileNotFoundError(f"session-root missing: {root}")
         for f in root.rglob("*.md"):
             project = f.parent.name
             add(f, lineage_of(project))
 
-    # memory: <root>/*.md (кроме MEMORY.md-индекса)
+    # memory: <root>/*.md (кроме MEMORY.md-индекса); lineage из имени бакета
+    # (напр. C--dev-h2t-skills → h2t-skills через LINEAGE_MAP, codex P1)
     for root in memory_roots:
+        if not root.is_dir():
+            raise FileNotFoundError(f"memory-root missing: {root}")
         for f in root.glob("*.md"):
             if f.name == "MEMORY.md":
                 continue
@@ -618,7 +651,7 @@ if __name__ == "__main__":
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `C:/dev/h2t-skills/.venv/Scripts/pytest tests/practice_harvest/test_build_index.py -v`
-Expected: PASS (1 passed)
+Expected: PASS (2 passed)
 
 - [ ] **Step 5: Gitignore the raw corpus artifact**
 
@@ -693,6 +726,12 @@ def test_missing_source_path_on_disk_rejected(tmp_path):
     with pytest.raises(ValidationError):
         validate_finding(f)
 
+def test_recurrence_must_match_unique_lineage(tmp_path):
+    # recurrence врёт: 3, но уникальный lineage один
+    f = _ok(tmp_path); f["recurrence"] = 3; f["lineage_sources"] = ["quant-kb"]
+    with pytest.raises(ValidationError):
+        validate_finding(f)
+
 def test_append_verdict_with_target_ok(tmp_path):
     f = _ok(tmp_path); f["lift_verdict"] = "append:git-naming-conventions.md"
     validate_finding(f)  # no raise
@@ -761,6 +800,12 @@ def validate_finding(f: dict) -> None:
         raise ValidationError(f"bad recurrence: {f['recurrence']}")
     if not f["lineage_sources"]:
         raise ValidationError("lineage_sources empty")
+    # recurrence ДОЛЖЕН равняться числу уникальных lineage (спец §3: source-diversity).
+    # Без этого метрика может врать и пройти гейт (codex plan-gate P1).
+    if f["recurrence"] != len(set(f["lineage_sources"])):
+        raise ValidationError(
+            f"recurrence {f['recurrence']} != unique lineage_sources "
+            f"{len(set(f['lineage_sources']))}")
     if not f["source_paths"]:
         raise ValidationError("source_paths empty")
     for sp in f["source_paths"]:
@@ -814,7 +859,7 @@ if __name__ == "__main__":
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `C:/dev/h2t-skills/.venv/Scripts/pytest tests/practice_harvest/test_validate_registry.py -v`
-Expected: PASS (7 passed)
+Expected: PASS (8 passed)
 
 - [ ] **Step 5: Commit**
 
@@ -928,6 +973,9 @@ REG = {
         {"practice": "two-gate verdict", "track": "technical", "lineage_sources": ["quant-kb", "crypto-regime-spike"],
          "recurrence": 2, "domain_independence": "medium",
          "current_location": "…", "lift_verdict": "deferred:code", "source_paths": ["y"]},
+    {"practice": "batch telemetry", "track": "technical", "lineage_sources": ["crypto-regime-spike"],
+         "recurrence": 1, "domain_independence": "low",
+         "current_location": "…", "lift_verdict": "skip", "source_paths": ["z"]},
     ],
 }
 
@@ -942,8 +990,8 @@ def test_render_groups_by_track_and_has_columns():
 
 def test_render_sorts_by_recurrence_desc_within_track():
     md = render_md(REG)
-    # в technical только один; проверяем что recurrence-колонка присутствует
-    assert "recurrence" in md.lower()
+    # technical: два finding — recurrence 2 (two-gate) должен идти ВЫШЕ recurrence 1 (batch)
+    assert md.index("two-gate verdict") < md.index("batch telemetry")
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
