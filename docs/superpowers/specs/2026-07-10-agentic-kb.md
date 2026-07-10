@@ -131,6 +131,11 @@ Recurrence по доменам одного оператора может отр
   `rank` монотонен и уникален, каждая ступень называет `promote_when` + trust-вес.
 - **`synthesize_council.py` (P2):** расширить — деривировать и записывать claim `verdict` из
   config-лестницы по (strength-axis сигнал + council PASS), не только majority-подсчёт.
+- **Runtime-enforcement (codex rev-2, остаточный):** `lint_wiki.py` обязан enforce'ить два
+  инварианта на рантайме (статическая схема не может): (1) `verdict` ∈ `config.verdicts`;
+  (2) **council-completeness** — claim с non-`HYPOTHESIS` вердиктом или в `tldr`/
+  `decision_triggers` обязан иметь `judge_pass` выставленным (нельзя нести promoted-вердикт
+  без пройденного council). Оба — в acceptance A1.
 - `_kbconfig.py`: загрузка+валидация `verdicts`/`strength_axis` (fail-loud).
 - **Back-compat gate (P2, обязателен ДО правок):** запиннить golden-fixture текущего quant-kb
   (config + 1 топик + ожидаемый filter-log/pipeline-state); A1 обязан воспроизвести
@@ -152,6 +157,12 @@ Recurrence по доменам одного оператора может отр
   Recurrence из харвеста записывается как `internal-lineage` sources, но **не** как
   подтверждённый исход. Промоушен в `WORKS-IN-PRACTICE` — только после council PASS +
   отдельно записанных application-outcome в ≥2 independent domains.
+- **MVP = HYPOTHESIS-only (codex rev-2, главный остаточный риск).** Механического моста
+  registry-recurrence → аудируемый application-outcome сейчас **нет** (registry не пишет
+  applied/expected/observed). Значит: **MVP честно поднимает KB целиком в `HYPOTHESIS`;
+  любой промоушен в `WORKS-IN-PRACTICE` = phase-2 (#295)**, где строится application-outcome
+  bridge (минимальный operator-ratified ledger: run-id · applied · expected/observed). Пока
+  моста нет — `WORKS-IN-PRACTICE` недостижим by design, и это правильное состояние, а не пробел.
 
 **A3. Retrieval MVP.**
 - Retrieval-протокол темплейта (`kb-lookup`-аналог) как скилл/reference в h2t-skills.
@@ -205,10 +216,12 @@ Recurrence по доменам одного оператора может отр
 
 - [ ] `llm-kb-template`: verdict/strength-axis конфигурируемы (путь (b): generic string +
       runtime membership); мета-схема валидирует форму лестницы; `synthesize_council` пишет
-      verdict; **back-compat golden-gate PASS** (байт-идентичный quant-вывод); тесты зелёные +
+      verdict; **`lint_wiki` enforce'ит verdict-membership + council-completeness**;
+      **back-compat golden-gate PASS** (байт-идентичный quant-вывод); тесты зелёные +
       configurable-verdict тест.
 - [ ] `agentic-kb` поднят: config + taxonomy + 3 судьи (Generalization с operational-крит.) +
-      seed 40 находок **как HYPOTHESIS**; `pytest` + `lint_wiki` зелёные.
+      seed 40 находок **как HYPOTHESIS** (WORKS-IN-PRACTICE недостижим до application-outcome
+      bridge, #295); `pytest` + `lint_wiki` зелёные.
 - [ ] Retrieval-протокол доступен агенту; consumer-mapping для стандарта задокументирован.
 - [ ] Один council-прогон по ≥1 P0-топику → атомы с council-вердиктами (advisory).
 - [ ] Стандарт `kb-grounded-operator-decisions` разблокирован (KB существует).
@@ -222,7 +235,10 @@ Recurrence по доменам одного оператора может отр
 
 ## Ссылки
 
-- Codex-ревью rev-1 (4 P1 + 5 P2) — учтено в rev-2.
+- Codex-ревью rev-1 (4 P1 + 5 P2) — учтено в rev-2. Codex-переревью rev-2: 4 P1 подтверждены
+  снятыми; 2 остаточных (application-outcome bridge → MVP=HYPOTHESIS-only + #295;
+  runtime-enforcement council-completeness → A1) — учтены здесь. (Макс 2 codex-прохода
+  исчерпаны; 2-й job завис на финальном flush после выдачи вердикта, снят.)
 - Эпик: #294. Backlog issues: #295 (phase-2 loop), #296 (cross-machine scan + gbrain spike),
   #297 (Проект B unify), #298 (project overview).
 - Seed: `docs/reports/2026-07-10-practice-harvest-registry.md`.
