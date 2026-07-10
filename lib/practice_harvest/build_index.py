@@ -45,6 +45,9 @@ def build_corpus(
             # session-md шумный: оставляем только смысловые секции
             parsed = parse_session_md(path.read_text(encoding="utf-8", errors="replace"))
             text = "\n".join(parsed["what_done"] + parsed["what_remains"])
+            if not text.strip():
+                return  # пустая session после parse — не эмитить (иначе coverage-гейт
+                        # сертифицирует пустышку как «examined»; council Lens 1)
             records.append(SourceRecord(path=path.as_posix(), lineage=lineage,
                                         kind=kind, track=track_for_kind(kind), text=text))
             return
