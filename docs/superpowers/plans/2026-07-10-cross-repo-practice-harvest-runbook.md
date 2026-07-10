@@ -28,7 +28,7 @@ Decision-protocol). Verify the branch before every commit.
 - [x] **gates** — skill: `codex + pre-merge-check` · input: `full pytest tests/practice_harvest/ + codex final read` · done: suite green (26 pkg + 1556 repo); codex-final unavailable×2 (placeholder, no P1) → deferred to council · failure: fix then re-run (<=N) · re-entry: idempotent: re-run gate
 - [x] **e2e** — skill: `real entrypoint run` · input: `build_index on real corpus -> synthesize registry -> validate_registry with coverage gate PASS` · done: DONE (259 records/12 lineages → 47 findings, validator PASS + coverage complete) · failure: BLOCKED->handoff; behavioral fail->fix · re-entry: idempotent: re-run
 - [x] **PR** — skill: `superpowers:finishing-a-development-branch` · input: `branch docs/practice-harvest -> PR to main` · done: PR #293 opened · failure: escalate · re-entry: continue: reuse branch
-- [ ] **handoff** — skill: `h2t-core:handoff` · input: `session record + run outcome` · done: session record written · failure: n/a (terminal) · re-entry: idempotent: re-run handoff
+- [x] **handoff** — skill: `h2t-core:handoff` · input: `session record + run outcome` · done: session record written · failure: n/a (terminal) · re-entry: idempotent: re-run handoff
 
 ## Gates
 
