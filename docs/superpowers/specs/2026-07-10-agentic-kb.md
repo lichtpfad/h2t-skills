@@ -160,16 +160,18 @@ Recurrence по доменам одного оператора может отр
   authoritative = `verdict: WORKS-IN-PRACTICE` + `judge_pass: true`; `HYPOTHESIS`
   surfaced-with-warning, не как основание. Промоушен в стандарт = operator sign-off.
 
-### Не в scope A → backlog (GitHub issues, см. ниже)
+### Не в scope A → backlog (зафиксировано в GitHub issues)
 
-- **A-phase-2 (fast-follow):** live operator-question триггер + промоушен подтверждённого в
-  `docs/standards`.
-- **Phase 2 — cross-machine JSON-L scan:** расширить coverage харвеста до всего JSON-L на двух
-  машинах; gated **gbrain-spike** (≤4ч, PGLite-local, read-only) — НЕ коммит вслепую.
-- **Проект B — унификация машинерии:** влить свежий quant-kb (judge-calibration ADR-0001,
+- **#295 A-phase-2 (fast-follow):** live operator-question триггер + промоушен подтверждённого
+  в `docs/standards`.
+- **#296 Phase 2 — cross-machine JSON-L scan:** расширить coverage харвеста до всего JSON-L на
+  двух машинах; gated **gbrain-spike** (≤4ч, PGLite-local, read-only) — НЕ коммит вслепую.
+- **#297 Проект B — унификация машинерии:** влить свежий quant-kb (judge-calibration ADR-0001,
   faithfulness-механику, model-routing Plan 19), шеринг council-движка, news-research алгоритм.
-- **Downstream (отдельная спека):** overview незаконченных проектов — что убить /
+- **#298 Downstream (отдельная спека):** overview незаконченных проектов — что убить /
   приоритизировать / как влить новый опыт в зависшие. Потребитель инсайтов, не KB.
+
+Эпик Проекта A: **#294**.
 
 ## Владение / репо
 
@@ -221,7 +223,8 @@ Recurrence по доменам одного оператора может отр
 ## Ссылки
 
 - Codex-ревью rev-1 (4 P1 + 5 P2) — учтено в rev-2.
-- Backlog issues: см. раздел «Не в scope A» (создаются в lichtpfad/h2t-skills).
+- Эпик: #294. Backlog issues: #295 (phase-2 loop), #296 (cross-machine scan + gbrain spike),
+  #297 (Проект B unify), #298 (project overview).
 - Seed: `docs/reports/2026-07-10-practice-harvest-registry.md`.
 - Паттерн: `C:/dev/llm-kb-template/README.md`, `C:/dev/quant-kb/JUDGE-PIPELINE.md`.
 - Калибровка (Проект B): `C:/dev/quant-kb/docs/adr/0001-...md`.
