@@ -1,5 +1,6 @@
 """Сбор источников корпуса с привязкой к файлу, lineage, kind, track."""
 from __future__ import annotations
+import hashlib
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -56,3 +57,21 @@ class SourceRecord:
             track=track_for_kind(kind),
             text=path.read_text(encoding="utf-8", errors="replace"),
         )
+
+
+def dedup_records(records: list["SourceRecord"]) -> list["SourceRecord"]:
+    """Отбросить дубли (canonical_lineage, kind, content-hash).
+
+    Одинаковый контент в одном lineage (клон форка) → один.
+    Одинаковый контент в разных lineage → оба (реальный кросс-repo сигнал).
+    """
+    seen: set[tuple[str, str, str]] = set()
+    out: list[SourceRecord] = []
+    for r in records:
+        h = hashlib.sha256(r.text.encode("utf-8")).hexdigest()
+        key = (r.lineage, r.kind, h)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(r)
+    return out
