@@ -11,7 +11,7 @@ milestone: ""
 
 **Goal:** Собрать golden-source корпус за окно [2026-06-10 … 2026-07-10] детерминированным агрегатором, синтезировать реестр повторяющихся практик (два трека, ось recurrence×domain-independence, diff против существующих стандартов) и выдать черновые предложения гайдбуков в `docs/standards/`.
 
-**Architecture:** Гибрид. Фаза A — детерминированный Python-пакет `scripts/practice_harvest/` (TDD, тестируемый: lineage-collapse → сбор источников → dedup → эмиссия `corpus.json`). Фаза B — интерпретативный синтез поверх `corpus.json`, чей *выход* (`registry.json`) проверяется sealed-валидатором `validate_registry.py` (паттерн из h2t-core autonomous-run: не-кодовый артефакт держится детерминированной схемой + проверкой существования source-path).
+**Architecture:** Гибрид. Фаза A — детерминированный Python-пакет `lib/practice_harvest/` (TDD, тестируемый: lineage-collapse → сбор источников → dedup → эмиссия `corpus.json`). Фаза B — интерпретативный синтез поверх `corpus.json`, чей *выход* (`registry.json`) проверяется sealed-валидатором `validate_registry.py` (паттерн из h2t-core autonomous-run: не-кодовый артефакт держится детерминированной схемой + проверкой существования source-path).
 
 **Tech Stack:** Python stdlib (pathlib, json, hashlib, re, datetime), pytest. Никаких внешних зависимостей, без Node, без Workflow/агентов (корпус ≈ сотни КБ).
 
@@ -23,13 +23,13 @@ milestone: ""
 
 | Файл | Ответственность |
 |---|---|
-| `scripts/practice_harvest/__init__.py` | пакет-маркер |
-| `scripts/practice_harvest/lineage.py` | fork/worktree → canonical lineage (§1 нормализация) |
-| `scripts/practice_harvest/session_parse.py` | парсинг markdown-секций session-md |
-| `scripts/practice_harvest/collect.py` | сбор источников в окне + классификация kind/track |
-| `scripts/practice_harvest/build_index.py` | CLI: dedup + эмиссия `corpus.json` |
-| `scripts/practice_harvest/validate_registry.py` | sealed-валидатор реестра синтеза |
-| `scripts/practice_harvest/render_registry.py` | `registry.json` → человекочитаемый `.md` |
+| `lib/practice_harvest/__init__.py` | пакет-маркер |
+| `lib/practice_harvest/lineage.py` | fork/worktree → canonical lineage (§1 нормализация) |
+| `lib/practice_harvest/session_parse.py` | парсинг markdown-секций session-md |
+| `lib/practice_harvest/collect.py` | сбор источников в окне + классификация kind/track |
+| `lib/practice_harvest/build_index.py` | CLI: dedup + эмиссия `corpus.json` |
+| `lib/practice_harvest/validate_registry.py` | sealed-валидатор реестра синтеза |
+| `lib/practice_harvest/render_registry.py` | `registry.json` → человекочитаемый `.md` |
 | `tests/practice_harvest/` | pytest для всех детерминированных модулей |
 | `docs/reports/2026-07-10-practice-harvest-corpus.json` | выход фазы A (артефакт, gitignored — сырьё) |
 | `docs/reports/2026-07-10-practice-harvest-registry.{json,md}` | выход фазы B (канон, в git) |
@@ -44,15 +44,15 @@ milestone: ""
 ### Task 1: Lineage canonicalization
 
 **Files:**
-- Create: `scripts/practice_harvest/__init__.py`
-- Create: `scripts/practice_harvest/lineage.py`
+- Create: `lib/practice_harvest/__init__.py`
+- Create: `lib/practice_harvest/lineage.py`
 - Test: `tests/practice_harvest/test_lineage.py`
 
 - [ ] **Step 1: Write the failing test**
 
 ```python
 # tests/practice_harvest/test_lineage.py
-from scripts.practice_harvest.lineage import canonical_lineage
+from lib.practice_harvest.lineage import canonical_lineage
 
 def test_crypto_variants_collapse():
     assert canonical_lineage("crypto-regime-spike-dmde") == "crypto-regime-spike"
@@ -76,12 +76,12 @@ def test_worktree_path_collapses():
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `C:/dev/h2t-skills/.venv/Scripts/pytest tests/practice_harvest/test_lineage.py -v`
-Expected: FAIL — `ModuleNotFoundError: scripts.practice_harvest.lineage`
+Expected: FAIL — `ModuleNotFoundError: lib.practice_harvest.lineage`
 
 - [ ] **Step 3: Write minimal implementation**
 
 ```python
-# scripts/practice_harvest/lineage.py
+# lib/practice_harvest/lineage.py
 """Свернуть форки/worktree/переименования проектов к каноничному lineage.
 
 Справочник ведётся вручную; ревьюится оператором до синтеза (спец §Boundaries).
@@ -128,7 +128,7 @@ Expected: PASS (4 passed)
 - [ ] **Step 5: Commit**
 
 ```bash
-git add scripts/practice_harvest/__init__.py scripts/practice_harvest/lineage.py tests/practice_harvest/test_lineage.py
+git add lib/practice_harvest/__init__.py lib/practice_harvest/lineage.py tests/practice_harvest/test_lineage.py
 git commit -m "feat(practice-harvest): lineage canonicalization (fork/worktree collapse)"
 ```
 
@@ -137,7 +137,7 @@ git commit -m "feat(practice-harvest): lineage canonicalization (fork/worktree c
 ### Task 2: session-md parser
 
 **Files:**
-- Create: `scripts/practice_harvest/session_parse.py`
+- Create: `lib/practice_harvest/session_parse.py`
 - Test: `tests/practice_harvest/test_session_parse.py`
 
 session-md формат — markdown-секции (`## Meta` с `- **Date:**`, `## What Was Done`, `## What Remains`, `## Artifacts`), НЕ YAML. Используется в Task 5 (`build_corpus` берёт только `what_done`+`what_remains`, отбрасывая шум Meta/Artifacts).
@@ -146,7 +146,7 @@ session-md формат — markdown-секции (`## Meta` с `- **Date:**`, `
 
 ```python
 # tests/practice_harvest/test_session_parse.py
-from scripts.practice_harvest.session_parse import parse_session_md
+from lib.practice_harvest.session_parse import parse_session_md
 
 SAMPLE = """# Session: dev-h2t-skills-demo-2026-07-01
 
@@ -188,7 +188,7 @@ Expected: FAIL — `ModuleNotFoundError`
 - [ ] **Step 3: Write minimal implementation**
 
 ```python
-# scripts/practice_harvest/session_parse.py
+# lib/practice_harvest/session_parse.py
 """Парсинг markdown-секций session-md в структуру."""
 from __future__ import annotations
 import re
@@ -233,7 +233,7 @@ Expected: PASS (2 passed)
 - [ ] **Step 5: Commit**
 
 ```bash
-git add scripts/practice_harvest/session_parse.py tests/practice_harvest/test_session_parse.py
+git add lib/practice_harvest/session_parse.py tests/practice_harvest/test_session_parse.py
 git commit -m "feat(practice-harvest): session-md section parser"
 ```
 
@@ -242,7 +242,7 @@ git commit -m "feat(practice-harvest): session-md section parser"
 ### Task 3: Source collection + window + classification
 
 **Files:**
-- Create: `scripts/practice_harvest/collect.py`
+- Create: `lib/practice_harvest/collect.py`
 - Test: `tests/practice_harvest/test_collect.py`
 
 Собирает источники в `SourceRecord`-ы. Классификация `kind` → `track`:
@@ -254,7 +254,7 @@ git commit -m "feat(practice-harvest): session-md section parser"
 ```python
 # tests/practice_harvest/test_collect.py
 from pathlib import Path
-from scripts.practice_harvest.collect import classify_kind, track_for_kind, SourceRecord
+from lib.practice_harvest.collect import classify_kind, track_for_kind, SourceRecord
 
 def test_classify_kind():
     assert classify_kind(Path("x/.claude/rules/git.md")) == "rules"
@@ -291,7 +291,7 @@ Expected: FAIL — `ModuleNotFoundError`
 - [ ] **Step 3: Write minimal implementation**
 
 ```python
-# scripts/practice_harvest/collect.py
+# lib/practice_harvest/collect.py
 """Сбор источников корпуса с привязкой к файлу, lineage, kind, track."""
 from __future__ import annotations
 from dataclasses import dataclass
@@ -360,7 +360,7 @@ Expected: PASS (4 passed)
 - [ ] **Step 5: Commit**
 
 ```bash
-git add scripts/practice_harvest/collect.py tests/practice_harvest/test_collect.py
+git add lib/practice_harvest/collect.py tests/practice_harvest/test_collect.py
 git commit -m "feat(practice-harvest): source collection + kind/track classification"
 ```
 
@@ -369,7 +369,7 @@ git commit -m "feat(practice-harvest): source collection + kind/track classifica
 ### Task 4: Dedup across lineage
 
 **Files:**
-- Modify: `scripts/practice_harvest/collect.py` (добавить `dedup_records`)
+- Modify: `lib/practice_harvest/collect.py` (добавить `dedup_records`)
 - Test: `tests/practice_harvest/test_dedup.py`
 
 Идентичные rule-файлы, размноженные форками, — один источник после collapse. Dedup по `(canonical_lineage, kind, content-hash)`: если один и тот же контент уже учтён для того же lineage — отбросить дубль.
@@ -378,7 +378,7 @@ git commit -m "feat(practice-harvest): source collection + kind/track classifica
 
 ```python
 # tests/practice_harvest/test_dedup.py
-from scripts.practice_harvest.collect import SourceRecord, dedup_records
+from lib.practice_harvest.collect import SourceRecord, dedup_records
 
 def _rec(path, lineage, text):
     return SourceRecord(path=path, lineage=lineage, kind="rules",
@@ -416,7 +416,7 @@ Expected: FAIL — `ImportError: cannot import name 'dedup_records'`
 - [ ] **Step 3: Write minimal implementation**
 
 ```python
-# добавить в scripts/practice_harvest/collect.py
+# добавить в lib/practice_harvest/collect.py
 import hashlib
 
 
@@ -446,7 +446,7 @@ Expected: PASS (3 passed)
 - [ ] **Step 5: Commit**
 
 ```bash
-git add scripts/practice_harvest/collect.py tests/practice_harvest/test_dedup.py
+git add lib/practice_harvest/collect.py tests/practice_harvest/test_dedup.py
 git commit -m "feat(practice-harvest): dedup identical rule files within lineage"
 ```
 
@@ -455,7 +455,7 @@ git commit -m "feat(practice-harvest): dedup identical rule files within lineage
 ### Task 5: Corpus index CLI
 
 **Files:**
-- Create: `scripts/practice_harvest/build_index.py`
+- Create: `lib/practice_harvest/build_index.py`
 - Test: `tests/practice_harvest/test_build_index.py`
 
 CLI обходит реальные корни, собирает `SourceRecord`-ы, dedup, пишет `corpus.json`:
@@ -468,7 +468,7 @@ CLI обходит реальные корни, собирает `SourceRecord`-
 # tests/practice_harvest/test_build_index.py
 import json
 from pathlib import Path
-from scripts.practice_harvest.build_index import build_corpus
+from lib.practice_harvest.build_index import build_corpus
 
 def _touch(p: Path, text="x"):
     p.parent.mkdir(parents=True, exist_ok=True)
@@ -515,7 +515,7 @@ Expected: FAIL — `ModuleNotFoundError`
 - [ ] **Step 3: Write minimal implementation**
 
 ```python
-# scripts/practice_harvest/build_index.py
+# lib/practice_harvest/build_index.py
 """Собрать корпус из реальных корней и записать corpus.json."""
 from __future__ import annotations
 import argparse
@@ -525,11 +525,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
 
-from scripts.practice_harvest.collect import (
+from lib.practice_harvest.collect import (
     SourceRecord, classify_kind, dedup_records, track_for_kind,
 )
-from scripts.practice_harvest.lineage import canonical_lineage
-from scripts.practice_harvest.session_parse import parse_session_md
+from lib.practice_harvest.lineage import canonical_lineage
+from lib.practice_harvest.session_parse import parse_session_md
 
 WINDOW_START = "2026-06-10"
 WINDOW_END = "2026-07-10"
@@ -630,7 +630,7 @@ docs/reports/*-practice-harvest-corpus.json
 - [ ] **Step 6: Commit**
 
 ```bash
-git add scripts/practice_harvest/build_index.py tests/practice_harvest/test_build_index.py .gitignore
+git add lib/practice_harvest/build_index.py tests/practice_harvest/test_build_index.py .gitignore
 git commit -m "feat(practice-harvest): corpus index CLI (build_corpus + gitignore raw)"
 ```
 
@@ -639,7 +639,7 @@ git commit -m "feat(practice-harvest): corpus index CLI (build_corpus + gitignor
 ### Task 6: Registry sealed-validator
 
 **Files:**
-- Create: `scripts/practice_harvest/validate_registry.py`
+- Create: `lib/practice_harvest/validate_registry.py`
 - Test: `tests/practice_harvest/test_validate_registry.py`
 
 Валидатор — гейт для интерпретативного выхода фазы B. Схема одной находки:
@@ -647,13 +647,19 @@ git commit -m "feat(practice-harvest): corpus index CLI (build_corpus + gitignor
 domain_independence∈{high,medium,low}, current_location, lift_verdict, source_paths[≥1]`.
 `lift_verdict` ∈ `{new-standard, append:<file>, skip, deferred:code, deferred:skill}`.
 Каждый `source_paths[i]` ДОЛЖЕН существовать на диске (проверяемость факта «практика в файле Y»).
+Registry-уровень: опциональный `examined_no_lift: [lineage,…]` — lineage, просмотренные,
+но не давшие находок (для coverage-гейта). `validate_coverage` требует, чтобы КАЖДЫЙ
+lineage корпуса был либо в `finding.lineage_sources`, либо в `examined_no_lift` — иначе
+синтез неполон (форм-валидатор один этого не ловит).
 
 - [ ] **Step 1: Write the failing test**
 
 ```python
 # tests/practice_harvest/test_validate_registry.py
 import pytest
-from scripts.practice_harvest.validate_registry import validate_finding, ValidationError
+from lib.practice_harvest.validate_registry import (
+    validate_finding, validate_coverage, ValidationError,
+)
 
 def _ok(tmp_path):
     f = tmp_path / "rule.md"
@@ -690,6 +696,22 @@ def test_missing_source_path_on_disk_rejected(tmp_path):
 def test_append_verdict_with_target_ok(tmp_path):
     f = _ok(tmp_path); f["lift_verdict"] = "append:git-naming-conventions.md"
     validate_finding(f)  # no raise
+
+def test_coverage_all_lineages_accounted_passes():
+    # каждый lineage корпуса покрыт: либо в finding, либо в examined_no_lift
+    corpus = {"lineage_counts": {"quant-kb": 3, "rejuve": 5}}
+    registry = {
+        "findings": [{"lineage_sources": ["quant-kb"]}],
+        "examined_no_lift": ["rejuve"],
+    }
+    validate_coverage(registry, corpus)  # no raise
+
+def test_coverage_missing_lineage_rejected():
+    # rejuve присутствует в корпусе, но нигде не учтён → синтез неполон
+    corpus = {"lineage_counts": {"quant-kb": 3, "rejuve": 5}}
+    registry = {"findings": [{"lineage_sources": ["quant-kb"]}], "examined_no_lift": []}
+    with pytest.raises(ValidationError):
+        validate_coverage(registry, corpus)
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -700,7 +722,7 @@ Expected: FAIL — `ModuleNotFoundError`
 - [ ] **Step 3: Write minimal implementation**
 
 ```python
-# scripts/practice_harvest/validate_registry.py
+# lib/practice_harvest/validate_registry.py
 """Sealed-валидатор реестра синтеза (фаза B). Держит интерпретативный выход
 детерминированной схемой + проверкой существования source-path."""
 from __future__ import annotations
@@ -746,7 +768,23 @@ def validate_finding(f: dict) -> None:
             raise ValidationError(f"source_path missing on disk: {sp}")
 
 
-def validate_registry(path: str) -> int:
+def validate_coverage(registry: dict, corpus: dict) -> None:
+    """Гейт полноты синтеза: каждый lineage корпуса должен быть либо в
+    каком-то finding.lineage_sources, либо явно в registry.examined_no_lift.
+    Превращает «я посмотрел везде» в проверяемое свойство — форм-валидатор
+    один этого не ловит (advisor 2026-07-10)."""
+    corpus_lineages = set(corpus.get("lineage_counts", {}))
+    covered: set[str] = set(registry.get("examined_no_lift", []))
+    for f in registry.get("findings", []):
+        covered.update(f.get("lineage_sources", []))
+    missing = corpus_lineages - covered
+    if missing:
+        raise ValidationError(
+            f"coverage gap — lineages neither lifted nor examined_no_lift: "
+            f"{sorted(missing)}")
+
+
+def validate_registry(path: str, corpus_path: str | None = None) -> int:
     data = json.loads(Path(path).read_text(encoding="utf-8"))
     findings = data["findings"] if isinstance(data, dict) else data
     for i, f in enumerate(findings):
@@ -755,24 +793,34 @@ def validate_registry(path: str) -> int:
         except ValidationError as e:
             print(f"FAIL finding[{i}] ({f.get('practice','?')}): {e}")
             return 1
-    print(f"PASS: {len(findings)} findings valid")
+    if corpus_path:
+        corpus = json.loads(Path(corpus_path).read_text(encoding="utf-8"))
+        try:
+            validate_coverage(data, corpus)
+        except ValidationError as e:
+            print(f"FAIL coverage: {e}")
+            return 1
+    print(f"PASS: {len(findings)} findings valid"
+          + (" + coverage complete" if corpus_path else ""))
     return 0
 
 
 if __name__ == "__main__":
-    sys.exit(validate_registry(sys.argv[1]))
+    # usage: validate_registry <registry.json> [corpus.json]
+    _corpus = sys.argv[2] if len(sys.argv) > 2 else None
+    sys.exit(validate_registry(sys.argv[1], _corpus))
 ```
 
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `C:/dev/h2t-skills/.venv/Scripts/pytest tests/practice_harvest/test_validate_registry.py -v`
-Expected: PASS (5 passed)
+Expected: PASS (7 passed)
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add scripts/practice_harvest/validate_registry.py tests/practice_harvest/test_validate_registry.py
-git commit -m "feat(practice-harvest): sealed registry validator (schema + source-path existence)"
+git add lib/practice_harvest/validate_registry.py tests/practice_harvest/test_validate_registry.py
+git commit -m "feat(practice-harvest): sealed registry validator (schema + source-path + coverage gate)"
 ```
 
 ---
@@ -789,7 +837,7 @@ git commit -m "feat(practice-harvest): sealed registry validator (schema + sourc
 
 Run (одной строкой, реальные корни):
 ```bash
-C:/dev/h2t-skills/.venv/Scripts/python -m scripts.practice_harvest.build_index --repo-root C:/dev/crypto-regime-spike --repo-root C:/dev/quant-kb --repo-root C:/dev/h2t-skills --repo-root C:/dev/POS --repo-root C:/dev/kraken --repo-root C:/dev/h2t-business --repo-root C:/dev/invest-research --repo-root C:/work/rejuve --repo-root C:/work/claudeworking --session-root "C:/Users/stani/.h2t/sessions/AUTOMATA" --memory-root "C:/Users/stani/.claude/projects/C--dev-h2t-skills/memory"
+C:/dev/h2t-skills/.venv/Scripts/python -m lib.practice_harvest.build_index --repo-root C:/dev/crypto-regime-spike --repo-root C:/dev/quant-kb --repo-root C:/dev/h2t-skills --repo-root C:/dev/POS --repo-root C:/dev/kraken --repo-root C:/dev/h2t-business --repo-root C:/dev/invest-research --repo-root C:/work/rejuve --repo-root C:/work/claudeworking --session-root "C:/Users/stani/.h2t/sessions/AUTOMATA" --memory-root "C:/Users/stani/.claude/projects/C--dev-h2t-skills/memory"
 ```
 Expected: `corpus: N records across M lineages -> docs/reports/2026-07-10-practice-harvest-corpus.json`
 
@@ -798,28 +846,37 @@ Expected: `corpus: N records across M lineages -> docs/reports/2026-07-10-practi
 Run: `ls C:/dev/docs/standards/`
 Записать имена — база для `lift_verdict = append:<file>` / `skip`.
 
-- [ ] **Step 3: Синтезировать находки в оба трека**
-
-Прочитать `corpus.json`. Для каждой повторяющейся практики создать finding-объект по схеме Task 6. Правила синтеза:
+Общие правила синтеза (для обоих треков ниже):
 - **recurrence** = число *разных canonical lineage*, где практика встречается (source-diversity: 1 lineage → пометить, но не выбрасывать).
 - **domain_independence** = оценка переносимости (high/medium/low), НЕ производная от recurrence.
 - **lift_verdict** через diff против списка из Step 2: `new-standard` | `append:<file>` | `skip` (уже покрыто) | `deferred:code`/`deferred:skill` (дом — не гайдбук).
 - **source_paths** = реальные пути из `record.path` (валидатор проверит существование).
-- Держать треки раздельно (`track` поле).
+- Каждый рассмотренный canonical lineage должен попасть либо в чью-то `lineage_sources`, либо в registry-level `examined_no_lift` (coverage-гейт Step 5).
 
-Записать `docs/reports/2026-07-10-practice-harvest-registry.json`:
+- [ ] **Step 3a: Синтез процессного трека**
+
+Прочитать `corpus.json`, отфильтровать `record.track ∈ {process, both}` (rules / CLAUDE.md / memory). Сгруппировать по повторяющейся практике (codex-дисциплина, destructive-ops/git-safety, autonomous-runbook, gates, research/evidence). Для каждой — finding-объект с `track: "process"` по схеме Task 6. Накапливать в списке `findings`.
+
+- [ ] **Step 3b: Синтез технического трека**
+
+Отфильтровать `record.track ∈ {technical, both}` (session what-done / specs / plans / pipeline-rules). Сгруппировать пайплайн-паттерны (extraction/distillation, research-intake, two-gate verdict, validation-library, batch-telemetry). Для каждой — finding-объект с `track: "technical"`. Добавить в `findings`.
+
+- [ ] **Step 3c: Собрать registry.json + учесть непокрытые lineage**
+
+Объединить оба трека. Любой canonical lineage из `corpus.lineage_counts`, не попавший ни в одну находку, внести в `examined_no_lift` (осознанно просмотрен, находок нет). Записать `docs/reports/2026-07-10-practice-harvest-registry.json`:
 ```json
 {
   "window": ["2026-06-10", "2026-07-10"],
   "generated": "2026-07-10",
+  "examined_no_lift": ["kraken"],
   "findings": [
     {
-      "practice": "…",
+      "practice": "codex second-opinion gate before merge",
       "track": "process",
       "lineage_sources": ["quant-kb", "h2t-skills"],
       "recurrence": 2,
       "domain_independence": "high",
-      "current_location": "…/.claude/rules/….md",
+      "current_location": "quant-kb/.claude/rules/codex-review.md",
       "lift_verdict": "new-standard",
       "source_paths": ["C:/dev/quant-kb/.claude/rules/codex-review.md"]
     }
@@ -827,11 +884,14 @@ Run: `ls C:/dev/docs/standards/`
 }
 ```
 
-- [ ] **Step 4: Прогнать sealed-валидатор — ГЕЙТ**
+- [ ] **Step 4: Прогнать sealed-валидатор c coverage-гейтом — ГЕЙТ**
 
-Run: `C:/dev/h2t-skills/.venv/Scripts/python -m scripts.practice_harvest.validate_registry docs/reports/2026-07-10-practice-harvest-registry.json`
-Expected: `PASS: N findings valid`
-Если FAIL — починить finding (не валидатор), повторить.
+Run (registry + corpus для coverage):
+```bash
+C:/dev/h2t-skills/.venv/Scripts/python -m lib.practice_harvest.validate_registry docs/reports/2026-07-10-practice-harvest-registry.json docs/reports/2026-07-10-practice-harvest-corpus.json
+```
+Expected: `PASS: N findings valid + coverage complete`
+Если FAIL по finding — починить finding (не валидатор). Если FAIL coverage — добить непокрытый lineage (находка или `examined_no_lift`). Повторять до PASS.
 
 - [ ] **Step 5: Commit**
 
@@ -845,7 +905,7 @@ git commit -m "docs(practice-harvest): synthesized practice registry (validated)
 ### Task 8: Render registry + draft guidebooks
 
 **Files:**
-- Create: `scripts/practice_harvest/render_registry.py`
+- Create: `lib/practice_harvest/render_registry.py`
 - Create: `tests/practice_harvest/test_render_registry.py`
 - Create: `docs/reports/2026-07-10-practice-harvest-registry.md` (рендер)
 - Create: `docs/reports/proposed-standards/*.md` (черновики для оператора)
@@ -856,7 +916,7 @@ git commit -m "docs(practice-harvest): synthesized practice registry (validated)
 
 ```python
 # tests/practice_harvest/test_render_registry.py
-from scripts.practice_harvest.render_registry import render_md
+from lib.practice_harvest.render_registry import render_md
 
 REG = {
     "window": ["2026-06-10", "2026-07-10"],
@@ -894,7 +954,7 @@ Expected: FAIL — `ModuleNotFoundError`
 - [ ] **Step 3: Write minimal implementation**
 
 ```python
-# scripts/practice_harvest/render_registry.py
+# lib/practice_harvest/render_registry.py
 """registry.json -> человекочитаемый markdown, сгруппированный по треку."""
 from __future__ import annotations
 import json
@@ -944,7 +1004,7 @@ Expected: PASS (2 passed)
 
 - [ ] **Step 5: Render the real registry**
 
-Run: `C:/dev/h2t-skills/.venv/Scripts/python -m scripts.practice_harvest.render_registry docs/reports/2026-07-10-practice-harvest-registry.json docs/reports/2026-07-10-practice-harvest-registry.md`
+Run: `C:/dev/h2t-skills/.venv/Scripts/python -m lib.practice_harvest.render_registry docs/reports/2026-07-10-practice-harvest-registry.json docs/reports/2026-07-10-practice-harvest-registry.md`
 Expected: `rendered -> docs/reports/2026-07-10-practice-harvest-registry.md`
 
 - [ ] **Step 6: Draft guidebooks for `new-standard` verdicts**
@@ -957,7 +1017,7 @@ Run: `C:/dev/h2t-skills/.venv/Scripts/pytest tests/practice_harvest/ -v`
 Expected: PASS (все задачи)
 
 ```bash
-git add scripts/practice_harvest/render_registry.py tests/practice_harvest/test_render_registry.py docs/reports/2026-07-10-practice-harvest-registry.md docs/reports/proposed-standards/
+git add lib/practice_harvest/render_registry.py tests/practice_harvest/test_render_registry.py docs/reports/2026-07-10-practice-harvest-registry.md docs/reports/proposed-standards/
 git commit -m "docs(practice-harvest): render registry + draft standard proposals"
 ```
 
@@ -970,4 +1030,6 @@ git commit -m "docs(practice-harvest): render registry + draft standard proposal
 - **lineage.py LINEAGE_MAP** — единственная ручная точка; при новом форке дополнить и переревьюить (спец §Boundaries: fork-collapse — операторский справочник).
 - **source-diversity:** находка на 1 canonical lineage валидна, но помечается `⚠` в рендере — не выдавать за общий паттерн без домен-независимости.
 - **Границы честности:** корпус ловит только закристаллизованное (rules/handoff/memory); невыписанные уроки на этой глубине невидимы.
+- **mtime ≠ авторство** для specs/plans: недавний `git pull`/clone ставит mtime = время checkout, окно может втянуть всё или ничего. Session-md пишутся однократно → их mtime надёжен (и это основной источник технического трека). Near-пустой harvest specs/plans — возможно mtime-артефакт, а не реальное отсутствие; не делать вывод «практик нет».
+- **memory-охват — только h2t-skills** (один `--memory-root`; lineage резолвится в бакет `C--dev-h2t-skills`). memory других проектов (`~/.claude/projects/*/memory/`) не покрыта — осознанный scope-call, не полная картина памяти.
 
