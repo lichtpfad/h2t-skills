@@ -1,11 +1,15 @@
 """SkillEval — context manager for skill evaluation.
 
-Dual-write: local JSON (always) + h2t-evals SDK (when H2T_EVALS_ENABLED=1).
+Write behavior is gated by the resolved H2T_EVALS_MODE (see resolve_mode):
+  - off   → no local JSON, no SDK send (default when SDK/token absent)
+  - local → local JSON only
+  - push  → local JSON + h2t-evals SDK send
+Mode is resolved once at construction. SkillEval never crashes its caller.
 
 Usage:
     with SkillEval("session-start", domain="dev", project="h2t-ai") as ev:
         ev.metric("skills.gather_source_success_rate", value_num=0.95)
-    # local JSON written + SDK sent on __exit__
+    # on __exit__: writes per resolved mode (nothing when off)
 
 Promoted from plugins/h2t/lib/gather/eval.py to shared lib/.
 """
