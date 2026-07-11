@@ -23,7 +23,7 @@ Decision-protocol). Verify the branch before every commit.
 - [x] **write-spec** — DONE pre-run: `docs/superpowers/specs/2026-07-11-eval-fallback-degradation.md` exists (merged via #303)
 - [x] **review-spec** — DONE pre-run: spec iterated + reviewed across commits 6ba6d48..128b996, merged #303 (no open [P1])
 - [x] **write-plan** — DONE pre-run: `docs/superpowers/plans/2026-07-11-eval-fallback-degradation.md` exists (merged #303)
-- [ ] **plan-gate** — skill: `codex-rescue (sequential)` · input: plan #303 + spec + advisor-flagged Task4 monkeypatch defect + Task5 connector contracts · done: no [P1] · failure: fix P1 then re-run (<=2) · re-entry: idempotent: re-review
+- [x] **plan-gate** — DONE 2026-07-11: codex-rescue read-only pass. Found 2 confirmed [P1] + 1 [P2] (all verified by me); 1 codex [P2] refuted. Fixes folded into execution (see Decision-log). Plan file (merged #303) unchanged; deviations documented.
 - [ ] **subagent-driven-dev** — skill: `superpowers:subagent-driven-development` · input: 7 TDD tasks in plan · done: all tasks green · failure: per-task gate; escalate on repeated fail · re-entry: continue from first unchecked task
 - [ ] **gates** — skill: `codex + pre-merge-check` · input: full diff · done: no [P1]; suite green · failure: fix then re-run (<=2) · re-entry: idempotent: re-run gate
 - [ ] **e2e** — skill: `real entrypoint run` · input: `h2t-ops evals status --json` · done: DONE / N/A / BLOCKED-DEFERRED · failure: BLOCKED->handoff; behavioral fail->fix · re-entry: idempotent: re-run
@@ -78,3 +78,15 @@ never `git add -A`, never commit a red suite as green, message `WIP:` + what was
   `discover()` auto-finds subpackages via CONNECTOR attr (no registration list), CLI is `h2t_ops.cli`.
 - 2026-07-11 handoff note (BREAKING): after merge, machines without SDK+token flip eval
   telemetry to `off` (local JSON writes stop) unless `H2T_EVALS_MODE=local` is set. Intended.
+- 2026-07-11 PLAN-GATE (codex-rescue, verified by me):
+  - **[P1] Task5 CLI unreachable** — `h2t_ops/cli.py:182` dispatches connectors only if
+    `argv[0] in _MIGRATED` (line 18 set); "evals" absent → `h2t-ops evals status` falls to
+    legacy `_legacy()`, Task5 Step5 smoke fails (unit tests stay green — real e2e gap). FIX:
+    add `"evals"` to `_MIGRATED` in cli.py as an extra step in Task 5. Confirmed by reading cli.py.
+  - **[P1] Task4 monkeypatch miss** — (as above) status.py must call `sess._sdk_available()` /
+    `sess.resolve_mode()` module-qualified. Confirmed.
+  - **[P2→apply] Task4 session_count over-count** — plan's `root.rglob("*.json")` counts any
+    json under evals root; sessions live at `<root>/<skill>/sessions/*.json`. Not a test-fail
+    (test has 1 file) but mislabels count. FIX: use `root.glob("*/sessions/*.json")`. Applied in Task4.
+  - **[P2 refuted] ConnectorSpec client typing** — codex claimed a function is passed; plan
+    passes a STRING `"lib.eval.status:get_status"` (like drive). No action.
