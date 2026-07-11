@@ -1,15 +1,15 @@
 import json
-import os
-from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock
 
 import pytest
 
+from lib.eval import session as sess
 from lib.eval.session import SkillEval
 
 
-def test_skill_eval_local_write_on_success(tmp_path):
+def test_skill_eval_local_write_on_success(tmp_path, monkeypatch):
     """SkillEval writes local JSON file with success status."""
+    monkeypatch.setenv("H2T_EVALS_MODE", "local")
     evals_root = tmp_path / "evals"
     with SkillEval("session-start", domain="dev", project="h2t-ai", evals_root=str(evals_root)):
         pass  # success (no exception)
@@ -23,8 +23,9 @@ def test_skill_eval_local_write_on_success(tmp_path):
     assert "ended_at" in record
 
 
-def test_skill_eval_local_write_on_failure(tmp_path):
+def test_skill_eval_local_write_on_failure(tmp_path, monkeypatch):
     """SkillEval writes failure status when exception raised."""
+    monkeypatch.setenv("H2T_EVALS_MODE", "local")
     evals_root = tmp_path / "evals"
     with pytest.raises(ValueError):
         with SkillEval("handoff", domain="dev", project="p", evals_root=str(evals_root)):
@@ -36,8 +37,9 @@ def test_skill_eval_local_write_on_failure(tmp_path):
     assert record["status"] == "failure"
 
 
-def test_skill_eval_metrics_recorded(tmp_path):
+def test_skill_eval_metrics_recorded(tmp_path, monkeypatch):
     """Metrics passed via .metric() appear in local JSON."""
+    monkeypatch.setenv("H2T_EVALS_MODE", "local")
     evals_root = tmp_path / "evals"
     with SkillEval("session-start", domain="dev", project="p", evals_root=str(evals_root)) as ev:
         ev.metric("skills.gather_source_success_rate", value_num=0.85)
@@ -163,3 +165,77 @@ def test_close_handles_graph_exception_gracefully():
         node_id = ev.close(0.9)
 
     assert node_id is None
+
+
+def test_resolve_mode_explicit_wins(monkeypatch):
+    monkeypatch.setattr(sess, "_sdk_available", lambda: True)
+    assert sess.resolve_mode({"H2T_EVALS_MODE": "off"}) == "off"
+    assert sess.resolve_mode({"H2T_EVALS_MODE": "local"}) == "local"
+    assert sess.resolve_mode({"H2T_EVALS_MODE": "push"}) == "push"
+
+
+def test_resolve_mode_auto_push_when_sdk_and_token(monkeypatch):
+    monkeypatch.setattr(sess, "_sdk_available", lambda: True)
+    assert sess.resolve_mode({"H2T_EVALS_TOKEN": "t"}) == "push"
+
+
+def test_resolve_mode_auto_off_without_sdk(monkeypatch):
+    monkeypatch.setattr(sess, "_sdk_available", lambda: False)
+    assert sess.resolve_mode({"H2T_EVALS_TOKEN": "t"}) == "off"
+
+
+def test_resolve_mode_auto_off_without_token(monkeypatch):
+    monkeypatch.setattr(sess, "_sdk_available", lambda: True)
+    assert sess.resolve_mode({}) == "off"
+
+
+def test_resolve_mode_legacy_enabled_maps_push(monkeypatch):
+    monkeypatch.setattr(sess, "_sdk_available", lambda: False)
+    assert sess.resolve_mode({"H2T_EVALS_ENABLED": "1"}) == "push"
+
+
+def test_resolve_mode_invalid_behaves_as_auto(monkeypatch):
+    monkeypatch.setattr(sess, "_sdk_available", lambda: False)
+    assert sess.resolve_mode({"H2T_EVALS_MODE": "garbage"}) == "off"
+
+
+def test_off_mode_writes_nothing(tmp_path, monkeypatch):
+    monkeypatch.setattr(sess, "_sdk_available", lambda: False)
+    for var in ("H2T_EVALS_MODE", "H2T_EVALS_TOKEN", "H2T_EVALS_ENABLED"):
+        monkeypatch.delenv(var, raising=False)
+    evals_root = tmp_path / "evals"
+    with sess.SkillEval("session-start", domain="d", project="p",
+                        evals_root=str(evals_root)) as ev:
+        ev.metric("skills.token_consumption", value_num=1.0)
+    assert not evals_root.exists()
+
+
+def test_push_with_absent_sdk_degrades_to_local(tmp_path, monkeypatch):
+    monkeypatch.setenv("H2T_EVALS_MODE", "push")
+
+    def _boom(self, status):
+        raise ImportError("no sdk")
+
+    monkeypatch.setattr(sess.SkillEval, "_send_central", _boom)
+    evals_root = tmp_path / "evals"
+    with sess.SkillEval("handoff", domain="d", project="p",
+                        evals_root=str(evals_root)):
+        pass
+    files = list((evals_root / "handoff" / "sessions").glob("*.json"))
+    assert len(files) == 1
+
+
+def test_session_imports_only_stdlib():
+    import ast
+    import sys
+    import pathlib
+    tree = ast.parse(pathlib.Path(sess.__file__).read_text(encoding="utf-8"))
+    roots = set()
+    for node in tree.body:
+        if isinstance(node, ast.Import):
+            for a in node.names:
+                roots.add(a.name.split(".")[0])
+        elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
+            roots.add(node.module.split(".")[0])
+    non_stdlib = roots - set(sys.stdlib_module_names)
+    assert non_stdlib == set(), f"non-stdlib top-level imports: {non_stdlib}"
