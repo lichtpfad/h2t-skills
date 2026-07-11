@@ -75,8 +75,14 @@ terminal behavior:
 `auto`, a missing SDK resolves to `off` before this branch is reached; the degradation
 matters for *explicit* `H2T_EVALS_MODE=push` on a machine where the SDK later breaks.)
 
-The mode is resolved once in `__init__` and stored. `off` short-circuits every public
-method.
+The mode is resolved once in `__init__` and stored. `off` short-circuits the **eval writes**
+(`_write_local` + `_send_central`).
+
+**Scope of "mode":** the mode governs eval telemetry writes only (local JSON + central
+push). The `skill_graph` lesson hook in `__exit__`/`close` is a *separate* subsystem
+(knowledge graph, not h2t-evals) and remains gated solely by whether a `skill_graph` was
+passed in — it is **not** disabled by `off`. This preserves existing `skill_graph` behavior
+and its tests.
 
 ### 3. Robustness (centralized)
 
@@ -130,6 +136,14 @@ method.
 - Invalid `H2T_EVALS_MODE` → resolves to `auto` (never raises).
 - Invariant: `eval.session` imports only stdlib at module top.
 - `status` returns the correct dict per mode (mode/source/SDK/token/dir/count).
+- **Existing-test migration:** the current local-write tests in `lib/eval/test_session.py`
+  (`test_skill_eval_local_write_on_success`, `..._on_failure`, `..._metrics_recorded`) rely
+  on implicit local write with no env set. Under the new `auto` default they must set
+  `H2T_EVALS_MODE=local` explicitly (they test local-write behavior). The `skill_graph`
+  lesson tests are unaffected (mode-independent, see §2/§3).
+- **Parity:** a test asserts `lib/eval/session.py` and
+  `plugins/h2t-core/lib/eval/session.py` stay byte-identical (guards the two-copy drift,
+  since `check_marketplace_sync.py` does not cover source parity).
 
 ## Out of scope
 
