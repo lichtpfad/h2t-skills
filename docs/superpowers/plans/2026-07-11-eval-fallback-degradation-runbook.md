@@ -27,7 +27,7 @@ Decision-protocol). Verify the branch before every commit.
 - [x] **subagent-driven-dev** — DONE 2026-07-11: all 7 TDD tasks executed (red→green→commit each). Plan-gate fixes folded in. Final scoped suite 1675 passed / 0 fail; ruff@latest clean on changed files. Commits 48b4f3e..f00a263.
 - [x] **gates** — DONE 2026-07-11 council finish-gate = **SOUND**. codex final: NO [P1] (1 P2 docstring, fixed 05ee948). Opus Lens-A (correctness): SOUND, P2s out-of-scope (close(None) TypeError — no live caller; docstring nuance). Opus Lens-B (integration/regression): SOUND — traced all SkillEval callers (gather.py:130, writer.py:230, lib/cli/main.py:102), only corpus reader is read-only status.py; off-by-default = clean stop, no downstream misbehave; vendored parity byte-identical; connector reachable e2e. Zero [P1] across 3 lenses. pre-merge-check next.
 - [x] **e2e** — DONE 2026-07-11: `python -m h2t_ops.cli evals status --json` returns valid envelope (mode=off, sdk_available=true, token_present=false, session_count real); human form + `connectors`/`doctor` list evals without error (Lens-B verified). pre-merge-check: Security PASS / Tests 1096 PASS / Build PASS (v3.2.13) / Plan 7/7 → READY.
-- [ ] **PR** — skill: `superpowers:finishing-a-development-branch` · input: branch feat/eval-fallback-impl · done: PR opened · failure: escalate · re-entry: continue: reuse branch
+- [x] **PR** — DONE 2026-07-11: pushed feat/eval-fallback-impl; opened PR #304 (https://github.com/lichtpfad/h2t-skills/pull/304). NOT merged (merge to main = hard-stop, operator decision).
 - [ ] **handoff** — skill: `h2t-core:handoff` · input: run summary · done: session record written · failure: n/a (terminal) · re-entry: idempotent: re-run handoff
 
 ## Gates
