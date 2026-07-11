@@ -411,7 +411,7 @@ Invoke `h2t-core:init-project` from `C:/dev/agentic-kb` so it surfaces in dev-ov
 - [x] `pytest` + `lint_wiki` green on this config (Task 8) — `WORKS-IN-PRACTICE` unreached by design (#295).
 - [x] A1↔A2 integration verified: ladder membership + rank-0 council-exemption + `domain_recurrence` axis exercised (Task 8 Step 2).
 - [ ] Retrieval MVP + consumer-mapping = **A3** (separate plan).
-- [ ] One council-run over a P0 topic (spec A criterion) = phase-2 / #295 (needs the outcome bridge; not reachable in this MVP).
+- [~] One council-run over a P0 topic → **advisory verdicts** (spec A criterion). **Correction (finish-gate):** a council RUN (`parse_claims` → 3 judge sections → `synthesize_council` majority vote → `pipeline-state.json`) is **reachable NOW** — it produces advisory verdicts and needs NOTHING from #295. Only *promotion* to `WORKS-IN-PRACTICE` needs the #295 outcome bridge. The council **write-path was smoke-tested green** in A2's finish-gate (parse_claims on `subagent-orchestration` + synthesize_council under the 3-judge / `vote_threshold: null` config → correct 2-of-3 majority; smoke artifacts reverted, KB stays HYPOTHESIS-only). A full *live* advisory-council pass over P0 topics is deferred to **A3** as low-value-until-#295 (the Generalization judge lacks application-outcome inputs to PASS anything meaningfully), NOT because it is unreachable.
 
 ## Self-review notes
 
