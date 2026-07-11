@@ -113,8 +113,16 @@ and its tests.
 
 ### 5. Parity & back-compat
 
-- Apply the `session.py` changes to the canonical `lib/eval/session.py` **and** the vendored
-  `plugins/h2t-core/lib/eval/session.py` (avoid the known two-copy drift).
+- **Runtime copy (verified):** `h2t-gather` (`h2t_ops.gather_entry:main`) and `h2t-handoff`
+  run the *plugin* scripts via `run_plugin_main`, whose sys.path bootstrap inserts
+  `plugins/h2t-core/lib` first — so the **vendored** `plugins/h2t-core/lib/eval/session.py`
+  is the live copy at runtime. Root `lib/eval/session.py` is the canonical source (and what
+  `test_session.py` imports); `lib/cli/main.py` is legacy and not wired to `h2t-gather`.
+- Apply the `session.py` change to the canonical root, then **sync the vendored copy
+  byte-identical** to it. The two currently drift (vendored is stale — it lacks the
+  `skill_graph`/`close()` block); syncing both fixes the fallback *and* that pre-existing
+  drift. The added `skill_graph` code is dormant in the hook path (`gather.py` does not pass
+  `skill_graph`), so the sync is behavior-safe there.
 - **Behavior change:** the default flips from local-by-default to `auto`. Under `auto`, a
   machine with the SDK + a token auto-activates `push` (previously it only wrote local); a
   machine without them resolves to `off` (previously it wrote local). So the old implicit
