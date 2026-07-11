@@ -102,3 +102,13 @@ never `git add -A`, never commit a red suite as green, message `WIP:` + what was
 - 2026-07-11 Task7: ruff not installed in .venv and not a CI gate; repo carries ~200
   pre-existing ruff@latest findings. Verified my changed files clean under ruff@latest
   (fixed net-new E402 + a few pre-existing F401/F541 in files I was already editing).
+- 2026-07-11 FINISH-GATE (advisor) — **Task3 enforcement gap fixed**: parity guard was at
+  `tests/` root; CI (`evals.yml`) runs `pytest lib/`, `pytest tests/core tests/connectors`,
+  autonomous-run scripts — none collect bare `tests/`, so the guard was DEAD in CI (my local
+  `pytest lib/ tests/` was wider than the gate → false confidence). `git mv` into `tests/core`
+  (CI-covered) + fixed ROOT `parents[1]→parents[2]` for the deeper location. Near-miss: the
+  first commit staged the rename before the depth edit, committing parents[1] (would FileNotFound
+  in CI); caught and fixed in follow-up commit 63ac4d3. Verified: `pytest tests/core tests/connectors`
+  = 984 passed incl. parity. Restores drift enforcement (project_lib_gather_drift class).
+- 2026-07-11 verified `Refs #289` is correct tracking issue (#289 OPEN: "Integrate skill
+  telemetry with h2t-evals — push analytics + cost control").
