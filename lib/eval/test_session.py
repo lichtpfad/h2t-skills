@@ -163,3 +163,38 @@ def test_close_handles_graph_exception_gracefully():
         node_id = ev.close(0.9)
 
     assert node_id is None
+
+
+from lib.eval import session as sess
+
+
+def test_resolve_mode_explicit_wins(monkeypatch):
+    monkeypatch.setattr(sess, "_sdk_available", lambda: True)
+    assert sess.resolve_mode({"H2T_EVALS_MODE": "off"}) == "off"
+    assert sess.resolve_mode({"H2T_EVALS_MODE": "local"}) == "local"
+    assert sess.resolve_mode({"H2T_EVALS_MODE": "push"}) == "push"
+
+
+def test_resolve_mode_auto_push_when_sdk_and_token(monkeypatch):
+    monkeypatch.setattr(sess, "_sdk_available", lambda: True)
+    assert sess.resolve_mode({"H2T_EVALS_TOKEN": "t"}) == "push"
+
+
+def test_resolve_mode_auto_off_without_sdk(monkeypatch):
+    monkeypatch.setattr(sess, "_sdk_available", lambda: False)
+    assert sess.resolve_mode({"H2T_EVALS_TOKEN": "t"}) == "off"
+
+
+def test_resolve_mode_auto_off_without_token(monkeypatch):
+    monkeypatch.setattr(sess, "_sdk_available", lambda: True)
+    assert sess.resolve_mode({}) == "off"
+
+
+def test_resolve_mode_legacy_enabled_maps_push(monkeypatch):
+    monkeypatch.setattr(sess, "_sdk_available", lambda: False)
+    assert sess.resolve_mode({"H2T_EVALS_ENABLED": "1"}) == "push"
+
+
+def test_resolve_mode_invalid_behaves_as_auto(monkeypatch):
+    monkeypatch.setattr(sess, "_sdk_available", lambda: False)
+    assert sess.resolve_mode({"H2T_EVALS_MODE": "garbage"}) == "off"

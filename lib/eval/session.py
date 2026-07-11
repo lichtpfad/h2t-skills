@@ -17,6 +17,36 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
+_VALID_MODES = ("auto", "off", "local", "push")
+
+
+def _sdk_available() -> bool:
+    """True if the h2t_evals SDK client is importable (cheap, no network)."""
+    try:
+        import h2t_evals.sdk  # noqa: F401
+        return True
+    except Exception:
+        return False
+
+
+def resolve_mode(env=None) -> str:
+    """Resolve H2T_EVALS_MODE to a terminal mode: 'off' | 'local' | 'push'.
+
+    Priority: explicit off/local/push > explicit 'auto' (resolved) >
+    legacy H2T_EVALS_ENABLED=1 (push) > auto. 'auto' resolves to 'push' when
+    the SDK is importable AND H2T_EVALS_TOKEN is set, else 'off'. An unset or
+    invalid H2T_EVALS_MODE behaves as auto (with the legacy flag honored).
+    """
+    env = env if env is not None else os.environ
+    raw = (env.get("H2T_EVALS_MODE") or "").strip().lower()
+    if raw in ("off", "local", "push"):
+        return raw
+    if raw != "auto" and env.get("H2T_EVALS_ENABLED") == "1":
+        return "push"
+    if _sdk_available() and env.get("H2T_EVALS_TOKEN"):
+        return "push"
+    return "off"
+
 
 class SkillEval:
     def __init__(
