@@ -69,17 +69,22 @@ class SkillEval:
         self._score_after: Optional[float] = None
         self._metrics: list[dict] = []
         self._started_at: Optional[str] = None
+        self._mode = resolve_mode()
 
     def __enter__(self) -> "SkillEval":
         self._started_at = datetime.now(timezone.utc).isoformat()
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb) -> bool:
-        status = "failure" if exc_type else "success"
-        ended_at = datetime.now(timezone.utc).isoformat()
-        self._write_local(status, ended_at)
-        if os.environ.get("H2T_EVALS_ENABLED") == "1":
-            self._send_central(status)
+        try:
+            if self._mode in ("local", "push"):
+                status = "failure" if exc_type else "success"
+                ended_at = datetime.now(timezone.utc).isoformat()
+                self._write_local(status, ended_at)
+                if self._mode == "push":
+                    self._send_central(status)
+        except Exception:
+            pass  # never crash a skill for eval failure
         if exc_type is not None and self._skill_graph is not None:
             try:
                 self._skill_graph.add_lesson(
@@ -129,6 +134,8 @@ class SkillEval:
         value_text: Optional[str] = None,
     ) -> None:
         """Record a metric to be written on context exit."""
+        if self._mode == "off":
+            return
         entry: dict = {"key": key}
         if value_num is not None:
             entry["value_num"] = value_num
