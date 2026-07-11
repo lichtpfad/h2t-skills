@@ -1,0 +1,80 @@
+# Autonomous run — Eval fallback degradation
+
+> **Durable spine (autonomous run, 2026-07-11).** Survives context compaction / blocker.
+> A fresh session resumes from HERE.
+> **Resume:** `autonomous-run resume docs/superpowers/plans/2026-07-11-eval-fallback-degradation-runbook.md`
+
+## Durable-spine header
+
+Authorized: autonomous delivery through handoff. On a **hard-stop or unresolvable blocker**
+→ run `h2t-core:handoff` — NOT on a default-shaped decision (those are auto-resolved, see
+Decision-protocol). Verify the branch before every commit.
+
+## Where things are
+
+- Branch: `feat/eval-fallback-impl`
+- Spec: `docs/superpowers/specs/2026-07-11-eval-fallback-degradation.md`
+- Issue: #289
+- Tests: `C:/dev/h2t-skills/.venv/Scripts/pytest`
+- e2e applicability: applies (CLI smoke: h2t-ops evals status --json, Task5 Step5 + full suite Task7)
+
+## Pipeline steps
+
+- [x] **write-spec** — DONE pre-run: `docs/superpowers/specs/2026-07-11-eval-fallback-degradation.md` exists (merged via #303)
+- [x] **review-spec** — DONE pre-run: spec iterated + reviewed across commits 6ba6d48..128b996, merged #303 (no open [P1])
+- [x] **write-plan** — DONE pre-run: `docs/superpowers/plans/2026-07-11-eval-fallback-degradation.md` exists (merged #303)
+- [ ] **plan-gate** — skill: `codex-rescue (sequential)` · input: plan #303 + spec + advisor-flagged Task4 monkeypatch defect + Task5 connector contracts · done: no [P1] · failure: fix P1 then re-run (<=2) · re-entry: idempotent: re-review
+- [ ] **subagent-driven-dev** — skill: `superpowers:subagent-driven-development` · input: 7 TDD tasks in plan · done: all tasks green · failure: per-task gate; escalate on repeated fail · re-entry: continue from first unchecked task
+- [ ] **gates** — skill: `codex + pre-merge-check` · input: full diff · done: no [P1]; suite green · failure: fix then re-run (<=2) · re-entry: idempotent: re-run gate
+- [ ] **e2e** — skill: `real entrypoint run` · input: `h2t-ops evals status --json` · done: DONE / N/A / BLOCKED-DEFERRED · failure: BLOCKED->handoff; behavioral fail->fix · re-entry: idempotent: re-run
+- [ ] **PR** — skill: `superpowers:finishing-a-development-branch` · input: branch feat/eval-fallback-impl · done: PR opened · failure: escalate · re-entry: continue: reuse branch
+- [ ] **handoff** — skill: `h2t-core:handoff` · input: run summary · done: session record written · failure: n/a (terminal) · re-entry: idempotent: re-run handoff
+
+## Gates
+
+- Codex review-gate after each milestone/checkpoint AND at the end (embedded content,
+  read-only). GATE FAIL if any `[P1]`.
+- Council finish-gate at the end (codex + >=2 Opus lenses) -> SOUND / blockers.
+- pre-merge-check before PR.
+- `N_gate_attempts` = 2. One attempt = one fix edit + one gate/test re-run.
+
+## Decision-protocol
+
+Auto-resolve ONLY allow-listed, reversible decisions (library/API call shape; formatting/
+naming within conventions; test-fixture values; doc wording): research best-practice ->
+pick -> append to Decision-log -> continue. Escalate everything else.
+
+Hard-stops (stop -> eligible WIP-commit -> handoff; never auto-resolve):
+- **Irreversible / destructive** (delete/force-push, merge to main, external publish/send,
+  deleting/modifying pre-existing untracked files).
+- **Money / budget** (paid runs, token budget over limit, council/codex beyond cost-gate).
+- **Scope / architecture change** (deviation from approved spec, new invariant, redefined goal).
+- **Gate not fixable in** `N_gate_attempts`.
+
+## Execution principles
+
+Verify branch before every commit; `git mv`/`git rm` only; never delete/modify pre-existing
+untracked files (creating this run's own artifacts is allowed). One command per Bash call.
+Frequent small commits. Codex subagents one-at-a-time, never parallel.
+
+## Blocker / fail-safe protocol
+
+Record the blocker + what was tried -> eligible WIP-commit (stage only intentional files,
+never `git add -A`, never commit a red suite as green, message `WIP:` + what was left) ->
+`h2t-core:handoff`. Never force a broken merge or a false-green.
+
+## Decision-log
+
+- 2026-07-11 pre-flight (advisor): **Task4 status.py deviation** — plan's `get_status`
+  calls bare `_sdk_available()` imported into the status module, which `monkeypatch.setattr(sess, "_sdk_available", …)`
+  does NOT reach → `test_status_off_when_no_sdk_or_token` fails on `sdk_available is False`
+  (h2t_evals IS importable in this venv, verified). Fix: status.py uses
+  `import lib.eval.session as sess` and calls `sess._sdk_available()` / `sess.resolve_mode()`.
+  Bounded to Task4 impl; makes the plan's own declared tests pass. Allow-listed (call-shape).
+- 2026-07-11 pre-flight: **Branch** — plan-referenced `feat/eval-fallback-degradation`
+  already exists as a stale ancestor-of-main pointer (pre-#303). Used `feat/eval-fallback-impl`
+  off main instead; did not touch the stale branch.
+- 2026-07-11 pre-flight: contracts verified before Task5 — `ConnectorSpec(name,help,client,register)`,
+  `discover()` auto-finds subpackages via CONNECTOR attr (no registration list), CLI is `h2t_ops.cli`.
+- 2026-07-11 handoff note (BREAKING): after merge, machines without SDK+token flip eval
+  telemetry to `off` (local JSON writes stop) unless `H2T_EVALS_MODE=local` is set. Intended.
