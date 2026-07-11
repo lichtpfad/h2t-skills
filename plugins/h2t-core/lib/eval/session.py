@@ -116,7 +116,7 @@ class SkillEval:
         try:
             return self._skill_graph.add_lesson(
                 skill_name=self.skill,
-                trigger=f"eval score change",
+                trigger="eval score change",
                 resolution=f"score {self._score_before:.3f} → {score:.3f}",
                 lesson_type="eval-finding",
                 session_id=f"{self.skill}-{self._started_at or ''}",

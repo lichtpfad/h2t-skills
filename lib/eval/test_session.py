@@ -1,10 +1,9 @@
 import json
-import os
-from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock
 
 import pytest
 
+from lib.eval import session as sess
 from lib.eval.session import SkillEval
 
 
@@ -166,9 +165,6 @@ def test_close_handles_graph_exception_gracefully():
         node_id = ev.close(0.9)
 
     assert node_id is None
-
-
-from lib.eval import session as sess
 
 
 def test_resolve_mode_explicit_wins(monkeypatch):
