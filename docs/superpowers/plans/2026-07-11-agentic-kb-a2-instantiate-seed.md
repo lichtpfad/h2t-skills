@@ -358,14 +358,14 @@ git -C C:/dev/agentic-kb commit -m "feat: seed 40 practice-harvest findings as H
 
 ### Task 8: Acceptance gate (A1↔A2 integration) — the real done-gate
 
-First exercise of A1's ladder + strength_axis + council-completeness outside A1's own tests. A composition gap surfaces here.
+First exercise of A1's ladder + strength_axis + council-completeness outside A1's own tests. A composition gap surfaces here. **NB (codex review):** the template `pytest` suite builds throwaway fixture configs in `tmp_path` — it does NOT load the repo-root `kb.config.json`. So the actual A1↔A2 integration is exercised ONLY by `lint_wiki.py wiki/` (Step 2), which calls `load_config()` on the real root config. Step 1 confirms the template code is intact; Step 2 is the config-exercising gate.
 
-- [ ] **Step 1: Template tests still green on this config**
+- [ ] **Step 1: Template code intact (fixture-level, does NOT exercise root config)**
 
 Run: `C:/dev/agentic-kb/.venv/Scripts/pytest C:/dev/agentic-kb/tests/ -q`
-Expected: all pass (35).
+Expected: all pass (35). This proves the A1-upgraded template code is intact in the clone; it uses fixture configs, not agentic-kb's root config (that's Step 2).
 
-- [ ] **Step 2: Lint the seeded wiki — the core acceptance**
+- [ ] **Step 2: Lint the seeded wiki — the real A1↔A2 integration gate (loads root config)**
 
 Run: `C:/dev/agentic-kb/.venv/Scripts/python C:/dev/agentic-kb/scripts/lint_wiki.py C:/dev/agentic-kb/wiki/`
 Expected: `OK:` for all 7 topic pages. If `wiki/_template.md` is still present it will FAIL on its placeholder date — if so, remove it (`git -C C:/dev/agentic-kb rm wiki/_template.md`) and re-lint.
@@ -391,7 +391,7 @@ git -C C:/dev/agentic-kb commit -m "chore: lint-clean seeded wiki"
 
 ### Task 9: Publish + register (operator-gated)
 
-**Outward-facing — confirm with operator before pushing (new repo).**
+**Outward-facing — confirm with operator before pushing (new repo). For an autonomous run this is a HARD-STOP: execute Tasks 1-8 autonomously, then STOP here and hand off for operator sign-off on repo creation + push (creating a public/remote repo is not auto-resolvable).**
 
 - [ ] **Step 1: Create the GitHub repo** (operator-gated; choose `--private`/`--public` with operator)
 
