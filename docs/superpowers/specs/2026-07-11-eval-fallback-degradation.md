@@ -39,16 +39,30 @@ only via the on-demand `status` command.
 
 ### 1. Mode contract (resolution)
 
-A single tri-state env var governs behavior: `H2T_EVALS_MODE ∈ {off, local, push}`
+A single env var governs behavior: `H2T_EVALS_MODE ∈ {auto, off, local, push}`
 (case-insensitive). Resolution priority:
 
 1. `H2T_EVALS_MODE` set to a valid value → use it.
 2. else `H2T_EVALS_ENABLED=1` (legacy) → `push`.
-3. else → `off` (new default).
+3. else → `auto` (default).
 
-An invalid `H2T_EVALS_MODE` value resolves to `off` (never raises).
+An invalid `H2T_EVALS_MODE` value resolves to `auto` (never raises).
+
+**`auto` resolution** — cheap, per-run, **no network**:
+
+- → `push` if `h2t_evals.sdk` is importable **and** `H2T_EVALS_TOKEN` is set.
+- → `off` otherwise.
+
+Rationale: an external user without the SDK/token gets `off` (zero writes — same
+cleanliness as explicit off); an internal user with SDK + token auto-activates `push` with
+no flag. Self-healing: once the SDK is installed and a token is set, the next run activates
+on its own. The network is never probed at resolution time (a transient outage must not flip
+the mode — `push` already spools and, per h2t-evals#96, fails loud only on permanent 4xx).
 
 ### 2. Per-mode behavior (null-object)
+
+`auto` first resolves to a terminal mode (`push` or `off`, per §1); the table below is the
+terminal behavior:
 
 | mode  | `_write_local` | `_send_central` |
 |-------|:--------------:|:---------------:|
@@ -57,7 +71,9 @@ An invalid `H2T_EVALS_MODE` value resolves to `off` (never raises).
 | push  | ✓              | ✓ (guarded)     |
 
 `push` + SDK unavailable (e.g. h2t-evals#99 psycopg import, or any `ImportError`) →
-**graceful degradation to local** (central becomes a no-op); no exception.
+**graceful degradation to local** (central becomes a no-op); no exception. (Note: under
+`auto`, a missing SDK resolves to `off` before this branch is reached; the degradation
+matters for *explicit* `H2T_EVALS_MODE=push` on a machine where the SDK later breaks.)
 
 The mode is resolved once in `__init__` and stored. `off` short-circuits every public
 method.
@@ -83,16 +99,21 @@ method.
   - token present? (masked);
   - `service_url` (configured value only — not probed);
   - local eval dir path + session-file count;
-  - activation hint: `to enable: export H2T_EVALS_MODE=local` (or `push`).
+  - activation hint tuned to the resolved state: if `auto` resolved to `off`, name the
+    missing signal (SDK not importable and/or `H2T_EVALS_TOKEN` unset) and note that
+    supplying both auto-activates `push`, or `export H2T_EVALS_MODE=local` to force
+    local-only.
 - No live service probing in this scope (a `--probe` flag is a possible follow-up).
 
 ### 5. Parity & back-compat
 
 - Apply the `session.py` changes to the canonical `lib/eval/session.py` **and** the vendored
   `plugins/h2t-core/lib/eval/session.py` (avoid the known two-copy drift).
-- **Behavior change:** the default flips from local-by-default to `off`. Existing users who
-  relied on implicit local writes must set `H2T_EVALS_MODE=local` (or `push`). The `status`
-  command surfaces the activation hint; note the change in CHANGELOG.
+- **Behavior change:** the default flips from local-by-default to `auto`. Under `auto`, a
+  machine with the SDK + a token auto-activates `push` (previously it only wrote local); a
+  machine without them resolves to `off` (previously it wrote local). So the old implicit
+  local-only behavior is gone — `local` is now explicit-only (`H2T_EVALS_MODE=local`). The
+  `status` command surfaces the resolved mode and its source; note the change in CHANGELOG.
 
 ## Testing (TDD)
 
@@ -100,8 +121,13 @@ method.
   behavior.
 - `off` → full no-op: no local files created, no push.
 - `push` + SDK absent → local-only write, no exception raised.
+- `auto` resolution:
+  - SDK importable **and** token set → resolves to `push`;
+  - SDK absent → resolves to `off`;
+  - token unset → resolves to `off`.
 - Legacy `H2T_EVALS_ENABLED=1` (no `H2T_EVALS_MODE`) → resolves to `push`.
-- Invalid `H2T_EVALS_MODE` → resolves to `off`.
+- Explicit `H2T_EVALS_MODE` overrides legacy and auto.
+- Invalid `H2T_EVALS_MODE` → resolves to `auto` (never raises).
 - Invariant: `eval.session` imports only stdlib at module top.
 - `status` returns the correct dict per mode (mode/source/SDK/token/dir/count).
 
