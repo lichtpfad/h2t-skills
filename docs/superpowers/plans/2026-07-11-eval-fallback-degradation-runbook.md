@@ -24,7 +24,7 @@ Decision-protocol). Verify the branch before every commit.
 - [x] **review-spec** — DONE pre-run: spec iterated + reviewed across commits 6ba6d48..128b996, merged #303 (no open [P1])
 - [x] **write-plan** — DONE pre-run: `docs/superpowers/plans/2026-07-11-eval-fallback-degradation.md` exists (merged #303)
 - [x] **plan-gate** — DONE 2026-07-11: codex-rescue read-only pass. Found 2 confirmed [P1] + 1 [P2] (all verified by me); 1 codex [P2] refuted. Fixes folded into execution (see Decision-log). Plan file (merged #303) unchanged; deviations documented.
-- [ ] **subagent-driven-dev** — skill: `superpowers:subagent-driven-development` · input: 7 TDD tasks in plan · done: all tasks green · failure: per-task gate; escalate on repeated fail · re-entry: continue from first unchecked task
+- [x] **subagent-driven-dev** — DONE 2026-07-11: all 7 TDD tasks executed (red→green→commit each). Plan-gate fixes folded in. Final scoped suite 1675 passed / 0 fail; ruff@latest clean on changed files. Commits 48b4f3e..f00a263.
 - [ ] **gates** — skill: `codex + pre-merge-check` · input: full diff · done: no [P1]; suite green · failure: fix then re-run (<=2) · re-entry: idempotent: re-run gate
 - [ ] **e2e** — skill: `real entrypoint run` · input: `h2t-ops evals status --json` · done: DONE / N/A / BLOCKED-DEFERRED · failure: BLOCKED->handoff; behavioral fail->fix · re-entry: idempotent: re-run
 - [ ] **PR** — skill: `superpowers:finishing-a-development-branch` · input: branch feat/eval-fallback-impl · done: PR opened · failure: escalate · re-entry: continue: reuse branch
@@ -90,3 +90,15 @@ never `git add -A`, never commit a red suite as green, message `WIP:` + what was
     (test has 1 file) but mislabels count. FIX: use `root.glob("*/sessions/*.json")`. Applied in Task4.
   - **[P2 refuted] ConnectorSpec client typing** — codex claimed a function is passed; plan
     passes a STRING `"lib.eval.status:get_status"` (like drive). No action.
+- 2026-07-11 Task6 deviation: `plugins/h2t-core/CHANGELOG.md` did NOT exist (plan assumed
+  bump_plugin.py updates it; it only touches plugin.json + marketplace.json). Created the
+  CHANGELOG following h2t-dev convention with the 3.2.13 BREAKING entry.
+- 2026-07-11 Task7: **bare `pytest` from root crashes collection** (INTERNALERROR) —
+  pre-existing, NOT a regression: `plugins/h2t-core/skills/init-project/scripts/apply_registration.py`
+  calls `sys.exit(1)` at import when `ruamel.yaml` is absent (it is, in local .venv). The
+  real gate is CI-scoped (`.github/workflows/evals.yml`): `pytest lib/`, `pytest tests/core
+  tests/connectors`, `pytest plugins/h2t-core/skills/autonomous-run/scripts`. Ran
+  `pytest lib/ tests/ plugins/h2t-core/skills/autonomous-run/scripts` → 1675 passed / 0 fail.
+- 2026-07-11 Task7: ruff not installed in .venv and not a CI gate; repo carries ~200
+  pre-existing ruff@latest findings. Verified my changed files clean under ruff@latest
+  (fixed net-new E402 + a few pre-existing F401/F541 in files I was already editing).
