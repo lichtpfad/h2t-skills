@@ -239,3 +239,68 @@ def test_session_imports_only_stdlib():
             roots.add(node.module.split(".")[0])
     non_stdlib = roots - set(sys.stdlib_module_names)
     assert non_stdlib == set(), f"non-stdlib top-level imports: {non_stdlib}"
+
+
+def test_metric_records_level_and_unit_in_local(tmp_path, monkeypatch):
+    """metric(level=..., unit=...) is preserved in the local JSON entry."""
+    monkeypatch.setenv("H2T_EVALS_MODE", "local")
+    evals_root = tmp_path / "evals"
+    with SkillEval("research", domain="dev", project="p", evals_root=str(evals_root)) as ev:
+        ev.metric("skills.research_cost_usd", value_num=0.42, level="business", unit="usd")
+    files = list((evals_root / "research" / "sessions").glob("*.json"))
+    entry = next(m for m in json.loads(files[0].read_text())["metrics"]
+                 if m["key"] == "skills.research_cost_usd")
+    assert entry["level"] == "business"
+    assert entry["unit"] == "usd"
+    assert entry["value_num"] == 0.42
+
+
+def test_metric_level_defaults_to_none_when_omitted(tmp_path, monkeypatch):
+    """Omitting level leaves it absent (no forced 'unit') in the stored entry."""
+    monkeypatch.setenv("H2T_EVALS_MODE", "local")
+    evals_root = tmp_path / "evals"
+    with SkillEval("session-start", domain="dev", project="p", evals_root=str(evals_root)) as ev:
+        ev.metric("skills.token_consumption", value_num=1.0)
+    files = list((evals_root / "session-start" / "sessions").glob("*.json"))
+    entry = next(m for m in json.loads(files[0].read_text())["metrics"]
+                 if m["key"] == "skills.token_consumption")
+    assert "level" not in entry
+
+
+def test_metric_level_unit_propagate_to_central(tmp_path, monkeypatch):
+    """level/unit reach the central SDK path (not just local). business != unit."""
+    import sys
+    import types
+    captured = []
+
+    class FakeSession:
+        def __init__(self, **kw):
+            pass
+
+        def start(self):
+            pass
+
+        def metric(self, key, **kw):
+            captured.append((key, kw))
+
+        def finish(self, **kw):
+            pass
+
+    class FakeClient:
+        def __init__(self, **kw):
+            pass
+
+        def flush(self, **kw):
+            pass
+
+    fake = types.ModuleType("h2t_evals.sdk")
+    fake.EvalClient = FakeClient
+    fake.EvalSession = FakeSession
+    monkeypatch.setitem(sys.modules, "h2t_evals", types.ModuleType("h2t_evals"))
+    monkeypatch.setitem(sys.modules, "h2t_evals.sdk", fake)
+    monkeypatch.setenv("H2T_EVALS_MODE", "push")
+    with SkillEval("research", domain="d", project="p",
+                   evals_root=str(tmp_path / "evals")) as ev:
+        ev.metric("skills.research_cost_usd", value_num=0.4, level="business", unit="usd")
+    biz = [kw for key, kw in captured if key == "skills.research_cost_usd"]
+    assert biz and biz[0]["level"] == "business" and biz[0]["unit"] == "usd"

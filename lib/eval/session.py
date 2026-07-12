@@ -136,8 +136,16 @@ class SkillEval:
         value_num: Optional[float] = None,
         value_bool: Optional[bool] = None,
         value_text: Optional[str] = None,
+        *,
+        level: Optional[str] = None,
+        unit: Optional[str] = None,
     ) -> None:
-        """Record a metric to be written on context exit."""
+        """Record a metric to be written on context exit.
+
+        level/unit are optional and threaded to both the local JSON and the
+        central SDK path (via _finalize_metrics). Omitted level stays absent
+        locally; _send_central applies the SDK default only when level is None.
+        """
         if self._mode == "off":
             return
         entry: dict = {"key": key}
@@ -147,6 +155,10 @@ class SkillEval:
             entry["value_bool"] = value_bool
         if value_text is not None:
             entry["value_text"] = value_text
+        if level is not None:
+            entry["level"] = level
+        if unit is not None:
+            entry["unit"] = unit
         self._metrics.append(entry)
 
     def _write_local(self, status: str, ended_at: str) -> None:
