@@ -105,6 +105,8 @@ def _run_gather(skill: str, cwd: str, format_briefing_flag: bool, briefing_only:
                 value_num=1.0 - len(sources_failed) / max(len(sources_used), 1),
             )
             ev.metric("skills.token_consumption", value_num=float(len(str(data)) // 4))
+            ev.metric("skills.sources_failed_count",
+                      value_num=float(len(sources_failed)), level="unit")
     except Exception:
         pass
 
