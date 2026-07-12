@@ -18,7 +18,6 @@ import time
 import urllib.error
 import urllib.request
 from datetime import datetime, timezone
-from hashlib import sha256
 from pathlib import Path
 from typing import Any, NoReturn
 
@@ -602,7 +601,7 @@ def write_partial_md(
     lines.append(f"| **Query** | {meta['query']} |")
     lines.append(f"| **Mode** | {meta['mode']} |")
     lines.append(f"| **Depth** | {meta['depth']} |")
-    lines.append(f"| **Engine** | Exa (via scripts/exa_search.py) |")
+    lines.append("| **Engine** | Exa (via scripts/exa_search.py) |")
     lines.append(f"| **Status** | {meta['status']} |")
     lines.append(f"| **Cache hit** | {meta['cache_hit']} |\n")
     lines.append("## Telemetry\n")
@@ -629,45 +628,59 @@ def write_partial_md(
     path.write_text("\n".join(lines), encoding="utf-8")
 
 
-def post_telemetry(event: dict[str, Any], buffer_path: Path) -> str:
-    """Fail-graceful telemetry (spec §9.2).
-    Returns one of: 'sent', 'buffered', 'awaiting_endpoint', 'disabled'.
+_SkillEval = None
 
-    Contract:
-      - H2T_EVALS_DISABLE=1            -> 'disabled' (explicit opt-out)
-      - H2T_EVALS_URL unset            -> 'awaiting_endpoint' (MVP default)
-      - URL set, HTTP 2xx              -> 'sent'
-      - URL set, URLError/HTTPError    -> 'buffered' (local JSONL append)
-    """
-    if os.environ.get("H2T_EVALS_DISABLE") == "1":
-        return "disabled"
-    evals_url = os.environ.get("H2T_EVALS_URL")
-    if not evals_url:
-        return "awaiting_endpoint"
-    token = os.environ.get("H2T_EVALS_TOKEN", "")
-    req = urllib.request.Request(
-        f"{evals_url.rstrip('/')}/api/telemetry/research",
-        data=json.dumps(event).encode("utf-8"),
-        headers={
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {token}" if token else "",
-            "User-Agent": f"exa_search.py/{__version__} (h2t-ops:research)",
-        },
-        method="POST",
-    )
+
+def _load_skilleval():
+    """Load SkillEval from the vendored h2t-core copy by putting its lib/ on sys.path
+    and importing the package (relative imports inside session.py then resolve)."""
+    global _SkillEval
+    if _SkillEval is not None:
+        return _SkillEval
+    here = Path(__file__).resolve()
+    for base in here.parents:
+        lib_dir = base / "plugins" / "h2t-core" / "lib"
+        if (lib_dir / "eval" / "session.py").exists():
+            added = str(lib_dir) not in sys.path
+            if added:
+                sys.path.insert(0, str(lib_dir))
+            try:
+                mod = importlib.import_module("eval.session")
+            except Exception:
+                return None
+            finally:
+                if added and str(lib_dir) in sys.path:
+                    sys.path.remove(str(lib_dir))  # do not leak path across callers
+            _SkillEval = mod.SkillEval
+            return _SkillEval
+    return None
+
+
+def _emit_eval(envelope: dict[str, Any], exit_code: int, project: str, mode: str) -> None:
+    """Emit an L1 SkillEval session for one research sub-call. Never raises."""
+    SkillEval = _load_skilleval()
+    if SkillEval is None:
+        return
+    root = os.environ.get("H2T_EVALS_ROOT")
+    tel = envelope.get("telemetry", {})
+    status_ok = envelope.get("status") in ("OK", "DEGRADED")
     try:
-        with urllib.request.urlopen(req, timeout=5) as resp:
-            if 200 <= resp.status < 300:
-                return "sent"
-    except urllib.error.URLError:
+        with SkillEval("research", domain="ops", project=project, evals_root=root) as ev:
+            ev.record_op_type(status_ok)
+            if envelope.get("status") == "DEGRADED":
+                ev.record_fallback()
+            ev.metric("skills.research_cost_usd",
+                      value_num=float(tel.get("total_cost_usd", 0.0)),
+                      level="business", unit="usd")
+            ev.metric("skills.api_latency_ms",
+                      value_num=float(tel.get("total_latency_ms", 0.0)),
+                      level="integration", unit="ms")
+            ev.metric("skills.records_returned",
+                      value_num=float(len(envelope.get("results", []))), level="unit")
+            if exit_code != 0:
+                raise RuntimeError("research failed")  # marks status=failure
+    except Exception:
         pass
-    except urllib.error.HTTPError:
-        pass
-    # Fallback: buffer locally
-    buffer_path.parent.mkdir(parents=True, exist_ok=True)
-    with buffer_path.open("a", encoding="utf-8") as f:
-        f.write(json.dumps(event) + "\n")
-    return "buffered"
 
 
 MODES = list(MODE_CONFIG.keys())
@@ -854,26 +867,8 @@ def _run_search(args: argparse.Namespace) -> int:
             json_path=paths["sources_json"],
         )
 
-    # Telemetry (fire-and-forget, unchanged shape).
-    post_telemetry(
-        event={
-            "session_id": os.environ.get("H2T_SESSION_ID", ""),
-            "engine": "exa",
-            "endpoint": "/search",
-            "mode": args.mode,
-            "exa_type": body["type"],
-            "exa_category": body.get("category"),
-            "query_hash": sha256(args.query.encode("utf-8")).hexdigest()[:16],
-            "num_results_requested": body["numResults"],
-            "num_results_returned": len(envelope["results"]),
-            "cost_usd": envelope["telemetry"]["total_cost_usd"],
-            "latency_ms": envelope["telemetry"]["total_latency_ms"],
-            "http_status": envelope["telemetry"]["attempts"][-1]["http"] or 0,
-            "exit_code": exit_code,
-            "timestamp": envelope["meta"]["timestamp"],
-        },
-        buffer_path=out_dir / ".pending_telemetry.jsonl",
-    )
+    # Telemetry unified on SkillEval (bespoke post_telemetry / H2T_EVALS_URL deprecated).
+    _emit_eval(envelope, exit_code=exit_code, project=args.project, mode=args.mode)
 
     if exit_code != 0:
         sys.exit(exit_code)
@@ -939,20 +934,8 @@ def _run_crawl(args: argparse.Namespace) -> int:
         partial_path=paths["partial_md"],
         json_path=paths["sources_json"],
     )
-    post_telemetry(
-        event={
-            "session_id": os.environ.get("H2T_SESSION_ID", ""),
-            "engine": "exa",
-            "endpoint": "/contents",
-            "mode": "crawl",
-            "cost_usd": cost,
-            "latency_ms": latency_ms,
-            "http_status": status,
-            "exit_code": 0,
-            "timestamp": timestamp,
-        },
-        buffer_path=out_dir / ".pending_telemetry.jsonl",
-    )
+    # Telemetry unified on SkillEval (bespoke post_telemetry deprecated).
+    _emit_eval(envelope, exit_code=0, project=args.project, mode="crawl")
     return 0
 
 
