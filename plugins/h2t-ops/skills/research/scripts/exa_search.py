@@ -658,13 +658,13 @@ def _load_skilleval():
 
 def _emit_eval(envelope: dict[str, Any], exit_code: int, project: str, mode: str) -> None:
     """Emit an L1 SkillEval session for one research sub-call. Never raises."""
-    SkillEval = _load_skilleval()
-    if SkillEval is None:
-        return
-    root = os.environ.get("H2T_EVALS_ROOT")
-    tel = envelope.get("telemetry", {})
-    status_ok = envelope.get("status") in ("OK", "DEGRADED")
     try:
+        SkillEval = _load_skilleval()
+        if SkillEval is None:
+            return
+        root = os.environ.get("H2T_EVALS_ROOT")
+        tel = envelope.get("telemetry", {})
+        status_ok = envelope.get("status") in ("OK", "DEGRADED")
         with SkillEval("research", domain="ops", project=project, evals_root=root) as ev:
             ev.record_op_type(status_ok)
             if envelope.get("status") == "DEGRADED":
@@ -867,7 +867,7 @@ def _run_search(args: argparse.Namespace) -> int:
             json_path=paths["sources_json"],
         )
 
-    # Telemetry unified on SkillEval (bespoke post_telemetry / H2T_EVALS_URL deprecated).
+    # Telemetry unified on SkillEval (bespoke dead-endpoint channel + H2T_EVALS_URL deprecated).
     _emit_eval(envelope, exit_code=exit_code, project=args.project, mode=args.mode)
 
     if exit_code != 0:
@@ -934,7 +934,7 @@ def _run_crawl(args: argparse.Namespace) -> int:
         partial_path=paths["partial_md"],
         json_path=paths["sources_json"],
     )
-    # Telemetry unified on SkillEval (bespoke post_telemetry deprecated).
+    # Telemetry unified on SkillEval (bespoke dead-endpoint channel deprecated).
     _emit_eval(envelope, exit_code=0, project=args.project, mode="crawl")
     return 0
 
