@@ -918,12 +918,16 @@ def _load_skilleval():
     for base in here.parents:
         lib_dir = base / "plugins" / "h2t-core" / "lib"
         if (lib_dir / "eval" / "session.py").exists():
-            if str(lib_dir) not in sys.path:
+            added = str(lib_dir) not in sys.path
+            if added:
                 sys.path.insert(0, str(lib_dir))
             try:
                 mod = importlib.import_module("eval.session")
             except Exception:
                 return None
+            finally:
+                if added and str(lib_dir) in sys.path:
+                    sys.path.remove(str(lib_dir))  # do not leak path across callers
             _SkillEval = mod.SkillEval
             return _SkillEval
     return None
@@ -959,16 +963,30 @@ def _emit_eval(envelope: dict[str, Any], exit_code: int, project: str, mode: str
 Note: the `raise` inside the `with` is caught by the outer `try` — it exists only to flip
 `SkillEval` status to `failure` on non-zero exit; it never escapes `_emit_eval`.
 
-- [ ] **Step 4: Replace the `post_telemetry` call.** In `_run_search`, replace the entire
-      `post_telemetry(event={...}, buffer_path=...)` block (`:857-876`) with:
+- [ ] **Step 4: Replace BOTH `post_telemetry` call-sites** (there are TWO — `_run_search` AND
+      `_run_crawl`; deleting the function without replacing both = runtime `NameError`).
+
+  4a. In `_run_search`, replace the `post_telemetry(event={...}, buffer_path=...)` block (`:857-876`) with:
 
 ```python
     # Telemetry unified on SkillEval (bespoke post_telemetry / H2T_EVALS_URL deprecated).
     _emit_eval(envelope, exit_code=exit_code, project=args.project, mode=args.mode)
 ```
 
-Delete the now-dead `post_telemetry` function (`:632-670`) and the `sha256` import if it becomes unused
-(check: `grep -n "sha256" exa_search.py` → if only the removed block used it, drop the import).
+  4b. In `_run_crawl`, replace the `post_telemetry(event={...}, buffer_path=...)` block (`:942-955`) with
+      (crawl already builds `envelope` at `:908` and always returns 0):
+
+```python
+    # Telemetry unified on SkillEval (bespoke post_telemetry deprecated).
+    _emit_eval(envelope, exit_code=0, project=args.project, mode="crawl")
+```
+
+  4c. Delete the now-dead `post_telemetry` function (`:632-670`). Then verify nothing else references it or
+      its now-unused imports:
+
+Run: `grep -n "post_telemetry\|sha256" plugins/h2t-ops/skills/research/scripts/exa_search.py`
+Expected: ZERO `post_telemetry` matches. If `sha256` is now unused (only the deleted search block used it),
+remove `from hashlib import sha256`; if any remaining line uses it, keep the import.
 
 - [ ] **Step 5: Run the research test suite**
 
