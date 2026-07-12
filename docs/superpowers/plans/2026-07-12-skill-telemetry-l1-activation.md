@@ -108,6 +108,45 @@ def test_metric_level_defaults_to_none_when_omitted(tmp_path, monkeypatch):
     entry = next(m for m in json.loads(files[0].read_text())["metrics"]
                  if m["key"] == "skills.token_consumption")
     assert "level" not in entry
+
+
+def test_metric_level_unit_propagate_to_central(tmp_path, monkeypatch):
+    """level/unit reach the central SDK path (not just local). business != unit."""
+    import sys
+    import types
+    captured = []
+
+    class FakeSession:
+        def __init__(self, **kw):
+            pass
+
+        def start(self):
+            pass
+
+        def metric(self, key, **kw):
+            captured.append((key, kw))
+
+        def finish(self, **kw):
+            pass
+
+    class FakeClient:
+        def __init__(self, **kw):
+            pass
+
+        def flush(self, **kw):
+            pass
+
+    fake = types.ModuleType("h2t_evals.sdk")
+    fake.EvalClient = FakeClient
+    fake.EvalSession = FakeSession
+    monkeypatch.setitem(sys.modules, "h2t_evals", types.ModuleType("h2t_evals"))
+    monkeypatch.setitem(sys.modules, "h2t_evals.sdk", fake)
+    monkeypatch.setenv("H2T_EVALS_MODE", "push")
+    with SkillEval("research", domain="d", project="p",
+                   evals_root=str(tmp_path / "evals")) as ev:
+        ev.metric("skills.research_cost_usd", value_num=0.4, level="business", unit="usd")
+    biz = [kw for key, kw in captured if key == "skills.research_cost_usd"]
+    assert biz and biz[0]["level"] == "business" and biz[0]["unit"] == "usd"
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
@@ -269,6 +308,33 @@ def test_time_to_first_valid_is_nonneg_proxy(tmp_path, monkeypatch):
         pass
     m = _local_metrics(evals_root, "session-start")
     assert m["core.time_to_first_valid_ms"]["value_num"] >= 0.0
+
+
+def test_auto_custom_duration_always_emitted(tmp_path, monkeypatch):
+    """skills.duration_ms is auto-emitted for every session (emit-ahead)."""
+    monkeypatch.setenv("H2T_EVALS_MODE", "local")
+    evals_root = tmp_path / "evals"
+    with SkillEval("session-start", domain="d", project="p", evals_root=str(evals_root)):
+        pass
+    m = _local_metrics(evals_root, "session-start")
+    assert m["skills.duration_ms"]["value_num"] >= 0.0
+    assert m["skills.duration_ms"]["unit"] == "ms"
+
+
+def test_auto_custom_error_class_on_failure(tmp_path, monkeypatch):
+    """skills.error_class carries the exception class name on failure; absent on success."""
+    monkeypatch.setenv("H2T_EVALS_MODE", "local")
+    evals_root = tmp_path / "evals"
+    with pytest.raises(ValueError):
+        with SkillEval("handoff", domain="d", project="p", evals_root=str(evals_root)):
+            raise ValueError("boom")
+    m = _local_metrics(evals_root, "handoff")
+    assert m["skills.error_class"]["value_text"] == "ValueError"
+    with SkillEval("handoff", domain="d", project="p", evals_root=str(evals_root)):
+        pass
+    ok = list((evals_root / "handoff" / "sessions").glob("*.json"))
+    latest = max(ok, key=lambda p: p.stat().st_mtime)
+    assert "skills.error_class" not in {mm["key"] for mm in json.loads(latest.read_text())["metrics"]}
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
@@ -284,6 +350,7 @@ Expected: FAIL — core.* absent from local write.
         self._start_dt: Optional[datetime] = None
         self._op_type_valid: Optional[bool] = None
         self._fallback_used: bool = False
+        self._error_class: Optional[str] = None
 ```
 
 3b. In `__enter__`, capture the start datetime (keep the isoformat string too):
@@ -331,11 +398,26 @@ Expected: FAIL — core.* absent from local write.
              "value_num": 1.0 if success else 0.0, "level": "unit"},  # proxy: script success
         ]
 
+    def _auto_custom(self, status: str, ended_at: str) -> list[dict]:
+        """Cross-class custom metrics emitted for every session (emit-ahead, D3)."""
+        out: list[dict] = []
+        if self._start_dt is not None:
+            duration_ms = (
+                datetime.fromisoformat(ended_at) - self._start_dt
+            ).total_seconds() * 1000.0
+            out.append({"key": "skills.duration_ms", "value_num": duration_ms,
+                        "level": "integration", "unit": "ms"})
+        if self._error_class:
+            out.append({"key": "skills.error_class",
+                        "value_text": self._error_class, "level": "unit"})
+        return out
+
     def _finalize_metrics(self, status: str, ended_at: str) -> list[dict]:
-        """Merge caller metrics with core.*; caller-supplied core.* override the proxy."""
+        """Merge caller metrics with core.* + auto-custom; caller keys override the proxy."""
         caller_keys = {m["key"] for m in self._metrics}
-        core = [c for c in self._core_metrics(status, ended_at) if c["key"] not in caller_keys]
-        return self._metrics + core
+        auto = self._core_metrics(status, ended_at) + self._auto_custom(status, ended_at)
+        extra = [c for c in auto if c["key"] not in caller_keys]
+        return self._metrics + extra
 ```
 
 3d. Rewrite `_write_local` to write finalized metrics (change its signature to take the list):
@@ -375,6 +457,7 @@ Expected: FAIL — core.* absent from local write.
 
 ```python
     def __exit__(self, exc_type, exc_val, exc_tb) -> bool:
+        self._error_class = exc_type.__name__ if exc_type is not None else None
         try:
             if self._mode in ("local", "push"):
                 status = "failure" if exc_type else "success"
@@ -389,6 +472,17 @@ Expected: FAIL — core.* absent from local write.
 ```
 
 (Keep the existing `skill_graph.add_lesson` block and `return False` exactly as-is.)
+
+- [ ] **Step 3g: Fix the stale monkeypatch signature.** The existing test
+      `test_push_with_absent_sdk_degrades_to_local` monkeypatches `_send_central` with the OLD 2-arg
+      signature — after this task the real call is `_send_central(status, final)`, so a mismatched stub
+      would raise `TypeError` (silently swallowed → test passes for the wrong reason). Update it in
+      `lib/eval/test_session.py`:
+
+```python
+    def _boom(self, status, metrics):
+        raise ImportError("no sdk")
+```
 
 3f. Rewrite `_send_central` to consume the finalized list (REMOVE the inline core.* block at
 `:208-213`; core.* now come from `final`):
@@ -732,6 +826,13 @@ git rm plugins/h2t-core/lib/gather/eval.py plugins/h2t-core/lib/gather/test_eval
   - delete the line `from .eval import record_eval, estimate_tokens`
   - delete `"record_eval", "estimate_tokens",` from the `__all__` list.
 
+- [ ] **Step 5b: Remove doc/README references (D7 requires this).**
+
+Run: `grep -rln "record_eval\|estimate_tokens" --include=*.md . `
+For each match outside build artifacts/worktrees (e.g. a `lib/gather/README.md` or docs listing the
+gather API), delete the specific line/section referencing the removed functions. If there are no `.md`
+matches, this step is a no-op — record that.
+
 - [ ] **Step 6: Run to verify pass + full suite**
 
 Run: `C:/dev/h2t-skills/.venv/Scripts/pytest lib/eval/test_session.py::test_record_eval_module_removed -v`
@@ -761,10 +862,13 @@ that does not exist on the service → cost never persists centrally. Wrap the e
 and emit `skills.research_cost_usd` from the envelope. Per-invocation aggregation is a documented
 follow-up (Task 8); this is per-sub-call.
 
-**Import mechanism:** `exa_search.py` already dynamically loads a helper from the h2t-core plugin via
-`_load_h2t_secrets()` (importlib from a candidate path). Reuse that exact pattern to load `SkillEval`
-from the vendored `plugins/h2t-core/lib/eval/session.py`. This is the shared thin-wrapper seam Task 8
-reuses. Add a module-level loader:
+**Import mechanism (CRITICAL — do NOT use `spec_from_file_location`):** `session.py` uses a relative
+import `from .skill_class import eval_set_for` (Task 3). A module loaded via
+`spec_from_file_location(name, path)` has no package context, so that relative import raises
+`ImportError: attempted relative import with no known parent package` — silently swallowed in `_emit_eval`,
+telemetry lost. Instead, put the vendored `lib` dir on `sys.path` and import `eval.session` as a proper
+package (mirrors how the gather runtime already imports it — `lib/cli/main.py:30` `from eval.session import SkillEval`).
+This is the shared thin-wrapper seam Task 8 reuses. Add a module-level loader:
 
 - [ ] **Step 1: Write the failing test** — add to `plugins/h2t-ops/skills/research/tests/test_exa_search.py`
       (adapt to the file's existing import/style):
@@ -805,18 +909,22 @@ _SkillEval = None
 
 
 def _load_skilleval():
-    """Load SkillEval from the vendored h2t-core copy (mirrors _load_h2t_secrets)."""
+    """Load SkillEval from the vendored h2t-core copy by putting its lib/ on sys.path
+    and importing the package (relative imports inside session.py then resolve)."""
     global _SkillEval
     if _SkillEval is not None:
         return _SkillEval
     here = Path(__file__).resolve()
     for base in here.parents:
-        candidate = base / "plugins" / "h2t-core" / "lib" / "eval" / "session.py"
-        if candidate.exists():
-            spec = importlib.util.spec_from_file_location("h2t_skilleval", candidate)
-            module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module)
-            _SkillEval = module.SkillEval
+        lib_dir = base / "plugins" / "h2t-core" / "lib"
+        if (lib_dir / "eval" / "session.py").exists():
+            if str(lib_dir) not in sys.path:
+                sys.path.insert(0, str(lib_dir))
+            try:
+                mod = importlib.import_module("eval.session")
+            except Exception:
+                return None
+            _SkillEval = mod.SkillEval
             return _SkillEval
     return None
 
@@ -976,7 +1084,70 @@ git commit -m "feat(evals): author minimal parse-valid repo-assets (#307)"
 
 ---
 
-## Task 8 (D8 remainder): documented follow-up — instrument remaining integration skills
+## Task 8 (D3 gather metric): emit `skills.sources_failed_count` at the gather call-site
+
+**Files:**
+- Modify: `lib/cli/main.py:101-109` (the `SkillEval` block in `_run_gather`)
+- Test: `tests/core/` — new `tests/core/test_gather_eval_metrics.py`
+
+**Why:** the gather-class custom metric `skills.sources_failed_count` (taxonomy §4.2) is declared but not
+emitted. The call-site already computes `sources_failed`. Emit it (emit-ahead).
+
+- [ ] **Step 1: Write the failing test** — create `tests/core/test_gather_eval_metrics.py`:
+
+```python
+import json
+from pathlib import Path
+
+from lib.eval.session import SkillEval
+
+
+def test_gather_emits_sources_failed_count(tmp_path, monkeypatch):
+    """The gather call-site pattern emits skills.sources_failed_count."""
+    monkeypatch.setenv("H2T_EVALS_MODE", "local")
+    evals_root = tmp_path / "evals"
+    sources_failed = ["github"]
+    with SkillEval("session-start", domain="d", project="p", evals_root=str(evals_root)) as ev:
+        ev.metric("skills.sources_failed_count", value_num=float(len(sources_failed)), level="unit")
+    files = list((evals_root / "session-start" / "sessions").glob("*.json"))
+    m = {x["key"]: x for x in json.loads(Path(files[0]).read_text())["metrics"]}
+    assert m["skills.sources_failed_count"]["value_num"] == 1.0
+```
+
+- [ ] **Step 2: Run to verify it passes as a pattern test** (it exercises SkillEval directly)
+
+Run: `C:/dev/h2t-skills/.venv/Scripts/pytest tests/core/test_gather_eval_metrics.py -v`
+Expected: PASS (this validates the emit shape; Step 3 wires it into the real call-site).
+
+- [ ] **Step 3: Wire into `lib/cli/main.py`.** In the `SkillEval` block (`:102-107`), add one metric line
+      after the `skills.token_consumption` line:
+
+```python
+        with SkillEval(skill, domain=domain, project=proj_id) as ev:
+            ev.metric(
+                "skills.gather_source_success_rate",
+                value_num=1.0 - len(sources_failed) / max(len(sources_used), 1),
+            )
+            ev.metric("skills.token_consumption", value_num=float(len(str(data)) // 4))
+            ev.metric("skills.sources_failed_count",
+                      value_num=float(len(sources_failed)), level="unit")
+```
+
+- [ ] **Step 4: Full suite**
+
+Run: `C:/dev/h2t-skills/.venv/Scripts/pytest`
+Expected: all green.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add lib/cli/main.py tests/core/test_gather_eval_metrics.py
+git commit -m "feat(eval): gather emits skills.sources_failed_count (#312)"
+```
+
+---
+
+## Task 9 (D8 remainder): documented follow-up — instrument remaining integration skills
 
 **This task is NOT executed in this run — it is the recorded, bounded follow-up (see Scope note).**
 
@@ -996,9 +1167,12 @@ Open question from spec (operator): all-at-once vs research+connectors first. Re
 
 ## Self-Review (author checklist — completed)
 
-**Spec coverage:** D1→Task 2; D3→Task 1 (signature) + Task 2 (`skills.fallback_used`) + Task 6 (new
-metrics emitted); D4→Task 6; D5→Task 3; D6→Task 7; D7→Task 5; D8→Task 6 (research) + Task 8 (deferred,
-logged); D9→Task 4. D2 = `#305`, out of scope (not planned). Acceptance items: local 5×core.* (Task 2),
+**Spec coverage:** D1→Task 2; D3→Task 1 (signature) + Task 2 (`skills.fallback_used`, auto `skills.duration_ms`
++ `skills.error_class`) + Task 6 (research custom metrics) + Task 8 (gather `skills.sources_failed_count`);
+D4→Task 6; D5→Task 3; D6→Task 7; D7→Task 5; D8→Task 6 (research) + Task 9 (deferred, logged); D9→Task 4.
+D2 = `#305`, out of scope (not planned). §4 custom metrics: cross (`duration_ms`/`fallback_used`/`error_class`)
+Task 2; gather (`gather_source_success_rate`/`token_consumption` already; `sources_failed_count`) Task 8;
+integration (`research_cost_usd`/`api_latency_ms`/`records_returned`) Task 6. Acceptance items: local 5×core.* (Task 2),
 `metric()` level/unit both paths (Tasks 1–2), research cost via SkillEval + post_telemetry gone (Task 6),
 custom metrics emitted local (Tasks 2,6), per-class eval_set single module (Task 3), repo-assets parse-valid
 (Task 7), no per-write glob + parity green (Tasks 3,4), record_eval removed ×3 (Task 5), SkillEval-never-crashes
