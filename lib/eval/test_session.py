@@ -213,7 +213,7 @@ def test_off_mode_writes_nothing(tmp_path, monkeypatch):
 def test_push_with_absent_sdk_degrades_to_local(tmp_path, monkeypatch):
     monkeypatch.setenv("H2T_EVALS_MODE", "push")
 
-    def _boom(self, status):
+    def _boom(self, status, metrics):
         raise ImportError("no sdk")
 
     monkeypatch.setattr(sess.SkillEval, "_send_central", _boom)
@@ -304,3 +304,103 @@ def test_metric_level_unit_propagate_to_central(tmp_path, monkeypatch):
         ev.metric("skills.research_cost_usd", value_num=0.4, level="business", unit="usd")
     biz = [kw for key, kw in captured if key == "skills.research_cost_usd"]
     assert biz and biz[0]["level"] == "business" and biz[0]["unit"] == "usd"
+
+
+CORE_KEYS = {
+    "core.task_success", "core.op_type_correct_rate", "core.deflection_rate",
+    "core.time_to_first_valid_ms", "core.tool_call_success_rate",
+}
+
+
+def _local_metrics(evals_root, skill):
+    files = list((evals_root / skill / "sessions").glob("*.json"))
+    return {m["key"]: m for m in json.loads(files[0].read_text())["metrics"]}
+
+
+def test_local_write_contains_all_five_core(tmp_path, monkeypatch):
+    """_write_local carries all 5 core.* (not only caller metrics)."""
+    monkeypatch.setenv("H2T_EVALS_MODE", "local")
+    evals_root = tmp_path / "evals"
+    with SkillEval("session-start", domain="d", project="p", evals_root=str(evals_root)) as ev:
+        ev.metric("skills.token_consumption", value_num=1.0)
+    m = _local_metrics(evals_root, "session-start")
+    assert CORE_KEYS <= set(m)
+
+
+def test_core_task_success_reflects_status(tmp_path, monkeypatch):
+    monkeypatch.setenv("H2T_EVALS_MODE", "local")
+    evals_root = tmp_path / "evals"
+    with pytest.raises(ValueError):
+        with SkillEval("handoff", domain="d", project="p", evals_root=str(evals_root)):
+            raise ValueError("boom")
+    m = _local_metrics(evals_root, "handoff")
+    assert m["core.task_success"]["value_bool"] is False
+    assert m["core.tool_call_success_rate"]["value_num"] == 0.0
+
+
+def test_op_type_correct_rate_from_record_op_type(tmp_path, monkeypatch):
+    monkeypatch.setenv("H2T_EVALS_MODE", "local")
+    evals_root = tmp_path / "evals"
+    with SkillEval("research", domain="d", project="p", evals_root=str(evals_root)) as ev:
+        ev.record_op_type(False)  # schema-invalid output
+    m = _local_metrics(evals_root, "research")
+    assert m["core.op_type_correct_rate"]["value_num"] == 0.0
+
+
+def test_deflection_rate_from_fallback(tmp_path, monkeypatch):
+    monkeypatch.setenv("H2T_EVALS_MODE", "local")
+    evals_root = tmp_path / "evals"
+    with SkillEval("research", domain="d", project="p", evals_root=str(evals_root)) as ev:
+        ev.record_fallback()  # degraded path taken
+    m = _local_metrics(evals_root, "research")
+    assert m["core.deflection_rate"]["value_num"] == 0.0
+    assert m["skills.fallback_used"]["value_bool"] is True
+
+
+def test_caller_core_override_wins_no_duplicate(tmp_path, monkeypatch):
+    """A caller-emitted core.* overrides the proxy; exactly one entry survives."""
+    monkeypatch.setenv("H2T_EVALS_MODE", "local")
+    evals_root = tmp_path / "evals"
+    with SkillEval("research", domain="d", project="p", evals_root=str(evals_root)) as ev:
+        ev.metric("core.op_type_correct_rate", value_num=0.5, level="unit")
+    files = list((evals_root / "research" / "sessions").glob("*.json"))
+    entries = [m for m in json.loads(files[0].read_text())["metrics"]
+               if m["key"] == "core.op_type_correct_rate"]
+    assert len(entries) == 1
+    assert entries[0]["value_num"] == 0.5
+
+
+def test_time_to_first_valid_is_nonneg_proxy(tmp_path, monkeypatch):
+    monkeypatch.setenv("H2T_EVALS_MODE", "local")
+    evals_root = tmp_path / "evals"
+    with SkillEval("session-start", domain="d", project="p", evals_root=str(evals_root)):
+        pass
+    m = _local_metrics(evals_root, "session-start")
+    assert m["core.time_to_first_valid_ms"]["value_num"] >= 0.0
+
+
+def test_auto_custom_duration_always_emitted(tmp_path, monkeypatch):
+    """skills.duration_ms is auto-emitted for every session (emit-ahead)."""
+    monkeypatch.setenv("H2T_EVALS_MODE", "local")
+    evals_root = tmp_path / "evals"
+    with SkillEval("session-start", domain="d", project="p", evals_root=str(evals_root)):
+        pass
+    m = _local_metrics(evals_root, "session-start")
+    assert m["skills.duration_ms"]["value_num"] >= 0.0
+    assert m["skills.duration_ms"]["unit"] == "ms"
+
+
+def test_auto_custom_error_class_on_failure(tmp_path, monkeypatch):
+    """skills.error_class carries the exception class name on failure; absent on success."""
+    monkeypatch.setenv("H2T_EVALS_MODE", "local")
+    evals_root = tmp_path / "evals"
+    with pytest.raises(ValueError):
+        with SkillEval("handoff", domain="d", project="p", evals_root=str(evals_root)):
+            raise ValueError("boom")
+    m = _local_metrics(evals_root, "handoff")
+    assert m["skills.error_class"]["value_text"] == "ValueError"
+    with SkillEval("handoff", domain="d", project="p", evals_root=str(evals_root)):
+        pass
+    ok = list((evals_root / "handoff" / "sessions").glob("*.json"))
+    latest = max(ok, key=lambda p: p.stat().st_mtime)
+    assert "skills.error_class" not in {mm["key"] for mm in json.loads(latest.read_text())["metrics"]}

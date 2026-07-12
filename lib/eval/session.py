@@ -73,20 +73,27 @@ class SkillEval:
         self._score_after: Optional[float] = None
         self._metrics: list[dict] = []
         self._started_at: Optional[str] = None
+        self._start_dt: Optional[datetime] = None
+        self._op_type_valid: Optional[bool] = None
+        self._fallback_used: bool = False
+        self._error_class: Optional[str] = None
         self._mode = resolve_mode()
 
     def __enter__(self) -> "SkillEval":
-        self._started_at = datetime.now(timezone.utc).isoformat()
+        self._start_dt = datetime.now(timezone.utc)
+        self._started_at = self._start_dt.isoformat()
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb) -> bool:
+        self._error_class = exc_type.__name__ if exc_type is not None else None
         try:
             if self._mode in ("local", "push"):
                 status = "failure" if exc_type else "success"
                 ended_at = datetime.now(timezone.utc).isoformat()
-                self._write_local(status, ended_at)
+                final = self._finalize_metrics(status, ended_at)
+                self._write_local(status, ended_at, final)
                 if self._mode == "push":
-                    self._send_central(status)
+                    self._send_central(status, final)
         except Exception:
             pass  # never crash a skill for eval failure
         if exc_type is not None and self._skill_graph is not None:
@@ -161,7 +168,61 @@ class SkillEval:
             entry["unit"] = unit
         self._metrics.append(entry)
 
-    def _write_local(self, status: str, ended_at: str) -> None:
+    def record_op_type(self, valid: bool) -> None:
+        """Call-site signal: was the output schema-valid? Drives core.op_type_correct_rate."""
+        self._op_type_valid = valid
+
+    def record_fallback(self, used: bool = True) -> None:
+        """Call-site signal: was a degraded/fallback path taken? Drives core.deflection_rate."""
+        self._fallback_used = used
+        self.metric("skills.fallback_used", value_bool=used, level="business")
+
+    def _core_metrics(self, status: str, ended_at: str) -> list[dict]:
+        """The 5 mandatory core.* for this session (real values + honest proxies)."""
+        success = status == "success"
+        if self._op_type_valid is not None:
+            op_type = 1.0 if self._op_type_valid else 0.0
+        else:
+            op_type = 1.0 if success else 0.0  # proxy: no schema signal from call-site
+        if self._start_dt is not None:
+            duration_ms = (
+                datetime.fromisoformat(ended_at) - self._start_dt
+            ).total_seconds() * 1000.0
+        else:
+            duration_ms = 0.0
+        return [
+            {"key": "core.task_success", "value_bool": success, "level": "integration"},
+            {"key": "core.op_type_correct_rate", "value_num": op_type, "level": "unit"},
+            {"key": "core.deflection_rate",
+             "value_num": 0.0 if self._fallback_used else 1.0, "level": "business"},
+            {"key": "core.time_to_first_valid_ms",
+             "value_num": duration_ms, "level": "integration", "unit": "ms"},  # proxy: script wall-clock
+            {"key": "core.tool_call_success_rate",
+             "value_num": 1.0 if success else 0.0, "level": "unit"},  # proxy: script success
+        ]
+
+    def _auto_custom(self, status: str, ended_at: str) -> list[dict]:
+        """Cross-class custom metrics emitted for every session (emit-ahead, D3)."""
+        out: list[dict] = []
+        if self._start_dt is not None:
+            duration_ms = (
+                datetime.fromisoformat(ended_at) - self._start_dt
+            ).total_seconds() * 1000.0
+            out.append({"key": "skills.duration_ms", "value_num": duration_ms,
+                        "level": "integration", "unit": "ms"})
+        if self._error_class:
+            out.append({"key": "skills.error_class",
+                        "value_text": self._error_class, "level": "unit"})
+        return out
+
+    def _finalize_metrics(self, status: str, ended_at: str) -> list[dict]:
+        """Merge caller metrics with core.* + auto-custom; caller keys override the proxy."""
+        caller_keys = {m["key"] for m in self._metrics}
+        auto = self._core_metrics(status, ended_at) + self._auto_custom(status, ended_at)
+        extra = [c for c in auto if c["key"] not in caller_keys]
+        return self._metrics + extra
+
+    def _write_local(self, status: str, ended_at: str, metrics: list[dict]) -> None:
         root = Path(self.evals_root) if self.evals_root else Path.home() / ".h2t" / "evals"
         sessions_dir = root / self.skill / "sessions"
         try:
@@ -182,7 +243,7 @@ class SkillEval:
             "status": status,
             "started_at": self._started_at,
             "ended_at": ended_at,
-            "metrics": self._metrics,
+            "metrics": metrics,
         }
         try:
             with open(filepath, "w", encoding="utf-8") as f:
@@ -190,7 +251,7 @@ class SkillEval:
         except OSError:
             pass
 
-    def _send_central(self, status: str) -> None:
+    def _send_central(self, status: str, metrics: list[dict]) -> None:
         """Send to h2t-evals SDK. Silent on any failure."""
         try:
             from h2t_evals.sdk import EvalClient, EvalSession
@@ -217,14 +278,7 @@ class SkillEval:
             )
             s.start()
 
-            task_success = status == "success"
-            s.metric("core.task_success", level="integration", value_bool=task_success)
-            s.metric("core.time_to_first_valid_ms", level="integration", value_num=0.0, unit="ms")
-            s.metric("core.tool_call_success_rate", level="unit", value_num=1.0 if task_success else 0.0)
-            s.metric("core.op_type_correct_rate", level="unit", value_num=1.0)
-            s.metric("core.deflection_rate", level="business", value_num=1.0 if task_success else 0.0)
-
-            for m in self._metrics:
+            for m in metrics:
                 kwargs = {k: v for k, v in m.items() if k != "key"}
                 kwargs.setdefault("level", "unit")
                 s.metric(m["key"], **kwargs)
