@@ -17,6 +17,7 @@ Promoted from plugins/h2t/lib/gather/eval.py to shared lib/.
 import json
 import os
 import platform
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -233,11 +234,9 @@ class SkillEval:
         except OSError:
             return
 
-        now_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-        existing = list(sessions_dir.glob(f"{self.skill[:2]}-{now_str}-*.json"))
-        seq = len(existing) + 1
         prefix = self.skill[:2]
-        filepath = sessions_dir / f"{prefix}-{now_str}-{seq:03d}.json"
+        stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d-%H%M%S-%f")
+        filepath = sessions_dir / f"{prefix}-{stamp}-{uuid.uuid4().hex[:8]}.json"
 
         record = {
             "skill": self.skill,

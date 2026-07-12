@@ -412,3 +412,25 @@ def test_eval_set_resolved_per_class():
     assert ev._eval_set == eval_set_for("research") == "skills-integration-baseline-v1"
     ev2 = SkillEval("handoff", domain="d", project="p")
     assert ev2._eval_set == "skills-gather-baseline-v1"
+
+
+def test_write_local_no_collision_without_glob(tmp_path, monkeypatch):
+    """Many same-skill/same-day sessions produce distinct files (no seq-glob)."""
+    monkeypatch.setenv("H2T_EVALS_MODE", "local")
+    evals_root = tmp_path / "evals"
+    for _ in range(5):
+        with SkillEval("session-start", domain="d", project="p", evals_root=str(evals_root)):
+            pass
+    files = list((evals_root / "session-start" / "sessions").glob("*.json"))
+    assert len(files) == 5  # all distinct, none overwritten
+
+
+def test_write_local_filename_has_no_seq_suffix(tmp_path, monkeypatch):
+    """Filename no longer uses the 3-digit seq scheme (…-NNN.json)."""
+    import re
+    monkeypatch.setenv("H2T_EVALS_MODE", "local")
+    evals_root = tmp_path / "evals"
+    with SkillEval("handoff", domain="d", project="p", evals_root=str(evals_root)):
+        pass
+    name = list((evals_root / "handoff" / "sessions").glob("*.json"))[0].name
+    assert not re.search(r"-\d{3}\.json$", name)
