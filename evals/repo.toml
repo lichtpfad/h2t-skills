@@ -1,7 +1,7 @@
 repo = "claude-agent-skills"
 framework = "h2t-skills"
 default_source = "h2t-core:v3"
-default_eval_set_id = "skills-session-baseline-v1"
+default_eval_set_id = "skills-gather-baseline-v1"
 
 [thresholds.unit]
 core_tool_call_success_rate = 0.90

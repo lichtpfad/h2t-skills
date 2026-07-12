@@ -21,6 +21,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
+from .skill_class import eval_set_for
+
 _VALID_MODES = ("auto", "off", "local", "push")
 
 
@@ -78,6 +80,7 @@ class SkillEval:
         self._fallback_used: bool = False
         self._error_class: Optional[str] = None
         self._mode = resolve_mode()
+        self._eval_set = eval_set_for(skill)
 
     def __enter__(self) -> "SkillEval":
         self._start_dt = datetime.now(timezone.utc)
@@ -272,7 +275,7 @@ class SkillEval:
                 repo=self.project,
                 framework="h2t-skill",
                 source=source,
-                eval_set_id="skills-session-baseline-v1",
+                eval_set_id=self._eval_set,
                 host=platform.node().lower().split(".")[0],
                 run_env=os.environ.get("H2T_EVALS_RUN_ENV", "agent"),
             )

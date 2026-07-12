@@ -404,3 +404,11 @@ def test_auto_custom_error_class_on_failure(tmp_path, monkeypatch):
     ok = list((evals_root / "handoff" / "sessions").glob("*.json"))
     latest = max(ok, key=lambda p: p.stat().st_mtime)
     assert "skills.error_class" not in {mm["key"] for mm in json.loads(latest.read_text())["metrics"]}
+
+
+def test_eval_set_resolved_per_class():
+    from lib.eval.skill_class import eval_set_for
+    ev = SkillEval("research", domain="d", project="p")
+    assert ev._eval_set == eval_set_for("research") == "skills-integration-baseline-v1"
+    ev2 = SkillEval("handoff", domain="d", project="p")
+    assert ev2._eval_set == "skills-gather-baseline-v1"
