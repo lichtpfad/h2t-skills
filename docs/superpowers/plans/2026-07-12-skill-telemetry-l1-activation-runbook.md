@@ -66,3 +66,10 @@ never `git add -A`, never commit a red suite as green, message `WIP:` + what was
 ## Decision-log
 
 - (append-only; auto-resolved defaults recorded here)
+- **D7 doc-refs (2026-07-12):** `record_eval`/`estimate_tokens` code deleted (×3 eval.py + ×3 `__init__`
+  exports + root/h2t test_eval.py). README/doc references NOT rewritten this run — the 3
+  `lib/gather/README.md` copies + `docs/gather-agent-instructions.md` + `docs/briefing-for-evals-agent.md`
+  weave `record_eval` in as the whole gather-eval tutorial (import examples, "eval is mandatory", API
+  section) and also carry unrelated staleness (old `claude-agent-skills` repo path). A correct migration
+  to the SkillEval context-manager API is a separate bounded doc pass → **deferred to handoff follow-up**,
+  logged (not silently dropped). Historical `docs/plans/2026-03-25-gather-framework.md` left as-is (archival).

@@ -434,3 +434,13 @@ def test_write_local_filename_has_no_seq_suffix(tmp_path, monkeypatch):
         pass
     name = list((evals_root / "handoff" / "sessions").glob("*.json"))[0].name
     assert not re.search(r"-\d{3}\.json$", name)
+
+
+def test_record_eval_module_removed():
+    """The vestigial gather.eval module and its exports are gone."""
+    import importlib
+    import lib.gather as g
+    assert not hasattr(g, "record_eval")
+    assert not hasattr(g, "estimate_tokens")
+    with pytest.raises(ModuleNotFoundError):
+        importlib.import_module("lib.gather.eval")
