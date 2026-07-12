@@ -36,7 +36,7 @@ recorded pattern.
 **Session.py discipline (MANDATORY on every task that edits `session.py` or a vendored sibling):**
 1. Edit BOTH copies: `lib/eval/session.py` AND `plugins/h2t-core/lib/eval/session.py` (and `skill_class.py` when added).
 2. Run `C:/dev/h2t-skills/.venv/Scripts/pytest tests/core/test_eval_vendored_parity.py -v` → PASS.
-3. Run the CI-gate scope `C:/dev/h2t-skills/.venv/Scripts/pytest lib tests/core tests/connectors -q` → green, before commit.
+3. Run the CI-gate scope `C:/dev/h2t-skills/.venv/Scripts/pytest lib tests/core tests/connectors plugins/h2t-core/skills/autonomous-run/scripts -q` → green, before commit.
 Never let parity drift between steps — the two copies change in the same commit.
 
 **Test gate = CI scope, NOT bare `pytest`.** Verified `.github/workflows/evals.yml`: CI runs `lib/`,
@@ -206,7 +206,7 @@ Expected: PASS (all, including the two new tests).
 
 Run: `C:/dev/h2t-skills/.venv/Scripts/pytest tests/core/test_eval_vendored_parity.py -v`
 Expected: PASS.
-Run: `C:/dev/h2t-skills/.venv/Scripts/pytest lib tests/core tests/connectors -q` (CI gate scope; bare `pytest` also hits 24 pre-existing env-red script tests outside CI — see Scope note)
+Run: `C:/dev/h2t-skills/.venv/Scripts/pytest lib tests/core tests/connectors plugins/h2t-core/skills/autonomous-run/scripts -q` (CI gate scope; bare `pytest` also hits 24 pre-existing env-red script tests outside CI — see Scope note)
 Expected: all green.
 
 - [ ] **Step 6: Commit**
@@ -542,7 +542,7 @@ Expected: PASS (all, incl. the 6 new tests).
 
 Run: `C:/dev/h2t-skills/.venv/Scripts/pytest tests/core/test_eval_vendored_parity.py -v`
 Expected: PASS.
-Run: `C:/dev/h2t-skills/.venv/Scripts/pytest lib tests/core tests/connectors -q` (CI gate scope; bare `pytest` also hits 24 pre-existing env-red script tests outside CI — see Scope note)
+Run: `C:/dev/h2t-skills/.venv/Scripts/pytest lib tests/core tests/connectors plugins/h2t-core/skills/autonomous-run/scripts -q` (CI gate scope; bare `pytest` also hits 24 pre-existing env-red script tests outside CI — see Scope note)
 Expected: all green.
 
 - [ ] **Step 6: Commit**
@@ -697,7 +697,7 @@ default_eval_set_id = "skills-gather-baseline-v1"
 
 Run: `C:/dev/h2t-skills/.venv/Scripts/pytest tests/core/test_eval_vendored_parity.py -v`
 Expected: PASS (both params).
-Run: `C:/dev/h2t-skills/.venv/Scripts/pytest lib tests/core tests/connectors -q` (CI gate scope; bare `pytest` also hits 24 pre-existing env-red script tests outside CI — see Scope note)
+Run: `C:/dev/h2t-skills/.venv/Scripts/pytest lib tests/core tests/connectors plugins/h2t-core/skills/autonomous-run/scripts -q` (CI gate scope; bare `pytest` also hits 24 pre-existing env-red script tests outside CI — see Scope note)
 Expected: all green.
 
 - [ ] **Step 10: Commit**
@@ -770,7 +770,7 @@ Expected: PASS.
 
 Run: `C:/dev/h2t-skills/.venv/Scripts/pytest tests/core/test_eval_vendored_parity.py -v`
 Expected: PASS.
-Run: `C:/dev/h2t-skills/.venv/Scripts/pytest lib tests/core tests/connectors -q` (CI gate scope; bare `pytest` also hits 24 pre-existing env-red script tests outside CI — see Scope note)
+Run: `C:/dev/h2t-skills/.venv/Scripts/pytest lib tests/core tests/connectors plugins/h2t-core/skills/autonomous-run/scripts -q` (CI gate scope; bare `pytest` also hits 24 pre-existing env-red script tests outside CI — see Scope note)
 Expected: all green.
 
 - [ ] **Step 6: Commit**
@@ -1024,7 +1024,7 @@ Run: `C:/dev/h2t-skills/.venv/Scripts/pytest tests/connectors/research -q`
 Expected: green — these test the connector package `h2t_ops.connectors.research.exa` (which has NO
 `post_telemetry`; `test_forbidden_cli_symbols_absent` already asserts its absence), so the script edit
 does not touch them. If any go red, STOP — the script/connector boundary was crossed.
-Run: `C:/dev/h2t-skills/.venv/Scripts/pytest lib tests/core -q`
+Run: `C:/dev/h2t-skills/.venv/Scripts/pytest lib tests/core plugins/h2t-core/skills/autonomous-run/scripts -q`
 Expected: green.
 
 - [ ] **Step 7: Commit**
@@ -1179,7 +1179,7 @@ Expected: PASS (this validates the emit shape; Step 3 wires it into the real cal
 
 - [ ] **Step 4: Full suite**
 
-Run: `C:/dev/h2t-skills/.venv/Scripts/pytest lib tests/core tests/connectors -q` (CI gate scope; bare `pytest` also hits 24 pre-existing env-red script tests outside CI — see Scope note)
+Run: `C:/dev/h2t-skills/.venv/Scripts/pytest lib tests/core tests/connectors plugins/h2t-core/skills/autonomous-run/scripts -q` (CI gate scope; bare `pytest` also hits 24 pre-existing env-red script tests outside CI — see Scope note)
 Expected: all green.
 
 - [ ] **Step 5: Commit**
