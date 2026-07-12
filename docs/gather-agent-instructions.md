@@ -39,7 +39,6 @@ from gather.project import identify_project
 # from gather.user import gather_user_context
 # from gather.stack import detect_stack
 # from gather.sessions import find_session_files
-from gather.eval import record_eval, estimate_tokens
 ```
 
 ### Step 2: Declare your layers
@@ -80,20 +79,21 @@ $H2T_PYTHON "${CLAUDE_PLUGIN_ROOT}/skills/YOUR-SKILL/gather.py" \
 Parse the returned JSON and use for subsequent steps.
 ```
 
-### Step 4: Add eval tracking
+### Step 4: Eval is at the skill layer, not the gatherer
 
-Always record eval metrics — it's free and helps measure skill performance:
+Gatherers do **not** record eval. The skill (or its CLI entrypoint) wraps the run
+in `SkillEval` (`lib/eval/session.py`), which emits the mandatory `core.*` metrics
+automatically and writes per the resolved `H2T_EVALS_MODE`:
 
 ```python
-record_eval("your-skill-name", {
-    "duration_ms": duration_ms,
-    "sources_used": sources_used,
-    "sources_failed": sources_failed,
-    "context_tokens_estimate": estimate_tokens(result),
-    # Add skill-specific metrics:
-    "your_custom_metric": value,
-})
+from lib.eval.session import SkillEval
+
+with SkillEval("your-skill-name", domain=domain, project=project_id) as ev:
+    ev.metric("skills.gather_source_success_rate", value_num=rate)
+    ev.metric("skills.token_consumption", value_num=float(len(str(result)) // 4))
 ```
+
+Keep your `gather.py` eval-free — it returns context, nothing else.
 
 ## Adding a New Context Source
 
@@ -113,7 +113,7 @@ When you need data from a source that doesn't exist yet (Notion, Calendar, Obsid
 - **Gatherers call `output_json()` once.** At the end, after all modules complete.
 - **Fail silently.** If `gh` isn't installed, `gather_github()` returns empty. No crashes.
 - **No external deps in core.** Only stdlib. PyYAML is the exception (already in h2t venv).
-- **Eval is mandatory.** Every gatherer must call `record_eval()`.
+- **Gatherers are eval-free.** Eval lives at the skill/CLI layer via `SkillEval` (see Step 4).
 - **Cross-platform.** Test on Windows and macOS. Use `pathlib`, not string paths.
 
 ## Project Identity Resolution
@@ -143,7 +143,7 @@ For a skill that only needs project identity and GitHub issues:
 
 ```python
 #!/usr/bin/env python3
-import sys, time
+import sys
 from pathlib import Path
 PLUGIN_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(PLUGIN_ROOT / "lib"))
@@ -151,16 +151,10 @@ sys.path.insert(0, str(PLUGIN_ROOT / "lib"))
 from gather import output_json
 from gather.project import identify_project
 from gather.github import gather_github
-from gather.eval import record_eval, estimate_tokens
 
-start = time.monotonic()
 project = identify_project(".")
 github = gather_github(project["github"]) if project.get("github") else {}
 result = {"project": project, "github": github}
 
-record_eval("my-skill", {
-    "duration_ms": int((time.monotonic() - start) * 1000),
-    "context_tokens_estimate": estimate_tokens(result),
-})
 output_json(result)
 ```
