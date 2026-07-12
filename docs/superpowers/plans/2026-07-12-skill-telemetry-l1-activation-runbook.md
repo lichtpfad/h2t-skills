@@ -28,7 +28,7 @@ Decision-protocol). Verify the branch before every commit.
 - [x] **gates** — skill: `codex + council + pre-merge-check` · input: `codex review-gate PASS (P2 _emit_eval loader-in-try + P3 comment fixed, 3b5306f); council finish-gate SOUND (codex PASS + advisor Lens1 SOUND + fresh-Opus Lens2 SOUND: every acceptance MET, no P1/P2, P3 residuals R1 proxy-mark→#305/R2 push-untested-out-of-scope/R3 mtime-flake fixed); final CI-scope 1117 passed; pre-merge-check next` · done: no [P1]; suite green · failure: fix then re-run (<=N) · re-entry: idempotent: re-run gate
 - [x] **e2e** — skill: `real entrypoint run` · input: `N/A — local-only telemetry, no external service surface (push/central = #305). Runtime import path empirically exercised by test_emit_eval_records_research_cost (vendored eval.session via sys.path + relative .skill_class)` · done: N/A · failure: BLOCKED->handoff; behavioral fail->fix · re-entry: idempotent: re-run
 - [x] **PR** — skill: `superpowers:finishing-a-development-branch` · input: `PR #314 opened → main (branch pushed); merge to main is operator hard-stop, NOT auto-done` · done: PR opened · failure: escalate · re-entry: continue: reuse branch
-- [ ] **handoff** — skill: `h2t-core:handoff` · input: `record run outcome + D4 connector-path future work + concurrent codex/research-parity conflict risk` · done: session record written · failure: n/a (terminal) · re-entry: idempotent: re-run handoff
+- [x] **handoff** — skill: `h2t-core:handoff` · input: `run complete: PR #314 open, council SOUND; handoff records deferred D8/doc-migration/connector-path + redeploy-needed + codex/research-parity conflict risk` · done: session record written · failure: n/a (terminal) · re-entry: idempotent: re-run handoff
 
 ## Gates
 
