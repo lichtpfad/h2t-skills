@@ -12,7 +12,6 @@ from .sessions import (
 )
 from .project import identify_project
 from .user import gather_user_context
-from .eval import record_eval, estimate_tokens
 from .briefing import format_briefing
 
 __all__ = [
@@ -21,6 +20,5 @@ __all__ = [
     "detect_stack",
     "find_session_files", "find_latest_session_index", "extract_session_id", "get_machine_name",
     "identify_project", "gather_user_context",
-    "record_eval", "estimate_tokens",
     "format_briefing",
 ]

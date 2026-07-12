@@ -1,0 +1,12 @@
+# Business KPIs (non-blocking, §10). Cadence: weekly review.
+[kpi.research_cost_usd]
+metric = "skills.research_cost_usd"
+aggregation = "sum"
+window = "7d"
+description = "Weekly Exa research spend across sessions"
+
+[kpi.deflection_rate]
+metric = "core.deflection_rate"
+aggregation = "avg"
+window = "7d"
+description = "Fraction of sessions completing without a manual fallback"
