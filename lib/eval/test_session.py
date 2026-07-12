@@ -402,7 +402,7 @@ def test_auto_custom_error_class_on_failure(tmp_path, monkeypatch):
     with SkillEval("handoff", domain="d", project="p", evals_root=str(evals_root)):
         pass
     ok = list((evals_root / "handoff" / "sessions").glob("*.json"))
-    latest = max(ok, key=lambda p: p.stat().st_mtime)
+    latest = max(ok, key=lambda p: p.name)  # name = time+uuid, lexically == chronological
     assert "skills.error_class" not in {mm["key"] for mm in json.loads(latest.read_text())["metrics"]}
 
 
