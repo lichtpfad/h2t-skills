@@ -1,3 +1,8 @@
+> ⚠️ **Stale snapshot as of 2026-04-14 — archived, kept for history.**
+> Repo path, version (v2.12.1), and skill inventory below are obsolete (pre-`h2t-skills`
+> rename, pre h2t-ops/h2t-core split). Do not use as current reference.
+> For the live gather guide see `docs/gather-agent-instructions.md`.
+
 # claude-agent-skills (h2t plugin) — Инвентарь инструментов
 
 **Репо:** `C:/dev/claude-agent-skills` (GitHub: `lichtpfad/h2t`)
