@@ -25,7 +25,7 @@ milestone: ""
 (connectors, drive, meetgeek, research, telegram, drawio, docs-*, edu-transcripts). Instrumenting all
 of them in one run is unbounded and each has a different entry surface. This run proves the shared
 pattern on `research` (its telemetry seam already exists and is the reconciliation target). The
-remaining skills are a **documented follow-up** (Task 8) — NOT silently dropped. Extend later per the
+remaining skills are a **documented follow-up** (Task 9) — NOT silently dropped. Extend later per the
 recorded pattern.
 
 **Hard boundaries (do not cross — all `#305`/push track):**
@@ -36,8 +36,15 @@ recorded pattern.
 **Session.py discipline (MANDATORY on every task that edits `session.py` or a vendored sibling):**
 1. Edit BOTH copies: `lib/eval/session.py` AND `plugins/h2t-core/lib/eval/session.py` (and `skill_class.py` when added).
 2. Run `C:/dev/h2t-skills/.venv/Scripts/pytest tests/core/test_eval_vendored_parity.py -v` → PASS.
-3. Run the FULL suite `C:/dev/h2t-skills/.venv/Scripts/pytest` → green, before commit.
+3. Run the CI-gate scope `C:/dev/h2t-skills/.venv/Scripts/pytest lib tests/core tests/connectors -q` → green, before commit.
 Never let parity drift between steps — the two copies change in the same commit.
+
+**Test gate = CI scope, NOT bare `pytest`.** Verified `.github/workflows/evals.yml`: CI runs `lib/`,
+`tests/core`, `tests/connectors`, and `plugins/h2t-core/skills/autonomous-run/scripts`. Bare `pytest`
+from the repo root additionally collects `plugins/h2t-ops/skills/research/tests/test_exa_search.py`, which
+has **24 pre-existing failures in the local sandbox** (subprocess tests can't bootstrap `h2t_secrets`) —
+these are env-only, NOT in CI, and NOT introduced by this plan. The acceptance "suite green" means the
+CI-scoped command above is green; do not chase the pre-existing script-subprocess reds.
 
 **Concurrent-repo hazard:** many branches/worktrees are live (`codex/research-parity` touches
 `exa_search.py` = D4 target). Work on a fresh branch off `main`; verify branch before every commit;
@@ -199,7 +206,7 @@ Expected: PASS (all, including the two new tests).
 
 Run: `C:/dev/h2t-skills/.venv/Scripts/pytest tests/core/test_eval_vendored_parity.py -v`
 Expected: PASS.
-Run: `C:/dev/h2t-skills/.venv/Scripts/pytest`
+Run: `C:/dev/h2t-skills/.venv/Scripts/pytest lib tests/core tests/connectors -q` (CI gate scope; bare `pytest` also hits 24 pre-existing env-red script tests outside CI — see Scope note)
 Expected: all green.
 
 - [ ] **Step 6: Commit**
@@ -535,7 +542,7 @@ Expected: PASS (all, incl. the 6 new tests).
 
 Run: `C:/dev/h2t-skills/.venv/Scripts/pytest tests/core/test_eval_vendored_parity.py -v`
 Expected: PASS.
-Run: `C:/dev/h2t-skills/.venv/Scripts/pytest`
+Run: `C:/dev/h2t-skills/.venv/Scripts/pytest lib tests/core tests/connectors -q` (CI gate scope; bare `pytest` also hits 24 pre-existing env-red script tests outside CI — see Scope note)
 Expected: all green.
 
 - [ ] **Step 6: Commit**
@@ -690,7 +697,7 @@ default_eval_set_id = "skills-gather-baseline-v1"
 
 Run: `C:/dev/h2t-skills/.venv/Scripts/pytest tests/core/test_eval_vendored_parity.py -v`
 Expected: PASS (both params).
-Run: `C:/dev/h2t-skills/.venv/Scripts/pytest`
+Run: `C:/dev/h2t-skills/.venv/Scripts/pytest lib tests/core tests/connectors -q` (CI gate scope; bare `pytest` also hits 24 pre-existing env-red script tests outside CI — see Scope note)
 Expected: all green.
 
 - [ ] **Step 10: Commit**
@@ -763,7 +770,7 @@ Expected: PASS.
 
 Run: `C:/dev/h2t-skills/.venv/Scripts/pytest tests/core/test_eval_vendored_parity.py -v`
 Expected: PASS.
-Run: `C:/dev/h2t-skills/.venv/Scripts/pytest`
+Run: `C:/dev/h2t-skills/.venv/Scripts/pytest lib tests/core tests/connectors -q` (CI gate scope; bare `pytest` also hits 24 pre-existing env-red script tests outside CI — see Scope note)
 Expected: all green.
 
 - [ ] **Step 6: Commit**
@@ -860,7 +867,13 @@ git commit -m "chore(eval): remove vestigial record_eval/estimate_tokens x3 (#31
 **Why (Codex-P2, interim per-sub-call):** research writes cost to a bespoke POST `/api/telemetry/research`
 that does not exist on the service → cost never persists centrally. Wrap the existing seam in `SkillEval`
 and emit `skills.research_cost_usd` from the envelope. Per-invocation aggregation is a documented
-follow-up (Task 8); this is per-sub-call.
+follow-up (Task 9); this is per-sub-call.
+
+**Scope boundary (verified):** the bespoke `post_telemetry` dead-channel lives ONLY in the standalone
+script `scripts/exa_search.py` (the CLI the skill invokes). The importable connector package
+`h2t_ops/connectors/research/exa.py` has NO `post_telemetry` (grep-confirmed) — D4 does not touch it, and
+its CI-gated tests (`tests/connectors/research/`) are unaffected. Emitting cost telemetry from the
+connector-package path is out of D4 scope → note in handoff as future work (Task 9 territory).
 
 **Import mechanism (CRITICAL — do NOT use `spec_from_file_location`):** `session.py` uses a relative
 import `from .skill_class import eval_set_for` (Task 3). A module loaded via
@@ -868,7 +881,7 @@ import `from .skill_class import eval_set_for` (Task 3). A module loaded via
 `ImportError: attempted relative import with no known parent package` — silently swallowed in `_emit_eval`,
 telemetry lost. Instead, put the vendored `lib` dir on `sys.path` and import `eval.session` as a proper
 package (mirrors how the gather runtime already imports it — `lib/cli/main.py:30` `from eval.session import SkillEval`).
-This is the shared thin-wrapper seam Task 8 reuses. Add a module-level loader:
+This is the shared thin-wrapper seam Task 9 reuses. Add a module-level loader:
 
 - [ ] **Step 1: Write the failing test** — add to `plugins/h2t-ops/skills/research/tests/test_exa_search.py`
       (adapt to the file's existing import/style):
@@ -988,18 +1001,31 @@ Run: `grep -n "post_telemetry\|sha256" plugins/h2t-ops/skills/research/scripts/e
 Expected: ZERO `post_telemetry` matches. If `sha256` is now unused (only the deleted search block used it),
 remove `from hashlib import sha256`; if any remaining line uses it, keep the import.
 
-- [ ] **Step 5: Run the research test suite**
+- [ ] **Step 5: Clean up the script's own test file.** `plugins/h2t-ops/skills/research/tests/test_exa_search.py`
+      has a **pre-existing** local failure mode: its subprocess tests (`test_version_flag`, all
+      `test_envelope_flag_*`, `test_crawl_*` — 24 total) shell out to `exa_search.py`, which cannot
+      bootstrap `h2t_secrets` in the pytest sandbox (`EXA_ERROR:ENV h2t_secrets module not found`). These
+      are env-dependent, NOT caused by this task, and this file is **NOT in the CI gate** (CI runs
+      `lib/`, `tests/core`, `tests/connectors`, autonomous-run scripts — verified `.github/workflows/evals.yml`).
+      Do the two edits that ARE in scope:
+  - Delete/replace any `post_telemetry`-referencing test (e.g. one asserting `awaiting_endpoint`/`disabled`/`buffered`) — that contract is gone.
+  - Opportunistic fix (same file): update the stale version assertion `assert "0.1.1" in result.stdout`
+    → `assert "0.1.2" in result.stdout` (script `__version__` is `0.1.2`).
+  - Then run ONLY the non-subprocess tests you added/own:
 
-Run: `C:/dev/h2t-skills/.venv/Scripts/pytest plugins/h2t-ops/skills/research/tests/test_exa_search.py -v`
-Expected: PASS (new test green; update/remove any old `post_telemetry` test that now references the
-deleted function — if an old test asserts `awaiting_endpoint`/`disabled`, delete it, that contract is gone).
+Run: `C:/dev/h2t-skills/.venv/Scripts/pytest "plugins/h2t-ops/skills/research/tests/test_exa_search.py::test_emit_eval_records_research_cost" -v`
+Expected: PASS.
+(Do NOT gate on the whole file being green — the 24 subprocess reds are pre-existing/env-only. Record
+that in the commit body.)
 
-- [ ] **Step 6: Connector suite + full suite**
+- [ ] **Step 6: CI-gated suites must stay green** (this is the real gate)
 
-Run: `C:/dev/h2t-skills/.venv/Scripts/pytest tests/connectors/research`
+Run: `C:/dev/h2t-skills/.venv/Scripts/pytest tests/connectors/research -q`
+Expected: green — these test the connector package `h2t_ops.connectors.research.exa` (which has NO
+`post_telemetry`; `test_forbidden_cli_symbols_absent` already asserts its absence), so the script edit
+does not touch them. If any go red, STOP — the script/connector boundary was crossed.
+Run: `C:/dev/h2t-skills/.venv/Scripts/pytest lib tests/core -q`
 Expected: green.
-Run: `C:/dev/h2t-skills/.venv/Scripts/pytest`
-Expected: all green.
 
 - [ ] **Step 7: Commit**
 
@@ -1153,7 +1179,7 @@ Expected: PASS (this validates the emit shape; Step 3 wires it into the real cal
 
 - [ ] **Step 4: Full suite**
 
-Run: `C:/dev/h2t-skills/.venv/Scripts/pytest`
+Run: `C:/dev/h2t-skills/.venv/Scripts/pytest lib tests/core tests/connectors -q` (CI gate scope; bare `pytest` also hits 24 pre-existing env-red script tests outside CI — see Scope note)
 Expected: all green.
 
 - [ ] **Step 5: Commit**
