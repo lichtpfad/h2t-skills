@@ -24,7 +24,7 @@ def test_version_flag():
         text=True,
     )
     assert result.returncode == 0, result.stderr
-    assert "0.1.1" in result.stdout
+    assert "0.1.2" in result.stdout
 
 
 # --- MODE_CONFIG tests ---
@@ -421,48 +421,9 @@ def test_write_partial_md_includes_meta_and_telemetry_row(tmp_path):
     assert "Integrity check:" in text
 
 
-def test_post_telemetry_awaiting_endpoint_when_env_unset(monkeypatch, tmp_path):
-    # MVP default: endpoint not configured yet → 'awaiting_endpoint', not 'disabled'.
-    monkeypatch.delenv("H2T_EVALS_URL", raising=False)
-    monkeypatch.delenv("H2T_EVALS_DISABLE", raising=False)
-    status = exa_search.post_telemetry(
-        event={"foo": "bar"}, buffer_path=tmp_path / "buf.jsonl"
-    )
-    assert status == "awaiting_endpoint"
-    assert not (tmp_path / "buf.jsonl").exists()
-
-
-def test_post_telemetry_disabled_when_explicit_opt_out(monkeypatch, tmp_path):
-    # User explicit opt-out takes precedence over URL presence.
-    monkeypatch.setenv("H2T_EVALS_DISABLE", "1")
-    monkeypatch.setenv("H2T_EVALS_URL", "https://evals.example.com")
-    status = exa_search.post_telemetry(
-        event={"foo": "bar"}, buffer_path=tmp_path / "buf.jsonl"
-    )
-    assert status == "disabled"
-    assert not (tmp_path / "buf.jsonl").exists()
-
-
-def test_post_telemetry_buffers_on_network_failure(monkeypatch, tmp_path):
-    monkeypatch.delenv("H2T_EVALS_DISABLE", raising=False)
-    monkeypatch.setenv("H2T_EVALS_URL", "https://evals.example.com")
-    buf = tmp_path / "buf.jsonl"
-    with patch("urllib.request.urlopen", side_effect=urllib.error.URLError("down")):
-        status = exa_search.post_telemetry(event={"a": 1}, buffer_path=buf)
-    assert status == "buffered"
-    assert buf.exists()
-    line = buf.read_text(encoding="utf-8").strip()
-    assert json.loads(line) == {"a": 1}
-
-
-def test_post_telemetry_sent_on_success(monkeypatch, tmp_path):
-    monkeypatch.delenv("H2T_EVALS_DISABLE", raising=False)
-    monkeypatch.setenv("H2T_EVALS_URL", "https://evals.example.com")
-    buf = tmp_path / "buf.jsonl"
-    with patch("urllib.request.urlopen", return_value=_mock_urlopen_response(202, {})):
-        status = exa_search.post_telemetry(event={"a": 1}, buffer_path=buf)
-    assert status == "sent"
-    assert not buf.exists()
+# Research telemetry unified on SkillEval (D4, #312); bespoke post_telemetry removed.
+# Its old awaiting_endpoint/disabled/buffered/sent contract tests deleted with the fn.
+# Coverage is now test_emit_eval_records_research_cost (SkillEval local emit).
 
 
 # --- main() argparse tests ---
@@ -1326,3 +1287,22 @@ def test_main_handles_missing_secrets_file(monkeypatch, capsys):
 
     assert excinfo.value.code == 4
     assert "EXA_ERROR:ENV" in capsys.readouterr().err
+
+
+def test_emit_eval_records_research_cost(tmp_path, monkeypatch):
+    """_emit_eval writes a local SkillEval session carrying research cost + core.*."""
+    monkeypatch.setenv("H2T_EVALS_MODE", "local")
+    monkeypatch.setenv("H2T_EVALS_ROOT", str(tmp_path / "evals"))
+    envelope = {
+        "status": "OK",
+        "results": [1, 2, 3],
+        "telemetry": {"total_cost_usd": 0.037, "total_latency_ms": 1200,
+                      "attempts": [{"http": 200, "latency_ms": 1200, "error": None}]},
+        "meta": {"timestamp": "2026-07-12T00:00:00Z"},
+    }
+    exa_search._emit_eval(envelope, exit_code=0, project="h2t-skills", mode="generic")
+    files = list((tmp_path / "evals" / "research" / "sessions").glob("*.json"))
+    assert len(files) == 1
+    keys = {m["key"] for m in json.loads(files[0].read_text())["metrics"]}
+    assert "skills.research_cost_usd" in keys
+    assert "core.task_success" in keys

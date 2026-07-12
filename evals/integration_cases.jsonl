@@ -1,0 +1,2 @@
+{"id": "session-start-task-success", "eval_set_id": "skills-gather-baseline-v1", "metric": "core.task_success", "input": {"skill": "session-start"}, "expected": {"equals": true}}
+{"id": "research-task-success", "eval_set_id": "skills-integration-baseline-v1", "metric": "core.task_success", "input": {"skill": "research", "mode": "generic"}, "expected": {"equals": true}}

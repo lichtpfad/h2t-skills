@@ -1,0 +1,2 @@
+{"id": "gather-source-success-baseline", "eval_set_id": "skills-gather-baseline-v1", "metric": "core.op_type_correct_rate", "input": {"skill": "session-start"}, "expected": {"min": 0.9}}
+{"id": "integration-op-type-baseline", "eval_set_id": "skills-integration-baseline-v1", "metric": "core.op_type_correct_rate", "input": {"skill": "research"}, "expected": {"min": 0.9}}
