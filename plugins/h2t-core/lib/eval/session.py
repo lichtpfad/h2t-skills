@@ -61,6 +61,7 @@ class SkillEval:
         skill: str,
         domain: str,
         project: str,
+        repo: str = "h2t-skills",
         plugin_version: str = "",
         evals_root: Optional[str] = None,
         skill_graph=None,
@@ -69,6 +70,10 @@ class SkillEval:
         self.skill = skill
         self.domain = domain
         self.project = project
+        # Central-push repo identity is canonical 'h2t-skills' and is intentionally
+        # decoupled from project.id (which stays 'agent-skills', wired into
+        # session/handoff/activity/lineage). See #305.
+        self.repo = repo
         self.plugin_version = plugin_version
         self.evals_root = evals_root
         self._skill_graph = skill_graph
@@ -271,7 +276,7 @@ class SkillEval:
             source = f"{self.skill}:v{self.plugin_version}" if self.plugin_version else self.skill
             s = EvalSession(
                 client=client,
-                repo=self.project,
+                repo=self.repo,
                 framework="h2t-skill",
                 source=source,
                 eval_set_id=self._eval_set,
