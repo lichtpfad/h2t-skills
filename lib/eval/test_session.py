@@ -444,3 +444,20 @@ def test_record_eval_module_removed():
     assert not hasattr(g, "estimate_tokens")
     with pytest.raises(ModuleNotFoundError):
         importlib.import_module("lib.gather.eval")
+
+
+def test_eval_repo_decoupled_from_project():
+    """#305: central-push repo identity is 'h2t-skills', independent of project.id.
+
+    project.id ('agent-skills') is wired into session/handoff/activity/lineage and must
+    NOT change; the evals repo identity is a separate canonical string.
+    """
+    ev = SkillEval("session-start", domain="dev", project="agent-skills")
+    assert ev.repo == "h2t-skills"
+    assert ev.project == "agent-skills"
+
+
+def test_eval_repo_is_overridable():
+    """The canonical repo default is overridable for tests / other repos."""
+    ev = SkillEval("session-start", domain="dev", project="agent-skills", repo="other-repo")
+    assert ev.repo == "other-repo"
