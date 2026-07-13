@@ -52,7 +52,7 @@ jobs:
         run: |
           if [ "$H2T_EVALS_ENABLED" = "1" ] && [ -n "$H2T_EVALS_SERVICE_URL" ]; then
             pip install -e . 2>/dev/null || true
-            h2t-evals validate-repo --repo claude-agent-skills --repo-config evals/repo.toml
+            h2t-evals validate-repo --repo h2t-skills --repo-config evals/repo.toml
           else
             echo "BLOCKED: H2T_EVALS_TOKEN not provisioned for this repo."
             echo "Service token must be added as GitHub secret H2T_EVALS_TOKEN by platform team."

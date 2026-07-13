@@ -1,4 +1,4 @@
-repo = "claude-agent-skills"
+repo = "h2t-skills"
 framework = "h2t-skills"
 default_source = "h2t-core:v3"
 default_eval_set_id = "skills-gather-baseline-v1"
