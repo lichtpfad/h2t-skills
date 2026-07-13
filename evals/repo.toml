@@ -1,5 +1,5 @@
 repo = "h2t-skills"
-framework = "h2t-skills"
+framework = "h2t-skill"
 default_source = "h2t-core:v3"
 default_eval_set_id = "skills-gather-baseline-v1"
 
@@ -30,3 +30,52 @@ level = "unit"
 type = "num"
 aggregation = "avg"
 description = "Fraction of data sources that responded without error"
+
+[custom_metrics.skills_sources_failed_count]
+key = "skills.sources_failed_count"
+level = "unit"
+type = "num"
+aggregation = "avg"
+description = "Count of gather data sources that failed in a session"
+
+[custom_metrics.skills_fallback_used]
+key = "skills.fallback_used"
+level = "business"
+type = "bool"
+aggregation = "avg"
+description = "Whether a degraded/fallback path was taken (scored as 0/1 rate)"
+
+[custom_metrics.skills_duration_ms]
+key = "skills.duration_ms"
+level = "integration"
+type = "num"
+aggregation = "avg"
+description = "Skill wall-clock duration in milliseconds"
+
+[custom_metrics.skills_error_class]
+key = "skills.error_class"
+level = "unit"
+type = "text"
+aggregation = "count"
+description = "Exception class name on failure (descriptive label, not scored)"
+
+[custom_metrics.skills_research_cost_usd]
+key = "skills.research_cost_usd"
+level = "business"
+type = "num"
+aggregation = "sum"
+description = "Provider cost of a research run in USD (weekly-sum KPI)"
+
+[custom_metrics.skills_api_latency_ms]
+key = "skills.api_latency_ms"
+level = "integration"
+type = "num"
+aggregation = "avg"
+description = "Research provider API latency in milliseconds"
+
+[custom_metrics.skills_records_returned]
+key = "skills.records_returned"
+level = "unit"
+type = "num"
+aggregation = "avg"
+description = "Count of records returned by a research run"
