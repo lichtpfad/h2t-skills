@@ -25,6 +25,19 @@ def test_status_source_legacy(monkeypatch):
     assert st["mode"] == "push"
 
 
+def test_status_default_env_merges_secrets_file(tmp_path, monkeypatch):
+    """get_status() default env reflects ~/.dor/secrets.env so operators see push (#321)."""
+    monkeypatch.setattr(sess, "_sdk_available", lambda: True)
+    f = tmp_path / "secrets.env"
+    f.write_text("H2T_EVALS_TOKEN=tok\n", encoding="utf-8")
+    monkeypatch.setattr(sess, "_DEFAULT_SECRETS", f)
+    for var in ("H2T_EVALS_MODE", "H2T_EVALS_ENABLED", "H2T_EVALS_TOKEN"):
+        monkeypatch.delenv(var, raising=False)
+    st = get_status(evals_root="/nonexistent")
+    assert st["token_present"] is True
+    assert st["mode"] == "push"
+
+
 def test_status_counts_local_sessions(tmp_path, monkeypatch):
     monkeypatch.setattr(sess, "_sdk_available", lambda: False)
     d = tmp_path / "session-start" / "sessions"

@@ -26,6 +26,34 @@ from .skill_class import eval_set_for
 
 _VALID_MODES = ("auto", "off", "local", "push")
 
+_DEFAULT_SECRETS = Path.home() / ".dor" / "secrets.env"
+
+
+def _load_secrets(secrets_path=None) -> dict:
+    """Merge ~/.dor/secrets.env under the process env for H2T_EVALS_* keys.
+
+    Mirrors lib/skill_graph/client.py _load_secrets: the file supplies values,
+    explicit environment variables win. Prefix-matched (never a hardcoded key
+    list) so SERVICE_URL/TOKEN/SPOOL/RUN_ENV cannot be silently dropped.
+    Self-contained (stdlib only) — the bundled plugin copy carries no
+    cross-package dependency. See #321.
+    """
+    path = Path(secrets_path) if secrets_path else _DEFAULT_SECRETS
+    result: dict = {}
+    if path.exists():
+        for line in path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if line.startswith("#") or "=" not in line:
+                continue
+            key, _, val = line.partition("=")
+            key = key.strip()
+            if key.startswith("H2T_EVALS_"):
+                result[key] = val.strip()
+    for key, val in os.environ.items():
+        if key.startswith("H2T_EVALS_"):
+            result[key] = val
+    return result
+
 
 def _sdk_available() -> bool:
     """True if the h2t_evals SDK client is importable (cheap, no network)."""
@@ -66,6 +94,7 @@ class SkillEval:
         evals_root: Optional[str] = None,
         skill_graph=None,
         score_before: Optional[float] = None,
+        secrets_path: Optional[str] = None,
     ) -> None:
         self.skill = skill
         self.domain = domain
@@ -85,7 +114,10 @@ class SkillEval:
         self._op_type_valid: Optional[bool] = None
         self._fallback_used: bool = False
         self._error_class: Optional[str] = None
-        self._mode = resolve_mode()
+        # Credentials resolve from ~/.dor/secrets.env (env-wins); one merged env
+        # feeds both mode resolution and the central send path. See #321.
+        self._env = _load_secrets(secrets_path)
+        self._mode = resolve_mode(self._env)
         self._eval_set = eval_set_for(skill)
 
     def __enter__(self) -> "SkillEval":
@@ -265,9 +297,9 @@ class SkillEval:
         except ImportError:
             return
 
-        service_url = os.environ.get("H2T_EVALS_SERVICE_URL", "http://127.0.0.1:8088")
-        token = os.environ.get("H2T_EVALS_TOKEN", "")
-        spool = os.environ.get(
+        service_url = self._env.get("H2T_EVALS_SERVICE_URL", "http://127.0.0.1:8088")
+        token = self._env.get("H2T_EVALS_TOKEN", "")
+        spool = self._env.get(
             "H2T_EVALS_SPOOL",
             str(Path.home() / ".h2t" / "evals" / ".h2t_evals_spool.db"),
         )
@@ -281,7 +313,7 @@ class SkillEval:
                 source=source,
                 eval_set_id=self._eval_set,
                 host=platform.node().lower().split(".")[0],
-                run_env=os.environ.get("H2T_EVALS_RUN_ENV", "agent"),
+                run_env=self._env.get("H2T_EVALS_RUN_ENV", "agent"),
             )
             s.start()
 
