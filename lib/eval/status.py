@@ -1,5 +1,4 @@
 """Read-only eval status — offline-safe, no writes, no network."""
-import os
 from pathlib import Path
 
 # Module-qualified access (not `from .session import ...`) so tests that
@@ -36,7 +35,10 @@ def _hint(mode: str, sdk: bool, token: bool) -> str:
 
 
 def get_status(env=None, evals_root=None) -> dict:
-    env = env if env is not None else os.environ
+    # Default view merges ~/.dor/secrets.env (env-wins) so the operator sees the
+    # same creds the runtime push path resolves — else status reads 'off' while
+    # real runs push (#321). Explicit env (tests, callers) is used verbatim.
+    env = env if env is not None else sess._load_secrets()
     mode = sess.resolve_mode(env)
     sdk = sess._sdk_available()
     token = bool(env.get("H2T_EVALS_TOKEN"))

@@ -121,3 +121,26 @@ CI-гейты (§10, unit/integration thresholds), judge-скоринг (§12), 
 - [ ] Repo-ассеты (G4): `unit_cases.jsonl`, `integration_cases.jsonl`, `business_kpi.toml` → `validate-repo` зелёный.
 - [x] Issue(s) в h2t-skills на G2–G10 (2026-07-12): **#305** (identity G3+G7+G8), **#306** (core.* G2), **#307** (repo-ассеты G4), **#308** (checklist_compliance G5), **#309** (eval_set по-классу G6), **#310** (record_eval cleanup G9), **#311** (SKILL_GRAPH_DIR G10). Все дети #289.
 - [ ] Issue в h2t-evals (repo-boundary): дрейф doc-vs-code §1.1 (branch/commit заявлены обязательными, но не в `REQUIRED_SESSION_FIELDS`) — НЕ заведён, на усмотрение оператора.
+
+## 7) Локальная конфигурация push (gate 3, #321)
+
+`SkillEval` резолвит креды из `~/.dor/secrets.env` (env-переменные процесса выигрывают
+над файлом; `_load_secrets`, обе копии `session.py` — parity-guard
+`tests/core/test_eval_session_parity.py`). Один merged-env кормит и `resolve_mode()`,
+и `_send_central`. Чтобы включить локальный push, добавь в `~/.dor/secrets.env`:
+
+```
+H2T_EVALS_ENABLED=1                                  # рычаг активации — ставить последним (после #321+#99+gate 4)
+H2T_EVALS_SERVICE_URL=https://evals.lichtpfadstudio.com   # confirmed live (evals.h2t.ai / evals.hou2touch.ai = DNS-fail, миграция не завершена)
+H2T_EVALS_TOKEN=<h2t-skills-scoped token>            # доставлен локально (в GH-secret бесполезен рантайму); токен ротирован evals-стороной
+```
+
+Опционально: `H2T_EVALS_SPOOL`, `H2T_EVALS_RUN_ENV` (любой `H2T_EVALS_*` ключ подхватывается по префиксу).
+Статус: `h2t-ops evals status` (дефолтный view мержит файл — покажет `push`, когда креды на месте).
+
+**Всё ещё блокирует live push:** h2t-evals#99 (в лёгком venv `~/.h2t/venv`
+`import h2t_evals.sdk` → `ModuleNotFoundError: psycopg`; `_send_central` глотает ImportError → no-push).
+Фикс — h2t-evals PR #109 (lazy-load через PEP 562); go-live = мердж #109 (editable-pth venv, reinstall не нужен).
+Config-wiring (эта секция) тестируется без live-SDK и от #99 не зависит.
+
+**Go-live порядок:** #321 (этот PR) → мердж h2t-evals#109 → gate 4 (потребитель данных) → флип `H2T_EVALS_ENABLED=1`.
