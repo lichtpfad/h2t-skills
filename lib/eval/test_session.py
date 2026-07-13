@@ -461,3 +461,77 @@ def test_eval_repo_is_overridable():
     """The canonical repo default is overridable for tests / other repos."""
     ev = SkillEval("session-start", domain="dev", project="agent-skills", repo="other-repo")
     assert ev.repo == "other-repo"
+
+
+# --- #321: SkillEval resolves push creds from ~/.dor/secrets.env -------------
+
+def _write_secrets(path, **kv):
+    path.write_text("".join(f"{k}={v}\n" for k, v in kv.items()), encoding="utf-8")
+
+
+def test_secrets_file_activates_push(tmp_path, monkeypatch):
+    """H2T_EVALS_ENABLED=1 in secrets.env activates push when process env is unset."""
+    for var in ("H2T_EVALS_MODE", "H2T_EVALS_ENABLED", "H2T_EVALS_TOKEN"):
+        monkeypatch.delenv(var, raising=False)
+    f = tmp_path / "secrets.env"
+    _write_secrets(f, H2T_EVALS_ENABLED="1")
+    ev = SkillEval("session-start", domain="d", project="p", secrets_path=str(f))
+    assert ev._mode == "push"
+
+
+def test_env_var_wins_over_secrets_file(tmp_path, monkeypatch):
+    """Explicit H2T_EVALS_MODE=off overrides the file's ENABLED=1 (env-wins)."""
+    monkeypatch.setenv("H2T_EVALS_MODE", "off")
+    f = tmp_path / "secrets.env"
+    _write_secrets(f, H2T_EVALS_ENABLED="1")
+    ev = SkillEval("session-start", domain="d", project="p", secrets_path=str(f))
+    assert ev._mode == "off"
+
+
+def test_send_central_reads_service_url_and_token_from_file(tmp_path, monkeypatch):
+    """_send_central must pull SERVICE_URL/TOKEN from secrets.env, not only os.environ.
+
+    Proves the send path itself consumes the merged env — the crux of #321
+    (resolve_mode alone flipping to push is not enough).
+    """
+    import sys
+    import types
+    captured: dict = {}
+
+    class FakeSession:
+        def __init__(self, **kw):
+            pass
+
+        def start(self):
+            pass
+
+        def metric(self, key, **kw):
+            pass
+
+        def finish(self, **kw):
+            pass
+
+    class FakeClient:
+        def __init__(self, **kw):
+            captured.update(kw)
+
+        def flush(self, **kw):
+            pass
+
+    fake = types.ModuleType("h2t_evals.sdk")
+    fake.EvalClient = FakeClient
+    fake.EvalSession = FakeSession
+    monkeypatch.setitem(sys.modules, "h2t_evals", types.ModuleType("h2t_evals"))
+    monkeypatch.setitem(sys.modules, "h2t_evals.sdk", fake)
+    for var in ("H2T_EVALS_MODE", "H2T_EVALS_ENABLED", "H2T_EVALS_TOKEN",
+                "H2T_EVALS_SERVICE_URL"):
+        monkeypatch.delenv(var, raising=False)
+    f = tmp_path / "secrets.env"
+    _write_secrets(f, H2T_EVALS_ENABLED="1",
+                   H2T_EVALS_SERVICE_URL="https://evals.example.test",
+                   H2T_EVALS_TOKEN="tok-from-file")
+    with SkillEval("research", domain="d", project="p",
+                   evals_root=str(tmp_path / "evals"), secrets_path=str(f)):
+        pass
+    assert captured.get("service_url") == "https://evals.example.test"
+    assert captured.get("token") == "tok-from-file"
