@@ -151,3 +151,17 @@ def test_now_data_anchored_report_nonempty_on_old_sessions():
     r = rep.build_report(old, recent_days=7, min_n=1)   # now defaults to max(started_at)
     assert r["generated_now"] is not None
     assert r["skills"] and r["skills"][0]["runs_recent"] == 5
+
+
+def test_low_sample_partitioned_and_main_sorted_worst_first():
+    sessions = (
+        _runs("good", 14, 10, status="success")                      # 100% ok
+        + _runs("bad", 14, 6, status="failure") + _runs("bad", 14, 4, status="success")  # 40%
+        + _runs("tiny", 14, 2, status="failure")                     # < min_n
+    )
+    r = rep.build_report(sessions, recent_days=7, min_n=5)
+    main = [s["skill"] for s in r["skills"]]
+    low = [s["skill"] for s in r["low_sample"]]
+    assert "tiny" not in main and "tiny" in low
+    assert main[0] == "bad"           # worst success first
+    assert main == ["bad", "good"]

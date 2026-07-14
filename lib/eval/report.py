@@ -194,11 +194,26 @@ def build_report(sessions, *, now=None, recent_days=7, min_n=5, regress_pp=10.0,
                 row["regressed"] = row["success_delta"] <= -(regress_pp / 100.0)
             rows.append(row)
 
+    low = [r for r in rows if r["runs_recent"] < min_n]
+    rated = [r for r in rows if r["runs_recent"] >= min_n]
+    for r in low:
+        r["low_sample"] = True
+
+    def _sort_key(r):
+        # worst-first: regressed, then low success, then high fallback
+        return (
+            0 if r["regressed"] else 1,
+            r["success_rate"] if r["success_rate"] is not None else 1.0,
+            -(r["fallback_rate"] if r["fallback_rate"] is not None else 0.0),
+        )
+    rated.sort(key=_sort_key)
+    low.sort(key=lambda r: r["skill"])
+
     return {
         "generated_now": now.isoformat() if now else None,
         "recent_days": recent_days,
-        "skills": rows,
-        "low_sample": [],
+        "skills": rated,
+        "low_sample": low,
         "coverage_gap": [],
         "coverage_unmatched": [],
         "excluded_proxies": list(EXCLUDED_PROXIES),
