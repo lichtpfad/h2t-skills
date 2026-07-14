@@ -173,12 +173,26 @@ def build_report(sessions, *, now=None, recent_days=7, min_n=5, regress_pp=10.0,
     rows = []
     if now is not None:
         recent_lo = now - timedelta(days=recent_days)
+        prior_lo = now - timedelta(days=2 * recent_days)
         recent_by: dict[str, list[dict]] = {}
+        prior_by: dict[str, list[dict]] = {}
         for s in filtered:
-            if recent_lo <= s["_started_dt"] <= now:
+            t = s["_started_dt"]
+            if recent_lo <= t <= now:
                 recent_by.setdefault(s["skill"], []).append(s)
-        for skill in sorted(recent_by):
-            rows.append(_row_from(skill, _window_stats(recent_by[skill])))
+            elif prior_lo <= t < recent_lo:
+                prior_by.setdefault(s["skill"], []).append(s)
+        for skill in sorted(set(recent_by) | set(prior_by)):
+            ws = _window_stats(recent_by.get(skill, []))
+            ps = _window_stats(prior_by.get(skill, []))
+            row = _row_from(skill, ws)
+            row["runs_prior"] = ps["runs"]
+            if (ws["runs"] >= min_n and ps["runs"] >= min_n
+                    and ws["success_rate"] is not None
+                    and ps["success_rate"] is not None):
+                row["success_delta"] = ws["success_rate"] - ps["success_rate"]
+                row["regressed"] = row["success_delta"] <= -(regress_pp / 100.0)
+            rows.append(row)
 
     return {
         "generated_now": now.isoformat() if now else None,

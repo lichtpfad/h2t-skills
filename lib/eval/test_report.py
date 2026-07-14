@@ -111,3 +111,43 @@ def test_build_report_duration_percentiles_with_n():
     assert row["dur_n"] == 4
     assert row["dur_p50"] == pytest.approx(250.0)
     assert row["dur_p95"] == pytest.approx(385.0)
+
+
+def _runs(skill, day, n, status="success"):
+    out = []
+    for _ in range(n):
+        s = _session(skill=skill, status=status, started=_dt(day))
+        s["_started_dt"] = rep._parse_dt(s["started_at"])
+        out.append(s)
+    return out
+
+
+def test_trend_regression_flagged_when_both_windows_meet_min_n():
+    # now = max(started_at) = day 12. recent=[day5, day12] (has day12);
+    # prior=[day-2, day5) (has day4). 7-day windows.
+    prior = _runs("session-start", 4, 10, status="success")          # 100% prior
+    recent = (_runs("session-start", 12, 6, status="success")
+              + _runs("session-start", 12, 4, status="failure"))     # 60% recent
+    r = rep.build_report(prior + recent, recent_days=7, min_n=5, regress_pp=10.0)
+    row = {s["skill"]: s for s in r["skills"]}["session-start"]
+    assert row["runs_recent"] == 10
+    assert row["runs_prior"] == 10
+    assert row["success_rate"] == pytest.approx(0.6)
+    assert row["success_delta"] == pytest.approx(-0.4)
+    assert row["regressed"] is True
+
+
+def test_trend_not_flagged_when_prior_below_min_n():
+    prior = _runs("handoff", 4, 2)                                   # < min_n
+    recent = _runs("handoff", 12, 6, status="failure")
+    r = rep.build_report(prior + recent, recent_days=7, min_n=5)
+    row = {s["skill"]: s for s in r["skills"]}["handoff"]
+    assert row["regressed"] is False
+    assert row["success_delta"] is None
+
+
+def test_now_data_anchored_report_nonempty_on_old_sessions():
+    old = _runs("session-start", 14, 5)  # July 2026; wall-clock windows would be empty
+    r = rep.build_report(old, recent_days=7, min_n=1)   # now defaults to max(started_at)
+    assert r["generated_now"] is not None
+    assert r["skills"] and r["skills"][0]["runs_recent"] == 5
