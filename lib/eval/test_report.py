@@ -190,3 +190,30 @@ def test_coverage_unmatched_flags_store_dirs_without_catalog_entry():
     sessions = _runs("dev-session-start", 14, 3)
     r = rep.build_report(sessions, min_n=1, known_skills={"session-start"})
     assert r["coverage_unmatched"] == ["dev-session-start"]
+
+
+def test_render_human_surfaces_states_and_rows():
+    sessions = _runs("bad", 14, 6, status="failure") + _runs("bad", 14, 4, status="success")
+    r = rep.build_report(sessions, min_n=5, known_skills={"bad", "research"})
+    r["load"] = {"root_readable": True, "files_seen": 11, "loaded": 10,
+                 "malformed_skipped": 1, "undated_skipped": 0}
+    text = rep.render_human(r)
+    assert "bad" in text
+    assert "malformed" in text.lower()          # data-loss surfaced
+    assert "research" in text                    # coverage-gap listed
+    assert any(p in text for p in rep.EXCLUDED_PROXIES)   # proxy footnote
+
+
+def test_render_human_root_unreadable_distinct_from_empty():
+    r = rep.build_report([], known_skills=set())
+    r["load"] = {"root_readable": False, "files_seen": 0, "loaded": 0,
+                 "malformed_skipped": 0, "undated_skipped": 0}
+    assert "unreadable" in rep.render_human(r).lower()
+
+
+def test_render_md_is_markdown_table():
+    sessions = _runs("bad", 14, 6, status="failure")
+    r = rep.build_report(sessions, min_n=1)
+    md = rep.render_md(r)
+    assert "| skill |" in md.lower()
+    assert "---" in md

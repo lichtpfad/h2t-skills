@@ -236,3 +236,81 @@ def build_report(sessions, *, now=None, recent_days=7, min_n=5, regress_pp=10.0,
         "excluded_proxies": list(EXCLUDED_PROXIES),
         "load": _load_dict(load_stats),
     }
+
+
+def _pct(x):
+    return "—" if x is None else f"{x * 100:.0f}%"
+
+
+def _dur(row):
+    if not row["dur_n"]:
+        return "—"
+    p95 = "" if row["dur_p95"] is None or row["dur_n"] < 5 else f"/{row['dur_p95']:.0f}"
+    return f"{row['dur_p50']:.0f}{p95} (n={row['dur_n']})"
+
+
+def _delta(row):
+    if row["success_delta"] is None:
+        return "·"
+    arrow = "▼" if row["regressed"] else ("▲" if row["success_delta"] > 0 else "flat")
+    return f"{arrow} {row['success_delta'] * 100:+.0f}pp"
+
+
+def _header_lines(report) -> list:
+    load = report.get("load") or {}
+    lines = ["Instrumented-session health"]
+    if load.get("root_readable") is False:
+        lines.append("⚠ telemetry root unreadable — no data read")
+    lines.append(f"window: recent {report['recent_days']}d vs prior "
+                 f"{report['recent_days']}d  (now={report['generated_now']})")
+    warn = ""
+    if load.get("malformed_skipped"):
+        warn += f"  ⚠ malformed={load['malformed_skipped']}"
+    if load.get("undated_skipped"):
+        warn += f"  ⚠ undated={load['undated_skipped']}"
+    lines.append(f"loaded: {load.get('loaded', 0)}/{load.get('files_seen', 0)}{warn}")
+    return lines
+
+
+def _footer_lines(report) -> list:
+    lines = []
+    if report["low_sample"]:
+        lines.append("")
+        lines.append("low-sample (< min_n, not ranked): "
+                     + ", ".join(f"{r['skill']}({r['runs_recent']})"
+                                 for r in report["low_sample"]))
+    if report["coverage_gap"]:
+        lines.append("")
+        lines.append("coverage-gap (instrumented: no) → instrument next: "
+                     + ", ".join(report["coverage_gap"]))
+    if report["coverage_unmatched"]:
+        lines.append("store dirs without a catalog match: "
+                     + ", ".join(report["coverage_unmatched"]))
+    lines.append("")
+    lines.append("excluded proxies (not signal): " + ", ".join(report["excluded_proxies"]))
+    return lines
+
+
+def render_human(report) -> str:
+    lines = _header_lines(report)
+    lines.append("")
+    lines.append(f"{'skill':22} {'runs':>9} {'success':>8} {'trend':>10} "
+                 f"{'fallback':>8} {'top-exc':>16} {'dur p50/p95':>16}")
+    for r in report["skills"]:
+        runs = f"{r['runs_recent']}/{r['runs_prior']}"
+        lines.append(f"{r['skill']:22} {runs:>9} {_pct(r['success_rate']):>8} "
+                     f"{_delta(r):>10} {_pct(r['fallback_rate']):>8} "
+                     f"{(r['top_error'] or '—'):>16} {_dur(r):>16}")
+    return "\n".join(lines + _footer_lines(report))
+
+
+def render_md(report) -> str:
+    lines = list(_header_lines(report))
+    lines.append("")
+    lines.append("| skill | runs (r/p) | success | trend | fallback | top-exc | dur p50/p95 |")
+    lines.append("|---|---|---|---|---|---|---|")
+    for r in report["skills"]:
+        lines.append(f"| {r['skill']} | {r['runs_recent']}/{r['runs_prior']} | "
+                     f"{_pct(r['success_rate'])} | {_delta(r)} | "
+                     f"{_pct(r['fallback_rate'])} | {r['top_error'] or '—'} | {_dur(r)} |")
+    return "\n".join(lines + _footer_lines(report))
