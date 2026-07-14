@@ -70,3 +70,44 @@ def test_percentile_linear_interpolation(vals, p, expected):
 
 def test_percentile_empty_is_none():
     assert rep._percentile([], 50) is None
+
+
+def _dt(day):  # a July-2026 UTC timestamp
+    return f"2026-07-{day:02d}T12:00:00+00:00"
+
+
+def test_build_report_success_and_fallback_math():
+    sessions = [
+        _session(status="success", started=_dt(14),
+                 metrics=[{"key": "core.deflection_rate", "value_num": 1.0}]),
+        _session(status="failure", started=_dt(14),
+                 metrics=[{"key": "core.deflection_rate", "value_num": 0.0},
+                          {"key": "skills.error_class", "value_text": "ValueError"}]),
+        _session(status="success", started=_dt(14),
+                 metrics=[{"key": "core.deflection_rate", "value_num": 0.5}]),  # off-scale
+    ]
+    for s in sessions:
+        s["_started_dt"] = rep._parse_dt(s["started_at"])
+    r = rep.build_report(sessions, now=rep._parse_dt(_dt(14)),
+                         recent_days=7, min_n=1)
+    row = {s["skill"]: s for s in r["skills"]}["session-start"]
+    assert row["runs_recent"] == 3
+    assert row["success_rate"] == pytest.approx(2 / 3)
+    # fallback denominator excludes the 0.5 off-scale record: 1 degraded / 2 clean
+    assert row["fallback_rate"] == pytest.approx(1 / 2)
+    assert row["fallback_unknown"] == 1
+    assert row["top_error"] == "ValueError"
+
+
+def test_build_report_duration_percentiles_with_n():
+    sessions = []
+    for v in (100.0, 200.0, 300.0, 400.0):
+        s = _session(started=_dt(14),
+                     metrics=[{"key": "skills.duration_ms", "value_num": v}])
+        s["_started_dt"] = rep._parse_dt(s["started_at"])
+        sessions.append(s)
+    r = rep.build_report(sessions, now=rep._parse_dt(_dt(14)), min_n=1)
+    row = r["skills"][0]
+    assert row["dur_n"] == 4
+    assert row["dur_p50"] == pytest.approx(250.0)
+    assert row["dur_p95"] == pytest.approx(385.0)

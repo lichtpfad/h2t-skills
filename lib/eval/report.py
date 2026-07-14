@@ -9,8 +9,9 @@ from __future__ import annotations
 
 import json
 import math
+from collections import Counter
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -97,3 +98,95 @@ def _percentile(values, p: float):
     if lo == hi:
         return float(s[int(k)])
     return float(s[lo] + (s[hi] - s[lo]) * (k - lo))
+
+
+EXCLUDED_PROXIES = (
+    "core.op_type_correct_rate",
+    "core.tool_call_success_rate",
+    "core.time_to_first_valid_ms",
+)
+
+
+def _window_stats(sessions: list[dict]) -> dict:
+    """Aggregate one already-windowed, single-skill list of sessions."""
+    runs = len(sessions)
+    successes = sum(1 for s in sessions if s.get("status") == "success")
+    clean = degraded = unknown = 0
+    for s in sessions:
+        d = _metric(s, "core.deflection_rate", "value_num")
+        if d in (0.0, 1.0):
+            clean += 1
+            if d == 0.0:
+                degraded += 1
+        else:
+            unknown += 1
+    errors = [e for s in sessions if s.get("status") == "failure"
+              and (e := _metric(s, "skills.error_class", "value_text")) is not None]
+    durations = [d for s in sessions
+                 if (d := _metric(s, "skills.duration_ms", "value_num")) is not None]
+    return {
+        "runs": runs,
+        "success_rate": (successes / runs) if runs else None,
+        "fallback_rate": (degraded / clean) if clean else None,
+        "fallback_unknown": unknown,
+        "top_error": Counter(errors).most_common(1)[0][0] if errors else None,
+        "dur_n": len(durations),
+        "dur_p50": _percentile(durations, 50),
+        "dur_p95": _percentile(durations, 95),
+        "domains": sorted({s.get("domain") for s in sessions if s.get("domain")}),
+        "projects": sorted({s.get("project") for s in sessions if s.get("project")}),
+    }
+
+
+def _row_from(skill: str, ws: dict) -> dict:
+    row = {"skill": skill, "low_sample": False, "regressed": False,
+           "success_delta": None, "runs_recent": ws["runs"], "runs_prior": 0}
+    row.update({k: ws[k] for k in (
+        "success_rate", "fallback_rate", "fallback_unknown", "top_error",
+        "dur_n", "dur_p50", "dur_p95", "domains", "projects")})
+    return row
+
+
+def _load_dict(load_stats):
+    if load_stats is None:
+        return None
+    return {"root_readable": load_stats.root_readable,
+            "files_seen": load_stats.files_seen, "loaded": load_stats.loaded,
+            "malformed_skipped": load_stats.malformed_skipped,
+            "undated_skipped": load_stats.undated_skipped}
+
+
+def build_report(sessions, *, now=None, recent_days=7, min_n=5, regress_pp=10.0,
+                 skill_filter=None, project_filter=None, known_skills=None,
+                 load_stats=None) -> dict:
+    """Aggregate loaded sessions into a per-skill health report (pure)."""
+    dated = [s for s in sessions if s.get("_started_dt") is not None]
+    if now is None:
+        now = max((s["_started_dt"] for s in dated), default=None)
+
+    filtered = dated
+    if skill_filter:
+        filtered = [s for s in filtered if s.get("skill") == skill_filter]
+    if project_filter:
+        filtered = [s for s in filtered if s.get("project") == project_filter]
+
+    rows = []
+    if now is not None:
+        recent_lo = now - timedelta(days=recent_days)
+        recent_by: dict[str, list[dict]] = {}
+        for s in filtered:
+            if recent_lo <= s["_started_dt"] <= now:
+                recent_by.setdefault(s["skill"], []).append(s)
+        for skill in sorted(recent_by):
+            rows.append(_row_from(skill, _window_stats(recent_by[skill])))
+
+    return {
+        "generated_now": now.isoformat() if now else None,
+        "recent_days": recent_days,
+        "skills": rows,
+        "low_sample": [],
+        "coverage_gap": [],
+        "coverage_unmatched": [],
+        "excluded_proxies": list(EXCLUDED_PROXIES),
+        "load": _load_dict(load_stats),
+    }
