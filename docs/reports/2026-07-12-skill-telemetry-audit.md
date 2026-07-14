@@ -144,3 +144,7 @@ H2T_EVALS_TOKEN=<h2t-skills-scoped token>            # доставлен лок
 Config-wiring (эта секция) тестируется без live-SDK и от #99 не зависит.
 
 **Go-live порядок:** #321 (этот PR) → мердж h2t-evals#109 → gate 4 (потребитель данных) → флип `H2T_EVALS_ENABLED=1`.
+
+- **Gate-4 consumer (phase 1):** `h2t-ops evals report` — local per-skill health
+  (success/fallback/error/duration + regression + coverage-gap). Spec/plan:
+  `docs/superpowers/{specs,plans}/2026-07-14-evals-telemetry-consumer-phase1.md`.
