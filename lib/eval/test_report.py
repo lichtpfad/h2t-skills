@@ -165,3 +165,28 @@ def test_low_sample_partitioned_and_main_sorted_worst_first():
     assert "tiny" not in main and "tiny" in low
     assert main[0] == "bad"           # worst success first
     assert main == ["bad", "good"]
+
+
+def test_catalog_skills_enumerates_skill_md_dirs(tmp_path):
+    (tmp_path / "h2t-ops" / "skills" / "research").mkdir(parents=True)
+    (tmp_path / "h2t-ops" / "skills" / "research" / "SKILL.md").write_text("x", encoding="utf-8")
+    (tmp_path / "h2t-core" / "skills" / "handoff").mkdir(parents=True)
+    (tmp_path / "h2t-core" / "skills" / "handoff" / "SKILL.md").write_text("x", encoding="utf-8")
+    assert rep.catalog_skills(tmp_path) == {"research", "handoff"}
+
+
+def test_coverage_gap_is_global_and_filter_invariant():
+    sessions = _runs("handoff", 14, 3) + _runs("handoff", 14, 1, status="failure")
+    known = {"handoff", "research", "connectors"}
+    r_all = rep.build_report(sessions, min_n=1, known_skills=known)
+    r_filtered = rep.build_report(sessions, min_n=1, known_skills=known,
+                                  project_filter="does-not-exist")
+    assert r_all["coverage_gap"] == ["connectors", "research"]      # sorted, minus handoff
+    assert r_filtered["coverage_gap"] == ["connectors", "research"] # filter-invariant
+    assert r_all["coverage_unmatched"] == []
+
+
+def test_coverage_unmatched_flags_store_dirs_without_catalog_entry():
+    sessions = _runs("dev-session-start", 14, 3)
+    r = rep.build_report(sessions, min_n=1, known_skills={"session-start"})
+    assert r["coverage_unmatched"] == ["dev-session-start"]

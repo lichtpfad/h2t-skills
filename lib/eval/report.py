@@ -107,6 +107,18 @@ EXCLUDED_PROXIES = (
 )
 
 
+def catalog_skills(plugins_root) -> set:
+    """Skill ids from plugins/*/skills/*/SKILL.md parent dir names. Empty on I/O error."""
+    root = Path(plugins_root)
+    out: set[str] = set()
+    try:
+        for md in root.glob("*/skills/*/SKILL.md"):
+            out.add(md.parent.name)
+    except OSError:
+        pass
+    return out
+
+
 def _window_stats(sessions: list[dict]) -> dict:
     """Aggregate one already-windowed, single-skill list of sessions."""
     runs = len(sessions)
@@ -164,6 +176,11 @@ def build_report(sessions, *, now=None, recent_days=7, min_n=5, regress_pp=10.0,
     if now is None:
         now = max((s["_started_dt"] for s in dated), default=None)
 
+    instrumented = {s.get("skill") for s in dated if s.get("skill")}
+    known = set(known_skills or ())
+    coverage_gap = sorted(known - instrumented)
+    coverage_unmatched = sorted(instrumented - known) if known else []
+
     filtered = dated
     if skill_filter:
         filtered = [s for s in filtered if s.get("skill") == skill_filter]
@@ -214,8 +231,8 @@ def build_report(sessions, *, now=None, recent_days=7, min_n=5, regress_pp=10.0,
         "recent_days": recent_days,
         "skills": rated,
         "low_sample": low,
-        "coverage_gap": [],
-        "coverage_unmatched": [],
+        "coverage_gap": coverage_gap,
+        "coverage_unmatched": coverage_unmatched,
         "excluded_proxies": list(EXCLUDED_PROXIES),
         "load": _load_dict(load_stats),
     }
