@@ -8,6 +8,7 @@ docs/superpowers/specs/2026-07-14-evals-telemetry-consumer-phase1.md.
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -69,3 +70,30 @@ def load_sessions(root, *, load_since=None):
         sessions.append(record)
         stats.loaded += 1
     return sessions, stats
+
+
+def _metric(session: dict, key: str, slot: str):
+    """Return session's metric value for key at the given value_* slot, else None.
+
+    None-safe: never coerces a missing value to 0. slot ∈
+    {"value_bool","value_num","value_text"}.
+    """
+    for m in session.get("metrics", []):
+        if m.get("key") == key and slot in m:
+            return m[slot]
+    return None
+
+
+def _percentile(values, p: float):
+    """Linear-interpolation percentile (p in 0..100) over an unsorted list."""
+    if not values:
+        return None
+    s = sorted(values)
+    if len(s) == 1:
+        return float(s[0])
+    k = (len(s) - 1) * (p / 100.0)
+    lo = math.floor(k)
+    hi = math.ceil(k)
+    if lo == hi:
+        return float(s[int(k)])
+    return float(s[lo] + (s[hi] - s[lo]) * (k - lo))
