@@ -43,7 +43,7 @@ For the slug find `council_results.round_N.pass[]` / `fail[]` (id-keyed `ev-xxxx
 
 If the KB has no PASS-claim for the question, do NOT silently fall back to an unrecorded search.
 - **Routine:** any `h2t-ops research` you run captures to `~/.h2t/research/`; mark it for KB ingest (interactive: ask; autonomous: auto-mark). Heavy ingest runs in batch, not per lookup.
-- **Urgent gap** (need a verified claim NOW to decide): run a targeted **`kb ingest --strict "<the question>"`** (cost-gated) and ground on the council-PASS result. **Why `--strict`:** default ingest is Tier-1 lightweight — no council, `partial` page, never council-PASS. Query may ground only on council-PASS, so the urgent-gap path REQUIRES strict.
+- **Urgent gap** (need a verified claim NOW to decide): invoke the **ingest mode with `--strict <topic>`** — read `references/ingest.md` §"Strict tier" and follow it (this is a skill mode, not a shell command). Strict is **cost-gated and never auto-run**: its agent-propose gate means the agent proposes strict and dispatches nothing until a human approves. Once it completes, ground on the council-PASS result. **Why `--strict`:** default ingest is Tier-1 lightweight — no council, `partial` page, never council-PASS. Query may ground only on council-PASS, so the urgent-gap path REQUIRES strict.
 
 ## Antipatterns
 
