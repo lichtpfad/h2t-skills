@@ -615,3 +615,18 @@ Routing 6/6 in-scope correct + 0/3 false triggers.
 Content-preservation (grep counts on migrated bodies): `COST GATE`=2 (Tier-1 hard-stop +
 strict ⛔), `--strict`=6, lint `"fix" content silently`=1, `council-PASS`=7. No safety gate
 dropped in migration. GREEN passes.
+
+## KB-agnostic proof (Task 8 — captured 2026-07-24)
+
+A subagent read the real `references/query.md` and followed it against a fixture KB
+(`kb-consolidation-tests/fixture-kb`) whose taxonomy is "widgets" (NOT research-kb's role
+tiers), `H2T_KB_ROOT` pointed there. Result:
+- (a) found slug `widget-testing` from the fixture's OWN `taxonomy.md` — not research-kb tiers.
+- (b) read council PASS `ev-0001` from the fixture `data/pipeline-state.json`
+  (`["widget-testing"]["council_results"]["round_1"]["pass"][0]`).
+- (c) grounded the answer on `ev-0001` (★★★ CONFIRMED+replicated+PASS).
+- (d) restated the fail-loud contract: absent file/slug/round → stop, do not fall back;
+  only Step-5 gap path (`kb ingest --strict`) is allowed.
+
+The KB-agnostic claim is exercised and holds: query works against a second instance via
+`H2T_KB_ROOT`, reads that instance's own ontology, and enforces council-PASS + fail-loud.
