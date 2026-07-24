@@ -595,3 +595,23 @@ route 4 requests. Verbatim result:
    no dedicated skill" → no single owner. ← confirms query absent + compound unowned.
 
 RED confirmed: query has no skill; entry fragmented across two; compound unowned. Premise holds.
+
+## GREEN (Task 7 — captured 2026-07-24)
+
+Routing oracle given the full unified `SKILL.md`, 9 requests:
+
+1. "заземли..." → `references/query.md` ✓
+2. "наполни KB..." → `references/ingest.md` ✓
+3. "проверь целостность KB" → `references/lint.md` ✓
+4. "поискать и добавить..." → `references/query.md` then `references/ingest.md` (compound) ✓
+5. "kb-ingest" (legacy) → `references/ingest.md` ✓
+6. "kb-lint" (legacy) → `references/lint.md` ✓
+7. "Notion knowledge base" → **NONE — out of scope** ✓
+8. "Confluence knowledge base" → **NONE — out of scope** ✓
+9. "Salesforce Knowledge Base" → **NONE — out of scope** ✓
+
+Routing 6/6 in-scope correct + 0/3 false triggers.
+
+Content-preservation (grep counts on migrated bodies): `COST GATE`=2 (Tier-1 hard-stop +
+strict ⛔), `--strict`=6, lint `"fix" content silently`=1, `council-PASS`=7. No safety gate
+dropped in migration. GREEN passes.
