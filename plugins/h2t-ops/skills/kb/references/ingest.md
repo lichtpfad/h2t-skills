@@ -1,13 +1,7 @@
----
-name: h2t-ops:kb-ingest
-description: "Ingest ecosystem research into the shared Ecosystem Research KB. DEFAULT is the Tier-1 lightweight navigation tier: harvest → honesty screen (drops promo) → deterministic T-prep → extractor → grounded synthesis → a readable `partial` page whose every claim cites a minted (ev-xxxx) id. The full judge COUNCIL is available on-demand via `--strict` for a decision that needs verified grounding. Human-invoked and COST-GATED. Use to turn a research question into a grounded page instead of a dump. Triggers: 'kb-ingest', 'ingest into KB', 'наполни KB', 'зафиксируй ресёрч в KB'."
-compatibility: "Requires the research-kb instance (default C:/dev/research-kb, override H2T_KB_ROOT) with its .venv, and the h2t-ops research connector for harvest. Python never calls an LLM — this skill dispatches the agents (honesty, extractor, synthesis; +faithfulness/conflict/council under --strict) via the Agent tool between the deterministic stages."
-metadata:
-  author: lichtpfad
-  version: 0.2.0
----
+# kb — ingest mode
 
-# h2t-ops:kb-ingest
+> Resolve `KB`/`PY` per SKILL.md § "Resolve the KB root" (repeated for a self-contained run):
+> `KB="${H2T_KB_ROOT:-C:/dev/research-kb}"` · `PY="$KB/.venv/Scripts/python"`
 
 Turn a research question into a **grounded knowledge page** in the shared KB. The engine
 (`llm-kb-template`, vendored in research-kb) owns every deterministic seam; this skill drives
@@ -24,13 +18,6 @@ Two flows:
   (extractor + faithfulness + conflict + majority-vote council). Slower and more expensive;
   use it when a decision needs council-verified grounding in a domain the operator can't
   personally verify. Never auto-run — see § Strict tier.
-
-## 0. Resolve the KB root
-
-```bash
-KB="${H2T_KB_ROOT:-C:/dev/research-kb}"
-PY="$KB/.venv/Scripts/python"      # Windows; Linux/mac: $KB/.venv/bin/python
-```
 
 Pick the target `slug` from `$KB/taxonomy.md` (existing topic) or add a new row under the
 right role-tier domain first. A `$KB/wiki/<slug>.md` stub must exist before ingest writes onto it.
@@ -204,7 +191,6 @@ Append to `$KB/log.md`: `[DATE] ingest | <slug> | <source-id> | "Tier-1 partial,
 
 ## Guardrails
 
-- **Python never calls an LLM** via subprocess; agents dispatched only here, via the Agent tool.
 - **Grounded synthesis:** the Python guard rejects any non-minted `(ev-xxxx)` citation, any
   un-grounded written section, and any page with no minted evidence — synthesis cannot invent a
   fact or cite a ghost id.
@@ -212,5 +198,4 @@ Append to `$KB/log.md`: `[DATE] ingest | <slug> | <source-id> | "Tier-1 partial,
   via `--strict`.
 - **Council never skipped WHEN `--strict` is chosen** — poisoning the KB is worst exactly where
   the operator is blind.
-- One stage per CLI call. Frequent small commits. `git mv`/`git rm` only.
 - Never fabricate a source `body` or a quote — quotes are Python-resolved from the source text.
