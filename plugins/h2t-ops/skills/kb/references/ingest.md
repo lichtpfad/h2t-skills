@@ -47,6 +47,8 @@ synthesis) are dispatched via the Agent tool between the deterministic stages.
    $PY -m pipeline.grade.orchestrate render-extractor --repo "$KB"
    -> Agent reads agent-work/<h>/extractor_prompt.txt, emits a PLAIN JSON list
       [{claim_text, quote_ids, conflict_candidates}] per pack.
+      `quote_ids` are PLAIN INTEGERS (the span qids), e.g. [26, 31] — NOT strings "26".
+      (ingest-light coerces numeric strings, but emit ints; a non-numeric qid fail-closes.)
    - Build extractions.json = {source_id: [extractions]} and body-hashes.json = {source_id: body_hash}
      (read body_hash from each prompt-pack data/intake/prompts/<h>.json).
    $PY -m pipeline.run ingest-light --harvest real.json --extractions extractions.json \
@@ -104,6 +106,13 @@ Map each result into the **raw_source schema** the engine expects and write a ha
 `source_types`: academic | practitioner | implementation | blog | review — you classify),
 `body` (the extractable text). Optional: `url`, `title`, `authors`, `published_date` (ISO),
 `doi`, `stars`, `replicated`, `landmark`. A source missing id/type/body is rejected fail-loud.
+
+**Classifying `type` — do not over-use `implementation`.** `implementation` means an actual
+**code repository** (GitHub/GitLab) — set `stars` for it; the engine applies a repo stars-floor.
+A web how-to, tutorial, or engineering article is NOT `implementation` — classify it as `blog`
+(identified author / company blog) or `practitioner` (a recognised practitioner writing from
+experience). `academic` = paper / preprint (set `doi`); `review` = survey / meta-analysis.
+Mis-labelling an article as `implementation` gets it quarantined by the stars-floor.
 
 ### 2. Deterministic T-prep (no LLM)
 
@@ -171,7 +180,7 @@ council PASS does NOT belong in `tldr` and must not be cited as grounding.
 
 ```bash
 $PY "$KB/scripts/lint_wiki.py" "$KB/wiki/<slug>.md"      # must PASS (or fix)
-$PY "$KB/scripts/update_index.py"                         # refresh index.md
+$PY "$KB/scripts/update_index.py" --repo "$KB"            # refresh index.md ($KB, not cwd)
 git -C "$KB" add wiki/<slug>.md filter-logs/<slug>.md data/pipeline-state.json index.md log.md
 git -C "$KB" commit -m "ingest(<slug>): +N council-verified claims"
 ```
@@ -182,7 +191,7 @@ Append to `$KB/log.md`: `[DATE] ingest | <slug> | <source-id> | "added N claims"
 
 ```bash
 $PY "$KB/scripts/lint_wiki.py" "$KB/wiki/<slug>.md"      # must PASS (or fix)
-$PY "$KB/scripts/update_index.py"                         # refresh index.md
+$PY "$KB/scripts/update_index.py" --repo "$KB"            # refresh index.md ($KB, not cwd)
 git -C "$KB" add wiki/<slug>.md index.md log.md
 git -C "$KB" commit -m "ingest(<slug>): Tier-1 partial page (N grounded claims)"
 ```
