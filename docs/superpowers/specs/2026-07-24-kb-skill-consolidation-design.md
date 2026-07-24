@@ -56,6 +56,10 @@ Carries the shared, mode-independent parts once (no duplication across reference
   | Fill the KB from research | ingest, наполни KB, add to knowledge base, зафиксируй ресёрч | `references/ingest.md` |
   | Ground a decision in the KB | ground, заземли, узнать из базы знаний, kb-lookup, look up in KB | `references/query.md` |
   | Check KB integrity | lint, проверь KB, KB health | `references/lint.md` |
+  | **Compound: search AND add** | поискать и добавить в базу знаний, search and add to the KB | `query.md` **first** (is it already grounded?) → `ingest.md` only if the query mode's gap-fill fires |
+
+  The compound intent is explicitly query-then-ingest, not a fourth mode: query first to
+  avoid re-ingesting an already-grounded topic; ingest only on a genuine gap.
 
 ### description — triggers only, no workflow summary
 
@@ -83,12 +87,29 @@ Ventures/Craft/Educator/Builder) and federation pointers. In the skill, query is
 2. Read the topic at 3 levels (L1 `index.md` → L2 `evidence[]` frontmatter → L3 full page).
 3. Check the council (mandatory): `data/pipeline-state.json` → `council_results.round_N.pass[]`.
 4. Apply the trust hierarchy (CONFIRMED+replicated+PASS ★★★ … council FAIL ✗).
-5. Gap → fill it (capture ≠ ingest; urgent gap → cost-gated `kb ingest`).
+5. Gap → fill it (capture ≠ ingest; urgent gap → cost-gated **`kb ingest --strict`**).
 
-`research-kb/.claude/rules/kb-lookup.md` is replaced by a thin pointer: "lookup protocol
-now lives in `h2t-ops:kb` query; this KB is the research-kb instance — its ontology is in
-`taxonomy.md`, federation to quant-kb / agentic-kb noted here." (Federation is instance
-knowledge, stays in the KB; the mode stays generic.)
+**Why `--strict` on the urgent-gap path (codex block #1):** query grounds only on
+council-PASS claims (step 3). But the default ingest tier is Tier-1 lightweight, which runs
+NO council and emits a `partial` page — its claims can never be council-PASS. So an urgent
+gap that query must ground on *requires* the strict council tier. Calling default ingest
+here would produce a page query is contractually barred from using as grounding.
+
+**Schema assumption + fail-loud (codex #2):** query hard-reads the `llm-kb-template`
+artifact shape — `evidence[]` frontmatter, the `data/pipeline-state.json` council-state
+layout, the verdict ladder. This is safe because every KB instance shares the one engine
+(see consolidation-direction: single multi-domain engine). query therefore **assumes the
+`llm-kb-template` schema and fails loud** if a required artifact is missing (no page,
+no `pipeline-state.json`, no council round) — it never silently degrades to an ungrounded
+answer. What is instance-specific (taxonomy, federation) is read from the KB; what is
+engine-invariant (schema) is assumed.
+
+`research-kb/.claude/rules/kb-lookup.md` is replaced by a thin pointer that **still carries
+the load-bearing rule inline** (codex #4): "Ground only on council-PASS claims. Full lookup
+protocol: `h2t-ops:kb` query. This KB = research-kb instance — ontology in `taxonomy.md`;
+federation to quant-kb / agentic-kb below." Keeping the one-line policy in the stub means
+the council-PASS discipline survives even if the plugin skill fails to load; the protocol
+detail lives in the skill, the non-negotiable rule is duplicated for safety.
 
 ## Migration
 
@@ -98,34 +119,75 @@ knowledge, stays in the KB; the mode stays generic.)
   shared resolve-root/guardrails hoisted up to `SKILL.md`).
 - Move `kb-lint/SKILL.md` body → `kb/references/lint.md`.
 - Author `kb/references/query.md` from `kb-lookup.md`, generalized as above.
-- Replace `research-kb/.claude/rules/kb-lookup.md` with the pointer stub (separate repo, separate commit).
+- Replace `research-kb/.claude/rules/kb-lookup.md` with the pointer stub — which retains the
+  council-PASS rule inline (see query section) — separate repo, separate commit.
+
+**Accepted risk — no compatibility alias (codex #3):** old skill names `h2t-ops:kb-ingest` /
+`h2t-ops:kb-lint` are removed, not aliased. The operator chose `git rm` over
+deprecate-redirect knowing this can break a call site that hard-codes the old names. The
+skills are recent (kb-ingest v0.2.0 / kb-lint v0.1.0, both merged 2026-07-24) with no known
+external callers, and their trigger words fold into the unified `description`, so
+natural-language invocation continues to resolve. Deliberate, risk accepted.
 
 ## Testing (Iron Law — no skill edit without a failing test first)
 
-Editing/creating skills requires a failing test first. Retrieval-style tests with subagents:
+Editing/creating skills requires a failing test first. Retrieval-style tests with subagents.
 
-**RED (baseline):** with the current three-way state (or a deliberately weak unified
-description), give a subagent each intent and observe mis-routing:
-- "наполни KB по теме X" / "add findings to the knowledge base"
-- "заземли это решение в базе знаний" / "look it up in the KB"
-- "проверь целостность KB" / "kb health"
+**RED — a REAL baseline, not a manufactured one (codex #6).** Do NOT weaken the description
+to fake a failure. The genuine pre-change defect the consolidation fixes is that **query does
+not exist as a skill at all** and the entry is fragmented across two skills. Baseline on the
+*current* plugin state:
+- "заземли это решение в базе знаний" / "look it up in the KB" → **no skill surfaces** the
+  lookup protocol (it lives only in `research-kb/.claude/rules/kb-lookup.md`, invisible to the
+  plugin) → the subagent improvises or asks the operator. This is the real RED.
+- "наполни KB" and "проверь целостность KB" resolve today, but to two *separate* skills; the
+  compound "поискать и добавить" has no single owner. Document the fragmentation verbatim.
 
-Document verbatim which mode it picks and where it improvises.
+**GREEN — routing AND preserved safety properties (codex #7).** With the unified `kb` skill:
+1. *Routing:* each intent (below) routes a subagent to the correct `references/*` file.
+2. *Content preservation:* the migrated `ingest.md` / `lint.md` still carry their
+   load-bearing gates verbatim — assert by diff that the moved bodies retain the ingest
+   cost-gate hard-stop, the `--strict` council step, and `lint.md`'s read-only "do not fix
+   silently" clause. For the newly-authored `query.md`, assert the council-PASS-only rule is
+   present (not a diff — it is authored from `kb-lookup.md`). Consolidation must not quietly
+   drop a safety gate while relocating text.
 
-**GREEN:** with the unified `kb` skill, each intent routes to the correct `references/*` file.
+**KB-agnostic proof (codex #8).** Run query with `H2T_KB_ROOT` pointed at a *second* instance
+whose `taxonomy.md` differs from research-kb's (a minimal fixture KB is enough): the mode must
+find the cluster from that instance's own taxonomy and still enforce council-PASS. This is the
+only test that actually exercises the central KB-agnostic claim.
 
-**REFACTOR:** disambiguate overlapping triggers; add a **false-trigger** check — an
-unrelated "knowledge base" mention (Notion, an external wiki) must NOT fire the skill (it is
-scoped to `llm-kb-template`/research-kb instances).
+**Retrieval matrix** — must include, per codex #9/#10:
+- The exact legacy names `kb-ingest` / `kb-lint` (verify the folded triggers still fire the unified skill).
+- The compound "поискать и добавить в базу знаний" (verify query-then-ingest, not a single mode).
+- **2–3 false-trigger cases**, not one: a Notion knowledge base, an external wiki, a
+  third-party product's "knowledge base" — none may fire the skill (scoped to
+  `llm-kb-template`/research-kb instances).
 
-Success: 3/3 intents route correctly + no false trigger on out-of-scope KBs.
+**REFACTOR:** disambiguate overlapping triggers from whatever the matrix mis-routes.
+
+Success: real RED reproduced → all intents route correctly + content-preservation diff clean
++ KB-agnostic query passes against a second instance + 0/3 false triggers.
 
 ## Risks
 
 - **Unified description covering 3 modes without a workflow summary** — the tightest part;
   validated by the retrieval test, not by inspection.
 - **Over-broad triggers** ("any knowledge base") causing false activation — mitigated by the
-  false-trigger REFACTOR check and by scoping wording to the KB instances.
+  2–3 false-trigger checks and by scoping wording to the KB instances.
+
+## Codex review adjudication (2026-07-24)
+
+Read-only codex review flagged 9 items; adjudicated and folded into this spec:
+- #1 urgent-gap must call `kb ingest --strict` (Tier-1 default has no council) — **fixed** (query §5).
+- #2 KB-agnostic schema assumption + fail-loud contract — **fixed** (query mode).
+- #4 pointer stub retains council-PASS rule inline — **fixed** (query + migration).
+- #5/#9 compound "search and add" routes query→ingest — **fixed** (routing table, matrix).
+- #6 RED must be a real baseline (query absent, entry fragmented) — **fixed** (testing).
+- #7 GREEN adds content-preservation of safety gates — **fixed** (testing).
+- #8 KB-agnostic tested against a second `H2T_KB_ROOT` — **fixed** (testing).
+- #10 2–3 false-trigger cases — **fixed** (matrix).
+- #3 no compat alias for old skill names — **accepted risk** (operator decision; migration).
 
 ## Open follow-ups (out of scope here)
 
