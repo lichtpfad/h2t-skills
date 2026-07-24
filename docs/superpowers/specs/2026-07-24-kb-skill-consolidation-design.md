@@ -61,6 +61,13 @@ Carries the shared, mode-independent parts once (no duplication across reference
   The compound intent is explicitly query-then-ingest, not a fourth mode: query first to
   avoid re-ingesting an already-grounded topic; ingest only on a genuine gap.
 
+  **Routing must be a positive REQUIRED instruction**, not a prohibition (project finding:
+  "запреты игнорируются — работают только позитивные инструкции"). Phrase each row's action as
+  `**REQUIRED:** read references/<mode>.md and follow it before any <mode> action` — this
+  matters most for ingest, whose cost-gate hard-stop lives inside `ingest.md`: a weak router
+  risks Claude improvising an ingest and skipping the gate. The mode files stay linear so the
+  gate cannot be jumped once entered.
+
 ### description — triggers only, no workflow summary
 
 Single `description` covering all three modes, **triggering conditions only** (project +
@@ -101,8 +108,11 @@ layout, the verdict ladder. This is safe because every KB instance shares the on
 (see consolidation-direction: single multi-domain engine). query therefore **assumes the
 `llm-kb-template` schema and fails loud** if a required artifact is missing (no page,
 no `pipeline-state.json`, no council round) — it never silently degrades to an ungrounded
-answer. What is instance-specific (taxonomy, federation) is read from the KB; what is
-engine-invariant (schema) is assumed.
+answer. What is instance-specific *and machine-readable* (taxonomy via `taxonomy.md`) is read
+from the KB; what is engine-invariant (schema) is assumed. **Federation** (which sibling KB
+owns a domain) is NOT read from the KB by the query mode — it is prose guidance that lives in
+each instance's per-KB pointer stub (e.g. research-kb's stub names quant-kb / agentic-kb);
+the query mode itself stays federation-agnostic.
 
 `research-kb/.claude/rules/kb-lookup.md` is replaced by a thin pointer that **still carries
 the load-bearing rule inline** (codex #4): "Ground only on council-PASS claims. Full lookup
