@@ -579,3 +579,19 @@ Then open a PR summarizing: 3→1 skill consolidation, new query mode, migration
 **Note on testing method:** retrieval tests pass the actual SKILL.md/query.md text to the subagent
 rather than relying on plugin auto-discovery inside a subagent (more deterministic; discovery in
 subagents is unverified on this setup). This tests the routing/grounding *logic* the skill encodes.
+
+---
+
+## RED baseline (Task 1 — captured 2026-07-24)
+
+Routing oracle given ONLY the two existing kb-skill descriptions (kb-ingest, kb-lint), asked to
+route 4 requests. Verbatim result:
+
+1. "заземли/look it up to ground a decision" → **NONE — no skill covers this** (A writes into the
+   KB, B lints it; neither reads/queries to ground a decision). ← the real defect query fixes.
+2. "наполни KB / add findings" → `h2t-ops:kb-ingest`.
+3. "проверь целостность KB / kb health" → `h2t-ops:kb-lint`.
+4. "поискать и добавить" (compound) → only `kb-ingest` covers the "add" half; "the search half has
+   no dedicated skill" → no single owner. ← confirms query absent + compound unowned.
+
+RED confirmed: query has no skill; entry fragmented across two; compound unowned. Premise holds.
