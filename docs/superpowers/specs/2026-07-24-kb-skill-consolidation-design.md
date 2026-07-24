@@ -181,10 +181,25 @@ Success: real RED reproduced → all intents route correctly + content-preservat
 
 ## Risks
 
-- **Unified description covering 3 modes without a workflow summary** — the tightest part;
-  validated by the retrieval test, not by inspection.
-- **Over-broad triggers** ("any knowledge base") causing false activation — mitigated by the
-  2–3 false-trigger checks and by scoping wording to the KB instances.
+- **Unified description covering 3 modes without a workflow summary** — the tightest part.
+  ⚠ **NOT validated by the retrieval test.** The GREEN/false-trigger tests feed the full
+  SKILL.md text to a subagent and ask "which reference to read" — they validate the *routing
+  logic* assuming the skill is already loaded. They do NOT test whether the harness *activates*
+  `h2t-ops:kb` from the `description` on a live trigger phrase, nor whether the `description`
+  *itself* stays silent on an out-of-scope "knowledge base". The false-trigger test is
+  circular: the oracle was told "out-of-scope → NONE", so 0/3 proves rule-application, not that
+  the `description` encodes the scoping. **Live activation + scoping is unverified** — only a
+  plugin reload in a live session with real trigger phrases can confirm it. This is consistent
+  with the patch (not minor) version bump: not live-confirmed.
+- **Over-broad triggers** ("any knowledge base") causing false activation — the scoping wording
+  is present but, per the point above, its real-world effect on activation is pending live test.
+
+## Cross-repo merge order (load-bearing)
+
+**Merge h2t-skills #325 FIRST, then the research-kb `chore/kb-lookup-pointer` branch.** The
+research-kb pointer stub directs grounding to `h2t-ops:kb` query mode; if it merges before the
+plugin skill exists, research-kb points at a mode that isn't there yet → broken grounding until
+#325 lands. Order is not optional.
 
 ## Codex review adjudication (2026-07-24)
 
