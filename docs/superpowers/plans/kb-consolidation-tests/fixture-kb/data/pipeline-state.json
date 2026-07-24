@@ -1,0 +1,11 @@
+{
+  "widget-testing": {
+    "council_results": {
+      "round_1": {
+        "pass": ["ev-0001"],
+        "fail": [],
+        "labels": {"ev-0001": "Widgets must be tested in isolation"}
+      }
+    }
+  }
+}
