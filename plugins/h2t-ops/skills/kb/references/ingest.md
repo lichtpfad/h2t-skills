@@ -19,8 +19,29 @@ Two flows:
   use it when a decision needs council-verified grounding in a domain the operator can't
   personally verify. Never auto-run — see § Strict tier.
 
-Pick the target `slug` from `$KB/taxonomy.md` (existing topic) or add a new row under the
-right role-tier domain first. A `$KB/wiki/<slug>.md` stub must exist before ingest writes onto it.
+Resolve the target **domain and slug** first. Read `$KB/kb.config.json`:
+
+- **Multi-domain KB** (`domains[]` present): choose the domain the topic belongs to (the domain
+  list is `kb.config.json.domains[].name`). The page slug is then `<domain>--<topic-slug>`, and the
+  stub `$KB/wiki/<domain>--<topic-slug>.md` must exist AND carry a `domain: <domain>` frontmatter
+  field. Scaffold it with the engine's `scaffold_topics.py` (it stamps `domain:`); never hand-write
+  a stub without the `domain:` field — the linter rejects it. Every `<slug>` below is this
+  domain-prefixed value.
+- **Flat single-domain KB** (no `domains[]`): `<slug>` is a plain topic slug from `$KB/taxonomy.md`
+  (existing topic) or a new row you add first; no `domain:` field. A `$KB/wiki/<slug>.md` stub must
+  exist before ingest writes onto it.
+
+One ingest run targets **exactly one domain** — the engine derives it from the slug prefix and
+fails loud on a batch that mixes domains.
+
+## Multi-domain KB
+
+One central KB can hold many specialised domains via `base ⊕ override(domain)`: shared defaults in
+`kb.config.json.base`, per-domain overrides in `domains[].override` (judges, `source_type_policy`,
+verdicts, …). Every grading stage resolves the run's domain from the `<domain>--<slug>` page slug
+and applies that domain's config; there is no global "current domain". A **flat** single-domain KB
+(no `base`/`domains`) is unaffected — behaves exactly as before. Pick the domain before ingest;
+one run = one domain.
 
 ## Default: Tier-1 lightweight flow
 
