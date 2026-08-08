@@ -28,7 +28,7 @@ Decision-protocol). Verify the branch before every commit.
 - [x] **gates** — skill: `codex + pre-merge-check` · input: `engine E1 diff review + full suite; skill self-review` · done: 490 passed (engine, bit-for-bit); E1 code == plan-gate-approved (codex ITEM1 OK), no redundant re-review; skill self-review PASS; both diffs clean of debug/secrets · failure: fix then re-run (<=N) · re-entry: idempotent: re-run gate
 - [x] **e2e** — skill: `real entrypoint run` · input: `honesty --slug on a 2-domain fixture (real CLI)` · done: DONE — multi honesty --slug alpha--foo rc0; multi no-slug rc1 fail-loud; flat no-slug rc0 unchanged. parse_claims E1 unit-proven via real main(); full external-KB parse_claims CLI run deferred (needs a scaffolded multi-KB) · failure: BLOCKED->handoff; behavioral fail->fix · re-entry: idempotent: re-run
 - [x] **PR** — skill: `superpowers:finishing-a-development-branch` · input: `engine PR (llm-kb-template) + skill PR (h2t-skills)` · done: engine PR #14 + skill PR #332 opened; merge to main = operator hard-stop (merge #14 first — skill strict tier depends on it) · failure: escalate · re-entry: continue: reuse branch
-- [ ] **handoff** — skill: `h2t-core:handoff` · input: `session record` · done: session record written · failure: n/a (terminal) · re-entry: idempotent: re-run handoff
+- [x] **handoff** — skill: `h2t-core:handoff` · input: `session record` · done: session record written · failure: n/a (terminal) · re-entry: idempotent: re-run handoff
 
 ## Gates
 
