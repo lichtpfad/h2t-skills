@@ -67,7 +67,10 @@ def test_parse_claims_validates_domain_judge_prompts(monkeypatch, capsys):
 
 - [ ] **Step 3: Run to verify it fails** —
   `C:/dev/llm-kb-template/.venv/Scripts/pytest tests/test_parse_claims_domain.py -v`
-  Expected: FAIL — `seen["judges"]` is `["b1","b2"]` (base), not the domain's.
+  Expected: FAIL — with the old code, `load_config()` returns the raw multi cfg which has **no
+  top-level `judges`** (they live under `base`/`domains`), so `_fake_require` records
+  `seen["judges"] == []` (not the domain's `["r1","r2","r3"]`). The test still discriminates the
+  fix; only after Step 4 does `effective_config(raw, "research")` surface the domain's judges.
 
 - [ ] **Step 4: Implement** — in `scripts/parse_claims.py` `main()`, replace line 99
   (`_kbconfig.require_all_judge_prompts(_kbconfig.load_config())`) with:
