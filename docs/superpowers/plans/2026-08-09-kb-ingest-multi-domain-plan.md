@@ -149,14 +149,20 @@ fails loud on a batch that mixes domains.
 ### Task S4: version bump + reinstall
 
 > NOTE: source `plugins/h2t-ops/.claude-plugin/plugin.json` is already `1.5.9`, but the INSTALLED
-> cache is `1.5.8` (1.5.9 unreleased). Bump to `1.5.10` so the live plugin reliably reloads and we
-> don't ship these edits silently under an already-numbered 1.5.9.
+> cache is `1.5.8` (1.5.9 unreleased). Bump to `1.5.10`.
+>
+> CORRECTION (verified during execution): the `lichtpfad` marketplace is a **GitHub source**
+> (`known_marketplaces.json` → `lichtpfad/h2t-skills`, `autoUpdate: true`). The live SKILL markdown
+> is served from the plugin cache pulled from GitHub — **NOT** from `uv tool install` (that only
+> rebuilds the Python CLI binaries: h2t-gather/h2t-handoff/h2t-ops). So the live skill reloads
+> **automatically after the skill PR is merged to `main`** (autoUpdate). There is no autonomous way
+> to reload it before merge; the version bump is what lets autoUpdate detect the new release.
 
 - [ ] **Step 1: Patch-bump** `"version"` `1.5.9 → 1.5.10` in
   `plugins/h2t-ops/.claude-plugin/plugin.json:4`.
 
-- [ ] **Step 2: Reinstall** — `uv tool install --editable C:/dev/h2t-skills` so the live skill
-  reloads the edited markdown.
+- [ ] **Step 2: (optional) `uv tool install --editable C:/dev/h2t-skills`** — refreshes the CLI
+  binaries only; does NOT reload the skill markdown. Live skill reload = merge PR → autoUpdate.
 
 - [ ] **Step 3: Commit** — `chore(h2t-ops): bump 1.5.9 -> 1.5.10 (kb multi-domain ingest)`.
 
