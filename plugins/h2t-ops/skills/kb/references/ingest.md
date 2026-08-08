@@ -37,8 +37,10 @@ synthesis) are dispatched via the Agent tool between the deterministic stages.
       object: {\"source_id\": \"<id>\", \"verdict\": \"real\"|\"promo\", \"score\": <0..1>, \"note\":
       \"<short>\"}. Judge honesty only. Default to \"promo\" under uncertainty."
    - Collect all objects into honesty.json (a JSON list, one entry per harvested source).
-   - $PY -m pipeline.run honesty --harvest harvest.json --verdicts honesty.json --out real.json --repo "$KB"
+   - $PY -m pipeline.run honesty --harvest harvest.json --verdicts honesty.json --out real.json --repo "$KB" --slug <slug>
      -> writes real.json (promo dropped + logged to data/intake/dropped/<date>.md).
+     (`--slug` is REQUIRED in a multi-domain KB — the honesty stage resolves the run's domain from
+      the `<domain>--<slug>` prefix; omit it only for a flat single-domain KB.)
 3. T-prep (reuse strict chain, no new seam):
    $PY -m pipeline.run records-from-harvest --harvest real.json --slug <slug> --out records.json
    $PY -m pipeline.run intake  --records records.json --repo "$KB"
