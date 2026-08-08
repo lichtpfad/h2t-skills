@@ -190,6 +190,11 @@ Prints `{packs, enriched_claims, rejected, conflicts}`.
 
 ### 6. Council (Transform — mandatory under --strict, never skip)
 
+In a multi-domain KB, `parse_claims.py <slug>` and `synthesize_council.py <slug>` resolve the domain
+from the `<domain>--<slug>` prefix and use **that domain's** judges / vote-threshold / judge-prompts
+— so the slug MUST be domain-prefixed, or the council runs under the wrong (base) config.
+
+
 ```bash
 $PY "$KB/scripts/parse_claims.py" <slug>            # writes round header, prints claims
 # dispatch the judges (Agent tool, parallel) → each appends its section to filter-logs/<slug>.md
