@@ -2,10 +2,10 @@
 
 Ground a decision in the KB instead of asking the operator: justify/refute a claim, choose a method in an unfamiliar domain, or check a fact where neither you nor the operator has verified expertise. **Only council-PASS claims may drive conclusions.**
 
-> Resolve `KB`/`PY` per SKILL.md § "Resolve the KB root" (repeated for a self-contained run):
-> `KB="${H2T_KB_ROOT:-C:/dev/research-kb}"` · `PY="$KB/.venv/Scripts/python"`
+> Resolve `KB` per SKILL.md § "Resolve the KB root": `KB="${H2T_KB_ROOT:-C:/dev/research-kb}"`.
+> Query is read-only (Read/Grep over `$KB`); it needs no engine interpreter.
 
-This mode is **KB-agnostic**: instance ontology is read from the KB (`$KB/taxonomy.md`, `$KB/index.md`); the `llm-kb-template` artifact **schema** is assumed (every instance shares the one engine). **Fail loud** if a required artifact is missing (no page, no `pipeline-state.json`, no council round) — never silently answer ungrounded.
+This mode is **KB-agnostic**: instance ontology is read from the KB (`$KB/taxonomy.md`, `$KB/index.md`); the `llm-kb-engine` artifact **schema** is assumed (every instance shares the one engine). **Fail loud** if a required artifact is missing (no page, no `pipeline-state.json`, no council round) — never silently answer ungrounded.
 
 ## Step 1 — Find the cluster
 
