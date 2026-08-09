@@ -1,11 +1,21 @@
 # kb — ingest mode
 
-> Resolve `KB`/`PY` per SKILL.md § "Resolve the KB root" (repeated for a self-contained run):
-> `KB="${H2T_KB_ROOT:-C:/dev/research-kb}"` · `PY="$KB/.venv/Scripts/python"`
+> **Data-only model.** The engine is installed as the `llm-kb-engine` tool (`uv tool install
+> llm-kb-engine`); the KB is data-only (no engine files). Resolve the KB root per SKILL.md
+> § "Resolve the KB root": `KB="${H2T_KB_ROOT:-C:/dev/research-kb}"`.
+>
+> **Two ways the engine is invoked:**
+> - **Console-scripts** — cwd-independent, always driven with `--repo "$KB"`:
+>   `run <stage>` · `kb-lint` · `kb-index` · `kb-parse-claims` · `kb-council`.
+> - **`ENGINE_PY`** — one module (`pipeline.grade.orchestrate`) has no console-script, so call it
+>   with the engine-venv python:
+>   `ENGINE_PY="$(uv tool dir)/llm-kb-engine/Scripts/python"` (Win) ·
+>   `.../llm-kb-engine/bin/python` (Linux/mac). **Prefix `PYTHONIOENCODING=utf-8`** — orchestrate
+>   prints non-ASCII quotes and crashes on the Windows default codepage otherwise.
 
 Turn a research question into a **grounded knowledge page** in the shared KB. The engine
-(`llm-kb-template`, vendored in research-kb) owns every deterministic seam; this skill drives
-them and dispatches the agents. **Python never calls an LLM.**
+(`llm-kb-engine`) owns every deterministic seam; this skill drives them and dispatches the
+agents. **Python never calls an LLM.**
 
 Two flows:
 
@@ -24,9 +34,9 @@ Resolve the target **domain and slug** first. Read `$KB/kb.config.json`:
 - **Multi-domain KB** (`domains[]` present): choose the domain the topic belongs to (the domain
   list is `kb.config.json.domains[].name`). The page slug is then `<domain>--<topic-slug>`, and the
   stub `$KB/wiki/<domain>--<topic-slug>.md` must exist AND carry a `domain: <domain>` frontmatter
-  field. Scaffold it with the engine's `scaffold_topics.py` (it stamps `domain:`); never hand-write
-  a stub without the `domain:` field — the linter rejects it. Every `<slug>` below is this
-  domain-prefixed value.
+  field. Scaffold it with `kb-scaffold --repo "$KB"` (it stamps `domain:`); never hand-write a stub
+  without the `domain:` field — the linter rejects it. Every `<slug>` below is this domain-prefixed
+  value.
 - **Flat single-domain KB** (no `domains[]`): `<slug>` is a plain topic slug from `$KB/taxonomy.md`
   (existing topic) or a new row you add first; no `domain:` field. A `$KB/wiki/<slug>.md` stub must
   exist before ingest writes onto it.
@@ -45,7 +55,7 @@ one run = one domain.
 
 ## Default: Tier-1 lightweight flow
 
-One CLI call per step (`$PY -m pipeline.run <stage>`). The agent passes (honesty, extractor,
+One CLI call per step (`run <stage> --repo "$KB"`). The agent passes (honesty, extractor,
 synthesis) are dispatched via the Agent tool between the deterministic stages.
 
 ```
@@ -58,23 +68,23 @@ synthesis) are dispatched via the Agent tool between the deterministic stages.
       object: {\"source_id\": \"<id>\", \"verdict\": \"real\"|\"promo\", \"score\": <0..1>, \"note\":
       \"<short>\"}. Judge honesty only. Default to \"promo\" under uncertainty."
    - Collect all objects into honesty.json (a JSON list, one entry per harvested source).
-   - $PY -m pipeline.run honesty --harvest harvest.json --verdicts honesty.json --out real.json --repo "$KB" --slug <slug>
+   - run honesty --harvest harvest.json --verdicts honesty.json --out real.json --repo "$KB" --slug <slug>
      -> writes real.json (promo dropped + logged to data/intake/dropped/<date>.md).
      (`--slug` is REQUIRED in a multi-domain KB — the honesty stage resolves the run's domain from
       the `<domain>--<slug>` prefix; omit it only for a flat single-domain KB.)
 3. T-prep (reuse strict chain, no new seam):
-   $PY -m pipeline.run records-from-harvest --harvest real.json --slug <slug> --out records.json
-   $PY -m pipeline.run intake  --records records.json --repo "$KB"
-   $PY -m pipeline.run prepare --repo "$KB"          # -> prompt-packs with qid spans + body_hash
+   run records-from-harvest --harvest real.json --slug <slug> --out records.json
+   run intake  --records records.json --repo "$KB"
+   run prepare --repo "$KB"          # -> prompt-packs with qid spans + body_hash
 4. Extractor (agent) — REUSE render_extractor:
-   $PY -m pipeline.grade.orchestrate render-extractor --repo "$KB"
+   PYTHONIOENCODING=utf-8 $ENGINE_PY -m pipeline.grade.orchestrate render-extractor --repo "$KB"
    -> Agent reads agent-work/<h>/extractor_prompt.txt, emits a PLAIN JSON list
       [{claim_text, quote_ids, conflict_candidates}] per pack.
       `quote_ids` are PLAIN INTEGERS (the span qids), e.g. [26, 31] — NOT strings "26".
       (ingest-light coerces numeric strings, but emit ints; a non-numeric qid fail-closes.)
    - Build extractions.json = {source_id: [extractions]} and body-hashes.json = {source_id: body_hash}
      (read body_hash from each prompt-pack data/intake/prompts/<h>.json).
-   $PY -m pipeline.run ingest-light --harvest real.json --extractions extractions.json \
+   run ingest-light --harvest real.json --extractions extractions.json \
        --slug <slug> --repo "$KB" --body-hashes body-hashes.json
 5. Synthesis (agent) — AFTER ingest-light (ev-ids now minted on the page):
    - Read the minted evidence[] ids + claims + quotes from wiki/<slug>.md.
@@ -84,7 +94,7 @@ synthesis) are dispatched via the Agent tool between the deterministic stages.
      {\"Key Concepts\": \"...\", \"What Works\": \"...\", \"What Doesn't Work\": \"...\"}}. Omit a
      section if the claims do not support it. tldr is a navigational summary (it need not cite)."
    - Write synthesis.json, then:
-   $PY -m pipeline.run synthesize --repo "$KB" --slug <slug> --synthesis synthesis.json
+   run synthesize --repo "$KB" --slug <slug> --synthesis synthesis.json
 6. Lint + commit (skill owns the commit; reuse the § Lint + commit steps below).
 ```
 
@@ -129,6 +139,7 @@ Map each result into the **raw_source schema** the engine expects and write a ha
 `source_types`: academic | practitioner | implementation | blog | review — you classify),
 `body` (the extractable text). Optional: `url`, `title`, `authors`, `published_date` (ISO),
 `doi`, `stars`, `replicated`, `landmark`. A source missing id/type/body is rejected fail-loud.
+(`authors` must be a **list of strings** — a bare string gets split character-by-character.)
 
 **Classifying `type` — do not over-use `implementation`.** `implementation` means an actual
 **code repository** (GitHub/GitLab) — set `stars` for it; the engine applies a repo stars-floor.
@@ -140,9 +151,9 @@ Mis-labelling an article as `implementation` gets it quarantined by the stars-fl
 ### 2. Deterministic T-prep (no LLM)
 
 ```bash
-$PY -m pipeline.run records-from-harvest --harvest harvest.json --slug <slug> --out records.json
-$PY -m pipeline.run intake  --records records.json --repo "$KB"      # sources → pending
-$PY -m pipeline.run prepare --repo "$KB"                              # pending → prompt-packs
+run records-from-harvest --harvest harvest.json --slug <slug> --out records.json
+run intake  --records records.json --repo "$KB"      # sources → pending
+run prepare --repo "$KB"                              # pending → prompt-packs
 ```
 
 `prepare` prints `{"packs": N}` and writes `$KB/data/intake/prompts/<h>.json` per source.
@@ -157,22 +168,24 @@ money hard-stop — never auto-proceed.
 
 ### 4. Per-pack agent loop (Transform — the only live step)
 
-For each pack hash `<h>` (run one stage per call — matches the engine convention):
+For each pack hash `<h>` (run one stage per call — matches the engine convention).
+`orchestrate` has no console-script → call it with `$ENGINE_PY` (see header) and
+`PYTHONIOENCODING=utf-8`:
 
 ```bash
-$PY -m pipeline.grade.orchestrate render-extractor  --repo "$KB"   # writes extractor_prompt.txt
+PYTHONIOENCODING=utf-8 $ENGINE_PY -m pipeline.grade.orchestrate render-extractor  --repo "$KB"   # writes extractor_prompt.txt
 ```
 → **Agent** (extractor): read `agent-work/<h>/extractor_prompt.txt`, emit `extractions.json`.
 ```bash
-$PY -m pipeline.grade.orchestrate build-faithfulness --repo "$KB"  # prompt + qids sidecar
+PYTHONIOENCODING=utf-8 $ENGINE_PY -m pipeline.grade.orchestrate build-faithfulness --repo "$KB"  # prompt + qids sidecar
 ```
 → **Agent** (faithfulness): emit `faithfulness.json`.
 ```bash
-$PY -m pipeline.grade.orchestrate build-conflict    --repo "$KB"   # iff candidates
+PYTHONIOENCODING=utf-8 $ENGINE_PY -m pipeline.grade.orchestrate build-conflict    --repo "$KB"   # iff candidates
 ```
 → **Agent** (conflict, only if a `conflict_prompt.txt` was written): emit `conflicts.json`.
 ```bash
-$PY -m pipeline.grade.orchestrate assemble          --repo "$KB"   # stamps qids → agent-out/<h>.json
+PYTHONIOENCODING=utf-8 $ENGINE_PY -m pipeline.grade.orchestrate assemble          --repo "$KB"   # stamps qids → agent-out/<h>.json
 ```
 
 The agent sees only sanctioned inputs (numbered spans by qid; Python-resolved quote text;
@@ -182,7 +195,7 @@ discarded at assemble (provenance enforced there).
 ### 5. Finalize (Load, fail-closed)
 
 ```bash
-$PY -m pipeline.run finalize --repo "$KB"     # agent-out → evidence on page + rejected/conflicts reports
+run finalize --repo "$KB"     # agent-out → evidence on page + rejected/conflicts reports
 ```
 
 Fail-closed: a verdict whose stamped `quote_ids` don't bind to the extractor's is rejected.
@@ -190,25 +203,35 @@ Prints `{packs, enriched_claims, rejected, conflicts}`.
 
 ### 6. Council (Transform — mandatory under --strict, never skip)
 
-In a multi-domain KB, `parse_claims.py <slug>` and `synthesize_council.py <slug>` resolve the domain
-from the `<domain>--<slug>` prefix and use **that domain's** judges / vote-threshold / judge-prompts
-— so the slug MUST be domain-prefixed, or the council runs under the wrong (base) config.
-
+In a multi-domain KB, `kb-parse-claims <slug>` and `kb-council <slug>` resolve the domain from the
+`<domain>--<slug>` prefix and use **that domain's** judges / vote-threshold / judge-prompts — so the
+slug MUST be domain-prefixed, or the council runs under the wrong (base) config.
 
 ```bash
-$PY "$KB/scripts/parse_claims.py" <slug>            # writes round header, prints claims
+kb-parse-claims <slug> --repo "$KB"            # writes round header, prints claims (id-keyed)
 # dispatch the judges (Agent tool, parallel) → each appends its section to filter-logs/<slug>.md
-$PY "$KB/scripts/synthesize_council.py" <slug>      # majority vote → data/pipeline-state.json
+kb-council <slug> --repo "$KB"                 # majority vote → data/pipeline-state.json + Council table
 ```
 
 Loop E→T→L until 2 consecutive rounds add no new PASS (dry_streak = 2). A claim without a
 council PASS does NOT belong in `tldr` and must not be cited as grounding.
 
+**Bind the verdict onto the page (S3a).** `kb-council` records the majority vote in
+`filter-logs/<slug>.md` + `data/pipeline-state.json`, but to stamp `judge_pass:` onto each
+evidence entry — so `synthesize` excludes FAILed ids — apply the id-keyed Council table as a
+`{ev-id: PASS|FAIL}` map:
+
+```bash
+run apply-verdicts --repo "$KB" --slug <slug> --verdicts verdicts.json   # verdicts.json = {ev-id: PASS|FAIL}
+```
+
+Build `verdicts.json` from the id-keyed Council table (first column = ev-id).
+
 ### 7. Lint + commit
 
 ```bash
-$PY "$KB/scripts/lint_wiki.py" "$KB/wiki/<slug>.md"      # must PASS (or fix)
-$PY "$KB/scripts/update_index.py" --repo "$KB"            # refresh index.md ($KB, not cwd)
+kb-lint --repo "$KB" "$KB/wiki/<slug>.md"      # must PASS (or fix)
+kb-index --repo "$KB"                          # refresh index.md ($KB, not cwd)
 git -C "$KB" add wiki/<slug>.md filter-logs/<slug>.md data/pipeline-state.json index.md log.md
 git -C "$KB" commit -m "ingest(<slug>): +N council-verified claims"
 ```
@@ -218,13 +241,18 @@ Append to `$KB/log.md`: `[DATE] ingest | <slug> | <source-id> | "added N claims"
 ## Lint + commit (Tier-1 default)
 
 ```bash
-$PY "$KB/scripts/lint_wiki.py" "$KB/wiki/<slug>.md"      # must PASS (or fix)
-$PY "$KB/scripts/update_index.py" --repo "$KB"            # refresh index.md ($KB, not cwd)
+kb-lint --repo "$KB" "$KB/wiki/<slug>.md"      # must PASS (or fix)
+kb-index --repo "$KB"                          # refresh index.md ($KB, not cwd)
 git -C "$KB" add wiki/<slug>.md index.md log.md
 git -C "$KB" commit -m "ingest(<slug>): Tier-1 partial page (N grounded claims)"
 ```
 
 Append to `$KB/log.md`: `[DATE] ingest | <slug> | <source-id> | "Tier-1 partial, N claims"`.
+
+> **Cleanup.** `run` stages leave working files under `$KB/data/intake/{pending,prompts,agent-out,
+> agent-work,dropped,…}`. These are ingest scratch, not KB content — do NOT commit them (the KB
+> should `.gitignore` `data/intake/`). Commit only `wiki/`, `index.md`, `log.md`, and (strict)
+> `filter-logs/` + `data/pipeline-state.json`.
 
 ## Guardrails
 

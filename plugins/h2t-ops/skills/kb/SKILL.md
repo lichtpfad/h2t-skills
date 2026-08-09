@@ -1,10 +1,10 @@
 ---
 name: h2t-ops:kb
 description: "Use when working with the Ecosystem Research KB or any llm-kb-template instance: knowledge base, база знаний, add to the knowledge base / добавить в базу знаний, learn from the knowledge base / узнать из базы знаний, search and add to the KB / поискать и добавить в базу знаний, ground a decision in the KB, kb-ingest, kb-lint, kb-lookup, KB health. Human-invoked; ingest is COST-GATED."
-compatibility: "Requires an llm-kb-template instance (default C:/dev/research-kb, override H2T_KB_ROOT) with its .venv, and the h2t-ops research connector for ingest harvest."
+compatibility: "Requires the installed llm-kb-engine tool (uv tool install) and a data-only KB (default C:/dev/research-kb, override H2T_KB_ROOT), plus the h2t-ops research connector for ingest harvest."
 metadata:
   author: lichtpfad
-  version: 0.1.0
+  version: 0.1.1
 ---
 
 # h2t-ops:kb
@@ -15,8 +15,12 @@ One entry point for the shared Ecosystem Research KB (an `llm-kb-template` insta
 
 ```bash
 KB="${H2T_KB_ROOT:-C:/dev/research-kb}"
-PY="$KB/.venv/Scripts/python"      # Windows; Linux/mac: $KB/.venv/bin/python
 ```
+
+The engine is the installed `llm-kb-engine` tool (`uv tool install`), NOT a KB-local `.venv`. It
+exposes cwd-independent console-scripts driven with `--repo "$KB"`: `run <stage>`, `kb-lint`,
+`kb-index`, `kb-parse-claims`, `kb-council`. One module (`pipeline.grade.orchestrate`) has no
+console-script — the ingest mode resolves an `ENGINE_PY` for it. Each mode file names what it needs.
 
 ## Guardrails (all modes)
 
