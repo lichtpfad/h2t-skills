@@ -254,6 +254,36 @@ Append to `$KB/log.md`: `[DATE] ingest | <slug> | <source-id> | "Tier-1 partial,
 > should `.gitignore` `data/intake/`). Commit only `wiki/`, `index.md`, `log.md`, and (strict)
 > `filter-logs/` + `data/pipeline-state.json`.
 
+## Craft verdict (Opt3)
+
+A second, ORTHOGONAL axis for a domain whose `override.verdicts` is a craft-ladder (e.g.
+art-practice: CONTESTED / SITUATIONAL / ESTABLISHED-CRAFT, ranks 0/1/2). It records
+craft-standing (endorsement strength) judged by an LLM-in-the-role-of-practitioner, NOT
+evidence accumulation. Run it AFTER a page is council-graded (`judge_pass` stamped).
+
+1. **Blind claim list.** Take ONLY `judge_pass:true` claims and emit `id + text` — NO
+   sources / confidence / popularity cues, or the axis collapses into convergence.
+   `parse_claims.format_claims_blind(claims)` does this.
+2. **One verdict-judge (Agent), prompt verbatim:**
+
+   > You are a seasoned visual-art practitioner and open-call juror (25+ years). For each numbered
+   > advice-claim, assign ONE verdict AS PROFESSIONAL CRAFT ADVICE — from your own knowledge, NOT how
+   > many sources repeat it:
+   > - ESTABLISHED-CRAFT — a principle serious practitioners broadly hold as sound
+   > - SITUATIONAL — useful but depends on context/medium/career stage
+   > - CONTESTED — templated/superficial, a logistical tip, OR something practitioners disagree on
+   > Do NOT default everything to ESTABLISHED-CRAFT. IGNORE any in-text popularity/source cues
+   > ("across 11 artists", URLs). Output a table: | id | verdict | reason |
+
+3. The judge appends `### Verdict-Judge: Practitioner` (a `| id | verdict | reason |` table) to
+   `filter-logs/<slug>.md` under the current round.
+4. **Apply with the engine:** `run apply-craft-verdicts <slug> --repo "$KB"` → page-side gate
+   (rank>0 only on `judge_pass:true`) + lint fail-closed + atomic write.
+
+> verdict — SINGLE-judge, un-cross-checked, HYPOTHESIS-grade сигнал: craft-standing по суждению
+> LLM-в-роли-практика, не проверенная проф-истина. Валидирован на стабильность+ортогональность
+> (проба #10), НЕ на проф-верность. Реальная валидация — за настоящим open-call экспертом.
+
 ## Guardrails
 
 - **Grounded synthesis:** the Python guard rejects any non-minted `(ev-xxxx)` citation, any
