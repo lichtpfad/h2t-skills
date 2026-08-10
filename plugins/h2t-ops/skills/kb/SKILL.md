@@ -4,7 +4,7 @@ description: "Use when working with the Ecosystem Research KB or any llm-kb-temp
 compatibility: "Requires the installed llm-kb-engine tool (uv tool install) and a data-only KB (default C:/dev/research-kb, override H2T_KB_ROOT), plus the h2t-ops research connector for ingest harvest."
 metadata:
   author: lichtpfad
-  version: 0.1.2
+  version: 0.1.3
 ---
 
 # h2t-ops:kb
@@ -33,6 +33,7 @@ console-script — the ingest mode resolves an `ENGINE_PY` for it. Each mode fil
 | Intent | Action |
 |---|---|
 | Fill the KB from research (ingest, наполни KB, add to knowledge base, зафиксируй ресёрч) | **REQUIRED:** read `references/ingest.md` and follow it before any ingest action (it holds the cost-gate). |
-| Ground a decision in the KB (ground, заземли, узнать из базы знаний, kb-lookup, look up in KB) | **REQUIRED:** read `references/query.md` and follow it before grounding. |
+| Read / retrieve KB material (show sources on X, what do we have on, покажи материалы по) | **REQUIRED:** read `references/query.md` and follow the `read` intent (no council gate — material is surfaced with its status as a label). |
+| Ground a decision in the KB (ground, заземли, узнать из базы знаний, kb-lookup, look up in KB) | **REQUIRED:** read `references/query.md` and follow the `ground` intent (council-PASS gate is mandatory). |
 | Check KB integrity (lint, проверь KB, KB health) | **REQUIRED:** read `references/lint.md` and follow it. |
 | Compound: search AND add (поискать и добавить в базу знаний, search and add to the KB) | **REQUIRED:** read `references/query.md` first; only if its gap-fill fires, then read `references/ingest.md`. Query-then-ingest, not a fourth mode. |
