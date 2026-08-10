@@ -59,7 +59,9 @@ One CLI call per step (`run <stage> --repo "$KB"`). The agent passes (honesty, e
 synthesis) are dispatched via the Agent tool between the deterministic stages.
 
 ```
-1. Harvest (Exa) -> harvest.json  [reuse the §1 mapping to the raw_source schema below]
+1. Harvest (Exa, `--full-text`) -> harvest.json  [reuse the §1 mapping to the raw_source schema
+   below — each source MUST carry `fetch_mode: "full-text"` + `fetch_provider`, or ingest-light
+   fail-closes it]
 2. Honesty (agent):
    - Build ONE honesty prompt per source in the skill (input = a bounded head of the body + type + url).
    - Prompt LENS (verbatim contract):
@@ -128,18 +130,38 @@ because grounding happens in domains the operator can't personally verify.
 
 ### 1. Harvest (Extract)  →  raw_source JSON
 
-Gather 20–40 sources for the topic with the research connector:
+Gather 20–40 sources for the topic with the research connector. **`--full-text` is mandatory** —
+without it the provider returns only highlights, the body is a snippet, and the engine fail-closes
+the whole harvest (see `fetch_mode` below). `--json` gives the nested envelope
+`{ok, provider, result: {status, results: [...]}}` — map `result.results[i]`:
 
 ```bash
-h2t-ops research --mode deep "<the research question>"
+h2t-ops research search --query "<the research question>" --mode deep --full-text --json
 ```
 
 Map each result into the **raw_source schema** the engine expects and write a harvest JSON
 (list of objects). REQUIRED per source: `id` (stable), `type` (one of the config
 `source_types`: academic | practitioner | implementation | blog | review — you classify),
-`body` (the extractable text). Optional: `url`, `title`, `authors`, `published_date` (ISO),
-`doi`, `stars`, `replicated`, `landmark`. A source missing id/type/body is rejected fail-loud.
+`body` (the extractable text), `fetch_mode`, `fetch_provider` (both below). Optional: `url`,
+`title`, `authors`, `published_date` (ISO), `doi`, `stars`, `replicated`, `landmark`. A source
+missing id/type/body is rejected fail-loud.
 (`authors` must be a **list of strings** — a bare string gets split character-by-character.)
+
+**`fetch_mode` — the gated provenance field (spec #6, fail-closed).** `records-from-harvest` and
+`ingest-light` REJECT any source whose `fetch_mode != "full-text"` — a snippet body must never
+reach extraction. Derive it honestly per source, tied to the SAME decision as `body`:
+- the result carried non-empty `text` (full page) → `body` = that `text`, `fetch_mode: "full-text"`.
+- only `highlights` came back → you joined them into `body`, `fetch_mode: "highlights"` — this
+  source WILL be dropped, and that is intended. Do not label a highlights body `"full-text"`;
+  provenance must never disagree with the body it describes.
+
+With `--full-text` every returned result normally has `text` (~15 000 chars, provider-capped), so
+all sources should honestly be `"full-text"`. If a source has no `text`, drop it or re-fetch —
+never relabel.
+
+**`fetch_provider`** — the provider that returned the body: `"exa"` for the Exa-backed research
+search, `"github"` for a repo. Provenance metadata (carried onto the raw capture); not gated, but
+always serialize it.
 
 **Classifying `type` — do not over-use `implementation`.** `implementation` means an actual
 **code repository** (GitHub/GitLab) — set `stars` for it; the engine applies a repo stars-floor.
