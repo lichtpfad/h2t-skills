@@ -146,7 +146,11 @@ Map each result into the **raw_source schema** the engine expects and write a ha
 A web how-to, tutorial, or engineering article is NOT `implementation` — classify it as `blog`
 (identified author / company blog) or `practitioner` (a recognised practitioner writing from
 experience). `academic` = paper / preprint (set `doi`); `review` = survey / meta-analysis.
-Mis-labelling an article as `implementation` gets it quarantined by the stars-floor.
+Mis-labelling still matters even though the engine now guards it: an `implementation` source
+with no `stars` is auto-reclassified to `blog` at intake (#27), so it is no longer quarantined —
+but if you also set a `stars` value it is treated as a real repo and the stars-floor applies.
+Classify correctly upfront regardless: that gives the right trust tier and the honesty check
+(`implementation` is out of honesty scope); do not rely on the safety net.
 
 ### 2. Deterministic T-prep (no LLM)
 
