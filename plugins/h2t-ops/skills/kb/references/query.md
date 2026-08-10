@@ -45,11 +45,11 @@ Read `$KB/wiki/<slug>.md` whole (Key Concepts / What Works / What Doesn't Work) 
 2. **Re-extract** — the claim doesn't answer the exact question but the source might → extract from raw rather than re-harvest.
 3. **Provenance audit** — confirm `body_hash` matches (capture unaltered).
 
-**Segment-addressed read (don't scan the whole body).** When a source carries `loc` (the segment qids the quote resolved from), read just that span + surrounding context via the engine:
+**Segment-addressed read (don't scan the whole body).** When a source carries `loc` (the segment qids the quote resolved from), read just that span + surrounding context via the engine — pass the source's own `raw` pin and its `loc`:
 ```
-kb-read-span --repo "$KB" <slug> <id> --qids <loc, e.g. 0,2> [--context N] [--verify]
+kb-read-span --repo "$KB" --raw <evidence sources[].raw> --qids <loc, e.g. 0,2> [--context N] [--verify]
 ```
-It re-segments the immutable capture (Python owns the text) and prints the addressed "chapter". `--verify` runs the provenance audit (body_hash match) for trigger 3. If a source has no `loc` (capture predates the pin), fall back to reading the capture body and locating the quote.
+It re-segments the immutable capture (Python owns the text) and prints the addressed "chapter". `--verify` runs the provenance audit (`body_hash` match) for trigger 3. If a source has no `loc` (capture predates the pin), fall back to reading the capture at `raw` and locating the quote.
 
 If `evidence[].sources[].raw` is absent, L-raw is unreachable for that page (the capture predates the pin, or the source was never captured) — say so; do not silently fall back to a live fetch.
 
