@@ -190,7 +190,7 @@ def register(subparsers: Any) -> None:
     answer_p.add_argument("--query", required=True)
     add_fmt(answer_p)
 
-    research_p = cmds.add_parser("research", help="Run a deep async research task via Exa Research API")
+    research_p = cmds.add_parser("research", help="Run a deep async research task via Exa Agent API")
     research_p.add_argument("--instructions", required=True)
     research_p.add_argument(
         "--model",

@@ -746,238 +746,172 @@ def test_research_models_and_default():
     assert exa.RESEARCH_DEFAULT_MODEL == "exa-research-fast"
 
 
-def test_create_research_posts_instructions_and_model(monkeypatch):
+def test_model_to_effort_mapping():
+    # Legacy --model tiers map onto Agent API effort after the /research/v1 retirement.
+    assert exa.MODEL_TO_EFFORT == {
+        "exa-research-fast": "low",
+        "exa-research": "medium",
+        "exa-research-pro": "high",
+    }
+
+
+def test_research_task_delegates_to_agent_run(monkeypatch):
     seen = {}
 
-    def fake_call(endpoint, body, api_key, **kw):
-        seen["endpoint"] = endpoint
-        seen["body"] = body
-        seen["method"] = kw.get("method", "POST")
-        return (201, {"researchId": "r_1", "status": "running", "model": body["model"]}, 30)
+    def fake_agent_run(query, *, api_key, output_schema, effort, wait, poll_interval, timeout_s):
+        seen.update(
+            query=query, effort=effort, output_schema=output_schema,
+            wait=wait, poll_interval=poll_interval, timeout_s=timeout_s,
+        )
+        return (
+            {
+                "status": "OK",
+                "run_id": "agent_run_1",
+                "output": {"text": "Answer.", "structured": None,
+                           "grounding": [{"citations": [{"url": "https://x", "title": "X"}]}]},
+                "citations": [{"url": "https://x", "title": "X"}],
+                "telemetry": {
+                    "attempts": [{"engine": "exa", "endpoint": "/agent/runs", "http": 200,
+                                  "latency_ms": 0, "error": None}],
+                    "reason_for_fallback": None,
+                    "total_cost_usd": 0.025,
+                    "usage": {"searches": 3, "agentComputeUnits": 0.1},
+                },
+            },
+            0,
+        )
 
-    monkeypatch.setattr(exa, "call_exa", fake_call)
-    data = exa.create_research(
-        "Summarize X", model="exa-research", output_schema={"type": "object"}, api_key="k"
+    monkeypatch.setattr(exa, "agent_run", fake_agent_run)
+    env, code = exa.research_task(
+        "Summarize X", api_key="k", model="exa-research",
+        output_schema={"type": "object"}, poll_interval=0.0, timeout_s=10.0,
     )
 
-    assert seen["endpoint"] == "/research/v1"
-    assert seen["method"] == "POST"
-    assert seen["body"]["instructions"] == "Summarize X"
-    assert seen["body"]["model"] == "exa-research"
-    assert seen["body"]["outputSchema"] == {"type": "object"}
-    assert data["researchId"] == "r_1"
+    # model tier -> effort, and the research envelope shape is preserved for callers.
+    assert seen["effort"] == "medium"
+    assert seen["query"] == "Summarize X"
+    assert seen["output_schema"] == {"type": "object"}
+    assert code == 0
+    assert env["status"] == "OK"
+    assert env["research_id"] == "agent_run_1"
+    assert env["model"] == "exa-research"
+    assert env["output"]["content"] == "Answer."
+    assert env["results"] == [{"url": "https://x", "title": "X"}]
+    assert env["telemetry"]["total_cost_usd"] == 0.025
+    assert env["telemetry"]["num_searches"] == 3
+    assert env["telemetry"]["reasoning_units"] == 0.1
+    assert env["meta"]["query"] == "Summarize X"
 
 
-def test_create_research_omits_schema_when_absent(monkeypatch):
+def test_research_task_default_model_maps_to_low_effort(monkeypatch):
     seen = {}
 
-    def fake_call(endpoint, body, api_key, **kw):
-        seen["body"] = body
-        return (201, {"researchId": "r_2", "status": "running"}, 20)
+    def fake_agent_run(query, *, api_key, output_schema, effort, wait, poll_interval, timeout_s):
+        seen["effort"] = effort
+        return ({"status": "RUNNING", "run_id": "agent_run_9",
+                 "output": None, "citations": [], "telemetry": {"attempts": []}}, 0)
 
-    monkeypatch.setattr(exa, "call_exa", fake_call)
-    exa.create_research("Q", model="exa-research-fast", output_schema=None, api_key="k")
-    assert "outputSchema" not in seen["body"]
+    monkeypatch.setattr(exa, "agent_run", fake_agent_run)
+    exa.research_task("Q", api_key="k", wait=False)
+    assert seen["effort"] == "low"  # RESEARCH_DEFAULT_MODEL == exa-research-fast
 
 
-def test_get_research_uses_path_param_and_get(monkeypatch):
-    seen = {}
-
-    def fake_call(endpoint, body, api_key, **kw):
-        seen["endpoint"] = endpoint
-        seen["method"] = kw.get("method")
-        return (200, {"researchId": "r_1", "status": "completed", "output": {"content": "done"}}, 15)
-
-    monkeypatch.setattr(exa, "call_exa", fake_call)
-    data = exa.get_research("r_1", api_key="k")
-
-    assert seen["endpoint"] == "/research/v1/r_1"
-    assert seen["method"] == "GET"
-    assert data["status"] == "completed"
+def _agent_env(status, *, run_id="agent_run_1", output=None, citations=None,
+               reason=None, cost=0.0, searches=None, compute=None, code=0):
+    """Build a minimal agent-run envelope + exit code, as agent_run() would return."""
+    telemetry = {"attempts": [], "reason_for_fallback": reason, "total_cost_usd": cost}
+    if searches is not None or compute is not None:
+        telemetry["usage"] = {"searches": searches, "agentComputeUnits": compute}
+    return (
+        {"status": status, "run_id": run_id, "output": output,
+         "citations": citations or [], "telemetry": telemetry},
+        code,
+    )
 
 
 def test_research_task_async_returns_running(monkeypatch):
     monkeypatch.setattr(
-        exa, "create_research",
-        lambda instructions, *, model, output_schema, api_key: {"researchId": "r_9", "status": "running"},
+        exa, "agent_run",
+        lambda query, **kw: _agent_env("RUNNING", run_id="agent_run_9"),
     )
     env, exit_code = exa.research_task("Q", api_key="k", wait=False)
     assert exit_code == 0
     assert env["status"] == "RUNNING"
-    assert env["research_id"] == "r_9"
+    assert env["research_id"] == "agent_run_9"
     assert env["model"] == exa.RESEARCH_DEFAULT_MODEL
 
 
-def test_research_task_wait_completes(monkeypatch):
-    monkeypatch.setattr(exa, "sleep_with_jitter", lambda s: None)
+def test_research_task_failed_propagates_reason_and_code(monkeypatch):
     monkeypatch.setattr(
-        exa, "create_research",
-        lambda instructions, *, model, output_schema, api_key: {"researchId": "r_1", "status": "running"},
-    )
-    polls = iter([
-        {"researchId": "r_1", "status": "running"},
-        {"researchId": "r_1", "status": "completed",
-         "output": {"content": "Answer."},
-         "costDollars": {"total": 0.02, "numSearches": 3, "numPages": 5, "reasoningTokens": 900},
-         "citations": [{"url": "https://x", "title": "X"}]},
-    ])
-    monkeypatch.setattr(exa, "get_research", lambda rid, *, api_key: next(polls))
-
-    env, exit_code = exa.research_task("Q", api_key="k", wait=True, poll_interval=0.0, timeout_s=10.0)
-
-    assert exit_code == 0
-    assert env["status"] == "OK"
-    assert env["output"]["content"] == "Answer."
-    assert env["results"] == [{"url": "https://x", "title": "X"}]
-    assert env["telemetry"]["total_cost_usd"] == 0.02
-    assert env["telemetry"]["num_searches"] == 3
-    assert env["telemetry"]["num_pages"] == 5
-    assert env["telemetry"]["reasoning_units"] == 900
-    assert env["meta"]["query"] == "Q"
-
-
-def test_research_task_failed_status(monkeypatch):
-    monkeypatch.setattr(exa, "sleep_with_jitter", lambda s: None)
-    monkeypatch.setattr(
-        exa, "create_research",
-        lambda instructions, *, model, output_schema, api_key: {"researchId": "r_1", "status": "running"},
-    )
-    monkeypatch.setattr(
-        exa, "get_research",
-        lambda rid, *, api_key: {"researchId": "r_1", "status": "failed", "error": "boom"},
+        exa, "agent_run",
+        lambda query, **kw: _agent_env("FAILED", reason="agent_failed", code=1),
     )
     env, exit_code = exa.research_task("Q", api_key="k", wait=True, poll_interval=0.0, timeout_s=10.0)
     assert env["status"] == "FAILED"
     assert exit_code == 1
-    assert env["telemetry"]["reason_for_fallback"] == "boom"
+    assert env["telemetry"]["reason_for_fallback"] == "agent_failed"
 
 
-def test_research_task_timeout(monkeypatch):
-    monkeypatch.setattr(exa, "sleep_with_jitter", lambda s: None)
-    ticks = iter([0.0, 5.0, 20.0])
-    monkeypatch.setattr(exa.time, "monotonic", lambda: next(ticks))
+def test_research_task_auth_error_exit_4(monkeypatch):
     monkeypatch.setattr(
-        exa, "create_research",
-        lambda instructions, *, model, output_schema, api_key: {"researchId": "r_1", "status": "running"},
+        exa, "agent_run",
+        lambda query, **kw: _agent_env("FAILED", run_id="", reason="exa_auth_error", code=4),
     )
-    monkeypatch.setattr(
-        exa, "get_research",
-        lambda rid, *, api_key: {"researchId": "r_1", "status": "running"},
-    )
-    env, exit_code = exa.research_task("Q", api_key="k", wait=True, poll_interval=0.0, timeout_s=10.0)
-    assert env["status"] == "FAILED"
-    assert exit_code == 1
-    assert env["telemetry"]["reason_for_fallback"] == "research_timeout"
-
-
-def test_research_task_create_auth_error(monkeypatch):
-    def _raise(instructions, *, model, output_schema, api_key):
-        raise exa.ExaPermanentError("http 401", http_status=401, latency_ms=10)
-    monkeypatch.setattr(exa, "create_research", _raise)
     env, exit_code = exa.research_task("Q", api_key="bad", wait=True)
     assert env["status"] == "FAILED"
     assert exit_code == 4
 
 
-def test_research_task_poll_error_is_failed(monkeypatch):
-    monkeypatch.setattr(exa, "sleep_with_jitter", lambda s: None)
-    monkeypatch.setattr(
-        exa, "create_research",
-        lambda instructions, *, model, output_schema, api_key: {"researchId": "r_1", "status": "running"},
-    )
-
-    def _raise(rid, *, api_key):
-        raise exa.ExaPermanentError("http 500", http_status=500, latency_ms=10)
-
-    monkeypatch.setattr(exa, "get_research", _raise)
-    env, exit_code = exa.research_task("Q", api_key="k", wait=True, poll_interval=0.0, timeout_s=10.0)
-    assert env["status"] == "FAILED"
-    assert exit_code == 1
-    assert env["telemetry"]["reason_for_fallback"] == "exa_poll_failed"
-
-
-def test_research_task_poll_404_retries_then_completes(monkeypatch):
-    monkeypatch.setattr(exa, "sleep_with_jitter", lambda s: None)
-    monkeypatch.setattr(
-        exa, "create_research",
-        lambda instructions, *, model, output_schema, api_key: {"researchId": "r_1", "status": "running"},
-    )
-    calls = {"n": 0}
-
-    def fake_get(rid, *, api_key):
-        calls["n"] += 1
-        if calls["n"] == 1:
-            raise exa.ExaPermanentError("http 404", http_status=404, latency_ms=10)
-        return {"researchId": "r_1", "status": "completed", "output": {"content": "ok"}, "citations": []}
-
-    monkeypatch.setattr(exa, "get_research", fake_get)
-    env, exit_code = exa.research_task("Q", api_key="k", wait=True, poll_interval=0.0, timeout_s=10.0)
-    assert exit_code == 0
-    assert env["status"] == "OK"
-    assert calls["n"] == 2
-
-
-def test_research_task_poll_backoff_grows(monkeypatch):
-    intervals = []
-    monkeypatch.setattr(exa, "sleep_with_jitter", lambda s: intervals.append(s))
-    monkeypatch.setattr(
-        exa, "create_research",
-        lambda instructions, *, model, output_schema, api_key: {"researchId": "r_1", "status": "running"},
-    )
-    polls = iter([
-        {"researchId": "r_1", "status": "running"},
-        {"researchId": "r_1", "status": "running"},
-        {"researchId": "r_1", "status": "completed", "output": {"content": "ok"}, "citations": []},
-    ])
-    monkeypatch.setattr(exa, "get_research", lambda rid, *, api_key: next(polls))
-    exa.research_task("Q", api_key="k", wait=True, poll_interval=2.0, timeout_s=1000.0)
-    assert intervals == [2.0, 3.0]
-
-
-def test_research_task_empty_id_fails(monkeypatch):
-    monkeypatch.setattr(
-        exa, "create_research",
-        lambda instructions, *, model, output_schema, api_key: {"status": "running"},
-    )
-    env, exit_code = exa.research_task("Q", api_key="k", wait=True)
-    assert env["status"] == "FAILED"
-    assert exit_code == 1
-    assert env["telemetry"]["reason_for_fallback"] == "exa_no_research_id"
-
-
 def test_research_status_running(monkeypatch):
     monkeypatch.setattr(
-        exa, "get_research",
-        lambda rid, *, api_key: {"researchId": rid, "status": "running",
-                                 "model": "exa-research-fast", "instructions": "Q"},
+        exa, "get_agent_run",
+        lambda rid, *, api_key: {"id": rid, "status": "running", "request": {"query": "Q"}},
     )
-    env, code = exa.research_status("r_1", api_key="k")
+    env, code = exa.research_status("agent_run_1", api_key="k")
     assert code == 0
     assert env["status"] == "RUNNING"
-    assert env["research_id"] == "r_1"
+    assert env["research_id"] == "agent_run_1"
+    assert env["meta"]["instructions"] == "Q"
 
 
-def test_research_status_completed_reads_top_level_cost(monkeypatch):
+def test_research_status_completed_reads_agent_output_and_cost(monkeypatch):
     monkeypatch.setattr(
-        exa, "get_research",
+        exa, "get_agent_run",
         lambda rid, *, api_key: {
-            "researchId": rid, "status": "completed",
-            "output": {"content": "done"}, "citations": [{"url": "https://x"}],
-            "costDollars": {"total": 0.006, "numSearches": 1, "numPages": 0.9, "reasoningTokens": 0},
+            "id": rid, "status": "completed", "request": {"query": "Q"},
+            "output": {"text": "done", "structured": None,
+                       "grounding": [{"citations": [{"url": "https://x", "title": "X"}]}]},
+            "usage": {"searches": 1, "agentComputeUnits": 0.1},
+            "costDollars": {"total": 0.006},
         },
     )
-    env, code = exa.research_status("r_1", api_key="k")
+    env, code = exa.research_status("agent_run_1", api_key="k")
     assert code == 0
     assert env["status"] == "OK"
+    assert env["output"]["content"] == "done"
+    assert env["results"] == [{"url": "https://x", "title": "X"}]
     assert env["telemetry"]["total_cost_usd"] == 0.006
     assert env["telemetry"]["num_searches"] == 1
+    assert env["telemetry"]["reasoning_units"] == 0.1
+
+
+def test_research_status_failed_uses_stop_reason(monkeypatch):
+    monkeypatch.setattr(
+        exa, "get_agent_run",
+        lambda rid, *, api_key: {"id": rid, "status": "failed", "stopReason": "error",
+                                 "request": {"query": "Q"}},
+    )
+    env, code = exa.research_status("agent_run_1", api_key="k")
+    assert env["status"] == "FAILED"
+    assert code == 1
+    assert env["telemetry"]["reason_for_fallback"] == "error"
 
 
 def test_research_status_not_found(monkeypatch):
     def _raise(rid, *, api_key):
         raise exa.ExaPermanentError("http 404", http_status=404, latency_ms=10)
 
-    monkeypatch.setattr(exa, "get_research", _raise)
+    monkeypatch.setattr(exa, "get_agent_run", _raise)
     env, code = exa.research_status("r_x", api_key="k")
     assert env["status"] == "FAILED"
     assert code == 5
