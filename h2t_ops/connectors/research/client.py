@@ -1249,7 +1249,7 @@ class ResearchClient:
             provider_envelope=envelope,
             telemetry=telemetry,
             ledger_provider="exa",
-            ledger_endpoint="/research/v1",
+            ledger_endpoint="/agent/runs",
             ledger_mode=str(envelope.get("model", "research")),
         )
         run_refs = self._persist_thread_run(
@@ -1314,7 +1314,7 @@ class ResearchClient:
             provider_envelope=envelope,
             telemetry=telemetry,
             ledger_provider="exa",
-            ledger_endpoint="/research/v1",
+            ledger_endpoint="/agent/runs",
             ledger_mode=str(envelope.get("model", "research")),
         )
         run_refs = self._persist_thread_run(

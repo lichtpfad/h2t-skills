@@ -28,7 +28,7 @@ grounded synthesis** over black-box synthesis for client deliverables.
 | Structured dig, budget-conscious | `search --mode deep-lite` + `--schema` | lighter synthesis, cheaper than `deep` |
 | One-shot structured deep dig | `search --mode deep` + `--schema` | synchronous, ~4 s |
 | Genuine multi-step reasoning in one call | `search --mode deep-reasoning` + `--schema` | Exa `deep-reasoning`, ~13 s, real multi-hop |
-| Multi-hop deep dig, "разберись в теме X" | `research --instructions "..."` | async Exa Research API, ~20–120 s, cited report |
+| Multi-hop deep dig, "разберись в теме X" | `research --instructions "..."` | async Exa Agent API, ~20–120 s, cited report |
 | LeadGen / enrichment / invest from premium sources | `agent --query "..." --schema ...` | Exa Agent API, schema+citations; paid providers via `--data-source` (see Agent mode) |
 | Pull raw text of a known URL | `fetch` / `crawl` | fetch ladder / Exa contents |
 | Find pages like a known URL | `similar` | Exa /findSimilar |
@@ -57,12 +57,16 @@ h2t-ops research research --instructions "..." --no-wait --json      # returns r
 h2t-ops research research-get --id r_xxx --project "$RESEARCH_PROJECT" --json   # redeem it later
 ```
 
-- Models: `exa-research-fast` (default) / `exa-research` / `exa-research-pro` (deeper, pricier).
-- `--wait` (default) blocks and polls with backoff; `--no-wait` returns the `researchId`
-  immediately — redeem it later with `research-get --id <researchId>` (status `RUNNING`
+- Runs on the Exa **Agent API** (`/agent/runs`); the legacy Research API (`/research/v1`)
+  was retired (HTTP 410). The `--model` tiers map onto Agent `effort`:
+  `exa-research-fast`→`low` (default) / `exa-research`→`medium` / `exa-research-pro`→`high`
+  (deeper, pricier).
+- `--wait` (default) blocks and polls with backoff; `--no-wait` returns the run id
+  immediately — redeem it later with `research-get --id <id>` (status `RUNNING`
   until done, then `OK` with the result + artifacts).
-- Telemetry reports `num_searches` / `num_pages` / `reasoning_units` (reasoning token
-  count) and `total_cost_usd` (top-level `costDollars` on the completed task).
+- Telemetry reports `num_searches` / `reasoning_units` (agent compute units) and
+  `total_cost_usd` (top-level `costDollars` on the completed run). `num_pages` is not
+  reported by the Agent API.
 - Retrieval-first: prefer taking the returned `citations` and synthesizing under
   `evidence-grounded-synthesis` over shipping the black-box `output.content` verbatim for
   client deliverables.
