@@ -77,6 +77,7 @@ For the slug find `council_results.round_N.pass[]` / `fail[]` (id-keyed `ev-xxxx
 
 If a `ground` query has no PASS-claim for the question, do NOT silently fall back to an unrecorded search.
 - **Routine:** any `h2t-ops research` you run captures to `~/.h2t/research/`; mark it for KB ingest (interactive: ask; autonomous: auto-mark). Heavy ingest runs in batch, not per lookup.
+- **Domain is re-decided at ingest, not inherited from the read.** The ingest that consumes a gap-fill resolves its OWN target domain via `ingest.md`'s classify → propose → **confirm** gate — do NOT write the material into the domain you happened to be reading. Multi-domain KB: propose the domain and get the operator's OK before any page is written.
 - **Urgent gap** (need a verified claim NOW to decide): invoke **ingest mode with `--strict <topic>`** — read `references/ingest.md` §"Strict tier". Strict is **cost-gated and never auto-run** (agent-propose gate; a human approves before any dispatch). Only after it completes may you ground on the council-PASS result. Default ingest is Tier-1 (no council, `partial` page, never council-PASS) → the urgent-gap path REQUIRES `--strict`.
 
 ## Compound the KB — file good answers back (query → wiki)
@@ -86,6 +87,11 @@ A good answer is an asset; don't let it vanish into chat. When a query produces 
 ```
 kb-writeback --repo "$KB" --input <answer.json> [--date YYYY-MM-DD] [--commit]
 ```
+
+- **Confirm the target domain before filing** (multi-domain KB): classify → propose →
+  confirm, exactly as `ingest.md` does. A filed-back page is a durable write, so the
+  `domain` field is decided at write time and never inherited from the domain you happened
+  to be reading.
 
 `answer.json` is a single JSON object the agent writes:
 - `slug` — lowercase alnum + `-`; in a multi-domain KB **prefix the routed domain**: `<domain>--<slug>`.
