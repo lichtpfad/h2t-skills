@@ -666,6 +666,116 @@ def test_search_channels_raises_provider_error_on_flood_wait(tmp_path, monkeypat
     assert ei.value.details["wait_seconds"] == 42
 
 
+# ── download-media / media serialization ──────────────────────────────────────
+
+
+def test_message_row_includes_media_info(tmp_path, monkeypatch):
+    from h2t_ops.connectors.telegram import client as tmod
+
+    (tmp_path / "config.json").write_text(json.dumps({"api_id": 1, "api_hash": "h"}), encoding="utf-8")
+
+    file_obj = SimpleNamespace(name="report.pdf", size=1234, mime_type="application/pdf", ext=".pdf")
+    media = SimpleNamespace()  # stands in for MessageMediaDocument
+    msg = SimpleNamespace(
+        id=8, chat_id=42, date=None, sender_id=1, sender=None,
+        text="", entities=[], reply_to_msg_id=None, media=media, file=file_obj,
+    )
+
+    class FakeInner:
+        def iter_messages(self, entity, limit=None):
+            return [msg]
+
+    monkeypatch.setattr(tmod.TelegramClientAdapter, "_client", lambda self: _CtxClient(FakeInner()))
+    rows = tmod.TelegramClientAdapter(config_dir=tmp_path).list_messages("chat", limit=5)
+    assert rows[0]["media"] == {
+        "kind": "SimpleNamespace",
+        "name": "report.pdf",
+        "size": 1234,
+        "mime_type": "application/pdf",
+        "ext": ".pdf",
+    }
+
+
+def test_message_row_media_is_none_without_attachment(tmp_path, monkeypatch):
+    from h2t_ops.connectors.telegram import client as tmod
+
+    (tmp_path / "config.json").write_text(json.dumps({"api_id": 1, "api_hash": "h"}), encoding="utf-8")
+    msg = SimpleNamespace(
+        id=9, chat_id=42, date=None, sender_id=1, sender=None,
+        text="hi", entities=[], reply_to_msg_id=None, media=None,
+    )
+
+    class FakeInner:
+        def iter_messages(self, entity, limit=None):
+            return [msg]
+
+    monkeypatch.setattr(tmod.TelegramClientAdapter, "_client", lambda self: _CtxClient(FakeInner()))
+    rows = tmod.TelegramClientAdapter(config_dir=tmp_path).list_messages("chat", limit=5)
+    assert rows[0]["media"] is None
+
+
+def test_download_media_saves_file_and_returns_row(tmp_path, monkeypatch):
+    out_dir = tmp_path / "out"
+    saved = out_dir / "report.pdf"
+
+    file_obj = SimpleNamespace(name="report.pdf", size=3, mime_type="application/pdf", ext=".pdf")
+    msg = SimpleNamespace(media=SimpleNamespace(), file=file_obj)
+
+    calls = {}
+
+    class FakeClient:
+        def get_messages(self, entity, ids=None):
+            calls["entity"] = entity
+            calls["ids"] = ids
+            return msg
+
+        def download_media(self, message, file=None):
+            calls["download_file"] = file
+            Path(file).mkdir(parents=True, exist_ok=True)
+            saved.write_bytes(b"pdf")
+            return str(saved)
+
+    adapter = _make_adapter_with_fake_connection(tmp_path, monkeypatch, FakeClient())
+    out = adapter.download_media("chat", 55, out_dir=str(out_dir))
+    assert calls["entity"] == "chat"
+    assert calls["ids"] == 55
+    assert out["message_id"] == 55
+    assert out["filename"] == "report.pdf"
+    assert out["size"] == 3
+    assert out["path"] == str(saved)
+    assert out["media"]["mime_type"] == "application/pdf"
+
+
+def test_download_media_raises_when_no_media(tmp_path, monkeypatch):
+    msg = SimpleNamespace(media=None)
+
+    class FakeClient:
+        def get_messages(self, entity, ids=None):
+            return msg
+
+        def download_media(self, message, file=None):
+            raise AssertionError("must not download when message has no media")
+
+    adapter = _make_adapter_with_fake_connection(tmp_path, monkeypatch, FakeClient())
+    with pytest.raises(ProviderError, match="no downloadable media"):
+        adapter.download_media("chat", 55, out_dir=str(tmp_path / "out"))
+
+
+def test_download_media_raises_when_download_returns_none(tmp_path, monkeypatch):
+    msg = SimpleNamespace(media=SimpleNamespace(), file=None)
+
+    class FakeClient:
+        def get_messages(self, entity, ids=None):
+            return msg
+
+        def download_media(self, message, file=None):
+            return None  # Telethon returns None on failure
+
+    adapter = _make_adapter_with_fake_connection(tmp_path, monkeypatch, FakeClient())
+    with pytest.raises(ProviderError, match="failed to download"):
+        adapter.download_media("chat", 55, out_dir=str(tmp_path / "out"))
+
+
 def test_search_channels_flood_wait_missing_seconds_fallback(tmp_path, monkeypatch):
     class FakeFloodWait(Exception):
         pass  # no .seconds attribute — graceful fallback
