@@ -97,6 +97,19 @@ def register(subparsers: Any) -> None:
     )
     add_json(send_file)
 
+    download_media = cmds.add_parser(
+        "download-media", help="Download a message attachment to a local directory"
+    )
+    download_media.add_argument("entity")
+    download_media.add_argument("message_id", type=int)
+    download_media.add_argument(
+        "--out",
+        dest="out",
+        default=None,
+        help="output directory (default: ~/Downloads)",
+    )
+    add_json(download_media)
+
     forward_msg = cmds.add_parser("forward-message", help="Forward a message to another entity")
     forward_msg.add_argument("to_entity", help="destination entity (username, chat id, or 'me')")
     forward_msg.add_argument("--from", dest="from_entity", required=True, help="source entity")
@@ -170,6 +183,12 @@ def run(args: Any) -> Any:
                 "telegram send-file requires --confirm-send flag to prevent accidental sends"
             )
         return client.send_file(args.entity, args.path, caption=getattr(args, "caption", None))
+    if cmd == "download-media":
+        return client.download_media(
+            args.entity,
+            args.message_id,
+            out_dir=getattr(args, "out", None),
+        )
     if cmd == "forward-message":
         if not getattr(args, "confirm_forward", False):
             raise UsageError(

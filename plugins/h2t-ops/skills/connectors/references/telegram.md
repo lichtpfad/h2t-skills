@@ -10,6 +10,7 @@
 | list dialogs | `h2t-ops telegram dialogs --limit 20 --json` |
 | list folders | `h2t-ops telegram folders --json` |
 | read messages | `h2t-ops telegram messages ENTITY_FROM_DIALOGS --limit 20 --json` |
+| download attachment | `h2t-ops telegram download-media ENTITY MSG_ID --out /path/to/dir --json` |
 | read saved messages | `h2t-ops telegram saved-messages --limit 20 --json` |
 | read mentions | `h2t-ops telegram mentions --chat-id CHAT_ID_FROM_DIALOGS --days 7 --limit 20 --json` |
 | warm entity cache | `h2t-ops telegram bootstrap --json` |
@@ -19,7 +20,9 @@
 
 ## Safety
 
-- Auth status, dialogs, folders, messages, saved messages, mentions, and bootstrap are provider reads.
+- Auth status, dialogs, folders, messages, saved messages, mentions, bootstrap, and download-media are provider reads.
+- `messages` output now carries a `media` field (kind/name/size/mime_type/ext) per message, or `null` when there is no attachment — use it to find `MSG_ID` before `download-media`.
+- `download-media` writes to `--out` (default `~/Downloads`); it fails loud with a ProviderError when the message has no downloadable media.
 - Request-code and complete modify local Telegram session state and require explicit user intent.
 - `send-file`, `forward-message`, and `delete-message` are write/destructive operations. Require explicit user approval per command.
 - `send-file` requires `--confirm-send` flag; the CLI raises UsageError without it.

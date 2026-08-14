@@ -128,6 +128,21 @@ def _plain_text(value: Any) -> str:
     return str(value)
 
 
+def _media_info(msg: Any) -> dict[str, Any] | None:
+    """Summarise a message's attachment, or None if there is no media."""
+    media = _get_attr(msg, "media", None)
+    if media is None:
+        return None
+    f = _get_attr(msg, "file", None)
+    return {
+        "kind": type(media).__name__,
+        "name": _get_attr(f, "name", None),
+        "size": _get_attr(f, "size", None),
+        "mime_type": _get_attr(f, "mime_type", None),
+        "ext": _get_attr(f, "ext", None),
+    }
+
+
 def _extract_urls(msg: Any) -> list[str]:
     text = _get_attr(msg, "text", "") or ""
     urls: list[str] = []
@@ -364,6 +379,7 @@ class TelegramClientAdapter:
             "text": _get_attr(msg, "text", "") or "",
             "urls": _extract_urls(msg),
             "reply_to_msg_id": _get_attr(msg, "reply_to_msg_id"),
+            "media": _media_info(msg),
         }
 
     def list_dialogs(
@@ -507,6 +523,65 @@ class TelegramClientAdapter:
             "chat_id": row["chat_id"],
             "date": row["date"],
             "text": row["text"],
+        }
+
+    def download_media(
+        self,
+        entity: str,
+        message_id: int,
+        *,
+        out_dir: str | None = None,
+    ) -> dict[str, Any]:
+        """Download the attachment of a single message to a local directory.
+
+        Mirrors list_messages' peer resolution (SQLite InputPeer first) to avoid
+        get_entity() → FloodWait on uncached numeric peers. Fails loud via
+        ProviderError when the message carries no downloadable media.
+        """
+        dest = Path(out_dir) if out_dir else Path.home() / "Downloads"
+        dest.mkdir(parents=True, exist_ok=True)
+        if isinstance(entity, str) and entity.lstrip("-").isdigit():
+            input_peer = _input_peer_from_sqlite(self.session_sqlite_file, int(entity))
+        else:
+            input_peer = None
+        candidates: list[Any] = (
+            [input_peer]
+            if input_peer is not None
+            else _peer_candidates(entity) if isinstance(entity, str) else [entity]
+        )
+        saved_path: Any = None
+        msg: Any = None
+        try:
+            with self._connected_client() as client:
+                last_exc: Exception | None = None
+                for candidate in candidates:
+                    try:
+                        msg = client.get_messages(candidate, ids=message_id)
+                        last_exc = None
+                        break
+                    except ValueError as exc:
+                        last_exc = exc
+                if last_exc is not None:
+                    raise last_exc
+                if msg is None or _get_attr(msg, "media", None) is None:
+                    raise ProviderError(
+                        f"message {message_id} in {entity} has no downloadable media"
+                    )
+                saved_path = client.download_media(msg, file=str(dest))
+        except (ValueError, sqlite3.OperationalError) as exc:
+            raise _session_incompatible_error(exc) from exc
+        if saved_path is None:
+            raise ProviderError(
+                f"failed to download media from message {message_id} in {entity}"
+            )
+        path = Path(saved_path)
+        return {
+            "entity": entity,
+            "message_id": message_id,
+            "path": str(path),
+            "filename": path.name,
+            "size": path.stat().st_size if path.exists() else None,
+            "media": _media_info(msg),
         }
 
     def forward_message(
