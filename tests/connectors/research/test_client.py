@@ -160,6 +160,7 @@ def test_validate_public_http_url_allows_public_http_url():
         "http://192.168.1.10/",
         "http://intranet/",
         "/relative/path",
+        "https://ex[ample.com/page",
     ],
 )
 def test_validate_public_http_url_blocks_local_or_private_targets(url):
@@ -222,6 +223,27 @@ def test_sanitize_details_redacts_sensitive_dict_keys(details, leaked):
 
     assert leaked not in text
     assert json.loads(text) == {"[REDACTED_KEY]": "[REDACTED]"}
+
+
+def test_sanitize_details_survives_malformed_url_token():
+    # Regression: Exa highlights carry markdown-link fragments like `[text](url)`.
+    # The URL regex over-matches `https://](https://`, whose netloc holds an
+    # unbalanced `]`, and urlsplit raised ValueError("Invalid IPv6 URL"),
+    # crashing the whole artifact/telemetry write path.
+    sanitized = client.sanitize_details(
+        "see [x](https://a.com) and broken https://](https://b.com)"
+    )
+    assert isinstance(sanitized, str)
+    assert "a.com" in sanitized
+
+
+def test_sanitize_details_redacts_secret_in_malformed_url():
+    # Even when the URL token is unparseable, a key=value secret must still redact.
+    sanitized = client.sanitize_details(
+        "frag https://](https://x.com/?api_key=" + "malformed-url-secret"
+    )
+    assert "malformed-url-secret" not in sanitized
+    assert "[REDACTED]" in sanitized
 
 
 def test_write_research_artifact_json(tmp_path):

@@ -131,7 +131,15 @@ def artifact_id(prefix: str = "research") -> str:
 def validate_public_http_url(url: str) -> str:
     """Accept only public http(s) URLs for provider fetch/crawl surfaces."""
     raw = str(url or "").strip()
-    parts = urlsplit(raw)
+    try:
+        parts = urlsplit(raw)
+    except ValueError as exc:
+        # urlsplit raises ValueError("Invalid IPv6 URL") on an unbalanced
+        # bracket in the netloc; surface the function's designed error instead.
+        raise UsageError(
+            "Research fetch URL must be an absolute http(s) URL",
+            hint="Use a public https://... or http://... URL.",
+        ) from exc
     if parts.scheme.lower() not in {"http", "https"} or not parts.netloc or not parts.hostname:
         raise UsageError(
             "Research fetch URL must be an absolute http(s) URL",
@@ -196,6 +204,19 @@ def _is_sensitive_key(key: str) -> bool:
 
 
 def _sanitize_url_query(value: str) -> str:
+    # Total function: the URL regex over-matches text fragments (e.g. markdown
+    # links `[t](url)` collapse to `https://](https://...`), whose netloc holds
+    # an unbalanced bracket and makes urlsplit raise ValueError("Invalid IPv6
+    # URL"). This runs in the telemetry/artifact write path, so it must never
+    # throw. On any parse failure, return the token unchanged — downstream
+    # `key=value` secret redaction in _sanitize_string still applies.
+    try:
+        return _sanitize_url_query_unsafe(value)
+    except ValueError:
+        return value
+
+
+def _sanitize_url_query_unsafe(value: str) -> str:
     parts = urlsplit(value)
     netloc = parts.netloc
     if parts.username or parts.password:
