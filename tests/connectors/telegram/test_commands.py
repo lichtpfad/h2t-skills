@@ -349,6 +349,48 @@ def test_delete_message_dispatches_after_confirm(monkeypatch):
     assert result["deleted"] is True
 
 
+def test_download_media_parser_surface():
+    parser = _build_parser()
+    ns = parser.parse_args(["telegram", "download-media", "chat", "55"])
+    assert ns.telegram_cmd == "download-media"
+    assert ns.entity == "chat"
+    assert ns.message_id == 55
+    assert ns.out is None
+    ns2 = parser.parse_args(["telegram", "download-media", "chat", "55", "--out", "/tmp/x", "--json"])
+    assert ns2.out == "/tmp/x"
+    assert ns2.as_json is True
+
+
+def test_download_media_dispatches_to_client(monkeypatch):
+    import h2t_ops.connectors.telegram.client as client_mod
+    from h2t_ops.connectors.telegram import commands as cmds
+
+    calls = {}
+
+    class Stub:
+        def download_media(self, entity, message_id, *, out_dir=None):
+            calls["entity"] = entity
+            calls["message_id"] = message_id
+            calls["out_dir"] = out_dir
+            return {"entity": entity, "message_id": message_id, "path": "/tmp/f.pdf",
+                    "filename": "f.pdf", "size": 10, "media": None}
+
+    monkeypatch.setattr(client_mod, "TelegramClientAdapter", lambda: Stub())
+    args = SimpleNamespace(
+        telegram_cmd="download-media",
+        entity="chat",
+        message_id=55,
+        out="/tmp/dl",
+        as_json=True,
+        fmt="human",
+    )
+    result = cmds.run(args)
+    assert calls["entity"] == "chat"
+    assert calls["message_id"] == 55
+    assert calls["out_dir"] == "/tmp/dl"
+    assert result["filename"] == "f.pdf"
+
+
 def test_parser_registers_search_verb():
     parser = _build_parser()
     # nargs="+" joins multi-word queries without shell quoting
