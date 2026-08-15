@@ -81,14 +81,26 @@ If a `ground` query has no PASS-claim for the question, do NOT silently fall bac
 
 ## Compound the KB — file good answers back (query → wiki)
 
-A good answer is an asset; don't let it vanish into chat. When a query produces a synthesis, comparison, or discovered connection worth keeping, **file it back as a new wiki page** (interactive: ask; autonomous: file it):
-- Write `$KB/wiki/<slug>.md` in the instance page format; add it to the routed `index.<domain>.md`; append a `log.md` entry.
-- Stamp provenance so it's not mistaken for an ingested source: mark it **query-derived**, citing the pages/claims it synthesized.
-- A query-derived page is L3 content, not council-graded — a later `ground` use of it still needs the council gate on its underlying claims.
+A good answer is an asset; don't let it vanish into chat. When a query produces a synthesis, comparison, or discovered connection worth keeping, **file it back as a `page_kind: synthesis` page via the engine** (interactive: ask; autonomous: file it). **Never hand-write the page** — that drifts from the schema (the historical `query_derived:` hand-filing produced malformed pages). Use the engine seam `kb-writeback`; the read side stays Read/Grep.
+
+```
+kb-writeback --repo "$KB" --input <answer.json> [--date YYYY-MM-DD] [--commit]
+```
+
+`answer.json` is a single JSON object the agent writes:
+- `slug` — lowercase alnum + `-`; in a multi-domain KB **prefix the routed domain**: `<domain>--<slug>`.
+- `topic`, `tldr` — human title + one-line answer.
+- `body` — the synthesized answer prose (markdown).
+- `see_also` — the slugs of the pages this answer drew on (**this is the page's provenance**).
+- `priority` (default `P2`); `domain` — **required in a multi-domain KB** (the routed domain); `query` — the originating question (logged, not stored on the page).
+
+The engine renders the page (`page_kind: synthesis`, **no `evidence[]`** — a synthesis page carries no ingested sources), gates it (lint + JSON Schema), **refuses to overwrite a source-derived page** (updates an existing synthesis one), regenerates the routed index, and appends a `writeback` log line — all atomically with rollback. `--commit` also git-commits the writeset.
+
+Provenance is `page_kind: synthesis` + `see_also` — a synthesis page is honestly marked as LLM synthesis, never mistaken for an ingested source. It is L3 content, **not council-graded** — a later `ground` use still needs the council gate on the underlying source pages it drew on.
 
 ## Antipatterns
 
 - **`ground` only:** no claim drives a conclusion without a council check — the agent-set verdict may have been overturned.
 - Don't descend to L-raw for a lookup L1–L3 already answered. Don't generalize one FAIL to a whole topic. Don't cite HYPOTHESIS as fact.
 - Don't ignore `What Doesn't Work` — council-verified failures are often the most valuable.
-- Don't present a query-derived page as an independently-sourced ingest.
+- Don't present a `page_kind: synthesis` (filed-back) page as an independently-sourced ingest.
