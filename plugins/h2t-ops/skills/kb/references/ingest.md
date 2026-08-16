@@ -184,6 +184,30 @@ run prepare --repo "$KB"                              # pending → prompt-packs
 
 `prepare` prints `{"packs": N}` and writes `$KB/data/intake/prompts/<h>.json` per source.
 
+**If `intake` reports `skipped > 0`, read `skip_reasons` before re-harvesting.** The intake JSON
+now names which corpus identity matched each skip, e.g.
+`"skip_reasons": {"<id>": "exact-id (raw-index)"}`:
+
+- `exact-id (raw-index)` — the id is in `raw-index.md` but on **no** wiki page: an earlier run was
+  interrupted after the index write but before the page write (**partial-run**). The captures
+  already exist — do **not** re-harvest. Re-drive the same records through extraction with the
+  operator override:
+
+  ```bash
+  run intake --records records.json --repo "$KB" --reingest   # alias: --no-dedupe
+  ```
+
+  `--reingest` bypasses only the dedup verdicts (duplicate + uncertain-dedupe); the shill/stars/
+  below trust gates stay live, bodies are read from the records file (no fetch), and the raw-index
+  append is idempotent. Full runbook: `docs/partial-run-resume.md` in the engine repo.
+- `exact-id (wiki-ref)` — the source is already bound on a page (genuine full duplicate). Do **not**
+  `--reingest` it: the page evidence write is not idempotent and would double-write. Slice it out of
+  `records.json` first.
+
+> Scope: `--reingest` is wired on the `intake` subcommand. Threading it through the Tier-1
+> `ingest-light`/`finalize` path is a follow-up (engine #57) — for a Tier-1 partial run, re-drive
+> via `run intake` on the records, or slice the records to the un-bound sources.
+
 ### 3. ⛔ COST GATE (hard-stop — human go)
 
 Before dispatching ANY agent, STOP and report:
