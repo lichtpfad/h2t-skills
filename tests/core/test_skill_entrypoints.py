@@ -2,6 +2,8 @@ import sys
 from contextlib import contextmanager
 from pathlib import Path
 
+import pytest
+
 from h2t_ops import activity_log_entry, gather_entry, handoff_entry, plugin_entrypoints
 
 
@@ -108,3 +110,72 @@ def test_handoff_skill_uses_installable_entrypoint():
     assert "resolve_h2t_python ||" in text
     assert "h2t-handoff write \\" in text
     assert "${CLAUDE_PLUGIN_ROOT}/skills/handoff/scripts/writer.py" not in text
+
+
+HANDOFF_SCRIPT = "skills/handoff/scripts/writer.py"
+
+
+def _make_plugin_tree(root: Path) -> Path:
+    script = root / HANDOFF_SCRIPT
+    script.parent.mkdir(parents=True, exist_ok=True)
+    script.write_text("def main():\n    return 0\n", encoding="utf-8")
+    return script
+
+
+def _cache_dir(home: Path, version: str) -> Path:
+    root = home / ".claude" / "plugins" / "cache" / "lichtpfad" / "h2t-core" / version
+    _make_plugin_tree(root)
+    return root
+
+
+def test_plugin_script_path_honours_claude_plugin_root(tmp_path, monkeypatch):
+    """The harness already exports CLAUDE_PLUGIN_ROOT when a skill runs."""
+    expected = _make_plugin_tree(tmp_path / "plugin")
+    monkeypatch.setenv("CLAUDE_PLUGIN_ROOT", str(tmp_path / "plugin"))
+
+    assert plugin_entrypoints.plugin_script_path(HANDOFF_SCRIPT) == expected
+
+
+def test_plugin_script_path_falls_back_to_plugin_cache_for_a_shipped_install(tmp_path, monkeypatch):
+    """A non-editable install has no plugins/ next to the package — the real bug."""
+    monkeypatch.delenv("CLAUDE_PLUGIN_ROOT", raising=False)
+    monkeypatch.setattr(plugin_entrypoints, "_package_plugin_root",
+                        lambda: tmp_path / "site-packages" / "plugins" / "h2t-core")
+    expected = _cache_dir(tmp_path / "home", "3.2.14") / HANDOFF_SCRIPT
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path / "home"))
+
+    assert plugin_entrypoints.plugin_script_path(HANDOFF_SCRIPT) == expected
+
+
+def test_plugin_cache_fallback_prefers_highest_version_over_the_latest_dir(tmp_path, monkeypatch):
+    """The observed `latest` dir lags behind the versioned ones."""
+    monkeypatch.delenv("CLAUDE_PLUGIN_ROOT", raising=False)
+    monkeypatch.setattr(plugin_entrypoints, "_package_plugin_root", lambda: tmp_path / "absent")
+    home = tmp_path / "home"
+    _cache_dir(home, "3.2.13")
+    _cache_dir(home, "latest")
+    expected = _cache_dir(home, "3.2.14") / HANDOFF_SCRIPT
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
+
+    assert plugin_entrypoints.plugin_script_path(HANDOFF_SCRIPT) == expected
+
+
+def test_env_root_without_the_script_falls_through_instead_of_failing(tmp_path, monkeypatch):
+    """CLAUDE_PLUGIN_ROOT may point at a different plugin than h2t-core."""
+    (tmp_path / "other-plugin").mkdir()
+    monkeypatch.setenv("CLAUDE_PLUGIN_ROOT", str(tmp_path / "other-plugin"))
+
+    assert plugin_entrypoints.plugin_script_path(HANDOFF_SCRIPT).is_file()
+
+
+def test_plugin_script_path_error_names_every_candidate_tried(tmp_path, monkeypatch):
+    monkeypatch.delenv("CLAUDE_PLUGIN_ROOT", raising=False)
+    monkeypatch.setattr(plugin_entrypoints, "_package_plugin_root", lambda: tmp_path / "absent")
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path / "empty-home"))
+
+    with pytest.raises(FileNotFoundError) as excinfo:
+        plugin_entrypoints.plugin_script_path(HANDOFF_SCRIPT)
+
+    message = str(excinfo.value)
+    assert str(tmp_path / "absent") in message
+    assert "H2T_PLUGIN_ROOT" in message  # tells the operator how to override
