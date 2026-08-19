@@ -17,6 +17,7 @@ REQUIRED_REFERENCES = {
     "notion.md",
     "telegram.md",
     "meetgeek.md",
+    "granola.md",
     "issue-policy.md",
 }
 
@@ -68,6 +69,14 @@ def test_connector_references_exist():
     assert refs.is_dir()
     found = {path.name for path in refs.glob("*.md")}
     assert REQUIRED_REFERENCES <= found
+
+
+def test_skill_references_section_lists_every_reference_file():
+    """A reference on disk that SKILL.md never links is unreachable for the agent."""
+    on_disk = {path.name for path in (ROOT / "references").glob("*.md")}
+    section = _text(ROOT / "SKILL.md").split("## References", 1)[1].split("\n## ", 1)[0]
+    listed = set(re.findall(r"`references/([^`]+\.md)`", section))
+    assert on_disk == listed, f"missing from SKILL.md: {sorted(on_disk - listed)}"
 
 
 def test_issue_policy_contains_privacy_checklist():
@@ -164,3 +173,18 @@ def test_final_skill_inventory_after_deprecation_gate():
         if path.is_dir() and (path / "SKILL.md").is_file()
     }
     assert active == {"connectors", "daily-brief", "research", "deploy"}
+
+
+def test_granola_reference_documents_sync_and_transcript_privacy():
+    text = _text(ROOT / "references" / "granola.md")
+    assert "h2t-ops granola sync --to" in text
+    assert "h2t-ops granola transcript NOTE_ID_FROM_LIST --format md" in text
+    # Webhook management is read-only in this connector; secrets must never be echoed.
+    assert "h2t-ops granola webhooks" in text
+    assert "whsec_" not in text
+
+
+def test_skill_routes_granola_note_urls():
+    text = _text(ROOT / "SKILL.md")
+    assert "notes.granola.ai" in text
+    assert "Granola" in text

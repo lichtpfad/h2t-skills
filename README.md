@@ -7,7 +7,7 @@ Claude Code plugin suite for H2T workflows: lifecycle context, provider connecto
 | Plugin | Main skills | Purpose |
 | --- | --- | --- |
 | `h2t-core` | `h2t-core:setup`, `session-start`, `handoff`, `init-project`, `scaffold-project`, `agent-profile` | Session lifecycle, setup, project registration, local context continuity |
-| `h2t-ops` | `h2t-ops:connectors`, `h2t-ops:research`, `h2t-ops:daily-brief` | Provider I/O through `h2t-ops`: Drive, Gmail, Calendar, Notion, Telegram, MeetGeek, research |
+| `h2t-ops` | `h2t-ops:connectors`, `h2t-ops:research`, `h2t-ops:daily-brief` | Provider I/O through `h2t-ops`: Drive, Gmail, Calendar, Notion, Telegram, MeetGeek, Granola, research |
 | `h2t-dev` | `docs-lint`, `pre-merge-check`, `milestone-closure`, `github-issues` | Development and documentation lifecycle automation |
 | `h2t-arch` | `drawio`, `diagram-node`, `node-researcher` | Architecture and diagram workflows |
 | `h2t-creative` | `deck`, `landing`, `design`, `style-create`, `style-validate` | Landing pages, decks, and visual asset generation |
@@ -53,7 +53,8 @@ For external install troubleshooting, use [H2T Ops External Install + Debug Log]
 - Gmail / mail.google.com links;
 - Notion links;
 - Telegram links;
-- MeetGeek meetings, transcripts, summaries, recordings.
+- MeetGeek meetings, transcripts, summaries, recordings;
+- Granola notes, AI summaries, verbatim transcripts, folders.
 
 Agents should use the `h2t-ops` CLI instead of raw provider APIs when a connector command exists.
 
@@ -66,6 +67,7 @@ h2t-ops calendar list --max 10 --json
 h2t-ops notion get PAGE_ID --format md
 h2t-ops telegram auth status
 h2t-ops meetgeek transcript MEETING_ID --format md
+h2t-ops granola list --limit 10 --format md
 ```
 
 ## Setup Notes
@@ -74,7 +76,7 @@ h2t-ops meetgeek transcript MEETING_ID --format md
 - `h2t-ops` is installed as a Python CLI via `uv tool install --reinstall git+https://github.com/lichtpfad/h2t-skills.git`.
 - POS/DOR configuration is optional for connector I/O.
 - Google connectors require a local OAuth token store.
-- Notion, MeetGeek, and Exa use API keys in `~/.dor/secrets/secrets.env` or environment variables.
+- Notion, MeetGeek, Granola, and Exa use API keys in `~/.dor/secrets/secrets.env` or environment variables.
 - Telegram requires `~/.config/telegram/config.json` with `api_id` / `api_hash`, then `h2t-ops telegram auth`.
 
 ## Development

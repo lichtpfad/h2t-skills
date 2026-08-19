@@ -13,7 +13,7 @@ on clean Windows + macOS user runtimes and evidence is attached.
 ## North Star
 
 `h2t-ops` owns operational provider connectors only: Notion, Gmail, Calendar,
-Drive, MeetGeek, Telegram, and Research.
+Drive, MeetGeek, Granola, Telegram, and Research.
 
 It does not own:
 
