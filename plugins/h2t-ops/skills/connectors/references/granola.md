@@ -58,6 +58,9 @@ In Claude Code, check readiness through:
   (the `note.edited` event always reports `changed_fields: ["summary"]`), so a created-at cursor
   would freeze the first version forever. A re-synced note overwrites its markdown and appends a
   new `manifest.jsonl` row, so the manifest carries version history while the files stay current.
+- `--include` coverage is tracked per note version. Widening it on a later run (summaries
+  first, transcripts overnight) backfills only the missing half; narrowing it is a no-op.
+  Manifest rows written before coverage tracking count as complete and are never refetched.
 - Default cursor file: `~/.dor/lake/_cursors/granola.json`. Override with `--cursor-file`.
 - Granola auto-deletes transcripts under its retention policy — a regular `sync` is the only way
   to keep verbatim text beyond that window.

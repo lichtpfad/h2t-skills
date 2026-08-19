@@ -31,9 +31,13 @@ def _load_json(path: Path) -> Dict[str, Any]:
     return {}
 
 
-def _synced_versions(manifest: Path) -> Set[str]:
-    """Keys of (note_id, updated_at) pairs already written."""
-    seen: Set[str] = set()
+def _synced_versions(manifest: Path) -> Dict[str, Set[str]]:
+    """(note_id, updated_at) key -> include parts already written for that version.
+
+    Records predating include-tracking carry no "include" field. Treat them as
+    complete: an existing lake must not trigger a surprise full refetch.
+    """
+    seen: Dict[str, Set[str]] = {}
     if not manifest.is_file():
         return seen
     with manifest.open(encoding="utf-8") as fh:
@@ -46,7 +50,10 @@ def _synced_versions(manifest: Path) -> Set[str]:
             except ValueError:
                 continue
             if rec.get("note_id"):
-                seen.add(f"{rec['note_id']}@{rec.get('updated_at') or ''}")
+                key = f"{rec['note_id']}@{rec.get('updated_at') or ''}"
+                parts = rec.get("include")
+                covered = set(parts) if isinstance(parts, list) else set(VALID_INCLUDE)
+                seen.setdefault(key, set()).update(covered)
     return seen
 
 
@@ -101,14 +108,15 @@ def sync_notes(
         if not note_id:
             continue
         version = f"{note_id}@{row.get('updated_at') or ''}"
-        if version in seen:
+        missing = include - seen.get(version, set())
+        if not missing:
             skipped += 1
             continue
         try:
             note = client.get_note(note_id)
-            if "summaries" in include:
+            if "summaries" in missing:
                 _write_pair(lake / "summaries", note_id, _fmt_note_md(note), note)
-            if "transcripts" in include:
+            if "transcripts" in missing:
                 data = client.get_transcript(note_id)
                 md = _fmt_transcript_md(note, data["transcript"],
                                         truncated=data.get("truncated", False))
@@ -124,9 +132,10 @@ def sync_notes(
             "title": note.get("title") or row.get("title"),
             "created_at": note.get("created_at") or row.get("created_at"),
             "updated_at": ts,
+            "include": sorted(missing),
             "synced_at": _now_iso(),
         }, ensure_ascii=False))
-        seen.add(version)
+        seen.setdefault(version, set()).update(missing)
         synced += 1
         if ts and (last_seen_ts is None or ts > last_seen_ts):
             last_seen_ts, last_seen_id = ts, note_id

@@ -120,3 +120,73 @@ def test_sync_resolves_folder_name(tmp_path):
     S.sync_notes(client, to=tmp_path, include={"summaries"},
                  cursor_file=tmp_path / "c.json", folder="Clients")
     assert client.list_notes.call_args.kwargs["folder_id"] == "fol_x"
+
+
+def test_sync_backfills_transcripts_when_include_widens(tmp_path):
+    """First pass took summaries only; asking for transcripts later must fetch them."""
+    args = dict(to=tmp_path, cursor_file=tmp_path / "c.json")
+    S.sync_notes(_client(), include={"summaries"}, **args)
+    assert not (tmp_path / "transcripts" / "not_1.md").is_file()
+
+    out = S.sync_notes(_client(), include={"summaries", "transcripts"}, **args)
+
+    assert out["synced"] == 1
+    assert out["skipped"] == 0
+    assert (tmp_path / "transcripts" / "not_1.md").is_file()
+
+
+def test_sync_backfill_fetches_only_the_missing_part(tmp_path):
+    """Widening include must not re-download what the lake already holds."""
+    args = dict(to=tmp_path, cursor_file=tmp_path / "c.json")
+    S.sync_notes(_client(), include={"transcripts"}, **args)
+    client = _client()
+
+    S.sync_notes(client, include={"summaries", "transcripts"}, **args)
+
+    assert client.get_transcript.call_count == 0  # already on disk
+    assert (tmp_path / "summaries" / "not_1.md").is_file()
+
+
+def test_sync_skips_when_include_narrows(tmp_path):
+    """Asking for less than the lake already holds is a no-op, not a re-sync."""
+    args = dict(to=tmp_path, cursor_file=tmp_path / "c.json")
+    S.sync_notes(_client(), include={"summaries", "transcripts"}, **args)
+
+    out = S.sync_notes(_client(), include={"summaries"}, **args)
+
+    assert out["synced"] == 0
+    assert out["skipped"] == 1
+
+
+def test_sync_manifest_records_what_was_included(tmp_path):
+    S.sync_notes(_client(), to=tmp_path, include={"summaries"}, cursor_file=tmp_path / "c.json")
+    rec = json.loads((tmp_path / "manifest.jsonl").read_text(encoding="utf-8").splitlines()[0])
+    assert rec["include"] == ["summaries"]
+
+
+def test_sync_coverage_is_the_union_across_manifest_records(tmp_path):
+    """After a backfill the version is complete; a third pass must do nothing."""
+    args = dict(to=tmp_path, cursor_file=tmp_path / "c.json")
+    S.sync_notes(_client(), include={"summaries"}, **args)
+    S.sync_notes(_client(), include={"transcripts"}, **args)
+
+    out = S.sync_notes(_client(), include={"summaries", "transcripts"}, **args)
+
+    assert out["synced"] == 0
+    assert out["skipped"] == 1
+
+
+def test_sync_treats_legacy_manifest_record_without_include_as_complete(tmp_path):
+    """Lakes written before include-tracking must not trigger a surprise full refetch."""
+    (tmp_path / "manifest.jsonl").write_text(json.dumps({
+        "note_id": "not_1", "title": "Call",
+        "created_at": "2026-08-17T15:00:00.000Z",
+        "updated_at": "2026-08-17T16:00:00.000Z",
+        "synced_at": "2026-08-17T16:05:00.000Z",
+    }) + "\n", encoding="utf-8")
+
+    out = S.sync_notes(_client(), to=tmp_path, include={"summaries", "transcripts"},
+                       cursor_file=tmp_path / "c.json")
+
+    assert out["synced"] == 0
+    assert out["skipped"] == 1
