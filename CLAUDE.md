@@ -14,7 +14,7 @@ Use it before creating H2T-OPS specs, plans, PRs, or GitHub issues. It defines t
 
 ## h2t-ops Ownership Boundary
 
-`h2t-ops` owns operational connectors ONLY: Notion, Gmail, Calendar, Drive, MeetGeek, Telegram, research.
+`h2t-ops` owns operational connectors ONLY: Notion, Gmail, Calendar, Drive, MeetGeek, Granola, Telegram, research.
 Root `h2t` command and Python package belong to `h2t-ai`. Do not create `h2t` entrypoints here.
 
 ## Plugin Development

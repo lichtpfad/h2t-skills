@@ -1,6 +1,6 @@
 ---
 name: h2t-ops:connectors
-description: "h2t-ops connector hub — load when the user mentions Calendar (events, schedule, FreeBusy, Google Meet), Gmail (email, inbox, draft, send, labels), Drive/Google Docs/Sheets/Slides (files, folders, documents, download, export, upload, any drive.google.com/docs.google.com/sheets.google.com/slides.google.com link), Notion (pages, databases, sync, workspace), Telegram (dialogs, messages, auth, mentions), or MeetGeek (meetings, transcripts, summaries, recordings). Also load for any provider-owned URL or provider I/O command lookup. Research and daily-brief are separate skills."
+description: "h2t-ops connector hub — load when the user mentions Calendar (events, schedule, FreeBusy, Google Meet), Gmail (email, inbox, draft, send, labels), Drive/Google Docs/Sheets/Slides (files, folders, documents, download, export, upload, any drive.google.com/docs.google.com/sheets.google.com/slides.google.com link), Notion (pages, databases, sync, workspace), Telegram (dialogs, messages, auth, mentions), MeetGeek (meetings, transcripts, summaries, recordings), or Granola (notes, AI summaries, verbatim transcripts, folders). Also load for any provider-owned URL or provider I/O command lookup. Research and daily-brief are separate skills."
 compatibility: "CLI-first connector navigator. MCP/Playwright are optional and not required."
 metadata:
   author: lichtpfad
@@ -18,7 +18,8 @@ Use this skill for:
 - Google Drive list, search, download, export, upload, and upload-folder;
 - Notion pages, blocks, databases, workspace search, graph, and sync;
 - Telegram auth, dialogs, messages, saved messages, mentions, and bootstrap;
-- MeetGeek teams, meetings, transcripts, summaries, highlights, insights, recording URLs, and submit-url.
+- MeetGeek teams, meetings, transcripts, summaries, highlights, insights, recording URLs, and submit-url;
+- Granola notes, summaries, verbatim transcripts, folders, webhook endpoint listing, and sync to disk.
 
 Do not use this skill for:
 
@@ -47,6 +48,7 @@ Load this skill whenever the user provides a provider-owned URL, even if they do
 | URL/domain pattern | Connector | First action |
 | --- | --- | --- |
 | `drive.google.com/...`, `docs.google.com/document/d/...`, `spreadsheets.google.com/...`, `docs.google.com/spreadsheets/d/...`, `slides.google.com/...`, `docs.google.com/presentation/d/...` | Drive | Extract the object ID and use `h2t-ops drive list/download/export` |
+| `notes.granola.ai/...` | Granola | Extract the note ID and use `h2t-ops granola get/transcript` |
 | `calendar.google.com/...`, `meet.google.com/...` | Calendar | Use `h2t-ops calendar` for events/availability; keep Meet links as event artifacts |
 | `mail.google.com/...`, `gmail.com/...` | Gmail | Use `h2t-ops gmail` for message/search/draft/send flows |
 | `notion.so/...`, `notion.site/...` | Notion | Extract page/database ID when present and use `h2t-ops notion` |
@@ -64,6 +66,7 @@ Do not use Fetch/WebFetch/Playwright as the primary path for these URLs when an 
 | Telegram auth, dialogs, messages, saved messages, mentions | Telegram | `references/telegram.md` | `h2t-ops telegram` |
 | MeetGeek meetings, transcripts, summaries, recordings | MeetGeek | `references/meetgeek.md` | `h2t-ops meetgeek` |
 | local .webm / .mp4 recording files to upload to MeetGeek | MeetGeek + Drive | `references/meetgeek.md` → "Local File Upload Flow" | `h2t-ops drive upload` then `h2t-ops meetgeek submit-url` |
+| Granola notes, AI summaries, verbatim transcripts, folders, sync to disk | Granola | `references/granola.md` | `h2t-ops granola` |
 
 ### Drive-specific intent routing (important)
 
@@ -138,6 +141,7 @@ For credential readiness, prefer the installed setup skill:
 - `references/notion.md`
 - `references/telegram.md`
 - `references/meetgeek.md`
+- `references/granola.md`
 - `references/issue-policy.md`
 
 ## Codex / AGENTS Adapter
