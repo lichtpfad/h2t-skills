@@ -2,7 +2,7 @@
 
 ## Provider I/O — только h2t-ops (mandatory)
 
-Drive, Gmail, Calendar, Notion, Telegram, MeetGeek — **только** через `h2t-ops <connector>`.
+Drive, Gmail, Calendar, Notion, Telegram, MeetGeek, Granola — **только** через `h2t-ops <connector>`.
 - Перед командой: вызвать скилл `h2t-ops:connectors` **или** `h2t-ops <connector> --help`. **Флаги не угадывать** (id папки/файла — позиционный, не `--folder`).
 - **Никогда** `gdown` / `rclone` / raw Google API / WebFetch / браузер для provider-файлов — только `h2t-ops`.
 - Discover: `h2t-ops connectors`.

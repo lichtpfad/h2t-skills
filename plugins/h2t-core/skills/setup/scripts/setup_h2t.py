@@ -26,6 +26,7 @@ CANONICAL_H2T_OPS_SOURCE = "git+https://github.com/lichtpfad/h2t-skills.git"
 SECRET_KEYS = {
     "notion": ["NOTION_API_TOKEN"],
     "meetgeek": ["MEETGEEK_API_KEY"],
+    "granola": ["GRANOLA_API_KEY"],
     "research": ["EXA_API_KEY"],
 }
 
@@ -329,6 +330,12 @@ def connector_matrix(home: Path | None = None, *, live: bool = False, include_pa
             "live": "skipped",
         },
         {
+            "connector": "granola",
+            "status": "ready" if _secret_present("GRANOLA_API_KEY", home) else "missing",
+            "checks": {"GRANOLA_API_KEY": "present" if _secret_present("GRANOLA_API_KEY", home) else "missing"},
+            "live": "skipped",
+        },
+        {
             "connector": "research",
             "status": "ready" if _secret_present("EXA_API_KEY", home) else "missing",
             "checks": {"EXA_API_KEY": "present" if _secret_present("EXA_API_KEY", home) else "missing"},
@@ -354,6 +361,7 @@ def _attach_live_checks(checks: list[dict[str, Any]], h2t_ops_path: str, include
     commands = {
         "telegram": [h2t_ops_path, "telegram", "auth", "status", "--json"],
         "meetgeek": [h2t_ops_path, "meetgeek", "auth-check", "--json"],
+        "granola": [h2t_ops_path, "granola", "auth-check", "--json"],
     }
     if include_paid:
         commands["research"] = [h2t_ops_path, "research", "preflight", "--json"]
