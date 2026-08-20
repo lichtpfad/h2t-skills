@@ -38,13 +38,14 @@ structured proposed captures instead of mutating stores.
 плагину и к клону репозитория: `${CLAUDE_PLUGIN_ROOT}` в bash-блок скилла
 приходит не во всех харнессах, а версионированный кэш плагина протухает.
 
+Питон в скилле не нужен: даты считает сам коннектор, `--from/--to` принимают
+`today` и смещения вида `+2d` и резолвят их в таймзоне запроса. Это заодно
+убирает POSIX-специфичный путь к интерпретатору, который ломался на Windows.
+
 ```bash
 command -v h2t-ops >/dev/null || { echo "ERROR: h2t-ops not on PATH. Run /h2t-core:setup"; exit 1; }
-PY="${H2T_PYTHON:-$HOME/.h2t/venv/bin/python}"
 TASKS_DB="beabac7bf4314952a9327759c638d89f"
 TZ_NAME="Asia/Jerusalem"
-TODAY=$("$PY" -c "from datetime import date; print(date.today())")
-PLUS2=$("$PY" -c "from datetime import date,timedelta; print(date.today()+timedelta(days=2))")
 ```
 
 ## Шаги
@@ -56,7 +57,7 @@ PLUS2=$("$PY" -c "from datetime import date,timedelta; print(date.today()+timede
 ```bash
 # События: явное окно календарных суток. --days считает от текущего момента и
 # теряет то, что было раньше сегодня, поэтому здесь --from/--to с таймзоной.
-h2t-ops calendar list --from "$TODAY" --to "$PLUS2" --tz "$TZ_NAME" --max 50 --json
+h2t-ops calendar list --from today --to +2d --tz "$TZ_NAME" --max 50 --json
 
 # Письма: --format human, а не --json. В json каждая строка тащит полное тело
 # письма (~5 KB), 40 писем это ~300 KB в контекст. human даёт ~13 KB с ID.
