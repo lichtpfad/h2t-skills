@@ -75,6 +75,23 @@ class CalendarClient:
         tz: Optional[str] = None,
         busy_only: bool = False,
     ) -> List[Dict[str, Any]]:
+        return self.list_events_page(
+            days=days, max_results=max_results, calendar_id=calendar_id,
+            time_min=time_min, time_max=time_max, tz=tz, busy_only=busy_only,
+        )["items"]
+
+    def list_events_page(
+        self,
+        days: int = 1,
+        max_results: int = 250,
+        *,
+        calendar_id: str = "primary",
+        time_min: Optional[str] = None,
+        time_max: Optional[str] = None,
+        tz: Optional[str] = None,
+        busy_only: bool = False,
+    ) -> Dict[str, Any]:
+        """Same as list_events, plus whether Calendar had more to give."""
         if time_min is None:
             time_min = datetime.now(timezone.utc).isoformat()
         if time_max is None:
@@ -96,7 +113,11 @@ class CalendarClient:
         items = res.get("items", [])
         if busy_only:
             items = [it for it in items if it.get("transparency") != "transparent"]
-        return [self._normalize_event(it, calendar_id=calendar_id) for it in items]
+        return {
+            "items": [self._normalize_event(it, calendar_id=calendar_id) for it in items],
+            "truncated": bool(res.get("nextPageToken")),
+            "window": {"from": time_min, "to": time_max},
+        }
 
     def search_events(
         self,
@@ -408,6 +429,7 @@ class CalendarClient:
         event: Dict[str, Any],
         *,
         calendar_id: str = "primary",
+        today: Optional[date_cls] = None,
     ) -> Dict[str, Any]:
         start_obj = event.get("start", {})
         end_obj = event.get("end", {})
@@ -438,6 +460,7 @@ class CalendarClient:
                     meet_link = entry.get("uri", "")
                     break
         meet_status = status or ("success" if meet_link else "none")
+        span = self._event_span(start, end, all_day, today)
 
         return {
             "kind": "calendar_event/v1",
@@ -458,6 +481,39 @@ class CalendarClient:
             "recurrence": event.get("recurrence", []),
             "attendees": event.get("attendees", []),
             "reminders": event.get("reminders", {"useDefault": True, "overrides": []}),
+            **span,
+        }
+
+    @staticmethod
+    def _event_span(
+        start: str, end: str, all_day: bool, today: Optional[date_cls] = None
+    ) -> Dict[str, Any]:
+        """Derive multi-day / ongoing facts from a start-end pair.
+
+        Without these a running multi-day event is indistinguishable from a
+        past single-day one, because rows are keyed on the start date (#351).
+        ``today`` is injectable to keep the derivation testable.
+        """
+        blank = {"multi_day": False, "days_total": None,
+                 "ongoing": None, "day_index": None}
+        if not start or not end:
+            return blank
+        try:
+            first = date_cls.fromisoformat(start[:10])
+            last = date_cls.fromisoformat(end[:10])
+        except ValueError:
+            return blank
+        if all_day:
+            # All-day end dates are exclusive: 18 -> 26 means the 25th is last.
+            last -= timedelta(days=1)
+        days_total = max((last - first).days + 1, 1)
+        today = today or date_cls.today()
+        ongoing = first <= today <= last
+        return {
+            "multi_day": days_total > 1,
+            "days_total": days_total,
+            "ongoing": ongoing,
+            "day_index": (today - first).days + 1 if ongoing else None,
         }
 
     def _event_time_body(

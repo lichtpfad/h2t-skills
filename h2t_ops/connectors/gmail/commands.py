@@ -110,6 +110,17 @@ def _fmt(args) -> str:
     return "json" if getattr(args, "as_json", False) else getattr(args, "fmt", "human")
 
 
+def _paged(page: dict, args, rendered: str | None = None) -> Any:
+    """Wrap a client page so every format carries count and truncation."""
+    from h2t_ops.core.envelope import Paged
+
+    extra = {}
+    if page.get("estimated_total") is not None:
+        extra["estimated_total"] = page["estimated_total"]
+    return Paged(page["items"], truncated=page.get("truncated", False),
+                 limit=getattr(args, "max", None), extra=extra, rendered=rendered)
+
+
 def run(args) -> Any:
     """Dispatch a gmail subcommand. Returns a result or raises core.errors."""
     from h2t_ops.connectors.gmail.client import (  # lazy (spec §4.1)
@@ -128,12 +139,14 @@ def run(args) -> Any:
     client = GmailClient()
     cmd = args.gmail_cmd
     if cmd == "list":
-        msgs = client.list_messages(
+        page = client.list_messages_page(
             max_results=args.max, query=args.query, unread_only=args.unread)
-        return msgs if _fmt(args) == "json" else format_message_list(msgs)
+        return _paged(page, args, None if _fmt(args) == "json"
+                      else format_message_list(page["items"]))
     if cmd == "search":
-        msgs = client.search_messages(args.query, max_results=args.max)
-        return msgs if _fmt(args) == "json" else format_message_list(msgs)
+        page = client.list_messages_page(query=args.query, max_results=args.max)
+        return _paged(page, args, None if _fmt(args) == "json"
+                      else format_message_list(page["items"]))
     if cmd == "read":
         msg = client.get_message(args.message_id)
         return msg if _fmt(args) == "json" else format_message_detail(msg)

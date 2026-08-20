@@ -170,6 +170,7 @@ def run(args) -> Any:
     """Dispatch a calendar subcommand. Returns a result or raises core.errors."""
     from h2t_ops.connectors.calendar.client import CalendarClient  # lazy (spec §4.1)
     from h2t_ops.core.errors import UsageError
+    from h2t_ops.core.envelope import Paged
 
     cmd = args.calendar_cmd
     if cmd == "delete" and not getattr(args, "confirm", False):
@@ -193,7 +194,7 @@ def run(args) -> Any:
         if getattr(args, "from_date", None):
             tz = _resolve_query_tz(tz)
             time_min, time_max = _date_window_bounds(args.from_date, args.to_date, tz)
-        return client.list_events(
+        page = client.list_events_page(
             days=args.days,
             max_results=args.max,
             calendar_id=args.calendar_id,
@@ -202,6 +203,8 @@ def run(args) -> Any:
             tz=tz,
             busy_only=getattr(args, "busy_only", False),
         )
+        return Paged(page["items"], truncated=page["truncated"], limit=args.max,
+                     extra={"window": page["window"]})
     if cmd == "search":
         return client.search_events(
             args.query,

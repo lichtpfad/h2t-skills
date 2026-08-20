@@ -533,3 +533,47 @@ def test_init_with_missing_google_libs_raises_configerror(monkeypatch):
     from h2t_ops.connectors.calendar.client import CalendarClient
     with pytest.raises(ConfigError):
         CalendarClient()
+
+
+# --- span fields: multi-day / ongoing (#351) --------------------------------
+
+def _span(client_obj, start, end, today, *, all_day=True):
+    key = "date" if all_day else "dateTime"
+    ev = {"id": "e", "summary": "Trip",
+          "start": {key: start}, "end": {key: end}}
+    return client_obj._normalize_event(ev, today=today)
+
+
+def test_all_day_multi_day_ongoing(client_obj_factory=None):
+    from datetime import date
+    from h2t_ops.connectors.calendar.client import CalendarClient
+    c = object.__new__(CalendarClient)
+    r = _span(c, "2026-08-18", "2026-08-26", date(2026, 8, 20))
+    assert (r["multi_day"], r["days_total"], r["ongoing"], r["day_index"]) == (True, 8, True, 3)
+
+
+def test_all_day_end_is_exclusive_last_day_and_after():
+    from datetime import date
+    from h2t_ops.connectors.calendar.client import CalendarClient
+    c = object.__new__(CalendarClient)
+    last = _span(c, "2026-08-18", "2026-08-26", date(2026, 8, 25))
+    assert last["ongoing"] is True and last["day_index"] == 8
+    after = _span(c, "2026-08-18", "2026-08-26", date(2026, 8, 26))
+    assert after["ongoing"] is False and after["day_index"] is None
+
+
+def test_single_all_day_is_not_multi_day():
+    from datetime import date
+    from h2t_ops.connectors.calendar.client import CalendarClient
+    c = object.__new__(CalendarClient)
+    r = _span(c, "2026-08-20", "2026-08-21", date(2026, 8, 20))
+    assert r["multi_day"] is False and r["days_total"] == 1 and r["ongoing"] is True
+
+
+def test_timed_event_span():
+    from datetime import date
+    from h2t_ops.connectors.calendar.client import CalendarClient
+    c = object.__new__(CalendarClient)
+    r = _span(c, "2026-04-06T14:00:00+03:00", "2026-04-06T15:00:00+03:00",
+              date(2026, 4, 6), all_day=False)
+    assert r["all_day"] is False and r["multi_day"] is False and r["ongoing"] is True

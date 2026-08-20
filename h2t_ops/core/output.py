@@ -7,7 +7,7 @@ import sys
 from typing import Any
 
 
-from h2t_ops.core.envelope import error_envelope, success_envelope
+from h2t_ops.core.envelope import Paged, error_envelope, success_envelope
 from h2t_ops.core.errors import exit_code_for
 
 
@@ -58,6 +58,16 @@ def _finalize(writer: Any, created: bool) -> None:
             pass
 
 
+def _meta_note(meta: dict[str, Any]) -> str:
+    """One-line count/truncation footer for non-json renderings."""
+    count = meta.get("count")
+    if meta.get("truncated"):
+        total = meta.get("estimated_total")
+        of = f" of ~{total}" if total else ""
+        return f"\n[{count}{of} shown — MORE EXIST, raise the limit for the rest]"
+    return f"\n[{count} shown — complete]"
+
+
 def emit(provider: str, *, result: Any = None, exc: BaseException | None = None,
          fmt: str = "human") -> int:
     """Render to stdout (success) or stderr (error). Return exit code."""
@@ -80,19 +90,25 @@ def emit(provider: str, *, result: Any = None, exc: BaseException | None = None,
 
     out_writer, out_created = _utf8_writer(sys.stdout)
     write_exc: BaseException | None = None
+    envelope = success_envelope(provider, result)
+    meta_note = ""
+    if isinstance(result, Paged):
+        # Non-json renderings show the rows, then one line of counts, so a
+        # truncated page cannot be read as a complete one (#351).
+        meta_note = _meta_note(result.meta())
+        result = result.items if result.rendered is None else result.rendered
     try:
         if fmt == "json":
-            print(json.dumps(success_envelope(provider, result), ensure_ascii=False),
-                  file=out_writer)
+            print(json.dumps(envelope, ensure_ascii=False), file=out_writer)
         elif fmt == "md":
             # NOTE: md and human are identical for now; they diverge in Task 9
             # (md → markdown tables, human → concise). Keep branches separate.
-            print(result if isinstance(result, str)
-                  else json.dumps(result, ensure_ascii=False, indent=2),
+            print((result if isinstance(result, str)
+                   else json.dumps(result, ensure_ascii=False, indent=2)) + meta_note,
                   file=out_writer)
         else:  # human
-            print(result if isinstance(result, str)
-                  else json.dumps(result, ensure_ascii=False, indent=2),
+            print((result if isinstance(result, str)
+                   else json.dumps(result, ensure_ascii=False, indent=2)) + meta_note,
                   file=out_writer)
     except (UnicodeEncodeError, OSError) as _exc:
         # Writing the success output failed — surface as a non-zero exit so
