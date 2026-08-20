@@ -172,7 +172,7 @@ def test_final_skill_inventory_after_deprecation_gate():
         for path in SKILLS_ROOT.iterdir()
         if path.is_dir() and (path / "SKILL.md").is_file()
     }
-    assert active == {"connectors", "daily-brief", "research", "deploy"}
+    assert active == {"connectors", "daily-brief", "research", "deploy", "kb"}
 
 
 def test_granola_reference_documents_sync_and_transcript_privacy():
