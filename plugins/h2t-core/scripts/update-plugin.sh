@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Update h2t-core plugin in Claude Code cache.
-# Also copies repo-root lib/ into cache (packaging decision from spec).
+# Update h2t-core plugin in Claude Code cache, matching what a marketplace install
+# would place there.
 # Usage: bash plugins/h2t-core/scripts/update-plugin.sh [--push]
 set -euo pipefail
 
@@ -38,10 +38,10 @@ rm -f "$CACHE_DIR/.orphaned_at"
 # Copy plugin content
 cp -r "$PLUGIN_DIR/." "$CACHE_DIR/"
 
-# KEY: copy repo-root lib/ into cache (overwrite plugin's own stale lib/)
-# plugins/h2t-core/lib/ is outdated — repo-root lib/ is canonical
-rm -rf "$CACHE_DIR/lib"
-cp -r "$REPO_DIR/lib" "$CACHE_DIR/lib"
+# The plugin ships its own lib/ and `cp -r "$PLUGIN_DIR/."` above already placed it.
+# Do NOT overwrite it with the repo-root lib/: the copies have drifted, and only the
+# plugin one defines gather.sessions.find_latest_session_index, which the plugin's
+# gather.py imports. A marketplace install ships the plugin copy — match it.
 
 # Copy pyproject.toml so `uv pip install -e <cache_dir>` works
 cp "$REPO_DIR/pyproject.toml" "$CACHE_DIR/pyproject.toml"
