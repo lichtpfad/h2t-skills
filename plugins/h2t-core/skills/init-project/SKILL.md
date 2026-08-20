@@ -16,11 +16,10 @@ Register the current directory as a project in the h2t ecosystem. The PreToolUse
 ## Variables
 
 ```bash
-H2T_PYTHON="${H2T_PYTHON:-}"
-if [ -z "$H2T_PYTHON" ]; then
-  [ -f "$HOME/.h2t/venv/bin/python" ] && H2T_PYTHON="$HOME/.h2t/venv/bin/python"
-  [ -f "$HOME/.h2t/venv/Scripts/python.exe" ] && H2T_PYTHON="$HOME/.h2t/venv/Scripts/python.exe"
-fi
+command -v h2t-project-register >/dev/null 2>&1 || {
+  echo "ERROR: h2t-project-register not found. Run /h2t-core:setup"
+  exit 1
+}
 ```
 
 ## Procedure
@@ -47,10 +46,10 @@ If `needs_input` is false — wait for "ок" or corrections from user.
 
 ### Step 3: Apply Registration
 
-Call apply_registration.py with confirmed parameters:
+Call `h2t-project-register` with confirmed parameters:
 
 ```bash
-$H2T_PYTHON "${CLAUDE_PLUGIN_ROOT}/skills/init-project/scripts/apply_registration.py" \
+h2t-project-register \
   --id "{id}" --domain "{domain}" --type "{type}" \
   --label "{label}" --task-tracker "{tracker}" \
   --cwd "$(pwd)" --config-root "$HOME/.h2t/config" \

@@ -34,6 +34,11 @@ def test_wheel_ships_the_scripts_the_entrypoints_load(wheel_names):
     assert f"{PAYLOAD}/skills/handoff/scripts/writer.py" in wheel_names
     assert f"{PAYLOAD}/skills/session-start/scripts/gather.py" in wheel_names
     assert f"{PAYLOAD}/lib/activity/writer.py" in wheel_names
+    # #357: the lifecycle skills call these as commands, so the wheel is their only carrier
+    assert f"{PAYLOAD}/skills/project-audit/scripts/scan.py" in wheel_names
+    assert f"{PAYLOAD}/skills/project-audit/scripts/report.py" in wheel_names
+    assert f"{PAYLOAD}/skills/init-project/scripts/apply_registration.py" in wheel_names
+    assert f"{PAYLOAD}/skills/scaffold-project/scripts/scaffold_project.py" in wheel_names
 
 
 def test_wheel_ships_the_lib_those_scripts_import(wheel_names):

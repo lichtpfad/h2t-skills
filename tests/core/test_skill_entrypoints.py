@@ -101,8 +101,9 @@ def test_session_start_skill_uses_installable_entrypoints():
     text = skill_path.read_text(encoding="utf-8")
     assert "command -v h2t-gather" in text
     assert "command -v h2t-activity-log" in text
-    assert 'source "${CLAUDE_PLUGIN_ROOT}/scripts/resolve-h2t-python.sh"' in text
-    assert "resolve_h2t_python ||" in text
+    # #357: the resolver was sourced by plugin path, for a graph block that never ran (#361)
+    assert "resolve-h2t-python.sh" not in text
+    assert "resolve_h2t_python" not in text
     assert 'h2t-gather --cwd "$(pwd)" --briefing-only' in text
     assert "h2t-activity-log start \\" in text
     assert "${CLAUDE_PLUGIN_ROOT}/skills/session-start/scripts/gather.py" not in text
@@ -113,8 +114,8 @@ def test_handoff_skill_uses_installable_entrypoint():
     skill_path = Path("plugins/h2t-core/skills/handoff/SKILL.md")
     text = skill_path.read_text(encoding="utf-8")
     assert "command -v h2t-handoff" in text
-    assert 'source "${CLAUDE_PLUGIN_ROOT}/scripts/resolve-h2t-python.sh"' in text
-    assert "resolve_h2t_python ||" in text
+    assert "resolve-h2t-python.sh" not in text
+    assert "resolve_h2t_python" not in text
     assert "h2t-handoff write \\" in text
     assert "${CLAUDE_PLUGIN_ROOT}/skills/handoff/scripts/writer.py" not in text
 
@@ -270,3 +271,55 @@ def test_gather_hook_uses_strict_python_probe():
     hook_path = Path("plugins/h2t-core/hooks-handlers/gather-on-skill")
     text = hook_path.read_text(encoding="utf-8")
     assert 'resolve_h2t_python "import lib.cli.main"' in text
+
+
+def _console_scripts() -> dict[str, str]:
+    """`name -> module` for every console script pyproject declares."""
+    import tomllib
+
+    root = Path(__file__).resolve().parents[2]
+    with (root / "pyproject.toml").open("rb") as f:
+        scripts = tomllib.load(f)["project"]["scripts"]
+    return {name: target.split(":")[0] for name, target in scripts.items()}
+
+
+PLUGIN_SCRIPT_ENTRIES = sorted(
+    (name, module)
+    for name, module in _console_scripts().items()
+    if module.endswith("_entry")
+)
+
+
+@pytest.mark.parametrize("name,module_path", PLUGIN_SCRIPT_ENTRIES, ids=[n for n, _ in PLUGIN_SCRIPT_ENTRIES])
+def test_entrypoint_names_a_script_that_ships(name, module_path, monkeypatch):
+    """Every installed command must name a plugin script that actually exists.
+
+    The path lives inside `main()`, so it is captured by standing in for
+    `run_plugin_main` — that also proves the module wires the two together at all.
+    """
+    import importlib
+
+    module = importlib.import_module(module_path)
+    captured = {}
+    monkeypatch.setattr(module, "run_plugin_main", lambda rel: captured.setdefault("path", rel) or 0)
+    module.main()
+
+    relative = captured.get("path")
+    assert relative, f"{module_path}.main() never called run_plugin_main"
+    assert plugin_entrypoints.plugin_script_path(relative).is_file(), (
+        f"{name} points at {relative}, which is not in the plugin"
+    )
+
+
+def test_payload_script_dependencies_are_installed():
+    """Moving a script behind a command changes which interpreter runs it.
+
+    `apply_registration.py` used to run under `~/.h2t/venv`, where ruamel.yaml happened to
+    be installed by hand; as `h2t-project-register` it runs under the h2t-ops environment,
+    so the dependency has to be declared. It fails politely (`{"status": "error"}`), which
+    reads as a failed registration rather than a broken build — hence this test.
+    """
+    import importlib
+
+    importlib.import_module("ruamel.yaml")  # skills/init-project/scripts/apply_registration.py
+    importlib.import_module("yaml")  # skills/project-audit/scripts/scan.py
