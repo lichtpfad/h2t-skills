@@ -1,5 +1,5 @@
 ---
-name: h2t-core:setup
+name: setup
 description: "Install, repair, update, and diagnose h2t-core / h2t-ops delivery. Use for 'h2t setup', 'install h2t-ops', 'repair h2t', 'update h2t', connector auth/status checks, or sharing h2t tools with another machine/user."
 compatibility: "Claude Code"
 metadata:

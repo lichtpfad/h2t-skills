@@ -1,5 +1,5 @@
 ---
-name: h2t-dev:gh-memory
+name: gh-memory
 description: "Deprecated compatibility shim for old GitHub-Issues-as-memory workflows. Prefer h2t-core:session-start and h2t-core:handoff for session continuity; prefer project GitHub issues for real task state."
 compatibility: "Claude Code. Requires: gh CLI authenticated to the target GitHub account."
 status: deprecated

@@ -1,5 +1,5 @@
 ---
-name: h2t-core:snap
+name: snap
 description: "Desktop screenshot & interact utility for AI agents. Capture windows, click, type, hover in any desktop app. Use when agent needs visual feedback from native applications (not browsers). Triggers: 'snap', 'h2t:snap', 'h2t-snap', 'screenshot desktop', 'capture window', 'click in app', 'скриншот приложения', 'кликни в окне'."
 compatibility: "Claude Code"
 metadata:
