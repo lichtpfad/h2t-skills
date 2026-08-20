@@ -625,3 +625,43 @@ def test_freebusy_dispatch_uses_date_window(monkeypatch):
         ["primary", "team@example.com"],
         "Asia/Jerusalem",
     )
+
+
+# --- relative day tokens: no interpreter needed in the skill ----------------
+
+def test_resolve_day_accepts_iso_today_and_offsets():
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    from h2t_ops.connectors.calendar import commands as cmds_mod
+
+    tz = ZoneInfo("Asia/Jerusalem")
+    today = datetime.now(tz).date()
+    assert cmds_mod._resolve_day("2026-05-01", tz).isoformat() == "2026-05-01"
+    assert cmds_mod._resolve_day("today", tz) == today
+    assert cmds_mod._resolve_day("TODAY", tz) == today
+    assert (cmds_mod._resolve_day("+2d", tz) - today).days == 2
+    assert (cmds_mod._resolve_day("-1d", tz) - today).days == -1
+
+
+def test_resolve_day_rejects_garbage():
+    from zoneinfo import ZoneInfo
+    from h2t_ops.core.errors import UsageError
+    from h2t_ops.connectors.calendar import commands as cmds_mod
+    import pytest as _pytest
+
+    with _pytest.raises(UsageError):
+        cmds_mod._resolve_day("tomorrow-ish", ZoneInfo("Asia/Jerusalem"))
+
+
+def test_date_window_bounds_with_relative_tokens():
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    from h2t_ops.connectors.calendar import commands as cmds_mod
+
+    tz_name = "Asia/Jerusalem"
+    today = datetime.now(ZoneInfo(tz_name)).date()
+    start, end = cmds_mod._date_window_bounds("today", "+2d", tz_name)
+    assert start.startswith(today.isoformat())
+    assert start.endswith("T00:00:00+03:00") or start.endswith("T00:00:00+02:00")
+    # end bound is exclusive midnight after the last requested day
+    assert end > start

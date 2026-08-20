@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 from datetime import date, datetime, time, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -12,6 +13,33 @@ PROVIDER = "calendar"
 
 def _resolve_query_tz(tz: str | None) -> str:
     return tz or os.environ.get("H2T_CALENDAR_TZ") or "Asia/Jerusalem"
+
+
+_RELATIVE_DAY = re.compile(r"^([+-])(\d+)d$")
+
+
+def _resolve_day(raw: str, tz: ZoneInfo) -> date:
+    """Accept YYYY-MM-DD, ``today``, or an offset like ``+2d`` / ``-1d``.
+
+    Relative values are resolved in the query timezone, so a caller does not
+    need a Python interpreter just to name today.
+    """
+    from h2t_ops.core.errors import UsageError
+
+    value = raw.strip().lower()
+    if value == "today":
+        return datetime.now(tz).date()
+    match = _RELATIVE_DAY.match(value)
+    if match:
+        sign, count = match.group(1), int(match.group(2))
+        delta = timedelta(days=count if sign == "+" else -count)
+        return datetime.now(tz).date() + delta
+    try:
+        return date.fromisoformat(raw)
+    except ValueError as exc:
+        raise UsageError(
+            "calendar: --from/--to must use YYYY-MM-DD, 'today', or an offset like '+2d'"
+        ) from exc
 
 
 def _date_window_bounds(from_date: str, to_date: str, tz_name: str) -> tuple[str, str]:
@@ -24,11 +52,8 @@ def _date_window_bounds(from_date: str, to_date: str, tz_name: str) -> tuple[str
             f"Unknown calendar timezone: {tz_name}",
             hint="Install project dependencies with `uv sync`; Windows requires the tzdata package.",
         ) from exc
-    try:
-        start_day = date.fromisoformat(from_date)
-        end_day = date.fromisoformat(to_date)
-    except ValueError as exc:
-        raise UsageError("calendar: --from/--to must use YYYY-MM-DD") from exc
+    start_day = _resolve_day(from_date, tz)
+    end_day = _resolve_day(to_date, tz)
     if end_day < start_day:
         raise UsageError("calendar: --to must be on or after --from")
     start = datetime.combine(start_day, time.min, tzinfo=tz)
@@ -65,8 +90,10 @@ def register(subparsers: Any) -> None:
 
     lp = cmds.add_parser("list", help="List upcoming events")
     lp.add_argument("--days", type=int, default=1)
-    lp.add_argument("--from", dest="from_date", metavar="YYYY-MM-DD")
-    lp.add_argument("--to", dest="to_date", metavar="YYYY-MM-DD")
+    lp.add_argument("--from", dest="from_date", metavar="DAY",
+                    help="YYYY-MM-DD, 'today', or an offset like '+2d'")
+    lp.add_argument("--to", dest="to_date", metavar="DAY",
+                    help="YYYY-MM-DD, 'today', or an offset like '+2d'")
     lp.add_argument("--tz", default=None)
     lp.add_argument("--max", type=int, default=250)
     lp.add_argument("--busy-only", action="store_true",
