@@ -1,5 +1,5 @@
 ---
-name: h2t-core:agent-profile
+name: agent-profile
 description: >
   Project-scoped Claude plugin profile manager. Apply base profiles (dev, pos, ops, creative,
   dcc, product, marketing, mixed) and work contexts to control which plugins load per repo.

@@ -1,5 +1,5 @@
 ---
-name: h2t-core:session-start
+name: session-start
 description: "Use at the start of any working session (dev, creative, personal). Triggers on 'start session', 'начинаем', 'новая сессия'. Do not invoke again while already executing session-start."
 compatibility: "Claude Code"
 metadata:

@@ -1,5 +1,5 @@
 ---
-name: h2t-dev:docs-lint
+name: docs-lint
 description: >-
   Audit and maintain documentation/structure health in h2t-stack repos.
   Full pipeline: sniff → gate → analyze → plan → issues → fixes → validate.

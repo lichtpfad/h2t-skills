@@ -1,5 +1,5 @@
 ---
-name: h2t-ops:kb
+name: kb
 description: "Use when working with the Ecosystem Research KB or any llm-kb-template instance: knowledge base, база знаний, add to the knowledge base / добавить в базу знаний, learn from the knowledge base / узнать из базы знаний, search and add to the KB / поискать и добавить в базу знаний, ground a decision in the KB, kb-ingest, kb-lint, kb-lookup, KB health. Human-invoked; ingest is COST-GATED."
 compatibility: "Requires the installed llm-kb-engine tool (uv tool install) and a data-only KB (default C:/dev/research-kb, override H2T_KB_ROOT), plus the h2t-ops research connector for ingest harvest."
 metadata:

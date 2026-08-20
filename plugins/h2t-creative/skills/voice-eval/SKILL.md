@@ -1,5 +1,5 @@
 ---
-name: h2t-creative:voice-eval
+name: voice-eval
 description: "Evaluate writing style of a draft against author voice profile. Triggers on: 'voice eval', 'check my voice', 'оцени стиль', 'проверь голос', 'voice check', '/voice-eval'. Requires h2t-voice installed at C:/dev/h2t-voice."
 compatibility: "Requires h2t-voice venv at C:/dev/h2t-voice/.venv. Profile must exist at ~/.h2t/voice/profiles/default/."
 metadata:

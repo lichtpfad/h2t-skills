@@ -1,5 +1,5 @@
 ---
-name: h2t-ops:deploy
+name: deploy
 description: "Operator deploy surface for registered services via `h2t-ops deploy`. Use for deploy list, dry-run, status, and service-target deploy execution. Profile-driven: service -> target -> profile -> script. Current reference profile: github-actions-dispatch."
 compatibility: "Requires `h2t-ops` CLI with local deploy registry under ~/.h2t/config/deploy/services.yaml and profiles.yaml. V1 supports repo-local profile scripts under scripts/deploy/ only."
 metadata:

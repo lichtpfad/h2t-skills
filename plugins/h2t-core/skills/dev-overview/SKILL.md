@@ -1,5 +1,5 @@
 ---
-name: h2t-core:dev-overview
+name: dev-overview
 description: "Cross-project dev dashboard: progress toward goals, activity status, open issues. Weekly review and planning tool. Triggers: 'dev overview', 'project overview', 'all projects', 'weekly review', 'где я нахожусь по проектам', 'h2t:dev-overview'."
 compatibility: "Claude Code"
 metadata:

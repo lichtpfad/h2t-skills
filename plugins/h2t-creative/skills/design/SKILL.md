@@ -1,5 +1,5 @@
 ---
-name: h2t-creative:design
+name: design
 description: "This skill should be used when the user wants to generate dashboards, presentations, or interfaces in HUD tactical style with tactical dashboard aesthetic: monochrome + red accent, bracket tags, canvas animations, cursor reticle. Triggers: 'h2t-design', 'HUD design', 'tactical dashboard', 'design system', 'h2t-creative:design'"
 compatibility: "Claude Code"
 metadata:
