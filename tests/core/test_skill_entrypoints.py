@@ -2,6 +2,8 @@ import sys
 from contextlib import contextmanager
 from pathlib import Path
 
+import pytest
+
 from h2t_ops import activity_log_entry, gather_entry, handoff_entry, plugin_entrypoints
 
 
@@ -31,6 +33,13 @@ def _isolated_gather_modules():
         for name in _gather_keys():
             del sys.modules[name]
         sys.modules.update(saved)
+
+
+@pytest.fixture(autouse=True)
+def _no_host_env_leak(monkeypatch):
+    """Every host location is env-overridable now; a real one would leak into the tmp trees."""
+    for var in ("H2T_PLUGIN_ROOT", "CLAUDE_PLUGIN_ROOT", "CLAUDE_CONFIG_DIR", "CODEX_HOME"):
+        monkeypatch.delenv(var, raising=False)
 
 
 def test_plugin_script_paths_exist():
@@ -108,3 +117,156 @@ def test_handoff_skill_uses_installable_entrypoint():
     assert "resolve_h2t_python ||" in text
     assert "h2t-handoff write \\" in text
     assert "${CLAUDE_PLUGIN_ROOT}/skills/handoff/scripts/writer.py" not in text
+
+
+HANDOFF_SCRIPT = "skills/handoff/scripts/writer.py"
+
+
+def _make_plugin_tree(root: Path) -> Path:
+    script = root / HANDOFF_SCRIPT
+    script.parent.mkdir(parents=True, exist_ok=True)
+    script.write_text("def main():\n    return 0\n", encoding="utf-8")
+    return script
+
+
+def _cache_dir(home: Path, version: str, marketplace: str = "lichtpfad") -> Path:
+    root = home / ".claude" / "plugins" / "cache" / marketplace / "h2t-core" / version
+    _make_plugin_tree(root)
+    return root
+
+
+def _codex_cache_dir(home: Path, version: str, marketplace: str = "lichtpfad") -> Path:
+    root = home / ".codex" / "plugins" / "cache" / marketplace / "h2t-core" / version
+    _make_plugin_tree(root)
+    return root
+
+
+def test_plugin_script_path_honours_claude_plugin_root(tmp_path, monkeypatch):
+    """The harness already exports CLAUDE_PLUGIN_ROOT when a skill runs."""
+    expected = _make_plugin_tree(tmp_path / "plugin")
+    monkeypatch.setenv("CLAUDE_PLUGIN_ROOT", str(tmp_path / "plugin"))
+
+    assert plugin_entrypoints.plugin_script_path(HANDOFF_SCRIPT) == expected
+
+
+def test_plugin_script_path_falls_back_to_plugin_cache_for_a_shipped_install(tmp_path, monkeypatch):
+    """A non-editable install has no plugins/ next to the package — the real bug."""
+    monkeypatch.delenv("CLAUDE_PLUGIN_ROOT", raising=False)
+    monkeypatch.setattr(plugin_entrypoints, "_package_plugin_root",
+                        lambda: tmp_path / "site-packages" / "plugins" / "h2t-core")
+    expected = _cache_dir(tmp_path / "home", "3.2.14") / HANDOFF_SCRIPT
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path / "home"))
+
+    assert plugin_entrypoints.plugin_script_path(HANDOFF_SCRIPT) == expected
+
+
+def test_plugin_cache_fallback_prefers_highest_version_over_the_latest_dir(tmp_path, monkeypatch):
+    """The observed `latest` dir lags behind the versioned ones."""
+    monkeypatch.delenv("CLAUDE_PLUGIN_ROOT", raising=False)
+    monkeypatch.setattr(plugin_entrypoints, "_package_plugin_root", lambda: tmp_path / "absent")
+    home = tmp_path / "home"
+    _cache_dir(home, "3.2.13")
+    _cache_dir(home, "latest")
+    expected = _cache_dir(home, "3.2.14") / HANDOFF_SCRIPT
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
+
+    assert plugin_entrypoints.plugin_script_path(HANDOFF_SCRIPT) == expected
+
+
+def test_env_root_without_the_script_falls_through_instead_of_failing(tmp_path, monkeypatch):
+    """CLAUDE_PLUGIN_ROOT may point at a different plugin than h2t-core."""
+    (tmp_path / "other-plugin").mkdir()
+    monkeypatch.setenv("CLAUDE_PLUGIN_ROOT", str(tmp_path / "other-plugin"))
+
+    assert plugin_entrypoints.plugin_script_path(HANDOFF_SCRIPT).is_file()
+
+
+def test_plugin_script_path_error_names_every_candidate_tried(tmp_path, monkeypatch):
+    monkeypatch.delenv("CLAUDE_PLUGIN_ROOT", raising=False)
+    monkeypatch.setattr(plugin_entrypoints, "_package_plugin_root", lambda: tmp_path / "absent")
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path / "empty-home"))
+
+    with pytest.raises(FileNotFoundError) as excinfo:
+        plugin_entrypoints.plugin_script_path(HANDOFF_SCRIPT)
+
+    message = str(excinfo.value)
+    assert str(tmp_path / "absent") in message
+    assert "H2T_PLUGIN_ROOT" in message  # tells the operator how to override
+
+
+def test_bundled_payload_is_the_last_resort_when_no_plugin_is_installed(tmp_path, monkeypatch):
+    """`uv tool install` on a machine with no plugin host at all: the wheel carries its own copy."""
+    monkeypatch.setattr(plugin_entrypoints, "_package_plugin_root", lambda: tmp_path / "absent")
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path / "empty-home"))
+    expected = _make_plugin_tree(tmp_path / "payload")
+    monkeypatch.setattr(plugin_entrypoints, "_bundled_payload_root", lambda: tmp_path / "payload")
+
+    assert plugin_entrypoints.plugin_script_path(HANDOFF_SCRIPT) == expected
+
+
+def test_installed_plugin_beats_the_bundled_payload(tmp_path, monkeypatch):
+    """The wheel copy is frozen at build time; an installed plugin can be newer."""
+    monkeypatch.setattr(plugin_entrypoints, "_package_plugin_root", lambda: tmp_path / "absent")
+    home = tmp_path / "home"
+    expected = _cache_dir(home, "3.2.14") / HANDOFF_SCRIPT
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
+    _make_plugin_tree(tmp_path / "payload")
+    monkeypatch.setattr(plugin_entrypoints, "_bundled_payload_root", lambda: tmp_path / "payload")
+
+    assert plugin_entrypoints.plugin_script_path(HANDOFF_SCRIPT) == expected
+
+
+def test_codex_plugin_cache_is_searched(tmp_path, monkeypatch):
+    """Codex installs into ~/.codex/plugins/cache/<marketplace>/<plugin>/<version>/."""
+    monkeypatch.setattr(plugin_entrypoints, "_package_plugin_root", lambda: tmp_path / "absent")
+    home = tmp_path / "home"
+    expected = _codex_cache_dir(home, "3.2.14") / HANDOFF_SCRIPT
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
+
+    assert plugin_entrypoints.plugin_script_path(HANDOFF_SCRIPT) == expected
+
+
+def test_cache_lookup_accepts_non_semver_version_dirs(tmp_path, monkeypatch):
+    """Codex names that dir `local` for local plugins and a content hash for curated ones."""
+    monkeypatch.setattr(plugin_entrypoints, "_package_plugin_root", lambda: tmp_path / "absent")
+    home = tmp_path / "home"
+    expected = _codex_cache_dir(home, "local") / HANDOFF_SCRIPT
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
+
+    assert plugin_entrypoints.plugin_script_path(HANDOFF_SCRIPT) == expected
+
+
+def test_cache_lookup_does_not_depend_on_the_marketplace_name(tmp_path, monkeypatch):
+    """`codex plugin marketplace add` and forks register the catalog under their own name."""
+    monkeypatch.setattr(plugin_entrypoints, "_package_plugin_root", lambda: tmp_path / "absent")
+    home = tmp_path / "home"
+    expected = _cache_dir(home, "3.2.14", marketplace="some-fork") / HANDOFF_SCRIPT
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
+
+    assert plugin_entrypoints.plugin_script_path(HANDOFF_SCRIPT) == expected
+
+
+def test_cache_lookup_honours_a_relocated_host_state_dir(tmp_path, monkeypatch):
+    """CODEX_HOME / CLAUDE_CONFIG_DIR move the whole state directory off ~."""
+    monkeypatch.setattr(plugin_entrypoints, "_package_plugin_root", lambda: tmp_path / "absent")
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path / "empty-home"))
+    relocated = tmp_path / "elsewhere" / "codex"
+    expected = _make_plugin_tree(
+        relocated / "plugins" / "cache" / "lichtpfad" / "h2t-core" / "local"
+    )
+    monkeypatch.setenv("CODEX_HOME", str(relocated))
+
+    assert plugin_entrypoints.plugin_script_path(HANDOFF_SCRIPT) == expected
+
+
+def test_gather_hook_uses_strict_python_probe():
+    """gather-on-skill must reject a package-less interpreter.
+
+    Regression guard: the resolver probe used to be `import sys` (any Python
+    passes), so a ~/.h2t/venv without the h2t package was selected and the
+    downstream `-m lib.cli.main` crashed silently ("returned no output"). The
+    hook must pass the strict probe so resolution fails loud instead.
+    """
+    hook_path = Path("plugins/h2t-core/hooks-handlers/gather-on-skill")
+    text = hook_path.read_text(encoding="utf-8")
+    assert 'resolve_h2t_python "import lib.cli.main"' in text
