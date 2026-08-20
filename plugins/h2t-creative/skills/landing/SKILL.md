@@ -1,5 +1,5 @@
 ---
-name: h2t-creative:landing
+name: landing
 description: "Generates a multi-file landing page using the h2t-creative assembler pipeline. Reads DESIGN.md profile as context, collaborates on recipe.yaml content, runs assembler.py, then performs mandatory Playwright QA at 375px and 1440px. Delivery halted if Playwright unavailable. Triggers: 'landing', 'create landing', 'landing page', 'h2t-creative:landing'"
 compatibility: "Claude Code"
 metadata:

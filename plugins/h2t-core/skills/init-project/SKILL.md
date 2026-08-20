@@ -1,5 +1,5 @@
 ---
-name: h2t-core:init-project
+name: init-project
 description: Register existing repo or directory in h2t ecosystem. Triggers on "/init-project", "register project", or actionable hint from session-start when project.id == "unknown". NOT for creating new repos (use /h2t-factory:scaffold-project or similar).
 compatibility: "Claude Code"
 metadata:

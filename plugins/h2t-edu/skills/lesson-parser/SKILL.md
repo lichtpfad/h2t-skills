@@ -1,5 +1,5 @@
 ---
-name: h2t-edu:lesson-parser
+name: lesson-parser
 description: "Parses procedural tutorial transcripts into structured topology (nodes, connections, params). 3-level: chapters -> actions -> synthesis. Triggers: 'lesson-parser', 'parse tutorial', 'parse transcript', 'extract topology'."
 compatibility: "Claude Code. Input: markdown transcript with chapters (from /h2t-edu:youtube-transcript)."
 metadata:

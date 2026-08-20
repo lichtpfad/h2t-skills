@@ -1,5 +1,5 @@
 ---
-name: h2t-ops:connectors
+name: connectors
 description: "h2t-ops connector hub — load when the user mentions Calendar (events, schedule, FreeBusy, Google Meet), Gmail (email, inbox, draft, send, labels), Drive/Google Docs/Sheets/Slides (files, folders, documents, download, export, upload, any drive.google.com/docs.google.com/sheets.google.com/slides.google.com link), Notion (pages, databases, sync, workspace), Telegram (dialogs, messages, auth, mentions), MeetGeek (meetings, transcripts, summaries, recordings), or Granola (notes, AI summaries, verbatim transcripts, folders). Also load for any provider-owned URL or provider I/O command lookup. Research and daily-brief are separate skills."
 compatibility: "CLI-first connector navigator. MCP/Playwright are optional and not required."
 metadata:

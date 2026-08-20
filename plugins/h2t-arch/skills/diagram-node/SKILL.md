@@ -1,5 +1,5 @@
 ---
-name: h2t-arch:diagram-node
+name: diagram-node
 description: >-
   Documents architecture diagram nodes: researches APIs, ML algorithms, or
   internal processes to produce a 6-line draw.io annotation and a research doc.

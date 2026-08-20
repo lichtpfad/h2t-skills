@@ -1,5 +1,5 @@
 ---
-name: h2t-arch:node-researcher
+name: node-researcher
 description: >-
   Deep researches a crypto-regime-orchestrator diagram node using Exa API.
   Produces a research doc and draw.io annotation. Use when researching any

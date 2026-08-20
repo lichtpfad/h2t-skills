@@ -1,5 +1,5 @@
 ---
-name: h2t-core:scaffold-project
+name: scaffold-project
 description: >
   Create and register a new project in h2t ecosystem via interactive wizard.
   Triggers on "/scaffold-project", "scaffold", "новый проект", "new project".

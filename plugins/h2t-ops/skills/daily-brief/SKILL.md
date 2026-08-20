@@ -1,5 +1,5 @@
 ---
-name: h2t-ops:daily-brief
+name: daily-brief
 description: "Morning briefing aggregating Google Calendar, Gmail, and Notion tasks into a daily plan. Triggers: 'daily brief', 'briefing', 'утренний брифинг', 'что сегодня', 'план на день', 'h2t:daily-brief'"
 compatibility: "Requires the h2t-ops CLI on PATH (uv tool install), Google OAuth + NOTION_API_TOKEN."
 metadata:

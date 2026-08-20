@@ -1,5 +1,5 @@
 ---
-name: h2t-dev:github-issues
+name: github-issues
 description: This skill should be used when creating or updating GitHub issues. It enforces consistent issue structure with Context/What/Why/Part-of sections, correct labels (domain, phase, priority), and milestone assignment. Triggers on "create issue", "add to backlog", "github issue".
 compatibility: "Claude Code"
 metadata:
