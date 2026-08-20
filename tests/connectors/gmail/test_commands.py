@@ -56,6 +56,8 @@ from h2t_ops.core.errors import UsageError
 class _FakeClient:
     def list_messages(self, **k): return [{"id": "1", "subject": "S", "from": "f",
                                            "date": "d", "snippet": "x", "labelIds": []}]
+    def list_messages_page(self, **k): return {"items": self.list_messages(**k),
+                                               "truncated": True, "estimated_total": 42}
     def list_threads(self, **k): return [{"id": "t1", "messages": []}]
     def get_message(self, mid): return {"id": mid, "subject": "S", "from": "f",
                                         "to": "t", "date": "d", "labelIds": [], "body": "B", "attachments": []}
@@ -89,8 +91,11 @@ def test_list_json_returns_raw(monkeypatch):
     _patch(monkeypatch)
     out = gc.run(_ns(gmail_cmd="list", max=10, unread=False, query=None,
                      as_json=True, fmt="human"))
-    assert out == [{"id": "1", "subject": "S", "from": "f", "date": "d",
-                    "snippet": "x", "labelIds": []}]
+    assert out.items == [{"id": "1", "subject": "S", "from": "f", "date": "d",
+                          "snippet": "x", "labelIds": []}]
+    # A full page must not read as a complete result.
+    assert out.meta() == {"count": 1, "truncated": True, "limit": 10,
+                          "estimated_total": 42}
 
 
 def test_read_human_returns_detail(monkeypatch):

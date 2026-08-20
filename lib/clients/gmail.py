@@ -116,6 +116,17 @@ class GmailClient:
         query: Optional[str] = None,
         unread_only: bool = False,
     ) -> List[Dict[str, Any]]:
+        return self.list_messages_page(
+            max_results=max_results, query=query, unread_only=unread_only
+        )["items"]
+
+    def list_messages_page(
+        self,
+        max_results: int = 10,
+        query: Optional[str] = None,
+        unread_only: bool = False,
+    ) -> Dict[str, Any]:
+        """Same as list_messages, plus whether the mailbox had more to give."""
         try:
             if unread_only and query:
                 query = f"is:unread {query}"
@@ -125,7 +136,11 @@ class GmailClient:
                 userId="me", maxResults=max_results, q=query
             ).execute()
             messages = results.get("messages", [])
-            return [self.get_message(m["id"]) for m in messages]
+            return {
+                "items": [self.get_message(m["id"]) for m in messages],
+                "has_more": bool(results.get("nextPageToken")),
+                "estimated_total": results.get("resultSizeEstimate"),
+            }
         except HttpError as e:
             raise Exception(f"Gmail API error: {e}") from e
 

@@ -23,7 +23,10 @@ def register(subparsers: Any) -> None:
     b.add_argument("page_id"); b.add_argument("--limit", type=int); add_fmt(b)
     s = cmds.add_parser("search", help="Query a database")
     s.add_argument("database_id"); s.add_argument("--filter")
-    s.add_argument("--filter-json"); s.add_argument("--limit", type=int); add_fmt(s)
+    s.add_argument("--filter-json"); s.add_argument("--limit", type=int)
+    s.add_argument("--resolve-relations", nargs="*", metavar="PROP",
+                   help="resolve relation properties to title+url; names limit which ones")
+    add_fmt(s)
     gd = cmds.add_parser("get-database", help="Database items")
     gd.add_argument("database_id"); gd.add_argument("--limit", type=int); add_fmt(gd)
     sw = cmds.add_parser("search-workspace", help="Search shared Notion workspace objects")
@@ -131,6 +134,16 @@ def register(subparsers: Any) -> None:
     p.set_defaults(_handler=run)
 
 
+def _paged(page: dict, args, relations: dict | None = None,
+           rendered: str | None = None) -> Any:
+    """Wrap a client page so every format carries count and truncation."""
+    from h2t_ops.core.envelope import Paged
+
+    extra = {"relations": relations} if relations else {}
+    return Paged(page["items"], truncated=page.get("truncated", False),
+                 limit=getattr(args, "limit", None), extra=extra, rendered=rendered)
+
+
 def _fmt(args) -> str:
     return "json" if getattr(args, "as_json", False) else getattr(args, "fmt", "human")
 
@@ -163,9 +176,16 @@ def run(args) -> Any:
         elif args.filter and "=" in args.filter:
             k, _, v = args.filter.partition("=")
             fdict = {"property": k.strip(), "select": {"equals": v.strip()}}
-        rows = client.query_database(args.database_id, filter_dict=fdict, limit=args.limit)
-        return rows if _fmt(args) == "json" else client.database_items_to_markdown(
-            rows, client.get_database(args.database_id))
+        page = client.query_database_page(
+            args.database_id, filter_dict=fdict, limit=args.limit)
+        rows = page["items"]
+        relations = None
+        if getattr(args, "resolve_relations", None) is not None:
+            relations = client.resolve_relations(rows, args.resolve_relations or None)
+        if _fmt(args) == "json":
+            return _paged(page, args, relations)
+        return _paged(page, args, relations, client.database_items_to_markdown(
+            rows, client.get_database(args.database_id), relations))
     if cmd == "get-database":
         rows = client.query_database(args.database_id, limit=args.limit)
         return rows if _fmt(args) == "json" else client.database_items_to_markdown(

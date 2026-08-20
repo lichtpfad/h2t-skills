@@ -5,7 +5,7 @@ Write: create_event, delete_event
 """
 
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -81,6 +81,10 @@ class CalendarClient:
 
     def list_events(self, days: int = 1, max_results: int = 20) -> List[Dict[str, Any]]:
         """Return events for the next N days as normalized dicts."""
+        return self.list_events_page(days=days, max_results=max_results)["items"]
+
+    def list_events_page(self, days: int = 1, max_results: int = 20) -> Dict[str, Any]:
+        """Same as list_events, plus whether the API had more to give."""
         local_today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
         time_min = local_today.astimezone(timezone.utc).isoformat()
         time_max = (local_today + timedelta(days=days)).astimezone(timezone.utc).isoformat()
@@ -94,13 +98,19 @@ class CalendarClient:
             orderBy="startTime",
         ).execute()
 
-        events = []
-        for event in result_raw.get("items", []):
-            events.append(self._normalize_event(event))
-        return events
+        events = [self._normalize_event(e) for e in result_raw.get("items", [])]
+        return {
+            "items": events,
+            "has_more": bool(result_raw.get("nextPageToken")),
+            "window": {"from": time_min, "to": time_max},
+        }
 
     def search_events(self, query: str, max_results: int = 10) -> List[Dict[str, Any]]:
         """Full-text search across all calendar events."""
+        return self.search_events_page(query, max_results=max_results)["items"]
+
+    def search_events_page(self, query: str, max_results: int = 10) -> Dict[str, Any]:
+        """Same as search_events, plus whether the API had more to give."""
         result_raw = self.service.events().list(
             calendarId="primary",
             q=query,
@@ -108,7 +118,10 @@ class CalendarClient:
             singleEvents=True,
             orderBy="startTime",
         ).execute()
-        return [self._normalize_event(e) for e in result_raw.get("items", [])]
+        return {
+            "items": [self._normalize_event(e) for e in result_raw.get("items", [])],
+            "has_more": bool(result_raw.get("nextPageToken")),
+        }
 
     # --- Write ---
 
@@ -151,21 +164,38 @@ class CalendarClient:
 
     # --- Helpers ---
 
-    def _normalize_event(self, event: Dict[str, Any]) -> Dict[str, Any]:
-        """Normalize a raw Calendar API event to a flat dict."""
+    def _normalize_event(
+        self, event: Dict[str, Any], today: Optional[date] = None
+    ) -> Dict[str, Any]:
+        """Normalize a raw Calendar API event to a flat dict.
+
+        Carries the raw ``start``/``end`` plus derived span fields, so a running
+        multi-day event is not mistaken for a past single-day one. ``today`` is
+        injectable to keep the derivation testable.
+        """
         start = event["start"].get("dateTime", event["start"].get("date"))
         end = event["end"].get("dateTime", event["end"].get("date"))
+        all_day = "T" not in start
+        today = today or date.today()
 
-        if "T" in start:
+        if all_day:
+            time_str = "весь день"
+            duration_min = None
+            event_date = start
+            first = date.fromisoformat(start)
+            # All-day end dates are exclusive: 18 -> 26 means the 25th is last.
+            last = date.fromisoformat(end) - timedelta(days=1)
+        else:
             start_dt = datetime.fromisoformat(start.replace("Z", "+00:00"))
             end_dt = datetime.fromisoformat(end.replace("Z", "+00:00"))
             time_str = start_dt.strftime("%H:%M")
             duration_min = int((end_dt - start_dt).total_seconds() / 60)
             event_date = start_dt.strftime("%Y-%m-%d")
-        else:
-            time_str = "весь день"
-            duration_min = None
-            event_date = start
+            first = start_dt.date()
+            last = end_dt.date()
+
+        days_total = max((last - first).days + 1, 1)
+        ongoing = first <= today <= last
 
         return {
             "id": event.get("id", ""),
@@ -176,4 +206,11 @@ class CalendarClient:
             "location": event.get("location", ""),
             "description": (event.get("description") or "")[:200],
             "html_link": event.get("htmlLink", ""),
+            "start": start,
+            "end": end,
+            "all_day": all_day,
+            "multi_day": days_total > 1,
+            "days_total": days_total,
+            "ongoing": ongoing,
+            "day_index": (today - first).days + 1 if ongoing else None,
         }

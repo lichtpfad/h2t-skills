@@ -127,12 +127,13 @@ def test_list_dispatch_json_returns_rows(monkeypatch):
     from h2t_ops.connectors.calendar import commands as cmds_mod
 
     class _Stub:
-        def list_events(self, **kwargs):
+        def list_events_page(self, **kwargs):
             assert kwargs["days"] == 1
             assert kwargs["max_results"] == 20
             assert kwargs["time_min"] is None
             assert kwargs["time_max"] is None
-            return [{"id": "evt1", "summary": "M"}]
+            return {"items": [{"id": "evt1", "summary": "M"}], "truncated": False,
+                    "window": {"from": "a", "to": "b"}}
     _patch_calendar_client(monkeypatch, lambda: _Stub())
     args = SimpleNamespace(
         calendar_cmd="list", days=1, max=20, calendar_id="primary",
@@ -140,7 +141,9 @@ def test_list_dispatch_json_returns_rows(monkeypatch):
         as_json=True, fmt="human",
     )
     out = cmds_mod.run(args)
-    assert out == [{"id": "evt1", "summary": "M"}]
+    assert out.items == [{"id": "evt1", "summary": "M"}]
+    assert out.meta() == {"count": 1, "truncated": False, "limit": 20,
+                          "window": {"from": "a", "to": "b"}}
 
 
 def test_list_dispatch_date_window_passes_explicit_bounds(monkeypatch):
@@ -149,9 +152,9 @@ def test_list_dispatch_date_window_passes_explicit_bounds(monkeypatch):
     calls = []
 
     class _Stub:
-        def list_events(self, **kwargs):
+        def list_events_page(self, **kwargs):
             calls.append(kwargs)
-            return []
+            return {"items": [], "truncated": False, "window": {"from": "a", "to": "b"}}
 
     _patch_calendar_client(monkeypatch, lambda: _Stub())
     args = SimpleNamespace(
@@ -169,7 +172,7 @@ def test_list_dispatch_date_window_passes_explicit_bounds(monkeypatch):
 
     out = cmds_mod.run(args)
 
-    assert out == []
+    assert out.items == []
     assert calls == [{
         "days": 7,
         "max_results": 250,
@@ -257,7 +260,8 @@ def test_missing_scopes_surfaces_as_configerror_with_neutral_hint(tmp_path, monk
 
 def test_ingest_calendar_shim_warns_on_human(monkeypatch, capsys):
     class _Stub:
-        def list_events(self, **_): return []
+        def list_events_page(self, **_):
+            return {"items": [], "truncated": False, "window": {"from": "a", "to": "b"}}
     _patch_calendar_client(monkeypatch, lambda: _Stub())
     from h2t_ops.cli import dispatch
     rc = dispatch(["ingest", "calendar", "list", "--days", "1"])
@@ -269,7 +273,8 @@ def test_ingest_calendar_shim_warns_on_human(monkeypatch, capsys):
 
 def test_ingest_calendar_shim_silent_on_json(monkeypatch, capsys):
     class _Stub:
-        def list_events(self, **_): return []
+        def list_events_page(self, **_):
+            return {"items": [], "truncated": False, "window": {"from": "a", "to": "b"}}
     _patch_calendar_client(monkeypatch, lambda: _Stub())
     from h2t_ops.cli import dispatch
     rc = dispatch(["ingest", "calendar", "list", "--format", "json"])
@@ -620,3 +625,43 @@ def test_freebusy_dispatch_uses_date_window(monkeypatch):
         ["primary", "team@example.com"],
         "Asia/Jerusalem",
     )
+
+
+# --- relative day tokens: no interpreter needed in the skill ----------------
+
+def test_resolve_day_accepts_iso_today_and_offsets():
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    from h2t_ops.connectors.calendar import commands as cmds_mod
+
+    tz = ZoneInfo("Asia/Jerusalem")
+    today = datetime.now(tz).date()
+    assert cmds_mod._resolve_day("2026-05-01", tz).isoformat() == "2026-05-01"
+    assert cmds_mod._resolve_day("today", tz) == today
+    assert cmds_mod._resolve_day("TODAY", tz) == today
+    assert (cmds_mod._resolve_day("+2d", tz) - today).days == 2
+    assert (cmds_mod._resolve_day("-1d", tz) - today).days == -1
+
+
+def test_resolve_day_rejects_garbage():
+    from zoneinfo import ZoneInfo
+    from h2t_ops.core.errors import UsageError
+    from h2t_ops.connectors.calendar import commands as cmds_mod
+    import pytest as _pytest
+
+    with _pytest.raises(UsageError):
+        cmds_mod._resolve_day("tomorrow-ish", ZoneInfo("Asia/Jerusalem"))
+
+
+def test_date_window_bounds_with_relative_tokens():
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    from h2t_ops.connectors.calendar import commands as cmds_mod
+
+    tz_name = "Asia/Jerusalem"
+    today = datetime.now(ZoneInfo(tz_name)).date()
+    start, end = cmds_mod._date_window_bounds("today", "+2d", tz_name)
+    assert start.startswith(today.isoformat())
+    assert start.endswith("T00:00:00+03:00") or start.endswith("T00:00:00+02:00")
+    # end bound is exclusive midnight after the last requested day
+    assert end > start

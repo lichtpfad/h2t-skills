@@ -814,3 +814,72 @@ def test_replace_content_dispatch(monkeypatch, tmp_path):
     ))
     assert out == {"status": "replaced", "page_id": "page1"}
     assert calls == [("replace", "page1", str(md_file), "My Page")]
+
+
+# --- search: envelope meta + relation resolution (#351) ---------------------
+
+def test_search_json_envelope_reports_truncation_and_relations(monkeypatch):
+    import h2t_ops.connectors.notion.client as client_mod
+    from h2t_ops.connectors.notion import commands as cmds_mod
+    from types import SimpleNamespace
+
+    rows = [{"id": "t1", "url": "https://notion.so/t1",
+             "properties": {"Project": {"type": "relation",
+                                        "relation": [{"id": "p1"}], "has_more": False}}}]
+
+    class _StubClient:
+        def query_database_page(self, db, *, filter_dict=None, limit=None, **_):
+            return {"items": rows, "truncated": True}
+        def resolve_relations(self, items, prop_names=None):
+            assert prop_names == ["Project"]
+            return {"p1": {"title": "Qatal Yiktol", "url": "https://notion.so/qy"}}
+
+    monkeypatch.setattr(client_mod, "NotionClient", lambda: _StubClient())
+    args = SimpleNamespace(notion_cmd="search", database_id="db-1", filter=None,
+                           filter_json=None, limit=30, resolve_relations=["Project"],
+                           as_json=True, fmt="human")
+    out = cmds_mod.run(args)
+    assert out.items == rows
+    meta = out.meta()
+    assert meta["count"] == 1 and meta["truncated"] is True and meta["limit"] == 30
+    assert meta["relations"]["p1"]["title"] == "Qatal Yiktol"
+
+
+def test_search_markdown_path_passes_relations(monkeypatch):
+    """The md path takes a third argument now; a 2-arg renderer would break."""
+    import h2t_ops.connectors.notion.client as client_mod
+    from h2t_ops.connectors.notion import commands as cmds_mod
+    from types import SimpleNamespace
+
+    seen = {}
+
+    class _StubClient:
+        def query_database_page(self, db, *, filter_dict=None, limit=None, **_):
+            return {"items": [{"id": "t1"}], "truncated": False}
+        def get_database(self, db):
+            return {"id": db}
+        def resolve_relations(self, items, prop_names=None):
+            return {"p1": {"title": "P", "url": "u"}}
+        def database_items_to_markdown(self, rows, meta, relations=None):
+            seen["relations"] = relations
+            return "# md"
+
+    monkeypatch.setattr(client_mod, "NotionClient", lambda: _StubClient())
+    args = SimpleNamespace(notion_cmd="search", database_id="db-1", filter=None,
+                           filter_json=None, limit=10, resolve_relations=["Project"],
+                           as_json=False, fmt="md")
+    out = cmds_mod.run(args)
+    assert out.rendered == "# md"
+    # Even the markdown path reports counts now.
+    assert out.meta()["count"] == 1
+    assert seen["relations"] == {"p1": {"title": "P", "url": "u"}}
+
+
+def test_unresolved_relation_is_labelled():
+    from h2t_ops.connectors.notion.client import NotionClient
+    c = object.__new__(NotionClient)
+    prop = {"type": "relation", "relation": [{"id": "abc"}], "has_more": False}
+    assert c._extract_property_value(prop, "relation") == "1 linked item (unresolved)"
+    resolved = {"abc": {"title": "Qatal Yiktol", "url": "https://notion.so/qy"}}
+    assert c._extract_property_value(prop, "relation", resolved) == \
+        "[Qatal Yiktol](https://notion.so/qy)"
