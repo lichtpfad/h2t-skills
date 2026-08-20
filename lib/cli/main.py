@@ -136,6 +136,28 @@ def _cmd_gather(args: argparse.Namespace) -> int:
 # ingest: gmail
 # ---------------------------------------------------------------------------
 
+def _emit_list(page: dict, limit: int | None, bare: bool) -> None:
+    """Print a list result as an envelope, or bare for legacy consumers.
+
+    The envelope exists so a caller cannot mistake a truncated page for the
+    whole set: `count` is what came back, `truncated` is the API's own flag.
+    """
+    items = page["items"]
+    if bare:
+        print(json.dumps(items, ensure_ascii=False, indent=2))
+        return
+    envelope = {
+        "items": items,
+        "count": len(items),
+        "limit": limit,
+        "truncated": bool(page.get("has_more")),
+    }
+    for key in ("estimated_total", "window", "relations"):
+        if page.get(key) is not None:
+            envelope[key] = page[key]
+    print(json.dumps(envelope, ensure_ascii=False, indent=2))
+
+
 def _add_gmail_subparser(ingest_sub: argparse.Action) -> None:
     p = ingest_sub.add_parser("gmail", help="Gmail operations")
     cmds = p.add_subparsers(dest="gmail_cmd")
@@ -146,6 +168,7 @@ def _add_gmail_subparser(ingest_sub: argparse.Action) -> None:
     lp.add_argument("--unread", action="store_true")
     lp.add_argument("--query", default=None)
     lp.add_argument("--json", dest="as_json", action="store_true")
+    lp.add_argument("--bare", action="store_true", help="emit a plain array, no envelope")
 
     # read
     rp = cmds.add_parser("read", help="Read a message")
@@ -157,6 +180,7 @@ def _add_gmail_subparser(ingest_sub: argparse.Action) -> None:
     sp.add_argument("query")
     sp.add_argument("--max", type=int, default=10)
     sp.add_argument("--json", dest="as_json", action="store_true")
+    sp.add_argument("--bare", action="store_true", help="emit a plain array, no envelope")
 
     # send
     snp = cmds.add_parser("send", help="Send a message")
@@ -199,13 +223,13 @@ def _cmd_gmail(args: argparse.Namespace) -> int:
         client = GmailClient()
 
         if cmd == "list":
-            messages = client.list_messages(
+            page = client.list_messages_page(
                 max_results=args.max, query=args.query, unread_only=args.unread
             )
             if getattr(args, "as_json", False):
-                print(json.dumps(messages, ensure_ascii=False, indent=2))
+                _emit_list(page, args.max, getattr(args, "bare", False))
             else:
-                print(format_message_list(messages))
+                print(format_message_list(page["items"]))
 
         elif cmd == "read":
             message = client.get_message(args.message_id)
@@ -215,11 +239,11 @@ def _cmd_gmail(args: argparse.Namespace) -> int:
                 print(format_message_detail(message))
 
         elif cmd == "search":
-            messages = client.search_messages(args.query, max_results=args.max)
+            page = client.list_messages_page(max_results=args.max, query=args.query)
             if getattr(args, "as_json", False):
-                print(json.dumps(messages, ensure_ascii=False, indent=2))
+                _emit_list(page, args.max, getattr(args, "bare", False))
             else:
-                print(format_message_list(messages))
+                print(format_message_list(page["items"]))
 
         elif cmd in ("send", "draft"):
             body = args.body
@@ -284,6 +308,13 @@ def _add_notion_subparser(ingest_sub: argparse.Action) -> None:
     sp.add_argument("database_id")
     sp.add_argument("--filter")
     sp.add_argument("--filter-json")
+    sp.add_argument("--bare", action="store_true", help="emit a plain array, no envelope")
+    sp.add_argument(
+        "--resolve-relations",
+        nargs="*",
+        metavar="PROP",
+        help="resolve relation properties to title+url; names limit which ones",
+    )
     sp.add_argument("--limit", type=int)
     sp.add_argument("--format", choices=["json", "markdown"], default="json")
 
@@ -356,12 +387,24 @@ def _cmd_notion(args: argparse.Namespace) -> int:
                 parts = args.filter.split("=")
                 if len(parts) == 2:
                     filter_dict = {"property": parts[0].strip(), "select": {"equals": parts[1].strip()}}
-            results = client.query_database(args.database_id, filter_dict=filter_dict, limit=args.limit)
+            page = client.query_database_page(
+                args.database_id, filter_dict=filter_dict, limit=args.limit
+            )
+            results = page["items"]
+            relations = None
+            if getattr(args, "resolve_relations", None) is not None:
+                relations = client.resolve_relations(results, args.resolve_relations or None)
             if args.format == "json":
-                print(json.dumps(results, indent=2, ensure_ascii=False))
+                if relations:
+                    page = {**page, "relations": relations}
+                _emit_list(page, args.limit, getattr(args, "bare", False))
             else:
                 db_meta = client.get_database(args.database_id)
-                print(client.database_items_to_markdown(results, db_meta))
+                print(client.database_items_to_markdown(results, db_meta, relations))
+                print(
+                    f"_{len(results)} items, truncated: "
+                    f"{str(bool(page.get('has_more'))).lower()}_"
+                )
 
         elif cmd == "create":
             content = args.content
@@ -451,14 +494,16 @@ def _add_calendar_subparser(ingest_sub: argparse.Action) -> None:
     cmds = p.add_subparsers(dest="calendar_cmd")
 
     lp = cmds.add_parser("list", help="List upcoming events")
-    lp.add_argument("--days", type=int, default=1)
+    lp.add_argument("--days", type=int, default=1, help="window of N days from local midnight")
     lp.add_argument("--max", type=int, default=20)
     lp.add_argument("--json", dest="as_json", action="store_true")
+    lp.add_argument("--bare", action="store_true", help="emit a plain array, no envelope")
 
     sp = cmds.add_parser("search", help="Search events")
     sp.add_argument("query")
     sp.add_argument("--max", type=int, default=10)
     sp.add_argument("--json", dest="as_json", action="store_true")
+    sp.add_argument("--bare", action="store_true", help="emit a plain array, no envelope")
 
     cp = cmds.add_parser("create", help="Create event")
     cp.add_argument("summary")
@@ -489,9 +534,10 @@ def _cmd_calendar(args: argparse.Namespace) -> int:
         client = CalendarClient()
 
         if cmd == "list":
-            events = client.list_events(days=args.days, max_results=args.max)
+            page = client.list_events_page(days=args.days, max_results=args.max)
+            events = page["items"]
             if getattr(args, "as_json", False):
-                print(json.dumps(events, ensure_ascii=False, indent=2))
+                _emit_list(page, args.max, getattr(args, "bare", False))
             else:
                 if not events:
                     print("No events found.")
@@ -499,14 +545,20 @@ def _cmd_calendar(args: argparse.Namespace) -> int:
                     for e in events:
                         dur = f" ({e['duration_min']}min)" if e["duration_min"] else ""
                         loc = f" @ {e['location']}" if e["location"] else ""
-                        print(f"• {e['date']} {e['time']}: **{e['summary']}**{dur}{loc}")
+                        span = (
+                            f" [день {e['day_index']} из {e['days_total']}]"
+                            if e.get("multi_day") and e.get("ongoing")
+                            else ""
+                        )
+                        print(f"• {e['date']} {e['time']}: **{e['summary']}**{dur}{loc}{span}")
                         if e["description"]:
                             print(f"  {e['description'][:80]}")
 
         elif cmd == "search":
-            events = client.search_events(args.query, max_results=args.max)
+            page = client.search_events_page(args.query, max_results=args.max)
+            events = page["items"]
             if getattr(args, "as_json", False):
-                print(json.dumps(events, ensure_ascii=False, indent=2))
+                _emit_list(page, args.max, getattr(args, "bare", False))
             else:
                 if not events:
                     print(f"No events matching '{args.query}'")
