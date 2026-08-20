@@ -35,6 +35,13 @@ def _isolated_gather_modules():
         sys.modules.update(saved)
 
 
+@pytest.fixture(autouse=True)
+def _no_host_env_leak(monkeypatch):
+    """Every host location is env-overridable now; a real one would leak into the tmp trees."""
+    for var in ("H2T_PLUGIN_ROOT", "CLAUDE_PLUGIN_ROOT", "CLAUDE_CONFIG_DIR", "CODEX_HOME"):
+        monkeypatch.delenv(var, raising=False)
+
+
 def test_plugin_script_paths_exist():
     gather_path = plugin_entrypoints.plugin_script_path("skills/session-start/scripts/gather.py")
     activity_path = plugin_entrypoints.plugin_script_path("lib/activity/writer.py")
@@ -122,8 +129,14 @@ def _make_plugin_tree(root: Path) -> Path:
     return script
 
 
-def _cache_dir(home: Path, version: str) -> Path:
-    root = home / ".claude" / "plugins" / "cache" / "lichtpfad" / "h2t-core" / version
+def _cache_dir(home: Path, version: str, marketplace: str = "lichtpfad") -> Path:
+    root = home / ".claude" / "plugins" / "cache" / marketplace / "h2t-core" / version
+    _make_plugin_tree(root)
+    return root
+
+
+def _codex_cache_dir(home: Path, version: str, marketplace: str = "lichtpfad") -> Path:
+    root = home / ".codex" / "plugins" / "cache" / marketplace / "h2t-core" / version
     _make_plugin_tree(root)
     return root
 
@@ -179,3 +192,68 @@ def test_plugin_script_path_error_names_every_candidate_tried(tmp_path, monkeypa
     message = str(excinfo.value)
     assert str(tmp_path / "absent") in message
     assert "H2T_PLUGIN_ROOT" in message  # tells the operator how to override
+
+
+def test_bundled_payload_is_the_last_resort_when_no_plugin_is_installed(tmp_path, monkeypatch):
+    """`uv tool install` on a machine with no plugin host at all: the wheel carries its own copy."""
+    monkeypatch.setattr(plugin_entrypoints, "_package_plugin_root", lambda: tmp_path / "absent")
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path / "empty-home"))
+    expected = _make_plugin_tree(tmp_path / "payload")
+    monkeypatch.setattr(plugin_entrypoints, "_bundled_payload_root", lambda: tmp_path / "payload")
+
+    assert plugin_entrypoints.plugin_script_path(HANDOFF_SCRIPT) == expected
+
+
+def test_installed_plugin_beats_the_bundled_payload(tmp_path, monkeypatch):
+    """The wheel copy is frozen at build time; an installed plugin can be newer."""
+    monkeypatch.setattr(plugin_entrypoints, "_package_plugin_root", lambda: tmp_path / "absent")
+    home = tmp_path / "home"
+    expected = _cache_dir(home, "3.2.14") / HANDOFF_SCRIPT
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
+    _make_plugin_tree(tmp_path / "payload")
+    monkeypatch.setattr(plugin_entrypoints, "_bundled_payload_root", lambda: tmp_path / "payload")
+
+    assert plugin_entrypoints.plugin_script_path(HANDOFF_SCRIPT) == expected
+
+
+def test_codex_plugin_cache_is_searched(tmp_path, monkeypatch):
+    """Codex installs into ~/.codex/plugins/cache/<marketplace>/<plugin>/<version>/."""
+    monkeypatch.setattr(plugin_entrypoints, "_package_plugin_root", lambda: tmp_path / "absent")
+    home = tmp_path / "home"
+    expected = _codex_cache_dir(home, "3.2.14") / HANDOFF_SCRIPT
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
+
+    assert plugin_entrypoints.plugin_script_path(HANDOFF_SCRIPT) == expected
+
+
+def test_cache_lookup_accepts_non_semver_version_dirs(tmp_path, monkeypatch):
+    """Codex names that dir `local` for local plugins and a content hash for curated ones."""
+    monkeypatch.setattr(plugin_entrypoints, "_package_plugin_root", lambda: tmp_path / "absent")
+    home = tmp_path / "home"
+    expected = _codex_cache_dir(home, "local") / HANDOFF_SCRIPT
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
+
+    assert plugin_entrypoints.plugin_script_path(HANDOFF_SCRIPT) == expected
+
+
+def test_cache_lookup_does_not_depend_on_the_marketplace_name(tmp_path, monkeypatch):
+    """`codex plugin marketplace add` and forks register the catalog under their own name."""
+    monkeypatch.setattr(plugin_entrypoints, "_package_plugin_root", lambda: tmp_path / "absent")
+    home = tmp_path / "home"
+    expected = _cache_dir(home, "3.2.14", marketplace="some-fork") / HANDOFF_SCRIPT
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
+
+    assert plugin_entrypoints.plugin_script_path(HANDOFF_SCRIPT) == expected
+
+
+def test_cache_lookup_honours_a_relocated_host_state_dir(tmp_path, monkeypatch):
+    """CODEX_HOME / CLAUDE_CONFIG_DIR move the whole state directory off ~."""
+    monkeypatch.setattr(plugin_entrypoints, "_package_plugin_root", lambda: tmp_path / "absent")
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path / "empty-home"))
+    relocated = tmp_path / "elsewhere" / "codex"
+    expected = _make_plugin_tree(
+        relocated / "plugins" / "cache" / "lichtpfad" / "h2t-core" / "local"
+    )
+    monkeypatch.setenv("CODEX_HOME", str(relocated))
+
+    assert plugin_entrypoints.plugin_script_path(HANDOFF_SCRIPT) == expected
