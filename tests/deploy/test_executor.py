@@ -517,17 +517,31 @@ services:
     return profiles_path, services_path
 
 
+# The stub stands in for the `gh` binary; a .cmd batch file only runs on Windows.
+_GH_STUB_NAME = "gh.cmd" if os.name == "nt" else "gh"
+
+
 def _write_gh_stub(stub_dir: Path, *, stdout_file: Path | None, log_path: Path) -> None:
     stub_dir.mkdir(parents=True, exist_ok=True)
     stdout_value = str(stdout_file) if stdout_file is not None else ""
-    script = f"""
+    if os.name == "nt":
+        script = f"""
 @echo off
 setlocal
 echo %*>>"{log_path}"
 if not "{stdout_value}"=="" type "{stdout_value}"
 exit /b 0
 """
-    (stub_dir / "gh.cmd").write_text(textwrap.dedent(script).strip() + "\n", encoding="utf-8")
+    else:
+        script = f"""
+#!/usr/bin/env bash
+echo "$@" >> "{log_path}"
+if [ -n "{stdout_value}" ]; then cat "{stdout_value}"; fi
+exit 0
+"""
+    stub = stub_dir / _GH_STUB_NAME
+    stub.write_text(textwrap.dedent(script).strip() + "\n", encoding="utf-8")
+    stub.chmod(0o755)
 
 
 def _env_with_stub_gh(
@@ -538,7 +552,7 @@ def _env_with_stub_gh(
 ) -> dict[str, str]:
     env = dict(os.environ)
     env["PATH"] = str(stub_dir) + os.pathsep + env.get("PATH", "")
-    env["H2T_DEPLOY_GH"] = str(stub_dir / "gh.cmd")
+    env["H2T_DEPLOY_GH"] = str(stub_dir / _GH_STUB_NAME)
     if stdout_file is not None:
         env["GH_STUB_STDOUT"] = str(stdout_file)
     if log_path is not None:
