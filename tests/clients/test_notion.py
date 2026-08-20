@@ -83,3 +83,68 @@ def test_blocks_to_markdown_roundtrip(client):
     blocks = client.markdown_to_blocks(md)
     result = client.blocks_to_markdown(blocks)
     assert result.strip() == md.strip()
+
+
+# --- relation resolution and page links -------------------------------------
+
+def _task(title: str, relation_id: str | None = None, url: str = "") -> dict:
+    props: dict = {
+        "Task name": {"type": "title", "title": [{"type": "text", "text": {"content": title},
+                                                  "annotations": {}, "plain_text": title}]},
+    }
+    if relation_id:
+        props["Project"] = {"type": "relation", "relation": [{"id": relation_id}], "has_more": False}
+    return {"properties": props, "url": url}
+
+
+def test_unresolved_relation_is_labelled_not_silent(client):
+    """`1 linked item` alone reads like data; it must say it is unresolved."""
+    prop = {"type": "relation", "relation": [{"id": "abc"}], "has_more": False}
+    assert client._extract_property_value(prop, "relation") == "1 linked item (unresolved)"
+
+
+def test_resolved_relation_renders_title_and_link(client):
+    prop = {"type": "relation", "relation": [{"id": "abc"}], "has_more": False}
+    resolved = {"abc": {"title": "Qatal Yiktol", "url": "https://notion.so/qy"}}
+    out = client._extract_property_value(prop, "relation", resolved)
+    assert out == "[Qatal Yiktol](https://notion.so/qy)"
+
+
+def test_markdown_includes_page_url(client):
+    md = client.database_items_to_markdown([_task("Do it", url="https://notion.so/t1")], {})
+    assert "https://notion.so/t1" in md
+
+
+def test_markdown_uses_resolved_relations(client):
+    items = [_task("Do it", relation_id="abc", url="https://notion.so/t1")]
+    resolved = {"abc": {"title": "Qatal Yiktol", "url": "https://notion.so/qy"}}
+    md = client.database_items_to_markdown(items, {}, resolved)
+    assert "[Qatal Yiktol](https://notion.so/qy)" in md
+    assert "linked item" not in md
+
+
+def test_resolve_relations_fetches_each_unique_id_once(client, monkeypatch):
+    calls = []
+
+    def fake_get_page(page_id):
+        calls.append(page_id)
+        return {
+            "url": f"https://notion.so/{page_id}",
+            "properties": {"Name": {"type": "title",
+                                    "title": [{"type": "text", "text": {"content": "P"},
+                                               "annotations": {}, "plain_text": "P"}]}},
+        }
+
+    monkeypatch.setattr(client, "get_page", fake_get_page)
+    items = [_task("a", "same"), _task("b", "same"), _task("c", "other")]
+    resolved = client.resolve_relations(items)
+    assert sorted(calls) == ["other", "same"]
+    assert resolved["same"]["title"] == "P"
+
+
+def test_resolve_relations_skips_unreachable_page(client, monkeypatch):
+    def boom(page_id):
+        raise Exception("404")
+
+    monkeypatch.setattr(client, "get_page", boom)
+    assert client.resolve_relations([_task("a", "gone")]) == {}

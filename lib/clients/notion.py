@@ -85,8 +85,25 @@ class NotionClient:
         sorts: Optional[List] = None,
         limit: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
+        return self.query_database_page(
+            database_id, filter_dict=filter_dict, sorts=sorts, limit=limit
+        )["items"]
+
+    def query_database_page(
+        self,
+        database_id: str,
+        filter_dict: Optional[Dict] = None,
+        sorts: Optional[List] = None,
+        limit: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """Same as query_database, plus whether the database had more to give.
+
+        ``has_more`` is Notion's own flag, so a page that exactly fills ``limit``
+        is still reported correctly as complete or truncated.
+        """
         try:
             results: List[Dict[str, Any]] = []
+            has_more = False
             start_cursor = None
             while True:
                 body: Dict[str, Any] = {}
@@ -107,10 +124,16 @@ class NotionClient:
                 response.raise_for_status()
                 data = response.json()
                 results.extend(data["results"])
-                if not data["has_more"] or (limit and len(results) >= limit):
+                has_more = data["has_more"]
+                if not has_more or (limit and len(results) >= limit):
                     break
                 start_cursor = data.get("next_cursor")
-            return results[:limit] if limit else results
+            items = results[:limit] if limit else results
+            return {
+                "items": items,
+                # Trimming to `limit` also truncates, even if Notion had no more.
+                "has_more": has_more or len(items) < len(results),
+            }
         except Exception as e:
             raise Exception(f"Failed to query database {database_id}: {e}") from e
 
@@ -372,7 +395,12 @@ class NotionClient:
                 i += 1
         return blocks
 
-    def _extract_property_value(self, prop_data: Dict[str, Any], prop_type: str) -> Any:
+    def _extract_property_value(
+        self,
+        prop_data: Dict[str, Any],
+        prop_type: str,
+        resolved_relations: Optional[Dict[str, Dict[str, str]]] = None,
+    ) -> Any:
         if not prop_data:
             return None
         if prop_type == "title":
@@ -408,8 +436,13 @@ class NotionClient:
             relations = prop_data.get("relation", [])
             if not relations:
                 return None
+            resolved = [resolved_relations.get(r["id"]) for r in relations] if resolved_relations else []
+            resolved = [r for r in resolved if r]
+            if resolved:
+                return ", ".join(f"[{r['title']}]({r['url']})" for r in resolved)
             suffix = "+" if prop_data.get("has_more") else ""
-            return f"{len(relations)} linked item{'s' if len(relations) != 1 else ''}{suffix}"
+            # Unresolved: say so, so a reader does not mistake it for "no project".
+            return f"{len(relations)} linked item{'s' if len(relations) != 1 else ''}{suffix} (unresolved)"
         elif prop_type == "formula":
             formula = prop_data.get("formula", {})
             ftype = formula.get("type")
@@ -435,7 +468,43 @@ class NotionClient:
             return ", ".join(f.get("name", "file") for f in files) if files else None
         return None
 
-    def database_items_to_markdown(self, items: List[Dict[str, Any]], db_metadata: Dict[str, Any]) -> str:
+    def resolve_relations(
+        self, items: List[Dict[str, Any]], prop_names: Optional[List[str]] = None
+    ) -> Dict[str, Dict[str, str]]:
+        """Map related page ids to their title and url.
+
+        One fetch per unique id, not per row. Restrict with ``prop_names`` to
+        avoid paying for relations the caller will not display.
+        """
+        ids = set()
+        for item in items:
+            for pname, pdata in item.get("properties", {}).items():
+                if pdata.get("type") != "relation":
+                    continue
+                if prop_names and pname not in prop_names:
+                    continue
+                ids.update(r["id"] for r in pdata.get("relation", []))
+
+        resolved: Dict[str, Dict[str, str]] = {}
+        for page_id in sorted(ids):
+            try:
+                page = self.get_page(page_id)
+            except Exception:
+                continue  # a deleted or unshared page must not kill the render
+            title = "(без названия)"
+            for pdata in page.get("properties", {}).values():
+                if pdata.get("type") == "title":
+                    title = self._extract_property_value(pdata, "title") or title
+                    break
+            resolved[page_id] = {"title": title, "url": page.get("url", "")}
+        return resolved
+
+    def database_items_to_markdown(
+        self,
+        items: List[Dict[str, Any]],
+        db_metadata: Dict[str, Any],
+        resolved_relations: Optional[Dict[str, Dict[str, str]]] = None,
+    ) -> str:
         if not items:
             return "_No items in database_\n"
         md = []
@@ -455,8 +524,10 @@ class NotionClient:
                 ptype = pdata.get("type")
                 if ptype == "title":
                     continue
-                val = self._extract_property_value(pdata, ptype)
+                val = self._extract_property_value(pdata, ptype, resolved_relations)
                 if val:
                     md.append(f"- **{pname}:** {val}\n")
+            if item.get("url"):
+                md.append(f"- **Link:** {item['url']}\n")
             md.append("\n")
         return "".join(md)
