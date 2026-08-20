@@ -257,3 +257,16 @@ def test_cache_lookup_honours_a_relocated_host_state_dir(tmp_path, monkeypatch):
     monkeypatch.setenv("CODEX_HOME", str(relocated))
 
     assert plugin_entrypoints.plugin_script_path(HANDOFF_SCRIPT) == expected
+
+
+def test_gather_hook_uses_strict_python_probe():
+    """gather-on-skill must reject a package-less interpreter.
+
+    Regression guard: the resolver probe used to be `import sys` (any Python
+    passes), so a ~/.h2t/venv without the h2t package was selected and the
+    downstream `-m lib.cli.main` crashed silently ("returned no output"). The
+    hook must pass the strict probe so resolution fails loud instead.
+    """
+    hook_path = Path("plugins/h2t-core/hooks-handlers/gather-on-skill")
+    text = hook_path.read_text(encoding="utf-8")
+    assert 'resolve_h2t_python "import lib.cli.main"' in text
