@@ -6,7 +6,7 @@ import subprocess
 
 _H2T_SKILLS = Path(__file__).parents[2]  # h2t-skills root (tests/docs/ -> repo root)
 _LINT = Path(__file__).parents[2] / "plugins/h2t-dev/skills/docs-lint/scripts/lint.py"
-_PYTHON = _H2T_SKILLS / ".venv/Scripts/python.exe"
+_PYTHON = Path(sys.executable)  # the interpreter running the suite, not a Windows-only venv
 
 
 def _run(args, cwd=None):
