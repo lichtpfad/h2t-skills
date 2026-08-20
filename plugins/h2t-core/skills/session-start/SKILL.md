@@ -22,8 +22,6 @@ command -v h2t-activity-log >/dev/null 2>&1 || {
   echo "ERROR: h2t-activity-log not found. Run: uv tool install --editable C:/dev/h2t-skills"
   exit 1
 }
-source "${CLAUDE_PLUGIN_ROOT}/scripts/resolve-h2t-python.sh"
-resolve_h2t_python || { echo "ERROR: no working Python found for h2t"; exit 1; }
 ```
 
 ## Pipeline
@@ -152,26 +150,3 @@ Show exactly:
 ```
 
 Fill `N` and `branch` from GATHER_RESULT.
-
-## Graph Integration
-
-### Query (optional — if work direction is unclear after briefing)
-
-```bash
-SKILL_GRAPH_DIR="${SKILL_GRAPH_DIR:-C:/dev/claude-agent-skills/lib}"
-(cd "$SKILL_GRAPH_DIR" && "${H2T_PYTHON_CMD[@]}" -m skill_graph.cli query \
-  --context "session start: unclear work direction or unfamiliar project context" \
-  --skill "session-start") 2>/dev/null || true
-```
-
-If results contain relevant patterns or lessons, apply them before proceeding.
-
-### Add Lesson (after resolving unexpected behavior in this skill)
-
-```bash
-(cd "$SKILL_GRAPH_DIR" && "${H2T_PYTHON_CMD[@]}" -m skill_graph.cli add-lesson \
-  --skill "session-start" \
-  --trigger "<what broke or caused confusion>" \
-  --resolution "<what fixed it>" \
-  --session-id "$SESSION_NAME") 2>/dev/null || true
-```

@@ -17,6 +17,10 @@ dependencies = [
   "telethon>=1.36,<1.43",
   "rapidocr-onnxruntime>=1.3.24",
   "youtube-transcript-api>=0.6",
+  # payload scripts the console entrypoints load (#357): apply_registration.py needs
+  # ruamel.yaml to keep comments in the h2t config, scan.py reads projects.yaml
+  "ruamel.yaml>=0.18",
+  "PyYAML>=6.0",
 ]
 
 [project.scripts]
@@ -24,6 +28,10 @@ h2t-ops = "h2t_ops.cli:main"
 h2t-gather = "h2t_ops.gather_entry:main"
 h2t-activity-log = "h2t_ops.activity_log_entry:main"
 h2t-handoff = "h2t_ops.handoff_entry:main"
+h2t-project-audit-scan = "h2t_ops.project_audit_scan_entry:main"
+h2t-project-audit-report = "h2t_ops.project_audit_report_entry:main"
+h2t-project-register = "h2t_ops.project_register_entry:main"
+h2t-scaffold-project = "h2t_ops.scaffold_project_entry:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["h2t_ops", "lib"]
@@ -36,6 +44,10 @@ packages = ["h2t_ops", "lib"]
 "plugins/h2t-core/lib" = "h2t_ops/_plugin_payload/lib"
 "plugins/h2t-core/skills/handoff/scripts/writer.py" = "h2t_ops/_plugin_payload/skills/handoff/scripts/writer.py"
 "plugins/h2t-core/skills/session-start/scripts/gather.py" = "h2t_ops/_plugin_payload/skills/session-start/scripts/gather.py"
+"plugins/h2t-core/skills/project-audit/scripts/scan.py" = "h2t_ops/_plugin_payload/skills/project-audit/scripts/scan.py"
+"plugins/h2t-core/skills/project-audit/scripts/report.py" = "h2t_ops/_plugin_payload/skills/project-audit/scripts/report.py"
+"plugins/h2t-core/skills/init-project/scripts/apply_registration.py" = "h2t_ops/_plugin_payload/skills/init-project/scripts/apply_registration.py"
+"plugins/h2t-core/skills/scaffold-project/scripts/scaffold_project.py" = "h2t_ops/_plugin_payload/skills/scaffold-project/scripts/scaffold_project.py"
 
 [tool.pytest.ini_options]
 pythonpath = ["."]

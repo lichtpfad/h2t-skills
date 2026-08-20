@@ -26,14 +26,9 @@ H2T_PYTHON="${H2T_PYTHON:-}"
 [ -z "$H2T_PYTHON" ] && [ -f "$HOME/.h2t/venv/Scripts/python.exe" ] && H2T_PYTHON="$HOME/.h2t/venv/Scripts/python.exe"
 [ -z "$H2T_PYTHON" ] && [ -f "$HOME/.h2t/venv/bin/python" ] && H2T_PYTHON="$HOME/.h2t/venv/bin/python"
 
-# Resolve h2t-core plugin root — $CLAUDE_PLUGIN_ROOT is not always exported to bash
-if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ]; then
-    _CORE_ROOT="$CLAUDE_PLUGIN_ROOT"
-else
-    _CORE_ROOT=$(ls -dt "$HOME/.claude/plugins/cache/lichtpfad/h2t-core"/[0-9]* 2>/dev/null | head -1)
-fi
-SCAFFOLD="$_CORE_ROOT/skills/scaffold-project/scripts/scaffold_project.py"
-APPLY_REG="$_CORE_ROOT/skills/init-project/scripts/apply_registration.py"
+for _cmd in h2t-scaffold-project h2t-project-register; do
+    command -v "$_cmd" >/dev/null 2>&1 || { echo "ERROR: $_cmd not found. Run /h2t-core:setup"; exit 1; }
+done
 CONFIG_ROOT="$HOME/.h2t/config"
 ```
 
@@ -99,7 +94,7 @@ Show detected state in one line, e.g. `Состояние: EXISTS+NO_GIT → д�
 Run (add `--merge` only if state is EXISTS+NO_GIT):
 
 ```bash
-$H2T_PYTHON "$SCAFFOLD" create \
+h2t-scaffold-project create \
   --id "{id}" --type "{type}" --stack "{stack}" \
   --dir "{base_dir}" --description "{description}" \
   [--merge]   # only if state is EXISTS+NO_GIT
@@ -135,7 +130,7 @@ If user selects "Отмена" — stop immediately. Do NOT continue to Step 4.
 Run (add `--merge` only if state is EXISTS+NO_GIT):
 
 ```bash
-$H2T_PYTHON "$SCAFFOLD" create \
+h2t-scaffold-project create \
   --id "{id}" --type "{type}" --stack "{stack}" \
   --dir "{base_dir}" --description "{description}" \
   [--merge]   # only if state is EXISTS+NO_GIT
@@ -161,7 +156,7 @@ Determine `--github` arg:
 Run:
 
 ```bash
-$H2T_PYTHON "$APPLY_REG" \
+h2t-project-register \
   --id "{id}" --domain "{domain}" --type "{reg_type}" \
   --label "{label}" --task-tracker "{tracker}" \
   --cwd "{project_path}" --config-root "$CONFIG_ROOT" \
@@ -184,7 +179,7 @@ Ask: "Создать GitHub repo `{github_slug}`? (public/private/skip)"
 If public or private:
 
 ```bash
-$H2T_PYTHON "$SCAFFOLD" github \
+h2t-scaffold-project github \
   --github "{github_slug}" \
   --description "{description}" \
   --source "{project_path}" \

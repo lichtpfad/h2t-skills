@@ -14,16 +14,13 @@ metadata:
 ## Variables
 
 ```bash
-H2T_PYTHON="${H2T_PYTHON:-}"
-if [ -z "$H2T_PYTHON" ]; then
-  [ -f "$HOME/.h2t/venv/Scripts/python.exe" ] && H2T_PYTHON="$HOME/.h2t/venv/Scripts/python.exe"
-  [ -f "$HOME/.h2t/venv/bin/python" ] && H2T_PYTHON="$HOME/.h2t/venv/bin/python"
-fi
+command -v h2t-project-audit-scan >/dev/null 2>&1 || {
+  echo "ERROR: h2t-project-audit-scan not found. Run /h2t-core:setup"
+  exit 1
+}
 
 TEMPLATES_DIR="C:/dev/h2t-landings/templates"
 PROJECTS_YAML="C:/dev/h2t-landings/projects.yaml"
-SCAN_SCRIPT="${CLAUDE_PLUGIN_ROOT}/skills/project-audit/scripts/scan.py"
-REPORT_SCRIPT="${CLAUDE_PLUGIN_ROOT}/skills/project-audit/scripts/report.py"
 ```
 
 ## Argument Parsing
@@ -49,7 +46,7 @@ Parse the user's command arguments:
 Run the scan script:
 
 ```bash
-$H2T_PYTHON "$SCAN_SCRIPT" "<repo_path>" --projects-yaml "$PROJECTS_YAML"
+h2t-project-audit-scan "<repo_path>" --projects-yaml "$PROJECTS_YAML"
 ```
 
 The script outputs JSON to stdout. Read it and present a **brief summary** to the user:
@@ -418,7 +415,7 @@ Write each file using the Write tool. For existing files (overwrite), confirm wh
 Update projects.yaml with new doc statuses:
 
 ```bash
-$H2T_PYTHON "$REPORT_SCRIPT" "{project_id}" \
+h2t-project-audit-report "{project_id}" \
   --field claude_md=true \
   --field readme=true \
   --field marketing_docs=true \
