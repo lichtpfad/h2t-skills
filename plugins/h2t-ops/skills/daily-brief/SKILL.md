@@ -1,10 +1,10 @@
 ---
 name: h2t-ops:daily-brief
 description: "Morning briefing aggregating Google Calendar, Gmail, and Notion tasks into a daily plan. Triggers: 'daily brief', 'briefing', 'утренний брифинг', 'что сегодня', 'план на день', 'h2t:daily-brief'"
-compatibility: "Requires Google OAuth + NOTION_API_TOKEN. Gmail, calendar, notion must be working."
+compatibility: "Requires the h2t-ops CLI on PATH (uv tool install), Google OAuth + NOTION_API_TOKEN."
 metadata:
   author: lichtpfad
-  version: 2.3.0
+  version: 3.0.0
 ---
 
 # Daily Brief
@@ -20,67 +20,64 @@ structured proposed captures instead of mutating stores.
 
 Эти правила важнее полноты брифинга. Нарушение = брифинг недостоверен.
 
-1. **Счётчик только из конверта.** Число активных задач и писем берётся из
-   `count` / `truncated` / `estimated_total`, никогда из длины показанного списка.
-   При `truncated: true` формулировка «показаны N из ~M», а не «всего N».
+1. **Счётчик только из футера или meta.** Каждая списочная команда заканчивается
+   строкой `[N shown — complete]` или `[N of ~M shown — MORE EXIST]`. Число брать
+   оттуда, никогда из длины показанного списка. При `MORE EXIST` формулировка
+   «показаны N из ~M», а не «всего N».
 2. **Ссылка на каждый пункт.** Событие, письмо, задача — без URL пункт не выводится.
 3. **Разделять данные и вывод.** Всё, чего нет в выдаче, помечать `(вывод)`.
    Запрещено без проверки: «ждёт вашего ответа», «не отправлено», «следующий шаг будет».
-4. **Пустое поле — не «нет».** `Project: unresolved` — это «неизвестно», а не повод
-   подставить проект из CLAUDE.md или памяти.
+4. **Пустое поле — не «нет».** `(unresolved)` у relation означает «неизвестно», а не
+   повод подставить проект из CLAUDE.md или памяти.
 5. **Не подгонять под формат.** Если свойство из Step 2 отсутствует в базе — сказать
    об этом в брифинге, а не заменять правило собственным суждением.
 
 ## Переменные
 
+`h2t-ops` ставится через `uv tool install` и лежит в PATH. Никаких путей к
+плагину и к клону репозитория: `${CLAUDE_PLUGIN_ROOT}` в bash-блок скилла
+приходит не во всех харнессах, а версионированный кэш плагина протухает.
+
 ```bash
-H2T_PYTHON="${H2T_PYTHON:-}"
-[ -z "$H2T_PYTHON" ] && [ -f "$HOME/.h2t/venv/Scripts/python.exe" ] && H2T_PYTHON="$HOME/.h2t/venv/Scripts/python.exe"
-[ -z "$H2T_PYTHON" ] && [ -f "$HOME/.h2t/venv/bin/python" ] && H2T_PYTHON="$HOME/.h2t/venv/bin/python"
-[ -z "$H2T_PYTHON" ] && echo "ERROR: h2t venv not found. Run /h2t-core:setup" && exit 1
-
-# lib/cli не поставляется ни одним плагином (см. issue #350) — ищем по кандидатам
-H2T_CLI="${H2T_CLI:-}"
-for c in \
-  "${CLAUDE_PLUGIN_ROOT}/lib/cli/main.py" \
-  "$HOME/.claude/plugins/cache/lichtpfad/h2t-core/latest/lib/cli/main.py" \
-  "$HOME/.claude/plugins/marketplaces/lichtpfad/lib/cli/main.py" ; do
-  [ -z "$H2T_CLI" ] && [ -f "$c" ] && H2T_CLI="$c"
-done
-[ -z "$H2T_CLI" ] && echo "ERROR: h2t CLI not found. See issue #350" && exit 1
-
-CLI="$H2T_PYTHON $H2T_CLI"
-COMPACT="$H2T_PYTHON ${CLAUDE_PLUGIN_ROOT}/skills/daily-brief/compact.py"
+command -v h2t-ops >/dev/null || { echo "ERROR: h2t-ops not on PATH. Run /h2t-core:setup"; exit 1; }
+PY="${H2T_PYTHON:-$HOME/.h2t/venv/bin/python}"
 TASKS_DB="beabac7bf4314952a9327759c638d89f"
+TZ_NAME="Asia/Jerusalem"
+TODAY=$("$PY" -c "from datetime import date; print(date.today())")
+PLUS2=$("$PY" -c "from datetime import date,timedelta; print(date.today()+timedelta(days=2))")
 ```
 
 ## Шаги
 
 ### Step 1: Собери данные
 
-Запусти последовательно — ошибка одного источника не блокирует остальные.
-Сырой JSON в контекст не тащить: `gmail list` отдаёт полные тела писем
-(десятки KB). Всё идёт через `compact.py`, который режет поля, строит ссылки и
-помечает обрезку.
+Ошибка одного источника не блокирует остальные.
 
 ```bash
-# События: окно --days считается от локальной полуночи, 3 суток с запасом.
-# Многодневные события приходят с ongoing / day_index / days_total
-$CLI ingest calendar list --days 3 --max 50 --json | $COMPACT calendar
+# События: явное окно календарных суток. --days считает от текущего момента и
+# теряет то, что было раньше сегодня, поэтому здесь --from/--to с таймзоной.
+h2t-ops calendar list --from "$TODAY" --to "$PLUS2" --tz "$TZ_NAME" --max 50 --json
 
-# Важные непрочитанные письма
-$CLI ingest gmail list --unread --query "is:important" --max 40 --json | $COMPACT gmail
+# Письма: --format human, а не --json. В json каждая строка тащит полное тело
+# письма (~5 KB), 40 писем это ~300 KB в контекст. human даёт ~13 KB с ID.
+h2t-ops gmail list --unread --query "is:important" --max 40 --format human
 
-# Активные задачи Notion (--format json, не --json: у notion другой флаг)
-$CLI ingest notion search $TASKS_DB \
+# Задачи: --format md отдаёт свойства, Link и резолвленный проект
+h2t-ops notion search "$TASKS_DB" \
   --filter-json '{"property":"Status","status":{"does_not_equal":"Done"}}' \
-  --limit 200 --format json --resolve-relations Project | $COMPACT notion
+  --limit 200 --format md --resolve-relations Project
 ```
 
-Каждый ответ это конверт: `items`, `count`, `truncated`, плюс `estimated_total`
-у gmail и `window` у календаря. Счётчики брать оттуда, а не из длины списка.
-`--resolve-relations Project` обязателен: без него проект задачи придёт как
-`unresolved`, и подставлять его по памяти нельзя.
+Что даёт каждая команда:
+
+| Команда | Ключевые поля |
+|---|---|
+| `calendar list` | `ongoing`, `day_index`, `days_total` у многодневных, `html_link` |
+| `gmail list` | отправитель, дата, `ID` (ссылка: `https://mail.google.com/mail/u/0/#all/<ID>`), snippet |
+| `notion search` | `Status`, `Priority`, `Due`, `Link`, `Project` со ссылкой |
+
+`--resolve-relations Project` обязателен: без него проект придёт как
+`(unresolved)`, и подставлять его по памяти нельзя.
 
 ### Step 2: Приоритизация
 
@@ -142,7 +139,7 @@ $CLI ingest notion search $TASKS_DB \
 - [Название](html_link) — время
 
 ## 📧 Gmail (показаны M из ~N важных непрочитанных)
-- [Тема](https://mail.google.com/mail/u/0/#all/<threadId>) — отправитель, дата
+- [Тема](https://mail.google.com/mail/u/0/#all/<ID>) — отправитель, дата
 
 ## ✅ Tasks (N активных)
 - [Задача](notion_url) — Status · Priority · Due · [Проект](project_url)
@@ -155,12 +152,11 @@ $CLI ingest notion search $TASKS_DB \
 ### LOW
 ```
 
-Счётчики брать из `count` / `truncated` / `estimated_total` конверта, а не из
-длины показанного списка. Если `truncated: true` — писать «показаны N из ~M».
-
 ## Обработка ошибок
 
-- **CLI не найден**: см. issue #350, `lib/cli` не входит ни в один плагин
+- **`h2t-ops` не найден**: `/h2t-core:setup`, затем
+  `python scripts/setup_h2t.py install-h2t-ops --source main --json`
 - **Calendar/Gmail**: проверь токены — `~/.config/google-calendar-mcp/tokens.json`
 - **Notion**: проверь `NOTION_API_TOKEN` в `~/.dor/secrets.env`
+- Диагностика разом: `h2t-ops doctor`
 - Если источник недоступен — пропусти его и укажи в брифинге `⚠️ <source> unavailable`
