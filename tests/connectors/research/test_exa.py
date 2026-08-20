@@ -4,9 +4,7 @@ from __future__ import annotations
 import io
 import inspect
 import json
-import tomllib
 import urllib.error
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -461,14 +459,6 @@ def test_search_with_retry_signature_keyword_only():
 def test_split_csv():
     assert exa._split_csv(None) is None
     assert exa._split_csv("alpha, beta,,gamma ") == ["alpha", "beta", "gamma"]
-
-
-def test_pyproject_includes_research_systemprompt_package_data():
-    pyproject = Path(__file__).resolve().parents[3] / "pyproject.toml"
-    data = tomllib.loads(pyproject.read_text(encoding="utf-8"))
-
-    package_data = data["tool"]["setuptools"]["package-data"]
-    assert "systemprompts/*.md" in package_data["h2t_ops.connectors.research"]
 
 
 def test_build_envelope_ok_shape():

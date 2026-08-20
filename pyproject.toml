@@ -1,6 +1,6 @@
 [build-system]
-requires = ["setuptools>=70"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
 
 [project]
 name = "h2t-ops"
@@ -25,12 +25,17 @@ h2t-gather = "h2t_ops.gather_entry:main"
 h2t-activity-log = "h2t_ops.activity_log_entry:main"
 h2t-handoff = "h2t_ops.handoff_entry:main"
 
-[tool.setuptools.packages.find]
-where = ["."]
-include = ["h2t_ops*", "lib*"]
+[tool.hatch.build.targets.wheel]
+packages = ["h2t_ops", "lib"]
 
-[tool.setuptools.package-data]
-"h2t_ops.connectors.research" = ["systemprompts/*.md"]
+# The three thin entrypoints load plugin-owned scripts. Ship them inside the wheel so
+# `uv tool install` alone is enough on a host with no plugin cache — Codex-only
+# machines, CI, bare servers. plugin_entrypoints prefers an installed plugin over this
+# copy; it is the last resort, not the default.
+[tool.hatch.build.targets.wheel.force-include]
+"plugins/h2t-core/lib" = "h2t_ops/_plugin_payload/lib"
+"plugins/h2t-core/skills/handoff/scripts/writer.py" = "h2t_ops/_plugin_payload/skills/handoff/scripts/writer.py"
+"plugins/h2t-core/skills/session-start/scripts/gather.py" = "h2t_ops/_plugin_payload/skills/session-start/scripts/gather.py"
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
