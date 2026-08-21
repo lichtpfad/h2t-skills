@@ -5,6 +5,7 @@ differ per the connector standard (spec §10).
 """
 from __future__ import annotations
 
+from datetime import datetime
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -535,45 +536,99 @@ def test_init_with_missing_google_libs_raises_configerror(monkeypatch):
         CalendarClient()
 
 
-# --- span fields: multi-day / ongoing (#351) --------------------------------
+# --- span fields: multi-day / ongoing (#351, #359) --------------------------
 
-def _span(client_obj, start, end, today, *, all_day=True):
+def _span(client_obj, start, end, now, *, all_day=True, tz=None):
     key = "date" if all_day else "dateTime"
     ev = {"id": "e", "summary": "Trip",
           "start": {key: start}, "end": {key: end}}
-    return client_obj._normalize_event(ev, today=today)
+    return client_obj._normalize_event(ev, now=now, tz=tz)
 
 
-def test_all_day_multi_day_ongoing(client_obj_factory=None):
-    from datetime import date
+def _client():
     from h2t_ops.connectors.calendar.client import CalendarClient
-    c = object.__new__(CalendarClient)
-    r = _span(c, "2026-08-18", "2026-08-26", date(2026, 8, 20))
+    return object.__new__(CalendarClient)
+
+
+def _at(iso: str) -> datetime:
+    """A tz-aware instant; every `ongoing` question is a question about an instant."""
+    return datetime.fromisoformat(iso)
+
+
+def test_all_day_multi_day_ongoing():
+    r = _span(_client(), "2026-08-18", "2026-08-26", _at("2026-08-20T09:00:00+03:00"))
     assert (r["multi_day"], r["days_total"], r["ongoing"], r["day_index"]) == (True, 8, True, 3)
 
 
 def test_all_day_end_is_exclusive_last_day_and_after():
-    from datetime import date
-    from h2t_ops.connectors.calendar.client import CalendarClient
-    c = object.__new__(CalendarClient)
-    last = _span(c, "2026-08-18", "2026-08-26", date(2026, 8, 25))
+    c = _client()
+    last = _span(c, "2026-08-18", "2026-08-26", _at("2026-08-25T23:00:00+03:00"))
     assert last["ongoing"] is True and last["day_index"] == 8
-    after = _span(c, "2026-08-18", "2026-08-26", date(2026, 8, 26))
+    after = _span(c, "2026-08-18", "2026-08-26", _at("2026-08-26T00:30:00+03:00"))
     assert after["ongoing"] is False and after["day_index"] is None
 
 
-def test_single_all_day_is_not_multi_day():
-    from datetime import date
-    from h2t_ops.connectors.calendar.client import CalendarClient
-    c = object.__new__(CalendarClient)
-    r = _span(c, "2026-08-20", "2026-08-21", date(2026, 8, 20))
-    assert r["multi_day"] is False and r["days_total"] == 1 and r["ongoing"] is True
+def test_single_all_day_stays_ongoing_all_day():
+    """A birthday has no clock; for all-day rows the day *is* the span."""
+    r = _span(_client(), "2026-08-20", "2026-08-21", _at("2026-08-20T21:00:00+03:00"))
+    assert r["multi_day"] is False and r["days_total"] == 1
+    assert r["ongoing"] is True and r["day_index"] == 1
 
 
-def test_timed_event_span():
-    from datetime import date
+def test_timed_event_is_not_ongoing_before_it_starts():
+    """The #359 regression: a 13:00 meeting was 'ongoing' at 09:00."""
+    r = _span(_client(), "2026-04-06T13:00:00+03:00", "2026-04-06T14:00:00+03:00",
+              _at("2026-04-06T09:00:00+03:00"), all_day=False)
+    assert r["ongoing"] is False
+    assert r["day_index"] == 1  # it still falls on today
+
+
+def test_timed_event_is_ongoing_while_it_runs():
+    r = _span(_client(), "2026-04-06T13:00:00+03:00", "2026-04-06T14:00:00+03:00",
+              _at("2026-04-06T13:30:00+03:00"), all_day=False)
+    assert r["ongoing"] is True and r["all_day"] is False and r["multi_day"] is False
+
+
+def test_timed_event_is_not_ongoing_after_it_ends():
+    r = _span(_client(), "2026-04-06T13:00:00+03:00", "2026-04-06T14:00:00+03:00",
+              _at("2026-04-06T20:00:00+03:00"), all_day=False)
+    assert r["ongoing"] is False
+
+
+def test_timed_event_end_is_exclusive():
+    """At exactly 14:00 the meeting is over, not running."""
+    r = _span(_client(), "2026-04-06T13:00:00+03:00", "2026-04-06T14:00:00+03:00",
+              _at("2026-04-06T14:00:00+03:00"), all_day=False)
+    assert r["ongoing"] is False
+
+
+def test_timed_event_ongoing_is_judged_in_the_requested_timezone():
+    """09:00 in Jerusalem is 08:00 in Berlin — the requested tz decides."""
+    ev_start, ev_end = "2026-04-06T09:30:00+03:00", "2026-04-06T10:30:00+03:00"
+    c = _client()
+    berlin = c._normalize_event(
+        {"id": "e", "start": {"dateTime": ev_start}, "end": {"dateTime": ev_end}},
+        now=_at("2026-04-06T09:00:00+02:00"), tz="Europe/Berlin",
+    )
+    assert berlin["ongoing"] is True  # 09:00 Berlin == 10:00 Jerusalem, mid-meeting
+
+
+def test_span_survives_a_naive_now():
+    """A caller that forgets tzinfo must not raise; the event's offset is assumed."""
+    r = _span(_client(), "2026-04-06T13:00:00+03:00", "2026-04-06T14:00:00+03:00",
+              datetime(2026, 4, 6, 13, 30), all_day=False)
+    assert r["ongoing"] is True
+
+
+def test_unparseable_times_fall_back_to_the_date_span():
+    """A valid date with a broken clock part degrades to the old date answer.
+
+    Exercised on _event_span directly: _normalize_event parses the same timestamps
+    for `duration_min` and would raise before the span is ever derived.
+    """
     from h2t_ops.connectors.calendar.client import CalendarClient
-    c = object.__new__(CalendarClient)
-    r = _span(c, "2026-04-06T14:00:00+03:00", "2026-04-06T15:00:00+03:00",
-              date(2026, 4, 6), all_day=False)
-    assert r["all_day"] is False and r["multi_day"] is False and r["ongoing"] is True
+    r = CalendarClient._event_span(
+        "2026-04-06T13:00:00+03:00", "2026-04-06T99:99:99", False,
+        _at("2026-04-06T09:00:00+03:00"),
+    )
+    assert r["ongoing"] is True and r["days_total"] == 1

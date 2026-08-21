@@ -5,6 +5,7 @@ import uuid
 from datetime import date as date_cls
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from h2t_ops.core.errors import (
     AuthError, H2TError, NetworkError, NotFoundError, ProviderError, UsageError,
@@ -16,6 +17,32 @@ from h2t_ops.core.google_auth import (
 
 CALENDAR_SCOPES = ["https://www.googleapis.com/auth/calendar"]
 _CALENDAR_LIST_HINT = "Run `h2t-ops calendar calendars --json` to inspect calendar ids and access roles."
+
+
+def _now_in(tz: Optional[str]) -> datetime:
+    """Current instant in the requested timezone; local time when it is unusable."""
+    if tz:
+        try:
+            return datetime.now(ZoneInfo(tz))
+        except (ZoneInfoNotFoundError, ValueError):
+            pass
+    return datetime.now().astimezone()
+
+
+def _is_running(start: str, end: str, now: datetime, fallback: bool) -> bool:
+    """True while ``now`` is inside [start, end) — the end instant is already over.
+
+    Falls back to the date-level answer when the timestamps do not parse, so a
+    malformed payload degrades to the old behaviour instead of raising.
+    """
+    try:
+        start_dt = datetime.fromisoformat(start.replace("Z", "+00:00"))
+        end_dt = datetime.fromisoformat(end.replace("Z", "+00:00"))
+    except ValueError:
+        return fallback
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=start_dt.tzinfo)
+    return start_dt <= now < end_dt
 
 
 def _map_http_error(e: Exception, *, op: str, hint: str | None = None):
@@ -114,7 +141,7 @@ class CalendarClient:
         if busy_only:
             items = [it for it in items if it.get("transparency") != "transparent"]
         return {
-            "items": [self._normalize_event(it, calendar_id=calendar_id) for it in items],
+            "items": [self._normalize_event(it, calendar_id=calendar_id, tz=tz) for it in items],
             "truncated": bool(res.get("nextPageToken")),
             "window": {"from": time_min, "to": time_max},
         }
@@ -429,7 +456,8 @@ class CalendarClient:
         event: Dict[str, Any],
         *,
         calendar_id: str = "primary",
-        today: Optional[date_cls] = None,
+        now: Optional[datetime] = None,
+        tz: Optional[str] = None,
     ) -> Dict[str, Any]:
         start_obj = event.get("start", {})
         end_obj = event.get("end", {})
@@ -460,7 +488,7 @@ class CalendarClient:
                     meet_link = entry.get("uri", "")
                     break
         meet_status = status or ("success" if meet_link else "none")
-        span = self._event_span(start, end, all_day, today)
+        span = self._event_span(start, end, all_day, now, tz)
 
         return {
             "kind": "calendar_event/v1",
@@ -486,13 +514,23 @@ class CalendarClient:
 
     @staticmethod
     def _event_span(
-        start: str, end: str, all_day: bool, today: Optional[date_cls] = None
+        start: str,
+        end: str,
+        all_day: bool,
+        now: Optional[datetime] = None,
+        tz: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Derive multi-day / ongoing facts from a start-end pair.
 
         Without these a running multi-day event is indistinguishable from a
         past single-day one, because rows are keyed on the start date (#351).
-        ``today`` is injectable to keep the derivation testable.
+
+        ``ongoing`` answers "is this running *now*", so a timed event is judged
+        against the clock, not the date (#359): a 13:00 meeting is not ongoing at
+        09:00. All-day rows have no clock — for them the day is the span, which is
+        why a birthday stays ongoing until midnight. ``day_index`` is a different
+        question ("which day of this event is today"), so it survives an event that
+        has not started yet. ``now`` is injectable to keep the derivation testable.
         """
         blank = {"multi_day": False, "days_total": None,
                  "ongoing": None, "day_index": None}
@@ -507,13 +545,15 @@ class CalendarClient:
             # All-day end dates are exclusive: 18 -> 26 means the 25th is last.
             last -= timedelta(days=1)
         days_total = max((last - first).days + 1, 1)
-        today = today or date_cls.today()
-        ongoing = first <= today <= last
+        now = now or _now_in(tz)
+        today = now.date()
+        spans_today = first <= today <= last
+        ongoing = spans_today if all_day else _is_running(start, end, now, spans_today)
         return {
             "multi_day": days_total > 1,
             "days_total": days_total,
             "ongoing": ongoing,
-            "day_index": (today - first).days + 1 if ongoing else None,
+            "day_index": (today - first).days + 1 if spans_today else None,
         }
 
     def _event_time_body(

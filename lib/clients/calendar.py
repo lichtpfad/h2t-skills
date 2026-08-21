@@ -165,18 +165,24 @@ class CalendarClient:
     # --- Helpers ---
 
     def _normalize_event(
-        self, event: Dict[str, Any], today: Optional[date] = None
+        self, event: Dict[str, Any], now: Optional[datetime] = None
     ) -> Dict[str, Any]:
         """Normalize a raw Calendar API event to a flat dict.
 
         Carries the raw ``start``/``end`` plus derived span fields, so a running
-        multi-day event is not mistaken for a past single-day one. ``today`` is
-        injectable to keep the derivation testable.
+        multi-day event is not mistaken for a past single-day one.
+
+        ``ongoing`` answers "is this running *now*", so a timed event is judged
+        against the clock, not the date (#359). All-day rows have no clock — for
+        them the day is the span. ``day_index`` answers a different question
+        ("which day of this event is today"), so it survives an event that has not
+        started yet. ``now`` is injectable to keep the derivation testable.
         """
         start = event["start"].get("dateTime", event["start"].get("date"))
         end = event["end"].get("dateTime", event["end"].get("date"))
         all_day = "T" not in start
-        today = today or date.today()
+        now = now or datetime.now().astimezone()
+        today = now.date()
 
         if all_day:
             time_str = "весь день"
@@ -195,7 +201,13 @@ class CalendarClient:
             last = end_dt.date()
 
         days_total = max((last - first).days + 1, 1)
-        ongoing = first <= today <= last
+        spans_today = first <= today <= last
+        if all_day:
+            ongoing = spans_today
+        else:
+            # A caller that forgets tzinfo gets the event's own offset assumed.
+            ref = now if now.tzinfo else now.replace(tzinfo=start_dt.tzinfo)
+            ongoing = start_dt <= ref < end_dt  # the end instant is already over
 
         return {
             "id": event.get("id", ""),
@@ -212,5 +224,5 @@ class CalendarClient:
             "multi_day": days_total > 1,
             "days_total": days_total,
             "ongoing": ongoing,
-            "day_index": (today - first).days + 1 if ongoing else None,
+            "day_index": (today - first).days + 1 if spans_today else None,
         }
