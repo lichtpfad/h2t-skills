@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """Detect project type, domain, tracker for init-project skill.
 
-Usage: $H2T_PYTHON detect_project.py --cwd <path>
-Outputs JSON to stdout.
+Usage: $H2T_PYTHON detect_project.py --cwd <path> [--config-root <path>]
+Outputs JSON to stdout. Config root: --config-root, else $H2T_CONFIG_ROOT, else ~/.h2t/config.
 """
 import argparse
 import io
 import json
+import os
 import re
 import subprocess
 import sys
@@ -251,9 +252,19 @@ def _is_workspace(cwd: Path, mapping_data: dict) -> bool:
     return child_count >= 3  # arbitrary threshold: 3+ known children = workspace
 
 
-def detect_project(cwd: str) -> dict:
+def _resolve_config_root(config_root: str | None = None) -> Path:
+    """Same precedence as gather's identify_project: explicit, env, default."""
+    if config_root:
+        return Path(config_root).expanduser()
+    env = os.environ.get("H2T_CONFIG_ROOT")
+    if env:
+        return Path(env).expanduser()
+    return Path.home() / ".h2t" / "config"
+
+
+def detect_project(cwd: str, config_root: str | None = None) -> dict:
     """Main detection entry point. Returns full result dict."""
-    config_root = Path.home() / ".h2t" / "config"
+    config_root = _resolve_config_root(config_root)
     mapping_data = _load_yaml(config_root / "repo-mapping.yaml")
     domains_data = _load_yaml(config_root / "domains.yaml")
 
@@ -340,9 +351,10 @@ def detect_project(cwd: str) -> dict:
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--cwd", default=".")
+    parser.add_argument("--config-root", default=None)
     args = parser.parse_args()
 
-    result = detect_project(args.cwd)
+    result = detect_project(args.cwd, args.config_root)
     # UTF-8 output on Windows (avoid cp1252 encoding errors)
     out = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", newline="")
     json.dump(result, out, ensure_ascii=False, indent=2)

@@ -36,6 +36,7 @@ def apply_registration(
     stack: str | None = None,
     cwd: str | None = None,
     config_root: str | None = None,
+    description: str = "",
 ) -> dict:
     """Register project in repo-mapping.yaml and domains.yaml.
 
@@ -105,12 +106,15 @@ def apply_registration(
     if existing:
         # Update existing entry
         existing["label"] = label
+        # Only fill a blank one: a description written by hand outranks a re-registration.
+        if description and not existing.get("description"):
+            existing["description"] = description
         if task_tracker != "none":
             existing["task_tracker"] = task_tracker
         actions.append(f"Updated {project_id} in domains.yaml under {domain}")
     else:
         # Add new entry
-        new_entry = {"id": project_id, "label": label, "description": ""}
+        new_entry = {"id": project_id, "label": label, "description": description}
         if task_tracker != "none":
             new_entry["task_tracker"] = task_tracker
         domain_data["projects"].append(new_entry)
@@ -149,6 +153,10 @@ def main():
     parser.add_argument("--stack", default=None)
     parser.add_argument("--cwd", default=None)
     parser.add_argument("--config-root", default=None)
+    parser.add_argument(
+        "--description", default="",
+        help="one-line summary; feeds LLM task classification in domains.yaml",
+    )
     args = parser.parse_args()
 
     result = apply_registration(
@@ -161,6 +169,7 @@ def main():
         stack=args.stack,
         cwd=args.cwd,
         config_root=args.config_root,
+        description=args.description,
     )
 
     json.dump(result, sys.stdout, ensure_ascii=False, indent=2)
