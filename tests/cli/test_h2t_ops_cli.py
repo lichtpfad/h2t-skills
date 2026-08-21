@@ -40,3 +40,23 @@ def test_top_level_deploy_routes_to_deploy_dispatcher(monkeypatch):
 
     assert dispatch(["deploy", "list"]) == 17
     assert calls == [["list"]]
+
+
+def test_retired_ingest_source_names_the_connector_to_use(capsys):
+    """lib/clients is gone (#356); the three live shims are handled before this."""
+    from h2t_ops.cli import dispatch
+
+    rc = dispatch(["ingest", "trello", "list"])
+    assert rc != 0
+    assert "h2t-ops gmail list" in capsys.readouterr().err
+
+
+def test_live_ingest_shims_still_reach_a_connector(monkeypatch):
+    """The compatibility layer must outlive the implementation it replaced."""
+    import h2t_ops.cli as cli
+
+    seen = []
+    monkeypatch.setattr(cli, "_run_connector", lambda argv: seen.append(argv) or 0)
+    for source in ("gmail", "notion", "calendar"):
+        assert cli.dispatch(["ingest", source, "list", "--json"]) == 0
+    assert [a[0] for a in seen] == ["gmail", "notion", "calendar"]
