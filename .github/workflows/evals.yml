@@ -31,6 +31,12 @@ jobs:
       - name: Run autonomous-run skill tests
         run: python -m pytest plugins/h2t-core/skills/autonomous-run/scripts -q
 
+      - name: Run init-project skill tests
+        # Outside CI these rotted into Windows-only assumptions — a literal "E:/DROPBOX/..."
+        # cwd wrote a stray tree into the repo on POSIX, and "/some/path" hit the read-only
+        # root (#378, same family as #355).
+        run: python -m pytest plugins/h2t-core/skills/init-project/scripts -q
+
   eval-gate:
     name: h2t-evals validate-repo
     runs-on: ubuntu-latest
