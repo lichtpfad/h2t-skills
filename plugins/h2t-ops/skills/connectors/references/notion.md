@@ -16,6 +16,11 @@
 | sync page to markdown | `h2t-ops notion sync PAGE_ID ./notion-page.md --json` |
 | create typed database | `h2t-ops notion create-database PARENT_PAGE_ID --title "Partners" --properties-file schema.json --json` |
 | add/rename/remove columns | `h2t-ops notion patch-db-schema DB_ID --properties-file schema.json --json` |
+| list views of a database | `h2t-ops notion views list --database-id DB_ID --json` |
+| read one view (sorts, columns) | `h2t-ops notion views get VIEW_ID --json` |
+| set sorting / column layout | `h2t-ops notion views patch VIEW_ID --spec-file spec.json --json` |
+| create a view | `h2t-ops notion views create --data-source-id DS_ID --spec-file spec.json --json` |
+| delete a view | `h2t-ops notion views delete VIEW_ID --confirm-name "Board" --json` |
 | create database row | `h2t-ops notion create-db-item DB_ID --title "Task" --json` |
 | update database row properties | `h2t-ops notion update-db-item PAGE_ID --property-json '{"Status":{"select":{"name":"Done"}}}' --json` |
 | archive page (safe, title-verified) | `h2t-ops notion archive PAGE_ID --confirm-title "Exact Title" --json` |
@@ -124,3 +129,39 @@ Replace-content (requires exact title confirmation):
 ```bash
 h2t-ops notion replace-content <page_id> --content-file ./new-content.md --confirm-title "h2t-e2e-updated" --json
 ```
+
+## Views (API `2025-09-03`)
+
+Views carry `sorts`, `filter`, `quick_filters` and `configuration` — column order,
+visibility, width, `group_by`, `frozen_column_index`. Before these commands the only
+way to touch them was by hand in the UI.
+
+Three things that cost time when you meet them for the first time:
+
+1. **`views list` returns stubs.** Rows are `{"object": "view", "id": ...}` and nothing
+   else — no name, no type. Everything else comes from `views get`.
+
+2. **Property *names* work where an id is expected.** In `sorts[].property` and
+   `configuration.properties[].property_id` Notion resolves a name itself. This is what
+   makes one spec portable across copies of a database: the copies have different
+   property ids but the same column names.
+
+   ```json
+   {"sorts": [{"property": "Position", "direction": "ascending"}],
+    "configuration": {"type": "table",
+                      "properties": [{"property_id": "title", "visible": true, "width": 230},
+                                     {"property_id": "Position", "visible": false}]}}
+   ```
+
+3. **The same property id comes back in two encodings.** `/data_sources/{id}` returns it
+   percent-encoded (`f%3Drx`); `/views/{id}` returns it decoded (`f=rx`). Comparing them
+   directly does not raise — both are valid strings — it just quietly never matches, and
+   the symptom reads as "no such column" rather than "the comparison is broken". If you
+   diff a view against a schema, unquote once at the boundary, not at each use.
+
+`patch` and `create` send the spec file verbatim: the payload shape is Notion's, not
+ours. `delete` requires `--confirm-name` matching the view's actual name, like
+`archive` does for pages.
+
+Reference implementation of a full declarative sync (spec by names, dry-run diff,
+idempotent): `lichtpfad/h2t-business@a2c1af8` — `scripts/notion_sync_course_views.py`.

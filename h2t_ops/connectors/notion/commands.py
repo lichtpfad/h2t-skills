@@ -112,6 +112,28 @@ def register(subparsers: Any) -> None:
                     help="Target a specific data source (default: the DB's first)")
     add_fmt(ps)
 
+    v = cmds.add_parser("views", help="Database views: sorts, filter, column layout")
+    vsub = v.add_subparsers(dest="views_cmd")
+    vl = vsub.add_parser("list", help="List views (rows are id-only stubs; details via get)")
+    vl.add_argument("--database-id"); vl.add_argument("--data-source-id")
+    vl.add_argument("--limit", type=int); add_fmt(vl)
+    vg = vsub.add_parser("get", help="Read one view: sorts, filter, configuration")
+    vg.add_argument("view_id"); add_fmt(vg)
+    vp = vsub.add_parser("patch", help="Update a view from a spec file (provider write)")
+    vp.add_argument("view_id")
+    vp.add_argument("--spec-file", required=True,
+                    help="JSON body: sorts / filter / configuration. Property NAMES work.")
+    add_fmt(vp)
+    vc = vsub.add_parser("create", help="Create a view from a spec file (provider write)")
+    vc.add_argument("--database-id"); vc.add_argument("--data-source-id")
+    vc.add_argument("--spec-file", required=True)
+    add_fmt(vc)
+    vd = vsub.add_parser("delete", help="Delete a view (requires name confirmation)")
+    vd.add_argument("view_id")
+    vd.add_argument("--confirm-name", required=True,
+                    help="Exact view name — must match before the delete")
+    add_fmt(vd)
+
     ar = cmds.add_parser("archive", help="Archive a page (requires title confirmation)")
     ar.add_argument("page_id")
     ar.add_argument("--confirm-title", required=True,
@@ -218,6 +240,38 @@ def run(args) -> Any:
             return _paged(page, args)
         return _paged(page, args, None, client.database_items_to_markdown(
             page["items"], client.get_database(args.database_id)))
+    if cmd == "views":
+        import json as _json
+        sub = getattr(args, "views_cmd", None)
+        if not sub:
+            raise UsageError("notion views: pick a subcommand (list, get, patch, create, delete)")
+
+        def _spec():
+            try:
+                return _json.loads(_read_file(args.spec_file))
+            except ValueError as e:
+                raise UsageError(f"--spec-file is not valid JSON: {args.spec_file}") from e
+
+        if sub == "list":
+            page = client.list_views(
+                database_id=getattr(args, "database_id", None),
+                data_source_id=getattr(args, "data_source_id", None),
+                limit=getattr(args, "limit", None),
+            )
+            return _paged(page, args)
+        if sub == "get":
+            return client.get_view(args.view_id)
+        if sub == "patch":
+            return client.patch_view(args.view_id, _spec())
+        if sub == "create":
+            return client.create_view(
+                _spec(),
+                database_id=getattr(args, "database_id", None),
+                data_source_id=getattr(args, "data_source_id", None),
+            )
+        if sub == "delete":
+            return client.delete_view(args.view_id, confirm_name=args.confirm_name)
+        raise UsageError(f"notion views: unknown subcommand {sub!r}")
     if cmd == "comments":
         return client.list_comments(args.page_id)
     if cmd == "comment":
