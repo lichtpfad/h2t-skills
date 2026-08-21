@@ -3,8 +3,9 @@ name: h2t-evals gate
 on:
   push:
     branches: [main]
+  # No `branches:` filter here on purpose: it matches the PR *base*, so a stacked PR
+  # whose base is another feature branch would get no gate at all until retargeted.
   pull_request:
-    branches: [main]
 
 jobs:
   unit-tests:
