@@ -13,7 +13,7 @@ from h2t_ops.core.errors import ConfigError
 def test_resolve_notion_token_reads_secrets_env(tmp_path, monkeypatch):
     """Audit #144: when NOTION_API_TOKEN lives in a secrets.env file and no
     other source is present, resolve_notion_token() must find it (parity with
-    legacy lib/clients/notion.py's import-time load_dotenv).
+    the import-time load_dotenv in lib/clients/notion.py, retired in #356).
 
     NOTE: load_secrets() mutates os.environ directly (not via monkeypatch), so
     we must clean NOTION_API_TOKEN explicitly to avoid leaking it into sibling

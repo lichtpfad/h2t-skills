@@ -1,7 +1,7 @@
 """Tests for h2t_ops.connectors.calendar.client.CalendarClient.
 
-API logic mirrors lib/clients/calendar.py; only side effects and error types
-differ per the connector standard (spec §10).
+The only CalendarClient there is: lib/clients/calendar.py, which this once
+mirrored, was retired in #356.
 """
 from __future__ import annotations
 
