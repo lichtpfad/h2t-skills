@@ -11,11 +11,16 @@ VENDORED_PACKAGES = ["eval", "gather", "activity"]
 
 
 def _vendored_modules(package: str) -> list[str]:
-    """Non-test modules the plugin ships for this package."""
+    """Non-test modules the plugin ships for this package, subpackages included.
+
+    rglob, not glob: a nested package added to the vendored copy would otherwise never be
+    compared. Test files are excluded because the two copies legitimately carry different
+    ones — root has eight for gather/, the plugin ships two.
+    """
     directory = VENDORED_LIB / package
     return sorted(
-        path.name
-        for path in directory.glob("*.py")
+        str(path.relative_to(directory))
+        for path in directory.rglob("*.py")
         if not path.name.startswith("test_")
     )
 

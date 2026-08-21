@@ -6,6 +6,7 @@ Outputs JSON to stdout.
 """
 import argparse
 import json
+import os
 import shutil
 import sys
 from pathlib import Path
@@ -26,6 +27,20 @@ def _backup(path: Path) -> None:
         shutil.copy2(path, path.with_suffix(path.suffix + ".bak"))
 
 
+def _resolve_config_root(config_root: str | None = None) -> Path:
+    """Explicit, then H2T_CONFIG_ROOT, then default — as detect_project.py resolves it.
+
+    Detection and registration must land on the same config or a relocated one silently
+    splits them.
+    """
+    if config_root:
+        return Path(config_root).expanduser()
+    env = os.environ.get("H2T_CONFIG_ROOT")
+    if env:
+        return Path(env).expanduser()
+    return Path.home() / ".h2t" / "config"
+
+
 def apply_registration(
     project_id: str,
     domain: str,
@@ -42,7 +57,7 @@ def apply_registration(
 
     Returns result dict with status and actions list.
     """
-    root = Path(config_root) if config_root else Path.home() / ".h2t" / "config"
+    root = _resolve_config_root(config_root)
     mapping_path = root / "repo-mapping.yaml"
     domains_path = root / "domains.yaml"
 

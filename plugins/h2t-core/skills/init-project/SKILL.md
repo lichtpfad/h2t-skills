@@ -58,7 +58,7 @@ h2t-project-register \
   --id "{id}" --domain "{domain}" --type "{type}" \
   --label "{label}" --task-tracker "{tracker}" \
   --description "{description}" \
-  --cwd "$(pwd)" --config-root "$HOME/.h2t/config" \
+  --cwd "$(pwd)" --config-root "${H2T_CONFIG_ROOT:-$HOME/.h2t/config}" \
   [--github "{github}"]
 ```
 
