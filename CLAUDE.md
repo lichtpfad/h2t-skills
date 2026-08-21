@@ -3,7 +3,7 @@
 This repo is a Claude Code plugin pack. It contains:
 - `plugins/h2t-*` — plugin source directories (skills, hooks, agents)
 - `h2t_ops/` — Python package for operational connectors (Notion, Gmail, Calendar, etc.)
-- `lib/` — shared utilities (activity, gather, skill_graph, clients)
+- `lib/` — shared utilities (activity, cli, eval, gather, practice_harvest)
 - `scripts/` — bump_plugin.py, claude-dev.ps1, hooks/
 
 The baseline plan for operational connector work is
