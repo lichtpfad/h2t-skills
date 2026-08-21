@@ -1,5 +1,19 @@
 # h2t-core Changelog
 
+## 3.2.19 — 2026-08-22
+
+- session-start/handoff context injection works again. The hook ran `-m lib.cli.main`
+  and cd'd into the plugin root, whose vendored `lib/` has no `cli` package and shadows
+  an installed one — so it returned GATHER_ERROR on every interpreter, in every layout,
+  since 2026-04-25. It now runs the plugin's own `gather.py --briefing-only`.
+- init-project receives the `INIT_DATA` its SKILL.md documents; nothing produced it before.
+- The hook keeps stdout, stderr and exit code apart, so a crashed script can no longer
+  pass a half-written payload off as a briefing, and its dedup lock is per directory and
+  records a success rather than an attempt.
+- `detect_project.py` and `apply_registration.py` both honour `--config-root` and
+  `H2T_CONFIG_ROOT`; registration takes `--description` and fills a blank field only.
+- `lib/gather` is identical to the root copy again, guarded by a parity test.
+
 ## 3.2.13 — 2026-07-11
 
 - eval fallback: `H2T_EVALS_MODE` (auto/off/local/push, default auto); off-by-default

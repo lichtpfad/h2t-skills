@@ -171,3 +171,102 @@ def test_detect_honours_config_root_env(hook_env, fixture_config, tmp_path):
 
     assert result.returncode == 0, result.stderr
     assert json.loads(result.stdout)["already_registered"] is True
+
+
+def _fake_script(path, *, stdout="", stderr="", rc=0):
+    path.write_text(
+        "import sys\n"
+        f"sys.stdout.write({stdout!r})\n"
+        f"sys.stderr.write({stderr!r})\n"
+        f"sys.exit({rc})\n",
+        encoding="utf-8",
+    )
+    return path
+
+
+@pytest.fixture
+def fake_plugin(tmp_path, hook_env):
+    """A plugin tree whose scripts we control, so failure paths are reachable."""
+    root = tmp_path / "plugin"
+    (root / "hooks-handlers").mkdir(parents=True)
+    (root / "scripts").mkdir()
+    (root / "skills" / "session-start" / "scripts").mkdir(parents=True)
+    (root / "skills" / "init-project" / "scripts").mkdir(parents=True)
+
+    hook = root / "hooks-handlers" / "gather-on-skill"
+    hook.write_text(HOOK.read_text(encoding="utf-8"), encoding="utf-8")
+    hook.chmod(0o755)
+    resolver = REPO_ROOT / "plugins" / "h2t-core" / "scripts" / "resolve-h2t-python.sh"
+    (root / "scripts" / "resolve-h2t-python.sh").write_text(
+        resolver.read_text(encoding="utf-8"), encoding="utf-8"
+    )
+    return root
+
+
+def _run_fake(env, plugin_root, skill, cwd):
+    return subprocess.run(
+        [shutil.which("bash") or "/bin/bash", str(plugin_root / "hooks-handlers" / "gather-on-skill")],
+        input=json.dumps({"tool_input": {"skill": skill}, "cwd": str(cwd)}),
+        capture_output=True, text=True, cwd=cwd, env=env,
+    )
+
+
+def test_a_failing_script_is_reported_not_injected(hook_env, fake_plugin, tmp_path):
+    """Partial stdout plus a non-zero exit must not pass for a real briefing."""
+    _fake_script(
+        fake_plugin / "skills" / "session-start" / "scripts" / "gather.py",
+        stdout="BRIEFING:\nhalf a brie", stderr="boom: config unreadable", rc=1,
+    )
+
+    result = _run_fake(hook_env, fake_plugin, "h2t-core:session-start", tmp_path)
+
+    message = json.loads(result.stdout)["systemMessage"]
+    assert message.startswith("GATHER_ERROR"), message[:200]
+    assert "boom: config unreadable" in message
+    assert "half a brie" not in message
+
+
+def test_control_characters_survive_as_valid_json(hook_env, fake_plugin, tmp_path):
+    """The injected envelope is JSON; a tab or CR in the payload must not break it."""
+    _fake_script(
+        fake_plugin / "skills" / "session-start" / "scripts" / "gather.py",
+        stdout='BRIEFING:\ncol\tcol\r\nquote " and back\\slash\n\nGATHER_META: {}',
+    )
+
+    result = _run_fake(hook_env, fake_plugin, "h2t-core:session-start", tmp_path)
+
+    message = json.loads(result.stdout)["systemMessage"]
+    assert "col\tcol" in message
+    assert 'quote " and back\\slash' in message
+
+
+def test_dedup_lock_is_per_directory(hook_env, fake_plugin, tmp_path):
+    """A skill run in one repo must not silence the same skill in another."""
+    _fake_script(
+        fake_plugin / "skills" / "session-start" / "scripts" / "gather.py",
+        stdout="BRIEFING:\nfrom the script\n\nGATHER_META: {}",
+    )
+    repo_a = tmp_path / "repo-a"
+    repo_b = tmp_path / "repo-b"
+    repo_a.mkdir()
+    repo_b.mkdir()
+
+    first = _run_fake(hook_env, fake_plugin, "h2t-core:session-start", repo_a)
+    second = _run_fake(hook_env, fake_plugin, "h2t-core:session-start", repo_b)
+
+    assert first.stdout.strip(), "first run produced nothing"
+    assert second.stdout.strip(), "second run in a different repo was suppressed"
+
+
+def test_a_failed_run_does_not_suppress_the_retry(hook_env, fake_plugin, tmp_path):
+    """The dedup lock must record a success, not an attempt."""
+    script = fake_plugin / "skills" / "session-start" / "scripts" / "gather.py"
+    _fake_script(script, stderr="transient", rc=1)
+    first = _run_fake(hook_env, fake_plugin, "h2t-core:session-start", tmp_path)
+    assert json.loads(first.stdout)["systemMessage"].startswith("GATHER_ERROR")
+
+    _fake_script(script, stdout="BRIEFING:\nrecovered\n\nGATHER_META: {}")
+    second = _run_fake(hook_env, fake_plugin, "h2t-core:session-start", tmp_path)
+
+    assert second.stdout.strip(), "retry after a failure was suppressed by the lock"
+    assert "recovered" in json.loads(second.stdout)["systemMessage"]
