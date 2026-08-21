@@ -665,3 +665,39 @@ def test_date_window_bounds_with_relative_tokens():
     assert start.endswith("T00:00:00+03:00") or start.endswith("T00:00:00+02:00")
     # end bound is exclusive midnight after the last requested day
     assert end > start
+
+
+def test_search_dispatch_returns_an_envelope(monkeypatch):
+    """`calendar search --max N` must report truncation, not a bare list (#351)."""
+    from h2t_ops.connectors.calendar import commands as cmds_mod
+
+    class _Stub:
+        def search_events_page(self, query, *, calendar_id, max_results):
+            assert (query, calendar_id, max_results) == ("standup", "primary", 10)
+            return {"items": [{"id": "e"}], "truncated": True}
+
+    _patch_calendar_client(monkeypatch, lambda: _Stub())
+    args = SimpleNamespace(calendar_cmd="search", query="standup", max=10,
+                           calendar_id="primary", as_json=True, fmt="human")
+    out = cmds_mod.run(args)
+    assert out.items == [{"id": "e"}]
+    assert out.meta() == {"count": 1, "truncated": True, "limit": 10}
+
+
+def test_list_dispatch_passes_a_resolved_timezone(monkeypatch):
+    """Without a tz the client cannot know where midnight is (#351)."""
+    from h2t_ops.connectors.calendar import commands as cmds_mod
+
+    seen = {}
+
+    class _Stub:
+        def list_events_page(self, **kwargs):
+            seen.update(kwargs)
+            return {"items": [], "truncated": False, "window": {"from": "a", "to": "b"}}
+
+    _patch_calendar_client(monkeypatch, lambda: _Stub())
+    args = SimpleNamespace(calendar_cmd="list", days=1, max=20, calendar_id="primary",
+                           from_date=None, to_date=None, tz=None, busy_only=False,
+                           as_json=True, fmt="human")
+    cmds_mod.run(args)
+    assert seen["tz"], "tz must be resolved even when the caller omits --tz"

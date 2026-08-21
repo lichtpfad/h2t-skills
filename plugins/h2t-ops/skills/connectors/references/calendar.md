@@ -5,7 +5,7 @@
 | Intent | Command |
 | --- | --- |
 | list calendars | `h2t-ops calendar calendars --json` |
-| list events | `h2t-ops calendar list --days 1 --max 250 --json` |
+| list events | `h2t-ops calendar list --days 1 --max 250 --json` — N календарных суток от сегодня в `--tz`, не скользящие N×24ч |
 | explicit date window | `h2t-ops calendar list --from 2026-05-23 --to 2026-05-23 --tz Asia/Jerusalem --max 250 --json` |
 | busy windows | `h2t-ops calendar freebusy --from 2026-05-23 --to 2026-05-23 --tz Asia/Jerusalem --json` |
 | search events | `h2t-ops calendar search "meeting" --max 20 --json` |

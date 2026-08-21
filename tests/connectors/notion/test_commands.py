@@ -250,7 +250,7 @@ def test_find_project_tasks_parser_registered():
 def test_find_project_tasks_dispatch_uses_relation_filter(monkeypatch):
     """find-project-tasks must build the Project-relation filter shape
     {'property':'Project','relation':{'contains': <page_id>}} and pass --limit
-    through to client.query_database."""
+    through to client.query_database_page."""
     import h2t_ops.connectors.notion.client as client_mod
     from h2t_ops.connectors.notion import commands as cmds_mod
     from types import SimpleNamespace
@@ -258,9 +258,9 @@ def test_find_project_tasks_dispatch_uses_relation_filter(monkeypatch):
     calls: list[tuple] = []
 
     class _StubClient:
-        def query_database(self, db, *, filter_dict=None, limit=None, **_):
+        def query_database_page(self, db, *, filter_dict=None, limit=None, **_):
             calls.append(("query", db, filter_dict, limit))
-            return [{"id": "task-1"}, {"id": "task-2"}]
+            return {"items": [{"id": "task-1"}, {"id": "task-2"}], "truncated": False}
 
     monkeypatch.setattr(client_mod, "NotionClient", lambda: _StubClient())
 
@@ -273,7 +273,7 @@ def test_find_project_tasks_dispatch_uses_relation_filter(monkeypatch):
         fmt="human",
     )
     out = cmds_mod.run(args)
-    assert out == [{"id": "task-1"}, {"id": "task-2"}]
+    assert out.items == [{"id": "task-1"}, {"id": "task-2"}]
     assert calls == [(
         "query",
         "db-1",
@@ -290,8 +290,8 @@ def test_find_project_tasks_dispatch_markdown_uses_database_metadata(monkeypatch
     from types import SimpleNamespace
 
     class _StubClient:
-        def query_database(self, db, *, filter_dict=None, limit=None, **_):
-            return [{"id": "task-1"}]
+        def query_database_page(self, db, *, filter_dict=None, limit=None, **_):
+            return {"items": [{"id": "task-1"}], "truncated": False}
         def get_database(self, db):
             return {"id": db, "title": [{"plain_text": "Tasks"}]}
         def database_items_to_markdown(self, rows, meta):
@@ -308,7 +308,7 @@ def test_find_project_tasks_dispatch_markdown_uses_database_metadata(monkeypatch
         fmt="human",
     )
     out = cmds_mod.run(args)
-    assert out == "# Tasks (1 rows)"
+    assert out.rendered == "# Tasks (1 rows)"
 
 
 def test_find_databases_parser_accepts_recursive_rows_limits_and_json():
@@ -883,3 +883,50 @@ def test_unresolved_relation_is_labelled():
     resolved = {"abc": {"title": "Qatal Yiktol", "url": "https://notion.so/qy"}}
     assert c._extract_property_value(prop, "relation", resolved) == \
         "[Qatal Yiktol](https://notion.so/qy)"
+
+
+# --- remaining bare lists: a limit is not a total (#351) ---------------------
+
+def test_get_database_returns_an_envelope(monkeypatch):
+    """`notion get-database --limit N` reported N as if it were the count."""
+    from types import SimpleNamespace
+    from h2t_ops.connectors.notion import client as client_mod
+    from h2t_ops.connectors.notion import commands as cmds_mod
+
+    class _Stub:
+        def query_database_page(self, database_id, *, filter_dict=None, limit=None, **_):
+            assert (database_id, limit) == ("DB", 30)
+            return {"items": [{"id": "p1"}], "truncated": True}
+
+        def get_database(self, database_id):
+            return {"properties": {}}
+
+    monkeypatch.setattr(client_mod, "NotionClient", lambda: _Stub())
+    args = SimpleNamespace(notion_cmd="get-database", database_id="DB", limit=30,
+                           as_json=True, fmt="human")
+    out = cmds_mod.run(args)
+    assert out.items == [{"id": "p1"}]
+    assert out.meta()["truncated"] is True
+    assert out.meta()["limit"] == 30
+
+
+def test_find_project_tasks_returns_an_envelope(monkeypatch):
+    from types import SimpleNamespace
+    from h2t_ops.connectors.notion import client as client_mod
+    from h2t_ops.connectors.notion import commands as cmds_mod
+
+    class _Stub:
+        def query_database_page(self, database_id, *, filter_dict=None, limit=None, **_):
+            assert filter_dict == {"property": "Project",
+                                   "relation": {"contains": "PROJ"}}
+            return {"items": [], "truncated": False}
+
+        def get_database(self, database_id):
+            return {"properties": {}}
+
+    monkeypatch.setattr(client_mod, "NotionClient", lambda: _Stub())
+    args = SimpleNamespace(notion_cmd="find-project-tasks", database_id="DB",
+                           project_page_id="PROJ", limit=100,
+                           as_json=True, fmt="human")
+    out = cmds_mod.run(args)
+    assert out.meta() == {"count": 0, "truncated": False, "limit": 100}
