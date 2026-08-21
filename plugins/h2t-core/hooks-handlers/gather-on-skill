@@ -16,8 +16,10 @@ case "$skill" in
   *) exit 0 ;;
 esac
 
-# Deduplicate: skip if same skill was gathered in the last 30s
-LOCK_KEY=$(echo "$skill" | tr '/:' '__')
+# Deduplicate: skip if the same skill was gathered for the same directory in the last 30s.
+# Keyed by cwd as well as skill, so a run in one repo cannot silence another; written only
+# after a successful run, so a failure does not suppress the retry.
+LOCK_KEY="$(echo "$skill" | tr '/:' '__')_$(printf '%s' "$cwd" | cksum | awk '{print $1}')"
 LOCK_FILE="${TMPDIR:-/tmp}/h2t_gather_${LOCK_KEY}.lock"
 NOW=$(date +%s)
 if [ -f "$LOCK_FILE" ]; then
@@ -27,7 +29,6 @@ if [ -f "$LOCK_FILE" ]; then
     exit 0
   fi
 fi
-echo "$NOW" > "$LOCK_FILE"
 
 # Cache layout: scripts/resolve-h2t-python.sh is at ../scripts/ (plugin root = ../)
 # Dev layout: scripts/ is at plugins/h2t-core/ (repo root = ../../..)
@@ -48,35 +49,55 @@ if ! resolve_h2t_python "import yaml"; then
   exit 0
 fi
 
-# Escape a plain message into the systemMessage JSON field.
+# json.dumps, not hand-rolled escaping: a tab or CR in the briefing would otherwise
+# produce an invalid envelope.
 emit() {
-  printf '{"systemMessage": "%s"}' "$("${H2T_PYTHON_CMD[@]}" -c "
-import sys
-print(sys.stdin.read()
-  .replace('\\\\', '\\\\\\\\')
-  .replace('\"', '\\\\\"')
-  .replace(chr(10), '\\\\n')
-)" <<< "$1")"
+  printf '%s' "$1" | "${H2T_PYTHON_CMD[@]}" -c \
+    'import json, sys; sys.stdout.write(json.dumps({"systemMessage": sys.stdin.read()}))'
+}
+
+SCRIPT_STDOUT=""
+SCRIPT_STDERR=""
+# Run a plugin script, keeping stdout, stderr and the exit code apart. Discarding any of
+# them lets a half-written payload from a crashed script pass for a real one.
+run_script() {
+  local out err rc
+  out=$(mktemp)
+  err=$(mktemp)
+  set +e
+  "${H2T_PYTHON_CMD[@]}" "$@" >"$out" 2>"$err"
+  rc=$?
+  set -e
+  SCRIPT_STDOUT=$(cat "$out")
+  SCRIPT_STDERR=$(tail -c 500 "$err")
+  rm -f "$out" "$err"
+  return "$rc"
 }
 
 if [[ "$skill" == *init-project* ]]; then
   # SKILL.md step 1 reads INIT_DATA; detection is what it asks for, not a briefing.
-  DETECT="$PLUGIN_ROOT/skills/init-project/scripts/detect_project.py"
-  RESULT=$("${H2T_PYTHON_CMD[@]}" "$DETECT" --cwd "$cwd" 2>/dev/null) || true
-  if [ -z "$RESULT" ]; then
+  if ! run_script "$PLUGIN_ROOT/skills/init-project/scripts/detect_project.py" --cwd "$cwd"; then
+    emit "INIT_ERROR: detect_project.py failed. ${SCRIPT_STDERR:-no stderr}"
+    exit 0
+  fi
+  if [ -z "$SCRIPT_STDOUT" ]; then
     emit "INIT_ERROR: detect_project.py returned no output. Check Python resolution."
     exit 0
   fi
-  emit "INIT_DATA: $RESULT"
+  echo "$NOW" > "$LOCK_FILE"
+  emit "INIT_DATA: $SCRIPT_STDOUT"
   exit 0
 fi
 
 # --briefing-only prints the injection format verbatim, so there is nothing to reformat
 # here and no second assembly of the payload to drift from the CLI path.
-GATHER="$PLUGIN_ROOT/skills/session-start/scripts/gather.py"
-RESULT=$("${H2T_PYTHON_CMD[@]}" "$GATHER" --cwd "$cwd" --briefing-only 2>/dev/null) || true
-if [ -z "$RESULT" ]; then
+if ! run_script "$PLUGIN_ROOT/skills/session-start/scripts/gather.py" --cwd "$cwd" --briefing-only; then
+  emit "GATHER_ERROR: gather.py failed. ${SCRIPT_STDERR:-no stderr}"
+  exit 0
+fi
+if [ -z "$SCRIPT_STDOUT" ]; then
   emit "GATHER_ERROR: h2t gather returned no output. Check Python resolution or recreate ~/.h2t/venv."
   exit 0
 fi
-emit "$RESULT"
+echo "$NOW" > "$LOCK_FILE"
+emit "$SCRIPT_STDOUT"

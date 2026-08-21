@@ -77,3 +77,23 @@ def test_updating_a_project_keeps_its_existing_description(config_root):
     _register(config_root, "existing-repo")
 
     assert _project(config_root, "existing-repo")["description"] == "already written by hand"
+
+
+def test_config_root_env_is_honoured_without_the_flag(config_root, monkeypatch):
+    """detect_project.py reads H2T_CONFIG_ROOT; apply must resolve the same root.
+
+    Otherwise detection runs against one config and the documented apply command writes
+    another — silently, whenever the config is relocated.
+    """
+    env = dict(os.environ, H2T_CONFIG_ROOT=str(config_root))
+    result = subprocess.run(
+        [
+            _interpreter(), str(APPLY),
+            "--id", "env-repo", "--domain", "fixture-domain",
+            "--type", "git", "--label", "Env Repo",
+        ],
+        capture_output=True, text=True, env=env,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert _project(config_root, "env-repo")["label"] == "Env Repo"
