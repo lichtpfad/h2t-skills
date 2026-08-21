@@ -187,9 +187,11 @@ def run(args) -> Any:
         return _paged(page, args, relations, client.database_items_to_markdown(
             rows, client.get_database(args.database_id), relations))
     if cmd == "get-database":
-        rows = client.query_database(args.database_id, limit=args.limit)
-        return rows if _fmt(args) == "json" else client.database_items_to_markdown(
-            rows, client.get_database(args.database_id))
+        page = client.query_database_page(args.database_id, limit=args.limit)
+        if _fmt(args) == "json":
+            return _paged(page, args)
+        return _paged(page, args, None, client.database_items_to_markdown(
+            page["items"], client.get_database(args.database_id)))
     if cmd == "search-workspace":
         return client.search_workspace(object_type=args.object, limit=args.limit)
     if cmd == "graph":
@@ -210,10 +212,12 @@ def run(args) -> Any:
         )
     if cmd == "find-project-tasks":
         fdict = {"property": "Project", "relation": {"contains": args.project_page_id}}
-        rows = client.query_database(args.database_id,
-                                     filter_dict=fdict, limit=args.limit)
-        return rows if _fmt(args) == "json" else client.database_items_to_markdown(
-            rows, client.get_database(args.database_id))
+        page = client.query_database_page(args.database_id,
+                                          filter_dict=fdict, limit=args.limit)
+        if _fmt(args) == "json":
+            return _paged(page, args)
+        return _paged(page, args, None, client.database_items_to_markdown(
+            page["items"], client.get_database(args.database_id)))
     if cmd == "comments":
         return client.list_comments(args.page_id)
     if cmd == "comment":

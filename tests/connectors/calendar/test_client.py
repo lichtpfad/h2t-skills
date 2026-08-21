@@ -5,7 +5,7 @@ mirrored, was retired in #356.
 """
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -632,3 +632,63 @@ def test_unparseable_times_fall_back_to_the_date_span():
         _at("2026-04-06T09:00:00+03:00"),
     )
     assert r["ongoing"] is True and r["days_total"] == 1
+
+
+# --- default window: local calendar days, not a rolling UTC span (#351) ------
+
+def _window_of(client_obj, **kwargs) -> tuple[str, str]:
+    client_obj.service.events.return_value.list.return_value.execute.return_value = {"items": []}
+    client_obj.list_events_page(**kwargs)
+    call = client_obj.service.events.return_value.list.call_args.kwargs
+    return call["timeMin"], call["timeMax"]
+
+
+def test_default_window_starts_at_local_midnight_not_now():
+    """`--days 1` must mean today, not the next 24 hours (#351).
+
+    A brief that says "today" cannot start counting at the moment it runs: an
+    event that ended an hour ago is still part of today.
+    """
+    from zoneinfo import ZoneInfo
+    from h2t_ops.connectors.calendar.client import CalendarClient
+    c = object.__new__(CalendarClient)
+    c.service = MagicMock()
+    tz = "Asia/Jerusalem"
+    lo, hi = _window_of(c, days=1, tz=tz)
+    start = datetime.fromisoformat(lo)
+    end = datetime.fromisoformat(hi)
+    assert (start.hour, start.minute, start.second) == (0, 0, 0)
+    assert start.date() == datetime.now(ZoneInfo(tz)).date()
+    assert (end - start) == timedelta(days=1)
+
+
+def test_default_window_spans_whole_calendar_days():
+    from h2t_ops.connectors.calendar.client import CalendarClient
+    c = object.__new__(CalendarClient)
+    c.service = MagicMock()
+    lo, hi = _window_of(c, days=3, tz="Asia/Jerusalem")
+    assert (datetime.fromisoformat(hi) - datetime.fromisoformat(lo)) == timedelta(days=3)
+
+
+def test_explicit_bounds_still_win():
+    from h2t_ops.connectors.calendar.client import CalendarClient
+    c = object.__new__(CalendarClient)
+    c.service = MagicMock()
+    lo, hi = _window_of(c, days=1, time_min="2026-06-01T00:00:00+00:00",
+                        time_max="2026-06-02T00:00:00+00:00")
+    assert (lo, hi) == ("2026-06-01T00:00:00+00:00", "2026-06-02T00:00:00+00:00")
+
+
+def test_search_events_page_reports_truncation():
+    """`calendar search --max N` must not pass a ceiling off as a total (#351)."""
+    from h2t_ops.connectors.calendar.client import CalendarClient
+    c = object.__new__(CalendarClient)
+    c.service = MagicMock()
+    c.service.events.return_value.list.return_value.execute.return_value = {
+        "items": [{"id": "e", "summary": "S", "start": {"date": "2026-08-20"},
+                   "end": {"date": "2026-08-21"}}],
+        "nextPageToken": "more",
+    }
+    page = c.search_events_page("standup", max_results=1)
+    assert page["truncated"] is True
+    assert len(page["items"]) == 1

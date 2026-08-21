@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import date as date_cls
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, time as time_cls, timedelta, timezone
 from typing import Any, Dict, List, Optional
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -19,14 +19,32 @@ CALENDAR_SCOPES = ["https://www.googleapis.com/auth/calendar"]
 _CALENDAR_LIST_HINT = "Run `h2t-ops calendar calendars --json` to inspect calendar ids and access roles."
 
 
-def _now_in(tz: Optional[str]) -> datetime:
-    """Current instant in the requested timezone; local time when it is unusable."""
+def _local_day_window(days: int, tz: Optional[str]) -> tuple[str, str]:
+    """Whole calendar days from today, in the query timezone (#351).
+
+    A rolling `now .. now + days` window makes "today" start at the moment the
+    command runs, so an event that ended an hour ago drops out of a brief that
+    claims to describe today. Days are calendar days, and the day starts at
+    midnight where the caller is.
+    """
+    zone = _zone(tz)
+    today = datetime.now(zone).date()
+    start = datetime.combine(today, time_cls.min, tzinfo=zone)
+    return start.isoformat(), (start + timedelta(days=max(days, 1))).isoformat()
+
+
+def _zone(tz: Optional[str]):
     if tz:
         try:
-            return datetime.now(ZoneInfo(tz))
+            return ZoneInfo(tz)
         except (ZoneInfoNotFoundError, ValueError):
             pass
-    return datetime.now().astimezone()
+    return datetime.now().astimezone().tzinfo
+
+
+def _now_in(tz: Optional[str]) -> datetime:
+    """Current instant in the requested timezone; local time when it is unusable."""
+    return datetime.now(_zone(tz))
 
 
 def _is_running(start: str, end: str, now: datetime, fallback: bool) -> bool:
@@ -119,10 +137,10 @@ class CalendarClient:
         busy_only: bool = False,
     ) -> Dict[str, Any]:
         """Same as list_events, plus whether Calendar had more to give."""
-        if time_min is None:
-            time_min = datetime.now(timezone.utc).isoformat()
-        if time_max is None:
-            time_max = (datetime.now(timezone.utc) + timedelta(days=days)).isoformat()
+        if time_min is None or time_max is None:
+            day_min, day_max = _local_day_window(days, tz)
+            time_min = time_min or day_min
+            time_max = time_max or day_max
         params: Dict[str, Any] = {
             "calendarId": calendar_id,
             "timeMin": time_min,
@@ -153,6 +171,19 @@ class CalendarClient:
         calendar_id: str = "primary",
         max_results: int = 10,
     ) -> List[Dict[str, Any]]:
+        """Matching events. Prefer search_events_page — this drops truncation."""
+        return self.search_events_page(
+            query, calendar_id=calendar_id, max_results=max_results,
+        )["items"]
+
+    def search_events_page(
+        self,
+        query: str,
+        *,
+        calendar_id: str = "primary",
+        max_results: int = 10,
+    ) -> Dict[str, Any]:
+        """Same as search_events, plus whether Calendar had more to give (#351)."""
         try:
             res = self.service.events().list(
                 calendarId=calendar_id,
@@ -163,7 +194,11 @@ class CalendarClient:
             ).execute()
         except Exception as e:
             raise _map_http_error(e, op=f"search events on calendar {calendar_id!r}") from e
-        return [self._normalize_event(it, calendar_id=calendar_id) for it in res.get("items", [])]
+        return {
+            "items": [self._normalize_event(it, calendar_id=calendar_id)
+                      for it in res.get("items", [])],
+            "truncated": bool(res.get("nextPageToken")),
+        }
 
     def get_event(self, event_id: str, *, calendar_id: str = "primary") -> Dict[str, Any]:
         try:

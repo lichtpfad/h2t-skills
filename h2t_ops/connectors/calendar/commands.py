@@ -215,11 +215,12 @@ def run(args) -> Any:
     if cmd == "list":
         time_min = None
         time_max = None
-        tz = getattr(args, "tz", None)
+        # Resolved even without --from/--to: the client anchors `--days` to
+        # midnight in this zone, and it cannot guess where midnight is (#351).
+        tz = _resolve_query_tz(getattr(args, "tz", None))
         if bool(getattr(args, "from_date", None)) != bool(getattr(args, "to_date", None)):
             raise UsageError("calendar list: --from and --to must be used together")
         if getattr(args, "from_date", None):
-            tz = _resolve_query_tz(tz)
             time_min, time_max = _date_window_bounds(args.from_date, args.to_date, tz)
         page = client.list_events_page(
             days=args.days,
@@ -233,11 +234,12 @@ def run(args) -> Any:
         return Paged(page["items"], truncated=page["truncated"], limit=args.max,
                      extra={"window": page["window"]})
     if cmd == "search":
-        return client.search_events(
+        page = client.search_events_page(
             args.query,
             calendar_id=args.calendar_id,
             max_results=args.max,
         )
+        return Paged(page["items"], truncated=page["truncated"], limit=args.max)
     if cmd == "get":
         return client.get_event(args.event_id, calendar_id=args.calendar_id)
     if cmd == "create":
