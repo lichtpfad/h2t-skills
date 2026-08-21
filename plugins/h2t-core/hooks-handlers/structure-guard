@@ -1,3 +1,20 @@
 #!/usr/bin/env bash
+# PreToolUse: enforce .h2t/structure.yaml naming conventions.
+#
+# macOS and most Linux distros ship `python3` only — no `python` alias after the
+# Python 2 EOL — so resolve the interpreter instead of assuming one (#331).
+# structure_guard.py is stdlib-only, hence the default probe.
+set -euo pipefail
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-exec python "$SCRIPT_DIR/structure_guard.py"
+# scripts/ sits beside hooks-handlers/ in both the cache and the dev layout.
+PLUGIN_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+source "$PLUGIN_ROOT/scripts/resolve-h2t-python.sh"
+if ! resolve_h2t_python; then
+  # Fail open: a guard that cannot start must not block every Write and Edit.
+  echo "structure-guard: no Python found; skipping. Set H2T_PYTHON to enable." >&2
+  exit 0
+fi
+
+exec "${H2T_PYTHON_CMD[@]}" "$SCRIPT_DIR/structure_guard.py"
