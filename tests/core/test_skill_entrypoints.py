@@ -230,16 +230,22 @@ def test_cache_lookup_honours_a_relocated_host_state_dir(tmp_path, monkeypatch):
 
 
 def test_gather_hook_uses_strict_python_probe():
-    """gather-on-skill must reject a package-less interpreter.
+    """gather-on-skill must reject an interpreter its scripts cannot run under.
 
-    Regression guard: the resolver probe used to be `import sys` (any Python
-    passes), so a ~/.h2t/venv without the h2t package was selected and the
-    downstream `-m lib.cli.main` crashed silently ("returned no output"). The
-    hook must pass the strict probe so resolution fails loud instead.
+    Regression guard: the resolver probe used to be `import sys` (any Python passes), so
+    an unprovisioned ~/.h2t/venv was selected and the run crashed silently ("returned no
+    output"). The probe must name something the scripts actually need, so resolution
+    fails loud instead.
+
+    It must NOT be `lib.cli.main`: that package lives only at the repo root, and the hook
+    used to cd into the plugin root, whose vendored `lib/` shadows it — the probe then
+    failed on every interpreter, in every layout (#378).
     """
-    hook_path = Path("plugins/h2t-core/hooks-handlers/gather-on-skill")
-    text = hook_path.read_text(encoding="utf-8")
-    assert 'resolve_h2t_python "import lib.cli.main"' in text
+    text = Path("plugins/h2t-core/hooks-handlers/gather-on-skill").read_text(encoding="utf-8")
+    code = "\n".join(line.split("#", 1)[0] for line in text.splitlines())
+    assert 'resolve_h2t_python "import yaml"' in code
+    assert "lib.cli" not in code
+    assert 'resolve_h2t_python "import sys"' not in code
 
 
 def _console_scripts() -> dict[str, str]:

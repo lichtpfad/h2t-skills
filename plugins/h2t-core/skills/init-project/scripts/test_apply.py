@@ -69,6 +69,8 @@ def test_add_git_project_to_mapping(tmp_path):
 
 def test_add_directory_project_to_cwd_patterns(tmp_path):
     mapping_file, domains_file = _make_config(tmp_path, MINIMAL_MAPPING, MINIMAL_DOMAINS)
+    project_dir = tmp_path / "DROPBOX" / "Steuer"
+    project_dir.mkdir(parents=True)
 
     result = apply_registration(
         project_id="steuer",
@@ -76,13 +78,13 @@ def test_add_directory_project_to_cwd_patterns(tmp_path):
         project_type="directory",
         label="Steuer Docs",
         task_tracker="none",
-        cwd="E:/DROPBOX/Steuer",
+        cwd=str(project_dir),
         config_root=str(tmp_path),
     )
 
     assert result["status"] == "ok"
     content = mapping_file.read_text(encoding="utf-8")
-    assert "E:/DROPBOX/Steuer" in content
+    assert str(project_dir) in content
     assert "admin/steuer" in content
 
 
@@ -183,7 +185,7 @@ def test_new_domain_created_if_missing(tmp_path):
         project_type="directory",
         label="Taxes",
         task_tracker="notion",
-        cwd="/some/path",
+        cwd=str(tmp_path / "taxes-dir"),
         config_root=str(tmp_path),
     )
 

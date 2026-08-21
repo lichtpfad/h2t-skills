@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
-# PreToolUse: gather context when h2t-core session skills are invoked.
+# PreToolUse: inject context when h2t-core session skills are invoked.
+#
+# The hook is the executor on purpose. 672249e (2026-03-25) moved gathering out of the
+# model's hands — "Closes #12 — gather.py can no longer be ignored by Claude". Do not
+# replace this with an instruction telling the agent to run something itself.
 set -euo pipefail
 
 input=$(cat)
@@ -25,53 +29,54 @@ if [ -f "$LOCK_FILE" ]; then
 fi
 echo "$NOW" > "$LOCK_FILE"
 
-# Run gather CLI (must run from dir containing lib/ so lib.cli.main is importable)
 # Cache layout: scripts/resolve-h2t-python.sh is at ../scripts/ (plugin root = ../)
 # Dev layout: scripts/ is at plugins/h2t-core/ (repo root = ../../..)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [ -f "$SCRIPT_DIR/../scripts/resolve-h2t-python.sh" ]; then
-  REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-  PLUGIN_ROOT="$REPO_ROOT"
+  PLUGIN_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 else
-  REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
-  PLUGIN_ROOT="$REPO_ROOT/plugins/h2t-core"
+  PLUGIN_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)/plugins/h2t-core"
 fi
 
-# Find Python. Resolve from REPO_ROOT so the probe runs in the same directory as
-# the gather exec below: "import lib.cli.main" then rejects any interpreter that
-# cannot import the package (e.g. a ~/.h2t/venv missing the h2t install), failing
-# loud here instead of a silent "returned no output" crash downstream.
-cd "$REPO_ROOT"
+# Never cd into PLUGIN_ROOT. Its vendored lib/ has no `cli` package, so it shadows an
+# installed `lib` and `-m lib.cli.main` raises ModuleNotFoundError even on an interpreter
+# that has the wheel — which is how this hook died silently from 14e2b42 until #378. The
+# plugin scripts take --cwd, so the working directory is irrelevant to them.
 source "$PLUGIN_ROOT/scripts/resolve-h2t-python.sh"
-if ! resolve_h2t_python "import lib.cli.main"; then
-  echo '{"systemMessage": "GATHER_ERROR: no Python with the h2t package (lib.cli.main) found. Install it into ~/.h2t/venv (pip install -e <h2t-skills>) or set H2T_PYTHON."}'
+if ! resolve_h2t_python "import yaml"; then
+  echo '{"systemMessage": "GATHER_ERROR: no Python with PyYAML found. Install it into ~/.h2t/venv or set H2T_PYTHON."}'
   exit 0
 fi
 
-# Build args
-ARGS=("$skill" "--cwd" "$cwd")
-[[ "$skill" == *session-start* ]] && ARGS+=("--format-briefing")
-
-RESULT=$("${H2T_PYTHON_CMD[@]}" -m lib.cli.main gather "${ARGS[@]}" 2>/dev/null) || true
-
-if [ -z "$RESULT" ]; then
-  echo '{"systemMessage": "GATHER_ERROR: h2t gather returned no output. Check Python resolution or recreate ~/.h2t/venv."}'
-  exit 0
-fi
-
-# Format output for Claude systemMessage injection
-BRIEFING=$("${H2T_PYTHON_CMD[@]}" -c "
-import json, sys
-data = json.load(sys.stdin)
-b = data.get('_briefing', '')
-m = json.dumps(data.get('_meta', {}))
-print(f'BRIEFING:\n{b}\n\nGATHER_META: {m}')
-" <<< "$RESULT" 2>/dev/null) || BRIEFING="GATHER_DATA: $RESULT"
-
-printf '{"systemMessage": "%s"}' "$("${H2T_PYTHON_CMD[@]}" -c "
+# Escape a plain message into the systemMessage JSON field.
+emit() {
+  printf '{"systemMessage": "%s"}' "$("${H2T_PYTHON_CMD[@]}" -c "
 import sys
 print(sys.stdin.read()
   .replace('\\\\', '\\\\\\\\')
   .replace('\"', '\\\\\"')
   .replace(chr(10), '\\\\n')
-)" <<< "$BRIEFING")"
+)" <<< "$1")"
+}
+
+if [[ "$skill" == *init-project* ]]; then
+  # SKILL.md step 1 reads INIT_DATA; detection is what it asks for, not a briefing.
+  DETECT="$PLUGIN_ROOT/skills/init-project/scripts/detect_project.py"
+  RESULT=$("${H2T_PYTHON_CMD[@]}" "$DETECT" --cwd "$cwd" 2>/dev/null) || true
+  if [ -z "$RESULT" ]; then
+    emit "INIT_ERROR: detect_project.py returned no output. Check Python resolution."
+    exit 0
+  fi
+  emit "INIT_DATA: $RESULT"
+  exit 0
+fi
+
+# --briefing-only prints the injection format verbatim, so there is nothing to reformat
+# here and no second assembly of the payload to drift from the CLI path.
+GATHER="$PLUGIN_ROOT/skills/session-start/scripts/gather.py"
+RESULT=$("${H2T_PYTHON_CMD[@]}" "$GATHER" --cwd "$cwd" --briefing-only 2>/dev/null) || true
+if [ -z "$RESULT" ]; then
+  emit "GATHER_ERROR: h2t gather returned no output. Check Python resolution or recreate ~/.h2t/venv."
+  exit 0
+fi
+emit "$RESULT"

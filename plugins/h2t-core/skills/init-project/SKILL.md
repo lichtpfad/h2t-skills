@@ -4,7 +4,7 @@ description: Register existing repo or directory in h2t ecosystem. Triggers on "
 compatibility: "Claude Code"
 metadata:
   author: lichtpfad
-  version: 1.0.0
+  version: 1.1.0
 ---
 
 # Instructions
@@ -44,6 +44,11 @@ If `needs_input` is true:
 
 If `needs_input` is false — wait for "ок" or corrections from user.
 
+Always collect a one-line `description` as well, unless the user declines. It is what
+LLM task classification reads out of `domains.yaml`; a project registered without one
+sorts worse from then on. Propose one from the repo's README or its issues rather than
+asking cold.
+
 ### Step 3: Apply Registration
 
 Call `h2t-project-register` with confirmed parameters:
@@ -52,9 +57,12 @@ Call `h2t-project-register` with confirmed parameters:
 h2t-project-register \
   --id "{id}" --domain "{domain}" --type "{type}" \
   --label "{label}" --task-tracker "{tracker}" \
+  --description "{description}" \
   --cwd "$(pwd)" --config-root "$HOME/.h2t/config" \
   [--github "{github}"]
 ```
+
+`--description` fills a blank field only; a description already written by hand is kept.
 
 Show the result JSON `actions` and `next_steps` to user.
 
@@ -63,6 +71,7 @@ Show the result JSON `actions` and `next_steps` to user.
 | Mistake | Fix |
 |---------|-----|
 | Running detection manually | Hook already ran detect_project.py. Use INIT_DATA |
+| Treating a missing INIT_DATA as normal | The hook is the executor by design (#12). No INIT_DATA means the hook failed — report it, do not silently work around it |
 | Writing YAML manually | Call apply_registration.py. It handles backups and comment preservation |
 | Skipping domain question when needs_input | User MUST confirm domain before apply |
 | Resolving tracker before domain is known | Tracker depends on domain. Wait for domain first |
