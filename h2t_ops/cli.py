@@ -7,7 +7,7 @@ import shutil
 import sys
 from pathlib import Path
 
-import h2t_ops
+from h2t_ops import build_info
 from h2t_ops.core.errors import UsageError
 # Route shim deprecation notices through emit()'s UTF-8 writer (reuses privates
 # intentionally) so they don't UnicodeEncodeError on Windows consoles (#141 class).
@@ -20,7 +20,7 @@ _MIGRATED = {"notion", "gmail", "calendar", "drive", "meetgeek", "granola", "tel
 
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="h2t-ops", description="h2t-ops unified connector CLI")
-    p.add_argument("--version", action="version", version=f"h2t-ops {h2t_ops.__version__}")
+    p.add_argument("--version", action="version", version=build_info.version_line())
     sub = p.add_subparsers(dest="connector")
     sub.add_parser("connectors", help="List available connectors")
     sub.add_parser("deploy", help="Profile-driven deploy commands")
@@ -31,7 +31,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def _doctor() -> int:
-    print(f"h2t-ops {h2t_ops.__version__}")
+    print(build_info.version_line())
     print(f"executable: {shutil.which('h2t-ops') or sys.executable}")
     print("connectors:")
     for spec in discover():
@@ -108,7 +108,7 @@ def dispatch(argv: list[str]) -> int:
         build_parser().print_help()
         return 0
     if argv and argv[0] in ("--version", "-V"):
-        print(f"h2t-ops {h2t_ops.__version__}")
+        print(build_info.version_line())
         return 0
     if argv and argv[0] == "doctor":
         return _doctor()
