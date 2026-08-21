@@ -1,38 +1,8 @@
-import sys
-from contextlib import contextmanager
 from pathlib import Path
 
 import pytest
 
 from h2t_ops import activity_log_entry, gather_entry, handoff_entry, plugin_entrypoints
-
-
-@contextmanager
-def _isolated_gather_modules():
-    """Load the plugin gather.py against its OWN lib copy, deterministically.
-
-    The repo-root packaged `lib/gather` and the plugin `plugins/h2t-core/lib/gather`
-    have drifted (#283): the plugin gather.py imports `find_latest_session_index`, which
-    exists only in the plugin copy. In a whole-suite `pytest tests/` run an earlier test
-    can leave the (stale) root `gather` in sys.modules first, so the plugin script would
-    resolve that copy and raise ImportError. This snapshot / evict / restore forces a
-    fresh import (the plugin script puts its own lib on sys.path[0]). Runtime is
-    unaffected — the real `h2t-gather` process starts clean; this only removes a
-    test-ordering false failure. The staleness itself is inert (no runtime code that runs
-    against root `lib/gather` needs the missing symbol).
-    """
-    def _gather_keys():
-        return [n for n in sys.modules if n == "gather" or n.startswith("gather.")]
-
-    saved = {name: sys.modules[name] for name in _gather_keys()}
-    for name in saved:
-        del sys.modules[name]
-    try:
-        yield
-    finally:
-        for name in _gather_keys():
-            del sys.modules[name]
-        sys.modules.update(saved)
 
 
 @pytest.fixture(autouse=True)
@@ -50,8 +20,7 @@ def test_plugin_script_paths_exist():
 
 
 def test_load_plugin_module_exposes_main():
-    with _isolated_gather_modules():
-        module = plugin_entrypoints.load_plugin_module("skills/session-start/scripts/gather.py")
+    module = plugin_entrypoints.load_plugin_module("skills/session-start/scripts/gather.py")
     assert callable(module.main)
 
 

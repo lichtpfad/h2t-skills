@@ -5,7 +5,6 @@ from gather.user import gather_user_context
 def test_gather_user_context_returns_expected_keys():
     result = gather_user_context()
     assert "core_path" in result
-    assert "core_content" in result
     assert "language" in result
     assert "available_contexts" in result
     assert "deep_paths" in result
@@ -15,15 +14,12 @@ def test_gather_user_context_core_exists():
     if result["core_path"]:
         assert os.path.exists(result["core_path"])
 
-def test_gather_user_context_core_content_when_exists():
-    result = gather_user_context()
-    if result["core_path"]:
-        assert isinstance(result["core_content"], str)
-        assert len(result["core_content"]) > 0
+def test_gather_user_context_never_returns_core_content():
+    """core.md is referenced by path only; its body is not carried in the payload."""
+    assert "core_content" not in gather_user_context()
 
-def test_gather_user_context_core_content_missing(tmp_path):
+def test_gather_user_context_core_path_missing(tmp_path):
     result = gather_user_context(config_root=str(tmp_path))
-    assert result["core_content"] == ""
     assert result["core_path"] == ""
 
 def test_gather_user_context_language():

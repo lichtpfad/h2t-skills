@@ -147,16 +147,17 @@ def test_empty_github_no_crash():
     assert "## Сессия:" in md
 
 
-def test_briefing_with_core_content():
-    """core_content in user dict renders ## User Context section before session header."""
+def test_briefing_never_dumps_core_content():
+    """Even when core_content is supplied, core.md is not inlined into the briefing.
+
+    The unbounded ## User Context dump was replaced by the bounded Previous Session
+    section; re-adding it would blow the session-start context budget again.
+    """
     data = _minimal_data(user={"name": "stan", "core_content": "## Кто я\n\nТестовый контент."})
     md, meta = format_briefing(data)
 
-    assert "## User Context" in md
-    assert "## Кто я" in md
-    assert "Тестовый контент." in md
-    # User Context should appear before Session header
-    assert md.index("## User Context") < md.index("## Сессия:")
+    assert "## User Context" not in md
+    assert "Тестовый контент." not in md
 
 
 def test_briefing_without_core_content():

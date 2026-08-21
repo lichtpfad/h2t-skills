@@ -14,16 +14,13 @@ def format_briefing(data: dict) -> tuple[str, dict]:
     github = data.get("github", {})
     stack = data.get("stack", {})
     sessions = data.get("sessions", [])
+    latest_session = data.get("latest_session")
     machine = data.get("machine", "")
     user = data.get("user", {})
     session_id = data.get("session_id", "")
 
     slug = _build_slug_template(project, github)
-    core_content = user.get("core_content", "")
-    md = ""
-    if core_content:
-        md += f"## User Context\n\n{core_content}\n\n---\n\n"
-    md += _build_markdown(project, git, github, stack, sessions)
+    md = _build_markdown(project, git, github, stack, sessions, latest_session)
     hints = _build_hints(data)
     if hints:
         md += "\n### Hints\n"
@@ -48,6 +45,7 @@ def _build_markdown(
     github: dict,
     stack: dict,
     sessions: list,
+    latest_session: dict | None = None,
 ) -> str:
     branch = git.get("branch", "")
     pid = project.get("id", "unknown")
@@ -109,10 +107,61 @@ def _build_markdown(
     # Sessions context
     if sessions:
         lines.append("### Контекст")
-        lines.append(f"Handoff-файлы: {len(sessions)} (последние будут прочитаны)")
+        lines.append(f"Handoff-файлы: {len(sessions)}")
+        lines.append("")
+
+    previous = _build_previous_session_section(latest_session)
+    if previous:
+        lines.append(previous)
         lines.append("")
 
     return "\n".join(lines)
+
+
+def _build_previous_session_section(latest_session: dict | None) -> str:
+    if not isinstance(latest_session, dict):
+        return ""
+
+    lines = ["### Previous Session"]
+    summary = str(latest_session.get("summary_short", "")).strip()
+    if summary:
+        lines.append(f"- Summary: {summary}")
+
+    next_actions = latest_session.get("next_actions", [])
+    if isinstance(next_actions, list) and next_actions:
+        lines.append("- Next:")
+        for item in next_actions[:5]:
+            text = str(item).strip()
+            if text:
+                lines.append(f"  - {text}")
+
+    blockers = latest_session.get("blockers", [])
+    if isinstance(blockers, list) and blockers:
+        lines.append("- Blockers:")
+        for item in blockers[:5]:
+            text = str(item).strip()
+            if text:
+                lines.append(f"  - {text}")
+
+    artifacts = latest_session.get("artifacts", [])
+    if isinstance(artifacts, list) and artifacts:
+        refs = []
+        for artifact in artifacts[:10]:
+            if isinstance(artifact, dict):
+                typ = str(artifact.get("type", "artifact")).strip() or "artifact"
+                ref = str(artifact.get("ref", "")).strip()
+                if ref:
+                    refs.append(f"{typ}:{ref}")
+        if refs:
+            lines.append(f"- Artifacts: {', '.join(refs)}")
+
+    if len(lines) == 1:
+        return ""
+    text = "\n".join(lines)
+    if len(text) <= 1800:
+        return text
+    marker = "\n- [previous session truncated]"
+    return text[: 1800 - len(marker)].rstrip() + marker
 
 
 def _build_tasks_section(github: dict) -> str:
