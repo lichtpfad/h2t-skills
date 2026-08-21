@@ -43,15 +43,12 @@ https://gist.github.com/lichtpfad/faae653dede9b61b85ae587c0bf3b669
 
 ---
 
-## Skill Knowledge Graph (live API)
+## Skill Knowledge Graph — ретайрен (#361)
 
-| Компонент | Значение |
-|-----------|---------|
-| API | `https://graphs.lichtpfadstudio.com` |
-| Sources | `skill-patterns` (best practices), `skill-lessons` (что сломалось + как починили) |
-| Client | `lib/skill_graph/client.py` |
-| GEPA batch | `lib/skill_graph/gepa_batch.py` |
-| Tokens | `~/.dor/secrets.env` |
+`lib/skill_graph` удалён. Клиент работал, но `add-lesson` не запускался ни разу, так
+что граф содержал документацию Claude Code, а не уроки сессий. Межсессионная память
+живёт в handoff-файлах и `~/.h2t/sessions/`. API и токены в `~/.dor/secrets.env`
+остались — если граф вернётся, начинать нужно с записи, а не с чтения.
 
 ---
 
