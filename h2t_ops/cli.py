@@ -177,7 +177,13 @@ def dispatch(argv: list[str]) -> int:
                   file=_w)
             _finalize(_w, _c)
         return _run_connector(["calendar", *norm])
-    if argv and argv[0] in ("gather", "ingest"):
+    if argv and argv[0] == "ingest":
+        # Only the three shims above survive: lib/clients is retired (#356), so any
+        # other ingest source has no implementation left to reach.
+        return emit("ingest", exc=UsageError(
+            "`h2t-ops ingest` is retired — use the connector directly, e.g. `h2t-ops gmail list`"
+        ), fmt=_fmt_from(argv))
+    if argv and argv[0] == "gather":
         return _legacy(argv)
     if argv and argv[0] in _MIGRATED:
         return _run_connector(argv)
