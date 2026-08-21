@@ -9,6 +9,7 @@ def gather_git(cwd: str = ".") -> dict:
     raw = run_parallel({
         "remote": ["git", "-C", cwd, "remote", "get-url", "origin"],
         "branch": ["git", "-C", cwd, "branch", "--show-current"],
+        "head":   ["git", "-C", cwd, "rev-parse", "--short", "HEAD"],
         "log":    ["git", "-C", cwd, "log", "--oneline", "-5"],
         "status": ["git", "-C", cwd, "status", "--short"],
         "stash":  ["git", "-C", cwd, "stash", "list"],
@@ -16,12 +17,21 @@ def gather_git(cwd: str = ".") -> dict:
     remote = raw["remote"].strip()
     return {
         "remote": remote,
-        "branch": raw["branch"].strip(),
+        "branch": _display_branch(raw["branch"], raw["head"]),
         "log": raw["log"].strip().splitlines(),
         "status": raw["status"].strip(),
         "stash": raw["stash"].strip(),
         "owner_repo": _parse_owner_repo(remote),
     }
+
+
+def _display_branch(branch: str, head: str) -> str:
+    """Return a non-empty branch label, including detached CI checkouts."""
+    branch_name = branch.strip()
+    if branch_name:
+        return branch_name
+    short_head = head.strip()
+    return f"detached:{short_head}" if short_head else "detached"
 
 
 def _parse_owner_repo(remote_url: str) -> str:
