@@ -14,6 +14,10 @@ from h2t_ops.core.errors import (
 )
 from h2t_ops.core.secrets import resolve_notion_token
 
+# The Views API landed in this version; the rest of this client speaks 2022-06-28,
+# where the data-source model differs. Sent per-request, never globally (#372).
+VIEWS_API_VERSION = "2025-09-03"
+
 
 def _map_http_status(status: int, msg: str):
     if status in (401, 403):
@@ -61,6 +65,11 @@ class NotionClient:
         self.client = Client(auth=self.token)
 
     def _http_post(self, url: str, headers: dict, json_body: dict):
+        return self._http_request("POST", url, headers, json_body)
+
+    def _http_request(self, method: str, url: str, headers: dict,
+                      json_body: Optional[dict] = None):
+        """One HTTP call. Views needs GET/PATCH/DELETE, which the SDK does not carry."""
         try:
             import httpx  # optional dep — lazy (spec §4.1)
         except ImportError as e:
@@ -69,13 +78,108 @@ class NotionClient:
                 hint="pip install httpx  (or run /h2t-core:setup)",
             ) from e
         try:
-            resp = httpx.post(url, headers=headers, json=json_body)
+            resp = httpx.request(method, url, headers=headers, json=json_body)
             resp.raise_for_status()
-            return resp.json()
+            # DELETE answers 200 with an empty body; that is success, not a parse error.
+            return resp.json() if resp.content else {}
         except httpx.HTTPStatusError as e:
             raise _map_http_status(e.response.status_code, str(e)) from e
         except httpx.RequestError as e:
             raise NetworkError(f"Notion request failed: {e}") from e
+
+    # --- Views (API 2025-09-03) ---
+
+    def _views_headers(self) -> Dict[str, str]:
+        return {
+            "Authorization": f"Bearer {self.token}",
+            "Notion-Version": VIEWS_API_VERSION,
+            "Content-Type": "application/json",
+        }
+
+    def list_views(
+        self,
+        *,
+        database_id: Optional[str] = None,
+        data_source_id: Optional[str] = None,
+        limit: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """Views of one database or data source, plus Notion's own has_more.
+
+        Rows come back as stubs — ``{"object": "view", "id": ...}`` and nothing
+        else. Name, type, sorts and configuration live behind get_view.
+        """
+        if bool(database_id) == bool(data_source_id):
+            raise UsageError(
+                "notion views: pass exactly one of --database-id / --data-source-id"
+            )
+        key, value = (("database_id", database_id) if database_id
+                      else ("data_source_id", data_source_id))
+        results: List[Dict[str, Any]] = []
+        has_more = False
+        cursor = None
+        while True:
+            url = f"https://api.notion.com/v1/views?{key}={value}"
+            if cursor:
+                url += f"&start_cursor={cursor}"
+            data = self._http_request("GET", url, self._views_headers())
+            results.extend(data.get("results", []))
+            has_more = bool(data.get("has_more"))
+            if not has_more or (limit and len(results) >= limit):
+                break
+            cursor = data.get("next_cursor")
+        items = results[:limit] if limit else results
+        return {"items": items, "truncated": has_more or len(items) < len(results)}
+
+    def get_view(self, view_id: str) -> Dict[str, Any]:
+        return self._http_request(
+            "GET", f"https://api.notion.com/v1/views/{view_id}", self._views_headers()
+        )
+
+    def patch_view(self, view_id: str, spec: Dict[str, Any]) -> Dict[str, Any]:
+        """Send *spec* verbatim: the payload shape is Notion's, not ours.
+
+        ``sorts[].property`` and ``configuration.properties[].property_id`` accept a
+        property *name*, which Notion resolves — that is what makes one spec portable
+        across copies of a database whose property ids all differ.
+        """
+        return self._http_request(
+            "PATCH", f"https://api.notion.com/v1/views/{view_id}",
+            self._views_headers(), spec,
+        )
+
+    def create_view(
+        self,
+        spec: Dict[str, Any],
+        *,
+        database_id: Optional[str] = None,
+        data_source_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Create a view from *spec*; the parent is filled in only if spec omits it."""
+        body = dict(spec)
+        if "parent" not in body:
+            if bool(database_id) == bool(data_source_id):
+                raise UsageError(
+                    "notion views create: spec has no parent — pass exactly one of "
+                    "--database-id / --data-source-id"
+                )
+            body["parent"] = ({"type": "database_id", "database_id": database_id}
+                              if database_id else
+                              {"type": "data_source_id", "data_source_id": data_source_id})
+        return self._http_request(
+            "POST", "https://api.notion.com/v1/views", self._views_headers(), body
+        )
+
+    def delete_view(self, view_id: str, *, confirm_name: str) -> Dict[str, Any]:
+        """Delete a view after checking its name — mirrors archive_page's gate."""
+        actual = (self.get_view(view_id) or {}).get("name", "")
+        if actual != confirm_name:
+            raise UsageError(
+                f'delete aborted: view name mismatch — expected "{confirm_name}", '
+                f'got "{actual}"'
+            )
+        return self._http_request(
+            "DELETE", f"https://api.notion.com/v1/views/{view_id}", self._views_headers()
+        )
 
     # --- Read ---
 
