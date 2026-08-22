@@ -37,6 +37,10 @@ DRIVE_ROOT_FOLDER_NAME = "MeetGeek Uploads"
 _RECORDING_NAME_RE = re.compile(
     r"meetgeek-recording-(\d{4})-(\d{2})-(\d{2})T(\d{2})-(\d{2})-\d{2}-\d+Z"
 )
+# How far along the pipeline each status is, for merging manifest lines that
+# carry no timestamp. Everything else — the failures — ranks lowest.
+_STAGE_RANK = {"converted": 2, "in-drive": 3, "submitted": 4}
+
 _DURATION_RE = re.compile(r"Duration:\s*(\d+):(\d+):(\d+)(?:\.(\d+))?")
 _STREAM_AUDIO_RE = re.compile(r"Stream\s+#\d+:\d+(?:\([^)]+\))?: Audio:")
 _STREAM_VIDEO_RE = re.compile(r"Stream\s+#\d+:\d+(?:\([^)]+\))?: Video:")
@@ -486,8 +490,14 @@ def iter_manifest_records(path: Path | None = None) -> list[tuple[str, dict]]:
     order — an older `converted` line winning over a newer `submitted` one is
     the double-submit this is meant to stop. Lines from before `ts` existed sort
     first, which is where they belong.
+
+    Nothing dates those older lines against each other, though, and the 84 of
+    them already in the journal split across a shard and its sync-conflict copy,
+    which sorts second by name and would therefore always win. So among the
+    unstamped, the furthest-along status wins instead of the filename: a
+    submission is a fact about the past that a later attempt cannot undo.
     """
-    entries: list[tuple[str, int, int, dict]] = []
+    entries: list[tuple[str, int, int, int, dict]] = []
     for rank, shard in enumerate(iter_manifest_shards(path)):
         with shard.open(encoding="utf-8") as f:
             for line_no, line in enumerate(f):
@@ -498,9 +508,11 @@ def iter_manifest_records(path: Path | None = None) -> list[tuple[str, dict]]:
                     rec = json.loads(line)
                 except ValueError:
                     continue
-                entries.append((rec.get("ts") or "", rank, line_no, rec))
-    entries.sort(key=lambda e: e[:3])
-    return [(e[0], e[3]) for e in entries]
+                ts = rec.get("ts") or ""
+                stage = 0 if ts else _STAGE_RANK.get(rec.get("status"), 1)
+                entries.append((ts, stage, rank, line_no, rec))
+    entries.sort(key=lambda e: e[:4])
+    return [(e[0], e[4]) for e in entries]
 
 
 def read_uploads_manifest(path: Path | None = None) -> dict[str, dict]:
@@ -547,6 +559,11 @@ def process_one(src_path: Path, *, language: str | None, title_override: str | N
 
     state = read_uploads_manifest(manifest_path)
     rec = state.get(recording_key(src), {}) or {}
+    if rec.get("source_size_bytes") != src_size:
+        # The recording name is identity enough to dedupe on, but not to resume
+        # from: a differently sized copy is a different file, and reusing its
+        # record would submit the stored Drive object in place of this one.
+        rec = {}
     rec_status = rec.get("status")
     suffix = ".m4a" if audio_only else ".mp4"
     mp4_path = staging_dir() / (src.stem + suffix)

@@ -1642,3 +1642,98 @@ def test_upload_skips_a_recording_the_other_machine_already_submitted(cli, tmp_p
     rc = cli.main(["upload", "--from-file", str(src)])
     assert rc == 0
     assert called["n"] == 0, "already submitted on the other machine"
+
+
+def test_a_differently_sized_copy_does_not_inherit_the_stored_drive_file(
+        cli, tmp_path, monkeypatch):
+    """The size guard has to hold inside process_one, not only in cmd_upload.
+
+    cmd_upload refuses to skip a same-stem record whose size differs — and then
+    process_one resumed from that very record and submitted its Drive file, so a
+    different copy of the recording would have been reported as transcribed.
+    """
+    src = tmp_path / f"{_REC_STEM}.webm"
+    src.write_bytes(b"x" * 4096)
+    old_mp4 = tmp_path / "old.mp4"
+    old_mp4.write_bytes(b"M" * 2048)
+    manifest = _shard(tmp_path, "manifest.mac.jsonl", [{
+        "source_webm": f"I:\\{_REC_STEM}.webm",
+        "source_size_bytes": 100,  # a different copy of the same recording
+        "mp4_path": str(old_mp4), "mp4_size_bytes": 2048,
+        "drive_id": "OLD",
+        "drive_download_url": "https://example.com/dl/OLD",
+        "status": "submitted", "ts": "2026-04-18T10:00:00Z",
+    }])
+
+    rec = _recovery(cli)
+
+    def fake_convert(src_p, *, audio_only, mix_mode, output_path=None):
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_bytes(b"M" * 2048)
+        return output_path
+
+    submitted = []
+    monkeypatch.setattr(rec, "convert_media", fake_convert)
+    # Stubbed so the test reaches its assertion instead of dying on Drive auth:
+    # the failure has to be the stale URL, not a missing token.
+    monkeypatch.setattr(rec, "ensure_drive_public", lambda fid, **kw: None)
+    monkeypatch.setattr(rec, "drive_upload_file", lambda path, **kw: {
+        "drive_id": "NEW", "download_url": "https://example.com/dl/NEW",
+        "web_url": None, "created": True})
+    monkeypatch.setattr(rec, "submit_url_via_h2t_ops",
+                        lambda url, title, lang: submitted.append(url) or {"message": "ok"})
+
+    final = rec.process_one(src, manifest_path=manifest, language="ru",
+                            title_override=None, audio_only=False, mix_mode="auto")
+    assert submitted == ["https://example.com/dl/NEW"]
+    assert final["drive_id"] == "NEW"
+
+
+def test_an_unstamped_submitted_line_outranks_an_unstamped_earlier_stage(cli, tmp_path):
+    """The 84 lines already in the production journal carry no ts at all.
+
+    Nothing orders them but the shard filename, and `manifest.sync-conflict-...`
+    sorts after `manifest.jsonl` — so the conflict copy would always win, which
+    is how an older `converted` could hide a `submitted` and re-submit it.
+    Without a timestamp the honest merge is the furthest-along status: a
+    submission is a fact about the past that a later attempt cannot undo.
+    """
+    legacy = _shard(tmp_path, "manifest.jsonl", [
+        {"source_webm": f"/Users/x/{_REC_STEM}.webm", "status": "submitted",
+         "source_size_bytes": 100},
+    ])
+    _shard(tmp_path, "manifest.sync-conflict-20260516-223953-ASJLSSS.jsonl", [
+        {"source_webm": f"I:\\{_REC_STEM}.webm", "status": "converted",
+         "source_size_bytes": 100},
+    ])
+    assert cli._read_uploads_manifest(legacy)[_REC_STEM]["status"] == "submitted"
+
+
+def test_a_newer_stamped_line_wins_even_when_it_is_a_failure(cli, tmp_path):
+    """Status rank orders the unstamped lines only; ts keeps ordering the rest."""
+    mine = _shard(tmp_path, "manifest.a.jsonl", [
+        {"source_webm": f"/a/{_REC_STEM}.webm", "status": "submitted",
+         "source_size_bytes": 100, "ts": "2026-05-16T10:00:00Z"},
+    ])
+    _shard(tmp_path, "manifest.b.jsonl", [
+        {"source_webm": f"I:\\{_REC_STEM}.webm", "status": "drive-failed",
+         "source_size_bytes": 100, "ts": "2026-05-16T11:00:00Z"},
+    ])
+    assert cli._read_uploads_manifest(mine)[_REC_STEM]["status"] == "drive-failed"
+
+
+def test_line_order_decides_when_two_lines_share_a_timestamp(cli, tmp_path):
+    """now_iso() resolves to the second, so two stages routinely share a ts.
+
+    Within a shard the later line is the later event, and the status rank that
+    orders unstamped lines must not reorder these — an in-drive line outranks
+    the drive-failed one that followed it, and resume would reuse a Drive id
+    that had just failed.
+    """
+    mine = _shard(tmp_path, "manifest.a.jsonl", [
+        {"source_webm": f"/a/{_REC_STEM}.webm", "status": "in-drive",
+         "source_size_bytes": 100, "drive_id": "D", "ts": "2026-05-16T10:00:00Z"},
+        {"source_webm": f"/a/{_REC_STEM}.webm", "status": "drive-failed",
+         "source_size_bytes": 100, "ts": "2026-05-16T10:00:00Z"},
+    ])
+    assert cli._read_uploads_manifest(mine)[_REC_STEM]["status"] == "drive-failed"
