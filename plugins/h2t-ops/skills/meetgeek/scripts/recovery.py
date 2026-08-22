@@ -283,6 +283,33 @@ def _drive_public_permissions(svc, file_id: str) -> list[dict]:
     return [p for p in res.get("permissions", []) if p.get("type") == "anyone"]
 
 
+def iter_manifest_drive_ids(path: Path | None = None) -> list[str]:
+    """Every distinct drive_id the manifest has ever recorded, in first-seen order.
+
+    Not read_uploads_manifest(): that is last-line-wins per source_webm, so a
+    retry appending a line without a drive_id hides the earlier upload. For an
+    ACL sweep the superseded lines are exactly the ones that must not be missed.
+    """
+    if path is None:
+        path = uploads_manifest_path()
+    seen: list[str] = []
+    if not path.exists():
+        return seen
+    with path.open(encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                rec = json.loads(line)
+            except ValueError:
+                continue
+            file_id = rec.get("drive_id")
+            if file_id and file_id not in seen:
+                seen.append(file_id)
+    return seen
+
+
 def drive_audit_public(*, svc=None, manifest_path: Path | None = None,
                        revoke: bool = False) -> dict:
     """Report, and optionally revoke, anyone-with-link access on uploaded recordings.
@@ -296,14 +323,10 @@ def drive_audit_public(*, svc=None, manifest_path: Path | None = None,
     """
     if svc is None:
         svc = drive_service()
-    records = read_uploads_manifest(manifest_path)
     checked = 0
     public: list[str] = []
     revoked = 0
-    for record in records.values():
-        file_id = record.get("drive_id")
-        if not file_id:
-            continue
+    for file_id in iter_manifest_drive_ids(manifest_path):
         checked += 1
         perms = _drive_public_permissions(svc, file_id)
         if not perms:

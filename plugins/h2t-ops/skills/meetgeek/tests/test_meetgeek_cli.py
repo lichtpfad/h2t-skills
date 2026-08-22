@@ -1263,3 +1263,34 @@ def test_drive_audit_command_revokes_when_asked(cli, capsys, monkeypatch):
     assert rc == 0
     assert seen["revoke"] is True
     assert json.loads(capsys.readouterr().out)["revoked"] == 1
+
+
+def test_drive_audit_scans_superseded_manifest_lines(cli, tmp_path):
+    """An ACL sweep must read every line, not the last-line-wins state.
+
+    read_uploads_manifest() collapses the JSONL to one record per source_webm.
+    A retry that appends a line without a drive_id therefore hides the earlier,
+    still-public upload — and --revoke would leave it exposed (codex [P2]).
+    """
+    rec = _recovery(cli)
+    manifest = _manifest_with(tmp_path, [
+        {"source_webm": "/x/a.webm", "drive_id": "D1", "status": "upload-rejected"},
+        {"source_webm": "/x/a.webm", "status": "drive-failed"},
+    ])
+    svc = FakeDriveService({"D1": [{"id": "P1", "type": "anyone", "role": "reader"}]})
+    report = rec.drive_audit_public(svc=svc, manifest_path=manifest, revoke=True)
+    assert report["public"] == ["D1"]
+    assert svc.deleted == [("D1", "P1")]
+
+
+def test_drive_audit_checks_each_drive_id_once(cli, tmp_path):
+    """Repeated lines for the same upload must not be probed twice."""
+    rec = _recovery(cli)
+    manifest = _manifest_with(tmp_path, [
+        {"source_webm": "/x/a.webm", "drive_id": "D1", "status": "submitted"},
+        {"source_webm": "/x/a.webm", "drive_id": "D1", "status": "submitted"},
+    ])
+    svc = FakeDriveService({"D1": [{"id": "P1", "type": "anyone", "role": "reader"}]})
+    report = rec.drive_audit_public(svc=svc, manifest_path=manifest)
+    assert report["checked"] == 1
+    assert report["public"] == ["D1"]
