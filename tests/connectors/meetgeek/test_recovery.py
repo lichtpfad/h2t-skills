@@ -257,6 +257,9 @@ class TestProcessOne:
         drive_calls = []
         monkeypatch.setattr(rec, "convert_media", lambda s, **kw: convert_calls.append(1) or mp4)
         monkeypatch.setattr(rec, "drive_upload_file", lambda p, **kw: drive_calls.append(1) or {})
+        # The cached-drive path re-shares before submitting (#386): drive-audit
+        # --revoke may have removed the ACL the original upload granted.
+        monkeypatch.setattr(rec, "ensure_drive_public", lambda fid: None)
         monkeypatch.setattr(rec, "submit_url_via_h2t_ops", lambda url, title, lang: {"message": "ok"})
         monkeypatch.setattr(rec, "emit_submission_artifact", lambda r, **kw: tmp_path / "art.json")
 
