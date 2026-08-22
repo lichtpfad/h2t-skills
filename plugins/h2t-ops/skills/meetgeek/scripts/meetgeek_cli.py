@@ -555,7 +555,6 @@ def cmd_upload(args: argparse.Namespace) -> int:
         raise ApiError(f"no files match: {raw}", exit_code=1)
 
     manifest_path = _uploads_manifest_path()
-    state = _read_uploads_manifest(manifest_path)
     processed = 0
     skipped = 0
     errors = 0
@@ -565,6 +564,10 @@ def cmd_upload(args: argparse.Namespace) -> int:
         if not src_path.is_file():
             continue
         size = src_path.stat().st_size
+        # Re-read per file, not once before the loop: two copies of one
+        # recording in the same batch, and the second was submitted against a
+        # journal that already said the first had been.
+        state = _read_uploads_manifest(manifest_path)
         done = _submitted_record(state, str(src_path.resolve())) if args.skip_existing else None
         if done is not None:
             # The skip is on the recording, not on this copy of it, so say when
