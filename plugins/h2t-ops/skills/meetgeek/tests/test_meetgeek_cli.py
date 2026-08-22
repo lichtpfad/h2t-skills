@@ -1156,12 +1156,20 @@ class FakeDriveService:
     def __init__(self, perms: dict[str, list[dict]]):
         self._perms = perms
         self.deleted: list[tuple[str, str]] = []
+        self.created: list[tuple[str, str]] = []
 
     def permissions(self):
         return self
 
     def list(self, *, fileId, fields=None):
         return _Exec({"permissions": list(self._perms.get(fileId, []))})
+
+    def create(self, *, fileId, body, fields=None):
+        self.created.append((fileId, body.get("type")))
+        self._perms.setdefault(fileId, []).append(
+            {"id": f"NEW-{fileId}", "type": body["type"], "role": body["role"]}
+        )
+        return _Exec({"id": f"NEW-{fileId}"})
 
     def delete(self, *, fileId, permissionId):
         self.deleted.append((fileId, permissionId))
@@ -1413,3 +1421,22 @@ def test_resume_reshares_the_cached_drive_file_before_submitting(cli, tmp_path, 
     rc = cli.main(["upload", "--from-file", str(src), "--language", "ru", "--no-skip-existing"])
     assert rc == 0
     assert shared == ["EXISTING_DID"]
+
+
+def test_ensure_drive_public_is_a_no_op_when_already_shared(cli):
+    """Drive rejects a second anyone permission (codex [P2]).
+
+    The common resume path runs before any revoke, so the file is usually still
+    public — creating blindly would abort an upload that used to succeed.
+    """
+    rec = _recovery(cli)
+    svc = FakeDriveService({"D1": [{"id": "P1", "type": "anyone", "role": "reader"}]})
+    rec.ensure_drive_public("D1", svc=svc)
+    assert svc.created == []
+
+
+def test_ensure_drive_public_shares_when_the_permission_is_gone(cli):
+    rec = _recovery(cli)
+    svc = FakeDriveService({"D1": [{"id": "P1", "type": "user", "role": "owner"}]})
+    rec.ensure_drive_public("D1", svc=svc)
+    assert svc.created == [("D1", "anyone")]

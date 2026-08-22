@@ -320,6 +320,8 @@ def ensure_drive_public(file_id: str, *, svc=None) -> None:
     """
     if svc is None:
         svc = drive_service()
+    if _drive_public_permissions(svc, file_id):
+        return
     _drive_make_public(svc, file_id)
 
 
