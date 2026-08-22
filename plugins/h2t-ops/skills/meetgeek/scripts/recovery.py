@@ -541,13 +541,26 @@ def append_uploads_manifest(record: dict, path: Path | None = None) -> None:
         f.write(json.dumps(stamped, ensure_ascii=False) + "\n")
 
 
-def is_already_submitted(state: dict[str, dict], source: str, *, size: int) -> bool:
-    """Size, not mtime: each machine downloaded its own copy of the recording,
-    so the mtimes never matched and the guard re-submitted every time (#386)."""
+def submitted_record(state: dict[str, dict], source: str) -> dict | None:
+    """The submission on record for this recording, if there is one.
+
+    Neither mtime nor size takes part. Each machine downloaded its own copy, so
+    the mtimes never matched and the old guard re-submitted every time (#386);
+    size then had the same shape of problem from the other side — the manifest
+    keeps one record per recording, so a second copy of a different size made
+    the first look unsubmitted and MeetGeek would transcribe the meeting again.
+    Two copies of one meeting are still one meeting. Size stays where it is
+    load-bearing: the resume path, which must not inherit another copy's Drive
+    object.
+    """
     rec = state.get(recording_key(source))
     if not rec or rec.get("status") != "submitted":
-        return False
-    return rec.get("source_size_bytes") == size
+        return None
+    return rec
+
+
+def is_already_submitted(state: dict[str, dict], source: str) -> bool:
+    return submitted_record(state, source) is not None
 
 
 # ─── Pipeline coordinator ─────────────────────────────────────────────────────
