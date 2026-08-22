@@ -9,6 +9,9 @@ set -euo pipefail
 input=$(cat)
 skill=$(echo "$input" | jq -r '.tool_input.skill // ""')
 cwd=$(echo "$input" | jq -r '.cwd // "."')
+# gather-on-prompt re-enters here for the slash path and says so, because the output
+# contract is not symmetric across events (see emit).
+event=$(echo "$input" | jq -r '.hook_event_name // "PreToolUse"')
 
 # Only fire for h2t-core session skills
 case "$skill" in
@@ -51,9 +54,20 @@ fi
 
 # json.dumps, not hand-rolled escaping: a tab or CR in the briefing would otherwise
 # produce an invalid envelope.
+#
+# Channel by event: the model reads hookSpecificOutput.additionalContext, while
+# systemMessage is the user-visible TUI line. UserPromptSubmit is a member of the
+# hookSpecificOutput union, so the modern protocol validates there.
 emit() {
   printf '%s' "$1" | "${H2T_PYTHON_CMD[@]}" -c \
-    'import json, sys; sys.stdout.write(json.dumps({"systemMessage": sys.stdin.read()}))'
+    'import json, sys
+text = sys.stdin.read()
+event = sys.argv[1]
+if event == "UserPromptSubmit":
+    envelope = {"hookSpecificOutput": {"hookEventName": event, "additionalContext": text}}
+else:
+    envelope = {"systemMessage": text}
+sys.stdout.write(json.dumps(envelope))' "$event"
 }
 
 SCRIPT_STDOUT=""

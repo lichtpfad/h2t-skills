@@ -1,5 +1,18 @@
 # h2t-core Changelog
 
+## 3.2.20 — 2026-08-22
+
+- The slash form of a session skill gathers again. `/h2t-core:session-start` is expanded
+  into the prompt by the harness and never calls the Skill tool, so the `PreToolUse: Skill`
+  matcher could not fire — the accurate user was the only one whose briefing silently went
+  missing. A `UserPromptSubmit` hook now covers that path and hands over to the same
+  `gather-on-skill`, whose per-directory lock keeps a double entry from gathering twice.
+  Plain-text requests ("сделай handoff") already called the Skill tool and are unchanged.
+- The match is anchored to a leading slash command: `UserPromptSubmit` also fires for
+  harness messages such as `<task-notification>`, whose file paths contain these words.
+- Briefings reach the model on the slash path via `hookSpecificOutput.additionalContext`;
+  `systemMessage` is the user-visible TUI channel and stays in use for the Skill path.
+
 ## 3.2.19 — 2026-08-22
 
 - session-start/handoff context injection works again. The hook ran `-m lib.cli.main`
