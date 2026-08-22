@@ -1,5 +1,20 @@
 # h2t-core Changelog
 
+## 3.2.21 — 2026-08-22
+
+- session-start finds the handoff the previous session wrote. The writer keys the session
+  directory by `project.id`, the reader keyed it by the tail of the github remote — and for
+  20 of the 38 entries in `repo-mapping.yaml` those differ, so every handoff landed in a
+  directory session-start never looked in. Silently: `latest.json` still existed under the
+  repo name, so the briefing was not empty, merely days old.
+- `project.id` is the primary key, not an alternative. Several repositories map onto one
+  project on purpose (DocGraph and SpecDesigner onto docgraph); only `project.id` keeps
+  their history together. `find_session_files` and `find_latest_session_index` now take
+  several identity keys and read the repo name too, so handoffs written before a project
+  was mapped stay visible and no migration is needed.
+- Round-trip test: `h2t-handoff write --project agent-skills` must be found by a reader
+  that knows the repo as `h2t-skills`. Neither side's own tests could catch this.
+
 ## 3.2.20 — 2026-08-22
 
 - The slash form of a session skill gathers again. `/h2t-core:session-start` is expanded
