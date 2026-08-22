@@ -21,6 +21,9 @@ import pytest
 
 SCRIPT = Path(__file__).resolve().parent.parent / "scripts" / "meetgeek_cli.py"
 
+# Captured before any fixture redirects HOME — the production path the suite must never touch.
+_REAL_HOME = Path.home()
+
 
 @pytest.fixture()
 def cli(monkeypatch):
@@ -1078,3 +1081,185 @@ def test_upload_from_file_directory_walks_recursively(cli, tmp_path, monkeypatch
     rc = cli.main(["upload", "--from-file", str(tmp_path)])
     assert rc == 0
     assert sorted(seen) == [a.name, b.name]
+
+
+# ─── Lake root isolation (#386, defect 6) ─────────────────────────────────────
+#
+# staging_dir(), uploads_manifest_path() and the emit_submission_artifact()
+# default all derived from Path.home() with no override, so four upload tests
+# wrote mp4 stubs and submission artifacts into the user's real ~/.dor lake —
+# and Syncthing carried them to the other machine.
+
+def _recovery(cli):
+    import sys as _sys
+    mod = _sys.modules.get("recovery")
+    assert mod is not None, "recovery module not found in sys.modules"
+    return mod
+
+
+def test_staging_dir_honours_h2t_lake_root(cli, tmp_path, monkeypatch):
+    rec = _recovery(cli)
+    lake = tmp_path / "lake"
+    monkeypatch.setenv("H2T_LAKE_ROOT", str(lake))
+    assert lake in rec.staging_dir().parents
+
+
+def test_uploads_manifest_path_honours_h2t_lake_root(cli, tmp_path, monkeypatch):
+    rec = _recovery(cli)
+    lake = tmp_path / "lake"
+    monkeypatch.setenv("H2T_LAKE_ROOT", str(lake))
+    assert lake in rec.uploads_manifest_path().parents
+
+
+def test_emit_submission_artifact_defaults_into_lake_root(cli, tmp_path, monkeypatch):
+    rec = _recovery(cli)
+    lake = tmp_path / "lake"
+    monkeypatch.setenv("H2T_LAKE_ROOT", str(lake))
+    path = rec.emit_submission_artifact({"source_webm": "/x/meetgeek-recording-a.webm"})
+    assert lake in path.parents
+
+
+def test_lake_root_defaults_to_dor_lake_when_unset(cli, monkeypatch):
+    """Without the env var the historical location is preserved."""
+    rec = _recovery(cli)
+    monkeypatch.delenv("H2T_LAKE_ROOT", raising=False)
+    assert rec.lake_root() == Path.home() / ".dor" / "lake"
+
+
+def test_suite_never_points_at_the_real_lake(cli):
+    """The autouse conftest fixture must redirect every test away from ~/.dor.
+
+    Without it, a test that forgets to override the path writes into production
+    data — which is how pytest fixtures ended up in the synced lake.
+    """
+    rec = _recovery(cli)
+    # Path.home() is itself redirected by the fixture, so the real location has
+    # to be captured at import time, before any fixture runs.
+    real_lake = _REAL_HOME / ".dor" / "lake"
+    assert rec.lake_root() != real_lake
+    assert real_lake not in rec.staging_dir().parents
+
+
+# ─── Public-ACL audit (#386, defect 2) ────────────────────────────────────────
+#
+# _drive_make_public() grants `type: anyone` so MeetGeek can fetch the recording
+# by URL, and nothing ever revokes it: 26/26 uploads stayed world-readable by
+# link for 108 days. Revoking inside Stage 3 would race MeetGeek's own async
+# fetch, so the recovery path is a separate audit over the manifest's drive_ids.
+
+class FakeDriveService:
+    """Minimal Drive stub: permissions().list/delete over a dict of file -> perms."""
+
+    def __init__(self, perms: dict[str, list[dict]]):
+        self._perms = perms
+        self.deleted: list[tuple[str, str]] = []
+
+    def permissions(self):
+        return self
+
+    def list(self, *, fileId, fields=None):
+        return _Exec({"permissions": list(self._perms.get(fileId, []))})
+
+    def delete(self, *, fileId, permissionId):
+        self.deleted.append((fileId, permissionId))
+        self._perms[fileId] = [
+            p for p in self._perms.get(fileId, []) if p["id"] != permissionId
+        ]
+        return _Exec({})
+
+
+class _Exec:
+    def __init__(self, value):
+        self._value = value
+
+    def execute(self):
+        return self._value
+
+
+def _manifest_with(tmp_path, records):
+    path = tmp_path / "manifest.jsonl"
+    path.write_text(
+        "\n".join(json.dumps(r, ensure_ascii=False) for r in records) + "\n",
+        encoding="utf-8",
+    )
+    return path
+
+
+def test_drive_audit_reports_public_uploads_without_revoking(cli, tmp_path):
+    rec = _recovery(cli)
+    manifest = _manifest_with(tmp_path, [
+        {"source_webm": "/x/a.webm", "drive_id": "D1", "status": "submitted"},
+        {"source_webm": "/x/b.webm", "drive_id": "D2", "status": "submitted"},
+    ])
+    svc = FakeDriveService({
+        "D1": [{"id": "P1", "type": "anyone", "role": "reader"}],
+        "D2": [{"id": "P2", "type": "user", "role": "owner"}],
+    })
+    report = rec.drive_audit_public(svc=svc, manifest_path=manifest)
+    assert report["checked"] == 2
+    assert report["public"] == ["D1"]
+    assert report["revoked"] == 0
+    assert svc.deleted == []
+
+
+def test_drive_audit_revokes_only_the_anyone_permission(cli, tmp_path):
+    rec = _recovery(cli)
+    manifest = _manifest_with(tmp_path, [
+        {"source_webm": "/x/a.webm", "drive_id": "D1", "status": "submitted"},
+    ])
+    svc = FakeDriveService({
+        "D1": [
+            {"id": "P1", "type": "anyone", "role": "reader"},
+            {"id": "P2", "type": "user", "role": "owner"},
+        ],
+    })
+    report = rec.drive_audit_public(svc=svc, manifest_path=manifest, revoke=True)
+    assert report["revoked"] == 1
+    assert svc.deleted == [("D1", "P1")]
+    assert [p["id"] for p in svc._perms["D1"]] == ["P2"], "owner must survive the revoke"
+
+
+def test_drive_audit_skips_records_without_a_drive_id(cli, tmp_path):
+    """convert-failed and drive-failed records carry no drive_id."""
+    rec = _recovery(cli)
+    manifest = _manifest_with(tmp_path, [
+        {"source_webm": "/x/a.webm", "status": "convert-failed"},
+        {"source_webm": "/x/b.webm", "drive_id": "D2", "status": "submitted"},
+    ])
+    svc = FakeDriveService({"D2": [{"id": "P2", "type": "anyone", "role": "reader"}]})
+    report = rec.drive_audit_public(svc=svc, manifest_path=manifest)
+    assert report["checked"] == 1
+    assert report["public"] == ["D2"]
+
+
+def test_drive_audit_command_reports_without_revoking_by_default(cli, capsys, monkeypatch):
+    """Revoking is destructive to a live pipeline, so it must be opt-in."""
+    rec = _recovery(cli)
+    seen = {}
+
+    def fake_audit(*, svc=None, manifest_path=None, revoke=False):
+        seen["revoke"] = revoke
+        return {"checked": 2, "public": ["D1"], "revoked": 0}
+
+    monkeypatch.setattr(rec, "drive_audit_public", fake_audit)
+    monkeypatch.setattr(cli, "_drive_audit_public", fake_audit, raising=False)
+    rc = cli.main(["drive-audit"])
+    assert rc == 0
+    assert seen["revoke"] is False
+    assert json.loads(capsys.readouterr().out)["public"] == ["D1"]
+
+
+def test_drive_audit_command_revokes_when_asked(cli, capsys, monkeypatch):
+    rec = _recovery(cli)
+    seen = {}
+
+    def fake_audit(*, svc=None, manifest_path=None, revoke=False):
+        seen["revoke"] = revoke
+        return {"checked": 2, "public": ["D1"], "revoked": 1}
+
+    monkeypatch.setattr(rec, "drive_audit_public", fake_audit)
+    monkeypatch.setattr(cli, "_drive_audit_public", fake_audit, raising=False)
+    rc = cli.main(["drive-audit", "--revoke"])
+    assert rc == 0
+    assert seen["revoke"] is True
+    assert json.loads(capsys.readouterr().out)["revoked"] == 1

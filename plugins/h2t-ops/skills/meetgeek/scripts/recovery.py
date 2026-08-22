@@ -56,9 +56,24 @@ def now_iso() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def lake_root() -> Path:
+    """Root of the local data lake, overridable by H2T_LAKE_ROOT.
+
+    Every lake path goes through here so a test run cannot reach the user's real
+    ~/.dor: four upload tests wrote mp4 stubs and submission artifacts into it,
+    and Syncthing carried them to the other machine (#386).
+    """
+    override = os.environ.get("H2T_LAKE_ROOT")
+    return Path(override).expanduser() if override else Path.home() / ".dor" / "lake"
+
+
+def uploads_staging_root() -> Path:
+    return lake_root() / "meetgeek" / "uploads-staging"
+
+
 def staging_dir() -> Path:
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    return Path.home() / ".dor" / "lake" / "meetgeek" / "uploads-staging" / today
+    return uploads_staging_root() / today
 
 
 def title_from_filename(stem: str) -> str:
@@ -261,6 +276,48 @@ def _drive_make_public(svc, file_id: str) -> None:
     ).execute()
 
 
+def _drive_public_permissions(svc, file_id: str) -> list[dict]:
+    res = svc.permissions().list(
+        fileId=file_id, fields="permissions(id,type,role)",
+    ).execute()
+    return [p for p in res.get("permissions", []) if p.get("type") == "anyone"]
+
+
+def drive_audit_public(*, svc=None, manifest_path: Path | None = None,
+                       revoke: bool = False) -> dict:
+    """Report, and optionally revoke, anyone-with-link access on uploaded recordings.
+
+    `_drive_make_public` grants `type: anyone` so MeetGeek can fetch the file by
+    URL; nothing revoked it, so 26 recordings stayed world-readable by link for
+    108 days (#386). Revoking inside Stage 3 would race MeetGeek's own async
+    fetch — the request returning success says nothing about the download having
+    happened — so the sweep runs separately, over the drive_ids the manifest
+    already knows.
+    """
+    if svc is None:
+        svc = drive_service()
+    records = read_uploads_manifest(manifest_path)
+    checked = 0
+    public: list[str] = []
+    revoked = 0
+    for record in records.values():
+        file_id = record.get("drive_id")
+        if not file_id:
+            continue
+        checked += 1
+        perms = _drive_public_permissions(svc, file_id)
+        if not perms:
+            continue
+        public.append(file_id)
+        if revoke:
+            for perm in perms:
+                svc.permissions().delete(
+                    fileId=file_id, permissionId=perm["id"],
+                ).execute()
+                revoked += 1
+    return {"checked": checked, "public": public, "revoked": revoked}
+
+
 def drive_upload_file(path: Path, *, folder: str | None = None,
                       make_public: bool = True) -> dict:
     """Upload to Drive. Idempotent by filename within folder. Returns {drive_id, web_url, download_url, created}."""
@@ -343,7 +400,7 @@ def submit_url_via_h2t_ops(download_url: str, title: str | None,
 # ─── Manifest ─────────────────────────────────────────────────────────────────
 
 def uploads_manifest_path() -> Path:
-    return Path.home() / ".dor" / "lake" / "meetgeek" / "uploads-staging" / "manifest.jsonl"
+    return uploads_staging_root() / "manifest.jsonl"
 
 
 def read_uploads_manifest(path: Path | None = None) -> dict[str, dict]:
@@ -509,10 +566,7 @@ def emit_submission_artifact(result: dict, *, artifact_dir: Path | None = None) 
     separately after transcript fetch/sync.
     """
     if artifact_dir is None:
-        date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-        artifact_dir = (
-            Path.home() / ".dor" / "lake" / "meetgeek" / "uploads-staging" / date
-        )
+        artifact_dir = staging_dir()
     artifact_dir.mkdir(parents=True, exist_ok=True)
     stem = Path(result.get("source_webm", "unknown")).stem
     artifact = {
