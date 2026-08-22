@@ -31,6 +31,8 @@ def gather_github(
         ],
     })
 
+    failed = [name for name, out in raw.items() if out is None]
+
     milestones = _parse_jsonl_or_json(raw["milestones"])
     issues = _parse_json(raw["issues"])
     bugs = _parse_json(raw["bugs"])
@@ -47,12 +49,15 @@ def gather_github(
                 *label_args, "--json", "number,title,labels",
             ],
         })
+        if raw_mi["mi"] is None:
+            failed.append("milestone_issues")
         milestone_issues = _parse_json(raw_mi["mi"])
 
     return {
         "milestones": milestones, "current_milestone": current_milestone,
         "milestone_issues": milestone_issues,
         "issues": issues, "bugs": bugs, "prs": prs,
+        "failed": sorted(failed),
     }
 
 

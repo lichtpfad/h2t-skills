@@ -51,7 +51,7 @@ def identify_project(cwd: str = ".") -> dict:
 
     # 1. Try git remote
     raw = run_parallel({"remote": ["git", "-C", cwd, "remote", "get-url", "origin"]})
-    remote = raw["remote"].strip()
+    remote = (raw["remote"] or "").strip()
     repo_name = ""
     github_remote = ""
 

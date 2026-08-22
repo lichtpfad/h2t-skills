@@ -167,3 +167,26 @@ def test_briefing_without_core_content():
 
     assert "## User Context" not in md
     assert "## Сессия:" in md
+
+
+def test_hint_reports_github_outage_instead_of_no_issues():
+    """A failed gh call must not be reported as 'this repo has no issues'."""
+    data = _minimal_data(
+        project={"id": "my-tool", "domain": "dev", "type": "git", "github": "o/r"},
+        github={"issues": [], "milestone_issues": [], "failed": ["issues", "prs"]},
+        sessions=["s"],
+    )
+    hints = _build_hints(data)
+    assert not any("Нет открытых issues" in h for h in hints)
+    assert any("GitHub" in h for h in hints), hints
+
+
+def test_hint_still_reports_empty_backlog_when_github_healthy():
+    """With every gh call successful, an empty backlog is a real fact."""
+    data = _minimal_data(
+        project={"id": "my-tool", "domain": "dev", "type": "git", "github": "o/r"},
+        github={"issues": [], "milestone_issues": [], "failed": []},
+        sessions=["s"],
+    )
+    hints = _build_hints(data)
+    assert any("Нет открытых issues" in h for h in hints), hints

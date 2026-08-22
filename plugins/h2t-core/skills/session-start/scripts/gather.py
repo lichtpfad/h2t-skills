@@ -88,6 +88,8 @@ def main() -> None:
         if project.get("github"):
             github = gather_github(owner_repo=project["github"])
             sources_used.append("github")
+            if github.get("failed"):
+                sources_failed.append("github")
 
     # Layer 2: Stack detection
     stack = detect_stack(args.cwd)
