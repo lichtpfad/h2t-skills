@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import os
+import platform
 import re
 import subprocess
 import sys
@@ -67,6 +68,18 @@ def lake_root() -> Path:
     return Path(override).expanduser() if override else Path.home() / ".dor" / "lake"
 
 
+def machine_id() -> str:
+    """Slug identifying this machine, overridable by H2T_MACHINE_ID.
+
+    The uploads journal lives in a Syncthing-synced tree. Two machines appending
+    to one JSONL produced manifest.jsonl and a sync-conflict copy that were never
+    merged, so each machine was blind to the other's history (#386).
+    """
+    raw = os.environ.get("H2T_MACHINE_ID") or platform.node() or ""
+    slug = re.sub(r"[^a-z0-9]+", "-", raw.lower()).strip("-")
+    return slug or "unknown"
+
+
 def uploads_staging_root() -> Path:
     return lake_root() / "meetgeek" / "uploads-staging"
 
@@ -74,6 +87,20 @@ def uploads_staging_root() -> Path:
 def staging_dir() -> Path:
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     return uploads_staging_root() / today
+
+
+def recording_key(source: str | Path) -> str:
+    """Machine-stable identity of a recording.
+
+    The manifest keyed on the absolute source path, which is machine- and
+    OS-specific: the same recording was `I:\\meetgeek-recording-....webm` on
+    Windows and `~/Downloads/meetgeek-recording-....webm` on macOS, so two
+    meetings were converted, uploaded and submitted to MeetGeek twice (#386).
+    The recording name carries the start timestamp to the millisecond, which is
+    identity enough; anything not named that way keeps the old path key.
+    """
+    m = _RECORDING_NAME_RE.search(Path(source).stem)
+    return m.group(0) if m else str(source)
 
 
 def title_from_filename(stem: str) -> str:
@@ -286,27 +313,15 @@ def _drive_public_permissions(svc, file_id: str) -> list[dict]:
 def iter_manifest_drive_ids(path: Path | None = None) -> list[str]:
     """Every distinct drive_id the manifest has ever recorded, in first-seen order.
 
-    Not read_uploads_manifest(): that is last-line-wins per source_webm, so a
+    Not read_uploads_manifest(): that is newest-line-wins per recording, so a
     retry appending a line without a drive_id hides the earlier upload. For an
     ACL sweep the superseded lines are exactly the ones that must not be missed.
     """
-    if path is None:
-        path = uploads_manifest_path()
     seen: list[str] = []
-    if not path.exists():
-        return seen
-    with path.open(encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                rec = json.loads(line)
-            except ValueError:
-                continue
-            file_id = rec.get("drive_id")
-            if file_id and file_id not in seen:
-                seen.append(file_id)
+    for _, rec in iter_manifest_records(path):
+        file_id = rec.get("drive_id")
+        if file_id and file_id not in seen:
+            seen.append(file_id)
     return seen
 
 
@@ -444,28 +459,76 @@ def submit_url_via_h2t_ops(download_url: str, title: str | None,
 # ─── Manifest ─────────────────────────────────────────────────────────────────
 
 def uploads_manifest_path() -> Path:
-    return uploads_staging_root() / "manifest.jsonl"
+    """The shard this machine appends to. Never the one it reads alone."""
+    return uploads_staging_root() / f"manifest.{machine_id()}.jsonl"
+
+
+def iter_manifest_shards(path: Path | None = None) -> list[Path]:
+    """Every manifest shard beside `path`, `path` itself included.
+
+    The glob covers the legacy manifest.jsonl and the sync-conflict copies
+    Syncthing left behind, so no history is stranded by the move to per-machine
+    shards — and the other machine's uploads become visible (#386).
+    """
+    if path is None:
+        path = uploads_manifest_path()
+    shards = {p for p in path.parent.glob("manifest*.jsonl") if p.is_file()}
+    if path.is_file():
+        shards.add(path)
+    return sorted(shards)
+
+
+def iter_manifest_records(path: Path | None = None) -> list[tuple[str, dict]]:
+    """Every record across every shard, oldest first.
+
+    Ordering is by the `ts` each line is stamped with: shard filenames say
+    nothing about when a line was written, and the union is only as good as its
+    order — an older `converted` line winning over a newer `submitted` one is
+    the double-submit this is meant to stop. Lines from before `ts` existed sort
+    first, which is where they belong.
+
+    Nothing dates those older lines against each other, though — the 84 already
+    in the journal split across a shard and its sync-conflict copy, which sorts
+    second by name and would therefore always win — and two machines can stamp
+    the same second. read_uploads_manifest() carries the one guarantee that must
+    survive a guessed order.
+    """
+    entries: list[tuple[str, int, int, int, dict]] = []
+    for rank, shard in enumerate(iter_manifest_shards(path)):
+        with shard.open(encoding="utf-8") as f:
+            for line_no, line in enumerate(f):
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    rec = json.loads(line)
+                except ValueError:
+                    continue
+                entries.append((rec.get("ts") or "", rank, line_no, rec))
+    entries.sort(key=lambda e: e[:3])
+    return [(e[0], e[3]) for e in entries]
 
 
 def read_uploads_manifest(path: Path | None = None) -> dict[str, dict]:
-    """Last-line-wins per source_webm key."""
-    if path is None:
-        path = uploads_manifest_path()
+    """Newest-line-wins per recording, across every shard — except a submission.
+
+    Order between shards is a guess: filenames for the lines written before `ts`
+    existed, one second of resolution for the rest. Every mistake that guess can
+    make is recoverable by re-running, save one — reading a `submitted`
+    recording as unsubmitted sends it to MeetGeek a second time. So a later line
+    never demotes a submission; it describes the next attempt, and nothing
+    appended afterwards undoes that MeetGeek accepted the recording once.
+    """
     state: dict[str, dict] = {}
-    if not path.exists():
-        return state
-    with path.open(encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                rec = json.loads(line)
-            except ValueError:
-                continue
-            src = rec.get("source_webm")
-            if src:
-                state[src] = rec
+    for _, rec in iter_manifest_records(path):
+        src = rec.get("source_webm")
+        if not src:
+            continue
+        key = recording_key(src)
+        prev = state.get(key)
+        if prev and prev.get("status") == "submitted" and rec.get("status") != "submitted":
+            continue
+        state[key] = rec
     return state
 
 
@@ -473,16 +536,31 @@ def append_uploads_manifest(record: dict, path: Path | None = None) -> None:
     if path is None:
         path = uploads_manifest_path()
     path.parent.mkdir(parents=True, exist_ok=True)
+    stamped = {**record, "ts": record.get("ts") or now_iso()}
     with path.open("a", encoding="utf-8") as f:
-        f.write(json.dumps(record, ensure_ascii=False) + "\n")
+        f.write(json.dumps(stamped, ensure_ascii=False) + "\n")
 
 
-def is_already_submitted(state: dict[str, dict], source: str, *,
-                         size: int, mtime: str) -> bool:
-    rec = state.get(source)
+def submitted_record(state: dict[str, dict], source: str) -> dict | None:
+    """The submission on record for this recording, if there is one.
+
+    Neither mtime nor size takes part. Each machine downloaded its own copy, so
+    the mtimes never matched and the old guard re-submitted every time (#386);
+    size then had the same shape of problem from the other side — the manifest
+    keeps one record per recording, so a second copy of a different size made
+    the first look unsubmitted and MeetGeek would transcribe the meeting again.
+    Two copies of one meeting are still one meeting. Size stays where it is
+    load-bearing: the resume path, which must not inherit another copy's Drive
+    object.
+    """
+    rec = state.get(recording_key(source))
     if not rec or rec.get("status") != "submitted":
-        return False
-    return rec.get("source_size_bytes") == size and rec.get("source_mtime") == mtime
+        return None
+    return rec
+
+
+def is_already_submitted(state: dict[str, dict], source: str) -> bool:
+    return submitted_record(state, source) is not None
 
 
 # ─── Pipeline coordinator ─────────────────────────────────────────────────────
@@ -500,7 +578,12 @@ def process_one(src_path: Path, *, language: str | None, title_override: str | N
     }
 
     state = read_uploads_manifest(manifest_path)
-    rec = state.get(str(src), {}) or {}
+    rec = state.get(recording_key(src), {}) or {}
+    if rec.get("source_size_bytes") != src_size:
+        # The recording name is identity enough to dedupe on, but not to resume
+        # from: a differently sized copy is a different file, and reusing its
+        # record would submit the stored Drive object in place of this one.
+        rec = {}
     rec_status = rec.get("status")
     suffix = ".m4a" if audio_only else ".mp4"
     mp4_path = staging_dir() / (src.stem + suffix)
