@@ -9,6 +9,9 @@ set -euo pipefail
 input=$(cat)
 skill=$(echo "$input" | jq -r '.tool_input.skill // ""')
 cwd=$(echo "$input" | jq -r '.cwd // "."')
+# gather-on-prompt re-enters here for the slash path and says so, because the output
+# contract is not symmetric across events (see emit).
+event=$(echo "$input" | jq -r '.hook_event_name // "PreToolUse"')
 
 # Only fire for h2t-core session skills
 case "$skill" in
@@ -45,15 +48,34 @@ fi
 # plugin scripts take --cwd, so the working directory is irrelevant to them.
 source "$PLUGIN_ROOT/scripts/resolve-h2t-python.sh"
 if ! resolve_h2t_python "import yaml"; then
-  echo '{"systemMessage": "GATHER_ERROR: no Python with PyYAML found. Install it into ~/.h2t/venv or set H2T_PYTHON."}'
+  # emit() needs the interpreter we just failed to find, so this envelope is hand-written.
+  # Safe only because the text is a fixed literal with nothing to escape — and it still has
+  # to honour the per-event channel, or the slash user is told nothing at all.
+  _err="GATHER_ERROR: no Python with PyYAML found. Install it into ~/.h2t/venv or set H2T_PYTHON."
+  if [ "$event" = "UserPromptSubmit" ]; then
+    printf '{"hookSpecificOutput": {"hookEventName": "UserPromptSubmit", "additionalContext": "%s"}}\n' "$_err"
+  else
+    printf '{"systemMessage": "%s"}\n' "$_err"
+  fi
   exit 0
 fi
 
 # json.dumps, not hand-rolled escaping: a tab or CR in the briefing would otherwise
 # produce an invalid envelope.
+#
+# Channel by event: the model reads hookSpecificOutput.additionalContext, while
+# systemMessage is the user-visible TUI line. UserPromptSubmit is a member of the
+# hookSpecificOutput union, so the modern protocol validates there.
 emit() {
   printf '%s' "$1" | "${H2T_PYTHON_CMD[@]}" -c \
-    'import json, sys; sys.stdout.write(json.dumps({"systemMessage": sys.stdin.read()}))'
+    'import json, sys
+text = sys.stdin.read()
+event = sys.argv[1]
+if event == "UserPromptSubmit":
+    envelope = {"hookSpecificOutput": {"hookEventName": event, "additionalContext": text}}
+else:
+    envelope = {"systemMessage": text}
+sys.stdout.write(json.dumps(envelope))' "$event"
 }
 
 SCRIPT_STDOUT=""
