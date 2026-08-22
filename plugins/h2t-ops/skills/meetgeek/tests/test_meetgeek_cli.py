@@ -1294,3 +1294,38 @@ def test_drive_audit_checks_each_drive_id_once(cli, tmp_path):
     report = rec.drive_audit_public(svc=svc, manifest_path=manifest)
     assert report["checked"] == 1
     assert report["public"] == ["D1"]
+
+
+def test_drive_audit_survives_a_stale_drive_id(cli, tmp_path):
+    """A deleted Drive file must not abort the sweep (codex [P2]).
+
+    The audit walks every historical manifest entry, so an id whose file is gone
+    is expected. If permissions().list raises and nothing catches it, the later,
+    still-public uploads are never reached.
+    """
+    rec = _recovery(cli)
+    manifest = _manifest_with(tmp_path, [
+        {"source_webm": "/x/a.webm", "drive_id": "GONE", "status": "submitted"},
+        {"source_webm": "/x/b.webm", "drive_id": "D2", "status": "submitted"},
+    ])
+
+    class ExplodingService(FakeDriveService):
+        def list(self, *, fileId, fields=None):
+            if fileId == "GONE":
+                raise RuntimeError("File not found: GONE")
+            return super().list(fileId=fileId, fields=fields)
+
+    svc = ExplodingService({"D2": [{"id": "P2", "type": "anyone", "role": "reader"}]})
+    report = rec.drive_audit_public(svc=svc, manifest_path=manifest, revoke=True)
+    assert report["public"] == ["D2"]
+    assert svc.deleted == [("D2", "P2")]
+    assert [e["drive_id"] for e in report["errors"]] == ["GONE"]
+
+
+def test_drive_audit_reports_no_errors_on_a_clean_sweep(cli, tmp_path):
+    rec = _recovery(cli)
+    manifest = _manifest_with(tmp_path, [
+        {"source_webm": "/x/a.webm", "drive_id": "D1", "status": "submitted"},
+    ])
+    svc = FakeDriveService({"D1": [{"id": "P1", "type": "user", "role": "owner"}]})
+    assert rec.drive_audit_public(svc=svc, manifest_path=manifest)["errors"] == []

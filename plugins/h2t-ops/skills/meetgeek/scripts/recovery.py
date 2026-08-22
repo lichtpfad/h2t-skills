@@ -325,20 +325,26 @@ def drive_audit_public(*, svc=None, manifest_path: Path | None = None,
         svc = drive_service()
     checked = 0
     public: list[str] = []
+    errors: list[dict] = []
     revoked = 0
     for file_id in iter_manifest_drive_ids(manifest_path):
         checked += 1
-        perms = _drive_public_permissions(svc, file_id)
-        if not perms:
-            continue
-        public.append(file_id)
-        if revoke:
-            for perm in perms:
-                svc.permissions().delete(
-                    fileId=file_id, permissionId=perm["id"],
-                ).execute()
-                revoked += 1
-    return {"checked": checked, "public": public, "revoked": revoked}
+        # The sweep walks every historical entry, so ids whose file was deleted
+        # are expected. Letting one raise would strand every later upload public.
+        try:
+            perms = _drive_public_permissions(svc, file_id)
+            if not perms:
+                continue
+            public.append(file_id)
+            if revoke:
+                for perm in perms:
+                    svc.permissions().delete(
+                        fileId=file_id, permissionId=perm["id"],
+                    ).execute()
+                    revoked += 1
+        except Exception as e:  # noqa: BLE001 — one bad id must not end the sweep
+            errors.append({"drive_id": file_id, "error": str(e)})
+    return {"checked": checked, "public": public, "revoked": revoked, "errors": errors}
 
 
 def drive_upload_file(path: Path, *, folder: str | None = None,
