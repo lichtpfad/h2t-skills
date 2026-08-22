@@ -1,3 +1,7 @@
 # Repo Boundary Rules
 
-Работать только над задачами **своего** репозитория. Не вмешиваться в код или рабочий процесс другого репо (например `h2t-evals`), где может идти своя параллельная сессия — вместо правок там **заводить туда GitHub issue**, если чего-то не хватает в их API или что-то не работает с нашей стороны. Точный диагноз и репро в issue давать можно (и нужно), но фикс — их сторона.
+Work only on tasks belonging to **this** repository. Do not touch the code or the workflow
+of another repo (`h2t-evals`, for one) where a parallel session may be running — **file a
+GitHub issue there** instead when their API lacks something or something breaks from our
+side. A precise diagnosis and a repro belong in that issue (and are wanted), but the fix is
+their side to make.

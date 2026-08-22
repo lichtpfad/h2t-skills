@@ -1,13 +1,17 @@
 # Connectors Rules
 
-## Provider I/O — только h2t-ops (mandatory)
+## Provider I/O — h2t-ops only (mandatory)
 
-Drive, Gmail, Calendar, Notion, Telegram, MeetGeek, Granola — **только** через `h2t-ops <connector>`.
-- Перед командой: вызвать скилл `h2t-ops:connectors` **или** `h2t-ops <connector> --help`. **Флаги не угадывать** (id папки/файла — позиционный, не `--folder`).
-- **Никогда** `gdown` / `rclone` / raw Google API / WebFetch / браузер для provider-файлов — только `h2t-ops`.
+Drive, Gmail, Calendar, Notion, Telegram, MeetGeek, Granola — **only** through
+`h2t-ops <connector>`.
+- Before running a command: invoke the `h2t-ops:connectors` skill **or** `h2t-ops <connector> --help`. **Do not guess flags** (a folder or file id is positional, not `--folder`).
+- **Never** `gdown` / `rclone` / raw Google API / WebFetch / a browser for provider files — only `h2t-ops`.
 - Discover: `h2t-ops connectors`.
-- Касается и сабагентов: они получают этот файл, но не загруженные скиллы — грузи reference перед действием.
+- This applies to subagents too: they receive this file but not the loaded skills — load the reference before acting.
 
-## MeetGeek + локальные файлы
+## MeetGeek + local files
 
-При любом упоминании MeetGeek + локальные файлы (webm, mp4, запись, upload, залить) — всегда использовать `h2t-ops:connectors`. Не строить кастомный pipeline через h2t-transcription или другие инструменты. Флоу: Drive upload → meetgeek submit-url (см. `references/meetgeek.md` в connectors skill).
+Whenever MeetGeek comes up together with local files (webm, mp4, recording, upload), always
+use `h2t-ops:connectors`. Do not build a custom pipeline through h2t-transcription or other
+tools. The flow is: Drive upload → meetgeek submit-url (see `references/meetgeek.md` in the
+connectors skill).

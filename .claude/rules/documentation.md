@@ -4,6 +4,11 @@ Full standards: C:/dev/docs/standards/ (read before creating docs, issues, ADRs)
 
 ## Critical Inline Rules
 
+### Rules Language (MUST follow)
+`.claude/rules/*.md` are written in English — the rule text, its examples, and its rationale.
+Agents read these files verbatim; a mixed-language rule set makes them harder to quote,
+diff, and share across repos.
+
 ### Issue Titles (MUST follow)
 Format: `{repo-short}: [MN] verb noun`
 - repo-short = repo name without `h2t-` prefix (e.g., `graphs`, `ai`, `transcription`)
