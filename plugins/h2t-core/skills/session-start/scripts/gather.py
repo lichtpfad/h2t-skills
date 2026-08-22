@@ -98,8 +98,12 @@ def main() -> None:
     proj_id = project.get("id", "unknown")
     github_remote = project.get("github") or git.get("owner_repo", "")
     repo_name = github_remote.split("/")[-1] if github_remote else Path(args.cwd).resolve().name
-    sessions = find_session_files(repo_name)
-    latest_session = find_latest_session_index(repo_name)
+    # project.id first: repo-mapping.yaml folds several repositories into one project
+    # (DocGraph and SpecDesigner onto docgraph), and the handoff writer keys the directory
+    # by project.id — so reading by repo name alone missed every handoff for the 20 of 38
+    # mapped repos whose name differs from their project (#377).
+    sessions = find_session_files(proj_id, repo_name)
+    latest_session = find_latest_session_index(proj_id, repo_name)
 
     elapsed_ms = int((time.monotonic() - start) * 1000)
 

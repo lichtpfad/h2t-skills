@@ -74,7 +74,7 @@ def _run_gather(skill: str, cwd: str, format_briefing_flag: bool, briefing_only:
     proj_id = project.get("id", "unknown")
     github_remote = project.get("github") or git.get("owner_repo", "")
     repo_name = github_remote.split("/")[-1] if github_remote else Path(cwd).resolve().name
-    sessions = find_session_files(repo_name)
+    sessions = find_session_files(proj_id, repo_name)
 
     elapsed_ms = int((time.monotonic() - start) * 1000)
 

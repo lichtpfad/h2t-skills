@@ -19,8 +19,27 @@ def _legacy_session_root() -> Path:
 
 
 # Archival markdown discovery stays separate from repo continuity lookup.
-def find_session_files(repo_name: str) -> list[str]:
+def _identity_keys(names: tuple[str, ...]) -> list[str]:
+    """Directory names a session may live under, most significant first.
+
+    The writer keys the directory by project.id (handoff writer.py), and several
+    repositories map onto one project on purpose — DocGraph and SpecDesigner both onto
+    docgraph — so project.id is what keeps their history together. Repo names are read too,
+    for handoffs written before a project was mapped. Duplicates collapse; a name with a
+    path separator is dropped rather than failing the whole lookup.
+    """
+    keys: list[str] = []
+    for name in names:
+        if not name or "/" in name or "\\" in name:
+            continue
+        if name not in keys:
+            keys.append(name)
+    return keys
+
+
+def find_session_files(*repo_names: str) -> list[str]:
     """Find handoff markdown files across h2t and legacy DOR session roots."""
+    keys = _identity_keys(repo_names)
     files = []
     seen: set[str] = set()
     for sessions_root in (_session_root(), _legacy_session_root()):
@@ -29,13 +48,14 @@ def find_session_files(repo_name: str) -> list[str]:
         for machine_dir in sessions_root.iterdir():
             if not machine_dir.is_dir():
                 continue
-            repo_dir = machine_dir / repo_name
-            if repo_dir.is_dir():
-                for f in repo_dir.glob("*.md"):
-                    resolved = str(f)
-                    if resolved not in seen:
-                        seen.add(resolved)
-                        files.append(f)
+            for key in keys:
+                repo_dir = machine_dir / key
+                if repo_dir.is_dir():
+                    for f in repo_dir.glob("*.md"):
+                        resolved = str(f)
+                        if resolved not in seen:
+                            seen.add(resolved)
+                            files.append(f)
     return [str(f) for f in sorted(files, key=os.path.getmtime, reverse=True)]
 
 
@@ -88,9 +108,10 @@ def _bound_latest_index(data: dict, path: Path) -> dict:
     }
 
 
-def find_latest_session_index(repo_name: str) -> dict | None:
-    """Find newest bounded latest.json for a repo-scoped session."""
-    if not repo_name or "/" in repo_name or "\\" in repo_name:
+def find_latest_session_index(*repo_names: str) -> dict | None:
+    """Find newest bounded latest.json under any of this session's identity keys."""
+    keys = _identity_keys(repo_names)
+    if not keys:
         return None
     root = _session_root()
     if not root.exists():
@@ -99,9 +120,10 @@ def find_latest_session_index(repo_name: str) -> dict | None:
     for machine_dir in root.iterdir():
         if not machine_dir.is_dir():
             continue
-        latest = machine_dir / repo_name / "latest.json"
-        if latest.is_file():
-            candidates.append(latest)
+        for key in keys:
+            latest = machine_dir / key / "latest.json"
+            if latest.is_file():
+                candidates.append(latest)
     if not candidates:
         return None
     path = max(candidates, key=os.path.getmtime)
