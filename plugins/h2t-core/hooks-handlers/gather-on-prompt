@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# UserPromptSubmit: the slash path to a session skill never reaches PreToolUse.
+#
+# `/h2t-core:session-start` is expanded into the prompt by the harness — no Skill tool
+# call happens, so a PreToolUse:Skill matcher cannot fire. Measured 2026-08-22 with a
+# dump hook in a fresh headless session:
+#
+#   plain text "сделай handoff"   -> Skill tool called  {"skill":"h2t-core:handoff"}
+#   "/h2t-core:dev-overview"      -> UserPromptSubmit only, Skill dumper silent
+#
+# So the text path is already covered by gather-on-skill; this covers the slash form,
+# which is the one an accurate user types. Both funnel into gather-on-skill, whose 30s
+# per-cwd lock keeps a double entry from gathering twice.
+set -euo pipefail
+
+input=$(cat)
+# Sources disagree on the field name: plugin-dev/hook-development/SKILL.md says
+# `user_prompt`, the shipped warp hook reads `.prompt`. Measured: `.prompt`. Accept both.
+prompt=$(printf '%s' "$input" | jq -r '.prompt // .user_prompt // ""')
+
+# Anchored to the start of the prompt on purpose. UserPromptSubmit also fires for harness
+# messages — a <task-notification> carries file paths that contain "handoff" — and for any
+# sentence discussing the skills. Only a leading slash command is a real invocation.
+skill=$(printf '%s' "$prompt" \
+  | grep -oE '^[[:space:]]*/([A-Za-z0-9_.-]+:)?(session-start|handoff|init-project)([[:space:]]|$)' \
+  | head -1) || true
+[ -z "$skill" ] && exit 0
+
+skill=$(printf '%s' "$skill" | sed -E 's#^[[:space:]]*/##; s#[[:space:]]*$##')
+cwd=$(printf '%s' "$input" | jq -r '.cwd // "."')
+
+# Hand over to the one implementation. hook_event_name travels with it so gather-on-skill
+# picks the delivery channel: the model reads hookSpecificOutput.additionalContext,
+# systemMessage is the user-visible TUI channel.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+jq -n --arg s "$skill" --arg c "$cwd" \
+  '{hook_event_name: "UserPromptSubmit", tool_input: {skill: $s}, cwd: $c}' \
+  | bash "$SCRIPT_DIR/gather-on-skill"
