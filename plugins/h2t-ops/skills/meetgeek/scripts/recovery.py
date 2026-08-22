@@ -310,6 +310,23 @@ def iter_manifest_drive_ids(path: Path | None = None) -> list[str]:
     return seen
 
 
+# Statuses where process_one() reuses the existing Drive file instead of
+# re-uploading it (`can_skip_drive`). `submitted` is terminal — the sweep exists
+# to revoke exactly those. `in-drive` is a crash between upload and submit: the
+# resume path submits the cached URL without re-sharing, so revoking there hands
+# MeetGeek a private link.
+IN_FLIGHT_STATUSES = ("in-drive",)
+
+
+def in_flight_drive_ids(path: Path | None = None) -> set[str]:
+    """Drive ids whose current manifest state still needs the public link."""
+    return {
+        rec["drive_id"]
+        for rec in read_uploads_manifest(path).values()
+        if rec.get("drive_id") and rec.get("status") in IN_FLIGHT_STATUSES
+    }
+
+
 def drive_audit_public(*, svc=None, manifest_path: Path | None = None,
                        revoke: bool = False) -> dict:
     """Report, and optionally revoke, anyone-with-link access on uploaded recordings.
@@ -323,9 +340,11 @@ def drive_audit_public(*, svc=None, manifest_path: Path | None = None,
     """
     if svc is None:
         svc = drive_service()
+    in_flight = in_flight_drive_ids(manifest_path)
     checked = 0
     public: list[str] = []
     errors: list[dict] = []
+    skipped: list[str] = []
     revoked = 0
     for file_id in iter_manifest_drive_ids(manifest_path):
         checked += 1
@@ -336,6 +355,9 @@ def drive_audit_public(*, svc=None, manifest_path: Path | None = None,
             if not perms:
                 continue
             public.append(file_id)
+            if file_id in in_flight:
+                skipped.append(file_id)
+                continue
             if revoke:
                 for perm in perms:
                     svc.permissions().delete(
@@ -344,7 +366,8 @@ def drive_audit_public(*, svc=None, manifest_path: Path | None = None,
                     revoked += 1
         except Exception as e:  # noqa: BLE001 — one bad id must not end the sweep
             errors.append({"drive_id": file_id, "error": str(e)})
-    return {"checked": checked, "public": public, "revoked": revoked, "errors": errors}
+    return {"checked": checked, "public": public, "revoked": revoked,
+            "skipped": skipped, "errors": errors}
 
 
 def drive_upload_file(path: Path, *, folder: str | None = None,

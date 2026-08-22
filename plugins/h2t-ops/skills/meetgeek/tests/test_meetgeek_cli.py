@@ -1329,3 +1329,50 @@ def test_drive_audit_reports_no_errors_on_a_clean_sweep(cli, tmp_path):
     ])
     svc = FakeDriveService({"D1": [{"id": "P1", "type": "user", "role": "owner"}]})
     assert rec.drive_audit_public(svc=svc, manifest_path=manifest)["errors"] == []
+
+
+def test_drive_audit_does_not_revoke_an_in_flight_upload(cli, tmp_path):
+    """`in-drive` means the resume path will reuse this Drive file as-is (codex [P2]).
+
+    process_one() skips drive_upload_file() for `in-drive` records and submits the
+    cached URL, so revoking here hands MeetGeek a private link on the next retry.
+    """
+    rec = _recovery(cli)
+    manifest = _manifest_with(tmp_path, [
+        {"source_webm": "/x/a.webm", "drive_id": "D1",
+         "drive_download_url": "https://d/D1", "status": "in-drive"},
+    ])
+    svc = FakeDriveService({"D1": [{"id": "P1", "type": "anyone", "role": "reader"}]})
+    report = rec.drive_audit_public(svc=svc, manifest_path=manifest, revoke=True)
+    assert report["public"] == ["D1"]
+    assert report["skipped"] == ["D1"]
+    assert report["revoked"] == 0
+    assert svc.deleted == []
+
+
+def test_drive_audit_revokes_a_submitted_upload(cli, tmp_path):
+    """`submitted` is the terminal state — that is what the sweep exists for."""
+    rec = _recovery(cli)
+    manifest = _manifest_with(tmp_path, [
+        {"source_webm": "/x/a.webm", "drive_id": "D1", "status": "submitted"},
+    ])
+    svc = FakeDriveService({"D1": [{"id": "P1", "type": "anyone", "role": "reader"}]})
+    report = rec.drive_audit_public(svc=svc, manifest_path=manifest, revoke=True)
+    assert report["revoked"] == 1
+    assert report["skipped"] == []
+
+
+def test_drive_audit_revokes_a_superseded_id_a_retry_will_reshare(cli, tmp_path):
+    """A `drive-failed` retry re-uploads, and drive_upload_file re-shares by name.
+
+    So the earlier id is safe to revoke — only `in-drive` is genuinely in flight.
+    """
+    rec = _recovery(cli)
+    manifest = _manifest_with(tmp_path, [
+        {"source_webm": "/x/a.webm", "drive_id": "D1", "status": "upload-rejected"},
+        {"source_webm": "/x/a.webm", "status": "drive-failed"},
+    ])
+    svc = FakeDriveService({"D1": [{"id": "P1", "type": "anyone", "role": "reader"}]})
+    report = rec.drive_audit_public(svc=svc, manifest_path=manifest, revoke=True)
+    assert report["revoked"] == 1
+    assert report["skipped"] == []
