@@ -20,12 +20,16 @@ For any h2t-creative task:
 
 ## Canonical Architecture Docs
 
+- `docs/architecture/h2t-creative/ADR-2026-05-19-creative-reset.md` — current reset decision: legacy-first visual publishing, semantic-CMS stopped.
+- `docs/architecture/h2t-creative/EXTERNAL_RESEARCH_2026-05-22.md` — external prior-art review covering Claude Code plugins, DESIGN.md, Figma, Penpot, Pencil, Storyblok, Sanity, and Block Protocol.
 - `docs/architecture/h2t-creative/PRD.md` — product intent and workflows.
 - `docs/architecture/h2t-creative/CORE_SYSTEM.md` — runtime, profiles, recipes, renderer, and evidence taxonomy.
 - `docs/architecture/h2t-creative/COMPOSITION_RULES.md` — Swiss grid, rhythm, density, and composition constraints.
 - `docs/architecture/h2t-creative/EXTENSION_PROTOCOL.md` — adding blocks, layouts, formats, and interactive primitives.
 - `docs/architecture/h2t-creative/LANDING_WIREFRAME_CONTRACT.md` — landing-specific wireframe artefact format. Required reading before any landing recipe is authored.
 - `docs/library/h2t-creative/INDEX.md` — library index stub for roles, components, formats, and governance.
+- `docs/library/h2t-creative/RECOVERY_MAP.md` — practical map of what to keep, freeze, reuse, or avoid after the reset.
+- `docs/archive/h2t-creative/INDEX.md` — evidence archive index for positive and negative h2t-creative evidence.
 - `docs/protocols/h2t-creative/LANDING_WIREFRAME_REVIEW.md` — reviewer's pass/fail checklist for a landing wireframe.
 - `docs/superpowers/references/stitch-design-md-spec-reference.md` — EXTERNAL standard. Summary of the open-source Apache-2.0 Stitch DESIGN.md spec released by Google Labs (2026). Profile `DESIGN.md` files conform to it; not internal architecture.
 - `docs/wireframes/` — approved wireframe artefacts. One file per page at `<YYYY-MM-DD>-<profile>-<page-slug>.md`, with any embedded sketch images alongside. Living source for visual QA and recipe authoring.
