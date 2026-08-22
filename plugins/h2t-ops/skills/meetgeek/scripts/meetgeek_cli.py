@@ -565,9 +565,8 @@ def cmd_upload(args: argparse.Namespace) -> int:
         if not src_path.is_file():
             continue
         size = src_path.stat().st_size
-        mtime = datetime.fromtimestamp(src_path.stat().st_mtime, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         if args.skip_existing and _is_already_submitted(state, str(src_path.resolve()),
-                                                        size=size, mtime=mtime):
+                                                        size=size):
             print(f"[{i}/{total}] {src_path.name}  skip (already submitted)", file=sys.stderr)
             skipped += 1
             continue

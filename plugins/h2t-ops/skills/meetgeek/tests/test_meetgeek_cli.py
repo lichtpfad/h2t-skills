@@ -815,18 +815,14 @@ def test_uploads_manifest_last_line_wins(cli, tmp_path):
     assert state["/b.webm"]["status"] == "submitted"
 
 
-def test_uploads_manifest_skip_existing_size_mtime_match(cli, tmp_path):
+def test_uploads_manifest_skip_existing_matches_on_size(cli, tmp_path):
     m = tmp_path / "manifest.jsonl"
     rec = {"source_webm": "/x.webm", "status": "submitted",
            "source_size_bytes": 100, "source_mtime": "2026-05-06T10:00:00Z"}
     m.write_text(json.dumps(rec) + "\n", encoding="utf-8")
     state = cli._read_uploads_manifest(m)
-    assert cli._is_already_submitted(state, "/x.webm",
-                                     size=100, mtime="2026-05-06T10:00:00Z") is True
-    assert cli._is_already_submitted(state, "/x.webm",
-                                     size=200, mtime="2026-05-06T10:00:00Z") is False
-    assert cli._is_already_submitted(state, "/x.webm",
-                                     size=100, mtime="2026-05-06T11:00:00Z") is False
+    assert cli._is_already_submitted(state, "/x.webm", size=100) is True
+    assert cli._is_already_submitted(state, "/x.webm", size=200) is False
 
 
 # ─── upload --from-file (single file) ─────────────────────────────────────────
@@ -1483,4 +1479,166 @@ def test_resume_records_drive_failed_when_resharing_raises(cli, tmp_path, monkey
 
     assert submitted == [], "a private link must never reach MeetGeek"
     states = rec.read_uploads_manifest(manifest)
-    assert states[str(src.resolve())]["status"] == "drive-failed"
+    assert states[rec.recording_key(src)]["status"] == "drive-failed"
+
+
+# ─── Manifest identity across machines (#386, defects 3 and 4) ────────────────
+#
+# State was keyed on the absolute source path, in a JSONL that Syncthing forks:
+# the same recording is `I:\...webm` on Windows and `~/Downloads/...webm` on
+# macOS, and neither machine ever read the other's journal. Two recordings were
+# converted, uploaded to Drive and submitted to MeetGeek twice.
+
+_REC_STEM = "meetgeek-recording-2026-04-18T09-30-00-000Z"
+
+
+def _shard(tmp_path, name, records):
+    path = tmp_path / name
+    path.write_text(
+        "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in records),
+        encoding="utf-8",
+    )
+    return path
+
+
+def test_manifest_keys_a_recording_by_name_not_by_directory(cli, tmp_path):
+    m = _manifest_with(tmp_path, [
+        {"source_webm": f"I:\\{_REC_STEM}.webm", "status": "submitted",
+         "source_size_bytes": 100},
+    ])
+    state = cli._read_uploads_manifest(m)
+    assert cli._is_already_submitted(
+        state, f"/Users/x/Downloads/{_REC_STEM}.webm", size=100) is True
+
+
+def test_manifest_falls_back_to_the_path_for_a_non_recording_filename(cli, tmp_path):
+    m = _manifest_with(tmp_path, [
+        {"source_webm": "/a/notes.webm", "status": "submitted",
+         "source_size_bytes": 100},
+    ])
+    state = cli._read_uploads_manifest(m)
+    assert cli._is_already_submitted(state, "/a/notes.webm", size=100) is True
+    assert cli._is_already_submitted(state, "/b/notes.webm", size=100) is False
+
+
+def test_a_different_sized_copy_is_not_the_submitted_recording(cli, tmp_path):
+    m = _manifest_with(tmp_path, [
+        {"source_webm": f"/a/{_REC_STEM}.webm", "status": "submitted",
+         "source_size_bytes": 100},
+    ])
+    state = cli._read_uploads_manifest(m)
+    assert cli._is_already_submitted(state, f"/b/{_REC_STEM}.webm", size=99) is False
+
+
+def test_uploads_manifest_path_is_per_machine(cli, tmp_path, monkeypatch):
+    rec = _recovery(cli)
+    monkeypatch.setenv("H2T_LAKE_ROOT", str(tmp_path / "lake"))
+    monkeypatch.setenv("H2T_MACHINE_ID", "macbook-pro-3")
+    assert rec.uploads_manifest_path().name == "manifest.macbook-pro-3.jsonl"
+
+
+def test_machine_id_slugifies_the_hostname(cli, monkeypatch):
+    rec = _recovery(cli)
+    monkeypatch.delenv("H2T_MACHINE_ID", raising=False)
+    monkeypatch.setattr(rec.platform, "node", lambda: "Stanislavs MacBook.local")
+    assert rec.machine_id() == "stanislavs-macbook-local"
+
+
+def test_read_uploads_manifest_unions_every_shard(cli, tmp_path):
+    _shard(tmp_path, "manifest.win.jsonl", [
+        {"source_webm": f"I:\\{_REC_STEM}.webm", "status": "submitted",
+         "source_size_bytes": 100},
+    ])
+    mine = _shard(tmp_path, "manifest.mac.jsonl", [
+        {"source_webm": "/Users/x/meetgeek-recording-2026-04-29T09-00-00-000Z.webm",
+         "status": "converted", "source_size_bytes": 200},
+    ])
+    state = cli._read_uploads_manifest(mine)
+    assert state[_REC_STEM]["status"] == "submitted"
+    assert state["meetgeek-recording-2026-04-29T09-00-00-000Z"]["status"] == "converted"
+
+
+def test_read_uploads_manifest_reads_a_syncthing_conflict_file(cli, tmp_path):
+    """The observed shape: 33 lines in manifest.jsonl, 51 in the conflict copy."""
+    legacy = _shard(tmp_path, "manifest.jsonl", [
+        {"source_webm": f"/Users/x/{_REC_STEM}.webm", "status": "converted",
+         "source_size_bytes": 100, "ts": "2026-05-16T10:00:00Z"},
+    ])
+    _shard(tmp_path, "manifest.sync-conflict-20260516-223953-ASJLSSS.jsonl", [
+        {"source_webm": f"I:\\{_REC_STEM}.webm", "status": "submitted",
+         "source_size_bytes": 100, "ts": "2026-05-16T11:00:00Z"},
+    ])
+    state = cli._read_uploads_manifest(legacy)
+    assert state[_REC_STEM]["status"] == "submitted"
+
+
+def test_the_newest_line_wins_across_shards_regardless_of_filename(cli, tmp_path):
+    # "manifest.a" sorts first, but carries the newer record.
+    mine = _shard(tmp_path, "manifest.a.jsonl", [
+        {"source_webm": f"/a/{_REC_STEM}.webm", "status": "submitted",
+         "source_size_bytes": 100, "ts": "2026-05-16T11:00:00Z"},
+    ])
+    _shard(tmp_path, "manifest.z.jsonl", [
+        {"source_webm": f"I:\\{_REC_STEM}.webm", "status": "drive-failed",
+         "source_size_bytes": 100, "ts": "2026-05-16T10:00:00Z"},
+    ])
+    assert cli._read_uploads_manifest(mine)[_REC_STEM]["status"] == "submitted"
+
+
+def test_a_stamped_line_wins_over_an_unstamped_one(cli, tmp_path):
+    """Lines written before the ts field existed predate every stamped line."""
+    mine = _shard(tmp_path, "manifest.a.jsonl", [
+        {"source_webm": f"/a/{_REC_STEM}.webm", "status": "submitted",
+         "source_size_bytes": 100, "ts": "2026-05-16T11:00:00Z"},
+    ])
+    _shard(tmp_path, "manifest.zz.jsonl", [
+        {"source_webm": f"I:\\{_REC_STEM}.webm", "status": "converted",
+         "source_size_bytes": 100},
+    ])
+    assert cli._read_uploads_manifest(mine)[_REC_STEM]["status"] == "submitted"
+
+
+def test_append_uploads_manifest_stamps_each_line_with_a_timestamp(cli, tmp_path):
+    rec = _recovery(cli)
+    m = tmp_path / "manifest.here.jsonl"
+    rec.append_uploads_manifest({"source_webm": "/a.webm", "status": "converted"}, m)
+    line = json.loads(m.read_text(encoding="utf-8").strip())
+    assert line["ts"].endswith("Z")
+
+
+def test_drive_audit_sweeps_uploads_from_every_machine(cli, tmp_path):
+    rec = _recovery(cli)
+    mine = _shard(tmp_path, "manifest.mac.jsonl", [
+        {"source_webm": "/a/x.webm", "drive_id": "D1", "status": "submitted"},
+    ])
+    _shard(tmp_path, "manifest.win.jsonl", [
+        {"source_webm": "I:\\y.webm", "drive_id": "D2", "status": "submitted"},
+    ])
+    svc = FakeDriveService({
+        "D1": [{"id": "P1", "type": "anyone", "role": "reader"}],
+        "D2": [{"id": "P2", "type": "anyone", "role": "reader"}],
+    })
+    report = rec.drive_audit_public(svc=svc, manifest_path=mine, revoke=True)
+    assert report["revoked"] == 2
+
+
+def test_upload_skips_a_recording_the_other_machine_already_submitted(cli, tmp_path,
+                                                                     monkeypatch):
+    src = tmp_path / f"{_REC_STEM}.webm"
+    src.write_bytes(b"x" * 1024)
+    mine = _shard(tmp_path, "manifest.mac.jsonl", [])
+    _shard(tmp_path, "manifest.win.jsonl", [{
+        "source_webm": f"I:\\{_REC_STEM}.webm",
+        "source_size_bytes": src.stat().st_size,
+        # The other machine downloaded its own copy, so mtime never matches.
+        "source_mtime": "2026-04-18T09:31:00Z",
+        "status": "submitted", "ts": "2026-04-18T10:00:00Z",
+    }])
+    monkeypatch.setattr(cli, "_uploads_manifest_path", lambda: mine)
+    called = {"n": 0}
+    monkeypatch.setattr(cli, "_process_one_for_upload",
+                        lambda *a, **kw: called.__setitem__("n", called["n"] + 1))
+
+    rc = cli.main(["upload", "--from-file", str(src)])
+    assert rc == 0
+    assert called["n"] == 0, "already submitted on the other machine"
