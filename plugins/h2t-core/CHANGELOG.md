@@ -1,5 +1,21 @@
 # h2t-core Changelog
 
+## 3.2.22 — 2026-08-22
+
+- gather reports a dead GitHub source instead of an empty backlog. `_run_one` collapsed
+  every failure — timeout, non-zero exit, missing binary — into `""`, `_parse_json("")`
+  turned that into `[]`, and the briefing printed "Нет открытых issues" as a fact about the
+  repository. Two consecutive runs disagreed: the first at `gather_ms: 15110` (the 15s cap)
+  showed no tasks and no PRs, the second at 1544 ms showed 20 issues and 3 PRs. Both said
+  `sources_failed: []`.
+- `None` now means "the command did not run"; `""` means "it ran and printed nothing".
+  `gather_github` returns `failed`, the names of the calls that did not answer, and the
+  session-start script puts `"github"` into `sources_failed`. The hint names the failed
+  calls instead of asserting an empty backlog.
+- `identify_project` survives that same `None`. `git remote get-url origin` exits non-zero
+  outside a repo, and stripping it blindly raised `AttributeError` before the cwd patterns
+  or the default could run — caught by codex review as [P1] in both copies.
+
 ## 3.2.21 — 2026-08-22
 
 - session-start finds the handoff the previous session wrote. The writer keys the session
