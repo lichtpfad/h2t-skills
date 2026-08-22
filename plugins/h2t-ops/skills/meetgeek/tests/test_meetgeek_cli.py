@@ -1783,3 +1783,36 @@ def test_upload_names_the_size_difference_when_it_skips(cli, tmp_path, monkeypat
     assert rc == 0
     err = capsys.readouterr().err
     assert "4096" in err and "1024" in err
+
+
+def test_upload_submits_a_recording_once_per_batch(cli, tmp_path, monkeypatch):
+    """The dedup has to see what the batch itself just submitted.
+
+    cmd_upload read the manifest once before the loop, so two copies of one
+    recording inside the same `--from-file <dir>` run were both submitted: the
+    first appended `submitted` to a journal the skip check never re-read.
+    """
+    a = tmp_path / f"{_REC_STEM}.webm"
+    backup = tmp_path / "backup"
+    backup.mkdir()
+    b = backup / f"{_REC_STEM}.webm"
+    a.write_bytes(b"x" * 1024)
+    b.write_bytes(b"x" * 1024)
+    manifest = _shard(tmp_path, "manifest.mac.jsonl", [])
+    monkeypatch.setattr(cli, "_uploads_manifest_path", lambda: manifest)
+
+    rec = _recovery(cli)
+    processed = []
+
+    def fake_process(src, *, manifest_path, **kw):
+        processed.append(src)
+        final = {"source_webm": str(src.resolve()), "status": "submitted",
+                 "source_size_bytes": src.stat().st_size}
+        rec.append_uploads_manifest(final, manifest_path)
+        return final
+
+    monkeypatch.setattr(cli, "_process_one_for_upload", fake_process)
+
+    rc = cli.main(["upload", "--from-file", str(tmp_path)])
+    assert rc == 0
+    assert len(processed) == 1, "the same recording went to MeetGeek twice in one batch"
