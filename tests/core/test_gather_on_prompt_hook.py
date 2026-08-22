@@ -135,3 +135,44 @@ def test_both_entrypoints_are_registered():
     assert "gather-on-prompt" in json.dumps(config["UserPromptSubmit"])
     skill_matchers = [e for e in config["PreToolUse"] if e.get("matcher") == "Skill"]
     assert "gather-on-skill" in json.dumps(skill_matchers)
+
+
+def test_resolver_failure_reaches_the_model_on_the_slash_path(hook_env, tmp_path):
+    """codex review, 2026-08-22: the early exit kept the old envelope.
+
+    On a machine with no PyYAML interpreter the hook returns before emit() exists, so the
+    envelope is hand-written there — and it used `systemMessage`, the TUI channel. The
+    slash user was then told nothing the model could act on.
+    """
+    # Shadow every interpreter the resolver probes rather than emptying PATH: the hook
+    # still needs jq, cat and friends, and "python exists but the probe fails" is the
+    # real shape of the failure (an interpreter without PyYAML).
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    for name in ("python3", "python", "py"):
+        stub = fake_bin / name
+        stub.write_text("#!/bin/sh\nexit 1\n")
+        stub.chmod(0o755)
+    env = dict(hook_env)
+    env["PATH"] = f"{fake_bin}:{env['PATH']}"
+    env["HOME"] = str(tmp_path)          # no ~/.h2t/venv either
+    env["H2T_PYTHON"] = str(fake_bin / "python3")
+
+    result = subprocess.run(
+        [shutil.which("bash") or "/bin/bash", str(HOOK)],
+        input=json.dumps(
+            {
+                "hook_event_name": "UserPromptSubmit",
+                "prompt": "/h2t-core:session-start",
+                "cwd": str(REPO_ROOT),
+            }
+        ),
+        capture_output=True,
+        text=True,
+        cwd=REPO_ROOT,
+        env=env,
+    )
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert "systemMessage" not in payload
+    assert "GATHER_ERROR" in payload["hookSpecificOutput"]["additionalContext"]

@@ -12,6 +12,9 @@
   harness messages such as `<task-notification>`, whose file paths contain these words.
 - Briefings reach the model on the slash path via `hookSpecificOutput.additionalContext`;
   `systemMessage` is the user-visible TUI channel and stays in use for the Skill path.
+- The resolver-failure exit honours the same channel. On a machine with no PyYAML
+  interpreter the hook returns before `emit()` exists, and its hand-written envelope
+  still said `systemMessage` — so a slash user got no error the model could act on.
 
 ## 3.2.19 — 2026-08-22
 

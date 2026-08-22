@@ -48,7 +48,15 @@ fi
 # plugin scripts take --cwd, so the working directory is irrelevant to them.
 source "$PLUGIN_ROOT/scripts/resolve-h2t-python.sh"
 if ! resolve_h2t_python "import yaml"; then
-  echo '{"systemMessage": "GATHER_ERROR: no Python with PyYAML found. Install it into ~/.h2t/venv or set H2T_PYTHON."}'
+  # emit() needs the interpreter we just failed to find, so this envelope is hand-written.
+  # Safe only because the text is a fixed literal with nothing to escape — and it still has
+  # to honour the per-event channel, or the slash user is told nothing at all.
+  _err="GATHER_ERROR: no Python with PyYAML found. Install it into ~/.h2t/venv or set H2T_PYTHON."
+  if [ "$event" = "UserPromptSubmit" ]; then
+    printf '{"hookSpecificOutput": {"hookEventName": "UserPromptSubmit", "additionalContext": "%s"}}\n' "$_err"
+  else
+    printf '{"systemMessage": "%s"}\n' "$_err"
+  fi
   exit 0
 fi
 
