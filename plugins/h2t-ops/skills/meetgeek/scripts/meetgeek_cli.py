@@ -68,7 +68,7 @@ from recovery import (  # noqa: E402
     uploads_manifest_path as _uploads_manifest_path,
     read_uploads_manifest as _read_uploads_manifest,
     append_uploads_manifest as _append_uploads_manifest,
-    is_already_submitted as _is_already_submitted,
+    submitted_record as _submitted_record,
     process_one as _process_one_for_upload,
     emit_submission_artifact,
 )
@@ -565,9 +565,15 @@ def cmd_upload(args: argparse.Namespace) -> int:
         if not src_path.is_file():
             continue
         size = src_path.stat().st_size
-        if args.skip_existing and _is_already_submitted(state, str(src_path.resolve()),
-                                                        size=size):
-            print(f"[{i}/{total}] {src_path.name}  skip (already submitted)", file=sys.stderr)
+        done = _submitted_record(state, str(src_path.resolve())) if args.skip_existing else None
+        if done is not None:
+            # The skip is on the recording, not on this copy of it, so say when
+            # the copy in hand is not the one that was submitted.
+            submitted_size = done.get("source_size_bytes")
+            note = ("" if submitted_size == size
+                    else f" — submitted copy was {submitted_size} B, this one {size} B")
+            print(f"[{i}/{total}] {src_path.name}  skip (already submitted){note}",
+                  file=sys.stderr)
             skipped += 1
             continue
         if args.dry_run:

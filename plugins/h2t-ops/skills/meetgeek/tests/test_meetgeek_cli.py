@@ -815,14 +815,13 @@ def test_uploads_manifest_last_line_wins(cli, tmp_path):
     assert state["/b.webm"]["status"] == "submitted"
 
 
-def test_uploads_manifest_skip_existing_matches_on_size(cli, tmp_path):
+def test_uploads_manifest_skip_existing_needs_the_submitted_status(cli, tmp_path):
     m = tmp_path / "manifest.jsonl"
-    rec = {"source_webm": "/x.webm", "status": "submitted",
+    rec = {"source_webm": "/x.webm", "status": "in-drive",
            "source_size_bytes": 100, "source_mtime": "2026-05-06T10:00:00Z"}
     m.write_text(json.dumps(rec) + "\n", encoding="utf-8")
     state = cli._read_uploads_manifest(m)
-    assert cli._is_already_submitted(state, "/x.webm", size=100) is True
-    assert cli._is_already_submitted(state, "/x.webm", size=200) is False
+    assert _recovery(cli).is_already_submitted(state, "/x.webm") is False
 
 
 # ─── upload --from-file (single file) ─────────────────────────────────────────
@@ -1507,8 +1506,8 @@ def test_manifest_keys_a_recording_by_name_not_by_directory(cli, tmp_path):
          "source_size_bytes": 100},
     ])
     state = cli._read_uploads_manifest(m)
-    assert cli._is_already_submitted(
-        state, f"/Users/x/Downloads/{_REC_STEM}.webm", size=100) is True
+    assert _recovery(cli).is_already_submitted(
+        state, f"/Users/x/Downloads/{_REC_STEM}.webm") is True
 
 
 def test_manifest_falls_back_to_the_path_for_a_non_recording_filename(cli, tmp_path):
@@ -1517,17 +1516,25 @@ def test_manifest_falls_back_to_the_path_for_a_non_recording_filename(cli, tmp_p
          "source_size_bytes": 100},
     ])
     state = cli._read_uploads_manifest(m)
-    assert cli._is_already_submitted(state, "/a/notes.webm", size=100) is True
-    assert cli._is_already_submitted(state, "/b/notes.webm", size=100) is False
+    assert _recovery(cli).is_already_submitted(state, "/a/notes.webm") is True
+    assert _recovery(cli).is_already_submitted(state, "/b/notes.webm") is False
 
 
-def test_a_different_sized_copy_is_not_the_submitted_recording(cli, tmp_path):
+def test_a_copy_of_a_submitted_recording_is_submitted_whatever_its_size(cli, tmp_path):
+    """Two copies of one meeting are still one meeting.
+
+    Size guarded the skip for a while, and the manifest keeps one record per
+    recording: once a second copy of a different size was submitted, the first
+    one looked unsubmitted again and MeetGeek would transcribe the meeting a
+    third time. Size belongs to the resume path, where inheriting another
+    copy's Drive object would be wrong; it does not belong here.
+    """
     m = _manifest_with(tmp_path, [
         {"source_webm": f"/a/{_REC_STEM}.webm", "status": "submitted",
-         "source_size_bytes": 100},
+         "source_size_bytes": 200},
     ])
     state = cli._read_uploads_manifest(m)
-    assert cli._is_already_submitted(state, f"/b/{_REC_STEM}.webm", size=99) is False
+    assert _recovery(cli).is_already_submitted(state, f"/b/{_REC_STEM}.webm") is True
 
 
 def test_uploads_manifest_path_is_per_machine(cli, tmp_path, monkeypatch):
@@ -1758,3 +1765,21 @@ def test_line_order_decides_when_two_lines_share_a_timestamp(cli, tmp_path):
          "source_size_bytes": 100, "ts": "2026-05-16T10:00:00Z"},
     ])
     assert cli._read_uploads_manifest(mine)[_REC_STEM]["status"] == "drive-failed"
+
+
+def test_upload_names_the_size_difference_when_it_skips(cli, tmp_path, monkeypatch, capsys):
+    """A skip on a copy that is not the submitted one must not be silent."""
+    src = tmp_path / f"{_REC_STEM}.webm"
+    src.write_bytes(b"x" * 1024)
+    manifest = _shard(tmp_path, "manifest.mac.jsonl", [{
+        "source_webm": f"I:\\{_REC_STEM}.webm", "source_size_bytes": 4096,
+        "status": "submitted", "ts": "2026-04-18T10:00:00Z",
+    }])
+    monkeypatch.setattr(cli, "_uploads_manifest_path", lambda: manifest)
+    monkeypatch.setattr(cli, "_process_one_for_upload",
+                        lambda *a, **kw: pytest.fail("must not process"))
+
+    rc = cli.main(["upload", "--from-file", str(src)])
+    assert rc == 0
+    err = capsys.readouterr().err
+    assert "4096" in err and "1024" in err

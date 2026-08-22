@@ -115,23 +115,18 @@ class TestAppendUploadsManifest:
 
 
 class TestIsAlreadySubmitted:
-    def test_true_when_submitted_matching_size(self, rec):
+    def test_true_when_submitted(self, rec):
         state = {"/a/b.webm": {"status": "submitted", "source_size_bytes": 100,
                                 "source_mtime": "2026-05-20T10:00:00Z"}}
-        assert rec.is_already_submitted(state, "/a/b.webm", size=100)
-
-    def test_false_when_size_differs(self, rec):
-        state = {"/a/b.webm": {"status": "submitted", "source_size_bytes": 100,
-                                "source_mtime": "2026-05-20T10:00:00Z"}}
-        assert not rec.is_already_submitted(state, "/a/b.webm", size=200)
+        assert rec.is_already_submitted(state, "/a/b.webm")
 
     def test_false_when_not_submitted(self, rec):
         state = {"/a/b.webm": {"status": "converted", "source_size_bytes": 100,
                                 "source_mtime": "2026-05-20T10:00:00Z"}}
-        assert not rec.is_already_submitted(state, "/a/b.webm", size=100)
+        assert not rec.is_already_submitted(state, "/a/b.webm")
 
     def test_false_when_key_absent(self, rec):
-        assert not rec.is_already_submitted({}, "/a/b.webm", size=100)
+        assert not rec.is_already_submitted({}, "/a/b.webm")
 
 
 class TestSubmitUrlViaH2tOps:
