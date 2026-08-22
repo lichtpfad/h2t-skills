@@ -14,13 +14,13 @@ def gather_git(cwd: str = ".") -> dict:
         "status": ["git", "-C", cwd, "status", "--short"],
         "stash":  ["git", "-C", cwd, "stash", "list"],
     })
-    remote = raw["remote"].strip()
+    remote = (raw["remote"] or "").strip()
     return {
         "remote": remote,
-        "branch": _display_branch(raw["branch"], raw["head"]),
-        "log": raw["log"].strip().splitlines(),
-        "status": raw["status"].strip(),
-        "stash": raw["stash"].strip(),
+        "branch": _display_branch(raw["branch"] or "", raw["head"] or ""),
+        "log": (raw["log"] or "").strip().splitlines(),
+        "status": (raw["status"] or "").strip(),
+        "stash": (raw["stash"] or "").strip(),
         "owner_repo": _parse_owner_repo(remote),
     }
 

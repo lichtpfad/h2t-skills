@@ -19,6 +19,16 @@ def test_split_domain_project():
     assert _split_domain_project("dev/unknown") == ("dev", "unknown")
     assert _split_domain_project("standalone") == ("standalone", "unknown")
 
+def test_identify_project_in_directory_without_git_remote(tmp_path):
+    """`git remote get-url origin` exits non-zero outside a repo.
+
+    run_parallel reports that as None, so the caller must not strip it blindly —
+    identification has to fall through to the cwd patterns and the default.
+    """
+    result = identify_project(str(tmp_path))
+    assert result["github"] in (None, "")
+    assert isinstance(result["id"], str) and result["id"]
+
 def test_find_label_missing():
     assert _find_label({}, "x", "y") == "y"
 

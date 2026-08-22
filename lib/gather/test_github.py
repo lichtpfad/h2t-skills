@@ -34,3 +34,29 @@ if __name__ == "__main__":
     test_gather_github_returns_expected_keys()
     test_gather_github_with_project_filter()
     print("All github tests passed")
+
+
+def test_gather_github_reports_failed_sources():
+    """Every gh call failing must be reported, not rendered as an empty repo."""
+    import gather.github as gh_mod
+    original = gh_mod.run_parallel
+    gh_mod.run_parallel = lambda commands, **kw: {name: None for name in commands}
+    try:
+        result = gather_github("lichtpfad/h2t-skills")
+    finally:
+        gh_mod.run_parallel = original
+    assert result["issues"] == []
+    assert result["failed"] == ["bugs", "issues", "milestones", "prs"]
+
+
+def test_gather_github_no_failures_when_calls_succeed():
+    """A repo that genuinely has no issues reports no failed sources."""
+    import gather.github as gh_mod
+    original = gh_mod.run_parallel
+    gh_mod.run_parallel = lambda commands, **kw: {name: "[]" for name in commands}
+    try:
+        result = gather_github("lichtpfad/h2t-skills")
+    finally:
+        gh_mod.run_parallel = original
+    assert result["issues"] == []
+    assert result["failed"] == []

@@ -67,6 +67,8 @@ def _run_gather(skill: str, cwd: str, format_briefing_flag: bool, briefing_only:
         if project.get("github"):
             github = gather_github(owner_repo=project["github"])
             sources_used.append("github")
+            if github.get("failed"):
+                sources_failed.append("github")
 
     stack = detect_stack(cwd)
     machine = get_machine_name()

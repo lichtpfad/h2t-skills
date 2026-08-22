@@ -259,10 +259,15 @@ def _build_hints(data: dict) -> list[str]:
     if project.get("id") == "unknown":
         hints.append("Repo не зарегистрирован. Запусти `/h2t:init-project` для регистрации.")
 
-    # No issues
-    if github and not github.get("issues") and not github.get("milestone_issues"):
-        gh_remote = project.get("github")
-        if gh_remote:
+    # GitHub: a source that did not answer is not a repo without work
+    if github and project.get("github"):
+        if github.get("failed"):
+            hints.append(
+                "GitHub не ответил ({}). Задачи и PR в брифинге неполны — это отказ "
+                "источника, а не пустой бэклог. Проверь `gh auth status` и повтори."
+                .format(", ".join(github["failed"]))
+            )
+        elif not github.get("issues") and not github.get("milestone_issues"):
             hints.append("Нет открытых issues. Создай задачи через `gh issue create` или GitHub UI.")
 
     # No sessions
