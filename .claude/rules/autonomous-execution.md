@@ -1,27 +1,28 @@
 # Autonomous Plan Execution
 
-Область: только автономное/unattended исполнение многошагового плана
-(overnight, «выполни план сам»). НЕ для интерактивной работы и мелких фиксов.
+Scope: autonomous / unattended execution of a multi-step plan only (overnight, "run the plan
+yourself"). NOT for interactive work or small fixes.
 
-1. Plan-gate до старта: **codex-проход** плана (обязательно; консул судей — опционально,
-   для высокого риска). Исполнять только если гейт пройден (нет `[P1]`).
-2. Codex-валидация после каждого нетривиального гейта.
-3. Финальный **консул** реализации в конце (codex + ≥2 Opus линзы → SOUND).
-4. Сломано → чинить → handoff.
+1. Plan gate before starting: a **codex pass** over the plan (mandatory; a judge council is
+   optional, for high risk). Execute only if the gate passes (no `[P1]`).
+2. Codex validation after every non-trivial gate.
+3. A final implementation **council** at the end (codex + ≥2 Opus lenses → SOUND).
+4. Broken → fix → handoff.
 
-Стоимость council/codex реальна — cost-gate из CLAUDE.md остаётся в силе;
-это правило не разрешает multi-agent на тривиальных задачах.
+Council and codex cost real money — the cost gate from CLAUDE.md still applies; this rule
+does not authorise multi-agent work on trivial tasks.
 
 ## Canonical protocol source
 
-Полные, переносимые определения гейтов и decision-протокола (allow-list + hard-stops) живут в
-скилле `h2t-core:autonomous-run` и штампуются в durable runbook-артефакт каждого прогона:
+The complete, portable definitions of the gates and of the decision protocol (allow-list +
+hard stops) live in the `h2t-core:autonomous-run` skill and are stamped into a durable
+runbook artifact on every run:
 
-- Гейты (codex review-gate + council finish-gate + pre-merge-check, `N_gate_attempts`):
+- Gates (codex review gate + council finish gate + pre-merge-check, `N_gate_attempts`):
   `plugins/h2t-core/skills/autonomous-run/references/gates.md`
-- Decision-протокол (auto-resolve allow-list deny-by-default + 4 hard-stops):
+- Decision protocol (auto-resolve allow-list, deny by default + 4 hard stops):
   `plugins/h2t-core/skills/autonomous-run/references/decision-protocol.md`
 
-Пункты 1–4 выше — краткая сводка; при расхождении источником истины считать `references/`.
-Запуск/резюме автономного прогона — через скилл `h2t-core:autonomous-run` (генерит runbook,
-ведёт two-track state, доводит до handoff).
+Points 1–4 above are a summary; where they disagree with `references/`, the references are
+the source of truth. Start or resume an autonomous run through the `h2t-core:autonomous-run`
+skill (it generates the runbook, keeps two-track state, and carries the run to handoff).
