@@ -1689,14 +1689,13 @@ def test_a_differently_sized_copy_does_not_inherit_the_stored_drive_file(
     assert final["drive_id"] == "NEW"
 
 
-def test_an_unstamped_submitted_line_outranks_an_unstamped_earlier_stage(cli, tmp_path):
+def test_an_unstamped_conflict_copy_cannot_hide_a_submission(cli, tmp_path):
     """The 84 lines already in the production journal carry no ts at all.
 
     Nothing orders them but the shard filename, and `manifest.sync-conflict-...`
     sorts after `manifest.jsonl` — so the conflict copy would always win, which
     is how an older `converted` could hide a `submitted` and re-submit it.
-    Without a timestamp the honest merge is the furthest-along status: a
-    submission is a fact about the past that a later attempt cannot undo.
+    Without a timestamp there is no honest order, so the submission stands.
     """
     legacy = _shard(tmp_path, "manifest.jsonl", [
         {"source_webm": f"/Users/x/{_REC_STEM}.webm", "status": "submitted",
@@ -1709,8 +1708,13 @@ def test_an_unstamped_submitted_line_outranks_an_unstamped_earlier_stage(cli, tm
     assert cli._read_uploads_manifest(legacy)[_REC_STEM]["status"] == "submitted"
 
 
-def test_a_newer_stamped_line_wins_even_when_it_is_a_failure(cli, tmp_path):
-    """Status rank orders the unstamped lines only; ts keeps ordering the rest."""
+def test_a_later_failure_never_demotes_a_recorded_submission(cli, tmp_path):
+    """A line after `submitted` describes the next attempt, not the submission.
+
+    MeetGeek accepted the recording once and nothing appended later undoes that.
+    Reading it as "not submitted" is the one merge mistake with no recovery: it
+    submits the recording a second time.
+    """
     mine = _shard(tmp_path, "manifest.a.jsonl", [
         {"source_webm": f"/a/{_REC_STEM}.webm", "status": "submitted",
          "source_size_bytes": 100, "ts": "2026-05-16T10:00:00Z"},
@@ -1719,7 +1723,24 @@ def test_a_newer_stamped_line_wins_even_when_it_is_a_failure(cli, tmp_path):
         {"source_webm": f"I:\\{_REC_STEM}.webm", "status": "drive-failed",
          "source_size_bytes": 100, "ts": "2026-05-16T11:00:00Z"},
     ])
-    assert cli._read_uploads_manifest(mine)[_REC_STEM]["status"] == "drive-failed"
+    assert cli._read_uploads_manifest(mine)[_REC_STEM]["status"] == "submitted"
+
+
+def test_a_same_second_line_from_another_shard_cannot_hide_a_submission(cli, tmp_path):
+    """now_iso() resolves to the second, and two machines can land on the same one.
+
+    Nothing then orders the two lines but the shard filename, which says nothing
+    about when either was written.
+    """
+    mine = _shard(tmp_path, "manifest.a.jsonl", [
+        {"source_webm": f"/a/{_REC_STEM}.webm", "status": "submitted",
+         "source_size_bytes": 100, "ts": "2026-05-16T10:00:00Z"},
+    ])
+    _shard(tmp_path, "manifest.z.jsonl", [
+        {"source_webm": f"I:\\{_REC_STEM}.webm", "status": "converted",
+         "source_size_bytes": 100, "ts": "2026-05-16T10:00:00Z"},
+    ])
+    assert cli._read_uploads_manifest(mine)[_REC_STEM]["status"] == "submitted"
 
 
 def test_line_order_decides_when_two_lines_share_a_timestamp(cli, tmp_path):
