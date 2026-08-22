@@ -1440,3 +1440,47 @@ def test_ensure_drive_public_shares_when_the_permission_is_gone(cli):
     svc = FakeDriveService({"D1": [{"id": "P1", "type": "user", "role": "owner"}]})
     rec.ensure_drive_public("D1", svc=svc)
     assert svc.created == [("D1", "anyone")]
+
+
+def test_resume_records_drive_failed_when_resharing_raises(cli, tmp_path, monkeypatch):
+    """A Drive error on the re-share must stay a per-file failure (codex [P2]).
+
+    The call sits on the cached-drive path, outside Stage 2's try; unhandled, one
+    stale id would crash a whole batch instead of recording drive-failed and
+    letting the next file run.
+    """
+    src = tmp_path / "meetgeek-recording-2026-01-01T10-00-00-000Z.webm"
+    src.write_bytes(b"x" * 1024)
+    size = src.stat().st_size
+    mtime = datetime.fromtimestamp(src.stat().st_mtime, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    cached_mp4 = tmp_path / "cached.mp4"
+    cached_mp4.write_bytes(b"M" * 2048)
+
+    manifest = _manifest_with(tmp_path, [{
+        "source_webm": str(src.resolve()),
+        "source_size_bytes": size, "source_mtime": mtime,
+        "mp4_path": str(cached_mp4), "mp4_size_bytes": 2048,
+        "drive_id": "STALE",
+        "drive_download_url": "https://drive.google.com/uc?export=download&id=STALE",
+        "status": "in-drive",
+    }])
+
+    rec = _recovery(cli)
+
+    def boom(fid, **kw):
+        raise RuntimeError("File not found: STALE")
+
+    monkeypatch.setattr(rec, "ensure_drive_public", boom)
+    monkeypatch.setattr(rec, "convert_media",
+                        lambda src_p, *, audio_only, mix_mode, output_path=None: output_path)
+    submitted = []
+    monkeypatch.setattr(rec, "submit_url_via_h2t_ops",
+                        lambda url, title, lang: submitted.append(url) or {"message": "ok"})
+
+    with pytest.raises(rec.RecoveryError):
+        rec.process_one(src, manifest_path=manifest, language="ru",
+                        title_override=None, audio_only=False, mix_mode="auto")
+
+    assert submitted == [], "a private link must never reach MeetGeek"
+    states = rec.read_uploads_manifest(manifest)
+    assert states[str(src.resolve())]["status"] == "drive-failed"

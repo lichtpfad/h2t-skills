@@ -547,7 +547,20 @@ def process_one(src_path: Path, *, language: str | None, title_override: str | N
             "web_url": rec.get("drive_web_url"),
             "created": False,
         }
-        ensure_drive_public(drive_info["drive_id"])
+        # Same failure class as Stage 2 proper: a stale id or a Drive outage is a
+        # recoverable per-file failure, not a reason to end the batch.
+        try:
+            ensure_drive_public(drive_info["drive_id"])
+        except Exception as e:  # noqa: BLE001 — normalised to the pipeline's error
+            append_uploads_manifest({
+                **base_meta,
+                "mp4_path": str(mp4_path), "mp4_size_bytes": mp4_size,
+                "drive_id": drive_info["drive_id"],
+                "status": "drive-failed", "error": f"re-share failed: {e}",
+            }, manifest_path)
+            raise RecoveryError(
+                f"could not re-share Drive file {drive_info['drive_id']}: {e}", exit_code=1,
+            ) from e
         print(f"  [resume] drive ✓ (cached {drive_info['drive_id']})", file=sys.stderr)
     else:
         try:
