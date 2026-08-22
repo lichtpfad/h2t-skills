@@ -60,6 +60,7 @@ from recovery import (  # noqa: E402
     convert_media,
     drive_service as _drive_service,
     drive_upload_file as _drive_upload_file,
+    drive_audit_public as _drive_audit_public,
     drive_download_url as _drive_download_url,
     submit_url_via_h2t_ops as _submit_url_via_h2t_ops,
     title_from_filename as _title_from_filename,
@@ -507,6 +508,16 @@ def cmd_convert(args: argparse.Namespace) -> int:
 
 
 
+def cmd_drive_audit(args: argparse.Namespace) -> int:
+    """Report anyone-with-link access on uploaded recordings; --revoke to remove it."""
+    try:
+        report = _drive_audit_public(revoke=args.revoke)
+    except RecoveryError as e:
+        raise ApiError(str(e), exit_code=e.exit_code) from e
+    _print_json(report)
+    return 0
+
+
 def cmd_drive_upload(args: argparse.Namespace) -> int:
     try:
         info = _drive_upload_file(Path(args.file), folder=args.folder,
@@ -894,6 +905,13 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--make-public", action=argparse.BooleanOptionalAction, default=True,
                    help="Set permissions to anyone-with-link reader (default on)")
     s.set_defaults(func=cmd_drive_upload)
+
+    s = sub.add_parser("drive-audit",
+                       help="Report anyone-with-link access on uploaded recordings")
+    s.add_argument("--revoke", action="store_true",
+                   help="Remove the anyone permission (off by default; only safe once "
+                        "MeetGeek has fetched the recording)")
+    s.set_defaults(func=cmd_drive_audit)
 
     s = sub.add_parser("upload", help="Submit URL or local file to MeetGeek /v1/upload")
     grp = s.add_mutually_exclusive_group(required=True)

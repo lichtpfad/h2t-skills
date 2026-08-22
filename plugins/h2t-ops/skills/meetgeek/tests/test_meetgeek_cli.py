@@ -21,6 +21,9 @@ import pytest
 
 SCRIPT = Path(__file__).resolve().parent.parent / "scripts" / "meetgeek_cli.py"
 
+# Captured before any fixture redirects HOME — the production path the suite must never touch.
+_REAL_HOME = Path.home()
+
 
 @pytest.fixture()
 def cli(monkeypatch):
@@ -1014,6 +1017,9 @@ def test_upload_resumes_from_in_drive_state(cli, tmp_path, monkeypatch):
                         convert_called.__setitem__("n", convert_called["n"] + 1) or output_path)
     monkeypatch.setattr(_rec_mod, "drive_upload_file",
                         lambda path, **kw: drive_called.__setitem__("n", drive_called["n"] + 1) or {})
+    # The cached-drive path re-shares before submitting (#386): drive-audit
+    # --revoke may have removed the ACL the original upload granted.
+    monkeypatch.setattr(_rec_mod, "ensure_drive_public", lambda fid: None)
 
     posted = []
     monkeypatch.setattr(_rec_mod, "submit_url_via_h2t_ops",
@@ -1078,3 +1084,403 @@ def test_upload_from_file_directory_walks_recursively(cli, tmp_path, monkeypatch
     rc = cli.main(["upload", "--from-file", str(tmp_path)])
     assert rc == 0
     assert sorted(seen) == [a.name, b.name]
+
+
+# ─── Lake root isolation (#386, defect 6) ─────────────────────────────────────
+#
+# staging_dir(), uploads_manifest_path() and the emit_submission_artifact()
+# default all derived from Path.home() with no override, so four upload tests
+# wrote mp4 stubs and submission artifacts into the user's real ~/.dor lake —
+# and Syncthing carried them to the other machine.
+
+def _recovery(cli):
+    import sys as _sys
+    mod = _sys.modules.get("recovery")
+    assert mod is not None, "recovery module not found in sys.modules"
+    return mod
+
+
+def test_staging_dir_honours_h2t_lake_root(cli, tmp_path, monkeypatch):
+    rec = _recovery(cli)
+    lake = tmp_path / "lake"
+    monkeypatch.setenv("H2T_LAKE_ROOT", str(lake))
+    assert lake in rec.staging_dir().parents
+
+
+def test_uploads_manifest_path_honours_h2t_lake_root(cli, tmp_path, monkeypatch):
+    rec = _recovery(cli)
+    lake = tmp_path / "lake"
+    monkeypatch.setenv("H2T_LAKE_ROOT", str(lake))
+    assert lake in rec.uploads_manifest_path().parents
+
+
+def test_emit_submission_artifact_defaults_into_lake_root(cli, tmp_path, monkeypatch):
+    rec = _recovery(cli)
+    lake = tmp_path / "lake"
+    monkeypatch.setenv("H2T_LAKE_ROOT", str(lake))
+    path = rec.emit_submission_artifact({"source_webm": "/x/meetgeek-recording-a.webm"})
+    assert lake in path.parents
+
+
+def test_lake_root_defaults_to_dor_lake_when_unset(cli, monkeypatch):
+    """Without the env var the historical location is preserved."""
+    rec = _recovery(cli)
+    monkeypatch.delenv("H2T_LAKE_ROOT", raising=False)
+    assert rec.lake_root() == Path.home() / ".dor" / "lake"
+
+
+def test_suite_never_points_at_the_real_lake(cli):
+    """The autouse conftest fixture must redirect every test away from ~/.dor.
+
+    Without it, a test that forgets to override the path writes into production
+    data — which is how pytest fixtures ended up in the synced lake.
+    """
+    rec = _recovery(cli)
+    # Path.home() is itself redirected by the fixture, so the real location has
+    # to be captured at import time, before any fixture runs.
+    real_lake = _REAL_HOME / ".dor" / "lake"
+    assert rec.lake_root() != real_lake
+    assert real_lake not in rec.staging_dir().parents
+
+
+# ─── Public-ACL audit (#386, defect 2) ────────────────────────────────────────
+#
+# _drive_make_public() grants `type: anyone` so MeetGeek can fetch the recording
+# by URL, and nothing ever revokes it: 26/26 uploads stayed world-readable by
+# link for 108 days. Revoking inside Stage 3 would race MeetGeek's own async
+# fetch, so the recovery path is a separate audit over the manifest's drive_ids.
+
+class FakeDriveService:
+    """Minimal Drive stub: permissions().list/delete over a dict of file -> perms."""
+
+    def __init__(self, perms: dict[str, list[dict]]):
+        self._perms = perms
+        self.deleted: list[tuple[str, str]] = []
+        self.created: list[tuple[str, str]] = []
+
+    def permissions(self):
+        return self
+
+    def list(self, *, fileId, fields=None):
+        return _Exec({"permissions": list(self._perms.get(fileId, []))})
+
+    def create(self, *, fileId, body, fields=None):
+        self.created.append((fileId, body.get("type")))
+        self._perms.setdefault(fileId, []).append(
+            {"id": f"NEW-{fileId}", "type": body["type"], "role": body["role"]}
+        )
+        return _Exec({"id": f"NEW-{fileId}"})
+
+    def delete(self, *, fileId, permissionId):
+        self.deleted.append((fileId, permissionId))
+        self._perms[fileId] = [
+            p for p in self._perms.get(fileId, []) if p["id"] != permissionId
+        ]
+        return _Exec({})
+
+
+class _Exec:
+    def __init__(self, value):
+        self._value = value
+
+    def execute(self):
+        return self._value
+
+
+def _manifest_with(tmp_path, records):
+    path = tmp_path / "manifest.jsonl"
+    path.write_text(
+        "\n".join(json.dumps(r, ensure_ascii=False) for r in records) + "\n",
+        encoding="utf-8",
+    )
+    return path
+
+
+def test_drive_audit_reports_public_uploads_without_revoking(cli, tmp_path):
+    rec = _recovery(cli)
+    manifest = _manifest_with(tmp_path, [
+        {"source_webm": "/x/a.webm", "drive_id": "D1", "status": "submitted"},
+        {"source_webm": "/x/b.webm", "drive_id": "D2", "status": "submitted"},
+    ])
+    svc = FakeDriveService({
+        "D1": [{"id": "P1", "type": "anyone", "role": "reader"}],
+        "D2": [{"id": "P2", "type": "user", "role": "owner"}],
+    })
+    report = rec.drive_audit_public(svc=svc, manifest_path=manifest)
+    assert report["checked"] == 2
+    assert report["public"] == ["D1"]
+    assert report["revoked"] == 0
+    assert svc.deleted == []
+
+
+def test_drive_audit_revokes_only_the_anyone_permission(cli, tmp_path):
+    rec = _recovery(cli)
+    manifest = _manifest_with(tmp_path, [
+        {"source_webm": "/x/a.webm", "drive_id": "D1", "status": "submitted"},
+    ])
+    svc = FakeDriveService({
+        "D1": [
+            {"id": "P1", "type": "anyone", "role": "reader"},
+            {"id": "P2", "type": "user", "role": "owner"},
+        ],
+    })
+    report = rec.drive_audit_public(svc=svc, manifest_path=manifest, revoke=True)
+    assert report["revoked"] == 1
+    assert svc.deleted == [("D1", "P1")]
+    assert [p["id"] for p in svc._perms["D1"]] == ["P2"], "owner must survive the revoke"
+
+
+def test_drive_audit_skips_records_without_a_drive_id(cli, tmp_path):
+    """convert-failed and drive-failed records carry no drive_id."""
+    rec = _recovery(cli)
+    manifest = _manifest_with(tmp_path, [
+        {"source_webm": "/x/a.webm", "status": "convert-failed"},
+        {"source_webm": "/x/b.webm", "drive_id": "D2", "status": "submitted"},
+    ])
+    svc = FakeDriveService({"D2": [{"id": "P2", "type": "anyone", "role": "reader"}]})
+    report = rec.drive_audit_public(svc=svc, manifest_path=manifest)
+    assert report["checked"] == 1
+    assert report["public"] == ["D2"]
+
+
+def test_drive_audit_command_reports_without_revoking_by_default(cli, capsys, monkeypatch):
+    """Revoking is destructive to a live pipeline, so it must be opt-in."""
+    rec = _recovery(cli)
+    seen = {}
+
+    def fake_audit(*, svc=None, manifest_path=None, revoke=False):
+        seen["revoke"] = revoke
+        return {"checked": 2, "public": ["D1"], "revoked": 0}
+
+    monkeypatch.setattr(rec, "drive_audit_public", fake_audit)
+    monkeypatch.setattr(cli, "_drive_audit_public", fake_audit, raising=False)
+    rc = cli.main(["drive-audit"])
+    assert rc == 0
+    assert seen["revoke"] is False
+    assert json.loads(capsys.readouterr().out)["public"] == ["D1"]
+
+
+def test_drive_audit_command_revokes_when_asked(cli, capsys, monkeypatch):
+    rec = _recovery(cli)
+    seen = {}
+
+    def fake_audit(*, svc=None, manifest_path=None, revoke=False):
+        seen["revoke"] = revoke
+        return {"checked": 2, "public": ["D1"], "revoked": 1}
+
+    monkeypatch.setattr(rec, "drive_audit_public", fake_audit)
+    monkeypatch.setattr(cli, "_drive_audit_public", fake_audit, raising=False)
+    rc = cli.main(["drive-audit", "--revoke"])
+    assert rc == 0
+    assert seen["revoke"] is True
+    assert json.loads(capsys.readouterr().out)["revoked"] == 1
+
+
+def test_drive_audit_scans_superseded_manifest_lines(cli, tmp_path):
+    """An ACL sweep must read every line, not the last-line-wins state.
+
+    read_uploads_manifest() collapses the JSONL to one record per source_webm.
+    A retry that appends a line without a drive_id therefore hides the earlier,
+    still-public upload — and --revoke would leave it exposed (codex [P2]).
+    """
+    rec = _recovery(cli)
+    manifest = _manifest_with(tmp_path, [
+        {"source_webm": "/x/a.webm", "drive_id": "D1", "status": "upload-rejected"},
+        {"source_webm": "/x/a.webm", "status": "drive-failed"},
+    ])
+    svc = FakeDriveService({"D1": [{"id": "P1", "type": "anyone", "role": "reader"}]})
+    report = rec.drive_audit_public(svc=svc, manifest_path=manifest, revoke=True)
+    assert report["public"] == ["D1"]
+    assert svc.deleted == [("D1", "P1")]
+
+
+def test_drive_audit_checks_each_drive_id_once(cli, tmp_path):
+    """Repeated lines for the same upload must not be probed twice."""
+    rec = _recovery(cli)
+    manifest = _manifest_with(tmp_path, [
+        {"source_webm": "/x/a.webm", "drive_id": "D1", "status": "submitted"},
+        {"source_webm": "/x/a.webm", "drive_id": "D1", "status": "submitted"},
+    ])
+    svc = FakeDriveService({"D1": [{"id": "P1", "type": "anyone", "role": "reader"}]})
+    report = rec.drive_audit_public(svc=svc, manifest_path=manifest)
+    assert report["checked"] == 1
+    assert report["public"] == ["D1"]
+
+
+def test_drive_audit_survives_a_stale_drive_id(cli, tmp_path):
+    """A deleted Drive file must not abort the sweep (codex [P2]).
+
+    The audit walks every historical manifest entry, so an id whose file is gone
+    is expected. If permissions().list raises and nothing catches it, the later,
+    still-public uploads are never reached.
+    """
+    rec = _recovery(cli)
+    manifest = _manifest_with(tmp_path, [
+        {"source_webm": "/x/a.webm", "drive_id": "GONE", "status": "submitted"},
+        {"source_webm": "/x/b.webm", "drive_id": "D2", "status": "submitted"},
+    ])
+
+    class ExplodingService(FakeDriveService):
+        def list(self, *, fileId, fields=None):
+            if fileId == "GONE":
+                raise RuntimeError("File not found: GONE")
+            return super().list(fileId=fileId, fields=fields)
+
+    svc = ExplodingService({"D2": [{"id": "P2", "type": "anyone", "role": "reader"}]})
+    report = rec.drive_audit_public(svc=svc, manifest_path=manifest, revoke=True)
+    assert report["public"] == ["D2"]
+    assert svc.deleted == [("D2", "P2")]
+    assert [e["drive_id"] for e in report["errors"]] == ["GONE"]
+
+
+def test_drive_audit_reports_no_errors_on_a_clean_sweep(cli, tmp_path):
+    rec = _recovery(cli)
+    manifest = _manifest_with(tmp_path, [
+        {"source_webm": "/x/a.webm", "drive_id": "D1", "status": "submitted"},
+    ])
+    svc = FakeDriveService({"D1": [{"id": "P1", "type": "user", "role": "owner"}]})
+    assert rec.drive_audit_public(svc=svc, manifest_path=manifest)["errors"] == []
+
+
+def test_drive_audit_revokes_an_in_flight_upload_too(cli, tmp_path):
+    """Nothing is exempt: the resume path re-shares whatever it reuses.
+
+    Skipping in-drive ids would leave them public indefinitely. Making
+    process_one() re-share the cached file instead lets the sweep clean
+    everything (codex [P2], rounds 3 and 4).
+    """
+    rec = _recovery(cli)
+    manifest = _manifest_with(tmp_path, [
+        {"source_webm": "/x/a.webm", "drive_id": "D1",
+         "drive_download_url": "https://d/D1", "status": "in-drive"},
+    ])
+    svc = FakeDriveService({"D1": [{"id": "P1", "type": "anyone", "role": "reader"}]})
+    report = rec.drive_audit_public(svc=svc, manifest_path=manifest, revoke=True)
+    assert report["revoked"] == 1
+    assert svc.deleted == [("D1", "P1")]
+
+
+def test_drive_audit_revokes_a_submitted_upload(cli, tmp_path):
+    """`submitted` is the terminal state — that is what the sweep exists for."""
+    rec = _recovery(cli)
+    manifest = _manifest_with(tmp_path, [
+        {"source_webm": "/x/a.webm", "drive_id": "D1", "status": "submitted"},
+    ])
+    svc = FakeDriveService({"D1": [{"id": "P1", "type": "anyone", "role": "reader"}]})
+    assert rec.drive_audit_public(svc=svc, manifest_path=manifest, revoke=True)["revoked"] == 1
+
+
+def test_drive_audit_revokes_a_superseded_id_a_retry_will_reshare(cli, tmp_path):
+    """A `drive-failed` retry re-uploads, and drive_upload_file re-shares by name.
+
+    So the earlier id is safe to revoke — only `in-drive` is genuinely in flight.
+    """
+    rec = _recovery(cli)
+    manifest = _manifest_with(tmp_path, [
+        {"source_webm": "/x/a.webm", "drive_id": "D1", "status": "upload-rejected"},
+        {"source_webm": "/x/a.webm", "status": "drive-failed"},
+    ])
+    svc = FakeDriveService({"D1": [{"id": "P1", "type": "anyone", "role": "reader"}]})
+    report = rec.drive_audit_public(svc=svc, manifest_path=manifest, revoke=True)
+    assert report["revoked"] == 1
+
+
+def test_resume_reshares_the_cached_drive_file_before_submitting(cli, tmp_path, monkeypatch):
+    """Reusing a cached Drive id must re-grant the anyone permission (codex [P2]).
+
+    can_skip_drive short-circuits Stage 2 for in-drive and submitted records and
+    submits the stored URL. Once drive-audit --revoke exists, that URL may be
+    private — so the resume path can no longer assume the original ACL survived.
+    """
+    src = tmp_path / "meetgeek-recording-2026-01-01T10-00-00-000Z.webm"
+    src.write_bytes(b"x" * 1024)
+    size = src.stat().st_size
+    mtime = datetime.fromtimestamp(src.stat().st_mtime, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    cached_mp4 = tmp_path / "cached.mp4"
+    cached_mp4.write_bytes(b"M" * 2048)
+
+    manifest = _manifest_with(tmp_path, [{
+        "source_webm": str(src.resolve()),
+        "source_size_bytes": size, "source_mtime": mtime,
+        "mp4_path": str(cached_mp4), "mp4_size_bytes": 2048,
+        "drive_id": "EXISTING_DID",
+        "drive_download_url": "https://drive.google.com/uc?export=download&id=EXISTING_DID",
+        "status": "in-drive",
+    }])
+    monkeypatch.setattr(cli, "_uploads_manifest_path", lambda: manifest)
+
+    rec = _recovery(cli)
+    shared: list[str] = []
+    monkeypatch.setattr(rec, "ensure_drive_public", lambda fid: shared.append(fid))
+    monkeypatch.setattr(rec, "convert_media",
+                        lambda src_p, *, audio_only, mix_mode, output_path=None: output_path)
+    monkeypatch.setattr(rec, "drive_upload_file", lambda path, **kw: {})
+    monkeypatch.setattr(rec, "submit_url_via_h2t_ops",
+                        lambda url, title, lang: {"message": "ok"})
+
+    rc = cli.main(["upload", "--from-file", str(src), "--language", "ru", "--no-skip-existing"])
+    assert rc == 0
+    assert shared == ["EXISTING_DID"]
+
+
+def test_ensure_drive_public_is_a_no_op_when_already_shared(cli):
+    """Drive rejects a second anyone permission (codex [P2]).
+
+    The common resume path runs before any revoke, so the file is usually still
+    public — creating blindly would abort an upload that used to succeed.
+    """
+    rec = _recovery(cli)
+    svc = FakeDriveService({"D1": [{"id": "P1", "type": "anyone", "role": "reader"}]})
+    rec.ensure_drive_public("D1", svc=svc)
+    assert svc.created == []
+
+
+def test_ensure_drive_public_shares_when_the_permission_is_gone(cli):
+    rec = _recovery(cli)
+    svc = FakeDriveService({"D1": [{"id": "P1", "type": "user", "role": "owner"}]})
+    rec.ensure_drive_public("D1", svc=svc)
+    assert svc.created == [("D1", "anyone")]
+
+
+def test_resume_records_drive_failed_when_resharing_raises(cli, tmp_path, monkeypatch):
+    """A Drive error on the re-share must stay a per-file failure (codex [P2]).
+
+    The call sits on the cached-drive path, outside Stage 2's try; unhandled, one
+    stale id would crash a whole batch instead of recording drive-failed and
+    letting the next file run.
+    """
+    src = tmp_path / "meetgeek-recording-2026-01-01T10-00-00-000Z.webm"
+    src.write_bytes(b"x" * 1024)
+    size = src.stat().st_size
+    mtime = datetime.fromtimestamp(src.stat().st_mtime, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    cached_mp4 = tmp_path / "cached.mp4"
+    cached_mp4.write_bytes(b"M" * 2048)
+
+    manifest = _manifest_with(tmp_path, [{
+        "source_webm": str(src.resolve()),
+        "source_size_bytes": size, "source_mtime": mtime,
+        "mp4_path": str(cached_mp4), "mp4_size_bytes": 2048,
+        "drive_id": "STALE",
+        "drive_download_url": "https://drive.google.com/uc?export=download&id=STALE",
+        "status": "in-drive",
+    }])
+
+    rec = _recovery(cli)
+
+    def boom(fid, **kw):
+        raise RuntimeError("File not found: STALE")
+
+    monkeypatch.setattr(rec, "ensure_drive_public", boom)
+    monkeypatch.setattr(rec, "convert_media",
+                        lambda src_p, *, audio_only, mix_mode, output_path=None: output_path)
+    submitted = []
+    monkeypatch.setattr(rec, "submit_url_via_h2t_ops",
+                        lambda url, title, lang: submitted.append(url) or {"message": "ok"})
+
+    with pytest.raises(rec.RecoveryError):
+        rec.process_one(src, manifest_path=manifest, language="ru",
+                        title_override=None, audio_only=False, mix_mode="auto")
+
+    assert submitted == [], "a private link must never reach MeetGeek"
+    states = rec.read_uploads_manifest(manifest)
+    assert states[str(src.resolve())]["status"] == "drive-failed"
