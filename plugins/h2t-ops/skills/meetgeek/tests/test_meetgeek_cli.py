@@ -1017,6 +1017,9 @@ def test_upload_resumes_from_in_drive_state(cli, tmp_path, monkeypatch):
                         convert_called.__setitem__("n", convert_called["n"] + 1) or output_path)
     monkeypatch.setattr(_rec_mod, "drive_upload_file",
                         lambda path, **kw: drive_called.__setitem__("n", drive_called["n"] + 1) or {})
+    # The cached-drive path re-shares before submitting (#386): drive-audit
+    # --revoke may have removed the ACL the original upload granted.
+    monkeypatch.setattr(_rec_mod, "ensure_drive_public", lambda fid: None)
 
     posted = []
     monkeypatch.setattr(_rec_mod, "submit_url_via_h2t_ops",
@@ -1331,11 +1334,12 @@ def test_drive_audit_reports_no_errors_on_a_clean_sweep(cli, tmp_path):
     assert rec.drive_audit_public(svc=svc, manifest_path=manifest)["errors"] == []
 
 
-def test_drive_audit_does_not_revoke_an_in_flight_upload(cli, tmp_path):
-    """`in-drive` means the resume path will reuse this Drive file as-is (codex [P2]).
+def test_drive_audit_revokes_an_in_flight_upload_too(cli, tmp_path):
+    """Nothing is exempt: the resume path re-shares whatever it reuses.
 
-    process_one() skips drive_upload_file() for `in-drive` records and submits the
-    cached URL, so revoking here hands MeetGeek a private link on the next retry.
+    Skipping in-drive ids would leave them public indefinitely. Making
+    process_one() re-share the cached file instead lets the sweep clean
+    everything (codex [P2], rounds 3 and 4).
     """
     rec = _recovery(cli)
     manifest = _manifest_with(tmp_path, [
@@ -1344,10 +1348,8 @@ def test_drive_audit_does_not_revoke_an_in_flight_upload(cli, tmp_path):
     ])
     svc = FakeDriveService({"D1": [{"id": "P1", "type": "anyone", "role": "reader"}]})
     report = rec.drive_audit_public(svc=svc, manifest_path=manifest, revoke=True)
-    assert report["public"] == ["D1"]
-    assert report["skipped"] == ["D1"]
-    assert report["revoked"] == 0
-    assert svc.deleted == []
+    assert report["revoked"] == 1
+    assert svc.deleted == [("D1", "P1")]
 
 
 def test_drive_audit_revokes_a_submitted_upload(cli, tmp_path):
@@ -1357,9 +1359,7 @@ def test_drive_audit_revokes_a_submitted_upload(cli, tmp_path):
         {"source_webm": "/x/a.webm", "drive_id": "D1", "status": "submitted"},
     ])
     svc = FakeDriveService({"D1": [{"id": "P1", "type": "anyone", "role": "reader"}]})
-    report = rec.drive_audit_public(svc=svc, manifest_path=manifest, revoke=True)
-    assert report["revoked"] == 1
-    assert report["skipped"] == []
+    assert rec.drive_audit_public(svc=svc, manifest_path=manifest, revoke=True)["revoked"] == 1
 
 
 def test_drive_audit_revokes_a_superseded_id_a_retry_will_reshare(cli, tmp_path):
@@ -1375,4 +1375,41 @@ def test_drive_audit_revokes_a_superseded_id_a_retry_will_reshare(cli, tmp_path)
     svc = FakeDriveService({"D1": [{"id": "P1", "type": "anyone", "role": "reader"}]})
     report = rec.drive_audit_public(svc=svc, manifest_path=manifest, revoke=True)
     assert report["revoked"] == 1
-    assert report["skipped"] == []
+
+
+def test_resume_reshares_the_cached_drive_file_before_submitting(cli, tmp_path, monkeypatch):
+    """Reusing a cached Drive id must re-grant the anyone permission (codex [P2]).
+
+    can_skip_drive short-circuits Stage 2 for in-drive and submitted records and
+    submits the stored URL. Once drive-audit --revoke exists, that URL may be
+    private — so the resume path can no longer assume the original ACL survived.
+    """
+    src = tmp_path / "meetgeek-recording-2026-01-01T10-00-00-000Z.webm"
+    src.write_bytes(b"x" * 1024)
+    size = src.stat().st_size
+    mtime = datetime.fromtimestamp(src.stat().st_mtime, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    cached_mp4 = tmp_path / "cached.mp4"
+    cached_mp4.write_bytes(b"M" * 2048)
+
+    manifest = _manifest_with(tmp_path, [{
+        "source_webm": str(src.resolve()),
+        "source_size_bytes": size, "source_mtime": mtime,
+        "mp4_path": str(cached_mp4), "mp4_size_bytes": 2048,
+        "drive_id": "EXISTING_DID",
+        "drive_download_url": "https://drive.google.com/uc?export=download&id=EXISTING_DID",
+        "status": "in-drive",
+    }])
+    monkeypatch.setattr(cli, "_uploads_manifest_path", lambda: manifest)
+
+    rec = _recovery(cli)
+    shared: list[str] = []
+    monkeypatch.setattr(rec, "ensure_drive_public", lambda fid: shared.append(fid))
+    monkeypatch.setattr(rec, "convert_media",
+                        lambda src_p, *, audio_only, mix_mode, output_path=None: output_path)
+    monkeypatch.setattr(rec, "drive_upload_file", lambda path, **kw: {})
+    monkeypatch.setattr(rec, "submit_url_via_h2t_ops",
+                        lambda url, title, lang: {"message": "ok"})
+
+    rc = cli.main(["upload", "--from-file", str(src), "--language", "ru", "--no-skip-existing"])
+    assert rc == 0
+    assert shared == ["EXISTING_DID"]

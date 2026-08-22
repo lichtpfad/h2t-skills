@@ -310,21 +310,17 @@ def iter_manifest_drive_ids(path: Path | None = None) -> list[str]:
     return seen
 
 
-# Statuses where process_one() reuses the existing Drive file instead of
-# re-uploading it (`can_skip_drive`). `submitted` is terminal — the sweep exists
-# to revoke exactly those. `in-drive` is a crash between upload and submit: the
-# resume path submits the cached URL without re-sharing, so revoking there hands
-# MeetGeek a private link.
-IN_FLIGHT_STATUSES = ("in-drive",)
+def ensure_drive_public(file_id: str, *, svc=None) -> None:
+    """Re-grant anyone-with-link access to a Drive file already uploaded.
 
-
-def in_flight_drive_ids(path: Path | None = None) -> set[str]:
-    """Drive ids whose current manifest state still needs the public link."""
-    return {
-        rec["drive_id"]
-        for rec in read_uploads_manifest(path).values()
-        if rec.get("drive_id") and rec.get("status") in IN_FLIGHT_STATUSES
-    }
+    process_one() short-circuits Stage 2 for in-drive and submitted records and
+    submits the stored URL. Before drive-audit existed, the ACL from the original
+    upload was guaranteed to survive; it no longer is, so the resume path has to
+    re-share rather than assume (#386).
+    """
+    if svc is None:
+        svc = drive_service()
+    _drive_make_public(svc, file_id)
 
 
 def drive_audit_public(*, svc=None, manifest_path: Path | None = None,
@@ -340,11 +336,9 @@ def drive_audit_public(*, svc=None, manifest_path: Path | None = None,
     """
     if svc is None:
         svc = drive_service()
-    in_flight = in_flight_drive_ids(manifest_path)
     checked = 0
     public: list[str] = []
     errors: list[dict] = []
-    skipped: list[str] = []
     revoked = 0
     for file_id in iter_manifest_drive_ids(manifest_path):
         checked += 1
@@ -355,9 +349,6 @@ def drive_audit_public(*, svc=None, manifest_path: Path | None = None,
             if not perms:
                 continue
             public.append(file_id)
-            if file_id in in_flight:
-                skipped.append(file_id)
-                continue
             if revoke:
                 for perm in perms:
                     svc.permissions().delete(
@@ -366,8 +357,7 @@ def drive_audit_public(*, svc=None, manifest_path: Path | None = None,
                     revoked += 1
         except Exception as e:  # noqa: BLE001 — one bad id must not end the sweep
             errors.append({"drive_id": file_id, "error": str(e)})
-    return {"checked": checked, "public": public, "revoked": revoked,
-            "skipped": skipped, "errors": errors}
+    return {"checked": checked, "public": public, "revoked": revoked, "errors": errors}
 
 
 def drive_upload_file(path: Path, *, folder: str | None = None,
@@ -555,6 +545,7 @@ def process_one(src_path: Path, *, language: str | None, title_override: str | N
             "web_url": rec.get("drive_web_url"),
             "created": False,
         }
+        ensure_drive_public(drive_info["drive_id"])
         print(f"  [resume] drive ✓ (cached {drive_info['drive_id']})", file=sys.stderr)
     else:
         try:
