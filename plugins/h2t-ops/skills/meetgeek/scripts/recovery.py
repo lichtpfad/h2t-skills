@@ -37,10 +37,6 @@ DRIVE_ROOT_FOLDER_NAME = "MeetGeek Uploads"
 _RECORDING_NAME_RE = re.compile(
     r"meetgeek-recording-(\d{4})-(\d{2})-(\d{2})T(\d{2})-(\d{2})-\d{2}-\d+Z"
 )
-# How far along the pipeline each status is, for merging manifest lines that
-# carry no timestamp. Everything else — the failures — ranks lowest.
-_STAGE_RANK = {"converted": 2, "in-drive": 3, "submitted": 4}
-
 _DURATION_RE = re.compile(r"Duration:\s*(\d+):(\d+):(\d+)(?:\.(\d+))?")
 _STREAM_AUDIO_RE = re.compile(r"Stream\s+#\d+:\d+(?:\([^)]+\))?: Audio:")
 _STREAM_VIDEO_RE = re.compile(r"Stream\s+#\d+:\d+(?:\([^)]+\))?: Video:")
@@ -491,11 +487,11 @@ def iter_manifest_records(path: Path | None = None) -> list[tuple[str, dict]]:
     the double-submit this is meant to stop. Lines from before `ts` existed sort
     first, which is where they belong.
 
-    Nothing dates those older lines against each other, though, and the 84 of
-    them already in the journal split across a shard and its sync-conflict copy,
-    which sorts second by name and would therefore always win. So among the
-    unstamped, the furthest-along status wins instead of the filename: a
-    submission is a fact about the past that a later attempt cannot undo.
+    Nothing dates those older lines against each other, though — the 84 already
+    in the journal split across a shard and its sync-conflict copy, which sorts
+    second by name and would therefore always win — and two machines can stamp
+    the same second. read_uploads_manifest() carries the one guarantee that must
+    survive a guessed order.
     """
     entries: list[tuple[str, int, int, int, dict]] = []
     for rank, shard in enumerate(iter_manifest_shards(path)):
@@ -508,20 +504,31 @@ def iter_manifest_records(path: Path | None = None) -> list[tuple[str, dict]]:
                     rec = json.loads(line)
                 except ValueError:
                     continue
-                ts = rec.get("ts") or ""
-                stage = 0 if ts else _STAGE_RANK.get(rec.get("status"), 1)
-                entries.append((ts, stage, rank, line_no, rec))
-    entries.sort(key=lambda e: e[:4])
-    return [(e[0], e[4]) for e in entries]
+                entries.append((rec.get("ts") or "", rank, line_no, rec))
+    entries.sort(key=lambda e: e[:3])
+    return [(e[0], e[3]) for e in entries]
 
 
 def read_uploads_manifest(path: Path | None = None) -> dict[str, dict]:
-    """Newest-line-wins per recording, across every shard."""
+    """Newest-line-wins per recording, across every shard — except a submission.
+
+    Order between shards is a guess: filenames for the lines written before `ts`
+    existed, one second of resolution for the rest. Every mistake that guess can
+    make is recoverable by re-running, save one — reading a `submitted`
+    recording as unsubmitted sends it to MeetGeek a second time. So a later line
+    never demotes a submission; it describes the next attempt, and nothing
+    appended afterwards undoes that MeetGeek accepted the recording once.
+    """
     state: dict[str, dict] = {}
     for _, rec in iter_manifest_records(path):
         src = rec.get("source_webm")
-        if src:
-            state[recording_key(src)] = rec
+        if not src:
+            continue
+        key = recording_key(src)
+        prev = state.get(key)
+        if prev and prev.get("status") == "submitted" and rec.get("status") != "submitted":
+            continue
+        state[key] = rec
     return state
 
 
