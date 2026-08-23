@@ -405,6 +405,20 @@ Expected: `1938 passed, 7 skipped` — no failures, no errors. If anything is st
 your change, and the newly added CI directories are the only place new red can legitimately
 come from.
 
+- [ ] **Step 4a: Fix the three directories that are red today**
+
+Measured 2026-08-23 by running each directory locally. Eight of ten are green — 1185 tests
+that CI has never executed. The three red ones have known, bounded causes; none is rot:
+
+| Directory | Result | Cause |
+|---|---|---|
+| `plugins/h2t-ops/skills/research/tests` | 24 failed, 144 passed | `FileNotFoundError: h2t_secrets module not found. Tried: []` — the script resolves `h2t_secrets` from `H2T_PLUGIN_ROOT` or `plugins/h2t-core/scripts/h2t_secrets.py`, and the tests set neither. Add a `conftest.py` in that directory setting `H2T_PLUGIN_ROOT` to the repo's `plugins/h2t-core`. Do not weaken the assertions. |
+| `plugins/h2t-arch/skills/drawio/scripts` | 2 collection errors | `ModuleNotFoundError: No module named 'drawpyo'` — an undeclared optional dependency. Add `pytest.importorskip("drawpyo")` at the top of both test modules, and name `drawpyo` in the drawio skill's `compatibility:` line so the gap is documented rather than silent. |
+| `plugins/h2t-ops/skills/connectors/scripts` | 1 failed, 16 passed | `test_connectors_skill_exists_and_is_bounded` asserts `name: h2t-ops:connectors` in the frontmatter. `tests/core/test_skill_frontmatter.py` asserts the opposite — the name must be the bare directory name, because the harness prepends the plugin itself (`/h2t-core:h2t-core:handoff` otherwise). The frontmatter is correct; fix the assertion to `name: connectors` and reference the frontmatter test in its docstring. |
+
+Run each fixed directory before adding its CI step:
+`.venv/bin/pytest plugins/h2t-ops/skills/research/tests -q`
+
 - [ ] **Step 5: Run everything**
 
 Run: `.venv/bin/pytest tests/ lib/ -q`
