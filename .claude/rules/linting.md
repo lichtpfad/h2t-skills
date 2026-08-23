@@ -17,9 +17,16 @@ are tracked in #400. Read the comment before lifting one.
 
 `F401` is handled differently and the difference matters. It is **not** in `ignore` and not in
 `per-file-ignores`: both suppress the rule for a whole file, so a newly added unused import
-would pass unnoticed in any file that already had one. The 99 pre-existing ones carry a
+would pass unnoticed in any file that already had one. The 101 pre-existing ones carry a
 line-level `# noqa: F401` instead, so the rule stays live everywhere else in the same file.
-Verified: appending an unused import to a file full of noqa'd ones still fails.
+Verified: appending an unused import to a file full of marked ones still fails.
+
+**One gap remains, and it is deliberate.** A `noqa` covers its whole statement, so a name added
+*inside* an already-marked import hides too — `from typing import Any, Dict  # noqa` swallows a
+third unused name. 53 of the 101 markers sit on multi-name statements where that is possible;
+the other 48 are single-name imports with nothing to add to. Closing it means resolving each
+import rather than marking it, which is #400. Do not read "F401 is enabled" as "F401 is
+airtight".
 
 Those noqa markers are the debt (#400), not a pattern to copy. `F401` is also `unfixable` —
 several modules re-export names purely so tests can patch them, and `ruff --fix` removing
