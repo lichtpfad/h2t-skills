@@ -80,14 +80,35 @@ gather that never learned `find_latest_session_index` (added to the plugin scrip
 
 **Files:**
 - Modify: `h2t_ops/cli.py:186-187`
-- Modify: `lib/cli/main.py` — delete the `gather` subcommand and `_run_gather`
+- Modify: `plugins/h2t-core/skills/session-start/scripts/gather.py` — add `--skill`
+- Modify: `lib/cli/main.py` — delete `_cmd_gather`, `_run_gather` and the `gather` subparser
 - Test: `tests/core/test_gather_single_implementation.py` (create)
+
+**The contract that must survive.** `lib/cli/main.py` today accepts an *optional* positional
+skill (`gather_parser.add_argument("skill", nargs="?", default="")`), never validates it, uses
+it only for eval attribution (`SkillEval(skill, ...)`), and refuses an empty one:
+
+```python
+# lib/cli/main.py:125
+def _cmd_gather(args):
+    if not args.skill:
+        print("error: gather requires a skill name (e.g. session-start, handoff)", file=sys.stderr)
+        return 2
+```
+
+The plugin script has no positional at all and hardcodes `SkillEval("session-start", ...)` at
+line 136. So the reroute must (a) keep `exit 2` with that exact message when no skill is given,
+(b) forward the skill name for eval attribution, and (c) **keep accepting an unrecognised skill
+name** — legacy never validated it, and adding validation here is a behaviour change this task
+does not own.
 
 **Interfaces:**
 - Consumes: `h2t_ops.plugin_entrypoints.run_plugin_main(relative_path: str) -> int`
-- Produces: nothing new; `h2t-ops gather <skill> [--cwd] [--briefing-only]` keeps its argv shape
+- Produces: `gather.py` gains `--skill <name>` (default `session-start`), replacing the
+  hardcoded literal at line 136. `h2t-ops gather <skill> [--cwd] [--format-briefing]
+  [--briefing-only]` keeps its argv shape and its exit codes.
 
-- [ ] **Step 1: Write the failing test**
+- [ ] **Step 1: Write the failing tests**
 
 ```python
 # tests/core/test_gather_single_implementation.py
@@ -117,44 +138,89 @@ def test_both_entry_points_produce_the_same_briefing():
     assert via_ops.returncode == 0, via_ops.stderr
     assert via_gather.returncode == 0, via_gather.stderr
     assert via_ops.stdout == via_gather.stdout
+
+
+def test_missing_skill_still_exits_2():
+    result = _run(["h2t_ops.cli", "gather"])
+    assert result.returncode == 2, (result.returncode, result.stdout[:200])
+    assert "requires a skill name" in result.stderr
+
+
+def test_a_leading_flag_is_not_eaten_as_the_skill():
+    """`h2t-ops gather --cwd X` has no skill; --cwd must not be consumed as one."""
+    result = _run(["h2t_ops.cli", "gather", "--cwd", str(ROOT), "--briefing-only"])
+    assert result.returncode == 2, (result.returncode, result.stdout[:200])
+    assert "requires a skill name" in result.stderr
+
+
+def test_an_unrecognised_skill_is_still_accepted():
+    """Legacy never validated the name; this task does not start."""
+    result = _run(["h2t_ops.cli", "gather", "nosuch-skill",
+                   "--cwd", str(ROOT), "--briefing-only"])
+    assert result.returncode == 0, result.stderr
+    assert "BRIEFING:" in result.stdout
 ```
 
-- [ ] **Step 2: Run it to confirm it fails**
+- [ ] **Step 2: Run them and read every failure text**
 
 Run: `.venv/bin/pytest tests/core/test_gather_single_implementation.py -q`
-Expected: FAIL — the two stdouts differ, `h2t-ops` output missing `### Previous Session`.
-Read the diff before continuing; if it fails for another reason (module not runnable with
-`-m`), fix the invocation, not the assertion.
+Expected: `test_both_entry_points_produce_the_same_briefing` FAILS on differing stdout — the
+`h2t-ops` side missing `### Previous Session`. The other three PASS against the unchanged
+code: they are the contract you must not break, not new behaviour. If any of the three fails
+now, the contract is not what this plan describes — stop and re-read `lib/cli/main.py:125`.
 
-- [ ] **Step 3: Route `gather` through the resolver**
+- [ ] **Step 3: Give the plugin script the skill name**
+
+```python
+# plugins/h2t-core/skills/session-start/scripts/gather.py, in main()
+    parser.add_argument("--skill", default="session-start")
+```
+
+and at line 136 replace the literal:
+
+```python
+        with SkillEval(args.skill, domain=domain, project=proj_id) as ev:
+```
+
+- [ ] **Step 4: Route `gather` through the resolver, parsing argv instead of slicing it**
 
 ```python
 # h2t_ops/cli.py — replace lines 186-187
     if argv and argv[0] == "gather":
         from h2t_ops.plugin_entrypoints import run_plugin_main
-        # argv is ["gather", "<skill>", ...]; the plugin script takes no skill positional.
-        sys.argv = ["h2t-gather", *argv[2:]]
+        rest = list(argv[1:])
+        skill = rest.pop(0) if rest and not rest[0].startswith("-") else ""
+        if not skill:
+            print("error: gather requires a skill name (e.g. session-start, handoff)",
+                  file=sys.stderr)
+            return 2
+        sys.argv = ["h2t-gather", "--skill", skill, *rest]
         return run_plugin_main("skills/session-start/scripts/gather.py")
 ```
 
-- [ ] **Step 4: Delete the second implementation**
+`argv[2:]` would be wrong: `h2t-ops gather --cwd X` has no positional, and slicing would drop
+`--cwd` silently.
 
-Remove `_run_gather` and the `gather` subparser from `lib/cli/main.py`. Leave the module's
-docstring stating that gather now lives in the plugin script and this module keeps only what
-`h2t_ops/cli.py:_legacy` still needs. Do **not** touch `packages` in `pyproject.toml:37` in
-this task: `tests/core/test_wheel_payload.py::test_wheel_ships_the_lib_those_scripts_import`
-asserts `lib` is shipped, so unshipping it is its own change. It is decision 3 below.
+- [ ] **Step 5: Delete the second implementation**
 
-- [ ] **Step 5: Run the test and the suites it can break**
+Remove `_cmd_gather`, `_run_gather` and the `gather` subparser from `lib/cli/main.py`, and
+update the module docstring to say gather now lives in the plugin script. Do **not** touch
+`packages` in `pyproject.toml:37`: `tests/core/test_wheel_payload.py::
+test_wheel_ships_the_lib_those_scripts_import` asserts `lib` is shipped, so unshipping it is
+its own change — decision 3 below.
 
-Run: `.venv/bin/pytest tests/core/ tests/lifecycle/ lib/ -q`
-Expected: the new test passes; `test_gather_on_skill_hook.py` and
-`test_gather_on_prompt_hook.py` stay green.
+- [ ] **Step 6: Run the test and the suites it can break**
 
-- [ ] **Step 6: Commit**
+Run: `.venv/bin/pytest tests/ lib/ -q`
+Expected: all four new tests pass; `test_gather_on_skill_hook.py` and
+`test_gather_on_prompt_hook.py` stay green; baseline count rises from 1938 by the new tests.
+
+- [ ] **Step 7: Commit**
 
 ```bash
-git add h2t_ops/cli.py lib/cli/main.py tests/core/test_gather_single_implementation.py
+git add h2t_ops/cli.py lib/cli/main.py \
+        plugins/h2t-core/skills/session-start/scripts/gather.py \
+        tests/core/test_gather_single_implementation.py
 git commit -m "fix(cli): h2t-ops gather runs the plugin script, not a stale second copy"
 ```
 
@@ -315,8 +381,28 @@ elif ! run_script "$PLUGIN_ROOT/skills/session-start/scripts/gather.py" --cwd "$
 fi
 ```
 
-`run_cli` is `run_script` without the interpreter prefix — add it beside `run_script` in the
-same file, reusing its stdout/stderr capture so `SCRIPT_STDERR` keeps working.
+`run_cli` is `run_script` with the `H2T_PYTHON_CMD` prefix dropped. Add it directly beside
+`run_script`, keeping the tempfile capture identical so `SCRIPT_STDOUT`, the 500-byte
+`SCRIPT_STDERR` tail, and the `set +e` / `set -e` window all behave exactly as before:
+
+```bash
+run_cli() {
+  local out err rc
+  out=$(mktemp)
+  err=$(mktemp)
+  set +e
+  "$@" >"$out" 2>"$err"
+  rc=$?
+  set -e
+  SCRIPT_STDOUT=$(cat "$out")
+  SCRIPT_STDERR=$(tail -c 500 "$err")
+  rm -f "$out" "$err"
+  return "$rc"
+}
+```
+
+The empty-output guard that follows the call site (`if [ -z "$SCRIPT_STDOUT" ]`) must stay
+reachable on both branches — do not move it inside the `if`.
 
 - [ ] **Step 4: Run the hook tests**
 
@@ -342,9 +428,14 @@ tests merged in #389/#390 are among them. Nobody knows whether those directories
 they have not executed on GitHub since they were written.
 
 **Files:**
-- Modify: `.github/workflows/` — the workflow that runs pytest
-- Modify: `pyproject.toml` — add the missing dependency
+- Modify: `.github/workflows/h2t-evals-gate.yml` — the `unit-tests` job
+- Modify: `plugins/h2t-ops/skills/research/tests/conftest.py` (create),
+  `plugins/h2t-arch/skills/drawio/scripts/test_export.py`,
+  `plugins/h2t-arch/skills/drawio/scripts/test_generate.py`,
+  `plugins/h2t-ops/skills/connectors/scripts/test_connectors_surface.py`,
+  `plugins/h2t-arch/skills/drawio/SKILL.md` (the `compatibility:` line)
 - Test: the CI run itself; plus `tests/core/test_ci_covers_plugin_tests.py` (create)
+- **Do not touch `pyproject.toml` in this task.** Nothing is missing from it.
 
 **Interfaces:**
 - Produces: a test that fails when a new plugin test directory is added without a CI step
@@ -381,31 +472,7 @@ def test_every_plugin_test_dir_is_named_in_a_workflow():
 Run: `.venv/bin/pytest tests/core/test_ci_covers_plugin_tests.py -q`
 Expected: FAIL listing ten directories. Copy that list — it is the input to Step 3.
 
-- [ ] **Step 3: Add one pytest step per directory**
-
-Append to the workflow, after the existing `plugins/h2t-core/skills/init-project/scripts` step,
-one step per directory the test listed, in the same form:
-
-```yaml
-      - name: Plugin tests — h2t-creative
-        run: python -m pytest plugins/h2t-creative/tests -q
-```
-
-Do not collapse them into one `pytest plugins/` invocation: these directories have no shared
-conftest and several add their own `sys.path` entries, so a single run cross-contaminates them.
-
-- [ ] **Step 4: Confirm the local baseline is the environment, not the repo**
-
-No dependency is missing from `pyproject.toml`; `ruamel.yaml>=0.18` is declared at line 22 and
-CI has been green throughout. Sync the venv instead:
-
-Run: `uv pip install --python .venv/bin/python "ruamel.yaml>=0.18" pip` followed by
-`.venv/bin/pytest tests/ lib/ -q`
-Expected: `1938 passed, 7 skipped` — no failures, no errors. If anything is still red, it is
-your change, and the newly added CI directories are the only place new red can legitimately
-come from.
-
-- [ ] **Step 4a: Fix the three directories that are red today**
+- [ ] **Step 3: Fix the three directories that are red today**
 
 Measured 2026-08-23 by running each directory locally. Eight of ten are green — 1185 tests
 that CI has never executed. The three red ones have known, bounded causes; none is rot:
@@ -416,21 +483,48 @@ that CI has never executed. The three red ones have known, bounded causes; none 
 | `plugins/h2t-arch/skills/drawio/scripts` | 2 collection errors | `ModuleNotFoundError: No module named 'drawpyo'` — an undeclared optional dependency. Add `pytest.importorskip("drawpyo")` at the top of both test modules, and name `drawpyo` in the drawio skill's `compatibility:` line so the gap is documented rather than silent. |
 | `plugins/h2t-ops/skills/connectors/scripts` | 1 failed, 16 passed | `test_connectors_skill_exists_and_is_bounded` asserts `name: h2t-ops:connectors` in the frontmatter. `tests/core/test_skill_frontmatter.py` asserts the opposite — the name must be the bare directory name, because the harness prepends the plugin itself (`/h2t-core:h2t-core:handoff` otherwise). The frontmatter is correct; fix the assertion to `name: connectors` and reference the frontmatter test in its docstring. |
 
-Run each fixed directory before adding its CI step:
+Run each one green before Step 4 wires it into CI, so no known-red step is ever committed:
 `.venv/bin/pytest plugins/h2t-ops/skills/research/tests -q`
 
-- [ ] **Step 5: Run everything**
+- [ ] **Step 4: Add one pytest step per directory, all of them now green**
+
+Append to the `unit-tests` job in `.github/workflows/h2t-evals-gate.yml`, after the existing
+`plugins/h2t-core/skills/init-project/scripts` step, one step per directory Step 2 listed:
+
+```yaml
+      - name: Plugin tests — h2t-creative
+        run: python -m pytest plugins/h2t-creative/tests -q
+```
+
+Do not collapse them into one `pytest plugins/` invocation: these directories have no shared
+conftest and several add their own `sys.path` entries, so a single run cross-contaminates them.
+
+- [ ] **Step 5: Confirm the local baseline is the environment, not the repo**
+
+No dependency is missing from `pyproject.toml`; `ruamel.yaml>=0.18` is declared at line 22 and
+CI has been green throughout. Sync the venv instead:
+
+Run: `uv pip install --python .venv/bin/python "ruamel.yaml>=0.18" pip` followed by
+`.venv/bin/pytest tests/ lib/ -q`
+Expected: **no failures and no errors**. Do not assert a count: the baseline was
+`1938 passed, 7 skipped` on 2026-08-23 before Wave 1, and every task in this plan adds tests,
+so the number only ever grows. If anything is red, it is your change.
+
+- [ ] **Step 6: Run everything**
 
 Run: `.venv/bin/pytest tests/ lib/ -q`
 Expected: 0 failures, 0 errors. Then run each newly added plugin directory locally and record
 which ones are red — a directory that was never in CI may have been red for months. Fix or
 `xfail` with a reason and an issue number; do not delete tests to make CI green.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
-git add .github/workflows pyproject.toml tests/core/test_ci_covers_plugin_tests.py
-git commit -m "test(ci): run every plugin test directory, add the missing ruamel dep (#381)"
+git add .github/workflows tests/core/test_ci_covers_plugin_tests.py \
+        plugins/h2t-ops/skills/research/tests/conftest.py \
+        plugins/h2t-arch/skills/drawio/scripts plugins/h2t-arch/skills/drawio/SKILL.md \
+        plugins/h2t-ops/skills/connectors/scripts
+git commit -m "test(ci): run every plugin test directory (#381)"
 ```
 
 ---
@@ -488,6 +582,15 @@ WRITERS = {
 
 @pytest.mark.parametrize(("skill", "write_call"), sorted(WRITERS.items()))
 def test_nothing_blocks_before_the_write(skill, write_call):
+    """A textual tripwire, not a proof.
+
+    It catches the two phrasings that have actually appeared — "wait for" and a ⛔ GATE
+    marker — in the text preceding the FIRST occurrence of the write call. It cannot see a
+    gate phrased a third way, a gate reached through a variable, or one in a referenced
+    file. The rule in .claude/rules/gates.md is the invariant; this only stops the two
+    known regressions. Widen BLOCKING when a third phrasing appears; do not claim the
+    invariant is mechanically enforced.
+    """
     manifest = ROOT / "plugins" / skill / "SKILL.md"
     text = manifest.read_text(encoding="utf-8")
     index = text.find(write_call)
@@ -495,6 +598,9 @@ def test_nothing_blocks_before_the_write(skill, write_call):
     offenders = [p.pattern for p in BLOCKING if p.search(text[:index])]
     assert not offenders, f"{manifest} blocks on the user before `{write_call}`: {offenders}"
 ```
+
+The same honesty belongs in `.claude/rules/gates.md`: the rule is enforced by review, and the
+test only closes the two regressions seen so far.
 
 - [ ] **Step 3: Run it**
 
