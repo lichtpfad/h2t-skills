@@ -497,8 +497,11 @@ def test_run_search_invalid_combo_exits_1(monkeypatch, tmp_path, capsys):
             "search", "--query", "x",
             "--mode", "competitor",
             "--start-date", "2025-01-01",
+            "--project", "stub",
             "--output-dir", str(tmp_path),
         ])
+    # Without --project argparse exits 2 before the ARGS validation this case is about,
+    # so the assertion below passed for the wrong reason for as long as it ran at all.
     assert excinfo.value.code == 1
     assert "EXA_ERROR:ARGS" in capsys.readouterr().err
 

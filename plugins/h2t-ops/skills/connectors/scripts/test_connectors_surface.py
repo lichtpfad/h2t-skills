@@ -41,7 +41,11 @@ def test_connectors_skill_exists_and_is_bounded():
     assert skill.is_file()
     text = _text(skill)
     lines = text.splitlines()
-    assert "name: h2t-ops:connectors" in text
+    # The frontmatter name is the bare directory name: the harness composes the slash
+    # command as <plugin>:<name>, so a prefixed one yields /h2t-ops:h2t-ops:connectors.
+    # tests/core/test_skill_frontmatter.py asserts exactly that, and it is the one that
+    # ran in CI — this assertion had contradicted it, unnoticed, since it was written.
+    assert "name: connectors" in text
     assert len(lines) <= 200
     assert "h2t-ops:research" in text
     assert "daily-brief" in text
