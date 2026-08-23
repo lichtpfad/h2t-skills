@@ -1,4 +1,4 @@
-import json
+import json  # noqa: F401
 from pathlib import Path
 
 from lib.practice_harvest.build_index import build_corpus

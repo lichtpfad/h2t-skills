@@ -16,11 +16,11 @@ import argparse
 import glob
 import json
 import os
-import subprocess
+import subprocess  # noqa: F401
 import sys
 import time
 from collections.abc import Iterable
-from datetime import UTC, datetime, timezone
+from datetime import UTC, datetime, timezone  # noqa: F401
 from pathlib import Path
 from typing import Any
 
@@ -56,28 +56,28 @@ from recovery import (  # noqa: E402
     DRIVE_ROOT_FOLDER_NAME,
     RecoveryError,
     convert_media,
-    emit_submission_artifact,
+    emit_submission_artifact,  # noqa: F401
 )
 from recovery import (
-    append_uploads_manifest as _append_uploads_manifest,
+    append_uploads_manifest as _append_uploads_manifest,  # noqa: F401
 )
 from recovery import (
-    build_convert_cmd as _build_convert_cmd,
+    build_convert_cmd as _build_convert_cmd,  # noqa: F401
 )
 from recovery import (
     drive_audit_public as _drive_audit_public,
 )
 from recovery import (
-    drive_download_url as _drive_download_url,
+    drive_download_url as _drive_download_url,  # noqa: F401
 )
 from recovery import (
-    drive_service as _drive_service,
+    drive_service as _drive_service,  # noqa: F401
 )
 from recovery import (
     drive_upload_file as _drive_upload_file,
 )
 from recovery import (
-    ffmpeg_exe as _ffmpeg_exe,
+    ffmpeg_exe as _ffmpeg_exe,  # noqa: F401
 )
 from recovery import (
     ffmpeg_probe as _ffmpeg_probe,
@@ -92,7 +92,7 @@ from recovery import (
     read_uploads_manifest as _read_uploads_manifest,
 )
 from recovery import (
-    staging_dir as _staging_dir,
+    staging_dir as _staging_dir,  # noqa: F401
 )
 from recovery import (
     submit_url_via_h2t_ops as _submit_url_via_h2t_ops,
@@ -101,7 +101,7 @@ from recovery import (
     submitted_record as _submitted_record,
 )
 from recovery import (
-    title_from_filename as _title_from_filename,
+    title_from_filename as _title_from_filename,  # noqa: F401
 )
 from recovery import (
     uploads_manifest_path as _uploads_manifest_path,

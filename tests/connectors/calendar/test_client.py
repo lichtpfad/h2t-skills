@@ -14,7 +14,7 @@ import pytest
 from h2t_ops.core.errors import (
     AuthError,
     ConfigError,
-    NetworkError,
+    NetworkError,  # noqa: F401
     NotFoundError,
     ProviderError,
     UsageError,

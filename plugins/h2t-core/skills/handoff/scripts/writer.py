@@ -19,7 +19,7 @@ import argparse
 import json
 import os
 import sys
-from datetime import UTC, datetime, timezone
+from datetime import UTC, datetime, timezone  # noqa: F401
 from pathlib import Path
 
 # lib/ path: cache root (4 levels up) or repo root (6 levels up) fallback

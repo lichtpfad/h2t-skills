@@ -1,7 +1,7 @@
 """Tests for write_document_tab and _md_to_docs_requests — spec #206."""
 from __future__ import annotations
 
-from types import SimpleNamespace
+from types import SimpleNamespace  # noqa: F401
 from unittest.mock import MagicMock
 
 import pytest

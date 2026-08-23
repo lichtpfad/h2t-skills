@@ -104,7 +104,7 @@ def test_update_noop_raises_usageerror(monkeypatch):
                             append=None, file=None, replace=False))
 
 
-from h2t_ops.cli import build_parser, dispatch
+from h2t_ops.cli import build_parser, dispatch  # noqa: F401
 
 
 def test_version_branch_exits_zero(capsys):

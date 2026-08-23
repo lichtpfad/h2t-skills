@@ -1,8 +1,8 @@
 # plugins/h2t/skills/init-project/scripts/test_apply.py
 """Tests for apply_registration.py YAML writing."""
-import json
-import shutil
-import tempfile
+import json  # noqa: F401
+import shutil  # noqa: F401
+import tempfile  # noqa: F401
 from pathlib import Path
 
 from apply_registration import apply_registration

@@ -12,16 +12,28 @@ reason: an unpinned linter adds rules on its own schedule.
 
 The repo is at **zero findings** under that set (2026-08-24). A red line is therefore yours.
 
-`ignore` and `per-file-ignores` in `pyproject.toml` carry a comment each saying what the class
-is and why it is deferred — F401 because several modules re-export names purely so tests can
-patch them, and `ruff --fix` removing those took 14 tests down. Read the comment before
-lifting an ignore. The deferred classes are tracked in #400; `F401` is also `unfixable`, so
-`--fix` cannot delete an import that turns out to be an interface.
+`ignore` in `pyproject.toml` carries a comment per class saying why it is deferred; the classes
+are tracked in #400. Read the comment before lifting one.
+
+`F401` is handled differently and the difference matters. It is **not** in `ignore` and not in
+`per-file-ignores`: both suppress the rule for a whole file, so a newly added unused import
+would pass unnoticed in any file that already had one. The 99 pre-existing ones carry a
+line-level `# noqa: F401` instead, so the rule stays live everywhere else in the same file.
+Verified: appending an unused import to a file full of noqa'd ones still fails.
+
+Those noqa markers are the debt (#400), not a pattern to copy. `F401` is also `unfixable` —
+several modules re-export names purely so tests can patch them, and `ruff --fix` removing
+those took 14 tests down.
+
+Run the **same paths CI runs**, or a clean local check will still fail on the runner:
 
 ```
-C:/dev/h2t-skills/.venv/Scripts/ruff check plugins/ lib/ h2t_ops/   # Windows
-uvx ruff check plugins/ lib/ h2t_ops/                                # macOS — ruff is not in the venv
+C:/dev/h2t-skills/.venv/Scripts/ruff check plugins/ lib/ h2t_ops/ tests/ scripts/   # Windows
+uvx ruff check plugins/ lib/ h2t_ops/ tests/ scripts/                               # macOS
 ```
+
+CI pins the version (`pipx run ruff==0.16.4`); `uvx ruff` locally may be newer. If a finding
+appears locally and not in CI, compare `ruff --version` before assuming it is real.
 
 ## Markdown
 

@@ -7,9 +7,9 @@ Phase 2: replace _write() with POST to POS API; local spool becomes fallback.
 import json
 import os
 import platform
-from datetime import UTC, datetime, timezone
+from datetime import UTC, datetime, timezone  # noqa: F401
 from pathlib import Path
-from typing import Optional
+from typing import Optional  # noqa: F401
 
 
 def log_session_start(

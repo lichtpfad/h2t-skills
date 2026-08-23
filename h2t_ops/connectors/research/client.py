@@ -12,7 +12,7 @@ import os
 import re
 import uuid
 from argparse import Namespace
-from datetime import UTC, datetime, timezone
+from datetime import UTC, datetime, timezone  # noqa: F401
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qsl, quote, urlencode, urlsplit, urlunsplit

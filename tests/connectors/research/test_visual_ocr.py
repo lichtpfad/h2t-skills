@@ -231,7 +231,7 @@ def test_extract_text_from_image_engine_failure_raises_provider_error(tmp_path, 
 def test_capture_and_ocr_ok(monkeypatch, tmp_path):
     """capture_and_ocr calls h2t-screenshot, copies screenshot to stable path, runs OCR."""
     import shutil as _shutil
-    import subprocess
+    import subprocess  # noqa: F401
     from unittest.mock import patch as _patch
 
     monkeypatch.setattr(_shutil, "which", lambda cmd: "/usr/bin/h2t-screenshot")
@@ -275,7 +275,7 @@ def test_capture_and_ocr_ok(monkeypatch, tmp_path):
     assert stable_image.is_file(), "screenshot must be copied to output_dir, not left in tmp"
     assert str(output_dir) in str(stable_image)
     # Sidecar JSON must be written by capture_and_ocr itself
-    import glob as _glob
+    import glob as _glob  # noqa: F401
     sidecar_files = list(output_dir.rglob("*.sources.json"))
     assert sidecar_files, "capture_and_ocr must write sources.json sidecar"
     sidecar_data = json.loads(sidecar_files[0].read_text(encoding="utf-8"))
@@ -327,7 +327,7 @@ def test_capture_and_ocr_screenshot_not_on_path(monkeypatch, tmp_path):
 def test_capture_and_ocr_screenshot_fails(monkeypatch, tmp_path):
     """ProviderError when h2t-screenshot returns non-zero."""
     import shutil as _shutil
-    import subprocess
+    import subprocess  # noqa: F401
     from unittest.mock import patch as _patch
 
     monkeypatch.setattr(_shutil, "which", lambda cmd: "/usr/bin/h2t-screenshot")

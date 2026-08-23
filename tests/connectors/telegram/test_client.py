@@ -5,7 +5,7 @@ import builtins
 import json
 import sqlite3
 from contextlib import contextmanager
-from datetime import UTC, datetime, timezone
+from datetime import UTC, datetime, timezone  # noqa: F401
 from pathlib import Path
 from types import SimpleNamespace
 

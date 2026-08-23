@@ -17,7 +17,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
-from datetime import UTC, datetime, timezone
+from datetime import UTC, datetime, timezone  # noqa: F401
 from pathlib import Path
 from typing import Any, NoReturn
 

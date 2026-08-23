@@ -13,7 +13,7 @@ from __future__ import annotations
 import json
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Dict, Optional, Set
+from typing import Any, Dict, Optional, Set  # noqa: F401
 
 from h2t_ops.core.errors import UsageError
 

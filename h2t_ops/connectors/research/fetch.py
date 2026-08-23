@@ -15,7 +15,7 @@ import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
-from datetime import UTC, datetime, timezone
+from datetime import UTC, datetime, timezone  # noqa: F401
 from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any

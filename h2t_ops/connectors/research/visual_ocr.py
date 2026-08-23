@@ -5,7 +5,7 @@ import json
 import shutil
 import subprocess
 import tempfile
-from datetime import UTC, datetime, timezone
+from datetime import UTC, datetime, timezone  # noqa: F401
 from pathlib import Path
 from typing import Any
 

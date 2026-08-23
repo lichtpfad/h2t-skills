@@ -12,7 +12,7 @@ import re
 import socket
 from html.parser import HTMLParser
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional  # noqa: F401
 
 from h2t_ops.core.errors import (
     AuthError,
