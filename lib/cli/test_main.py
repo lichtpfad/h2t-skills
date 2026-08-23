@@ -1,4 +1,9 @@
-"""Tests for h2t gather CLI."""
+"""Tests for the `h2t-ops gather` CLI.
+
+Retargeted from `lib.cli.main` to `h2t_ops.cli` when the second gather
+implementation was deleted: these six cases are the regression net for the
+reroute, so they must exercise the path that survived, not the one that went.
+"""
 import json
 import subprocess
 import sys
@@ -11,7 +16,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
 def run_h2t(*args):
     result = subprocess.run(
-        [TEST_PYTHON, "-m", "lib.cli.main", *args],
+        [TEST_PYTHON, "-m", "h2t_ops.cli", *args],
         capture_output=True, text=True, encoding="utf-8", cwd=str(REPO_ROOT)
     )
     return result.returncode, result.stdout, result.stderr
