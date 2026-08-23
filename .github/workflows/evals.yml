@@ -21,7 +21,9 @@ jobs:
       - name: Lint
         # The rule set is pinned in pyproject.toml; ruff's own default grows with each
         # release. Without this step the pinned set drifts back into noise within a month.
-        run: pipx run ruff==0.16.4 check plugins/ lib/ h2t_ops/ tests/ scripts/
+        run: |
+          python -m pip install --quiet ruff==0.16.4
+          ruff check plugins/ lib/ h2t_ops/ tests/ scripts/
       - name: Install test deps
         run: pip install -e . pytest
 
