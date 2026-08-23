@@ -820,11 +820,25 @@ git commit -m "feat(gather): resolve identity from .claude/project-id before the
 
 ### Task 8: Typed exit codes for the h2t-core entry points
 
-**Evidence:** `h2t-ops` follows the taxonomy in CLAUDE.md — `h2t-ops nosuchconnector` and
-`h2t-ops drive nosuchcommand` both exit `2` (usage). The seven other entry points do not:
-`h2t-gather --cwd /nonexistent` exits `0` (Task 2 fixes that one), `h2t-handoff` with an
-unwritable `--markdown-dir` exits `1` with no distinction between provider, usage and config
-failure. None of them offer `--json`.
+**Evidence — re-measured 2026-08-23, after Wave 1.** `h2t-ops nosuchconnector` exits `2`, the
+reference. `h2t-gather --cwd /nonexistent` now exits `3` (Task 2 landed). The handoff writer
+does not follow the taxonomy:
+
+```
+writer.py                                    -> 1, help printed to stdout   (should be 2)
+writer.py write                              -> 2                          (argparse, correct)
+writer.py write --markdown-dir /dev/null/deep -> 1 + NotADirectoryError traceback (should be 3)
+```
+
+The third case matters beyond its exit code. `log_session_end()` writes the spool *before* the
+mirror, so the record was already on disk when `md_dir.mkdir` raised — the process died looking
+like a total failure over a session that had in fact been saved. That is the invariant
+`.claude/rules/gates.md` states, in its other form: not a gate before the write, but a crash
+after it.
+
+`--json` is not added. The writer already prints its result as JSON on every path, and gather
+has `--briefing-only` / `--format-briefing`; adding a third output flag is scope this release
+does not need.
 
 **Files:**
 - Modify: `plugins/h2t-core/skills/handoff/scripts/writer.py` — `main()`
@@ -870,8 +884,16 @@ Expected: the usage case already passes (argparse exits 2); the unwritable-dir c
 
 - [ ] **Step 3: Map the failures**
 
-Wrap the write in `main()` so an `OSError` while creating the markdown directory exits `3` with
-the path on stderr, leaving `1` for genuinely unexpected errors.
+Route every mirror failure through one `_degraded()` builder and exit `3` from `main()` when
+`mirror_write_failed` is set, leaving `1` for genuinely unexpected errors. The contour must
+cover the whole mirror, not just `mkdir`: `latest.json` is written by `_write_json_atomic`
+before the markdown file, and a directory named `latest.json.tmp` raised `IsADirectoryError`
+straight out of `main()` with the spool already written. Only the `markdown_path` backfill
+after the `.md` lands stays non-fatal.
+
+The pre-existing `status: "degraded"` path (mirror directory fine, file write refused) exited
+`0`. It now exits `3` too — a caller branching on the exit code could not otherwise tell a
+complete write from a partial one. Nothing in the repo depended on the old code.
 
 - [ ] **Step 4: Run and commit**
 

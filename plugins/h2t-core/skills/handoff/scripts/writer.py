@@ -171,6 +171,24 @@ def _write_json_atomic(path: Path, data: dict) -> None:
     tmp.replace(path)
 
 
+def _degraded(session_id: str, spool_path, parsed_artifacts: list, exc: Exception) -> dict:
+    """The record is written; the configured mirror is not usable.
+
+    Every mirror failure returns through here so the caller sees one shape, and so no
+    OSError can escape main() after log_session_end() has already persisted the session.
+    """
+    return {
+        "status": "degraded",
+        "session_id": session_id,
+        "spool": spool_path,
+        "markdown": "",
+        "latest": "",
+        "artifacts": len(parsed_artifacts),
+        "mirror_write_failed": True,
+        "mirror_error": f"{type(exc).__name__}: {exc}",
+    }
+
+
 def write_handoff(
     session_id: str,
     domain: str,
@@ -202,7 +220,10 @@ def write_handoff(
     )
 
     md_dir = Path(markdown_dir) if markdown_dir else default_markdown_dir(project)
-    md_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        md_dir.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        return _degraded(session_id, spool_path, parsed_artifacts, exc)
     md_path = md_dir / f"{session_id}.md"
 
     now = datetime.now(timezone.utc)
@@ -236,9 +257,16 @@ def write_handoff(
         updated_at=now,
     )
     latest_path = md_dir / "latest.json"
-    _write_json_atomic(latest_path, latest)
     markdown_failed = False
     persisted_md_path: Path | None = None
+    try:
+        _write_json_atomic(latest_path, latest)
+    except OSError as exc:
+        # latest.json is part of the same mirror. It used to sit outside every guard, so a
+        # directory named latest.json.tmp raised IsADirectoryError out of main() — exit 1
+        # and a traceback, with the spool already on disk. Same invariant, same answer.
+        return _degraded(session_id, spool_path, parsed_artifacts, exc)
+
     try:
         md_path.write_text(md_content, encoding="utf-8")
         persisted_md_path = md_path
@@ -247,7 +275,11 @@ def write_handoff(
 
     if persisted_md_path is not None:
         latest["markdown_path"] = str(persisted_md_path)
-        _write_json_atomic(latest_path, latest)
+        try:
+            _write_json_atomic(latest_path, latest)
+        except OSError:
+            # The first write landed; only the markdown_path backfill is lost.
+            markdown_failed = True
 
     try:
         with SkillEval("handoff", domain=domain, project=project):
@@ -291,9 +323,17 @@ def main() -> None:
             markdown_dir=args.markdown_dir or None,
         )
         print(json.dumps(result, ensure_ascii=False))
+        if result.get("mirror_write_failed"):
+            # 3 = config, the connector taxonomy in CLAUDE.md. The record is written; the
+            # mirror location is not usable. Callers that only check the exit code must be
+            # told something is wrong, and callers that read the JSON get the spool path.
+            print(f"handoff: record written to {result['spool']}; "
+                  f"markdown mirror unavailable: {result.get('mirror_error', 'write failed')}",
+                  file=sys.stderr)
+            sys.exit(3)
     else:
-        parser.print_help()
-        sys.exit(1)
+        parser.print_help(sys.stderr)
+        sys.exit(2)
 
 
 if __name__ == "__main__":
