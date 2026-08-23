@@ -20,6 +20,9 @@ Decision-protocol). Verify the branch before every commit.
 
 ## Pipeline steps
 
+> Task 1 done (one gather implementation) — diff gate PASS on the second pass;
+> the first raised a [P1] on argv slicing that a measurement of the legacy parser confirmed.
+
 - [x] **write-spec** — skill: `superpowers:brainstorming (spec tail)` · input: `the plan itself is the spec — docs/superpowers/plans/2026-08-23-skills-release-hardening.md, merged in #393. Each task argues from a re-runnable measurement instead of a separate spec doc.` · done: spec file exists + frontmatter · failure: escalate · re-entry: idempotent: overwrite spec
 - [x] **review-spec** — skill: `codex review (embedded)` · input: `folded into plan-gate: one codex pass covers both, since spec and plan are one document.` · done: no [P1] · failure: fix P1 then re-run (<=N) · re-entry: idempotent: re-review
 - [x] **write-plan** — skill: `superpowers:writing-plans` · input: `superpowers:writing-plans, 9 tasks; Wave 1 = Tasks 1-5. Merged #393, measured #394, gated #395.` · done: plan file exists · failure: escalate · re-entry: idempotent: overwrite plan
