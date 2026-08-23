@@ -184,7 +184,30 @@ def dispatch(argv: list[str]) -> int:
             "`h2t-ops ingest` is retired — use the connector directly, e.g. `h2t-ops gmail list`"
         ), fmt=_fmt_from(argv))
     if argv and argv[0] == "gather":
-        return _legacy(argv)
+        # One gather implementation: the plugin script, reached through the same ladder
+        # h2t-gather uses. lib/cli/main.py carried a second copy that never gained
+        # find_latest_session_index, so this path silently lost "### Previous Session".
+        from h2t_ops.plugin_entrypoints import run_plugin_main
+        # Replicate the legacy parser rather than slicing argv: argparse accepts the
+        # optional positional anywhere, so `gather --cwd /tmp session-start` is a valid
+        # legacy shape that hand-rolled parsing would reject.
+        gp = argparse.ArgumentParser(prog="h2t-ops gather")
+        gp.add_argument("skill", nargs="?", default="")
+        gp.add_argument("--cwd", default=".")
+        gp.add_argument("--format-briefing", action="store_true")
+        gp.add_argument("--briefing-only", action="store_true")
+        gathered = gp.parse_args(argv[1:])
+        if not gathered.skill:
+            print("error: gather requires a skill name (e.g. session-start, handoff)",
+                  file=sys.stderr)
+            return 2
+        forwarded = ["h2t-gather", "--skill", gathered.skill, "--cwd", gathered.cwd]
+        if gathered.format_briefing:
+            forwarded.append("--format-briefing")
+        if gathered.briefing_only:
+            forwarded.append("--briefing-only")
+        sys.argv = forwarded
+        return run_plugin_main("skills/session-start/scripts/gather.py")
     if argv and argv[0] in _MIGRATED:
         return _run_connector(argv)
     if not argv:

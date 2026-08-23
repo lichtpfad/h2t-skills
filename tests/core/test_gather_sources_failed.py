@@ -3,9 +3,12 @@
 On 2026-08-22 two consecutive `h2t-gather` runs disagreed: the first timed out on
 every gh call (gather_ms 15110 == the 15s cap in runner._run_one) and printed
 "Нет открытых issues" with `sources_failed: []`; the second listed 20 issues and
-3 PRs. Both gather orchestrations are covered — the plugin script is the one
-`h2t-gather` executes (h2t_ops/gather_entry.py), lib/cli/main.py is the root-only
-twin that must not drift away from it.
+3 PRs.
+
+There used to be two orchestrations to keep in step; the lib/cli/main.py twin was deleted
+in #392 after it was measured producing a briefing without its `### Previous Session`
+block. One implementation remains — the plugin script, which is what both `h2t-gather`
+and `h2t-ops gather` now execute — so this file no longer parametrises over a second one.
 """
 
 import importlib.util
@@ -34,14 +37,9 @@ def _load_plugin_gather():
     return module
 
 
-def _load_cli_gather():
-    from lib.cli import main as cli
-    return cli
-
-
-@pytest.fixture(params=["plugin", "cli"])
+@pytest.fixture(params=["plugin"])
 def gather_module(request):
-    return _load_plugin_gather() if request.param == "plugin" else _load_cli_gather()
+    return _load_plugin_gather()
 
 
 def _run(gather_module, monkeypatch, capfd, tmp_path, github_result):

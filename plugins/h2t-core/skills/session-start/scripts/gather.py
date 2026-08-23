@@ -55,6 +55,8 @@ def _print_text(text: str) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--cwd", default=".")
+    # The skill name is eval attribution only; h2t-ops gather forwards its positional here.
+    parser.add_argument("--skill", default="session-start")
     parser.add_argument("--format-briefing", action="store_true")
     parser.add_argument(
         "--briefing-only",
@@ -133,7 +135,7 @@ def main() -> None:
 
     # Eval (silent on failure — never crash skill)
     try:
-        with SkillEval("session-start", domain=domain, project=proj_id) as ev:
+        with SkillEval(args.skill, domain=domain, project=proj_id) as ev:
             ev.metric(
                 "skills.gather_source_success_rate",
                 value_num=1.0 - len(sources_failed) / max(len(sources_used), 1),
