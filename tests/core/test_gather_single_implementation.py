@@ -3,6 +3,7 @@
 They were not: h2t-ops routed to lib/cli/main.py, which never gained
 find_latest_session_index, so its briefing silently lacked "### Previous Session".
 """
+import json
 import os
 import re
 import subprocess
@@ -42,10 +43,63 @@ def test_the_gather_entry_probe_is_not_silently_empty():
     assert result.stdout.startswith("BRIEFING:"), result.stdout[:200]
 
 
-def test_both_entry_points_produce_the_same_briefing():
-    via_ops = _run(["h2t_ops.cli", "gather", "session-start",
-                    "--cwd", str(ROOT), "--briefing-only"])
-    via_gather = _run_gather_entry("--cwd", str(ROOT), "--briefing-only")
+def _session_store(tmp_path, work, env):
+    """A session store of the test's own, holding one previous session.
+
+    The block under test only renders when a `latest.json` exists for the resolved project,
+    so asserting on this machine's real ~/.h2t/sessions made the test a statement about the
+    developer's history: green here, red on a CI runner that has none. The store is built
+    from the project id gather itself reports, so it lands where the reader will look.
+    """
+    root = tmp_path / "sessions"
+    env = dict(env, H2T_SESSION_ROOT=str(root), H2T_MACHINE_NAME="test-machine")
+
+    probe = subprocess.run(
+        [sys.executable, "-c", _ENTRY, "--cwd", str(work), "--briefing-only"],
+        capture_output=True, text=True, cwd=ROOT, env=env, check=False,
+    )
+    assert probe.returncode == 0, probe.stderr
+    meta = json.loads(probe.stdout.split("\n\nGATHER_META: ", 1)[1])
+    project = meta["project"]["id"]
+
+    directory = root / "test-machine" / project
+    directory.mkdir(parents=True)
+    (directory / "latest.json").write_text(json.dumps({
+        "version": 1,
+        "session_id": "prior-session-2026-08-22",
+        "project": project,
+        "domain": meta["project"].get("domain", "dev"),
+        "updated_at": "2026-08-22T10:00:00+00:00",
+        "summary_short": "the session before this one",
+        "next_actions": ["carry on"],
+        "blockers": [],
+        "artifacts": [],
+        "markdown_path": str(directory / "prior-session-2026-08-22.md"),
+    }), encoding="utf-8")
+    return env
+
+
+def test_both_entry_points_produce_the_same_briefing(tmp_path):
+    """A directory outside git on purpose: no live source, no flake.
+
+    Pointed at this repo, the briefing calls out to `gh` on every run, and two consecutive
+    runs genuinely disagree — one session's handoff recorded exactly that, the first run
+    timing out on every gh call (gather_ms 15110 == runner._run_one's cap) and the second
+    listing 20 issues. Comparing two live runs byte for byte would make this test flake in
+    CI. What it is here to check is that the two entry points execute the same code.
+    """
+    work = tmp_path / "checkout"
+    work.mkdir()
+    env = _session_store(tmp_path, work, dict(os.environ, H2T_EVALS_MODE="off"))
+
+    via_ops = subprocess.run(
+        [sys.executable, "-m", "h2t_ops.cli", "gather", "session-start",
+         "--cwd", str(work), "--briefing-only"],
+        capture_output=True, text=True, cwd=ROOT, env=env, check=False)
+    via_gather = subprocess.run(
+        [sys.executable, "-c", _ENTRY, "--cwd", str(work), "--briefing-only"],
+        capture_output=True, text=True, cwd=ROOT, env=env, check=False)
+
     assert via_ops.returncode == 0, via_ops.stderr
     assert via_gather.returncode == 0, via_gather.stderr
     assert "### Previous Session" in via_ops.stdout, (
