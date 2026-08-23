@@ -57,5 +57,40 @@ def test_wheel_payload_carries_no_bytecode(wheel_names):
 
 def test_wheel_still_ships_the_package_and_its_data(wheel_names):
     assert "h2t_ops/cli.py" in wheel_names
-    assert "lib/cli/main.py" in wheel_names
+    # lib/cli/main.py is deliberately absent now — _legacy() guards the import and the
+    # contract for an unrecognised command stays exit 2.
+    assert f"{PAYLOAD}/lib/eval/session.py" in wheel_names
     assert "h2t_ops/connectors/research/systemprompts/academic.md" in wheel_names
+
+
+def test_wheel_ships_the_hook_handlers_h2t_hook_resolves(wheel_names):
+    """`h2t-hook <name>` is on PATH as soon as the wheel installs, but it resolves the
+    handler through the plugin ladder — and on a host with no plugin cache the payload is
+    the only rung left. Without these files the command exists and exits 5, which for a
+    hook means silence.
+    """
+    for handler in ("on-stop", "post-git-commit-docs-lint", "post_git_commit_docs_lint.py"):
+        assert f"{PAYLOAD}/hooks-handlers/{handler}" in wheel_names, handler
+
+
+def test_the_wheel_claims_no_generic_top_level_name(wheel_names):
+    """`lib` in site-packages is about as generic a name as a distribution can claim.
+
+    Nothing else in the wheel needs it: the payload carries the same modules under
+    h2t_ops/_plugin_payload, which is where every entry point already looks.
+    """
+    tops = {n.split("/")[0] for n in wheel_names if "/" in n}
+    assert tops, "no entries read from the wheel — the fixture is broken, not the wheel"
+    assert "lib" not in tops, f"wheel claims the top-level name 'lib': {sorted(tops)}"
+
+
+def test_each_payload_module_ships_once(wheel_names):
+    for name in ("eval/session.py", "eval/skill_class.py", "activity/writer.py"):
+        copies = [n for n in wheel_names if n.endswith(name)]
+        assert len(copies) == 1, f"{name} ships {len(copies)} times: {copies}"
+
+
+def test_the_payload_lib_is_complete(wheel_names):
+    """The evals connector reaches status/report through the payload now."""
+    assert f"{PAYLOAD}/lib/eval/status.py" in wheel_names
+    assert f"{PAYLOAD}/lib/eval/report.py" in wheel_names

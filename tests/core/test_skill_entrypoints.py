@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 import pytest
@@ -258,10 +259,15 @@ def _console_scripts() -> dict[str, str]:
     return {name: target.split(":")[0] for name, target in scripts.items()}
 
 
+# h2t-hook takes the handler name as an argument and launches it as a process, so it has
+# no single script to name and never calls run_plugin_main. It is covered instead by
+# test_hook_entry_resolves_the_handlers_scaffold_writes below and by tests/core/test_hook_entry.py.
+_NOT_A_SINGLE_SCRIPT = {"h2t_ops.hook_entry"}
+
 PLUGIN_SCRIPT_ENTRIES = sorted(
     (name, module)
     for name, module in _console_scripts().items()
-    if module.endswith("_entry")
+    if module.endswith("_entry") and module not in _NOT_A_SINGLE_SCRIPT
 )
 
 
@@ -298,3 +304,104 @@ def test_payload_script_dependencies_are_installed():
 
     importlib.import_module("ruamel.yaml")  # skills/init-project/scripts/apply_registration.py
     importlib.import_module("yaml")  # skills/project-audit/scripts/scan.py
+
+
+CLI_BACKED = {
+    "h2t-core/skills/handoff": "h2t-handoff",
+    "h2t-core/skills/session-start": "h2t-gather",
+    "h2t-core/skills/init-project": "h2t-project-register",
+    "h2t-core/skills/project-audit": "h2t-project-audit-scan",
+    "h2t-core/skills/scaffold-project": "h2t-scaffold-project",
+}
+
+
+def _gated_commands(text: str) -> set[str]:
+    """Commands the skill genuinely refuses to run without.
+
+    Two shapes are in use: `command -v h2t-x || { ...; exit 1; }` per line, and a
+    `for _cmd in a b; do command -v "$_cmd" || { ...; exit 1; }; done` loop. Both are
+    gates; only the loop hides the name from a substring search, so a test that greps
+    for the literal fails a correct skill.
+
+    Naming a command is not gating on it. Each shape must carry both the probe and a
+    failing exit, or the name does not count — otherwise `for _cmd in h2t-x; do echo
+    "$_cmd"; done` beside an unrelated `command -v` line would read as a gate.
+    """
+    gated = set()
+    for names, body in re.findall(r"for _cmd in ([^;\n]+); do(.*?)done", text, re.S):
+        if 'command -v "$_cmd"' in body and "exit 1" in body:
+            gated |= {n for n in names.split() if n.startswith("h2t-")}
+    for name, tail in re.findall(r"command -v ([\w.-]+)[^\n]*\|\|(.{0,200})", text, re.S):
+        if "exit 1" in tail:
+            gated.add(name)
+    return gated
+
+
+@pytest.mark.parametrize(("skill", "cli"), sorted(CLI_BACKED.items()))
+def test_skill_gates_on_its_cli(skill, cli):
+    text = (Path("plugins") / skill / "SKILL.md").read_text(encoding="utf-8")
+    gated = _gated_commands(text)
+    assert gated, f"{skill}: no gate found at all — the parser is broken, not the skill"
+    assert cli in gated, f"{skill} does not gate on {cli}; it gates on {sorted(gated)}"
+
+
+def test_no_h2t_core_skill_hand_rolls_a_python_probe():
+    """`$H2T_PYTHON` predates the entry points. A skill that still resolves an interpreter
+    by hand has a second way to run its code, and the two can disagree."""
+    skills = sorted(Path("plugins/h2t-core/skills").glob("*/SKILL.md"))
+    assert skills, "no SKILL.md files found — the glob is broken, not the skills"
+    offenders = [p.as_posix() for p in skills if "H2T_PYTHON" in p.read_text(encoding="utf-8")]
+    assert offenders == [], f"still hand-rolling an interpreter: {offenders}"
+
+
+def _scaffold_hook_entries() -> dict:
+    """Load scaffold_project through the resolver rather than sys.path.
+
+    `tests/scaffold/` puts that directory on sys.path, so a bare `import scaffold_project`
+    here passes only when both directories run in the same session — green for the wrong
+    reason, and red the moment someone runs `pytest tests/core/` alone.
+    """
+    return plugin_entrypoints.load_plugin_module(
+        "skills/scaffold-project/scripts/scaffold_project.py"
+    )._HOOK_ENTRIES
+
+
+def test_scaffold_gates_on_every_command_it_writes_into_settings():
+    """scaffold-project emits `h2t-hook <name>` into a project's settings.json.
+
+    The gate must cover it. Between pulling the plugin and re-running
+    `uv tool install`, the skill would otherwise happily create a project whose hooks
+    name a command that is not on PATH — and a hook that cannot start is silent.
+    Deriving the requirement from _HOOK_ENTRIES keeps the two from drifting apart.
+    """
+    _HOOK_ENTRIES = _scaffold_hook_entries()
+
+    emitted = {
+        command["command"].split()[0]
+        for entries in _HOOK_ENTRIES.values()
+        for entry in entries
+        for command in entry["hooks"]
+        if command["command"].startswith("h2t-")
+    }
+    assert emitted, "no h2t-* command emitted — the probe is broken, not the code"
+    text = Path("plugins/h2t-core/skills/scaffold-project/SKILL.md").read_text(encoding="utf-8")
+    gated = _gated_commands(text)
+    missing = emitted - gated
+    assert not missing, f"scaffold writes {sorted(missing)} but does not gate on it"
+
+
+def test_hook_entry_resolves_the_handlers_scaffold_writes():
+    """scaffold-project writes `h2t-hook on-stop` and `h2t-hook post-git-commit-docs-lint`
+    into other people's settings.json. A name that does not resolve makes those hooks dead
+    on arrival, and a dead hook is silent."""
+    _HOOK_ENTRIES = _scaffold_hook_entries()
+
+    named = [
+        command["command"].split()[1]
+        for entries in _HOOK_ENTRIES.values()
+        for entry in entries
+        for command in entry["hooks"]
+    ]
+    assert named, "no hook commands read — the probe is broken, not the code"
+    for handler in named:
+        assert plugin_entrypoints.plugin_script_path(f"hooks-handlers/{handler}").is_file()

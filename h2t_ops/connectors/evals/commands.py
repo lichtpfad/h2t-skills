@@ -7,7 +7,14 @@ from typing import Any
 
 
 def _cmd_status(ns: Any) -> dict:
-    from lib.eval.status import get_status
+    # The lib is reached through the resolver, not through a top-level `lib` package: the
+    # wheel no longer claims that name, and the payload copy is the only one on a host with
+    # no plugin cache. Naming the module each caller needs is what makes an older cache
+    # entry — whose lib/eval has no status.py — fall through instead of being selected.
+    from h2t_ops.plugin_entrypoints import ensure_plugin_lib_on_path
+
+    ensure_plugin_lib_on_path(requires="eval/status.py")
+    from eval.status import get_status
 
     return get_status()
 
@@ -36,8 +43,11 @@ def _parse_since_days(raw) -> Any:
 
 
 def _cmd_report(ns: Any):
-    from lib.eval.report import (build_report, catalog_skills, load_sessions,
-                                 render_human, render_md)
+    from h2t_ops.plugin_entrypoints import ensure_plugin_lib_on_path
+
+    ensure_plugin_lib_on_path(requires="eval/report.py")
+    from eval.report import (build_report, catalog_skills,  # noqa: I001 - path set above
+                             load_sessions, render_human, render_md)
 
     recent_days = getattr(ns, "recent_days", 7)
     since_days = _parse_since_days(getattr(ns, "since", None))

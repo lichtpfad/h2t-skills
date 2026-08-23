@@ -29,13 +29,17 @@ Required: `docs/superpowers/{specs,plans}/`, `docs/adr/`, `docs/reports/`
 ### Creating plan/spec/adr files (MUST)
 Do **not** hand-write frontmatter. Generate the file with the correct dated name
 and required fields:
+`docs-lint` is a plugin skill script, not a command on PATH — see
+`.claude/rules/linting.md`. Substitute `LINT` below:
+
 ```
-docs-lint new plan <slug> [--milestone M3]   # docs/superpowers/plans/YYYY-MM-DD-<slug>.md
-docs-lint new spec <slug> [--milestone M3]   # docs/superpowers/specs/YYYY-MM-DD-<slug>.md
-docs-lint new adr  <slug>                     # docs/adr/NNNN-<slug>.md
+LINT="plugins/h2t-dev/skills/docs-lint/scripts/lint.py"   # from this checkout
+.venv/bin/python "$LINT" new plan <slug> [--milestone M3]   # docs/superpowers/plans/YYYY-MM-DD-<slug>.md
+.venv/bin/python "$LINT" new spec <slug> [--milestone M3]   # docs/superpowers/specs/YYYY-MM-DD-<slug>.md
+.venv/bin/python "$LINT" new adr  <slug>                     # docs/adr/NNNN-<slug>.md
 ```
 If a file already exists without frontmatter, backfill it deterministically:
-`docs-lint fix-safe --only=frontmatter`.
+`.venv/bin/python "$LINT" fix-safe --only=frontmatter`.
 
 ## Full Standards References
 - Directory structure: C:/dev/docs/standards/documentation-structure.md
