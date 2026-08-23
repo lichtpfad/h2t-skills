@@ -1,5 +1,50 @@
 # h2t-core Changelog
 
+## 3.2.24 — 2026-08-23
+
+- Hooks written into other projects resolve when they fire. `scaffold-project` used to put
+  `~/.claude/plugins/cache/lichtpfad/h2t-core/latest/hooks-handlers/on-stop` into a project's
+  `.claude/settings.json` — a path under one machine's home directory, in a file that is
+  normally committed. The `latest` junction it named was refreshed only by
+  `install-h2t-ops`, never by `/plugin marketplace update`, so it sat at 3.2.18 while the
+  cache held 3.2.22. The new `h2t-hook <name>` resolves the handler through the same ladder
+  the entry points use and runs it under the interpreter its shebang names. Nothing had been
+  wired to the old path yet, so no scaffolded project needs repair.
+- `create_latest_link` and the symlink are gone: deleting the artifact alone would have left
+  the generator to recreate it.
+- `.claude/project-id` is read at last. `init-project` wrote it and promised the next
+  session-start would recognise the project; no reader existed, so identity came from the git
+  remote plus a central `repo-mapping.yaml` and a clone without that mapping resolved to
+  `unknown`. It is now the first rung, found by walking up from the working directory and
+  stopping at the repository root. The writer emits `domain/project`; bare-id files still
+  resolve through `domains.yaml`.
+- The handoff writer no longer dies after the record is written. `log_session_end` writes the
+  spool before the markdown mirror, so an unusable `--markdown-dir` raised out of `main()`
+  over a session that was already saved. Every mirror failure now returns `degraded` with the
+  spool path, and exit codes follow the connector taxonomy: 2 usage, 3 config.
+- `scaffold-project`: the dead `$H2T_PYTHON` block is gone (its only use sat inside
+  `open(... if False else ...)` under prose saying to skip it), and the skill gates on
+  `h2t-hook`, which it now writes into other projects' settings.
+- Packaging: the wheel shipped `eval/session.py`, `eval/skill_class.py` and
+  `activity/writer.py` twice and claimed the top-level name `lib` in `site-packages`. One
+  copy each now, under `h2t_ops/_plugin_payload`, reached through
+  `ensure_plugin_lib_on_path`. Hook handlers ship in the payload too, so `h2t-hook` works on
+  a host that never installed the plugin.
+
+## 3.2.23 — 2026-08-23
+
+- One gather implementation. `h2t-ops gather` reached a second copy in `lib/cli/main.py` that
+  never gained `find_latest_session_index`, so it silently dropped the `### Previous Session`
+  block; `h2t-ops gather session-start --briefing-only | grep -c "Previous Session"` returned
+  0 where `h2t-gather` returned 1. Both paths now run the plugin script.
+- `h2t-gather --cwd` on a path that is not a directory exits 3 instead of printing a complete
+  looking briefing for project `unknown`.
+- The `gather-on-skill` hook calls `h2t-gather` when it is on PATH, so it resolves through the
+  same ladder as everything else rather than reaching for the plugin script directly.
+- `handoff` no longer asks for a session name before writing (#391): the question stood
+  between a finished summary and the only place it could survive. Identity is derived from
+  the working directory through the same `identify_project()` the reader uses.
+
 ## 3.2.22 — 2026-08-22
 
 - gather reports a dead GitHub source instead of an empty backlog. `_run_one` collapsed
