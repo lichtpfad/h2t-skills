@@ -34,8 +34,12 @@ taken on `main` at 6b9fcd3 plus PR #391. Re-run any probe to confirm before chan
   by `tests/core/test_vendored_lib_parity.py`, which requires **byte-identical** files. Every
   change to one copy must be made to the other in the same commit.
 - No `&&` chaining in Bash tool calls (CLAUDE.md).
-- `pytest tests/` on clean `main` ends with 1 failure + 4 errors from a missing `ruamel`
-  module. That is pre-existing; Task 4 removes it. Do not attribute it to your change.
+- A red local suite is usually a stale venv, not the repo. CI installs the project with
+  `pip install -e .` and is green. On the Mac the venv is built by `uv` and ships neither
+  `ruamel.yaml` (declared at `pyproject.toml:22`) nor `pip` (which `test_wheel_payload.py`
+  shells out to). Fix the environment before diagnosing the code:
+  `uv pip install --python .venv/bin/python "ruamel.yaml>=0.18" pip`. Baseline after that:
+  `1938 passed, 7 skipped`.
 - Deploy is not `update-plugin.sh`. Commit → `git push origin main` →
   `/plugin marketplace update lichtpfad` → `/reload-plugins`. Verify by reading the cache, not
   by reading the command's output.
@@ -137,8 +141,9 @@ Read the diff before continuing; if it fails for another reason (module not runn
 
 Remove `_run_gather` and the `gather` subparser from `lib/cli/main.py`. Leave the module's
 docstring stating that gather now lives in the plugin script and this module keeps only what
-`h2t_ops/cli.py:_legacy` still needs. If nothing remains, delete `lib/cli/` and drop `lib`
-from `packages` in `pyproject.toml:37` — check `grep -rn "from lib\." h2t_ops/` first.
+`h2t_ops/cli.py:_legacy` still needs. Do **not** touch `packages` in `pyproject.toml:37` in
+this task: `tests/core/test_wheel_payload.py::test_wheel_ships_the_lib_those_scripts_import`
+asserts `lib` is shipped, so unshipping it is its own change. It is decision 3 below.
 
 - [ ] **Step 5: Run the test and the suites it can break**
 
@@ -333,9 +338,8 @@ git commit -m "fix(hooks): gather through h2t-gather so hook and skill resolve o
 **Evidence:** `.github/workflows/*.yml` runs `lib/`, `tests/`, and exactly two plugin script
 directories (`autonomous-run`, `init-project`). Ten directories holding roughly 26 test files
 never run — the largest is `plugins/h2t-creative/tests` with 14 files, and the 25 meetgeek
-tests merged in #389/#390 are among them. Separately, `tests/core/test_skill_entrypoints.py::
-test_payload_script_dependencies_are_installed` fails on clean `main` with
-`ModuleNotFoundError: No module named 'ruamel'`.
+tests merged in #389/#390 are among them. Nobody knows whether those directories are green:
+they have not executed on GitHub since they were written.
 
 **Files:**
 - Modify: `.github/workflows/` — the workflow that runs pytest
@@ -390,14 +394,16 @@ one step per directory the test listed, in the same form:
 Do not collapse them into one `pytest plugins/` invocation: these directories have no shared
 conftest and several add their own `sys.path` entries, so a single run cross-contaminates them.
 
-- [ ] **Step 4: Fix the pre-existing dependency failure**
+- [ ] **Step 4: Confirm the local baseline is the environment, not the repo**
 
-Add `ruamel.yaml` to the dev dependency group in `pyproject.toml` — it is what
-`test_payload_script_dependencies_are_installed` asserts is installed. Then:
+No dependency is missing from `pyproject.toml`; `ruamel.yaml>=0.18` is declared at line 22 and
+CI has been green throughout. Sync the venv instead:
 
-Run: `.venv/bin/pip install -e .` followed by
-`.venv/bin/pytest tests/core/test_skill_entrypoints.py tests/core/test_wheel_payload.py -q`
-Expected: PASS — the 1 failure and 4 errors quoted in the Global Constraints disappear.
+Run: `uv pip install --python .venv/bin/python "ruamel.yaml>=0.18" pip` followed by
+`.venv/bin/pytest tests/ lib/ -q`
+Expected: `1938 passed, 7 skipped` — no failures, no errors. If anything is still red, it is
+your change, and the newly added CI directories are the only place new red can legitimately
+come from.
 
 - [ ] **Step 5: Run everything**
 
