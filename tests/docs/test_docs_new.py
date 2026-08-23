@@ -8,8 +8,8 @@ import pytest
 _LIB = Path(__file__).parents[2] / "plugins/h2t-dev/lib"
 sys.path.insert(0, str(_LIB))
 
-from docs.new_doc import create_doc, slugify, next_adr_number  # noqa: E402
-from docs.common import parse_frontmatter, FRONTMATTER_RULES  # noqa: E402
+from docs.common import FRONTMATTER_RULES, parse_frontmatter  # noqa: E402
+from docs.new_doc import create_doc, next_adr_number, slugify  # noqa: E402
 
 TODAY = "2026-07-08"
 

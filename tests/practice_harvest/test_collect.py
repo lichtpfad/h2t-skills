@@ -1,5 +1,7 @@
 from pathlib import Path
-from lib.practice_harvest.collect import classify_kind, track_for_kind, SourceRecord
+
+from lib.practice_harvest.collect import SourceRecord, classify_kind, track_for_kind
+
 
 def test_classify_kind():
     assert classify_kind(Path("x/.claude/rules/git.md")) == "rules"

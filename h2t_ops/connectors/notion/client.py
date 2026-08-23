@@ -6,10 +6,16 @@ types changed per spec §10 (re-wrap not rewrite).
 from __future__ import annotations
 
 import re
-from typing import Any, Dict, Iterable, List, Optional
+from collections.abc import Iterable
+from typing import Any, Dict, List, Optional
 
 from h2t_ops.core.errors import (
-    AuthError, ConfigError, H2TError, NetworkError, NotFoundError, ProviderError,
+    AuthError,
+    ConfigError,
+    H2TError,
+    NetworkError,
+    NotFoundError,
+    ProviderError,
     UsageError,
 )
 from h2t_ops.core.secrets import resolve_notion_token
@@ -53,7 +59,7 @@ def _map_sdk_exc(e: Exception, *, op: str):
 class NotionClient:
     """Notion API client — read and write pages and databases."""
 
-    def __init__(self, token: Optional[str] = None) -> None:
+    def __init__(self, token: str | None = None) -> None:
         self.token = token or resolve_notion_token()  # raises ConfigError if missing
         try:
             from notion_client import Client  # optional dep — lazy (spec §4.1)
@@ -68,7 +74,7 @@ class NotionClient:
         return self._http_request("POST", url, headers, json_body)
 
     def _http_request(self, method: str, url: str, headers: dict,
-                      json_body: Optional[dict] = None):
+                      json_body: dict | None = None):
         """One HTTP call. Views needs GET/PATCH/DELETE, which the SDK does not carry."""
         try:
             import httpx  # optional dep — lazy (spec §4.1)
@@ -89,7 +95,7 @@ class NotionClient:
 
     # --- Views (API 2025-09-03) ---
 
-    def _views_headers(self) -> Dict[str, str]:
+    def _views_headers(self) -> dict[str, str]:
         return {
             "Authorization": f"Bearer {self.token}",
             "Notion-Version": VIEWS_API_VERSION,
@@ -99,10 +105,10 @@ class NotionClient:
     def list_views(
         self,
         *,
-        database_id: Optional[str] = None,
-        data_source_id: Optional[str] = None,
-        limit: Optional[int] = None,
-    ) -> Dict[str, Any]:
+        database_id: str | None = None,
+        data_source_id: str | None = None,
+        limit: int | None = None,
+    ) -> dict[str, Any]:
         """Views of one database or data source, plus Notion's own has_more.
 
         Rows come back as stubs — ``{"object": "view", "id": ...}`` and nothing
@@ -114,7 +120,7 @@ class NotionClient:
             )
         key, value = (("database_id", database_id) if database_id
                       else ("data_source_id", data_source_id))
-        results: List[Dict[str, Any]] = []
+        results: list[dict[str, Any]] = []
         has_more = False
         cursor = None
         while True:
@@ -130,12 +136,12 @@ class NotionClient:
         items = results[:limit] if limit else results
         return {"items": items, "truncated": has_more or len(items) < len(results)}
 
-    def get_view(self, view_id: str) -> Dict[str, Any]:
+    def get_view(self, view_id: str) -> dict[str, Any]:
         return self._http_request(
             "GET", f"https://api.notion.com/v1/views/{view_id}", self._views_headers()
         )
 
-    def patch_view(self, view_id: str, spec: Dict[str, Any]) -> Dict[str, Any]:
+    def patch_view(self, view_id: str, spec: dict[str, Any]) -> dict[str, Any]:
         """Send *spec* verbatim: the payload shape is Notion's, not ours.
 
         ``sorts[].property`` and ``configuration.properties[].property_id`` accept a
@@ -149,11 +155,11 @@ class NotionClient:
 
     def create_view(
         self,
-        spec: Dict[str, Any],
+        spec: dict[str, Any],
         *,
-        database_id: Optional[str] = None,
-        data_source_id: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        database_id: str | None = None,
+        data_source_id: str | None = None,
+    ) -> dict[str, Any]:
         """Create a view from *spec*; the parent is filled in only if spec omits it."""
         body = dict(spec)
         if "parent" not in body:
@@ -169,7 +175,7 @@ class NotionClient:
             "POST", "https://api.notion.com/v1/views", self._views_headers(), body
         )
 
-    def delete_view(self, view_id: str, *, confirm_name: str) -> Dict[str, Any]:
+    def delete_view(self, view_id: str, *, confirm_name: str) -> dict[str, Any]:
         """Delete a view after checking its name — mirrors archive_page's gate."""
         actual = (self.get_view(view_id) or {}).get("name", "")
         if actual != confirm_name:
@@ -183,20 +189,20 @@ class NotionClient:
 
     # --- Read ---
 
-    def get_page(self, page_id: str) -> Dict[str, Any]:
+    def get_page(self, page_id: str) -> dict[str, Any]:
         try:
             return self.client.pages.retrieve(page_id=page_id)
         except Exception as e:
             raise _map_sdk_exc(e, op=f"get page {page_id}") from e
 
-    def get_block(self, block_id: str) -> Dict[str, Any]:
+    def get_block(self, block_id: str) -> dict[str, Any]:
         try:
             return self.client.blocks.retrieve(block_id=block_id)
         except Exception as e:
             raise _map_sdk_exc(e, op=f"get block {block_id}") from e
 
-    def get_blocks(self, page_id: str, limit: Optional[int] = None) -> List[Dict[str, Any]]:
-        blocks: List[Dict[str, Any]] = []
+    def get_blocks(self, page_id: str, limit: int | None = None) -> list[dict[str, Any]]:
+        blocks: list[dict[str, Any]] = []
         start_cursor = None
         try:
             while True:
@@ -217,9 +223,9 @@ class NotionClient:
         self,
         block_id: str,
         *,
-        start_cursor: Optional[str] = None,
+        start_cursor: str | None = None,
         page_size: int = 100,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         try:
             return self.client.blocks.children.list(
                 block_id=block_id,
@@ -234,21 +240,21 @@ class NotionClient:
         root_page_id: str,
         *,
         max_depth: int = 3,
-        limit_blocks: Optional[int] = None,
-    ) -> Iterable[Dict[str, Any]]:
+        limit_blocks: int | None = None,
+    ) -> Iterable[dict[str, Any]]:
         if max_depth < 0:
             raise UsageError("max_depth must be non-negative")
         if limit_blocks is not None and limit_blocks < 0:
             raise UsageError("limit_blocks must be non-negative")
 
-        self._last_traversal_errors: List[Dict[str, str]] = []
+        self._last_traversal_errors: list[dict[str, str]] = []
         if max_depth == 0:
             return
 
         seen: set[str] = set()
         emitted = 0
 
-        def walk(block_id: str, depth: int, path: List[str]):
+        def walk(block_id: str, depth: int, path: list[str]):
             nonlocal emitted
             if limit_blocks is not None and emitted >= limit_blocks:
                 return
@@ -290,10 +296,10 @@ class NotionClient:
     def query_database(
         self,
         database_id: str,
-        filter_dict: Optional[Dict] = None,
-        sorts: Optional[List] = None,
-        limit: Optional[int] = None,
-    ) -> List[Dict[str, Any]]:
+        filter_dict: dict | None = None,
+        sorts: list | None = None,
+        limit: int | None = None,
+    ) -> list[dict[str, Any]]:
         return self.query_database_page(
             database_id, filter_dict=filter_dict, sorts=sorts, limit=limit
         )["items"]
@@ -301,21 +307,21 @@ class NotionClient:
     def query_database_page(
         self,
         database_id: str,
-        filter_dict: Optional[Dict] = None,
-        sorts: Optional[List] = None,
-        limit: Optional[int] = None,
-    ) -> Dict[str, Any]:
+        filter_dict: dict | None = None,
+        sorts: list | None = None,
+        limit: int | None = None,
+    ) -> dict[str, Any]:
         """Same as query_database, plus Notion's own has_more flag.
 
         A page that exactly fills ``limit`` is otherwise indistinguishable from
         a complete result (#351).
         """
         try:
-            results: List[Dict[str, Any]] = []
+            results: list[dict[str, Any]] = []
             has_more = False
             start_cursor = None
             while True:
-                body: Dict[str, Any] = {}
+                body: dict[str, Any] = {}
                 if filter_dict:
                     body["filter"] = filter_dict
                 if sorts:
@@ -344,7 +350,7 @@ class NotionClient:
         except Exception as e:
             raise _map_sdk_exc(e, op=f"query database {database_id}") from e
 
-    def get_database(self, database_id: str) -> Dict[str, Any]:
+    def get_database(self, database_id: str) -> dict[str, Any]:
         try:
             return self.client.databases.retrieve(database_id=database_id)
         except Exception as e:
@@ -354,8 +360,8 @@ class NotionClient:
         self,
         object_type: str = "all",
         *,
-        limit: Optional[int] = None,
-    ) -> Dict[str, Any]:
+        limit: int | None = None,
+    ) -> dict[str, Any]:
         if limit is not None and limit < 0:
             raise UsageError("limit must be non-negative")
         if limit == 0:
@@ -391,7 +397,7 @@ class NotionClient:
             start_cursor = response.get("next_cursor")
         return {"kind": "notion_workspace_search/v1", "object": object_type, "results": results}
 
-    def _title_from_object(self, obj: Dict[str, Any]) -> str:
+    def _title_from_object(self, obj: dict[str, Any]) -> str:
         properties = obj.get("properties", {})
         for prop in properties.values():
             if prop.get("type") == "title":
@@ -412,9 +418,9 @@ class NotionClient:
                     return self._rich_text_to_markdown(rich_text) or obj_type
         return obj.get("object") or obj_type or "Untitled"
 
-    def _resolve_block_owner(self, block_id: str) -> Dict[str, Any]:
+    def _resolve_block_owner(self, block_id: str) -> dict[str, Any]:
         seen: set[str] = set()
-        chain: List[str] = []
+        chain: list[str] = []
         current_id = block_id
 
         for _ in range(100):
@@ -455,16 +461,16 @@ class NotionClient:
         *,
         max_depth: int = 3,
         include_databases: bool = True,
-        root_label: Optional[str] = None,
-    ) -> Dict[str, Any]:
-        nodes: List[Dict[str, Any]] = []
-        edges: List[Dict[str, Any]] = []
-        parent_map: Dict[str, str] = {}
-        owner_map: Dict[str, Dict[str, Any]] = {}
-        owner_cache: Dict[str, Dict[str, Any]] = {}
+        root_label: str | None = None,
+    ) -> dict[str, Any]:
+        nodes: list[dict[str, Any]] = []
+        edges: list[dict[str, Any]] = []
+        parent_map: dict[str, str] = {}
+        owner_map: dict[str, dict[str, Any]] = {}
+        owner_cache: dict[str, dict[str, Any]] = {}
         owner_error_keys: set[tuple[str, str, str, str]] = set()
-        children_map: Dict[str, List[str]] = {}
-        errors: List[Dict[str, Any]] = []
+        children_map: dict[str, list[str]] = {}
+        errors: list[dict[str, Any]] = []
 
         root = self.get_page(root_page_id)
         root_id = root.get("id", root_page_id)
@@ -579,7 +585,7 @@ class NotionClient:
         *,
         recursive: bool = False,
         max_depth: int = 3,
-        limit_blocks: Optional[int] = None,
+        limit_blocks: int | None = None,
         with_rows: bool = False,
         row_limit: int = 100,
     ):
@@ -617,8 +623,8 @@ class NotionClient:
                 raise _map_sdk_exc(e, op=f"find databases on page {page_id}") from e
 
         seen_databases: set[str] = set()
-        databases: List[Dict[str, Any]] = []
-        errors: List[Dict[str, Any]] = []
+        databases: list[dict[str, Any]] = []
+        errors: list[dict[str, Any]] = []
         blocks_seen = 0
         duplicate_refs = 0
         queried = 0
@@ -663,7 +669,7 @@ class NotionClient:
                 continue
             seen_databases.add(database_id)
 
-            rows: List[Dict[str, Any]] = []
+            rows: list[dict[str, Any]] = []
             if with_rows:
                 if row_limit == 0:
                     rows = []
@@ -717,9 +723,9 @@ class NotionClient:
         self,
         parent_id: str,
         title: str,
-        content: Optional[str] = None,
+        content: str | None = None,
         is_database: bool = False,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         try:
             parent = {
                 "type": "database_id" if is_database else "page_id",
@@ -735,22 +741,22 @@ class NotionClient:
         except Exception as e:
             raise _map_sdk_exc(e, op="create page") from e
 
-    def update_page(self, page_id: str, title: Optional[str] = None) -> Dict[str, Any]:
+    def update_page(self, page_id: str, title: str | None = None) -> dict[str, Any]:
         try:
-            properties: Dict[str, Any] = {}
+            properties: dict[str, Any] = {}
             if title:
                 properties["title"] = {"title": [{"text": {"content": title}}]}
             return self.client.pages.update(page_id=page_id, properties=properties)
         except Exception as e:
             raise _map_sdk_exc(e, op=f"update page {page_id}") from e
 
-    def append_blocks(self, page_id: str, blocks: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def append_blocks(self, page_id: str, blocks: list[dict[str, Any]]) -> dict[str, Any]:
         try:
             return self.client.blocks.children.append(block_id=page_id, children=blocks)
         except Exception as e:
             raise _map_sdk_exc(e, op=f"append blocks to {page_id}") from e
 
-    def delete_block(self, block_id: str) -> Dict[str, Any]:
+    def delete_block(self, block_id: str) -> dict[str, Any]:
         try:
             return self.client.blocks.delete(block_id=block_id)
         except Exception as e:
@@ -804,7 +810,7 @@ class NotionClient:
         )
 
     @staticmethod
-    def _has_title_property(properties: Dict[str, Any]) -> bool:
+    def _has_title_property(properties: dict[str, Any]) -> bool:
         return any(
             isinstance(v, dict) and "title" in v for v in properties.values()
         )
@@ -814,10 +820,10 @@ class NotionClient:
         database_id: str,
         *,
         title: str,
-        property_json: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        property_json: str | None = None,
+    ) -> dict[str, Any]:
         import json
-        properties: Dict[str, Any] = json.loads(property_json) if property_json else {}
+        properties: dict[str, Any] = json.loads(property_json) if property_json else {}
         # Resolve the title property by type (it may be renamed from "Name").
         # Only hit the API when the caller did not already supply a title value.
         if not self._has_title_property(properties):
@@ -836,8 +842,8 @@ class NotionClient:
         parent_page_id: str,
         *,
         title: str,
-        properties: Dict[str, Any],
-    ) -> Dict[str, Any]:
+        properties: dict[str, Any],
+    ) -> dict[str, Any]:
         """Create a typed database under a page (API 2025-09-03).
 
         ``properties`` is a Notion properties map and must include exactly one
@@ -862,9 +868,9 @@ class NotionClient:
         self,
         database_id: str,
         *,
-        properties: Dict[str, Any],
-        data_source_id: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        properties: dict[str, Any],
+        data_source_id: str | None = None,
+    ) -> dict[str, Any]:
         """Add/rename/remove columns on a database's data source (API 2025-09-03).
 
         Schema changes now target the data source, not the database. When
@@ -879,7 +885,7 @@ class NotionClient:
         except Exception as e:
             raise _map_sdk_exc(e, op=f"patch schema of data source {ds_id}") from e
 
-    def update_db_item(self, page_id: str, *, property_json: str) -> Dict[str, Any]:
+    def update_db_item(self, page_id: str, *, property_json: str) -> dict[str, Any]:
         import json
         try:
             return self.client.pages.update(
@@ -889,7 +895,7 @@ class NotionClient:
         except Exception as e:
             raise _map_sdk_exc(e, op=f"update db item {page_id}") from e
 
-    def archive_page(self, page_id: str, *, confirm_title: str) -> Dict[str, Any]:
+    def archive_page(self, page_id: str, *, confirm_title: str) -> dict[str, Any]:
         try:
             page = self.client.pages.retrieve(page_id=page_id)
         except Exception as e:
@@ -904,7 +910,7 @@ class NotionClient:
         except Exception as e:
             raise _map_sdk_exc(e, op=f"archive page {page_id}") from e
 
-    def append_blocks_from_file(self, page_id: str, content_file: str) -> Dict[str, Any]:
+    def append_blocks_from_file(self, page_id: str, content_file: str) -> dict[str, Any]:
         from pathlib import Path as _P
         markdown = _P(content_file).read_text(encoding="utf-8")
         blocks = self.markdown_to_blocks(markdown)
@@ -947,10 +953,10 @@ class NotionClient:
 
     # --- Comments ---
 
-    def _rich_text_to_plain(self, rich_text: List[Dict[str, Any]]) -> str:
+    def _rich_text_to_plain(self, rich_text: list[dict[str, Any]]) -> str:
         return "".join(item.get("text", {}).get("content", "") for item in rich_text)
 
-    def _normalize_comment(self, comment: Dict[str, Any]) -> Dict[str, Any]:
+    def _normalize_comment(self, comment: dict[str, Any]) -> dict[str, Any]:
         return {
             "id": comment.get("id", ""),
             "text": self._rich_text_to_plain(comment.get("rich_text", [])),
@@ -958,12 +964,12 @@ class NotionClient:
             "created_by_id": comment.get("created_by", {}).get("id", ""),
         }
 
-    def list_comments(self, page_id: str) -> List[Dict[str, Any]]:
-        results: List[Dict[str, Any]] = []
+    def list_comments(self, page_id: str) -> list[dict[str, Any]]:
+        results: list[dict[str, Any]] = []
         start_cursor = None
         try:
             while True:
-                kwargs: Dict[str, Any] = {"block_id": page_id, "page_size": 100}
+                kwargs: dict[str, Any] = {"block_id": page_id, "page_size": 100}
                 if start_cursor:
                     kwargs["start_cursor"] = start_cursor
                 response = self.client.comments.list(**kwargs)
@@ -976,7 +982,7 @@ class NotionClient:
             raise _map_sdk_exc(e, op=f"list comments for {page_id}") from e
         return results
 
-    def create_comment(self, page_id: str, body: str) -> Dict[str, Any]:
+    def create_comment(self, page_id: str, body: str) -> dict[str, Any]:
         try:
             result = self.client.comments.create(
                 parent={"page_id": page_id},
@@ -988,10 +994,10 @@ class NotionClient:
 
     # --- Conversion ---
 
-    def blocks_to_markdown(self, blocks: List[Dict[str, Any]]) -> str:
+    def blocks_to_markdown(self, blocks: list[dict[str, Any]]) -> str:
         return "".join(self._block_to_markdown(b) for b in blocks)
 
-    def _block_to_markdown(self, block: Dict[str, Any]) -> str:  # noqa: C901
+    def _block_to_markdown(self, block: dict[str, Any]) -> str:  # noqa: C901
         t = block.get("type")
         if t == "paragraph":
             text = self._rich_text_to_markdown(block["paragraph"]["rich_text"])
@@ -1058,7 +1064,7 @@ class NotionClient:
             return "\n".join(lines) + "\n\n"
         return ""
 
-    def _rich_text_to_markdown(self, rich_text: List[Dict[str, Any]]) -> str:
+    def _rich_text_to_markdown(self, rich_text: list[dict[str, Any]]) -> str:
         if not rich_text:
             return ""
         result = []
@@ -1080,7 +1086,7 @@ class NotionClient:
                 result.append(text)
         return "".join(result)
 
-    def parse_inline(self, text: str) -> List[Dict[str, Any]]:
+    def parse_inline(self, text: str) -> list[dict[str, Any]]:
         spans = []
         pattern = re.compile(r"\*\*(.+?)\*\*|\*(.+?)\*|`(.+?)`|([^*`]+)", re.DOTALL)
         for m in pattern.finditer(text):
@@ -1094,7 +1100,7 @@ class NotionClient:
                 spans.append({"type": "text", "text": {"content": m.group(4)}})
         return spans or [{"type": "text", "text": {"content": text}}]
 
-    def markdown_to_blocks(self, markdown: str) -> List[Dict[str, Any]]:  # noqa: C901
+    def markdown_to_blocks(self, markdown: str) -> list[dict[str, Any]]:  # noqa: C901
         blocks = []
         lines = markdown.split("\n")
         i = 0
@@ -1157,9 +1163,9 @@ class NotionClient:
 
     def _extract_property_value(
         self,
-        prop_data: Dict[str, Any],
+        prop_data: dict[str, Any],
         prop_type: str,
-        resolved_relations: Optional[Dict[str, Dict[str, str]]] = None,
+        resolved_relations: dict[str, dict[str, str]] | None = None,
     ) -> Any:
         if not prop_data:
             return None
@@ -1230,8 +1236,8 @@ class NotionClient:
         return None
 
     def resolve_relations(
-        self, items: List[Dict[str, Any]], prop_names: Optional[List[str]] = None
-    ) -> Dict[str, Dict[str, str]]:
+        self, items: list[dict[str, Any]], prop_names: list[str] | None = None
+    ) -> dict[str, dict[str, str]]:
         """Map related page ids to title and url.
 
         One fetch per unique id, not per row. A deleted or unshared page is
@@ -1246,7 +1252,7 @@ class NotionClient:
                     continue
                 ids.update(r["id"] for r in pdata.get("relation", []))
 
-        resolved: Dict[str, Dict[str, str]] = {}
+        resolved: dict[str, dict[str, str]] = {}
         for page_id in sorted(ids):
             try:
                 page = self.get_page(page_id)
@@ -1262,9 +1268,9 @@ class NotionClient:
 
     def database_items_to_markdown(
         self,
-        items: List[Dict[str, Any]],
-        db_metadata: Dict[str, Any],
-        resolved_relations: Optional[Dict[str, Dict[str, str]]] = None,
+        items: list[dict[str, Any]],
+        db_metadata: dict[str, Any],
+        resolved_relations: dict[str, dict[str, str]] | None = None,
     ) -> str:
         if not items:
             return "_No items in database_\n"

@@ -9,7 +9,6 @@ import pytest
 from h2t_ops.core import google_auth as mod
 from h2t_ops.core.errors import AuthError, ConfigError
 
-
 CAL_SCOPE = "https://www.googleapis.com/auth/calendar"
 GMAIL_READ_SCOPE = "https://www.googleapis.com/auth/gmail.readonly"
 DRIVE_SCOPE = "https://www.googleapis.com/auth/drive"

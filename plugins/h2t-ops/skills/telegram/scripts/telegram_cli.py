@@ -12,18 +12,19 @@ Telegram CLI — три pipeline для Telegram данных.
   telegram_cli.py sync              # все три pipeline
 """
 
-import os
-import sys
-import json
-import subprocess
 import argparse
+import json
+import os
+import subprocess
+import sys
+from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
-from datetime import datetime, timezone, timedelta
 
-from telethon.sync import TelegramClient
-from telethon.errors import SessionPasswordNeededError
 from google import genai
 from google.genai import types as genai_types
+from telethon.errors import SessionPasswordNeededError
+from telethon.sync import TelegramClient
+
 
 def _load_secret_env_files() -> None:
     """Load canonical then legacy h2t secrets files without overriding env."""
@@ -159,7 +160,7 @@ def update_last_sync(key: str):
     data = {}
     if LAST_SYNC_FILE.exists():
         data = json.loads(LAST_SYNC_FILE.read_text())
-    data[key] = datetime.now(timezone.utc).timestamp()
+    data[key] = datetime.now(UTC).timestamp()
     LAST_SYNC_FILE.write_text(json.dumps(data, indent=2))
 
 
@@ -182,7 +183,7 @@ def call_gemini(prompt: str, model: str = GEMINI_MODEL_FAST) -> str:
 def fetch_saved_messages(fetch_all: bool = False) -> list:
     """Fetch messages from Telegram Saved Messages (sent to self)."""
     since_ts = 0.0 if fetch_all else get_last_sync('saved')
-    since_dt = datetime.fromtimestamp(since_ts, tz=timezone.utc) if since_ts else None
+    since_dt = datetime.fromtimestamp(since_ts, tz=UTC) if since_ts else None
 
     print(f"📥 Читаю Saved Messages {'(всё)' if fetch_all else '(новые)'}...", file=sys.stderr)
 
@@ -201,7 +202,7 @@ def fetch_saved_messages(fetch_all: bool = False) -> list:
             }
 
             if msg.entities:
-                from telethon.tl.types import MessageEntityUrl, MessageEntityTextUrl
+                from telethon.tl.types import MessageEntityTextUrl, MessageEntityUrl
                 for ent in msg.entities:
                     if isinstance(ent, MessageEntityUrl):
                         item['urls'].append(msg.text[ent.offset:ent.offset + ent.length])
@@ -283,9 +284,9 @@ def fetch_channel_posts(fetch_all: bool = False) -> dict:
         return {}
 
     since_ts = 0.0 if fetch_all else get_last_sync('digest')
-    cutoff = datetime.now(timezone.utc) - timedelta(days=7) if fetch_all else (
-        datetime.fromtimestamp(since_ts, tz=timezone.utc) if since_ts
-        else datetime.now(timezone.utc) - timedelta(hours=24)
+    cutoff = datetime.now(UTC) - timedelta(days=7) if fetch_all else (
+        datetime.fromtimestamp(since_ts, tz=UTC) if since_ts
+        else datetime.now(UTC) - timedelta(hours=24)
     )
 
     result = {}
@@ -293,7 +294,7 @@ def fetch_channel_posts(fetch_all: bool = False) -> dict:
         for ch in cfg.get('ext_channels', []):
             username = ch.get('id')
             if not username:
-                print(f"⚠️  Пропускаю ext_channel без поля 'id'", file=sys.stderr)
+                print("⚠️  Пропускаю ext_channel без поля 'id'", file=sys.stderr)
                 continue
             display_name = ch.get('label', ch.get('id'))
             print(f"  📡 {display_name} ({username})...", file=sys.stderr)
@@ -376,8 +377,8 @@ def fetch_chat_messages(fetch_all: bool = False) -> dict:
         return {}
 
     since_ts = 0.0 if fetch_all else get_last_sync('tasks')
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=24) if not since_ts else \
-        datetime.fromtimestamp(since_ts, tz=timezone.utc)
+    cutoff = datetime.now(UTC) - timedelta(hours=24) if not since_ts else \
+        datetime.fromtimestamp(since_ts, tz=UTC)
 
     result = {}
     with get_client() as client:
@@ -386,7 +387,7 @@ def fetch_chat_messages(fetch_all: bool = False) -> dict:
         for ch in cfg.get('work_chats', []):
             chat_id = ch.get('id')
             if not chat_id:
-                print(f"⚠️  Пропускаю work_chat без поля 'id'", file=sys.stderr)
+                print("⚠️  Пропускаю work_chat без поля 'id'", file=sys.stderr)
                 continue
             label = ch.get('label', ch.get('id'))
             print(f"  💬 {label} ({chat_id})...", file=sys.stderr)
@@ -460,7 +461,6 @@ def cmd_tasks(args):
     """Pipeline: Work chats → extracted tasks → Notion + MD log."""
     import importlib.util
     fetch_all = getattr(args, 'all', False)
-    TASKS_DB_ID = 'beabac7bf4314952a9327759c638d89f'
 
     print("💬 Читаю рабочие чаты...", file=sys.stderr)
     chat_msgs = fetch_chat_messages(fetch_all=fetch_all)
@@ -491,7 +491,7 @@ def cmd_chat(args):
     fetch_all = getattr(args, 'all', False)
     days = args.days
     limit = None if fetch_all else args.limit
-    cutoff = None if fetch_all else datetime.now(timezone.utc) - timedelta(days=days)
+    cutoff = None if fetch_all else datetime.now(UTC) - timedelta(days=days)
 
     # Resolve entity: numeric ID or @username
     try:
@@ -728,8 +728,8 @@ def cmd_mentions(args):
 
     days = args.days
     since_ts = get_last_sync('mentions')
-    cutoff = datetime.fromtimestamp(since_ts, tz=timezone.utc) if since_ts else \
-        datetime.now(timezone.utc) - timedelta(days=days)
+    cutoff = datetime.fromtimestamp(since_ts, tz=UTC) if since_ts else \
+        datetime.now(UTC) - timedelta(days=days)
     mentions = []
 
     with get_client() as client:
@@ -773,7 +773,7 @@ def cmd_mentions(args):
                         "text": (msg.text or '')[:200],
                         "date": msg.date.isoformat(),
                         "age_hours": round(
-                            (datetime.now(timezone.utc) - msg.date).total_seconds() / 3600, 1
+                            (datetime.now(UTC) - msg.date).total_seconds() / 3600, 1
                         ),
                         "url": url,
                     })
@@ -784,13 +784,13 @@ def cmd_mentions(args):
     cache = {
         "total": len(mentions),
         "mentions": mentions,
-        "fetched_at": datetime.now(timezone.utc).isoformat(),
+        "fetched_at": datetime.now(UTC).isoformat(),
     }
     cache_file = CONFIG_DIR / 'mentions_cache.json'
     cache_file.write_text(json.dumps(cache, ensure_ascii=False, indent=2))
     update_last_sync('mentions')
 
-    elapsed_days = (datetime.now(timezone.utc) - cutoff).days
+    elapsed_days = (datetime.now(UTC) - cutoff).days
     print(f"📣 Найдено {len(mentions)} упоминаний за {elapsed_days} дней")
     for m in mentions:
         print(f"  [{m['chat']}] {m['sender']}: {m['text'][:80]}")
@@ -831,7 +831,7 @@ def cmd_research(args):
     channels = cfg.get('own_channels', [])
     fetch_all = getattr(args, 'all', False)
     since_ts = 0.0 if fetch_all else get_last_sync('research')
-    cutoff = datetime.fromtimestamp(since_ts, tz=timezone.utc)
+    cutoff = datetime.fromtimestamp(since_ts, tz=UTC)
 
     all_items = []
     with get_client() as client:
@@ -953,7 +953,7 @@ def cmd_students(args):
 
     fetch_all = getattr(args, 'all', False)
     since_ts = 0.0 if fetch_all else get_last_sync('students')
-    cutoff = datetime.fromtimestamp(since_ts, tz=timezone.utc)
+    cutoff = datetime.fromtimestamp(since_ts, tz=UTC)
     messages = []
 
     with get_client() as client:
@@ -1004,7 +1004,7 @@ def cmd_students(args):
 
 def cmd_cleanup(args):
     """Find and optionally archive dead/deleted Telegram chats."""
-    cutoff = datetime.now(timezone.utc) - timedelta(days=365)
+    cutoff = datetime.now(UTC) - timedelta(days=365)
     dead = []
     with get_client() as client:
         for dialog in client.iter_dialogs(limit=1000):
@@ -1079,7 +1079,7 @@ def cmd_auth(args):
                 'phone_code_hash': sent.phone_code_hash,
             }))
             print(f"📱 Код отправлен на {args.phone}")
-            print(f"Теперь запустите:")
+            print("Теперь запустите:")
             print(f"  telegram auth --phone {args.phone} --code <КОД>")
         elif args.password and args.code is None:
             # Phase 2b (retry): only password — code already accepted in session

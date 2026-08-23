@@ -17,7 +17,7 @@ import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
@@ -115,7 +115,7 @@ def build_fetch_envelope(
             "primary_engine": PRIMARY_ENGINE,
             "envelope_version": ENVELOPE_VERSION,
             "fetch_envelope_version": FETCH_ENVELOPE_VERSION,
-            "timestamp": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            "timestamp": datetime.now(UTC).isoformat(timespec="seconds"),
             "user_agent": user_agent,
         },
     }
@@ -618,7 +618,7 @@ class JinaProvider:
         try:
             with urllib.request.urlopen(req, timeout=timeout_ms / 1000) as resp:
                 raw = resp.read()
-                final_url = resp.geturl() or target
+                resp.geturl() or target
                 http_status = getattr(resp, "status", 200)
         except urllib.error.HTTPError as e:
             latency_ms = int((time.perf_counter() - t0) * 1000)
@@ -1098,7 +1098,7 @@ def _output_paths(output_dir: Path, project: str, url: str,
                   ) -> dict[str, Path]:
     output_dir = Path(output_dir).expanduser()
     output_dir.mkdir(parents=True, exist_ok=True)
-    date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    date = datetime.now(UTC).strftime("%Y-%m-%d")
     slug = _slug_from_url(url)
     base = output_dir / f"{project}-fetch-{slug}-{date}"
     return {

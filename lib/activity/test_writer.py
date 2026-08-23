@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from lib.activity.writer import log_session_start, log_session_end
+from lib.activity.writer import log_session_end, log_session_start
 
 
 def test_log_session_start_creates_spool(tmp_path):

@@ -62,6 +62,7 @@ def test_init_repo_returns_none_when_explicit_root_missing(tmp_path):
 
 def test_init_repo_rejects_home_directory(monkeypatch, tmp_path):
     from pathlib import Path
+
     import init as init_mod
     # Temporarily treat tmp_path as "home" for testing purposes
     monkeypatch.setattr(Path, "home", staticmethod(lambda: tmp_path))

@@ -5,7 +5,7 @@ import json
 import shutil
 import subprocess
 import tempfile
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -274,7 +274,7 @@ def capture_and_ocr(
 
     # Temp dir deleted — use stable_image for OCR and provenance
     extracted_text, visible_headings, confidence = extract_text_from_image(stable_image)
-    captured_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    captured_at = datetime.now(UTC).isoformat(timespec="seconds")
 
     envelope = build_visual_ocr_envelope(
         url=url,

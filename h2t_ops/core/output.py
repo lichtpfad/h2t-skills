@@ -6,7 +6,6 @@ import json
 import sys
 from typing import Any
 
-
 from h2t_ops.core.envelope import Paged, error_envelope, success_envelope
 from h2t_ops.core.errors import exit_code_for
 

@@ -4,13 +4,12 @@ from __future__ import annotations
 import builtins
 import json
 import sqlite3
-from datetime import datetime, timezone
+from contextlib import contextmanager
+from datetime import UTC, datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-
-from contextlib import contextmanager
 
 from h2t_ops.core.errors import AuthError, ConfigError, ProviderError
 
@@ -218,7 +217,7 @@ def test_list_messages_maps_rows_and_urls(tmp_path, monkeypatch):
     msg = SimpleNamespace(
         id=5,
         chat_id=99,
-        date=datetime(2026, 5, 21, 10, 0, tzinfo=timezone.utc),
+        date=datetime(2026, 5, 21, 10, 0, tzinfo=UTC),
         sender_id=7,
         sender=SimpleNamespace(first_name="Ada", last_name="L"),
         text="link: https://example.com",
@@ -351,7 +350,7 @@ def test_send_message_returns_normalized_row(tmp_path, monkeypatch):
     sent = SimpleNamespace(
         id=9,
         chat_id=77,
-        date=datetime(2026, 5, 25, 10, 0, tzinfo=timezone.utc),
+        date=datetime(2026, 5, 25, 10, 0, tzinfo=UTC),
         text="hello",
     )
 
@@ -396,7 +395,7 @@ def test_send_file_returns_normalized_row(tmp_path, monkeypatch):
     sent = SimpleNamespace(
         id=20,
         chat_id=55,
-        date=datetime(2026, 5, 27, 12, 0, tzinfo=timezone.utc),
+        date=datetime(2026, 5, 27, 12, 0, tzinfo=UTC),
         sender_id=7,
         sender=SimpleNamespace(first_name="Stan", last_name="G"),
         text="",
@@ -446,7 +445,7 @@ def test_forward_message_returns_normalized_row(tmp_path, monkeypatch):
     fwd = SimpleNamespace(
         id=30,
         chat_id=77,
-        date=datetime(2026, 5, 27, 12, 0, tzinfo=timezone.utc),
+        date=datetime(2026, 5, 27, 12, 0, tzinfo=UTC),
         sender_id=None,
         sender=None,
         text="forwarded text",

@@ -1,6 +1,7 @@
 """GitHub context gathering via gh CLI."""
 
 import json as _json
+
 from .runner import run_parallel
 
 

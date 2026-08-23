@@ -19,9 +19,10 @@ import os
 import subprocess
 import sys
 import time
-from datetime import datetime, timezone
+from collections.abc import Iterable
+from datetime import UTC, datetime, timezone
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 try:
     import requests
@@ -49,28 +50,61 @@ _load_secret_env_files()
 # ─── Recovery module ──────────────────────────────────────────────────────────
 import sys as _sys_r
 from pathlib import Path as _Path_r
+
 _sys_r.path.insert(0, str(_Path_r(__file__).parent))
 from recovery import (  # noqa: E402
-    RecoveryError,
-    now_iso as _now_iso,
-    staging_dir as _staging_dir,
-    ffmpeg_exe as _ffmpeg_exe,
-    ffmpeg_probe as _ffmpeg_probe,
-    build_convert_cmd as _build_convert_cmd,
-    convert_media,
-    drive_service as _drive_service,
-    drive_upload_file as _drive_upload_file,
-    drive_audit_public as _drive_audit_public,
-    drive_download_url as _drive_download_url,
-    submit_url_via_h2t_ops as _submit_url_via_h2t_ops,
-    title_from_filename as _title_from_filename,
     DRIVE_ROOT_FOLDER_NAME,
-    uploads_manifest_path as _uploads_manifest_path,
-    read_uploads_manifest as _read_uploads_manifest,
-    append_uploads_manifest as _append_uploads_manifest,
-    submitted_record as _submitted_record,
-    process_one as _process_one_for_upload,
+    RecoveryError,
+    convert_media,
     emit_submission_artifact,
+)
+from recovery import (
+    append_uploads_manifest as _append_uploads_manifest,
+)
+from recovery import (
+    build_convert_cmd as _build_convert_cmd,
+)
+from recovery import (
+    drive_audit_public as _drive_audit_public,
+)
+from recovery import (
+    drive_download_url as _drive_download_url,
+)
+from recovery import (
+    drive_service as _drive_service,
+)
+from recovery import (
+    drive_upload_file as _drive_upload_file,
+)
+from recovery import (
+    ffmpeg_exe as _ffmpeg_exe,
+)
+from recovery import (
+    ffmpeg_probe as _ffmpeg_probe,
+)
+from recovery import (
+    now_iso as _now_iso,
+)
+from recovery import (
+    process_one as _process_one_for_upload,
+)
+from recovery import (
+    read_uploads_manifest as _read_uploads_manifest,
+)
+from recovery import (
+    staging_dir as _staging_dir,
+)
+from recovery import (
+    submit_url_via_h2t_ops as _submit_url_via_h2t_ops,
+)
+from recovery import (
+    submitted_record as _submitted_record,
+)
+from recovery import (
+    title_from_filename as _title_from_filename,
+)
+from recovery import (
+    uploads_manifest_path as _uploads_manifest_path,
 )
 
 API_KEY = os.environ.get("MEETGEEK_API_KEY", "").strip()
@@ -605,7 +639,7 @@ def cmd_upload(args: argparse.Namespace) -> int:
             continue
 
     _print_json({"processed": processed, "skipped": skipped, "errors": errors,
-                 "drive_folder": f"{DRIVE_ROOT_FOLDER_NAME}/{datetime.now(timezone.utc).strftime('%Y-%m-%d')}",
+                 "drive_folder": f"{DRIVE_ROOT_FOLDER_NAME}/{datetime.now(UTC).strftime('%Y-%m-%d')}",
                  "results_count": len(results)})
     return 0 if errors == 0 else 1
 

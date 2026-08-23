@@ -1,4 +1,5 @@
 import pytest
+
 from h2t_ops.connectors.notion.client import NotionClient
 from h2t_ops.core.errors import ConfigError
 
@@ -52,8 +53,15 @@ def test_missing_sdk_raises_configerror(monkeypatch):
 
 
 import pytest
+
 from h2t_ops.connectors.notion.client import _map_http_status, _map_sdk_exc
-from h2t_ops.core.errors import AuthError, NetworkError, NotFoundError, ProviderError, UsageError
+from h2t_ops.core.errors import (
+    AuthError,
+    NetworkError,
+    NotFoundError,
+    ProviderError,
+    UsageError,
+)
 
 
 @pytest.mark.parametrize("status,expected", [
@@ -407,6 +415,7 @@ def test_list_comments_empty(conv):
 
 def test_list_comments_maps_sdk_exc(conv):
     from unittest.mock import MagicMock
+
     from h2t_ops.core.errors import ProviderError
     conv.client = MagicMock()
     conv.client.comments.list.side_effect = RuntimeError("boom")
@@ -433,6 +442,7 @@ def test_create_comment_wraps_text_in_rich_text(conv):
 
 def test_create_comment_maps_sdk_exc(conv):
     from unittest.mock import MagicMock
+
     from h2t_ops.core.errors import ProviderError
     conv.client = MagicMock()
     conv.client.comments.create.side_effect = RuntimeError("boom")
@@ -916,6 +926,7 @@ def test_create_database_wraps_properties_in_initial_data_source(conv):
 
 def test_create_database_requires_title_property(conv):
     from unittest.mock import MagicMock
+
     from h2t_ops.core.errors import UsageError
     conv.client = MagicMock()
     with pytest.raises(UsageError):
@@ -965,7 +976,7 @@ def test_archive_confirms_title_before_update(conv):
         "properties": {"Name": {"type": "title", "title": [{"type": "text", "text": {"content": "My Task"}}]}},
     }
     conv.client.pages.update.return_value = {"id": "page1", "archived": True}
-    result = conv.archive_page("page1", confirm_title="My Task")
+    conv.archive_page("page1", confirm_title="My Task")
     assert conv.client.pages.update.called
     update_kwargs = conv.client.pages.update.call_args.kwargs
     assert update_kwargs["archived"] is True
@@ -973,6 +984,7 @@ def test_archive_confirms_title_before_update(conv):
 
 def test_archive_mismatch_raises_usageerror_before_update(conv):
     from unittest.mock import MagicMock
+
     from h2t_ops.core.errors import UsageError
     conv.client = MagicMock()
     conv.client.pages.retrieve.return_value = {
@@ -1019,6 +1031,7 @@ def test_replace_content_deletes_existing_blocks_then_appends(conv, tmp_path):
 
 def test_replace_content_mismatch_raises_before_delete(conv, tmp_path):
     from unittest.mock import MagicMock
+
     from h2t_ops.core.errors import UsageError
     md_file = tmp_path / "content.md"
     md_file.write_text("Replacement.\n", encoding="utf-8")
@@ -1037,6 +1050,7 @@ def test_replace_content_mismatch_raises_before_delete(conv, tmp_path):
 def test_replace_content_fails_fast_on_delete_error(conv, tmp_path):
     """Verify that if block deletion fails, append is NOT called and error propagates."""
     from unittest.mock import MagicMock
+
     from h2t_ops.core.errors import ProviderError
     md_file = tmp_path / "content.md"
     md_file.write_text("New content.\n", encoding="utf-8")

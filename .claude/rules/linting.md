@@ -4,11 +4,19 @@
 
 Use `ruff`. No `pylint`, no `flake8`.
 
-There is **no `[tool.ruff]` section in `pyproject.toml`** and no `ruff.toml`, so ruff runs on
-its default rule set — which drifts with the ruff version. Two consequences worth knowing
-before acting on a finding: existing code already trips rules the default set enables
-(`PLW1510`, `I001`, `TRY004` all fire on files nobody has touched), and a finding on a line
-you did not write is pre-existing, not yours to fix. Check with `git stash` before assuming.
+The rule set is **pinned** in `pyproject.toml`: `select = ["E4", "E7", "E9", "F", "I", "UP"]`.
+Ruff's own default is not a set anyone chose — 0.16.4 enables 413 rules and reported 1625
+findings here, nearly all on untouched files, which turned every finding into "mine or
+pre-existing?" instead of a signal. The CI step pins the ruff version too, for the same
+reason: an unpinned linter adds rules on its own schedule.
+
+The repo is at **zero findings** under that set (2026-08-24). A red line is therefore yours.
+
+`ignore` and `per-file-ignores` in `pyproject.toml` carry a comment each saying what the class
+is and why it is deferred — F401 because several modules re-export names purely so tests can
+patch them, and `ruff --fix` removing those took 14 tests down. Read the comment before
+lifting an ignore. The deferred classes are tracked in #400; `F401` is also `unfixable`, so
+`--fix` cannot delete an import that turns out to be an interface.
 
 ```
 C:/dev/h2t-skills/.venv/Scripts/ruff check plugins/ lib/ h2t_ops/   # Windows

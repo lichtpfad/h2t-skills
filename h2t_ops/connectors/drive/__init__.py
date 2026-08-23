@@ -1,5 +1,6 @@
 """Drive connector — registry entry."""
 from h2t_ops.core.registry import ConnectorSpec
+
 from .commands import register  # safe: commands.py has no heavy module-level imports
 
 CONNECTOR = ConnectorSpec(

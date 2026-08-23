@@ -9,8 +9,8 @@ def test_evals_connector_registered():
 
 
 def test_evals_status_handler_returns_status(monkeypatch):
-    from lib.eval import session as sess
     from h2t_ops.connectors.evals.commands import _cmd_status
+    from lib.eval import session as sess
 
     monkeypatch.setattr(sess, "_sdk_available", lambda: False)
     result = _cmd_status(argparse.Namespace())

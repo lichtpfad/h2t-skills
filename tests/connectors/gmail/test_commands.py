@@ -1,6 +1,7 @@
 import argparse
-import sys
 import builtins
+import sys
+
 from h2t_ops.connectors.gmail.commands import register
 
 
@@ -48,7 +49,9 @@ def test_importing_commands_does_not_import_client(monkeypatch):
 
 
 import types
+
 import pytest
+
 from h2t_ops.connectors.gmail import commands as gc
 from h2t_ops.core.errors import UsageError
 
@@ -251,6 +254,7 @@ def test_delete_dispatch_with_both_flags(monkeypatch):
 
 def test_trash_parser_requires_confirm_subject():
     import argparse
+
     from h2t_ops.connectors.gmail.commands import register
     p = argparse.ArgumentParser()
     register(p.add_subparsers(dest="c"))
@@ -260,6 +264,7 @@ def test_trash_parser_requires_confirm_subject():
 
 def test_delete_parser_has_confirm_permanent_flag():
     import argparse
+
     from h2t_ops.connectors.gmail.commands import register
     p = argparse.ArgumentParser()
     register(p.add_subparsers(dest="c"))

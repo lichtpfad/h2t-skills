@@ -1,8 +1,8 @@
 """Smoke tests: every profile × palette assembles without error."""
-import pytest
 from pathlib import Path
 
 import assembler as asm
+import pytest
 
 # R1 profiles (h2t-graphs, h2t-mono) follow golden component contract with profile-specific
 # hero/cta fields — see test_r1_legacy_fidelity.py for assembly tests.

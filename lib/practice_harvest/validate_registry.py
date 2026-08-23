@@ -1,6 +1,7 @@
 """Sealed-валидатор реестра синтеза (фаза B). Держит интерпретативный выход
 детерминированной схемой + проверкой существования source-path + coverage-гейтом."""
 from __future__ import annotations
+
 import json
 import sys
 from pathlib import Path

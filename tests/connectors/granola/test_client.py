@@ -8,7 +8,11 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from h2t_ops.core.errors import (
-    AuthError, ConfigError, NotFoundError, ProviderError, UsageError,
+    AuthError,
+    ConfigError,
+    NotFoundError,
+    ProviderError,
+    UsageError,
 )
 
 

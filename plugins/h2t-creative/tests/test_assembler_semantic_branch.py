@@ -22,10 +22,9 @@ Out of scope (per user T4 scope):
 """
 from pathlib import Path
 
+import assembler
 import pytest
 import yaml
-
-import assembler
 from renderer.adapter import (
     SemanticAdapterError,
     build_legacy_recipe_from_semantic,
@@ -33,7 +32,6 @@ from renderer.adapter import (
 )
 from renderer.semantic_parser import SemanticRecipeError, parse_semantic_recipe
 from renderer.skin_loader import SkinLoaderError, load_skin
-
 
 # ---------------------------------------------------------------------------
 # Fixtures

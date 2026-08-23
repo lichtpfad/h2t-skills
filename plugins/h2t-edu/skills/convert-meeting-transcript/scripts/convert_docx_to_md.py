@@ -3,13 +3,14 @@
 Convert DOCX transcript to Markdown with speaker name replacements
 """
 
-from docx import Document
+import argparse
 import os
 import sys
-import argparse
 from pathlib import Path
 
+from docx import Document
 from dotenv import load_dotenv
+
 load_dotenv(Path.home() / '.dor' / 'secrets.env', override=False)
 
 def parse_speaker_mapping(speaker_args):
@@ -67,7 +68,7 @@ def convert_docx_to_markdown(input_file, speaker_mapping):
     with open(output_file, 'w', encoding='utf-8') as f:
         f.write(final_content)
 
-    print(f"Successfully converted to markdown!")
+    print("Successfully converted to markdown!")
     print(f"Output file: {output_file}")
 
     return output_file

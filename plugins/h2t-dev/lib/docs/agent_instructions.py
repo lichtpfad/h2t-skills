@@ -1,5 +1,6 @@
 """Deterministic audit of .claude/* agent instructions structure (v1 — no LLM)."""
 from __future__ import annotations
+
 import re
 from pathlib import Path
 

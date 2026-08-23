@@ -196,6 +196,7 @@ def test_data_docs_boundary_readme_in_data_not_flagged(tmp_path):
 def test_legacy_main_unknown_repo_uses_cwd_not_all_repos(tmp_path, monkeypatch):
     """When called without args from an unknown repo, must NOT fall back to all 16 repos."""
     import argparse
+
     import lint as _lint
 
     audit_calls = []
@@ -223,7 +224,8 @@ def test_legacy_main_unknown_repo_uses_cwd_not_all_repos(tmp_path, monkeypatch):
 
 
 import subprocess
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
+
 from lint import fix_labels
 
 
@@ -231,7 +233,7 @@ def test_fix_labels_calls_sync(tmp_path):
     """fix_labels runs sync_labels.py for the given repo."""
     with patch("subprocess.run") as mock_run:
         mock_run.return_value = MagicMock(returncode=0, stdout="synced 3", stderr="")
-        result = fix_labels(tmp_path, "h2t-skills")
+        fix_labels(tmp_path, "h2t-skills")
     mock_run.assert_called_once()
     cmd = mock_run.call_args[0][0]
     assert "sync_labels.py" in " ".join(str(c) for c in cmd)
@@ -326,9 +328,10 @@ def test_fix_safe_preserves_existing_frontmatter_keys(tmp_path):
 
 def test_fix_safe_moves_tracked_html(tmp_path, monkeypatch):
     """fix-safe with project_checks=true moves tracked HTML via git mv."""
-    import lint
-    from unittest.mock import patch, MagicMock
     from pathlib import Path
+    from unittest.mock import MagicMock, patch
+
+    import lint
 
     (tmp_path / ".claude" / "rules").mkdir(parents=True)
     (tmp_path / ".claude" / "rules" / "docs-lint.yaml").write_text(
@@ -782,8 +785,8 @@ def test_agent_instructions_finding_in_collect(tmp_path):
 
 def test_fix_safe_cli_adds_gitignore_patterns_when_project_checks_enabled(tmp_path):
     """fix-safe CLI with project_checks: true adds missing temp patterns to .gitignore."""
-    import sys as _sys
     import subprocess as _sp3
+    import sys as _sys
     (tmp_path / ".claude" / "rules").mkdir(parents=True)
     (tmp_path / ".claude" / "rules" / "docs-lint.yaml").write_text(
         "project_checks: true\n"
@@ -805,8 +808,8 @@ def test_fix_safe_cli_adds_gitignore_patterns_when_project_checks_enabled(tmp_pa
 def test_doctor_json_summary_includes_project_count(tmp_path):
     """doctor --json summary string includes project issue count when project_checks enabled."""
     import json as _json
-    import sys as _sys
     import subprocess as _sp2
+    import sys as _sys
     (tmp_path / ".claude" / "rules").mkdir(parents=True)
     (tmp_path / ".claude" / "rules" / "docs-lint.yaml").write_text(
         "project_checks: true\n"
@@ -834,8 +837,9 @@ def test_doctor_json_summary_includes_project_count(tmp_path):
 
 def test_collect_all_findings_detects_html_in_docs(tmp_path, monkeypatch):
     """_collect_all_findings returns misplaced_deliverable finding for HTML in docs/."""
-    import lint
     from unittest.mock import patch
+
+    import lint
 
     (tmp_path / ".claude" / "rules").mkdir(parents=True)
     yaml_content = "schema: h2t_docs_lint_config/v0.2\nproject_checks: true\n"
@@ -852,9 +856,10 @@ def test_collect_all_findings_detects_html_in_docs(tmp_path, monkeypatch):
 
 def test_plan_save_writes_json_file(tmp_path):
     """plan --save writes fix plan JSON to disk."""
-    import lint
     import json
     from unittest.mock import patch
+
+    import lint
 
     (tmp_path / ".claude" / "rules").mkdir(parents=True)
     (tmp_path / ".claude" / "rules" / "docs-lint.yaml").write_text(
@@ -876,8 +881,9 @@ def test_plan_save_writes_json_file(tmp_path):
 
 def test_run_plan_human_readable_shows_misplaced(tmp_path, capsys):
     """_run_plan human output shows Misplaced Deliverable Files section."""
-    import lint
     from unittest.mock import patch
+
+    import lint
 
     (tmp_path / ".claude" / "rules").mkdir(parents=True)
     (tmp_path / ".claude" / "rules" / "docs-lint.yaml").write_text(
@@ -896,9 +902,10 @@ def test_run_plan_human_readable_shows_misplaced(tmp_path, capsys):
 
 def test_doctor_counts_misplaced_deliverable(tmp_path, capsys):
     """doctor JSON output counts misplaced_deliverable in project issues."""
-    import lint
     import json
     from unittest.mock import patch
+
+    import lint
 
     (tmp_path / ".claude" / "rules").mkdir(parents=True)
     (tmp_path / ".claude" / "rules" / "docs-lint.yaml").write_text(

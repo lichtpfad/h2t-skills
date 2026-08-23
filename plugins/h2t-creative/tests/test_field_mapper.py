@@ -15,7 +15,6 @@ Out of scope here (delegated to later slices and per user guardrail):
   integration — those are T2 / T4 / T5.
 """
 import pytest
-
 from renderer.field_mapper import (
     ALLOWED_HELPERS,
     FieldMappingError,
@@ -23,12 +22,11 @@ from renderer.field_mapper import (
     render_cards,
     render_comparison_cards,
     render_flow_steps,
-    render_table_head,
     render_table_body,
+    render_table_head,
 )
 from renderer.semantic_parser import Block
 from renderer.skin_loader import BlockMapping
-
 
 # ---------------------------------------------------------------------------
 # Fixtures

@@ -1,10 +1,11 @@
 """Marker-based docs/README.md index builder with bootstrap support."""
 from __future__ import annotations
+
 import os
 import re
 import tempfile
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 INDEX_START = "<!-- h2t-index-start -->"
 INDEX_END = "<!-- h2t-index-end -->"

@@ -84,7 +84,7 @@ def remote_branches(repo: Path) -> list[dict]:
     if not out:
         return []
 
-    local_branch = run(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=str(repo)) or "main"
+    run(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=str(repo)) or "main"
     branches = []
     for line in out.splitlines():
         parts = line.split("|", 2)

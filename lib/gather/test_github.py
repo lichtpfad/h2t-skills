@@ -1,6 +1,9 @@
-import sys, os
+import os
+import sys
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-from gather.github import gather_github, _parse_json, _parse_jsonl_or_json
+from gather.github import _parse_json, _parse_jsonl_or_json, gather_github
+
 
 def test_gather_github_returns_expected_keys():
     result = gather_github("lichtpfad/claude-agent-skills")

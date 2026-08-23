@@ -5,7 +5,7 @@ import json
 import time
 import urllib.error
 import urllib.request
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlparse
@@ -72,7 +72,7 @@ def fetch_youtube(
     project: str = "default",
 ) -> tuple[dict[str, Any], int]:
     """Fetch YouTube transcript and return a fetch-ladder-compatible envelope."""
-    timestamp = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    timestamp = datetime.now(UTC).isoformat(timespec="seconds")
     t0 = time.monotonic()
 
     try:

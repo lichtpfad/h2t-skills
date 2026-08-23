@@ -127,7 +127,7 @@ def test_exception_stale_flag(tmp_path):
         f"exceptions:\n  - path: old_dir/\n    reason: test\n    type: archive\n    reviewed: {old_date}\n"
     )
     (tmp_path / "old_dir").mkdir()
-    from docs.config import load_config, get_exception_warnings
+    from docs.config import get_exception_warnings, load_config
     cfg = load_config(tmp_path)
     warnings = get_exception_warnings(cfg["exceptions"], tmp_path)
     assert any("stale" in w["message"] for w in warnings)
@@ -140,7 +140,7 @@ def test_exception_orphan_flag(tmp_path):
     h2t_cfg.write_text(
         f"exceptions:\n  - path: nonexistent_dir/\n    reason: test\n    type: archive\n    reviewed: {today}\n"
     )
-    from docs.config import load_config, get_exception_warnings
+    from docs.config import get_exception_warnings, load_config
     cfg = load_config(tmp_path)
     warnings = get_exception_warnings(cfg["exceptions"], tmp_path)
     assert any("orphan exception" in w["message"] for w in warnings)
@@ -151,7 +151,7 @@ def test_exception_string_format_no_crash(tmp_path):
     h2t_cfg = tmp_path / ".h2t" / "docs-lint.yaml"
     h2t_cfg.parent.mkdir()
     h2t_cfg.write_text("exceptions:\n  - eval\n  - ops\n")
-    from docs.config import load_config, get_exception_warnings
+    from docs.config import get_exception_warnings, load_config
     cfg = load_config(tmp_path)
     warnings = get_exception_warnings(cfg["exceptions"], tmp_path)
     assert isinstance(warnings, list)

@@ -6,13 +6,15 @@ _LIB = Path(__file__).parents[2] / "plugins/h2t-dev/lib"
 sys.path.insert(0, str(_LIB))
 
 from docs.index_builder import (
+    INDEX_END,
+    INDEX_START,
     compute_index_update,
     write_index,
-    INDEX_START,
-    INDEX_END,
 )
 
-_FAKE_GENERATE = lambda rp, name: "# generated content\n"
+
+def _FAKE_GENERATE(rp, name):
+    return "# generated content\n"
 
 
 def test_no_readme_operation_is_append(tmp_path):

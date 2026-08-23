@@ -683,7 +683,7 @@ def test_docs_tab_write_clear_first_dispatch(monkeypatch, tmp_path, capsys):
                            content_file=str(content_file), clear_first=True,
                            as_json=True, fmt="human")
     rc = emit("drive", result=cmds_mod.run(args), fmt="json")
-    out = json.loads(capsys.readouterr().out)
+    json.loads(capsys.readouterr().out)
     assert rc == 0
     assert calls["clear_first"] is True
 
@@ -706,6 +706,6 @@ def test_upload_update_existing_dispatch(monkeypatch, capsys):
                            no_convert=False, update_existing=True, parent_id=None,
                            as_json=True, fmt="human")
     rc = emit("drive", result=cmds_mod.run(args), fmt="json")
-    out = json.loads(capsys.readouterr().out)
+    json.loads(capsys.readouterr().out)
     assert rc == 0
     assert calls["update_existing"] is True

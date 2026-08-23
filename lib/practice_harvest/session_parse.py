@@ -1,5 +1,6 @@
 """Парсинг markdown-секций session-md в структуру."""
 from __future__ import annotations
+
 import re
 
 _META_RE = re.compile(r"^- \*\*(?P<key>[^:*]+):\*\*\s*(?P<val>.+?)\s*$", re.M)

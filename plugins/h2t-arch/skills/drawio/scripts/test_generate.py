@@ -12,8 +12,12 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from generate import (_is_user_managed, _post_process_xml, _read_existing,
-                      generate_diagram)
+from generate import (
+    _is_user_managed,
+    _post_process_xml,
+    _read_existing,
+    generate_diagram,
+)
 
 
 def test_1_basic_nodes_edges():
@@ -32,7 +36,7 @@ def test_1_basic_nodes_edges():
 
     with tempfile.TemporaryDirectory() as tmpdir:
         output = os.path.join(tmpdir, "test.drawio")
-        result = generate_diagram(graph, output)
+        generate_diagram(graph, output)
         assert os.path.exists(output), "File not created"
         content = open(output).read()
         assert "<mxGraphModel" in content, "Not valid drawio XML"

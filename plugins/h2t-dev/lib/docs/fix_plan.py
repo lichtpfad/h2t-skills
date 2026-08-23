@@ -1,6 +1,7 @@
 # plugins/h2t-dev/lib/docs/fix_plan.py
 """Converts doc findings into h2t_docs_fix_plan/v0.1 action list."""
 from __future__ import annotations
+
 import datetime
 import hashlib
 import re

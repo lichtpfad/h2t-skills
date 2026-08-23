@@ -18,7 +18,7 @@ import json
 import os
 import platform
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -91,10 +91,10 @@ class SkillEval:
         project: str,
         repo: str = "h2t-skills",
         plugin_version: str = "",
-        evals_root: Optional[str] = None,
+        evals_root: str | None = None,
         skill_graph=None,
-        score_before: Optional[float] = None,
-        secrets_path: Optional[str] = None,
+        score_before: float | None = None,
+        secrets_path: str | None = None,
     ) -> None:
         self.skill = skill
         self.domain = domain
@@ -107,13 +107,13 @@ class SkillEval:
         self.evals_root = evals_root
         self._skill_graph = skill_graph
         self._score_before = score_before
-        self._score_after: Optional[float] = None
+        self._score_after: float | None = None
         self._metrics: list[dict] = []
-        self._started_at: Optional[str] = None
-        self._start_dt: Optional[datetime] = None
-        self._op_type_valid: Optional[bool] = None
+        self._started_at: str | None = None
+        self._start_dt: datetime | None = None
+        self._op_type_valid: bool | None = None
         self._fallback_used: bool = False
-        self._error_class: Optional[str] = None
+        self._error_class: str | None = None
         # Credentials resolve from ~/.dor/secrets.env (env-wins); one merged env
         # feeds both mode resolution and the central send path. See #321.
         self._env = _load_secrets(secrets_path)
@@ -121,7 +121,7 @@ class SkillEval:
         self._eval_set = eval_set_for(skill)
 
     def __enter__(self) -> "SkillEval":
-        self._start_dt = datetime.now(timezone.utc)
+        self._start_dt = datetime.now(UTC)
         self._started_at = self._start_dt.isoformat()
         return self
 
@@ -130,7 +130,7 @@ class SkillEval:
         try:
             if self._mode in ("local", "push"):
                 status = "failure" if exc_type else "success"
-                ended_at = datetime.now(timezone.utc).isoformat()
+                ended_at = datetime.now(UTC).isoformat()
                 final = self._finalize_metrics(status, ended_at)
                 self._write_local(status, ended_at, final)
                 if self._mode == "push":
@@ -149,7 +149,7 @@ class SkillEval:
                 pass  # never crash a skill for graph failure
         return False  # do not suppress exceptions
 
-    def close(self, score: float) -> Optional[str]:
+    def close(self, score: float) -> str | None:
         """Record final eval score. Writes eval-finding lesson if delta > 0.1.
 
         Returns node_id if lesson was written, None otherwise.
@@ -181,12 +181,12 @@ class SkillEval:
     def metric(
         self,
         key: str,
-        value_num: Optional[float] = None,
-        value_bool: Optional[bool] = None,
-        value_text: Optional[str] = None,
+        value_num: float | None = None,
+        value_bool: bool | None = None,
+        value_text: str | None = None,
         *,
-        level: Optional[str] = None,
-        unit: Optional[str] = None,
+        level: str | None = None,
+        unit: str | None = None,
     ) -> None:
         """Record a metric to be written on context exit.
 
@@ -272,7 +272,7 @@ class SkillEval:
             return
 
         prefix = self.skill[:2]
-        stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d-%H%M%S-%f")
+        stamp = datetime.now(UTC).strftime("%Y-%m-%d-%H%M%S-%f")
         filepath = sessions_dir / f"{prefix}-{stamp}-{uuid.uuid4().hex[:8]}.json"
 
         record = {

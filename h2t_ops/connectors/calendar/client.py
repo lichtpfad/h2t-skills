@@ -3,12 +3,18 @@ from __future__ import annotations
 
 import uuid
 from datetime import date as date_cls
-from datetime import datetime, time as time_cls, timedelta, timezone
+from datetime import datetime, timedelta, timezone
+from datetime import time as time_cls
 from typing import Any, Dict, List, Optional
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from h2t_ops.core.errors import (
-    AuthError, H2TError, NetworkError, NotFoundError, ProviderError, UsageError,
+    AuthError,
+    H2TError,
+    NetworkError,
+    NotFoundError,
+    ProviderError,
+    UsageError,
 )
 from h2t_ops.core.google_auth import (
     build_google_service,
@@ -19,7 +25,7 @@ CALENDAR_SCOPES = ["https://www.googleapis.com/auth/calendar"]
 _CALENDAR_LIST_HINT = "Run `h2t-ops calendar calendars --json` to inspect calendar ids and access roles."
 
 
-def _local_day_window(days: int, tz: Optional[str]) -> tuple[str, str]:
+def _local_day_window(days: int, tz: str | None) -> tuple[str, str]:
     """Whole calendar days from today, in the query timezone (#351).
 
     A rolling `now .. now + days` window makes "today" start at the moment the
@@ -33,7 +39,7 @@ def _local_day_window(days: int, tz: Optional[str]) -> tuple[str, str]:
     return start.isoformat(), (start + timedelta(days=max(days, 1))).isoformat()
 
 
-def _zone(tz: Optional[str]):
+def _zone(tz: str | None):
     if tz:
         try:
             return ZoneInfo(tz)
@@ -42,7 +48,7 @@ def _zone(tz: Optional[str]):
     return datetime.now().astimezone().tzinfo
 
 
-def _now_in(tz: Optional[str]) -> datetime:
+def _now_in(tz: str | None) -> datetime:
     """Current instant in the requested timezone; local time when it is unusable."""
     return datetime.now(_zone(tz))
 
@@ -89,7 +95,7 @@ class CalendarClient:
         self.service = build_google_service("calendar", "v3", creds)
 
     # ----- Read -----
-    def list_calendars(self) -> Dict[str, Any]:
+    def list_calendars(self) -> dict[str, Any]:
         try:
             res = self.service.calendarList().list().execute()
         except Exception as e:
@@ -115,11 +121,11 @@ class CalendarClient:
         max_results: int = 250,
         *,
         calendar_id: str = "primary",
-        time_min: Optional[str] = None,
-        time_max: Optional[str] = None,
-        tz: Optional[str] = None,
+        time_min: str | None = None,
+        time_max: str | None = None,
+        tz: str | None = None,
         busy_only: bool = False,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         return self.list_events_page(
             days=days, max_results=max_results, calendar_id=calendar_id,
             time_min=time_min, time_max=time_max, tz=tz, busy_only=busy_only,
@@ -131,17 +137,17 @@ class CalendarClient:
         max_results: int = 250,
         *,
         calendar_id: str = "primary",
-        time_min: Optional[str] = None,
-        time_max: Optional[str] = None,
-        tz: Optional[str] = None,
+        time_min: str | None = None,
+        time_max: str | None = None,
+        tz: str | None = None,
         busy_only: bool = False,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Same as list_events, plus whether Calendar had more to give."""
         if time_min is None or time_max is None:
             day_min, day_max = _local_day_window(days, tz)
             time_min = time_min or day_min
             time_max = time_max or day_max
-        params: Dict[str, Any] = {
+        params: dict[str, Any] = {
             "calendarId": calendar_id,
             "timeMin": time_min,
             "timeMax": time_max,
@@ -170,7 +176,7 @@ class CalendarClient:
         *,
         calendar_id: str = "primary",
         max_results: int = 10,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Matching events. Prefer search_events_page — this drops truncation."""
         return self.search_events_page(
             query, calendar_id=calendar_id, max_results=max_results,
@@ -182,7 +188,7 @@ class CalendarClient:
         *,
         calendar_id: str = "primary",
         max_results: int = 10,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Same as search_events, plus whether Calendar had more to give (#351)."""
         try:
             res = self.service.events().list(
@@ -200,7 +206,7 @@ class CalendarClient:
             "truncated": bool(res.get("nextPageToken")),
         }
 
-    def get_event(self, event_id: str, *, calendar_id: str = "primary") -> Dict[str, Any]:
+    def get_event(self, event_id: str, *, calendar_id: str = "primary") -> dict[str, Any]:
         try:
             return self.service.events().get(
                 calendarId=calendar_id, eventId=event_id,
@@ -213,19 +219,19 @@ class CalendarClient:
         self,
         summary: str,
         date: str,
-        time: Optional[str] = None,
+        time: str | None = None,
         duration_min: int = 60,
-        description: Optional[str] = None,
-        attendees: Optional[str] = None,
+        description: str | None = None,
+        attendees: str | None = None,
         tz: str = "Asia/Jerusalem",
         *,
         calendar_id: str = "primary",
         all_day: bool = False,
-        location: Optional[str] = None,
+        location: str | None = None,
         meet: bool = False,
-        rrule: Optional[str] = None,
-        reminder_minutes: Optional[List[int]] = None,
-    ) -> Dict[str, Any]:
+        rrule: str | None = None,
+        reminder_minutes: list[int] | None = None,
+    ) -> dict[str, Any]:
         event = self._event_time_body(
             summary=summary,
             date=date,
@@ -248,7 +254,7 @@ class CalendarClient:
         if reminder_minutes is not None:
             event["reminders"] = self._reminders_body(reminder_minutes)
 
-        kwargs: Dict[str, Any] = {
+        kwargs: dict[str, Any] = {
             "calendarId": calendar_id,
             "body": event,
             "sendUpdates": "all" if parsed_attendees else "none",
@@ -270,21 +276,21 @@ class CalendarClient:
         event_id: str,
         *,
         calendar_id: str = "primary",
-        summary: Optional[str] = None,
-        date: Optional[str] = None,
-        time: Optional[str] = None,
-        duration_min: Optional[int] = None,
-        all_day: Optional[bool] = None,
-        description: Optional[str] = None,
-        location: Optional[str] = None,
-        replace_attendees: Optional[str] = None,
+        summary: str | None = None,
+        date: str | None = None,
+        time: str | None = None,
+        duration_min: int | None = None,
+        all_day: bool | None = None,
+        description: str | None = None,
+        location: str | None = None,
+        replace_attendees: str | None = None,
         meet: bool = False,
-        replace_rrule: Optional[str] = None,
-        replace_reminder_minutes: Optional[List[int]] = None,
+        replace_rrule: str | None = None,
+        replace_reminder_minutes: list[int] | None = None,
         clear_reminders: bool = False,
-        tz: Optional[str] = None,
-    ) -> Dict[str, Any]:
-        body: Dict[str, Any] = {}
+        tz: str | None = None,
+    ) -> dict[str, Any]:
+        body: dict[str, Any] = {}
         if summary is not None:
             body["summary"] = summary
         if description is not None:
@@ -326,7 +332,7 @@ class CalendarClient:
         if not body:
             raise ValueError("no update fields specified")
 
-        kwargs: Dict[str, Any] = {
+        kwargs: dict[str, Any] = {
             "calendarId": calendar_id,
             "eventId": event_id,
             "body": body,
@@ -350,7 +356,7 @@ class CalendarClient:
         status: str,
         *,
         calendar_id: str = "primary",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         normalized = status.lower()
         if normalized not in {"accepted", "declined", "tentative"}:
             raise ValueError("status must be accepted, declined, or tentative")
@@ -387,7 +393,7 @@ class CalendarClient:
         *,
         calendar_id: str = "primary",
         destination_calendar_id: str,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         try:
             moved = self.service.events().move(
                 calendarId=calendar_id,
@@ -414,8 +420,10 @@ class CalendarClient:
                 hint=_CALENDAR_LIST_HINT,
             ) from e
 
-    def create_calendar(self, summary: str, *, timezone: Optional[str] = None) -> dict:
-        body: Dict[str, Any] = {"summary": summary}
+    def create_calendar(self, summary: str, *, timezone: str | None = None) -> dict:  # noqa: F811
+        # `timezone` shadows datetime.timezone here on purpose: it is the caller-facing
+        # name for Google's timeZone field, and this method never needs the datetime one.
+        body: dict[str, Any] = {"summary": summary}
         if timezone:
             body["timeZone"] = timezone
         try:
@@ -428,11 +436,11 @@ class CalendarClient:
         event_id: str,
         *,
         calendar_id: str = "primary",
-        time_min: Optional[str] = None,
-        time_max: Optional[str] = None,
+        time_min: str | None = None,
+        time_max: str | None = None,
         max_results: int = 250,
-    ) -> List[Dict[str, Any]]:
-        params: Dict[str, Any] = {
+    ) -> list[dict[str, Any]]:
+        params: dict[str, Any] = {
             "calendarId": calendar_id,
             "eventId": event_id,
             "maxResults": max_results,
@@ -456,10 +464,10 @@ class CalendarClient:
         time_min: str,
         time_max: str,
         *,
-        calendar_ids: List[str],
-        tz: Optional[str] = None,
-    ) -> Dict[str, Any]:
-        body: Dict[str, Any] = {
+        calendar_ids: list[str],
+        tz: str | None = None,
+    ) -> dict[str, Any]:
+        body: dict[str, Any] = {
             "timeMin": time_min,
             "timeMax": time_max,
             "items": [{"id": cid} for cid in calendar_ids],
@@ -488,12 +496,12 @@ class CalendarClient:
     # ----- Helpers -----
     def _normalize_event(
         self,
-        event: Dict[str, Any],
+        event: dict[str, Any],
         *,
         calendar_id: str = "primary",
-        now: Optional[datetime] = None,
-        tz: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        now: datetime | None = None,
+        tz: str | None = None,
+    ) -> dict[str, Any]:
         start_obj = event.get("start", {})
         end_obj = event.get("end", {})
         start = start_obj.get("dateTime", start_obj.get("date", ""))
@@ -552,9 +560,9 @@ class CalendarClient:
         start: str,
         end: str,
         all_day: bool,
-        now: Optional[datetime] = None,
-        tz: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        now: datetime | None = None,
+        tz: str | None = None,
+    ) -> dict[str, Any]:
         """Derive multi-day / ongoing facts from a start-end pair.
 
         Without these a running multi-day event is indistinguishable from a
@@ -596,11 +604,11 @@ class CalendarClient:
         *,
         summary: str,
         date: str,
-        time: Optional[str],
+        time: str | None,
         duration_min: int,
         all_day: bool,
         tz: str,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         event = {"summary": summary}
         if all_day:
             if time:
@@ -618,7 +626,7 @@ class CalendarClient:
         time: str,
         duration_min: int,
         tz: str,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         start_dt = datetime.strptime(f"{date} {time}", "%Y-%m-%d %H:%M")
         end_dt = start_dt + timedelta(minutes=duration_min)
         return {
@@ -626,7 +634,7 @@ class CalendarClient:
             "end": {"dateTime": end_dt.isoformat(), "timeZone": tz},
         }
 
-    def _date_range(self, event_date: str) -> Dict[str, Any]:
+    def _date_range(self, event_date: str) -> dict[str, Any]:
         start_day = date_cls.fromisoformat(event_date)
         end_day = start_day + timedelta(days=1)
         return {
@@ -634,7 +642,7 @@ class CalendarClient:
             "end": {"date": end_day.isoformat()},
         }
 
-    def _meet_request(self) -> Dict[str, Any]:
+    def _meet_request(self) -> dict[str, Any]:
         return {
             "createRequest": {
                 "requestId": str(uuid.uuid4()),
@@ -647,7 +655,7 @@ class CalendarClient:
             raise ValueError("RRULE must start with RRULE: and fit on one line")
         return rrule
 
-    def _parse_attendees(self, attendees: Optional[str]) -> List[Dict[str, str]]:
+    def _parse_attendees(self, attendees: str | None) -> list[dict[str, str]]:
         if not attendees:
             return []
         seen = set()
@@ -662,7 +670,7 @@ class CalendarClient:
             rows.append({"email": email})
         return rows
 
-    def _reminders_body(self, minutes: List[int]) -> Dict[str, Any]:
+    def _reminders_body(self, minutes: list[int]) -> dict[str, Any]:
         if len(minutes) > 5:
             raise ValueError("at most 5 reminder overrides are allowed")
         for value in minutes:

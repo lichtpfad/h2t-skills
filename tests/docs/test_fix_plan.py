@@ -5,7 +5,7 @@ from pathlib import Path
 _LIB = Path(__file__).parents[2] / "plugins/h2t-dev/lib"
 sys.path.insert(0, str(_LIB))
 
-from docs.fix_plan import build_fix_plan, _action_id, SCHEMA, _findings_to_actions
+from docs.fix_plan import SCHEMA, _action_id, _findings_to_actions, build_fix_plan
 from docs.reporter import finding
 
 
@@ -87,7 +87,7 @@ def test_empty_findings_empty_actions():
 
 # --- apply_report ---
 
-from docs.apply_report import build_apply_report, action_result, file_hash, APPLY_SCHEMA
+from docs.apply_report import APPLY_SCHEMA, action_result, build_apply_report, file_hash
 
 
 def test_apply_report_schema():

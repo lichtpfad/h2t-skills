@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 from typing import Any, Dict, List, Optional
 
 PROVIDER = "granola"
@@ -29,7 +29,7 @@ def _yaml_value(v: Any) -> str:
     return s
 
 
-def _frontmatter(fields: Dict[str, Any]) -> str:
+def _frontmatter(fields: dict[str, Any]) -> str:
     lines = ["---"]
     for k, val in fields.items():
         if val is None or val == "":
@@ -40,7 +40,7 @@ def _frontmatter(fields: Dict[str, Any]) -> str:
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _clock(ts: Any) -> str:
@@ -50,8 +50,8 @@ def _clock(ts: Any) -> str:
     return str(ts or "")
 
 
-def _people(entries: Any) -> List[str]:
-    out: List[str] = []
+def _people(entries: Any) -> list[str]:
+    out: list[str] = []
     for e in entries or []:
         if isinstance(e, dict):
             name = e.get("name") or e.get("email") or ""
@@ -62,7 +62,7 @@ def _people(entries: Any) -> List[str]:
     return out
 
 
-def _speaker_label(speaker: Dict[str, Any]) -> str:
+def _speaker_label(speaker: dict[str, Any]) -> str:
     """Name when Granola resolved one, else the diarization label, else side.
 
     Calls recorded before Granola's Meet extension often carry no name at all —
@@ -77,22 +77,22 @@ def _speaker_label(speaker: Dict[str, Any]) -> str:
     return {"me": "Me", "them": "Them"}.get(speaker.get("attribution"), "Speaker")
 
 
-def _fragment_key(item: Dict[str, Any]) -> str:
+def _fragment_key(item: dict[str, Any]) -> str:
     return json.dumps(
         [item.get("text"), item.get("start_time"), item.get("end_time"), item.get("speaker")],
         sort_keys=True, ensure_ascii=False,
     )
 
 
-def _merge_fragments(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def _merge_fragments(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Collapse consecutive fragments of one speaker into readable blocks.
 
     Also drops a fragment that exactly repeats the one before it (same text,
     same timestamps, same speaker) — a provider-side duplication seen in real
     transcripts. Identical text at different timestamps is real speech and stays.
     """
-    blocks: List[Dict[str, Any]] = []
-    prev_key: Optional[str] = None
+    blocks: list[dict[str, Any]] = []
+    prev_key: str | None = None
     for item in items or []:
         key = _fragment_key(item)
         if key == prev_key:
@@ -115,7 +115,7 @@ def _merge_fragments(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return blocks
 
 
-def _note_meta(note: Dict[str, Any]) -> Dict[str, Any]:
+def _note_meta(note: dict[str, Any]) -> dict[str, Any]:
     cal = note.get("calendar_event") or {}
     owner = note.get("owner") or {}
     attendees = _people(note.get("attendees")) or _people(cal.get("invitees"))
@@ -135,10 +135,10 @@ def _note_meta(note: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def _fmt_transcript_md(note: Dict[str, Any], items: List[Dict[str, Any]],
+def _fmt_transcript_md(note: dict[str, Any], items: list[dict[str, Any]],
                        truncated: bool = False, raw: bool = False) -> str:
     meta = _note_meta(note)
-    speakers: List[str] = []
+    speakers: list[str] = []
     unnamed = 0
     for item in items or []:
         if (item.get("speaker") or {}).get("name"):
@@ -167,12 +167,12 @@ def _fmt_transcript_md(note: Dict[str, Any], items: List[Dict[str, Any]],
     return "\n".join(lines) + "\n"
 
 
-def _fmt_summary_md(note: Dict[str, Any]) -> str:
+def _fmt_summary_md(note: dict[str, Any]) -> str:
     """Provider markdown, verbatim — no frontmatter, ready to paste elsewhere."""
     return note.get("summary_markdown") or note.get("summary_text") or ""
 
 
-def _fmt_note_md(note: Dict[str, Any]) -> str:
+def _fmt_note_md(note: dict[str, Any]) -> str:
     meta = _note_meta(note)
     fm = _frontmatter({**meta, "type": "note", "source": "granola-api", "fetched_at": _now_iso()})
     body = _fmt_summary_md(note) or "_This note has no summary yet._"
@@ -180,7 +180,7 @@ def _fmt_note_md(note: Dict[str, Any]) -> str:
     return "\n".join([fm, "", f"# {title}", "", body]) + "\n"
 
 
-def _fmt_notes_md(rows: List[Dict[str, Any]]) -> str:
+def _fmt_notes_md(rows: list[dict[str, Any]]) -> str:
     lines = ["| date | note_id | title |", "| --- | --- | --- |"]
     for n in rows or []:
         title = (n.get("title") or "").replace("|", "\\|")
@@ -188,13 +188,13 @@ def _fmt_notes_md(rows: List[Dict[str, Any]]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _fmt_folders_md(rows: List[Dict[str, Any]]) -> str:
-    by_parent: Dict[Optional[str], List[Dict[str, Any]]] = {}
+def _fmt_folders_md(rows: list[dict[str, Any]]) -> str:
+    by_parent: dict[str | None, list[dict[str, Any]]] = {}
     for f in rows or []:
         by_parent.setdefault(f.get("parent_folder_id"), []).append(f)
-    lines: List[str] = []
+    lines: list[str] = []
 
-    def walk(parent: Optional[str], depth: int) -> None:
+    def walk(parent: str | None, depth: int) -> None:
         for f in sorted(by_parent.get(parent, []), key=lambda x: (x.get("name") or "").casefold()):
             lines.append(f"{'  ' * depth}- {f.get('name')} ({f.get('id')})")
             walk(f.get("id"), depth + 1)

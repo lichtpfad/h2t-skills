@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
+
 from lib.practice_harvest.build_index import build_corpus
+
 
 def _touch(p: Path, text="x"):
     p.parent.mkdir(parents=True, exist_ok=True)

@@ -1,6 +1,9 @@
-import sys, os
+import os
+import sys
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-from gather.project import identify_project, _split_domain_project, _find_label
+from gather.project import _find_label, _split_domain_project, identify_project
+
 
 def test_identify_project_returns_expected_keys():
     result = identify_project(".")

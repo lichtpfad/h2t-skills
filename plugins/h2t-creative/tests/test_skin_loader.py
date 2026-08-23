@@ -19,7 +19,6 @@ from pathlib import Path
 
 import pytest
 import yaml
-
 from renderer.semantic_parser import KNOWN_BLOCK_TYPES
 from renderer.skin_loader import (
     BlockMapping,
@@ -28,7 +27,6 @@ from renderer.skin_loader import (
     load_skin,
     parse_skin,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fixtures

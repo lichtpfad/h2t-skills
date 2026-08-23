@@ -2,15 +2,14 @@ from __future__ import annotations
 
 import json
 import sys
-from types import SimpleNamespace
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
 
-from h2t_ops.core.errors import ProviderError, UsageError
 from h2t_ops.connectors.research import visual_ocr
-
+from h2t_ops.core.errors import ProviderError, UsageError
 
 FIXTURES = Path(__file__).parent / "fixtures" / "visual_ocr"
 

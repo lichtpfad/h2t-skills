@@ -1,7 +1,8 @@
 import argparse
+import builtins
 import json
 import sys
-import builtins
+
 from h2t_ops.connectors.notion.commands import register
 
 
@@ -52,7 +53,9 @@ def test_importing_commands_does_not_import_client(monkeypatch):
 
 
 import types
+
 import pytest
+
 from h2t_ops.connectors.notion import commands as notion_cmds
 from h2t_ops.core.errors import UsageError
 
@@ -236,6 +239,7 @@ def test_find_project_tasks_parser_registered():
     """Audit #144: find-project-tasks must exist as a notion subcommand with the
     legacy default database id."""
     import argparse
+
     from h2t_ops.connectors.notion.commands import register
     parser = argparse.ArgumentParser()
     sub = parser.add_subparsers(dest="provider")
@@ -251,9 +255,10 @@ def test_find_project_tasks_dispatch_uses_relation_filter(monkeypatch):
     """find-project-tasks must build the Project-relation filter shape
     {'property':'Project','relation':{'contains': <page_id>}} and pass --limit
     through to client.query_database_page."""
+    from types import SimpleNamespace
+
     import h2t_ops.connectors.notion.client as client_mod
     from h2t_ops.connectors.notion import commands as cmds_mod
-    from types import SimpleNamespace
 
     calls: list[tuple] = []
 
@@ -285,9 +290,10 @@ def test_find_project_tasks_dispatch_uses_relation_filter(monkeypatch):
 def test_find_project_tasks_dispatch_markdown_uses_database_metadata(monkeypatch):
     """Human/md output path must call get_database + database_items_to_markdown
     (mirrors `search` and `get-database` dispatch in the same module)."""
+    from types import SimpleNamespace
+
     import h2t_ops.connectors.notion.client as client_mod
     from h2t_ops.connectors.notion import commands as cmds_mod
-    from types import SimpleNamespace
 
     class _StubClient:
         def query_database_page(self, db, *, filter_dict=None, limit=None, **_):
@@ -359,9 +365,10 @@ def test_search_workspace_and_graph_parsers_registered():
 
 
 def test_find_databases_dispatch_passes_recursive_options(monkeypatch):
+    from types import SimpleNamespace
+
     import h2t_ops.connectors.notion.client as client_mod
     from h2t_ops.connectors.notion import commands as cmds_mod
-    from types import SimpleNamespace
 
     calls = []
 
@@ -395,9 +402,10 @@ def test_find_databases_dispatch_passes_recursive_options(monkeypatch):
 
 
 def test_graph_dispatch_passes_options(monkeypatch):
+    from types import SimpleNamespace
+
     import h2t_ops.connectors.notion.client as client_mod
     from h2t_ops.connectors.notion import commands as cmds_mod
-    from types import SimpleNamespace
 
     calls = []
 
@@ -504,9 +512,10 @@ def test_search_workspace_json_default_limit_is_none(monkeypatch, capsys):
 
 
 def test_sync_databases_json_without_include_databases_raises(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
     import h2t_ops.connectors.notion.client as client_mod
     from h2t_ops.connectors.notion import commands as cmds_mod
-    from types import SimpleNamespace
 
     calls = []
 
@@ -536,10 +545,11 @@ def test_sync_databases_json_without_include_databases_raises(tmp_path, monkeypa
 
 
 def test_sync_databases_json_same_as_output_raises_before_client_io(tmp_path, monkeypatch):
+    from pathlib import Path
+    from types import SimpleNamespace
+
     import h2t_ops.connectors.notion.client as client_mod
     from h2t_ops.connectors.notion import commands as cmds_mod
-    from types import SimpleNamespace
-    from pathlib import Path
 
     calls = []
     writes = []
@@ -584,9 +594,10 @@ def test_sync_databases_json_same_as_output_raises_before_client_io(tmp_path, mo
 
 
 def test_sync_include_databases_writes_markdown_and_json_sidecar(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
     import h2t_ops.connectors.notion.client as client_mod
     from h2t_ops.connectors.notion import commands as cmds_mod
-    from types import SimpleNamespace
 
     calls = []
 
@@ -639,10 +650,11 @@ def test_sync_include_databases_writes_markdown_and_json_sidecar(tmp_path, monke
 
 
 def test_sync_primary_markdown_write_failure_does_not_create_sidecar(tmp_path, monkeypatch):
+    from pathlib import Path
+    from types import SimpleNamespace
+
     import h2t_ops.connectors.notion.client as client_mod
     from h2t_ops.connectors.notion import commands as cmds_mod
-    from types import SimpleNamespace
-    from pathlib import Path
 
     class _Stub:
         def get_blocks(self, page_id):
@@ -693,9 +705,10 @@ def test_sync_primary_markdown_write_failure_does_not_create_sidecar(tmp_path, m
 # --- P0 lifecycle command dispatch tests ---
 
 def test_create_db_item_dispatch(monkeypatch, tmp_path):
+    from types import SimpleNamespace
+
     import h2t_ops.connectors.notion.client as client_mod
     from h2t_ops.connectors.notion import commands as cmds_mod
-    from types import SimpleNamespace
 
     calls = []
 
@@ -718,9 +731,10 @@ def test_create_db_item_dispatch(monkeypatch, tmp_path):
 
 
 def test_update_db_item_dispatch(monkeypatch):
+    from types import SimpleNamespace
+
     import h2t_ops.connectors.notion.client as client_mod
     from h2t_ops.connectors.notion import commands as cmds_mod
-    from types import SimpleNamespace
 
     calls = []
 
@@ -742,9 +756,10 @@ def test_update_db_item_dispatch(monkeypatch):
 
 
 def test_archive_dispatch(monkeypatch):
+    from types import SimpleNamespace
+
     import h2t_ops.connectors.notion.client as client_mod
     from h2t_ops.connectors.notion import commands as cmds_mod
-    from types import SimpleNamespace
 
     calls = []
 
@@ -766,9 +781,10 @@ def test_archive_dispatch(monkeypatch):
 
 
 def test_append_blocks_dispatch(monkeypatch, tmp_path):
+    from types import SimpleNamespace
+
     import h2t_ops.connectors.notion.client as client_mod
     from h2t_ops.connectors.notion import commands as cmds_mod
-    from types import SimpleNamespace
 
     md_file = tmp_path / "content.md"
     md_file.write_text("# Hello\n", encoding="utf-8")
@@ -780,7 +796,7 @@ def test_append_blocks_dispatch(monkeypatch, tmp_path):
             return {"results": []}
 
     monkeypatch.setattr(client_mod, "NotionClient", lambda: _Stub())
-    out = cmds_mod.run(SimpleNamespace(
+    cmds_mod.run(SimpleNamespace(
         notion_cmd="append-blocks",
         page_id="page1",
         content_file=str(md_file),
@@ -791,9 +807,10 @@ def test_append_blocks_dispatch(monkeypatch, tmp_path):
 
 
 def test_replace_content_dispatch(monkeypatch, tmp_path):
+    from types import SimpleNamespace
+
     import h2t_ops.connectors.notion.client as client_mod
     from h2t_ops.connectors.notion import commands as cmds_mod
-    from types import SimpleNamespace
 
     md_file = tmp_path / "content.md"
     md_file.write_text("Replacement.\n", encoding="utf-8")
@@ -819,9 +836,10 @@ def test_replace_content_dispatch(monkeypatch, tmp_path):
 # --- search: envelope meta + relation resolution (#351) ---------------------
 
 def test_search_json_envelope_reports_truncation_and_relations(monkeypatch):
+    from types import SimpleNamespace
+
     import h2t_ops.connectors.notion.client as client_mod
     from h2t_ops.connectors.notion import commands as cmds_mod
-    from types import SimpleNamespace
 
     rows = [{"id": "t1", "url": "https://notion.so/t1",
              "properties": {"Project": {"type": "relation",
@@ -847,9 +865,10 @@ def test_search_json_envelope_reports_truncation_and_relations(monkeypatch):
 
 def test_search_markdown_path_passes_relations(monkeypatch):
     """The md path takes a third argument now; a 2-arg renderer would break."""
+    from types import SimpleNamespace
+
     import h2t_ops.connectors.notion.client as client_mod
     from h2t_ops.connectors.notion import commands as cmds_mod
-    from types import SimpleNamespace
 
     seen = {}
 
@@ -890,6 +909,7 @@ def test_unresolved_relation_is_labelled():
 def test_get_database_returns_an_envelope(monkeypatch):
     """`notion get-database --limit N` reported N as if it were the count."""
     from types import SimpleNamespace
+
     from h2t_ops.connectors.notion import client as client_mod
     from h2t_ops.connectors.notion import commands as cmds_mod
 
@@ -912,6 +932,7 @@ def test_get_database_returns_an_envelope(monkeypatch):
 
 def test_find_project_tasks_returns_an_envelope(monkeypatch):
     from types import SimpleNamespace
+
     from h2t_ops.connectors.notion import client as client_mod
     from h2t_ops.connectors.notion import commands as cmds_mod
 

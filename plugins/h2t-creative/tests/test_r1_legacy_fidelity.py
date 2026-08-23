@@ -1,10 +1,8 @@
 """R1 legacy fidelity contracts for h2t-graphs and h2t-mono."""
 from pathlib import Path
 
-import yaml
-
 import assembler as asm
-
+import yaml
 
 PLUGIN_ROOT = Path(__file__).resolve().parents[1]
 PROFILES_DIR = PLUGIN_ROOT / "profiles"

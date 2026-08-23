@@ -1,5 +1,6 @@
-import sys
 import builtins
+import sys
+
 from h2t_ops.core.registry import ConnectorSpec, discover, resolve_client
 
 

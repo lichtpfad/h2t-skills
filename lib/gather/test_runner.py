@@ -1,10 +1,12 @@
 # test_runner.py
 import json
-import sys
 import os
+import sys
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from gather.runner import run_parallel, output_json
+from gather.runner import output_json, run_parallel
+
 
 def test_run_parallel_basic():
     """Two independent commands run and return stdout."""

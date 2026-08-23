@@ -33,7 +33,7 @@ SUPPORTED_FORMATS = {"png", "svg", "pdf"}
 def _load_yaml(path: Path) -> dict:
     if not path.exists():
         return {}
-    with open(path, "r") as f:
+    with open(path) as f:
         return yaml.safe_load(f) or {}
 
 

@@ -124,8 +124,11 @@ def _paged(page: dict, args, rendered: str | None = None) -> Any:
 def run(args) -> Any:
     """Dispatch a gmail subcommand. Returns a result or raises core.errors."""
     from h2t_ops.connectors.gmail.client import (  # lazy (spec §4.1)
-        GmailClient, format_message_list, format_message_detail,
-        format_thread_list, format_thread_detail,
+        GmailClient,
+        format_message_detail,
+        format_message_list,
+        format_thread_detail,
+        format_thread_list,
     )
     from h2t_ops.core.errors import UsageError
 

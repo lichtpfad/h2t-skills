@@ -30,14 +30,22 @@ for _lib in [_PLUGIN_ROOT / "lib", _PLUGIN_ROOT.parent.parent / "lib"]:
         break
 
 from docs.common import (
-    DEV_ROOT, REPO_MANIFEST, REQUIRED_CORE_DIRS, REPO_EXTRA_DIRS, STANDARDS_FILES,
-    FRONTMATTER_RULES, ensure_dir, print_header, repo_path, parse_frontmatter,
+    DEV_ROOT,
+    FRONTMATTER_RULES,
+    REPO_EXTRA_DIRS,
+    REPO_MANIFEST,
+    REQUIRED_CORE_DIRS,
+    STANDARDS_FILES,
+    ensure_dir,
+    parse_frontmatter,
+    print_header,
+    repo_path,
 )
-from docs.orphan import find_orphan_files
-from docs.naming import check_naming_all_docs
-from docs.reporter import build_report, status_from_findings, finding
 from docs.config import load_config
 from docs.index_builder import write_index
+from docs.naming import check_naming_all_docs
+from docs.orphan import find_orphan_files
+from docs.reporter import build_report, finding, status_from_findings
 
 try:
     from docs.project_types import PROJECT_TYPES
@@ -47,9 +55,9 @@ except ImportError:
     _PROJECT_TYPES_AVAILABLE = False
 
 try:
-    from docs.root_structure import check_root_structure, check_root_readmes
-    from docs.gitignore_hygiene import check_gitignore_hygiene, fix_gitignore_hygiene
     from docs.agent_instructions import check_agent_instructions
+    from docs.gitignore_hygiene import check_gitignore_hygiene, fix_gitignore_hygiene
+    from docs.root_structure import check_root_readmes, check_root_structure
     _PROJECT_LAYER_AVAILABLE = True
 except ImportError as _e:
     import warnings as _warnings
@@ -737,8 +745,8 @@ def _run_plan(
     if not orphans and not naming and not structure and not misplaced and not project:
         print("\n  No cleanup needed.")
     else:
-        print(f"\n  Run 'docs-lint fix-safe' for auto-fixable items.")
-        print(f"  Run 'docs-lint fix-index' for README/index rebuild.")
+        print("\n  Run 'docs-lint fix-safe' for auto-fixable items.")
+        print("  Run 'docs-lint fix-index' for README/index rebuild.")
 
 
 def _apply_misplaced_moves(rp: Path, cfg: dict) -> list[str]:
@@ -774,9 +782,10 @@ def _apply_misplaced_moves(rp: Path, cfg: dict) -> list[str]:
 
 def _run_fix_safe(rp: Path, only: str = "all", plan_file: str | None = None) -> None:
     if plan_file:
-        from docs.fix_plan import build_fix_plan
-        from docs.apply_report import build_apply_report, action_result, file_hash
         import time
+
+        from docs.apply_report import action_result, build_apply_report, file_hash
+        from docs.fix_plan import build_fix_plan
 
         plan = json.loads(Path(plan_file).read_text())
         results = []
@@ -910,8 +919,9 @@ def _safe_generate(repo_root: Path, repo_name: str) -> str:
 
 def _run_fix_index(rp: Path, apply: bool = False, plan_file: str | None = None) -> None:
     if plan_file and apply:
-        from docs.apply_report import build_apply_report, action_result
         import time
+
+        from docs.apply_report import action_result, build_apply_report
 
         plan = json.loads(Path(plan_file).read_text())
         index_actions = [a for a in plan["actions"] if a.get("type") == "add_to_index"]

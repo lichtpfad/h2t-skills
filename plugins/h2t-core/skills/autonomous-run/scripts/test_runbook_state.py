@@ -1,6 +1,6 @@
 import runbook_schema as S
 from new_runbook import render
-from runbook_state import parse_steps, unchecked_steps, is_active
+from runbook_state import is_active, parse_steps, unchecked_steps
 
 
 def _rendered_with_two_done() -> str:

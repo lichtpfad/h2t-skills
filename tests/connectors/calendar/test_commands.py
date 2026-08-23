@@ -113,6 +113,7 @@ def test_importing_commands_does_not_import_client(monkeypatch):
     builtins.__import__ = guard
     try:
         import importlib
+
         import h2t_ops.connectors.calendar.commands as cmds
         importlib.reload(cmds)
     finally:
@@ -233,8 +234,8 @@ def test_missing_scopes_surfaces_as_configerror_with_neutral_hint(tmp_path, monk
     """Calendar client construction with a Gmail-only token must raise
     ConfigError with the neutral bootstrap hint — not the legacy 403-at-call.
     """
-    from pathlib import Path
     import json
+    from pathlib import Path
     shared = tmp_path / ".config" / "google-calendar-mcp" / "tokens.json"
     shared.parent.mkdir(parents=True)
     shared.write_text(json.dumps({
@@ -632,6 +633,7 @@ def test_freebusy_dispatch_uses_date_window(monkeypatch):
 def test_resolve_day_accepts_iso_today_and_offsets():
     from datetime import datetime
     from zoneinfo import ZoneInfo
+
     from h2t_ops.connectors.calendar import commands as cmds_mod
 
     tz = ZoneInfo("Asia/Jerusalem")
@@ -645,9 +647,11 @@ def test_resolve_day_accepts_iso_today_and_offsets():
 
 def test_resolve_day_rejects_garbage():
     from zoneinfo import ZoneInfo
-    from h2t_ops.core.errors import UsageError
-    from h2t_ops.connectors.calendar import commands as cmds_mod
+
     import pytest as _pytest
+
+    from h2t_ops.connectors.calendar import commands as cmds_mod
+    from h2t_ops.core.errors import UsageError
 
     with _pytest.raises(UsageError):
         cmds_mod._resolve_day("tomorrow-ish", ZoneInfo("Asia/Jerusalem"))
@@ -656,6 +660,7 @@ def test_resolve_day_rejects_garbage():
 def test_date_window_bounds_with_relative_tokens():
     from datetime import datetime
     from zoneinfo import ZoneInfo
+
     from h2t_ops.connectors.calendar import commands as cmds_mod
 
     tz_name = "Asia/Jerusalem"

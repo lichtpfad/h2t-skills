@@ -1,6 +1,7 @@
 # plugins/h2t-dev/lib/docs/misplaced_files.py
 """Detect misplaced deliverable files (html/pdf/pptx) inside docs/."""
 from __future__ import annotations
+
 import subprocess
 from pathlib import Path
 

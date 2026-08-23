@@ -6,13 +6,13 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from collections.abc import Iterator
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any
 
 from h2t_ops.core.errors import AuthError, ConfigError, ProviderError
-
 
 DEFAULT_CONFIG_DIR = Path.home() / ".config" / "telegram"
 
@@ -39,7 +39,7 @@ def _iso(dt: Any) -> str:
         return ""
     if isinstance(dt, datetime):
         if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
+            dt = dt.replace(tzinfo=UTC)
         return dt.isoformat()
     return str(dt)
 
@@ -408,7 +408,7 @@ class TelegramClientAdapter:
         if days is not None:
             from datetime import timedelta
 
-            cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+            cutoff = datetime.now(UTC) - timedelta(days=days)
         # Prefer direct InputPeer from SQLite session to avoid get_entity() API calls
         # that trigger GetContactsRequest → FloodWait on uncached entities.
         if isinstance(entity, str) and entity.lstrip("-").isdigit():
@@ -457,7 +457,7 @@ class TelegramClientAdapter:
         if days is not None:
             from datetime import timedelta
 
-            cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+            cutoff = datetime.now(UTC) - timedelta(days=days)
         try:
             with self._connected_client() as client:
                 me = client.get_me()
@@ -650,7 +650,7 @@ class TelegramClientAdapter:
             raise _session_incompatible_error(exc) from exc
         self.config_dir.mkdir(parents=True, exist_ok=True)
         self.dialogs_bootstrap_file.write_text(
-            str(datetime.now(timezone.utc).timestamp()),
+            str(datetime.now(UTC).timestamp()),
             encoding="utf-8",
         )
         return {

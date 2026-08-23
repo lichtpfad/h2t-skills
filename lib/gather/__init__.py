@@ -1,18 +1,18 @@
 """h2t gather framework — parallel context collection for skills."""
 
-from .runner import run_parallel, output_json
+from .briefing import format_briefing
 from .git import gather_git
 from .github import gather_github
-from .stack import detect_stack
+from .project import identify_project
+from .runner import output_json, run_parallel
 from .sessions import (
+    extract_session_id,
     find_latest_session_index,
     find_session_files,
-    extract_session_id,
     get_machine_name,
 )
-from .project import identify_project
+from .stack import detect_stack
 from .user import gather_user_context
-from .briefing import format_briefing
 
 __all__ = [
     "run_parallel", "output_json",

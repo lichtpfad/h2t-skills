@@ -1,6 +1,6 @@
 import pytest
 import runbook_schema as S
-from validate_runbook import validate, validate_or_raise, RunbookInvalid, split_sections
+from validate_runbook import RunbookInvalid, split_sections, validate, validate_or_raise
 
 
 def _good_text() -> str:

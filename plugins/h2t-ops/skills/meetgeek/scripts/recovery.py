@@ -17,7 +17,7 @@ import platform
 import re
 import subprocess
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 from pathlib import Path
 
 try:
@@ -54,7 +54,7 @@ class RecoveryError(Exception):
 # ─── Utilities ────────────────────────────────────────────────────────────────
 
 def now_iso() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def lake_root() -> Path:
@@ -85,7 +85,7 @@ def uploads_staging_root() -> Path:
 
 
 def staging_dir() -> Path:
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    today = datetime.now(UTC).strftime("%Y-%m-%d")
     return uploads_staging_root() / today
 
 
@@ -387,7 +387,7 @@ def drive_upload_file(path: Path, *, folder: str | None = None,
     if folder:
         parts = [p for p in folder.replace("\\", "/").split("/") if p]
     else:
-        date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        date = datetime.now(UTC).strftime("%Y-%m-%d")
         parts = [DRIVE_ROOT_FOLDER_NAME, date]
     parent_id: str | None = None
     for part in parts:
@@ -570,7 +570,7 @@ def process_one(src_path: Path, *, language: str | None, title_override: str | N
     """Three-stage recovery pipeline: convert → drive → submit. Manifest-based resume."""
     src = src_path.resolve()
     src_size = src.stat().st_size
-    src_mtime = datetime.fromtimestamp(src.stat().st_mtime, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    src_mtime = datetime.fromtimestamp(src.stat().st_mtime, UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     base_meta = {
         "source_webm": str(src),
         "source_size_bytes": src_size,

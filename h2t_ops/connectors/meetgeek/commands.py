@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 from typing import Any
 
 PROVIDER = "meetgeek"
@@ -40,7 +40,7 @@ def _frontmatter(fields: dict) -> str:
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _normalize_meeting(m: dict) -> dict:

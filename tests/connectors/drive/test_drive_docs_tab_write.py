@@ -9,7 +9,6 @@ import pytest
 from h2t_ops.connectors.drive.client import _md_to_docs_requests, _utf16_len
 from h2t_ops.core.errors import UsageError
 
-
 # ---------------------------------------------------------------------------
 # _md_to_docs_requests unit tests
 # ---------------------------------------------------------------------------

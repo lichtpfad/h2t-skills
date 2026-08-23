@@ -7,7 +7,6 @@ from typing import Any
 from h2t_ops.connectors.research import store
 from h2t_ops.core.errors import ConfigError, NotFoundError, UsageError
 
-
 INDEX_NAMES = {"documents", "threads", "syntheses", "aliases"}
 
 # Canonical object-type map for future Task 2 (show/resolve helpers): index name,

@@ -10,9 +10,13 @@ from unittest.mock import MagicMock
 import pytest
 
 from h2t_ops.core.errors import (
-    AuthError, ConfigError, NetworkError, NotFoundError, ProviderError, UsageError,
+    AuthError,
+    ConfigError,
+    NetworkError,
+    NotFoundError,
+    ProviderError,
+    UsageError,
 )
-
 
 DRIVE_SCOPE = "https://www.googleapis.com/auth/drive"
 
@@ -1019,7 +1023,7 @@ def test_http_500_maps_to_providererror():
 
 def test_transport_timeout_maps_to_networkerror():
     from h2t_ops.connectors.drive.client import _map_http_error
-    err = _map_http_error(socket.timeout("timed out"), op="download file")
+    err = _map_http_error(TimeoutError("timed out"), op="download file")
     assert isinstance(err, NetworkError)
 
 

@@ -204,8 +204,8 @@ def test_list_threads_returns_thread_summaries():
     (500, "ProviderError"), (503, "ProviderError"), (0, "ProviderError"),
 ])
 def test_map_http_error_status_branches(status, exc_name):
-    from h2t_ops.connectors.gmail import client as gmod
     import h2t_ops.core.errors as errs
+    from h2t_ops.connectors.gmail import client as gmod
     e = type("_E", (Exception,), {"resp": types.SimpleNamespace(status=status)})("boom")
     assert isinstance(gmod._map_http_error(e, op="x"), getattr(errs, exc_name))
 

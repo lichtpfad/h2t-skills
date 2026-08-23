@@ -5,8 +5,11 @@ from pathlib import Path
 _LIB = Path(__file__).parents[2] / "plugins/h2t-dev/lib"
 sys.path.insert(0, str(_LIB))
 
-from docs.root_structure import check_root_structure, check_root_readmes, STANDARD_ALLOWLIST
-
+from docs.root_structure import (
+    STANDARD_ALLOWLIST,
+    check_root_readmes,
+    check_root_structure,
+)
 
 # --- check_root_structure ---
 

@@ -1,6 +1,7 @@
 # plugins/h2t-dev/lib/docs/apply_report.py
 """Builds h2t_docs_fix_apply_report/v0.1 — audit trail of a fix run."""
 from __future__ import annotations
+
 import datetime
 import hashlib
 from pathlib import Path
@@ -24,7 +25,7 @@ def action_result(
     }
 
 
-def file_hash(path: "Path | str") -> str:
+def file_hash(path: Path | str) -> str:
     """SHA256 of file content (first 16 hex chars), empty string if absent."""
     p = Path(path)
     if not p.exists():

@@ -10,9 +10,10 @@ from __future__ import annotations
 
 import json
 import os
+from collections.abc import Iterable
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Iterable, Optional
+from typing import Any, Optional
 
 from h2t_ops.core.errors import AuthError, ConfigError
 
@@ -182,7 +183,7 @@ def resolve_google_credentials(service_name: str,
     _load_dotenv()
     candidates = _candidate_paths(service_name)
     creds = None
-    found_token_path: Optional[Path] = None
+    found_token_path: Path | None = None
     for token_path, creds_path in candidates:
         loaded = _load_credentials(token_path, creds_path)
         if loaded is not None:

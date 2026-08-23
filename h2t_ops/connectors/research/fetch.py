@@ -15,7 +15,7 @@ import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
@@ -113,7 +113,7 @@ def build_fetch_envelope(
             "primary_engine": PRIMARY_ENGINE,
             "envelope_version": ENVELOPE_VERSION,
             "fetch_envelope_version": FETCH_ENVELOPE_VERSION,
-            "timestamp": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            "timestamp": datetime.now(UTC).isoformat(timespec="seconds"),
             "user_agent": user_agent,
         },
     }
@@ -634,7 +634,7 @@ class JinaProvider:
         try:
             with urllib.request.urlopen(req, timeout=timeout_ms / 1000) as resp:
                 raw = resp.read()
-                final_url = resp.geturl() or target
+                resp.geturl() or target
                 http_status = getattr(resp, "status", 200)
         except urllib.error.HTTPError as e:
             latency_ms = int((time.perf_counter() - t0) * 1000)

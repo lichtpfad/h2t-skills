@@ -12,7 +12,12 @@ from unittest.mock import MagicMock
 import pytest
 
 from h2t_ops.core.errors import (
-    AuthError, ConfigError, NetworkError, NotFoundError, ProviderError, UsageError,
+    AuthError,
+    ConfigError,
+    NetworkError,
+    NotFoundError,
+    ProviderError,
+    UsageError,
 )
 
 
@@ -650,6 +655,7 @@ def test_default_window_starts_at_local_midnight_not_now():
     event that ended an hour ago is still part of today.
     """
     from zoneinfo import ZoneInfo
+
     from h2t_ops.connectors.calendar.client import CalendarClient
     c = object.__new__(CalendarClient)
     c.service = MagicMock()

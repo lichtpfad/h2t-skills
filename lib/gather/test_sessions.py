@@ -1,6 +1,9 @@
-import sys, os
+import os
+import sys
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-from gather.sessions import find_session_files, extract_session_id, get_machine_name
+from gather.sessions import extract_session_id, find_session_files, get_machine_name
+
 
 def test_find_session_files_returns_list():
     assert isinstance(find_session_files("claude-agent-skills"), list)
