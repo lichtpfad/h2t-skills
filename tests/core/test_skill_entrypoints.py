@@ -259,10 +259,15 @@ def _console_scripts() -> dict[str, str]:
     return {name: target.split(":")[0] for name, target in scripts.items()}
 
 
+# h2t-hook takes the handler name as an argument and launches it as a process, so it has
+# no single script to name and never calls run_plugin_main. It is covered instead by
+# test_hook_entry_resolves_the_handlers_scaffold_writes below and by tests/core/test_hook_entry.py.
+_NOT_A_SINGLE_SCRIPT = {"h2t_ops.hook_entry"}
+
 PLUGIN_SCRIPT_ENTRIES = sorted(
     (name, module)
     for name, module in _console_scripts().items()
-    if module.endswith("_entry")
+    if module.endswith("_entry") and module not in _NOT_A_SINGLE_SCRIPT
 )
 
 
@@ -347,3 +352,20 @@ def test_no_h2t_core_skill_hand_rolls_a_python_probe():
     assert skills, "no SKILL.md files found — the glob is broken, not the skills"
     offenders = [p.as_posix() for p in skills if "H2T_PYTHON" in p.read_text(encoding="utf-8")]
     assert offenders == [], f"still hand-rolling an interpreter: {offenders}"
+
+
+def test_hook_entry_resolves_the_handlers_scaffold_writes():
+    """scaffold-project writes `h2t-hook on-stop` and `h2t-hook post-git-commit-docs-lint`
+    into other people's settings.json. A name that does not resolve makes those hooks dead
+    on arrival, and a dead hook is silent."""
+    from scaffold_project import _HOOK_ENTRIES
+
+    named = [
+        command["command"].split()[1]
+        for entries in _HOOK_ENTRIES.values()
+        for entry in entries
+        for command in entry["hooks"]
+    ]
+    assert named, "no hook commands read — the probe is broken, not the code"
+    for handler in named:
+        assert plugin_entrypoints.plugin_script_path(f"hooks-handlers/{handler}").is_file()

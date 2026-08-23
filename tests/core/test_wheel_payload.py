@@ -59,3 +59,13 @@ def test_wheel_still_ships_the_package_and_its_data(wheel_names):
     assert "h2t_ops/cli.py" in wheel_names
     assert "lib/cli/main.py" in wheel_names
     assert "h2t_ops/connectors/research/systemprompts/academic.md" in wheel_names
+
+
+def test_wheel_ships_the_hook_handlers_h2t_hook_resolves(wheel_names):
+    """`h2t-hook <name>` is on PATH as soon as the wheel installs, but it resolves the
+    handler through the plugin ladder — and on a host with no plugin cache the payload is
+    the only rung left. Without these files the command exists and exits 5, which for a
+    hook means silence.
+    """
+    for handler in ("on-stop", "post-git-commit-docs-lint", "post_git_commit_docs_lint.py"):
+        assert f"{PAYLOAD}/hooks-handlers/{handler}" in wheel_names, handler

@@ -461,28 +461,23 @@ def run_sync_labels(repo_name: str) -> dict:
     return {"status": "error", "error": r.stderr.strip()[:200]}
 
 
-_HOOK_BASE = "~/.claude/plugins/cache/lichtpfad/h2t-core/latest"
-
+# `h2t-hook <name>`, not a path into the plugin cache. This dict is written into somebody
+# else's `.claude/settings.json`, which is normally committed: an absolute path under one
+# home directory is wrong on the next machine, and the `latest` junction it used to point at
+# is refreshed only by `install-h2t-ops`, never by `/plugin marketplace update`. The launcher
+# resolves the handler when the hook fires, through the same ladder the entry points use.
 _HOOK_ENTRIES = {
     "Stop": [
         {
             "matcher": "",
-            "hooks": [
-                {
-                    "type": "command",
-                    "command": f"{_HOOK_BASE}/hooks-handlers/on-stop",
-                }
-            ],
+            "hooks": [{"type": "command", "command": "h2t-hook on-stop"}],
         }
     ],
     "PostToolUse": [
         {
             "matcher": "Bash(git commit*)",
             "hooks": [
-                {
-                    "type": "command",
-                    "command": f"{_HOOK_BASE}/hooks-handlers/post-git-commit-docs-lint",
-                }
+                {"type": "command", "command": "h2t-hook post-git-commit-docs-lint"}
             ],
         }
     ],

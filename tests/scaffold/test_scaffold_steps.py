@@ -184,15 +184,26 @@ def test_install_hooks_has_stop_hook(tmp_path):
     assert any("on-stop" in cmd for cmd in stop_commands)
 
 
-def test_install_hooks_stop_hook_points_to_latest(tmp_path):
-    """Stop hook path starts with ~ (portable) and references latest/ junction."""
+def test_install_hooks_write_no_machine_specific_path(tmp_path):
+    """A project's settings.json travels to other clones and other operating systems.
+
+    An absolute cache path under one home directory is wrong on arrival, and the `latest`
+    junction it used to name is refreshed only by `install-h2t-ops` — never by
+    `/plugin marketplace update` — so it drifts silently. The command must resolve when
+    the hook fires.
+    """
     install_hooks(tmp_path)
     data = json.loads((tmp_path / ".claude" / "settings.json").read_text())
-    stop_hooks = data.get("hooks", {}).get("Stop", [])
-    stop_commands = _hook_commands(stop_hooks)
-    cmd = stop_commands[0]
-    assert cmd.startswith("~")
-    assert "latest" in cmd
+    hooks = data.get("hooks", {})
+    commands = _hook_commands(hooks.get("Stop", [])) + _hook_commands(
+        hooks.get("PostToolUse", [])
+    )
+    assert len(commands) == 2, f"expected both hook commands, read {commands}"
+    for command in commands:
+        assert command.startswith("h2t-hook "), command
+        assert "plugins/cache" not in command, command
+        assert "latest" not in command, command
+        assert not command.startswith("~"), command
 
 
 def test_install_hooks_idempotent(tmp_path):
