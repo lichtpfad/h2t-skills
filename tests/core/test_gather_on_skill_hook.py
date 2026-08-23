@@ -47,6 +47,15 @@ def hook_env(tmp_path):
     return env
 
 
+def _path_without_h2t_gather():
+    """PATH stripped of every directory that carries a real h2t-gather."""
+    kept = []
+    for entry in os.environ.get("PATH", "").split(os.pathsep):
+        if entry and not (Path(entry) / "h2t-gather").exists():
+            kept.append(entry)
+    return os.pathsep.join(kept)
+
+
 def _run_hook(env, skill, cwd):
     return subprocess.run(
         [shutil.which("bash") or "/bin/bash", str(HOOK)],
@@ -204,6 +213,15 @@ def fake_plugin(tmp_path, hook_env):
 
 
 def _run_fake(env, plugin_root, skill, cwd):
+    """Drive the hook down its script branch.
+
+    The fake plugin root only means anything on that branch: since the hook learned to
+    prefer `h2t-gather`, an installed CLI would resolve the real plugin and brief happily
+    while the stub script sat untouched. Stripping the CLI from PATH is what keeps these
+    cases about the error reporting they were written for; `test_hook_prefers_the_installed_cli`
+    covers the other branch.
+    """
+    env = dict(env, PATH=_path_without_h2t_gather())
     return subprocess.run(
         [shutil.which("bash") or "/bin/bash", str(plugin_root / "hooks-handlers" / "gather-on-skill")],
         input=json.dumps({"tool_input": {"skill": skill}, "cwd": str(cwd)}),
@@ -270,3 +288,71 @@ def test_a_failed_run_does_not_suppress_the_retry(hook_env, fake_plugin, tmp_pat
 
     assert second.stdout.strip(), "retry after a failure was suppressed by the lock"
     assert "recovered" in json.loads(second.stdout)["systemMessage"]
+
+
+def _gather_shim(bin_dir, marker):
+    bin_dir.mkdir(parents=True, exist_ok=True)
+    shim = bin_dir / "h2t-gather"
+    shim.write_text(
+        "#!/bin/sh\n"
+        f'printf "%s" "$*" > {marker}\n'
+        "echo 'BRIEFING:'\n"
+        "echo 'shim briefing'\n"
+        "echo ''\n"
+        "echo 'GATHER_META: {}'\n"
+    )
+    shim.chmod(0o755)
+    return shim
+
+
+def test_hook_prefers_the_installed_cli(hook_env, tmp_path):
+    """The hook and the skills must resolve one root.
+
+    `gather-on-skill` ran $PLUGIN_ROOT/skills/session-start/scripts/gather.py directly,
+    pinning itself to the plugin cache, while h2t-gather walks the ladder in
+    plugin_entrypoints.py and prefers an editable checkout. Measured 2026-08-23:
+    `h2t-handoff write --help` showed flags the cached copy did not have.
+    """
+    marker = tmp_path / "shim-args"
+    bin_dir = tmp_path / "bin"
+    _gather_shim(bin_dir, marker)
+    env = dict(hook_env, PATH=f"{bin_dir}{os.pathsep}{_path_without_h2t_gather()}")
+
+    result = _run_hook(env, "h2t-core:session-start", REPO_ROOT)
+
+    assert marker.exists(), (
+        f"hook bypassed h2t-gather and ran the script directly. stdout={result.stdout[:300]}"
+    )
+    assert "--briefing-only" in marker.read_text(encoding="utf-8")
+    assert "shim briefing" in result.stdout
+
+
+def test_hook_falls_back_to_the_script_without_the_cli(hook_env, tmp_path):
+    """The control: a machine where the wheel was never installed must still brief."""
+    env = dict(hook_env, PATH=_path_without_h2t_gather())
+    result = _run_hook(env, "h2t-core:session-start", REPO_ROOT)
+    assert "GATHER_ERROR" not in result.stdout, result.stdout[:300]
+    assert "BRIEFING:" in result.stdout, result.stdout[:300]
+
+
+def test_a_failing_cli_is_reported_not_injected(hook_env, tmp_path):
+    """The CLI branch needs the same error reporting the script branch has."""
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir(parents=True)
+    shim = bin_dir / "h2t-gather"
+    shim.write_text(
+        "#!/bin/sh\n"
+        "echo 'BRIEFING:'\n"
+        "echo 'half a brie'\n"
+        "echo 'boom: config unreadable' >&2\n"
+        "exit 1\n"
+    )
+    shim.chmod(0o755)
+    env = dict(hook_env, PATH=f"{bin_dir}{os.pathsep}{_path_without_h2t_gather()}")
+
+    result = _run_hook(env, "h2t-core:session-start", REPO_ROOT)
+
+    message = json.loads(result.stdout)["systemMessage"]
+    assert message.startswith("GATHER_ERROR"), message[:200]
+    assert "boom: config unreadable" in message
+    assert "half a brie" not in message

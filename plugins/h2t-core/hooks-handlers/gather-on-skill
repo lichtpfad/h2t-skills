@@ -82,6 +82,21 @@ SCRIPT_STDOUT=""
 SCRIPT_STDERR=""
 # Run a plugin script, keeping stdout, stderr and the exit code apart. Discarding any of
 # them lets a half-written payload from a crashed script pass for a real one.
+# Same capture as run_script, without the interpreter prefix: the CLI is its own program.
+run_cli() {
+  local out err rc
+  out=$(mktemp)
+  err=$(mktemp)
+  set +e
+  "$@" >"$out" 2>"$err"
+  rc=$?
+  set -e
+  SCRIPT_STDOUT=$(cat "$out")
+  SCRIPT_STDERR=$(tail -c 500 "$err")
+  rm -f "$out" "$err"
+  return "$rc"
+}
+
 run_script() {
   local out err rc
   out=$(mktemp)
@@ -113,7 +128,18 @@ fi
 
 # --briefing-only prints the injection format verbatim, so there is nothing to reformat
 # here and no second assembly of the payload to drift from the CLI path.
-if ! run_script "$PLUGIN_ROOT/skills/session-start/scripts/gather.py" --cwd "$cwd" --briefing-only; then
+# Prefer the installed CLI so the hook resolves the same plugin root a skill would:
+# h2t-gather walks the ladder in h2t_ops/plugin_entrypoints.py (operator override ->
+# CLAUDE_PLUGIN_ROOT -> editable checkout -> plugin cache -> frozen payload), while calling
+# the script directly pins the hook to whichever cache copy sits beside this handler. Every
+# SKILL.md already gates on `command -v h2t-gather`, so the script path is the fallback for
+# a machine where the wheel was never installed.
+if command -v h2t-gather >/dev/null 2>&1; then
+  if ! run_cli h2t-gather --cwd "$cwd" --briefing-only; then
+    emit "GATHER_ERROR: h2t-gather failed. ${SCRIPT_STDERR:-no stderr}"
+    exit 0
+  fi
+elif ! run_script "$PLUGIN_ROOT/skills/session-start/scripts/gather.py" --cwd "$cwd" --briefing-only; then
   emit "GATHER_ERROR: gather.py failed. ${SCRIPT_STDERR:-no stderr}"
   exit 0
 fi
