@@ -65,6 +65,12 @@ def main() -> None:
     )
     args = parser.parse_args()
 
+    # A cwd that is not a directory resolves to project "unknown", whose session
+    # directory holds unrelated handoffs — a briefing that looks complete and is not.
+    if not Path(args.cwd).expanduser().is_dir():
+        print(f"gather: --cwd is not a directory: {args.cwd}", file=sys.stderr)
+        sys.exit(3)
+
     start = time.monotonic()
     sources_used: list[str] = []
     sources_failed: list[str] = []
