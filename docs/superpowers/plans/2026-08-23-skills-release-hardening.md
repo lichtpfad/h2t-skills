@@ -1341,9 +1341,10 @@ the rebase, which a "keep ours" resolution would silently drop while the other t
 
 - [ ] **Step 5: Tests and docs lint**
 
-Run: `.venv/bin/pytest tests/ -q`, then `docs-lint doctor`
-Expected: green. If `docs-lint` is not on PATH, run it through `uv run docs-lint doctor` rather
-than skipping the check.
+Run: `.venv/bin/pytest tests/ -q`, then
+`.venv/bin/python plugins/h2t-dev/skills/docs-lint/scripts/lint.py doctor`
+Expected: green. There is no `docs-lint` binary and `uv run docs-lint` fails to spawn — it is a
+plugin skill script (`.claude/rules/linting.md`).
 
 - [ ] **Step 6: Push and merge**
 
