@@ -144,7 +144,10 @@ def apply_registration(
         pid_file = pid_dir / "project-id"
         if not pid_file.exists():
             pid_dir.mkdir(parents=True, exist_ok=True)
-            pid_file.write_text(project_id + "\n", encoding="utf-8")
+            # domain/project, not the bare id: gather.project reads this file first now,
+            # and a bare id makes the domain a lookup in the very config a fresh clone
+            # does not have. Existing bare-id files still resolve through domains.yaml.
+            pid_file.write_text(domain_project + "\n", encoding="utf-8")
             actions.append("Created .claude/project-id")
 
     return {
