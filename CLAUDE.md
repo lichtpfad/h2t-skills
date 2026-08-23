@@ -39,7 +39,8 @@ C:/dev/h2t-skills/.venv/Scripts/pytest tests/connectors/   # connector-only
 C:/dev/h2t-skills/.venv/Scripts/ruff check plugins/ lib/ h2t_ops/
 uvx ruff check plugins/ lib/ h2t_ops/
 
-# Version bump (updates plugin.json + CHANGELOG) — two literal arguments
+# Version bump — two literal arguments. Updates plugin.json and marketplace.json only;
+# the CHANGELOG is written by hand (grep -c CHANGELOG scripts/bump_plugin.py -> 0).
 .venv/bin/python scripts/bump_plugin.py <plugin-name> <version>
 
 # Run h2t-ops CLI without install
