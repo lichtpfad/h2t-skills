@@ -1,10 +1,10 @@
 ---
 name: handoff
-description: This skill should be used when the user says "handoff", "завершить сессию", "конец сессии", "wrap up", "закончим", "сохрани сессию", or asks to close/end the current working session. Reconstructs what was done and what remains from conversation context and git history, shows summary, then writes the session record immediately (no confirmation gate).
+description: This skill should be used when the user says "handoff", "завершить сессию", "конец сессии", "wrap up", "закончим", "сохрани сессию", or asks to close/end the current working session. Reconstructs what was done and what remains from conversation context and git history, shows summary, then writes the session record immediately — it never asks for a session name or any other confirmation before writing.
 compatibility: "Claude Code"
 metadata:
   author: lichtpfad
-  version: 3.1.4
+  version: 3.1.5
 ---
 
 # Handoff v3.1
@@ -22,10 +22,18 @@ command -v h2t-handoff >/dev/null 2>&1 || {
 
 ### Step 1: Establish session context
 
-Resolve these values from conversation context:
-- `SESSION_NAME` — from session-start confirmation if run this session, otherwise propose `{domain}-{project}-{topic}-YYYY-MM-DD` and wait for `y`/`ok`/`.`/alternative
-- `DOMAIN` — from GATHER_RESULT.project.domain (session-start output), fallback: `personal-os`
-- `PROJECT_ID` — from GATHER_RESULT.project.id (session-start output), fallback: current repo name
+⛔ Ask the user nothing until the record is written (Step 6). Handoff runs when the session
+is ending and the user is often already gone; a question here costs the whole record, while
+a wrong name costs one rename. Resolve every value yourself:
+
+- `SESSION_NAME` — the name confirmed in session-start, if it ran this session. Otherwise
+  derive `{domain}-{project}-{topic}-YYYY-MM-DD` on your own, with `{topic}` a 1–2 word
+  kebab-case summary of the dominant work. Do not offer it for approval; write with it.
+- `DOMAIN`, `PROJECT_ID` — from GATHER_RESULT.project (session-start output). If
+  session-start did not run this session, **omit both flags** in Step 6 rather than
+  substituting the repo name: the writer resolves them from the working directory through
+  the same `identify_project()` the reader uses. A guessed name lands the record in a
+  directory no session-start looks in.
 
 ### Step 2: Auto-generate what was done
 
@@ -167,6 +175,9 @@ h2t-handoff write \
 ```
 
 Replace all `<...>` with literal values (not shell variables).
+
+Then show the `markdown` path the writer returned, on one line, so a derived name can be corrected later:
+`Записано: <path>` — переименовать при необходимости.
 
 ### Step 6b: Rule promotion gate
 

@@ -3,7 +3,7 @@
 
 Usage:
   $H2T_PYTHON writer.py write \
-    --session-id <id> --domain <d> --project <p> \
+    --session-id <id> [--domain <d>] [--project <p>] \
     --what-done "..." --what-remains "..." \
     --artifacts commit:abc123 issue:42 \
     [--markdown-dir <path>]
@@ -38,6 +38,29 @@ SUMMARY_LIMIT = 1200
 ITEM_LIMIT = 240
 MAX_ITEMS = 5
 MAX_ARTIFACTS = 10
+
+
+def resolve_identity(project: str = "", domain: str = "", cwd: str = "") -> tuple[str, str]:
+    """Which project a handoff belongs to is a property of the directory it was written in.
+
+    session-start already resolves scope that way (identify_project -> repo-mapping.yaml);
+    when it has run, it passes the answer down and this is a no-op. When it has not, ask
+    the same resolver rather than let the caller guess: guessing produced three directories
+    for one project on this machine, and an `unknown/` no reader looks in. A project that
+    still does not resolve keeps the checkout name, which is at least a key the reader tries.
+    """
+    if project and domain:
+        return project, domain
+    cwd = cwd or os.getcwd()
+    try:
+        from gather.project import identify_project
+        resolved = identify_project(cwd) or {}
+    except Exception:  # noqa: BLE001 - a resolver that fails must not cost the record
+        resolved = {}
+    found = str(resolved.get("id") or "")
+    if not found or found == "unknown":
+        found = Path(cwd).resolve().name
+    return project or found, domain or str(resolved.get("domain") or "dev")
 
 
 def default_markdown_dir(project: str) -> Path:
@@ -248,8 +271,8 @@ def main() -> None:
     sub = parser.add_subparsers(dest="cmd")
     w = sub.add_parser("write")
     w.add_argument("--session-id", required=True)
-    w.add_argument("--domain", required=True)
-    w.add_argument("--project", required=True)
+    w.add_argument("--domain", default="")
+    w.add_argument("--project", default="")
     w.add_argument("--what-done", default="")
     w.add_argument("--what-remains", default="")
     w.add_argument("--artifacts", nargs="*", default=[])
@@ -257,10 +280,11 @@ def main() -> None:
     args = parser.parse_args()
 
     if args.cmd == "write":
+        project, domain = resolve_identity(args.project, args.domain)
         result = write_handoff(
             session_id=args.session_id,
-            domain=args.domain,
-            project=args.project,
+            domain=domain,
+            project=project,
             what_done=args.what_done,
             what_remains=args.what_remains,
             artifacts=args.artifacts,
