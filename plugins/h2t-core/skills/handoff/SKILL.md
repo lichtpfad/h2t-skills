@@ -29,8 +29,11 @@ a wrong name costs one rename. Resolve every value yourself:
 - `SESSION_NAME` — the name confirmed in session-start, if it ran this session. Otherwise
   derive `{domain}-{project}-{topic}-YYYY-MM-DD` on your own, with `{topic}` a 1–2 word
   kebab-case summary of the dominant work. Do not offer it for approval; write with it.
-- `DOMAIN` — from GATHER_RESULT.project.domain (session-start output), fallback: `personal-os`
-- `PROJECT_ID` — from GATHER_RESULT.project.id (session-start output), fallback: current repo name
+- `DOMAIN`, `PROJECT_ID` — from GATHER_RESULT.project (session-start output). If
+  session-start did not run this session, **omit both flags** in Step 6 rather than
+  substituting the repo name: the writer resolves them from the working directory through
+  the same `identify_project()` the reader uses. A guessed name lands the record in a
+  directory no session-start looks in.
 
 ### Step 2: Auto-generate what was done
 

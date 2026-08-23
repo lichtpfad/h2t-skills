@@ -14,7 +14,7 @@ SKILL = ROOT / "plugins" / "h2t-core" / "skills" / "handoff" / "SKILL.md"
 WRITE_CALL = "h2t-handoff write"
 
 BLOCKING = (
-    re.compile(r"\bwait for\b", re.I),
+    re.compile(r"\bwait for\b", re.IGNORECASE),
     re.compile(r"⛔\s*GATE"),
 )
 
