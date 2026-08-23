@@ -138,7 +138,7 @@ def test_project_id_file_created(tmp_path):
 
     pid_file = project_dir / ".claude" / "project-id"
     assert pid_file.exists()
-    assert pid_file.read_text().strip() == "my-project"
+    assert pid_file.read_text().strip() == "dev/my-project"
 
 
 def test_project_id_file_not_overwritten(tmp_path):

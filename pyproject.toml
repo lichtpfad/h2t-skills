@@ -32,9 +32,13 @@ h2t-project-audit-scan = "h2t_ops.project_audit_scan_entry:main"
 h2t-project-audit-report = "h2t_ops.project_audit_report_entry:main"
 h2t-project-register = "h2t_ops.project_register_entry:main"
 h2t-scaffold-project = "h2t_ops.scaffold_project_entry:main"
+h2t-hook = "h2t_ops.hook_entry:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["h2t_ops", "lib"]
+# `lib` is not shipped as a top-level package: it is about as generic a name as a
+# distribution can claim in site-packages, and the payload below already carries the
+# same modules where every entry point looks for them.
+packages = ["h2t_ops"]
 
 # The three thin entrypoints load plugin-owned scripts. Ship them inside the wheel so
 # `uv tool install` alone is enough on a host with no plugin cache — Codex-only
@@ -48,6 +52,11 @@ packages = ["h2t_ops", "lib"]
 "plugins/h2t-core/skills/project-audit/scripts/report.py" = "h2t_ops/_plugin_payload/skills/project-audit/scripts/report.py"
 "plugins/h2t-core/skills/init-project/scripts/apply_registration.py" = "h2t_ops/_plugin_payload/skills/init-project/scripts/apply_registration.py"
 "plugins/h2t-core/skills/scaffold-project/scripts/scaffold_project.py" = "h2t_ops/_plugin_payload/skills/scaffold-project/scripts/scaffold_project.py"
+# h2t-hook resolves hooks-handlers/<name> through the same ladder. On a host with no
+# plugin cache the payload is the only carrier, and a hook that resolves to nothing is
+# silent — the whole point of the launcher is that a scaffolded project keeps working
+# on a machine that never installed the plugin.
+"plugins/h2t-core/hooks-handlers" = "h2t_ops/_plugin_payload/hooks-handlers"
 
 [tool.pytest.ini_options]
 pythonpath = ["."]

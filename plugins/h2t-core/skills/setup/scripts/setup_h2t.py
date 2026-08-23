@@ -41,32 +41,6 @@ def _semver_key(name: str) -> tuple[int, int, int]:
         return (0, 0, 0)
 
 
-def create_latest_link(versioned_dir: Path, latest_path: Path) -> Path:
-    if latest_path.exists() or latest_path.is_symlink():
-        if sys.platform == "win32":
-            subprocess.run(["cmd", "/c", "rmdir", str(latest_path)], capture_output=True)
-        else:
-            if latest_path.is_symlink():
-                latest_path.unlink()
-            else:
-                latest_path.rmdir()
-    if sys.platform == "win32":
-        r_rm = subprocess.run(["cmd", "/c", "rmdir", str(latest_path)], capture_output=True)
-        if r_rm.returncode == 0 or not latest_path.exists():
-            r = subprocess.run(
-                ["cmd", "/c", "mklink", "/J", str(latest_path), str(versioned_dir)],
-                capture_output=True,
-            )
-            if r.returncode != 0:
-                latest_path.symlink_to(versioned_dir, target_is_directory=True)
-        else:
-            # rmdir failed (non-empty dir?), fallback to symlink
-            latest_path.symlink_to(versioned_dir, target_is_directory=True)
-    else:
-        latest_path.symlink_to(versioned_dir, target_is_directory=True)
-    return latest_path
-
-
 def detect_platform() -> dict[str, str]:
     raw = sys.platform
     if raw.startswith("win"):
@@ -628,7 +602,10 @@ def main(argv: list[str] | None = None) -> int:
                     )
                     if versions:
                         current = versions[-1]
-                        create_latest_link(current, plugin_cache / "latest")
+                        # No `latest` junction is created any more. It was refreshed only
+                        # here, never by `/plugin marketplace update`, so it drifted behind
+                        # the installed version and silently answered the wrong one.
+                        # Hooks resolve through `h2t-hook` at fire time instead.
                         versions_file = _home() / ".h2t" / "config" / "plugin-versions.json"
                         versions_file.parent.mkdir(parents=True, exist_ok=True)
                         _data = {}
