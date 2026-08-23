@@ -1,5 +1,10 @@
 """A test directory nobody runs is documentation, not a test.
 
+A coverage tripwire, not proof of execution: it checks that each directory appears in a
+`run:` command invoking pytest. A later `--ignore`, a shell conditional, or a disabled
+workflow trigger would still pass it. It closes the gap that actually happened — a
+directory nobody wired up at all — and nothing wider.
+
 25 meetgeek tests landed in #389/#390 and have never executed on GitHub. Eight of the ten
 plugin test directories outside CI were measured green on 2026-08-23 — 1185 assertions
 nobody was checking — and three were red for reasons no one had seen (#381).

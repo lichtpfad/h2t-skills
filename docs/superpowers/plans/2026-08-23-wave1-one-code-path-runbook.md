@@ -20,16 +20,24 @@ Decision-protocol). Verify the branch before every commit.
 
 ## Pipeline steps
 
-> Task 1 done (one gather implementation) — diff gate PASS on the second pass;
-> the first raised a [P1] on argv slicing that a measurement of the legacy parser confirmed.
+> Tasks 1-5 done. Every task passed its own codex diff gate; three needed a second or third
+> pass. Findings that mattered: argv slicing rejected a valid legacy shape (Task 1); an
+> importorskip would have made a CI step green while running nothing (Task 4); the prewrite
+> tripwire was vacuous twice before a planted gate finally turned it red (Task 5).
+> Cumulative wave gate: no [P1].
+>
+> e2e measured green: the hook emits a briefing carrying `### Previous Session`; both
+> `h2t-ops gather` and `h2t-gather` emit it; `h2t-gather --cwd /nonexistent` exits 3.
+> pre-merge-check: no secrets in the diff, 1956 passed / 7 skipped, wheel builds, and ruff
+> is three findings lighter than main with none added.
 
 - [x] **write-spec** — skill: `superpowers:brainstorming (spec tail)` · input: `the plan itself is the spec — docs/superpowers/plans/2026-08-23-skills-release-hardening.md, merged in #393. Each task argues from a re-runnable measurement instead of a separate spec doc.` · done: spec file exists + frontmatter · failure: escalate · re-entry: idempotent: overwrite spec
 - [x] **review-spec** — skill: `codex review (embedded)` · input: `folded into plan-gate: one codex pass covers both, since spec and plan are one document.` · done: no [P1] · failure: fix P1 then re-run (<=N) · re-entry: idempotent: re-review
 - [x] **write-plan** — skill: `superpowers:writing-plans` · input: `superpowers:writing-plans, 9 tasks; Wave 1 = Tasks 1-5. Merged #393, measured #394, gated #395.` · done: plan file exists · failure: escalate · re-entry: idempotent: overwrite plan
 - [x] **plan-gate** — skill: `codex review (embedded)` · input: `four codex passes (exec -s read-only, reasoning=high, embedded). Six findings closed, two of them [P1]: the pyproject contradiction in Task 4 and the argv[2:] slice in Task 1. Fourth pass: no open [P1], GATE PASS (#395).` · done: no [P1] · failure: fix P1 then re-run (<=N) · re-entry: idempotent: re-review
-- [ ] **subagent-driven-dev** — skill: `superpowers:subagent-driven-development` · input: `Tasks 1-5 of the plan, executed INLINE via superpowers:executing-plans rather than subagents — this session is not authorised to dispatch the Agent tool. TDD per task: red first, read the failure text, then implement.` · done: all tasks green · failure: per-task gate; escalate on repeated fail · re-entry: continue from first unchecked task
-- [ ] **gates** — skill: `codex + pre-merge-check` · input: `codex review over the Wave 1 diff after each task and once at the end; then h2t-dev:pre-merge-check. GATE FAIL on any [P1].` · done: no [P1]; suite green · failure: fix then re-run (<=N) · re-entry: idempotent: re-run gate
-- [ ] **e2e** — skill: `real entrypoint run` · input: `the hook path end to end: a fresh session-start whose briefing carries '### Previous Session', plus `h2t-ops gather session-start` and `h2t-gather` producing byte-identical output.` · done: DONE / N/A / BLOCKED-DEFERRED · failure: BLOCKED->handoff; behavioral fail->fix · re-entry: idempotent: re-run
+- [x] **subagent-driven-dev** — skill: `superpowers:subagent-driven-development` · input: `Tasks 1-5 of the plan, executed INLINE via superpowers:executing-plans rather than subagents — this session is not authorised to dispatch the Agent tool. TDD per task: red first, read the failure text, then implement.` · done: all tasks green · failure: per-task gate; escalate on repeated fail · re-entry: continue from first unchecked task
+- [x] **gates** — skill: `codex + pre-merge-check` · input: `codex review over the Wave 1 diff after each task and once at the end; then h2t-dev:pre-merge-check. GATE FAIL on any [P1].` · done: no [P1]; suite green · failure: fix then re-run (<=N) · re-entry: idempotent: re-run gate
+- [x] **e2e** — skill: `real entrypoint run` · input: `the hook path end to end: a fresh session-start whose briefing carries '### Previous Session', plus `h2t-ops gather session-start` and `h2t-gather` producing byte-identical output.` · done: DONE / N/A / BLOCKED-DEFERRED · failure: BLOCKED->handoff; behavioral fail->fix · re-entry: idempotent: re-run
 - [ ] **PR** — skill: `superpowers:finishing-a-development-branch` · input: `one PR for Wave 1 off feat/wave1-one-code-path, closing #392 and advancing #381.` · done: PR opened · failure: escalate · re-entry: continue: reuse branch
 - [ ] **handoff** — skill: `h2t-core:handoff` · input: `h2t-core:handoff — now writes without asking for a name (#391).` · done: session record written · failure: n/a (terminal) · re-entry: idempotent: re-run handoff
 
