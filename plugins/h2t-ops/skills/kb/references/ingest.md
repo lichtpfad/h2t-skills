@@ -31,12 +31,23 @@ Two flows:
 
 Resolve the target **domain and slug** first. Read `$KB/kb.config.json`:
 
-- **Multi-domain KB** (`domains[]` present): choose the domain the topic belongs to (the domain
-  list is `kb.config.json.domains[].name`). The page slug is then `<domain>--<topic-slug>`, and the
-  stub `$KB/wiki/<domain>--<topic-slug>.md` must exist AND carry a `domain: <domain>` frontmatter
-  field. Scaffold it with `kb-scaffold --repo "$KB"` (it stamps `domain:`); never hand-write a stub
-  without the `domain:` field — the linter rejects it. Every `<slug>` below is this domain-prefixed
-  value.
+- **Multi-domain KB** (`domains[]` present): resolve the domain with the **classify → propose →
+  confirm** gate (mirrors the query L0 router, but STRICTER because ingest is a durable write —
+  writing a page into the wrong domain is a mutation, not a re-read). Classify the topic against
+  `kb.config.json.domains[].name`, then:
+  - **Always PROPOSE the target domain and get the operator's confirmation before writing**
+    (AskUserQuestion) — even when one domain looks obvious. **Never** silently write to the
+    in-conversation / "current" domain; a gap-fill inherited from a read must NOT reuse the read's
+    domain without re-classifying and asking.
+  - Ambiguous / low-confidence / two plausible domains → propose the best-fit options and let the
+    operator pick.
+  - No existing domain fits → **propose** creating one (gated — operator approves); **never**
+    silently invent a domain, **never** decline.
+
+  Once confirmed, the page slug is `<domain>--<topic-slug>`, and the stub
+  `$KB/wiki/<domain>--<topic-slug>.md` must exist AND carry a `domain: <domain>` frontmatter field.
+  Scaffold it with `kb-scaffold --repo "$KB"` (it stamps `domain:`); never hand-write a stub without
+  the `domain:` field — the linter rejects it. Every `<slug>` below is this domain-prefixed value.
 - **Flat single-domain KB** (no `domains[]`): `<slug>` is a plain topic slug from `$KB/taxonomy.md`
   (existing topic) or a new row you add first; no `domain:` field. A `$KB/wiki/<slug>.md` stub must
   exist before ingest writes onto it.
