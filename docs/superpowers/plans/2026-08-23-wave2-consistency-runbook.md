@@ -28,7 +28,7 @@ Decision-protocol). Verify the branch before every commit.
 - [x] **gates** — skill: `codex + pre-merge-check` · input: `cumulative gate found the T6/T10 seam (1a08d7d); GATE PASS on pass 2; pre-merge-check READY TO MERGE` · done: no [P1]; suite green · failure: fix then re-run (<=N) · re-entry: idempotent: re-run gate
 - [x] **e2e** — skill: `real entrypoint run` · input: `DONE — handlers fired from a wheel install with the cache redirected away; evals status/report exit 0` · done: DONE / N/A / BLOCKED-DEFERRED · failure: BLOCKED->handoff; behavioral fail->fix · re-entry: idempotent: re-run
 - [x] **PR** — skill: `superpowers:finishing-a-development-branch` · input: `#398 opened; #339 merged 2026-08-23` · done: PR opened · failure: escalate · re-entry: continue: reuse branch
-- [ ] **handoff** — skill: `h2t-core:handoff` · input: `Wave 2 — three decisions taken and executed` · done: session record written · failure: n/a (terminal) · re-entry: idempotent: re-run handoff
+- [x] **handoff** — skill: `h2t-core:handoff` · input: `personal-os-agent-skills-wave2-release-2026-08-24; released as h2t-core 3.2.24` · done: session record written · failure: n/a (terminal) · re-entry: idempotent: re-run handoff
 
 ## Gates
 
