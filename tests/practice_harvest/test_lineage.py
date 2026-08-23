@@ -1,5 +1,6 @@
 from lib.practice_harvest.lineage import canonical_lineage
 
+
 def test_crypto_variants_collapse():
     assert canonical_lineage("crypto-regime-spike-dmde") == "crypto-regime-spike"
     assert canonical_lineage("crypto-regime-test") == "crypto-regime-spike"

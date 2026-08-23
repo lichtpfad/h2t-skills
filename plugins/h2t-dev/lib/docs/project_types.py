@@ -7,6 +7,7 @@ Single source of truth consumed by:
   - docs-lint (structure compliance checks, future)
 """
 from __future__ import annotations
+
 from pathlib import Path
 from typing import TypedDict
 

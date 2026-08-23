@@ -10,7 +10,6 @@ sys.path.insert(0, str(SCRIPTS_DIR))
 
 import setup_h2t  # noqa: E402
 
-
 REGISTRY = {
     "EXA_API_KEY": {
         "description": "Exa key",

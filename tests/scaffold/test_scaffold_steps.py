@@ -1,7 +1,7 @@
 """Tests for scaffold-project step helpers."""
 import sys
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 _SCAFFOLD_DIR = Path(__file__).parents[2] / "plugins/h2t-core/skills/scaffold-project/scripts"
 sys.path.insert(0, str(_SCAFFOLD_DIR))
@@ -156,6 +156,7 @@ def test_run_sync_labels_error_on_failure():
 
 
 import json
+
 from scaffold_project import install_hooks
 
 
@@ -275,7 +276,7 @@ def test_install_hooks_ignores_lifecycle_report_cache(tmp_path):
     assert ".h2t/lifecycle/*.json" in exclude.read_text(encoding="utf-8")
 
 
-from scaffold_project import write_setup_report, template_for_type
+from scaffold_project import template_for_type, write_setup_report
 
 
 def test_template_for_type_maps_client_docs():
@@ -346,8 +347,9 @@ def test_cmd_create_dcc_uses_dcc_gitignore(tmp_path, monkeypatch):
 
 def test_cmd_create_dry_run_lists_would_create(tmp_path):
     """dry-run returns would_create list without touching disk."""
-    import scaffold_project
     import argparse
+
+    import scaffold_project
     args = argparse.Namespace(
         id="dry-proj", type="code-local", stack="python",
         dir=str(tmp_path), description="", dry_run=True,
@@ -364,8 +366,9 @@ def test_cmd_create_fails_when_docs_init_ok_but_paths_missing(tmp_path, monkeypa
     This catches the silent-skip case where docs-init returns status='ok' but
     didn't actually write any files (e.g. script path mismatch).
     """
-    import scaffold_project
     import argparse
+
+    import scaffold_project
     monkeypatch.setattr(scaffold_project, "_PROJECT_TYPES_AVAILABLE", True)
     monkeypatch.setattr(scaffold_project, "PROJECT_TYPES", {
         "code_repo": {"root_dirs": ["src", "tests", "docs", "scripts"], "docs_dirs": [], "root_files_required": []},
@@ -388,8 +391,9 @@ def test_cmd_create_fails_when_docs_init_ok_but_paths_missing(tmp_path, monkeypa
 
 def test_cmd_create_succeeds_when_docs_init_ok_and_paths_present(tmp_path, monkeypatch):
     """scaffold succeeds when docs-init ok AND critical paths exist."""
-    import scaffold_project
     import argparse
+
+    import scaffold_project
     monkeypatch.setattr(scaffold_project, "_PROJECT_TYPES_AVAILABLE", True)
     monkeypatch.setattr(scaffold_project, "PROJECT_TYPES", {
         "code_repo": {"root_dirs": ["src", "tests", "docs", "scripts"], "docs_dirs": [], "root_files_required": []},

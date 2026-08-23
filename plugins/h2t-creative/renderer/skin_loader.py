@@ -36,7 +36,6 @@ import yaml
 
 from renderer.semantic_parser import KNOWN_BLOCK_TYPES
 
-
 # v0 supports landing format only. Future slices may add deck/dashboard.
 SUPPORTED_FORMATS: frozenset[str] = frozenset({"landing"})
 

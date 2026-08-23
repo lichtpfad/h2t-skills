@@ -1,11 +1,11 @@
 import json
 import os
-import sys
-from pathlib import Path
+import sys  # noqa: F401
+from pathlib import Path  # noqa: F401
 
-import pytest
+import pytest  # noqa: F401
 
-from lib.activity.writer import log_session_start, log_session_end
+from lib.activity.writer import log_session_end, log_session_start
 
 
 def test_log_session_start_creates_spool(tmp_path):

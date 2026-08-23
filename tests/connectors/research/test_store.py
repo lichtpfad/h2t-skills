@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
+from pathlib import Path  # noqa: F401
 
 from h2t_ops.connectors.research import store
 

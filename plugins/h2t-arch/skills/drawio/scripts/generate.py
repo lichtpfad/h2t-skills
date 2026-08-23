@@ -14,16 +14,15 @@ from __future__ import annotations
 import copy
 import os
 import re
+import tomllib
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any
 
-import tomllib
-import yaml
-
 import drawpyo
-from drawpyo.diagram.objects import Object
+import yaml
 from drawpyo.diagram.edges import Edge
+from drawpyo.diagram.objects import Object
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -163,7 +162,7 @@ def _load_yaml(path: str | Path) -> dict:
     p = Path(path)
     if not p.exists():
         return {}
-    with open(p, "r") as f:
+    with open(p) as f:
         return yaml.safe_load(f) or {}
 
 

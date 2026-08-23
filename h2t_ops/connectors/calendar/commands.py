@@ -196,8 +196,8 @@ def _fmt(args) -> str:
 def run(args) -> Any:
     """Dispatch a calendar subcommand. Returns a result or raises core.errors."""
     from h2t_ops.connectors.calendar.client import CalendarClient  # lazy (spec §4.1)
-    from h2t_ops.core.errors import UsageError
     from h2t_ops.core.envelope import Paged
+    from h2t_ops.core.errors import UsageError
 
     cmd = args.calendar_cmd
     if cmd == "delete" and not getattr(args, "confirm", False):

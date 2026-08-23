@@ -27,7 +27,6 @@ Out of scope (per user T5 scope + plan §4 T5 schema-only):
 - assembler integration
 """
 import pytest
-
 from renderer.asset_validator import (
     ALLOWED_ASSET_TYPES,
     ALLOWED_EMBED_HOSTS,
@@ -35,7 +34,6 @@ from renderer.asset_validator import (
     AssetValidationError,
     validate_assets,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fixtures

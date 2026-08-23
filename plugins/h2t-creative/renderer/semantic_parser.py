@@ -21,7 +21,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-
 # Universal Landing Block Roles — architecture spec §4. The parser
 # accepts every type in this list. The renderer / skin (T2-T4) decides
 # which subset a given profile actually supports.

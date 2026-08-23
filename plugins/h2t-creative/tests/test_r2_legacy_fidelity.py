@@ -6,7 +6,6 @@ from pathlib import Path
 import pytest
 import yaml
 
-
 PLUGIN_ROOT = Path(__file__).resolve().parents[1]
 PROFILES_DIR = PLUGIN_ROOT / "profiles"
 
@@ -373,7 +372,7 @@ def test_h2t_terminal_deck_code_layout_renders_caption_raw_after_code_block():
         },
     }
     out = asm._build_deck_slide_html_v2(slide, profile_dir, index=0)
-    code_block_end = out.rfind("</div>")
+    out.rfind("</div>")
     caption_idx = out.find('<p class="caption">')
     assert caption_idx != -1, "caption_html must render when provided"
     assert "&lt;p" not in out, (
@@ -777,7 +776,7 @@ def test_h2t_terminal_deck_nav_js_appears_inlined_in_form_v2_output(tmp_path):
     out = tmp_path / "out"
     asm.assemble_deck(recipe, profile_dir, out)
     html_text = (out / "index.html").read_text(encoding="utf-8")
-    js = _terminal_deck_nav_text().strip()
+    _terminal_deck_nav_text().strip()
     # Pick a stable signature line from the JS to verify inlining occurred
     # exactly once (not zero, not duplicated).
     signature = "window.showSlide"

@@ -428,7 +428,7 @@ def test_research_cleanup_cli_dry_run_reports_orphan_partial(tmp_path, capsys, m
 
 
 class FakeResearchClient:
-    instances: list["FakeResearchClient"] = []
+    instances: list[FakeResearchClient] = []
 
     def __init__(self, *, output_dir: Path | None = None) -> None:
         self.output_dir = output_dir
@@ -1219,6 +1219,7 @@ def test_research_model_choices():
 
 def test_research_dispatch_calls_client(monkeypatch):
     from types import SimpleNamespace
+
     from h2t_ops.connectors.research import commands as research_commands
 
     seen = {}
@@ -1260,6 +1261,7 @@ def test_research_get_subparser_registered():
 
 def test_research_get_dispatch_calls_client(monkeypatch):
     from types import SimpleNamespace
+
     from h2t_ops.connectors.research import commands as research_commands
 
     seen = {}

@@ -1,5 +1,6 @@
 """Root structure validation for docs-lint project-layer (v1 — deterministic, no LLM)."""
 from __future__ import annotations
+
 import fnmatch
 from pathlib import Path
 
@@ -62,8 +63,8 @@ def check_root_structure(
     - warn  → matches a TEMP_PATTERNS glob (temp file, should be gitignored)
     - info  → unknown item (may be intentional — add to custom_root_dirs)
     """
-    from docs.reporter import finding as make_finding
     from docs.project_types import PROJECT_TYPES
+    from docs.reporter import finding as make_finding
 
     allowed: set[str] = set(STANDARD_ALLOWLIST)
     if template:
@@ -105,8 +106,8 @@ def check_root_readmes(rp: Path, template: str) -> list[dict]:
     Only checks dirs that actually exist on disk — missing dirs are
     already reported by check_project_structure_typed.
     """
-    from docs.reporter import finding as make_finding
     from docs.project_types import PROJECT_TYPES
+    from docs.reporter import finding as make_finding
 
     spec = PROJECT_TYPES.get(template)
     if spec is None:

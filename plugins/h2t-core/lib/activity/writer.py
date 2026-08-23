@@ -7,16 +7,16 @@ Phase 2: replace _write() with POST to POS API; local spool becomes fallback.
 import json
 import os
 import platform
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone  # noqa: F401
 from pathlib import Path
-from typing import Optional
+from typing import Optional  # noqa: F401
 
 
 def log_session_start(
     session_id: str,
     domain: str,
     project: str,
-    machine: Optional[str] = None,
+    machine: str | None = None,
 ) -> str:
     """Append session.start record to local spool. Returns spool path."""
     return _write(
@@ -32,8 +32,8 @@ def log_session_end(
     session_id: str,
     domain: str,
     project: str,
-    artifacts: Optional[list] = None,
-    machine: Optional[str] = None,
+    artifacts: list | None = None,
+    machine: str | None = None,
 ) -> str:
     """Append session.end record with optional artifacts. Returns spool path."""
     return _write(
@@ -56,8 +56,8 @@ def _write(
     action: str,
     domain: str,
     project: str,
-    machine: Optional[str] = None,
-    artifacts: Optional[list] = None,
+    machine: str | None = None,
+    artifacts: list | None = None,
 ) -> str:
     path = _spool_path()
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -68,7 +68,7 @@ def _write(
         "domain": domain,
         "project": project,
         "machine": machine or platform.node(),
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
     }
     if artifacts:
         record["artifacts"] = artifacts

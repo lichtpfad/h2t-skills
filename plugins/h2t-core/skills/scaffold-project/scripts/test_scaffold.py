@@ -86,7 +86,7 @@ def test_merge_skips_dir_that_is_a_file(tmp_path):
 
 
 def test_create_generates_structure_yaml(tmp_path):
-    result = _run("create", "--id", "myproj", "--type", "code-local",
+    _run("create", "--id", "myproj", "--type", "code-local",
                   "--stack", "python", "--dir", str(tmp_path))
     structure_yaml = tmp_path / "myproj" / ".h2t" / "structure.yaml"
     assert structure_yaml.exists(), f"Expected .h2t/structure.yaml at {structure_yaml}"
@@ -98,7 +98,7 @@ def test_create_generates_structure_yaml(tmp_path):
 
 def test_merge_generates_structure_yaml_if_missing(tmp_path):
     (tmp_path / "myproj").mkdir()
-    result = _run("create", "--id", "myproj", "--type", "code-local",
+    _run("create", "--id", "myproj", "--type", "code-local",
                   "--stack", "python", "--dir", str(tmp_path), "--merge")
     structure_yaml = tmp_path / "myproj" / ".h2t" / "structure.yaml"
     assert structure_yaml.exists()

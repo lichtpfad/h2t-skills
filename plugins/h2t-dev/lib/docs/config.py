@@ -5,6 +5,7 @@ Search order:
   2. .claude/rules/docs-lint.yaml  — legacy location
 """
 from __future__ import annotations
+
 import datetime
 from pathlib import Path
 from typing import Any

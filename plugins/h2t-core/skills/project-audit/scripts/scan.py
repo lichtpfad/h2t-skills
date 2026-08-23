@@ -10,7 +10,7 @@ Output: JSON to stdout (scan_result.json schema)
 
 import argparse
 import json
-import os
+import os  # noqa: F401
 import subprocess
 import sys
 from pathlib import Path
@@ -84,7 +84,7 @@ def remote_branches(repo: Path) -> list[dict]:
     if not out:
         return []
 
-    local_branch = run(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=str(repo)) or "main"
+    run(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=str(repo)) or "main"
     branches = []
     for line in out.splitlines():
         parts = line.split("|", 2)

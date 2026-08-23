@@ -12,7 +12,12 @@ for _lib in [_PLUGIN_ROOT / "lib", _PLUGIN_ROOT.parent.parent / "lib"]:
         break
 
 from docs.common import (
-    DEV_ROOT, REQUIRED_CORE_DIRS, ensure_dir, git_add_commit, print_header, repo_path,
+    DEV_ROOT,
+    REQUIRED_CORE_DIRS,
+    ensure_dir,
+    git_add_commit,
+    print_header,
+    repo_path,
 )
 from docs.project_types import PROJECT_TYPES
 

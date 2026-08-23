@@ -13,7 +13,6 @@ import pytest
 
 from h2t_ops.connectors.research import fetch
 
-
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "fetch"
 
 

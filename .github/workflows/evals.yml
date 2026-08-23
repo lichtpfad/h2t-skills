@@ -18,6 +18,12 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Lint
+        # The rule set is pinned in pyproject.toml; ruff's own default grows with each
+        # release. Without this step the pinned set drifts back into noise within a month.
+        run: |
+          python -m pip install --quiet ruff==0.16.4
+          ruff check plugins/ lib/ h2t_ops/ tests/ scripts/
       - name: Install test deps
         run: pip install -e . pytest
 
@@ -42,9 +48,9 @@ jobs:
       # h2t-creative alone, plus the 87 meetgeek tests merged in #389/#390. Each gets its
       # own step because they cannot share one invocation: plugins/h2t-ops/skills/research/
       # tests is also named `tests`, so collecting it beside the repo's tests/ package dies
-      # on `ModuleNotFoundError: No module named 'tests.core'`. drawio is absent on purpose
-      # — its test_*.py are smoke scripts with no test function, `pytest` there exits 5
-      # ("no tests ran"), and converting them is #396.
+      # on `ModuleNotFoundError: No module named 'tests.core'`. All twelve directories run
+      # now — drawio joined once its smoke scripts became real test functions (#396); its
+      # export test skips on a runner, loudly, because the draw.io Desktop CLI is absent.
       - name: Plugin tests — h2t-core vendored lib
         run: python -m pytest plugins/h2t-core/lib/gather -q
       - name: Plugin tests — h2t-core bootstrap scripts
@@ -65,6 +71,12 @@ jobs:
         run: python -m pytest plugins/h2t-ops/skills/meetgeek/tests -q
       - name: Plugin tests — research skill
         run: python -m pytest plugins/h2t-ops/skills/research/tests -q
+      - name: Plugin tests — drawio skill
+        # generate.py imports drawpyo unconditionally; nothing in the repo declares it,
+        # which is why this directory passed locally and could not have passed here.
+        run: |
+          python -m pip install --quiet drawpyo==0.2.5
+          python -m pytest plugins/h2t-arch/skills/drawio/scripts -q -rs
 
   eval-gate:
     name: h2t-evals validate-repo

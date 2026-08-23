@@ -101,7 +101,7 @@ def _stub_client(monkeypatch, methods: dict):
 
 
 def test_list_dispatch_returns_rows(monkeypatch):
-    stub = _stub_client(monkeypatch, {"list_meetings": {"rows": [{"meeting_id": "m1"}], "next_cursor": None}})
+    _stub_client(monkeypatch, {"list_meetings": {"rows": [{"meeting_id": "m1"}], "next_cursor": None}})
     from h2t_ops.connectors.meetgeek import commands as cmds
     args = SimpleNamespace(
         meetgeek_cmd="list", limit=None, cursor=None,
@@ -112,7 +112,7 @@ def test_list_dispatch_returns_rows(monkeypatch):
 
 
 def test_get_dispatch_returns_meeting(monkeypatch):
-    stub = _stub_client(monkeypatch, {"get_meeting": {"meeting_id": "m1", "title": "Test"}})
+    _stub_client(monkeypatch, {"get_meeting": {"meeting_id": "m1", "title": "Test"}})
     from h2t_ops.connectors.meetgeek import commands as cmds
     args = SimpleNamespace(meetgeek_cmd="get", meeting_id="m1", as_json=True, fmt="human")
     result = cmds.run(args)
@@ -120,7 +120,7 @@ def test_get_dispatch_returns_meeting(monkeypatch):
 
 
 def test_transcript_dispatch_json_format(monkeypatch):
-    stub = _stub_client(monkeypatch, {"get_transcript": {"sentences": [{"text": "Hi"}]}})
+    _stub_client(monkeypatch, {"get_transcript": {"sentences": [{"text": "Hi"}]}})
     from h2t_ops.connectors.meetgeek import commands as cmds
     args = SimpleNamespace(meetgeek_cmd="transcript", meeting_id="m1", fmt="json", as_json=False)
     result = cmds.run(args)
@@ -128,7 +128,7 @@ def test_transcript_dispatch_json_format(monkeypatch):
 
 
 def test_transcript_dispatch_md_format_returns_string(monkeypatch):
-    stub = _stub_client(monkeypatch, {
+    _stub_client(monkeypatch, {
         "get_meeting": {"meeting_id": "m1", "title": "T"},
         "get_transcript": {"sentences": [{"speaker": "A", "text": "Hello", "timestamp": 0}]},
     })
@@ -181,7 +181,7 @@ def test_md_artifact_verbs_do_not_require_get_meeting(monkeypatch, verb, method,
 
 
 def test_download_url_dispatch_returns_envelope(monkeypatch):
-    stub = _stub_client(monkeypatch, {
+    _stub_client(monkeypatch, {
         "get_download_url": {"meeting_id": "m1", "download_url": "https://example.com/f.mp4"},
     })
     from h2t_ops.connectors.meetgeek import commands as cmds
@@ -208,7 +208,7 @@ def test_submit_url_dispatch_calls_submit_url(monkeypatch):
 
 
 def test_auth_check_dispatch_returns_ok(monkeypatch):
-    stub = _stub_client(monkeypatch, {"auth_check": True})
+    _stub_client(monkeypatch, {"auth_check": True})
     from h2t_ops.connectors.meetgeek import commands as cmds
     args = SimpleNamespace(meetgeek_cmd="auth-check", as_json=False, fmt="human")
     result = cmds.run(args)
@@ -216,7 +216,7 @@ def test_auth_check_dispatch_returns_ok(monkeypatch):
 
 
 def test_teams_dispatch_returns_teams(monkeypatch):
-    stub = _stub_client(monkeypatch, {"get_teams": {"teams": []}})
+    _stub_client(monkeypatch, {"get_teams": {"teams": []}})
     from h2t_ops.connectors.meetgeek import commands as cmds
     args = SimpleNamespace(meetgeek_cmd="teams", as_json=True, fmt="human")
     result = cmds.run(args)

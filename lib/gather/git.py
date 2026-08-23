@@ -1,6 +1,7 @@
 """Git context gathering."""
 
 import re
+
 from .runner import run_parallel
 
 

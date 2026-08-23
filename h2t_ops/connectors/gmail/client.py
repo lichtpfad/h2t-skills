@@ -15,12 +15,12 @@ from email.mime.base import MIMEBase
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional  # noqa: F401
 
 from h2t_ops.core.errors import AuthError, ConfigError, UsageError
 from h2t_ops.core.google_auth import (
-    resolve_google_credentials,
     build_google_service,
+    resolve_google_credentials,
 )
 
 _GMAIL_SCOPES = [
@@ -74,7 +74,10 @@ def _map_http_error(e: Exception, *, op: str):
     UNCHANGED (ТЗ-0 CRITICAL: re-wrapped typed errors must not be downgraded).
     """
     from h2t_ops.core.errors import (
-        AuthError, H2TError, NetworkError, NotFoundError, ProviderError,
+        H2TError,
+        NetworkError,
+        NotFoundError,
+        ProviderError,
     )
     if isinstance(e, H2TError):
         return e
@@ -116,9 +119,9 @@ class GmailClient:
     def list_messages(
         self,
         max_results: int = 10,
-        query: Optional[str] = None,
+        query: str | None = None,
         unread_only: bool = False,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         return self.list_messages_page(
             max_results=max_results, query=query, unread_only=unread_only
         )["items"]
@@ -126,9 +129,9 @@ class GmailClient:
     def list_messages_page(
         self,
         max_results: int = 10,
-        query: Optional[str] = None,
+        query: str | None = None,
         unread_only: bool = False,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Same as list_messages, plus what Gmail said about the rest."""
         try:
             if unread_only and query:
@@ -147,7 +150,7 @@ class GmailClient:
         except HttpError as e:
             raise _map_http_error(e, op="list messages") from e
 
-    def get_message(self, message_id: str) -> Dict[str, Any]:
+    def get_message(self, message_id: str) -> dict[str, Any]:
         try:
             message = self.service.users().messages().get(
                 userId="me", id=message_id, format="full"
@@ -156,15 +159,15 @@ class GmailClient:
         except HttpError as e:
             raise _map_http_error(e, op=f"get message {message_id}") from e
 
-    def search_messages(self, query: str, max_results: int = 10) -> List[Dict[str, Any]]:
+    def search_messages(self, query: str, max_results: int = 10) -> list[dict[str, Any]]:
         return self.list_messages(max_results=max_results, query=query)
 
     def list_threads(
         self,
         max_results: int = 10,
-        query: Optional[str] = None,
+        query: str | None = None,
         unread_only: bool = False,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         try:
             if unread_only and query:
                 query = f"is:unread {query}"
@@ -178,7 +181,7 @@ class GmailClient:
         except HttpError as e:
             raise _map_http_error(e, op="list threads") from e
 
-    def get_thread(self, thread_id: str) -> Dict[str, Any]:
+    def get_thread(self, thread_id: str) -> dict[str, Any]:
         try:
             thread = self.service.users().threads().get(
                 userId="me", id=thread_id, format="full"
@@ -190,7 +193,7 @@ class GmailClient:
         except HttpError as e:
             raise _map_http_error(e, op=f"get thread {thread_id}") from e
 
-    def list_labels(self) -> List[Dict[str, str]]:
+    def list_labels(self) -> list[dict[str, str]]:
         try:
             results = self.service.users().labels().list(userId="me").execute()
             return results.get("labels", [])
@@ -202,7 +205,7 @@ class GmailClient:
         message_id: str,
         attachment_id: str,
         output_path: str | Path,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         try:
             result = self.service.users().messages().attachments().get(
                 userId="me", messageId=message_id, id=attachment_id
@@ -230,11 +233,11 @@ class GmailClient:
         to: str,
         subject: str,
         body: str,
-        attachments: Optional[List[str]] = None,
+        attachments: list[str] | None = None,
         as_draft: bool = False,
-        thread_id: Optional[str] = None,
-        reply_to_message_id: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        thread_id: str | None = None,
+        reply_to_message_id: str | None = None,
+    ) -> dict[str, Any]:
         try:
             message = MIMEMultipart() if attachments else MIMEText(body)
             message["to"] = to
@@ -249,14 +252,14 @@ class GmailClient:
 
             raw = base64.urlsafe_b64encode(message.as_bytes()).decode()
             if as_draft:
-                draft_body: Dict[str, Any] = {"raw": raw}
+                draft_body: dict[str, Any] = {"raw": raw}
                 if thread_id:
                     draft_body["threadId"] = thread_id
                 return self.service.users().drafts().create(
                     userId="me", body={"message": draft_body}
                 ).execute()
             else:
-                send_body: Dict[str, Any] = {"raw": raw}
+                send_body: dict[str, Any] = {"raw": raw}
                 if thread_id:
                     send_body["threadId"] = thread_id
                 return self.service.users().messages().send(
@@ -270,11 +273,11 @@ class GmailClient:
     def modify_labels(
         self,
         message_id: str,
-        add_labels: Optional[List[str]] = None,
-        remove_labels: Optional[List[str]] = None,
-    ) -> Dict[str, Any]:
+        add_labels: list[str] | None = None,
+        remove_labels: list[str] | None = None,
+    ) -> dict[str, Any]:
         try:
-            body: Dict[str, Any] = {}
+            body: dict[str, Any] = {}
             if add_labels:
                 body["addLabelIds"] = add_labels
             if remove_labels:
@@ -290,10 +293,10 @@ class GmailClient:
         thread_id: str,
         *,
         body: str,
-        body_file: Optional[str] = None,
+        body_file: str | None = None,
         send: bool = False,
         confirm_send: bool = False,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         if send and not confirm_send:
             raise UsageError("gmail reply: --confirm-send is required with --send")
         thread = self.get_thread(thread_id)
@@ -318,10 +321,10 @@ class GmailClient:
         message_id: str,
         *,
         to: str,
-        body: Optional[str] = None,
+        body: str | None = None,
         send: bool = False,
         confirm_send: bool = False,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         if send and not confirm_send:
             raise UsageError("gmail forward: --confirm-send is required with --send")
         msg = self.get_message(message_id)
@@ -337,7 +340,7 @@ class GmailClient:
             as_draft=not send,
         )
 
-    def create_label(self, name: str) -> Dict[str, Any]:
+    def create_label(self, name: str) -> dict[str, Any]:
         try:
             body = {
                 "name": name,
@@ -348,7 +351,7 @@ class GmailClient:
         except HttpError as e:
             raise _map_http_error(e, op=f"create label {name!r}") from e
 
-    def delete_label(self, label_id: str, *, confirm_name: str) -> Dict[str, Any]:
+    def delete_label(self, label_id: str, *, confirm_name: str) -> dict[str, Any]:
         labels = self.list_labels()
         match = next((lb for lb in labels if lb.get("id") == label_id), None)
         actual = (match or {}).get("name", "")
@@ -377,7 +380,7 @@ class GmailClient:
             )
         return actual
 
-    def trash_thread(self, thread_id: str, confirm_subject: str) -> Dict[str, Any]:
+    def trash_thread(self, thread_id: str, confirm_subject: str) -> dict[str, Any]:
         actual = self._validate_subject(thread_id, confirm_subject)
         try:
             self.service.users().threads().trash(userId="me", id=thread_id).execute()
@@ -385,14 +388,14 @@ class GmailClient:
             raise _map_http_error(e, op=f"trash thread {thread_id}") from e
         return {"thread_id": thread_id, "subject": actual, "trashed": True}
 
-    def untrash_thread(self, thread_id: str) -> Dict[str, Any]:
+    def untrash_thread(self, thread_id: str) -> dict[str, Any]:
         try:
             self.service.users().threads().untrash(userId="me", id=thread_id).execute()
         except HttpError as e:
             raise _map_http_error(e, op=f"untrash thread {thread_id}") from e
         return {"thread_id": thread_id, "trashed": False}
 
-    def delete_thread(self, thread_id: str, confirm_subject: str) -> Dict[str, Any]:
+    def delete_thread(self, thread_id: str, confirm_subject: str) -> dict[str, Any]:
         actual = self._validate_subject(thread_id, confirm_subject)
         try:
             self.service.users().threads().delete(userId="me", id=thread_id).execute()
@@ -410,7 +413,7 @@ class GmailClient:
 
     # --- Helpers ---
 
-    def _parse_message(self, message: Dict[str, Any]) -> Dict[str, Any]:
+    def _parse_message(self, message: dict[str, Any]) -> dict[str, Any]:
         headers = {h["name"]: h["value"] for h in message["payload"]["headers"]}
         return {
             "id": message["id"],
@@ -425,7 +428,7 @@ class GmailClient:
             "attachments": self._collect_attachments(message["payload"]),
         }
 
-    def _get_message_body(self, payload: Dict[str, Any]) -> str:
+    def _get_message_body(self, payload: dict[str, Any]) -> str:
         if "body" in payload and "data" in payload["body"]:
             return self._decode_base64_data(payload["body"]["data"]).decode("utf-8")
         if "parts" in payload:
@@ -441,8 +444,8 @@ class GmailClient:
                         return body
         return ""
 
-    def _collect_attachments(self, payload: Dict[str, Any]) -> List[Dict[str, Any]]:
-        rows: List[Dict[str, Any]] = []
+    def _collect_attachments(self, payload: dict[str, Any]) -> list[dict[str, Any]]:
+        rows: list[dict[str, Any]] = []
         for part in payload.get("parts", []) or []:
             filename = part.get("filename", "") or ""
             body = part.get("body", {}) or {}
@@ -492,7 +495,7 @@ class GmailClient:
 
 # --- Formatting helpers (used by CLI) ---
 
-def format_message_list(messages: List[Dict[str, Any]]) -> str:
+def format_message_list(messages: list[dict[str, Any]]) -> str:
     if not messages:
         return "No messages found."
     lines = [f"Found {len(messages)} message(s):\n"]
@@ -510,7 +513,7 @@ def format_message_list(messages: List[Dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
-def format_message_detail(message: Dict[str, Any]) -> str:
+def format_message_detail(message: dict[str, Any]) -> str:
     lines = [
         f"# {message['subject']}\n",
         f"**From:** {message['from']}",
@@ -533,7 +536,7 @@ def format_message_detail(message: Dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def format_thread_list(threads: List[Dict[str, Any]]) -> str:
+def format_thread_list(threads: list[dict[str, Any]]) -> str:
     if not threads:
         return "No threads found."
     lines = [f"Found {len(threads)} thread(s):\n"]
@@ -553,7 +556,7 @@ def format_thread_list(threads: List[Dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
-def format_thread_detail(thread: Dict[str, Any]) -> str:
+def format_thread_detail(thread: dict[str, Any]) -> str:
     lines = [f"# Thread {thread['id']}", ""]
     for msg in thread.get("messages", []):
         lines.extend([

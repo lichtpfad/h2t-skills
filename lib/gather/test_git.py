@@ -1,6 +1,9 @@
-import sys, os
+import os
+import sys
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-from gather.git import gather_git, _display_branch, _parse_owner_repo
+from gather.git import _display_branch, _parse_owner_repo, gather_git
+
 
 def test_gather_git_returns_expected_keys():
     result = gather_git()

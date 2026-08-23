@@ -3,13 +3,14 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone  # noqa: F401
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
 
+from h2t_ops.connectors.research import client, store
 from h2t_ops.core.errors import (
     AuthError,
     ConfigError,
@@ -18,7 +19,6 @@ from h2t_ops.core.errors import (
     ProviderError,
     UsageError,
 )
-from h2t_ops.connectors.research import client, store
 
 
 def _clear_sensitive_env(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -299,7 +299,7 @@ def test_append_telemetry_best_effort(tmp_path, monkeypatch):
 def test_append_telemetry_coerces_non_json_values(tmp_path, monkeypatch):
     _clear_sensitive_env(monkeypatch)
     ledger = tmp_path / "telemetry.jsonl"
-    now = datetime(2026, 5, 21, tzinfo=timezone.utc)
+    now = datetime(2026, 5, 21, tzinfo=UTC)
 
     assert client.append_telemetry(
         ledger,
@@ -1368,12 +1368,12 @@ def test_research_client_crawl_network_failure_maps_to_networkerror(
 
 def test_research_client_visual_ocr_ok_writes_dedicated_artifacts(tmp_path, monkeypatch):
     _clear_sensitive_env(monkeypatch)
-    fixed_now = datetime(2026, 5, 25, 12, 34, 56, tzinfo=timezone.utc)
+    fixed_now = datetime(2026, 5, 25, 12, 34, 56, tzinfo=UTC)
 
     class FixedDateTime:
         @classmethod
         def now(cls, tz=None):
-            assert tz is timezone.utc
+            assert tz is UTC
             return fixed_now
 
     monkeypatch.setattr(client, "datetime", FixedDateTime)
@@ -1461,12 +1461,12 @@ def test_research_client_visual_ocr_ok_writes_dedicated_artifacts(tmp_path, monk
 
 def test_research_client_visual_ocr_artifacts_redact_sensitive_values(tmp_path, monkeypatch):
     _clear_sensitive_env(monkeypatch)
-    fixed_now = datetime(2026, 5, 25, 12, 35, 0, tzinfo=timezone.utc)
+    fixed_now = datetime(2026, 5, 25, 12, 35, 0, tzinfo=UTC)
 
     class FixedDateTime:
         @classmethod
         def now(cls, tz=None):
-            assert tz is timezone.utc
+            assert tz is UTC
             return fixed_now
 
     monkeypatch.setattr(client, "datetime", FixedDateTime)
@@ -1788,8 +1788,7 @@ def test_crawl_missing_exa_key_fails_before_artifact_writes(tmp_path, monkeypatc
 
 
 def test_resolve_author_missing_exa_key_fails_before_provider_call(tmp_path, monkeypatch):
-    from h2t_ops.connectors.research import author_resolve
-    from h2t_ops.connectors.research import provider_routing
+    from h2t_ops.connectors.research import author_resolve, provider_routing
 
     monkeypatch.setattr(provider_routing, "_secret_available", lambda name: False)
 
@@ -1805,8 +1804,7 @@ def test_resolve_author_missing_exa_key_fails_before_provider_call(tmp_path, mon
 
 
 def test_preflight_missing_exa_key_fails_before_provider_call(tmp_path, monkeypatch):
-    from h2t_ops.connectors.research import exa
-    from h2t_ops.connectors.research import provider_routing
+    from h2t_ops.connectors.research import exa, provider_routing
 
     monkeypatch.setattr(provider_routing, "_secret_available", lambda name: False)
 

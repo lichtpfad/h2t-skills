@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import os
 import time
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional  # noqa: F401
 
 from h2t_ops.core.errors import (
     AuthError,
@@ -56,12 +56,12 @@ class MeetGeekClient:
         ).rstrip("/")
         self._timeout = int(os.environ.get("MEETGEEK_TIMEOUT", "30"))
 
-    def _headers(self) -> Dict[str, str]:
+    def _headers(self) -> dict[str, str]:
         return {"Authorization": f"Bearer {self._api_key}", "Accept": "application/json"}
 
     def _request(self, method: str, path: str, *,
-                 params: Optional[Dict] = None,
-                 json_body: Optional[Any] = None) -> Any:
+                 params: dict | None = None,
+                 json_body: Any | None = None) -> Any:
         import requests as _r  # lazy — module-scope import forbidden
         url = (
             f"{self._base_url}{path}"
@@ -69,7 +69,7 @@ class MeetGeekClient:
             else f"{self._base_url}/{path}"
         )
         backoff = 1.0
-        last_exc: Optional[Exception] = None
+        last_exc: Exception | None = None
         for attempt in range(3):
             try:
                 resp = _r.request(
@@ -104,7 +104,7 @@ class MeetGeekClient:
             f"MeetGeek request failed after 3 attempts: {last_exc or 'server error'}"
         )
 
-    def _get(self, path: str, params: Optional[Dict] = None) -> Any:
+    def _get(self, path: str, params: dict | None = None) -> Any:
         resp = self._request("GET", path, params=params)
         _raise_for_status(resp, path)
         try:
@@ -125,17 +125,17 @@ class MeetGeekClient:
 
     def list_meetings(
         self,
-        limit: Optional[int] = None,
-        cursor: Optional[str] = None,
-        from_date: Optional[str] = None,
-        to_date: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        limit: int | None = None,
+        cursor: str | None = None,
+        from_date: str | None = None,
+        to_date: str | None = None,
+    ) -> dict[str, Any]:
         """Returns {rows: [...raw...], next_cursor: str|None}.
 
         Rows are raw API items — normalization (meeting_id|id, timestamps)
         is the commands layer's responsibility.
         """
-        params: Dict[str, Any] = {}
+        params: dict[str, Any] = {}
         if cursor:
             params["cursor"] = cursor
         if from_date:
@@ -158,7 +158,7 @@ class MeetGeekClient:
             )
         return {"rows": rows, "next_cursor": next_cursor}
 
-    def get_meeting(self, meeting_id: str) -> Dict[str, Any]:
+    def get_meeting(self, meeting_id: str) -> dict[str, Any]:
         """/v1/meeting/{id}; fallback to list row when metadata endpoint 404s."""
         try:
             return self._get(f"/v1/meeting/{meeting_id}")
@@ -171,8 +171,8 @@ class MeetGeekClient:
                 hint="If this meeting appeared recently, wait for MeetGeek processing to finish.",
             ) from exc
 
-    def _find_listed_meeting(self, meeting_id: str) -> Optional[Dict[str, Any]]:
-        cursor: Optional[str] = None
+    def _find_listed_meeting(self, meeting_id: str) -> dict[str, Any] | None:
+        cursor: str | None = None
         pages = 0
         max_pages = int(os.environ.get("MEETGEEK_MAX_PAGES", "1000"))
         while pages < max_pages:
@@ -186,11 +186,11 @@ class MeetGeekClient:
                 return None
         return None
 
-    def get_transcript(self, meeting_id: str) -> Dict[str, Any]:
+    def get_transcript(self, meeting_id: str) -> dict[str, Any]:
         """Fetches all transcript pages; returns {sentences: [...], ...metadata}."""
         sentences = []
-        base: Dict[str, Any] = {}
-        cursor: Optional[str] = None
+        base: dict[str, Any] = {}
+        cursor: str | None = None
         pages = 0
         max_pages = int(os.environ.get("MEETGEEK_MAX_PAGES", "1000"))
         while True:
@@ -212,19 +212,19 @@ class MeetGeekClient:
                 break
         return {**base, "sentences": sentences}
 
-    def get_summary(self, meeting_id: str) -> Dict[str, Any]:
+    def get_summary(self, meeting_id: str) -> dict[str, Any]:
         return self._get(f"/v1/meetings/{meeting_id}/summary")
 
-    def get_highlights(self, meeting_id: str) -> Dict[str, Any]:
+    def get_highlights(self, meeting_id: str) -> dict[str, Any]:
         return self._get(f"/v1/meetings/{meeting_id}/highlights")
 
-    def get_insights(self, meeting_id: str) -> Dict[str, Any]:
+    def get_insights(self, meeting_id: str) -> dict[str, Any]:
         return self._get(f"/v1/meetings/{meeting_id}/insights")
 
     def get_teams(self) -> Any:
         return self._get("/v1/teams")
 
-    def get_download_url(self, meeting_id: str) -> Dict[str, Any]:
+    def get_download_url(self, meeting_id: str) -> dict[str, Any]:
         """POST /v1/meetings/{id}/download → {meeting_id, download_url}.
 
         Returns URL only — never writes file to disk.
@@ -245,7 +245,7 @@ class MeetGeekClient:
             raise ProviderError(f"No download URL in response for {meeting_id}: {info!r}")
         return {"meeting_id": meeting_id, "download_url": url}
 
-    def action_items(self, meeting_id: str) -> Dict[str, Any]:
+    def action_items(self, meeting_id: str) -> dict[str, Any]:
         """Return action items extracted from a meeting summary."""
         summary = self.get_summary(meeting_id)
         return {
@@ -260,10 +260,10 @@ class MeetGeekClient:
         self,
         download_url: str,
         *,
-        title: Optional[str] = None,
-        language_code: Optional[str] = None,
-        template_name: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        title: str | None = None,
+        language_code: str | None = None,
+        template_name: str | None = None,
+    ) -> dict[str, Any]:
         """POST /v1/upload — single provider-write verb.
 
         Named submit_url to distinguish from the upload --from-file pipeline (#149).
@@ -272,7 +272,7 @@ class MeetGeekClient:
         """
         if not download_url:
             raise UsageError("submit-url: download_url is required and must be non-empty")
-        body: Dict[str, Any] = {"download_url": download_url}
+        body: dict[str, Any] = {"download_url": download_url}
         if title:
             body["title"] = title
         if language_code:

@@ -9,7 +9,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-import pytest
+import pytest  # noqa: F401
 
 ROOT = Path(__file__).resolve().parents[2]
 WRITER = ROOT / "plugins" / "h2t-core" / "skills" / "handoff" / "scripts" / "writer.py"

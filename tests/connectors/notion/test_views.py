@@ -50,6 +50,7 @@ def test_list_views_sends_the_views_api_version(client_obj):
 def test_other_commands_keep_the_old_api_version(client_obj):
     """The version bump must not leak into the rest of the connector."""
     import inspect
+
     from h2t_ops.connectors.notion.client import NotionClient
     src = inspect.getsource(NotionClient.query_database_page)
     assert "2022-06-28" in src

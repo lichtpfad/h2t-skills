@@ -27,11 +27,11 @@ from __future__ import annotations
 
 import html
 import re
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from renderer.semantic_parser import Block
 from renderer.skin_loader import BlockMapping
-
 
 # ---------------------------------------------------------------------------
 # Public errors + helper allowlist

@@ -5,6 +5,7 @@ Uses ~/.h2t/config/domains.yaml for domain metadata.
 """
 
 from pathlib import Path
+
 from .runner import run_parallel
 
 try:

@@ -1,4 +1,5 @@
 from pathlib import Path
+
 import pytest
 import runbook_schema as S
 

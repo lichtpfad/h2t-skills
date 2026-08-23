@@ -209,8 +209,8 @@ def _rows(rows):
 
 def run(args) -> Any:
     """Dispatch a drive subcommand. Returns a result or raises core.errors."""
-    from h2t_ops.core.errors import UsageError
     from h2t_ops.connectors.drive.client import normalize_export_format
+    from h2t_ops.core.errors import UsageError
 
     cmd = args.drive_cmd
 

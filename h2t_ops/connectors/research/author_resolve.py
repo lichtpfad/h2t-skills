@@ -13,7 +13,6 @@ import urllib.error
 import urllib.request
 from typing import Any
 
-
 _YOUTUBE_URL_RE = re.compile(
     r"https?://(?:www\.)?youtube\.com/@?[\w.-]+|https?://youtu\.be/[\w.-]+"
 )
@@ -36,7 +35,8 @@ def _exa_people_search(
         "numResults": 5,
         "contents": {"highlights": {"maxCharacters": 2000}},
     }
-    from h2t_ops.core.errors import AuthError, NetworkError, ProviderError as _ProviderError
+    from h2t_ops.core.errors import AuthError, NetworkError
+    from h2t_ops.core.errors import ProviderError as _ProviderError
     try:
         _status, data, _latency = call_exa("/search", body, api_key)
     except (AuthError, NetworkError, _ProviderError):
@@ -100,7 +100,8 @@ def resolve_author(
     """
     resolution_path: list[str] = []
 
-    from h2t_ops.core.errors import AuthError, NetworkError, ProviderError as _ProviderError
+    from h2t_ops.core.errors import AuthError, NetworkError
+    from h2t_ops.core.errors import ProviderError as _ProviderError
     # Step 1: Exa people search
     try:
         exa_url = _exa_people_search(name, keywords, api_key)

@@ -1,8 +1,9 @@
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).parents[2] / "plugins/h2t-dev/lib"))
 
-from docs.project_types import detect_template, PROJECT_TYPES
+from docs.project_types import PROJECT_TYPES, detect_template  # noqa: F401
 
 
 def test_detect_from_h2t_docs_lint_yaml_project_type(tmp_path):

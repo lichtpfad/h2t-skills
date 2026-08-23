@@ -19,7 +19,7 @@ import argparse
 import json
 import os
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone  # noqa: F401
 from pathlib import Path
 
 # lib/ path: cache root (4 levels up) or repo root (6 levels up) fallback
@@ -226,7 +226,7 @@ def write_handoff(
         return _degraded(session_id, spool_path, parsed_artifacts, exc)
     md_path = md_dir / f"{session_id}.md"
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     artifacts_md = "\n".join(
         f"- {a['type']}: {a['ref']}" for a in parsed_artifacts
     ) or "None"

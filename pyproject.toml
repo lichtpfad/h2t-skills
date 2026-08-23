@@ -58,6 +58,52 @@ packages = ["h2t_ops"]
 # on a machine that never installed the plugin.
 "plugins/h2t-core/hooks-handlers" = "h2t_ops/_plugin_payload/hooks-handlers"
 
+[tool.ruff]
+target-version = "py311"
+# plugins/h2t/ is a rollback archive, not shipped (tests/core/test_skill_frontmatter.py:22).
+# Linting it would report defects in code that is deliberately frozen.
+extend-exclude = ["plugins/h2t/"]
+
+[tool.ruff.lint]
+# Pinned explicitly. Ruff's default set is large and grows with each release — 0.16.4
+# enables 413 rules and reported 1625 findings here, almost all on untouched files, which
+# made every finding a question of "mine or pre-existing?" rather than a signal.
+# E/F are correctness, I import order, UP the py311 idioms this repo already targets.
+# BLE/PLW/S/DTZ are deliberately out: they carry real signal, but ~250 findings at once
+# would train everyone to scroll past them.
+select = ["E4", "E7", "E9", "F", "I", "UP"]
+# F401 stays enabled so a NEW unused import is caught, but it is never auto-fixed. The 67
+# files that already carry one are listed at the bottom of per-file-ignores — that list is
+# the debt (#400) and shrinks as files are cleared; it is not a licence to add more.
+# Several modules re-export names purely so tests
+# can patch them — meetgeek_cli aliases a dozen recovery helpers it does not itself call,
+# and `import subprocess` there exists only because tests reach the module object through
+# it. `ruff --fix` removed all of those and took 14 tests down with them. Whether an unused
+# import is dead or an interface is a judgment call, so it stays a human decision.
+unfixable = ["F401"]
+
+# Everything below is a named debt, not a decision that these do not matter. Counts are
+# from 2026-08-24, after the sweep; the classes are tracked in #400.
+ignore = [
+    # 81 findings, all `stmt; stmt` in connector argument parsers. Mechanical to fix and
+    # entirely cosmetic — not worth an 81-file diff inside a release week.
+    "E702",
+    # 14 findings: `l` as a variable name.
+    "E741",
+    # 8 findings: `if x: return` on one line.
+    "E701",
+    # 15 findings: `typing.List` style imports that ruff will not rewrite safely.
+    "UP035",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Scripts and tests put a directory on sys.path before importing from it, so the import
+# cannot be hoisted above that line.
+"plugins/**/scripts/*.py" = ["E402"]
+"tests/**/*.py" = ["E402"]
+
+"plugins/h2t-ops/skills/telegram/scripts/telegram_cli.py" = ["E402", "F821"]
+
 [tool.pytest.ini_options]
 pythonpath = ["."]
 

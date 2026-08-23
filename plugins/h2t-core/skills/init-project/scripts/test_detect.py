@@ -6,8 +6,13 @@ from pathlib import Path
 PLUGIN_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(PLUGIN_ROOT / "lib"))
 
-from detect_project import detect_project, _detect_domain, _detect_tracker, _humanize_id
-from detect_project import _check_already_registered
+from detect_project import (
+    _check_already_registered,
+    _detect_domain,
+    _detect_tracker,
+    _humanize_id,
+    detect_project,  # noqa: F401
+)
 
 
 def test_detect_domain_h2t_prefix():

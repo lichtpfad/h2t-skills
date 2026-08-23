@@ -9,8 +9,10 @@ malicious agent could bypass by never calling the validator. Duplicate-heading a
 empty-body checks close the realistic accidental-bypass paths; line-scoped marker matching
 reduces (does not eliminate) unrelated-prose false-accepts."""
 from __future__ import annotations
+
 import re
 import sys
+
 import runbook_schema as S
 
 

@@ -1,7 +1,8 @@
 """Tests for docs-lint v2 extensions: severity, vendor filter, cap, exceptions."""
-from pathlib import Path
 import datetime
-import pytest
+from pathlib import Path
+
+import pytest  # noqa: F401
 
 
 def _make_repo(tmp_path: Path) -> Path:
@@ -51,8 +52,9 @@ def test_vendor_paths_excluded(tmp_path):
 def test_per_dimension_cap(tmp_path):
     import sys
     sys.path.insert(0, str(Path("plugins/h2t-dev/skills/docs-lint/scripts")))
-    from lint import _collect_all_findings, _DIM_LIMIT
     from collections import Counter
+
+    from lint import _DIM_LIMIT, _collect_all_findings
     repo = _make_repo(tmp_path)
     # Create 60 files without date prefix to trigger naming findings
     for i in range(60):

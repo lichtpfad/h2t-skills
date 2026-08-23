@@ -9,7 +9,6 @@ import pytest
 from h2t_ops.connectors.granola import sync as S
 from h2t_ops.core.errors import UsageError
 
-
 NOTE_V1 = {
     "id": "not_1", "title": "Call", "created_at": "2026-08-17T15:00:00.000Z",
     "updated_at": "2026-08-17T16:00:00.000Z", "summary_markdown": "## v1\n",

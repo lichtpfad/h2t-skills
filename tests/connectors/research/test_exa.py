@@ -1,8 +1,8 @@
 """Provider-core tests for h2t_ops.connectors.research.exa."""
 from __future__ import annotations
 
-import io
 import inspect
+import io
 import json
 import urllib.error
 from types import SimpleNamespace
@@ -10,8 +10,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from h2t_ops.core.errors import AuthError, ConfigError, NetworkError, UsageError
 from h2t_ops.connectors.research import exa
+from h2t_ops.core.errors import AuthError, ConfigError, NetworkError, UsageError
 
 
 def _args(**kwargs):

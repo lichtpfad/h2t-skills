@@ -1,7 +1,11 @@
 import pytest
+
 from lib.practice_harvest.validate_registry import (
-    validate_finding, validate_coverage, ValidationError,
+    ValidationError,
+    validate_coverage,
+    validate_finding,
 )
+
 
 def _ok(tmp_path):
     f = tmp_path / "rule.md"
