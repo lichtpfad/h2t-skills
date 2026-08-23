@@ -9,9 +9,9 @@ from typing import Any
 
 from h2t_ops.core.errors import ConfigError
 
-from .models import DeployServiceSpec, DeployTargetBinding, DeployProfileSpec
-from .profiles import load_profile_registry
 from ._yaml import load_yaml_mapping
+from .models import DeployProfileSpec, DeployServiceSpec, DeployTargetBinding
+from .profiles import load_profile_registry
 
 _SERVICES_RELATIVE_PATH = Path(".h2t/config/deploy/services.yaml")
 

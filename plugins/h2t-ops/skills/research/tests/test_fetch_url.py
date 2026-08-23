@@ -954,7 +954,7 @@ def test_keep_raw_off_by_default_no_raw_file(tmp_path):
         mock_urlopen.return_value = _make_http_response(
             html, url="https://example.com/x",
         )
-        rc = fetch_url.main([
+        fetch_url.main([
             "fetch", "--url", "https://example.com/x",
             "--output-dir", str(tmp_path), "--project", "test",
         ])
@@ -971,7 +971,7 @@ def test_keep_raw_on_writes_raw_file(tmp_path):
         mock_urlopen.return_value = _make_http_response(
             html, url="https://example.com/x",
         )
-        rc = fetch_url.main([
+        fetch_url.main([
             "fetch", "--url", "https://example.com/x", "--keep-raw",
             "--output-dir", str(tmp_path), "--project", "test",
         ])
@@ -1120,7 +1120,7 @@ def test_cli_json_emits_utf8_envelope_with_non_ascii(tmp_path, monkeypatch, caps
         "rather than short_body. The em-dash and Cyrillic glyphs and emoji-like "
         "characters must round-trip cleanly through stdout.</p>"
         "</article></body></html>"
-    ).encode("utf-8")
+    ).encode()
 
     # Replace sys.stdout/sys.stderr with cp1252-restricted streams. The
     # buffer-backed TextIOWrapper exposes reconfigure() (Python 3.7+) so the

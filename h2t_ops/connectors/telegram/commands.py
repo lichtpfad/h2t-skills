@@ -140,8 +140,8 @@ def _rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
 
 def run(args: Any) -> Any:
     """Dispatch a Telegram subcommand. Returns a result or raises core.errors."""
-    from h2t_ops.core.errors import UsageError
     from h2t_ops.connectors.telegram.client import TelegramClientAdapter
+    from h2t_ops.core.errors import UsageError
 
     def _read_file(path: str) -> str:
         try:

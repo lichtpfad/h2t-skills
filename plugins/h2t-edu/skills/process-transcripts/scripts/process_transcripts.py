@@ -12,14 +12,14 @@ process_transcripts.py — LLM-enrichment для MeetGeek транскрипто
   7. Обновляет context/meetings/INDEX.md
 """
 
+import argparse
+import json
 import os
 import re
-import sys
-import json
 import subprocess
-import argparse
-from pathlib import Path
+import sys
 from datetime import datetime
+from pathlib import Path
 
 try:
     import yaml
@@ -371,12 +371,12 @@ def save_action_items(meeting_name: str, metadata: dict, source_file: Path):
     date_str = datetime.now().strftime("%Y-%m-%d")
     fp = ACTIONS_DIR / f"{date_str}-{_slug(meeting_name)}.md"
     lines = [
-        f"---",
+        "---",
         f"source_meeting: \"{source_file.name}\"",
         f"date: \"{date_str}\"",
         f"projects: {json.dumps(metadata.get('projects', []))}",
-        f"status: open",
-        f"---", "",
+        "status: open",
+        "---", "",
         f"# Action Items: {metadata.get('topic', meeting_name)}", "",
     ]
     for item in items:
@@ -395,11 +395,11 @@ def save_decisions(meeting_name: str, metadata: dict, source_file: Path):
     date_str = datetime.now().strftime("%Y-%m-%d")
     fp = DECISIONS_DIR / f"{date_str}-{_slug(meeting_name)}.md"
     lines = [
-        f"---",
+        "---",
         f"source_meeting: \"{source_file.name}\"",
         f"date: \"{date_str}\"",
         f"projects: {json.dumps(metadata.get('projects', []))}",
-        f"---", "",
+        "---", "",
         f"# Decisions: {metadata.get('topic', meeting_name)}", "",
     ]
     for d in decisions:
@@ -480,7 +480,7 @@ def process_file(filepath: Path, projects_context: str, dry_run: bool, force: bo
     log(f"  тип={t_type}  дата={raw_date}")
 
     if dry_run:
-        log(f"  [DRY] пропускаю LLM вызов")
+        log("  [DRY] пропускаю LLM вызов")
         return True
 
     prompt = build_prompt(t_type, projects_context)
@@ -504,7 +504,7 @@ def process_file(filepath: Path, projects_context: str, dry_run: bool, force: bo
     if category in PERSONAL_CATEGORIES:
         SELFWORK_TRANSCRIPTS.mkdir(parents=True, exist_ok=True)
         out_path = SELFWORK_TRANSCRIPTS / filepath.name
-        log(f"  → роутинг в SELFWORK/transcripts/")
+        log("  → роутинг в SELFWORK/transcripts/")
     else:
         out_path = filepath
 
@@ -519,7 +519,7 @@ def process_file(filepath: Path, projects_context: str, dry_run: bool, force: bo
     save_action_items(meeting_name, metadata, filepath)
     save_decisions(meeting_name, metadata, filepath)
 
-    log(f"  ✓ готово")
+    log("  ✓ готово")
     return True
 
 # ── CLI ───────────────────────────────────────────────────────────────────────

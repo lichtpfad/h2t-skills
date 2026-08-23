@@ -11,8 +11,9 @@ created_at cursor would freeze the first version forever.
 from __future__ import annotations
 
 import json
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Dict, Iterable, Optional, Set
+from typing import Any, Dict, Optional, Set  # noqa: F401
 
 from h2t_ops.core.errors import UsageError
 
@@ -22,7 +23,7 @@ VALID_INCLUDE = {"summaries", "transcripts"}
 CURSOR_PATH_DEFAULT = Path.home() / ".dor" / "lake" / "_cursors" / "granola.json"
 
 
-def _load_json(path: Path) -> Dict[str, Any]:
+def _load_json(path: Path) -> dict[str, Any]:
     if path.is_file():
         try:
             return json.loads(path.read_text(encoding="utf-8"))
@@ -31,13 +32,13 @@ def _load_json(path: Path) -> Dict[str, Any]:
     return {}
 
 
-def _synced_versions(manifest: Path) -> Dict[str, Set[str]]:
+def _synced_versions(manifest: Path) -> dict[str, set[str]]:
     """(note_id, updated_at) key -> include parts already written for that version.
 
     Records predating include-tracking carry no "include" field. Treat them as
     complete: an existing lake must not trigger a surprise full refetch.
     """
-    seen: Dict[str, Set[str]] = {}
+    seen: dict[str, set[str]] = {}
     if not manifest.is_file():
         return seen
     with manifest.open(encoding="utf-8") as fh:
@@ -70,12 +71,12 @@ def sync_notes(
     *,
     to: Path,
     include: Iterable[str],
-    cursor_file: Optional[Path] = None,
-    since: Optional[str] = None,
+    cursor_file: Path | None = None,
+    since: str | None = None,
     since_cursor: bool = False,
-    folder: Optional[str] = None,
-    limit: Optional[int] = None,
-) -> Dict[str, Any]:
+    folder: str | None = None,
+    limit: int | None = None,
+) -> dict[str, Any]:
     """Pull notes into a lake directory. Returns run counters."""
     include = set(include)
     unknown = include - VALID_INCLUDE

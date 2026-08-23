@@ -1,14 +1,18 @@
 """Собрать корпус из реальных корней и записать corpus.json."""
 from __future__ import annotations
+
 import argparse
 import json
 from collections import Counter
-from datetime import datetime, timezone
+from collections.abc import Callable
+from datetime import UTC, datetime, timezone  # noqa: F401
 from pathlib import Path
-from typing import Callable
 
 from lib.practice_harvest.collect import (
-    SourceRecord, classify_kind, dedup_records, track_for_kind,
+    SourceRecord,
+    classify_kind,
+    dedup_records,
+    track_for_kind,
 )
 from lib.practice_harvest.lineage import canonical_lineage
 from lib.practice_harvest.session_parse import parse_session_md
@@ -19,7 +23,7 @@ _MTIME_KINDS = {"session", "spec", "plan"}
 
 
 def _in_window(path: Path, start: str, end: str) -> bool:
-    mt = datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc).date()
+    mt = datetime.fromtimestamp(path.stat().st_mtime, tz=UTC).date()
     return start <= mt.isoformat() <= end
 
 

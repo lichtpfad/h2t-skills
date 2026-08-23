@@ -9,9 +9,10 @@ from pathlib import Path
 
 from h2t_ops import build_info
 from h2t_ops.core.errors import UsageError
+
 # Route shim deprecation notices through emit()'s UTF-8 writer (reuses privates
 # intentionally) so they don't UnicodeEncodeError on Windows consoles (#141 class).
-from h2t_ops.core.output import emit, _utf8_writer, _finalize
+from h2t_ops.core.output import _finalize, _utf8_writer, emit
 from h2t_ops.core.registry import discover
 from h2t_ops.dev import main as _dev_main
 
@@ -47,7 +48,9 @@ def _doctor() -> int:
 
 def _legacy(argv: list[str]) -> int:
     try:
-        from lib.cli.main import main as legacy_main  # legacy keeps its own sys.path hack
+        from lib.cli.main import (
+            main as legacy_main,  # legacy keeps its own sys.path hack
+        )
     except ImportError:
         # Wave 1 emptied lib/cli, and the wheel no longer ships a top-level `lib` at all.
         # The contract for an unrecognised command is exit 2, not a traceback.

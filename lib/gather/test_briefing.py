@@ -1,12 +1,14 @@
 """Tests for briefing formatter."""
 
-import sys, os
+import os
+import sys
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from datetime import datetime
 from unittest.mock import patch
 
-from gather.briefing import format_briefing, _build_slug_template, _build_hints
+from gather.briefing import _build_hints, _build_slug_template, format_briefing
 
 
 def _minimal_data(**overrides):

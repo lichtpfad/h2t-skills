@@ -1,8 +1,9 @@
 """Token Contract v2: every palette + tokens.css exports canonical token names."""
 import re
-import pytest
-from pathlib import Path
+from pathlib import Path  # noqa: F401
+
 import assembler as asm
+import pytest
 
 # R1 profiles (h2t-graphs, h2t-mono) follow golden token contract — see test_r1_legacy_fidelity.py
 PROFILES = {

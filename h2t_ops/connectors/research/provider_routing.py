@@ -5,7 +5,6 @@ from typing import Any
 
 from h2t_ops.core.errors import UsageError
 
-
 CAPABILITIES = {
     "preflight",
     "search",

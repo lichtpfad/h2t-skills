@@ -1,10 +1,10 @@
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "plugins" / "h2t-creative"))
 
-import pytest
 import assembler
-
+import pytest
 
 # --- interpolate ---
 
@@ -666,7 +666,7 @@ def test_render_table_mobile_block_emits_one_card_per_row():
         [["A", "2", "first"], ["B", "4", "second"], ["C", "6", "third"]],
     )
     mobile_start = out.find('<div class="table-mobile">')
-    mobile_end = out.find('</div>', mobile_start) + len('</div>')
+    out.find('</div>', mobile_start) + len('</div>')
     # The outer <div class="table-mobile"> wraps the cards; find articles inside.
     assert out.count('<article class="table-card">') == 3
 

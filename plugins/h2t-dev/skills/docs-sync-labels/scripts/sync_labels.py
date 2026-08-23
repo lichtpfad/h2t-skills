@@ -76,12 +76,12 @@ def main() -> None:
         total_errors += errors
 
     if not args.apply:
-        print(f"\n  Dry-run complete. Run with --apply to sync.")
+        print("\n  Dry-run complete. Run with --apply to sync.")
     elif total_errors:
         print(f"\n  FAILED: {total_errors} label(s) failed")
         sys.exit(1)
     else:
-        print(f"\n  All repos synced.")
+        print("\n  All repos synced.")
 
 
 if __name__ == "__main__":

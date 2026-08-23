@@ -32,7 +32,6 @@ from pathlib import Path
 import pytest
 import yaml
 
-
 PLUGIN_ROOT = Path(__file__).resolve().parents[1]
 PROFILES_DIR = PLUGIN_ROOT / "profiles"
 REPO_ROOT = PLUGIN_ROOT.parents[1]

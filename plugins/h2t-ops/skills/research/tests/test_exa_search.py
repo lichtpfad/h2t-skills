@@ -3,12 +3,12 @@ import io
 import json
 import subprocess
 import sys
+import urllib.error
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
-import urllib.error
 
 SCRIPT = Path(__file__).resolve().parent.parent / "scripts" / "exa_search.py"
 

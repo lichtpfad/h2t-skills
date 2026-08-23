@@ -2,15 +2,19 @@
 from __future__ import annotations
 
 import os
-from types import SimpleNamespace
+from types import SimpleNamespace  # noqa: F401
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from h2t_ops.core.errors import (
-    AuthError, ConfigError, NetworkError, NotFoundError, ProviderError, UsageError,
+    AuthError,
+    ConfigError,
+    NetworkError,
+    NotFoundError,
+    ProviderError,
+    UsageError,
 )
-
 
 # ─── Fixture ─────────────────────────────────────────────────────────────────
 

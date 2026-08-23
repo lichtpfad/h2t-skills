@@ -14,6 +14,7 @@ from datetime import datetime
 from pathlib import Path
 
 from dotenv import load_dotenv
+
 load_dotenv(Path.home() / '.dor' / 'secrets.env', override=False)
 
 DOR_ROOT = Path(os.environ.get('DOR_ROOT', Path.home() / 'Projects' / 'DOR'))
@@ -291,7 +292,7 @@ def extract_frames(
     # Download video once to temp file
     with tempfile.TemporaryDirectory() as tmp:
         tmp_video = Path(tmp) / "video.mp4"
-        print(f"Downloading video for frame extraction...", file=sys.stderr)
+        print("Downloading video for frame extraction...", file=sys.stderr)
         dl_cmd = [
             'yt-dlp', video_url,
             '-f', 'bestvideo[height<=720]+bestaudio/best[height<=720]',

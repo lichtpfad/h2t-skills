@@ -1,5 +1,6 @@
 """Gitignore hygiene checks: temp files at repo root not effectively git-ignored."""
 from __future__ import annotations
+
 import os
 import subprocess
 import tempfile

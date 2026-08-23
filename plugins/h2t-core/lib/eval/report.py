@@ -11,9 +11,9 @@ import json
 import math
 from collections import Counter
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone  # noqa: F401
 from pathlib import Path
-from typing import Optional
+from typing import Optional  # noqa: F401
 
 
 @dataclass
@@ -25,7 +25,7 @@ class LoadStats:
     undated_skipped: int = 0
 
 
-def _parse_dt(raw) -> Optional[datetime]:
+def _parse_dt(raw) -> datetime | None:
     """Parse an ISO-8601 timestamp to a tz-aware UTC datetime, else None."""
     if not isinstance(raw, str) or not raw:
         return None
@@ -35,7 +35,7 @@ def _parse_dt(raw) -> Optional[datetime]:
         return None
     if dt.tzinfo is None:
         return None
-    return dt.astimezone(timezone.utc)
+    return dt.astimezone(UTC)
 
 
 def load_sessions(root, *, load_since=None):

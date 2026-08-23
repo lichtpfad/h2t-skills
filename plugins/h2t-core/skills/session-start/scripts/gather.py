@@ -32,15 +32,19 @@ for _lib in [_cache_lib, _repo_lib]:
         sys.path.insert(0, str(_lib))
         break
 
+from eval.session import SkillEval
 from gather import output_json
-from gather.project import identify_project
-from gather.user import gather_user_context
+from gather.briefing import format_briefing
 from gather.git import gather_git
 from gather.github import gather_github
+from gather.project import identify_project
+from gather.sessions import (
+    find_latest_session_index,
+    find_session_files,
+    get_machine_name,
+)
 from gather.stack import detect_stack
-from gather.sessions import find_latest_session_index, find_session_files, get_machine_name
-from gather.briefing import format_briefing
-from eval.session import SkillEval
+from gather.user import gather_user_context
 
 
 def _print_text(text: str) -> None:

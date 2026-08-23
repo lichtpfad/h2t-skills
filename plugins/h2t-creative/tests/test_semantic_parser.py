@@ -12,14 +12,12 @@ Out of scope for T1 (per v0 plan §4):
 - Assembler integration (T4 adapter).
 """
 import pytest
-
 from renderer.semantic_parser import (
     Block,
     SemanticRecipe,
     SemanticRecipeError,
     parse_semantic_recipe,
 )
-
 
 # ---------------------------------------------------------------------------
 # Happy path

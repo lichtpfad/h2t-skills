@@ -10,6 +10,7 @@ Example:
 """
 
 import argparse
+import json
 import re
 import sys
 from pathlib import Path
@@ -43,7 +44,7 @@ def update_project_docs(yaml_path: Path, project_id: str, fields: dict[str, bool
         yaml_path.write_text(text, encoding="utf-8")
 
     # Build report
-    report = {
+    {
         "project_id": project_id,
         "updated_fields": {k: v for k, v in fields.items()},
         "yaml_path": str(yaml_path),

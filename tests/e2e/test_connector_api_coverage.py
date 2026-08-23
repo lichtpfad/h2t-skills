@@ -4,11 +4,10 @@ import json
 import os
 import subprocess
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone  # noqa: F401
 from pathlib import Path
 
 import pytest
-
 
 E2E_PREFIX = "h2t-e2e-connector-api"
 EVIDENCE_PATH = Path("docs/reports/e2e/connector-api-coverage-p0.json")
@@ -55,7 +54,7 @@ def _record(
     else:
         data = {"schema": "connector_api_coverage_e2e/v0.1", "runs": []}
     data["runs"].append({
-        "at": datetime.now(timezone.utc).isoformat(),
+        "at": datetime.now(UTC).isoformat(),
         "connector": connector,
         "command": command,
         "mode": mode,

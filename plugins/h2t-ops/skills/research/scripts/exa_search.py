@@ -17,7 +17,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone  # noqa: F401
 from pathlib import Path
 from typing import Any, NoReturn
 
@@ -414,7 +414,7 @@ def search_with_retry(
         cost = 0.0
         reason = None
 
-    timestamp = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    timestamp = datetime.now(UTC).isoformat(timespec="seconds")
     envelope = build_envelope(
         status=status_label,
         results=results,
@@ -811,7 +811,7 @@ def _run_search(args: argparse.Namespace) -> int:
     # Persist sidecar (always — OK, DEGRADED, FAILED all get .sources.json).
     out_dir = Path(args.output_dir)
     paths = output_paths(out_dir, args.project, args.query,
-                         datetime.now(timezone.utc).strftime("%Y-%m-%d"))
+                         datetime.now(UTC).strftime("%Y-%m-%d"))
     response_for_writers = {
         "results": envelope["results"],
         "costDollars": {"total": envelope["telemetry"]["total_cost_usd"]},
@@ -892,8 +892,8 @@ def _run_crawl(args: argparse.Namespace) -> int:
         die(2, f"EXA_ERROR:MALFORMED {e}")
 
     out_dir = Path(args.output_dir)
-    date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    timestamp = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    date = datetime.now(UTC).strftime("%Y-%m-%d")
+    timestamp = datetime.now(UTC).isoformat(timespec="seconds")
     topic = f"crawl-{args.url}"
     paths = output_paths(out_dir, args.project, topic, date)
 

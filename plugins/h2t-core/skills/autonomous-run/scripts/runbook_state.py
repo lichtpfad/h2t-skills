@@ -3,8 +3,10 @@ durable source of truth (spec § Two-track state model). Scoped to the `## Pipel
 section and filtered to known step names, so gate checklists and decision-log bullets never
 leak into resume state (codex-plan-gate-1 P1)."""
 from __future__ import annotations
+
 import re
 import sys
+
 import runbook_schema as S
 from validate_runbook import split_sections
 

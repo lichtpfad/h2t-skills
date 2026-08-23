@@ -4,7 +4,9 @@ Token substitution uses `<<NAME>>` markers (NOT str.format) so literal braces in
 JSON inside the template are safe. The generator is thin; the template holds the safety
 prose; validate_runbook is the guard (spec § Generation)."""
 from __future__ import annotations
+
 from pathlib import Path
+
 import runbook_schema as S
 from validate_runbook import validate_or_raise
 

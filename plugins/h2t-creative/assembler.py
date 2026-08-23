@@ -5,8 +5,9 @@ import html
 import re
 import shutil
 import sys
-import yaml
 from pathlib import Path
+
+import yaml
 
 PLUGIN_ROOT = Path(__file__).parent
 BASE_DIR = PLUGIN_ROOT / "base"

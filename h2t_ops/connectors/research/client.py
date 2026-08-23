@@ -6,13 +6,13 @@ ResearchClient facade. Provider calls land in later tasks.
 """
 from __future__ import annotations
 
-import json
 import ipaddress
+import json
 import os
 import re
 import uuid
 from argparse import Namespace
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone  # noqa: F401
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qsl, quote, urlencode, urlsplit, urlunsplit
@@ -124,7 +124,7 @@ def slugify(text: str, max_len: int = 60) -> str:
 
 def artifact_id(prefix: str = "research") -> str:
     """Return a compact unique artifact id."""
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     return f"{slugify(prefix, max_len=24)}_{stamp}_{uuid.uuid4().hex[:8]}"
 
 
@@ -187,7 +187,7 @@ def artifact_paths(
     """Create artifact directory and return the canonical output paths."""
     output_dir = Path(output_dir).expanduser()
     output_dir.mkdir(parents=True, exist_ok=True)
-    stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d-%H%M%S")
+    stamp = datetime.now(UTC).strftime("%Y-%m-%d-%H%M%S")
     nonce = uuid.uuid4().hex[:8]
     base = f"{slugify(project)}-{slugify(slug_source)}-{slugify(kind)}-{stamp}-{nonce}"
     return {
@@ -305,7 +305,7 @@ def build_research_artifact(
         "kind": "research_artifact",
         "version": "v1",
         "artifact_id": artifact_id,
-        "created_at": datetime.now(timezone.utc).isoformat(),
+        "created_at": datetime.now(UTC).isoformat(),
         "tool": tool,
         "provider_status": provider_status,
         "artifact_refs": artifact_refs,
@@ -537,7 +537,7 @@ class ResearchClient:
             fetch_envelope.get("telemetry", {}).get("reason_for_failed")
             or fetch_envelope.get("telemetry", {}).get("reason_for_degraded")
         )
-        captured_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        captured_at = datetime.now(UTC).isoformat(timespec="seconds")
         ocr_envelope = visual_ocr.build_visual_ocr_envelope(
             url=str(fetch_envelope.get("url") or ""),
             source_fetch_status=str(fetch_envelope.get("status") or "UNKNOWN"),
@@ -1464,7 +1464,9 @@ class ResearchClient:
         hint: str | None = None,
     ) -> dict[str, Any]:
         """Resolve an author name to a channel URL."""
-        from h2t_ops.connectors.research.author_resolve import resolve_author as _resolve
+        from h2t_ops.connectors.research.author_resolve import (
+            resolve_author as _resolve,
+        )
 
         self._require_research_route("author", provider="exa")
         api_key = resolve_secret("EXA_API_KEY")

@@ -1,8 +1,8 @@
 # tests/docs/test_execution_tracking.py
 import json
+import subprocess
 import sys
 from pathlib import Path
-import subprocess
 
 _H2T_SKILLS = Path(__file__).parents[2]  # h2t-skills root (tests/docs/ -> repo root)
 _LINT = Path(__file__).parents[2] / "plugins/h2t-dev/skills/docs-lint/scripts/lint.py"

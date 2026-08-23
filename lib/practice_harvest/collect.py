@@ -1,5 +1,6 @@
 """Сбор источников корпуса с привязкой к файлу, lineage, kind, track."""
 from __future__ import annotations
+
 import hashlib
 from dataclasses import dataclass
 from pathlib import Path
@@ -49,7 +50,7 @@ class SourceRecord:
     text: str
 
     @classmethod
-    def from_path(cls, path: Path, lineage: str, kind: str) -> "SourceRecord":
+    def from_path(cls, path: Path, lineage: str, kind: str) -> SourceRecord:
         return cls(
             path=path.as_posix(),
             lineage=lineage,
@@ -59,7 +60,7 @@ class SourceRecord:
         )
 
 
-def dedup_records(records: list["SourceRecord"]) -> list["SourceRecord"]:
+def dedup_records(records: list[SourceRecord]) -> list[SourceRecord]:
     """Отбросить дубли (canonical_lineage, kind, content-hash).
 
     Одинаковый контент в одном lineage (клон форка) → один.

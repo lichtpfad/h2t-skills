@@ -12,11 +12,16 @@ import re
 import socket
 from html.parser import HTMLParser
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional  # noqa: F401
 
 from h2t_ops.core.errors import (
-    AuthError, ConfigError, H2TError, NetworkError, NotFoundError,
-    ProviderError, UsageError,
+    AuthError,
+    ConfigError,
+    H2TError,
+    NetworkError,
+    NotFoundError,
+    ProviderError,
+    UsageError,
 )
 from h2t_ops.core.google_auth import (
     build_google_service,
@@ -62,7 +67,7 @@ EXPORT_FORMAT_ALIASES = {
 }
 
 
-def normalize_export_format(fmt: Optional[str]) -> Optional[str]:
+def normalize_export_format(fmt: str | None) -> str | None:
     if fmt is None:
         return None
     return EXPORT_FORMAT_ALIASES.get(fmt, fmt)
@@ -236,7 +241,7 @@ def _guess_mime(path: Path) -> str:
     )
 
 
-def _row(file: Dict[str, Any]) -> Dict[str, Any]:
+def _row(file: dict[str, Any]) -> dict[str, Any]:
     row = {
         "id": file.get("id", ""),
         "name": file.get("name", ""),
@@ -268,14 +273,14 @@ def _inline_style_requests(
     raw_text: str,
     base_index: int,
     tab_id: str,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """Build updateTextStyle requests for bold/italic spans in raw_text.
 
     *plain_text* is the text after marker stripping (what was inserted).
     *raw_text* is the original markdown line text (before stripping).
     *base_index* is the document index at which plain_text starts.
     """
-    requests: List[Dict[str, Any]] = []
+    requests: list[dict[str, Any]] = []
     plain_offset = 0
     raw_offset = 0
     while raw_offset < len(raw_text):
@@ -327,7 +332,7 @@ def _utf16_len(text: str) -> int:
     return len(text.encode("utf-16-le")) // 2
 
 
-def _find_tab_end_index(doc: Dict[str, Any], tab_id: str) -> Optional[int]:
+def _find_tab_end_index(doc: dict[str, Any], tab_id: str) -> int | None:
     """Return the endIndex of *tab_id*'s body, or None if the tab is not found."""
     for tab in doc.get("tabs", []):
         if tab.get("tabProperties", {}).get("tabId") == tab_id:
@@ -337,7 +342,7 @@ def _find_tab_end_index(doc: Dict[str, Any], tab_id: str) -> Optional[int]:
     return None
 
 
-def _md_to_docs_requests(markdown_text: str, tab_id: str) -> List[Dict[str, Any]]:
+def _md_to_docs_requests(markdown_text: str, tab_id: str) -> list[dict[str, Any]]:
     """Convert markdown to Docs API batchUpdate requests targeting *tab_id*.
 
     v1 scope: H1–H3 headings, paragraphs, unordered bullets (- or *).
@@ -347,7 +352,7 @@ def _md_to_docs_requests(markdown_text: str, tab_id: str) -> List[Dict[str, Any]
     insertText request, followed by style/bullet requests with pre-computed
     stable indices.
     """
-    paragraphs: List[Dict[str, Any]] = []
+    paragraphs: list[dict[str, Any]] = []
     for line in markdown_text.splitlines():
         m = re.match(r'^(#{1,3})\s+(.*)', line)
         if m:
@@ -365,7 +370,7 @@ def _md_to_docs_requests(markdown_text: str, tab_id: str) -> List[Dict[str, Any]
         return []
 
     full_text = "".join(p["text"] + "\n" for p in paragraphs)
-    requests: List[Dict[str, Any]] = [{
+    requests: list[dict[str, Any]] = [{
         "insertText": {
             "location": {"index": 1, "tabId": tab_id},
             "text": full_text,
@@ -425,7 +430,7 @@ class DriveClient:
             self._sheets_service = build_google_service("sheets", "v4", self._creds)
         return self._sheets_service
 
-    def sheets_read(self, sheet_id: str, *, cell_range: str) -> Dict[str, Any]:
+    def sheets_read(self, sheet_id: str, *, cell_range: str) -> dict[str, Any]:
         """Read a cell range from a Google Sheet (values only)."""
         try:
             resp = self._sheets().spreadsheets().values().get(
@@ -444,9 +449,9 @@ class DriveClient:
         sheet_id: str,
         *,
         cell_range: str,
-        value: Optional[str] = None,
-        values_file: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        value: str | None = None,
+        values_file: str | None = None,
+    ) -> dict[str, Any]:
         """Write values into a range in place via Sheets ``values.update``.
 
         Values-only update (``valueInputOption=RAW``) — cell/column formatting,
@@ -491,11 +496,11 @@ class DriveClient:
         q: str,
         fields: str,
         page_size: int,
-        order_by: Optional[str] = None,
-        max_results: Optional[int] = None,
-        drive_id: Optional[str] = None,
-    ) -> List[Dict[str, Any]]:
-        rows: List[Dict[str, Any]] = []
+        order_by: str | None = None,
+        max_results: int | None = None,
+        drive_id: str | None = None,
+    ) -> list[dict[str, Any]]:
+        rows: list[dict[str, Any]] = []
         page_token = None
         while True:
             kwargs = {
@@ -520,7 +525,7 @@ class DriveClient:
             rows = rows[:max_results]
         return [_row(f) for f in rows]
 
-    def _resolve_folder_id(self, folder_name: str) -> tuple[Optional[str], str, bool]:
+    def _resolve_folder_id(self, folder_name: str) -> tuple[str | None, str, bool]:
         """Resolve folder name or ID to (folder_id, display_name, is_shared_drive).
 
         is_shared_drive=True means the ID is a Shared Drive root — listing requires
@@ -577,8 +582,8 @@ class DriveClient:
         parent_id: str,
         name: str,
         *,
-        folder: Optional[bool] = None,
-    ) -> Optional[Dict[str, Any]]:
+        folder: bool | None = None,
+    ) -> dict[str, Any] | None:
         """Find a single direct child by name under a parent id.
 
         If duplicates exist for the requested kind, stop instead of guessing.
@@ -609,8 +614,8 @@ class DriveClient:
         return parent_id.startswith("dry-run:")
 
     @staticmethod
-    def _summary(entries: list[Dict[str, Any]]) -> Dict[str, int]:
-        counts: Dict[str, int] = {}
+    def _summary(entries: list[dict[str, Any]]) -> dict[str, int]:
+        counts: dict[str, int] = {}
         for entry in entries:
             action = str(entry.get("action", "unknown"))
             counts[action] = counts.get(action, 0) + 1
@@ -624,7 +629,7 @@ class DriveClient:
         *,
         relative_path: str,
         dry_run: bool,
-        entries: list[Dict[str, Any]],
+        entries: list[dict[str, Any]],
     ) -> str:
         if self._is_virtual_parent(parent_id):
             virtual_id = f"dry-run:{relative_path}"
@@ -693,7 +698,7 @@ class DriveClient:
         relative_path: str,
         dry_run: bool,
         update_existing: bool,
-        entries: list[Dict[str, Any]],
+        entries: list[dict[str, Any]],
     ) -> None:
         source_mime = _guess_mime(src)
         size = src.stat().st_size
@@ -757,9 +762,9 @@ class DriveClient:
 
     def list_files(
         self,
-        folder: Optional[str] = None,
-        max_results: Optional[int] = None,
-    ) -> List[Dict[str, Any]]:
+        folder: str | None = None,
+        max_results: int | None = None,
+    ) -> list[dict[str, Any]]:
         try:
             drive_id = None
             if folder:
@@ -785,9 +790,9 @@ class DriveClient:
     def search_files(
         self,
         query: str,
-        mime_filter: Optional[str] = None,
-        max_results: Optional[int] = None,
-    ) -> List[Dict[str, Any]]:
+        mime_filter: str | None = None,
+        max_results: int | None = None,
+    ) -> list[dict[str, Any]]:
         safe = _escape_query_value(query)
         q = f"fullText contains '{safe}' and trashed=false"
         if mime_filter == "docx":
@@ -810,9 +815,9 @@ class DriveClient:
 
     def list_folders(
         self,
-        parent: Optional[str] = None,
+        parent: str | None = None,
         max_results: int = 50,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         try:
             drive_id = None
             if parent:
@@ -845,8 +850,8 @@ class DriveClient:
         self,
         name: str,
         *,
-        parent: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        parent: str | None = None,
+    ) -> dict[str, Any]:
         if not name or not name.strip():
             raise UsageError("drive create-folder: name is required")
         try:
@@ -854,7 +859,7 @@ class DriveClient:
             parent_name = "root"
             if parent:
                 parent_id, parent_name, _ = self._resolve_folder_id(parent)
-            body: Dict[str, Any] = {"name": name.strip(), "mimeType": FOLDER_MIME}
+            body: dict[str, Any] = {"name": name.strip(), "mimeType": FOLDER_MIME}
             if parent_id:
                 body["parents"] = [parent_id]
             res = self.service.files().create(
@@ -873,7 +878,7 @@ class DriveClient:
         except Exception as e:
             raise _map_http_error(e, op=f"create folder {name.strip()!r}") from e
 
-    def rename_file(self, file_id: str, new_name: str) -> Dict[str, Any]:
+    def rename_file(self, file_id: str, new_name: str) -> dict[str, Any]:
         if not new_name or not new_name.strip():
             raise UsageError("drive rename: new name is required")
         clean_name = new_name.strip()
@@ -898,11 +903,11 @@ class DriveClient:
         self,
         file_id: str,
         *,
-        new_name: Optional[str] = None,
-        folder: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        new_name: str | None = None,
+        folder: str | None = None,
+    ) -> dict[str, Any]:
         try:
-            body: Dict[str, Any] = {}
+            body: dict[str, Any] = {}
             if new_name and new_name.strip():
                 body["name"] = new_name.strip()
             if folder:
@@ -928,7 +933,7 @@ class DriveClient:
         except Exception as e:
             raise _map_http_error(e, op=f"copy file {file_id}") from e
 
-    def move_file(self, file_id: str, *, destination_folder_id: str) -> Dict[str, Any]:
+    def move_file(self, file_id: str, *, destination_folder_id: str) -> dict[str, Any]:
         destination = destination_folder_id.strip() if destination_folder_id else ""
         if not destination:
             raise UsageError("drive move: destination folder is required")
@@ -970,7 +975,7 @@ class DriveClient:
         except Exception as e:
             raise _map_http_error(e, op=f"move file {file_id}") from e
 
-    def list_document_tabs(self, document_id: str) -> Dict[str, Any]:
+    def list_document_tabs(self, document_id: str) -> dict[str, Any]:
         try:
             meta = self.service.files().get(
                 fileId=document_id,
@@ -988,8 +993,8 @@ class DriveClient:
         except Exception as e:
             raise _map_http_error(e, op=f"list document tabs for {document_id}") from e
 
-        def _flatten(tabs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-            rows: List[Dict[str, Any]] = []
+        def _flatten(tabs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+            rows: list[dict[str, Any]] = []
             for tab in tabs or []:
                 props = tab.get("tabProperties", {}) or {}
                 children = tab.get("childTabs", []) or []
@@ -1016,7 +1021,7 @@ class DriveClient:
             "count": len(tabs),
         }
 
-    def add_document_tab(self, document_id: str, title: str) -> Dict[str, Any]:
+    def add_document_tab(self, document_id: str, title: str) -> dict[str, Any]:
         try:
             meta = self.service.files().get(
                 fileId=document_id,
@@ -1054,7 +1059,7 @@ class DriveClient:
         markdown_text: str,
         *,
         clear_first: bool = False,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Write markdown content to an existing Google Docs tab via batchUpdate.
 
         v1 scope: H1–H3 headings, paragraphs, unordered bullet lists.
@@ -1072,7 +1077,7 @@ class DriveClient:
                     f"file {meta.get('name', document_id)!r} is not a Google Docs editor file"
                 )
 
-            all_reqs: List[Dict[str, Any]] = []
+            all_reqs: list[dict[str, Any]] = []
 
             doc = self._docs().documents().get(
                 documentId=document_id, includeTabsContent=True,
@@ -1142,9 +1147,9 @@ class DriveClient:
         }
 
     @staticmethod
-    def _find_tab_body(doc: Dict[str, Any], tab_id: str) -> Optional[Dict[str, Any]]:
+    def _find_tab_body(doc: dict[str, Any], tab_id: str) -> dict[str, Any] | None:
         """Recursively find a tab's documentTab.body by tab_id."""
-        def _search(tabs: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+        def _search(tabs: list[dict[str, Any]]) -> dict[str, Any] | None:
             for tab in tabs or []:
                 props = tab.get("tabProperties", {}) or {}
                 if props.get("tabId") == tab_id:
@@ -1155,7 +1160,7 @@ class DriveClient:
             return None
         return _search(doc.get("tabs", []) or [])
 
-    def read_tab(self, document_id: str, tab_id: str) -> Dict[str, Any]:
+    def read_tab(self, document_id: str, tab_id: str) -> dict[str, Any]:
         """Read and return the plain text content of a specific Google Docs tab."""
         try:
             meta = self.service.files().get(
@@ -1178,7 +1183,7 @@ class DriveClient:
             from h2t_ops.core.errors import NotFoundError
             raise NotFoundError(f"tab {tab_id!r} not found in document {document_id}")
 
-        text_parts: List[str] = []
+        text_parts: list[str] = []
         for block in body.get("content", []) or []:
             para = block.get("paragraph")
             if not para:
@@ -1196,7 +1201,7 @@ class DriveClient:
             "text": text,
         }
 
-    def get_file(self, file_id: str) -> Dict[str, Any]:
+    def get_file(self, file_id: str) -> dict[str, Any]:
         """Get metadata for a Drive file by id."""
         try:
             return self.service.files().get(
@@ -1207,7 +1212,7 @@ class DriveClient:
         except Exception as e:
             raise _map_http_error(e, op=f"get file {file_id}") from e
 
-    def _confirm_file_name(self, file_id: str, confirm_name: str) -> Dict[str, Any]:
+    def _confirm_file_name(self, file_id: str, confirm_name: str) -> dict[str, Any]:
         """Fetch file metadata and verify the name matches confirm_name (case-insensitive)."""
         meta = self.get_file(file_id)
         actual = str(meta.get("name", "")).strip()
@@ -1217,7 +1222,7 @@ class DriveClient:
             )
         return meta
 
-    def trash_file(self, file_id: str, *, confirm_name: str) -> Dict[str, Any]:
+    def trash_file(self, file_id: str, *, confirm_name: str) -> dict[str, Any]:
         """Move a Drive file to trash after verifying the file name."""
         meta = self._confirm_file_name(file_id, confirm_name)
         try:
@@ -1236,7 +1241,7 @@ class DriveClient:
             "previous": meta,
         }
 
-    def delete_file(self, file_id: str, *, confirm_name: str) -> Dict[str, Any]:
+    def delete_file(self, file_id: str, *, confirm_name: str) -> dict[str, Any]:
         """Permanently delete a Drive file after verifying the file name."""
         meta = self._confirm_file_name(file_id, confirm_name)
         try:
@@ -1249,10 +1254,10 @@ class DriveClient:
         self,
         title: str,
         *,
-        folder_id: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        folder_id: str | None = None,
+    ) -> dict[str, Any]:
         """Create a new Google Doc with the given title, optionally inside a folder."""
-        body: Dict[str, Any] = {
+        body: dict[str, Any] = {
             "name": title,
             "mimeType": "application/vnd.google-apps.document",
         }
@@ -1267,7 +1272,7 @@ class DriveClient:
         except Exception as e:
             raise _map_http_error(e, op=f"create document {title!r}") from e
 
-    def download_file(self, file_id: str, dest: Optional[str | Path] = None) -> Dict[str, Any]:
+    def download_file(self, file_id: str, dest: str | Path | None = None) -> dict[str, Any]:
         try:
             meta = self.service.files().get(
                 fileId=file_id, fields="name, mimeType, size",
@@ -1282,7 +1287,7 @@ class DriveClient:
                 _, done = downloader.next_chunk()
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(buf.getvalue())
-            result: Dict[str, Any] = {
+            result: dict[str, Any] = {
                 "saved_path": str(target),
                 "file_id": file_id,
                 "name": name,
@@ -1297,10 +1302,10 @@ class DriveClient:
     def export_file(
         self,
         file_id: str,
-        fmt: Optional[str] = None,
-        dest: Optional[str | Path] = None,
+        fmt: str | None = None,
+        dest: str | Path | None = None,
         to_stdout: bool = False,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         chosen_fmt = normalize_export_format(fmt)
         if to_stdout and chosen_fmt in {"docx", "xlsx", "pdf", "pptx"}:
             raise UsageError(f"drive export --print cannot use binary format: {chosen_fmt}")
@@ -1330,7 +1335,7 @@ class DriveClient:
                 html = content.decode("utf-8") if isinstance(content, bytes) else content
                 content = convert_html_to_markdown(html).encode("utf-8")
 
-            result: Dict[str, Any] = {
+            result: dict[str, Any] = {
                 "file_id": file_id,
                 "name": name,
                 "source_mime": source_mime,
@@ -1365,13 +1370,13 @@ class DriveClient:
     def upload_file(
         self,
         file_path: str | Path,
-        folder: Optional[str],
+        folder: str | None,
         no_convert: bool = False,
         *,
         update_existing: bool = False,
-        parent_id: Optional[str] = None,
-        title: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        parent_id: str | None = None,
+        title: str | None = None,
+    ) -> dict[str, Any]:
         if not folder and not parent_id:
             raise UsageError("drive upload: --folder is required")
         src = Path(file_path)
@@ -1399,7 +1404,7 @@ class DriveClient:
             if update_existing and folder_id and not self._is_virtual_parent(folder_id):
                 existing = self._find_child_by_name(folder_id, dest_name, folder=False)
 
-            metadata: Dict[str, Any] = {"name": dest_name}
+            metadata: dict[str, Any] = {"name": dest_name}
             if folder_id:
                 metadata["parents"] = [folder_id]
             if target_mime:
@@ -1437,11 +1442,11 @@ class DriveClient:
         self,
         file_id: str,
         *,
-        email: Optional[str] = None,
+        email: str | None = None,
         role: str = "reader",
         anyone: bool = False,
         get_link: bool = False,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         try:
             if not email and not anyone and not get_link:
                 raise UsageError("share_file: one of email, anyone, or get_link is required")
@@ -1466,7 +1471,7 @@ class DriveClient:
                     "has_anyone_permission": has_anyone,
                 }
             perm_type = "user" if email else "anyone"
-            perm_body: Dict[str, Any] = {"type": perm_type, "role": role}
+            perm_body: dict[str, Any] = {"type": perm_type, "role": role}
             if email:
                 perm_body["emailAddress"] = email
             perm = self.service.permissions().create(
@@ -1501,7 +1506,7 @@ class DriveClient:
         parent_id: str,
         dry_run: bool = False,
         update_existing: bool = False,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Recursively upload a local folder to Drive preserving relative paths.
 
         Folder upload is native by default: `.html`, `.txt`, `.md`, and other files
@@ -1517,8 +1522,8 @@ class DriveClient:
             raise UsageError(f"not a directory: {root}")
 
         try:
-            entries: list[Dict[str, Any]] = []
-            folder_ids: Dict[Path, str] = {Path("."): parent_id}
+            entries: list[dict[str, Any]] = []
+            folder_ids: dict[Path, str] = {Path("."): parent_id}
 
             all_paths = sorted(
                 root.rglob("*"),

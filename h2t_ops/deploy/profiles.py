@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from types import MappingProxyType
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any
 
 from h2t_ops.core.errors import ConfigError
 
-from .models import DeployProfileSpec, ScriptStep
 from ._yaml import load_yaml_mapping
+from .models import DeployProfileSpec, ScriptStep
 
 _PROFILES_RELATIVE_PATH = Path(".h2t/config/deploy/profiles.yaml")
 

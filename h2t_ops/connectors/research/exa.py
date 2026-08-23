@@ -8,12 +8,17 @@ import random
 import time
 import urllib.error
 import urllib.request
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone  # noqa: F401
 from pathlib import Path
 from typing import Any
 
-from h2t_ops.core.errors import AuthError, ConfigError, NetworkError, ProviderError, UsageError
-
+from h2t_ops.core.errors import (
+    AuthError,
+    ConfigError,
+    NetworkError,
+    ProviderError,
+    UsageError,
+)
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 SYSTEMPROMPTS_DIR = SCRIPT_DIR / "systemprompts"
@@ -352,7 +357,7 @@ def search_with_retry(
         cost = 0.0
         reason = None
 
-    timestamp = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    timestamp = datetime.now(UTC).isoformat(timespec="seconds")
     envelope = build_envelope(
         status=status_label,
         results=results,
@@ -571,7 +576,7 @@ def find_similar(
     if exclude_domains:
         body["excludeDomains"] = exclude_domains
 
-    timestamp = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    timestamp = datetime.now(UTC).isoformat(timespec="seconds")
     try:
         http_status, data, latency = call_exa("/findSimilar", body, api_key)
     except ExaPermanentError as exc:
@@ -630,7 +635,7 @@ def answer(
 ) -> tuple[dict[str, Any], int]:
     """Call Exa /answer. Returns (envelope, exit_code)."""
     body: dict[str, Any] = {"query": query, "text": True}
-    timestamp = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    timestamp = datetime.now(UTC).isoformat(timespec="seconds")
     try:
         http_status, data, latency = call_exa("/answer", body, api_key)
     except ExaPermanentError as exc:
@@ -725,7 +730,7 @@ def build_research_envelope(
     reason_for_fallback: str | None = None,
 ) -> dict[str, Any]:
     """Assemble the research provider envelope (artifact-writer compatible)."""
-    timestamp = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    timestamp = datetime.now(UTC).isoformat(timespec="seconds")
     total_latency_ms = sum(a.get("latency_ms", 0) for a in attempts)
     return {
         "status": status,
@@ -996,7 +1001,7 @@ def build_agent_envelope(
     reason_for_fallback: str | None = None,
 ) -> dict[str, Any]:
     """Assemble the agent provider envelope (artifact-writer compatible)."""
-    timestamp = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    timestamp = datetime.now(UTC).isoformat(timespec="seconds")
     total_latency_ms = sum(a.get("latency_ms", 0) for a in attempts)
     citations = _flatten_grounding(grounding)
     return {

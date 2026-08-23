@@ -13,7 +13,8 @@ from __future__ import annotations
 import importlib.util
 import json
 import sys
-from datetime import datetime, timezone
+import time
+from datetime import UTC, datetime, timezone  # noqa: F401
 from pathlib import Path
 from unittest.mock import patch
 
@@ -304,10 +305,10 @@ def test_sync_recordings_streams_file(cli, tmp_path):
 # ─── webhook server (smoke) ───────────────────────────────────────────────────
 
 def test_webhook_server_writes_event(cli, tmp_path):
+    import socket
     import threading
     import urllib.error
     import urllib.request
-    import socket
 
     # find free port
     with socket.socket() as s:
@@ -335,7 +336,7 @@ def test_webhook_server_writes_event(cli, tmp_path):
         for _ in range(50):
             if "s" in server_holder:
                 break
-            import time as _t; _t.sleep(0.02)
+            time.sleep(0.02)
         assert "s" in server_holder, "server did not start"
 
         req = urllib.request.Request(
@@ -893,7 +894,7 @@ def test_upload_from_file_skip_existing(cli, tmp_path, monkeypatch):
     src.write_bytes(b"x" * 1024)
 
     size = src.stat().st_size
-    mtime = datetime.fromtimestamp(src.stat().st_mtime, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    mtime = datetime.fromtimestamp(src.stat().st_mtime, UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     manifest = tmp_path / "manifest.jsonl"
     manifest.write_text(json.dumps({
         "source_webm": str(src.resolve()),
@@ -945,7 +946,7 @@ def test_upload_resumes_from_converted_state(cli, tmp_path, monkeypatch):
     src = tmp_path / "meetgeek-recording-2026-01-01T10-00-00-000Z.webm"
     src.write_bytes(b"x" * 1024)
     size = src.stat().st_size
-    mtime = datetime.fromtimestamp(src.stat().st_mtime, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    mtime = datetime.fromtimestamp(src.stat().st_mtime, UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     cached_mp4 = tmp_path / "cached.mp4"
     cached_mp4.write_bytes(b"M" * 2048)
@@ -985,7 +986,7 @@ def test_upload_resumes_from_in_drive_state(cli, tmp_path, monkeypatch):
     src = tmp_path / "meetgeek-recording-2026-01-01T10-00-00-000Z.webm"
     src.write_bytes(b"x" * 1024)
     size = src.stat().st_size
-    mtime = datetime.fromtimestamp(src.stat().st_mtime, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    mtime = datetime.fromtimestamp(src.stat().st_mtime, UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     cached_mp4 = tmp_path / "cached.mp4"
     cached_mp4.write_bytes(b"M" * 2048)
@@ -1390,7 +1391,7 @@ def test_resume_reshares_the_cached_drive_file_before_submitting(cli, tmp_path, 
     src = tmp_path / "meetgeek-recording-2026-01-01T10-00-00-000Z.webm"
     src.write_bytes(b"x" * 1024)
     size = src.stat().st_size
-    mtime = datetime.fromtimestamp(src.stat().st_mtime, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    mtime = datetime.fromtimestamp(src.stat().st_mtime, UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     cached_mp4 = tmp_path / "cached.mp4"
     cached_mp4.write_bytes(b"M" * 2048)
 
@@ -1447,7 +1448,7 @@ def test_resume_records_drive_failed_when_resharing_raises(cli, tmp_path, monkey
     src = tmp_path / "meetgeek-recording-2026-01-01T10-00-00-000Z.webm"
     src.write_bytes(b"x" * 1024)
     size = src.stat().st_size
-    mtime = datetime.fromtimestamp(src.stat().st_mtime, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    mtime = datetime.fromtimestamp(src.stat().st_mtime, UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     cached_mp4 = tmp_path / "cached.mp4"
     cached_mp4.write_bytes(b"M" * 2048)
 

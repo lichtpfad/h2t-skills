@@ -4,12 +4,27 @@ description: "Generates, exports, and validates draw.io architecture diagrams. C
 compatibility: "Claude Code"
 metadata:
   author: lichtpfad
-  version: 1.0.0
+  version: 1.0.1
 ---
 
 # Draw.io Diagram Skill
 
 Generate production-quality `.drawio` architecture diagrams from structured graph descriptions with project-specific styling.
+
+## Setup
+
+`generate.py` imports `drawpyo` unconditionally, and nothing installs it for you:
+
+```bash
+python -c "import drawpyo" 2>/dev/null || {
+  echo "ERROR: drawpyo not installed. Run: pip install drawpyo"
+  exit 1
+}
+```
+
+Export additionally needs the draw.io Desktop CLI at
+`/Applications/draw.io.app/Contents/MacOS/draw.io`, overridable through
+`.drawio-skill.yaml` (`export.drawio_path`).
 
 ## Commands
 

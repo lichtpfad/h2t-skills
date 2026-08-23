@@ -1,8 +1,9 @@
 import inspect
+
 import pytest
 import runbook_schema as S
-from validate_runbook import validate, validate_or_raise, RunbookInvalid
-from new_runbook import render, create_runbook, PIPELINE_CONTRACT
+from new_runbook import PIPELINE_CONTRACT, create_runbook, render
+from validate_runbook import RunbookInvalid, validate, validate_or_raise
 
 _FIELDS = dict(title="Demo", today="2026-07-09", runbook_path="docs/x-runbook.md",
                branch="feat/x", spec_path="docs/x-spec.md", issue="#1",

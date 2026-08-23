@@ -24,11 +24,9 @@ from pathlib import Path
 
 import pytest
 import yaml
-
 from renderer.field_mapper import ALLOWED_HELPERS
 from renderer.semantic_parser import KNOWN_BLOCK_TYPES
 from renderer.skin_loader import BlockMapping, Skin, load_skin
-
 
 PLUGIN_ROOT = Path(__file__).resolve().parents[1]
 

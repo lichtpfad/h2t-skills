@@ -3,20 +3,21 @@
 Google Drive CLI — list, search, download, export, upload.
 """
 
-import sys
-import json
-import io
 import argparse
+import io
+import json
+import sys
 from pathlib import Path
 
 from dotenv import load_dotenv
+
 load_dotenv(Path.home() / '.dor' / 'secrets.env', override=False)
 
 try:
     from google.auth.transport.requests import Request
     from google.oauth2.credentials import Credentials
     from googleapiclient.discovery import build
-    from googleapiclient.http import MediaIoBaseDownload, MediaFileUpload
+    from googleapiclient.http import MediaFileUpload, MediaIoBaseDownload
 except ImportError:
     print("Error: google-api-python-client not installed", file=sys.stderr)
     sys.exit(1)
@@ -433,7 +434,7 @@ def upload_file(file_path, folder_name=None, no_convert=False):
         print(f"❌ Ошибка загрузки: {e}", file=sys.stderr)
         sys.exit(1)
 
-    print(f"\n✅ Загружено:")
+    print("\n✅ Загружено:")
     print(f"   Имя:    {result['name']}")
     print(f"   ID:     {result['id']}")
     print(f"   Ссылка: {result.get('webViewLink', 'N/A')}")

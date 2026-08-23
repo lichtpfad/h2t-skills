@@ -4,8 +4,9 @@ from __future__ import annotations
 import importlib
 import pkgutil
 import sys
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
-from typing import Any, Callable, Iterator
+from typing import Any
 
 import h2t_ops.connectors as _connectors_pkg
 

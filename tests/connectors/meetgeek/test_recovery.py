@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
-import subprocess
+import subprocess  # noqa: F401
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch

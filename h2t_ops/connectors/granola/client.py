@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import os
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional  # noqa: F401
 
 from h2t_ops.core.errors import (
     AuthError,
@@ -68,16 +68,16 @@ class GranolaClient:
         ).rstrip("/")
         self._timeout = int(os.environ.get("GRANOLA_TIMEOUT", "30"))
 
-    def _headers(self) -> Dict[str, str]:
+    def _headers(self) -> dict[str, str]:
         return {"Authorization": f"Bearer {self._api_key}", "Accept": "application/json"}
 
     def _request(self, method: str, path: str, *,
-                 params: Optional[Dict] = None,
-                 json_body: Optional[Any] = None) -> Any:
+                 params: dict | None = None,
+                 json_body: Any | None = None) -> Any:
         import requests as _r  # lazy — module-scope import forbidden
         url = f"{self._base_url}{path}" if path.startswith("/") else f"{self._base_url}/{path}"
         backoff = 1.0
-        last_exc: Optional[Exception] = None
+        last_exc: Exception | None = None
         for attempt in range(3):
             try:
                 resp = _r.request(
@@ -113,7 +113,7 @@ class GranolaClient:
             f"Granola request failed after 3 attempts: {last_exc or 'server error'}"
         )
 
-    def _get(self, path: str, params: Optional[Dict] = None) -> Any:
+    def _get(self, path: str, params: dict | None = None) -> Any:
         resp = self._request("GET", path, params=params)
         _raise_for_status(resp, path)
         try:
@@ -134,13 +134,13 @@ class GranolaClient:
 
     def list_notes(
         self,
-        limit: Optional[int] = None,
-        cursor: Optional[str] = None,
-        created_after: Optional[str] = None,
-        created_before: Optional[str] = None,
-        updated_after: Optional[str] = None,
-        folder_id: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        limit: int | None = None,
+        cursor: str | None = None,
+        created_after: str | None = None,
+        created_before: str | None = None,
+        updated_after: str | None = None,
+        folder_id: str | None = None,
+    ) -> dict[str, Any]:
         """Returns {rows: [...raw...], next_cursor: str|None, has_more: bool}.
 
         Without `limit` this fetches a single page of NOTES_PAGE_MAX. With a
@@ -148,7 +148,7 @@ class GranolaClient:
         the provider reports no more notes. Rows stay raw — normalization is
         the commands layer's job.
         """
-        base: Dict[str, Any] = {}
+        base: dict[str, Any] = {}
         if created_after:
             base["created_after"] = created_after
         if created_before:
@@ -158,7 +158,7 @@ class GranolaClient:
         if folder_id:
             base["folder_id"] = folder_id
 
-        rows: List[Dict[str, Any]] = []
+        rows: list[dict[str, Any]] = []
         next_cursor = cursor
         has_more = False
         while True:
@@ -180,7 +180,7 @@ class GranolaClient:
             rows = rows[:limit]
         return {"rows": rows, "next_cursor": next_cursor, "has_more": has_more}
 
-    def get_note(self, note_id: str, include_transcript: bool = False) -> Dict[str, Any]:
+    def get_note(self, note_id: str, include_transcript: bool = False) -> dict[str, Any]:
         """GET /v1/notes/{id}; on 413 the transcript is paged in separately."""
         params = {"include": "transcript"} if include_transcript else None
         try:
@@ -193,10 +193,10 @@ class GranolaClient:
                 note["transcript_truncated"] = True
             return note
 
-    def get_transcript(self, note_id: str) -> Dict[str, Any]:
+    def get_transcript(self, note_id: str) -> dict[str, Any]:
         """Fetch every transcript page; returns {transcript: [...], truncated: bool}."""
-        items: List[Dict[str, Any]] = []
-        cursor: Optional[str] = None
+        items: list[dict[str, Any]] = []
+        cursor: str | None = None
         max_pages = int(os.environ.get("GRANOLA_MAX_PAGES", "1000"))
         pages = 0
         truncated = False
@@ -204,7 +204,7 @@ class GranolaClient:
             if pages >= max_pages:
                 truncated = True
                 break
-            params: Dict[str, Any] = {"page_size": TRANSCRIPT_PAGE_MAX}
+            params: dict[str, Any] = {"page_size": TRANSCRIPT_PAGE_MAX}
             if cursor:
                 params["cursor"] = cursor
             page = self._get(f"/v1/notes/{note_id}/transcript", params=params)
@@ -215,14 +215,14 @@ class GranolaClient:
                 break
         return {"transcript": items, "truncated": truncated}
 
-    def list_folders(self) -> Dict[str, Any]:
+    def list_folders(self) -> dict[str, Any]:
         """Fetch every folder page; returns {rows: [...raw...]}."""
-        rows: List[Dict[str, Any]] = []
-        cursor: Optional[str] = None
+        rows: list[dict[str, Any]] = []
+        cursor: str | None = None
         max_pages = int(os.environ.get("GRANOLA_MAX_PAGES", "1000"))
         pages = 0
         while pages < max_pages:
-            params: Dict[str, Any] = {"page_size": FOLDERS_PAGE_MAX}
+            params: dict[str, Any] = {"page_size": FOLDERS_PAGE_MAX}
             if cursor:
                 params["cursor"] = cursor
             page = self._get("/v1/folders", params=params)
@@ -233,7 +233,7 @@ class GranolaClient:
                 break
         return {"rows": rows}
 
-    def list_webhook_endpoints(self) -> Dict[str, Any]:
+    def list_webhook_endpoints(self) -> dict[str, Any]:
         """GET /v1/webhook-endpoints — read-only; secrets are never returned here."""
         data = self._get("/v1/webhook-endpoints")
         return {"rows": data.get("webhook_endpoints") or []}

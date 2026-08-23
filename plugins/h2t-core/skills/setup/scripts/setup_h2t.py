@@ -14,8 +14,9 @@ import re
 import shutil
 import subprocess
 import sys
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 KIND_DOCTOR = "h2t_setup_doctor/v1"
 KIND_CONNECTORS = "h2t_connectors_check/v1"

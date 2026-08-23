@@ -4,16 +4,43 @@
 
 Use `ruff`. No `pylint`, no `flake8`.
 
-There is **no `[tool.ruff]` section in `pyproject.toml`** and no `ruff.toml`, so ruff runs on
-its default rule set — which drifts with the ruff version. Two consequences worth knowing
-before acting on a finding: existing code already trips rules the default set enables
-(`PLW1510`, `I001`, `TRY004` all fire on files nobody has touched), and a finding on a line
-you did not write is pre-existing, not yours to fix. Check with `git stash` before assuming.
+The rule set is **pinned** in `pyproject.toml`: `select = ["E4", "E7", "E9", "F", "I", "UP"]`.
+Ruff's own default is not a set anyone chose — 0.16.4 enables 413 rules and reported 1625
+findings here, nearly all on untouched files, which turned every finding into "mine or
+pre-existing?" instead of a signal. The CI step pins the ruff version too, for the same
+reason: an unpinned linter adds rules on its own schedule.
+
+The repo is at **zero findings** under that set (2026-08-24). A red line is therefore yours.
+
+`ignore` in `pyproject.toml` carries a comment per class saying why it is deferred; the classes
+are tracked in #400. Read the comment before lifting one.
+
+`F401` is handled differently and the difference matters. It is **not** in `ignore` and not in
+`per-file-ignores`: both suppress the rule for a whole file, so a newly added unused import
+would pass unnoticed in any file that already had one. The 101 pre-existing ones carry a
+line-level `# noqa: F401` instead, so the rule stays live everywhere else in the same file.
+Verified: appending an unused import to a file full of marked ones still fails.
+
+**One gap remains, and it is deliberate.** A `noqa` covers its whole statement, so a name added
+*inside* an already-marked import hides too — `from typing import Any, Dict  # noqa` swallows a
+third unused name. 53 of the 101 markers sit on multi-name statements where that is possible;
+the other 48 are single-name imports with nothing to add to. Closing it means resolving each
+import rather than marking it, which is #400. Do not read "F401 is enabled" as "F401 is
+airtight".
+
+Those noqa markers are the debt (#400), not a pattern to copy. `F401` is also `unfixable` —
+several modules re-export names purely so tests can patch them, and `ruff --fix` removing
+those took 14 tests down.
+
+Run the **same paths CI runs**, or a clean local check will still fail on the runner:
 
 ```
-C:/dev/h2t-skills/.venv/Scripts/ruff check plugins/ lib/ h2t_ops/   # Windows
-uvx ruff check plugins/ lib/ h2t_ops/                                # macOS — ruff is not in the venv
+C:/dev/h2t-skills/.venv/Scripts/ruff check plugins/ lib/ h2t_ops/ tests/ scripts/   # Windows
+uvx ruff check plugins/ lib/ h2t_ops/ tests/ scripts/                               # macOS
 ```
+
+CI pins the version (`pipx run ruff==0.16.4`); `uvx ruff` locally may be newer. If a finding
+appears locally and not in CI, compare `ruff --version` before assuming it is real.
 
 ## Markdown
 

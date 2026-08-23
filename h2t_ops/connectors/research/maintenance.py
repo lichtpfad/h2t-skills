@@ -7,7 +7,6 @@ from typing import Any
 
 from h2t_ops.connectors.research import store
 
-
 OBJECTS = {
     "document": {
         "directory": "documents",

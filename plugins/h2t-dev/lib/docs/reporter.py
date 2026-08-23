@@ -1,6 +1,7 @@
 # plugins/h2t-dev/lib/docs/reporter.py
 """h2t_lifecycle_report/v0.1 envelope builder."""
 from __future__ import annotations
+
 import datetime
 
 SCHEMA = "h2t_lifecycle_report/v0.1"

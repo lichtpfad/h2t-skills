@@ -1,7 +1,6 @@
 """Font link injection: profile.yaml web_fonts list -> <link> tags in <head>."""
-import pytest
-
 import assembler as asm
+import pytest
 
 _RECIPE = {
     "title": "Font Test",
