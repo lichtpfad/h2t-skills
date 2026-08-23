@@ -622,22 +622,39 @@ git commit -m "docs(rules): a gate guards an outward action, never a pending wri
 
 ### Task 6: scaffold-project calls its own entry point
 
-**Evidence:** `h2t-scaffold-project` is a declared entry point (`pyproject.toml`, and `uv tool
-list` shows all eight installed), yet
-`plugins/h2t-core/skills/scaffold-project/SKILL.md:26-27` hand-rolls an `$H2T_PYTHON` probe for
-`~/.h2t/venv`. It is the only skill in `h2t-core` still doing so; handoff, session-start,
-init-project and project-audit all gate on `command -v h2t-*`.
+**Evidence — re-measured 2026-08-23, and it is not what this task first claimed.** The gate is
+already present. `plugins/h2t-core/skills/scaffold-project/SKILL.md:29-31`:
+
+```bash
+for _cmd in h2t-scaffold-project h2t-project-register; do
+    command -v "$_cmd" >/dev/null 2>&1 || { echo "ERROR: $_cmd not found. Run /h2t-core:setup"; exit 1; }
+done
+```
+
+The other four skills spell it out one command per line (`handoff:15`, `session-start:17,21`,
+`init-project:19`, `project-audit:17`). Same guarantee, different shape — so a test asserting
+the literal string `command -v h2t-scaffold-project` would fail on a skill that is correct.
+
+What is actually wrong is the `$H2T_PYTHON` block, and it is dead rather than merely
+non-standard. `SKILL.md:25-27` defines the variable; its only use is `:212`, inside a snippet
+that cancels itself — `open(... if False else ...)`, `2>/dev/null || true`, and the next line
+of prose reads *"Actually — skip automatic label apply for now."* It performs no work and
+carries a `~/.h2t/venv` path that nothing else in `h2t-core` still depends on.
 
 **Files:**
-- Modify: `plugins/h2t-core/skills/scaffold-project/SKILL.md:20-30, 212`
+- Modify: `plugins/h2t-core/skills/scaffold-project/SKILL.md:25-27, 206-215`
 - Test: `tests/core/test_skill_entrypoints.py` (extend)
 
 **Interfaces:**
-- Consumes: `h2t-scaffold-project` on PATH
+- Consumes: nothing new.
 
 - [ ] **Step 1: Write the failing test**
 
+The test has to recognise both gate shapes, or it measures style instead of safety:
+
 ```python
+import re
+
 CLI_BACKED = {
     "h2t-core/skills/handoff": "h2t-handoff",
     "h2t-core/skills/session-start": "h2t-gather",
@@ -646,40 +663,72 @@ CLI_BACKED = {
     "h2t-core/skills/scaffold-project": "h2t-scaffold-project",
 }
 
+
+def _gated_commands(text: str) -> set[str]:
+    """Commands the skill refuses to run without.
+
+    Two shapes are in use: `command -v h2t-x` per line, and a `for _cmd in a b; do
+    command -v "$_cmd"` loop. Both are gates; only the loop hides the name from a
+    substring search.
+    """
+    gated = set()
+    if "command -v" in text:
+        gated |= set(re.findall(r"command -v ([\w.-]+)", text))
+        for names in re.findall(r"for _cmd in ([^;\n]+); do", text):
+            gated |= {n for n in names.split() if n.startswith("h2t-")}
+    return gated
+
+
 @pytest.mark.parametrize(("skill", "cli"), sorted(CLI_BACKED.items()))
 def test_skill_gates_on_its_cli(skill, cli):
     text = (ROOT / "plugins" / skill / "SKILL.md").read_text(encoding="utf-8")
-    assert f"command -v {cli}" in text, f"{skill} does not check for {cli}"
+    gated = _gated_commands(text)
+    assert gated, f"{skill}: no gate found at all — the parser is broken, not the skill"
+    assert cli in gated, f"{skill} does not gate on {cli}; it gates on {sorted(gated)}"
+
+
+def test_no_h2t_core_skill_hand_rolls_a_python_probe():
+    """`$H2T_PYTHON` predates the entry points. A skill that still resolves an interpreter
+    by hand has a second way to run its code, and the two can disagree."""
+    offenders = [
+        path.relative_to(ROOT).as_posix()
+        for path in (ROOT / "plugins" / "h2t-core" / "skills").glob("*/SKILL.md")
+        if "H2T_PYTHON" in path.read_text(encoding="utf-8")
+    ]
+    assert offenders == [], f"still hand-rolling an interpreter: {offenders}"
 ```
 
-- [ ] **Step 2: Run it — only scaffold-project fails**
+- [ ] **Step 2: Run it and read which assertion fires**
 
-Run: `.venv/bin/pytest tests/core/test_skill_entrypoints.py -q -k gates_on_its_cli`
-Expected: four PASS, `scaffold-project` FAIL.
+Run: `.venv/bin/pytest tests/core/test_skill_entrypoints.py -q -k "gates_on_its_cli or python_probe"`
+Expected: the five `gates_on_its_cli` cases PASS (the loop shape is recognised), and
+`test_no_h2t_core_skill_hand_rolls_a_python_probe` FAILS naming `scaffold-project/SKILL.md`.
+If a `gates_on_its_cli` case fails instead, the parser is wrong — fix the test, not the skill.
 
-- [ ] **Step 3: Replace the probe with the gate**
+- [ ] **Step 3: Delete the dead block**
 
-```bash
-command -v h2t-scaffold-project >/dev/null 2>&1 || {
-  echo "ERROR: h2t-scaffold-project not found. Run: uv tool install --editable <repo>"
-  exit 1
-}
+Remove the three `H2T_PYTHON` lines at `SKILL.md:25-27`, and replace the self-cancelling label
+snippet at `:206-215` with the instruction the prose underneath already gives:
+
+```markdown
+Labels are applied by a separate skill — canonical labels live in
+`~/.h2t/config/labels.json` and are synced by `/h2t-dev:docs-sync-labels`:
+
+"Запусти `/h2t-dev:docs-sync-labels` в новом репо для применения канонических labels."
 ```
 
-Then replace the `$H2T_PYTHON -c "..."` block at `:212` with the equivalent
-`h2t-scaffold-project` invocation. Read `h2t-scaffold-project --help` for the flag names — do
-not guess them.
+Keep `CONFIG_ROOT` — `grep -n CONFIG_ROOT SKILL.md` before deciding, since other steps read it.
 
-- [ ] **Step 4: Run the test, then the skill against a scratch directory**
+- [ ] **Step 4: Run the tests**
 
-Run: `.venv/bin/pytest tests/core/ -q`, then `h2t-scaffold-project --help`.
-Expected: PASS; the CLI prints its usage.
+Run: `.venv/bin/pytest tests/core/ -q`
+Expected: green, including the two new tests.
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add plugins/h2t-core/skills/scaffold-project/SKILL.md tests/core/test_skill_entrypoints.py
-git commit -m "fix(scaffold-project): gate on the entry point like every other h2t-core skill"
+git commit -m "fix(scaffold-project): drop the dead H2T_PYTHON probe, pin the gate with a test"
 ```
 
 ---

@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 import pytest
@@ -298,3 +299,51 @@ def test_payload_script_dependencies_are_installed():
 
     importlib.import_module("ruamel.yaml")  # skills/init-project/scripts/apply_registration.py
     importlib.import_module("yaml")  # skills/project-audit/scripts/scan.py
+
+
+CLI_BACKED = {
+    "h2t-core/skills/handoff": "h2t-handoff",
+    "h2t-core/skills/session-start": "h2t-gather",
+    "h2t-core/skills/init-project": "h2t-project-register",
+    "h2t-core/skills/project-audit": "h2t-project-audit-scan",
+    "h2t-core/skills/scaffold-project": "h2t-scaffold-project",
+}
+
+
+def _gated_commands(text: str) -> set[str]:
+    """Commands the skill genuinely refuses to run without.
+
+    Two shapes are in use: `command -v h2t-x || { ...; exit 1; }` per line, and a
+    `for _cmd in a b; do command -v "$_cmd" || { ...; exit 1; }; done` loop. Both are
+    gates; only the loop hides the name from a substring search, so a test that greps
+    for the literal fails a correct skill.
+
+    Naming a command is not gating on it. Each shape must carry both the probe and a
+    failing exit, or the name does not count — otherwise `for _cmd in h2t-x; do echo
+    "$_cmd"; done` beside an unrelated `command -v` line would read as a gate.
+    """
+    gated = set()
+    for names, body in re.findall(r"for _cmd in ([^;\n]+); do(.*?)done", text, re.S):
+        if 'command -v "$_cmd"' in body and "exit 1" in body:
+            gated |= {n for n in names.split() if n.startswith("h2t-")}
+    for name, tail in re.findall(r"command -v ([\w.-]+)[^\n]*\|\|(.{0,200})", text, re.S):
+        if "exit 1" in tail:
+            gated.add(name)
+    return gated
+
+
+@pytest.mark.parametrize(("skill", "cli"), sorted(CLI_BACKED.items()))
+def test_skill_gates_on_its_cli(skill, cli):
+    text = (Path("plugins") / skill / "SKILL.md").read_text(encoding="utf-8")
+    gated = _gated_commands(text)
+    assert gated, f"{skill}: no gate found at all — the parser is broken, not the skill"
+    assert cli in gated, f"{skill} does not gate on {cli}; it gates on {sorted(gated)}"
+
+
+def test_no_h2t_core_skill_hand_rolls_a_python_probe():
+    """`$H2T_PYTHON` predates the entry points. A skill that still resolves an interpreter
+    by hand has a second way to run its code, and the two can disagree."""
+    skills = sorted(Path("plugins/h2t-core/skills").glob("*/SKILL.md"))
+    assert skills, "no SKILL.md files found — the glob is broken, not the skills"
+    offenders = [p.as_posix() for p in skills if "H2T_PYTHON" in p.read_text(encoding="utf-8")]
+    assert offenders == [], f"still hand-rolling an interpreter: {offenders}"

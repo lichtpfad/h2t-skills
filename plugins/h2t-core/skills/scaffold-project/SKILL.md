@@ -11,7 +11,7 @@ description: >
 compatibility: "Claude Code"
 metadata:
   author: lichtpfad
-  version: 1.0.0
+  version: 1.0.1
 ---
 
 # Instructions
@@ -22,10 +22,6 @@ No UI framework — just Claude asking questions and acting on answers.
 ## Variables
 
 ```bash
-H2T_PYTHON="${H2T_PYTHON:-}"
-[ -z "$H2T_PYTHON" ] && [ -f "$HOME/.h2t/venv/Scripts/python.exe" ] && H2T_PYTHON="$HOME/.h2t/venv/Scripts/python.exe"
-[ -z "$H2T_PYTHON" ] && [ -f "$HOME/.h2t/venv/bin/python" ] && H2T_PYTHON="$HOME/.h2t/venv/bin/python"
-
 for _cmd in h2t-scaffold-project h2t-project-register; do
     command -v "$_cmd" >/dev/null 2>&1 || { echo "ERROR: $_cmd not found. Run /h2t-core:setup"; exit 1; }
 done
@@ -204,20 +200,9 @@ for milestone in {milestones}; do
 done
 ```
 
-Labels are set from `~/.h2t/config/labels.json` if the file exists:
+Labels are applied by a separate skill — canonical labels live in
+`~/.h2t/config/labels.json` and are synced by `/h2t-dev:docs-sync-labels`. Tell the user:
 
-```bash
-# Apply canonical labels
-gh label list --repo "{github_slug}" --json name | \
-  $H2T_PYTHON -c "
-import json,sys,subprocess
-existing = {x['name'] for x in json.load(sys.stdin)}
-labels = json.load(open('$CONFIG_ROOT/../../../docs/standards/labels.json' if False else '$HOME/.h2t/config/docs/standards/labels.json', encoding='utf-8'))
-# fallback: skip if labels.json not found
-" 2>/dev/null || true
-```
-
-Actually — skip automatic label apply for now. Just tell user:
 "Запусти `/h2t-dev:docs-sync-labels` в новом репо для применения канонических labels."
 
 ---
