@@ -11,7 +11,7 @@ description: >
 compatibility: "Claude Code"
 metadata:
   author: lichtpfad
-  version: 1.0.1
+  version: 1.0.2
 ---
 
 # Instructions
@@ -22,7 +22,7 @@ No UI framework — just Claude asking questions and acting on answers.
 ## Variables
 
 ```bash
-for _cmd in h2t-scaffold-project h2t-project-register; do
+for _cmd in h2t-scaffold-project h2t-project-register h2t-hook; do
     command -v "$_cmd" >/dev/null 2>&1 || { echo "ERROR: $_cmd not found. Run /h2t-core:setup"; exit 1; }
 done
 CONFIG_ROOT="$HOME/.h2t/config"

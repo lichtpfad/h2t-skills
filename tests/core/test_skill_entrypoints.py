@@ -354,11 +354,47 @@ def test_no_h2t_core_skill_hand_rolls_a_python_probe():
     assert offenders == [], f"still hand-rolling an interpreter: {offenders}"
 
 
+def _scaffold_hook_entries() -> dict:
+    """Load scaffold_project through the resolver rather than sys.path.
+
+    `tests/scaffold/` puts that directory on sys.path, so a bare `import scaffold_project`
+    here passes only when both directories run in the same session — green for the wrong
+    reason, and red the moment someone runs `pytest tests/core/` alone.
+    """
+    return plugin_entrypoints.load_plugin_module(
+        "skills/scaffold-project/scripts/scaffold_project.py"
+    )._HOOK_ENTRIES
+
+
+def test_scaffold_gates_on_every_command_it_writes_into_settings():
+    """scaffold-project emits `h2t-hook <name>` into a project's settings.json.
+
+    The gate must cover it. Between pulling the plugin and re-running
+    `uv tool install`, the skill would otherwise happily create a project whose hooks
+    name a command that is not on PATH — and a hook that cannot start is silent.
+    Deriving the requirement from _HOOK_ENTRIES keeps the two from drifting apart.
+    """
+    _HOOK_ENTRIES = _scaffold_hook_entries()
+
+    emitted = {
+        command["command"].split()[0]
+        for entries in _HOOK_ENTRIES.values()
+        for entry in entries
+        for command in entry["hooks"]
+        if command["command"].startswith("h2t-")
+    }
+    assert emitted, "no h2t-* command emitted — the probe is broken, not the code"
+    text = Path("plugins/h2t-core/skills/scaffold-project/SKILL.md").read_text(encoding="utf-8")
+    gated = _gated_commands(text)
+    missing = emitted - gated
+    assert not missing, f"scaffold writes {sorted(missing)} but does not gate on it"
+
+
 def test_hook_entry_resolves_the_handlers_scaffold_writes():
     """scaffold-project writes `h2t-hook on-stop` and `h2t-hook post-git-commit-docs-lint`
     into other people's settings.json. A name that does not resolve makes those hooks dead
     on arrival, and a dead hook is silent."""
-    from scaffold_project import _HOOK_ENTRIES
+    _HOOK_ENTRIES = _scaffold_hook_entries()
 
     named = [
         command["command"].split()[1]
