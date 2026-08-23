@@ -4,7 +4,7 @@ description: "Use when working with the Ecosystem Research KB or any llm-kb-temp
 compatibility: "Requires the installed llm-kb-engine tool (uv tool install) and a data-only KB (default C:/dev/research-kb, override H2T_KB_ROOT), plus the h2t-ops research connector for ingest harvest."
 metadata:
   author: lichtpfad
-  version: 0.1.3
+  version: 0.1.5
 ---
 
 # h2t-ops:kb
