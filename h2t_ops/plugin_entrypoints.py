@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import importlib.util
 import os
+import sys
 from pathlib import Path
 from types import ModuleType
 
@@ -106,6 +107,24 @@ def plugin_script_path(relative_path: str) -> Path:
         if path.is_file():
             return path
     raise FileNotFoundError(_not_found_message(relative_path))
+
+
+def ensure_plugin_lib_on_path(*, requires: str = "eval/status.py") -> Path:
+    """Put the resolved plugin's `lib` on sys.path, the way the plugin scripts do.
+
+    `gather.py:27-32` and `writer.py` already do this by hand from `__file__`. Code inside
+    the installed package has no `__file__` near a plugin root, so it resolves through the
+    same ladder every other entry point uses.
+
+    Resolution is by the module the caller needs, not by the presence of a `lib` directory.
+    The ladder prefers an installed plugin cache over the bundled payload, and every cache
+    entry predating this change has a `lib/eval` without `status.py` — selecting one by
+    directory alone would insert an incomplete lib and never reach the complete one.
+    """
+    lib = plugin_script_path(f"lib/{requires}").parent.parent
+    if str(lib) not in sys.path:
+        sys.path.insert(0, str(lib))
+    return lib
 
 
 def load_plugin_module(relative_path: str) -> ModuleType:

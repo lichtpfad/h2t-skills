@@ -46,7 +46,13 @@ def _doctor() -> int:
 
 
 def _legacy(argv: list[str]) -> int:
-    from lib.cli.main import main as legacy_main  # legacy keeps its own sys.path hack
+    try:
+        from lib.cli.main import main as legacy_main  # legacy keeps its own sys.path hack
+    except ImportError:
+        # Wave 1 emptied lib/cli, and the wheel no longer ships a top-level `lib` at all.
+        # The contract for an unrecognised command is exit 2, not a traceback.
+        print(f"error: unknown command: {argv[0] if argv else ''}", file=sys.stderr)
+        return 2
     old = sys.argv
     sys.argv = ["h2t-ops", *argv]
     try:
