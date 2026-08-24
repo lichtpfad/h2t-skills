@@ -10,7 +10,6 @@ Output: JSON to stdout (scan_result.json schema)
 
 import argparse
 import json
-import os  # noqa: F401
 import subprocess
 import sys
 from pathlib import Path

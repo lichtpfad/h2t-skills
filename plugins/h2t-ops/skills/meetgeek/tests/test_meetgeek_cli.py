@@ -14,7 +14,7 @@ import importlib.util
 import json
 import sys
 import time
-from datetime import UTC, datetime, timezone  # noqa: F401
+from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import patch
 
@@ -501,7 +501,9 @@ def test_convert_single_track_builds_simple_recipe(cli, tmp_path, monkeypatch):
         from pathlib import Path as P
         P(out_path).write_bytes(b"M" * 2048)
         class R:
-            returncode = 0; stderr = ""; stdout = ""
+            returncode = 0
+            stderr = ""
+            stdout = ""
         return R()
 
     monkeypatch.setattr(cli.subprocess, "run", fake_run)
@@ -518,8 +520,10 @@ def test_convert_single_track_builds_simple_recipe(cli, tmp_path, monkeypatch):
 
 
 def test_convert_skip_if_cached(cli, tmp_path, monkeypatch):
-    src = tmp_path / "in.webm"; src.write_bytes(b"x")
-    out = tmp_path / "out.mp4"; out.write_bytes(b"M" * 2048)  # already big enough
+    src = tmp_path / "in.webm"
+    src.write_bytes(b"x")
+    out = tmp_path / "out.mp4"
+    out.write_bytes(b"M" * 2048)  # already big enough
 
     monkeypatch.setattr(cli, "_ffmpeg_probe",
                         lambda p: {"audio_streams": 1, "has_video": True,
@@ -536,7 +540,8 @@ def test_convert_skip_if_cached(cli, tmp_path, monkeypatch):
 
 
 def test_convert_corrupted_raises(cli, tmp_path, monkeypatch):
-    src = tmp_path / "broken.webm"; src.write_bytes(b"x")
+    src = tmp_path / "broken.webm"
+    src.write_bytes(b"x")
     def bad_probe(p): raise cli.ApiError("ffmpeg cannot probe", exit_code=1)
     monkeypatch.setattr(cli, "_ffmpeg_probe", bad_probe)
     rc = cli.main(["convert", str(src), "-o", str(tmp_path / "out.mp4")])
@@ -548,7 +553,8 @@ def test_convert_single_track_maps_audio_explicitly(cli, tmp_path, monkeypatch):
     The single-track recipe used to give -map 0:v? without an audio map,
     silently producing video-only mp4 that MeetGeek then rejects as Failed.
     """
-    src = tmp_path / "in.webm"; src.write_bytes(b"x")
+    src = tmp_path / "in.webm"
+    src.write_bytes(b"x")
     monkeypatch.setattr(cli, "_ffmpeg_probe",
                         lambda p: {"audio_streams": 1, "has_video": True,
                                    "duration_seconds": 60, "raw_stderr_tail": ""})
@@ -557,7 +563,10 @@ def test_convert_single_track_maps_audio_explicitly(cli, tmp_path, monkeypatch):
         captured["cmd"] = cmd
         from pathlib import Path as P
         P(cmd[-1]).write_bytes(b"M" * 2048)
-        class R: returncode = 0; stderr = ""; stdout = ""
+        class R:
+            returncode = 0
+            stderr = ""
+            stdout = ""
         return R()
     monkeypatch.setattr(cli.subprocess, "run", fake_run)
 
@@ -571,7 +580,8 @@ def test_convert_single_track_maps_audio_explicitly(cli, tmp_path, monkeypatch):
 
 def test_convert_audio_only_still_maps_audio(cli, tmp_path, monkeypatch):
     """audio_only must map audio stream explicitly (in addition to -vn)."""
-    src = tmp_path / "in.webm"; src.write_bytes(b"x")
+    src = tmp_path / "in.webm"
+    src.write_bytes(b"x")
     monkeypatch.setattr(cli, "_ffmpeg_probe",
                         lambda p: {"audio_streams": 1, "has_video": True,
                                    "duration_seconds": 60, "raw_stderr_tail": ""})
@@ -580,7 +590,10 @@ def test_convert_audio_only_still_maps_audio(cli, tmp_path, monkeypatch):
         captured["cmd"] = cmd
         from pathlib import Path as P
         P(cmd[-1]).write_bytes(b"M" * 2048)
-        class R: returncode = 0; stderr = ""; stdout = ""
+        class R:
+            returncode = 0
+            stderr = ""
+            stdout = ""
         return R()
     monkeypatch.setattr(cli.subprocess, "run", fake_run)
 
@@ -592,7 +605,8 @@ def test_convert_audio_only_still_maps_audio(cli, tmp_path, monkeypatch):
 
 
 def test_convert_multi_track_uses_amix(cli, tmp_path, monkeypatch):
-    src = tmp_path / "in.webm"; src.write_bytes(b"x")
+    src = tmp_path / "in.webm"
+    src.write_bytes(b"x")
     monkeypatch.setattr(cli, "_ffmpeg_probe",
                         lambda p: {"audio_streams": 3, "has_video": True,
                                    "duration_seconds": 60, "raw_stderr_tail": ""})
@@ -601,7 +615,10 @@ def test_convert_multi_track_uses_amix(cli, tmp_path, monkeypatch):
         captured["cmd"] = cmd
         from pathlib import Path as P
         P(cmd[-1]).write_bytes(b"M" * 2048)
-        class R: returncode = 0; stderr = ""; stdout = ""
+        class R:
+            returncode = 0
+            stderr = ""
+            stdout = ""
         return R()
     monkeypatch.setattr(cli.subprocess, "run", fake_run)
 
@@ -619,7 +636,8 @@ def test_convert_multi_track_uses_amix(cli, tmp_path, monkeypatch):
 
 
 def test_convert_mix_mode_first_picks_first_stream(cli, tmp_path, monkeypatch):
-    src = tmp_path / "in.webm"; src.write_bytes(b"x")
+    src = tmp_path / "in.webm"
+    src.write_bytes(b"x")
     monkeypatch.setattr(cli, "_ffmpeg_probe",
                         lambda p: {"audio_streams": 3, "has_video": True,
                                    "duration_seconds": 60, "raw_stderr_tail": ""})
@@ -628,7 +646,10 @@ def test_convert_mix_mode_first_picks_first_stream(cli, tmp_path, monkeypatch):
         captured["cmd"] = cmd
         from pathlib import Path as P
         P(cmd[-1]).write_bytes(b"M" * 2048)
-        class R: returncode = 0; stderr = ""; stdout = ""
+        class R:
+            returncode = 0
+            stderr = ""
+            stdout = ""
         return R()
     monkeypatch.setattr(cli.subprocess, "run", fake_run)
 
@@ -640,7 +661,8 @@ def test_convert_mix_mode_first_picks_first_stream(cli, tmp_path, monkeypatch):
 
 
 def test_convert_audio_only_strips_video_codec_flags(cli, tmp_path, monkeypatch):
-    src = tmp_path / "in.webm"; src.write_bytes(b"x")
+    src = tmp_path / "in.webm"
+    src.write_bytes(b"x")
     monkeypatch.setattr(cli, "_ffmpeg_probe",
                         lambda p: {"audio_streams": 1, "has_video": True,
                                    "duration_seconds": 60, "raw_stderr_tail": ""})
@@ -649,7 +671,10 @@ def test_convert_audio_only_strips_video_codec_flags(cli, tmp_path, monkeypatch)
         captured["cmd"] = cmd
         from pathlib import Path as P
         P(cmd[-1]).write_bytes(b"M" * 2048)
-        class R: returncode = 0; stderr = ""; stdout = ""
+        class R:
+            returncode = 0
+            stderr = ""
+            stdout = ""
         return R()
     monkeypatch.setattr(cli.subprocess, "run", fake_run)
 
@@ -684,7 +709,8 @@ def test_drive_service_raises_when_token_missing(cli, tmp_path, monkeypatch):
 
 
 def test_drive_upload_idempotent_returns_existing(cli, tmp_path, monkeypatch):
-    file_path = tmp_path / "test.mp4"; file_path.write_bytes(b"M" * 1024)
+    file_path = tmp_path / "test.mp4"
+    file_path.write_bytes(b"M" * 1024)
 
     folder_resp = {"files": [{"id": "FOLDER123", "name": "MeetGeek Uploads"}]}
     dated_resp = {"files": [{"id": "DATED456", "name": "2026-05-06"}]}
@@ -695,7 +721,8 @@ def test_drive_upload_idempotent_returns_existing(cli, tmp_path, monkeypatch):
     class FakeService:
         def files(self): return self
         def list(self, **kw):
-            self._resp = responses.pop(0); return self
+            self._resp = responses.pop(0)
+            return self
         def execute(self): return self._resp
         def permissions(self):
             class _P:
@@ -746,7 +773,8 @@ def test_upload_direct_url_400_invalid(cli, monkeypatch):
 
 
 def test_drive_upload_creates_dated_folder_and_uploads(cli, tmp_path, monkeypatch):
-    file_path = tmp_path / "x.mp4"; file_path.write_bytes(b"M" * 1024)
+    file_path = tmp_path / "x.mp4"
+    file_path.write_bytes(b"M" * 1024)
     state = {"folders": {}, "files": {}, "perm_calls": []}
 
     class _FakePerms:
@@ -768,7 +796,8 @@ def test_drive_upload_creates_dated_folder_and_uploads(cli, tmp_path, monkeypatc
         def permissions(self): return _FakePerms(state)
         def execute(self):
             if getattr(self, "_create_body", None):
-                b = self._create_body; self._create_body = None
+                b = self._create_body
+                self._create_body = None
                 if b.get("mimeType") == "application/vnd.google-apps.folder":
                     new_id = f"FOLDER_{b['name']}"
                     state["folders"][b["name"]] = new_id
@@ -872,7 +901,8 @@ def test_upload_from_file_chains_convert_drive_submit(cli, tmp_path, monkeypatch
 def test_upload_from_file_glob_processes_all(cli, tmp_path, monkeypatch):
     a = tmp_path / "meetgeek-recording-2026-01-01T10-00-00-000Z.webm"
     b = tmp_path / "meetgeek-recording-2026-01-02T11-00-00-000Z.webm"
-    a.write_bytes(b"x" * 1024); b.write_bytes(b"x" * 1024)
+    a.write_bytes(b"x" * 1024)
+    b.write_bytes(b"x" * 1024)
 
     posted = []
     def fake_process(src, **kw):
@@ -927,7 +957,8 @@ def test_upload_from_file_continues_on_per_file_error(cli, tmp_path, monkeypatch
     a = tmp_path / "meetgeek-recording-2026-01-01T10-00-00-000Z.webm"
     b = tmp_path / "meetgeek-recording-2026-01-02T10-00-00-000Z.webm"
     c = tmp_path / "meetgeek-recording-2026-01-03T10-00-00-000Z.webm"
-    for f in (a, b, c): f.write_bytes(b"x" * 1024)
+    for f in (a, b, c):
+        f.write_bytes(b"x" * 1024)
 
     def proc(src, **kw):
         if src.name == b.name:

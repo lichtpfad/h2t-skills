@@ -3,9 +3,9 @@ from __future__ import annotations
 
 import uuid
 from datetime import date as date_cls
-from datetime import datetime, timedelta, timezone  # noqa: F401
+from datetime import datetime, timedelta
 from datetime import time as time_cls
-from typing import Any, Dict, List, Optional  # noqa: F401
+from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from h2t_ops.core.errors import (
@@ -420,9 +420,7 @@ class CalendarClient:
                 hint=_CALENDAR_LIST_HINT,
             ) from e
 
-    def create_calendar(self, summary: str, *, timezone: str | None = None) -> dict:  # noqa: F811
-        # `timezone` shadows datetime.timezone here on purpose: it is the caller-facing
-        # name for Google's timeZone field, and this method never needs the datetime one.
+    def create_calendar(self, summary: str, *, timezone: str | None = None) -> dict:
         body: dict[str, Any] = {"summary": summary}
         if timezone:
             body["timeZone"] = timezone

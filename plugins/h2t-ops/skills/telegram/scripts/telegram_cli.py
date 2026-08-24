@@ -17,7 +17,7 @@ import json
 import os
 import subprocess
 import sys
-from datetime import UTC, datetime, timedelta, timezone  # noqa: F401
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from google import genai
@@ -459,7 +459,6 @@ def extract_tasks(chat_messages: dict) -> list:
 
 def cmd_tasks(args):
     """Pipeline: Work chats → extracted tasks → Notion + MD log."""
-    import importlib.util  # noqa: F401
     fetch_all = getattr(args, 'all', False)
 
     print("💬 Читаю рабочие чаты...", file=sys.stderr)

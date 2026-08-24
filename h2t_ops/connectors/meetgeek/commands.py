@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime, timezone  # noqa: F401
+from datetime import UTC, datetime
 from typing import Any
 
 PROVIDER = "meetgeek"

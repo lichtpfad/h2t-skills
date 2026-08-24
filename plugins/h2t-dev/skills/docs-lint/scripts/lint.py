@@ -451,7 +451,7 @@ def _git_author(rp: Path, filepath: Path) -> str:
         ["git", "-C", str(rp), "log", "--diff-filter=A", "--format=%an", "--", rel],
         capture_output=True, text=True,
     )
-    lines = [l.strip() for l in result.stdout.splitlines() if l.strip()]
+    lines = [line.strip() for line in result.stdout.splitlines() if line.strip()]
     return lines[0] if lines else "lichtpfad"
 
 
@@ -785,7 +785,6 @@ def _run_fix_safe(rp: Path, only: str = "all", plan_file: str | None = None) -> 
         import time
 
         from docs.apply_report import action_result, build_apply_report, file_hash
-        from docs.fix_plan import build_fix_plan  # noqa: F401
 
         plan = json.loads(Path(plan_file).read_text())
         results = []

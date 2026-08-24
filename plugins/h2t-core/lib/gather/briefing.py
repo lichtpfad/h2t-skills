@@ -179,7 +179,7 @@ def _build_tasks_section(github: dict) -> str:
     for iss in issues:
         num = iss.get("number", "")
         title = iss.get("title", "")
-        labels = {l.get("name", "") if isinstance(l, dict) else l for l in iss.get("labels", [])}
+        labels = {lab.get("name", "") if isinstance(lab, dict) else lab for lab in iss.get("labels", [])}
         tags = []
         if num in bugs_set or "bug" in labels:
             tags.append("\U0001f41b BUG")
@@ -187,11 +187,11 @@ def _build_tasks_section(github: dict) -> str:
             tags.append("\U0001f534 P0")
         elif "priority:p1" in labels:
             tags.append("\U0001f7e1 P1")
-        for l in sorted(labels):
-            if l.startswith("domain:"):
-                tags.append(l.replace("domain:", ""))
-            elif l.startswith("phase:"):
-                tags.append(l.replace("phase:", ""))
+        for lab in sorted(labels):
+            if lab.startswith("domain:"):
+                tags.append(lab.replace("domain:", ""))
+            elif lab.startswith("phase:"):
+                tags.append(lab.replace("phase:", ""))
         tag_str = ", ".join(tags) if tags else ""
         lines.append(f"| #{num} | {title} | {tag_str} |")
     return "\n".join(lines)

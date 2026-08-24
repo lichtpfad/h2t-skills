@@ -1,5 +1,4 @@
 """Smoke tests: every profile × palette assembles without error."""
-from pathlib import Path  # noqa: F401
 
 import assembler as asm
 import pytest
