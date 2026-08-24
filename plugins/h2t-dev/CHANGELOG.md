@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- fix(docs-index): collect section docs recursively — a nested document now gets its
+  own link instead of a link to the directory it lives in, which the orphan BFS treats
+  as a dead end
+- fix(docs-index): link loose `docs/*.md` and nested `README.md`/`index.md`; only
+  `docs/README.md` itself stays out of the index
+- fix(docs-index): honour `exclude_dirs` — frozen trees are no longer indexed
+- fix(docs-lint): narrow `_safe_generate`'s fallback to `ImportError`; any other error
+  used to replace a live index with a two-line stub on `--apply`
 - feat(milestone-closure): add gh-api dry-run backend and structured closure report
 - docs(milestone-closure): replace standalone docs-index/docs-cleanup flow with unified docs-lint
 

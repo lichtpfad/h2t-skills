@@ -108,3 +108,62 @@ def test_build_navigation_index_excludes_adr_from_quick_links(tmp_path):
     assert "## Architecture Decisions" in result
     # No Quick Links row pointing to adr/
     assert not any("[adr]" in line.lower() for line in result.splitlines())
+
+
+def test_nested_section_files_are_linked(tmp_path):
+    """A doc one level below a section dir gets its own link, not a dead-end dir link."""
+    nested = tmp_path / "docs" / "architecture" / "h2t-creative"
+    nested.mkdir(parents=True)
+    (nested / "rendering.md").write_text("# Rendering\n")
+    result = build_navigation_index(tmp_path, "my-repo")
+    assert "(architecture/h2t-creative/rendering.md)" in result
+
+
+def test_loose_root_docs_are_linked(tmp_path):
+    """Markdown sitting directly in docs/ is linked; only README.md is skipped."""
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "roadmap.md").write_text("# Roadmap\n")
+    (docs / "README.md").write_text("# Index\n")
+    result = build_navigation_index(tmp_path, "my-repo")
+    assert "(roadmap.md)" in result
+    assert "(README.md)" not in result
+
+
+def test_superpowers_references_are_linked(tmp_path):
+    """superpowers/ has dedicated specs+plans tables; references/ must not fall through."""
+    refs = tmp_path / "docs" / "superpowers" / "references"
+    refs.mkdir(parents=True)
+    (refs / "prior-art.md").write_text("# Prior Art\n")
+    result = build_navigation_index(tmp_path, "my-repo")
+    assert "(superpowers/references/prior-art.md)" in result
+
+
+def test_excluded_dirs_are_not_linked(tmp_path):
+    """A frozen tree stays out of the index — linking it is what archiving undid."""
+    arch = tmp_path / "docs" / "archive"
+    arch.mkdir(parents=True)
+    (arch / "old.md").write_text("# Old\n")
+    result = build_navigation_index(tmp_path, "my-repo", exclude_dirs=["docs/archive"])
+    assert "archive/old.md" not in result
+
+
+def test_nested_readme_is_linked_but_not_the_index_itself(tmp_path):
+    """A nested README is a subtree entry point; docs/README.md is the index, not an entry."""
+    sub = tmp_path / "docs" / "wireframes"
+    sub.mkdir(parents=True)
+    (sub / "README.md").write_text("# Wireframes\n")
+    (tmp_path / "docs" / "README.md").write_text("# Index\n")
+    result = build_navigation_index(tmp_path, "my-repo")
+    assert "(wireframes/README.md)" in result
+    assert "](README.md)" not in result
+
+
+def test_adr_index_file_is_linked(tmp_path):
+    """adr/index.md does not match the ADR glob [0-9]*.md — link it explicitly."""
+    adr = tmp_path / "docs" / "adr"
+    adr.mkdir(parents=True)
+    (adr / "0001-a.md").write_text("---\nstatus: accepted\n---\n# A\n")
+    (adr / "index.md").write_text("# ADR Index\n")
+    result = build_navigation_index(tmp_path, "my-repo")
+    assert "(adr/index.md)" in result
