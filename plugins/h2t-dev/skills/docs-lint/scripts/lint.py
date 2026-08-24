@@ -47,6 +47,7 @@ from docs.index_builder import write_index
 from docs.naming import check_naming_all_docs
 from docs.orphan import find_orphan_files
 from docs.reporter import build_report, finding, status_from_findings
+from docs.retire import find_retire_candidates, retire_files
 
 try:
     from docs.project_types import PROJECT_TYPES
@@ -75,7 +76,9 @@ try:
 except ImportError:
     _MISPLACED_FILES_AVAILABLE = False
 
-_SUBCOMMANDS = frozenset({"audit", "plan", "fix-safe", "fix-index", "doctor", "new"})
+_SUBCOMMANDS = frozenset(
+    {"audit", "plan", "fix-safe", "fix-index", "doctor", "new", "retire"}
+)
 
 _VENDOR_EXCLUDE = {
     ".venv", "venv", "node_modules", "__pycache__", "dist", "build",
@@ -1262,6 +1265,55 @@ def _run_new(raw: list[str]) -> None:
     print(f"created: {rel}")
 
 
+def _run_retire(
+    rp: Path, apply: bool = False, stale_days: int = 60, json_output: bool = False
+) -> None:
+    """List stale plans/specs, and with --apply move them into docs/archive/.
+
+    Listing exits 0 even when there are candidates: this is a maintenance
+    command, not a gate. Making it exit non-zero would put it in the same class
+    as `doctor` and it would end up wired into CI, where a judgement call that
+    needs a person does not belong.
+    """
+    cfg = load_config(rp)
+    candidates = find_retire_candidates(
+        rp, stale_days=stale_days, exclude_dirs=cfg.get("exclude_dirs")
+    )
+
+    if json_output:
+        results = retire_files(rp, candidates) if apply else candidates
+        print(json.dumps({"candidates": results}, ensure_ascii=False, indent=2))
+        return
+
+    if not candidates:
+        print(f"retire: нет открытых plan/spec старше {stale_days} дней.")
+        return
+
+    if not apply:
+        print(f"retire: {len(candidates)} кандидатов старше {stale_days} дней\n")
+        print(f"{'возраст':>8}  {'коммитов':>8}  {'статус':<12}  файл")
+        for c in candidates:
+            print(
+                f"{c['age_days']:>6}д  {c['commits']:>8}  {c['status']:<12}  {c['path']}"
+            )
+        print(
+            "\n0 коммитов после создания = документ ни разу не открывали.\n"
+            "Переместить в docs/archive/: docs-lint retire --apply"
+        )
+        return
+
+    results = retire_files(rp, candidates)
+    moved = [r for r in results if r["status"] == "moved"]
+    for r in results:
+        if r["status"] != "moved":
+            print(f"  ПРОПУЩЕН {r['path']}: {r.get('reason', '')}")
+    print(f"retire: перемещено {len(moved)} из {len(results)} в docs/archive/.")
+    print("Файлы в индексе git — проверьте `git status` и закоммитьте.")
+    if moved:
+        # docs/README.md still links every moved file by its old path.
+        print("docs/README.md ссылается на старые пути: docs-lint fix-index --apply")
+
+
 def main() -> None:
     raw = sys.argv[1:]
 
@@ -1320,6 +1372,9 @@ def main() -> None:
                             help="Save fix plan JSON to FILE (plan command only)")
         parser.add_argument("--no-pymarkdown", dest="no_pymarkdown", action="store_true")
         parser.add_argument("--plan", default=None, metavar="FILE")
+        parser.add_argument("--older-than", dest="older_than", type=int, default=60,
+                            metavar="DAYS",
+                            help="retire: age above which an open doc is a candidate")
         args = parser.parse_args(raw)
         rp = _resolve_root(args.root)
 
@@ -1334,6 +1389,9 @@ def main() -> None:
             _run_fix_index(rp, apply=args.apply, plan_file=args.plan)
         elif cmd == "doctor":
             _run_doctor(rp, json_output=args.json_output, no_pymarkdown=args.no_pymarkdown)
+        elif cmd == "retire":
+            _run_retire(rp, apply=args.apply, stale_days=args.older_than,
+                        json_output=args.json_output)
         return
 
     parser = argparse.ArgumentParser()

@@ -20,7 +20,9 @@ def format_briefing(data: dict) -> tuple[str, dict]:
     session_id = data.get("session_id", "")
 
     slug = _build_slug_template(project, github)
-    md = _build_markdown(project, git, github, stack, sessions, latest_session)
+    md = _build_markdown(
+        project, git, github, stack, sessions, latest_session, data.get("docs_debt")
+    )
     hints = _build_hints(data)
     if hints:
         md += "\n### Hints\n"
@@ -46,6 +48,7 @@ def _build_markdown(
     stack: dict,
     sessions: list,
     latest_session: dict | None = None,
+    docs_debt: dict | None = None,
 ) -> str:
     branch = git.get("branch", "")
     pid = project.get("id", "unknown")
@@ -58,6 +61,10 @@ def _build_markdown(
     stack_name = stack.get("name", "none")
     if stack_name and stack_name != "none":
         lines.append(f"**Stack:** {stack_name}")
+
+    debt_line = _build_docs_debt_line(docs_debt)
+    if debt_line:
+        lines.append(debt_line)
 
     # Milestone with progress bar
     ms = github.get("current_milestone")
@@ -116,6 +123,27 @@ def _build_markdown(
         lines.append("")
 
     return "\n".join(lines)
+
+
+def _build_docs_debt_line(docs_debt: dict | None) -> str:
+    """One line of lifecycle debt, or "" when there is none to report.
+
+    Silent when nothing is open, and silent when the key is absent — an older
+    gather.py must still render a briefing. The number is here rather than in a
+    section of its own because a section below the fold is a number nobody sees,
+    and not seeing it is the entire failure this line exists to fix.
+    """
+    if not isinstance(docs_debt, dict):
+        return ""
+    open_count = docs_debt.get("open", 0)
+    if not open_count:
+        return ""
+    total = docs_debt.get("total", open_count)
+    line = f"**Docs:** {open_count} из {total} plan/spec/adr не закрыты"
+    stale = docs_debt.get("stale", 0)
+    if stale:
+        line += f" · {stale} старше {docs_debt.get('stale_days', 60)} дней"
+    return line
 
 
 def _build_previous_session_section(latest_session: dict | None) -> str:
