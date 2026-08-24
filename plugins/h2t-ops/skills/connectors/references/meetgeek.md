@@ -22,6 +22,7 @@
 - Auth-check, teams, list, get, transcript, summary, highlights, insights, and download-url are provider reads.
 - Submit-url writes to MeetGeek and requires explicit user intent.
 - Local recording recovery remains a legacy script/coordinator workflow, not connector runtime and not an active per-connector skill.
+- A public Drive link is a step in the flow, not a resting state — see step 5 of the upload flow.
 - Do not include transcript bodies in GitHub issues.
 
 ## Commands
@@ -61,6 +62,12 @@ MeetGeek API accepts only **public URLs** — not local files. For local `.webm`
    ```bash
    h2t-ops meetgeek transcript MEETING_ID --format md
    ```
+5. **Revoke the public link afterwards.** Step 1 makes the file readable by anyone who
+   has the URL, and MeetGeek only needs that during the fetch. Left in place it does not
+   expire: 26 recordings shared this way stayed world-readable for 108 days (#386).
+   ```bash
+   h2t-ops drive share FILE_ID --revoke-anyone --json
+   ```
 
 **Multiple files:** upload and submit one at a time.
 
@@ -69,6 +76,25 @@ MeetGeek API accepts only **public URLs** — not local files. For local `.webm`
 **Do NOT** use `https://drive.google.com/file/d/FILE_ID/view` — that is a viewer URL, not a download URL.
 
 **Do NOT** route local recording files to `h2t-transcription` — that pipeline is for Vimeo/course content, not meeting recordings.
+
+## Retention (recovery script, not the connector)
+
+The recovery pipeline in `plugins/h2t-ops/skills/meetgeek/scripts/` sweeps after itself:
+every `upload --from-file` batch revokes public ACLs and deletes staged media older than
+24 hours, then reports what it did under `housekeeping` in its JSON. Both sweeps are also
+available on their own:
+
+```bash
+meetgeek_cli.py drive-audit --revoke --min-age-hours 24
+meetgeek_cli.py staging-purge --dry-run
+```
+
+The grace period is not a preference. `submit-url` returns when MeetGeek accepts the URL,
+not when it has fetched the file, so anything retired on the strength of Stage 3 returning
+success can be pulled out from under the download. `staging-purge` deletes a converted file
+only when the recording is `submitted`, its source recording still exists locally, and the
+Drive copy is still there — each gate is a way the deletion would otherwise be the loss of
+the last copy.
 
 ## Common Failures
 

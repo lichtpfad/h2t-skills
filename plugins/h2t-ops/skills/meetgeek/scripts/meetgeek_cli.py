@@ -54,6 +54,7 @@ from pathlib import Path as _Path_r
 _sys_r.path.insert(0, str(_Path_r(__file__).parent))
 from recovery import (  # noqa: E402
     DRIVE_ROOT_FOLDER_NAME,
+    HOUSEKEEPING_MIN_AGE_HOURS,
     RecoveryError,
     convert_media,
 )
@@ -79,7 +80,13 @@ from recovery import (
     process_one as _process_one_for_upload,
 )
 from recovery import (
+    purge_staging as _purge_staging,
+)
+from recovery import (
     read_uploads_manifest as _read_uploads_manifest,
+)
+from recovery import (
+    run_housekeeping as _run_housekeeping,
 )
 from recovery import (
     staging_dir as _staging_dir,  # noqa: F401 — test_meetgeek_cli calls cli._staging_dir
@@ -532,7 +539,20 @@ def cmd_convert(args: argparse.Namespace) -> int:
 def cmd_drive_audit(args: argparse.Namespace) -> int:
     """Report anyone-with-link access on uploaded recordings; --revoke to remove it."""
     try:
-        report = _drive_audit_public(revoke=args.revoke)
+        report = _drive_audit_public(revoke=args.revoke,
+                                     min_age_hours=args.min_age_hours)
+    except RecoveryError as e:
+        raise ApiError(str(e), exit_code=e.exit_code) from e
+    _print_json(report)
+    return 0
+
+
+def cmd_staging_purge(args: argparse.Namespace) -> int:
+    """Delete converted media whose recording is submitted and safely copied elsewhere."""
+    try:
+        report = _purge_staging(min_age_hours=args.min_age_hours,
+                                dry_run=args.dry_run,
+                                verify_drive=args.verify_drive)
     except RecoveryError as e:
         raise ApiError(str(e), exit_code=e.exit_code) from e
     _print_json(report)
@@ -625,9 +645,17 @@ def cmd_upload(args: argparse.Namespace) -> int:
             # would drift from the spec's status enum.
             continue
 
-    _print_json({"processed": processed, "skipped": skipped, "errors": errors,
-                 "drive_folder": f"{DRIVE_ROOT_FOLDER_NAME}/{datetime.now(UTC).strftime('%Y-%m-%d')}",
-                 "results_count": len(results)})
+    envelope = {"processed": processed, "skipped": skipped, "errors": errors,
+                "drive_folder": f"{DRIVE_ROOT_FOLDER_NAME}/{datetime.now(UTC).strftime('%Y-%m-%d')}",
+                "results_count": len(results)}
+    if args.housekeeping and not args.dry_run:
+        # Both retention gaps in #386 were "there is a command for it, and nobody
+        # ran it": staging held 7.69 GB for three months and 26 uploads stayed
+        # world-readable for 108 days. So the sweeps run here, unasked, over
+        # everything older than the grace period — never over this batch.
+        print(f"housekeeping (>{HOUSEKEEPING_MIN_AGE_HOURS:g}h) ...", file=sys.stderr)
+        envelope["housekeeping"] = _run_housekeeping(manifest_path=manifest_path)
+    _print_json(envelope)
     return 0 if errors == 0 else 1
 
 
@@ -940,7 +968,22 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--revoke", action="store_true",
                    help="Remove the anyone permission (off by default; only safe once "
                         "MeetGeek has fetched the recording)")
+    s.add_argument("--min-age-hours", type=float, default=0.0,
+                   help="Leave uploads younger than this alone when revoking "
+                        "(default 0: a human asking for --revoke means all of them)")
     s.set_defaults(func=cmd_drive_audit)
+
+    s = sub.add_parser("staging-purge",
+                       help="Delete converted media whose recording is submitted, still "
+                            "on Drive, and still has its source")
+    s.add_argument("--min-age-hours", type=float, default=HOUSEKEEPING_MIN_AGE_HOURS,
+                   help=f"Keep media submitted less than this long ago "
+                        f"(default {HOUSEKEEPING_MIN_AGE_HOURS:g})")
+    s.add_argument("--dry-run", action="store_true",
+                   help="Report what would be deleted; delete nothing")
+    s.add_argument("--verify-drive", action=argparse.BooleanOptionalAction, default=True,
+                   help="Check the Drive copy still exists before deleting (default on)")
+    s.set_defaults(func=cmd_staging_purge)
 
     s = sub.add_parser("upload", help="Submit URL or local file to MeetGeek /v1/upload")
     grp = s.add_mutually_exclusive_group(required=True)
@@ -957,6 +1000,9 @@ def build_parser() -> argparse.ArgumentParser:
                    help="Skip files already in manifest with status=submitted (default on)")
     s.add_argument("--dry-run", action="store_true",
                    help="Print plan; do not convert/upload")
+    s.add_argument("--housekeeping", action=argparse.BooleanOptionalAction, default=True,
+                   help=f"After the batch, revoke public ACLs and purge staged media "
+                        f"older than {HOUSEKEEPING_MIN_AGE_HOURS:g}h (default on)")
     s.set_defaults(func=cmd_upload)
 
     s = sub.add_parser("sync", help="Bulk pull to LAKE_PATH (manifest.jsonl + per-asset folders)")

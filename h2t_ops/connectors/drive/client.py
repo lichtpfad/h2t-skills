@@ -1446,10 +1446,15 @@ class DriveClient:
         role: str = "reader",
         anyone: bool = False,
         get_link: bool = False,
+        revoke_anyone: bool = False,
     ) -> dict[str, Any]:
         try:
-            if not email and not anyone and not get_link:
-                raise UsageError("share_file: one of email, anyone, or get_link is required")
+            if not email and not anyone and not get_link and not revoke_anyone:
+                raise UsageError(
+                    "share_file: one of email, anyone, get_link, or revoke_anyone is required"
+                )
+            if revoke_anyone:
+                return self._revoke_anyone(file_id)
             if get_link:
                 meta = self.service.files().get(
                     fileId=file_id,
@@ -1498,6 +1503,36 @@ class DriveClient:
             }
         except Exception as e:
             raise _map_http_error(e, op=f"share file {file_id}") from e
+
+    def _revoke_anyone(self, file_id: str) -> dict[str, Any]:
+        """Remove every anyone-with-link permission, leaving named grants intact.
+
+        `--anyone` was a one-way door: the connector could open link access and had
+        no way to close it, so a file shared for one fetch stayed world-readable —
+        26 recordings for 108 days (#386). Only `type: anyone` is deleted; the
+        owner and any invited user keep their access.
+        """
+        perms_resp = self.service.permissions().list(
+            fileId=file_id,
+            fields="permissions(id,type,role)",
+            supportsAllDrives=True,
+        ).execute()
+        targets = [
+            p for p in perms_resp.get("permissions", []) if p.get("type") == "anyone"
+        ]
+        for perm in targets:
+            self.service.permissions().delete(
+                fileId=file_id,
+                permissionId=perm["id"],
+                supportsAllDrives=True,
+            ).execute()
+        return {
+            "kind": "drive_share/v1",
+            "file_id": file_id,
+            "type": "revoke-anyone",
+            "revoked": len(targets),
+            "has_anyone_permission": False,
+        }
 
     def upload_folder(
         self,

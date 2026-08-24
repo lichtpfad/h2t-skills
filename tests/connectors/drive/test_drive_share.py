@@ -170,7 +170,7 @@ def test_get_link_with_role_raises_usage_error(monkeypatch):
     monkeypatch.setattr(client_mod, "DriveClient", lambda: MagicMock())
     args = SimpleNamespace(
         drive_cmd="share", file_id="fid1",
-        email=None, anyone=False, get_link=True,
+        email=None, anyone=False, get_link=True, revoke_anyone=False,
         role="writer", confirm_public=False,
         as_json=True, fmt="human",
     )
@@ -186,7 +186,7 @@ def test_anyone_without_confirm_public_raises_usage_error(monkeypatch):
     monkeypatch.setattr(client_mod, "DriveClient", lambda: MagicMock())
     args = SimpleNamespace(
         drive_cmd="share", file_id="fid1",
-        email=None, anyone=True, get_link=False,
+        email=None, anyone=True, get_link=False, revoke_anyone=False,
         role="reader", confirm_public=False,
         as_json=True, fmt="human",
     )
@@ -202,11 +202,122 @@ def test_share_email_dispatches_to_share_file(monkeypatch):
     monkeypatch.setattr(client_mod, "DriveClient", lambda: mock_client)
     args = SimpleNamespace(
         drive_cmd="share", file_id="fid1",
-        email="a@b.com", anyone=False, get_link=False,
+        email="a@b.com", anyone=False, get_link=False, revoke_anyone=False,
         role="writer", confirm_public=False,
         as_json=False, fmt="human",
     )
     cmds_mod.run(args)
     mock_client.share_file.assert_called_once_with(
         "fid1", email="a@b.com", role="writer", anyone=False, get_link=False,
+        revoke_anyone=False,
+    )
+
+
+# --- --revoke-anyone mode (#386, defect 2) ---
+#
+# `--anyone` was a one-way door: the connector could open link access and had no
+# way to close it, so the documented MeetGeek upload flow left every recording
+# world-readable — 26 of them, for 108 days.
+
+def _setup_revoke(sc, permissions):
+    sc.service.permissions.return_value.list.return_value.execute.return_value = {
+        "permissions": permissions
+    }
+
+
+def test_revoke_anyone_deletes_only_the_anyone_permission(sc):
+    _setup_revoke(sc, [
+        {"id": "P1", "type": "anyone", "role": "reader"},
+        {"id": "P2", "type": "user", "role": "owner"},
+    ])
+    result = sc.share_file("fid1", revoke_anyone=True)
+    delete = sc.service.permissions.return_value.delete
+    assert delete.call_count == 1
+    assert delete.call_args.kwargs["permissionId"] == "P1"
+    assert result["revoked"] == 1
+    assert result["has_anyone_permission"] is False
+
+
+def test_revoke_anyone_is_a_no_op_on_a_private_file(sc):
+    _setup_revoke(sc, [{"id": "P2", "type": "user", "role": "owner"}])
+    result = sc.share_file("fid1", revoke_anyone=True)
+    sc.service.permissions.return_value.delete.assert_not_called()
+    assert result["revoked"] == 0
+
+
+def test_revoke_anyone_removes_every_anyone_grant(sc):
+    """Drive can carry more than one; leaving the second is leaving it public."""
+    _setup_revoke(sc, [
+        {"id": "P1", "type": "anyone", "role": "reader"},
+        {"id": "P3", "type": "anyone", "role": "writer"},
+    ])
+    result = sc.share_file("fid1", revoke_anyone=True)
+    assert result["revoked"] == 2
+    deleted = [c.kwargs["permissionId"]
+               for c in sc.service.permissions.return_value.delete.call_args_list]
+    assert deleted == ["P1", "P3"]
+
+
+def test_revoke_anyone_never_creates_a_permission(sc):
+    _setup_revoke(sc, [{"id": "P1", "type": "anyone", "role": "reader"}])
+    sc.share_file("fid1", revoke_anyone=True)
+    sc.service.permissions.return_value.create.assert_not_called()
+
+
+def test_revoke_anyone_result_shape(sc):
+    _setup_revoke(sc, [])
+    result = sc.share_file("fid1", revoke_anyone=True)
+    assert result["kind"] == "drive_share/v1"
+    assert result["type"] == "revoke-anyone"
+    assert "granted_to" not in result
+    assert "permission_id" not in result
+
+
+def test_revoke_anyone_registered_and_exclusive():
+    parser = _build_parser()
+    args = parser.parse_args(["drive", "share", "fid1", "--revoke-anyone"])
+    assert args.revoke_anyone is True
+    with pytest.raises(SystemExit):
+        parser.parse_args(["drive", "share", "fid1", "--anyone", "--revoke-anyone"])
+
+
+def test_revoke_anyone_needs_no_confirm_public():
+    """Closing an exposure is not the risky direction; only opening one is."""
+    parser = _build_parser()
+    args = parser.parse_args(["drive", "share", "fid1", "--revoke-anyone"])
+    assert args.confirm_public is False
+
+
+def test_revoke_anyone_with_role_raises_usage_error(monkeypatch):
+    import h2t_ops.connectors.drive.client as client_mod
+    from h2t_ops.connectors.drive import commands as cmds_mod
+    from h2t_ops.core.errors import UsageError
+
+    monkeypatch.setattr(client_mod, "DriveClient", lambda: MagicMock())
+    args = SimpleNamespace(
+        drive_cmd="share", file_id="fid1",
+        email=None, anyone=False, get_link=False, revoke_anyone=True,
+        role="writer", confirm_public=False,
+        as_json=True, fmt="human",
+    )
+    with pytest.raises(UsageError, match="--role cannot be used with --revoke-anyone"):
+        cmds_mod.run(args)
+
+
+def test_share_revoke_anyone_dispatches_to_share_file(monkeypatch):
+    import h2t_ops.connectors.drive.client as client_mod
+    from h2t_ops.connectors.drive import commands as cmds_mod
+
+    mock_client = MagicMock()
+    monkeypatch.setattr(client_mod, "DriveClient", lambda: mock_client)
+    args = SimpleNamespace(
+        drive_cmd="share", file_id="fid1",
+        email=None, anyone=False, get_link=False, revoke_anyone=True,
+        role="reader", confirm_public=False,
+        as_json=False, fmt="human",
+    )
+    cmds_mod.run(args)
+    mock_client.share_file.assert_called_once_with(
+        "fid1", email=None, role="reader", anyone=False, get_link=False,
+        revoke_anyone=True,
     )
