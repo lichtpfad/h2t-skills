@@ -12,25 +12,33 @@ reason: an unpinned linter adds rules on its own schedule.
 
 The repo is at **zero findings** under that set (2026-08-24). A red line is therefore yours.
 
-`ignore` in `pyproject.toml` carries a comment per class saying why it is deferred; the classes
-are tracked in #400. Read the comment before lifting one.
+There is **no `ignore`**. E702/E701/E741/UP035 sat there until 2026-08-24 on a cost estimate
+that turned out to be wrong by an order of magnitude — "117 findings" was read as a large diff,
+and they were in 23 files, three of which held 68 of them. A rule parked in `ignore` is off for
+the whole repo, so nothing was catching the next one. Prefer clearing a class to deferring it;
+if you must defer, say in the comment what you measured.
 
-`F401` is handled differently and the difference matters. It is **not** in `ignore` and not in
-`per-file-ignores`: both suppress the rule for a whole file, so a newly added unused import
-would pass unnoticed in any file that already had one. The 101 pre-existing ones carry a
-line-level `# noqa: F401` instead, so the rule stays live everywhere else in the same file.
-Verified: appending an unused import to a file full of marked ones still fails.
+Suppression has three scopes and they are not interchangeable. `ignore` kills a rule repo-wide.
+`per-file-ignores` kills it for whole files — earned only where the file's shape forces it
+(`E402` where a `sys.path.insert` must precede an import). A line-level `# noqa` is the narrow
+one, and the only one that leaves the rule live elsewhere in the same file.
 
-**One gap remains, and it is deliberate.** A `noqa` covers its whole statement, so a name added
-*inside* an already-marked import hides too — `from typing import Any, Dict  # noqa` swallows a
-third unused name. 53 of the 101 markers sit on multi-name statements where that is possible;
-the other 48 are single-name imports with nothing to add to. Closing it means resolving each
-import rather than marking it, which is #400. Do not read "F401 is enabled" as "F401 is
-airtight".
+`F401` uses the third, and never the first two: a whole-file suppression would let a newly
+added unused import pass unnoticed in any file that already had one. The 101 markers were
+resolved import by import (#400); **six** remain, each with the reason on its own line.
 
-Those noqa markers are the debt (#400), not a pattern to copy. `F401` is also `unfixable` —
-several modules re-export names purely so tests can patch them, and `ruff --fix` removing
-those took 14 tests down.
+**The known gap is narrower than it was written here.** A `noqa` covers the statement it sits
+on, so `from typing import Any, Dict  # noqa: F401` does swallow a third unused name added to
+that line. But measured 2026-08-24: in the *parenthesised* form, ruff anchors the marker to the
+individual name's line — a planted `now_iso` on the next line inside an already-marked
+`from recovery import (...)` was still reported. So the gap is a property of single-line
+multi-name imports only. All six surviving markers are single-name statements, with nothing to
+hide behind them.
+
+`F401` stays `unfixable`. Several modules re-export names purely so tests can patch them, and
+`ruff --fix` across the repo removed those and took 14 tests down. The safe way to clear a
+batch is `uvx ruff check --isolated --select F401 --fix <explicit file list>` — `--isolated` is
+what bypasses `unfixable`, and the vetted list is what keeps an interface from being deleted.
 
 Run the **same paths CI runs**, or a clean local check will still fail on the runner:
 
