@@ -129,3 +129,46 @@ def test_retire_refuses_to_overwrite_an_existing_archive_entry(tmp_path):
     results = retire_files(repo, find_retire_candidates(repo, today="2026-08-24"))
     assert results[0]["status"] == "skipped"
     assert (repo / "docs/superpowers/plans/2026-01-05-old.md").exists()
+
+
+# ── evidence: did work ever ship with the document ──────────────────────────
+#
+# Raw commit count does not discriminate. On h2t-skills the modal value was 2,
+# and the second commit was the same one for dozens of files: a bulk
+# `docs-lint --fix-frontmatter` pass on 2026-05-26. A tool touched the file;
+# nobody worked the plan. What separates a plan that was executed from one that
+# was only written is whether any commit touching it also touched code.
+
+
+def test_work_commits_counts_only_commits_that_also_touched_code(tmp_path):
+    repo = _repo(tmp_path)
+    _doc(repo, "docs/superpowers/plans/2026-01-05-old.md")
+    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "-qm", "write the plan"], check=True)
+
+    # a docs-only sweep — the shape that inflated the count
+    (repo / "docs/superpowers/plans/2026-01-05-old.md").write_text(
+        '---\ntitle: "x"\nstatus: draft\nmilestone: M1\n---\nbody\n', encoding="utf-8")
+    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "-qm", "docs: frontmatter"], check=True)
+
+    c = find_retire_candidates(repo, today="2026-08-24")[0]
+    assert c["commits"] == 2
+    assert c["work_commits"] == 0
+
+
+def test_a_commit_touching_both_the_doc_and_code_counts_as_work(tmp_path):
+    repo = _repo(tmp_path)
+    _doc(repo, "docs/superpowers/plans/2026-01-05-old.md")
+    (repo / "src").mkdir()
+    (repo / "src" / "app.py").write_text("x = 1\n", encoding="utf-8")
+    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "-qm", "plan + implementation"], check=True)
+
+    c = find_retire_candidates(repo, today="2026-08-24")[0]
+    assert c["work_commits"] == 1
+
+
+def test_work_commits_is_zero_outside_a_git_repo(tmp_path):
+    _doc(tmp_path, "docs/superpowers/plans/2026-01-05-old.md")
+    assert find_retire_candidates(tmp_path, today="2026-08-24")[0]["work_commits"] == 0

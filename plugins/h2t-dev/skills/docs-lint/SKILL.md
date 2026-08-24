@@ -324,9 +324,14 @@ over hand-writing — hand-written files trigger frontmatter findings.
 ## Retiring stale documents — `retire`
 
 The only sub-command that lowers the debt count. Lists open plans/specs older
-than `--older-than` days (60 by default) with their evidence — age, and how many
-commits have touched the file since it was written. `0 коммитов` means nobody
-opened it again.
+than `--older-than` days (60 by default) with their evidence: age, how many
+commits touched the file, and how many of those also touched code.
+
+Read the second number. The raw count does not discriminate — on h2t-skills the
+modal value was 2, and for dozens of files the second commit was one bulk
+`docs-lint --fix-frontmatter` sweep. `с кодом = 0` means no commit ever changed
+the document and something outside `docs/` together: the plan was written and
+nothing shipped under it (69 of 111 here).
 
 ```bash
 "$H2T_PYTHON" "$LINT" retire --root .                    # list candidates
