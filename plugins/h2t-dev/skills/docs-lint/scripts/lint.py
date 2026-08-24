@@ -232,12 +232,15 @@ def check_structure(rp: Path) -> list[str]:
     return failures
 
 
-def check_adr_naming(rp: Path) -> list[str]:
+def check_adr_naming(rp: Path, exclude_dirs: list[str] | None = None) -> list[str]:
     failures = []
     adr_dir = rp / "docs" / "adr"
     if not adr_dir.exists():
         return failures
+    is_excluded = excluded_predicate(rp, exclude_dirs)
     for adr in adr_dir.glob("[0-9]*.md"):
+        if is_excluded(adr):
+            continue
         if not re.match(r"^\d{4}-", adr.name):
             failures.append(f"ADR naming: {adr.name} (expected 4-digit prefix)")
     return failures
@@ -667,7 +670,7 @@ def _collect_all_findings(rp: Path, no_pymarkdown: bool = False) -> list[dict]:
     for msg in (
         check_structure(rp)
         + typed_msgs
-        + check_adr_naming(rp)
+        + check_adr_naming(rp, exclude_dirs=exclude_dirs)
         + check_legacy_dirs(rp, extra_dirs=extra)
         + check_data_docs_boundary(rp, exclude_dirs=exclude_dirs)
         + check_repo_root(rp)
@@ -729,19 +732,31 @@ def _collect_all_findings(rp: Path, no_pymarkdown: bool = False) -> list[dict]:
     return all_findings
 
 
-def _dimension_total(findings: list[dict], dim: str) -> int:
-    """Uncapped count for one finding type.
+def _dimension_counts(findings: list[dict], dim: str) -> tuple[int, int]:
+    """(total found, actually listed) for one finding type.
 
-    Its truncation notice when it was capped, otherwise what is present — which
-    is the whole point for a grouped header. "Project Layer" sums five types; a
-    default of 0 for the four that were not capped made the group report only
-    the capped one, so a header meant to say "total found" could say less than
-    the list beneath it (codex [P2]).
+    Two things make this more than len(): a dimension may be capped, and step 6
+    of the collector appends exception warnings *after* the cap under the type
+    `structure`. So the list can hold more entries than the notice's `shown`,
+    and deriving the hidden count from len() subtracts those late arrivals from
+    it — under-reporting, and once there are enough of them, dropping the "this
+    list is partial" line entirely (codex [P2]).
+
+    Hidden comes from the notice, which recorded it at cap time; listed is
+    whatever is in hand now; total is the two added back together.
     """
+    present = sum(1 for f in findings if f.get("type") == dim)
     for f in findings:
         if f.get("type") == "truncated" and f.get("dimension") == dim:
-            return int(f.get("total", 0))
-    return sum(1 for f in findings if f.get("type") == dim)
+            hidden = int(f.get("total", present)) - int(f.get("shown", present))
+            return present + hidden, present
+    return present, present
+
+
+def _dimension_total(findings: list[dict], dim: str) -> int:
+    """Total found for one type. "Project Layer" sums five of them; a default of
+    0 for the uncapped four made the group report only the capped one."""
+    return _dimension_counts(findings, dim)[0]
 
 
 def _run_audit(rp: Path, no_pymarkdown: bool = False) -> None:
@@ -771,13 +786,15 @@ def _run_audit(rp: Path, no_pymarkdown: bool = False) -> None:
     for title, items, dims in sections:
         if not items:
             continue
-        full = sum(_dimension_total(all_findings, d) for d in dims)
+        counts = [_dimension_counts(all_findings, d) for d in dims]
+        full = sum(c[0] for c in counts)
+        listed = sum(c[1] for c in counts)
         # The header carries what was found; the list carries what fits.
         print(f"\n--- {title} ({full}) ---")
         for item in items:
             print(_fmt(item))
-        if full > len(items):
-            print(f"  ... {full - len(items)} more not listed (per-dimension cap {_DIM_LIMIT})")
+        if full > listed:
+            print(f"  ... {full - listed} more not listed (per-dimension cap {_DIM_LIMIT})")
         total += full
 
     print(f"\n{'=' * 60}")
@@ -818,9 +835,10 @@ def _run_plan(
     def _elided(items: list[dict], dims: list[str]) -> None:
         """Say what the cap left out. A partial worklist that looks complete is
         worse than a long one: it is finished when it is not."""
-        full = sum(_dimension_total(all_findings, d) for d in dims)
-        if full > len(items):
-            print(f"\n  ... {full - len(items)} more not listed "
+        counts = [_dimension_counts(all_findings, d) for d in dims]
+        full, listed = sum(c[0] for c in counts), sum(c[1] for c in counts)
+        if full > listed:
+            print(f"\n  ... {full - listed} more not listed "
                   f"(per-dimension cap {_DIM_LIMIT}) — this list is partial.")
 
     if orphans:
@@ -1181,7 +1199,7 @@ def _legacy_main(args: argparse.Namespace) -> None:
         extra = REPO_EXTRA_DIRS.get(name, [])
         failures = (
             check_structure(rp)
-            + check_adr_naming(rp)
+            + check_adr_naming(rp, exclude_dirs=_legacy_exclude)
             + check_legacy_dirs(rp, extra_dirs=extra)
             + check_naming_conventions(rp)
             + check_frontmatter(rp, exclude_dirs=_legacy_exclude)

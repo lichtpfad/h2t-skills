@@ -501,3 +501,35 @@ def test_an_excluded_dir_does_not_swallow_its_prefix_siblings(tmp_path, monkeypa
     out = lint.run_pymarkdownlnt(repo, exclude_dirs=["docs/archive"])
     assert len(out) == 1, out
     assert "archive-old" in out[0]
+
+
+# --- codex round 4 ----------------------------------------------------------
+
+def test_findings_appended_after_the_cap_do_not_shrink_the_hidden_count(tmp_path):
+    """get_exception_warnings appends `structure` findings at step 6, after the
+    cap. Deriving the hidden count from len() subtracts those late arrivals from
+    it, and with enough of them the "partial" line vanishes (codex [P2])."""
+    lint = _lint()
+    findings = (
+        [{"type": "structure"} for _ in range(53)]   # 50 capped + 3 appended after
+        + [{"type": "truncated", "dimension": "structure", "total": 60, "shown": 50}]
+    )
+    total, listed = lint._dimension_counts(findings, "structure")
+    assert (total, listed) == (63, 53)
+    assert total - listed == 10, "ten were cut and ten must stay hidden"
+
+
+def test_dimension_counts_on_an_uncapped_type(tmp_path):
+    lint = _lint()
+    findings = [{"type": "naming"}, {"type": "naming"}]
+    assert lint._dimension_counts(findings, "naming") == (2, 2)
+    assert lint._dimension_counts(findings, "orphan") == (0, 0)
+
+
+def test_adr_naming_honours_exclude_dirs(tmp_path):
+    """The last per-file walk over docs/ that did not take the exclusion."""
+    lint = _lint()
+    repo = _make_repo(tmp_path)
+    (repo / "docs" / "adr" / "12-bad-prefix.md").write_text("# adr\n")
+    assert lint.check_adr_naming(repo) != []
+    assert lint.check_adr_naming(repo, exclude_dirs=["docs/adr"]) == []
