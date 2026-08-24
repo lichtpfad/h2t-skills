@@ -28,20 +28,28 @@ def _is_tracked(rp: Path, filepath: Path) -> bool:
 def check_misplaced_deliverables(
     rp: Path,
     deliverables_dir: str = "deliverables",
+    exclude_dirs: list[str] | None = None,
 ) -> list[dict]:
     """Find non-markdown deliverable files inside docs/ and propose moving them.
 
     Returns findings with extra fields: target_path, is_tracked.
+
+    `exclude_dirs` matters most here: golden references under a visual-regression
+    tree are fixtures pinned to their path, and "move to deliverables/" would
+    break the baselines they exist to hold.
     """
+    from docs.common import excluded_predicate
     from docs.reporter import finding as make_finding
 
     docs_dir = rp / "docs"
     if not docs_dir.exists():
         return []
 
+    is_excluded = excluded_predicate(rp, exclude_dirs)
+
     findings: list[dict] = []
     for f in sorted(docs_dir.rglob("*")):
-        if not f.is_file():
+        if not f.is_file() or is_excluded(f):
             continue
         if f.suffix.lower() not in _DELIVERABLE_EXTS:
             continue

@@ -33,17 +33,14 @@ def find_orphan_files(repo_root: Path, exclude_dirs: list[str] | None = None) ->
     """
     BFS from docs/README.md. Returns finding dicts for unreachable .md files.
     """
+    from docs.common import excluded_predicate
     from docs.reporter import finding as make_finding
 
     docs_dir = repo_root / "docs"
     if not docs_dir.exists():
         return []
 
-    _excluded = {(repo_root / d).resolve() for d in (exclude_dirs or [])}
-
-    def _is_excluded(p: Path) -> bool:
-        rp = p.resolve()
-        return any(rp == ex or ex in rp.parents for ex in _excluded)
+    _is_excluded = excluded_predicate(repo_root, exclude_dirs)
 
     readme = docs_dir / "README.md"
     if not readme.exists():

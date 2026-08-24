@@ -109,7 +109,7 @@ def build_fix_plan(
         sorted(a["action_id"] for a in actions)
     )
     plan_id = "docs-fix-plan:" + hashlib.sha256(id_key.encode()).hexdigest()[:16]
-    return {
+    plan = {
         "schema": SCHEMA,
         "schema_version": "0.1",
         "plan_id": plan_id,
@@ -118,3 +118,13 @@ def build_fix_plan(
         "source_report_id": source_report_id,
         "actions": actions,
     }
+    # A truncated finding carries no action of its own, so without this the
+    # action list is short and says nothing about it — a worklist that reads as
+    # finished when half of it was never written down (codex [P2]).
+    truncated = [
+        {"dimension": f.get("dimension"), "total": f.get("total"), "shown": f.get("shown")}
+        for f in findings if f.get("type") == "truncated"
+    ]
+    if truncated:
+        plan["truncated"] = truncated
+    return plan
