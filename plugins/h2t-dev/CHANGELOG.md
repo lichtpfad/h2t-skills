@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- feat(docs-lint): `retire` — list open plans/specs older than N days with their
+  evidence (age, commits touching the file since it was written), and `--apply`
+  to `git mv` them into `docs/archive/`. The only sub-command that lowers the
+  debt count; every other one measures form. Deliberately manual: both automatic
+  closing signals were measured here and failed — a plan slug appears in 7 of 60
+  merged PR bodies, and 47 of 140 documents were created in one commit and never
+  touched again, which does not separate "done and never updated" from
+  "abandoned". Writing `status: done` on that would be a guess put in the file
+
 - fix(docs-index): collect section docs recursively — a nested document now gets its
   own link instead of a link to the directory it lives in, which the orphan BFS treats
   as a dead end
