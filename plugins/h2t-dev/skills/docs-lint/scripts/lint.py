@@ -412,10 +412,11 @@ def run_pymarkdownlnt(rp: Path, exclude_dirs: list[str] | None = None) -> list[s
     """Markdown lint over docs/, minus the frozen trees.
 
     pymarkdownlnt scans the directory it is handed, so the exclusion is applied
-    to its output. Matching on the path substring rather than parsing the line:
-    the format is `path:line:col: RULE: text` with a Windows drive letter making
-    the first colon ambiguous, and an excluded directory path appearing inside a
-    rule message is not a thing that happens.
+    to its output. Matched on the path rather than parsed out of the line: the
+    format is `path:line:col: RULE: text` and a Windows drive letter makes the
+    first colon ambiguous. The needle carries a trailing separator, because
+    `docs/archive` without one also swallows `docs/archive-old/` — an exclusion
+    wider than the one configured, hiding findings from a live tree (codex [P2]).
 
     Nothing is installed on some machines and this returns [] — which reads
     exactly like a clean tree, so a zero here is not evidence of one.
@@ -434,8 +435,10 @@ def run_pymarkdownlnt(rp: Path, exclude_dirs: list[str] | None = None) -> list[s
         return []
     needles = []
     for d in (exclude_dirs or []):
-        needles.append(str((rp / d).resolve()).replace("\\", "/"))
-        needles.append(d.replace("\\", "/"))
+        for form in (str((rp / d).resolve()), d):
+            form = form.replace("\\", "/").rstrip("/")
+            if form:
+                needles.append(form + "/")
     out = result.stdout + result.stderr
     lines = []
     for ln in out.splitlines():

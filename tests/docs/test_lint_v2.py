@@ -479,3 +479,25 @@ def test_pymarkdown_says_when_it_stops_listing(tmp_path, monkeypatch):
     out = lint.run_pymarkdownlnt(repo)
     assert len(out) == lint._PYMD_LIMIT + 1
     assert "10 more not listed" in out[-1]
+
+
+def test_an_excluded_dir_does_not_swallow_its_prefix_siblings(tmp_path, monkeypatch):
+    """`docs/archive` must not exclude `docs/archive-old` (codex [P2] round 3)."""
+    import subprocess as _sp
+    lint = _lint()
+    repo = _make_repo(tmp_path)
+
+    class _R:
+        returncode = 1
+        stdout = (
+            f"{repo}/docs/archive/old.md:1:1: MD041: frozen\n"
+            f"{repo}/docs/archive-old/bad.md:1:1: MD041: live\n"
+        )
+        stderr = ""
+
+    monkeypatch.setattr(lint.shutil, "which", lambda _n: "/usr/bin/pymarkdownlnt")
+    monkeypatch.setattr(_sp, "run", lambda *a, **k: _R())
+    monkeypatch.setattr(lint.subprocess, "run", lambda *a, **k: _R())
+    out = lint.run_pymarkdownlnt(repo, exclude_dirs=["docs/archive"])
+    assert len(out) == 1, out
+    assert "archive-old" in out[0]
