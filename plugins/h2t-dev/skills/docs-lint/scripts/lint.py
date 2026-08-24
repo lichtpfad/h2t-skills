@@ -1290,15 +1290,20 @@ def _run_retire(
         return
 
     if not apply:
+        never = sum(1 for c in candidates if not c["work_commits"])
         print(f"retire: {len(candidates)} кандидатов старше {stale_days} дней\n")
-        print(f"{'возраст':>8}  {'коммитов':>8}  {'статус':<12}  файл")
+        print(f"{'возраст':>8}  {'правок':>7}  {'с кодом':>8}  {'статус':<12}  файл")
         for c in candidates:
             print(
-                f"{c['age_days']:>6}д  {c['commits']:>8}  {c['status']:<12}  {c['path']}"
+                f"{c['age_days']:>6}д  {c['commits']:>7}  {c['work_commits']:>8}  "
+                f"{c['status']:<12}  {c['path']}"
             )
         print(
-            "\n0 коммитов после создания = документ ни разу не открывали.\n"
-            "Переместить в docs/archive/: docs-lint retire --apply"
+            f"\nс кодом = 0: документ ни разу не выходил в одном коммите с кодом — "
+            f"план писали, ничего не выкатили. Таких {never} из {len(candidates)}.\n"
+            f"'правок' считает и коммит создания, и массовые прогоны docs-lint, "
+            f"поэтому сам по себе ничего не говорит.\n"
+            f"Переместить в docs/archive/: docs-lint retire --apply"
         )
         return
 
