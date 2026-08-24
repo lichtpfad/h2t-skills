@@ -188,6 +188,19 @@ allowed_root_dirs:
   - .claude/
   - .github/
 
+# Sections under docs/. A NEW first-level section and a NEW loose file in the
+# docs/ root are BLOCKED; a directory that already exists is allowed by existing,
+# so this list never has to grow to match the repo. Add a section here only when
+# you mean to introduce one.
+allowed_doc_dirs:
+  - superpowers/
+  - adr/
+  - reports/
+  - archive/
+
+# A blacklist of shapes — the obvious cases only. It can never be the main
+# defence: it has to name what an agent might invent, and the next write invents
+# something else. The two allowlists above are the defence.
 forbidden_patterns:
   - "tmp_*"
   - "*_tmp.*"
