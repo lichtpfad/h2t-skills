@@ -321,6 +321,25 @@ over hand-writing — hand-written files trigger frontmatter findings.
 - Never overwrites an existing file (exit 1). Reactive backfill for legacy files:
   `fix-safe --only=frontmatter`.
 
+## Retiring stale documents — `retire`
+
+The only sub-command that lowers the debt count. Lists open plans/specs older
+than `--older-than` days (60 by default) with their evidence — age, and how many
+commits have touched the file since it was written. `0 коммитов` means nobody
+opened it again.
+
+```bash
+"$H2T_PYTHON" "$LINT" retire --root .                    # list candidates
+"$H2T_PYTHON" "$LINT" retire --root . --older-than 90    # a stricter cut
+"$H2T_PYTHON" "$LINT" retire --root . --apply            # git mv into docs/archive/
+```
+
+`--apply` stages the moves; it never commits and never overwrites an existing
+archive entry. Run `fix-index --apply` afterwards — `docs/README.md` still links
+the old paths. Deliberately manual: no automatic signal separates "done and
+never updated" from "abandoned" (a plan slug appears in 7 of 60 merged PR bodies
+on h2t-skills), so the judgement is a person's and this only makes it cheap.
+
 ## Legacy sub-commands (still work)
 
 ```bash
@@ -329,6 +348,7 @@ over hand-writing — hand-written files trigger frontmatter findings.
 "$H2T_PYTHON" "$LINT" fix-safe --root .
 "$H2T_PYTHON" "$LINT" fix-index --root .
 "$H2T_PYTHON" "$LINT" doctor --json --root .
+"$H2T_PYTHON" "$LINT" retire --root .
 ```
 
 ## References

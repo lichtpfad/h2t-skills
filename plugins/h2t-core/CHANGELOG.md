@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+- feat(session-start): the briefing carries a docs-debt line — `141 из 144
+  plan/spec/adr не закрыты · 111 старше 60 дней`. docs-lint measures form and
+  never lifecycle, so nothing displayed that number anywhere and it took six
+  months to notice. Pure filesystem read, no git/gh, silent when nothing is open
+- feat(structure-guard): deny-by-default one level below `docs/`. A NEW
+  first-level section and a NEW loose file in the `docs/` root are blocked; a
+  directory that already exists is allowed by existing, so no legacy section has
+  to be enumerated. The repo root has had an allowlist from the start and holds
+  14 deliberate directories; `docs/` had none and grew twelve nobody planned
+  (wireframes, library, protocols, visual-regression, agent-instructions,
+  architecture, research, and a `docs/plans/` beside `docs/superpowers/plans/`).
+  Opt-in: without `allowed_doc_dirs` in structure.yaml the check is off.
+  A section is grandfathered by holding a file, not by existing: `mkdir
+  docs/kb` would otherwise authorise the very write that follows it, and
+  `mkdir -p` before writing is a reflex rather than a decision
+- feat(scaffold-project): the generated structure.yaml ships `allowed_doc_dirs`,
+  so a new project has the rule on day one rather than after the mess
 - fix(structure-guard): block, not warn, on an unlisted root directory and on a
   plan/spec/adr written without frontmatter. A warning in PreToolUse exits 0, so
   the write landed and the message was advice — the same layer as a rules file

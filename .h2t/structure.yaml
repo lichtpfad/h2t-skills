@@ -21,6 +21,21 @@ allowed_root_dirs:
   - .claude-plugin/
   - .github/
 
+# Sections under docs/. Deliberately short: an existing directory is allowed by
+# existing, so none of the twelve legacy sections needs listing here. This list
+# exists only so the rule still works in a repo scaffolded five minutes ago,
+# where docs/superpowers/ does not yet hold a file.
+# Blocks a NEW first-level section and a NEW loose file in docs/ root. Edits to
+# anything already tracked are untouched.
+allowed_doc_dirs:
+  - superpowers/
+  - adr/
+  - reports/
+  - archive/
+
+# A blacklist of shapes. Kept for the obvious cases, but it can never be the
+# main defence: it has to name what an agent might invent, and the next write
+# invents something else. allowed_root_dirs / allowed_doc_dirs are the defence.
 forbidden_patterns:
   - "tmp_*"
   - "*_tmp.*"
