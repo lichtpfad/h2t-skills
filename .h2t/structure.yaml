@@ -1,6 +1,10 @@
 # Structure guard configuration for h2t-skills
 # Used by plugins/h2t-core/hooks-handlers/structure_guard.py
 
+# Every top-level directory that holds tracked files must be listed here.
+# An unlisted directory is now BLOCKED, not warned about — and the list had
+# drifted six entries behind the repo, which is why it could only warn.
+# tests/hooks/test_structure_guard.py keeps it in sync with `git ls-files`.
 allowed_root_dirs:
   - plugins/
   - docs/
@@ -8,8 +12,14 @@ allowed_root_dirs:
   - lib/
   - scripts/
   - tests/
+  - tools/
+  - evals/
+  - hooks/
+  - hooks-handlers/
   - .h2t/
   - .claude/
+  - .claude-plugin/
+  - .github/
 
 forbidden_patterns:
   - "tmp_*"
