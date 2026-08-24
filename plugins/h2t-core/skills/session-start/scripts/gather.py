@@ -35,6 +35,7 @@ for _lib in [_cache_lib, _repo_lib]:
 from eval.session import SkillEval
 from gather import output_json
 from gather.briefing import format_briefing
+from gather.docs_debt import gather_docs_debt
 from gather.git import gather_git
 from gather.github import gather_github
 from gather.project import identify_project
@@ -106,6 +107,11 @@ def main() -> None:
     # Layer 2: Stack detection
     stack = detect_stack(args.cwd)
 
+    # Layer 2b: lifecycle debt — pure filesystem, no git/gh, safe on every start
+    docs_debt = gather_docs_debt(args.cwd)
+    if docs_debt:
+        sources_used.append("docs_debt")
+
     # Layer 3: Previous sessions
     machine = get_machine_name()
     domain = project.get("domain", "dev")
@@ -126,6 +132,7 @@ def main() -> None:
         "git": git,
         "github": github,
         "stack": stack,
+        "docs_debt": docs_debt,
         "sessions": sessions,
         "latest_session": latest_session,
         "machine": machine,

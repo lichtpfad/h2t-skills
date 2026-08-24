@@ -75,8 +75,14 @@ def load_config(repo_root: Path) -> dict | None:
         return None
 
 
-def check_file(file_path: str, config: dict) -> tuple[int, str]:
-    """Return (exit_code, message). 0=allow, 1=warn, 2=block."""
+def check_file(
+    file_path: str, config: dict, repo_root: Path | None = None
+) -> tuple[int, str]:
+    """Return (exit_code, message). 0=allow, 1=warn, 2=block.
+
+    `repo_root` is what makes the docs/ check able to tell a new section from
+    an existing one; without it that check can only consult the allowlist.
+    """
     norm = file_path.replace("\\", "/")
     name = Path(norm).name
 
@@ -114,7 +120,64 @@ def check_file(file_path: str, config: dict) -> tuple[int, str]:
                 f".h2t/structure.yaml и повторите запись."
             )
 
-    return 0, ""
+    # 4. New section under docs/
+    return _check_docs_section(norm, config, repo_root)
+
+
+_DOCS_ROOT_EXEMPT = {"README.md", "index.md"}
+
+
+def _check_docs_section(
+    norm: str, config: dict, repo_root: Path | None
+) -> tuple[int, str]:
+    """Deny-by-default one level below docs/, without an allowlist to maintain.
+
+    The repo root has had an allowlist since the start and holds 14 deliberate
+    directories. docs/ had none and grew twelve sections nobody planned. The fix
+    is not a longer list of forbidden shapes — that loses to whatever the next
+    write invents — but the same white-list shape one level deeper.
+
+    Three ways to pass, in order of how often they apply:
+      * the section is already on disk — existence is the grandfathering, so no
+        legacy directory has to be enumerated anywhere;
+      * the section is in `allowed_doc_dirs` — the canonical set, which is what
+        makes this work in a repo scaffolded five minutes ago and still empty;
+      * the key is absent — the rule is opt-in, so other repos are unaffected.
+    """
+    allowed_docs = config.get("allowed_doc_dirs", [])
+    if not allowed_docs or not norm.startswith("docs/"):
+        return 0, ""
+
+    rest = norm[len("docs/"):]
+    if not rest:
+        return 0, ""
+
+    allowed_sections = sorted({d.rstrip("/") for d in allowed_docs})
+
+    if "/" not in rest:
+        # A loose file directly in docs/. The generated index is exempt; a new
+        # one of anything else belongs in a section.
+        if rest in _DOCS_ROOT_EXEMPT:
+            return 0, ""
+        if repo_root and (repo_root / norm).exists():
+            return 0, ""
+        return 2, (
+            f"BLOCKED: {rest!r} кладётся прямо в docs/. Выберите секцию — "
+            f"{', '.join(allowed_sections)} — или существующую директорию "
+            f"в docs/. Свободные файлы в корне docs/ никто не находит."
+        )
+
+    section = rest.split("/")[0]
+    if section in allowed_sections:
+        return 0, ""
+    if repo_root and (repo_root / "docs" / section).is_dir():
+        return 0, ""
+    return 2, (
+        f"BLOCKED: новая секция docs/{section}/. Канонические: "
+        f"{', '.join(allowed_sections)}. Существующая секция разрешена сама по "
+        f"себе; новая заводится осознанно — добавьте её в allowed_doc_dirs "
+        f"в .h2t/structure.yaml и повторите запись."
+    )
 
 
 _FM_EXEMPT_NAMES = {"readme.md", "index.md"}
@@ -191,7 +254,7 @@ def main() -> int:
     except ValueError:
         return 0  # outside repo — not our concern
 
-    exit_code, message = check_file(norm, config)
+    exit_code, message = check_file(norm, config, repo_root)
     if exit_code == 2:
         # Blocking beats any warning — surface it and stop.
         print(message, file=sys.stderr)

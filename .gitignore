@@ -41,3 +41,4 @@ build/
 docs/reports/*-practice-harvest-corpus.json
 docs/reports/_*.json
 docs/reports/_build_registry.py
+.h2t/lint-state.jsonl
