@@ -107,10 +107,11 @@ def check_file(file_path: str, config: dict) -> tuple[int, str]:
         allowed_roots = {a.rstrip("/") for a in allowed}
         if root not in allowed_roots:
             allowed_list = ", ".join(sorted(allowed_roots))
-            return 1, (
-                f"WARNING: директория {root!r} не в allowlist. "
+            return 2, (
+                f"BLOCKED: директория {root!r} не в allowlist. "
                 f"Допустимые: {allowed_list}. "
-                f"Создаёте новую директорию? Добавьте в .h2t/structure.yaml."
+                f"Создаёте новую директорию осознанно? Добавьте её в "
+                f".h2t/structure.yaml и повторите запись."
             )
 
     return 0, ""
@@ -131,9 +132,13 @@ def _has_frontmatter(content: str) -> bool:
 def check_frontmatter_presence(
     file_path: str, content: str, config: dict
 ) -> tuple[int, str]:
-    """Warn (code 1) when a Markdown file under a frontmatter_dir is written
+    """Block (code 2) when a Markdown file under a frontmatter_dir is written
     without a frontmatter block. Presence-only — field-level validation stays
     in docs-lint's check_frontmatter. Returns (0, "") when not applicable.
+
+    This was a warning until 2026-08-24. A warning in PreToolUse exits 0, so
+    the write lands and the message is advice the model may decline — the same
+    layer as a rules file. 47 plans carried a stale `status: draft` under it.
     """
     dirs = config.get("frontmatter_dirs", [])
     if not dirs:
@@ -146,8 +151,8 @@ def check_frontmatter_presence(
         return 0, ""
     if _has_frontmatter(content):
         return 0, ""
-    return 1, (
-        f"WARNING: {norm!r} без frontmatter. Создайте через "
+    return 2, (
+        f"BLOCKED: {norm!r} без frontmatter. Создайте через "
         f"`docs-lint new <plan|spec|adr> <slug>` (сгенерирует поля), "
         f"либо добавьте блок --- вручную, либо после записи прогоните "
         f"`docs-lint fix-safe --only=frontmatter`."
@@ -196,9 +201,12 @@ def main() -> int:
 
     # Frontmatter presence — only Write carries the full file content.
     if tool_name == "Write":
-        _, fm_msg = check_frontmatter_presence(
+        fm_code, fm_msg = check_frontmatter_presence(
             norm, tool_input.get("content", ""), config
         )
+        if fm_code == 2:
+            print("\n".join([*messages, fm_msg]), file=sys.stderr)
+            return 2
         if fm_msg:
             messages.append(fm_msg)
 

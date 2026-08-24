@@ -1,5 +1,16 @@
 # h2t-core Changelog
 
+## Unreleased
+
+- fix(structure-guard): block, not warn, on an unlisted root directory and on a
+  plan/spec/adr written without frontmatter. A warning in PreToolUse exits 0, so
+  the write landed and the message was advice — the same layer as a rules file
+- fix(structure-guard): `main()` honours the frontmatter verdict; it used to
+  discard the code and keep only the message
+- chore(structure.yaml): allowlist had drifted six entries behind the repo
+  (.github, evals, tools, hooks, hooks-handlers, .claude-plugin); a test now
+  keeps it in sync with `git ls-files`
+
 ## 3.2.24 — 2026-08-23
 
 - Hooks written into other projects resolve when they fire. `scaffold-project` used to put

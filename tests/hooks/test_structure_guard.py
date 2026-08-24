@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import importlib.util
+import io
+import json
 from pathlib import Path
 
 
@@ -96,10 +98,11 @@ def test_known_root_dir_allowed():
     assert code == 0
 
 
-def test_unknown_root_dir_warns():
+def test_unknown_root_dir_blocks():
     guard = _load_guard()
     code, msg = guard.check_file("random_new_dir/foo.py", SAMPLE_CONFIG)
-    assert code == 1
+    assert code == 2
+    assert "structure.yaml" in msg
     assert "random_new_dir" in msg or "allowlist" in msg.lower()
 
 
@@ -225,12 +228,12 @@ def test_has_frontmatter_true_with_bom():
     assert guard._has_frontmatter("﻿---\ntitle: X\n---\n") is True
 
 
-def test_plan_write_without_frontmatter_warns():
+def test_plan_write_without_frontmatter_blocks():
     guard = _load_guard()
     code, msg = guard.check_frontmatter_presence(
         "docs/superpowers/plans/2026-07-08-foo.md", "# Foo\n\nbody\n", FM_CONFIG
     )
-    assert code == 1
+    assert code == 2
     assert "frontmatter" in msg.lower() or "docs-lint new" in msg
 
 
@@ -244,20 +247,20 @@ def test_plan_write_with_frontmatter_ok():
     assert code == 0
 
 
-def test_spec_write_without_frontmatter_warns():
+def test_spec_write_without_frontmatter_blocks():
     guard = _load_guard()
     code, _ = guard.check_frontmatter_presence(
         "docs/superpowers/specs/2026-07-08-bar.md", "# Bar\n", FM_CONFIG
     )
-    assert code == 1
+    assert code == 2
 
 
-def test_adr_write_without_frontmatter_warns():
+def test_adr_write_without_frontmatter_blocks():
     guard = _load_guard()
     code, _ = guard.check_frontmatter_presence(
         "docs/adr/0007-thing.md", "# Thing\n", FM_CONFIG
     )
-    assert code == 1
+    assert code == 2
 
 
 def test_readme_in_frontmatter_dir_exempt():
@@ -322,3 +325,43 @@ def test_hooks_json_has_structure_guard_entry():
     assert any("structure-guard" in cmd for cmd in commands), (
         f"structure-guard not found in PreToolUse hooks. Commands: {commands}"
     )
+
+
+# ── warn → block: the two axes that actually produced the drift ──────────────
+
+
+def test_main_exits_2_when_frontmatter_missing(tmp_path, monkeypatch, capsys):
+    """main() must honour the frontmatter verdict — it used to discard the code."""
+    guard = _load_guard()
+    (tmp_path / ".h2t").mkdir()
+    (tmp_path / ".h2t" / "structure.yaml").write_text(
+        "allowed_root_dirs:\n  - docs/\n"
+        "frontmatter_dirs:\n  - docs/superpowers/plans/\n"
+    )
+    target = tmp_path / "docs" / "superpowers" / "plans" / "2026-01-01-x.md"
+    target.parent.mkdir(parents=True)
+    monkeypatch.chdir(tmp_path)
+    payload = {
+        "tool_name": "Write",
+        "tool_input": {"file_path": str(target), "content": "# X\n"},
+    }
+    monkeypatch.setattr(guard.sys, "stdin", io.StringIO(json.dumps(payload)))
+    assert guard.main() == 2
+
+
+def test_allowlist_covers_every_tracked_root_dir():
+    """The allowlist blocks now, so a drifted list breaks legitimate writes.
+
+    It had drifted six entries behind (.github, evals, tools, hooks,
+    hooks-handlers, .claude-plugin) while the check was only a warning.
+    """
+    import subprocess
+    guard = _load_guard()
+    repo = Path(__file__).parents[2]
+    tracked = subprocess.run(
+        ["git", "ls-files"], cwd=repo, capture_output=True, text=True, check=True
+    ).stdout.splitlines()
+    roots = {p.split("/")[0] for p in tracked if "/" in p}
+    config = guard.load_config(repo)
+    allowed = {a.rstrip("/") for a in config["allowed_root_dirs"]}
+    assert not (roots - allowed), f"not in allowlist: {sorted(roots - allowed)}"
