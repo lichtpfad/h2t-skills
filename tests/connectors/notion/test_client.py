@@ -89,7 +89,10 @@ def test_map_sdk_exc_passthrough_typed():
 
 
 class _FakeAPIErr(Exception):
-    def __init__(self, code, status): super().__init__("opaque message"); self.code=code; self.status=status
+    def __init__(self, code, status):
+        super().__init__("opaque message")
+        self.code=code
+        self.status=status
 
 
 @pytest.mark.parametrize("code,status,expected", [

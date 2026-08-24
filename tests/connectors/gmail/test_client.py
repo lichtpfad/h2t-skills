@@ -232,7 +232,9 @@ def test_send_message_happy():
     sent = {}
 
     class _Svc(_FakeService):
-        def send(self, userId, body): sent.update(body); return _Exec({"id": "m1"})
+        def send(self, userId, body):
+            sent.update(body)
+            return _Exec({"id": "m1"})
         def messages(self): return self
         def users(self): return self
 
@@ -246,7 +248,9 @@ def test_draft_with_thread_and_reply_header():
 
     class _Svc(_FakeService):
         def drafts(self): return self
-        def create(self, userId, body): created.update(body); return _Exec({"id": "d1"})
+        def create(self, userId, body):
+            created.update(body)
+            return _Exec({"id": "d1"})
 
     c, _ = _client_with(_Svc())
     out = c.send_message(to="a@b.com", subject="S", body="B", as_draft=True,
@@ -351,7 +355,9 @@ def test_trash_thread_validates_subject_match():
 
     class _Svc(_FakeService):
         def get(self, **k): return _Exec(_thread_payload("thr1", "Weekly Sync"))
-        def trash(self, **k): calls.append(k); return _Exec({})
+        def trash(self, **k):
+            calls.append(k)
+            return _Exec({})
 
     c, _ = _client_with(_Svc())
     result = c.trash_thread("thr1", "Weekly Sync")
@@ -364,7 +370,9 @@ def test_trash_thread_subject_case_insensitive():
 
     class _Svc(_FakeService):
         def get(self, **k): return _Exec(_thread_payload("thr1", "Weekly Sync"))
-        def trash(self, **k): calls.append(k); return _Exec({})
+        def trash(self, **k):
+            calls.append(k)
+            return _Exec({})
 
     c, _ = _client_with(_Svc())
     c.trash_thread("thr1", "  weekly sync  ")
@@ -386,7 +394,9 @@ def test_untrash_thread_no_subject_check():
     calls = []
 
     class _Svc(_FakeService):
-        def untrash(self, **k): calls.append(k); return _Exec({})
+        def untrash(self, **k):
+            calls.append(k)
+            return _Exec({})
 
     c, _ = _client_with(_Svc())
     result = c.untrash_thread("thr1")
@@ -399,7 +409,9 @@ def test_delete_thread_validates_subject_and_deletes():
 
     class _Svc(_FakeService):
         def get(self, **k): return _Exec(_thread_payload("thr1", "Smoke Test"))
-        def delete(self, **k): calls.append(k); return _Exec(None)
+        def delete(self, **k):
+            calls.append(k)
+            return _Exec(None)
 
     c, _ = _client_with(_Svc())
     result = c.delete_thread("thr1", "Smoke Test")

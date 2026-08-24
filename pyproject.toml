@@ -82,19 +82,11 @@ select = ["E4", "E7", "E9", "F", "I", "UP"]
 # import is dead or an interface is a judgment call, so it stays a human decision.
 unfixable = ["F401"]
 
-# Everything below is a named debt, not a decision that these do not matter. Counts are
-# from 2026-08-24, after the sweep; the classes are tracked in #400.
-ignore = [
-    # 81 findings, all `stmt; stmt` in connector argument parsers. Mechanical to fix and
-    # entirely cosmetic — not worth an 81-file diff inside a release week.
-    "E702",
-    # 14 findings: `l` as a variable name.
-    "E741",
-    # 8 findings: `if x: return` on one line.
-    "E701",
-    # 15 findings: `typing.List` style imports that ruff will not rewrite safely.
-    "UP035",
-]
+# No `ignore`. E702/E701/E741/UP035 were deferred here on 2026-08-24 as "117 findings, not
+# worth the diff"; the measurement behind that was wrong — they sat in 23 files, three of
+# which held 68 of them, and the sweep took one pass. A rule left in `ignore` is off for the
+# whole repo, so the next semicolon would have landed unnoticed. Nothing is suppressed
+# repo-wide any more; the narrow, justified suppressions live in per-file-ignores below.
 
 [tool.ruff.lint.per-file-ignores]
 # Scripts and tests put a directory on sys.path before importing from it, so the import

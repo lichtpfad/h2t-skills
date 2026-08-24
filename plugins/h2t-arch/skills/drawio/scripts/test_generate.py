@@ -404,7 +404,8 @@ def test_12_round_trip_user_positions_survive_regeneration():
         for cell in tree.findall('.//*[@id="s3"]'):
             geo = cell.find("mxGeometry")
             if geo is not None:
-                geo.set("x", "700"); geo.set("y", "400")
+                geo.set("x", "700")
+                geo.set("y", "400")
         tree.write(path, xml_declaration=True, encoding="UTF-8")
 
         # Regenerate — preserve_user_edits=True (default)
@@ -443,8 +444,10 @@ def test_13_user_only_node_draw_io_desktop_id_survives_regeneration():
         user_cell.set("vertex", "1")
         user_cell.set("parent", "1")
         geo = ET.SubElement(user_cell, "mxGeometry")
-        geo.set("x", "900"); geo.set("y", "50")
-        geo.set("width", "150"); geo.set("height", "40")
+        geo.set("x", "900")
+        geo.set("y", "50")
+        geo.set("width", "150")
+        geo.set("height", "40")
         geo.set("as", "geometry")
         tree.write(path, xml_declaration=True, encoding="UTF-8")
 
@@ -475,7 +478,8 @@ def test_14_preserve_user_edits_false_resets_to_graph_dict_positions():
         for cell in tree.findall('.//*[@id="node_a"]'):
             geo = cell.find("mxGeometry")
             if geo is not None:
-                geo.set("x", "999"); geo.set("y", "999")
+                geo.set("x", "999")
+                geo.set("y", "999")
         tree.write(path, xml_declaration=True, encoding="UTF-8")
 
         # Regenerate with preserve_user_edits=False — should reset
