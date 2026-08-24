@@ -395,15 +395,19 @@ def test_new_doc_section_is_blocked(tmp_path):
 
 
 def test_existing_doc_section_is_allowed_without_being_listed(tmp_path):
-    """A directory that already holds documents is grandfathered by existing."""
+    """A section that already holds a document is grandfathered by holding it."""
     (tmp_path / "docs" / "wireframes").mkdir(parents=True)
+    (tmp_path / "docs" / "wireframes" / "README.md").write_text("x", encoding="utf-8")
     code, _ = _load_guard().check_file("docs/wireframes/sketch.md", _DOCS_CFG, tmp_path)
     assert code == 0
 
 
 def test_nested_dir_inside_an_existing_section_is_allowed(tmp_path):
     """Only the first level is governed — dated subdirs are normal inside a section."""
-    (tmp_path / "docs" / "visual-regression").mkdir(parents=True)
+    (tmp_path / "docs" / "visual-regression" / "2026-05-03").mkdir(parents=True)
+    (tmp_path / "docs" / "visual-regression" / "2026-05-03" / "x.md").write_text(
+        "x", encoding="utf-8"
+    )
     code, _ = _load_guard().check_file("docs/visual-regression/2026-09-01/checklist.md", _DOCS_CFG, tmp_path)
     assert code == 0
 
@@ -430,4 +434,32 @@ def test_docs_readme_is_always_allowed(tmp_path):
 def test_rule_is_off_when_allowed_doc_dirs_is_absent(tmp_path):
     """Other repos carry a structure.yaml without the key — they must not break."""
     code, _ = _load_guard().check_file("docs/anything/x.md", {"allowed_root_dirs": ["docs/"]}, tmp_path)
+    assert code == 0
+
+
+def test_empty_dir_does_not_grandfather_a_new_section(tmp_path):
+    """`mkdir docs/kb` must not be the way past the rule.
+
+    Grandfathering reads an existing section as evidence that somebody meant it.
+    An empty directory is no evidence: it is created by the very write it would
+    authorise, and `mkdir -p` before a write is a reflex, not a decision.
+    """
+    (tmp_path / "docs" / "kb").mkdir(parents=True)
+    code, msg = _load_guard().check_file("docs/kb/index.md", _DOCS_CFG, tmp_path)
+    assert code == 2
+    assert "kb" in msg
+
+
+def test_section_with_a_file_still_grandfathers(tmp_path):
+    (tmp_path / "docs" / "kb").mkdir(parents=True)
+    (tmp_path / "docs" / "kb" / "existing.md").write_text("x", encoding="utf-8")
+    code, _ = _load_guard().check_file("docs/kb/another.md", _DOCS_CFG, tmp_path)
+    assert code == 0
+
+
+def test_file_nested_deeper_also_grandfathers_the_section(tmp_path):
+    """docs/visual-regression/ holds only dated subdirectories, no loose file."""
+    (tmp_path / "docs" / "vr" / "2026-05-03").mkdir(parents=True)
+    (tmp_path / "docs" / "vr" / "2026-05-03" / "checklist.md").write_text("x", encoding="utf-8")
+    code, _ = _load_guard().check_file("docs/vr/2026-09-01/checklist.md", _DOCS_CFG, tmp_path)
     assert code == 0

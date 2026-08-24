@@ -13,7 +13,10 @@
   14 deliberate directories; `docs/` had none and grew twelve nobody planned
   (wireframes, library, protocols, visual-regression, agent-instructions,
   architecture, research, and a `docs/plans/` beside `docs/superpowers/plans/`).
-  Opt-in: without `allowed_doc_dirs` in structure.yaml the check is off
+  Opt-in: without `allowed_doc_dirs` in structure.yaml the check is off.
+  A section is grandfathered by holding a file, not by existing: `mkdir
+  docs/kb` would otherwise authorise the very write that follows it, and
+  `mkdir -p` before writing is a reflex rather than a decision
 - feat(scaffold-project): the generated structure.yaml ships `allowed_doc_dirs`,
   so a new project has the rule on day one rather than after the mess
 - fix(structure-guard): block, not warn, on an unlisted root directory and on a

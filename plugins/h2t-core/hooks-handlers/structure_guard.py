@@ -127,6 +127,20 @@ def check_file(
 _DOCS_ROOT_EXEMPT = {"README.md", "index.md"}
 
 
+def _holds_a_file(directory: Path) -> bool:
+    """True if *directory* already contains a file, at any depth.
+
+    Any depth, because a section can legitimately hold only subdirectories —
+    docs/visual-regression/ is dated folders and no loose file.
+    """
+    if not directory.is_dir():
+        return False
+    try:
+        return any(p.is_file() for p in directory.rglob("*"))
+    except OSError:
+        return False
+
+
 def _check_docs_section(
     norm: str, config: dict, repo_root: Path | None
 ) -> tuple[int, str]:
@@ -138,8 +152,10 @@ def _check_docs_section(
     write invents — but the same white-list shape one level deeper.
 
     Three ways to pass, in order of how often they apply:
-      * the section is already on disk — existence is the grandfathering, so no
-        legacy directory has to be enumerated anywhere;
+      * the section already holds a file — that is the grandfathering, so no
+        legacy directory has to be enumerated anywhere. A file, not a directory:
+        `mkdir docs/kb` would otherwise authorise the very write that follows
+        it, and `mkdir -p` before writing is a reflex rather than a decision;
       * the section is in `allowed_doc_dirs` — the canonical set, which is what
         makes this work in a repo scaffolded five minutes ago and still empty;
       * the key is absent — the rule is opt-in, so other repos are unaffected.
@@ -170,13 +186,14 @@ def _check_docs_section(
     section = rest.split("/")[0]
     if section in allowed_sections:
         return 0, ""
-    if repo_root and (repo_root / "docs" / section).is_dir():
+    if repo_root and _holds_a_file(repo_root / "docs" / section):
         return 0, ""
     return 2, (
         f"BLOCKED: новая секция docs/{section}/. Канонические: "
-        f"{', '.join(allowed_sections)}. Существующая секция разрешена сама по "
-        f"себе; новая заводится осознанно — добавьте её в allowed_doc_dirs "
-        f"в .h2t/structure.yaml и повторите запись."
+        f"{', '.join(allowed_sections)}. Секция, где уже лежат файлы, "
+        f"разрешена; пустой директории недостаточно (mkdir не решение). "
+        f"Новая секция заводится осознанно — добавьте {section!r} в "
+        f"allowed_doc_dirs в .h2t/structure.yaml и повторите запись."
     )
 
 
