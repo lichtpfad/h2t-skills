@@ -160,14 +160,12 @@
 |---------|-------------|
 | [Agent Instructions](agent-instructions/) | Agent-Instructions documents |
 | [Architecture](architecture/) | Architecture documentation |
-| [Archive](archive/) | Archive documents |
 | [Library](library/) | Library documents |
 | [Plans](plans/) | Plans documents |
 | [Protocols](protocols/) | Protocols documents |
 | [Reports](reports/) | Milestone reports |
 | [Research](research/) | Research documents |
 | [Specs & Plans](superpowers/) | Design specs and implementation plans |
-| [Visual Regression](visual-regression/) | Visual-Regression documents |
 | [Wireframes](wireframes/) | Wireframes documents |
 
 ## Architecture Decisions
@@ -176,6 +174,8 @@
 |---|-------|--------|------|
 | 1 | [ADR-001: Context Assembly Framework (lib/gather)](adr/0001-gather-framework.md) | draft | unknown |
 | 2 | [Retire telegram_cli, record its LLM pipelines for POS](adr/0002-retire-telegram-cli-llm-pipelines.md) | accepted | 2026-08-24 |
+
+See also: [ADR Index](adr/index.md)
 
 ## Specs
 
@@ -332,6 +332,22 @@
 | Title | Date |
 |-------|------|
 | [skills-release Milestone Report](reports/skills-release-report.md) | 2026-06-02 |
+| [Detect and Unlink Directory Junctions Before Recursive Delete on Windows](reports/proposed-standards/windows-junction-cleanup.md) |  |
+| [Give Every Subagent a Self-Contained Prompt with Disjoint Write-Sets](reports/proposed-standards/subagent-dispatch-discipline.md) |  |
+| [Enforce Single-Writer Discipline When Parallel Agents Share a File](reports/proposed-standards/single-writer-parallel-agents.md) |  |
+| [Route Reusable Reference Knowledge to a Council-Verified KB](reports/proposed-standards/route-reusable-knowledge-to-kb.md) |  |
+| [Ground Operator-Facing Decisions in Verified KB/Research Before Asking](reports/proposed-standards/kb-grounded-operator-decisions.md) |  |
+| [Enforce an Internal-vs-Client-Facing Document Boundary](reports/proposed-standards/internal-external-boundary.md) |  |
+| [Treat Generated Deliverables as Regenerable Artifacts, Never Hand-Edit Them](reports/proposed-standards/generated-artifact-ssot.md) |  |
+| [Fail-Closed / Fail-Loud: Never Emit a False GO](reports/proposed-standards/fail-closed-fail-loud.md) |  |
+| [Log Full Telemetry for Every Batch Run](reports/proposed-standards/batch-run-telemetry.md) |  |
+| [Keep Bash/Tool Commands Approval-Friendly and Portable](reports/proposed-standards/bash-command-portability.md) |  |
+| [Deferred (stage 2) and skipped findings](reports/proposed-standards/_deferred-and-skipped.md) |  |
+| [Proposed additions to `C:/dev/docs/standards/research-pipeline-runbook.md`](reports/proposed-standards/_append-to-research-pipeline-runbook.md) |  |
+| [Proposed additions to `C:/dev/docs/standards/naming-conventions.md`](reports/proposed-standards/_append-to-naming-conventions.md) |  |
+| [Proposed additions to `C:/dev/docs/standards/evidence-grounded-synthesis.md`](reports/proposed-standards/_append-to-evidence-grounded-synthesis.md) |  |
+| [Proposed additions to `C:/dev/docs/standards/documentation-structure.md`](reports/proposed-standards/_append-to-documentation-structure.md) |  |
+| [Proposed additions to `C:/dev/docs/standards/branching.md`](reports/proposed-standards/_append-to-branching.md) |  |
 | [Skill Telemetry — Metric Taxonomy & Sync Design (2026-07-12)](reports/2026-07-12-skill-telemetry-taxonomy-design.md) | 2026-07-12 |
 | [Skill Telemetry Audit — map & gaps (2026-07-12)](reports/2026-07-12-skill-telemetry-audit.md) | 2026-07-12 |
 | [Practice harvest registry (2026-06-10 … 2026-07-10)](reports/2026-07-10-practice-harvest-registry.md) | 2026-07-10 |
@@ -365,11 +381,25 @@
 |-------|------|
 | [Agent Instructions: docs-lint audit + refactor для rejuve](agent-instructions/rejuve-docs-lint-audit.md) |  |
 
-## Archive
+## Architecture
 
 | Title | Date |
 |-------|------|
-| [claude-agent-skills (h2t plugin) — Инвентарь инструментов](archive/briefing-for-evals-agent.md) |  |
+| [h2t-creative ROOT GUIDE](architecture/h2t-creative/ROOT_GUIDE.md) |  |
+| [h2t-creative PRD](architecture/h2t-creative/PRD.md) |  |
+| [h2t-creative Landing Wireframe Contract](architecture/h2t-creative/LANDING_WIREFRAME_CONTRACT.md) |  |
+| [h2t-creative External Research: Agentic Visual Publishing](architecture/h2t-creative/EXTERNAL_RESEARCH_2026-05-22.md) |  |
+| [h2t-creative Extension Protocol](architecture/h2t-creative/EXTENSION_PROTOCOL.md) |  |
+| [h2t-creative Core System](architecture/h2t-creative/CORE_SYSTEM.md) |  |
+| [h2t-creative Composition Rules](architecture/h2t-creative/COMPOSITION_RULES.md) |  |
+| [ADR 2026-05-19: h2t-creative Architecture Reset](architecture/h2t-creative/ADR-2026-05-19-creative-reset.md) |  |
+
+## Library
+
+| Title | Date |
+|-------|------|
+| [h2t-creative Recovery Map](library/h2t-creative/RECOVERY_MAP.md) |  |
+| [h2t-creative Library Index](library/h2t-creative/INDEX.md) |  |
 
 ## Plans
 
@@ -377,12 +407,49 @@
 |-------|------|
 | [Gather Framework + Fix dev-session-start Step 6 Bug](plans/2026-03-25-gather-framework.md) | 2026-03-25 |
 
+## Protocols
+
+| Title | Date |
+|-------|------|
+| [h2t-creative Wireframe Gate](protocols/h2t-creative/WIREFRAME_GATE.md) |  |
+| [h2t-creative Visual QA](protocols/h2t-creative/VISUAL_QA.md) |  |
+| [h2t-creative Landing Wireframe Review](protocols/h2t-creative/LANDING_WIREFRAME_REVIEW.md) |  |
+
 ## Research
 
 | Title | Date |
 |-------|------|
+| [Exa Evaluation Methodology — Reference](research/exa-official-skills/evaluation-methodology.md) |  |
+| [Exa Official Skills — Reference Material](research/exa-official-skills/README.md) |  |
 | [gstack vs Superpowers — функциональное сравнение skill-паков для агентной разработки](research/2026-05-20-gstack-superpowers-comparison.md) | 2026-05-20 |
 | [Hook Injection vs SKILL.md Instructions: исследование управления поведением Claude Code](research/2026-03-31-hook-injection-vs-skill-instructions.md) | 2026-03-31 |
+
+## Specs & Plans
+
+| Title | Date |
+|-------|------|
+| [Stitch DESIGN.md — open-standard reference](superpowers/references/stitch-design-md-spec-reference.md) |  |
+| [h2t-creative semantic rendering — prior art references](superpowers/references/h2t-creative-semantic-rendering-prior-art.md) |  |
+
+## Wireframes
+
+| Title | Date |
+|-------|------|
+| [h2t-creative Wireframes](wireframes/README.md) |  |
+
+## Documents
+
+| Title | Date |
+|-------|------|
+| [Plugin Versioning Policy](plugin-versioning.md) |  |
+| [H2T-OPS Testing Plan](h2t-ops-testing-plan.md) |  |
+| [H2T-SKILLS Roadmap](h2t-ops-roadmap.md) |  |
+| [H2T Ops External Install + Debug Log](h2t-ops-external-install-debug.md) |  |
+| [Agent Instructions: Using the Gather Framework](gather-agent-instructions.md) |  |
+| [Credential Sync Policy](credential-sync-policy.md) |  |
+| [From 10+ Tool Calls to One: How We Built a Context Assembly Framework for Claude Code](article-gather-framework.md) |  |
+| [Agent Permissions Policy](agent-permissions.md) |  |
+| [Skill Best Practices — Knowledge Index](SKILL-BEST-PRACTICES.md) |  |
 
 
 <!-- h2t-index-end -->
