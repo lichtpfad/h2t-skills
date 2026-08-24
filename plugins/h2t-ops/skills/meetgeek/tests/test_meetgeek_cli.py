@@ -557,7 +557,10 @@ def test_convert_single_track_maps_audio_explicitly(cli, tmp_path, monkeypatch):
         captured["cmd"] = cmd
         from pathlib import Path as P
         P(cmd[-1]).write_bytes(b"M" * 2048)
-        class R: returncode = 0; stderr = ""; stdout = ""
+        class R:
+            returncode = 0
+            stderr = ""
+            stdout = ""
         return R()
     monkeypatch.setattr(cli.subprocess, "run", fake_run)
 
@@ -580,7 +583,10 @@ def test_convert_audio_only_still_maps_audio(cli, tmp_path, monkeypatch):
         captured["cmd"] = cmd
         from pathlib import Path as P
         P(cmd[-1]).write_bytes(b"M" * 2048)
-        class R: returncode = 0; stderr = ""; stdout = ""
+        class R:
+            returncode = 0
+            stderr = ""
+            stdout = ""
         return R()
     monkeypatch.setattr(cli.subprocess, "run", fake_run)
 
@@ -601,7 +607,10 @@ def test_convert_multi_track_uses_amix(cli, tmp_path, monkeypatch):
         captured["cmd"] = cmd
         from pathlib import Path as P
         P(cmd[-1]).write_bytes(b"M" * 2048)
-        class R: returncode = 0; stderr = ""; stdout = ""
+        class R:
+            returncode = 0
+            stderr = ""
+            stdout = ""
         return R()
     monkeypatch.setattr(cli.subprocess, "run", fake_run)
 
@@ -628,7 +637,10 @@ def test_convert_mix_mode_first_picks_first_stream(cli, tmp_path, monkeypatch):
         captured["cmd"] = cmd
         from pathlib import Path as P
         P(cmd[-1]).write_bytes(b"M" * 2048)
-        class R: returncode = 0; stderr = ""; stdout = ""
+        class R:
+            returncode = 0
+            stderr = ""
+            stdout = ""
         return R()
     monkeypatch.setattr(cli.subprocess, "run", fake_run)
 
@@ -649,7 +661,10 @@ def test_convert_audio_only_strips_video_codec_flags(cli, tmp_path, monkeypatch)
         captured["cmd"] = cmd
         from pathlib import Path as P
         P(cmd[-1]).write_bytes(b"M" * 2048)
-        class R: returncode = 0; stderr = ""; stdout = ""
+        class R:
+            returncode = 0
+            stderr = ""
+            stdout = ""
         return R()
     monkeypatch.setattr(cli.subprocess, "run", fake_run)
 
@@ -927,7 +942,8 @@ def test_upload_from_file_continues_on_per_file_error(cli, tmp_path, monkeypatch
     a = tmp_path / "meetgeek-recording-2026-01-01T10-00-00-000Z.webm"
     b = tmp_path / "meetgeek-recording-2026-01-02T10-00-00-000Z.webm"
     c = tmp_path / "meetgeek-recording-2026-01-03T10-00-00-000Z.webm"
-    for f in (a, b, c): f.write_bytes(b"x" * 1024)
+    for f in (a, b, c):
+        f.write_bytes(b"x" * 1024)
 
     def proc(src, **kw):
         if src.name == b.name:

@@ -147,8 +147,10 @@ def build_projects_context(projects):
         aliases  = ", ".join(p.get("aliases", [])[:6])
         partners = ", ".join(p.get("partners", []))
         line = f"- {p['id']}: {p['name']}"
-        if aliases:  line += f" (алиасы: {aliases})"
-        if partners: line += f" [партнёры: {partners}]"
+        if aliases:
+            line += f" (алиасы: {aliases})"
+        if partners:
+            line += f" [партнёры: {partners}]"
         lines.append(line)
     return "\n".join(lines)
 
