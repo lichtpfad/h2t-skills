@@ -11,9 +11,9 @@ import json
 import math
 from collections import Counter
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta, timezone  # noqa: F401
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Optional  # noqa: F401
+from typing import Optional
 
 
 @dataclass

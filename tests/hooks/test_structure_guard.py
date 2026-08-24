@@ -2,11 +2,11 @@
 from __future__ import annotations
 
 import importlib.util
-import json  # noqa: F401
-import sys  # noqa: F401
+import json
+import sys
 from pathlib import Path
 
-import pytest  # noqa: F401
+import pytest
 
 
 def _load_guard():

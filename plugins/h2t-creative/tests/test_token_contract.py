@@ -1,6 +1,6 @@
 """Token Contract v2: every palette + tokens.css exports canonical token names."""
 import re
-from pathlib import Path  # noqa: F401
+from pathlib import Path
 
 import assembler as asm
 import pytest

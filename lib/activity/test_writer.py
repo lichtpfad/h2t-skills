@@ -1,9 +1,9 @@
 import json
 import os
-import sys  # noqa: F401
-from pathlib import Path  # noqa: F401
+import sys
+from pathlib import Path
 
-import pytest  # noqa: F401
+import pytest
 
 from lib.activity.writer import log_session_end, log_session_start
 

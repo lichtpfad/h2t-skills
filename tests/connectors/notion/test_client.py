@@ -1013,7 +1013,7 @@ def test_append_blocks_uses_blocks_children_append(conv, tmp_path):
 
 
 def test_replace_content_deletes_existing_blocks_then_appends(conv, tmp_path):
-    from unittest.mock import MagicMock, call  # noqa: F401
+    from unittest.mock import MagicMock, call
     md_file = tmp_path / "content.md"
     md_file.write_text("New content.\n", encoding="utf-8")
     conv.client = MagicMock()

@@ -5,7 +5,7 @@ from pathlib import Path
 _LIB = Path(__file__).parents[2] / "plugins/h2t-dev/lib"
 sys.path.insert(0, str(_LIB))
 
-from docs.fix_plan import (  # noqa: F401
+from docs.fix_plan import (
     SCHEMA,
     _action_id,
     _findings_to_actions,

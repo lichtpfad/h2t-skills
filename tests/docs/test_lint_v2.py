@@ -2,7 +2,7 @@
 import datetime
 from pathlib import Path
 
-import pytest  # noqa: F401
+import pytest
 
 
 def _make_repo(tmp_path: Path) -> Path:

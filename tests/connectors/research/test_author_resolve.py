@@ -1,9 +1,9 @@
 """Tests for author_resolve — no network."""
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch  # noqa: F401
+from unittest.mock import MagicMock, patch
 
-import pytest  # noqa: F401
+import pytest
 
 from h2t_ops.connectors.research import author_resolve
 

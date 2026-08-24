@@ -785,7 +785,7 @@ def _run_fix_safe(rp: Path, only: str = "all", plan_file: str | None = None) -> 
         import time
 
         from docs.apply_report import action_result, build_apply_report, file_hash
-        from docs.fix_plan import build_fix_plan  # noqa: F401
+        from docs.fix_plan import build_fix_plan
 
         plan = json.loads(Path(plan_file).read_text())
         results = []

@@ -18,9 +18,9 @@ import json
 import os
 import platform
 import uuid
-from datetime import UTC, datetime, timezone  # noqa: F401
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Optional  # noqa: F401
+from typing import Optional
 
 from .skill_class import eval_set_for
 
@@ -58,7 +58,7 @@ def _load_secrets(secrets_path=None) -> dict:
 def _sdk_available() -> bool:
     """True if the h2t_evals SDK client is importable (cheap, no network)."""
     try:
-        import h2t_evals.sdk  # noqa: F401
+        import h2t_evals.sdk
         return True
     except Exception:
         return False

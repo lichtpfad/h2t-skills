@@ -223,7 +223,7 @@ def test_legacy_main_unknown_repo_uses_cwd_not_all_repos(tmp_path, monkeypatch):
     assert audit_calls[0] == tmp_path.resolve()
 
 
-import subprocess  # noqa: F401
+import subprocess
 from unittest.mock import MagicMock, patch
 
 from lint import fix_labels

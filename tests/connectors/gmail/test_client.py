@@ -636,7 +636,7 @@ def test_forward_defaults_to_draft():
 
 def test_forward_does_not_pass_thread_id():
     """Forward creates a new thread — thread_id must NOT be forwarded."""
-    import base64  # noqa: F401
+    import base64
     created = {}
 
     class _Svc(_FakeService):
