@@ -308,3 +308,101 @@ def test_excluding_a_tree_moves_the_reported_total(tmp_path):
     _with_exclusions(repo, ["docs/archive"])
     after = len(lint._collect_all_findings(repo, no_pymarkdown=True))
     assert after < before, f"{before} -> {after}: exclusion had no effect"
+
+
+# --- codex review findings on the truncation work itself ---------------------
+#
+# The first pass fixed audit and doctor and left `plan` — the surface people act
+# from — silently partial, and fixed the deliverable *fixer* while leaving the
+# frontmatter fixer walking the excluded trees. Same class both times: the
+# reporter learned the rule and the thing that acts on it did not.
+
+def test_plan_says_its_worklist_is_partial(tmp_path, capsys):
+    lint = _lint()
+    repo = _make_repo(tmp_path)
+    _plans_without_dates(repo, 60)
+    lint._run_plan(repo)
+    out = capsys.readouterr().out
+    assert "10 more not listed" in out
+    assert "this list is partial" in out
+
+
+def test_plan_json_carries_the_truncation(tmp_path, capsys):
+    """The JSON plan is what an applier consumes; a short action list must say so."""
+    import json as _json
+    lint = _lint()
+    repo = _make_repo(tmp_path)
+    _plans_without_dates(repo, 60)
+    lint._run_plan(repo, json_output=True)
+    plan = _json.loads(capsys.readouterr().out)
+    naming = [t for t in plan["truncated"] if t["dimension"] == "naming"]
+    assert naming == [{"dimension": "naming", "total": 60, "shown": 50}]
+
+
+def test_plan_json_omits_the_key_when_nothing_was_cut(tmp_path, capsys):
+    import json as _json
+    lint = _lint()
+    repo = _make_repo(tmp_path)
+    _plans_without_dates(repo, 2)
+    lint._run_plan(repo, json_output=True)
+    assert "truncated" not in _json.loads(capsys.readouterr().out)
+
+
+def test_the_frontmatter_fixer_honours_the_same_exclusions(tmp_path):
+    """A fixture kept bare on purpose must not be handed frontmatter by fix-safe."""
+    lint = _lint()
+    repo = _make_repo(tmp_path)
+    fixtures = repo / "docs" / "superpowers" / "plans" / "fixture-kb"
+    fixtures.mkdir(parents=True)
+    bare = fixtures / "2026-01-01-bare.md"
+    bare.write_text("# bare\n")
+    assert lint.fix_frontmatter_action(
+        repo, exclude_dirs=["docs/superpowers/plans/fixture-kb"]
+    ) == []
+    assert bare.read_text() == "# bare\n", "the excluded fixture must be untouched"
+    assert lint.fix_frontmatter_action(repo) != []
+
+
+def test_fix_safe_frontmatter_skips_the_excluded_tree(tmp_path, capsys):
+    """End to end through the command, not just the function it calls."""
+    lint = _lint()
+    repo = _make_repo(tmp_path)
+    fixtures = repo / "docs" / "superpowers" / "plans" / "fixture-kb"
+    fixtures.mkdir(parents=True)
+    bare = fixtures / "2026-01-01-bare.md"
+    bare.write_text("# bare\n")
+    _with_exclusions(repo, ["docs/superpowers/plans/fixture-kb"])
+    lint._run_fix_safe(repo, only="frontmatter")
+    capsys.readouterr()
+    assert bare.read_text() == "# bare\n"
+
+
+def test_the_legacy_flag_path_still_runs(tmp_path, monkeypatch, capsys):
+    """--fix-frontmatter now reads exclude_dirs, and it reads it before the
+    repo loop's other setup. A use-before-assignment there is a runtime
+    NameError that ruff's F821 does not see, because the name *is* bound —
+    later in the same scope.
+
+    _legacy_main resolves its targets through repo_path(), i.e. C:/dev/<name>,
+    which does not exist on a dev machine — so every target is SKIPped and the
+    loop body never executes. Pointing repo_path at tmp is what makes this test
+    touch the code it is named for.
+    """
+    import argparse as _argparse
+    lint = _lint()
+    repo = _make_repo(tmp_path)
+    (repo / "docs" / "superpowers" / "plans" / "2026-01-01-bare.md").write_text("# bare\n")
+    _with_exclusions(repo, ["docs/superpowers/plans/fixture-kb"])
+    monkeypatch.setattr(lint, "repo_path", lambda name: repo)
+    monkeypatch.setattr(lint, "_load_projects_yaml", lambda: {})
+    args = _argparse.Namespace(
+        repos=["h2t-skills"], all=False, fix=False, fix_frontmatter=True,
+        fix_labels=False, no_pymarkdown=True, repo_root=False, root=None,
+    )
+    try:
+        lint._legacy_main(args)
+    except SystemExit:
+        pass  # the legacy path exits 1 whenever the repo has findings
+    out = capsys.readouterr().out
+    assert "SKIP: repo not found" not in out, "the loop body must actually run"
+    assert "FIX: added frontmatter fields" in out, "the fixer must have done work"

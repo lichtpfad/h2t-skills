@@ -497,13 +497,22 @@ def _frontmatter_value(field: str, md_file: Path, text: str, rp: Path) -> str:
     return '""'
 
 
-def fix_frontmatter_action(rp: Path) -> list[str]:
-    """Add only missing required frontmatter fields. Preserves existing keys."""
+def fix_frontmatter_action(rp: Path, exclude_dirs: list[str] | None = None) -> list[str]:
+    """Add only missing required frontmatter fields. Preserves existing keys.
+
+    Takes the same exclusions as check_frontmatter. A fixture kept without
+    frontmatter on purpose — because a test asserts what happens when it is
+    absent — must not be handed one by fix-safe just because the audit went
+    quiet about it (codex [P2]).
+    """
     fixes = []
     docs_dir = rp / "docs"
     if not docs_dir.exists():
         return fixes
+    is_excluded = excluded_predicate(rp, exclude_dirs)
     for md_file in docs_dir.rglob("*.md"):
+        if is_excluded(md_file):
+            continue
         rel = str(md_file.relative_to(rp)).replace("\\", "/")
         matched_pattern = None
         required_fields_for_pattern: list[str] = []
@@ -561,9 +570,9 @@ def fix_frontmatter_action(rp: Path) -> list[str]:
 
 
 # Legacy alias used by existing --fix-frontmatter flag path
-def fix_frontmatter(rp: Path) -> list[str]:
+def fix_frontmatter(rp: Path, exclude_dirs: list[str] | None = None) -> list[str]:
     """Legacy wrapper: delegates to fix_frontmatter_action."""
-    return fix_frontmatter_action(rp)
+    return fix_frontmatter_action(rp, exclude_dirs=exclude_dirs)
 
 
 _SYNC_LABELS_SCRIPT = Path(__file__).parents[2] / "docs-sync-labels" / "scripts" / "sync_labels.py"
@@ -764,10 +773,19 @@ def _run_plan(
         "root_structure", "root_readmes", "gitignore_hygiene", "agent_instructions"
     }]
 
+    def _elided(items: list[dict], dims: list[str]) -> None:
+        """Say what the cap left out. A partial worklist that looks complete is
+        worse than a long one: it is finished when it is not."""
+        full = sum(_dimension_total(all_findings, d, 0) for d in dims)
+        if full > len(items):
+            print(f"\n  ... {full - len(items)} more not listed "
+                  f"(per-dimension cap {_DIM_LIMIT}) — this list is partial.")
+
     if orphans:
         print("\n## Orphan Files (not linked from any README/index)\n")
         for f in orphans:
             print(f"  - {f['path']}")
+        _elided(orphans, ["orphan"])
         print("\n  Action: link from a relevant README, move to archive/, or delete after review.")
 
     if naming:
@@ -777,23 +795,27 @@ def _run_plan(
             print(f"  - {f['path']}: {f['message']}")
             if fix:
                 print(f"    -> {fix}")
+        _elided(naming, ["naming"])
 
     if structure:
         print("\n## Structure Issues\n")
         for f in structure:
             print(f"  - {f['message']}")
+        _elided(structure, ["structure"])
 
     if misplaced:
         print("\n## Misplaced Deliverable Files\n")
         for f in misplaced:
             tracked_note = "" if f.get("is_tracked") else " (untracked — move manually)"
             print(f"  - {f['path']} -> {f['target_path']}{tracked_note}")
+        _elided(misplaced, ["misplaced_deliverable"])
         print("\n  Action: run 'docs-lint fix-safe' to git mv tracked files.")
 
     if project:
         print("\n## Project Layer\n")
         for f in project:
             print(f"  - [{f['type']}] {f['path']}: {f['message']}")
+        _elided(project, [t for t in _PROJECT_TYPES if t != "misplaced_deliverable"])
 
     if not orphans and not naming and not structure and not misplaced and not project:
         print("\n  No cleanup needed.")
@@ -878,7 +900,9 @@ def _run_fix_safe(rp: Path, only: str = "all", plan_file: str | None = None) -> 
         for f in fixes:
             print(f"  FIX: {f}")
     if only in ("all", "frontmatter"):
-        fixes = fix_frontmatter_action(rp)
+        fixes = fix_frontmatter_action(
+            rp, exclude_dirs=load_config(rp).get("exclude_dirs") or [],
+        )
         for f in fixes:
             print(f"  FIX: {f}")
     if _PROJECT_LAYER_AVAILABLE:
@@ -1101,18 +1125,18 @@ def _legacy_main(args: argparse.Namespace) -> None:
             print(f"\n--- {name} ---\n  SKIP: repo not found at {rp}")
             continue
         print(f"\n--- {name} ---")
+        _legacy_exclude = load_config(rp).get("exclude_dirs") or []
 
         if args.fix:
             fixes = fix_structure(rp)
             for f in fixes:
                 print(f"  FIX: {f}")
         if args.fix_frontmatter:
-            fixes = fix_frontmatter_action(rp)
+            fixes = fix_frontmatter_action(rp, exclude_dirs=_legacy_exclude)
             for f in fixes:
                 print(f"  FIX: {f}")
 
         extra = REPO_EXTRA_DIRS.get(name, [])
-        _legacy_exclude = load_config(rp).get("exclude_dirs") or []
         failures = (
             check_structure(rp)
             + check_adr_naming(rp)
