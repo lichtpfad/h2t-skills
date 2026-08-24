@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime, timezone  # noqa: F401
-from typing import Any, Dict, List, Optional  # noqa: F401
+from typing import Any
 
 PROVIDER = "granola"
 
