@@ -107,4 +107,4 @@ def test_build_navigation_index_excludes_adr_from_quick_links(tmp_path):
     # ADR appears in Architecture Decisions table, not Quick Links
     assert "## Architecture Decisions" in result
     # No Quick Links row pointing to adr/
-    assert not any("[adr]" in l.lower() for l in result.splitlines())
+    assert not any("[adr]" in line.lower() for line in result.splitlines())

@@ -451,7 +451,7 @@ def _git_author(rp: Path, filepath: Path) -> str:
         ["git", "-C", str(rp), "log", "--diff-filter=A", "--format=%an", "--", rel],
         capture_output=True, text=True,
     )
-    lines = [l.strip() for l in result.stdout.splitlines() if l.strip()]
+    lines = [line.strip() for line in result.stdout.splitlines() if line.strip()]
     return lines[0] if lines else "lichtpfad"
 
 
