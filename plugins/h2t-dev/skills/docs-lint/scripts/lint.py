@@ -405,7 +405,21 @@ def check_frontmatter(rp: Path, exclude_dirs: list[str] | None = None) -> list[s
     return failures
 
 
-def run_pymarkdownlnt(rp: Path) -> list[str]:
+_PYMD_LIMIT = 20
+
+
+def run_pymarkdownlnt(rp: Path, exclude_dirs: list[str] | None = None) -> list[str]:
+    """Markdown lint over docs/, minus the frozen trees.
+
+    pymarkdownlnt scans the directory it is handed, so the exclusion is applied
+    to its output. Matching on the path substring rather than parsing the line:
+    the format is `path:line:col: RULE: text` with a Windows drive letter making
+    the first colon ambiguous, and an excluded directory path appearing inside a
+    rule message is not a thing that happens.
+
+    Nothing is installed on some machines and this returns [] — which reads
+    exactly like a clean tree, so a zero here is not evidence of one.
+    """
     pymdl = shutil.which("pymarkdownlnt") or shutil.which("pymarkdown")
     if not pymdl:
         return []
@@ -416,11 +430,29 @@ def run_pymarkdownlnt(rp: Path) -> list[str]:
         [pymdl, "scan", str(docs_dir)],
         capture_output=True, text=True, cwd=str(rp),
     )
-    if result.returncode != 0:
-        out = result.stdout + result.stderr
-        lines = [ln for ln in out.splitlines() if ln.strip()]
-        return [f"pymarkdownlnt: {ln}" for ln in lines[:20]]
-    return []
+    if result.returncode == 0:
+        return []
+    needles = []
+    for d in (exclude_dirs or []):
+        needles.append(str((rp / d).resolve()).replace("\\", "/"))
+        needles.append(d.replace("\\", "/"))
+    out = result.stdout + result.stderr
+    lines = []
+    for ln in out.splitlines():
+        if not ln.strip():
+            continue
+        norm = ln.replace("\\", "/")
+        if any(n and n in norm for n in needles):
+            continue
+        lines.append(ln)
+    msgs = [f"pymarkdownlnt: {ln}" for ln in lines[:_PYMD_LIMIT]]
+    if len(lines) > _PYMD_LIMIT:
+        # Same rule as the dimension cap: bound the list, name the remainder.
+        msgs.append(
+            f"pymarkdownlnt: ... {len(lines) - _PYMD_LIMIT} more not listed "
+            f"(cap {_PYMD_LIMIT})"
+        )
+    return msgs
 
 
 def fix_structure(rp: Path) -> list[str]:
@@ -636,7 +668,7 @@ def _collect_all_findings(rp: Path, no_pymarkdown: bool = False) -> list[dict]:
         + check_legacy_dirs(rp, extra_dirs=extra)
         + check_data_docs_boundary(rp, exclude_dirs=exclude_dirs)
         + check_repo_root(rp)
-        + ([] if no_pymarkdown else run_pymarkdownlnt(rp))
+        + ([] if no_pymarkdown else run_pymarkdownlnt(rp, exclude_dirs=exclude_dirs))
     ):
         f = finding("structure", "warn", "", msg)
         if template and "(template:" in msg:
@@ -694,12 +726,19 @@ def _collect_all_findings(rp: Path, no_pymarkdown: bool = False) -> list[dict]:
     return all_findings
 
 
-def _dimension_total(findings: list[dict], dim: str, shown: int) -> int:
-    """Uncapped count for a dimension, read back from its truncation notice."""
+def _dimension_total(findings: list[dict], dim: str) -> int:
+    """Uncapped count for one finding type.
+
+    Its truncation notice when it was capped, otherwise what is present — which
+    is the whole point for a grouped header. "Project Layer" sums five types; a
+    default of 0 for the four that were not capped made the group report only
+    the capped one, so a header meant to say "total found" could say less than
+    the list beneath it (codex [P2]).
+    """
     for f in findings:
         if f.get("type") == "truncated" and f.get("dimension") == dim:
-            return int(f.get("total", shown))
-    return shown
+            return int(f.get("total", 0))
+    return sum(1 for f in findings if f.get("type") == dim)
 
 
 def _run_audit(rp: Path, no_pymarkdown: bool = False) -> None:
@@ -729,7 +768,7 @@ def _run_audit(rp: Path, no_pymarkdown: bool = False) -> None:
     for title, items, dims in sections:
         if not items:
             continue
-        full = sum(_dimension_total(all_findings, d, 0) for d in dims) or len(items)
+        full = sum(_dimension_total(all_findings, d) for d in dims)
         # The header carries what was found; the list carries what fits.
         print(f"\n--- {title} ({full}) ---")
         for item in items:
@@ -776,7 +815,7 @@ def _run_plan(
     def _elided(items: list[dict], dims: list[str]) -> None:
         """Say what the cap left out. A partial worklist that looks complete is
         worse than a long one: it is finished when it is not."""
-        full = sum(_dimension_total(all_findings, d, 0) for d in dims)
+        full = sum(_dimension_total(all_findings, d) for d in dims)
         if full > len(items):
             print(f"\n  ... {full - len(items)} more not listed "
                   f"(per-dimension cap {_DIM_LIMIT}) — this list is partial.")
@@ -1050,7 +1089,7 @@ def _run_doctor(rp: Path, json_output: bool = False, no_pymarkdown: bool = False
     project = [f for f in all_findings if f["type"] in _PROJECT_TYPES]
 
     def _full(items: list[dict], dims: list[str]) -> int:
-        return sum(_dimension_total(all_findings, d, 0) for d in dims) or len(items)
+        return sum(_dimension_total(all_findings, d) for d in dims)
 
     n_orphans = _full(orphans, ["orphan"])
     n_naming = _full(naming, ["naming"])
@@ -1146,7 +1185,7 @@ def _legacy_main(args: argparse.Namespace) -> None:
             + check_data_docs_boundary(rp, exclude_dirs=_legacy_exclude)
             + check_projects_yaml(rp, name, projects)
             + (check_repo_root(rp) if args.repo_root else [])
-            + ([] if args.no_pymarkdown else run_pymarkdownlnt(rp))
+            + ([] if args.no_pymarkdown else run_pymarkdownlnt(rp, exclude_dirs=_legacy_exclude))
         )
         if failures:
             for f in failures:

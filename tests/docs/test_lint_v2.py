@@ -406,3 +406,76 @@ def test_the_legacy_flag_path_still_runs(tmp_path, monkeypatch, capsys):
     out = capsys.readouterr().out
     assert "SKIP: repo not found" not in out, "the loop body must actually run"
     assert "FIX: added frontmatter fields" in out, "the fixer must have done work"
+
+
+# --- codex round 2: grouped totals and the markdown linter ------------------
+
+def test_a_grouped_header_counts_its_uncapped_siblings_too(tmp_path):
+    """Project Layer sums five types. Defaulting the four uncapped ones to zero
+    made the header report only the capped one — a "total found" line that could
+    be smaller than the list under it (codex [P2])."""
+    lint = _lint()
+    findings = (
+        [{"type": "misplaced_deliverable"} for _ in range(50)]
+        + [{"type": "root_structure"}, {"type": "root_structure"},
+           {"type": "agent_instructions"},
+           {"type": "truncated", "dimension": "misplaced_deliverable",
+            "total": 60, "shown": 50}]
+    )
+    total = sum(lint._dimension_total(findings, d) for d in lint._PROJECT_TYPES)
+    assert total == 63, f"expected 60 capped + 3 uncapped siblings, got {total}"
+
+
+def test_dimension_total_falls_back_to_what_is_present(tmp_path):
+    lint = _lint()
+    findings = [{"type": "naming"}, {"type": "naming"}, {"type": "orphan"}]
+    assert lint._dimension_total(findings, "naming") == 2
+    assert lint._dimension_total(findings, "orphan") == 1
+    assert lint._dimension_total(findings, "structure") == 0
+
+
+def test_pymarkdown_output_drops_the_frozen_trees(tmp_path, monkeypatch):
+    """pymarkdownlnt scans the directory it is handed, so exclude_dirs has to be
+    applied to its output. It is often not installed at all, and then this check
+    returns [] — which reads exactly like a clean tree."""
+    import subprocess as _sp
+    lint = _lint()
+    repo = _make_repo(tmp_path)
+    (repo / "docs" / "archive").mkdir(parents=True)
+    monkeypatch.setattr(lint.shutil, "which", lambda _n: "/usr/bin/pymarkdownlnt")
+
+    class _R:
+        returncode = 1
+        stdout = (
+            f"{repo}/docs/archive/old.md:1:1: MD041: First line should be a heading\n"
+            f"{repo}/docs/README.md:3:1: MD022: Headings should be surrounded\n"
+        )
+        stderr = ""
+
+    monkeypatch.setattr(_sp, "run", lambda *a, **k: _R())
+    monkeypatch.setattr(lint.subprocess, "run", lambda *a, **k: _R())
+    out = lint.run_pymarkdownlnt(repo, exclude_dirs=["docs/archive"])
+    assert len(out) == 1
+    assert "README.md" in out[0]
+    assert "archive" not in out[0]
+
+
+def test_pymarkdown_says_when_it_stops_listing(tmp_path, monkeypatch):
+    """Its own [:20] slice was a second silent cap in the same file."""
+    import subprocess as _sp
+    lint = _lint()
+    repo = _make_repo(tmp_path)
+
+    class _R:
+        returncode = 1
+        stdout = "".join(
+            f"{repo}/docs/f{i}.md:1:1: MD041: whatever\n" for i in range(30)
+        )
+        stderr = ""
+
+    monkeypatch.setattr(lint.shutil, "which", lambda _n: "/usr/bin/pymarkdownlnt")
+    monkeypatch.setattr(_sp, "run", lambda *a, **k: _R())
+    monkeypatch.setattr(lint.subprocess, "run", lambda *a, **k: _R())
+    out = lint.run_pymarkdownlnt(repo)
+    assert len(out) == lint._PYMD_LIMIT + 1
+    assert "10 more not listed" in out[-1]
