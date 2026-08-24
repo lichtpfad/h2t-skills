@@ -177,6 +177,8 @@ _STRUCTURE_YAML_TEMPLATE = """\
 # Structure guard configuration — managed by h2t-core:scaffold-project
 # Used by plugins/h2t-core/hooks-handlers/structure_guard.py
 
+# An unlisted top-level directory is BLOCKED, not warned about. Add a new one
+# here before writing into it — including any not needed on day one.
 allowed_root_dirs:
   - src/
   - tests/
@@ -184,6 +186,7 @@ allowed_root_dirs:
   - scripts/
   - .h2t/
   - .claude/
+  - .github/
 
 forbidden_patterns:
   - "tmp_*"
@@ -197,7 +200,7 @@ plan_dirs:
     pattern: "^\\d{4}-\\d{2}-\\d{2}-.+\\.md$"
 
 # Dirs whose Markdown files must open with a --- frontmatter block.
-# Presence-only warn (structure_guard); field-level validation is docs-lint's job.
+# Presence-only block (structure_guard); field-level validation is docs-lint's job.
 frontmatter_dirs:
   - docs/superpowers/plans/
   - docs/superpowers/specs/
