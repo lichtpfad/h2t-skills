@@ -1,7 +1,6 @@
 """Tests for h2t_ops.connectors.drive.client.DriveClient."""
 from __future__ import annotations
 
-import socket  # noqa: F401
 import sys
 from pathlib import Path
 from types import SimpleNamespace

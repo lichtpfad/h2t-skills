@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import importlib.util
 import json
-import subprocess  # noqa: F401
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -103,7 +102,7 @@ class TestAppendUploadsManifest:
     def test_creates_parent_dirs_and_appends(self, rec, tmp_path):
         manifest = tmp_path / "sub" / "manifest.jsonl"
         rec.append_uploads_manifest({"source_webm": "/x.webm", "status": "converted"}, manifest)
-        lines = [json.loads(l) for l in manifest.read_text().splitlines()]
+        lines = [json.loads(line) for line in manifest.read_text().splitlines()]
         assert lines[0]["status"] == "converted"
 
     def test_append_multiple_preserves_order(self, rec, tmp_path):
@@ -228,8 +227,8 @@ class TestProcessOne:
 
         assert result["status"] == "submitted"
         assert result["drive_id"] == "d1"
-        lines = [json.loads(l) for l in manifest.read_text().splitlines() if l.strip()]
-        statuses = [l["status"] for l in lines]
+        lines = [json.loads(line) for line in manifest.read_text().splitlines() if line.strip()]
+        statuses = [rec["status"] for rec in lines]
         assert statuses == ["converted", "in-drive", "submitted"]
 
     def test_resume_from_in_drive_skips_convert_and_drive(self, rec, tmp_path, monkeypatch):
@@ -278,7 +277,7 @@ class TestProcessOne:
             rec.process_one(src, language=None, title_override=None,
                             audio_only=False, mix_mode="amix", manifest_path=manifest)
 
-        lines = [json.loads(l) for l in manifest.read_text().splitlines() if l.strip()]
+        lines = [json.loads(line) for line in manifest.read_text().splitlines() if line.strip()]
         assert lines[-1]["status"] == "convert-failed"
 
     def test_drive_failure_writes_drive_failed(self, rec, tmp_path, monkeypatch):
@@ -294,7 +293,7 @@ class TestProcessOne:
             rec.process_one(src, language=None, title_override=None,
                             audio_only=False, mix_mode="amix", manifest_path=manifest)
 
-        lines = [json.loads(l) for l in manifest.read_text().splitlines() if l.strip()]
+        lines = [json.loads(line) for line in manifest.read_text().splitlines() if line.strip()]
         assert lines[-1]["status"] == "drive-failed"
 
     def test_infers_title_from_filename(self, rec, tmp_path, monkeypatch):

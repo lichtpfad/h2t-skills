@@ -2,8 +2,6 @@
 import datetime
 from pathlib import Path
 
-import pytest  # noqa: F401
-
 
 def _make_repo(tmp_path: Path) -> Path:
     (tmp_path / "docs" / "superpowers" / "specs").mkdir(parents=True)

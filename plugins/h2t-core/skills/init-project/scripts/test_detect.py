@@ -11,7 +11,6 @@ from detect_project import (
     _detect_domain,
     _detect_tracker,
     _humanize_id,
-    detect_project,  # noqa: F401
 )
 
 

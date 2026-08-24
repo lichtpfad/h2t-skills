@@ -25,28 +25,34 @@ def test_valid_finding_passes(tmp_path):
     validate_finding(_ok(tmp_path))  # no raise
 
 def test_bad_track_rejected(tmp_path):
-    f = _ok(tmp_path); f["track"] = "hybrid"
+    f = _ok(tmp_path)
+    f["track"] = "hybrid"
     with pytest.raises(ValidationError):
         validate_finding(f)
 
 def test_bad_verdict_rejected(tmp_path):
-    f = _ok(tmp_path); f["lift_verdict"] = "maybe"
+    f = _ok(tmp_path)
+    f["lift_verdict"] = "maybe"
     with pytest.raises(ValidationError):
         validate_finding(f)
 
 def test_missing_source_path_on_disk_rejected(tmp_path):
-    f = _ok(tmp_path); f["source_paths"] = [str(tmp_path / "nope.md")]
+    f = _ok(tmp_path)
+    f["source_paths"] = [str(tmp_path / "nope.md")]
     with pytest.raises(ValidationError):
         validate_finding(f)
 
 def test_recurrence_must_match_unique_lineage(tmp_path):
     # recurrence врёт: 3, но уникальный lineage один
-    f = _ok(tmp_path); f["recurrence"] = 3; f["lineage_sources"] = ["quant-kb"]
+    f = _ok(tmp_path)
+    f["recurrence"] = 3
+    f["lineage_sources"] = ["quant-kb"]
     with pytest.raises(ValidationError):
         validate_finding(f)
 
 def test_append_verdict_with_target_ok(tmp_path):
-    f = _ok(tmp_path); f["lift_verdict"] = "append:git-naming-conventions.md"
+    f = _ok(tmp_path)
+    f["lift_verdict"] = "append:git-naming-conventions.md"
     validate_finding(f)  # no raise
 
 def test_coverage_all_lineages_accounted_passes():

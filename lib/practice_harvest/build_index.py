@@ -5,7 +5,7 @@ import argparse
 import json
 from collections import Counter
 from collections.abc import Callable
-from datetime import UTC, datetime, timezone  # noqa: F401
+from datetime import UTC, datetime
 from pathlib import Path
 
 from lib.practice_harvest.collect import (

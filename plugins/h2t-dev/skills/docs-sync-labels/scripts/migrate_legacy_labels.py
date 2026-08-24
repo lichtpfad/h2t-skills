@@ -83,7 +83,7 @@ def get_repo_labels(repo: str) -> list[str]:
     if not out:
         return []
     try:
-        return [l["name"] for l in json.loads(out)]
+        return [lab["name"] for lab in json.loads(out)]
     except (json.JSONDecodeError, KeyError):
         return []
 
@@ -120,7 +120,7 @@ def delete_label(repo: str, label: str, dry_run: bool) -> None:
 
 def migrate_repo(repo: str, dry_run: bool) -> dict:
     existing = set(get_repo_labels(repo))
-    legacy_present = [l for l in LABEL_MAP if l in existing]
+    legacy_present = [name for name in LABEL_MAP if name in existing]
     if not legacy_present:
         return {"repo": repo, "legacy": 0, "issues_relabelled": 0, "labels_deleted": 0}
 

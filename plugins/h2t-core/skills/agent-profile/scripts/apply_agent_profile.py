@@ -8,7 +8,6 @@ Output: JSON on stdout (skill translates to human guidance).
 """
 import argparse
 import json
-import os  # noqa: F401
 import sys
 from datetime import date
 from pathlib import Path

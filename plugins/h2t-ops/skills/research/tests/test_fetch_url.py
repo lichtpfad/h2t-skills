@@ -158,7 +158,7 @@ def test_inline_extract_public_article():
     assert "# POPs in TouchDesigner" in body_markdown or "POPs in TouchDesigner" in body_markdown
     assert canonical == "https://example.com/pops-intro"
     assert lang == "en"
-    assert any(l["href"].endswith("/glsl-pops") for l in links)
+    assert any(link["href"].endswith("/glsl-pops") for link in links)
     # Script content excluded from body
     assert "/static/app.js" not in body_text
 
