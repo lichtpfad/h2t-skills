@@ -9,7 +9,7 @@
     {
       "name": "h2t-core",
       "description": "H2T Core — session lifecycle: session-start, handoff, scaffold-project, init-project, setup, agent-profile",
-      "version": "3.2.24",
+      "version": "3.2.25",
       "author": {
         "name": "lichtpfad"
       },
@@ -20,7 +20,7 @@
     {
       "name": "h2t-ops",
       "description": "H2T Ops — provider I/O connectors, daily-brief, research (Exa), and the Ecosystem Research KB skill (ingest/query/lint).",
-      "version": "1.6.5",
+      "version": "1.6.6",
       "author": {
         "name": "lichtpfad"
       },
@@ -31,7 +31,7 @@
     {
       "name": "h2t-dev",
       "description": "H2T Dev — development workflow: docs-lint, github-issues, pre-merge-check, milestone-closure",
-      "version": "1.0.22",
+      "version": "1.0.23",
       "author": {
         "name": "lichtpfad"
       },
@@ -42,7 +42,7 @@
     {
       "name": "h2t-arch",
       "description": "H2T Arch — architecture and diagram tools: drawio, diagram-node, node-researcher",
-      "version": "1.0.4",
+      "version": "1.0.5",
       "author": {
         "name": "lichtpfad"
       },
@@ -53,7 +53,7 @@
     {
       "name": "h2t-creative",
       "description": "H2T Creative v2 — modular landing pages and decks: Swiss grid base, swappable profiles, Python assembler, Playwright QA.",
-      "version": "1.4.5",
+      "version": "1.4.6",
       "author": {
         "name": "lichtpfad"
       },
@@ -64,7 +64,7 @@
     {
       "name": "h2t-edu",
       "description": "H2T Edu — education content pipeline: transcripts, YouTube, meeting conversion, lesson parsing",
-      "version": "1.0.3",
+      "version": "1.0.4",
       "author": {
         "name": "lichtpfad"
       },

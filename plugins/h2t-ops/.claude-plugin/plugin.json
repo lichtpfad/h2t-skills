@@ -1,7 +1,7 @@
 {
   "name": "h2t-ops",
   "description": "H2T Ops — provider I/O connectors, daily-brief, research (Exa), and the Ecosystem Research KB skill (ingest/query/lint).",
-  "version": "1.6.5",
+  "version": "1.6.6",
   "author": {
     "name": "lichtpfad"
   }
