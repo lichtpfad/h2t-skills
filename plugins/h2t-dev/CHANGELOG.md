@@ -10,6 +10,13 @@
   merged PR bodies, and 47 of 140 documents were created in one commit and never
   touched again, which does not separate "done and never updated" from
   "abandoned". Writing `status: done` on that would be a guess put in the file
+- fix(docs-lint): `retire` reports commits that touched a document *and* code,
+  not just commits. The raw count did not discriminate — the modal value was 2
+  and for dozens of files the second commit was one bulk `--fix-frontmatter`
+  sweep, a tool touching the file rather than anyone working the plan. The new
+  column separates 69 documents nothing ever shipped under from 42 that were
+  executed and never marked. The old hint named `0 коммитов`, a value that
+  could not occur: the count includes the commit that created the file
 
 - fix(docs-index): collect section docs recursively — a nested document now gets its
   own link instead of a link to the directory it lives in, which the orphan BFS treats

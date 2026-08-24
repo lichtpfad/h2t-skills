@@ -52,28 +52,43 @@ def _as_date(value: str | date | None) -> date | None:
         return None
 
 
-def _commit_counts(repo_root: Path) -> dict[str, int]:
-    """How many commits touched each doc, in one `git log` pass.
+def _commit_counts(repo_root: Path) -> tuple[dict[str, int], dict[str, int]]:
+    """Per document: (commits that touched it, commits that also touched code).
 
-    Per-file `git log` would be 140 subprocesses on this repo. Best-effort: a
-    directory that is not a git repo yields {}, and every count reads 0.
+    The second number is the one that discriminates. A raw commit count does
+    not: on h2t-skills the modal value was 2, and for dozens of files the second
+    commit was the same one — a bulk `docs-lint --fix-frontmatter` sweep. A tool
+    touched the file; nobody worked the plan. A commit that changed the document
+    *and* something outside docs/ is work actually shipping with it.
+
+    One `git log` over the whole history, not per file: 140 documents would
+    otherwise be 140 subprocesses. Best-effort — a directory that is not a git
+    repo yields empty maps and every count reads 0.
     """
     try:
         out = subprocess.run(
-            ["git", "-C", str(repo_root), "log", "--format=", "--name-only",
-             "--", *_SECTIONS],
-            capture_output=True, text=True, timeout=30,
+            ["git", "-C", str(repo_root), "log", "--format=%x00", "--name-only"],
+            capture_output=True, text=True, timeout=60,
         )
     except (OSError, subprocess.SubprocessError):
-        return {}
+        return {}, {}
     if out.returncode != 0:
-        return {}
-    counts: dict[str, int] = {}
-    for line in out.stdout.splitlines():
-        line = line.strip()
-        if line:
-            counts[line] = counts.get(line, 0) + 1
-    return counts
+        return {}, {}
+
+    touches: dict[str, int] = {}
+    work: dict[str, int] = {}
+    for chunk in out.stdout.split("\0")[1:]:
+        files = [ln.strip() for ln in chunk.splitlines() if ln.strip()]
+        if not files:
+            continue
+        with_code = any(not f.startswith("docs/") for f in files)
+        for f in files:
+            if not any(f.startswith(s + "/") for s in _SECTIONS):
+                continue
+            touches[f] = touches.get(f, 0) + 1
+            if with_code:
+                work[f] = work.get(f, 0) + 1
+    return touches, work
 
 
 def find_retire_candidates(
@@ -86,7 +101,7 @@ def find_retire_candidates(
     root = Path(repo_root)
     now = _as_date(today) or date.today()
     is_excluded = excluded_predicate(root, exclude_dirs)
-    counts = _commit_counts(root)
+    counts, work = _commit_counts(root)
 
     candidates: list[dict] = []
     for section in _SECTIONS:
@@ -114,6 +129,7 @@ def find_retire_candidates(
                 "age_days": (now - doc_date).days,
                 "status": status or "(нет)",
                 "commits": counts.get(rel, 0),
+                "work_commits": work.get(rel, 0),
             })
     return candidates
 
