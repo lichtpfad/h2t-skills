@@ -459,7 +459,6 @@ def extract_tasks(chat_messages: dict) -> list:
 
 def cmd_tasks(args):
     """Pipeline: Work chats → extracted tasks → Notion + MD log."""
-    import importlib.util
     fetch_all = getattr(args, 'all', False)
 
     print("💬 Читаю рабочие чаты...", file=sys.stderr)

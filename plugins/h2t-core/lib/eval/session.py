@@ -57,7 +57,7 @@ def _load_secrets(secrets_path=None) -> dict:
 def _sdk_available() -> bool:
     """True if the h2t_evals SDK client is importable (cheap, no network)."""
     try:
-        import h2t_evals.sdk
+        import h2t_evals.sdk  # noqa: F401 — the import IS the probe; the name is never used
         return True
     except Exception:
         return False
