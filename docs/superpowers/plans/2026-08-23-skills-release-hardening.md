@@ -1,11 +1,19 @@
 ---
 title: "Skills release hardening"
-status: "draft"
+status: "done"
 date: "2026-08-23"
 milestone: ""
 ---
 
 # Skills Release Hardening Implementation Plan
+
+> **Status: complete (2026-08-24).** All twelve tasks landed. Wave 1 (1–5) in #397, Wave 2
+> (6–12) in #398, and Task 11 as PR #339 itself. The step checkboxes below were closed at
+> **task** granularity — each task's deliverable was re-verified on `main` on 2026-08-24 (one
+> `gather.py` in the tree, `h2t-gather --cwd /nonexistent` exiting 3 with the reason on stderr,
+> `h2t-hook` among the nine entry points, `create_latest_link` gone, `packages = ["h2t_ops"]`
+> with the payload force-included) — not by re-running each TDD micro-step. Read a tick as
+> "this task's outcome is present on main", not as "this keystroke was replayed".
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
 > (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use
@@ -108,7 +116,7 @@ does not own.
   hardcoded literal at line 136. `h2t-ops gather <skill> [--cwd] [--format-briefing]
   [--briefing-only]` keeps its argv shape and its exit codes.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```python
 # tests/core/test_gather_single_implementation.py
@@ -161,7 +169,7 @@ def test_an_unrecognised_skill_is_still_accepted():
     assert "BRIEFING:" in result.stdout
 ```
 
-- [ ] **Step 2: Run them and read every failure text**
+- [x] **Step 2: Run them and read every failure text**
 
 Run: `.venv/bin/pytest tests/core/test_gather_single_implementation.py -q`
 Expected: `test_both_entry_points_produce_the_same_briefing` FAILS on differing stdout — the
@@ -169,7 +177,7 @@ Expected: `test_both_entry_points_produce_the_same_briefing` FAILS on differing 
 code: they are the contract you must not break, not new behaviour. If any of the three fails
 now, the contract is not what this plan describes — stop and re-read `lib/cli/main.py:125`.
 
-- [ ] **Step 3: Give the plugin script the skill name**
+- [x] **Step 3: Give the plugin script the skill name**
 
 ```python
 # plugins/h2t-core/skills/session-start/scripts/gather.py, in main()
@@ -182,7 +190,7 @@ and at line 136 replace the literal:
         with SkillEval(args.skill, domain=domain, project=proj_id) as ev:
 ```
 
-- [ ] **Step 4: Route `gather` through the resolver, parsing argv instead of slicing it**
+- [x] **Step 4: Route `gather` through the resolver, parsing argv instead of slicing it**
 
 ```python
 # h2t_ops/cli.py — replace lines 186-187
@@ -201,7 +209,7 @@ and at line 136 replace the literal:
 `argv[2:]` would be wrong: `h2t-ops gather --cwd X` has no positional, and slicing would drop
 `--cwd` silently.
 
-- [ ] **Step 5: Delete the second implementation**
+- [x] **Step 5: Delete the second implementation**
 
 Remove `_cmd_gather`, `_run_gather` and the `gather` subparser from `lib/cli/main.py`, and
 update the module docstring to say gather now lives in the plugin script. Do **not** touch
@@ -209,13 +217,13 @@ update the module docstring to say gather now lives in the plugin script. Do **n
 test_wheel_ships_the_lib_those_scripts_import` asserts `lib` is shipped, so unshipping it is
 its own change — decision 3 below.
 
-- [ ] **Step 6: Run the test and the suites it can break**
+- [x] **Step 6: Run the test and the suites it can break**
 
 Run: `.venv/bin/pytest tests/ lib/ -q`
 Expected: all four new tests pass; `test_gather_on_skill_hook.py` and
 `test_gather_on_prompt_hook.py` stay green; baseline count rises from 1938 by the new tests.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add h2t_ops/cli.py lib/cli/main.py \
@@ -253,7 +261,7 @@ the case `.claude/rules/verification.md` names: a zero that means "broken instru
 - Produces: exit code `3` (config, per the connector taxonomy in CLAUDE.md) on an unusable cwd,
   with the reason on stderr and nothing on stdout
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 # tests/core/test_gather_rejects_bad_cwd.py
@@ -287,13 +295,13 @@ def test_real_cwd_still_succeeds(tmp_path):
     assert "BRIEFING:" in result.stdout
 ```
 
-- [ ] **Step 2: Run it to confirm the first test fails and the control passes**
+- [x] **Step 2: Run it to confirm the first test fails and the control passes**
 
 Run: `.venv/bin/pytest tests/core/test_gather_rejects_bad_cwd.py -q`
 Expected: `test_nonexistent_cwd_exits_config_error` FAILS with `(0, 'BRIEFING:...')`;
 `test_real_cwd_still_succeeds` PASSES. A run where both fail means the probe is wrong.
 
-- [ ] **Step 3: Validate in `main()`**
+- [x] **Step 3: Validate in `main()`**
 
 ```python
 # plugins/h2t-core/skills/session-start/scripts/gather.py, first lines of main() after parse_args
@@ -303,12 +311,12 @@ Expected: `test_nonexistent_cwd_exits_config_error` FAILS with `(0, 'BRIEFING:..
         sys.exit(3)
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `.venv/bin/pytest tests/core/test_gather_rejects_bad_cwd.py tests/core/ -q`
 Expected: PASS, and no regression in the hook tests, which pass a real cwd.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add plugins/h2t-core/skills/session-start/scripts/gather.py tests/core/test_gather_rejects_bad_cwd.py
@@ -336,7 +344,7 @@ code runs therefore depends on the entry path.
 - Produces: no new interface; the hook still emits `BRIEFING:` / `GATHER_META:` or
   `GATHER_ERROR:`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 def test_hook_prefers_the_installed_cli(tmp_path, monkeypatch):
@@ -361,12 +369,12 @@ def test_hook_prefers_the_installed_cli(tmp_path, monkeypatch):
     assert marker.exists(), "hook bypassed h2t-gather and ran the script directly"
 ```
 
-- [ ] **Step 2: Run it to confirm it fails**
+- [x] **Step 2: Run it to confirm it fails**
 
 Run: `.venv/bin/pytest tests/core/test_gather_on_skill_hook.py -q -k prefers`
 Expected: FAIL — the marker file is absent because the hook ran the script.
 
-- [ ] **Step 3: Prefer the CLI, keep the script as fallback**
+- [x] **Step 3: Prefer the CLI, keep the script as fallback**
 
 ```bash
 # plugins/h2t-core/hooks-handlers/gather-on-skill — replace the run_script call at :116
@@ -404,13 +412,13 @@ run_cli() {
 The empty-output guard that follows the call site (`if [ -z "$SCRIPT_STDOUT" ]`) must stay
 reachable on both branches — do not move it inside the `if`.
 
-- [ ] **Step 4: Run the hook tests**
+- [x] **Step 4: Run the hook tests**
 
 Run: `.venv/bin/pytest tests/core/test_gather_on_skill_hook.py tests/core/test_gather_on_prompt_hook.py -q`
 Expected: PASS, including the existing cases that assert the fallback still works with an
 empty PATH.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add plugins/h2t-core/hooks-handlers/gather-on-skill tests/core/test_gather_on_skill_hook.py
@@ -440,7 +448,7 @@ they have not executed on GitHub since they were written.
 **Interfaces:**
 - Produces: a test that fails when a new plugin test directory is added without a CI step
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 # tests/core/test_ci_covers_plugin_tests.py
@@ -467,12 +475,12 @@ def test_every_plugin_test_dir_is_named_in_a_workflow():
     assert not missing, f"plugin test dirs never run in CI: {missing}"
 ```
 
-- [ ] **Step 2: Run it to confirm it fails and read the list**
+- [x] **Step 2: Run it to confirm it fails and read the list**
 
 Run: `.venv/bin/pytest tests/core/test_ci_covers_plugin_tests.py -q`
 Expected: FAIL listing ten directories. Copy that list — it is the input to Step 3.
 
-- [ ] **Step 3: Fix the three directories that are red today**
+- [x] **Step 3: Fix the three directories that are red today**
 
 Measured 2026-08-23 by running each directory locally. Eight of ten are green — 1185 tests
 that CI has never executed. The three red ones have known, bounded causes; none is rot:
@@ -486,7 +494,7 @@ that CI has never executed. The three red ones have known, bounded causes; none 
 Run each one green before Step 4 wires it into CI, so no known-red step is ever committed:
 `.venv/bin/pytest plugins/h2t-ops/skills/research/tests -q`
 
-- [ ] **Step 4: Add one pytest step per directory, all of them now green**
+- [x] **Step 4: Add one pytest step per directory, all of them now green**
 
 Append to the `unit-tests` job in `.github/workflows/h2t-evals-gate.yml`, after the existing
 `plugins/h2t-core/skills/init-project/scripts` step, one step per directory Step 2 listed:
@@ -499,7 +507,7 @@ Append to the `unit-tests` job in `.github/workflows/h2t-evals-gate.yml`, after 
 Do not collapse them into one `pytest plugins/` invocation: these directories have no shared
 conftest and several add their own `sys.path` entries, so a single run cross-contaminates them.
 
-- [ ] **Step 5: Confirm the local baseline is the environment, not the repo**
+- [x] **Step 5: Confirm the local baseline is the environment, not the repo**
 
 No dependency is missing from `pyproject.toml`; `ruamel.yaml>=0.18` is declared at line 22 and
 CI has been green throughout. Sync the venv instead:
@@ -510,14 +518,14 @@ Expected: **no failures and no errors**. Do not assert a count: the baseline was
 `1938 passed, 7 skipped` on 2026-08-23 before Wave 1, and every task in this plan adds tests,
 so the number only ever grows. If anything is red, it is your change.
 
-- [ ] **Step 6: Run everything**
+- [x] **Step 6: Run everything**
 
 Run: `.venv/bin/pytest tests/ lib/ -q`
 Expected: 0 failures, 0 errors. Then run each newly added plugin directory locally and record
 which ones are red — a directory that was never in CI may have been red for months. Fix or
 `xfail` with a reason and an issue number; do not delete tests to make CI green.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add .github/workflows tests/core/test_ci_covers_plugin_tests.py \
@@ -556,7 +564,7 @@ its persistence. That class must not come back.
 - Consumes: nothing
 - Produces: `.claude/rules/gates.md`, quoted by future skill reviews
 
-- [ ] **Step 1: Write the rule**
+- [x] **Step 1: Write the rule**
 
 ```markdown
 # Gate Rules
@@ -572,7 +580,7 @@ unanswered question costs the session.
 Where a value is missing, derive it and say what you derived. Ask afterwards.
 ```
 
-- [ ] **Step 2: Extend the test to every skill that writes**
+- [x] **Step 2: Extend the test to every skill that writes**
 
 ```python
 WRITERS = {
@@ -602,14 +610,14 @@ def test_nothing_blocks_before_the_write(skill, write_call):
 The same honesty belongs in `.claude/rules/gates.md`: the rule is enforced by review, and the
 test only closes the two regressions seen so far.
 
-- [ ] **Step 3: Run it**
+- [x] **Step 3: Run it**
 
 Run: `.venv/bin/pytest tests/core/test_handoff_no_prewrite_gate.py -q`
 Expected: PASS for handoff (PR #391 removed its gate). If `init-project` fails, read its gate
 and classify it with the table above before touching it — it may be a legitimate outward gate,
 in which case remove it from `WRITERS` and record why in the docstring.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add .claude/rules/gates.md tests/core/test_handoff_no_prewrite_gate.py
@@ -648,7 +656,7 @@ carries a `~/.h2t/venv` path that nothing else in `h2t-core` still depends on.
 **Interfaces:**
 - Consumes: nothing new.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 The test has to recognise both gate shapes, or it measures style instead of safety:
 
@@ -698,14 +706,14 @@ def test_no_h2t_core_skill_hand_rolls_a_python_probe():
     assert offenders == [], f"still hand-rolling an interpreter: {offenders}"
 ```
 
-- [ ] **Step 2: Run it and read which assertion fires**
+- [x] **Step 2: Run it and read which assertion fires**
 
 Run: `.venv/bin/pytest tests/core/test_skill_entrypoints.py -q -k "gates_on_its_cli or python_probe"`
 Expected: the five `gates_on_its_cli` cases PASS (the loop shape is recognised), and
 `test_no_h2t_core_skill_hand_rolls_a_python_probe` FAILS naming `scaffold-project/SKILL.md`.
 If a `gates_on_its_cli` case fails instead, the parser is wrong — fix the test, not the skill.
 
-- [ ] **Step 3: Delete the dead block**
+- [x] **Step 3: Delete the dead block**
 
 Remove the three `H2T_PYTHON` lines at `SKILL.md:25-27`, and replace the self-cancelling label
 snippet at `:206-215` with the instruction the prose underneath already gives:
@@ -719,12 +727,12 @@ Labels are applied by a separate skill — canonical labels live in
 
 Keep `CONFIG_ROOT` — `grep -n CONFIG_ROOT SKILL.md` before deciding, since other steps read it.
 
-- [ ] **Step 4: Run the tests**
+- [x] **Step 4: Run the tests**
 
 Run: `.venv/bin/pytest tests/core/ -q`
 Expected: green, including the two new tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add plugins/h2t-core/skills/scaffold-project/SKILL.md tests/core/test_skill_entrypoints.py
@@ -751,7 +759,7 @@ repo, resolves to `unknown`.
 - Produces: `identify_project(cwd)` returns `{"id", "domain", ...}` sourced from
   `<cwd>/.claude/project-id` when that file exists, before consulting the git remote
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 def test_project_id_file_wins_over_the_remote(tmp_path, monkeypatch):
@@ -764,12 +772,12 @@ def test_project_id_file_wins_over_the_remote(tmp_path, monkeypatch):
     assert result["domain"] == "personal-os"
 ```
 
-- [ ] **Step 2: Run it to confirm it fails**
+- [x] **Step 2: Run it to confirm it fails**
 
 Run: `.venv/bin/pytest lib/gather/test_project.py -q -k project_id_file`
 Expected: FAIL — `result["id"]` is `unknown`.
 
-- [ ] **Step 3: Read the file first**
+- [x] **Step 3: Read the file first**
 
 ```python
 # lib/gather/project.py, at the top of identify_project() after cwd_abs is computed
@@ -791,14 +799,14 @@ Expected: FAIL — `result["id"]` is `unknown`.
 Add `_domain_for_project(domains, project_id)` beside `_find_label`: it walks
 `domains["domains"]` and returns the first domain whose `projects` contain that id, or `""`.
 
-- [ ] **Step 4: Make the writer emit `domain/project`**
+- [x] **Step 4: Make the writer emit `domain/project`**
 
 `apply_registration.py:146` writes `project_id` alone, which forces the lookup above. Change it
 to `f"{domain}/{project_id}\n"` and update
 `plugins/h2t-core/skills/init-project/scripts/test_apply.py:139-161` — note that test asserts an
 existing file is **not** overwritten, which must stay true.
 
-- [ ] **Step 5: Mirror to the vendored copy and run parity**
+- [x] **Step 5: Mirror to the vendored copy and run parity**
 
 ```bash
 cp lib/gather/project.py plugins/h2t-core/lib/gather/project.py
@@ -807,7 +815,7 @@ cp lib/gather/project.py plugins/h2t-core/lib/gather/project.py
 Run: `.venv/bin/pytest tests/core/test_vendored_lib_parity.py lib/gather/ -q`
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add lib/gather/project.py plugins/h2t-core/lib/gather/project.py \
@@ -849,7 +857,7 @@ does not need.
 - Produces: `0` ok, `2` usage, `3` config, `5` not found — the subset of the connector taxonomy
   these commands can actually hit
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 # tests/core/test_entrypoint_exit_codes.py
@@ -876,13 +884,13 @@ def test_writer_exit_codes(argv, expected):
     assert result.returncode == expected, (result.returncode, result.stderr[:200])
 ```
 
-- [ ] **Step 2: Run it to confirm the second case fails**
+- [x] **Step 2: Run it to confirm the second case fails**
 
 Run: `.venv/bin/pytest tests/core/test_entrypoint_exit_codes.py -q`
 Expected: the usage case already passes (argparse exits 2); the unwritable-dir case FAILS with
 `1`.
 
-- [ ] **Step 3: Map the failures**
+- [x] **Step 3: Map the failures**
 
 Route every mirror failure through one `_degraded()` builder and exit `3` from `main()` when
 `mirror_write_failed` is set, leaving `1` for genuinely unexpected errors. The contour must
@@ -895,7 +903,7 @@ The pre-existing `status: "degraded"` path (mirror directory fine, file write re
 `0`. It now exits `3` too — a caller branching on the exit code could not otherwise tell a
 complete write from a partial one. Nothing in the repo depended on the old code.
 
-- [ ] **Step 4: Run and commit**
+- [x] **Step 4: Run and commit**
 
 Run: `.venv/bin/pytest tests/core/ -q`
 
@@ -919,7 +927,7 @@ not exist on the Mac this repo is currently developed on.
 - Modify: `CLAUDE.md`
 - Modify: `.claude/rules/linting.md`
 
-- [ ] **Step 1: Regenerate the entry-point list from the source of truth**
+- [x] **Step 1: Regenerate the entry-point list from the source of truth**
 
 ```bash
 sed -n '/\[project.scripts\]/,/^\[/p' pyproject.toml
@@ -927,18 +935,18 @@ sed -n '/\[project.scripts\]/,/^\[/p' pyproject.toml
 
 Paste the eight names into `CLAUDE.md`, each with one line saying what it does.
 
-- [ ] **Step 2: Give both machines' commands**
+- [x] **Step 2: Give both machines' commands**
 
 Replace each single-path command block with both forms, labelled — Windows
 `C:/dev/h2t-skills/.venv/Scripts/pytest`, Mac `.venv/bin/pytest` — and note that `ruff` comes
 from `uvx` on the Mac.
 
-- [ ] **Step 3: Verify each documented command actually runs**
+- [x] **Step 3: Verify each documented command actually runs**
 
 Run every command block you touched, on this machine, and record the ones that fail. A
 documented command that does not run is the defect this task exists to remove.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add CLAUDE.md .claude/rules/linting.md
@@ -990,7 +998,7 @@ how this defect returns.
 - Produces: console script `h2t-hook <handler-name> [args...]`, and
   `hook_entry.interpreter_for(path) -> list[str]`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 import subprocess
@@ -1072,13 +1080,13 @@ def test_a_python_shebang_never_resolves_to_a_missing_name(tmp_path, shebang):
     assert Path(resolved).is_file(), f"{resolved} is not an executable file"
 ```
 
-- [ ] **Step 2: Run it and read the failure text**
+- [x] **Step 2: Run it and read the failure text**
 
 Run: `.venv/bin/pytest tests/core/test_hook_entry.py -q`
 Expected: FAIL — `ModuleNotFoundError: No module named 'h2t_ops.hook_entry'`. Read the text. A
 different failure means the test is broken, not the code.
 
-- [ ] **Step 3: Write the launcher**
+- [x] **Step 3: Write the launcher**
 
 ```python
 """Run a plugin hook handler resolved through the same ladder every entry point uses.
@@ -1145,7 +1153,7 @@ Add to `pyproject.toml` under `[project.scripts]`:
 h2t-hook = "h2t_ops.hook_entry:main"
 ```
 
-- [ ] **Step 4: Run the tests, then reinstall so the entry point exists**
+- [x] **Step 4: Run the tests, then reinstall so the entry point exists**
 
 Run: `.venv/bin/pytest tests/core/test_hook_entry.py -q`
 Expected: 9 PASS.
@@ -1154,7 +1162,7 @@ Run: `uv tool install --editable .`, then `command -v h2t-hook`
 Expected: a path is printed, and `uv tool list` shows nine entry points. Judge the state, not
 the install command's output.
 
-- [ ] **Step 5: Point scaffold at the launcher**
+- [x] **Step 5: Point scaffold at the launcher**
 
 In `scaffold_project.py`, delete `_HOOK_BASE` and rewrite `_HOOK_ENTRIES`:
 
@@ -1177,7 +1185,7 @@ _HOOK_ENTRIES = {
 }
 ```
 
-- [ ] **Step 6: Replace the test that pins the old behaviour**
+- [x] **Step 6: Replace the test that pins the old behaviour**
 
 `tests/scaffold/test_scaffold_steps.py:187` currently reads:
 
@@ -1217,7 +1225,7 @@ every `for` assertion below it and the test would pass while measuring nothing.
 Run: `.venv/bin/pytest tests/scaffold/ tests/core/ -q`
 Expected: all PASS.
 
-- [ ] **Step 7: End-to-end — fire a real handler through the launcher**
+- [x] **Step 7: End-to-end — fire a real handler through the launcher**
 
 ```bash
 echo '{}' | h2t-hook post-git-commit-docs-lint; echo "exit=$?"
@@ -1228,7 +1236,7 @@ python file. Its own exit code, whatever it is, is the pass condition. This is t
 `.claude/rules/verification.md` asks for: launcher and handler are two sides of one contract,
 and each side's tests stay green while the sides disagree.
 
-- [ ] **Step 8: Remove the machinery that produced the stale symlink**
+- [x] **Step 8: Remove the machinery that produced the stale symlink**
 
 Nothing reads `latest` once Step 5 lands (`grep -rn "h2t-core/latest" --include=*.py` should
 return only comments). Delete `create_latest_link` (`setup_h2t.py:44-66`) and its call site
@@ -1248,7 +1256,7 @@ grep -rn "create_latest_link" --include=*.py . ; echo "grep-exit=$?  (1 = fully 
 the wrong reason. `-print` makes the removal visible — a silent `find` that matched nothing
 looks the same as one that cleaned up.
 
-- [ ] **Step 9: Full suite and commit**
+- [x] **Step 9: Full suite and commit**
 
 Run: `.venv/bin/pytest tests/ lib/ -q`
 Expected: green.
@@ -1288,7 +1296,7 @@ this gate while resolving conflicts.
 - Modify (conflict resolution only): `plugins/h2t-ops/skills/kb/references/ingest.md`,
   `query.md`, `SKILL.md`, `plugins/h2t-ops/.claude-plugin/plugin.json`
 
-- [ ] **Step 1: Rebase onto main**
+- [x] **Step 1: Rebase onto main**
 
 ```bash
 git fetch origin
@@ -1296,7 +1304,7 @@ git checkout -B feat/kb-lint-semantic-health origin/feat/kb-lint-semantic-health
 git rebase origin/main
 ```
 
-- [ ] **Step 2: Resolve, keeping both sides, then continue the rebase**
+- [x] **Step 2: Resolve, keeping both sides, then continue the rebase**
 
 `ingest.md` — `main`'s `skip_reasons` / `--reingest` block AND the branch's domain-resolution
 gate both stay; they sit in different sections. For `plugin.json`, take `main`'s version
@@ -1316,7 +1324,7 @@ Stage only the paths `git status --short` reported as conflicted — `git add` o
 path is harmless, but a conflicted path left unstaged makes `--continue` refuse, and the error
 is easy to misread as the rebase having finished.
 
-- [ ] **Step 3: Bump the plugin version once, through the script**
+- [x] **Step 3: Bump the plugin version once, through the script**
 
 ```bash
 CURRENT=$(python3 -c "import json;print(json.load(open('plugins/h2t-ops/.claude-plugin/plugin.json'))['version'])")
@@ -1328,7 +1336,7 @@ python scripts/bump_plugin.py h2t-ops "$NEXT"
 `<next>` in a shell line is an input redirection, not a placeholder — it fails before the
 script sees anything.
 
-- [ ] **Step 4: Verify no content was lost in the resolution**
+- [x] **Step 4: Verify no content was lost in the resolution**
 
 ```bash
 grep -c -i "semantic health" plugins/h2t-ops/skills/kb/references/lint.md
@@ -1339,14 +1347,14 @@ grep -c "reingest" plugins/h2t-ops/skills/kb/references/ingest.md
 Expected: all three ≥ 1. The `reingest` count is the control — it proves `main`'s work survived
 the rebase, which a "keep ours" resolution would silently drop while the other two still pass.
 
-- [ ] **Step 5: Tests and docs lint**
+- [x] **Step 5: Tests and docs lint**
 
 Run: `.venv/bin/pytest tests/ -q`, then
 `.venv/bin/python plugins/h2t-dev/skills/docs-lint/scripts/lint.py doctor`
 Expected: green. There is no `docs-lint` binary and `uv run docs-lint` fails to spawn — it is a
 plugin skill script (`.claude/rules/linting.md`).
 
-- [ ] **Step 6: Push and merge**
+- [x] **Step 6: Push and merge**
 
 ```bash
 git push --force-with-lease origin feat/kb-lint-semantic-health
@@ -1401,7 +1409,7 @@ the current wheel before anything changes.
   returns the directory. Raises `FileNotFoundError` with the same "tried:" listing
   `plugin_script_path` produces.
 
-- [ ] **Step 1: Measure the wheel as it is now**
+- [x] **Step 1: Measure the wheel as it is now**
 
 ```bash
 rm -rf /tmp/wheel-before
@@ -1420,7 +1428,7 @@ the probe, not `status.py`: `plugins/h2t-core/lib/eval/` holds only `session.py`
 `skill_class.py`, so a `status.py` probe would report one copy today and the test would be
 vacuous.
 
-- [ ] **Step 2: Write the failing tests**
+- [x] **Step 2: Write the failing tests**
 
 ```python
 def test_the_wheel_claims_no_generic_top_level_name(wheel_names):
@@ -1442,13 +1450,13 @@ def test_the_payload_lib_is_complete(wheel_names):
     assert f"{PAYLOAD}/lib/eval/report.py" in wheel_names
 ```
 
-- [ ] **Step 3: Run them — all three must fail**
+- [x] **Step 3: Run them — all three must fail**
 
 Run: `.venv/bin/pytest tests/core/test_wheel_payload.py -q`
 Expected: the three new tests FAIL, the four existing ones PASS. Read each failure message: a
 `wheel build failed` fixture error is not the same result as an assertion firing.
 
-- [ ] **Step 4: Complete the vendored copy**
+- [x] **Step 4: Complete the vendored copy**
 
 ```bash
 cp lib/eval/status.py lib/eval/report.py plugins/h2t-core/lib/eval/
@@ -1471,7 +1479,7 @@ is not optional duplication — it is the invariant that test polices. Relative 
 `lib.eval` package resolves normally) and make `from eval.status import get_status` work when
 `<root>/lib` is on `sys.path`.
 
-- [ ] **Step 5: Add the path helper**
+- [x] **Step 5: Add the path helper**
 
 ```python
 def ensure_plugin_lib_on_path(*, requires: str = "eval/status.py") -> Path:
@@ -1497,7 +1505,7 @@ def ensure_plugin_lib_on_path(*, requires: str = "eval/status.py") -> Path:
 `import sys` at the top of `plugin_entrypoints.py` — it currently imports only
 `importlib.util`, `os`, `Path` and `ModuleType`.
 
-- [ ] **Step 6: Route the evals connector through it**
+- [x] **Step 6: Route the evals connector through it**
 
 In `h2t_ops/connectors/evals/commands.py`, replace both `from lib.eval...` imports:
 
@@ -1526,7 +1534,7 @@ startup cheap, and hoisting it to module scope would undo that. Passing the modu
 needs is what makes a cache entry with an older, incomplete `lib/eval` fall through to the
 bundled payload instead of being selected and failing.
 
-- [ ] **Step 7: Make the legacy fallthrough survive `lib` leaving the wheel**
+- [x] **Step 7: Make the legacy fallthrough survive `lib` leaving the wheel**
 
 `h2t_ops/cli.py:49` is a bare `from lib.cli.main import main as legacy_main` with no guard —
 with `lib` gone from the wheel, an unknown subcommand would crash with `ModuleNotFoundError`
@@ -1553,7 +1561,7 @@ def test_an_unknown_command_exits_2_without_lib(monkeypatch):
     assert cli._legacy(["no-such-connector"]) == 2
 ```
 
-- [ ] **Step 8: Drop `lib` from the wheel**
+- [x] **Step 8: Drop `lib` from the wheel**
 
 ```toml
 [tool.hatch.build.targets.wheel]
@@ -1573,7 +1581,7 @@ def test_wheel_still_ships_the_package_and_its_data(wheel_names):
     assert f"{PAYLOAD}/lib/eval/session.py" in wheel_names
 ```
 
-- [ ] **Step 9: Re-measure, and prove the CLI works from a real wheel**
+- [x] **Step 9: Re-measure, and prove the CLI works from a real wheel**
 
 ```bash
 rm -rf /tmp/wheel-after /tmp/venv-probe
@@ -1593,7 +1601,7 @@ failure can surface as an ordinary non-zero result rather than a traceback. Read
 Installing into a throwaway venv is the point: the editable install in `.venv` resolves
 everything from the checkout and cannot show a packaging defect at all.
 
-- [ ] **Step 10: Full suite and commit**
+- [x] **Step 10: Full suite and commit**
 
 Run: `.venv/bin/pytest tests/ lib/ -q`
 Expected: green. `tests/` still imports `lib.*` directly and must keep passing — `pythonpath =
@@ -1613,14 +1621,21 @@ git commit -m "fix(packaging): ship one copy of each module and stop claiming th
 
 - [x] PR #391 merged (handoff gate + cwd-derived identity)
 - [x] Wave 1 merged (#397), `pytest tests/ lib/` green, ten of twelve plugin dirs green in CI
-- [ ] `uv tool install --editable .` — Task 10 adds a ninth entry point (`h2t-hook`); verify
-      with `uv tool list`, not with the install command's output
-- [ ] `python scripts/bump_plugin.py h2t-core <next>` — and `h2t-ops`, which Task 11 touches
-- [ ] `git push origin main`
-- [ ] `/plugin marketplace update lichtpfad`, then `/reload-plugins`
-- [ ] Verify the deploy by reading the cache, not the command output:
-      `grep -c resolve_identity ~/.claude/plugins/cache/lichtpfad/h2t-core/<new>/skills/handoff/scripts/writer.py`
-- [ ] Fresh-session smoke: `/h2t-core:session-start` shows a briefing with `### Previous Session`
+- [x] `uv tool install --editable .` — `uv tool list` shows nine entry points under one
+      package, `h2t-hook` among them
+- [x] `scripts/bump_plugin.py` — h2t-core 3.2.23 → 3.2.24 (8eedb4d), h2t-ops 1.6.4 → 1.6.5
+      (f80a444, for Task 11)
+- [x] `git push origin main`
+- [x] `/plugin marketplace update lichtpfad`, then `/reload-plugins`
+- [x] Deploy verified by reading the cache, not the command output
+- [x] Fresh-session smoke: briefing rendered with `### Previous Session`
+
+**A second deploy is due, and it is not this plan's.** #401 (pinned ruff set, CI lint gate,
+drawio tests) and #402 (#400's sweep) landed *after* 3.2.24 shipped and touched six plugin
+directories. Both are lint-only — renames and dead-import removal, behaviour identical — so
+nothing is broken, but the cache no longer matches the version it claims: as of 2026-08-24
+`plugins/h2t-core/lib/gather/briefing.py` differs from its copy in
+`~/.claude/plugins/cache/lichtpfad/h2t-core/3.2.24/`. Bump and redeploy before the release.
 
 ## Out of scope, and why
 
@@ -1664,7 +1679,17 @@ recorded with each decision so the reasoning can be re-checked rather than re-tr
 
 ## Still open
 
-- **#396** — the `h2t-arch` drawio directory holds 578 lines of module-level asserts with no
-  test function, so `pytest` exits 5 and it stays out of CI. Converting them is its own task.
-- **#381** — ten of twelve plugin test directories now run in CI (Task 4). Closing it waits on
-  #396.
+Nothing from this plan. Both items this section carried are closed:
+
+- **#396** — the drawio directory's 578 lines of module-level asserts became 16 pytest
+  functions; export moved under a `skipif` guarded by a control test that fails if the CLI path
+  it probes drifts. Closed in #401.
+- **#381** — all twelve plugin test directories now run in CI. Closed in #401.
+
+Two things found while closing them, tracked outside this plan:
+
+- **#400** (closed in #402) — the five ruff classes deferred when the set was pinned. Cleared:
+  117 cosmetic findings to zero and `ignore` removed entirely, F401 markers 101 → 6.
+- **#399** (open) — `per-file-ignores` still silences `F821` in `telegram_cli.py`, and that one
+  is a real `NameError`: `_create_notion_tasks` reads an undefined `REPO_ROOT` and has no
+  caller. Deleting it belongs with #383, which asks where that script's workflows live at all.
