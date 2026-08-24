@@ -3,3 +3,20 @@ project_checks: true
 custom_root_dirs:
   - h2t_ops
   - hooks-handlers
+
+# Frozen trees. Not "findings we chose to ignore" — material for which the
+# checks' premises are false, so a finding there is a wrong answer, not a
+# deferred one.
+#
+#   docs/archive          an archive is unreachable from the index by
+#                         definition; that is what archiving it meant.
+#   docs/visual-regression golden references pinned to their paths. The project
+#                         check wanted to git mv eight of them into
+#                         deliverables/, which is exactly how you break a
+#                         regression baseline.
+#   kb-consolidation-tests fixtures. Some of them exist *without* frontmatter
+#                         because a test asserts what happens when it is absent.
+exclude_dirs:
+  - docs/archive
+  - docs/visual-regression
+  - docs/superpowers/plans/kb-consolidation-tests

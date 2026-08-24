@@ -37,6 +37,7 @@ from docs.common import (
     REQUIRED_CORE_DIRS,
     STANDARDS_FILES,
     ensure_dir,
+    excluded_predicate,
     parse_frontmatter,
     print_header,
     repo_path,
@@ -81,6 +82,12 @@ _VENDOR_EXCLUDE = {
     ".git", ".mypy_cache", ".pytest_cache", ".ruff_cache",
 }
 _DIM_LIMIT = 50
+
+# Every finding type the audit and doctor fold into their "Project Layer" line.
+_PROJECT_TYPES = [
+    "root_structure", "root_readmes", "gitignore_hygiene",
+    "agent_instructions", "misplaced_deliverable",
+]
 
 _SEVERITY_MAP = {
     "error": "critical",
@@ -131,16 +138,30 @@ def _apply_exceptions(findings: list[dict], exceptions: list) -> list[dict]:
     return result
 
 
-def _cap_by_dimension(findings: list[dict], limit: int = _DIM_LIMIT) -> list[dict]:
-    """Keep at most `limit` findings per type, preserving order."""
+def _cap_by_dimension(
+    findings: list[dict], limit: int = _DIM_LIMIT,
+) -> tuple[list[dict], dict[str, int]]:
+    """Keep at most `limit` findings per type; also return the uncapped totals.
+
+    The cap used to be silent, and a silent cap is not a smaller report — it is
+    a wrong number. This repo had 136 orphans and every surface said 50: audit,
+    doctor, doctor --json, and the baseline written into .claude/rules. It also
+    made the report insensitive to real change — excluding three frozen trees
+    took orphans 136 → 93 and moved the printed count not at all.
+
+    Returns (kept, totals) so callers can bound what they print while reporting
+    what they found.
+    """
     counts: dict[str, int] = {}
+    totals: dict[str, int] = {}
     result = []
     for f in findings:
         t = f["type"]
+        totals[t] = totals.get(t, 0) + 1
         if counts.get(t, 0) < limit:
             result.append(f)
             counts[t] = counts.get(t, 0) + 1
-    return result
+    return result, totals
 
 
 def _normalize_severities(findings: list[dict]) -> list[dict]:
@@ -323,11 +344,14 @@ _DOC_EXTS_IN_DATA = {".md"}
 _DATA_DOCS_SKIP = {".pymarkdown.yaml", ".vale.ini"}
 
 
-def check_data_docs_boundary(rp: Path) -> list[str]:
+def check_data_docs_boundary(rp: Path, exclude_dirs: list[str] | None = None) -> list[str]:
     failures = []
+    is_excluded = excluded_predicate(rp, exclude_dirs)
     docs_dir = rp / "docs"
     if docs_dir.exists():
         for f in docs_dir.rglob("*"):
+            if is_excluded(f):
+                continue
             if f.is_file() and f.suffix in _DATA_EXTS_IN_DOCS and f.name not in _DATA_DOCS_SKIP:
                 rel = str(f.relative_to(rp)).replace("\\", "/")
                 failures.append(f"data in docs: {rel} — move to data/")
@@ -357,12 +381,15 @@ def check_naming_conventions(rp: Path) -> list[str]:
     return failures
 
 
-def check_frontmatter(rp: Path) -> list[str]:
+def check_frontmatter(rp: Path, exclude_dirs: list[str] | None = None) -> list[str]:
     failures = []
     docs_dir = rp / "docs"
     if not docs_dir.exists():
         return failures
+    is_excluded = excluded_predicate(rp, exclude_dirs)
     for md_file in docs_dir.rglob("*.md"):
+        if is_excluded(md_file):
+            continue
         rel = str(md_file.relative_to(rp)).replace("\\", "/")
         for dir_pattern, required_fields in FRONTMATTER_RULES.items():
             if dir_pattern not in rel or not required_fields:
@@ -598,7 +625,7 @@ def _collect_all_findings(rp: Path, no_pymarkdown: bool = False) -> list[dict]:
         + typed_msgs
         + check_adr_naming(rp)
         + check_legacy_dirs(rp, extra_dirs=extra)
-        + check_data_docs_boundary(rp)
+        + check_data_docs_boundary(rp, exclude_dirs=exclude_dirs)
         + check_repo_root(rp)
         + ([] if no_pymarkdown else run_pymarkdownlnt(rp))
     ):
@@ -606,7 +633,7 @@ def _collect_all_findings(rp: Path, no_pymarkdown: bool = False) -> list[dict]:
         if template and "(template:" in msg:
             f["template"] = template
         all_findings.append(f)
-    for msg in check_frontmatter(rp):
+    for msg in check_frontmatter(rp, exclude_dirs=exclude_dirs):
         path = msg.split(":")[0].strip() if ":" in msg else ""
         all_findings.append(finding("frontmatter", "info", path, msg))
 
@@ -620,7 +647,9 @@ def _collect_all_findings(rp: Path, no_pymarkdown: bool = False) -> list[dict]:
 
     if _MISPLACED_FILES_AVAILABLE and cfg.get("project_checks"):
         deliverables_dir = cfg.get("deliverables_dir", "deliverables")
-        all_findings.extend(check_misplaced_deliverables(rp, deliverables_dir))
+        all_findings.extend(
+            check_misplaced_deliverables(rp, deliverables_dir, exclude_dirs=exclude_dirs)
+        )
 
     # Post-processing pipeline
     # 1. Severity normalization (warn/info → important/low)
@@ -635,11 +664,33 @@ def _collect_all_findings(rp: Path, no_pymarkdown: bool = False) -> list[dict]:
     cfg_exceptions = cfg.get("exceptions") or []
     all_findings = _apply_exceptions(all_findings, cfg_exceptions)
     # 4. Dimension cap (exception warnings appended after cap so they survive)
-    all_findings = _cap_by_dimension(all_findings)
-    # 5. Exception warnings — appended AFTER cap so they are never dropped
+    all_findings, totals = _cap_by_dimension(all_findings)
+    # 5. Truncation notices — one finding per capped dimension, so a partial list
+    #    says so in every surface, the JSON envelope included.
+    for dim, total in sorted(totals.items()):
+        shown = sum(1 for f in all_findings if f["type"] == dim)
+        if total > shown:
+            note = finding(
+                "truncated", "low", "",
+                f"{dim}: {total} found, {shown} listed — "
+                f"{total - shown} not shown (per-dimension cap {_DIM_LIMIT})",
+            )
+            note["dimension"] = dim
+            note["total"] = total
+            note["shown"] = shown
+            all_findings.append(note)
+    # 6. Exception warnings — appended AFTER cap so they are never dropped
     from docs.config import get_exception_warnings
     all_findings.extend(get_exception_warnings(cfg_exceptions, rp))
     return all_findings
+
+
+def _dimension_total(findings: list[dict], dim: str, shown: int) -> int:
+    """Uncapped count for a dimension, read back from its truncation notice."""
+    for f in findings:
+        if f.get("type") == "truncated" and f.get("dimension") == dim:
+            return int(f.get("total", shown))
+    return shown
 
 
 def _run_audit(rp: Path, no_pymarkdown: bool = False) -> None:
@@ -650,10 +701,7 @@ def _run_audit(rp: Path, no_pymarkdown: bool = False) -> None:
     naming    = [f for f in all_findings if f["type"] == "naming"]
     structure = [f for f in all_findings if f["type"] == "structure"]
     frontmatter = [f for f in all_findings if f["type"] == "frontmatter"]
-    project   = [f for f in all_findings if f["type"] in {
-        "root_structure", "root_readmes", "gitignore_hygiene",
-        "agent_instructions", "misplaced_deliverable",
-    }]
+    project   = [f for f in all_findings if f["type"] in _PROJECT_TYPES]
 
     def _fmt(f: dict) -> str:
         sev = f.get("severity", "low").upper()[:4]
@@ -662,19 +710,24 @@ def _run_audit(rp: Path, no_pymarkdown: bool = False) -> None:
         return f"  [{sev}] {path}: {msg}" if path else f"  [{sev}] {msg}"
 
     sections = [
-        ("Navigation / Orphans", orphans),
-        ("Naming", naming),
-        ("Structure", structure),
-        ("Metadata / Frontmatter", frontmatter),
-        ("Project Layer", project),
+        ("Navigation / Orphans", orphans, ["orphan"]),
+        ("Naming", naming, ["naming"]),
+        ("Structure", structure, ["structure"]),
+        ("Metadata / Frontmatter", frontmatter, ["frontmatter"]),
+        ("Project Layer", project, _PROJECT_TYPES),
     ]
     total = 0
-    for title, items in sections:
-        if items:
-            print(f"\n--- {title} ({len(items)}) ---")
-            for item in items:
-                print(_fmt(item))
-            total += len(items)
+    for title, items, dims in sections:
+        if not items:
+            continue
+        full = sum(_dimension_total(all_findings, d, 0) for d in dims) or len(items)
+        # The header carries what was found; the list carries what fits.
+        print(f"\n--- {title} ({full}) ---")
+        for item in items:
+            print(_fmt(item))
+        if full > len(items):
+            print(f"  ... {full - len(items)} more not listed (per-dimension cap {_DIM_LIMIT})")
+        total += full
 
     print(f"\n{'=' * 60}")
     if total:
@@ -754,7 +807,11 @@ def _apply_misplaced_moves(rp: Path, cfg: dict) -> list[str]:
     if not _MISPLACED_FILES_AVAILABLE:
         return []
     deliverables_dir = cfg.get("deliverables_dir", "deliverables")
-    findings = check_misplaced_deliverables(rp, deliverables_dir)
+    # Same exclusion as the audit. A fixer that moves what the reporter has
+    # stopped reporting is worse than either behaviour on its own.
+    findings = check_misplaced_deliverables(
+        rp, deliverables_dir, exclude_dirs=cfg.get("exclude_dirs") or [],
+    )
     fixes: list[str] = []
     for f in findings:
         if not f.get("is_tracked"):
@@ -966,15 +1023,21 @@ def _run_doctor(rp: Path, json_output: bool = False, no_pymarkdown: bool = False
     naming = [f for f in all_findings if f["type"] == "naming"]
     structure = [f for f in all_findings if f["type"] == "structure"]
     frontmatter = [f for f in all_findings if f["type"] == "frontmatter"]
-    project = [f for f in all_findings if f["type"] in {
-        "root_structure", "root_readmes", "gitignore_hygiene", "agent_instructions",
-        "misplaced_deliverable",
-    }]
-    total = len(all_findings)
+    project = [f for f in all_findings if f["type"] in _PROJECT_TYPES]
+
+    def _full(items: list[dict], dims: list[str]) -> int:
+        return sum(_dimension_total(all_findings, d, 0) for d in dims) or len(items)
+
+    n_orphans = _full(orphans, ["orphan"])
+    n_naming = _full(naming, ["naming"])
+    n_structure = _full(structure, ["structure"])
+    n_frontmatter = _full(frontmatter, ["frontmatter"])
+    n_project = _full(project, _PROJECT_TYPES)
+    total = n_orphans + n_naming + n_structure + n_frontmatter + n_project
     summary = (
-        f"{len(orphans)} orphan(s), {len(naming)} naming issue(s), "
-        f"{len(structure)} structure issue(s), {len(frontmatter)} metadata issue(s), "
-        f"{len(project)} project issue(s)"
+        f"{n_orphans} orphan(s), {n_naming} naming issue(s), "
+        f"{n_structure} structure issue(s), {n_frontmatter} metadata issue(s), "
+        f"{n_project} project issue(s)"
     )
     safe_next = "Run 'docs-lint plan' for cleanup plan" if total else "No issues found"
     report = build_report(
@@ -1049,13 +1112,14 @@ def _legacy_main(args: argparse.Namespace) -> None:
                 print(f"  FIX: {f}")
 
         extra = REPO_EXTRA_DIRS.get(name, [])
+        _legacy_exclude = load_config(rp).get("exclude_dirs") or []
         failures = (
             check_structure(rp)
             + check_adr_naming(rp)
             + check_legacy_dirs(rp, extra_dirs=extra)
             + check_naming_conventions(rp)
-            + check_frontmatter(rp)
-            + check_data_docs_boundary(rp)
+            + check_frontmatter(rp, exclude_dirs=_legacy_exclude)
+            + check_data_docs_boundary(rp, exclude_dirs=_legacy_exclude)
             + check_projects_yaml(rp, name, projects)
             + (check_repo_root(rp) if args.repo_root else [])
             + ([] if args.no_pymarkdown else run_pymarkdownlnt(rp))
