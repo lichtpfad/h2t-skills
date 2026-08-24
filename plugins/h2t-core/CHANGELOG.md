@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- feat(hooks): `plan-closer` — a merged PR stamps `status: "done"` and `pr: N` on
+  every plan and spec it carried. The repo's first PostToolUse hook. Retrospective
+  inference had already been measured and rejected — a plan slug appears in 7 of 60
+  merged PR bodies, and commit counts cannot separate "done and never updated" from
+  "abandoned" — but at the moment of the merge nothing is inferred: `gh pr view`
+  lists the PR's own files. The link was never hard to compute, it was never written
+  down while it was still free. Every uncertain case is a no-op: an unmerged PR, a
+  file the PR deleted, a document with no frontmatter, one already closed, and
+  `gh pr merge` with no explicit number (resolving that after the fact would stamp
+  the wrong plan). Always exits 0 — bookkeeping must never look like a failed merge
+
 - feat(session-start): the briefing carries a docs-debt line — `141 из 144
   plan/spec/adr не закрыты · 111 старше 60 дней`. docs-lint measures form and
   never lifecycle, so nothing displayed that number anywhere and it took six

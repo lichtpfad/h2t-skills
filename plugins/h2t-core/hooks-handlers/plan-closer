@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# PostToolUse: a merged PR closes the plans and specs it carried.
+#
+# Same interpreter resolution as structure-guard: macOS ships `python3` only.
+# plan_closer.py is stdlib-only and shells out to `gh`.
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PLUGIN_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+# This hook fires on every Bash call. Read the payload here and bail before
+# paying for a Python start unless the command is actually a merge.
+PAYLOAD="$(cat)"
+case "$PAYLOAD" in
+  *"gh pr merge"*) ;;
+  *) exit 0 ;;
+esac
+
+source "$PLUGIN_ROOT/scripts/resolve-h2t-python.sh"
+if ! resolve_h2t_python; then
+  # Fail open and silent: bookkeeping after a merge must never look like a
+  # failed merge.
+  exit 0
+fi
+
+printf '%s' "$PAYLOAD" | exec "${H2T_PYTHON_CMD[@]}" "$SCRIPT_DIR/plan_closer.py"

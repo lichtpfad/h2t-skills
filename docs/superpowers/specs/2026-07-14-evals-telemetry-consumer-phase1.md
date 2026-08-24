@@ -1,6 +1,7 @@
 ---
 title: "Evals telemetry consumer phase1"
-status: "draft"
+status: "done"
+pr: 323
 owner: "Stanislav Glazov"
 date: "2026-07-14"
 milestone: ""
