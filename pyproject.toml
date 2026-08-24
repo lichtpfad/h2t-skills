@@ -93,11 +93,6 @@ unfixable = ["F401"]
 "plugins/**/scripts/*.py" = ["E402"]
 "tests/**/*.py" = ["E402"]
 
-# F821 here is a real NameError, not noise: `_create_notion_tasks` reads an undefined
-# REPO_ROOT. The function is dead (no caller anywhere), and whether it comes back with a
-# real anchor or goes is a telegram-skill decision, not a lint one — tracked in #399.
-"plugins/h2t-ops/skills/telegram/scripts/telegram_cli.py" = ["E402", "F821"]
-
 [tool.pytest.ini_options]
 pythonpath = ["."]
 
