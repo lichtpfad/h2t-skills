@@ -26,6 +26,9 @@
 | permanently delete a file | `h2t-ops drive delete FILE_ID --confirm-name "exact name" --confirm-permanent --json` |
 | create a new Google Doc | `h2t-ops drive docs create "Title" --json` |
 | upload file and update if exists | `h2t-ops drive upload ./note.md --folder "Folder" --update-existing --json` |
+| check who can reach a file | `h2t-ops drive share FILE_ID --get-link --json` |
+| open link access (public) | `h2t-ops drive share FILE_ID --anyone --confirm-public --json` |
+| close link access again | `h2t-ops drive share FILE_ID --revoke-anyone --json` |
 
 ## Safety
 
@@ -35,6 +38,7 @@
 - `trash` is recoverable from Drive Trash. `delete` is **permanent and irreversible** — requires `--confirm-permanent`.
 - Both `trash` and `delete` require `--confirm-name` matching the exact file name (case-insensitive) as a safety guard.
 - Run `upload-folder --dry-run --json` before a real recursive upload.
+- `share --anyone` makes the file readable by anyone holding the URL and does not expire. Pair every grant with `share --revoke-anyone` once the fetch it was for is done — 26 recordings shared for a one-off upload stayed public for 108 days (#386).
 - Do not write ad-hoc Google Drive API scripts when a command is missing; use `issue-policy.md`.
 
 ## Commands

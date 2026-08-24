@@ -190,6 +190,10 @@ def register(subparsers: Any) -> None:
         "--get-link", action="store_true", dest="get_link",
         help="Return webViewLink and permission state (read-only)",
     )
+    mode_group.add_argument(
+        "--revoke-anyone", action="store_true", dest="revoke_anyone",
+        help="Remove link access again, leaving named grants intact",
+    )
     shp.add_argument(
         "--role", choices=["reader", "writer", "commenter"], default="reader",
         help="Permission role (default: reader); applies to --email and --anyone; not valid with --get-link",
@@ -222,6 +226,8 @@ def run(args) -> Any:
     if cmd == "share":
         if args.get_link and args.role != "reader":
             raise UsageError("--role cannot be used with --get-link")
+        if args.revoke_anyone and args.role != "reader":
+            raise UsageError("--role cannot be used with --revoke-anyone")
         if args.anyone and not args.confirm_public:
             raise UsageError(
                 "--anyone requires --confirm-public to prevent accidental public exposure"
@@ -338,5 +344,6 @@ def run(args) -> Any:
             role=args.role,
             anyone=args.anyone,
             get_link=args.get_link,
+            revoke_anyone=args.revoke_anyone,
         )
     raise UsageError(f"unknown drive subcommand: {cmd}")

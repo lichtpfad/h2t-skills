@@ -14,7 +14,7 @@ import importlib.util
 import json
 import sys
 import time
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
@@ -1275,8 +1275,9 @@ def test_drive_audit_command_reports_without_revoking_by_default(cli, capsys, mo
     rec = _recovery(cli)
     seen = {}
 
-    def fake_audit(*, svc=None, manifest_path=None, revoke=False):
+    def fake_audit(*, svc=None, manifest_path=None, revoke=False, min_age_hours=0.0):
         seen["revoke"] = revoke
+        seen["min_age_hours"] = min_age_hours
         return {"checked": 2, "public": ["D1"], "revoked": 0}
 
     monkeypatch.setattr(rec, "drive_audit_public", fake_audit)
@@ -1291,8 +1292,9 @@ def test_drive_audit_command_revokes_when_asked(cli, capsys, monkeypatch):
     rec = _recovery(cli)
     seen = {}
 
-    def fake_audit(*, svc=None, manifest_path=None, revoke=False):
+    def fake_audit(*, svc=None, manifest_path=None, revoke=False, min_age_hours=0.0):
         seen["revoke"] = revoke
+        seen["min_age_hours"] = min_age_hours
         return {"checked": 2, "public": ["D1"], "revoked": 1}
 
     monkeypatch.setattr(rec, "drive_audit_public", fake_audit)
@@ -1848,3 +1850,482 @@ def test_upload_submits_a_recording_once_per_batch(cli, tmp_path, monkeypatch):
     rc = cli.main(["upload", "--from-file", str(tmp_path)])
     assert rc == 0
     assert len(processed) == 1, "the same recording went to MeetGeek twice in one batch"
+
+
+# ─── Retention: ACL grace period and staging purge (#386, defects 1 and 2) ────
+#
+# Both defects were the same shape. Stage 3's success says MeetGeek accepted the
+# URL, not that it fetched the file, so nothing can be retired on the strength of
+# it — and because nothing could be retired *there*, nothing was retired at all:
+# 7.69 GB of converted mp4 kept for three months, 26 uploads world-readable for
+# 108 days. The fix is an age gate, which makes both sweeps safe to run unasked.
+
+def _hours_ago(n: float) -> str:
+    return (datetime.now(UTC) - timedelta(hours=n)).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+class _DriveHttpError(Exception):
+    """Shaped like googleapiclient's HttpError: what matters is `.resp.status`."""
+
+    def __init__(self, status: int):
+        super().__init__(f"HTTP {status}")
+        self.resp = type("_Resp", (), {"status": status})()
+
+
+class _FilesApi:
+    """files().get for the purge's still-on-Drive gate."""
+
+    def __init__(self, alive: set[str], trashed: set[str], log: list[str],
+                 exploding: set[str]):
+        self._alive = alive
+        self._trashed = trashed
+        self._log = log
+        self._exploding = exploding
+
+    def get(self, *, fileId, fields=None):
+        self._log.append(fileId)
+        if fileId in self._exploding:
+            raise RuntimeError(f"connection reset while reading {fileId}")
+        if fileId not in self._alive and fileId not in self._trashed:
+            raise _DriveHttpError(404)
+        return _Exec({"id": fileId, "trashed": fileId in self._trashed})
+
+
+class FakeDriveStore(FakeDriveService):
+    """FakeDriveService with a files() namespace beside permissions()."""
+
+    def __init__(self, perms: dict, *, alive=None, trashed=(), exploding=()):
+        super().__init__(perms)
+        self.got: list[str] = []
+        self._files = _FilesApi(
+            set(perms) if alive is None else set(alive), set(trashed), self.got,
+            set(exploding),
+        )
+
+    def files(self):
+        return self._files
+
+
+def _staged(rec, name: str, size: int = 2048) -> Path:
+    path = rec.uploads_staging_root() / "2026-08-01" / name
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(b"M" * size)
+    return path
+
+
+# ── ACL: the grace period ─────────────────────────────────────────────────────
+
+def test_drive_audit_leaves_a_recent_upload_public(cli, tmp_path):
+    """MeetGeek fetches asynchronously; revoking now would break the download."""
+    rec = _recovery(cli)
+    manifest = _manifest_with(tmp_path, [
+        {"source_webm": "/x/a.webm", "drive_id": "D1", "status": "submitted",
+         "submitted_at": _hours_ago(1)},
+    ])
+    svc = FakeDriveService({"D1": [{"id": "P1", "type": "anyone", "role": "reader"}]})
+    report = rec.drive_audit_public(svc=svc, manifest_path=manifest,
+                                    revoke=True, min_age_hours=24)
+    assert report["public"] == ["D1"], "still reported — it is still public"
+    assert report["revoked"] == 0
+    assert report["skipped_recent"] == ["D1"]
+    assert svc.deleted == []
+
+
+def test_drive_audit_revokes_once_the_grace_period_has_passed(cli, tmp_path):
+    rec = _recovery(cli)
+    manifest = _manifest_with(tmp_path, [
+        {"source_webm": "/x/a.webm", "drive_id": "D1", "status": "submitted",
+         "submitted_at": _hours_ago(48)},
+    ])
+    svc = FakeDriveService({"D1": [{"id": "P1", "type": "anyone", "role": "reader"}]})
+    report = rec.drive_audit_public(svc=svc, manifest_path=manifest,
+                                    revoke=True, min_age_hours=24)
+    assert report["revoked"] == 1
+    assert svc.deleted == [("D1", "P1")]
+
+
+def test_drive_audit_revokes_a_line_written_before_timestamps_existed(cli, tmp_path):
+    """The 108-day uploads carry no `ts` at all — they are the point of the sweep.
+
+    An unstamped record reads as ts == "", and "" is below every cutoff. A gate
+    written as `ts > newest.get(id, "")` would have dropped exactly these ids
+    while every stamped test stayed green.
+    """
+    rec = _recovery(cli)
+    manifest = _manifest_with(tmp_path, [
+        {"source_webm": "/x/a.webm", "drive_id": "D1", "status": "submitted"},
+    ])
+    svc = FakeDriveService({"D1": [{"id": "P1", "type": "anyone", "role": "reader"}]})
+    report = rec.drive_audit_public(svc=svc, manifest_path=manifest,
+                                    revoke=True, min_age_hours=24)
+    assert report["checked"] == 1, "an unstamped id must not vanish from the sweep"
+    assert report["revoked"] == 1
+
+
+def test_drive_audit_dates_an_upload_by_its_newest_line(cli, tmp_path):
+    """A re-submitted Drive object restarts the clock, or the sweep races the fetch."""
+    rec = _recovery(cli)
+    manifest = _manifest_with(tmp_path, [
+        {"source_webm": "/x/a.webm", "drive_id": "D1", "status": "in-drive",
+         "ts": _hours_ago(200)},
+        {"source_webm": "/x/a.webm", "drive_id": "D1", "status": "submitted",
+         "submitted_at": _hours_ago(1)},
+    ])
+    svc = FakeDriveService({"D1": [{"id": "P1", "type": "anyone", "role": "reader"}]})
+    report = rec.drive_audit_public(svc=svc, manifest_path=manifest,
+                                    revoke=True, min_age_hours=24)
+    assert report["skipped_recent"] == ["D1"]
+    assert svc.deleted == []
+
+
+def test_drive_audit_command_passes_the_age_gate_through(cli, capsys, monkeypatch):
+    rec = _recovery(cli)
+    seen = {}
+
+    def fake_audit(*, svc=None, manifest_path=None, revoke=False, min_age_hours=0.0):
+        seen["min_age_hours"] = min_age_hours
+        return {"checked": 0, "public": [], "revoked": 0, "skipped_recent": [], "errors": []}
+
+    monkeypatch.setattr(rec, "drive_audit_public", fake_audit)
+    monkeypatch.setattr(cli, "_drive_audit_public", fake_audit, raising=False)
+    assert cli.main(["drive-audit", "--revoke", "--min-age-hours", "6"]) == 0
+    assert seen["min_age_hours"] == 6.0
+    capsys.readouterr()
+
+
+def test_drive_audit_command_defaults_to_no_age_gate(cli, capsys, monkeypatch):
+    """A human typing --revoke means all of them; the gate is for the unattended run."""
+    rec = _recovery(cli)
+    seen = {}
+
+    def fake_audit(*, svc=None, manifest_path=None, revoke=False, min_age_hours=0.0):
+        seen["min_age_hours"] = min_age_hours
+        return {"checked": 0, "public": [], "revoked": 0, "skipped_recent": [], "errors": []}
+
+    monkeypatch.setattr(rec, "drive_audit_public", fake_audit)
+    monkeypatch.setattr(cli, "_drive_audit_public", fake_audit, raising=False)
+    assert cli.main(["drive-audit", "--revoke"]) == 0
+    assert seen["min_age_hours"] == 0.0
+    capsys.readouterr()
+
+
+# ── Staging purge ─────────────────────────────────────────────────────────────
+
+def test_purge_deletes_staged_media_of_a_submitted_recording(cli, tmp_path):
+    rec = _recovery(cli)
+    source = tmp_path / "meetgeek-recording-2026-01-20T15-44-31-132Z.webm"
+    source.write_bytes(b"S" * 1024)
+    mp4 = _staged(rec, "a.mp4", size=4096)
+    manifest = _manifest_with(tmp_path, [
+        {"source_webm": str(source), "mp4_path": str(mp4), "drive_id": "D1",
+         "status": "submitted", "submitted_at": _hours_ago(48)},
+    ])
+    svc = FakeDriveStore({"D1": []})
+    report = rec.purge_staging(manifest_path=manifest, svc=svc, min_age_hours=24)
+    assert report["purged"] == [str(mp4)]
+    assert report["freed_bytes"] == 4096
+    assert not mp4.exists()
+    assert source.exists(), "the source recording is never touched"
+
+
+def test_purge_keeps_media_of_an_unsubmitted_recording(cli, tmp_path):
+    rec = _recovery(cli)
+    source = tmp_path / "meetgeek-recording-2026-01-20T15-44-31-132Z.webm"
+    source.write_bytes(b"S" * 1024)
+    mp4 = _staged(rec, "b.mp4")
+    manifest = _manifest_with(tmp_path, [
+        {"source_webm": str(source), "mp4_path": str(mp4), "drive_id": "D1",
+         "status": "in-drive", "ts": _hours_ago(48)},
+    ])
+    svc = FakeDriveStore({"D1": []})
+    report = rec.purge_staging(manifest_path=manifest, svc=svc, min_age_hours=24)
+    assert report["purged"] == []
+    assert mp4.exists()
+    assert "not submitted" in report["kept"][0]["reason"]
+
+
+def test_purge_keeps_media_when_the_source_recording_is_gone(cli, tmp_path):
+    """Without the source the mp4 cannot be reproduced — it is the last local copy."""
+    rec = _recovery(cli)
+    mp4 = _staged(rec, "c.mp4")
+    manifest = _manifest_with(tmp_path, [
+        {"source_webm": str(tmp_path / "deleted.webm"), "mp4_path": str(mp4),
+         "drive_id": "D1", "status": "submitted", "submitted_at": _hours_ago(48)},
+    ])
+    svc = FakeDriveStore({"D1": []})
+    report = rec.purge_staging(manifest_path=manifest, svc=svc, min_age_hours=24)
+    assert report["purged"] == []
+    assert mp4.exists()
+    assert "source recording is gone" in report["kept"][0]["reason"]
+
+
+def test_purge_keeps_media_when_the_drive_copy_is_gone(cli, tmp_path):
+    """A 404 on a months-old id is an answer, not a fault — kept, not errored."""
+    rec = _recovery(cli)
+    source = tmp_path / "meetgeek-recording-2026-01-20T15-44-31-132Z.webm"
+    source.write_bytes(b"S" * 1024)
+    mp4 = _staged(rec, "d.mp4")
+    manifest = _manifest_with(tmp_path, [
+        {"source_webm": str(source), "mp4_path": str(mp4), "drive_id": "GONE",
+         "status": "submitted", "submitted_at": _hours_ago(48)},
+    ])
+    svc = FakeDriveStore({}, alive=set())
+    report = rec.purge_staging(manifest_path=manifest, svc=svc, min_age_hours=24)
+    assert report["purged"] == []
+    assert mp4.exists()
+    assert report["errors"] == []
+    assert "gone or trashed" in report["kept"][0]["reason"]
+
+
+def test_purge_keeps_media_when_the_drive_copy_is_only_trashed(cli, tmp_path):
+    """Drive empties the bin on its own schedule — trashed is not a copy."""
+    rec = _recovery(cli)
+    source = tmp_path / "meetgeek-recording-2026-01-20T15-44-31-132Z.webm"
+    source.write_bytes(b"S" * 1024)
+    mp4 = _staged(rec, "e.mp4")
+    manifest = _manifest_with(tmp_path, [
+        {"source_webm": str(source), "mp4_path": str(mp4), "drive_id": "D1",
+         "status": "submitted", "submitted_at": _hours_ago(48)},
+    ])
+    svc = FakeDriveStore({"D1": []}, alive=set(), trashed={"D1"})
+    report = rec.purge_staging(manifest_path=manifest, svc=svc, min_age_hours=24)
+    assert report["purged"] == []
+    assert mp4.exists()
+    assert "trashed" in report["kept"][0]["reason"]
+
+
+def test_purge_keeps_media_inside_the_grace_period(cli, tmp_path):
+    rec = _recovery(cli)
+    source = tmp_path / "meetgeek-recording-2026-01-20T15-44-31-132Z.webm"
+    source.write_bytes(b"S" * 1024)
+    mp4 = _staged(rec, "f.mp4")
+    manifest = _manifest_with(tmp_path, [
+        {"source_webm": str(source), "mp4_path": str(mp4), "drive_id": "D1",
+         "status": "submitted", "submitted_at": _hours_ago(1)},
+    ])
+    svc = FakeDriveStore({"D1": []})
+    report = rec.purge_staging(manifest_path=manifest, svc=svc, min_age_hours=24)
+    assert report["purged"] == []
+    assert mp4.exists()
+    assert "grace period" in report["kept"][0]["reason"]
+    assert svc.got == [], "the grace gate comes before the Drive call"
+
+
+def test_purge_dry_run_reports_without_deleting(cli, tmp_path):
+    rec = _recovery(cli)
+    source = tmp_path / "meetgeek-recording-2026-01-20T15-44-31-132Z.webm"
+    source.write_bytes(b"S" * 1024)
+    mp4 = _staged(rec, "g.mp4", size=8192)
+    manifest = _manifest_with(tmp_path, [
+        {"source_webm": str(source), "mp4_path": str(mp4), "drive_id": "D1",
+         "status": "submitted", "submitted_at": _hours_ago(48)},
+    ])
+    svc = FakeDriveStore({"D1": []})
+    report = rec.purge_staging(manifest_path=manifest, svc=svc, min_age_hours=24,
+                               dry_run=True)
+    assert report["purged"] == [str(mp4)]
+    assert report["freed_bytes"] == 8192
+    assert report["dry_run"] is True
+    assert mp4.exists(), "dry run must delete nothing"
+
+
+def test_purge_reports_unclaimed_media_as_orphans_and_keeps_it(cli, tmp_path):
+    """A file no manifest line claims has no evidence it is safe to delete."""
+    rec = _recovery(cli)
+    orphan = _staged(rec, "handmade.mp4")
+    manifest = _manifest_with(tmp_path, [])
+    report = rec.purge_staging(manifest_path=manifest, min_age_hours=24,
+                               verify_drive=False)
+    assert report["orphans"] == [str(orphan)]
+    assert report["purged"] == []
+    assert orphan.exists()
+
+
+def test_purge_never_touches_the_submission_artifact(cli, tmp_path):
+    """The .submission.json beside the mp4 is the record, not the payload."""
+    rec = _recovery(cli)
+    source = tmp_path / "meetgeek-recording-2026-01-20T15-44-31-132Z.webm"
+    source.write_bytes(b"S" * 1024)
+    mp4 = _staged(rec, "h.mp4")
+    artifact = mp4.with_suffix(".submission.json")
+    artifact.write_text('{"artifact_type": "recording_submission_artifact"}',
+                        encoding="utf-8")
+    manifest = _manifest_with(tmp_path, [
+        {"source_webm": str(source), "mp4_path": str(mp4), "drive_id": "D1",
+         "status": "submitted", "submitted_at": _hours_ago(48)},
+    ])
+    svc = FakeDriveStore({"D1": []})
+    report = rec.purge_staging(manifest_path=manifest, svc=svc, min_age_hours=24)
+    assert not mp4.exists()
+    assert artifact.exists()
+    assert report["orphans"] == [], "a json file is not staged media"
+
+
+def test_purge_ignores_paths_belonging_to_the_other_machine(cli, tmp_path):
+    """mp4_path is absolute and machine-local; elsewhere there is nothing to delete."""
+    rec = _recovery(cli)
+    source = tmp_path / "meetgeek-recording-2026-01-20T15-44-31-132Z.webm"
+    source.write_bytes(b"S" * 1024)
+    manifest = _manifest_with(tmp_path, [
+        {"source_webm": str(source), "mp4_path": "I:\\staging\\other.mp4",
+         "drive_id": "D1", "status": "submitted", "submitted_at": _hours_ago(48)},
+    ])
+    svc = FakeDriveStore({"D1": []})
+    report = rec.purge_staging(manifest_path=manifest, svc=svc, min_age_hours=24)
+    assert report["considered"] == 0
+    assert report["purged"] == []
+    assert report["errors"] == []
+    assert svc.got == [], "an absent file must not cost a Drive call"
+
+
+def test_purge_survives_a_drive_error_and_keeps_the_file(cli, tmp_path):
+    """One unreachable id must not strand the rest, nor delete on a failed check."""
+    rec = _recovery(cli)
+    source = tmp_path / "meetgeek-recording-2026-01-20T15-44-31-132Z.webm"
+    source.write_bytes(b"S" * 1024)
+    other = tmp_path / "meetgeek-recording-2026-01-21T15-44-31-132Z.webm"
+    other.write_bytes(b"S" * 1024)
+    bad = _staged(rec, "bad.mp4")
+    good = _staged(rec, "good.mp4")
+    manifest = _manifest_with(tmp_path, [
+        {"source_webm": str(source), "mp4_path": str(bad), "drive_id": "BOOM",
+         "status": "submitted", "submitted_at": _hours_ago(48)},
+        {"source_webm": str(other), "mp4_path": str(good), "drive_id": "D2",
+         "status": "submitted", "submitted_at": _hours_ago(48)},
+    ])
+    svc = FakeDriveStore({"D2": []}, alive={"D2", "BOOM"}, exploding={"BOOM"})
+    report = rec.purge_staging(manifest_path=manifest, svc=svc, min_age_hours=24)
+    assert bad.exists()
+    assert not good.exists()
+    assert [e["mp4_path"] for e in report["errors"]] == [str(bad)]
+
+
+def test_staging_purge_command_reports_json(cli, tmp_path, capsys, monkeypatch):
+    rec = _recovery(cli)
+    seen = {}
+
+    def fake_purge(*, manifest_path=None, svc=None, min_age_hours=0.0,
+                   dry_run=False, verify_drive=True):
+        seen.update(min_age_hours=min_age_hours, dry_run=dry_run,
+                    verify_drive=verify_drive)
+        return {"considered": 1, "purged": [], "freed_bytes": 0, "kept": [],
+                "orphans": [], "errors": [], "dry_run": dry_run}
+
+    monkeypatch.setattr(rec, "purge_staging", fake_purge)
+    monkeypatch.setattr(cli, "_purge_staging", fake_purge, raising=False)
+    assert cli.main(["staging-purge", "--dry-run"]) == 0
+    assert seen == {"min_age_hours": rec.HOUSEKEEPING_MIN_AGE_HOURS,
+                    "dry_run": True, "verify_drive": True}
+    assert json.loads(capsys.readouterr().out)["considered"] == 1
+
+
+# ── Housekeeping after a batch ────────────────────────────────────────────────
+
+def _upload_batch_fakes(cli, monkeypatch, tmp_path):
+    """Convert/Drive/submit stubs shared by the housekeeping tests."""
+    rec = _recovery(cli)
+
+    def fake_convert_media(src_p, *, audio_only, mix_mode, output_path=None):
+        out = output_path or (rec.staging_dir() / (Path(str(src_p)).stem + ".mp4"))
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_bytes(b"M" * 2048)
+        return out
+
+    monkeypatch.setattr(rec, "convert_media", fake_convert_media)
+    monkeypatch.setattr(rec, "submit_url_via_h2t_ops",
+                        lambda url, title, lang: {"message": "submitted (mock)"})
+    monkeypatch.setattr(rec, "drive_upload_file",
+                        lambda path, **kw:
+                        {"drive_id": "FRESH", "download_url": "https://d/FRESH",
+                         "web_url": "https://drive/FRESH", "created": True})
+    manifest = tmp_path / "manifest.jsonl"
+    monkeypatch.setattr(cli, "_uploads_manifest_path", lambda: manifest)
+    return rec, manifest
+
+
+def test_upload_housekeeping_sweeps_the_old_and_spares_the_new(cli, tmp_path,
+                                                               monkeypatch, capsys):
+    """The whole point: the batch cleans up after earlier batches, not after itself."""
+    rec, manifest = _upload_batch_fakes(cli, monkeypatch, tmp_path)
+
+    old_source = tmp_path / "meetgeek-recording-2026-01-01T10-00-00-000Z.webm"
+    old_source.write_bytes(b"S" * 1024)
+    old_mp4 = _staged(rec, "old.mp4")
+    manifest.write_text(json.dumps({
+        "source_webm": str(old_source), "mp4_path": str(old_mp4), "drive_id": "OLD",
+        "status": "submitted", "submitted_at": _hours_ago(200),
+    }) + "\n", encoding="utf-8")
+
+    svc = FakeDriveStore(
+        {"OLD": [{"id": "PO", "type": "anyone", "role": "reader"}],
+         "FRESH": [{"id": "PF", "type": "anyone", "role": "reader"}]},
+        alive={"OLD", "FRESH"},
+    )
+    monkeypatch.setattr(rec, "drive_service", lambda: svc)
+
+    src = tmp_path / "meetgeek-recording-2026-08-20T15-44-31-132Z.webm"
+    src.write_bytes(b"x" * 1024)
+    assert cli.main(["upload", "--from-file", str(src)]) == 0
+
+    house = json.loads(capsys.readouterr().out)["housekeeping"]
+    assert house["acl"]["revoked"] == 1
+    assert svc.deleted == [("OLD", "PO")], "the fresh upload keeps its public link"
+    assert house["acl"]["skipped_recent"] == ["FRESH"]
+    assert house["staging"]["purged"] == [str(old_mp4)]
+    assert not old_mp4.exists()
+    fresh_mp4 = rec.staging_dir() / (src.stem + ".mp4")
+    assert fresh_mp4.exists(), "this batch's own media survives the sweep"
+
+
+def test_upload_no_housekeeping_leaves_everything_alone(cli, tmp_path,
+                                                        monkeypatch, capsys):
+    rec, manifest = _upload_batch_fakes(cli, monkeypatch, tmp_path)
+    old_source = tmp_path / "meetgeek-recording-2026-01-01T10-00-00-000Z.webm"
+    old_source.write_bytes(b"S" * 1024)
+    old_mp4 = _staged(rec, "old.mp4")
+    manifest.write_text(json.dumps({
+        "source_webm": str(old_source), "mp4_path": str(old_mp4), "drive_id": "OLD",
+        "status": "submitted", "submitted_at": _hours_ago(200),
+    }) + "\n", encoding="utf-8")
+    svc = FakeDriveStore({"OLD": [{"id": "PO", "type": "anyone", "role": "reader"}]})
+    monkeypatch.setattr(rec, "drive_service", lambda: svc)
+
+    src = tmp_path / "meetgeek-recording-2026-08-20T15-44-31-132Z.webm"
+    src.write_bytes(b"x" * 1024)
+    assert cli.main(["upload", "--from-file", str(src), "--no-housekeeping"]) == 0
+
+    assert "housekeeping" not in json.loads(capsys.readouterr().out)
+    assert svc.deleted == []
+    assert old_mp4.exists()
+
+
+def test_upload_dry_run_does_not_sweep(cli, tmp_path, monkeypatch, capsys):
+    rec, _ = _upload_batch_fakes(cli, monkeypatch, tmp_path)
+    called = []
+    monkeypatch.setattr(rec, "run_housekeeping",
+                        lambda **kw: called.append(kw) or {})
+    monkeypatch.setattr(cli, "_run_housekeeping",
+                        lambda **kw: called.append(kw) or {}, raising=False)
+    src = tmp_path / "meetgeek-recording-2026-08-20T15-44-31-132Z.webm"
+    src.write_bytes(b"x" * 1024)
+    assert cli.main(["upload", "--from-file", str(src), "--dry-run"]) == 0
+    assert called == []
+    capsys.readouterr()
+
+
+def test_housekeeping_failure_never_fails_the_batch(cli, tmp_path,
+                                                    monkeypatch, capsys):
+    """Six recordings submitted is a successful batch whether or not Drive answers."""
+    rec, _ = _upload_batch_fakes(cli, monkeypatch, tmp_path)
+
+    def no_drive():
+        raise rec.RecoveryError("Drive auth missing", exit_code=1)
+
+    monkeypatch.setattr(rec, "drive_service", no_drive)
+    src = tmp_path / "meetgeek-recording-2026-08-20T15-44-31-132Z.webm"
+    src.write_bytes(b"x" * 1024)
+    rc = cli.main(["upload", "--from-file", str(src)])
+    assert rc == 0
+    house = json.loads(capsys.readouterr().out)["housekeeping"]
+    assert "Drive auth missing" in house["acl"]["error"]
+    assert "Drive auth missing" in house["staging"]["error"]
