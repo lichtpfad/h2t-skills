@@ -1,12 +1,7 @@
 """Tests for the YouTube transcript provider."""
 from __future__ import annotations
 
-import json
-import urllib.error
-from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
-
-import pytest
+from unittest.mock import MagicMock
 
 from h2t_ops.connectors.research import youtube
 

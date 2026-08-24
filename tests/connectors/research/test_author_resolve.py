@@ -1,10 +1,6 @@
 """Tests for author_resolve — no network."""
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
-
-import pytest
-
 from h2t_ops.connectors.research import author_resolve
 
 

@@ -13,7 +13,6 @@ import os
 from collections.abc import Iterable
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Optional
 
 from h2t_ops.core.errors import AuthError, ConfigError
 

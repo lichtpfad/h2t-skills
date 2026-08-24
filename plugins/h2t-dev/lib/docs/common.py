@@ -4,7 +4,6 @@ import os
 import re
 import shutil
 import subprocess
-import sys
 from pathlib import Path
 
 DEV_ROOT = Path(os.environ.get("H2T_DEV_ROOT", "C:/dev"))

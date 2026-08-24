@@ -1,9 +1,5 @@
 import json
 import os
-import sys
-from pathlib import Path
-
-import pytest
 
 from lib.activity.writer import log_session_end, log_session_start
 

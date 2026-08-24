@@ -20,7 +20,6 @@ import platform
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Optional
 
 from .skill_class import eval_set_for
 
