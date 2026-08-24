@@ -63,12 +63,31 @@ skill invokes it:
 .venv/bin/python plugins/h2t-dev/skills/docs-lint/scripts/lint.py doctor
 ```
 
-Verified 2026-08-23: it prints a report and **exits 1 whenever there are findings**
-(`lint.py:987`) — the current checkout has 50 orphans, 32 naming, 6 structure, 39 metadata and
-12 project issues, so `doctor` exits 1 here even though it prints `status: ok`. Do not treat a
-non-zero exit as a broken command, and do not gate a step on `doctor` exiting 0 until those
-findings are cleared. Wherever a plan or rule says `docs-lint <subcommand>`, that is the
-script, not a binary.
+It prints a report and **exits 1 whenever there are findings** (`lint.py:1060`), so `doctor`
+exits 1 here even though it prints `status: ok`. Do not treat a non-zero exit as a broken
+command, and do not gate a step on `doctor` exiting 0 until the findings are cleared.
+Wherever a plan or rule says `docs-lint <subcommand>`, that is the script, not a binary.
+
+**The baseline this file used to carry — "50 orphans, 32 naming, 6 structure, 39 metadata,
+12 project", verified 2026-08-23 — was the truncated view.** `_DIM_LIMIT = 50` capped every
+dimension silently, in the collector shared by `audit`, `plan` and `doctor` alike. The real
+count was **136 orphans, 225 findings**. The cap also made the report insensitive to change:
+declaring three frozen trees took orphans 136 → 93 and moved the printed number not at all,
+which reads exactly like an exclusion setting that does not work.
+
+Fixed 2026-08-24: the cap still bounds the printed list, but each capped dimension emits a
+`truncated` finding carrying `total` and `shown`, and `audit` prints `... N more not listed`.
+Trust the header count, not the length of the list under it.
+
+Current baseline, same date, with `exclude_dirs` declared in `.claude/rules/docs-lint.yaml`:
+**93 orphans, 22 naming, 3 structure, 33 metadata, 1 project.** The 93 are one problem, not
+93: `docs/README.md` links 126 targets out of 218 live documents and links `superpowers/` and
+`reports/` as *directories*, which the BFS does not follow. `docs-lint fix-index` is the
+remedy, and rebuilding that file has not been done.
+
+`exclude_dirs` reaches every walk over `docs/` as of 2026-08-24 — including the `git mv` in
+`_apply_misplaced_moves`. Before that it reached two checks out of seven, so a frozen tree
+kept producing findings from the five it did not reach (#271).
 
 ## Tests
 

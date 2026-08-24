@@ -99,3 +99,22 @@ def parse_frontmatter(text: str) -> dict | None:
         return fm if fm else None
     except Exception:
         return None
+
+
+def excluded_predicate(repo_root: Path, exclude_dirs: list[str] | None):
+    """Build `is_excluded(path)` for the config's `exclude_dirs`.
+
+    One definition for every check. It used to live twice — in the orphan walk
+    and the naming walk — and the five other walks over docs/ simply did not
+    have it, so `exclude_dirs` reached two checks out of seven and a frozen tree
+    kept producing findings from the ones it did not reach (#271).
+    """
+    excluded = {(repo_root / d).resolve() for d in (exclude_dirs or [])}
+
+    def is_excluded(p: Path) -> bool:
+        if not excluded:
+            return False
+        rp = p.resolve()
+        return any(rp == ex or ex in rp.parents for ex in excluded)
+
+    return is_excluded
