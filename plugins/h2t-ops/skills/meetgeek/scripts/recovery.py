@@ -17,7 +17,7 @@ import platform
 import re
 import subprocess
 import sys
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 try:
@@ -33,6 +33,14 @@ DRIVE_TOKEN_FILE = DRIVE_CONFIG_DIR / "tokens.json"
 DRIVE_CREDENTIALS_FILE = DRIVE_CONFIG_DIR / "credentials.json"
 DRIVE_SCOPES = ["https://www.googleapis.com/auth/drive"]
 DRIVE_ROOT_FOLDER_NAME = "MeetGeek Uploads"
+
+# How long a submission is left alone before the housekeeping sweep touches it.
+# `h2t-ops meetgeek submit-url` returns as soon as MeetGeek accepts the URL, not
+# when it has fetched the file, so neither the ACL nor the staged copy can be
+# retired on the strength of Stage 3 returning success. A day is far past any
+# fetch observed in the manifest and still bounds the exposure to one day
+# instead of the 108 that #386 measured.
+HOUSEKEEPING_MIN_AGE_HOURS = 24.0
 
 _RECORDING_NAME_RE = re.compile(
     r"meetgeek-recording-(\d{4})-(\d{2})-(\d{2})T(\d{2})-(\d{2})-\d{2}-\d+Z"
@@ -55,6 +63,30 @@ class RecoveryError(Exception):
 
 def now_iso() -> str:
     return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def record_ts(rec: dict) -> str:
+    """The moment a manifest line describes, for age gating.
+
+    `submitted_at` first: that is when the URL was handed to MeetGeek, which is
+    what a grace period is counting from. `ts` is when the line was written, and
+    stands in for the stages before a submission. An empty string for the lines
+    written before either field existed — they sort below every cutoff, which is
+    where a two-year-old upload belongs.
+    """
+    return rec.get("submitted_at") or rec.get("ts") or ""
+
+
+def age_cutoff_iso(min_age_hours: float) -> str:
+    """Timestamps at or below this are old enough to sweep.
+
+    Compared as strings, the way iter_manifest_records() already orders them:
+    every stamp in the journal is the same fixed-width UTC format, so byte order
+    is chronological order and a malformed line cannot raise mid-sweep.
+    """
+    return (datetime.now(UTC) - timedelta(hours=min_age_hours)).strftime(
+        "%Y-%m-%dT%H:%M:%SZ"
+    )
 
 
 def lake_root() -> Path:
@@ -310,19 +342,34 @@ def _drive_public_permissions(svc, file_id: str) -> list[dict]:
     return [p for p in res.get("permissions", []) if p.get("type") == "anyone"]
 
 
-def iter_manifest_drive_ids(path: Path | None = None) -> list[str]:
-    """Every distinct drive_id the manifest has ever recorded, in first-seen order.
+def iter_manifest_drive_entries(path: Path | None = None) -> list[tuple[str, str]]:
+    """Every distinct drive_id the manifest has ever recorded, with its newest stamp.
 
     Not read_uploads_manifest(): that is newest-line-wins per recording, so a
     retry appending a line without a drive_id hides the earlier upload. For an
     ACL sweep the superseded lines are exactly the ones that must not be missed.
+
+    First-seen order, and the *newest* stamp of the lines carrying that id — the
+    grace period has to run from the last time the object was handed to MeetGeek,
+    not the first, or a re-submitted upload would be revoked out from under the
+    fetch it just triggered.
     """
-    seen: list[str] = []
+    newest: dict[str, str] = {}
     for _, rec in iter_manifest_records(path):
         file_id = rec.get("drive_id")
-        if file_id and file_id not in seen:
-            seen.append(file_id)
-    return seen
+        if not file_id:
+            continue
+        ts = record_ts(rec)
+        # `not in` first: an unstamped line has ts == "", and "" > "" is false,
+        # so a get()-with-default comparison would drop the id entirely.
+        if file_id not in newest or ts > newest[file_id]:
+            newest[file_id] = ts
+    return list(newest.items())
+
+
+def iter_manifest_drive_ids(path: Path | None = None) -> list[str]:
+    """Every distinct drive_id the manifest has ever recorded, in first-seen order."""
+    return [file_id for file_id, _ in iter_manifest_drive_entries(path)]
 
 
 def ensure_drive_public(file_id: str, *, svc=None) -> None:
@@ -341,7 +388,7 @@ def ensure_drive_public(file_id: str, *, svc=None) -> None:
 
 
 def drive_audit_public(*, svc=None, manifest_path: Path | None = None,
-                       revoke: bool = False) -> dict:
+                       revoke: bool = False, min_age_hours: float = 0.0) -> dict:
     """Report, and optionally revoke, anyone-with-link access on uploaded recordings.
 
     `_drive_make_public` grants `type: anyone` so MeetGeek can fetch the file by
@@ -350,14 +397,22 @@ def drive_audit_public(*, svc=None, manifest_path: Path | None = None,
     fetch — the request returning success says nothing about the download having
     happened — so the sweep runs separately, over the drive_ids the manifest
     already knows.
+
+    `min_age_hours` is what lets that sweep run unattended: an upload younger
+    than the grace period is reported but left alone, so the batch that just
+    submitted it cannot revoke the permission MeetGeek is about to use. Zero —
+    the default — is a human at a terminal asking for everything, and keeps the
+    manual `drive-audit --revoke` behaving as it always has.
     """
     if svc is None:
         svc = drive_service()
+    cutoff = age_cutoff_iso(min_age_hours)
     checked = 0
     public: list[str] = []
     errors: list[dict] = []
+    skipped_recent: list[str] = []
     revoked = 0
-    for file_id in iter_manifest_drive_ids(manifest_path):
+    for file_id, ts in iter_manifest_drive_entries(manifest_path):
         checked += 1
         # The sweep walks every historical entry, so ids whose file was deleted
         # are expected. Letting one raise would strand every later upload public.
@@ -366,15 +421,20 @@ def drive_audit_public(*, svc=None, manifest_path: Path | None = None,
             if not perms:
                 continue
             public.append(file_id)
-            if revoke:
-                for perm in perms:
-                    svc.permissions().delete(
-                        fileId=file_id, permissionId=perm["id"],
-                    ).execute()
-                    revoked += 1
+            if not revoke:
+                continue
+            if ts > cutoff:
+                skipped_recent.append(file_id)
+                continue
+            for perm in perms:
+                svc.permissions().delete(
+                    fileId=file_id, permissionId=perm["id"],
+                ).execute()
+                revoked += 1
         except Exception as e:  # noqa: BLE001 — one bad id must not end the sweep
             errors.append({"drive_id": file_id, "error": str(e)})
-    return {"checked": checked, "public": public, "revoked": revoked, "errors": errors}
+    return {"checked": checked, "public": public, "revoked": revoked,
+            "skipped_recent": skipped_recent, "errors": errors}
 
 
 def drive_upload_file(path: Path, *, folder: str | None = None,
@@ -730,3 +790,155 @@ def emit_submission_artifact(result: dict, *, artifact_dir: Path | None = None) 
     path = artifact_dir / f"{stem}.submission.json"
     path.write_text(json.dumps(artifact, ensure_ascii=False, indent=2), encoding="utf-8")
     return path
+
+
+# ─── Retention ────────────────────────────────────────────────────────────────
+
+_STAGED_MEDIA_SUFFIXES = (".mp4", ".m4a")
+
+
+def _drive_file_alive(svc, file_id: str) -> bool:
+    """Whether the Drive object still exists and is not in the trash.
+
+    A trashed file is not a copy: Drive empties the bin on its own schedule, so
+    treating it as one would let the purge delete the last local media while the
+    remote is on a countdown.
+
+    A 404 is an answer, not a failure — the journal reaches back months and the
+    ids in it get deleted. Reported as a kept file with a reason. Anything else
+    is raised: not knowing whether the remote copy exists is not permission to
+    delete the local one.
+    """
+    try:
+        meta = svc.files().get(fileId=file_id, fields="id,trashed").execute()
+    except Exception as e:  # noqa: BLE001 — re-raised unless it is a plain 404
+        if getattr(getattr(e, "resp", None), "status", None) == 404:
+            return False
+        raise
+    return not meta.get("trashed", False)
+
+
+def _purge_blocker(rec: dict, cutoff: str, *, svc) -> str | None:
+    """Why this record's staged media must stay, or None when it may go.
+
+    Three gates, and each one is a way the deletion could be the loss of the
+    only copy: the recording was never submitted, the source it was converted
+    from is gone, or the Drive object is gone. Any of them true and the mp4 in
+    staging is the last thing standing.
+    """
+    if rec.get("status") != "submitted":
+        return f"status is {rec.get('status') or 'unknown'}, not submitted"
+    if record_ts(rec) > cutoff:
+        return "submitted inside the grace period"
+    source = rec.get("source_webm")
+    if not source or not Path(source).exists():
+        return "source recording is gone — the staged copy is the only one left"
+    if svc is not None:
+        file_id = rec.get("drive_id")
+        if not file_id:
+            return "no drive_id on the submission record"
+        if not _drive_file_alive(svc, file_id):
+            return f"drive file {file_id} is gone or trashed"
+    return None
+
+
+def purge_staging(*, manifest_path: Path | None = None, svc=None,
+                  min_age_hours: float = 0.0, dry_run: bool = False,
+                  verify_drive: bool = True) -> dict:
+    """Delete converted media whose recording is submitted and safely copied.
+
+    The pipeline's terminal status is `submitted` and nothing ever removed the
+    mp4 it converted on the way there: 26 files, 7.69 GB, kept for three months
+    after MeetGeek had them (#386). This is that terminal-state cleanup.
+
+    Manifest-driven, not a sweep of the directory: only the journal knows which
+    file belongs to a submitted recording. mp4_path is an absolute path written
+    by whichever machine converted it, so on the other machine the entries
+    simply do not exist — nothing to delete there, which is the right answer.
+    Staged media no record claims is reported as an orphan and never deleted.
+    """
+    cutoff = age_cutoff_iso(min_age_hours)
+    state = read_uploads_manifest(manifest_path)
+    purged: list[str] = []
+    kept: list[dict] = []
+    errors: list[dict] = []
+    freed = 0
+    considered = 0
+    claimed: set[str] = set()
+    lazy_svc = svc
+
+    for rec in state.values():
+        mp4 = rec.get("mp4_path")
+        if not mp4:
+            continue
+        path = Path(mp4)
+        claimed.add(str(path))
+        if not path.exists():
+            continue
+        considered += 1
+        try:
+            if verify_drive and lazy_svc is None:
+                # Built only once a candidate has reached the Drive gate, so a
+                # purge with nothing to do never demands Drive auth.
+                lazy_svc = drive_service()
+            reason = _purge_blocker(rec, cutoff, svc=lazy_svc if verify_drive else None)
+        except Exception as e:  # noqa: BLE001 — one unreachable file keeps its media
+            errors.append({"mp4_path": str(path), "error": str(e)})
+            continue
+        if reason:
+            kept.append({"mp4_path": str(path), "reason": reason})
+            continue
+        size = path.stat().st_size
+        if not dry_run:
+            try:
+                path.unlink()
+            except OSError as e:
+                errors.append({"mp4_path": str(path), "error": str(e)})
+                continue
+        purged.append(str(path))
+        freed += size
+
+    orphans = [
+        str(p) for p in sorted(uploads_staging_root().rglob("*"))
+        if p.is_file() and p.suffix in _STAGED_MEDIA_SUFFIXES and str(p) not in claimed
+    ]
+    return {"considered": considered, "purged": purged, "freed_bytes": freed,
+            "kept": kept, "orphans": orphans, "errors": errors,
+            "dry_run": dry_run}
+
+
+def run_housekeeping(*, manifest_path: Path | None = None, svc=None,
+                     min_age_hours: float = HOUSEKEEPING_MIN_AGE_HOURS,
+                     dry_run: bool = False) -> dict:
+    """Both retention sweeps, age-gated, as they run at the end of a batch.
+
+    Neither may fail the upload it follows — a batch that submitted six
+    recordings has succeeded whether or not Drive answers afterwards — so each
+    sweep's failure is returned as data rather than raised.
+    """
+    report: dict = {"min_age_hours": min_age_hours}
+    if svc is None:
+        # One auth for both sweeps. Without Drive neither can run: the ACL sweep
+        # is Drive calls end to end, and the purge's third gate — the remote copy
+        # still exists — is the reason it may delete anything at all.
+        try:
+            svc = drive_service()
+        except Exception as e:  # noqa: BLE001 — reported, never fatal to the batch
+            report["acl"] = {"error": str(e)}
+            report["staging"] = {"error": str(e)}
+            return report
+    try:
+        report["acl"] = drive_audit_public(
+            svc=svc, manifest_path=manifest_path,
+            revoke=not dry_run, min_age_hours=min_age_hours,
+        )
+    except Exception as e:  # noqa: BLE001 — reported, never fatal to the batch
+        report["acl"] = {"error": str(e)}
+    try:
+        report["staging"] = purge_staging(
+            manifest_path=manifest_path, svc=svc,
+            min_age_hours=min_age_hours, dry_run=dry_run,
+        )
+    except Exception as e:  # noqa: BLE001 — reported, never fatal to the batch
+        report["staging"] = {"error": str(e)}
+    return report
