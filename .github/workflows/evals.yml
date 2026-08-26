@@ -9,8 +9,26 @@ on:
 
 jobs:
   unit-tests:
-    name: lib/ unit tests
-    runs-on: ubuntu-latest
+    name: lib/ unit tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    # Windows has never run this suite: both jobs were ubuntu-latest since the file
+    # was written, so every Windows-only assumption in the tree is unmeasured rather
+    # than absent — the same blind spot #353, #378 and #381 came out of, one platform
+    # over. The Windows leg reports and does not gate: a red leg here must not block
+    # a merge until someone has read what it says.
+    continue-on-error: ${{ matrix.os == 'windows-latest' }}
+    strategy:
+      # Without this a Windows failure cancels the Linux leg, and the run that was
+      # supposed to add information would remove some.
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    defaults:
+      run:
+        # Same shell on both runners. The question this probe answers is whether our
+        # Python runs on Windows; pwsh-vs-bash differences in these step bodies would
+        # be noise on top of it. Git Bash ships with the Windows runner.
+        shell: bash
     steps:
       - uses: actions/checkout@v4
 
