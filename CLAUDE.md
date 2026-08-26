@@ -39,6 +39,10 @@ C:/dev/h2t-skills/.venv/Scripts/pytest tests/connectors/   # connector-only
 C:/dev/h2t-skills/.venv/Scripts/ruff check plugins/ lib/ h2t_ops/
 uvx ruff check plugins/ lib/ h2t_ops/
 
+# Git hooks — once per clone. Sets core.hooksPath; git then runs scripts/hooks/pre-commit,
+# which blocks a commit that drifts marketplace.json against any plugin.json (#74).
+sh scripts/hooks/install.sh
+
 # Version bump — two literal arguments. Updates plugin.json and marketplace.json only;
 # the CHANGELOG is written by hand (grep -c CHANGELOG scripts/bump_plugin.py -> 0).
 .venv/bin/python scripts/bump_plugin.py <plugin-name> <version>
