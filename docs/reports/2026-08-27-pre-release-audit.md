@@ -810,3 +810,29 @@ would otherwise have got wrong:
 
 The second limit is the more valuable half of the report. The request itself changed what could
 be observed, and the agent said so rather than reporting a clean result.
+
+## Closed: the Google exposure question
+
+Resolved after the audit, on 2026-08-27.
+
+```
+Drive — 5 real objects from docs/reports/2026-05-25-*
+        has_anyone_permission = False on all five (measured, h2t-ops drive share --get-link)
+Calendar — "Procedural" (omue9d…@group.calendar.google.com)
+        private (confirmed by the operator in Google Calendar settings; the connector
+        cannot answer this — see H1)
+```
+
+**Nothing referenced in those evidence files is publicly reachable.** The identifiers therefore
+disclose structure — that a particular calendar, folder and set of files exist — and grant no
+access.
+
+Consequence for #419: the Google half of the publication problem is closed on both paths. Under
+the curated-snapshot manifest `docs/reports/` is not published at all, so the identifiers never
+leave; and even if they did, they open nothing. The remaining history question is the
+`h2t-graphs` token pair alone (#416), which the VPS re-provision retires by issuing new
+credentials.
+
+The measurement gap stands, though, and is worth keeping as a finding rather than as an
+inconvenience: this answer took a settings page and a human, because `h2t-ops calendar` has no
+ACL surface. The next such question will cost the same.
