@@ -182,6 +182,7 @@ See also: [ADR Index](adr/index.md)
 | Title | Status | Date |
 |-------|--------|------|
 | [Docs & Repo Management Skills v2](superpowers/specs/docs-skills-v2.md) | draft | unknown |
+| [Repo governance architecture](superpowers/specs/2026-08-24-repo-governance-architecture.md) | draft | 2026-08-24 |
 | [kb-ingest Multi-Domain Awareness — Design](superpowers/specs/2026-08-09-kb-ingest-multi-domain-design.md) |  | 2026-08-09 |
 | [KB Skill Consolidation — Design](superpowers/specs/2026-07-24-kb-skill-consolidation-design.md) |  | 2026-07-24 |
 | [Evals telemetry consumer phase1](superpowers/specs/2026-07-14-evals-telemetry-consumer-phase1.md) | draft | 2026-07-14 |
