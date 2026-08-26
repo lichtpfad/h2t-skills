@@ -535,12 +535,10 @@ test venv   still without pip / ruamel / drawpyo — the divergence-from-CI base
 tree        clean
 ```
 
-**Its half of phase D is not done.** The clean-HOME measurement on Windows was sent at 23:12
-and is unanswered. The operator reports that murmur does not actually wake the agent — the
-message was picked up only after a manual nudge — so this is `BLOCKED-DEFERRED (needs an
-operator nudge)`, not a failure of the task. When it lands it should answer one question this
-audit could not: whether the failures classified as *quiet* on macOS are quiet on Windows too,
-where the console codepage and path separators change what a failure looks like.
+**Its half of phase D is done** — `docs/reports/2026-08-27-pre-release-audit-windows.md`,
+committed to this branch by the agent itself (f7093e0). Summary in the section below. The
+original text of this paragraph said the measurement was unanswered; it arrived at 01:32. Note for the record: murmur does not wake the agent on its own — both
+tasks were picked up only after the operator nudged it.
 
 Note for the morning: after AUTOMATA pulls `87c3148`, empty directories may remain under
 `plugins/h2t/` from `__pycache__`, exactly as they did here. That is expected, not a new defect.
@@ -779,3 +777,36 @@ identical to one that passes on all of it.
 This settles the manifest question rather than deferring it. Publishing `h2t-creative` would
 ship a fidelity gap its own tracker documents, together with six profiles of the operator's
 identity. **Leave it out**, and let #83/#88/#90/#91 close on their own schedule.
+
+## Phase D, Windows half — what AUTOMATA found
+
+Full text: `docs/reports/2026-08-27-pre-release-audit-windows.md` (119 lines, committed by the
+agent as f7093e0).
+
+**The answer to the question this half was sent to settle: the quiet failures reproduce
+identically.** `h2t-ops doctor` prints `MISSING` and exits 0 on both platforms. `h2t-gather`'s
+dead-namespace hint misleads on both. Windows adds one minor misleading case — the
+`activity-log` program name — and adds no louder failure mode. Connectors with no keys return
+**rc 3 (config)** uniformly, not "1 for everything": the CLAUDE.md exit-code contract holds.
+
+No ghost directories were left under `plugins/h2t/` after the pull, contrary to what the macOS
+side predicted.
+
+### Two limits the agent stated about its own measurement
+
+Both are about the instrument rather than the result, and the second is a catch this audit
+would otherwise have got wrong:
+
+1. **The clean HOME isolates `~/.h2t`, not the toolchain.** `uv` and all nine entry points live
+   in `C:\Users\stani\.local\bin` and stayed on `PATH` under the override. A genuine fresh
+   clone has neither, so every "ready" concerning the toolchain is an artefact of that machine
+   — strictly optimistic. The `~/.h2t`-dependent findings are sound.
+
+2. **Output was captured to files, not a TTY — so the cp1252 path was never exercised.** The
+   task asked for stdout and stderr, which sends them down a pipe, where Windows Python does not
+   apply the console codepage. `h2t-gather` emitted Cyrillic into that pipe without error, and
+   that says nothing about an interactive console. **#428 is neither confirmed nor cleared by
+   this run.**
+
+The second limit is the more valuable half of the report. The request itself changed what could
+be observed, and the agent said so rather than reporting a clean result.
