@@ -78,7 +78,7 @@ def _run_guard(env, repo, payload):
         [shutil.which("bash") or "/bin/bash", str(GUARD)],
         input=json.dumps(payload),
         capture_output=True,
-        text=True,
+        text=True, encoding="utf-8",
         cwd=repo,
         env=env,
     )

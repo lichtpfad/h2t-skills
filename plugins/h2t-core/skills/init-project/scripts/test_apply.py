@@ -81,7 +81,10 @@ def test_add_directory_project_to_cwd_patterns(tmp_path):
 
     assert result["status"] == "ok"
     content = mapping_file.read_text(encoding="utf-8")
-    assert str(project_dir) in content
+    # apply_registration.py:90 stores the key separator-normalised, and
+    # lib/gather/project.py:107 reads it back the same way; asserting the native
+    # string here made the test a claim about the developer's platform.
+    assert str(project_dir).replace("\\", "/") in content
     assert "admin/steuer" in content
 
 

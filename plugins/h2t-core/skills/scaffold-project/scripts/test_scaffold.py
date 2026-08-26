@@ -8,7 +8,7 @@ PY = sys.executable
 
 
 def _run(*args):
-    r = subprocess.run([PY, str(SCRIPT), *args], capture_output=True, text=True)
+    r = subprocess.run([PY, str(SCRIPT), *args], capture_output=True, text=True, encoding="utf-8")
     return json.loads(r.stdout)
 
 
@@ -70,7 +70,7 @@ def test_merge_does_not_commit_preexisting_files(tmp_path):
     git_dir = proj / ".git"
     assert git_dir.exists(), "code-local type must always run git init"
     r = sp.run(["git", "-C", str(proj), "show", "--name-only", "HEAD"],
-               capture_output=True, text=True)
+               capture_output=True, text=True, encoding="utf-8")
     assert "secret.txt" not in r.stdout
 
 

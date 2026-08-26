@@ -16,7 +16,7 @@ GATHER = ROOT / "plugins" / "h2t-core" / "skills" / "session-start" / "scripts" 
 def _run(cwd_arg):
     env = dict(os.environ, H2T_EVALS_MODE="off")
     return subprocess.run([sys.executable, str(GATHER), "--cwd", cwd_arg, "--briefing-only"],
-                          capture_output=True, text=True, env=env, check=False)
+                          capture_output=True, text=True, encoding="utf-8", env=env, check=False)
 
 
 def test_nonexistent_cwd_exits_config_error(tmp_path):

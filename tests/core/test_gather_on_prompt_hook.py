@@ -52,7 +52,7 @@ def _run_hook(env, prompt, cwd=REPO_ROOT, field="prompt"):
             {"hook_event_name": "UserPromptSubmit", field: prompt, "cwd": str(cwd)}
         ),
         capture_output=True,
-        text=True,
+        text=True, encoding="utf-8",
         cwd=REPO_ROOT,
         env=env,
     )
@@ -120,7 +120,7 @@ def test_skill_tool_path_still_uses_the_tui_channel(hook_env):
             }
         ),
         capture_output=True,
-        text=True,
+        text=True, encoding="utf-8",
         cwd=REPO_ROOT,
         env=hook_env,
     )
@@ -168,7 +168,7 @@ def test_resolver_failure_reaches_the_model_on_the_slash_path(hook_env, tmp_path
             }
         ),
         capture_output=True,
-        text=True,
+        text=True, encoding="utf-8",
         cwd=REPO_ROOT,
         env=env,
     )

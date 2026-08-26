@@ -37,7 +37,10 @@ def test_editable_install_reports_the_checkout_path():
         "url": "file:///Users/dev/Projects/h2t-skills",
         "dir_info": {"editable": True},
     }))
-    assert build_info.build_id(dist) == "editable /Users/dev/Projects/h2t-skills"
+    # _local_path goes through url2pathname, which is platform-native on purpose: the same
+    # URL comes back "\\Users\\dev\\..." on Windows. Normalising the separator keeps the whole
+    # path under assertion instead of trading it for a startswith.
+    assert build_info.build_id(dist).replace("\\", "/") == "editable /Users/dev/Projects/h2t-skills"
 
 
 def test_plain_directory_install_is_not_called_editable():
