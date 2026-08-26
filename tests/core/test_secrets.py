@@ -10,6 +10,22 @@ from h2t_ops.core import secrets as mod
 from h2t_ops.core.errors import ConfigError
 
 
+@pytest.fixture(autouse=True)
+def _isolate_documented_secrets(tmp_path_factory, monkeypatch):
+    """Point H2T_CONFIG_SECRETS somewhere that does not exist, for every test here.
+
+    #432 added ~/.h2t/config/secrets/secrets.env as the first candidate. The tests below
+    patch DEFAULT_SECRETS and LEGACY_SECRETS but knew nothing about the third path, so they
+    would fall through to the developer's real one — green on a machine that happens not to
+    have it, and a statement about that machine rather than about the code. A test that
+    wants the documented path patches it explicitly.
+    """
+    monkeypatch.setattr(
+        mod, "H2T_CONFIG_SECRETS",
+        tmp_path_factory.mktemp("no-h2t-config") / "secrets.env",
+    )
+
+
 def test_resolve_notion_token_reads_secrets_env(tmp_path, monkeypatch):
     """Audit #144: when NOTION_API_TOKEN lives in a secrets.env file and no
     other source is present, resolve_notion_token() must find it (parity with
@@ -135,3 +151,63 @@ def test_load_secrets_h2t_secrets_file_override(tmp_path, monkeypatch):
         assert os.environ["FOO"] == "override"
     finally:
         os.environ.pop("FOO", None)
+
+
+def test_the_documented_secrets_path_is_actually_read(tmp_path, monkeypatch):
+    """#432: every user-facing message names ~/.h2t/config/secrets/, and nothing read it.
+
+    A new user put keys there, every command answered MISSING, and the hint pointed
+    somewhere else again. This is the control for the fix: a key that exists *only* in the
+    documented location must resolve.
+    """
+    monkeypatch.delenv("DOCUMENTED_ONLY", raising=False)
+    documented = tmp_path / ".h2t" / "config" / "secrets" / "secrets.env"
+    documented.parent.mkdir(parents=True)
+    documented.write_text("DOCUMENTED_ONLY=yes\n", encoding="utf-8")
+    monkeypatch.setattr(mod, "H2T_CONFIG_SECRETS", documented)
+    monkeypatch.setattr(mod, "DEFAULT_SECRETS", tmp_path / "absent-dor")
+    monkeypatch.setattr(mod, "LEGACY_SECRETS", tmp_path / "absent-legacy")
+    try:
+        mod.load_secrets()
+        assert os.environ["DOCUMENTED_ONLY"] == "yes"
+    finally:
+        os.environ.pop("DOCUMENTED_ONLY", None)
+
+
+def test_an_existing_install_is_untouched_by_the_new_candidate(tmp_path, monkeypatch):
+    """The negative control. Adding a candidate must not change a machine that has none.
+
+    Without this, the test above is satisfied by a change that reads the documented path
+    and nothing else — which would break both existing machines silently.
+    """
+    monkeypatch.delenv("SHARED_ONLY", raising=False)
+    dor = tmp_path / ".dor" / "secrets" / "secrets.env"
+    dor.parent.mkdir(parents=True)
+    dor.write_text("SHARED_ONLY=still-here\n", encoding="utf-8")
+    monkeypatch.setattr(mod, "H2T_CONFIG_SECRETS", tmp_path / ".h2t" / "absent.env")
+    monkeypatch.setattr(mod, "DEFAULT_SECRETS", dor)
+    monkeypatch.setattr(mod, "LEGACY_SECRETS", tmp_path / "absent-legacy")
+    try:
+        mod.load_secrets()
+        assert os.environ["SHARED_ONLY"] == "still-here"
+    finally:
+        os.environ.pop("SHARED_ONLY", None)
+
+
+def test_the_documented_path_wins_a_tie(tmp_path, monkeypatch):
+    """Both present: the location the messages name is the one that answers."""
+    monkeypatch.delenv("WHO_WINS", raising=False)
+    documented = tmp_path / ".h2t" / "config" / "secrets" / "secrets.env"
+    documented.parent.mkdir(parents=True)
+    documented.write_text("WHO_WINS=documented\n", encoding="utf-8")
+    dor = tmp_path / ".dor" / "secrets" / "secrets.env"
+    dor.parent.mkdir(parents=True)
+    dor.write_text("WHO_WINS=shared\n", encoding="utf-8")
+    monkeypatch.setattr(mod, "H2T_CONFIG_SECRETS", documented)
+    monkeypatch.setattr(mod, "DEFAULT_SECRETS", dor)
+    monkeypatch.setattr(mod, "LEGACY_SECRETS", tmp_path / "absent-legacy")
+    try:
+        mod.load_secrets()
+        assert os.environ["WHO_WINS"] == "documented"
+    finally:
+        os.environ.pop("WHO_WINS", None)

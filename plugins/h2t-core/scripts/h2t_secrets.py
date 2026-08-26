@@ -11,9 +11,22 @@ import os
 from pathlib import Path
 from typing import Final
 
+H2T_CONFIG_SECRETS_FILE: Final[Path] = Path.home() / ".h2t" / "config" / "secrets" / "secrets.env"
 DEFAULT_SECRETS_FILE: Final[Path] = Path.home() / ".dor" / "secrets" / "secrets.env"
 SECRETS_DIR: Final[Path] = Path.home() / ".dor" / "secrets"
 ENV_OVERRIDE: Final[str] = "H2T_SECRETS_FILE"
+
+
+def _default_secrets_file() -> Path:
+    """The documented location if it exists, else the shared one (#432).
+
+    Order, not preference: whichever is present is used, and the documented path wins a
+    tie. Returning the shared path when neither exists keeps the error message pointing
+    at the place established installs actually use.
+    """
+    if H2T_CONFIG_SECRETS_FILE.is_file():
+        return H2T_CONFIG_SECRETS_FILE
+    return DEFAULT_SECRETS_FILE
 
 
 def bootstrap(*, env_file: Path | None = None) -> dict[str, str]:
@@ -33,12 +46,12 @@ def bootstrap(*, env_file: Path | None = None) -> dict[str, str]:
     """
     if env_file is None:
         override = os.environ.get(ENV_OVERRIDE)
-        env_file = Path(override) if override else DEFAULT_SECRETS_FILE
+        env_file = Path(override) if override else _default_secrets_file()
 
     if not env_file.is_file():
         raise FileNotFoundError(
             f"h2t_secrets: secrets file not found at {env_file}. "
-            f"Create ~/.dor/secrets/secrets.env (see "
+            f"Create ~/.h2t/config/secrets/secrets.env (see "
             f"docs/superpowers/specs/2026-05-07-secrets-loader.md §5)."
         )
 
