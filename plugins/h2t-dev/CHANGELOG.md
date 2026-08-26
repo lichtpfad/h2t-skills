@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- chore: remove `docs-cleanup`. It sat under skills/ for four months with no
+  SKILL.md — demoted to "CLI" in 31395f5 without ever becoming one: no entry
+  point, nothing on PATH, no command file, zero references. Its README section
+  documented usage that could not run, and its 173 lines held `find_stale_plans`
+  plus a git-mv-to-archive — `docs-lint retire`, rebuilt from scratch four months
+  later by someone who did not know it was there. Its own reason for never
+  firing is the same gap the merge hook closes: `find_implemented_specs` read a
+  `status` nobody ever set
+- test: `tests/dev/test_no_ghost_skills.py` — every directory under skills/ has a
+  SKILL.md or is on a short exception list, and every exception must be
+  referenced from outside its own directory. That second assertion is the control
+  that would have caught this one
+
 - feat(docs-lint): `retire` — list open plans/specs older than N days with their
   evidence (age, commits touching the file since it was written), and `--apply`
   to `git mv` them into `docs/archive/`. The only sub-command that lowers the

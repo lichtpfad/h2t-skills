@@ -10,7 +10,7 @@ _GATHER = {
 }
 _INTEGRATION = {
     "connectors", "drive", "meetgeek", "research", "telegram",
-    "docs-lint", "docs-init", "docs-index", "docs-cleanup", "docs-sync-labels",
+    "docs-lint", "docs-init", "docs-index", "docs-sync-labels",
     "milestone-closure", "drawio",
     "convert-meeting-transcript", "process-transcripts", "youtube-transcript",
     "gmail", "notion", "calendar", "daily-brief",

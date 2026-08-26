@@ -8,7 +8,6 @@ Documentation and tooling skills for h2t platform. Includes standards compliance
 |-------|---------|----------|
 | `docs-lint` | Check docs standards compliance | `[repo...]`, `--fix`, `--no-pymarkdown` |
 | `docs-init` | Scaffold docs/ structure | `<repo>`, `--apply`, `--commit` |
-| `docs-cleanup` | Archive stale plans and implemented specs | `[repo]`, `--apply`, `--milestone N` |
 | `docs-sync-labels` | Sync canonical GitHub labels | `[repo...]`, `--apply` |
 
 All skills default to **dry-run** — safe to run anytime. Pass `--apply` to make real changes.
@@ -43,18 +42,6 @@ docs-init h2t-graphs --apply # Create dirs and files
 docs-init h2t-graphs --commit # Apply + commit
 ```
 
-### docs-cleanup
-
-After milestone closure: finds plans >30 days old and specs with `status: implemented`,
-archives them via `git mv` to `docs/archive/`. Commit message: `docs: archive M{N} documents`.
-
-**Usage:**
-```bash
-docs-cleanup                    # Dry-run on all repos
-docs-cleanup h2t-graphs         # Dry-run on specific repo
-docs-cleanup h2t-graphs --apply # Move files and stage
-docs-cleanup --milestone 5      # Archive only M5 docs
-```
 
 ### docs-sync-labels
 
