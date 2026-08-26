@@ -48,6 +48,7 @@ sit inside `subagent-driven-dev`, which is where this run's work actually is.
 - [ ] **G. duplicates** — overlapping-function skill pairs, with the evidence
 - [ ] **H. connectors-vs-api** — each connector against its provider API; gaps marked deliberate or missing
 - [ ] **I. architecture-review** — `claude-code-guide` agent on skill architecture, loading cost and trigger design (operator explicitly requested this agent)
+- [ ] **K. codex-compat** — cross-compatibility with OpenAI Codex: what here assumes the Claude Code harness (Skill tool, hooks, plugin cache) and what runs anywhere; AGENTS.md vs CLAUDE.md; whether the CLIs are harness-independent
 - [ ] **J. extras** — the run's own list of pre-publication checks, each backed by a measurement
 
 ## Gates
@@ -86,3 +87,17 @@ never `git add -A`, never commit a red suite as green, message `WIP:` + what was
 ## Decision-log
 
 - (append-only; auto-resolved defaults recorded here)
+- **2026-08-27, operator, before leaving:** "важно ничего не поломать" — the run is
+  read-only beyond its own artifacts. No fixes ship tonight, including obviously-correct
+  ones. A finding is a finding; the morning decides what to do with it.
+- **2026-08-27, operator:** deliverable is a morning-ready work plan **plus the state of
+  both machines** — this Mac and AUTOMATA. The report must say what each machine is in,
+  not only what the repository is in.
+- **2026-08-27, operator:** skills are to be English-only; the response language comes from
+  the user's own settings, not from the skill text. Recorded as target state for phase B —
+  measured, not fixed tonight.
+- **2026-08-27, run:** codex review-gate and council finish-gate are NOT run. Both cost
+  money (a named hard-stop) and the operator authorized an audit, not spend. The run also
+  produces no behavioural change for them to gate. Flagged here so the morning can disagree.
+- **2026-08-27, operator:** `claude-code-guide` agent explicitly requested for the
+  architecture phase; that is the only subagent this run spawns.
