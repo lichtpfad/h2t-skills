@@ -456,3 +456,91 @@ name does not exist. A reader is left with a variable, no definition, and a dead
 entire body to answer any question about them. The pattern the repo already uses elsewhere —
 `autonomous-run/references/gates.md`, `docs-lint/references/`, `research/references/` — is the
 fix, and it is a local one.
+
+## Phase J — the rest of the pre-publication list
+
+### J1. Nothing that makes a repository public is present
+
+```
+LICENSE              absent   → GitHub renders "all rights reserved"; nobody may legally reuse it
+CONTRIBUTING.md      absent
+SECURITY.md          absent   → no channel to report a vulnerability privately
+CODE_OF_CONDUCT.md   absent
+README.md            present, 127 lines, written for the author
+```
+
+The LICENSE is the one that changes what the repository *is*. Without it the pack is readable
+and not usable, which defeats the purpose of publishing it.
+
+### J2. `.gitignore` does not cover credentials
+
+Checked with `git check-ignore`, not by matching strings — the authoritative answer:
+
+```
+x/__pycache__/y.pyc   ignored
+.env                  NOT ignored
+secrets.env           NOT ignored
+foo.pem               NOT ignored
+bar.key               NOT ignored
+credentials.json      NOT ignored
+token.json            NOT ignored
+```
+
+44 lines of `.gitignore` covering build artifacts, editor state and lint output — and no
+credential pattern in any of them. No such file is in the tree today, so this is not a leak;
+it is the absence of the guard that would stop the next one. The repository is about to acquire
+contributors who do not know where secrets are supposed to live — and phase C shows the tree
+gives three different answers to that question.
+
+### J3. The working tree still carries the tokens
+
+`gitleaks --no-git` over the current tree: **2 findings, both in
+`docs/archive/plans/2026-04-07-skill-graph-foundation.md`.** Unchanged since the security review
+of 2026-08-26. Nothing new has appeared, and nothing has been cleaned.
+
+Under the curated-snapshot manifest this file is not published, which resolves it without any
+history surgery — but only if the manifest is actually applied. Right now the exposure is
+exactly where the review left it.
+
+### J4. Packaging
+
+`pyproject.toml` declares `requires-python = ">=3.11"`, `name = "h2t-ops"`, `version = "0.2.1"`.
+The version has not moved while the plugins have (h2t-ops the *plugin* is at 1.6.8 — see the
+name-collision note in `CLAUDE.md`), which is the drift #363 introduced `build_id()` to make
+visible. Nothing to fix for publication; recorded because a reader of the public repo will see
+`0.2.1` and draw conclusions.
+
+## State of the two machines
+
+### This Mac
+
+```
+repo        main @ 87c3148, clean; audit branch audit/pre-release-clean-machine
+CI          green on both platforms; the windows-latest leg now gates
+entry pts   9/9 installed, editable from this checkout
+config      ~/.h2t present, ~/.dor present — which is why the phase C defects were invisible here
+merged tonight   #427 (windows leg + 6 fixes), #430 (plugins/h2t deleted), 311975f (CLAUDE.md note)
+open issues from tonight   #428 (14 emitters), #429 (4 import-time exits), #431 (this audit)
+```
+
+### AUTOMATA (Windows)
+
+State as of its last report, 22:39:
+
+```
+repo        was at 1c6d7ee; has NOT yet pulled 87c3148 (the plugins/h2t deletion)
+entry pts   9/9 after `uv tool install --editable` — was 4/9
+git hook    core.hooksPath = scripts/hooks; drift guard verified by positive control
+test venv   still without pip / ruamel / drawpyo — the divergence-from-CI baseline is intact
+tree        clean
+```
+
+**Its half of phase D is not done.** The clean-HOME measurement on Windows was sent at 23:12
+and is unanswered. The operator reports that murmur does not actually wake the agent — the
+message was picked up only after a manual nudge — so this is `BLOCKED-DEFERRED (needs an
+operator nudge)`, not a failure of the task. When it lands it should answer one question this
+audit could not: whether the failures classified as *quiet* on macOS are quiet on Windows too,
+where the console codepage and path separators change what a failure looks like.
+
+Note for the morning: after AUTOMATA pulls `87c3148`, empty directories may remain under
+`plugins/h2t/` from `__pycache__`, exactly as they did here. That is expected, not a new defect.
