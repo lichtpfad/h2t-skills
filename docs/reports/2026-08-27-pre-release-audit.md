@@ -376,3 +376,83 @@ README, because a Codex user can have the connectors and cannot have the skills.
 `{"additionalContext": …}` that no documented harness consumes. That branch exists precisely
 for "some other harness", which today means Codex — and what it emits there is not a contract
 anyone honours. A silent hook is a failure, not a steady state (`.claude/rules/hooks.md`).
+
+## Phase E — cross-test: does every script run?
+
+75 Python files under `plugins/`, of which **29 have an entry point**. Each was invoked with
+`--help` under the synthetic HOME.
+
+```
+22  print a usage line               ok
+ 3  exit 0 with empty output         the hook handlers — they read stdin, not argv
+ 1  exit 4 with a hint               exa_search.py
+ 3  raise a traceback                below
+```
+
+### E1. Three scripts treat `--help` as a filename
+
+```
+plugins/h2t-core/skills/autonomous-run/scripts/runbook_state.py
+plugins/h2t-core/skills/autonomous-run/scripts/validate_runbook.py
+   FileNotFoundError: [Errno 2] No such file or directory: '--help'
+```
+
+Plus the `h2t-hook --help` case from phase D — the same defect at the entry-point level. Four
+places take `sys.argv[1]` as a path without checking it. The cost is small and the shape is
+worth naming: the failure blames the *file* for not existing rather than the *invocation* for
+being wrong, so the reader looks in the wrong place.
+
+### E2. A missing dependency crashes raw
+
+```
+plugins/h2t-edu/skills/convert-meeting-transcript/scripts/convert_docx_to_md.py
+   ModuleNotFoundError: No module named 'docx'
+```
+
+`python-docx` is declared nowhere. Note the contrast with #429: `apply_registration.py` at
+least prints a JSON error object before dying; this one just raises. The tree has **two**
+different behaviours for the same situation and neither is the right one — one kills the
+importer, the other kills the reader's patience.
+
+### E3. The one that gets it right, and its rough edge
+
+```
+plugins/h2t-ops/skills/research/scripts/exa_search.py
+   rc=4  EXA_ERROR:ENV h2t_secrets module not found. Tried: []. Set H2T_P…
+```
+
+Exit 4 is the auth code from the CLAUDE.md contract, the message names the cause and the fix.
+This is the standard the other 28 should be measured against. The rough edge: `Tried: []` — on
+a machine with no config the list of attempted paths is *empty*, so the diagnostic that exists
+to show where it looked shows nothing exactly when a new user needs it most.
+
+### E4. Hook handlers exit 0 on a malformed invocation
+
+`plan_closer.py`, `post_git_commit_docs_lint.py` and `structure_guard.py` all return 0 with no
+output when handed `--help`. For a hook that is defensible — the harness always feeds them
+stdin. It is recorded because `.claude/rules/hooks.md` says a silent hook is a failure, not a
+steady state, and these three are silent by construction when invoked any other way.
+
+## Phase F — are the instructions legible to an agent with no context?
+
+Judged per SKILL.md against one question: can an agent that has never seen this repository
+follow it? Four classes of blocker, all already quantified above, are what an outsider hits:
+
+| class | count | effect on a first run |
+|---|---|---|
+| points at `/h2t:*`, a plugin that is not shipped | 9 refs | instruction cannot be followed |
+| assumes `C:/dev/…` | 28 files | wrong path, sometimes another repo entirely |
+| assumes `~/.dor/…` | 27 files (live) | writes and reads a vault the user does not have |
+| undeclared runtime dependency | Ollama, `python-docx` | failure with no stated cause |
+
+Two further observations that are about legibility rather than correctness:
+
+**`$H2T_PYTHON` is used without ever being explained.** Three `h2t-edu` skills gate on it —
+`[ -z "$H2T_PYTHON" ] && echo "ERROR: h2t venv not found. Run /h2t:setup"` — and the remedy they
+name does not exist. A reader is left with a variable, no definition, and a dead command.
+
+**The largest skills carry their references inline.** `design` (1361 lines), `project-audit`
+(472), `setup` (262) have no `references/` directory, so an agent invoking them pays for the
+entire body to answer any question about them. The pattern the repo already uses elsewhere —
+`autonomous-run/references/gates.md`, `docs-lint/references/`, `research/references/` — is the
+fix, and it is a local one.
