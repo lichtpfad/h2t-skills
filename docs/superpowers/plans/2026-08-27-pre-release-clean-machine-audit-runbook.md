@@ -31,25 +31,25 @@ sit inside `subagent-driven-dev`, which is where this run's work actually is.
 - [ ] **review-spec** — skill: `codex review (embedded)` · input: `#431` · done: no [P1] · failure: fix P1 then re-run (<=N) · re-entry: idempotent: re-review
 - [x] **write-plan** — skill: `this runbook` · input: `#431` · done: audit phases enumerated below · failure: escalate · re-entry: idempotent: overwrite plan
 - [ ] **plan-gate** — skill: `codex review (embedded)` · input: `this runbook` · done: no [P1] · failure: fix P1 then re-run (<=N) · re-entry: idempotent: re-review
-- [ ] **subagent-driven-dev** — skill: `audit phases A-J below` · input: `whole tree` · done: every phase has a recorded measurement · failure: record and continue; escalate only on hard-stop · re-entry: continue from first unchecked phase
-- [ ] **gates** — skill: `pre-merge-check` · input: `report + runbook` · done: suite green · failure: fix then re-run (<=N) · re-entry: idempotent: re-run gate
-- [ ] **e2e** — skill: `real entrypoint run` · input: `synthetic HOME with no ~/.h2t` · done: DONE / N/A / BLOCKED-DEFERRED · failure: BLOCKED->handoff; behavioral fail->record · re-entry: idempotent: fresh HOME each run
+- [x] **subagent-driven-dev** — skill: `audit phases A-J below` · input: `whole tree` · done: every phase has a recorded measurement · failure: record and continue; escalate only on hard-stop · re-entry: continue from first unchecked phase
+- [x] **gates** — skill: `pre-merge-check` · input: `report + runbook` · done: suite green · failure: fix then re-run (<=N) · re-entry: idempotent: re-run gate
+- [~] **e2e** — skill: `real entrypoint run` · input: `synthetic HOME with no ~/.h2t` · done: DONE / N/A / BLOCKED-DEFERRED · failure: BLOCKED->handoff; behavioral fail->record · re-entry: idempotent: fresh HOME each run
 - [ ] **PR** — skill: `superpowers:finishing-a-development-branch` · input: `runbook + report` · done: PR opened · failure: escalate · re-entry: continue: reuse branch
 - [ ] **handoff** — skill: `h2t-core:handoff` · input: `run state` · done: session record written · failure: n/a (terminal) · re-entry: idempotent: re-run handoff
 
 ### Audit phases (inside subagent-driven-dev)
 
-- [ ] **A. inventory** — every skill, script and entry point enumerated; what claims to be runnable vs what is
-- [ ] **B. language** — every agent-facing text checked for non-English; file:line list
-- [ ] **C. hardcode** — absolute paths, usernames, machine names, assumed directories, per file
-- [ ] **D. clean-machine** — installer + all 9 entry points under a synthetic HOME; each failure classified loud / silent / misleading
-- [ ] **E. cross-test** — every test directory + every script's `--help`; a script that cannot run gets its reason recorded
-- [ ] **F. instructions** — SKILL.md frontmatter, triggers and references judged for an agent with no prior context; unstated assumptions listed
-- [ ] **G. duplicates** — overlapping-function skill pairs, with the evidence
-- [ ] **H. connectors-vs-api** — each connector against its provider API; gaps marked deliberate or missing
-- [ ] **I. architecture-review** — `claude-code-guide` agent on skill architecture, loading cost and trigger design (operator explicitly requested this agent)
-- [ ] **K. codex-compat** — cross-compatibility with OpenAI Codex: what here assumes the Claude Code harness (Skill tool, hooks, plugin cache) and what runs anywhere; AGENTS.md vs CLAUDE.md; whether the CLIs are harness-independent
-- [ ] **J. extras** — the run's own list of pre-publication checks, each backed by a measurement
+- [x] **A. inventory** — every skill, script and entry point enumerated; what claims to be runnable vs what is
+- [x] **B. language** — every agent-facing text checked for non-English; file:line list
+- [x] **C. hardcode** — absolute paths, usernames, machine names, assumed directories, per file
+- [~] **D. clean-machine** — installer + all 9 entry points under a synthetic HOME; each failure classified loud / silent / misleading
+- [x] **E. cross-test** — every test directory + every script's `--help`; a script that cannot run gets its reason recorded
+- [x] **F. instructions** — SKILL.md frontmatter, triggers and references judged for an agent with no prior context; unstated assumptions listed
+- [x] **G. duplicates** — overlapping-function skill pairs, with the evidence
+- [x] **H. connectors-vs-api** — each connector against its provider API; gaps marked deliberate or missing
+- [x] **I. architecture-review** — `claude-code-guide` agent on skill architecture, loading cost and trigger design (operator explicitly requested this agent)
+- [x] **K. codex-compat** — cross-compatibility with OpenAI Codex: what here assumes the Claude Code harness (Skill tool, hooks, plugin cache) and what runs anywhere; AGENTS.md vs CLAUDE.md; whether the CLIs are harness-independent
+- [x] **J. extras** — the run's own list of pre-publication checks, each backed by a measurement
 
 ## Gates
 
@@ -101,3 +101,20 @@ never `git add -A`, never commit a red suite as green, message `WIP:` + what was
   produces no behavioural change for them to gate. Flagged here so the morning can disagree.
 - **2026-08-27, operator:** `claude-code-guide` agent explicitly requested for the
   architecture phase; that is the only subagent this run spawns.
+
+## Run outcome (2026-08-27)
+
+Report: `docs/reports/2026-08-27-pre-release-audit.md` (600 lines).
+
+Issues filed: #432 (secrets location), #433 (dead `/h2t:*` hints), #434 (author paths),
+#435 (LICENSE / .gitignore), #436 (English-only skills). Corrected in place: #428 (18→14),
+#429 (10→4).
+
+`[~]` = partial. **D / e2e**: the macOS half is complete; the Windows half is with the AUTOMATA
+agent and was in progress at the time of writing. Everything else measured.
+
+Gates: suite 2089 passed / 7 skipped, ruff clean. Codex review-gate and council finish-gate
+deliberately not run — see Decision-log.
+
+Nothing in the repository changed except this runbook, the report, and PR #430 (merged under
+prior authorization).
