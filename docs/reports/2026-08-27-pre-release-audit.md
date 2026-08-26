@@ -740,3 +740,42 @@ out of the snapshot.** Not because the engine is weak — it is the strongest pa
 publishing it usefully means publishing the profiles with it, and that is a decision about
 identity rather than about code. A plugin can be added later; it cannot be withdrawn once
 cloned.
+
+### `h2t-creative` — the rework stopped, and the tracker says so
+
+The operator recalled a global rework that "drowned", with crooked output. That is not a
+recollection to check against taste — it is filed.
+
+```
+commits on plugins/h2t-creative:  22 in 2026-04, 42 in 2026-05, 4 in 2026-08
+```
+
+The four August commits are repo-wide chores — a lint-debt sweep, a rule-set pin, a namespace
+fix, a version bump. Real work on the plugin stopped at the end of May: three months.
+
+Open issues name the gap precisely:
+
+```
+#83  creative: [recovery] restore rich component library — fidelity gap vs legacy skills
+#88  skills: [R2b] Recover h2t-editorial landing legacy fidelity
+#90  skills: [R3a] Add h2t-graphs deck form
+#91  skills: [R3b] Add h2t-mono deck form
+```
+
+And the test distribution matches: of the 968 tests, **208 are fidelity-recovery tests** —
+`test_r2b_legacy_fidelity_deck.py` (128) and `test_r2_legacy_fidelity.py` (80). The measuring
+apparatus for the migration was built, works, and is green. The migration itself is unfinished.
+
+**This is the third instance of one shape in a single day.** `plugins/h2t/` was the rollback
+archive of the connector migration, outliving it by three months (#430). `.dor` against
+`~/.h2t` is an unfinished move between shared and local state (#432). And here: migration tests
+green, migration incomplete.
+
+What they share is that **a green state is reached before the work is done**, and nothing
+afterwards says otherwise. A rollback archive that nobody rolls back to looks identical to one
+that is still needed; a fidelity test suite that passes on the subset already recovered looks
+identical to one that passes on all of it.
+
+This settles the manifest question rather than deferring it. Publishing `h2t-creative` would
+ship a fidelity gap its own tracker documents, together with six profiles of the operator's
+identity. **Leave it out**, and let #83/#88/#90/#91 close on their own schedule.
