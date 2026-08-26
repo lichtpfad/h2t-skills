@@ -46,17 +46,24 @@ jobs:
         run: pip install -e . pytest
 
       - name: Run lib/ unit tests
+        # A step that stops the job hides every step after it: the first Windows probe
+        # reported 7 failures and left 13 test directories unrun, which reads as coverage
+        # it never had. The leg is here to enumerate, so each step runs regardless.
+        if: ${{ !cancelled() }}
         run: python -m pytest lib/ -v --tb=short
 
       - name: Run h2t-ops tests
+        if: ${{ !cancelled() }}
         # Whole tests/ tree: tests/docs and tests/deploy were outside CI, which is how
         # their Windows-only assumptions survived (#353 era: 9 red on macOS, 0 in CI).
         run: python -m pytest tests/ -q
 
       - name: Run autonomous-run skill tests
+        if: ${{ !cancelled() }}
         run: python -m pytest plugins/h2t-core/skills/autonomous-run/scripts -q
 
       - name: Run init-project skill tests
+        if: ${{ !cancelled() }}
         # Outside CI these rotted into Windows-only assumptions — a literal "E:/DROPBOX/..."
         # cwd wrote a stray tree into the repo on POSIX, and "/some/path" hit the read-only
         # root (#378, same family as #355).
@@ -70,26 +77,37 @@ jobs:
       # now — drawio joined once its smoke scripts became real test functions (#396); its
       # export test skips on a runner, loudly, because the draw.io Desktop CLI is absent.
       - name: Plugin tests — h2t-core vendored lib
+        if: ${{ !cancelled() }}
         run: python -m pytest plugins/h2t-core/lib/gather -q
       - name: Plugin tests — h2t-core bootstrap scripts
+        if: ${{ !cancelled() }}
         run: python -m pytest plugins/h2t-core/scripts/tests -q
       - name: Plugin tests — agent-profile skill
+        if: ${{ !cancelled() }}
         run: python -m pytest plugins/h2t-core/skills/agent-profile/scripts -q
       - name: Plugin tests — handoff skill
+        if: ${{ !cancelled() }}
         run: python -m pytest plugins/h2t-core/skills/handoff/scripts -q
       - name: Plugin tests — scaffold-project skill
+        if: ${{ !cancelled() }}
         run: python -m pytest plugins/h2t-core/skills/scaffold-project/scripts -q
       - name: Plugin tests — setup skill
+        if: ${{ !cancelled() }}
         run: python -m pytest plugins/h2t-core/skills/setup/scripts -q
       - name: Plugin tests — h2t-creative
+        if: ${{ !cancelled() }}
         run: python -m pytest plugins/h2t-creative/tests -q
       - name: Plugin tests — connectors skill
+        if: ${{ !cancelled() }}
         run: python -m pytest plugins/h2t-ops/skills/connectors/scripts -q
       - name: Plugin tests — meetgeek skill
+        if: ${{ !cancelled() }}
         run: python -m pytest plugins/h2t-ops/skills/meetgeek/tests -q
       - name: Plugin tests — research skill
+        if: ${{ !cancelled() }}
         run: python -m pytest plugins/h2t-ops/skills/research/tests -q
       - name: Plugin tests — drawio skill
+        if: ${{ !cancelled() }}
         # generate.py imports drawpyo unconditionally; nothing in the repo declares it,
         # which is why this directory passed locally and could not have passed here.
         run: |
