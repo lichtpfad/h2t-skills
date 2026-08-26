@@ -1,5 +1,0 @@
-#!/usr/bin/env bash
-# PreToolUse hook: stub — all gather routing moved to h2t-core plugin (Skills v3 Phase 1).
-# This handler remains to avoid hook config errors. It exits silently for all skills.
-# TODO: Remove this file and hooks.json entry when h2t-core migration is complete.
-exit 0
