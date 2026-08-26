@@ -399,10 +399,19 @@ def test_auto_custom_error_class_on_failure(tmp_path, monkeypatch):
             raise ValueError("boom")
     m = _local_metrics(evals_root, "handoff")
     assert m["skills.error_class"]["value_text"] == "ValueError"
+
+    # Identify the successful session by which file appeared, not by sorting the names.
+    # The stamp is %f-precise but the clock behind it is not: Windows/CPython 3.11 ticks
+    # about every 15.6 ms, these two writes are ~0.4 ms apart, so both names carry the
+    # same microsecond and the random uuid suffix decides the order — a coin flip that
+    # came up tails on windows-latest after coming up heads on the run before it.
+    sessions = evals_root / "handoff" / "sessions"
+    before = set(sessions.glob("*.json"))
     with SkillEval("handoff", domain="d", project="p", evals_root=str(evals_root)):
         pass
-    ok = list((evals_root / "handoff" / "sessions").glob("*.json"))
-    latest = max(ok, key=lambda p: p.name)  # name = time+uuid, lexically == chronological
+    written = set(sessions.glob("*.json")) - before
+    assert len(written) == 1, written
+    latest = written.pop()
     assert "skills.error_class" not in {mm["key"] for mm in json.loads(latest.read_text())["metrics"]}
 
 
