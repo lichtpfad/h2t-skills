@@ -255,3 +255,124 @@ the shape of a defect that survives a rewrite.
 Note these were already broken before #430: `h2t` was never shipped by the marketplace, so
 `/h2t:setup` has never resolved for anyone who installed the pack normally. The deletion did
 not create this — it removed the last excuse for not noticing.
+
+## Phase G — duplicate and stray functionality
+
+35 skills across 6 plugins. No two do the same job, but three things are worth acting on.
+
+### G1. A deprecated skill ships
+
+`plugins/h2t-dev/skills/gh-memory/SKILL.md` carries `status: deprecated` in its own
+frontmatter and describes itself as a *"Deprecated compatibility shim for old
+GitHub-Issues-as-memory workflows"*. It is in the marketplace, so its description is loaded
+into the skill list of every session, where it spends attention telling the model to prefer
+two other skills. Publishing a pack whose inventory includes a tombstone is a choice; making
+it deliberately is the point.
+
+### G2. A skill that needs a local LLM server, silently
+
+`plugins/h2t-edu/skills/process-transcripts/scripts/process_transcripts.py:74-75`
+
+```python
+OLLAMA_URL   = "http://localhost:11434/api/generate"
+OLLAMA_MODEL = "llama3.2:latest"
+```
+
+Neither is configurable and neither is mentioned in the skill's dependency notes. A user
+without Ollama running, or with a different model pulled, gets a connection error from a skill
+whose description says only *"LLM-enrichment of MeetGeek meeting transcripts"*. It does **not**
+violate the connector-ownership rule — it parses local Markdown and never calls the MeetGeek
+API — but it is the clearest case in the tree of an undeclared external dependency.
+
+### G3. Boundaries that hold
+
+`init-project` (register an existing repo) against `scaffold-project` (create a new one),
+`deck` against `landing` (same assembler, different output), `style-create` against
+`style-validate`, `research` against `kb`. Each pair has a stated boundary and the code
+respects it. Recorded because "no duplicates found" is only meaningful if the near-misses are
+named.
+
+## Phase H — connectors against the provider APIs
+
+Surface as shipped:
+
+```
+calendar   calendars list search get create update rsvp move delete create-calendar instances freebusy
+gmail      list read threads thread attachment search send draft reply forward label-* trash untrash delete
+drive      list search folders create-folder rename copy move get-file trash delete docs docs-tab
+           sheets download export upload upload-folder share
+notion     get blocks search get-database search-workspace graph find-* create update comments sync
+           create-db-item update-db-item create-database patch-db-schema views archive append-blocks
+telegram   auth dialogs folders messages send saved-messages mentions bootstrap search send-file
+           download-media forward-message delete-message
+meetgeek   auth-check teams list get transcript summary highlights insights download-url submit-url
+granola    list transcript auth-check get summary folders webhooks sync
+research   preflight providers route search crawl fetch visual-ocr similar answer research agent …
+```
+
+This is a wide surface and most of it is well covered. Two gaps are worth naming, and they
+share a shape.
+
+### H1. Neither Google connector can answer "who can see this?"
+
+`calendar` has **zero** references to `acl` anywhere in `h2t_ops/connectors/calendar/`. The
+Google Calendar API exposes `acl.list` / `acl.get`; the connector exposes none of it. There is
+no way to ask whether a calendar is public.
+
+`drive share --get-link` does call `permissions().list(fields="permissions(type,role)")` at
+`h2t_ops/connectors/drive/client.py:1466` — and then discards everything except one boolean:
+
+```python
+has_anyone = any(p.get("type") == "anyone" for p in permissions)
+```
+
+So it can say *"not link-shared"* and cannot say *who does* have access, or with what role. The
+data is fetched and thrown away.
+
+**This gap was hit by this very audit.** Checking whether the Google objects named in
+`docs/reports/2026-05-25-*` are publicly exposed is a precondition for publishing the
+repository. Drive answered — five objects, none link-shared. Calendar could not be asked at
+all, and that question is still open, on the operator's side, in a settings page.
+
+A connector suite built for *doing* things has no surface for *auditing* them. That is a
+coherent design until the day the audit is the task.
+
+### H2. Deliberate omissions, recorded as such
+
+`gmail` has no settings/filters/watch surface; `meetgeek` has no delete; `granola` has no
+write path. None of these has ever been needed by a workflow in this repo, and adding them
+speculatively would widen the auth scopes a user must grant. Listed so a later reader does not
+mistake a decision for an oversight.
+
+## Phase K — codex cross-compatibility
+
+`codex` is installed here (`/opt/homebrew/bin/codex`) and there is a global
+`~/.codex/AGENTS.md`, so the operator already works across both harnesses.
+
+### K1. The repository has no `AGENTS.md`
+
+Codex reads `AGENTS.md` for project instructions. This tree ships `CLAUDE.md` (109 lines) and
+`.claude/rules/*.md` (10 files, 388 lines) and nothing a Codex session will look at. Every rule
+this repository has learned the hard way — the connector boundary, the pinned ruff set, the
+verification discipline, the gate invariant — is invisible to half the toolchain the operator
+actually uses.
+
+### K2. What is portable and what is not
+
+Portable as-is: the nine CLI entry points, `h2t_ops/`, `lib/`, every `scripts/*.py` under a
+skill. They are plain Python with argparse and no harness dependency.
+
+Not portable: the skills themselves (`SKILL.md` is a Claude Code construct), the hooks
+(`hooks/hooks.json` + `hooks-handlers/`, driven by Claude Code events), and `plugin.json` /
+`marketplace.json`.
+
+That split is not a defect — it is the actual product boundary, and it is worth stating in the
+README, because a Codex user can have the connectors and cannot have the skills.
+
+### K3. The hook fallback branch is the codex-shaped hole
+
+`plugins/h2t-core/hooks-handlers/inject-h2t-context` branches three ways on
+`CURSOR_PLUGIN_ROOT` / `CLAUDE_PLUGIN_ROOT`, and its `else` branch emits a top-level
+`{"additionalContext": …}` that no documented harness consumes. That branch exists precisely
+for "some other harness", which today means Codex — and what it emits there is not a contract
+anyone honours. A silent hook is a failure, not a steady state (`.claude/rules/hooks.md`).
