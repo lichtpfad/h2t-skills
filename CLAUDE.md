@@ -78,6 +78,16 @@ either way.
 - Verify with `uv tool list` — all 9 under one package. Judge the listing, not the
   install command's output.
 
+**`h2t-ops` names two different things, versioned separately.** The plugin in
+`~/.claude/plugins/cache/lichtpfad/h2t-ops/` and the Python package behind these 9 commands
+share the name and nothing else. Measured on the Windows machine 2026-08-27: the plugin was
+at 1.6.8 and the package at 0.2.1, with 4 of the 9 commands installed.
+
+`/plugin marketplace update` bumps the plugin cache and touches none of the entry points —
+only `uv tool install --editable` does. So "h2t-ops updated to 1.6.8" is true and says nothing
+about whether `h2t-ops gather` is current. Read the version from `uv tool list`, never from
+the plugin listing.
+
 ```bash
 # Install / update all entry points from source
 uv tool install --editable C:/dev/h2t-skills   # Windows
