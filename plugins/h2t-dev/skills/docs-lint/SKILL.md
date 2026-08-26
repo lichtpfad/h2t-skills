@@ -337,7 +337,14 @@ nothing shipped under it (69 of 111 here).
 "$H2T_PYTHON" "$LINT" retire --root .                    # list candidates
 "$H2T_PYTHON" "$LINT" retire --root . --older-than 90    # a stricter cut
 "$H2T_PYTHON" "$LINT" retire --root . --apply            # git mv into docs/archive/
+"$H2T_PYTHON" "$LINT" retire --root . --never-shipped     # only `с кодом = 0`
 ```
+
+`--never-shipped` narrows the list to that second number being zero. It selects,
+it does not conclude: "nothing shipped alongside" is what was measured, and a
+single code-touching commit is far too weak to write `status: done` into a file.
+The 2026-08-26 migration used it to move 69 of 111 by command and leave the
+other 42 to be read one at a time.
 
 `--apply` stages the moves; it never commits and never overwrites an existing
 archive entry. Run `fix-index --apply` afterwards — `docs/README.md` still links

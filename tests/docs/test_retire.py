@@ -172,3 +172,45 @@ def test_a_commit_touching_both_the_doc_and_code_counts_as_work(tmp_path):
 def test_work_commits_is_zero_outside_a_git_repo(tmp_path):
     _doc(tmp_path, "docs/superpowers/plans/2026-01-05-old.md")
     assert find_retire_candidates(tmp_path, today="2026-08-24")[0]["work_commits"] == 0
+
+
+# ── selection by evidence ───────────────────────────────────────────────────
+
+
+def test_never_shipped_keeps_only_candidates_with_no_work_commit(tmp_path):
+    """The one-time legacy migration archives what nothing shipped under.
+
+    Age alone cannot separate the two piles: on this repo it put 111 documents
+    in one list, 42 of which had a commit that touched the plan and code
+    together. Those 42 are read by a person; only the other 69 move by command.
+    """
+    repo = _repo(tmp_path)
+    _doc(repo, "docs/superpowers/plans/2026-01-05-nothing-shipped.md")
+    _doc(repo, "docs/superpowers/plans/2026-01-06-work-happened.md")
+    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "-qm", "write both plans"], check=True)
+
+    (repo / "src").mkdir()
+    (repo / "src" / "app.py").write_text("x = 1\n", encoding="utf-8")
+    (repo / "docs/superpowers/plans/2026-01-06-work-happened.md").write_text(
+        '---\ntitle: "x"\nstatus: draft\n---\nbody v2\n', encoding="utf-8")
+    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "-qm", "plan + code"], check=True)
+
+    both = find_retire_candidates(repo, today="2026-08-24")
+    assert len(both) == 2
+
+    kept = find_retire_candidates(repo, today="2026-08-24", never_shipped=True)
+    assert [c["path"] for c in kept] == [
+        "docs/superpowers/plans/2026-01-05-nothing-shipped.md"
+    ]
+
+
+def test_never_shipped_does_not_relax_the_age_bar(tmp_path):
+    """The flag narrows the list; it must never widen it."""
+    repo = _repo(tmp_path)
+    _doc(repo, "docs/superpowers/plans/2026-08-20-fresh.md")
+    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "-qm", "fresh plan"], check=True)
+
+    assert find_retire_candidates(repo, today="2026-08-24", never_shipped=True) == []
