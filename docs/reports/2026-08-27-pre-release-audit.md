@@ -179,3 +179,79 @@ On `inject-h2t-context`, the agent's concern is the fallback branch emitting a t
 `{"hookSpecificOutput": {"hookEventName": …, "additionalContext": …}}`. That branch fires when
 `CLAUDE_PLUGIN_ROOT` is unset — which is precisely a non-Claude-Code harness, so it connects
 directly to phase K.
+
+## Phase D — a clean machine (macOS half)
+
+Method: a fresh `HOME` in `/tmp`, with a control both ways — `~/.h2t` must not resolve under
+the synthetic HOME **and** must resolve under the real one. Without the second half, a
+"nothing found" result cannot be told apart from a probe that never ran.
+
+```
+synthetic:  ls: /tmp/cleanhome.SuecEp/.h2t: No such file or directory
+real:       /Users/stanislav_glazov/.h2t
+```
+
+### D1. All nine entry points start; two misbehave
+
+```
+rc=0  h2t-ops --help / doctor / connectors
+rc=0  h2t-handoff, h2t-activity-log, h2t-project-register,
+      h2t-project-audit-scan, h2t-project-audit-report, h2t-scaffold-project
+rc=5  h2t-hook --help    Plugin entrypoint script not found: hooks-handlers/--help
+```
+
+`h2t-hook` treats `--help` as a handler name, so the one command whose behaviour is least
+guessable is also the one with no help. **Loud, but useless** — the message names an internal
+path rather than saying the command takes a handler name.
+
+`h2t-activity-log --help` prints `usage: writer.py`. The program name leaks the internal
+script, so a user who copies the usage line types a command that does not exist. **Misleading.**
+
+### D2. `h2t-ops doctor` exits 0 on a machine it has just diagnosed as unconfigured
+
+```
+secrets: NOTION_API_TOKEN=MISSING
+secrets: gmail credentials=MISSING
+rc=0
+```
+
+It says MISSING in prose and 0 in the exit code, so nothing can gate on it. It also never
+mentions that `~/.h2t` and `~/.dor` are absent — the two directories everything else assumes.
+**Quiet** by the classification that matters: a caller branching on the exit code is told the
+machine is fine.
+
+### D3. `h2t-gather` degrades well, then gives a broken instruction
+
+The briefing renders on a machine with no config at all — project id falls back to `unknown`,
+milestones and issues still resolve through `gh`. That part is genuinely graceful.
+
+Then it ends with:
+
+```
+### Hints
+- Repo не зарегистрирован. Запусти `/h2t:init-project` для регистрации.
+```
+
+`/h2t:init-project` does not exist. The `h2t` plugin was never in `marketplace.json` and was
+deleted in #430; the skill lives at `h2t-core:init-project`. This is the **misleading** class:
+the user is told exactly what to do, does it, and nothing happens.
+
+**Nine such references ship**, all naming the dead namespace:
+
+```
+plugins/h2t-edu/skills/process-transcripts/SKILL.md:27        → /h2t:setup
+plugins/h2t-edu/skills/convert-meeting-transcript/SKILL.md:23 → /h2t:setup
+plugins/h2t-edu/skills/youtube-transcript/SKILL.md:21,98,99   → /h2t:setup
+plugins/h2t-core/lib/gather/briefing.py:289                   → /h2t:init-project
+lib/gather/briefing.py:289                                    → /h2t:init-project
+plugins/h2t-core/skills/init-project/scripts/apply_registration.py:158 → /h2t:scaffold-project
+lib/gather/test_briefing.py:139                               → asserts the broken string
+```
+
+The last line is the one to read twice. A test pins `/h2t:init-project` as expected output, so
+the suite is green **because** the instruction is wrong. Fixing the hint fails a test; that is
+the shape of a defect that survives a rewrite.
+
+Note these were already broken before #430: `h2t` was never shipped by the marketplace, so
+`/h2t:setup` has never resolved for anyone who installed the pack normally. The deletion did
+not create this — it removed the last excuse for not noticing.
