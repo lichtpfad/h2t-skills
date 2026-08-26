@@ -19,7 +19,7 @@ def _shipped_skills():
     """Every SKILL.md under a plugin the marketplace actually ships.
 
     Directories without a SKILL.md are script-only helpers (skills/drive, skills/docs-index),
-    not skills; plugins/h2t/ is kept as a rollback archive and is not shipped.
+    not skills.
     """
     plugins = json.loads(MARKETPLACE.read_text(encoding="utf-8"))["plugins"]
     for plugin in plugins:
