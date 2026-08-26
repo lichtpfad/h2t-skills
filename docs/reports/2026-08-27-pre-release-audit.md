@@ -598,3 +598,34 @@ authorization: PR #430. Nothing else.
 Not changed: every finding above. They are findings, not fixes, by instruction — "важно ничего
 не поломать". The suite is green, `main` is green on both platforms, and both machines are in a
 known state.
+
+## Manifest decision, taken during the run
+
+**Operator, 2026-08-27:** of `h2t-edu`, only `youtube-transcript` ships. `process-transcripts`,
+`convert-meeting-transcript` and `lesson-parser` are superseded and move to POS.
+
+That decision retires several findings above outright rather than scheduling them. Recomputed:
+
+| finding | before | after the cut |
+|---|---|---|
+| `/h2t:*` dead references | 9 | **7** (3 of them in `youtube-transcript`) |
+| Cyrillic lines in agent-facing text | 701 | **495** — 206 leave with the three skills |
+| Ollama at a hardcoded `localhost:11434` (G2) | open | **gone** — only in `process-transcripts` |
+| raw `ModuleNotFoundError: docx` (E2) | open | **gone** — only in `convert-meeting-transcript` |
+| files writing into `~/.dor` under `h2t-edu` | 4 | **1** (`youtube_transcript_cli.py`) |
+
+Both undeclared-dependency findings disappear with the cut, which leaves that class empty in
+the shipped tree.
+
+`lesson-parser` also carried the only real question in `h2t-edu` that was not technical — it
+encodes a method for turning tutorial transcripts into topology, and whether to hand that to
+strangers was a business call rather than an audit finding. The cut settles it.
+
+What `youtube-transcript` still brings into the manifest, and what therefore still needs
+fixing before publication:
+
+```
+plugins/h2t-edu/skills/youtube-transcript/SKILL.md:21,98,99   → /h2t:setup   (dead namespace)
+plugins/h2t-edu/skills/youtube-transcript/scripts/…:18,22     → ~/.dor       (personal vault)
+33 lines of Cyrillic
+```
