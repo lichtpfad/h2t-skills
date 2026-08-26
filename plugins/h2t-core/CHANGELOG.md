@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- fix(session-start): the briefing warns when a versioned `pre-commit` exists and git
+  is not running it. `scripts/hooks/pre-commit` has blocked `marketplace.json` drift
+  since #74 and was off on this machine the whole time — `core.hooksPath` unset,
+  `.git/hooks` holding only samples. A hook committed but never wired into the clone
+  blocks nothing and prints nothing, so nothing distinguishes it from no hook at all.
+  Two causes fixed alongside: `install.sh` now sets `core.hooksPath` instead of
+  symlinking, and `pre-commit` was committed mode 100644 — non-executable on a fresh
+  clone, skipped even with `hooksPath` set. The per-clone step cannot be committed
+  away, only made noticeable; a legacy symlink into `.git/hooks` still counts as
+  active, so existing clones get no false hint
+
 - feat(hooks): `plan-closer` — a merged PR stamps `status: "done"` and `pr: N` on
   every plan and spec it carried. The repo's first PostToolUse hook. Retrospective
   inference had already been measured and rejected — a plan slug appears in 7 of 60
