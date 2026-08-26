@@ -709,3 +709,34 @@ For a single-machine user the split has no purpose at all — there is nothing t
 directories are local, and the distinction degrades into two places where the same thing might
 be. That is the form in which an outsider meets it, and it is the reason #432 is a design
 decision rather than a rename.
+
+## Open manifest question: `h2t-creative`
+
+Raised by the operator during the run — "not sure, they are raw". Measured, the plugin is three
+layers in very different states, and only one of them is raw.
+
+```
+engine    assembler.py + 968 tests in 14 files — the best-tested code in the repository
+          (legacy fidelity 128, field mapper 59, asset validator 46, skin loader 31,
+           semantic parser 29, editorial landing primitives 35 …)
+skills    7 skills, 94–1361 lines; none has scripts/, six have no references/
+profiles  6 profiles, 295 files of design assets; 2 files carry personal data
+```
+
+The tests cover the **engine**, not the skills. So the most verified code in the tree is wrapped
+in its thinnest instruction layer: seven prose skills, no scripts, and `design` as a 1361-line
+monolith (the same file phase I flagged for loading cost).
+
+"Raw" is accurate for the wrapper and wrong for the engine. Dropping the plugin wholesale would
+discard 968 tests of working code because of the prose around it.
+
+**The profiles are a different question again.** `h2t-pfad`, `h2t-graphs`, `h2t-editorial` are
+the operator's own brands; `h2t-default`, `h2t-mono`, `h2t-terminal` read as generic. Whether to
+publish them is not a readiness judgment but an identity one — the same shape as `lesson-parser`
+in `h2t-edu`, which the operator resolved by keeping it back.
+
+Default recommendation if the decision is not made before publication: **leave `h2t-creative`
+out of the snapshot.** Not because the engine is weak — it is the strongest part — but because
+publishing it usefully means publishing the profiles with it, and that is a decision about
+identity rather than about code. A plugin can be added later; it cannot be withdrawn once
+cloned.
