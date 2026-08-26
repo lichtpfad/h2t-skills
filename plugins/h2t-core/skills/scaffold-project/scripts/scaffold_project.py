@@ -6,6 +6,7 @@ Usage:
   scaffold_project.py github --github OWNER/REPO --source PATH [--description T] [--private]
 """
 import argparse
+import io
 import json
 import os
 import subprocess
@@ -546,6 +547,20 @@ def install_hooks(project_dir: Path) -> dict:
     return {"status": "ok", "path": str(settings_path)}
 
 
+def _print_json(payload) -> None:
+    """The report goes out as UTF-8 whatever the console codepage says.
+
+    Windows Python encodes a piped stdout with the ANSI codepage, so the em dashes in
+    these action strings left as cp1252 (byte 0x97) and every caller decoding UTF-8 got
+    a decode error in place of the report — measured on windows-latest, not reasoned.
+    lib/gather/runner.py:48 solves the same problem the same way.
+    """
+    out = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", newline="")
+    out.write(json.dumps(payload, ensure_ascii=False, indent=2) + "\n")
+    out.flush()
+    out.detach()  # leave the underlying buffer open
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Scaffold h2t project")
     sub = parser.add_subparsers(dest="cmd")
@@ -578,7 +593,7 @@ def main() -> None:
         parser.print_help()
         sys.exit(1)
 
-    print(json.dumps(result, ensure_ascii=False, indent=2))
+    _print_json(result)
 
 
 if __name__ == "__main__":
