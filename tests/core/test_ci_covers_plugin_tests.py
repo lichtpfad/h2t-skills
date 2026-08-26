@@ -15,11 +15,6 @@ ROOT = Path(__file__).resolve().parents[2]
 WORKFLOWS = ROOT / ".github" / "workflows"
 
 
-# plugins/h2t/ is the rollback archive: the marketplace ships h2t-core, h2t-ops, h2t-dev,
-# h2t-arch, h2t-creative and h2t-edu, and nothing else. Running an archive's tests in CI
-# would gate the repo on code no one can install.
-ARCHIVED = "plugins/h2t/"
-
 # drawio's `test_*.py` are manual smoke scripts, not pytest modules: 578 lines of
 # module-level asserts and print() that run on import and define no test function, so
 # `pytest` there exits 5 ("no tests ran") and a CI step would fail on an empty collection.
@@ -33,7 +28,6 @@ def _dirs_with_tests():
         path.parent.relative_to(ROOT).as_posix()
         for path in (ROOT / "plugins").rglob("test_*.py")
         if "__pycache__" not in path.parts
-        and not path.relative_to(ROOT).as_posix().startswith(ARCHIVED)
         and path.parent.relative_to(ROOT).as_posix() not in NOT_PYTEST
     })
 
