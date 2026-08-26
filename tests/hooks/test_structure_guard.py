@@ -359,7 +359,7 @@ def test_allowlist_covers_every_tracked_root_dir():
     guard = _load_guard()
     repo = Path(__file__).parents[2]
     tracked = subprocess.run(
-        ["git", "ls-files"], cwd=repo, capture_output=True, text=True, check=True
+        ["git", "ls-files"], cwd=repo, capture_output=True, text=True, encoding="utf-8", check=True
     ).stdout.splitlines()
     roots = {p.split("/")[0] for p in tracked if "/" in p}
     config = guard.load_config(repo)

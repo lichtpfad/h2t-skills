@@ -38,7 +38,7 @@ def _write(cwd, sessions_root, config_root, *extra):
          "--session-id", "some-session-2026-08-23",
          "--what-done", "did the thing",
          "--what-remains", "- [ ] the next thing", *extra],
-        capture_output=True, text=True, env=env, cwd=str(cwd), check=False,
+        capture_output=True, text=True, encoding="utf-8", env=env, cwd=str(cwd), check=False,
     )
     assert result.returncode == 0, result.stderr
     return json.loads(result.stdout)

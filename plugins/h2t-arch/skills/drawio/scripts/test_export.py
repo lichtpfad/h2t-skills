@@ -17,15 +17,18 @@ from export import export_diagram  # noqa: E402 - path set on the line above
 from generate import generate_diagram  # noqa: E402
 
 # export.py:104 — the default, overridable through .drawio-skill.yaml
-DRAWIO_CLI = Path("/Applications/draw.io.app/Contents/MacOS/draw.io")
+# The literal is what the control greps for; Path() would render it "\\Applications\\..."
+# on Windows and the control would fail on the separator rather than on a stale path.
+DRAWIO_CLI_LITERAL = "/Applications/draw.io.app/Contents/MacOS/draw.io"
+DRAWIO_CLI = Path(DRAWIO_CLI_LITERAL)
 
 
 def test_the_cli_path_this_test_probes_is_the_one_export_uses():
     """The control. If export.py's default moves, the skip below would silently become
     permanent and this file would report success by never running."""
     source = (Path(__file__).resolve().parent / "export.py").read_text(encoding="utf-8")
-    assert str(DRAWIO_CLI) in source, (
-        f"{DRAWIO_CLI} no longer appears in export.py — the skip condition is stale"
+    assert DRAWIO_CLI_LITERAL in source, (
+        f"{DRAWIO_CLI_LITERAL} no longer appears in export.py — the skip condition is stale"
     )
 
 

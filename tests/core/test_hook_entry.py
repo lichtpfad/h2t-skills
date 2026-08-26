@@ -20,7 +20,7 @@ _CALL = ("import sys; from h2t_ops.hook_entry import main; "
 def _run(plugin_root, *args):
     return subprocess.run(
         [sys.executable, "-c", _CALL.format(args=list(args))],
-        cwd=ROOT, capture_output=True, text=True, check=False,
+        cwd=ROOT, capture_output=True, text=True, encoding="utf-8", check=False,
         env={**os.environ, "H2T_PLUGIN_ROOT": str(plugin_root)},
     )
 
@@ -69,7 +69,7 @@ def test_stdin_reaches_the_handler(tmp_path):
     _handler(root, "reads", "#!/usr/bin/env bash\ncat\n")
     result = subprocess.run(
         [sys.executable, "-c", _CALL.format(args=["reads"])],
-        cwd=ROOT, capture_output=True, text=True, input='{"hook":"event"}', check=False,
+        cwd=ROOT, capture_output=True, text=True, encoding="utf-8", input='{"hook":"event"}', check=False,
         env={**os.environ, "H2T_PLUGIN_ROOT": str(root)},
     )
     assert '{"hook":"event"}' in result.stdout, result.stdout
