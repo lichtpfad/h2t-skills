@@ -629,3 +629,37 @@ plugins/h2t-edu/skills/youtube-transcript/SKILL.md:21,98,99   → /h2t:setup   (
 plugins/h2t-edu/skills/youtube-transcript/scripts/…:18,22     → ~/.dor       (personal vault)
 33 lines of Cyrillic
 ```
+
+## Why `.dor` is everywhere — measured, not guessed
+
+Asked during the run: how many config directories are synced. The Syncthing config
+(`~/Library/Application Support/Syncthing/config.xml`) has exactly **one folder**:
+
+```
+DOR Registry    /Users/stanislav_glazov/.dor
+   type=sendreceive   devices=MacBook-Pro-3.local, AUTOMATA
+```
+
+`~/.h2t` is **not** synced.
+
+This reframes finding C1. `.dor` is not a personal path that leaked into the code by accident —
+it is the only directory guaranteed identical on both machines, which is exactly why the
+secrets loader treats it as canonical. A key written on the Mac is on AUTOMATA immediately.
+
+`~/.h2t` is machine-local, and the whole day demonstrated what that means: 9 entry points on one
+machine and 4 on the other, different `core.hooksPath`, different venv contents.
+
+So the architecture is coherent: **`.dor` is shared state, `~/.h2t` is local state.** The
+three-way contradiction about where secrets live is not carelessness; it is the trace of an
+unfinished migration between those two models — `meetgeek/client.py:50` and the SessionStart
+banner already point at the local one while the loader still reads the shared one.
+
+For an external user the whole model collapses: no Syncthing, no second machine, no `.dor`. The
+fork that is meaningful here becomes three wrong addresses there. That does not make #432
+smaller — it makes it a design decision rather than a cleanup, and the decision is *which of the
+two models a single-machine user gets*.
+
+One consequence worth stating on its own: **`~/.dor/secrets/secrets.env` travels over
+Syncthing.** That is deliberate — the keys are needed on both boxes — but it means credentials
+live inside a synchronised folder, and any third device added to that share receives them
+without a further step.
