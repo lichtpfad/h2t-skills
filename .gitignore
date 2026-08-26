@@ -42,3 +42,23 @@ docs/reports/*-practice-harvest-corpus.json
 docs/reports/_*.json
 docs/reports/_build_registry.py
 .h2t/lint-state.jsonl
+
+# Credentials — never commit these. The tree gives more than one answer about where
+# secrets live (see the secrets-resolution chain in h2t_ops/core/secrets.py); this list
+# covers every shape regardless of which directory they end up in.
+.env
+*.env
+secrets.env
+*.pem
+*.key
+*.p12
+credentials.json
+client_secret*.json
+token.json
+service-account*.json
+
+# …but a template with no real values is meant to be committed. Without these, the first
+# `.env.example` someone adds is silently untracked and they find out much later.
+!*.env.example
+!*.env.sample
+!*.env.template
