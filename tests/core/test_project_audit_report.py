@@ -19,7 +19,7 @@ def _run(tmp_path, project_id):
     return subprocess.run(
         [sys.executable, str(REPORT), project_id, "--field", "claude_md=true",
          "--projects-yaml", str(projects)],
-        capture_output=True, text=True, check=False,
+        capture_output=True, text=True, encoding="utf-8", check=False,
     )
 
 

@@ -27,7 +27,7 @@ def _env(tmp_path, **extra):
 
 def _run(tmp_path, *argv, **extra):
     return subprocess.run([sys.executable, str(WRITER), *argv],
-                          capture_output=True, text=True, check=False, env=_env(tmp_path, **extra))
+                          capture_output=True, text=True, encoding="utf-8", check=False, env=_env(tmp_path, **extra))
 
 
 def test_no_subcommand_is_a_usage_error(tmp_path):
@@ -53,8 +53,13 @@ def test_an_unusable_markdown_dir_exits_3_and_still_keeps_the_record(tmp_path):
     used to raise NotADirectoryError out of main() — exit 1, a traceback, and a session
     that looks lost even though its record is on disk.
     """
+    # "/dev/null/deep" was the first form of this and only fails on POSIX: on Windows that
+    # is an ordinary missing path, mkdir succeeds, and the test asserted 3 against a real 0.
+    # A regular file as the parent is unusable on both.
+    blocker = tmp_path / "not-a-directory"
+    blocker.write_text("", encoding="utf-8")
     result = _run(tmp_path, "write", "--session-id", "probe", "--project", "p",
-                  "--domain", "d", "--markdown-dir", "/dev/null/deep")
+                  "--domain", "d", "--markdown-dir", str(blocker / "deep"))
     assert result.returncode == 3, (result.returncode, result.stderr[-400:])
     assert "Traceback" not in result.stderr
     payload = json.loads(result.stdout)

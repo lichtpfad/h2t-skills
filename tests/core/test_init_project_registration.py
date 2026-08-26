@@ -52,7 +52,7 @@ def _register(config_root, project_id, *args):
             "--type", "git", "--label", "Fixture Label",
             "--config-root", str(config_root), *args,
         ],
-        capture_output=True, text=True,
+        capture_output=True, text=True, encoding="utf-8",
     )
     assert result.returncode == 0, result.stderr
     return json.loads(result.stdout)
@@ -92,7 +92,7 @@ def test_config_root_env_is_honoured_without_the_flag(config_root, monkeypatch):
             "--id", "env-repo", "--domain", "fixture-domain",
             "--type", "git", "--label", "Env Repo",
         ],
-        capture_output=True, text=True, env=env,
+        capture_output=True, text=True, encoding="utf-8", env=env,
     )
 
     assert result.returncode == 0, result.stderr

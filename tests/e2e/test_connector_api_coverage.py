@@ -29,7 +29,7 @@ def _run(*args: str) -> dict:
         pytest.skip("set H2T_E2E_CONNECTORS=1 to run connector E2E")
     result = subprocess.run(
         [sys.executable, "-m", "h2t_ops.cli", *args, "--json"],
-        text=True,
+        text=True, encoding="utf-8",
         capture_output=True,
         check=False,
     )
