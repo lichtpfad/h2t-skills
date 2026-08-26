@@ -118,7 +118,7 @@ def test_retire_moves_the_file_and_keeps_history(tmp_path):
     assert results[0]["status"] == "moved"
     staged = subprocess.run(
         ["git", "-C", str(repo), "diff", "--cached", "--name-status"],
-        capture_output=True, text=True).stdout
+        capture_output=True, text=True, encoding="utf-8").stdout
     assert "docs/archive/plans/2026-01-05-old.md" in staged
 
 

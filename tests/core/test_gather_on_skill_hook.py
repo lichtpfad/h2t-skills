@@ -61,7 +61,7 @@ def _run_hook(env, skill, cwd):
         [shutil.which("bash") or "/bin/bash", str(HOOK)],
         input=json.dumps({"tool_input": {"skill": skill}, "cwd": str(cwd)}),
         capture_output=True,
-        text=True,
+        text=True, encoding="utf-8",
         cwd=REPO_ROOT,
         env=env,
     )
@@ -151,7 +151,7 @@ def _git_repo(path):
 def _detect(env, cwd, *args):
     return subprocess.run(
         [env["H2T_PYTHON"], str(DETECT), "--cwd", str(cwd), *args],
-        capture_output=True, text=True, env=env,
+        capture_output=True, text=True, encoding="utf-8", env=env,
     )
 
 
@@ -225,7 +225,7 @@ def _run_fake(env, plugin_root, skill, cwd):
     return subprocess.run(
         [shutil.which("bash") or "/bin/bash", str(plugin_root / "hooks-handlers" / "gather-on-skill")],
         input=json.dumps({"tool_input": {"skill": skill}, "cwd": str(cwd)}),
-        capture_output=True, text=True, cwd=cwd, env=env,
+        capture_output=True, text=True, encoding="utf-8", cwd=cwd, env=env,
     )
 
 

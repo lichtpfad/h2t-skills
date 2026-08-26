@@ -27,13 +27,13 @@ def _without_timing(text):
 def _run(argv):
     env = dict(os.environ, H2T_EVALS_MODE="off")
     return subprocess.run([sys.executable, "-m", *argv], capture_output=True,
-                          text=True, cwd=ROOT, env=env, check=False)
+                          text=True, encoding="utf-8", cwd=ROOT, env=env, check=False)
 
 
 def _run_gather_entry(*args):
     env = dict(os.environ, H2T_EVALS_MODE="off")
     return subprocess.run([sys.executable, "-c", _ENTRY, *args], capture_output=True,
-                          text=True, cwd=ROOT, env=env, check=False)
+                          text=True, encoding="utf-8", cwd=ROOT, env=env, check=False)
 
 
 def test_the_gather_entry_probe_is_not_silently_empty():
@@ -56,7 +56,7 @@ def _session_store(tmp_path, work, env):
 
     probe = subprocess.run(
         [sys.executable, "-c", _ENTRY, "--cwd", str(work), "--briefing-only"],
-        capture_output=True, text=True, cwd=ROOT, env=env, check=False,
+        capture_output=True, text=True, encoding="utf-8", cwd=ROOT, env=env, check=False,
     )
     assert probe.returncode == 0, probe.stderr
     meta = json.loads(probe.stdout.split("\n\nGATHER_META: ", 1)[1])
@@ -95,10 +95,10 @@ def test_both_entry_points_produce_the_same_briefing(tmp_path):
     via_ops = subprocess.run(
         [sys.executable, "-m", "h2t_ops.cli", "gather", "session-start",
          "--cwd", str(work), "--briefing-only"],
-        capture_output=True, text=True, cwd=ROOT, env=env, check=False)
+        capture_output=True, text=True, encoding="utf-8", cwd=ROOT, env=env, check=False)
     via_gather = subprocess.run(
         [sys.executable, "-c", _ENTRY, "--cwd", str(work), "--briefing-only"],
-        capture_output=True, text=True, cwd=ROOT, env=env, check=False)
+        capture_output=True, text=True, encoding="utf-8", cwd=ROOT, env=env, check=False)
 
     assert via_ops.returncode == 0, via_ops.stderr
     assert via_gather.returncode == 0, via_gather.stderr

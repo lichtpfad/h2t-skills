@@ -56,7 +56,7 @@ def _write_handoff(root: Path, project: str, session_id: str) -> None:
             "--what-done", "did the thing",
             "--what-remains", "- [ ] the next thing",
         ],
-        capture_output=True, text=True, env=env, cwd=ROOT,
+        capture_output=True, text=True, encoding="utf-8", env=env, cwd=ROOT,
     )
     assert result.returncode == 0, result.stderr
     assert json.loads(result.stdout)["status"] == "ok"

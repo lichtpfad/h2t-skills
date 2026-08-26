@@ -22,7 +22,7 @@ def wheel_names(tmp_path_factory) -> set[str]:
     result = subprocess.run(
         [sys.executable, "-m", "pip", "wheel", str(REPO_ROOT), "--no-deps", "-w", str(out_dir)],
         capture_output=True,
-        text=True,
+        text=True, encoding="utf-8",
     )
     if result.returncode != 0:
         pytest.fail(f"wheel build failed:\n{result.stdout[-2000:]}\n{result.stderr[-2000:]}")

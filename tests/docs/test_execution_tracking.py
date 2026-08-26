@@ -12,7 +12,7 @@ _PYTHON = Path(sys.executable)  # the interpreter running the suite, not a Windo
 def _run(args, cwd=None):
     r = subprocess.run(
         [str(_PYTHON), str(_LINT)] + args,
-        capture_output=True, text=True, cwd=cwd,
+        capture_output=True, text=True, encoding="utf-8", cwd=cwd,
     )
     return r
 

@@ -64,7 +64,7 @@ def test_the_exceptions_are_actually_referenced():
         found = subprocess.run(
             ["git", "-C", str(ROOT), "grep", "-l", f"skills/{skill}/", "--",
              "plugins", "lib", "h2t_ops", "tests", "scripts", ".github"],
-            capture_output=True, text=True,
+            capture_output=True, text=True, encoding="utf-8",
         ).stdout.splitlines()
         outside = [f for f in found if not f.startswith(f"plugins/{plugin}/skills/{skill}/")]
         if not outside:

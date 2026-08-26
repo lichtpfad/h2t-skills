@@ -21,7 +21,7 @@ def test_version_flag():
     result = subprocess.run(
         [sys.executable, str(SCRIPT), "--version"],
         capture_output=True,
-        text=True,
+        text=True, encoding="utf-8",
     )
     assert result.returncode == 0, result.stderr
     assert "0.1.2" in result.stdout

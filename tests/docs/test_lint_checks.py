@@ -269,7 +269,7 @@ def test_legacy_fix_with_root_is_rejected(tmp_path):
     """--fix combined with --root is rejected (ambiguous target). Exits non-zero."""
     result = _sp.run(
         [_sys.executable, _LINT_SCRIPT, "--root", str(tmp_path), "--fix"],
-        capture_output=True, text=True,
+        capture_output=True, text=True, encoding="utf-8",
     )
     assert result.returncode != 0
     assert "--root" in result.stderr or "incompatible" in result.stderr.lower()
@@ -279,7 +279,7 @@ def test_new_audit_subcommand_exits_cleanly(tmp_path):
     """audit subcommand with --root on empty repo exits without crash."""
     result = _sp.run(
         [_sys.executable, _LINT_SCRIPT, "audit", "--root", str(tmp_path)],
-        capture_output=True, text=True,
+        capture_output=True, text=True, encoding="utf-8",
     )
     assert result.returncode in (0, 1)
 
@@ -289,7 +289,7 @@ def test_doctor_json_produces_schema(tmp_path):
     import json as _json
     result = _sp.run(
         [_sys.executable, _LINT_SCRIPT, "doctor", "--root", str(tmp_path), "--json"],
-        capture_output=True, text=True,
+        capture_output=True, text=True, encoding="utf-8",
     )
     assert result.returncode in (0, 1)
     data = _json.loads(result.stdout)
@@ -301,7 +301,7 @@ def test_fix_index_dry_run_no_file_created(tmp_path):
     (tmp_path / "docs").mkdir()
     result = _sp.run(
         [_sys.executable, _LINT_SCRIPT, "fix-index", "--root", str(tmp_path)],
-        capture_output=True, text=True,
+        capture_output=True, text=True, encoding="utf-8",
     )
     assert result.returncode == 0
     assert not (tmp_path / "docs" / "README.md").exists()
@@ -318,7 +318,7 @@ def test_fix_safe_preserves_existing_frontmatter_keys(tmp_path):
     _sp.run(
         [_sys.executable, _LINT_SCRIPT, "fix-safe", "--root", str(tmp_path),
          "--only", "frontmatter"],
-        capture_output=True, text=True,
+        capture_output=True, text=True, encoding="utf-8",
     )
     result = md.read_text(encoding="utf-8")
     assert 'custom_tag: "keep-me"' in result
