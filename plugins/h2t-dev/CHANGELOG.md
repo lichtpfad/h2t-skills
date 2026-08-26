@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- feat(docs-lint): `retire --never-shipped` keeps only candidates with no commit
+  that touched the document and code together. Age alone put 111 documents in
+  one list here, 42 of which had such a commit; those 42 are a person's to read,
+  and the flag is what lets the other 69 move by command without writing a guess
+  into a file.
+
 - chore: remove `docs-cleanup`. It sat under skills/ for four months with no
   SKILL.md — demoted to "CLI" in 31395f5 without ever becoming one: no entry
   point, nothing on PATH, no command file, zero references. Its README section

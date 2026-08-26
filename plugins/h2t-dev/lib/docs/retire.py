@@ -96,8 +96,15 @@ def find_retire_candidates(
     today: str | date | None = None,
     stale_days: int = STALE_DAYS,
     exclude_dirs: list[str] | None = None,
+    never_shipped: bool = False,
 ) -> list[dict]:
-    """Open plans/specs older than *stale_days*, each with its evidence."""
+    """Open plans/specs older than *stale_days*, each with its evidence.
+
+    *never_shipped* narrows the list to documents with no commit that touched
+    them and code together. It selects, it does not conclude: "nothing shipped
+    alongside" is what was measured, and calling that pile "done" or "abandoned"
+    is the guess this module refuses to write into a file.
+    """
     root = Path(repo_root)
     now = _as_date(today) or date.today()
     is_excluded = excluded_predicate(root, exclude_dirs)
@@ -122,6 +129,8 @@ def find_retire_candidates(
             if not doc_date or (now - doc_date).days <= stale_days:
                 continue
             rel = f.relative_to(root).as_posix()
+            if never_shipped and work.get(rel, 0) > 0:
+                continue
             candidates.append({
                 "path": rel,
                 "target": archive_target(rel),
