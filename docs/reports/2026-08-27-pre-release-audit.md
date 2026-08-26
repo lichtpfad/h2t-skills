@@ -1,7 +1,7 @@
 ---
 title: "Pre-release audit — the tree against a machine that is not the author's"
 date: "2026-08-27"
-status: "in-progress"
+status: "complete"
 issue: "#431"
 runbook: "docs/superpowers/plans/2026-08-27-pre-release-clean-machine-audit-runbook.md"
 ---
@@ -544,3 +544,57 @@ where the console codepage and path separators change what a failure looks like.
 
 Note for the morning: after AUTOMATA pulls `87c3148`, empty directories may remain under
 `plugins/h2t/` from `__pycache__`, exactly as they did here. That is expected, not a new defect.
+
+## Morning plan
+
+Ordered by what blocks what, not by severity. Nothing below was done tonight — the run was
+read-only by instruction.
+
+### Before the repository becomes public
+
+| # | what | who | why it is first |
+|---|---|---|---|
+| 1 | **Pick a licence and add `LICENSE`** | operator | without it the pack is readable and not usable; five minutes, but it is a decision only you can make |
+| 2 | **Decide the manifest** (ship `plugins/ h2t_ops/ lib/ tests/ scripts/ .github/ docs/adr/`; drop `docs/superpowers docs/archive docs/reports TODOS.md`) | operator | it is the cheapest fix in the whole audit: both known leak sites are in directories the manifest excludes, so no history surgery is needed |
+| 3 | **Check whether the calendar `omue9d…slg` is public** — Google Calendar settings → "Make available to public" | operator | the one exposure this audit could not measure; `h2t-ops calendar` has no ACL surface (H1) |
+| 4 | **Re-provision the VPS with new tokens, not from a backup** | operator | free rotation; makes the leaked pair inert and removes the plan file from any history decision |
+
+### Before strangers arrive (they can clone within the hour)
+
+| # | what | effort | finding |
+|---|---|---|---|
+| 5 | Settle **where secrets live** — one answer, in code and in every message | ~1h | C1: `secrets.py` says `~/.dor/secrets/`, the context banner says `~/.h2t/config/secrets/`, MeetGeek says a third thing |
+| 6 | Remove the **9 `/h2t:*` references** — and the test at `lib/gather/test_briefing.py:139` that pins the broken string | ~30m | D3 |
+| 7 | Replace **`C:/dev` hardcode** in `scaffold-project` (default project dir), `project-audit` (points at another repo), `session-start`, `handoff`, `setup` | ~1h | C2 |
+| 8 | Add credential patterns to **`.gitignore`** | 5m | J2 |
+| 9 | Declare the **undeclared dependencies** — Ollama for `process-transcripts`, `python-docx` for `convert-meeting-transcript` | ~30m | G2, E2 |
+
+### After, in priority order
+
+10. **English-only skills** — 24 SKILL.md, 17 of them with Cyrillic in the dispatch
+    `description`; plus 18 files printing Russian to the user. Target state per the operator:
+    skills in English, response language from the user's settings.
+11. **#429** — 4 remaining import-time `sys.exit` sites (was 10 before `plugins/h2t` went).
+12. **#428** — 14 remaining unguarded JSON emitters; confirmed live on Windows (cp1252).
+13. **Split `design/SKILL.md`** (1361 lines) into `references/`; then `project-audit` (472)
+    and `setup` (262).
+14. **`AGENTS.md`** — Codex currently reads nothing in this repo (K1).
+15. **Retire or keep `gh-memory`** — it ships with `status: deprecated` in its own frontmatter.
+16. **`--help` as a filename** — 4 places (`h2t-hook`, `runbook_state.py`,
+    `validate_runbook.py`, plus the entry point).
+17. **`h2t-ops doctor` exit code** — it prints MISSING and exits 0, so nothing can gate on it.
+
+### Waiting on AUTOMATA
+
+The Windows half of phase D. Needs an operator nudge to be picked up. Its value is specifically
+in the *quiet* column: a failure that is loud on macOS can be silent on Windows, and the whole
+day has been examples of exactly that.
+
+## What this run did and did not change
+
+Changed: this report, the runbook, and three commits of documentation. Merged, under prior
+authorization: PR #430. Nothing else.
+
+Not changed: every finding above. They are findings, not fixes, by instruction — "важно ничего
+не поломать". The suite is green, `main` is green on both platforms, and both machines are in a
+known state.
