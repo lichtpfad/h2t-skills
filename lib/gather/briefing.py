@@ -286,7 +286,7 @@ def _build_hints(data: dict) -> list[str]:
 
     # Unknown project (default fallback)
     if project.get("id") == "unknown":
-        hints.append("Repo не зарегистрирован. Запусти `/h2t:init-project` для регистрации.")
+        hints.append("Repo не зарегистрирован. Запусти `/h2t-core:init-project` для регистрации.")
 
     # GitHub: a source that did not answer is not a repo without work
     if github and project.get("github"):

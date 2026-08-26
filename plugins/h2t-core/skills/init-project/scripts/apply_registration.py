@@ -155,7 +155,7 @@ def apply_registration(
         "actions": actions,
         "next_steps": [
             "Next /session-start will recognize this project",
-            "Run /h2t:scaffold-project for full setup (CLAUDE.md, milestones, issues)",
+            "Run /h2t-core:scaffold-project for full setup (CLAUDE.md, milestones, issues)",
         ],
     }
 

@@ -136,7 +136,7 @@ def test_unknown_project_hint():
     )
     md, _ = format_briefing(data)
 
-    assert "/h2t:init-project" in md
+    assert "/h2t-core:init-project" in md
 
 
 def test_empty_github_no_crash():

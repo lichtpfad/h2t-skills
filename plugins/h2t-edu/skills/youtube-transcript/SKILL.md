@@ -18,7 +18,7 @@ if [ -z "$H2T_PYTHON" ]; then
   [ -f "$HOME/.h2t/venv/bin/python" ] && H2T_PYTHON="$HOME/.h2t/venv/bin/python"
   [ -f "$HOME/.h2t/venv/Scripts/python.exe" ] && H2T_PYTHON="$HOME/.h2t/venv/Scripts/python.exe"
 fi
-[ -z "$H2T_PYTHON" ] && echo "ERROR: h2t venv not found. Run /h2t:setup" && exit 1
+[ -z "$H2T_PYTHON" ] && echo "ERROR: h2t venv not found. Run /h2t-core:setup" && exit 1
 
 CLI="$H2T_PYTHON ${CLAUDE_SKILL_DIR}/scripts/youtube_transcript_cli.py"
 ```
@@ -95,7 +95,7 @@ Frontmatter: `source`, `video_id`, `title`, `author`, `url`, `date`, опцио�
 
 ## Зависимости
 
-- `youtube-transcript-api` (в h2t venv, установится через /h2t:setup)
-- `yt-dlp` (в h2t venv, установится через /h2t:setup)
+- `youtube-transcript-api` (в h2t venv, установится через /h2t-core:setup)
+- `yt-dlp` (в h2t venv, установится через /h2t-core:setup)
 - `ffmpeg` (должен быть на PATH)
 - `python-dotenv` (pip install python-dotenv)
