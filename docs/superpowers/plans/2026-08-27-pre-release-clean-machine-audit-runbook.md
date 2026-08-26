@@ -33,8 +33,8 @@ sit inside `subagent-driven-dev`, which is where this run's work actually is.
 - [ ] **plan-gate** — skill: `codex review (embedded)` · input: `this runbook` · done: no [P1] · failure: fix P1 then re-run (<=N) · re-entry: idempotent: re-review
 - [x] **subagent-driven-dev** — skill: `audit phases A-J below` · input: `whole tree` · done: every phase has a recorded measurement · failure: record and continue; escalate only on hard-stop · re-entry: continue from first unchecked phase
 - [x] **gates** — skill: `pre-merge-check` · input: `report + runbook` · done: suite green · failure: fix then re-run (<=N) · re-entry: idempotent: re-run gate
-- [~] **e2e** — skill: `real entrypoint run` · input: `synthetic HOME with no ~/.h2t` · done: DONE / N/A / BLOCKED-DEFERRED · failure: BLOCKED->handoff; behavioral fail->record · re-entry: idempotent: fresh HOME each run
-- [ ] **PR** — skill: `superpowers:finishing-a-development-branch` · input: `runbook + report` · done: PR opened · failure: escalate · re-entry: continue: reuse branch
+- [x] **e2e** — skill: `real entrypoint run` · input: `synthetic HOME with no ~/.h2t` · done: DONE / N/A / BLOCKED-DEFERRED · failure: BLOCKED->handoff; behavioral fail->record · re-entry: idempotent: fresh HOME each run
+- [x] **PR** — skill: `superpowers:finishing-a-development-branch` · input: `runbook + report` · done: PR opened · failure: escalate · re-entry: continue: reuse branch
 - [ ] **handoff** — skill: `h2t-core:handoff` · input: `run state` · done: session record written · failure: n/a (terminal) · re-entry: idempotent: re-run handoff
 
 ### Audit phases (inside subagent-driven-dev)
@@ -42,7 +42,7 @@ sit inside `subagent-driven-dev`, which is where this run's work actually is.
 - [x] **A. inventory** — every skill, script and entry point enumerated; what claims to be runnable vs what is
 - [x] **B. language** — every agent-facing text checked for non-English; file:line list
 - [x] **C. hardcode** — absolute paths, usernames, machine names, assumed directories, per file
-- [~] **D. clean-machine** — installer + all 9 entry points under a synthetic HOME; each failure classified loud / silent / misleading
+- [x] **D. clean-machine** — installer + all 9 entry points under a synthetic HOME; each failure classified loud / silent / misleading
 - [x] **E. cross-test** — every test directory + every script's `--help`; a script that cannot run gets its reason recorded
 - [x] **F. instructions** — SKILL.md frontmatter, triggers and references judged for an agent with no prior context; unstated assumptions listed
 - [x] **G. duplicates** — overlapping-function skill pairs, with the evidence
@@ -104,14 +104,20 @@ never `git add -A`, never commit a red suite as green, message `WIP:` + what was
 
 ## Run outcome (2026-08-27)
 
-Report: `docs/reports/2026-08-27-pre-release-audit.md` (600 lines).
+Reports: `docs/reports/2026-08-27-pre-release-audit.md` (~760 lines) and
+`docs/reports/2026-08-27-pre-release-audit-windows.md` (119 lines, by the AUTOMATA agent).
+PR: #437.
 
 Issues filed: #432 (secrets location), #433 (dead `/h2t:*` hints), #434 (author paths),
 #435 (LICENSE / .gitignore), #436 (English-only skills). Corrected in place: #428 (18→14),
 #429 (10→4).
 
-`[~]` = partial. **D / e2e**: the macOS half is complete; the Windows half is with the AUTOMATA
-agent and was in progress at the time of writing. Everything else measured.
+**D / e2e**: complete on both platforms. The Windows half arrived at 01:32 as
+`docs/reports/2026-08-27-pre-release-audit-windows.md`, committed to this branch by the AUTOMATA
+agent itself (f7093e0). Its answer: the quiet failures reproduce identically on Windows, and
+connectors honour the exit-code contract (rc 3 for missing keys). It also recorded two limits
+on its own measurement — the toolchain was not isolated, and captured output bypassed the
+console codepage, so #428 is untouched by it.
 
 Gates: suite 2089 passed / 7 skipped, ruff clean. Codex review-gate and council finish-gate
 deliberately not run — see Decision-log.
