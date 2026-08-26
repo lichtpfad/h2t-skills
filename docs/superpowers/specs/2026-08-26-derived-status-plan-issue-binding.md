@@ -59,13 +59,41 @@ One field is what makes the other one checkable.
 
 Entirely from state GitHub already maintains. No new store.
 
-| issue #N | PR closing it | `status` |
+| issue #N | merged PR referencing it | `status` |
 |---|---|---|
-| open | none merged | `draft` |
-| open | one merged | `partial` |
+| open | none | `draft` |
+| open | at least one | `partial` |
 | closed as completed | — | `done` |
 | closed as not planned | — | `rejected` |
 | does not exist | — | finding `orphaned`, not a status |
+
+The predicate for `partial` is **a merged PR that references the issue**, read from
+`CROSS_REFERENCED_EVENT` — *not* `closedByPullRequestsReferences`. A PR that closes an issue
+is by construction a PR of a *closed* issue, so the closing edge can never witness `partial`.
+An earlier draft of this spec said "PR closing it" and was wrong for that reason.
+
+`done` and `rejected` need no PR at all: `stateReason` on the issue carries them.
+
+**Measured 2026-08-26, live API:**
+
+| probe | result |
+|---|---|
+| closed issues, closing PR recoverable | 21 of 24 (the 25th is `NOT_PLANNED`, which needs none) |
+| #386 (open) | `closedBy` empty, `xref` = #389, #390, #404, all merged → `partial` |
+| #414–#420 (open) | no cross-reference → `draft` |
+| #421–#424 (open) | `xref` = #425, **not** merged → correctly excluded |
+
+The last row is the negative control: the mechanism distinguishes a merged reference from an
+open one, so an empty result means "nothing merged" rather than "probe broken".
+
+Squash merges do not break this. The closing keyword lives in the PR body, not only in the
+commit message, so `gh pr merge --squash` keeps the edge — the 21-of-24 above is under squash
+throughout.
+
+**Known noise.** A cross-reference is any mention: a PR saying "see #386" in passing marks the
+document `partial`. This is tolerable because `partial` is the one derived value that triggers
+nothing — it is not in `_CLOSED`, so it neither archives nor retires. It costs a false
+"in progress", never a false deletion.
 
 `partial` is a new value. The manual review of the 42 produced exactly this bucket — ten
 documents whose code landed while the work continued — and today's schema cannot express it,
@@ -77,22 +105,38 @@ judgement.
 ## Guarantee
 
 Nothing can be guaranteed inside a document — a document does not resist editing. The
-invariant holds at the **entry paths** through which a file reaches the repository. There
-are three, and one is covered.
+invariant holds at the **entry paths** through which a file reaches the repository. There are
+five, and one and a half are covered.
 
 | path | today | needed |
 |---|---|---|
-| `docs-lint new plan <slug>` | nothing; `status: "draft"` is hardcoded | `--issue N` required, or `--new-issue "<title>"` creates it and stamps the number |
-| Write/Edit by an agent | `structure_guard.check_frontmatter_presence` checks that frontmatter exists | the same function checks that `issue:` is in it |
+| `docs-lint new plan <slug>` | nothing; `status: "draft"` is hardcoded (`new_doc.py:100`) | `--issue N` required, or `--new-issue "<title>"` creates it and stamps the number |
+| Write by an agent | `structure_guard.check_frontmatter_presence` runs (`structure_guard.py:282`) | the same function checks that `issue:` is in it |
+| Edit / MultiEdit by an agent | path gate only — the frontmatter check is behind `if tool_name == "Write"` | re-read the file and check the field after the edit |
+| **Bash heredoc, `sed`, any script** | **nothing** — `_WRITE_TOOLS = {"Write", "Edit", "MultiEdit"}` (`structure_guard.py:24`) | cannot be hooked; CI is the only cover |
 | hand edit in an IDE, merge from elsewhere | **nothing** — `.github/workflows/evals.yml` runs ruff and pytest and never looks at `docs/` | `docs-lint audit` in CI |
 
-The third row is how 111 overdue documents accumulated: path 1 held by convention only,
-path 2 arrived recently, path 3 has never been closed.
+The first draft of this spec listed three paths and missed two. It was itself written with a
+Bash heredoc, straight past row four — which is the shortest possible demonstration that the
+hook cannot be the guarantee. **CI is load-bearing, not a backstop.**
+
+`post_git_commit_docs_lint.py` looks like a sixth cover and is not one: it runs after a commit
+touching `docs/*.md` (`post_git_commit_docs_lint.py:46`) but exits 0 even on findings
+(`:206`, `:221`). It reports; it does not gate.
 
 **Escape hatch, mandatory.** A gate with no named exception gets routed around. `issue: none`
-with a `reason:` on the next line — deny-by-default plus an explicit exception, the same
-shape as `allowed_doc_dirs` in `structure_guard`. This very spec is that case: an
-architectural record that has no issue and should not have one.
+with a `reason:` on the next line — deny-by-default plus an explicit exception, the same shape
+as `allowed_doc_dirs` in `structure_guard`. This very spec is that case: an architectural
+record that has no issue and should not have one.
+
+**And the hatch needs its own pressure**, or it becomes the default. Three rules, all in
+`audit`:
+
+- an empty `issue:` is a finding, not a pass — key-presence validation alone
+  (`lint.py:408`) would let `issue: ""` through as compliant;
+- `issue: none` with an empty or missing `reason` is a finding;
+- every `issue: none` is listed by `audit` under its own dimension, with its reason, so the
+  set of exceptions is readable in one place rather than scattered across files.
 
 **Reverse edge.** The issue body carries `Plan: docs/superpowers/plans/...`. Then
 `gh issue view --json body` walks the link the other way with no extra storage, and `audit`
@@ -116,18 +160,32 @@ run and makes silence meaningful.
 
 ## Steps
 
-Each is independently verifiable; the order is a dependency order, not a preference.
+Each is independently verifiable; the order is a dependency order, not a preference. Two
+ordering hazards are named below and are part of the contract, not advice.
 
-1. **Field** (#421). `issue` into `FRONTMATTER_RULES` for `superpowers/plans` and `superpowers/specs`;
-   `issue: none` + `reason` accepted. Verify: `fix-safe --only=frontmatter` backfills empty
-   values, `audit` reports the gap as a dimension.
-2. **Generator** (#422). `docs-lint new` requires `--issue N` / `--new-issue "<title>"` / `--no-issue
-   "<reason>"`. Verify: no argument → non-zero exit, no file created.
-3. **Gates** (#423). `structure_guard` rejects a plan without the field; `docs-lint audit` runs in
-   `evals.yml`. Verify: a planted file blocks at the hook and fails in CI.
-4. **Reconciliation** (#424). `docs-lint reconcile [--apply]` computes the table above via `gh` and
-   reports drift; the weekly cron runs it and opens a PR. Verify: a doc whose cache is
-   deliberately wrong shows up as drift; a correct one does not.
+1. **Field** (#421). `issue` into `FRONTMATTER_RULES` for `superpowers/plans` and
+   `superpowers/specs`; `issue: none` + `reason` accepted; empty value is a finding. Verify:
+   `fix-safe --only=frontmatter` backfills, `audit` reports the gap as a dimension.
+2. **Generator** (#422). `docs-lint new` requires `--issue N` / `--new-issue "<title>"` /
+   `--no-issue "<reason>"`. Verify: no argument → non-zero exit, no file created.
+3. **Gates** (#423). `structure_guard` rejects a plan without the field on Write *and* on
+   Edit; `docs-lint audit` runs in `evals.yml`, failing on the `unlinked` dimension only.
+   Verify: a planted file blocks at the hook and fails in CI; a compliant file passes both.
+4. **Reconciliation** (#424). `docs-lint reconcile [--apply]` computes the table above via
+   `gh` and reports drift; `plan_closer` switches to the derived value; the weekly cron runs
+   it and opens a PR. Verify: a doc whose cache is deliberately wrong shows up as drift; a
+   correct one does not.
+
+**Hazard 1 — steps 1 and 2 must land in the same PR.** `new_doc.py:106` builds its field list
+from `FRONTMATTER_RULES` and emits `values.get(f, "")` (`:109`). Adding the field alone makes
+`docs-lint new` write `issue: ""` into every new document, and `fix-safe` do the same to
+existing ones (`lint.py:526`, `:538`). Step 1's "empty is a finding" rule keeps that loud
+rather than silent, but the generator must stop producing it in the same change.
+
+**Hazard 2 — `plan_closer` must learn `partial` before anything writes it.** The hook treats
+any status outside `_CLOSED` as closable (`plan_closer.py:95`, `:99`) and rewrites it to
+`status: "done"` (`:102`). A document reconciled to `partial` would be silently promoted to
+`done` by the next merge that touches it. Both halves live in step 4 and must ship together.
 
 ## Legacy is not migrated
 
@@ -136,6 +194,7 @@ the address after the fact is the same mistake a third time — a record written
 someone who was not a witness. The contract applies to documents created after the gate
 lands; the old ones go to the archive, which asserts nothing about state.
 
-Of the 72 live documents, **52 mention `#N` somewhere in prose** — the link largely exists
-already, it is simply not machine-readable. Extracting it is a one-off migration needing
-human review, because `#123` in running text can be anything.
+Measured 2026-08-26 across 73 live plan/spec files: **1 carries an `issue:` field** (this
+spec's own future case is not among them), and **54 mention `#N` somewhere in prose**. The
+link largely exists already; it is simply not machine-readable. Extracting it is a one-off
+migration needing human review, because `#123` in running text can be anything.
