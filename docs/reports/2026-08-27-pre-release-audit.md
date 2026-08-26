@@ -663,3 +663,49 @@ One consequence worth stating on its own: **`~/.dor/secrets/secrets.env` travels
 Syncthing.** That is deliberate — the keys are needed on both boxes — but it means credentials
 live inside a synchronised folder, and any third device added to that share receives them
 without a further step.
+
+## Correction to C2: the code is parameterised, the instructions are not
+
+Measured after the first pass. The tree already has a path-parameterisation mechanism and uses
+it widely — at least twelve environment variables:
+
+```
+H2T_CONFIG_ROOT  H2T_SESSION_ROOT  H2T_SECRETS_FILE  H2T_LAKE_ROOT
+H2T_ACTIVITY_SPOOL  H2T_MACHINE_NAME  H2T_DEV_ROOT  H2T_PLUGIN_ROOT
+H2T_EVALS_MODE  H2T_EVALS_TOKEN  H2T_PYTHON  H2T_LINT_ENTRIES
+```
+
+`H2T_DEV_ROOT` is one of them:
+
+```python
+plugins/h2t-core/skills/scaffold-project/scripts/scaffold_project.py:411
+plugins/h2t-dev/lib/docs/common.py:9
+    DEV_ROOT = Path(os.environ.get("H2T_DEV_ROOT", "C:/dev"))
+```
+
+So the *scripts* are not hardcoded — their **default** is wrong. The actual defect sits one
+layer up: `H2T_DEV_ROOT` is mentioned **zero times** in either SKILL.md that writes `C:/dev`
+into its prose (`scaffold-project/SKILL.md:61,64,67`, `project-audit/SKILL.md:22,23,33,40,41`).
+
+An agent following the skill offers `C:/dev/{id}` as the default project location, while the
+script underneath would have honoured the environment. Code and its own documentation disagree,
+and only the documentation is read by the thing making the decision.
+
+This makes #434 smaller and sharper than filed. Three pieces:
+
+1. a portable default instead of `C:/dev` (the value, not the mechanism),
+2. a root key in `repo-mapping.yaml` — which today holds only `mappings`, `cwd_patterns` and
+   `default`, while `H2T_CONFIG_ROOT` already exists to find that file,
+3. the two SKILL.md files told about the variable they are overriding by accident.
+
+## On having two config directories
+
+`.dor` synced, `~/.h2t` local — the split is a reasonable architecture and phase C mistook it
+for carelessness. What is genuinely wrong is the **naming**: `.dor` is a project name and
+`.h2t` is the ecosystem name, and neither says anything about the role it plays. Establishing
+that one is shared and the other is not required reading the Syncthing config.
+
+For a single-machine user the split has no purpose at all — there is nothing to sync with, both
+directories are local, and the distinction degrades into two places where the same thing might
+be. That is the form in which an outsider meets it, and it is the reason #432 is a design
+decision rather than a rename.
