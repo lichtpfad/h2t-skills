@@ -1,6 +1,7 @@
 """Git context gathering."""
 
 import re
+from pathlib import Path
 
 from .runner import run_parallel
 
@@ -14,6 +15,8 @@ def gather_git(cwd: str = ".") -> dict:
         "log":    ["git", "-C", cwd, "log", "--oneline", "-5"],
         "status": ["git", "-C", cwd, "status", "--short"],
         "stash":  ["git", "-C", cwd, "stash", "list"],
+        "hooks_path": ["git", "-C", cwd, "config", "--get", "core.hooksPath"],
+        "hooks_tracked": ["git", "-C", cwd, "ls-files", "--", "*hooks/pre-commit"],
     })
     remote = (raw["remote"] or "").strip()
     return {
@@ -23,7 +26,31 @@ def gather_git(cwd: str = ".") -> dict:
         "status": (raw["status"] or "").strip(),
         "stash": (raw["stash"] or "").strip(),
         "owner_repo": _parse_owner_repo(remote),
+        "hooks": _hooks_state(
+            cwd,
+            (raw["hooks_path"] or "").strip(),
+            raw["hooks_tracked"] or "",
+        ),
     }
+
+
+def _hooks_state(cwd: str, configured: str, tracked: str) -> dict:
+    """Whether the repo ships a pre-commit hook, and whether git will run it.
+
+    A hook committed to the repo but not wired into the clone is invisible: it
+    reports nothing, blocks nothing, and looks exactly like a repo with no hook.
+    `scripts/hooks/pre-commit` guarded marketplace.json drift for months while
+    `core.hooksPath` was unset on this machine and `.git/hooks` held only samples.
+    """
+    files = [f.strip() for f in tracked.splitlines() if f.strip()]
+    if not files:
+        return {"versioned": False, "active": True, "dir": ""}
+    root = Path(cwd)
+    hook_dir = str(Path(files[0]).parent).replace("\\", "/")
+    active = bool(configured) and (root / configured / "pre-commit").exists()
+    if not active:
+        active = (root / ".git" / "hooks" / "pre-commit").exists()
+    return {"versioned": True, "active": active, "dir": hook_dir}
 
 
 def _display_branch(branch: str, head: str) -> str:
