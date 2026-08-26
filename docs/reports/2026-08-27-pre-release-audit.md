@@ -80,3 +80,102 @@ profiles, CHANGELOGs, a handoff example). These carry no cost for an external re
 rules — not the connector boundary, not the linting rule set, not the verification discipline.
 
 Remaining sub-questions for this phase are unmeasured at time of writing.
+
+## Phase C — hardcode
+
+Scanned by publication zone, because a path in `docs/` that will not ship costs nothing and a
+path in `plugins/` costs a stranger their first hour.
+
+| zone | occurrences | note |
+|---|---|---|
+| **ships** (`plugins/ h2t_ops/ lib/ scripts/ tools/ tests/`) | **183** | the whole problem |
+| `.claude/` (undecided) | 9 | all in `rules/documentation.md` |
+| `docs/` (not shipping) | 1874 | disappears with the directory |
+
+The 1874 in `docs/` are the reason the curated-snapshot manifest matters more than any
+cleanup pass: they are already solved by not publishing them.
+
+### C1. `~/.dor` — 114 occurrences, 46 files, and it is not a comment
+
+`.dor` is the operator's personal vault. An AST pass separating real string literals from
+docstrings finds it **live in 27 shipped files**, and `h2t_ops/core/secrets.py:10` makes it
+canonical, not a fallback:
+
+```python
+DEFAULT_SECRETS = Path.home() / ".dor" / "secrets" / "secrets.env"
+LEGACY_SECRETS  = Path.home() / ".dor" / "secrets.env"
+```
+
+The docstring is explicit: *"Canonical runtime secrets live at `~/.dor/secrets/secrets.env`."*
+
+**And the tree contradicts itself about where secrets go.** Three answers are shipped at once:
+
+| source | says |
+|---|---|
+| `h2t_ops/core/secrets.py:10` | `~/.dor/secrets/secrets.env` — what the code actually reads |
+| `plugins/h2t-core/skills/setup/SKILL.md:172,181` | `~/.dor/secrets/secrets.env` — agrees |
+| `h2t_ops/connectors/meetgeek/client.py:50` | `~/.h2t/config/secrets/meetgeek.md` |
+| the SessionStart context banner | `Config: ~/.h2t/config/ (…, secrets/)` |
+
+A new user following the banner puts keys in `~/.h2t/config/secrets/` and the loader never
+looks there. For the author both directories already exist, so the contradiction has never
+had a chance to show itself.
+
+`.dor` also appears as a default *output* location — `meetgeek_cli.py:949` defaults to
+`~/.dor/lake/meetgeek/uploads-staging/`, `process_transcripts.py`, `youtube_transcript_cli.py`
+and `convert_docx_to_md.py` write there too. On a machine without that vault these are writes
+into a directory the user never made and cannot interpret.
+
+### C2. `C:/dev` — 48 occurrences, 28 files
+
+Not only in error text. Two skills hardcode it as **behaviour**:
+
+```
+plugins/h2t-core/skills/scaffold-project/SKILL.md:61
+   Ask: "Где создать/дополнить директорию? (по умолчанию: C:/dev/{id})"
+plugins/h2t-core/skills/project-audit/SKILL.md:22
+   TEMPLATES_DIR="C:/dev/h2t-landings/templates"
+```
+
+The first offers a Windows path as the default project location to every user on every
+platform — and asks in Russian. The second points at **a different repository entirely**
+(`h2t-landings`), which an external user does not have and cannot obtain.
+
+The error-message class is the smaller half: `session-start/SKILL.md:18,22` and
+`handoff/SKILL.md:16` tell a failing user to run
+`uv tool install --editable C:/dev/h2t-skills`. `CLAUDE.md:94` documents
+`uv tool install --editable .` for exactly this case, so the tree already knows the right
+answer and does not use it.
+
+### C3. Machine names and other machines' disks
+
+14 occurrences in 8 files name a specific machine; 4 more reference `E:/DROPBOX` (a drive
+letter on the author's Windows box), including two live test fixtures in
+`plugins/h2t-core/skills/init-project/scripts/test_detect.py:32,90`.
+
+## Phase I — architecture review (`claude-code-guide`)
+
+Run as an agent, at the operator's explicit request. Its findings, and what verification
+changed:
+
+| finding | agent's severity | verified |
+|---|---|---|
+| hardcoded `C:/dev` in skills | Critical, 3 files | **understated** — 28 files, and two of them hardcode behaviour, not just error text |
+| `design/SKILL.md` 1361 lines with no `references/` | Medium | confirmed; `project-audit` (472) and `setup` (262) are the next two |
+| `inject-h2t-context` three-way output branch | High | confirmed present; see below |
+| `Triggers:` phrases inside `description` frontmatter | Low | confirmed, ~18 skills |
+| plugin.json / marketplace.json compliance | none | confirmed clean — required fields present, sources relative |
+| hook events, matchers, output channels | correct | confirmed |
+| `plugins/*/agents/` | none found | confirmed — 0 directories, since #430 removed the only one |
+| dependencies | stdlib only in hooks | confirmed |
+
+The agent **missed `~/.dor` entirely**, which is the larger of the two hardcode classes. Worth
+recording as a property of the method rather than of the agent: it was asked about architecture
+and conformance to documented Claude Code behaviour, and `.dor` violates neither — it is a
+perfectly well-formed path to somewhere only one person has.
+
+On `inject-h2t-context`, the agent's concern is the fallback branch emitting a top-level
+`{"additionalContext": …}` rather than the documented
+`{"hookSpecificOutput": {"hookEventName": …, "additionalContext": …}}`. That branch fires when
+`CLAUDE_PLUGIN_ROOT` is unset — which is precisely a non-Claude-Code harness, so it connects
+directly to phase K.
