@@ -136,7 +136,7 @@ for judgement entirely.
 **The better the witness, the less agent is required.** That is the inversion of
 the original goal, and it is the finding, not a compromise.
 
-## Open decision: what triggers level 3
+## Decided 2026-08-26: what triggers level 3
 
 Both options measured on this repo. Repo is private, so Actions minutes are
 metered; the last 30 CI runs cost 2613s (~44 min), one run ~87s.
@@ -165,7 +165,29 @@ records the night handoff asked for a session name while the user slept and the
 summary was lost — a mass `git mv` at that moment is the same situation with a
 write. And the end of a session is usually a dirty tree; cleanup would add to it.
 
-### Recommendation
+### Decision
+
+**A, built after the legacy migration, not before it.** Recorded 2026-08-26.
+
+The measurement that fixed the order: on 2026-08-26 all 111 candidates were
+older than 60 days, so every one of them predates the hook and none could
+carry a stamp. A cron switched on that day would have collected exactly those
+111 on its first run — the pile this document says must never enter the loop.
+Once they are gone the cron's domain is empty until roughly 2026-10-25, which
+is the first date a document created after the hook can be both unstamped and
+60 days old. An empty domain is not an argument against A: the workflow opens a
+PR only when something changed, so an idle month costs nothing and prints
+nothing.
+
+Two things measured on the way that this document had slightly wrong:
+
+- The witness reaches the consumer through `status`, not through `pr:`.
+  `plan_closer` writes both lines; `retire` filters on `_CLOSED` and never
+  reads `pr:`. The chain holds only because the hook writes them together — a
+  `pr:` set without a `status` would leave the document a candidate.
+- `_CLOSED` has no value for "open on purpose". Long-running work older than
+  60 days with no merged PR is indistinguishable from abandoned work. Nothing
+  in the repo uses such a status today, so the risk is latent, not observed.
 
 Split by whether the step changes files, not by trigger.
 
@@ -194,14 +216,20 @@ exception must be referenced from outside its own directory. That reference
 count is what separates live code filed under `skills/` from a ghost — it was 0
 for `docs-cleanup` and at least 1 for all four survivors.
 
-## State on 2026-08-24
+## State on 2026-08-26
 
 | piece | state |
 |---|---|
 | debt line in the briefing | shipped, #408 |
 | deny-by-default under `docs/` | shipped, #408; empty-dir hole closed same PR |
 | `docs-lint retire` | shipped, #408; evidence column corrected #409 |
-| close plans on merge | PR #410, CI green |
-| remove `docs-cleanup` + ghost guard | PR #411, CI green |
-| weekly cleanup workflow | not built — the open decision above |
-| retire the 111 legacy documents | not run — the owner's call about their own history |
+| close plans on merge | shipped, #410 |
+| remove `docs-cleanup` + ghost guard | shipped, #411 |
+| weekly cleanup workflow | decided (A), not built — waits on the 42 below |
+| retire the 111 legacy documents | 69 archived by `retire --never-shipped`; 42 left for a person |
+
+The migration was split by evidence, not done wholesale. `work_commits == 0`
+means no commit ever touched the document and code together — measured, not
+inferred — and that pile moved by command. The other 42 had such a commit,
+which is far too weak to write `status: done` into a file, so they are read by
+a person one at a time.

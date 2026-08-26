@@ -1266,7 +1266,8 @@ def _run_new(raw: list[str]) -> None:
 
 
 def _run_retire(
-    rp: Path, apply: bool = False, stale_days: int = 60, json_output: bool = False
+    rp: Path, apply: bool = False, stale_days: int = 60, json_output: bool = False,
+    never_shipped: bool = False,
 ) -> None:
     """List stale plans/specs, and with --apply move them into docs/archive/.
 
@@ -1277,7 +1278,8 @@ def _run_retire(
     """
     cfg = load_config(rp)
     candidates = find_retire_candidates(
-        rp, stale_days=stale_days, exclude_dirs=cfg.get("exclude_dirs")
+        rp, stale_days=stale_days, exclude_dirs=cfg.get("exclude_dirs"),
+        never_shipped=never_shipped,
     )
 
     if json_output:
@@ -1304,6 +1306,7 @@ def _run_retire(
             f"'правок' считает и коммит создания, и массовые прогоны docs-lint, "
             f"поэтому сам по себе ничего не говорит.\n"
             f"Переместить в docs/archive/: docs-lint retire --apply"
+            f"{' --never-shipped' if never_shipped else ''}"
         )
         return
 
@@ -1380,6 +1383,9 @@ def main() -> None:
         parser.add_argument("--older-than", dest="older_than", type=int, default=60,
                             metavar="DAYS",
                             help="retire: age above which an open doc is a candidate")
+        parser.add_argument("--never-shipped", dest="never_shipped", action="store_true",
+                            help="retire: only docs with no commit that touched them "
+                                 "and code together")
         args = parser.parse_args(raw)
         rp = _resolve_root(args.root)
 
@@ -1396,7 +1402,8 @@ def main() -> None:
             _run_doctor(rp, json_output=args.json_output, no_pymarkdown=args.no_pymarkdown)
         elif cmd == "retire":
             _run_retire(rp, apply=args.apply, stale_days=args.older_than,
-                        json_output=args.json_output)
+                        json_output=args.json_output,
+                        never_shipped=args.never_shipped)
         return
 
     parser = argparse.ArgumentParser()
