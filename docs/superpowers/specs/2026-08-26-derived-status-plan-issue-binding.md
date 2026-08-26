@@ -102,6 +102,21 @@ judgement.
 
 `partial` must **not** enter `_CLOSED` in `retire.py`: partially shipped work is live work.
 
+### What the derivation does not buy
+
+It moves the witness from *the author at creation* to *whoever closed the issue*, which is
+later and better informed. It does not make the witness infallible.
+
+Measured while reviewing the 42 legacy documents: `2026-05-28-lifecycle-os-harness-contract.md`
+has all four of its issues (#240, #211, #196, #197) closed on GitHub, and the document is
+nonetheless partial — no `h2t_lifecycle_event` emission and no `.h2t-lint-cache.json` exist in
+the tree. The derivation would call it `done`. Its own embedded review says
+"PARTIALLY IMPLEMENTED".
+
+So the guarantee is bounded: **the field stops being unfalsifiable, and starts being wrong in
+the same way the issue tracker is wrong.** That is a large improvement and not a proof. An
+issue closed without the work finished stays a defect this spec cannot see.
+
 ## Guarantee
 
 Nothing can be guaranteed inside a document — a document does not resist editing. The
@@ -117,12 +132,50 @@ five, and one and a half are covered.
 | hand edit in an IDE, merge from elsewhere | **nothing** — `.github/workflows/evals.yml` runs ruff and pytest and never looks at `docs/` | `docs-lint audit` in CI |
 
 The first draft of this spec listed three paths and missed two. It was itself written with a
-Bash heredoc, straight past row four — which is the shortest possible demonstration that the
-hook cannot be the guarantee. **CI is load-bearing, not a backstop.**
+Bash heredoc, straight past row four — the shortest possible demonstration that the Claude
+hook cannot be the guarantee: it sees tool calls, and a script is not one.
 
-`post_git_commit_docs_lint.py` looks like a sixth cover and is not one: it runs after a commit
-touching `docs/*.md` (`post_git_commit_docs_lint.py:46`) but exits 0 even on findings
-(`:206`, `:221`). It reports; it does not gate.
+### CI cannot be the gate here, and the reason is structural
+
+The obvious answer — put `docs-lint audit` in CI — does not produce a guarantee on this
+repository. Measured 2026-08-26:
+
+| probe | result |
+|---|---|
+| `repos/.../branches/main/protection` | `403 Upgrade to GitHub Pro` |
+| `repos/.../rulesets` | `403 Upgrade to GitHub Pro` |
+| repo visibility | private |
+| `mergeStateStatus` on an open PR with zero checks | `CLEAN` |
+| Actions runs after two consecutive pushes | none fired; `actions/permissions` reports `enabled: true` |
+
+A private repository on this plan tier cannot mark a status check **required**. So a red CI
+step does not block a merge — GitHub reports `CLEAN` with no checks at all, which is exactly
+what an unrun workflow looks like. And workflows can silently not run: two pushes to this
+branch produced no run while Actions reported itself enabled.
+
+CI stays in the plan as a **reporter**. It is not what makes the invariant hold.
+
+### The gate is a versioned `pre-commit` hook
+
+`git commit` is the one chokepoint every path passes through — the generator, `Write`, `Edit`,
+a Bash heredoc, and a hand edit in an IDE all end there. A pre-commit hook covers rows 3–5 of
+the table in one mechanism, and it is the only cover row 4 can have.
+
+The machinery already exists and is already proven here: `scripts/hooks/pre-commit` blocks a
+commit that drifts `marketplace.json` against any `plugin.json` (#74), installed by
+`scripts/hooks/install.sh`. The docs check is a second guarded block in the same file, on the
+same cheap `git diff --cached --name-only` guard, scoped to
+`docs/superpowers/{plans,specs}/*.md`.
+
+**It is not installed on this machine.** `core.hooksPath` is unset and `.git/hooks/` holds
+nothing but samples — so the marketplace check from #74 has been off here the whole time. A
+per-clone installer is a rule that only fires where someone remembered to run it, which is the
+same failure mode as a status field only a human updates. Setting `core.hooksPath` to a
+versioned directory removes the install step; that change belongs with this one.
+
+`post_git_commit_docs_lint.py` is not a cover either: it runs after a commit touching
+`docs/*.md` (`post_git_commit_docs_lint.py:46`) but exits 0 even on findings (`:206`, `:221`),
+and it fires after the write it would object to. It reports; it does not gate.
 
 **Escape hatch, mandatory.** A gate with no named exception gets routed around. `issue: none`
 with a `reason:` on the next line — deny-by-default plus an explicit exception, the same shape
@@ -168,9 +221,13 @@ ordering hazards are named below and are part of the contract, not advice.
    `fix-safe --only=frontmatter` backfills, `audit` reports the gap as a dimension.
 2. **Generator** (#422). `docs-lint new` requires `--issue N` / `--new-issue "<title>"` /
    `--no-issue "<reason>"`. Verify: no argument → non-zero exit, no file created.
-3. **Gates** (#423). `structure_guard` rejects a plan without the field on Write *and* on
-   Edit; `docs-lint audit` runs in `evals.yml`, failing on the `unlinked` dimension only.
-   Verify: a planted file blocks at the hook and fails in CI; a compliant file passes both.
+3. **Gates** (#423). The `unlinked` check joins `scripts/hooks/pre-commit`, and
+   `core.hooksPath` is pointed at a versioned directory so no per-clone install is needed;
+   `structure_guard` rejects a plan without the field on Write *and* on Edit, as the fast
+   path; `docs-lint audit` joins `evals.yml` as a reporter. Verify: a planted file is
+   refused by `git commit`, including one written with a heredoc; a compliant file commits
+   cleanly. The second half is the control — without it the hook is indistinguishable from a
+   hook that blocks everything.
 4. **Reconciliation** (#424). `docs-lint reconcile [--apply]` computes the table above via
    `gh` and reports drift; `plan_closer` switches to the derived value; the weekly cron runs
    it and opens a PR. Verify: a doc whose cache is deliberately wrong shows up as drift; a
