@@ -192,3 +192,34 @@ def test_hint_still_reports_empty_backlog_when_github_healthy():
     )
     hints = _build_hints(data)
     assert any("Нет открытых issues" in h for h in hints), hints
+
+
+def test_hint_when_a_versioned_hook_is_not_wired_into_the_clone():
+    """A hook git never runs looks exactly like a repo with no hook at all."""
+    data = {
+        "project": {"id": "repo", "domain": "dev"},
+        "git": {
+            "branch": "main",
+            "hooks": {"versioned": True, "active": False, "dir": "scripts/hooks"},
+        },
+        "github": {},
+        "stack": {"name": "python"},
+        "sessions": ["s.md"],
+    }
+    md, _ = format_briefing(data)
+    assert "core.hooksPath scripts/hooks" in md
+
+
+def test_no_hook_hint_when_git_runs_it():
+    data = {
+        "project": {"id": "repo", "domain": "dev"},
+        "git": {
+            "branch": "main",
+            "hooks": {"versioned": True, "active": True, "dir": "scripts/hooks"},
+        },
+        "github": {},
+        "stack": {"name": "python"},
+        "sessions": ["s.md"],
+    }
+    md, _ = format_briefing(data)
+    assert "hooksPath" not in md

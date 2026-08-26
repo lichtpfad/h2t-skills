@@ -273,6 +273,7 @@ def _build_hints(data: dict) -> list[str]:
     github = data.get("github", {})
     sessions = data.get("sessions", [])
     stack = data.get("stack", {})
+    hooks = data.get("git", {}).get("hooks", {})
 
     ptype = project.get("type", "")
 
@@ -305,5 +306,13 @@ def _build_hints(data: dict) -> list[str]:
     # Stack none
     if stack.get("name") == "none" or not stack.get("name"):
         hints.append("Stack не определён. Проверь наличие package.json / pyproject.toml / Cargo.toml / go.mod.")
+
+    # A versioned hook the clone never wired in blocks nothing and says nothing.
+    if hooks.get("versioned") and not hooks.get("active"):
+        hints.append(
+            "pre-commit лежит в репозитории, но git его не запускает в этом клоне — "
+            "проверки на коммите молча выключены. "
+            "`git config core.hooksPath {}`.".format(hooks.get("dir") or "scripts/hooks")
+        )
 
     return hints
