@@ -664,6 +664,20 @@ def _repo_name_from_root(rp: Path) -> str:
     return rp.name
 
 
+def _extra_doc_dirs(rp: Path, cfg: dict) -> list[str]:
+    """Doc directories this repository is allowed beyond the required set.
+
+    The repository answers first, through `extra_doc_dirs` in its own docs-lint config.
+    The bundled table is consulted only for the three private repositories that predate
+    the key — a stranger's repository could not appear in it at any value, so the table
+    alone made the question unanswerable for everyone else.
+    """
+    declared = cfg.get("extra_doc_dirs") or []
+    if declared:
+        return [str(d) for d in declared]
+    return REPO_EXTRA_DIRS.get(_repo_name_from_root(rp), [])
+
+
 def _collect_all_findings(rp: Path, no_pymarkdown: bool = False) -> list[dict]:
     """Run all checks and return findings list (navigation first, metadata last)."""
     cfg = load_config(rp)
@@ -672,7 +686,7 @@ def _collect_all_findings(rp: Path, no_pymarkdown: bool = False) -> list[dict]:
     all_findings = []
     all_findings.extend(find_orphan_files(rp, exclude_dirs=exclude_dirs))
     all_findings.extend(check_naming_all_docs(rp, exclude_dirs=exclude_dirs, naming_exceptions=naming_exceptions))
-    extra = REPO_EXTRA_DIRS.get(_repo_name_from_root(rp), [])
+    extra = _extra_doc_dirs(rp, cfg)
     # Coerce to str | None — YAML could set template to a non-string value
     _raw = cfg.get("template")
     template = _raw if isinstance(_raw, str) and _raw.strip() else None
@@ -1212,7 +1226,7 @@ def _legacy_main(args: argparse.Namespace) -> None:
             for f in fixes:
                 print(f"  FIX: {f}")
 
-        extra = REPO_EXTRA_DIRS.get(name, [])
+        extra = _extra_doc_dirs(rp, load_config(rp))
         failures = (
             check_structure(rp)
             + check_adr_naming(rp, exclude_dirs=_legacy_exclude)

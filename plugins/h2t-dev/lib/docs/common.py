@@ -64,12 +64,44 @@ def standards_dir() -> Path:
             return candidate
     return PLUGIN_ROOT / "references" / "standards"
 
-REPO_MANIFEST = [
+# The author's sixteen, kept only as the answer when the operator has no registry of
+# their own. Nothing here should depend on a stranger having these repositories.
+_BUNDLED_MANIFEST = [
     "h2t-ai", "h2t-business", "h2t-client", "h2t-content", "h2t-dcc",
     "h2t-evals", "h2t-factory", "h2t-graphs", "h2t-landings", "h2t-skills",
     "h2t-snap", "h2t-staging", "h2t-tools", "h2t-transcription",
     "h2t-vision", "h2t-voice",
 ]
+
+
+def _manifest() -> list[str]:
+    """Repository names, from the operator's registry when there is one.
+
+    `~/.h2t/config/repo-mapping.yaml` already lists every repository this user has —
+    31 entries here against the bundled 16 — and it is keyed by repository name, which
+    is exactly what the manifest is. Reading it means a stranger's repositories are
+    known to the tooling and the author's are not assumed.
+
+    The bundled list remains the fallback rather than an empty one: dropping to nothing
+    would silently turn off cross-repo behaviour for the machine that has the file
+    missing for an unrelated reason.
+    """
+    path = Path.home() / ".h2t" / "config" / "repo-mapping.yaml"
+    try:
+        import yaml
+    except ImportError:
+        return list(_BUNDLED_MANIFEST)
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    except (OSError, UnicodeDecodeError, yaml.YAMLError):
+        return list(_BUNDLED_MANIFEST)
+    mappings = data.get("mappings")
+    if not isinstance(mappings, dict) or not mappings:
+        return list(_BUNDLED_MANIFEST)
+    return sorted(str(k) for k in mappings)
+
+
+REPO_MANIFEST = _manifest()
 
 REQUIRED_CORE_DIRS = [
     "docs/superpowers/specs",
@@ -78,7 +110,9 @@ REQUIRED_CORE_DIRS = [
     "docs/reports",
 ]
 
-# Extra dirs allowed per repo — not flagged by check_legacy_dirs or structure checks
+# Extra dirs allowed per repo. Superseded by the `extra_doc_dirs` key in a repository's
+# own docs-lint config, which is where a repository can answer for itself; this dict is
+# the answer for the three that predate the key.
 REPO_EXTRA_DIRS: dict[str, list[str]] = {
     "h2t-evals":         ["ops", "contracts"],
     "h2t-transcription": ["methodology", "diagrams"],

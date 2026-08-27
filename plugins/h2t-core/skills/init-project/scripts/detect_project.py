@@ -18,14 +18,21 @@ sys.path.insert(0, str(PLUGIN_ROOT / "lib"))
 
 from gather.stack import detect_stack
 
-# Domain patterns: (regex on normalized forward-slash path, domain, confidence)
+# Domain patterns: (regex on the normalized forward-slash path, domain, confidence).
+#
+# These used to be anchored to `C:/dev/` — one machine's checkout root — so the same
+# repository detected as `hou2touch` there and as nothing at all anywhere else, including
+# the author's own Mac under ~/Projects. What actually carries the signal is the
+# repository's NAME, not where its parent directory happens to sit, so the patterns are
+# anchored to a path segment instead: `/h2t-vision` matches under any root.
+#
+# The two `Projects/` entries stay as they are: they name specific repositories rather
+# than a family, and a segment anchor would not make them more portable.
 DOMAIN_PATTERNS = [
-    (r"[Cc]:/dev/h2t-|[Cc]:/dev/hou2touch", "hou2touch", "high", "path C:/dev/h2t-* matches hou2touch"),
-    (r"[Cc]:/dev/crypto-", "crypto", "high", "path C:/dev/crypto-* matches crypto"),
+    (r"/(?:h2t-|hou2touch)", "hou2touch", "high", "repository named h2t-* matches hou2touch"),
+    (r"/crypto-", "crypto", "high", "repository named crypto-* matches crypto"),
     (r"HOU2TOUCH", "hou2touch", "high", "path contains HOU2TOUCH"),
-    (r"[Cc]:/dev/", "dev", "medium", "path C:/dev/* suggests dev"),
     (r"Projects/DOR|Projects/newsengine", "personal-os", "high", "known personal-os project path"),
-    (r"Projects/crypto-", "crypto", "high", "path ~/Projects/crypto-* matches crypto"),
 ]
 
 # File extensions that hint at art domain

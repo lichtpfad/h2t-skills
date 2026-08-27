@@ -15,17 +15,31 @@ from detect_project import (
 
 
 def test_detect_domain_h2t_prefix():
-    assert _detect_domain("C:/dev/h2t-vision") == ("hou2touch", "high", "path C:/dev/h2t-* matches hou2touch")
+    """The signal is the repository name, so the answer must not depend on the root."""
+    for path in ("C:/dev/h2t-vision", "/Users/x/Projects/h2t-vision", "/home/y/src/h2t-vision"):
+        assert _detect_domain(path) == (
+            "hou2touch", "high", "repository named h2t-* matches hou2touch"
+        ), path
 
 
 def test_detect_domain_crypto_prefix():
-    assert _detect_domain("C:/dev/crypto-etl") == ("crypto", "high", "path C:/dev/crypto-* matches crypto")
+    for path in ("C:/dev/crypto-etl", "/Users/x/Projects/crypto-etl"):
+        assert _detect_domain(path) == (
+            "crypto", "high", "repository named crypto-* matches crypto"
+        ), path
 
 
-def test_detect_domain_generic_dev():
+def test_an_unrecognised_repository_gets_no_domain():
+    """The catch-all this replaces answered `dev` for anything under `C:/dev/`.
+
+    That is a guess made from one machine's directory name: it fired for every
+    repository the author kept there and for nobody else's, at medium confidence, which
+    reads as information and is not. `init-project` already handles `None` — it asks.
+    """
     domain, confidence, reason = _detect_domain("C:/dev/some-project")
-    assert domain == "dev"
-    assert confidence == "medium"
+    assert domain is None
+    assert confidence == "low"
+    assert "no pattern match" in reason
 
 
 def test_detect_domain_dropbox_h2t():

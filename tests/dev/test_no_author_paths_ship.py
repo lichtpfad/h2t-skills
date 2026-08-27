@@ -6,7 +6,7 @@ knowledge base to `C:/dev/research-kb`, and `project-audit` defaulted `projects.
 to `C:/dev/h2t-landings/`. On every machine but one those resolve to nothing, and the
 failure lands far from its cause.
 
-This is a ratchet, not a wall. `KNOWN_DEBT` lists what is still there with the reason,
+This is a ratchet, not a wall. `EXPECTED` lists what is still there with the reason,
 and `test_known_debt_is_not_stale` fails when an entry is fixed without being removed —
 otherwise the list outlives the problem and the next reader trusts it.
 """
@@ -15,7 +15,11 @@ import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-SHIPPED = ROOT / "plugins"
+# Everything that ships. `plugins/` alone was the first version of this list, and
+# `h2t_ops/` — the package behind the nine CLI entry points, the first thing a stranger
+# installs — was outside it. The hint in `visual_ocr.py` telling them to install from
+# `C:/dev/h2t-tools` was found by a grep, not by this test.
+SHIPPED_ROOTS = [ROOT / "plugins", ROOT / "h2t_ops", ROOT / "lib", ROOT / "scripts"]
 
 # A drive-letter dev root, or a home directory with a name in it.
 # Two or more characters in the home-directory name: `/Users/x/` is a placeholder in a
@@ -26,54 +30,57 @@ AUTHOR_PATH = re.compile(
 )
 
 SKIP_NAMES = {"CHANGELOG.md"}
+SCANNED_SUFFIXES = {".py", ".md", ".yaml", ".yml", ".json", ".sh", ""}
 
-# path -> why it is still here. Each is a design question, not a rename.
-KNOWN_DEBT = {
-    # The domain-detection table keys on the author's Windows layout. Rewriting it is
-    # #444 — what replaces "where my repos live" is not a path substitution.
-    "h2t-core/skills/init-project/scripts/detect_project.py":
-        "domain patterns key on C:/dev/* — #444",
-    "h2t-core/skills/init-project/scripts/test_detect.py":
-        "asserts the patterns above — moves with them (#444)",
-    # Prose explaining a default that was removed. Harmless, but it keeps the literal
-    # in the tree, so it is listed rather than silently allowed.
-    "h2t-dev/lib/docs/common.py": "comment recording the removed C:/dev default",
-    "h2t-core/skills/scaffold-project/scripts/scaffold_project.py":
+# path -> why an author path is expected there. Two kinds, and the distinction matters:
+# prose recording a default that was removed, and fixtures that assert an old Windows
+# path still resolves — the second is not debt, it is the portability proof.
+EXPECTED = {
+    "plugins/h2t-core/skills/init-project/scripts/detect_project.py":
+        "comment recording the C:/dev anchor these patterns replaced",
+    "plugins/h2t-core/skills/init-project/scripts/test_detect.py":
+        "deliberate: fixtures proving a C:/dev path resolves the same as ~/Projects",
+    "plugins/h2t-dev/lib/docs/common.py":
+        "comment recording the removed C:/dev default",
+    "plugins/h2t-core/skills/scaffold-project/scripts/scaffold_project.py":
         "comment recording the removed _DEV_ROOT default",
-    "h2t-core/skills/scaffold-project/SKILL.md":
+    "plugins/h2t-core/skills/scaffold-project/SKILL.md":
         "prose recording the removed C:/dev/{id} default",
 }
 
 
 def _offenders() -> dict[str, list[str]]:
     found: dict[str, list[str]] = {}
-    for path in sorted(SHIPPED.rglob("*")):
-        if not path.is_file() or path.name in SKIP_NAMES:
+    for root in SHIPPED_ROOTS:
+        if not root.is_dir():
             continue
-        if path.suffix.lower() not in {".py", ".md", ".yaml", ".yml", ".json", ".sh", ""}:
-            continue
-        try:
-            text = path.read_text(encoding="utf-8")
-        except (OSError, UnicodeDecodeError):
-            continue
-        hits = [
-            f"{lineno}: {line.strip()[:110]}"
-            for lineno, line in enumerate(text.splitlines(), 1)
-            if AUTHOR_PATH.search(line)
-        ]
-        if hits:
-            found[str(path.relative_to(SHIPPED))] = hits
+        for path in sorted(root.rglob("*")):
+            if not path.is_file() or path.name in SKIP_NAMES:
+                continue
+            if path.suffix.lower() not in SCANNED_SUFFIXES:
+                continue
+            try:
+                text = path.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError):
+                continue
+            hits = [
+                f"{lineno}: {line.strip()[:110]}"
+                for lineno, line in enumerate(text.splitlines(), 1)
+                if AUTHOR_PATH.search(line)
+            ]
+            if hits:
+                found[str(path.relative_to(ROOT))] = hits
     return found
 
 
 def test_no_new_author_paths_ship():
-    offenders = {k: v for k, v in _offenders().items() if k not in KNOWN_DEBT}
+    offenders = {k: v for k, v in _offenders().items() if k not in EXPECTED}
     assert not offenders, "author-machine paths in shipped files:\n" + "\n".join(
         f"  {rel}\n    " + "\n    ".join(lines) for rel, lines in offenders.items()
     )
 
 
-def test_known_debt_is_not_stale():
-    """Fixing an entry without deleting it leaves a list that lies to the next reader."""
-    clean = set(KNOWN_DEBT) - set(_offenders())
-    assert not clean, f"KNOWN_DEBT names files that are already clean: {sorted(clean)}"
+def test_expected_list_is_not_stale():
+    """An entry that is now clean means the list lies to the next reader."""
+    clean = set(EXPECTED) - set(_offenders())
+    assert not clean, f"EXPECTED names files that are already clean: {sorted(clean)}"
