@@ -37,7 +37,13 @@ output, and only then explain the next action.
 Use the `scripts/setup_h2t.py` file bundled next to this `SKILL.md`.
 
 Run it through `uv`, which is a prerequisite of this skill anyway — `doctor` reports
-`uv` status, and `install-h2t-ops` cannot work without it. One form on every platform:
+`uv` status, and `install-h2t-ops` cannot work without it.
+
+The snippet below is POSIX shell. On Windows run it from Git Bash, which the audit
+confirmed present as `/usr/bin/sh`; native PowerShell or CMD will not parse `if !
+command -v` and would fail before printing the message it exists to print. The install
+line the message prints for Windows is PowerShell, because that is what installs uv
+there — it is what the user runs next, not what runs this snippet.
 
 ```bash
 if ! command -v uv >/dev/null 2>&1; then
