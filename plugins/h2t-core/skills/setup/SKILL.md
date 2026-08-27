@@ -99,7 +99,7 @@ python scripts/setup_h2t.py install-h2t-ops --source main --json
 If installing from a local checkout (uses `--editable` automatically):
 
 ```bash
-python scripts/setup_h2t.py install-h2t-ops --source C:/dev/h2t-skills --json
+python scripts/setup_h2t.py install-h2t-ops --source . --json   # from a checkout; `--source main` installs from GitHub
 # macOS: --source ~/dev/h2t-skills
 ```
 

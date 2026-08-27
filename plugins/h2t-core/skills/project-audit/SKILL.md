@@ -19,8 +19,17 @@ command -v h2t-project-audit-scan >/dev/null 2>&1 || {
   exit 1
 }
 
-TEMPLATES_DIR="C:/dev/h2t-landings/templates"
-PROJECTS_YAML="C:/dev/h2t-landings/projects.yaml"
+# h2t-landings is a separate repository. Resolve where sibling repos live rather than
+# naming a drive letter; outside the author's machines neither the path nor the repo exists,
+# and the batch modes that need them degrade rather than fail (see below).
+DEV_ROOT="${H2T_DEV_ROOT:-$(cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)/.." && pwd)}"
+TEMPLATES_DIR="$DEV_ROOT/h2t-landings/templates"
+PROJECTS_YAML="$DEV_ROOT/h2t-landings/projects.yaml"
+
+if [ ! -d "$TEMPLATES_DIR" ]; then
+  echo "NOTE: h2t-landings not found at $DEV_ROOT — positioning templates and --tier batch"
+  echo "      mode are unavailable. Single-repo audit still works."
+fi
 ```
 
 ## Argument Parsing
@@ -30,15 +39,15 @@ Parse the user's command arguments:
 | Pattern | Meaning |
 |---------|---------|
 | No args | Audit current working directory |
-| `h2t-snap` | Audit `C:/dev/h2t-snap` |
+| `h2t-snap` | Audit `$DEV_ROOT/h2t-snap` |
 | `/path/to/repo` | Audit that path directly |
 | `--tier product` | Batch: audit all projects with `product_potential: high` from projects.yaml |
 | `--dry-run` | Show what would be generated, don't write files |
 
 **Repo path resolution:**
 1. If argument is an absolute path → use it
-2. If argument is a repo id → try `C:/dev/{id}`
-3. If `C:/dev/{id}` doesn't exist → error: "Repo not found. Specify full path."
+2. If argument is a repo id → try `$DEV_ROOT/{id}`
+3. If `$DEV_ROOT/{id}` doesn't exist → error: "Repo not found. Specify full path."
 4. No argument → use current working directory
 
 ## Stage 1: SCAN (Python script, no LLM)

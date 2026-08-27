@@ -58,13 +58,23 @@ Parse the user's answer. Ask follow-up only for any missing required fields.
 
 ## Step 2: Confirm Base Directory + Detect State
 
-Ask: "Где создать/дополнить директорию? (по умолчанию: C:/dev/{id})"
+Resolve the default base directory first — do not name a literal path:
+
+```bash
+BASE_DIR="${H2T_DEV_ROOT:-$(cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)/.." && pwd)}"
+```
+
+`H2T_DEV_ROOT` when set; otherwise the parent of the current checkout, which is where sibling
+repositories already live. This used to read `C:/dev/{id}`, correct on one machine and wrong
+on every other — including the author's Mac, where checkouts are under `~/Projects`.
+
+Ask: "Where should the project go? (default: `$BASE_DIR/{id}`)"
 
 Accept:
-- Enter / `.` / `да` → use `C:/dev/{id}`
+- Enter / `.` / `yes` → use `$BASE_DIR/{id}`
 - A path → use that path exactly
 
-Resolve `project_dir` = `{base_dir}/{id}` (prepend `C:/dev/` if relative).
+Resolve `project_dir` = `{base_dir}/{id}` (prepend `$BASE_DIR/` if relative).
 
 Run state detection:
 

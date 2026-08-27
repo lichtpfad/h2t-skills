@@ -22,11 +22,21 @@ def _make_fake_init(tmp_path: Path) -> Path:
     return plugin_root
 
 
+# These tests used to patch `scaffold_project._DEV_ROOT` as well. It was never read: the
+# module defined it and used `_H2T_DEV_ROOT` — derived at import by `_find_h2t_dev_root()` —
+# everywhere it mattered. The patch therefore did nothing, and its only effect was to make
+# removing the dead constant (#434) look like a breakage. The `_PLUGIN_ROOT` patch below is
+# equally inert for the same reason and is left alone: it is not what this change is about.
+#
+# The file already knew this — see the comment above the `_H2T_DEV_ROOT` patch further down,
+# which states plainly that run_docs_init reads that name and not these two. One test acted
+# on the knowledge; three kept the dead patch beside it.
+
+
 def test_run_docs_init_passes_repo_name_not_path(tmp_path, monkeypatch):
     """run_docs_init passes repo name (positional), not --cwd."""
     import scaffold_project
     plugin_root = _make_fake_init(tmp_path)
-    monkeypatch.setattr(scaffold_project, "_DEV_ROOT", tmp_path)
     monkeypatch.setattr(scaffold_project, "_PLUGIN_ROOT", plugin_root)
     project_dir = tmp_path / "my-repo"
     project_dir.mkdir()
@@ -42,7 +52,6 @@ def test_run_docs_init_passes_apply_flag(tmp_path, monkeypatch):
     """run_docs_init always passes --apply so files are actually created."""
     import scaffold_project
     plugin_root = _make_fake_init(tmp_path)
-    monkeypatch.setattr(scaffold_project, "_DEV_ROOT", tmp_path)
     monkeypatch.setattr(scaffold_project, "_PLUGIN_ROOT", plugin_root)
     project_dir = tmp_path / "my-repo"
     project_dir.mkdir()
@@ -58,7 +67,6 @@ def test_run_docs_init_passes_repo_root_for_non_dev_project(tmp_path, monkeypatc
     import scaffold_project
 
     plugin_root = _make_fake_init(tmp_path)
-    monkeypatch.setattr(scaffold_project, "_DEV_ROOT", tmp_path / "dev")
     monkeypatch.setattr(scaffold_project, "_PLUGIN_ROOT", plugin_root)
     project_dir = tmp_path / "work" / "my-repo"
     project_dir.mkdir(parents=True)
@@ -78,7 +86,6 @@ def test_run_docs_init_passes_repo_root_for_non_dev_project(tmp_path, monkeypatc
 def test_run_docs_init_returns_error_on_failure(tmp_path, monkeypatch):
     import scaffold_project
     plugin_root = _make_fake_init(tmp_path)
-    monkeypatch.setattr(scaffold_project, "_DEV_ROOT", tmp_path)
     monkeypatch.setattr(scaffold_project, "_PLUGIN_ROOT", plugin_root)
     project_dir = tmp_path / "my-repo"
     project_dir.mkdir()

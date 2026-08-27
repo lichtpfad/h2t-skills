@@ -8,7 +8,6 @@ Usage:
 import argparse
 import io
 import json
-import os
 import subprocess
 import sys
 from pathlib import Path
@@ -408,7 +407,10 @@ def cmd_github(args: argparse.Namespace) -> dict:
 
 
 _PLUGIN_ROOT = Path(__file__).resolve().parents[3]
-_DEV_ROOT = Path(os.environ.get("H2T_DEV_ROOT", "C:/dev"))
+# There was a `_DEV_ROOT = Path(os.environ.get("H2T_DEV_ROOT", "C:/dev"))` here, defined and
+# never read — the sibling-plugin lookup below uses _H2T_DEV_ROOT, which is derived rather
+# than configured. Removed in the #434 sweep: a hardcoded path nothing uses still answers grep,
+# and it sized part of that issue against code that could not run.
 
 
 def _find_h2t_dev_root() -> Path | None:

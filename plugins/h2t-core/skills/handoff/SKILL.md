@@ -13,7 +13,7 @@ metadata:
 
 ```bash
 command -v h2t-handoff >/dev/null 2>&1 || {
-  echo "ERROR: h2t-handoff not found. Run: uv tool install --editable C:/dev/h2t-skills"
+  echo "ERROR: h2t-handoff not found. From a checkout: uv tool install --editable ."
   exit 1
 }
 ```

@@ -15,11 +15,11 @@ metadata:
 
 ```bash
 command -v h2t-gather >/dev/null 2>&1 || {
-  echo "ERROR: h2t-gather not found. Run: uv tool install --editable C:/dev/h2t-skills"
+  echo "ERROR: h2t-gather not found. From a checkout: uv tool install --editable ."
   exit 1
 }
 command -v h2t-activity-log >/dev/null 2>&1 || {
-  echo "ERROR: h2t-activity-log not found. Run: uv tool install --editable C:/dev/h2t-skills"
+  echo "ERROR: h2t-activity-log not found. From a checkout: uv tool install --editable ."
   exit 1
 }
 ```

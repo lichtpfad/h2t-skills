@@ -6,7 +6,35 @@ import shutil
 import subprocess
 from pathlib import Path
 
-DEV_ROOT = Path(os.environ.get("H2T_DEV_ROOT", "C:/dev"))
+
+def _dev_root() -> Path:
+    """Where sibling h2t repositories live (#434).
+
+    The default was `C:/dev`, which is right on exactly one machine and wrong everywhere
+    else — including the author's Mac, where checkouts are under ~/Projects. Resolution
+    order, each step failing over to the next:
+
+    1. `H2T_DEV_ROOT` — the explicit answer, unchanged and still first.
+    2. Derived: if this file sits inside a checkout (a `pyproject.toml` four levels up),
+       sibling repositories are that checkout's parent. Correct on both machines with no
+       configuration — `C:/dev/h2t-skills` gives `C:/dev`, `~/Projects/h2t-skills` gives
+       `~/Projects`.
+    3. `~/dev` — the conventional guess, used only when running from the installed plugin
+       cache, where the checkout layout is absent and nothing better is knowable.
+
+    Step 2 is why this is a function and not a constant: a constant would have to pick one
+    of the three at import time, and the cache case cannot be distinguished then.
+    """
+    override = os.environ.get("H2T_DEV_ROOT")
+    if override:
+        return Path(override)
+    checkout = Path(__file__).resolve().parents[4]
+    if (checkout / "pyproject.toml").is_file():
+        return checkout.parent
+    return Path.home() / "dev"
+
+
+DEV_ROOT = _dev_root()
 
 REPO_MANIFEST = [
     "h2t-ai", "h2t-business", "h2t-client", "h2t-content", "h2t-dcc",
