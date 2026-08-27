@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- fix(docs-lint, docs-sync-labels, milestone-closure): run through `uv run --no-project
+  --with <pkg> python` instead of probing for `~/.h2t/venv`. The installer never created
+  that directory — `setup_h2t.py` contains the word `venv` zero times — so the contract
+  held only where it had been built by hand (#449)
+
 - feat(standards): the eight standards documents ship inside the plugin, under
   `references/standards/`. They lived only at `C:/dev/docs/standards/` — a path on one
   machine — while every skill and rule that cited them assumed they were readable
