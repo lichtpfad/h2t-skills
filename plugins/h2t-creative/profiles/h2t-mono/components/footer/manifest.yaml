@@ -1,6 +1,0 @@
-component: footer
-fields:
-  copy:
-    type: html
-    required: false
-    default: "&copy; 2026 Stanislav Glazov"

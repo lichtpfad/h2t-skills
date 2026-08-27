@@ -1,9 +1,0 @@
-component: faq
-fields:
-  title:
-    type: text
-    required: false
-    default: "FAQ"
-  items_html:
-    type: html
-    required: true

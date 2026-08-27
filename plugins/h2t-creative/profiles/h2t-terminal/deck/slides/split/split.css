@@ -1,7 +1,0 @@
-/* split — h2 + 2-column body.
- * Grid primitive (.split) lives in frame.css; this file only owns the column
- * wrappers and outer spacing.
- */
-
-.split-block .split { margin-top: 14px; }
-.split-col > * + * { margin-top: 12px; }

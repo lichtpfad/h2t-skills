@@ -1,9 +1,0 @@
-component: principles-grid
-fields:
-  title:
-    type: text
-    required: false
-    default: "Key Principles"
-  cards_html:
-    type: html
-    required: true

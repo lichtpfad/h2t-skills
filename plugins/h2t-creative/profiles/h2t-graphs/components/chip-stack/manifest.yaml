@@ -1,5 +1,0 @@
-component: chip-stack
-fields:
-  chips_html:
-    type: html
-    required: true

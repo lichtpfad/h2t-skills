@@ -1,8 +1,0 @@
-/* title-body — default content slide (System B canonical).
- * Composition: .label kicker + h2 (Playfair 27px) + .rule + body prose
- * (Georgia 16.5px line-height 1.65). All sizes flow from tokens.css
- * baseline rules; this file owns intra-block spacing only.
- */
-
-.title-body-block .body { margin-top: 6px; max-width: 60ch; }
-.title-body-block .body > * + * { margin-top: 12px; }

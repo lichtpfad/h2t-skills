@@ -1,7 +1,0 @@
-.site-footer {
-  padding: var(--space-md) 0;
-  border-top: 1px solid var(--border);
-  font-size: 10px;
-  color: var(--fg-muted);
-  letter-spacing: 0.1em;
-}

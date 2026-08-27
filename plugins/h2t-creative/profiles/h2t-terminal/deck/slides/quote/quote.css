@@ -1,7 +1,0 @@
-/* quote — h2 + emphasized quote-block + optional bullet-list below.
- * Both .quote-block and .bullet-list primitives live in frame.css.
- */
-
-.quote-slide .quote-block { margin-top: 14px; }
-.quote-slide .bullet-list { margin-top: 18px; }
-.quote-slide .bullet-list:empty { display: none; }

@@ -1,9 +1,0 @@
-.principles-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: var(--space-sm);
-}
-
-@media (max-width: 768px) {
-  .principles-grid { grid-template-columns: 1fr !important; }
-}

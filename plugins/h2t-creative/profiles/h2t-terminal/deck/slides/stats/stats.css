@@ -1,6 +1,0 @@
-/* stats — h2 + 3-up stat row.
- * Stat-row primitive (.stat-row, .stat-box, .stat-number, .stat-label) lives in
- * frame.css. This file only owns layout-level spacing for the stats block.
- */
-
-.stats-block .stat-row { margin-top: 14px; }

@@ -1,9 +1,0 @@
-component: problem-grid
-fields:
-  title:
-    type: text
-    required: false
-    default: "The Problem"
-  cards_html:
-    type: html
-    required: true

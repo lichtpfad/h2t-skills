@@ -1,5 +1,0 @@
-.content-section { padding: var(--space-xl); background: var(--color-bg2); border-top: 1px solid var(--color-border); }
-.section-inner { max-width: 1200px; margin: 0 auto; }
-.section__label { font-family: var(--font-mono); font-size: 0.55rem; color: var(--color-text-dim); letter-spacing: 0.25em; text-transform: uppercase; margin-bottom: var(--space-sm); }
-.section__title { font-family: var(--font-sans); font-size: clamp(1.5rem, 3vw, 2.5rem); font-weight: 700; color: var(--color-text-hi); margin-bottom: var(--space-lg); }
-.section__body { font-family: var(--font-mono); font-size: 0.875rem; color: var(--color-text); line-height: 1.8; }

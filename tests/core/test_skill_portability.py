@@ -44,10 +44,8 @@ KNOWN_DEBT = frozenset({
     "h2t-dev:docs-lint",
     "h2t-dev:docs-sync-labels",
     "h2t-dev:milestone-closure",
-    "h2t-creative:deck",
-    "h2t-creative:landing",
-    "h2t-creative:style-create",
-    "h2t-creative:style-validate",
+    # h2t-creative and its four entries left with the plugin: it was withdrawn from the
+    # release as unfinished, and its skills no longer ship.
 })
 
 

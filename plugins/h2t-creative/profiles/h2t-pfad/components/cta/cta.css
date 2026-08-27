@@ -1,7 +1,0 @@
-.cta-section { padding: var(--space-xl) var(--space-lg); background: var(--color-bg); border-top: 1px solid var(--color-border); text-align: center; }
-.cta-inner { max-width: 1200px; margin: 0 auto; }
-.cta-btn { display: inline-block; position: relative; font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--color-accent); text-decoration: none; padding: var(--space-sm) var(--space-lg); border: 1px solid var(--color-accent-dim); transition: background 0.2s; }
-.cta-btn:hover { background: var(--color-accent-glow); }
-.cta-btn::before { content: ''; position: absolute; top: -1px; left: -1px; width: 6px; height: 6px; border-top: 1px solid var(--color-accent); border-left: 1px solid var(--color-accent); }
-.cta-btn .corner-b { position: absolute; inset: 0; pointer-events: none; }
-.cta-btn .corner-b::after { content: ''; position: absolute; bottom: -1px; right: -1px; width: 6px; height: 6px; border-bottom: 1px solid var(--color-accent); border-right: 1px solid var(--color-accent); }

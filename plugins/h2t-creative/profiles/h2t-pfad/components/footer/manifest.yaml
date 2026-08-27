@@ -1,5 +1,0 @@
-component: footer
-fields:
-  copy:
-    type: text
-    required: true

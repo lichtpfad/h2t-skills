@@ -1,8 +1,0 @@
-.hero { padding: var(--space-xl) var(--space-lg); background: var(--color-bg); position: relative; }
-.hero::before { content: ''; position: absolute; top: 36px; left: 36px; width: 16px; height: 16px; border-top: 1px solid var(--color-fg-muted); border-left: 1px solid var(--color-fg-muted); }
-.hero::after  { content: ''; position: absolute; bottom: 36px; right: 36px; width: 16px; height: 16px; border-bottom: 1px solid var(--color-fg-muted); border-right: 1px solid var(--color-fg-muted); }
-.hero-inner { max-width: 1200px; margin: 0 auto; }
-.hero__label { font-size: 8px; color: var(--color-fg-dim); letter-spacing: 0.2em; text-transform: uppercase; margin-bottom: var(--space-md); }
-.hero__label::before { content: '// '; color: var(--color-accent); }
-.hero__headline { font-size: 2.5rem; font-weight: 400; color: var(--color-fg); line-height: 1.15; margin-bottom: var(--space-md); }
-.hero__subline { font-size: 11px; color: var(--color-fg-dim); line-height: 1.6; max-width: 600px; }

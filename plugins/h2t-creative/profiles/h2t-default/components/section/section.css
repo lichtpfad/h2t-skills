@@ -1,3 +1,0 @@
-.content__title { font-family: var(--font-display); margin-bottom: var(--space-lg); }
-.content__body { max-width: 72ch; color: var(--color-fg); }
-.content__body p + p { margin-top: var(--space-md); }

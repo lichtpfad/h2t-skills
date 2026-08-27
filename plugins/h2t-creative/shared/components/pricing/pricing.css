@@ -1,9 +1,0 @@
-.pricing__card { border: 1px solid var(--color-border); border-radius: var(--radius-lg); padding: var(--space-xl); display: flex; flex-direction: column; gap: var(--space-md); }
-.pricing__plan { font-family: var(--font-display, inherit); margin: 0; }
-.pricing__price-row { display: flex; align-items: baseline; gap: var(--space-sm); }
-.pricing__price { font-size: 2.5rem; font-weight: 700; color: var(--color-accent); }
-.pricing__period { color: var(--color-text-dim); font-size: 0.875rem; }
-.pricing__features { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: var(--space-sm); color: var(--color-text-dim); }
-.pricing__features li::before { content: "✓ "; color: var(--color-accent); }
-.pricing__cta { display: inline-block; background-color: var(--color-accent); color: var(--color-on-accent, #fff); padding: var(--space-md) var(--space-xl); border-radius: var(--radius-md); text-decoration: none; font-weight: 700; text-align: center; }
-.pricing__cta:hover { background-color: var(--color-accent-hover, var(--color-accent)); }
