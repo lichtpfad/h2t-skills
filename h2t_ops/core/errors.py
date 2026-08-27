@@ -23,6 +23,31 @@ class UsageError(H2TError):
     kind = "usage"
 
 
+# The remedy for a missing runtime dependency, in one place because it was wrong in six.
+#
+# Every one of them said `pip install <package>`, and `h2t-ops` runs from a uv tool
+# environment which ships without pip — measured 2026-08-27:
+# `~/.local/share/uv/tools/h2t-ops/bin/python -m pip` answers "No module named pip".
+# So the instruction fired at the moment of failure and could not be followed there.
+#
+# The second half said "(or run /h2t-core:setup)", a slash command inside Claude Code,
+# offered to somebody reading a traceback in a terminal.
+#
+# And all six named packages that pyproject already declares and that are installed.
+# A missing one is a broken install, not an absent extra, so the remedy is to repair the
+# install rather than to add a package to it.
+def broken_install_hint(*packages: str) -> str:
+    """Name what is missing, then how to repair the install it is missing from."""
+    named = " ".join(packages)
+    return (
+        f"{named} is declared in pyproject, so a missing one means a broken install "
+        "rather than an absent extra. Repair it: "
+        "uv tool install --editable <h2t-skills checkout>. `pip` is unavailable here — "
+        "the uv tool environment ships without it; for one package use "
+        f"`uv pip install --python <the h2t-ops interpreter> {named}`."
+    ).strip()
+
+
 class ConfigError(H2TError):
     kind = "config"
 

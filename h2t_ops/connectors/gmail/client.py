@@ -17,7 +17,7 @@ from email.mime.text import MIMEText
 from pathlib import Path
 from typing import Any
 
-from h2t_ops.core.errors import AuthError, ConfigError, UsageError
+from h2t_ops.core.errors import AuthError, ConfigError, UsageError, broken_install_hint
 from h2t_ops.core.google_auth import (
     build_google_service,
     resolve_google_credentials,
@@ -59,10 +59,7 @@ def _bind_http_error() -> None:
         except ImportError as e:
             raise ConfigError(
                 "Google API libraries not installed.",
-                hint=(
-                    "pip install google-api-python-client google-auth "
-                    "google-auth-oauthlib  (or run /h2t-core:setup)"
-                ),
+                hint=broken_install_hint("google-api-python-client", "google-auth", "google-auth-oauthlib"),
             ) from e
         HttpError = _real
 

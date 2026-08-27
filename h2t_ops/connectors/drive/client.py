@@ -22,6 +22,7 @@ from h2t_ops.core.errors import (
     NotFoundError,
     ProviderError,
     UsageError,
+    broken_install_hint,
 )
 from h2t_ops.core.google_auth import (
     build_google_service,
@@ -178,7 +179,7 @@ def _media_io_base_download():
     except ImportError as e:
         raise ConfigError(
             "Google API libraries not installed.",
-            hint="pip install google-api-python-client google-auth google-auth-oauthlib",
+            hint=broken_install_hint("google-api-python-client", "google-auth", "google-auth-oauthlib"),
         ) from e
     return MediaIoBaseDownload
 
@@ -189,7 +190,7 @@ def _media_file_upload():
     except ImportError as e:
         raise ConfigError(
             "Google API libraries not installed.",
-            hint="pip install google-api-python-client google-auth google-auth-oauthlib",
+            hint=broken_install_hint("google-api-python-client", "google-auth", "google-auth-oauthlib"),
         ) from e
     return MediaFileUpload
 

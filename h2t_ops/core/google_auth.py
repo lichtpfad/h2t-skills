@@ -14,7 +14,7 @@ from collections.abc import Iterable
 from datetime import datetime
 from pathlib import Path
 
-from h2t_ops.core.errors import AuthError, ConfigError
+from h2t_ops.core.errors import AuthError, ConfigError, broken_install_hint
 
 
 def _oauth_store_dir() -> Path:
@@ -36,10 +36,7 @@ _BOOTSTRAP_HINT = (
     "Google OAuth token store, then retry."
 )
 
-_GOOGLE_HINT = (
-    "pip install google-api-python-client google-auth google-auth-oauthlib"
-    "  (or run /h2t-core:setup)"
-)
+_GOOGLE_HINT = broken_install_hint("google-api-python-client", "google-auth", "google-auth-oauthlib")
 
 
 def _load_dotenv() -> None:

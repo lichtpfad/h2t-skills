@@ -20,7 +20,7 @@
     {
       "name": "h2t-ops",
       "description": "H2T Ops — provider I/O connectors, daily-brief, research (Exa), and the Ecosystem Research KB skill (ingest/query/lint).",
-      "version": "1.6.10",
+      "version": "1.6.11",
       "author": {
         "name": "lichtpfad"
       },
@@ -31,7 +31,7 @@
     {
       "name": "h2t-dev",
       "description": "H2T Dev — development workflow: docs-lint, github-issues, pre-merge-check, milestone-closure",
-      "version": "1.0.33",
+      "version": "1.0.34",
       "author": {
         "name": "lichtpfad"
       },

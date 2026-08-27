@@ -178,6 +178,21 @@ def _normalize_severities(findings: list[dict]) -> list[dict]:
 
 PROJECTS_YAML_PATH = DEV_ROOT / "h2t-landings" / "projects.yaml"
 
+_CROSS_REPO_NOTED = False
+
+
+def _note_cross_repo_disabled() -> None:
+    """Once per process, on stderr, so JSON on stdout stays parseable."""
+    global _CROSS_REPO_NOTED
+    if _CROSS_REPO_NOTED:
+        return
+    _CROSS_REPO_NOTED = True
+    print(
+        f"note: cross-repo checks are off — no registry at {PROJECTS_YAML_PATH}. "
+        "Set H2T_DEV_ROOT if your sibling repositories live elsewhere.",
+        file=sys.stderr,
+    )
+
 YAML_FLAG_CHECKS: dict[str, str] = {
     "docs.positioning": "docs/product/positioning.md",
     "docs.eval_report": "docs/reports",
@@ -187,6 +202,11 @@ YAML_FLAG_CHECKS: dict[str, str] = {
 
 def _load_projects_yaml() -> dict:
     if not PROJECTS_YAML_PATH.exists():
+        # Say it. An empty dict here turns off every cross-repo check, and the caller
+        # cannot tell that from "the registry says nothing about this repo". A stranger
+        # has no h2t-landings at all, so this is their normal state, not an error — but
+        # a check that is off must not read as a check that passed.
+        _note_cross_repo_disabled()
         return {}
     text = PROJECTS_YAML_PATH.read_text(encoding="utf-8")
     try:

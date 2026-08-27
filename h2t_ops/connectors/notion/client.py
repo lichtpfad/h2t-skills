@@ -17,6 +17,7 @@ from h2t_ops.core.errors import (
     NotFoundError,
     ProviderError,
     UsageError,
+    broken_install_hint,
 )
 from h2t_ops.core.secrets import resolve_notion_token
 
@@ -66,7 +67,7 @@ class NotionClient:
         except ImportError as e:
             raise ConfigError(
                 "notion-client library not installed.",
-                hint="pip install notion-client httpx  (or run /h2t-core:setup)",
+                hint=broken_install_hint("notion-client", "httpx"),
             ) from e
         self.client = Client(auth=self.token)
 
@@ -81,7 +82,7 @@ class NotionClient:
         except ImportError as e:
             raise ConfigError(
                 "httpx library not installed.",
-                hint="pip install httpx  (or run /h2t-core:setup)",
+                hint=broken_install_hint("httpx"),
             ) from e
         try:
             resp = httpx.request(method, url, headers=headers, json=json_body)

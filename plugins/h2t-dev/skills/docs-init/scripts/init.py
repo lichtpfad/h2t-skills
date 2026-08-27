@@ -90,6 +90,11 @@ exceptions: []
 
 def _load_project(name: str) -> dict:
     if not PROJECTS_YAML_PATH.exists():
+        print(
+            f"note: cross-repo lookup is off — no registry at {PROJECTS_YAML_PATH}. "
+            "Set H2T_DEV_ROOT if your sibling repositories live elsewhere.",
+            file=sys.stderr,
+        )
         return {}
     text = PROJECTS_YAML_PATH.read_text(encoding="utf-8")
     try:
