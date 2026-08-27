@@ -72,3 +72,44 @@ fourteen. In each case the tool is honest and the conclusion is wrong.
 Two habits close it. State the area before the command, not after the output. And when a
 check returns clean on something that was dirty a moment ago, widen it once before
 believing it.
+
+## An audit is a measurement; only a test is a gate
+
+An audit answers "how many are there now". A test answers "did it get worse". The first
+expires as it is printed, and it takes a reader to act on it; the second survives the
+session, the compaction and the change of hands.
+
+Measured 2026-08-27 on #434. The pre-release audit was not blind — its phase C counted
+**183** occurrences in the shipping directories and called them "the whole problem". A
+commit titled `fix: derive where sibling repos live instead of naming C:/dev (#434)`
+followed, removing **10 of 45** live `C:/dev` occurrences. The number in the subject
+reads as closure, and it was read that way here months later. No test existed:
+`git log` over `tests/**/*author*` and `*hardcode*` was empty until the ratchet was
+written, and by then twelve occurrences remained, three of them behaviour rather than
+prose.
+
+So: judge "is it done" by state, never by an issue number in a commit subject. And when
+an audit produces a list, the deliverable is not the list — it is whatever will fail
+tomorrow if the list grows.
+
+## After writing a guard, ask separately what it does not cover
+
+A guard encodes the shape of the defect at the moment it was found, and then protects
+that shape. The regex reads like "the rule about author paths" and is "the rule about
+`C:/dev`".
+
+Three instances in one session, 2026-08-27, none of them found by the guard itself:
+
+- The author-path ratchet matched `C:/dev` and missed
+  `C:/Program Files/GitHub CLI/gh.exe` — same class, different literal.
+- It walked `plugins/` while `h2t_ops/` is the package behind the nine CLI entry points,
+  the first thing a stranger installs. The hint telling them to install from
+  `C:/dev/h2t-tools` sat there untouched.
+- The interpreter guard forbade a *path* to an interpreter and said nothing about calling
+  one by name, so reverting a file to `python3` left the suite green.
+
+Each was found by a grep over the whole tree, in the minutes after the guard went in.
+
+The remedy is not "write it wider" — wider catches `/Users/x/` in a fixture. It is one
+deliberate question after the guard passes: **which files does this not read, and which
+spellings does it not match?** Three minutes of grep answered it every time.
