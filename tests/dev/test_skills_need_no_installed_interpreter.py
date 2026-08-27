@@ -17,6 +17,7 @@ environment is ephemeral and cached, and there is no second environment to repai
 """
 
 import re
+import shlex
 from pathlib import Path
 
 import pytest
@@ -99,39 +100,79 @@ def test_every_uv_run_names_its_project():
 COMMAND_FENCES = {"", "bash", "sh", "shell", "console", "zsh"}
 INTERPRETERS = {"python", "python3", "py"}
 WRAPPERS = {"env", "sudo", "time", "command", "exec", "nohup"}
+# Wrapper options that consume the next token. `env -u FOO python3 x.py` runs
+# python, and stopping at `FOO` is how that call read as a command of its own.
+# The list is what these wrappers actually take; an unlisted one would leave the
+# scan a token short, which the fixtures below would show.
+VALUE_OPTIONS = {"-u", "-g", "-C", "-o", "--unset", "--chdir", "--user", "--group"}
+BOUNDARIES = {";", "&&", "||", "|", "&", "(", ")"}
 ASSIGNMENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
-SEPARATORS = re.compile(r"\|\||&&|[;|&]|\$\(")
+NAIVE_SPLIT = re.compile(r"\|\||&&|[;|&()]|\$\(")
 HEREDOC = re.compile(r"<<-?\s*[\"']?([A-Za-z_][A-Za-z0-9_]*)[\"']?")
 
 
-def _command_word(segment: str) -> str | None:
-    """The word that would actually be executed, or None if the segment runs nothing.
+def _tokens(line: str) -> list[str] | None:
+    """Shell tokens, or None when the line cannot be lexed.
 
-    Steps over a copied shell prompt, leading environment assignments, and wrappers that
-    exec their argument — each of which puts the interpreter somewhere other than first.
+    A hand-rolled split cannot tell `echo "a; python3 b.py"` from two commands, and
+    cannot see that `sudo -E python3` still runs python. shlex can do both. It raises on
+    an unterminated quote, which is ordinary here — `$RUN -c "` opens a multi-line
+    script — and the caller falls back to a split that may over-report. Over-reporting
+    is the safe direction for a guard; a miss is what ships the defect.
     """
-    words = segment.strip().split()
-    i = 0
-    if i < len(words) and words[i] in {"$", "#", ">"}:
-        if words[i] == "#":
-            return None
-        i += 1
-    while i < len(words) and (ASSIGNMENT.match(words[i]) or words[i] in WRAPPERS):
-        i += 1
-    if i >= len(words):
+    try:
+        lexer = shlex.shlex(line, posix=True, punctuation_chars=True)
+        lexer.whitespace_split = True
+        return list(lexer)
+    except ValueError:
         return None
-    word = words[i]
+
+
+def _command_word(tokens: list[str]) -> str | None:
+    """The word that would actually be executed, or None if nothing is.
+
+    Steps over a copied shell prompt, environment assignments, and wrappers together
+    with their own options — `sudo -E python3 x.py` runs python, and reading `-E` as the
+    command is how that call went unnoticed.
+    """
+    i = 0
+    if i < len(tokens) and tokens[i] in {"$", ">"}:
+        i += 1
+    while i < len(tokens) and (ASSIGNMENT.match(tokens[i]) or tokens[i] in WRAPPERS):
+        was_wrapper = tokens[i] in WRAPPERS
+        i += 1
+        while was_wrapper and i < len(tokens) and (
+            tokens[i].startswith("-") or ASSIGNMENT.match(tokens[i])
+        ):
+            takes_value = tokens[i] in VALUE_OPTIONS
+            i += 1
+            if takes_value and i < len(tokens):
+                i += 1
+    if i >= len(tokens):
+        return None
+    word = tokens[i]
     return None if word.startswith("#") else word
 
 
 def _interpreter_calls(line: str) -> list[str]:
-    """Every command in the line whose executable is an interpreter, by name."""
-    found = []
-    for segment in SEPARATORS.split(line):
-        word = _command_word(segment)
-        if word in INTERPRETERS:
-            found.append(segment.strip())
-    return found
+    """Every command in the line whose executable is an interpreter, named directly."""
+    if line.lstrip().startswith("#"):
+        return []
+    tokens = _tokens(line)
+    if tokens is None:
+        segments = [seg.split() for seg in NAIVE_SPLIT.split(line)]
+    else:
+        segments, current = [], []
+        for token in tokens:
+            if token in BOUNDARIES:
+                segments.append(current)
+                current = []
+            else:
+                current.append(token)
+        segments.append(current)
+    return [
+        " ".join(seg) for seg in segments if _command_word(seg) in INTERPRETERS
+    ]
 
 
 def _command_lines(text: str):
@@ -177,6 +218,15 @@ MUST_FLAG = [
     "sudo python3 script.py",
     "time python3 script.py",
     "$ python3 script.py",
+    # Wrappers carry their own options; reading `-E` as the command missed these.
+    "sudo -E python3 x.py",
+    "env -u FOO python3 x.py",
+    "time -p python3 x.py",
+    # Grouping is a command boundary, not a command.
+    "( python3 x.py )",
+    "echo hi && ( python3 x.py )",
+    # A real substitution runs its contents.
+    "OUT=$(python3 x.py)",
 ]
 
 MUST_NOT_FLAG = [
@@ -189,6 +239,9 @@ MUST_NOT_FLAG = [
     "# python3 old.py",
     "echo 'python3 is a word here'",
     'RUN="uv run --no-project --python 3.11 python"',
+    # A separator inside quotes is data, not a boundary.
+    'echo "a; python3 b.py"',
+    "echo '$(python3 b.py)'",
 ]
 
 
