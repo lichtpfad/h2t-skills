@@ -11,6 +11,7 @@ from unittest.mock import patch
 import pytest
 
 from h2t_ops.connectors.research import client, store
+from h2t_ops.core import secrets as core_secrets
 from h2t_ops.core.errors import (
     AuthError,
     ConfigError,
@@ -59,13 +60,18 @@ def test_resolve_key_h2t_secrets_file(tmp_path, monkeypatch):
 
 
 def test_resolve_key_canonical_and_legacy_paths(tmp_path, monkeypatch):
+    # Redirect the shared candidate list, not Path.home (#448): resolve_secret now reads
+    # h2t_ops.core.secrets, whose paths resolve at import. Patching home left these tests
+    # reading the real ~/.dor and asserting against the author's live key.
     _clear_sensitive_env(monkeypatch)
-    monkeypatch.setattr(Path, "home", lambda: tmp_path)
     canonical = tmp_path / ".dor" / "secrets" / "secrets.env"
     legacy = tmp_path / ".dor" / "secrets.env"
     canonical.parent.mkdir(parents=True)
     canonical.write_text("EXA_API_KEY" + "=canonical-value\n", encoding="utf-8")
     legacy.write_text("EXA_API_KEY" + "=legacy-value\n", encoding="utf-8")
+    monkeypatch.setattr(core_secrets, "H2T_CONFIG_SECRETS", tmp_path / ".h2t" / "absent.env")
+    monkeypatch.setattr(core_secrets, "DEFAULT_SECRETS", canonical)
+    monkeypatch.setattr(core_secrets, "LEGACY_SECRETS", legacy)
 
     assert client.resolve_secret("EXA_API_KEY") == "canonical-value"
     canonical.unlink()
@@ -74,7 +80,9 @@ def test_resolve_key_canonical_and_legacy_paths(tmp_path, monkeypatch):
 
 def test_resolve_key_missing_raises_configerror(tmp_path, monkeypatch):
     _clear_sensitive_env(monkeypatch)
-    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.setattr(core_secrets, "H2T_CONFIG_SECRETS", tmp_path / "absent-documented.env")
+    monkeypatch.setattr(core_secrets, "DEFAULT_SECRETS", tmp_path / "absent-dor.env")
+    monkeypatch.setattr(core_secrets, "LEGACY_SECRETS", tmp_path / "absent-legacy.env")
 
     with pytest.raises(ConfigError) as ei:
         client.resolve_secret("EXA_API_KEY")

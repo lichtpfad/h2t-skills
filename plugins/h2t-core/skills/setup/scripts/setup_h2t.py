@@ -185,11 +185,19 @@ def _version_for_h2t_ops(path: str, runner: Runner = _run) -> dict[str, Any]:
 
 
 def _candidate_secret_files(home: Path) -> list[Path]:
+    """Same order as h2t_ops.core.secrets.candidate_secret_files (#448).
+
+    This script is standalone — it cannot import h2t_ops — so the list is duplicated on
+    purpose. It drifted once already: #432 added the documented path to the package and
+    not here, so `setup doctor` answered MISSING for a key the connectors could read.
+    tests/test_secrets_path_parity.py holds the two lists together.
+    """
     files: list[Path] = []
     override = os.environ.get("H2T_SECRETS_FILE")
     if override:
         files.append(Path(override))
     files.extend([
+        home / ".h2t" / "config" / "secrets" / "secrets.env",
         home / ".dor" / "secrets" / "secrets.env",
         home / ".dor" / "secrets.env",
     ])

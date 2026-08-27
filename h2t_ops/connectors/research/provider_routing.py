@@ -127,7 +127,8 @@ def select_route(capability: str, *, provider: str | None = None) -> dict[str, A
         )
         hint = (
             f"Set {', '.join(missing)} in env, H2T_SECRETS_FILE, "
-            "~/.dor/secrets/secrets.env, or ~/.dor/secrets.env."
+            "~/.h2t/config/secrets/secrets.env, ~/.dor/secrets/secrets.env, "
+            "or ~/.dor/secrets.env."
             if missing
             else "Enable or configure a provider for this capability."
         )

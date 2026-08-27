@@ -19,7 +19,7 @@ DEFAULT_SECRETS = Path.home() / ".dor" / "secrets" / "secrets.env"
 LEGACY_SECRETS = Path.home() / ".dor" / "secrets.env"
 
 
-def _candidate_secret_files(env_file: Path | None = None) -> list[Path]:
+def candidate_secret_files(env_file: Path | None = None) -> list[Path]:
     """Secrets files in load order: explicit, documented, shared, then legacy.
 
     Every candidate is read and merged without overriding, so listing the documented
@@ -41,7 +41,7 @@ def load_secrets(env_file: Path | None = None) -> None:
     author's machines over Syncthing), then the older ~/.dor/secrets.env. Files are
     merged, not chosen, so an existing machine needs no cutover.
     """
-    for path in _candidate_secret_files(env_file):
+    for path in candidate_secret_files(env_file):
         if not path.is_file():
             continue
         for raw in path.read_text(encoding="utf-8").splitlines():

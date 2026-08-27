@@ -26,6 +26,7 @@ from h2t_ops.core.errors import (
     ProviderError,
     UsageError,
 )
+from h2t_ops.core.secrets import candidate_secret_files
 
 DEFAULT_OUTPUT_DIR = Path.home() / ".h2t" / "research"
 REDACTED = "[REDACTED]"
@@ -84,24 +85,17 @@ def _read_env_file(path: Path) -> dict[str, str]:
 
 
 def resolve_secret(name: str) -> str:
-    """Resolve a secret from env, configured env file, canonical, then legacy path."""
+    """Resolve a secret from env, then the shared candidate files (#448).
+
+    The list comes from h2t_ops.core.secrets so every connector answers for the same
+    locations. Keeping a second list here is what made ~/.h2t/config/secrets/secrets.env
+    invisible to research after #432 added it everywhere else.
+    """
     env_value = os.getenv(name)
     if env_value:
         return env_value
 
-    candidates: list[Path] = []
-    secrets_file = os.getenv("H2T_SECRETS_FILE")
-    if secrets_file:
-        candidates.append(Path(secrets_file).expanduser())
-    home = Path.home()
-    candidates.extend(
-        [
-            home / ".dor" / "secrets" / "secrets.env",
-            home / ".dor" / "secrets.env",
-        ]
-    )
-
-    for path in candidates:
+    for path in candidate_secret_files():
         value = _read_env_file(path).get(name)
         if value:
             return value
@@ -110,7 +104,8 @@ def resolve_secret(name: str) -> str:
         f"Research secret not found: {name}",
         hint=(
             f"Set {name} in the environment, H2T_SECRETS_FILE, "
-            "~/.dor/secrets/secrets.env, or ~/.dor/secrets.env."
+            "~/.h2t/config/secrets/secrets.env, ~/.dor/secrets/secrets.env, "
+            "or ~/.dor/secrets.env."
         ),
     )
 
