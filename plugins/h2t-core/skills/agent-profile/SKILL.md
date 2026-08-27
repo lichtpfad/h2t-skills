@@ -20,10 +20,10 @@ MCP config, hooks, or global `~/.claude/settings.json`.
 plugins/h2t-core/skills/agent-profile/scripts/apply_agent_profile.py
 ```
 
-Call it with the project Python (no venv needed — stdlib only):
+The script is stdlib-only; `uv` supplies the interpreter so none has to be on PATH:
 
 ```bash
-python <script> <mode> [options] --cwd <repo>
+uv run --no-project --python 3.11 python <script> <mode> [options] --cwd <repo>
 ```
 
 ## Commands

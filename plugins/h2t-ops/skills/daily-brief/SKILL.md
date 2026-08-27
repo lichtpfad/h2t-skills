@@ -158,7 +158,7 @@ h2t-ops notion search "$TASKS_DB" \
 ## Обработка ошибок
 
 - **`h2t-ops` не найден**: `/h2t-core:setup`, затем
-  `python scripts/setup_h2t.py install-h2t-ops --source main --json`
+  `uv run --no-project --python 3.11 python scripts/setup_h2t.py install-h2t-ops --source main --json`
 - **Calendar/Gmail**: проверь токены — `~/.config/google-calendar-mcp/tokens.json`
 - **Notion**: проверь `NOTION_API_TOKEN` в `~/.dor/secrets.env`
 - Диагностика разом: `h2t-ops doctor`

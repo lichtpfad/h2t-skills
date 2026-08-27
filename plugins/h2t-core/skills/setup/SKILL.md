@@ -36,21 +36,24 @@ output, and only then explain the next action.
 
 Use the `scripts/setup_h2t.py` file bundled next to this `SKILL.md`.
 
-Run it with any available Python 3.11+:
+Run it through `uv`, which is a prerequisite of this skill anyway — `doctor` reports
+`uv` status, and `install-h2t-ops` cannot work without it. One form on every platform:
 
 ```bash
-# macOS / Linux
-python3 scripts/setup_h2t.py doctor --json
-
-# Windows
-py -3 .\scripts\setup_h2t.py doctor --json
+RUN="uv run --no-project --python 3.11 python"
+$RUN scripts/setup_h2t.py doctor --json
 ```
 
-If running from a repo checkout instead of plugin cache, use the repo-relative
-path:
+`--python 3.11` because the package declares `requires-python = ">=3.11"`; a bare
+`uv run` resolves to whatever uv considers current, measured as 3.10 on 2026-08-27.
+`--no-project` because the working directory is frequently the user's own Python
+project, and without it uv would build that instead.
 
-```powershell
-uv.exe run python plugins\h2t-core\skills\setup\scripts\setup_h2t.py doctor --json
+From a repo checkout rather than the plugin cache, the same line with the
+repo-relative path:
+
+```bash
+$RUN plugins/h2t-core/skills/setup/scripts/setup_h2t.py doctor --json
 ```
 
 ### Step 2: Doctor first
@@ -58,7 +61,7 @@ uv.exe run python plugins\h2t-core\skills\setup\scripts\setup_h2t.py doctor --js
 Always start with:
 
 ```bash
-python scripts/setup_h2t.py doctor --json
+$RUN scripts/setup_h2t.py doctor --json
 ```
 
 Report:
@@ -84,7 +87,7 @@ impact: lifecycle and connector provider I/O still work; POS publishing disabled
 First run a dry-run:
 
 ```bash
-python scripts/setup_h2t.py install-h2t-ops --source main --dry-run --json
+$RUN scripts/setup_h2t.py install-h2t-ops --source main --dry-run --json
 ```
 
 Show the command to the user. Ask before running the real install because it
@@ -93,13 +96,13 @@ modifies the user's `uv tool` environment.
 Real install:
 
 ```bash
-python scripts/setup_h2t.py install-h2t-ops --source main --json
+$RUN scripts/setup_h2t.py install-h2t-ops --source main --json
 ```
 
 If installing from a local checkout (uses `--editable` automatically):
 
 ```bash
-python scripts/setup_h2t.py install-h2t-ops --source . --json   # from a checkout; `--source main` installs from GitHub
+$RUN scripts/setup_h2t.py install-h2t-ops --source . --json   # from a checkout; `--source main` installs from GitHub
 # macOS: --source ~/dev/h2t-skills
 ```
 
@@ -108,7 +111,7 @@ python scripts/setup_h2t.py install-h2t-ops --source . --json   # from a checkou
 Default connector check is credential-only and read-only:
 
 ```bash
-python scripts/setup_h2t.py connectors-check --json
+$RUN scripts/setup_h2t.py connectors-check --json
 ```
 
 This must not write provider data, POS/DOR state, Notion pages, Drive files, or
@@ -117,14 +120,14 @@ calendar events.
 Live checks require explicit user intent:
 
 ```bash
-python scripts/setup_h2t.py connectors-check --live --json
+$RUN scripts/setup_h2t.py connectors-check --live --json
 ```
 
 Research/Exa preflight can use a paid provider request. Only run it if the user
 explicitly asks:
 
 ```bash
-python scripts/setup_h2t.py connectors-check --live --include-paid --json
+$RUN scripts/setup_h2t.py connectors-check --live --include-paid --json
 ```
 
 ### Step 5: Boundaries
@@ -158,7 +161,7 @@ or when `connectors-check` reports any connector as `missing`.
 ### Step 1 — Skeleton
 
 ```bash
-python setup_h2t.py secrets skeleton --json
+$RUN setup_h2t.py secrets skeleton --json
 ```
 
 From the result, show the user:
@@ -191,7 +194,7 @@ Wait for user to say "done" or "готово" before proceeding.
 First, check which Google connectors are actually missing:
 
 ```bash
-python setup_h2t.py connectors-check --json
+$RUN setup_h2t.py connectors-check --json
 ```
 
 For each connector in `["calendar", "gmail", "drive"]` where status is `missing`:
@@ -249,13 +252,13 @@ Confirm success by re-running `auth status`.
 Default (format-only, free):
 
 ```bash
-python setup_h2t.py secrets preflight --json
+$RUN setup_h2t.py secrets preflight --json
 ```
 
 If user asks for a live check (costs Exa tokens — confirm first):
 
 ```bash
-python setup_h2t.py secrets preflight --live --json
+$RUN setup_h2t.py secrets preflight --live --json
 ```
 
 Show a summary table: key → found/valid/connector.

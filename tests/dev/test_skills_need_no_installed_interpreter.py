@@ -51,11 +51,17 @@ def test_no_skill_builds_an_interpreter_path():
     )
 
 
-def test_every_uv_run_declares_no_project():
-    """`uv run` inside a directory holding a pyproject.toml would build *that* project.
+def test_every_uv_run_names_its_project():
+    """`uv run` must say which project it runs in — never inherit it from the directory.
 
-    Skills run against the user's repository (`--root $(pwd)`), which frequently is a
-    Python project, so the flag is what keeps the environment the skill's own.
+    Left implicit, uv builds whatever project the working directory happens to hold, and
+    skills run against the user's repository (`--root $(pwd)`), which frequently is one.
+
+    Two answers are correct and they are not interchangeable. `--no-project` is for a
+    script that ships with this pack: its dependencies come from `--with`, and the user's
+    repository must not be built at all. `--project <path>` is for a script that belongs
+    to the target project — `node-researcher` runs `${PROJECT_ROOT}/scripts/research.py`,
+    which this pack does not ship and whose dependencies are that project's.
 
     Only lines that *are* an invocation are checked: prose naming `uv run --with` while
     explaining a dependency is not a command, and reading it as one made this check fire
@@ -68,6 +74,10 @@ def test_every_uv_run_declares_no_project():
             invocation = (
                 stripped.startswith("uv run") or stripped.startswith('RUN="uv run')
             ) and "python" in line
-            if invocation and "--no-project" not in line:
+            names_project = "--no-project" in line or "--project" in line
+            if invocation and not names_project:
                 offenders.append(f"{path.relative_to(ROOT)}:{lineno}  {line.strip()}")
-    assert not offenders, "uv run without --no-project:\n" + "\n".join(offenders)
+    assert not offenders, (
+        "uv run that does not name its project (--no-project or --project <path>):\n"
+        + "\n".join(offenders)
+    )

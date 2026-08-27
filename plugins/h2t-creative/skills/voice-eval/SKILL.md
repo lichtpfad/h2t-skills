@@ -149,5 +149,5 @@ Score < 0.65 → флаг для проверки (не блокирует пу�
 | --- | --- |
 | `Profile 'default' not found` | `h2t-voice profile create default` + добавить тексты + train |
 | `No module named h2t_voice` | Установить: `cd C:/dev/h2t-voice && pip install -e .` |
-| `spaCy model not found` | `python -m spacy download ru_core_news_lg` |
+| `spaCy model not found` | `$H2T_VOICE_PYTHON -m spacy download ru_core_news_lg` |
 | Classifier score отсутствует | Нет negatives в профиле или model.cbm не обучен |

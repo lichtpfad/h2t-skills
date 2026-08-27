@@ -68,7 +68,8 @@ Before searching, define 4-5 specific questions. Always include:
 
 Each agent runs:
 ```bash
-python3 ${PROJECT_ROOT}/scripts/research.py "<query>" --n 6 --type auto
+uv run --project "${PROJECT_ROOT}" python "${PROJECT_ROOT}/scripts/research.py" \
+  "<query>" --n 6 --type auto
 # where PROJECT_ROOT = root of the target project being researched
 ```
 
@@ -80,7 +81,8 @@ Standard query set per node (adapt from research-execution-plan.md):
 
 For deep dive on a specific paper:
 ```bash
-python3 scripts/research.py "<specific paper title or topic>" --n 1 --type deep --full
+uv run --project "${PROJECT_ROOT}" python "${PROJECT_ROOT}/scripts/research.py" \
+  "<specific paper title or topic>" --n 1 --type deep --full
 ```
 
 ---

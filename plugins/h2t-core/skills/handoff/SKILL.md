@@ -107,7 +107,7 @@ Scan for agent behavioral rules discovered this session. These become candidates
 **JSONL scan** — catches rules from compacted early-session context (grep-only, no full dump):
 
 ```bash
-python -c "
+uv run --no-project --python 3.11 python -c "
 import os, pathlib, json, re
 TRIGGERS = re.compile(r'не делай|не используй|стоп|запомни|договорились|принято|всегда|никогда|правило:|протокол:|важно:|запрет|нельзя|не надо', re.I)
 cwd = os.getcwd().replace('\\\\', '-').replace('/', '-').replace(':', '-').lstrip('-')
