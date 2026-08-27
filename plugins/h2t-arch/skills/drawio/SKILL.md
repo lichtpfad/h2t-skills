@@ -17,8 +17,9 @@ Generate production-quality `.drawio` architecture diagrams from structured grap
 dependency for that run — there is nothing to install and nothing to check first:
 
 ```bash
+SKILL_DIR="$(h2t-arch skill-dir drawio)"
 RUN="uv run --no-project --with drawpyo python"
-$RUN "${CLAUDE_SKILL_DIR}/scripts/generate.py" ...
+$RUN "${SKILL_DIR}/scripts/generate.py" ...
 ```
 
 The probe this replaced (`python -c "import drawpyo"`) answered a question nobody asked:
@@ -105,7 +106,7 @@ graph = {
 ```bash
 $RUN -c "
 import sys, os
-sys.path.insert(0, '${CLAUDE_SKILL_DIR}/scripts')
+sys.path.insert(0, '${SKILL_DIR}/scripts')
 from generate import generate_diagram
 
 graph = {
@@ -135,7 +136,7 @@ Export `.drawio` to PNG, SVG, or PDF via draw.io Desktop CLI:
 ```bash
 $RUN -c "
 import sys, os
-sys.path.insert(0, '${CLAUDE_SKILL_DIR}/scripts')
+sys.path.insert(0, '${SKILL_DIR}/scripts')
 from export import export_diagram
 
 # Basic export:
@@ -164,7 +165,7 @@ Check available shape types in the project:
 ```bash
 $RUN -c "
 import os, tomllib
-for p in ['.drawio-shapes.toml', '${CLAUDE_SKILL_DIR}/config/shapes/general.toml']:
+for p in ['.drawio-shapes.toml', '${SKILL_DIR}/config/shapes/general.toml']:
     if os.path.exists(p):
         with open(p, 'rb') as f:
             shapes = tomllib.load(f)

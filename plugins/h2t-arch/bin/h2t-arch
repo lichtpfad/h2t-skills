@@ -1,0 +1,29 @@
+#!/bin/sh
+# The plugin's portable surface, for the same reason h2t-creative has one (#456).
+#
+# The harness exports neither CLAUDE_PLUGIN_ROOT nor CLAUDE_SKILL_DIR to the bash a skill
+# runs. Measured empty on Claude Code 2.1.247 with a skill active, which turned
+# `${CLAUDE_SKILL_DIR}/scripts/generate.py` into `/scripts/generate.py` — an error naming
+# the filesystem root instead of the real cause.
+#
+# What the harness does provide is PATH: every installed plugin's bin/ is on it. So this
+# script is reachable by bare name and derives the plugin root from its own location.
+set -eu
+
+PLUGIN_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+
+case "${1:-}" in
+  root)
+    echo "$PLUGIN_ROOT"
+    ;;
+  skill-dir)
+    [ $# -eq 2 ] || { echo "usage: h2t-arch skill-dir <name>" >&2; exit 2; }
+    dir="$PLUGIN_ROOT/skills/$2"
+    [ -d "$dir" ] || { echo "h2t-arch: no such skill: $2" >&2; exit 5; }
+    echo "$dir"
+    ;;
+  *)
+    echo "usage: h2t-arch root | h2t-arch skill-dir <name>" >&2
+    exit 2
+    ;;
+esac
