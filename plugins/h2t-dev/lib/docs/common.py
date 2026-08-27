@@ -36,6 +36,34 @@ def _dev_root() -> Path:
 
 DEV_ROOT = _dev_root()
 
+# The plugin root: this file is plugins/h2t-dev/lib/docs/common.py.
+PLUGIN_ROOT = Path(__file__).resolve().parents[2]
+
+
+def standards_dir() -> Path:
+    """Where the eight STANDARDS_FILES live (#439).
+
+    Bundled first. Until this change the only answer was `DEV_ROOT/docs/standards`, a
+    directory that exists on exactly one machine — and not the author's Mac, where
+    `lint.py h2t-skills` printed eight `FAIL: missing ...` lines while all eight files sat
+    in a sibling repository. On a stranger's machine nothing of that constellation exists,
+    so the skill reported their tree as violating standards they could not read.
+
+    `H2T_DEV_ROOT/docs/standards` still wins when the operator sets it: someone who keeps
+    their own standards keeps pointing at them, and the bundled copy is the seed they
+    started from rather than a rule they cannot escape. Resolved per call, not at import,
+    so the override is honoured by a process that sets it after this module loads.
+
+    Same precedent as docs-sync-labels, which shipped labels.json beside its script and
+    reached for DEV_ROOT only as a fallback.
+    """
+    override = os.environ.get("H2T_DEV_ROOT")
+    if override:
+        candidate = Path(override) / "docs" / "standards"
+        if candidate.is_dir():
+            return candidate
+    return PLUGIN_ROOT / "references" / "standards"
+
 REPO_MANIFEST = [
     "h2t-ai", "h2t-business", "h2t-client", "h2t-content", "h2t-dcc",
     "h2t-evals", "h2t-factory", "h2t-graphs", "h2t-landings", "h2t-skills",

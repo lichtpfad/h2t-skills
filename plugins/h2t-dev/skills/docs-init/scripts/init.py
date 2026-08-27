@@ -48,12 +48,16 @@ MINIMAL_README = """\
 RULES_TEMPLATE = """\
 # Documentation Rules
 
-Follow standards defined in C:/dev/docs/standards/:
+Follow the standards bundled with the `h2t-dev` plugin, under
+`references/standards/` (override with `H2T_DEV_ROOT/docs/standards/`):
 - Directory structure: documentation-structure.md
 - Naming: naming-conventions.md
 - Git conventions: git-naming-conventions.md
 - ADR process: adr-process.md
 - Linting: linting.md
+
+They are a starting point, not a rule set you are stuck with: copy what fits into this
+repository's own `.claude/rules/` and diverge where your project needs to.
 
 All documentation goes in docs/ with the standard subdirectory layout.
 """

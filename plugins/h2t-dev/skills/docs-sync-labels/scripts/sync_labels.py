@@ -13,13 +13,13 @@ for _lib in [_PLUGIN_ROOT / "lib", _PLUGIN_ROOT.parent.parent / "lib"]:
         sys.path.insert(0, str(_lib))
         break
 
-from docs.common import DEV_ROOT, GH, REPO_MANIFEST, print_header
+from docs.common import GH, REPO_MANIFEST, print_header, standards_dir
 
-# Bundled copy takes priority — works on any machine (MacBook, AUTOMATA, CI).
-# Canonical source: C:/dev/docs/standards/labels.json (Windows/AUTOMATA only).
-_BUNDLED = _PLUGIN_ROOT / "skills" / "docs-sync-labels" / "data" / "labels.json"
-_CANONICAL = DEV_ROOT / "docs" / "standards" / "labels.json"
-LABELS_FILE = _BUNDLED if _BUNDLED.exists() else _CANONICAL
+# One copy, resolved the same way every other standard is (#439). This file used to keep
+# its own bundled/canonical pair, which was right — it was the only consumer that worked
+# on a machine without the author's sibling repositories — but it left two truths about
+# where labels.json lives.
+LABELS_FILE = standards_dir() / "labels.json"
 ORG = "lichtpfad"
 
 

@@ -124,6 +124,20 @@ Repos MAY have additional directories in `docs/` for domain-specific content.
 | PowerShell/Python scripts | `scripts/` or `tools/` | Code, not documentation |
 | PNG mockups | `docs/superpowers/specs/` (inline) or `docs/architecture/` | Alongside relevant docs |
 
+## Pre-Write Checklist (SSOT boundary)
+
+> Promoted из cross-repo practice-harvest, PR #293 · lineages POS, rejuve, crypto-regime-spike · recurrence 3.
+
+Before creating **or moving** any file, answer three questions — only then proceed:
+
+1. **What artifact class is this?** — source / generated / ephemeral.
+2. **Does a canonical location already exist?** — SSOT boundary check (don't duplicate).
+3. **Does the operator need to approve this write?**
+
+Generated output must never be placed where source files live (see
+[`generated-artifact-ssot`](./generated-artifact-ssot.md)). This checklist gates the
+"What Does NOT Go in docs/" table above at write time.
+
 ## docs/README.md Template
 
 Every repo's `docs/README.md` must follow this structure. **Include only sections that actually exist** — omit rows for directories the repo doesn't have. The template below shows all possible rows; `/docs-init` generates only the applicable subset based on `projects.yaml` flags and repo reality.

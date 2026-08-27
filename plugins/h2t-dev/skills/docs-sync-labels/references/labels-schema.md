@@ -1,11 +1,11 @@
 # Canonical Labels Schema (namespaced-v1)
 
-Source of truth: `data/labels.json` (bundled). Sync to repos via `/h2t-dev:docs-sync-labels`.
+Source of truth: `references/standards/labels.json` (bundled with h2t-dev; `H2T_DEV_ROOT/docs/standards/` overrides). Sync to repos via `/h2t-dev:docs-sync-labels`.
 
 ## Rules
 - Always lowercase (`priority:p1`, never `priority:P1`)
 - Every issue MUST have: `type:*`, `priority:*`, `domain:*`
-- Never invent new labels without adding to `data/labels.json` first
+- Never invent new labels without adding to `references/standards/labels.json` first
 
 ## type:
 | Label | Description |

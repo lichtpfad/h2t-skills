@@ -162,8 +162,8 @@ BEFORE_COUNT=$(jq '.findings | length' "$ROOT/.h2t/lint-before.json" 2>/dev/null
 ### Step C: Multi-angle analysis
 
 Load references on demand (skip with log if missing):
-- `${CLAUDE_PLUGIN_ROOT}/skills/docs-lint/references/documentation-structure.md` — dims 1,2,6
-- `${CLAUDE_PLUGIN_ROOT}/skills/docs-lint/references/code-organization.md` — dims 3,4
+- `${CLAUDE_PLUGIN_ROOT}/references/standards/documentation-structure.md` — dims 1,2,6
+- `${CLAUDE_PLUGIN_ROOT}/references/standards/code-organization.md` — dims 3,4
 - `${CLAUDE_PLUGIN_ROOT}/skills/docs-lint/references/non-standard-resolution.md` — dim 8
 
 | # | Dimension | Source |
@@ -366,7 +366,7 @@ on h2t-skills), so the judgement is a person's and this only makes it cheap.
 ## References
 
 Load on demand:
-- `${CLAUDE_PLUGIN_ROOT}/skills/docs-lint/references/documentation-structure.md`
-- `${CLAUDE_PLUGIN_ROOT}/skills/docs-lint/references/naming-conventions.md`
-- `${CLAUDE_PLUGIN_ROOT}/skills/docs-lint/references/code-organization.md`
+- `${CLAUDE_PLUGIN_ROOT}/references/standards/documentation-structure.md`
+- `${CLAUDE_PLUGIN_ROOT}/references/standards/naming-conventions.md`
+- `${CLAUDE_PLUGIN_ROOT}/references/standards/code-organization.md`
 - `${CLAUDE_PLUGIN_ROOT}/skills/docs-lint/references/non-standard-resolution.md`

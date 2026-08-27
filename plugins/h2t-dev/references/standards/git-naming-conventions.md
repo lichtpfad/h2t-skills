@@ -119,7 +119,8 @@ The repo prefix is **required** — without it, issues are unidentifiable in the
 
 ## Labels
 
-**Canonical source:** `C:/dev/docs/standards/labels.json` (schema `namespaced-v1`).
+**Canonical source:** `labels.json` beside this file, shipped with `h2t-dev`
+(schema `namespaced-v1`). `H2T_DEV_ROOT/docs/standards/` overrides it.
 Sync to all repos via `/docs-sync-labels --apply` (additive — never deletes custom labels).
 
 **Schema:** namespaced, lowercase everywhere (`priority:p1`, never `priority:P1`).

@@ -41,7 +41,7 @@ Product value. Why this matters for users or agents.
 
 ## Labels (required)
 
-**Canonical source:** bundled in `h2t-dev:docs-sync-labels` — see `references/labels-schema.md` in that skill for the full table. Load on demand: `${CLAUDE_PLUGIN_ROOT}/../docs-sync-labels/references/labels-schema.md`
+**Canonical source:** bundled in `h2t-dev:docs-sync-labels` — see `references/labels-schema.md` in that skill for the full table. Load on demand: `${CLAUDE_PLUGIN_ROOT}/skills/docs-sync-labels/references/labels-schema.md`
 
 Every issue MUST carry labels from at least these namespaces:
 
@@ -94,7 +94,7 @@ EOF
 
 Load on demand when you need full naming/commit conventions:
 
-- `${CLAUDE_PLUGIN_ROOT}/skills/github-issues/references/git-naming-conventions.md` — issue title format, commit types, branch naming, milestone format
+- `${CLAUDE_PLUGIN_ROOT}/references/standards/git-naming-conventions.md` — issue title format, commit types, branch naming, milestone format
 
 ## Common Mistakes
 
@@ -103,3 +103,4 @@ Load on demand when you need full naming/commit conventions:
 - Forgetting `--milestone` for Phase 5/6/7 issues
 - Title too long or too vague
 - Creating duplicate of existing issue (always check `gh issue list` first)
+

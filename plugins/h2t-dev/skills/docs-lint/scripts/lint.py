@@ -41,6 +41,7 @@ from docs.common import (
     parse_frontmatter,
     print_header,
     repo_path,
+    standards_dir,
 )
 from docs.config import load_config
 from docs.index_builder import write_index
@@ -65,7 +66,7 @@ except ImportError as _e:
     import warnings as _warnings
     _warnings.warn(
         f"docs-lint project layer unavailable (import failed: {_e}). "
-        "Run: uv tool install --editable C:/dev/h2t-skills",
+        "Run: uv tool install --editable <your h2t-skills checkout>",
         RuntimeWarning, stacklevel=1,
     )
     _PROJECT_LAYER_AVAILABLE = False
@@ -1178,7 +1179,7 @@ def _legacy_main(args: argparse.Namespace) -> None:
     projects = _load_projects_yaml()
 
     print("\n--- Global Standards ---")
-    std_dir = DEV_ROOT / "docs" / "standards"
+    std_dir = standards_dir()
     std_fails = [f for f in STANDARDS_FILES if not (std_dir / f).exists()]
     if std_fails:
         for f in std_fails:

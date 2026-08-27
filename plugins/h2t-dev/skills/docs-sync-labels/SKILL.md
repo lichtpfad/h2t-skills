@@ -1,6 +1,6 @@
 ---
 name: docs-sync-labels
-description: Sync canonical GitHub labels (from data/labels.json) to all h2t repos via gh CLI. Triggers on "sync labels", "update labels", "apply labels to repos", "docs-sync-labels".
+description: Sync canonical GitHub labels (from references/standards/labels.json) to all h2t repos via gh CLI. Triggers on "sync labels", "update labels", "apply labels to repos", "docs-sync-labels".
 compatibility: "Claude Code"
 metadata:
   author: lichtpfad
@@ -9,7 +9,7 @@ metadata:
 
 # Instructions
 
-Sync canonical labels defined in `data/labels.json` to GitHub repos under the `lichtpfad` org using the `gh` CLI.
+Sync canonical labels defined in `references/standards/labels.json` to GitHub repos under the `lichtpfad` org using the `gh` CLI.
 
 **Default behaviour:** dry-run (preview only). Use `--apply` to actually write labels.
 
@@ -66,7 +66,7 @@ Report count of repos synced and whether any errors occurred.
 
 | Error | Cause | Fix |
 |-------|-------|-----|
-| `labels.json not found` | Bundled `data/labels.json` missing | Restore from `C:/dev/docs/standards/labels.json` |
+| `labels.json not found` | Bundled `references/standards/labels.json` missing | Restore it from the plugin, or point `H2T_DEV_ROOT` at your own `docs/standards/` |
 | `gh CLI not found` | `gh` not on PATH or wrong path in `docs/common.py` | Install `gh` or fix `GH` constant |
 | `FAIL: <label>` per label | GitHub API error (auth, rate-limit, repo not found) | Check `gh auth status`, verify repo name in `lichtpfad` org |
 | Script import error | `lib/docs/common.py` not found | Run from within the plugin cache or set `CLAUDE_PLUGIN_ROOT` |
