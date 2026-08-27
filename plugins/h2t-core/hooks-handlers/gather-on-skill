@@ -66,16 +66,29 @@ fi
 # Channel by event: the model reads hookSpecificOutput.additionalContext, while
 # systemMessage is the user-visible TUI line. UserPromptSubmit is a member of the
 # hookSpecificOutput union, so the modern protocol validates there.
+#
+# stdin is read as bytes and decoded explicitly. `sys.stdin.read()` uses the console code
+# page on Windows and, under UTF-8 mode, the surrogateescape handler — so one undecodable
+# byte becomes a lone surrogate, json.dumps writes \udcd1, and the API rejects not just
+# this request but every later one in the session: the string is in the conversation now.
+# Measured on AUTOMATA 2026-08-27 as `400 ... invalid high surrogate`, in two chats.
+#
+# Two upstreams hand over such bytes and neither is hypothetical: `tail -c 500` below cuts
+# stderr by BYTES and leaves half a UTF-8 character, and a localized Windows error arrives
+# in the console code page. errors="replace" is what makes those a visible U+FFFD instead
+# of an invisible surrogate — it cannot emit one, which is the whole point of choosing it
+# over surrogateescape. stdout is written as bytes for the same reason: json.dumps is pure
+# ASCII, so no console code page can touch the envelope on the way out.
 emit() {
   printf '%s' "$1" | "${H2T_PYTHON_CMD[@]}" -c \
     'import json, sys
-text = sys.stdin.read()
+text = sys.stdin.buffer.read().decode("utf-8", "replace")
 event = sys.argv[1]
 if event == "UserPromptSubmit":
     envelope = {"hookSpecificOutput": {"hookEventName": event, "additionalContext": text}}
 else:
     envelope = {"systemMessage": text}
-sys.stdout.write(json.dumps(envelope))' "$event"
+sys.stdout.buffer.write(json.dumps(envelope).encode("ascii"))' "$event"
 }
 
 SCRIPT_STDOUT=""
