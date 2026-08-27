@@ -30,7 +30,7 @@ Then run setup:
 
 ```text
 /h2t-core:setup doctor
-/h2t-core:setup install h2t-ops
+/h2t-core:setup install-h2t-ops
 /h2t-core:setup connectors-check
 ```
 
