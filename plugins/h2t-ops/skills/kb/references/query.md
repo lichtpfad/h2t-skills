@@ -7,7 +7,7 @@ Read the KB instead of re-deriving from raw. Two **intents** share one retrieval
 
 If unsure which intent applies: a request that will *decide something* is `ground`; a request to *see what we have* is `read`. When a `read` answer starts driving a decision, switch to `ground` and apply the gate.
 
-> Resolve `KB` per SKILL.md § "Resolve the KB root": `KB="${H2T_KB_ROOT:-C:/dev/research-kb}"`.
+> Resolve `KB` per SKILL.md § "Resolve the KB root": `H2T_KB_ROOT` is required.
 > Query is read-only (Read/Grep over `$KB`) for L0–L3. Two escape hatches use the engine: the L-raw segment read (`kb-read-span`) and the optional file-back step (§ Compound).
 
 This mode is **KB-agnostic**: instance ontology is read from the KB (`$KB/taxonomy.md`, `$KB/index*.md`); the `llm-kb-engine` artifact **schema** is assumed (every instance shares the one engine). **Fail loud** if a required artifact is missing (no page, no `pipeline-state.json`, no council round for a `ground` query) — never silently answer ungrounded.

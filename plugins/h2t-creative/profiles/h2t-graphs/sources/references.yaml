@@ -4,11 +4,11 @@ references:
   - id: graphs-live
     type: live-site
     url: https://graphs.lichtpfadstudio.com/
-    local_source: C:/dev/h2t-landings/graphs/index.html
+    local_source: h2t-landings/graphs/index.html  # author's private checkout
     screenshot: screenshots/reference-desktop.png
   - id: legacy-h2t-landing
     type: legacy-skill
-    path: C:/Users/stani/.claude/plugins/cache/lichtpfad/h2t/2.14.1/skills/landing/SKILL.md
+    path: h2t-creative/skills/landing/SKILL.md  # was a cache path naming a user and a plugin (h2t 2.14.1) that no longer ships
 visual_invariants:
   - HUD surface panels with four L-shaped corner brackets
   - JetBrains Mono for body/labels, Inter for display headings

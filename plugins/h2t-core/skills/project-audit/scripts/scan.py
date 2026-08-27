@@ -10,6 +10,7 @@ Output: JSON to stdout (scan_result.json schema)
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -327,17 +328,29 @@ def scan(repo_path: str, projects_yaml: str | None = None) -> dict:
     return result
 
 
+def _default_projects_yaml() -> str | None:
+    """Where sibling repositories live, or nothing.
+
+    This used to be a literal path on one Windows machine, so on every other machine the
+    scan silently read a file that was not there. `H2T_DEV_ROOT` is the variable the rest
+    of the pack already uses for the same question; unset, the answer is `--projects-yaml`
+    or nothing at all.
+    """
+    root = os.environ.get("H2T_DEV_ROOT")
+    return f"{root}/h2t-landings/projects.yaml" if root else None
+
+
 def main():
     parser = argparse.ArgumentParser(description="Scan repo for project-audit pipeline")
     parser.add_argument("repo_path", help="Path to the repository")
     parser.add_argument(
         "--projects-yaml",
         default=None,
-        help="Path to projects.yaml (default: C:/dev/h2t-landings/projects.yaml)",
+        help="Path to projects.yaml (default: $H2T_DEV_ROOT/h2t-landings/projects.yaml)",
     )
     args = parser.parse_args()
 
-    projects_yaml = args.projects_yaml or "C:/dev/h2t-landings/projects.yaml"
+    projects_yaml = args.projects_yaml or _default_projects_yaml()
     result = scan(args.repo_path, projects_yaml)
     sys.stdout.reconfigure(encoding="utf-8")
     json.dump(result, sys.stdout, indent=2, ensure_ascii=False)

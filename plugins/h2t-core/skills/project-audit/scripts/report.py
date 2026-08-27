@@ -11,6 +11,7 @@ Example:
 
 import argparse
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -60,7 +61,11 @@ def main():
     parser.add_argument("--field", action="append", default=[], help="key=value pairs (e.g. claude_md=true)")
     parser.add_argument(
         "--projects-yaml",
-        default="C:/dev/h2t-landings/projects.yaml",
+        default=(
+            f"{os.environ['H2T_DEV_ROOT']}/h2t-landings/projects.yaml"
+            if os.environ.get("H2T_DEV_ROOT")
+            else None
+        ),
         help="Path to projects.yaml",
     )
     args = parser.parse_args()

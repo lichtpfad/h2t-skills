@@ -2,7 +2,7 @@
 
 > **Data-only model.** The engine is installed as the `llm-kb-engine` tool (`uv tool install
 > llm-kb-engine`); the KB is data-only (no engine files). Resolve the KB root per SKILL.md
-> § "Resolve the KB root": `KB="${H2T_KB_ROOT:-C:/dev/research-kb}"`.
+> § "Resolve the KB root": `H2T_KB_ROOT` is required.
 >
 > **Two ways the engine is invoked:**
 > - **Console-scripts** — cwd-independent, always driven with `--repo "$KB"`:

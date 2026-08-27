@@ -1,6 +1,6 @@
 # kb — lint mode
 
-> Resolve `KB` per SKILL.md § "Resolve the KB root": `KB="${H2T_KB_ROOT:-C:/dev/research-kb}"`.
+> Resolve `KB` per SKILL.md § "Resolve the KB root": `H2T_KB_ROOT` is required.
 > The engine is the installed `llm-kb-engine` tool; `kb-lint` is a console-script (data-only model).
 
 Thin wrapper over the engine's `kb-lint` (config-bound source-type / verdict / council checks). Read-only.

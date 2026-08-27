@@ -1,7 +1,7 @@
 ---
 name: voice-eval
-description: "Evaluate writing style of a draft against author voice profile. Triggers on: 'voice eval', 'check my voice', 'оцени стиль', 'проверь голос', 'voice check', '/voice-eval'. Requires h2t-voice installed at C:/dev/h2t-voice."
-compatibility: "Requires h2t-voice venv at C:/dev/h2t-voice/.venv. Profile must exist at ~/.h2t/voice/profiles/default/."
+description: "Evaluate writing style of a draft against author voice profile. Triggers on: 'voice eval', 'check my voice', 'оцени стиль', 'проверь голос', 'voice check', '/voice-eval'. Requires the private h2t-voice repository; point H2T_VOICE_PYTHON at its interpreter."
+compatibility: "Requires H2T_VOICE_PYTHON pointing at the h2t-voice interpreter. Profile must exist at ~/.h2t/voice/profiles/default/."
 metadata:
   author: lichtpfad
   version: 1.0.0
@@ -148,6 +148,6 @@ Score < 0.65 → флаг для проверки (не блокирует пу�
 | Проблема | Решение |
 | --- | --- |
 | `Profile 'default' not found` | `h2t-voice profile create default` + добавить тексты + train |
-| `No module named h2t_voice` | Установить: `cd C:/dev/h2t-voice && pip install -e .` |
+| `No module named h2t_voice` | `H2T_VOICE_PYTHON` указывает не туда, либо пакет не установлен: `pip install -e <h2t-voice>` |
 | `spaCy model not found` | `$H2T_VOICE_PYTHON -m spacy download ru_core_news_lg` |
 | Classifier score отсутствует | Нет negatives в профиле или model.cbm не обучен |

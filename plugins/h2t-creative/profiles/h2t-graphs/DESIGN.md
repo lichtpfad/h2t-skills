@@ -76,7 +76,7 @@ Swap accent: `--color-accent: #00ff88`, `--color-accent-glow: rgba(0,255,136,0.4
 
 - Primary: `profiles/h2t-graphs/sources/references.yaml`
 - Live reference: `graphs.lichtpfadstudio.com`
-- Local source: `C:/dev/h2t-landings/graphs/index.html`
+- Local source: `h2t-landings/graphs/index.html` in the author's private checkout
 - Legacy skill: `h2t:landing` v2.14.1 SKILL.md
 
 ## R1 Required Components

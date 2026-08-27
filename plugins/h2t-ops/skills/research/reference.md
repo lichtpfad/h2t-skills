@@ -120,7 +120,7 @@ output schema.
 
 For client deliverables, prefer **Exa retrieval → our grounded synthesis** over the
 black-box `output.content` / agent answer. Take the returned `citations` /
-`output.grounding` and synthesize under `C:/dev/docs/standards/evidence-grounded-synthesis.md`
+`output.grounding` and synthesize under `standards/evidence-grounded-synthesis.md`
 (anti-hallucination: every assertion carries a URL + verbatim support).
 
 ## Known Limitations (Exa, documented)

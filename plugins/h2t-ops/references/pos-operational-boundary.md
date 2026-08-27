@@ -1,6 +1,7 @@
 # POS Operational Boundary for Skills
 
-Canonical decision: `C:/dev/POS/docs/adr/0006-pos-operational-journal-and-connector-boundary.md`
+Canonical decision: `docs/adr/0006-pos-operational-journal-and-connector-boundary.md`
+in the private POS repository.
 
 This is a skill-facing operational reference, not the canonical architecture
 decision. The POS repo decides architecture. The h2t-skills repo teaches agents
