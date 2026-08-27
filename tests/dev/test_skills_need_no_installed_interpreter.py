@@ -100,11 +100,6 @@ def test_every_uv_run_names_its_project():
 COMMAND_FENCES = {"", "bash", "sh", "shell", "console", "zsh"}
 INTERPRETERS = {"python", "python3", "py"}
 WRAPPERS = {"env", "sudo", "time", "command", "exec", "nohup"}
-# Wrapper options that consume the next token. `env -u FOO python3 x.py` runs
-# python, and stopping at `FOO` is how that call read as a command of its own.
-# The list is what these wrappers actually take; an unlisted one would leave the
-# scan a token short, which the fixtures below would show.
-VALUE_OPTIONS = {"-u", "-g", "-C", "-o", "--unset", "--chdir", "--user", "--group"}
 BOUNDARIES = {";", "&&", "||", "|", "&", "(", ")"}
 ASSIGNMENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
 NAIVE_SPLIT = re.compile(r"\|\||&&|[;|&()]|\$\(")
@@ -123,6 +118,10 @@ def _tokens(line: str) -> list[str] | None:
     try:
         lexer = shlex.shlex(line, posix=True, punctuation_chars=True)
         lexer.whitespace_split = True
+        # A shell only starts a comment at a word boundary; shlex cuts at any `#`, which
+        # silently dropped the rest of `echo foo#bar; python3 bad.py`. Comments are
+        # handled by the caller, on whole segments.
+        lexer.commenters = ""
         return list(lexer)
     except ValueError:
         return None
@@ -141,17 +140,48 @@ def _command_word(tokens: list[str]) -> str | None:
     while i < len(tokens) and (ASSIGNMENT.match(tokens[i]) or tokens[i] in WRAPPERS):
         was_wrapper = tokens[i] in WRAPPERS
         i += 1
-        while was_wrapper and i < len(tokens) and (
-            tokens[i].startswith("-") or ASSIGNMENT.match(tokens[i])
-        ):
-            takes_value = tokens[i] in VALUE_OPTIONS
+        # An option's value is whatever follows it and is neither another option nor the
+        # interpreter itself. Enumerating which options take one was a losing game —
+        # `sudo -p "Password:" python3 x.py` was missed by a list that had -u but not -p.
+        # Position decides instead, and `sudo apt install python3` is still untouched,
+        # because `apt` follows no option.
+        while was_wrapper and i < len(tokens) and tokens[i].startswith("-"):
             i += 1
-            if takes_value and i < len(tokens):
+            if (
+                i < len(tokens)
+                and not tokens[i].startswith("-")
+                and tokens[i] not in INTERPRETERS
+            ):
                 i += 1
     if i >= len(tokens):
         return None
     word = tokens[i]
     return None if word.startswith("#") else word
+
+
+def _substitutions(line: str) -> list[str]:
+    """Bodies of `$(...)` a shell would execute.
+
+    shlex returns `"$(python3 x.py)"` as one quoted word, so no boundary is seen and the
+    call inside it goes unnoticed — the thing the earlier naive split got right. Single
+    quotes are the one place a substitution is inert, so they are walked past as data.
+    """
+    bodies, i, n = [], 0, len(line)
+    while i < n:
+        if line[i] == "'":
+            close = line.find("'", i + 1)
+            i = n if close == -1 else close + 1
+            continue
+        if line.startswith("$(", i):
+            depth, j = 1, i + 2
+            while j < n and depth:
+                depth += (line[j] == "(") - (line[j] == ")")
+                j += 1
+            bodies.append(line[i + 2 : j - 1] if depth == 0 else line[i + 2 :])
+            i = j
+            continue
+        i += 1
+    return bodies
 
 
 def _interpreter_calls(line: str) -> list[str]:
@@ -170,9 +200,10 @@ def _interpreter_calls(line: str) -> list[str]:
             else:
                 current.append(token)
         segments.append(current)
-    return [
-        " ".join(seg) for seg in segments if _command_word(seg) in INTERPRETERS
-    ]
+    found = [" ".join(seg) for seg in segments if _command_word(seg) in INTERPRETERS]
+    for body in _substitutions(line):
+        found.extend(_interpreter_calls(body))
+    return list(dict.fromkeys(found))
 
 
 def _command_lines(text: str):
@@ -227,6 +258,13 @@ MUST_FLAG = [
     "echo hi && ( python3 x.py )",
     # A real substitution runs its contents.
     "OUT=$(python3 x.py)",
+    # A substitution runs inside double quotes too; shlex hands it back as one word.
+    'echo "$(python3 b.py)"',
+    'OUT="$(python3 b.py)"',
+    # A shell comment starts at a word boundary, not at any `#`.
+    "echo foo#bar; python3 bad.py",
+    # Enumerating value-taking options lost to this one; position decides now.
+    'sudo -p "Password:" python3 x.py',
 ]
 
 MUST_NOT_FLAG = [
@@ -242,6 +280,9 @@ MUST_NOT_FLAG = [
     # A separator inside quotes is data, not a boundary.
     'echo "a; python3 b.py"',
     "echo '$(python3 b.py)'",
+    # An interpreter as an argument is not an interpreter as the command.
+    "sudo apt install python3",
+    "brew install python3",
 ]
 
 
