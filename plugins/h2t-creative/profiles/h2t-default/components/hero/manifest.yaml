@@ -1,0 +1,9 @@
+component: hero
+fields:
+  headline:
+    type: text
+    required: true
+  subline:
+    type: text
+    required: false
+    default: ""

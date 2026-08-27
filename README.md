@@ -1,6 +1,6 @@
 # H2T Skills
 
-Claude Code plugin suite for H2T workflows: lifecycle context, provider connectors, docs/dev automation, architecture diagrams, and education tooling.
+Claude Code plugin suite for H2T workflows: lifecycle context, provider connectors, docs/dev automation, architecture diagrams, creative assets, and education tooling.
 
 ## Plugins
 
@@ -10,6 +10,7 @@ Claude Code plugin suite for H2T workflows: lifecycle context, provider connecto
 | `h2t-ops` | `h2t-ops:connectors`, `h2t-ops:research`, `h2t-ops:daily-brief` | Provider I/O through `h2t-ops`: Drive, Gmail, Calendar, Notion, Telegram, MeetGeek, Granola, research |
 | `h2t-dev` | `docs-lint`, `pre-merge-check`, `milestone-closure`, `github-issues` | Development and documentation lifecycle automation |
 | `h2t-arch` | `drawio`, `diagram-node`, `node-researcher` | Architecture and diagram workflows |
+| `h2t-creative` | `deck`, `landing`, `design`, `style-create`, `style-validate` | Landing pages, decks, and visual asset generation |
 | `h2t-edu` | education/transcript skills | Education content and transcript workflows |
 
 ## Install For A User
@@ -103,6 +104,7 @@ plugins/
   h2t-ops/
   h2t-dev/
   h2t-arch/
+  h2t-creative/
   h2t-edu/
 h2t_ops/
   cli.py

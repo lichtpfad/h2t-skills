@@ -72,7 +72,8 @@ jobs:
         run: python -m pytest plugins/h2t-core/skills/init-project/scripts -q
 
       # Ten more directories held assertions GitHub had never run (#381) — 968 in
-      # The 87 meetgeek tests merged in #389/#390. Each gets its
+      # h2t-creative alone before it was cut back to the v1.1.0 core (28 now), plus the 87
+      # meetgeek tests merged in #389/#390. Each gets its
       # own step because they cannot share one invocation: plugins/h2t-ops/skills/research/
       # tests is also named `tests`, so collecting it beside the repo's tests/ package dies
       # on `ModuleNotFoundError: No module named 'tests.core'`. All twelve directories run
@@ -96,6 +97,9 @@ jobs:
       - name: Plugin tests — setup skill
         if: ${{ !cancelled() }}
         run: python -m pytest plugins/h2t-core/skills/setup/scripts -q
+      - name: Plugin tests — h2t-creative
+        if: ${{ !cancelled() }}
+        run: python -m pytest plugins/h2t-creative/tests -q
       - name: Plugin tests — connectors skill
         if: ${{ !cancelled() }}
         run: python -m pytest plugins/h2t-ops/skills/connectors/scripts -q

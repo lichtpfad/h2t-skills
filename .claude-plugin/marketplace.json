@@ -51,6 +51,17 @@
       "strict": false
     },
     {
+      "name": "h2t-creative",
+      "description": "H2T Creative v2 — modular landing pages and decks: Swiss grid base, swappable profiles, Python assembler, Playwright QA.",
+      "version": "1.5.0",
+      "author": {
+        "name": "lichtpfad"
+      },
+      "source": "./plugins/h2t-creative",
+      "category": "productivity",
+      "strict": false
+    },
+    {
       "name": "h2t-edu",
       "description": "H2T Edu — education content pipeline: transcripts, YouTube, meeting conversion, lesson parsing",
       "version": "1.0.7",
