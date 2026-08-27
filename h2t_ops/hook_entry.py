@@ -45,10 +45,28 @@ def interpreter_for(path: Path) -> list[str]:
     return [resolved or parts[0], *parts[1:]]
 
 
+_USAGE = """usage: h2t-hook <handler-name> [args...]
+
+Runs a plugin hook handler from the h2t-core plugin, resolving the plugin root the
+same way a skill does. Handlers live in hooks-handlers/ and are named without a path:
+
+  h2t-hook gather-on-prompt
+  h2t-hook structure-guard
+
+Set H2T_PLUGIN_ROOT to override where the handler is looked for.
+"""
+
+
 def main() -> int:
     if len(sys.argv) < 2 or not sys.argv[1]:
-        print("usage: h2t-hook <handler-name> [args...]", file=sys.stderr)
+        print(_USAGE, file=sys.stderr)
         return 2
+    # `--help` is what a person types first, and it is not a handler name. Without this
+    # it was resolved as one: `h2t-hook --help` looked for `hooks-handlers/--help`, did
+    # not find it, and exited 5 — a real answer to a question nobody asked.
+    if sys.argv[1] in ("-h", "--help", "help"):
+        print(_USAGE)
+        return 0
     relative = f"hooks-handlers/{sys.argv[1]}"
     try:
         path = plugin_script_path(relative)

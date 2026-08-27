@@ -104,3 +104,28 @@ def test_a_python_shebang_never_resolves_to_a_missing_name(tmp_path, shebang):
     p.write_text(shebang + "pass\n", encoding="utf-8")
     resolved = interpreter_for(p)[0]
     assert Path(resolved).is_file(), f"{resolved} is not an executable file"
+
+
+def test_help_is_not_a_handler_name(tmp_path):
+    """`--help` is what a person types first, and it was resolved as a hook name.
+
+    Measured on a clean HOME, 2026-08-27: `h2t-hook --help` looked for
+    `hooks-handlers/--help`, did not find it, and exited 5 with a not-found message — a
+    correct answer to a question nobody asked. It was the only one of the nine entry
+    points that failed that probe.
+    """
+    root = tmp_path / "plugin"
+    (root / "hooks-handlers").mkdir(parents=True)
+    for flag in ("--help", "-h", "help"):
+        result = _run(root, flag)
+        assert result.returncode == 0, f"{flag}: rc={result.returncode} {result.stderr}"
+        assert "usage: h2t-hook" in result.stdout, flag
+
+
+def test_a_real_missing_handler_still_fails(tmp_path):
+    """The control. Without it, "help works" and "nothing is ever looked up" look alike."""
+    root = tmp_path / "plugin"
+    (root / "hooks-handlers").mkdir(parents=True)
+    result = _run(root, "no-such-handler")
+    assert result.returncode == 5, result.stderr
+
