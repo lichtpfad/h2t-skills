@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- feat(standards): the eight standards documents ship inside the plugin, under
+  `references/standards/`. They lived only at `C:/dev/docs/standards/` — a path on one
+  machine — while every skill and rule that cited them assumed they were readable
+  anywhere. Four stale copies scattered inside individual skills were collapsed into the
+  one shipped set (#439)
+
+- fix(docs-init): stop writing `C:/dev` into other repositories. The generated
+  documentation pointed its readers at a directory that exists on a single Windows
+  machine (#450)
+
 - feat(docs-lint): `retire --never-shipped` keeps only candidates with no commit
   that touched the document and code together. Age alone put 111 documents in
   one list here, 42 of which had such a commit; those 42 are a person's to read,

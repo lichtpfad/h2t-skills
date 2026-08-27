@@ -9,7 +9,7 @@
     {
       "name": "h2t-core",
       "description": "H2T Core — session lifecycle: session-start, handoff, scaffold-project, init-project, setup, agent-profile",
-      "version": "3.2.29",
+      "version": "3.2.30",
       "author": {
         "name": "lichtpfad"
       },
@@ -31,7 +31,7 @@
     {
       "name": "h2t-dev",
       "description": "H2T Dev — development workflow: docs-lint, github-issues, pre-merge-check, milestone-closure",
-      "version": "1.0.29",
+      "version": "1.0.30",
       "author": {
         "name": "lichtpfad"
       },
@@ -64,7 +64,7 @@
     {
       "name": "h2t-edu",
       "description": "H2T Edu — education content pipeline: transcripts, YouTube, meeting conversion, lesson parsing",
-      "version": "1.0.4",
+      "version": "1.0.5",
       "author": {
         "name": "lichtpfad"
       },

@@ -2,6 +2,29 @@
 
 ## Unreleased
 
+- fix(hooks): the gather envelope can no longer emit a lone surrogate. `sys.stdin.read()`
+  re-decodes the briefing through the interpreter's ANSI code page — cp1252 with
+  `errors="surrogateescape"` on a pipe, whatever `chcp` says — so byte `0x81` (Cyrillic
+  «с») became `U+DC81` and `json.dumps` printed the literal `\udc81`. The API then
+  rejected every subsequent request of that session, and the hook reported `rc=0`
+  throughout. Measured in vivo on the Windows machine: 17× `\udc81` and 3× `\udc8f` out
+  of one real `session-start` briefing — the trigger is the two most common Russian
+  letters, not an exotic byte. The envelope now reads `sys.stdin.buffer` and decodes with
+  `errors="replace"`, which has no representation for a lone surrogate (#453)
+
+- fix(secrets): read the secrets file from the location every other message names, and
+  merge the whole chain instead of the first file found. `H2T_SECRETS_FILE` had also lost
+  its `expanduser()`, so a `~`-prefixed path resolved to a literal directory named `~`.
+  Both regressions were found by `codex review` inside this same batch of commits and
+  confirmed by behaviour, not by reading (#432, #448)
+
+- fix(session-start): the briefing's hints name skills that exist. `/h2t:init-project`
+  was hardcoded in `briefing.py` and pinned green by a test — the `h2t` namespace is not
+  shipped, so the one actionable line a new machine sees pointed at nothing (#433)
+
+- fix(scaffold-project, setup): derive where sibling repositories live instead of naming
+  `C:/dev`. The path was written into other people's repositories verbatim (#434)
+
 - fix(session-start): the briefing warns when a versioned `pre-commit` exists and git
   is not running it. `scripts/hooks/pre-commit` has blocked `marketplace.json` drift
   since #74 and was off on this machine the whole time — `core.hooksPath` unset,
