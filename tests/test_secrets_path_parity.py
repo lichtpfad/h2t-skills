@@ -67,3 +67,21 @@ def test_research_hint_names_documented_path(tmp_path, monkeypatch):
         client.resolve_secret(KEY)
 
     assert "~/.h2t/config/secrets/secrets.env" in (ei.value.hint or "")
+
+
+def test_research_expands_tilde_in_override(tmp_path, monkeypatch):
+    """H2T_SECRETS_FILE=~/secrets.env must resolve (#448 review).
+
+    resolve_secret used to expanduser() its own override; moving to the shared list
+    dropped that, so a literal ~ from a quoted shell assignment missed every lookup.
+    """
+    monkeypatch.delenv(KEY, raising=False)
+    secrets = tmp_path / "tilde-secrets.env"
+    secrets.write_text(f"{KEY}=tilde-value\n", encoding="utf-8")
+    # setenv("HOME"), not setattr(Path, "home"): Path.expanduser() resolves ~ through
+    # os.environ["HOME"], so patching the classmethod leaves the tilde pointing at the
+    # real home. Same shape as the resolver bug this test guards.
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("H2T_SECRETS_FILE", "~/tilde-secrets.env")
+
+    assert client.resolve_secret(KEY) == "tilde-value"

@@ -29,7 +29,10 @@ def candidate_secret_files(env_file: Path | None = None) -> list[Path]:
         return [env_file]
     override = os.environ.get(ENV_OVERRIDE)
     if override:
-        return [Path(override)]
+        # expanduser, because the value arrives from a shell assignment or a config file
+        # where a quoted ~ stays literal. The research connector expanded it before #448
+        # moved it here; dropping that made every lookup miss the file.
+        return [Path(override).expanduser()]
     return [H2T_CONFIG_SECRETS, DEFAULT_SECRETS, LEGACY_SECRETS]
 
 

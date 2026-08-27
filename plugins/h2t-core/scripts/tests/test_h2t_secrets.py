@@ -1,6 +1,7 @@
 """Tests for h2t_secrets loader."""
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -158,3 +159,40 @@ def test_get_blob_fail_loud_on_missing(tmp_path, monkeypatch):
         h2t_secrets.get_blob("google/missing.json")
     msg = str(ei.value)
     assert "google/missing.json" in msg or "missing.json" in msg
+
+
+def test_bootstrap_merges_documented_and_shared(tmp_path, monkeypatch):
+    """A partial documented file must not hide the shared one (#448 review).
+
+    #432 made _default_secrets_file pick one file: the documented path if present, else
+    the shared one. A user who created ~/.h2t/config/secrets/secrets.env with a single
+    key lost every key still living in ~/.dor/secrets/secrets.env — exa_search.py then
+    die(4)s on a machine that was configured correctly before.
+    """
+    documented = tmp_path / ".h2t" / "config" / "secrets" / "secrets.env"
+    shared = tmp_path / ".dor" / "secrets" / "secrets.env"
+    documented.parent.mkdir(parents=True)
+    shared.parent.mkdir(parents=True)
+    documented.write_text("DOCUMENTED_ONLY=doc\n", encoding="utf-8")
+    shared.write_text("SHARED_ONLY=shared\n", encoding="utf-8")
+    monkeypatch.setattr(h2t_secrets, "H2T_CONFIG_SECRETS_FILE", documented)
+    monkeypatch.setattr(h2t_secrets, "DEFAULT_SECRETS_FILE", shared)
+    monkeypatch.setattr(h2t_secrets, "LEGACY_SECRETS_FILE", tmp_path / "absent-legacy.env", raising=False)
+    monkeypatch.delenv("H2T_SECRETS_FILE", raising=False)
+    monkeypatch.delenv("DOCUMENTED_ONLY", raising=False)
+    monkeypatch.delenv("SHARED_ONLY", raising=False)
+
+    h2t_secrets.bootstrap()
+
+    assert os.environ["DOCUMENTED_ONLY"] == "doc"
+    assert os.environ["SHARED_ONLY"] == "shared"
+
+
+def test_bootstrap_raises_only_when_no_candidate_exists(tmp_path, monkeypatch):
+    monkeypatch.setattr(h2t_secrets, "H2T_CONFIG_SECRETS_FILE", tmp_path / "absent-doc.env")
+    monkeypatch.setattr(h2t_secrets, "DEFAULT_SECRETS_FILE", tmp_path / "absent-shared.env")
+    monkeypatch.setattr(h2t_secrets, "LEGACY_SECRETS_FILE", tmp_path / "absent-legacy.env", raising=False)
+    monkeypatch.delenv("H2T_SECRETS_FILE", raising=False)
+
+    with pytest.raises(FileNotFoundError):
+        h2t_secrets.bootstrap()
