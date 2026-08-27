@@ -61,10 +61,15 @@ Three checks, each one command, said the opposite:
 - In the session doing the work: every `name:` bare on disk, every skill namespaced in
   the listing. The harness prepends. The premise was false where it mattered.
 
-The observation was almost certainly real. What did not survive the trip was everything
-needed to test the explanation — the machine's plugin cache, which held four stale
-`h2t-core` directories and, on the hypothesis, the cache of a `h2t` plugin deleted from
-the marketplace a while ago.
+The observation was real. What did not survive the trip was everything needed to test
+the explanation. Both replacement explanations offered from this side were wrong too — a
+stale `h2t` plugin cache, and leftover bare skills in `~/.claude/skills/` — and the peer
+refuted both by looking, which is the point: the machine that can answer is the machine
+that saw it.
+
+The actual cause was neither. Claude Code 2.1.160 renders a plugin skill in the command
+menu as its short name with the plugin in parentheses. Nothing was broken; a display
+format was read as a defect, and the reading travelled further than the display did.
 
 So: **act on the observation, verify the explanation.** Ask for what was typed, what
 happened, and what was expected — the peer asked the operator for exactly that shape
