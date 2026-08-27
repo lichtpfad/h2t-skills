@@ -39,3 +39,35 @@ usually unverifiable from this side. The daemon's source and its startup log are
 can be read: check `jetstreamEnabled`, the daemon's start time against the send time, and
 whether any conversation shows traffic in that window. Prefer the check you can run over
 the explanation you can only assert.
+
+## A diagnosis that travels becomes an instruction, and loses its evidence
+
+A peer reports what they saw and why they think it happens. By the time the report has
+crossed one or two hands, the observation and the explanation are one sentence, and the
+explanation is what arrives as the thing to do.
+
+Measured 2026-08-27. The peer observed a bare `/session-start` in the command menu,
+concluded "Claude Code does not namespace plugin skills; the driver is `name:` in
+SKILL.md", and the operator relayed the remedy: restore `name: h2t-core:*` to the three
+session skills, bump, ship.
+
+Three checks, each one command, said the opposite:
+
+- `tests/core/test_skill_frontmatter.py` fails on exactly that change, with the text
+  `renders as /h2t-core:h2t-core:session-start`.
+- #358 (bf66819) had already fixed the mirror-image complaint — the menu offering
+  `/h2t-core:h2t-core:handoff` and 32 more — by removing the prefix from frontmatter.
+  Applying the remedy would have been a knowing return to the state that issue left.
+- In the session doing the work: every `name:` bare on disk, every skill namespaced in
+  the listing. The harness prepends. The premise was false where it mattered.
+
+The observation was almost certainly real. What did not survive the trip was everything
+needed to test the explanation — the machine's plugin cache, which held four stale
+`h2t-core` directories and, on the hypothesis, the cache of a `h2t` plugin deleted from
+the marketplace a while ago.
+
+So: **act on the observation, verify the explanation.** Ask for what was typed, what
+happened, and what was expected — the peer asked the operator for exactly that shape
+earlier the same day and was right to. And when a remedy contradicts a deliberate
+decision in this repository, find that decision and read it before overriding it; both
+directions of this particular change have now been shipped once each.
