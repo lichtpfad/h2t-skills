@@ -81,3 +81,44 @@ def test_every_uv_run_names_its_project():
         "uv run that does not name its project (--no-project or --project <path>):\n"
         + "\n".join(offenders)
     )
+
+# An interpreter in command position: at the start of a line, or after a pipe, `&&`,
+# `;`, or the opening of a command substitution. `python-docx` and `python-dotenv` are
+# package names and must not match, so the word has to end there.
+BARE_INTERPRETER = re.compile(
+    r"(?:^|[;&|(]|\$\()\s*(?:python3?|py)(?=\s|$)"
+)
+
+
+def test_no_skill_invokes_a_bare_interpreter():
+    """`python` is not on PATH on macOS at all, and `python3` is not on Windows.
+
+    Every invocation goes through `uv run`, which supplies the interpreter. This is the
+    half the first version of this file missed: it forbade *paths* to an interpreter and
+    said nothing about calling one by name, so reverting `node-researcher` to `python3`
+    left the suite green. The red run is what showed the gap — a test believed on its
+    green alone would have shipped the hole.
+
+    A fenced ```python block is a syntax-highlighting hint, not a command, and prose
+    naming the defect this test guards against is not a command either. Both are skipped
+    by requiring the word to sit in command position on a line that is not fenced.
+    """
+    offenders = []
+    for path in SKILLS:
+        in_python_fence = False
+        for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            stripped = line.strip()
+            if stripped.startswith("```"):
+                in_python_fence = stripped[3:].strip().lower().startswith("python")
+                continue
+            if in_python_fence:
+                continue
+            if "uv run" in line or "$RUN" in line or "_PYTHON" in line:
+                continue
+            if BARE_INTERPRETER.search(line):
+                offenders.append(f"{path.relative_to(ROOT)}:{lineno}  {stripped}")
+    assert not offenders, (
+        "skills calling an interpreter by name:\n"
+        + "\n".join(offenders)
+        + "\n\nUse: uv run --no-project --python 3.11 python <script>"
+    )
