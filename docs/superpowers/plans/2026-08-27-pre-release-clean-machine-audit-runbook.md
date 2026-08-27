@@ -28,14 +28,15 @@ The canonical step names are kept so the artifact stays valid and resumable; the
 sit inside `subagent-driven-dev`, which is where this run's work actually is.
 
 - [x] **write-spec** — skill: `n/a — brief is issue #431` · input: `operator brief` · done: issue #431 filed with the seven scoped questions · failure: escalate · re-entry: idempotent: re-read issue
-- [ ] **review-spec** — skill: `codex review (embedded)` · input: `#431` · done: no [P1] · failure: fix P1 then re-run (<=N) · re-entry: idempotent: re-review
+- [n/a] **review-spec** — NOT RUN, deliberately (Decision-log, 2026-08-27): a paid gate is a
+  named hard-stop and the operator authorized an audit, not spend · skill: `codex review (embedded)` · input: `#431` · done: no [P1] · failure: fix P1 then re-run (<=N) · re-entry: idempotent: re-review
 - [x] **write-plan** — skill: `this runbook` · input: `#431` · done: audit phases enumerated below · failure: escalate · re-entry: idempotent: overwrite plan
-- [ ] **plan-gate** — skill: `codex review (embedded)` · input: `this runbook` · done: no [P1] · failure: fix P1 then re-run (<=N) · re-entry: idempotent: re-review
+- [n/a] **plan-gate** — NOT RUN, same decision and same reason · skill: `codex review (embedded)` · input: `this runbook` · done: no [P1] · failure: fix P1 then re-run (<=N) · re-entry: idempotent: re-review
 - [x] **subagent-driven-dev** — skill: `audit phases A-J below` · input: `whole tree` · done: every phase has a recorded measurement · failure: record and continue; escalate only on hard-stop · re-entry: continue from first unchecked phase
 - [x] **gates** — skill: `pre-merge-check` · input: `report + runbook` · done: suite green · failure: fix then re-run (<=N) · re-entry: idempotent: re-run gate
 - [x] **e2e** — skill: `real entrypoint run` · input: `synthetic HOME with no ~/.h2t` · done: DONE / N/A / BLOCKED-DEFERRED · failure: BLOCKED->handoff; behavioral fail->record · re-entry: idempotent: fresh HOME each run
 - [x] **PR** — skill: `superpowers:finishing-a-development-branch` · input: `runbook + report` · done: PR opened · failure: escalate · re-entry: continue: reuse branch
-- [ ] **handoff** — skill: `h2t-core:handoff` · input: `run state` · done: session record written · failure: n/a (terminal) · re-entry: idempotent: re-run handoff
+- [x] **handoff** — skill: `h2t-core:handoff` · input: `run state` · done: session record written · failure: n/a (terminal) · re-entry: idempotent: re-run handoff
 
 ### Audit phases (inside subagent-driven-dev)
 
@@ -124,3 +125,16 @@ deliberately not run — see Decision-log.
 
 Nothing in the repository changed except this runbook, the report, and PR #430 (merged under
 prior authorization).
+
+## Run closed (2026-08-27)
+
+Closed after the morning session verified the outputs by state, not by checkbox: PR #430 and
+#437 merged, both reports in `main`, all eleven audit phases recorded. The two gates above
+stayed open in the checklist while the Decision-log already said they would not run — so the
+artifact kept advertising itself as resumable for a day after the work had landed. A decision
+recorded only in prose does not reach the mechanism that reads the boxes.
+
+The findings this run filed were fixed in the session that followed and shipped in `main` at
+9168c13: #432/#448 (secrets location), #433 (dead `/h2t:*` hints), #434 (author paths),
+#435 (LICENSE / .gitignore), #439/#450 (standards path), #453 (the lone surrogate the Windows
+half of the audit made visible). #431 closed.
