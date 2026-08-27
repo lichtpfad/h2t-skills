@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- fix(hooks): the interpreter chain in `resolve-h2t-python.sh` ends at `uv` instead of
+  falling through to a system Python without the package the probe needs. uv is last, so
+  a machine that already resolves locally pays nothing — it costs 58 ms warm and an
+  unbounded download cold, on a hook that fires every prompt. Requirements travel with
+  the probe (`resolve_h2t_python "import yaml" pyyaml`), because uv has no environment
+  to inherit. The gather error no longer prescribes `~/.h2t/venv`, a directory the
+  installer never creates (#449)
+
+- fix(setup): a preflight names `uv` as the missing prerequisite and exits 3, rather
+  than letting the first documented command of a fresh machine die on `command not
+  found`. Every invocation in the skill runs through
+  `uv run --no-project --python 3.11 python` (#449)
+
 - fix(hooks): the gather envelope can no longer emit a lone surrogate. `sys.stdin.read()`
   re-decodes the briefing through the interpreter's ANSI code page — cp1252 with
   `errors="surrogateescape"` on a pipe, whatever `chcp` says — so byte `0x81` (Cyrillic
