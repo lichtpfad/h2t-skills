@@ -174,6 +174,11 @@ def _load_payload() -> dict:
 
 
 def main() -> int:
+    # Windows encodes a piped stdout with the ANSI codepage, whatever chcp says, so
+    # a non-ASCII payload reaches the caller as cp1252 — or kills the write outright
+    # where cp1252 has no byte for the character. Every caller decodes UTF-8 (#428).
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
     payload = _load_payload()
     if payload.get("tool_name") != "Bash":
         return 0

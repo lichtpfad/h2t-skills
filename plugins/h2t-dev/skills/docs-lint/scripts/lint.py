@@ -1364,6 +1364,11 @@ def _run_retire(
 
 
 def main() -> None:
+    # Windows encodes a piped stdout with the ANSI codepage, whatever chcp says, so
+    # a non-ASCII payload reaches the caller as cp1252 — or kills the write outright
+    # where cp1252 has no byte for the character. Every caller decodes UTF-8 (#428).
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
     raw = sys.argv[1:]
 
     legacy_flags = {"--fix", "--fix-frontmatter"}

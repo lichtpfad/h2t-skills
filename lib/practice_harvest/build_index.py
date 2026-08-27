@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from collections import Counter
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -102,6 +103,11 @@ def build_corpus(
 
 
 def main() -> None:
+    # Windows encodes a piped stdout with the ANSI codepage, whatever chcp says, so
+    # a non-ASCII payload reaches the caller as cp1252 — or kills the write outright
+    # where cp1252 has no byte for the character. Every caller decodes UTF-8 (#428).
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default="docs/reports/2026-07-10-practice-harvest-corpus.json")
     ap.add_argument("--repo-root", action="append", default=[], type=Path)

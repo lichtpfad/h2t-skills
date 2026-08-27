@@ -694,6 +694,11 @@ def run_cli(args: list, *, catalog_path: Path = None) -> dict:
 # ── Entry point ──────────────────────────────────────────────────────────────
 
 def main():
+    # Windows encodes a piped stdout with the ANSI codepage, whatever chcp says, so
+    # a non-ASCII payload reaches the caller as cp1252 — or kills the write outright
+    # where cp1252 has no byte for the character. Every caller decodes UTF-8 (#428).
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
     result = run_cli(sys.argv[1:])
     print(json.dumps(result, indent=2, ensure_ascii=False))
     if "error" in result:

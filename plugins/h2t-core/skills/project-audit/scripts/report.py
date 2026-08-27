@@ -54,6 +54,11 @@ def update_project_docs(yaml_path: Path, project_id: str, fields: dict[str, bool
 
 
 def main():
+    # Windows encodes a piped stdout with the ANSI codepage, whatever chcp says, so
+    # a non-ASCII payload reaches the caller as cp1252 — or kills the write outright
+    # where cp1252 has no byte for the character. Every caller decodes UTF-8 (#428).
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
     import json
 
     parser = argparse.ArgumentParser(description="Update projects.yaml after audit")

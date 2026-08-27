@@ -150,6 +150,11 @@ def write_report(repo_root: Path, report: dict) -> Path:
 
 
 def main(argv: list[str] | None = None) -> int:
+    # Windows encodes a piped stdout with the ANSI codepage, whatever chcp says, so
+    # a non-ASCII payload reaches the caller as cp1252 — or kills the write outright
+    # where cp1252 has no byte for the character. Every caller decodes UTF-8 (#428).
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
     parser = argparse.ArgumentParser()
     parser.add_argument("--repo", default=None, help="owner/repo; defaults to gh repo view")
     parser.add_argument("--repo-root", default=".", help="local repo root")

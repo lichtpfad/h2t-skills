@@ -7,6 +7,7 @@ Phase 2: replace _write() with POST to POS API; local spool becomes fallback.
 import json
 import os
 import platform
+import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -80,6 +81,11 @@ def _write(
 
 def main() -> None:
     """CLI: python writer.py start --session-id <id> --domain <d> --project <p>"""
+    # Windows encodes a piped stdout with the ANSI codepage, whatever chcp says, so
+    # a non-ASCII payload reaches the caller as cp1252 — or kills the write outright
+    # where cp1252 has no byte for the character. Every caller decodes UTF-8 (#428).
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
     import argparse as _argparse
 
     parser = _argparse.ArgumentParser(prog="writer.py", description="Activity stream writer CLI")
