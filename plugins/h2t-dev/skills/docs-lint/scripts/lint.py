@@ -38,6 +38,7 @@ from docs.common import (
     STANDARDS_FILES,
     ensure_dir,
     excluded_predicate,
+    git_repo_root,
     parse_frontmatter,
     print_header,
     repo_path,
@@ -647,6 +648,11 @@ def _get_git_head(rp: Path) -> str:
 def _resolve_root(root_arg: str | None) -> Path:
     if root_arg:
         return Path(root_arg).resolve()
+    root = git_repo_root()
+    if root:
+        return root
+    # No git, or not a repository. The name walk stays as a second answer, because a
+    # plain directory tree can still be one of the known repositories.
     cwd = Path.cwd()
     for part in [cwd] + list(cwd.parents):
         if part.name in REPO_MANIFEST:

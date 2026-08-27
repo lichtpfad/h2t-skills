@@ -71,10 +71,6 @@ REPO_MANIFEST = [
     "h2t-vision", "h2t-voice",
 ]
 
-TIER_A = ["h2t-evals", "h2t-transcription", "h2t-graphs", "h2t-ai", "h2t-vision", "h2t-skills"]
-TIER_B = ["h2t-factory", "h2t-snap", "h2t-staging", "h2t-landings", "h2t-dcc", "h2t-voice"]
-TIER_C = ["h2t-business", "h2t-client", "h2t-content", "h2t-tools"]
-
 REQUIRED_CORE_DIRS = [
     "docs/superpowers/specs",
     "docs/superpowers/plans",
@@ -101,11 +97,39 @@ FRONTMATTER_RULES = {
     "adr": ["title", "status", "date"],
 }
 
-GH = shutil.which("gh") or "C:/Program Files/GitHub CLI/gh.exe"
+# `gh` or nothing. The fallback here used to name a Windows install directory, so on a
+# machine without gh the callers received a path that cannot exist and failed on exec
+# rather than on the missing tool.
+GH = shutil.which("gh")
 
 
 def repo_path(name: str) -> Path:
     return DEV_ROOT / name
+
+
+def git_repo_root(start: Path | None = None) -> Path | None:
+    """The repository containing `start`, from git rather than from a list of names.
+
+    Callers used to walk up looking for a directory whose *name* appears in
+    REPO_MANIFEST — sixteen of the author's repositories. Measured 2026-08-27: inside a
+    repository that is not on that list, running from `docs/sub` resolved the repo root
+    to `docs/sub`, so the linter treated a subdirectory as the whole repository. Not
+    "some checks are off" — the wrong root, silently.
+
+    Returns None when there is no repository or no git, which is a real answer and the
+    caller decides what to do with it.
+    """
+    try:
+        out = subprocess.run(
+            ["git", "-C", str(start or Path.cwd()), "rev-parse", "--show-toplevel"],
+            capture_output=True, text=True, timeout=10,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if out.returncode != 0:
+        return None
+    path = out.stdout.strip()
+    return Path(path) if path else None
 
 
 def git_add_commit(repo: Path, paths: list[str], message: str) -> bool:

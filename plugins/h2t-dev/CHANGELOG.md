@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- fix(docs-lint, docs-index): the repository is resolved with `git rev-parse
+  --show-toplevel` before falling back to the name walk. The walk looked for a directory
+  whose name is one of sixteen private repositories, so anywhere else it fell through —
+  and `lint.py` then returned the cwd. Measured: run from `docs/sub` of a repository not
+  on that list, `repo_root` came back as `docs/sub`, and the linter treated a
+  subdirectory as the whole repository (#444)
+
+- chore(docs): `TIER_A`/`TIER_B`/`TIER_C` removed — zero readers in the tree, sixteen
+  private repository names. `GH` no longer falls back to a Windows install directory: a
+  machine without `gh` received a path that cannot exist and failed on exec rather than
+  on the missing tool (#434, #444)
+
 - fix(docs-lint, docs-sync-labels, milestone-closure): run through `uv run --no-project
   --with <pkg> python` instead of probing for `~/.h2t/venv`. The installer never created
   that directory — `setup_h2t.py` contains the word `venv` zero times — so the contract

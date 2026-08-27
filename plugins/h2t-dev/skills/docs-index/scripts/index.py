@@ -19,6 +19,7 @@ for _lib in [_PLUGIN_ROOT / "lib", _PLUGIN_ROOT.parent.parent / "lib"]:
 from docs.common import (
     REPO_MANIFEST,
     excluded_predicate,
+    git_repo_root,
     parse_frontmatter,
     print_header,
     repo_path,
@@ -26,6 +27,9 @@ from docs.common import (
 
 
 def _detect_current_repo() -> str | None:
+    root = git_repo_root()
+    if root:
+        return root.name
     cwd = Path.cwd()
     for part in [cwd] + list(cwd.parents):
         if part.name in REPO_MANIFEST:
