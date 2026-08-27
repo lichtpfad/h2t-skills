@@ -14,7 +14,7 @@ Scaffold a new visual profile for h2t-creative.
 ## Setup
 
 ```bash
-PLUGIN_ROOT="$(cd "${CLAUDE_SKILL_DIR}/../.." && pwd)"
+PLUGIN_ROOT="$(h2t-creative root)"
 PROFILES_DIR="$PLUGIN_ROOT/profiles"
 ```
 

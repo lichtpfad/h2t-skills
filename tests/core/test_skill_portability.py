@@ -20,6 +20,7 @@ MARKETPLACE = ROOT / ".claude-plugin" / "marketplace.json"
 BASH_BLOCK = re.compile(r"^```(?:bash|sh|shell)\r?\n(.*?)^```", re.M | re.S)
 FORBIDDEN = (
     ("CLAUDE_PLUGIN_ROOT", "the harness does not export it to skill bash"),
+    ("CLAUDE_SKILL_DIR", "the harness does not export it to skill bash either (#456)"),
     (".claude/plugins/cache", "the plugin cache path is host- and version-specific"),
 )
 
@@ -36,16 +37,21 @@ def _shipped_skills():
 SHIPPED = list(_shipped_skills())
 
 
-# Not yet migrated (#360). h2t-dev needs commands *and* a way to reach reference docs;
-# h2t-creative uses the plugin root as an asset base — both need a design decision, not the
-# mechanical swap #357 applied to the lifecycle skills. This list may only shrink: a skill
-# that gets fixed must be deleted from it, or the test below fails as a stale entry.
+# Not yet migrated (#360). h2t-dev needs commands *and* a way to reach reference docs,
+# which needs a design decision rather than the mechanical swap #357 applied to the
+# lifecycle skills. h2t-creative left this list by shipping bin/h2t-creative — an asset
+# base is reachable from a script that knows its own location. This list may only shrink:
+# a skill that gets fixed must be deleted from it, or the test below fails as a stale entry.
 KNOWN_DEBT = frozenset({
     "h2t-dev:docs-lint",
     "h2t-dev:docs-sync-labels",
     "h2t-dev:milestone-closure",
-    # h2t-creative and its four entries left with the plugin: it was withdrawn from the
-    # release as unfinished, and its skills no longer ship.
+    # CLAUDE_SKILL_DIR joined FORBIDDEN once it was measured empty too (#456). These four
+    # resolve scripts through it and need a bin/ entry each, the way h2t-creative got one.
+    "h2t-edu:process-transcripts",
+    "h2t-edu:convert-meeting-transcript",
+    "h2t-edu:youtube-transcript",
+    "h2t-arch:drawio",
 })
 
 

@@ -1,0 +1,31 @@
+#!/bin/sh
+# The plugin's portable surface.
+#
+# The harness exports neither CLAUDE_PLUGIN_ROOT nor CLAUDE_SKILL_DIR to the bash a
+# skill runs. Measured on Claude Code 2.1.247 with h2t-creative:deck active: both were
+# empty, so `"$PLUGIN_ROOT/assembler.py"` expanded to `/assembler.py` and the skill
+# failed naming the filesystem root instead of the real cause.
+#
+# What the harness does provide is PATH: every installed plugin's bin/ is on it
+# (verified by calling a probe script there by bare name). So this script is reachable
+# without a path, and derives the plugin root from its own location — the one thing a
+# script always knows about itself.
+set -eu
+
+PLUGIN_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+
+case "${1:-}" in
+  root)
+    echo "$PLUGIN_ROOT"
+    ;;
+  assemble)
+    shift
+    # assembler.py imports yaml; uv fetches it for the run, so there is nothing to
+    # install first and no interpreter path to guess.
+    exec uv run --no-project --with pyyaml python "$PLUGIN_ROOT/assembler.py" "$@"
+    ;;
+  *)
+    echo "usage: h2t-creative root | h2t-creative assemble [assembler args]" >&2
+    exit 2
+    ;;
+esac

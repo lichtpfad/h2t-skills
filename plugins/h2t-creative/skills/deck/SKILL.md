@@ -14,9 +14,7 @@ Generate a presentation deck via the assembler pipeline.
 ## Setup
 
 ```bash
-PLUGIN_ROOT="$(cd "${CLAUDE_SKILL_DIR}/../.." && pwd)"
-ASSEMBLER="$PLUGIN_ROOT/assembler.py"
-RUN="uv run --no-project --with pyyaml python"
+PLUGIN_ROOT="$(h2t-creative root)"
 ```
 
 ## Step 1: Choose profile
@@ -74,7 +72,7 @@ Available layouts: `title-only`, `title-body`, `title-media`, `blank`.
 ## Step 3: Run assembler
 
 ```bash
-$RUN "$ASSEMBLER" --profile <name> --type deck --recipe recipe.yaml --out ./dist
+h2t-creative assemble --profile <name> --type deck --recipe recipe.yaml --out ./dist
 ```
 
 On error: print assembler's stderr and stop.
