@@ -203,7 +203,22 @@ def test_uv_carries_the_hook_when_no_local_python_has_pyyaml(hook_env, tmp_path)
         stub.write_text("#!/bin/sh\nexit 1\n")
         stub.chmod(0o755)
     env = dict(hook_env)
-    env["PATH"] = f"{fake_bin}:{env['PATH']}"
+    # `h2t-gather` must be off PATH entirely, and that is the whole point of the test.
+    # gather-on-skill:150 prefers the installed CLI, which runs under its own shebang and
+    # never touches the resolved interpreter — so on a machine that has it, this test
+    # would pass while the uv candidate did nothing but satisfy a probe. A failing stub
+    # does not work either: `command -v` finds it and the hook reports the CLI as broken.
+    # Dropping its directory is what leaves the script path, which does run
+    # `"${H2T_PYTHON_CMD[@]}"` — the machine the hook comment calls "where the wheel was
+    # never installed".
+    installed = shutil.which("h2t-gather", path=env["PATH"])
+    if installed:
+        owner = str(Path(installed).parent)
+        env["PATH"] = os.pathsep.join(
+            d for d in env["PATH"].split(os.pathsep) if d and d != owner
+        )
+    env["PATH"] = f"{fake_bin}{os.pathsep}{env['PATH']}"
+    assert shutil.which("h2t-gather", path=env["PATH"]) is None
     env["HOME"] = str(tmp_path)
     env.pop("H2T_PYTHON", None)
 

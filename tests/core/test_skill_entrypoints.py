@@ -244,7 +244,10 @@ def test_gather_hook_uses_strict_python_probe():
     """
     text = Path("plugins/h2t-core/hooks-handlers/gather-on-skill").read_text(encoding="utf-8")
     code = "\n".join(line.split("#", 1)[0] for line in text.splitlines())
-    assert 'resolve_h2t_python "import yaml"' in code
+    # The requirement is part of the contract: uv has no environment to inherit, so a
+    # probe without it resolves an interpreter that cannot import yaml. A substring
+    # assertion on the probe alone would not notice the argument going missing.
+    assert 'resolve_h2t_python "import yaml" pyyaml' in code
     assert "lib.cli" not in code
     assert 'resolve_h2t_python "import sys"' not in code
 
