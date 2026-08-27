@@ -170,8 +170,11 @@ def test_message_distinguishes_a_plan_from_its_spec(tmp_path, monkeypatch, capsy
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(m, "_pr_view", lambda root, n: {
         "state": "MERGED",
+        # `lib/thing.py` is what makes this a PR that implemented something. Without
+        # a code file the hook is silent by design, and this test is about naming.
         "files": [{"path": "docs/superpowers/plans/2026-08-24-thing.md"},
-                  {"path": "docs/superpowers/specs/2026-08-24-thing.md"}],
+                  {"path": "docs/superpowers/specs/2026-08-24-thing.md"},
+                  {"path": "lib/thing.py"}],
     })
     monkeypatch.setattr(m, "_load_payload", lambda: {
         "tool_name": "Bash", "tool_input": {"command": "gh pr merge 408"}})
@@ -179,3 +182,95 @@ def test_message_distinguishes_a_plan_from_its_spec(tmp_path, monkeypatch, capsy
     msg = json.loads(capsys.readouterr().out)["systemMessage"]
     assert "plans/2026-08-24-thing.md" in msg
     assert "specs/2026-08-24-thing.md" in msg
+
+
+# ── "the PR listed it" is not "the document is finished" ────────────────────
+
+
+_DOCS_ONLY_VIEW = {
+    "state": "MERGED",
+    "files": [
+        {"path": "docs/superpowers/specs/2026-08-23-lms-design.md"},
+        {"path": "README.md"},
+    ],
+}
+
+
+def test_a_documentation_only_pr_closes_nothing(tmp_path):
+    """The defect, in the shape it actually appeared (#455).
+
+    h2t-business PRs #58, #59 and #60 on 2026-08-27 were documentation edits. Each
+    stamped `done` on a 2300-line decision map carrying four open questions in one
+    section. A PR that changed no code implemented nothing, and the file list says so.
+    """
+    m = _load()
+    doc = _plan(tmp_path, "docs/superpowers/specs/2026-08-23-lms-design.md",
+                '---\ntitle: "LMS"\nstatus: "draft"\n---\nbody\n')
+
+    assert m.close_plans_for_pr(tmp_path, 58, _DOCS_ONLY_VIEW) == []
+    assert 'status: "draft"' in doc.read_text(encoding="utf-8")
+    assert "pr: 58" not in doc.read_text(encoding="utf-8")
+
+
+def test_a_pr_that_changed_code_still_closes_its_plan(tmp_path):
+    """The control. Without it, "closes nothing" and "hook is broken" look alike."""
+    m = _load()
+    _plan(tmp_path, "docs/superpowers/plans/2026-08-24-thing.md",
+          '---\nstatus: "draft"\n---\nbody\n')
+    changed = m.close_plans_for_pr(tmp_path, 408, _VIEW)
+    assert [c["path"] for c in changed] == ["docs/superpowers/plans/2026-08-24-thing.md"]
+
+
+def test_an_empty_file_list_is_not_permission_to_stamp():
+    """`gh` returning nothing must read as "implemented nothing", not as a free hand.
+
+    Asserted on `_implements_something` rather than through `close_plans_for_pr`: with
+    no files there is nothing to iterate either way, so the end-to-end version passed
+    with the discriminator deleted. It was a comment, not a test.
+    """
+    m = _load()
+    assert m._implements_something({"files": []}) is False
+    assert m._implements_something({}) is False
+    assert m._implements_something({"files": [{"path": "lib/thing.py"}]}) is True
+
+
+def test_a_living_document_is_never_closed(tmp_path):
+    """A decision map has no finished state; it lives as long as its open questions.
+
+    `approved` granted permanent immunity while `draft` never could — so the documents
+    still in work were the ones getting stamped. `lifecycle: living` is the author
+    saying which kind of document this is, rather than the hook guessing.
+    """
+    m = _load()
+    doc = _plan(tmp_path, "docs/superpowers/specs/2026-08-23-lms-design.md",
+                '---\ntitle: "LMS"\nstatus: "draft"\nlifecycle: living\n---\nbody\n')
+    view = {
+        "state": "MERGED",
+        "files": [
+            {"path": "docs/superpowers/specs/2026-08-23-lms-design.md"},
+            {"path": "lib/lms.py"},
+        ],
+    }
+    assert m.close_plans_for_pr(tmp_path, 61, view) == []
+    assert 'status: "draft"' in doc.read_text(encoding="utf-8")
+
+
+def test_the_message_states_what_it_did_not_what_is_true(tmp_path, monkeypatch, capsys):
+    """It used to announce that the PR "закрыл" the documents — a claim about the
+    world, from a hook that can only know what it wrote."""
+    m = _load()
+    _plan(tmp_path, "docs/superpowers/plans/2026-08-24-thing.md",
+          '---\nstatus: "draft"\n---\nx\n')
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(m, "_pr_view", lambda root, n: {
+        "state": "MERGED",
+        "files": [{"path": "docs/superpowers/plans/2026-08-24-thing.md"},
+                  {"path": "lib/thing.py"}],
+    })
+    monkeypatch.setattr(m, "_load_payload", lambda: {
+        "tool_name": "Bash", "tool_input": {"command": "gh pr merge 408"}})
+    m.main()
+    msg = json.loads(capsys.readouterr().out)["systemMessage"]
+    assert "проставлен status: done" in msg
+    assert "закрыл" not in msg
+

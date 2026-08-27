@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- fix(plan-closer): a merged PR closes a plan only if it changed something other than
+  documentation. The hook read "the PR listed this document" as "this document is
+  finished" — two different claims. Measured on h2t-business 2026-08-27: PRs #58, #59
+  and #60, three documentation edits in a row, each stamping `done` on a 2300-line
+  decision map with four open questions in one section, and each leaving the working
+  tree dirty. The discriminator was on the same `gh pr view` output all along: a PR
+  that changed no code implemented nothing. A document with no finished state now says
+  so itself with `lifecycle: living` and is never stamped — previously `approved`
+  granted permanent immunity while `draft` never could, so the documents still in work
+  were exactly the ones being closed. The TUI line states what the hook wrote rather
+  than asserting the PR "закрыл" anything (#455)
+
 - fix(hooks): the interpreter chain in `resolve-h2t-python.sh` ends at `uv` instead of
   falling through to a system Python without the package the probe needs. uv is last, so
   a machine that already resolves locally pays nothing — it costs 58 ms warm and an
