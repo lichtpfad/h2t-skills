@@ -16,9 +16,7 @@ Sync canonical labels defined in `references/standards/labels.json` to GitHub re
 ## Variables
 
 ```bash
-H2T_PYTHON="${H2T_PYTHON:-}"
-[ -z "$H2T_PYTHON" ] && [ -f "$HOME/.h2t/venv/Scripts/python.exe" ] && H2T_PYTHON="$HOME/.h2t/venv/Scripts/python.exe"
-[ -z "$H2T_PYTHON" ] && [ -f "$HOME/.h2t/venv/bin/python" ] && H2T_PYTHON="$HOME/.h2t/venv/bin/python"
+RUN="uv run --no-project python"
 
 if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ]; then
     _DEV_ROOT="$CLAUDE_PLUGIN_ROOT"
@@ -40,8 +38,8 @@ SYNC_LABELS="$_DEV_ROOT/skills/docs-sync-labels/scripts/sync_labels.py"
 Run without `--apply` to preview every label that would be created/updated:
 
 ```bash
-"$H2T_PYTHON" "$SYNC_LABELS"                    # all repos
-"$H2T_PYTHON" "$SYNC_LABELS" h2t-ai h2t-skills  # specific repos
+$RUN "$SYNC_LABELS"                    # all repos
+$RUN "$SYNC_LABELS" h2t-ai h2t-skills  # specific repos
 ```
 
 Output shows `label-name (category)` per repo. No GitHub API calls are made.
@@ -51,8 +49,8 @@ Output shows `label-name (category)` per repo. No GitHub API calls are made.
 After confirming the dry-run output looks correct, run with `--apply`:
 
 ```bash
-"$H2T_PYTHON" "$SYNC_LABELS" --apply                    # all repos
-"$H2T_PYTHON" "$SYNC_LABELS" h2t-ai h2t-skills --apply  # specific repos
+$RUN "$SYNC_LABELS" --apply                    # all repos
+$RUN "$SYNC_LABELS" h2t-ai h2t-skills --apply  # specific repos
 ```
 
 The script calls `gh label create --force` for each label. `--force` updates existing labels.

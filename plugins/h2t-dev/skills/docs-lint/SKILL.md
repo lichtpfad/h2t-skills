@@ -17,8 +17,7 @@ Scope: h2t-stack repos (Claude Code, `.claude/rules/`, `docs/superpowers/`, h2t 
 ## Variables
 
 ```bash
-H2T_PYTHON="${H2T_PYTHON:-$HOME/.h2t/venv/Scripts/python.exe}"
-[ ! -f "$H2T_PYTHON" ] && H2T_PYTHON="$HOME/.h2t/venv/bin/python"
+RUN="uv run --no-project --with pyyaml python"
 LINT="${CLAUDE_PLUGIN_ROOT}/skills/docs-lint/scripts/lint.py"
 ROOT="${1:-.}"
 DRY_RUN="${2:-}"   # pass "--dry-run" to skip issue creation and commits
@@ -30,7 +29,7 @@ Run in parallel:
 
 ```bash
 git -C "$ROOT" ls-files --cached --others --exclude-standard 2>/dev/null | head -500
-"$H2T_PYTHON" "$LINT" doctor --json --root "$ROOT" 2>/dev/null
+$RUN "$LINT" doctor --json --root "$ROOT" 2>/dev/null
 cat "$ROOT/CLAUDE.md" 2>/dev/null | head -80
 cat "$ROOT/.h2t/docs-lint.yaml" 2>/dev/null
 ls "$ROOT/.claude/rules/" 2>/dev/null
@@ -72,7 +71,7 @@ Output exactly 3 lines:
 
 ```bash
 # Read last valid state (schema=1, handle corrupt lines)
-LAST_STATE=$("$H2T_PYTHON" - <<'PYEOF'
+LAST_STATE=$($RUN - <<'PYEOF'
 import sys, json
 from pathlib import Path
 state_file = Path("$ROOT/.h2t/lint-state.jsonl")
@@ -96,7 +95,7 @@ if [ -z "$LAST_STATE" ]; then
 fi
 
 # Capture current finding IDs via doctor --json
-"$H2T_PYTHON" "$LINT" doctor --json --root "$ROOT" > /tmp/lint-current.json 2>/dev/null
+$RUN "$LINT" doctor --json --root "$ROOT" > /tmp/lint-current.json 2>/dev/null
 CURRENT_IDS=$(jq '[.findings[].id]' /tmp/lint-current.json 2>/dev/null || echo "[]")
 LAST_IDS=$(echo "$LAST_STATE" | jq '.finding_ids // []' 2>/dev/null || echo "[]")
 
@@ -104,7 +103,7 @@ LAST_IDS=$(echo "$LAST_STATE" | jq '.finding_ids // []' 2>/dev/null || echo "[]"
 NEW_IDS=$(jq -n --argjson cur "$CURRENT_IDS" --argjson last "$LAST_IDS" '$cur - $last')
 
 # Apply safe fixes automatically
-"$H2T_PYTHON" "$LINT" fix-safe --root "$ROOT"
+$RUN "$LINT" fix-safe --root "$ROOT"
 
 # Show only delta
 jq -r '.[]' <<< "$NEW_IDS" | while read id; do echo "  [NEW] $id"; done
@@ -155,7 +154,7 @@ Dry-run mode (`$DRY_RUN` = `--dry-run`): skip commits and issue creation through
 
 ```bash
 mkdir -p "$ROOT/.h2t"
-"$H2T_PYTHON" "$LINT" doctor --json --root "$ROOT" > "$ROOT/.h2t/lint-before.json" 2>/dev/null
+$RUN "$LINT" doctor --json --root "$ROOT" > "$ROOT/.h2t/lint-before.json" 2>/dev/null
 BEFORE_COUNT=$(jq '.findings | length' "$ROOT/.h2t/lint-before.json" 2>/dev/null || echo 0)
 ```
 
@@ -243,8 +242,8 @@ Dry-run: print issue titles/bodies to stdout instead.
 
 Safe (automatic):
 ```bash
-"$H2T_PYTHON" "$LINT" fix-safe --root "$ROOT"
-"$H2T_PYTHON" "$LINT" fix-index --root "$ROOT" --apply
+$RUN "$LINT" fix-safe --root "$ROOT"
+$RUN "$LINT" fix-index --root "$ROOT" --apply
 ```
 
 Destructive (confirm each before running):
@@ -257,7 +256,7 @@ Stage 4: skip all fixes.
 ### Step H: Validation gate
 
 ```bash
-"$H2T_PYTHON" "$LINT" doctor --json --root "$ROOT" > "$ROOT/.h2t/lint-after.json" 2>/dev/null
+$RUN "$LINT" doctor --json --root "$ROOT" > "$ROOT/.h2t/lint-after.json" 2>/dev/null
 
 DELTA=$(jq -n \
   --slurpfile before "$ROOT/.h2t/lint-before.json" \
@@ -311,9 +310,9 @@ Generate a correctly-named file with required frontmatter (fields sourced from
 over hand-writing — hand-written files trigger frontmatter findings.
 
 ```bash
-"$H2T_PYTHON" "$LINT" new plan <slug> --root . [--milestone M3] [--title "..."]
-"$H2T_PYTHON" "$LINT" new spec <slug> --root . [--milestone M3]
-"$H2T_PYTHON" "$LINT" new adr  <slug> --root .
+$RUN "$LINT" new plan <slug> --root . [--milestone M3] [--title "..."]
+$RUN "$LINT" new spec <slug> --root . [--milestone M3]
+$RUN "$LINT" new adr  <slug> --root .
 ```
 
 - `plan`/`spec` → `docs/superpowers/{plans,specs}/YYYY-MM-DD-<slug>.md` (date = today)
@@ -334,10 +333,10 @@ the document and something outside `docs/` together: the plan was written and
 nothing shipped under it (69 of 111 here).
 
 ```bash
-"$H2T_PYTHON" "$LINT" retire --root .                    # list candidates
-"$H2T_PYTHON" "$LINT" retire --root . --older-than 90    # a stricter cut
-"$H2T_PYTHON" "$LINT" retire --root . --apply            # git mv into docs/archive/
-"$H2T_PYTHON" "$LINT" retire --root . --never-shipped     # only `с кодом = 0`
+$RUN "$LINT" retire --root .                    # list candidates
+$RUN "$LINT" retire --root . --older-than 90    # a stricter cut
+$RUN "$LINT" retire --root . --apply            # git mv into docs/archive/
+$RUN "$LINT" retire --root . --never-shipped     # only `с кодом = 0`
 ```
 
 `--never-shipped` narrows the list to that second number being zero. It selects,
@@ -355,12 +354,12 @@ on h2t-skills), so the judgement is a person's and this only makes it cheap.
 ## Legacy sub-commands (still work)
 
 ```bash
-"$H2T_PYTHON" "$LINT" audit --root .
-"$H2T_PYTHON" "$LINT" plan --root .
-"$H2T_PYTHON" "$LINT" fix-safe --root .
-"$H2T_PYTHON" "$LINT" fix-index --root .
-"$H2T_PYTHON" "$LINT" doctor --json --root .
-"$H2T_PYTHON" "$LINT" retire --root .
+$RUN "$LINT" audit --root .
+$RUN "$LINT" plan --root .
+$RUN "$LINT" fix-safe --root .
+$RUN "$LINT" fix-index --root .
+$RUN "$LINT" doctor --json --root .
+$RUN "$LINT" retire --root .
 ```
 
 ## References

@@ -16,8 +16,7 @@ Generate a presentation deck via the assembler pipeline.
 ```bash
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}"
 ASSEMBLER="$PLUGIN_ROOT/assembler.py"
-H2T_PYTHON="${H2T_PYTHON:-$HOME/.h2t/venv/Scripts/python.exe}"
-[ ! -f "$H2T_PYTHON" ] && H2T_PYTHON="$HOME/.h2t/venv/bin/python"
+RUN="uv run --no-project --with pyyaml python"
 ```
 
 ## Step 1: Choose profile
@@ -75,7 +74,7 @@ Available layouts: `title-only`, `title-body`, `title-media`, `blank`.
 ## Step 3: Run assembler
 
 ```bash
-$H2T_PYTHON "$ASSEMBLER" --profile <name> --type deck --recipe recipe.yaml --out ./dist
+$RUN "$ASSEMBLER" --profile <name> --type deck --recipe recipe.yaml --out ./dist
 ```
 
 On error: print assembler's stderr and stop.

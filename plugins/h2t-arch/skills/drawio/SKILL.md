@@ -13,14 +13,17 @@ Generate production-quality `.drawio` architecture diagrams from structured grap
 
 ## Setup
 
-`generate.py` imports `drawpyo` unconditionally, and nothing installs it for you:
+`generate.py` imports `drawpyo` unconditionally. Run it through `uv`, which fetches the
+dependency for that run — there is nothing to install and nothing to check first:
 
 ```bash
-python -c "import drawpyo" 2>/dev/null || {
-  echo "ERROR: drawpyo not installed. Run: pip install drawpyo"
-  exit 1
-}
+RUN="uv run --no-project --with drawpyo python"
+$RUN "${CLAUDE_SKILL_DIR}/scripts/generate.py" ...
 ```
+
+The probe this replaced (`python -c "import drawpyo"`) answered a question nobody asked:
+bare `python` is absent from PATH on macOS, so it failed with `command not found` and
+printed `pip install drawpyo` — a remedy for a problem that was not the one at hand.
 
 Export additionally needs the draw.io Desktop CLI at
 `/Applications/draw.io.app/Contents/MacOS/draw.io`, overridable through
@@ -100,7 +103,7 @@ graph = {
 ### Step 2: Generate the .drawio file
 
 ```bash
-~/.claude/skills/.venv/bin/python -c "
+$RUN -c "
 import sys, os
 sys.path.insert(0, '${CLAUDE_SKILL_DIR}/scripts')
 from generate import generate_diagram
@@ -130,7 +133,7 @@ open <path_to_drawio_file>
 Export `.drawio` to PNG, SVG, or PDF via draw.io Desktop CLI:
 
 ```bash
-~/.claude/skills/.venv/bin/python -c "
+$RUN -c "
 import sys, os
 sys.path.insert(0, '${CLAUDE_SKILL_DIR}/scripts')
 from export import export_diagram
@@ -159,7 +162,7 @@ With `embed_diagram: true` in config, PNG/SVG contain editable XML inside.
 
 Check available shape types in the project:
 ```bash
-~/.claude/skills/.venv/bin/python -c "
+$RUN -c "
 import os, tomllib
 for p in ['.drawio-shapes.toml', '${CLAUDE_SKILL_DIR}/config/shapes/general.toml']:
     if os.path.exists(p):

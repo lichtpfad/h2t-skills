@@ -14,15 +14,10 @@ This skill converts DOCX meeting transcripts to Markdown format with automatic s
 ## Переменные
 
 ```bash
-# Cross-platform h2t venv detection
-H2T_PYTHON="${H2T_PYTHON:-}"
-if [ -z "$H2T_PYTHON" ]; then
-  [ -f "$HOME/.h2t/venv/bin/python" ] && H2T_PYTHON="$HOME/.h2t/venv/bin/python"
-  [ -f "$HOME/.h2t/venv/Scripts/python.exe" ] && H2T_PYTHON="$HOME/.h2t/venv/Scripts/python.exe"
-fi
-[ -z "$H2T_PYTHON" ] && echo "ERROR: h2t venv not found. Run /h2t-core:setup" && exit 1
+# uv подтягивает зависимости на каждый запуск — устанавливать нечего
+RUN="uv run --no-project --with python-docx --with python-dotenv python"
 
-CLI="$H2T_PYTHON ${CLAUDE_SKILL_DIR}/scripts/convert_docx_to_md.py"
+CLI="$RUN ${CLAUDE_SKILL_DIR}/scripts/convert_docx_to_md.py"
 ```
 
 ## Usage

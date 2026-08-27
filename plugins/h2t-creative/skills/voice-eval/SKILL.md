@@ -15,8 +15,15 @@ metadata:
 ## Setup
 
 ```bash
-H2T_VOICE_PYTHON="${H2T_VOICE_PYTHON:-C:/dev/h2t-voice/.venv/Scripts/python.exe}"
-[ ! -f "$H2T_VOICE_PYTHON" ] && H2T_VOICE_PYTHON="C:/dev/h2t-voice/.venv/bin/python"
+# h2t-voice is a separate, private repository — it is not part of this pack and is not
+# published anywhere. Point H2T_VOICE_PYTHON at its interpreter yourself; there is no
+# default worth guessing, and the old one named one directory on one Windows machine.
+if [ -z "${H2T_VOICE_PYTHON:-}" ]; then
+  echo "ERROR: this skill needs the private h2t-voice checkout." >&2
+  echo "Set H2T_VOICE_PYTHON to the interpreter of its virtualenv, e.g." >&2
+  echo "  export H2T_VOICE_PYTHON=/path/to/h2t-voice/.venv/bin/python" >&2
+  exit 3
+fi
 
 VOICE_CLI="$H2T_VOICE_PYTHON -m h2t_voice.cli"
 PROFILE="${VOICE_PROFILE:-default}"

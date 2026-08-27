@@ -18,16 +18,11 @@ metadata:
 ## Переменные
 
 ```bash
-# Cross-platform h2t venv detection
-H2T_PYTHON="${H2T_PYTHON:-}"
-if [ -z "$H2T_PYTHON" ]; then
-  [ -f "$HOME/.h2t/venv/bin/python" ] && H2T_PYTHON="$HOME/.h2t/venv/bin/python"
-  [ -f "$HOME/.h2t/venv/Scripts/python.exe" ] && H2T_PYTHON="$HOME/.h2t/venv/Scripts/python.exe"
-fi
-[ -z "$H2T_PYTHON" ] && echo "ERROR: h2t venv not found. Run /h2t-core:setup" && exit 1
+# uv подтягивает зависимости на каждый запуск — устанавливать нечего
+RUN="uv run --no-project --with python-dotenv --with google-genai --with requests --with pyyaml python"
 
 SKILL_DIR="${CLAUDE_SKILL_DIR}"
-PYTHON="$H2T_PYTHON"
+PYTHON=$RUN
 ```
 
 ## Команды
@@ -63,7 +58,7 @@ $PYTHON $SKILL_DIR/process_transcripts.py --all --no-index
 Диагностика (тип, дата, прогресс) идёт в stderr — не мешает пайпу.
 
 ```bash
-# Используй те же переменные из секции выше (H2T_PYTHON, SKILL_DIR)
+# Используй те же переменные из секции выше (RUN, SKILL_DIR)
 
 # Полный JSON от LLM — посмотреть всё сразу
 $PYTHON $SKILL_DIR/process_transcripts.py "Meeting Notes- Название.md" --dump-json | jq .
@@ -123,8 +118,8 @@ head -20 context/meetings/INDEX.md
 
 ## Зависимости
 
-- `pyyaml` в `.venv` (установлен)
-- `google-genai` (Gemini SDK, в h2t venv)
+- `python-dotenv`, `google-genai` (Gemini SDK), `requests`, `pyyaml` — подтягиваются
+  `uv run --with` на каждый запуск, ставить заранее не нужно
 - Проекты: `.claude/projects.yaml`
 
 ## Выходной формат файла

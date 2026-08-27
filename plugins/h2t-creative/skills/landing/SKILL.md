@@ -26,8 +26,7 @@ Do not jump from content or components directly to recipe implementation.
 ```bash
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}"
 ASSEMBLER="$PLUGIN_ROOT/assembler.py"
-H2T_PYTHON="${H2T_PYTHON:-$HOME/.h2t/venv/Scripts/python.exe}"
-[ ! -f "$H2T_PYTHON" ] && H2T_PYTHON="$HOME/.h2t/venv/bin/python"
+RUN="uv run --no-project --with pyyaml python"
 ```
 
 ## Step 1: Choose profile
@@ -104,7 +103,7 @@ Save as `recipe.yaml` in the user's working directory (or a temp dir if unspecif
 ## Step 4: Run assembler
 
 ```bash
-$H2T_PYTHON "$ASSEMBLER" --profile <name> --type landing --recipe recipe.yaml --out ./dist
+$RUN "$ASSEMBLER" --profile <name> --type landing --recipe recipe.yaml --out ./dist
 ```
 
 On error: print assembler's stderr and stop.

@@ -1,7 +1,7 @@
 ---
 name: youtube-transcript
 description: "Extracts YouTube video transcripts with chapters and saves to vault. Triggers: 'youtube', 'video transcript', 'youtube transcript', 'сохрани видео'., 'h2t-edu:youtube-transcript'"
-compatibility: "Requires h2t venv (~/.h2t/venv) with youtube-transcript-api. DOR_ROOT env var optional."
+compatibility: "Requires uv on PATH; youtube-transcript-api is fetched per run. DOR_ROOT env var optional."
 metadata:
   author: lichtpfad
   version: 1.1.0
@@ -12,15 +12,10 @@ metadata:
 ## Переменные
 
 ```bash
-# Cross-platform h2t venv detection
-H2T_PYTHON="${H2T_PYTHON:-}"
-if [ -z "$H2T_PYTHON" ]; then
-  [ -f "$HOME/.h2t/venv/bin/python" ] && H2T_PYTHON="$HOME/.h2t/venv/bin/python"
-  [ -f "$HOME/.h2t/venv/Scripts/python.exe" ] && H2T_PYTHON="$HOME/.h2t/venv/Scripts/python.exe"
-fi
-[ -z "$H2T_PYTHON" ] && echo "ERROR: h2t venv not found. Run /h2t-core:setup" && exit 1
+# uv подтягивает зависимости на каждый запуск — устанавливать нечего
+RUN="uv run --no-project --with python-dotenv --with youtube-transcript-api python"
 
-CLI="$H2T_PYTHON ${CLAUDE_SKILL_DIR}/scripts/youtube_transcript_cli.py"
+CLI="$RUN ${CLAUDE_SKILL_DIR}/scripts/youtube_transcript_cli.py"
 ```
 
 ## Команды
@@ -95,7 +90,8 @@ Frontmatter: `source`, `video_id`, `title`, `author`, `url`, `date`, опцио�
 
 ## Зависимости
 
-- `youtube-transcript-api` (в h2t venv, установится через /h2t-core:setup)
-- `yt-dlp` (в h2t venv, установится через /h2t-core:setup)
-- `ffmpeg` (должен быть на PATH)
-- `python-dotenv` (pip install python-dotenv)
+- `youtube-transcript-api`, `python-dotenv` — подтягиваются `uv run --with` на каждый
+  запуск, ставить заранее не нужно
+- `uv` — должен быть на PATH
+- `yt-dlp`, `ffmpeg` — внешние бинарники на PATH; нужны только для извлечения кадров
+  (`youtube_transcript_cli.py:258` проверяет оба перед запуском)

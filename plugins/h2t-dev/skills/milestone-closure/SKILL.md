@@ -17,9 +17,7 @@ This skill is a thin orchestrator. Deterministic state is gathered by
 ## Variables
 
 ```bash
-H2T_PYTHON="${H2T_PYTHON:-}"
-[ -z "$H2T_PYTHON" ] && [ -f "$HOME/.h2t/venv/Scripts/python.exe" ] && H2T_PYTHON="$HOME/.h2t/venv/Scripts/python.exe"
-[ -z "$H2T_PYTHON" ] && [ -f "$HOME/.h2t/venv/bin/python" ] && H2T_PYTHON="$HOME/.h2t/venv/bin/python"
+RUN="uv run --no-project --with pyyaml python"
 CLOSURE="$CLAUDE_PLUGIN_ROOT/skills/milestone-closure/scripts/closure.py"
 ```
 
@@ -33,7 +31,7 @@ already explicit.
 ### Step 2: Dry-run closure report
 
 ```bash
-$H2T_PYTHON "$CLOSURE" --repo-root "$(pwd)" --milestone "{milestone}" --json
+$RUN "$CLOSURE" --repo-root "$(pwd)" --milestone "{milestone}" --json
 ```
 
 Read the JSON:
@@ -47,8 +45,8 @@ Read the JSON:
 Run docs cleanup manually through unified docs-lint:
 
 ```bash
-$H2T_PYTHON "$CLAUDE_PLUGIN_ROOT/skills/docs-lint/scripts/lint.py" plan --root "$(pwd)"
-$H2T_PYTHON "$CLAUDE_PLUGIN_ROOT/skills/docs-lint/scripts/lint.py" fix-index --root "$(pwd)"
+$RUN "$CLAUDE_PLUGIN_ROOT/skills/docs-lint/scripts/lint.py" plan --root "$(pwd)"
+$RUN "$CLAUDE_PLUGIN_ROOT/skills/docs-lint/scripts/lint.py" fix-index --root "$(pwd)"
 ```
 
 `fix-index` without `--apply` is dry-run. Ask before using `--apply`.
@@ -61,7 +59,7 @@ Do not archive, move, delete, or rename files without explicit user approval.
 Ask the user to confirm the exact milestone title.
 
 ```bash
-$H2T_PYTHON "$CLOSURE" --repo-root "$(pwd)" --milestone "{milestone}" --close --confirm-title "{exact title}" --json
+$RUN "$CLOSURE" --repo-root "$(pwd)" --milestone "{milestone}" --close --confirm-title "{exact title}" --json
 ```
 
 If `status == "partial"`: the GitHub API PATCH failed — show `close_result.stderr` from the report and stop. Do not treat partial as success.
