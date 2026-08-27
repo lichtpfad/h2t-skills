@@ -47,11 +47,11 @@ fi
 # that has the wheel — which is how this hook died silently from 14e2b42 until #378. The
 # plugin scripts take --cwd, so the working directory is irrelevant to them.
 source "$PLUGIN_ROOT/scripts/resolve-h2t-python.sh"
-if ! resolve_h2t_python "import yaml"; then
+if ! resolve_h2t_python "import yaml" pyyaml; then
   # emit() needs the interpreter we just failed to find, so this envelope is hand-written.
   # Safe only because the text is a fixed literal with nothing to escape — and it still has
   # to honour the per-event channel, or the slash user is told nothing at all.
-  _err="GATHER_ERROR: no Python with PyYAML found. Install it into ~/.h2t/venv or set H2T_PYTHON."
+  _err="GATHER_ERROR: no Python with PyYAML found. Install uv (https://astral.sh/uv) or set H2T_PYTHON to an interpreter that has it."
   if [ "$event" = "UserPromptSubmit" ]; then
     printf '{"hookSpecificOutput": {"hookEventName": "UserPromptSubmit", "additionalContext": "%s"}}\n' "$_err"
   else

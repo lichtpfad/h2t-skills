@@ -147,9 +147,14 @@ def test_resolver_failure_reaches_the_model_on_the_slash_path(hook_env, tmp_path
     # Shadow every interpreter the resolver probes rather than emptying PATH: the hook
     # still needs jq, cat and friends, and "python exists but the probe fails" is the
     # real shape of the failure (an interpreter without PyYAML).
+    #
+    # `uv` is shadowed too, and that is new. Since it became the resolver's last
+    # candidate, a machine with uv resolves even when no local interpreter has PyYAML —
+    # which is the point of adding it. Reaching the error path now takes a machine with
+    # neither, and the test says so instead of assuming it.
     fake_bin = tmp_path / "bin"
     fake_bin.mkdir()
-    for name in ("python3", "python", "py"):
+    for name in ("python3", "python", "py", "uv"):
         stub = fake_bin / name
         stub.write_text("#!/bin/sh\nexit 1\n")
         stub.chmod(0o755)
@@ -175,4 +180,48 @@ def test_resolver_failure_reaches_the_model_on_the_slash_path(hook_env, tmp_path
     assert result.returncode == 0, result.stderr
     payload = json.loads(result.stdout)
     assert "systemMessage" not in payload
-    assert "GATHER_ERROR" in payload["hookSpecificOutput"]["additionalContext"]
+    context = payload["hookSpecificOutput"]["additionalContext"]
+    assert "GATHER_ERROR" in context
+    # The remedy must name what is actually missing. It used to say "install it into
+    # ~/.h2t/venv", a directory the installer never creates.
+    assert "uv" in context and ".h2t/venv" not in context
+
+
+def test_uv_carries_the_hook_when_no_local_python_has_pyyaml(hook_env, tmp_path):
+    """The mirror of the test above, and the reason the candidate was added.
+
+    Same machine, same missing PyYAML — but uv present. The hook must produce a real
+    briefing instead of an error, because uv can supply both the interpreter and the
+    package. Without this case the suite would only ever prove the failure path.
+    """
+    if shutil.which("uv") is None:
+        pytest.skip("uv not installed on this machine")
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    for name in ("python3", "python", "py"):
+        stub = fake_bin / name
+        stub.write_text("#!/bin/sh\nexit 1\n")
+        stub.chmod(0o755)
+    env = dict(hook_env)
+    env["PATH"] = f"{fake_bin}:{env['PATH']}"
+    env["HOME"] = str(tmp_path)
+    env.pop("H2T_PYTHON", None)
+
+    result = subprocess.run(
+        [shutil.which("bash") or "/bin/bash", str(HOOK)],
+        input=json.dumps(
+            {
+                "hook_event_name": "UserPromptSubmit",
+                "prompt": "/h2t-core:session-start",
+                "cwd": str(REPO_ROOT),
+            }
+        ),
+        capture_output=True,
+        text=True, encoding="utf-8",
+        cwd=REPO_ROOT,
+        env=env,
+    )
+    assert result.returncode == 0, result.stderr
+    context = json.loads(result.stdout)["hookSpecificOutput"]["additionalContext"]
+    assert "GATHER_ERROR" not in context, context[:400]
+    assert "BRIEFING:" in context, context[:400]

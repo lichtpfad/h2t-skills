@@ -132,10 +132,104 @@ test_custom_probe_all_fail_returns_nonzero() {
   )
 }
 
+# uv is the last resort: it can supply an interpreter AND the packages a probe needs,
+# but it is slow and may download, and these hooks run on every prompt.
+test_uv_used_only_when_nothing_local_satisfies_the_probe() {
+  local home_dir="$TMPDIR_TEST/home6"
+  local bin_dir="$TMPDIR_TEST/bin6"
+
+  make_fake_python "$bin_dir/python3" \
+    '[[ "${1:-}" == "-c" && "${2:-}" == "import sys" ]] && exit 0; exit 1'
+  make_fake_python "$bin_dir/uv" 'exit 0'
+
+  (
+    export HOME="$home_dir"
+    export PATH="$bin_dir:/usr/bin:/bin"
+    unset H2T_PYTHON
+
+    source "$RESOLVER"
+    resolve_h2t_python "import yaml" pyyaml
+    assert_eq "${H2T_PYTHON_CMD[*]}" \
+      "uv run --no-project --python 3.11 --with pyyaml python" \
+      "uv should resolve when no local python has the package"
+  )
+}
+
+test_uv_is_not_reached_when_a_local_python_satisfies() {
+  local home_dir="$TMPDIR_TEST/home7"
+  local bin_dir="$TMPDIR_TEST/bin7"
+
+  make_fake_python "$bin_dir/python3" '[[ "${1:-}" == "-c" ]] && exit 0; exit 0'
+  make_fake_python "$bin_dir/uv" 'exit 0'
+
+  (
+    export HOME="$home_dir"
+    export PATH="$bin_dir:/usr/bin:/bin"
+    unset H2T_PYTHON
+
+    source "$RESOLVER"
+    resolve_h2t_python "import yaml" pyyaml
+    assert_eq "${H2T_PYTHON_CMD[*]}" "python3" \
+      "a working local python must win; uv costs hook latency on every prompt"
+  )
+}
+
+test_every_requirement_reaches_uv() {
+  local home_dir="$TMPDIR_TEST/home8"
+  local bin_dir="$TMPDIR_TEST/bin8"
+
+  # Shadow the host's python3 with one that satisfies nothing, so the chain has to walk
+  # past it. Without this the test passes or fails on whether /usr/bin/python3 happens
+  # to have the package — a property of the machine, not of the resolver.
+  make_fake_python "$bin_dir/python3" 'exit 1'
+  make_fake_python "$bin_dir/python" 'exit 1'
+  make_fake_python "$bin_dir/uv" 'exit 0'
+
+  (
+    export HOME="$home_dir"
+    export PATH="$bin_dir:/usr/bin:/bin"
+    unset H2T_PYTHON
+
+    source "$RESOLVER"
+    resolve_h2t_python "import yaml, requests" pyyaml requests
+    assert_eq "${H2T_PYTHON_CMD[*]}" \
+      "uv run --no-project --python 3.11 --with pyyaml --with requests python" \
+      "each requirement should become its own --with"
+  )
+}
+
+test_no_requirements_is_not_a_dangling_with() {
+  local home_dir="$TMPDIR_TEST/home9"
+  local bin_dir="$TMPDIR_TEST/bin9"
+
+  # Shadow the host's python3 with one that satisfies nothing, so the chain has to walk
+  # past it. Without this the test passes or fails on whether /usr/bin/python3 happens
+  # to have the package — a property of the machine, not of the resolver.
+  make_fake_python "$bin_dir/python3" 'exit 1'
+  make_fake_python "$bin_dir/python" 'exit 1'
+  make_fake_python "$bin_dir/uv" 'exit 0'
+
+  (
+    export HOME="$home_dir"
+    export PATH="$bin_dir:/usr/bin:/bin"
+    unset H2T_PYTHON
+
+    source "$RESOLVER"
+    resolve_h2t_python
+    assert_eq "${H2T_PYTHON_CMD[*]}" "uv run --no-project --python 3.11 python" \
+      "a probe with no packages must not produce a dangling --with"
+  )
+}
+
+
 test_broken_venv_falls_back_to_python3
 test_broken_env_var_falls_back_to_python3
 test_good_env_var_wins
 test_custom_probe_rejects_package_less_python
 test_custom_probe_all_fail_returns_nonzero
+test_uv_used_only_when_nothing_local_satisfies_the_probe
+test_uv_is_not_reached_when_a_local_python_satisfies
+test_every_requirement_reaches_uv
+test_no_requirements_is_not_a_dangling_with
 
 echo "OK: resolve-h2t-python"
