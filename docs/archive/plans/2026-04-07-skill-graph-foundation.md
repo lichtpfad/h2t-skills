@@ -1108,6 +1108,6 @@ git commit -m "feat(skill-graph): patch SkillEval to write lesson on failure via
 ## References
 
 - Spec: `docs/superpowers/specs/2026-04-06-skill-intelligence-graph-design.md`
-- h2t-graphs API rules: `C:/Users/stani/.h2t/config/rules/graphs-api.md`
+- h2t-graphs API rules: `C:/Users/<user>/.h2t/config/rules/graphs-api.md`
 - SkillEval: `lib/eval/session.py`
 - Existing test pattern: `tests/clients/test_gmail.py`

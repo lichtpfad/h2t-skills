@@ -921,7 +921,7 @@ git -C C:/dev/h2t-skills commit -m "feat(h2t-creative): add h2t-graphs profile â
 
 ### Task 7: h2t-pfad profile
 
-Source: `C:/Users/stani/.claude/plugins/cache/lichtpfad/h2t/2.14.1/skills/design/SKILL.md` (PFAD design system tokens already extracted).
+Source: `C:/Users/<user>/.claude/plugins/cache/lichtpfad/h2t/2.14.1/skills/design/SKILL.md` (PFAD design system tokens already extracted).
 
 **Files:** Create `plugins/h2t-creative/profiles/h2t-pfad/` with full profile structure + `fx/background.js`.
 

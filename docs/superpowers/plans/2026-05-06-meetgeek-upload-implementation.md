@@ -48,7 +48,7 @@ The CLI file will grow but stays single-file by design. Logical sections inside 
 - [ ] **Step 1: Install package**
 
 ```bash
-C:/Users/stani/.h2t/venv/Scripts/python.exe -m pip install imageio-ffmpeg
+C:/Users/<user>/.h2t/venv/Scripts/python.exe -m pip install imageio-ffmpeg
 ```
 
 Expected: `Successfully installed imageio-ffmpeg-X.Y.Z`. Mac equivalent: `~/.h2t/venv/bin/python -m pip install imageio-ffmpeg`.
@@ -56,7 +56,7 @@ Expected: `Successfully installed imageio-ffmpeg-X.Y.Z`. Mac equivalent: `~/.h2t
 - [ ] **Step 2: Verify binary path resolves on this machine**
 
 ```bash
-C:/Users/stani/.h2t/venv/Scripts/python.exe -c "import imageio_ffmpeg, os; p = imageio_ffmpeg.get_ffmpeg_exe(); print(p, os.path.exists(p))"
+C:/Users/<user>/.h2t/venv/Scripts/python.exe -c "import imageio_ffmpeg, os; p = imageio_ffmpeg.get_ffmpeg_exe(); print(p, os.path.exists(p))"
 ```
 
 Expected: a `.exe` path (Windows) and `True`.
@@ -64,7 +64,7 @@ Expected: a `.exe` path (Windows) and `True`.
 - [ ] **Step 3: Verify ffmpeg actually runs**
 
 ```bash
-C:/Users/stani/.h2t/venv/Scripts/python.exe -c "import imageio_ffmpeg, subprocess; subprocess.run([imageio_ffmpeg.get_ffmpeg_exe(), '-version'], check=True)"
+C:/Users/<user>/.h2t/venv/Scripts/python.exe -c "import imageio_ffmpeg, subprocess; subprocess.run([imageio_ffmpeg.get_ffmpeg_exe(), '-version'], check=True)"
 ```
 
 Expected: `ffmpeg version N.x ...` printed, exit 0.
@@ -108,7 +108,7 @@ def test_ffmpeg_probe_single_audio_stream(cli, monkeypatch):
 - [ ] **Step 2: Run test — should fail with AttributeError**
 
 ```bash
-cd C:/dev/h2t-skills/plugins/h2t-ops/skills/meetgeek && C:/Users/stani/.h2t/venv/Scripts/python.exe -m pytest tests/test_meetgeek_cli.py::test_ffmpeg_probe_single_audio_stream -v
+cd C:/dev/h2t-skills/plugins/h2t-ops/skills/meetgeek && C:/Users/<user>/.h2t/venv/Scripts/python.exe -m pytest tests/test_meetgeek_cli.py::test_ffmpeg_probe_single_audio_stream -v
 ```
 
 Expected: `AttributeError: module ... has no attribute '_ffmpeg_probe'` or `module 'meetgeek_cli_under_test' has no attribute 'subprocess'`.
@@ -176,7 +176,7 @@ def _ffmpeg_probe(path: str) -> dict:
 - [ ] **Step 4: Run test — should pass**
 
 ```bash
-cd C:/dev/h2t-skills/plugins/h2t-ops/skills/meetgeek && C:/Users/stani/.h2t/venv/Scripts/python.exe -m pytest tests/test_meetgeek_cli.py::test_ffmpeg_probe_single_audio_stream -v
+cd C:/dev/h2t-skills/plugins/h2t-ops/skills/meetgeek && C:/Users/<user>/.h2t/venv/Scripts/python.exe -m pytest tests/test_meetgeek_cli.py::test_ffmpeg_probe_single_audio_stream -v
 ```
 
 Expected: PASS.
@@ -219,7 +219,7 @@ def test_ffmpeg_probe_corrupted_raises(cli, monkeypatch):
 - [ ] **Step 6: Run all 3 tests**
 
 ```bash
-C:/Users/stani/.h2t/venv/Scripts/python.exe -m pytest tests/test_meetgeek_cli.py -k ffmpeg_probe -v
+C:/Users/<user>/.h2t/venv/Scripts/python.exe -m pytest tests/test_meetgeek_cli.py -k ffmpeg_probe -v
 ```
 
 Expected: 3 passed.
@@ -282,7 +282,7 @@ def test_convert_single_track_builds_simple_recipe(cli, tmp_path, monkeypatch):
 - [ ] **Step 2: Run — fails (cmd_convert not registered)**
 
 ```bash
-C:/Users/stani/.h2t/venv/Scripts/python.exe -m pytest tests/test_meetgeek_cli.py::test_convert_single_track_builds_simple_recipe -v
+C:/Users/<user>/.h2t/venv/Scripts/python.exe -m pytest tests/test_meetgeek_cli.py::test_convert_single_track_builds_simple_recipe -v
 ```
 
 Expected: SystemExit / argparse error "invalid choice: 'convert'".
@@ -384,7 +384,7 @@ Register the subparser inside `build_parser()` (find the section after `s = sub.
 - [ ] **Step 4: Run test — passes**
 
 ```bash
-C:/Users/stani/.h2t/venv/Scripts/python.exe -m pytest tests/test_meetgeek_cli.py::test_convert_single_track_builds_simple_recipe -v
+C:/Users/<user>/.h2t/venv/Scripts/python.exe -m pytest tests/test_meetgeek_cli.py::test_convert_single_track_builds_simple_recipe -v
 ```
 
 Expected: PASS.
@@ -421,7 +421,7 @@ def test_convert_corrupted_raises(cli, tmp_path, monkeypatch):
 - [ ] **Step 6: Run all convert tests**
 
 ```bash
-C:/Users/stani/.h2t/venv/Scripts/python.exe -m pytest tests/test_meetgeek_cli.py -k convert -v
+C:/Users/<user>/.h2t/venv/Scripts/python.exe -m pytest tests/test_meetgeek_cli.py -k convert -v
 ```
 
 Expected: 3 passed.
@@ -474,7 +474,7 @@ def test_convert_multi_track_uses_amix(cli, tmp_path, monkeypatch):
 - [ ] **Step 2: Run — fails (multi-track raises ApiError currently)**
 
 ```bash
-C:/Users/stani/.h2t/venv/Scripts/python.exe -m pytest tests/test_meetgeek_cli.py::test_convert_multi_track_uses_amix -v
+C:/Users/<user>/.h2t/venv/Scripts/python.exe -m pytest tests/test_meetgeek_cli.py::test_convert_multi_track_uses_amix -v
 ```
 
 Expected: FAIL — `ApiError("multi-track convert not yet implemented")`.
@@ -515,7 +515,7 @@ Replace the `raise ApiError("multi-track convert not yet implemented")` line wit
 - [ ] **Step 4: Run multi-track test — passes**
 
 ```bash
-C:/Users/stani/.h2t/venv/Scripts/python.exe -m pytest tests/test_meetgeek_cli.py::test_convert_multi_track_uses_amix -v
+C:/Users/<user>/.h2t/venv/Scripts/python.exe -m pytest tests/test_meetgeek_cli.py::test_convert_multi_track_uses_amix -v
 ```
 
 Expected: PASS.
@@ -567,7 +567,7 @@ def test_convert_audio_only_strips_video_codec_flags(cli, tmp_path, monkeypatch)
 - [ ] **Step 6: Run all convert tests (5 total)**
 
 ```bash
-C:/Users/stani/.h2t/venv/Scripts/python.exe -m pytest tests/test_meetgeek_cli.py -k convert -v
+C:/Users/<user>/.h2t/venv/Scripts/python.exe -m pytest tests/test_meetgeek_cli.py -k convert -v
 ```
 
 Expected: 5 passed.
@@ -603,7 +603,7 @@ def test_drive_service_raises_when_token_missing(cli, tmp_path, monkeypatch):
 - [ ] **Step 2: Run — fails (no `_drive_service`, no `DRIVE_TOKEN_FILE`)**
 
 ```bash
-C:/Users/stani/.h2t/venv/Scripts/python.exe -m pytest tests/test_meetgeek_cli.py::test_drive_service_raises_when_token_missing -v
+C:/Users/<user>/.h2t/venv/Scripts/python.exe -m pytest tests/test_meetgeek_cli.py::test_drive_service_raises_when_token_missing -v
 ```
 
 Expected: AttributeError.
@@ -671,7 +671,7 @@ def _drive_service():
 - [ ] **Step 4: Run test — passes**
 
 ```bash
-C:/Users/stani/.h2t/venv/Scripts/python.exe -m pytest tests/test_meetgeek_cli.py::test_drive_service_raises_when_token_missing -v
+C:/Users/<user>/.h2t/venv/Scripts/python.exe -m pytest tests/test_meetgeek_cli.py::test_drive_service_raises_when_token_missing -v
 ```
 
 Expected: PASS.
@@ -843,7 +843,7 @@ Register subparser in `build_parser()` (after `convert` block):
 - [ ] **Step 4: Run idempotent test**
 
 ```bash
-C:/Users/stani/.h2t/venv/Scripts/python.exe -m pytest tests/test_meetgeek_cli.py::test_drive_upload_idempotent_returns_existing -v
+C:/Users/<user>/.h2t/venv/Scripts/python.exe -m pytest tests/test_meetgeek_cli.py::test_drive_upload_idempotent_returns_existing -v
 ```
 
 Expected: PASS.
@@ -904,7 +904,7 @@ def test_drive_upload_creates_dated_folder_and_uploads(cli, tmp_path, monkeypatc
 - [ ] **Step 6: Run drive tests**
 
 ```bash
-C:/Users/stani/.h2t/venv/Scripts/python.exe -m pytest tests/test_meetgeek_cli.py -k drive -v
+C:/Users/<user>/.h2t/venv/Scripts/python.exe -m pytest tests/test_meetgeek_cli.py -k drive -v
 ```
 
 Expected: 3 passed (token-missing, idempotent, create).
@@ -1018,7 +1018,7 @@ Register subparser (after `drive-upload` block, before `sync`):
 - [ ] **Step 4: Run upload tests**
 
 ```bash
-C:/Users/stani/.h2t/venv/Scripts/python.exe -m pytest tests/test_meetgeek_cli.py -k "upload_direct" -v
+C:/Users/<user>/.h2t/venv/Scripts/python.exe -m pytest tests/test_meetgeek_cli.py -k "upload_direct" -v
 ```
 
 Expected: 3 passed.
@@ -1026,7 +1026,7 @@ Expected: 3 passed.
 - [ ] **Step 5: Run full suite**
 
 ```bash
-C:/Users/stani/.h2t/venv/Scripts/python.exe -m pytest tests/test_meetgeek_cli.py -q
+C:/Users/<user>/.h2t/venv/Scripts/python.exe -m pytest tests/test_meetgeek_cli.py -q
 ```
 
 Expected: all tests so far pass (15 prior + ~10 new).
@@ -1214,7 +1214,7 @@ def _is_already_submitted(state: dict[str, dict], source: str, *,
 - [ ] **Step 4: Run manifest tests**
 
 ```bash
-C:/Users/stani/.h2t/venv/Scripts/python.exe -m pytest tests/test_meetgeek_cli.py -k uploads_manifest -v
+C:/Users/<user>/.h2t/venv/Scripts/python.exe -m pytest tests/test_meetgeek_cli.py -k uploads_manifest -v
 ```
 
 Expected: 2 passed.
@@ -1526,7 +1526,7 @@ Add the new args to the upload subparser:
 - [ ] **Step 4: Run orchestrator test**
 
 ```bash
-C:/Users/stani/.h2t/venv/Scripts/python.exe -m pytest tests/test_meetgeek_cli.py::test_upload_from_file_chains_convert_drive_submit -v
+C:/Users/<user>/.h2t/venv/Scripts/python.exe -m pytest tests/test_meetgeek_cli.py::test_upload_from_file_chains_convert_drive_submit -v
 ```
 
 Expected: PASS.
@@ -1651,7 +1651,7 @@ Add args to the `upload` subparser (before `set_defaults`):
 - [ ] **Step 4: Run glob test**
 
 ```bash
-C:/Users/stani/.h2t/venv/Scripts/python.exe -m pytest tests/test_meetgeek_cli.py::test_upload_from_file_glob_processes_all -v
+C:/Users/<user>/.h2t/venv/Scripts/python.exe -m pytest tests/test_meetgeek_cli.py::test_upload_from_file_glob_processes_all -v
 ```
 
 Expected: PASS.
@@ -1713,7 +1713,7 @@ def test_upload_from_file_continues_on_per_file_error(cli, tmp_path, monkeypatch
 - [ ] **Step 6: Run all upload tests**
 
 ```bash
-C:/Users/stani/.h2t/venv/Scripts/python.exe -m pytest tests/test_meetgeek_cli.py -k upload -v
+C:/Users/<user>/.h2t/venv/Scripts/python.exe -m pytest tests/test_meetgeek_cli.py -k upload -v
 ```
 
 Expected: all pass.
@@ -1721,7 +1721,7 @@ Expected: all pass.
 - [ ] **Step 7: Run full suite**
 
 ```bash
-C:/Users/stani/.h2t/venv/Scripts/python.exe -m pytest tests/test_meetgeek_cli.py -q
+C:/Users/<user>/.h2t/venv/Scripts/python.exe -m pytest tests/test_meetgeek_cli.py -q
 ```
 
 Expected: all green.
@@ -1877,7 +1877,7 @@ def test_upload_from_file_directory_walks_recursively(cli, tmp_path, monkeypatch
 - [ ] **Step 5: Run all four tests**
 
 ```bash
-C:/Users/stani/.h2t/venv/Scripts/python.exe -m pytest tests/test_meetgeek_cli.py -k "resumes_from or drive_failure or directory_walks" -v
+C:/Users/<user>/.h2t/venv/Scripts/python.exe -m pytest tests/test_meetgeek_cli.py -k "resumes_from or drive_failure or directory_walks" -v
 ```
 
 Expected: 4 passed.
@@ -1885,7 +1885,7 @@ Expected: 4 passed.
 - [ ] **Step 6: Run full suite**
 
 ```bash
-C:/Users/stani/.h2t/venv/Scripts/python.exe -m pytest tests/test_meetgeek_cli.py -q
+C:/Users/<user>/.h2t/venv/Scripts/python.exe -m pytest tests/test_meetgeek_cli.py -q
 ```
 
 Expected: all green.
@@ -1964,7 +1964,7 @@ git -C C:/dev/h2t-skills commit -m "docs(h2t-ops): SKILL.md — convert/drive-up
 - [ ] **Step 1: Run bump script**
 
 ```bash
-PYTHONIOENCODING=utf-8 C:/Users/stani/.h2t/venv/Scripts/python.exe \
+PYTHONIOENCODING=utf-8 C:/Users/<user>/.h2t/venv/Scripts/python.exe \
   C:/dev/h2t-skills/scripts/bump_plugin.py h2t-ops 1.1.0
 ```
 
@@ -1973,7 +1973,7 @@ Expected: `✓ h2t-ops: 1.0.7 → 1.1.0`, two files updated.
 - [ ] **Step 2: Verify marketplace sync**
 
 ```bash
-PYTHONIOENCODING=utf-8 C:/Users/stani/.h2t/venv/Scripts/python.exe \
+PYTHONIOENCODING=utf-8 C:/Users/<user>/.h2t/venv/Scripts/python.exe \
   C:/dev/h2t-skills/scripts/check_marketplace_sync.py
 ```
 
@@ -1983,7 +1983,7 @@ Expected: `✓ marketplace synced (7 plugins)`.
 
 ```bash
 cd C:/dev/h2t-skills/plugins/h2t-ops/skills/meetgeek && \
-  C:/Users/stani/.h2t/venv/Scripts/python.exe -m pytest tests/ -q
+  C:/Users/<user>/.h2t/venv/Scripts/python.exe -m pytest tests/ -q
 ```
 
 Expected: all green.

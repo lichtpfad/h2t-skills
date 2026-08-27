@@ -24,11 +24,11 @@ milestone: ""
 ```
 ~/.local/bin/h2t-ops.exe --version
 ~/.local/bin/h2t-ops.exe doctor
-~/.local/bin/h2t-ops.exe notion get 10adbc1e61d04d13aa6f17210b77e0d3 --json
-~/.local/bin/h2t-ops.exe notion blocks 10adbc1e61d04d13aa6f17210b77e0d3 --limit 3 --json
+~/.local/bin/h2t-ops.exe notion get NOTION_PAGE_ID --json
+~/.local/bin/h2t-ops.exe notion blocks NOTION_PAGE_ID --limit 3 --json
 ~/.local/bin/h2t-ops.exe gmail list --max 3 --json     # HARD gate — Task 4: bootstrap mandatory if not authed
 ```
-(Notion fixture `10adbc1e61d04d13aa6f17210b77e0d3` = "Art - Projects", confirmed read-only & live. All five lines are hard-gate; `gmail` exit 3 = #139 FAIL, not informational.)
+(Notion fixture `NOTION_PAGE_ID` = "Art - Projects", confirmed read-only & live. All five lines are hard-gate; `gmail` exit 3 = #139 FAIL, not informational.)
 
 ---
 
@@ -36,10 +36,10 @@ milestone: ""
 
 | Fact | Value |
 |---|---|
-| `uv` installed at | `C:/Users/stani/AppData/Local/Microsoft/WinGet/Packages/astral-sh.uv_Microsoft.Winget.Source_8wekyb3d8bbwe/uv.exe` (v0.10.10) |
+| `uv` installed at | `C:/Users/<user>/AppData/Local/Microsoft/WinGet/Packages/astral-sh.uv_Microsoft.Winget.Source_8wekyb3d8bbwe/uv.exe` (v0.10.10) |
 | `uv` on interactive PATH? | **No** ("uv not found" in user shell) |
-| WinGet stable shim dir (prefer if present) | `C:/Users/stani/AppData/Local/Microsoft/WinGet/Links/` |
-| uv tool bin dir (where `h2t-ops.exe` lands) | `C:/Users/stani/.local/bin` |
+| WinGet stable shim dir (prefer if present) | `C:/Users/<user>/AppData/Local/Microsoft/WinGet/Links/` |
+| uv tool bin dir (where `h2t-ops.exe` lands) | `C:/Users/<user>/.local/bin` |
 | `~/.local/bin` current contents | `graphify.exe`, `h2t.exe` (h2t-ai — **stale/broken, OUT OF SCOPE**); **no `h2t-ops.exe`** |
 | `uv tool list` | `graphify`, `h2t-ai → h2t` — **`h2t-ops` is NOT installed** (root cause of "doesn't run") |
 | `h2t_ops` package + `[project.scripts] h2t-ops = "h2t_ops.cli:main"` + `uv.lock` | only on branch `worktree-feat+131-gmail-connector` (PR #140, draft) — **NOT on `main`** |
@@ -76,7 +76,7 @@ function Resolve-Uv {
     # Prefer the stable WinGet Links shim; fall back to the version-stamped package path.
     $candidates = @(
         (Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Links\uv.exe'),
-        'C:\Users\stani\AppData\Local\Microsoft\WinGet\Packages\astral-sh.uv_Microsoft.Winget.Source_8wekyb3d8bbwe\uv.exe'
+        'C:\Users\<user>\AppData\Local\Microsoft\WinGet\Packages\astral-sh.uv_Microsoft.Winget.Source_8wekyb3d8bbwe\uv.exe'
     )
     foreach ($c in $candidates) { if (Test-Path $c) { return $c } }
     $cmd = Get-Command uv -ErrorAction SilentlyContinue
@@ -135,7 +135,7 @@ KEEP the Task-1 header unchanged (`#requires`, `param([switch]$ResolveUvOnly)`, 
 ```powershell
 $Uv      = Resolve-Uv
 $Ops     = Join-Path $HOME '.local\bin\h2t-ops.exe'
-$Fixture = '10adbc1e61d04d13aa6f17210b77e0d3'   # Notion "Art - Projects", read-only
+$Fixture = 'NOTION_PAGE_ID'   # Notion "Art - Projects", read-only
 $results = [ordered]@{}
 
 function Smoke([string]$name, [scriptblock]$cmd, [bool]$json) {
@@ -232,7 +232,7 @@ Record the `h2t.exe` hash and the `uv tool list` output. **Constraint:** h2t-ai'
 ```powershell
 & $uv tool install --reinstall "C:/dev/h2t-skills/.claude/worktrees/feat+131-gmail-connector"
 ```
-Expected: uv resolves project `h2t-ops` (name from its `pyproject.toml`), installs deps from its `uv.lock`, writes `C:/Users/stani/.local/bin/h2t-ops.exe`. `--reinstall` makes it idempotent/repairable.
+Expected: uv resolves project `h2t-ops` (name from its `pyproject.toml`), installs deps from its `uv.lock`, writes `C:/Users/<user>/.local/bin/h2t-ops.exe`. `--reinstall` makes it idempotent/repairable.
 
 - [ ] **Step 3: Verify install + h2t-ai untouched (this task's "test")**
 
@@ -365,7 +365,7 @@ gh pr comment 140 -R lichtpfad/h2t-skills --body-file <evidence.md>
 
 **2. Placeholder scan:** No TBD/"handle errors"/"similar to". Every command is concrete with real absolute paths, the real Notion fixture id, the real uv path candidates, the real worktree source. Gmail is a hard gate (not a soft conditional): if OAuth is unbootstrapped the plan gives the exact mandatory bootstrap command and #139 stays open until `gmail list` passes — an explicit decision rule, not a placeholder.
 
-**3. Type/identifier consistency:** `Resolve-Uv`, `$Uv`/`$Ops`/`$Fixture`, `Smoke`, `$hardGate`/`$gatePass`, `tools/h2t-ops-runtime-smoke.ps1`/`.sh`, `tools/check-setup-skill.ps1`, `plugins/h2t-core/skills/setup/SKILL.md`, fixture `10adbc1e61d04d13aa6f17210b77e0d3` — used identically across Tasks 1–6. Hard-gate set is the same five commands in the DoD, Task 2 `$hardGate`, and Task 6.
+**3. Type/identifier consistency:** `Resolve-Uv`, `$Uv`/`$Ops`/`$Fixture`, `Smoke`, `$hardGate`/`$gatePass`, `tools/h2t-ops-runtime-smoke.ps1`/`.sh`, `tools/check-setup-skill.ps1`, `plugins/h2t-core/skills/setup/SKILL.md`, fixture `NOTION_PAGE_ID` — used identically across Tasks 1–6. Hard-gate set is the same five commands in the DoD, Task 2 `$hardGate`, and Task 6.
 
 **Known intentional non-TDD shape:** this is a runtime/adoption plan — the "tests" are the smoke commands themselves; "fail" = the real broken machine state (Task 2 Step 2 / Task 3), "pass" = post-repair. Code-with-unit-tests TDD does not apply to "install a tool on a machine"; the harness IS the executable, committed, repeatable proof. The only committed artifacts are the harness + setup-skill change + this plan; the install is environment state by design.
 

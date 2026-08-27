@@ -2,7 +2,7 @@
 
 ## Verify active branch before every commit (concurrent-chat hazard)
 - **Evidence:** lineages crypto-regime-spike, h2t-skills · recurrence 2 · domain-indep high
-- **Source:** `C:/dev/crypto-regime-spike/.claude/rules/git.md`, `C:/Users/stani/.claude/projects/C--dev-h2t-skills/memory/feedback_concurrent_chat_branch_hazard.md`
+- **Source:** `C:/dev/crypto-regime-spike/.claude/rules/git.md`, `C:/Users/<user>/.claude/projects/C--dev-h2t-skills/memory/feedback_concurrent_chat_branch_hazard.md`
 - **What to add:** Run `git branch --show-current` (or equivalent) before every commit. A parallel chat session or subagent can move HEAD while the current session is mid-task. If the branch does not match the expected working branch, stop, surface the conflict to the operator, and do not commit.
 
 ## Isolate destructive / bulk-rewrite operations on a dedicated branch

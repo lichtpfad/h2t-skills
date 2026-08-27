@@ -33,11 +33,11 @@ Result:
   "ok": true,
   "provider": "drive",
   "result": {
-    "file_id": "1JeS1Wz4sQkzVBcgaH2FL6oJd6eTwS2wV",
+    "file_id": "DRIVE_FILE_ID_1",
     "name": "h2t-ops-smoke-2026-05-25",
     "mimeType": "application/vnd.google-apps.folder",
-    "parents": ["0ACriOCEyHP1zUk9PVA"],
-    "web_view_link": "https://drive.google.com/drive/folders/1JeS1Wz4sQkzVBcgaH2FL6oJd6eTwS2wV",
+    "parents": ["DRIVE_ID_1"],
+    "web_view_link": "https://drive.google.com/drive/folders/DRIVE_FILE_ID_1",
     "parent_name": "root"
   }
 }
@@ -56,7 +56,7 @@ uv.exe run h2t-ops gmail threads --max 5 --json
 Thread detail command:
 
 ```powershell
-uv.exe run h2t-ops gmail thread 19e4a72c0188a0ee --json
+uv.exe run h2t-ops gmail thread GMAIL_MESSAGE_ID_1 --json
 ```
 
 Observed:
@@ -82,7 +82,7 @@ uv.exe run h2t-ops gmail search "has:attachment" --json
 Attachment smoke:
 
 ```powershell
-uv.exe run h2t-ops gmail attachment 19e595d395a65f58 ANGjdJ_l7nkI9VuJSLdYAeFCS9mRLdK_ldEBf1-Xb46PCqukvANHwd4Ruyr6Tv75rAd2jkwQqTcjjxmSykOVKJSp874Zb0ABNb1puL7ssNebu1uammYdmeUPZdx7qel-2j7f25DOTR6HvbG4j267HNpO68Zo41ghk7iTg6QMOq6HZ9Av0wLWocDIRrzhQLeVa2eKKzHfIO2cZaUJ0ywGpBpeaH43H6ynRNJRfaMHii6obUfDhmY2mT023klCkGT4SPkB72n0_-VO3fJ29khUCgWagukYt9S0pTCV8JHjDeocEga4RN6sV727-vKYl5RcQSzqIj37oBB_5hN2yxbtSZNZLbFmmSnx58VYc_rsiaNm9ddd7hPoZMJAzZgj8KqD9TJ-znL_a6kXqTbmB6O2J0kdTnScFTEbLT55F9BL0Q --output C:\tmp\h2t-ops-attachment-smoke-349096275.pdf --json
+uv.exe run h2t-ops gmail attachment GMAIL_MESSAGE_ID_2 GMAIL_ATTACHMENT_ID_1 --output C:\tmp\h2t-ops-attachment-smoke-349096275.pdf --json
 ```
 
 Result:
@@ -92,8 +92,8 @@ Result:
   "ok": true,
   "provider": "gmail",
   "result": {
-    "message_id": "19e595d395a65f58",
-    "attachment_id": "ANGjdJ_l7nkI9VuJSLdYAeFCS9mRLdK_ldEBf1-Xb46PCqukvANHwd4Ruyr6Tv75rAd2jkwQqTcjjxmSykOVKJSp874Zb0ABNb1puL7ssNebu1uammYdmeUPZdx7qel-2j7f25DOTR6HvbG4j267HNpO68Zo41ghk7iTg6QMOq6HZ9Av0wLWocDIRrzhQLeVa2eKKzHfIO2cZaUJ0ywGpBpeaH43H6ynRNJRfaMHii6obUfDhmY2mT023klCkGT4SPkB72n0_-VO3fJ29khUCgWagukYt9S0pTCV8JHjDeocEga4RN6sV727-vKYl5RcQSzqIj37oBB_5hN2yxbtSZNZLbFmmSnx58VYc_rsiaNm9ddd7hPoZMJAzZgj8KqD9TJ-znL_a6kXqTbmB6O2J0kdTnScFTEbLT55F9BL0Q",
+    "message_id": "GMAIL_MESSAGE_ID_2",
+    "attachment_id": "GMAIL_ATTACHMENT_ID_1",
     "saved_path": "C:\\tmp\\h2t-ops-attachment-smoke-349096275.pdf",
     "size": 124718
   }
@@ -130,15 +130,15 @@ Observed:
 
 - multiple writable owned calendars exist (`primary`, `Procedural`, `Hou2Touch`, etc.)
 - real attendee events exist, including:
-  - `_7185aqqea5jn2hjg8d732k3bb0oncjabb0q40gr1dgn66rrd`
-  - `6o2b3g9r6j1ht4v5b2h84bujpq`
+  - `CALENDAR_EVENT_ID_3`
+  - `CALENDAR_EVENT_ID_1`
 
 Move smoke:
 
 ```powershell
 uv.exe run h2t-ops calendar create "h2t-ops move smoke 2026-05-25" 2026-05-31 10:00 --duration-min 15 --json
-uv.exe run h2t-ops calendar move qoaooo8se7os9nmg0cisper1hc --to omue9dcijvb1qup9v4gvttnslg@group.calendar.google.com --json
-uv.exe run h2t-ops calendar delete qoaooo8se7os9nmg0cisper1hc --calendar-id omue9dcijvb1qup9v4gvttnslg@group.calendar.google.com --confirm --json
+uv.exe run h2t-ops calendar move CALENDAR_EVENT_ID_2 --to PERSONAL_CALENDAR_ID_1 --json
+uv.exe run h2t-ops calendar delete CALENDAR_EVENT_ID_2 --calendar-id PERSONAL_CALENDAR_ID_1 --confirm --json
 ```
 
 Observed:

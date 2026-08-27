@@ -34,8 +34,8 @@ milestone: ""
 
 **Literal paths used throughout the plan:**
 
-- Python: `C:/Users/stani/.h2t/venv/Scripts/python.exe`
-- Pytest: `C:/Users/stani/.h2t/venv/Scripts/python.exe -m pytest`
+- Python: `C:/Users/<user>/.h2t/venv/Scripts/python.exe`
+- Pytest: `C:/Users/<user>/.h2t/venv/Scripts/python.exe -m pytest`
 - Test file: `plugins/h2t-ops/skills/research/tests/test_exa_search.py`
 
 Some commands include bash-style pipes (`2>&1 | tail -N`) for output trimming. Either run them via the Bash tool, or strip the pipe and run the bare command — pytest already shows last failures by default.
@@ -137,7 +137,7 @@ def test_call_exa_returns_tuple_on_success():
 - [ ] **Step 2: Run tests to verify failure**
 
 ```bash
-C:/Users/stani/.h2t/venv/Scripts/python.exe -m pytest plugins/h2t-ops/skills/research/tests/test_exa_search.py -v -k "call_exa_" 2>&1 | tail -20
+C:/Users/<user>/.h2t/venv/Scripts/python.exe -m pytest plugins/h2t-ops/skills/research/tests/test_exa_search.py -v -k "call_exa_" 2>&1 | tail -20
 ```
 
 Expected: 6 FAIL with `AttributeError: module 'exa_search' has no attribute 'ExaTransientError'`.
@@ -278,7 +278,7 @@ The current test file has 2 tests that assume the old `call_exa` contract (retur
 - [ ] **Step 6: Run tests to verify pass + no regressions**
 
 ```
-C:/Users/stani/.h2t/venv/Scripts/python.exe -m pytest plugins/h2t-ops/skills/research/tests/test_exa_search.py -v
+C:/Users/<user>/.h2t/venv/Scripts/python.exe -m pytest plugins/h2t-ops/skills/research/tests/test_exa_search.py -v
 ```
 
 Expected: 6 new typed-exception tests PASS, all previously passing tests (minus the 2 deleted) still PASS. Total = original_count − 2 + 6.
@@ -331,7 +331,7 @@ def test_sleep_with_jitter_zero_base():
 - [ ] **Step 2: Run to verify FAIL**
 
 ```bash
-C:/Users/stani/.h2t/venv/Scripts/python.exe -m pytest plugins/h2t-ops/skills/research/tests/test_exa_search.py -v -k "sleep_with_jitter" 2>&1 | tail -10
+C:/Users/<user>/.h2t/venv/Scripts/python.exe -m pytest plugins/h2t-ops/skills/research/tests/test_exa_search.py -v -k "sleep_with_jitter" 2>&1 | tail -10
 ```
 
 Expected: 2 FAIL with `AttributeError`.
@@ -363,7 +363,7 @@ def sleep_with_jitter(base_seconds: float) -> None:
 - [ ] **Step 4: Run to verify PASS**
 
 ```
-C:/Users/stani/.h2t/venv/Scripts/python.exe -m pytest plugins/h2t-ops/skills/research/tests/test_exa_search.py -v -k "sleep_with_jitter"
+C:/Users/<user>/.h2t/venv/Scripts/python.exe -m pytest plugins/h2t-ops/skills/research/tests/test_exa_search.py -v -k "sleep_with_jitter"
 ```
 
 Expected: 2 PASS.
@@ -400,7 +400,7 @@ Note: this test still passes after Task 2 because retry loop doesn't exist yet �
 Run:
 
 ```
-C:/Users/stani/.h2t/venv/Scripts/python.exe -m pytest plugins/h2t-ops/skills/research/tests/test_exa_search.py::test_run_search_http_429_exits_2 -v
+C:/Users/<user>/.h2t/venv/Scripts/python.exe -m pytest plugins/h2t-ops/skills/research/tests/test_exa_search.py::test_run_search_http_429_exits_2 -v
 ```
 
 Expected: PASS.
@@ -492,7 +492,7 @@ def test_build_envelope_failed_empty_results():
 - [ ] **Step 2: Run to verify FAIL**
 
 ```bash
-C:/Users/stani/.h2t/venv/Scripts/python.exe -m pytest plugins/h2t-ops/skills/research/tests/test_exa_search.py -v -k "build_envelope" 2>&1 | tail -10
+C:/Users/<user>/.h2t/venv/Scripts/python.exe -m pytest plugins/h2t-ops/skills/research/tests/test_exa_search.py -v -k "build_envelope" 2>&1 | tail -10
 ```
 
 Expected: 3 FAIL with `AttributeError: build_envelope`.
@@ -535,7 +535,7 @@ def build_envelope(
 - [ ] **Step 4: Run to verify PASS**
 
 ```bash
-C:/Users/stani/.h2t/venv/Scripts/python.exe -m pytest plugins/h2t-ops/skills/research/tests/test_exa_search.py -v -k "build_envelope" 2>&1 | tail -10
+C:/Users/<user>/.h2t/venv/Scripts/python.exe -m pytest plugins/h2t-ops/skills/research/tests/test_exa_search.py -v -k "build_envelope" 2>&1 | tail -10
 ```
 
 Expected: 3 PASS.
@@ -737,7 +737,7 @@ Note: the 429 test asserts `error == "exa_5xx_retryable"` because the spec lumps
 - [ ] **Step 2: Run to verify FAIL**
 
 ```bash
-C:/Users/stani/.h2t/venv/Scripts/python.exe -m pytest plugins/h2t-ops/skills/research/tests/test_exa_search.py -v -k "search_with_retry" 2>&1 | tail -30
+C:/Users/<user>/.h2t/venv/Scripts/python.exe -m pytest plugins/h2t-ops/skills/research/tests/test_exa_search.py -v -k "search_with_retry" 2>&1 | tail -30
 ```
 
 Expected: 12 FAIL with `AttributeError: search_with_retry`.
@@ -905,7 +905,7 @@ def search_with_retry(
 - [ ] **Step 4: Run tests to verify PASS**
 
 ```bash
-C:/Users/stani/.h2t/venv/Scripts/python.exe -m pytest plugins/h2t-ops/skills/research/tests/test_exa_search.py -v -k "search_with_retry" 2>&1 | tail -25
+C:/Users/<user>/.h2t/venv/Scripts/python.exe -m pytest plugins/h2t-ops/skills/research/tests/test_exa_search.py -v -k "search_with_retry" 2>&1 | tail -25
 ```
 
 Expected: 12 PASS.
@@ -961,7 +961,7 @@ def test_warn_emitted_when_budget_exhausted(monkeypatch, capsys):
 - [ ] **Step 2: Run to verify PASS** (already implemented in Task 4)
 
 ```bash
-C:/Users/stani/.h2t/venv/Scripts/python.exe -m pytest plugins/h2t-ops/skills/research/tests/test_exa_search.py -v -k "warn_emitted_when_budget" 2>&1 | tail -10
+C:/Users/<user>/.h2t/venv/Scripts/python.exe -m pytest plugins/h2t-ops/skills/research/tests/test_exa_search.py -v -k "warn_emitted_when_budget" 2>&1 | tail -10
 ```
 
 Expected: PASS.
@@ -1164,7 +1164,7 @@ def test_envelope_flag_failed_writes_sources_json(monkeypatch, tmp_path):
 - [ ] **Step 2: Run to verify FAIL**
 
 ```
-C:/Users/stani/.h2t/venv/Scripts/python.exe -m pytest plugins/h2t-ops/skills/research/tests/test_exa_search.py -v -k "envelope_flag or no_retry_flag or default_stdout or sources_json_always"
+C:/Users/<user>/.h2t/venv/Scripts/python.exe -m pytest plugins/h2t-ops/skills/research/tests/test_exa_search.py -v -k "envelope_flag or no_retry_flag or default_stdout or sources_json_always"
 ```
 
 Expected: 9 FAIL (4 flag/back-compat + 5 FAILED-envelope tests). Reasons: flags missing, FAILED branch calls die() instead of printing envelope.
@@ -1307,7 +1307,7 @@ def _run_search(args: argparse.Namespace) -> int:
 - [ ] **Step 5: Run all tests**
 
 ```
-C:/Users/stani/.h2t/venv/Scripts/python.exe -m pytest plugins/h2t-ops/skills/research/tests/test_exa_search.py -v
+C:/Users/<user>/.h2t/venv/Scripts/python.exe -m pytest plugins/h2t-ops/skills/research/tests/test_exa_search.py -v
 ```
 
 Expected: 9 new tests PASS, all earlier tests PASS. If any earlier test fails on stdout shape — investigate, but the markdown writer is unchanged. Pay attention to `test_run_search_http_429_exits_2`: with the new retry path, `side_effect=[err, err]` is now fully consumed (sleep stubbed). It should still pass with exit 2 + `EXA_ERROR:API` in stderr.
@@ -1380,7 +1380,7 @@ def test_crawl_empty_is_degraded(monkeypatch, tmp_path):
 - [ ] **Step 2: Run to verify FAIL**
 
 ```bash
-C:/Users/stani/.h2t/venv/Scripts/python.exe -m pytest plugins/h2t-ops/skills/research/tests/test_exa_search.py -v -k "crawl_writes_envelope or crawl_empty" 2>&1 | tail -10
+C:/Users/<user>/.h2t/venv/Scripts/python.exe -m pytest plugins/h2t-ops/skills/research/tests/test_exa_search.py -v -k "crawl_writes_envelope or crawl_empty" 2>&1 | tail -10
 ```
 
 Expected: 2 FAIL (no envelope in sources.json yet for crawl).
@@ -1469,7 +1469,7 @@ def _run_crawl(args: argparse.Namespace) -> int:
 - [ ] **Step 4: Run to verify PASS**
 
 ```bash
-C:/Users/stani/.h2t/venv/Scripts/python.exe -m pytest plugins/h2t-ops/skills/research/tests/test_exa_search.py -v -k "crawl" 2>&1 | tail -15
+C:/Users/<user>/.h2t/venv/Scripts/python.exe -m pytest plugins/h2t-ops/skills/research/tests/test_exa_search.py -v -k "crawl" 2>&1 | tail -15
 ```
 
 Expected: 2 new tests PASS.
@@ -1700,7 +1700,7 @@ New: `assert "0.1.1" in result.stdout`
 - [ ] **Step 3: Run version test to verify**
 
 ```bash
-C:/Users/stani/.h2t/venv/Scripts/python.exe -m pytest plugins/h2t-ops/skills/research/tests/test_exa_search.py::test_version_flag -v
+C:/Users/<user>/.h2t/venv/Scripts/python.exe -m pytest plugins/h2t-ops/skills/research/tests/test_exa_search.py::test_version_flag -v
 ```
 
 Expected: PASS.
@@ -1708,7 +1708,7 @@ Expected: PASS.
 - [ ] **Step 4: Bump plugin manifest via helper script**
 
 ```bash
-C:/Users/stani/.h2t/venv/Scripts/python.exe scripts/bump_plugin.py h2t-ops 1.1.1
+C:/Users/<user>/.h2t/venv/Scripts/python.exe scripts/bump_plugin.py h2t-ops 1.1.1
 ```
 
 Expected stdout: confirmation that both `marketplace.json` and `plugin.json` updated to 1.1.1.
@@ -1724,7 +1724,7 @@ Expected: `"version": "1.1.1"`.
 - [ ] **Step 6: Run full test suite for final clean state**
 
 ```bash
-C:/Users/stani/.h2t/venv/Scripts/python.exe -m pytest plugins/h2t-ops/skills/research/tests/test_exa_search.py -v 2>&1 | tail -10
+C:/Users/<user>/.h2t/venv/Scripts/python.exe -m pytest plugins/h2t-ops/skills/research/tests/test_exa_search.py -v 2>&1 | tail -10
 ```
 
 Expected: all tests PASS, exit 0.
@@ -1750,7 +1750,7 @@ Refs: lichtpfad/h2t-skills#100"
 - [ ] **Step 1: Run full test suite**
 
 ```bash
-C:/Users/stani/.h2t/venv/Scripts/python.exe -m pytest plugins/h2t-ops/skills/research/tests/ -v 2>&1 | tail -20
+C:/Users/<user>/.h2t/venv/Scripts/python.exe -m pytest plugins/h2t-ops/skills/research/tests/ -v 2>&1 | tail -20
 ```
 
 Expected: all PASS. Print pass count.
@@ -1758,7 +1758,7 @@ Expected: all PASS. Print pass count.
 - [ ] **Step 2: Smoke test CLI shape — default stdout**
 
 ```bash
-C:/Users/stani/.h2t/venv/Scripts/python.exe plugins/h2t-ops/skills/research/scripts/exa_search.py --version
+C:/Users/<user>/.h2t/venv/Scripts/python.exe plugins/h2t-ops/skills/research/scripts/exa_search.py --version
 ```
 
 Expected: `exa_search 0.1.1`, exit 0.
@@ -1768,10 +1768,10 @@ Expected: `exa_search 0.1.1`, exit 0.
 If `$EXA_API_KEY` is set:
 
 ```bash
-C:/Users/stani/.h2t/venv/Scripts/python.exe plugins/h2t-ops/skills/research/scripts/exa_search.py search \
+C:/Users/<user>/.h2t/venv/Scripts/python.exe plugins/h2t-ops/skills/research/scripts/exa_search.py search \
   --query "TouchDesigner POP" --mode fast --num-results 3 \
   --output-dir /tmp/h2t-envelope-smoke --project smoketest --envelope \
-  | C:/Users/stani/.h2t/venv/Scripts/python.exe -c "import json,sys; e=json.load(sys.stdin); print('status=', e['status'], 'results=', len(e['results']))"
+  | C:/Users/<user>/.h2t/venv/Scripts/python.exe -c "import json,sys; e=json.load(sys.stdin); print('status=', e['status'], 'results=', len(e['results']))"
 ```
 
 Expected: `status= OK results= 3` (or `DEGRADED results= 0` if Exa returned empty — both are valid envelope outputs).

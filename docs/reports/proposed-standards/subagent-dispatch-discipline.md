@@ -11,7 +11,7 @@ Each dispatched subagent must receive a fully self-contained prompt (no implicit
 - Source files:
   - `C:/dev/POS/.claude/rules/governance.md`
   - `C:/work/rejuve/.claude/rules/research-execution.md`
-  - `C:/Users/stani/.claude/projects/C--dev-h2t-skills/memory/reference_subagent_context_inheritance.md`
+  - `C:/Users/<user>/.claude/projects/C--dev-h2t-skills/memory/reference_subagent_context_inheritance.md`
 
 ## Notes for operator
 Highest recurrence of any process finding (4 lineages). Ready to lift as-is. The write-strategy decision point is frequently missed — worth calling it out explicitly in the standard header.

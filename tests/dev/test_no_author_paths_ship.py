@@ -19,11 +19,30 @@ ROOT = Path(__file__).resolve().parents[2]
 # `h2t_ops/` — the package behind the nine CLI entry points, the first thing a stranger
 # installs — was outside it. The hint in `visual_ocr.py` telling them to install from
 # `C:/dev/h2t-tools` was found by a grep, not by this test.
-SHIPPED_ROOTS = [ROOT / "plugins", ROOT / "h2t_ops", ROOT / "lib", ROOT / "scripts"]
+# Two patterns, two scopes, because they are two different problems.
+#
+# A home directory with a person's name in it is personal data wherever it sits, and
+# publication makes the whole tree readable — 185 occurrences lived under docs/, tests/
+# and tools/ while the first version of this file walked four directories holding none
+# of them (#417).
+#
+# `C:/dev` is a portability defect in code and merely noise in prose. Enforcing it over
+# docs/ would mean rewriting several hundred lines of historical reports to no benefit;
+# the audit that counted them said the same.
+CODE_ROOTS = [ROOT / "plugins", ROOT / "h2t_ops", ROOT / "lib", ROOT / "scripts"]
+PROSE_ROOTS = [ROOT / "docs", ROOT / "tests", ROOT / "tools"]
+
+DEV_ROOT_PATH = re.compile(r"[A-Za-z]:[\\/]dev\b", re.IGNORECASE)
+# Two or more characters in the home-directory name: `/Users/x/` is a placeholder in a
+# fixture, a real account name is a person.
+PLACEHOLDER_HOMES = r"(?:user|users|testuser|someone|username|me|you|example|dev|<user>)"
+HOME_PATH = re.compile(
+    rf"/(?:Users|home)/(?!{PLACEHOLDER_HOMES}/)[A-Za-z_][A-Za-z0-9_-]+/", re.IGNORECASE
+)
 
 # A drive-letter dev root, or a home directory with a name in it.
 # Two or more characters in the home-directory name: `/Users/x/` is a placeholder in a
-# fixture, `/Users/stani/` is a person. A one-letter home does not exist on any machine
+# fixture, a real account name is a person. A one-letter home does not exist on any machine
 # this could leak.
 AUTHOR_PATH = re.compile(
     r"[A-Za-z]:[\\/]dev\b|/(?:Users|home)/[A-Za-z_][A-Za-z0-9_-]+/", re.IGNORECASE
@@ -49,9 +68,9 @@ EXPECTED = {
 }
 
 
-def _offenders() -> dict[str, list[str]]:
+def _offenders(roots, pattern) -> dict[str, list[str]]:
     found: dict[str, list[str]] = {}
-    for root in SHIPPED_ROOTS:
+    for root in roots:
         if not root.is_dir():
             continue
         for path in sorted(root.rglob("*")):
@@ -63,24 +82,38 @@ def _offenders() -> dict[str, list[str]]:
                 text = path.read_text(encoding="utf-8")
             except (OSError, UnicodeDecodeError):
                 continue
+            if path.lstat().st_mode & 0o170000 == 0o120000:
+                continue
             hits = [
                 f"{lineno}: {line.strip()[:110]}"
                 for lineno, line in enumerate(text.splitlines(), 1)
-                if AUTHOR_PATH.search(line)
+                if not line.lstrip().startswith("echo ") and pattern.search(line)
             ]
             if hits:
                 found[str(path.relative_to(ROOT))] = hits
     return found
 
 
-def test_no_new_author_paths_ship():
-    offenders = {k: v for k, v in _offenders().items() if k not in EXPECTED}
-    assert not offenders, "author-machine paths in shipped files:\n" + "\n".join(
+def test_no_author_dev_root_in_shipped_code():
+    offenders = {k: v for k, v in _offenders(CODE_ROOTS, DEV_ROOT_PATH).items()
+                 if k not in EXPECTED}
+    assert not offenders, "a dev root that exists on one machine:\n" + "\n".join(
+        f"  {rel}\n    " + "\n    ".join(lines) for rel, lines in offenders.items()
+    )
+
+
+def test_no_home_directory_names_anywhere():
+    """A person's home directory is personal data in prose as much as in code."""
+    roots = CODE_ROOTS + PROSE_ROOTS
+    offenders = {k: v for k, v in _offenders(roots, HOME_PATH).items() if k not in EXPECTED}
+    assert not offenders, "a home directory naming a person:\n" + "\n".join(
         f"  {rel}\n    " + "\n    ".join(lines) for rel, lines in offenders.items()
     )
 
 
 def test_expected_list_is_not_stale():
     """An entry that is now clean means the list lies to the next reader."""
-    clean = set(EXPECTED) - set(_offenders())
+    seen = set(_offenders(CODE_ROOTS, DEV_ROOT_PATH)) | set(
+        _offenders(CODE_ROOTS + PROSE_ROOTS, HOME_PATH))
+    clean = set(EXPECTED) - seen
     assert not clean, f"EXPECTED names files that are already clean: {sorted(clean)}"

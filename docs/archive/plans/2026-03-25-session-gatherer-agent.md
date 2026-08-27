@@ -60,9 +60,9 @@ Execute the gather command provided in the dispatch prompt. The values of `gathe
 <gather_cmd value> --cwd "<cwd value>"
 ```
 
-Example: if gather_cmd is `/c/Users/stani/.h2t/venv/Scripts/python.exe /path/to/gather.py` and cwd is `/c/dev/claude-agent-skills`, run:
+Example: if gather_cmd is `/c/Users/<user>/.h2t/venv/Scripts/python.exe /path/to/gather.py` and cwd is `/c/dev/claude-agent-skills`, run:
 ```bash
-/c/Users/stani/.h2t/venv/Scripts/python.exe /path/to/gather.py --cwd "/c/dev/claude-agent-skills"
+/c/Users/<user>/.h2t/venv/Scripts/python.exe /path/to/gather.py --cwd "/c/dev/claude-agent-skills"
 ```
 
 If the command fails (non-zero exit, no output, invalid JSON):

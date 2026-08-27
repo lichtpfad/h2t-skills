@@ -661,7 +661,7 @@ Format ready-to-paste on #133 (template below). Replace `<token>` placeholders w
 Date: 2026-05-20
 Machine: AUTOMATA
 Source: local `C:/dev/h2t-skills` (commits <T0>, <T1>, <T2>, <T3>; not pushed)
-Installed binary: `C:\Users\stani\.local\bin\h2t-ops.exe`
+Installed binary: `C:\Users\<user>\.local\bin\h2t-ops.exe`
 
 ### Mocked tests
 - `tests/core tests/connectors`: <count> passed, 0 failed (+<N> vs pre-#133).

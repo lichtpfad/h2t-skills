@@ -22,7 +22,7 @@ If executing in PowerShell directly, translate the snippets:
 - pipe-tail: `... 2>&1 | Select-Object -Last 3` instead of `2>&1 | tail -3`
 - grep negation: `... | Select-String -NotMatch "^docs/"` instead of `| grep -vE "^docs/"`
 - here-doc body: pass via `--body-file <tempfile>` after writing the body to a temp file
-- python path: `C:/Users/stani/.h2t/venv/Scripts/python.exe` (PowerShell understands forward slashes; `/c/Users/...` is Bash-only)
+- python path: `C:/Users/<user>/.h2t/venv/Scripts/python.exe` (PowerShell understands forward slashes; `/c/Users/...` is Bash-only)
 
 The Python interpreter is the same binary in either shell.
 
@@ -820,7 +820,7 @@ EOF
 
 ```bash
 cd C:/dev/h2t-skills-wireframe-contract
-/c/Users/stani/.h2t/venv/Scripts/python.exe -c "
+/c/Users/<user>/.h2t/venv/Scripts/python.exe -c "
 import re, pathlib, sys
 root = pathlib.Path('.')
 required_anchor = root / 'docs/wireframes/README.md'
@@ -909,8 +909,8 @@ If `docs/wireframes/README.md` is absent here, STOP. The PR cannot land without 
 - [ ] **Step 4: Run plugin + global tests as a sanity belt-and-braces**
 
 ```bash
-/c/Users/stani/.h2t/venv/Scripts/python.exe -m pytest plugins/h2t-creative/tests/ --tb=short 2>&1 | tail -3
-/c/Users/stani/.h2t/venv/Scripts/python.exe -m pytest tests/h2t_creative/test_assembler.py --tb=short 2>&1 | tail -3
+/c/Users/<user>/.h2t/venv/Scripts/python.exe -m pytest plugins/h2t-creative/tests/ --tb=short 2>&1 | tail -3
+/c/Users/<user>/.h2t/venv/Scripts/python.exe -m pytest tests/h2t_creative/test_assembler.py --tb=short 2>&1 | tail -3
 ```
 
 Expected: both green. Plugin: ~ 968 passed, 6 skipped. Global: 105 passed. (No tests should change.)

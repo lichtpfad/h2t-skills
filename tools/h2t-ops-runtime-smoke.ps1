@@ -27,7 +27,7 @@ function Resolve-Uv {
     # Prefer the stable WinGet Links shim; fall back to the version-stamped package path.
     $candidates = @(
         (Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Links\uv.exe'),
-        'C:\Users\stani\AppData\Local\Microsoft\WinGet\Packages\astral-sh.uv_Microsoft.Winget.Source_8wekyb3d8bbwe\uv.exe'  # machine-specific fallback; Links shim above covers other installs
+        "$env:LOCALAPPDATA\Microsoft\WinGet\Packages\astral-sh.uv_Microsoft.Winget.Source_8wekyb3d8bbwe\uv.exe"  # machine-specific fallback; Links shim above covers other installs
     )
     foreach ($c in $candidates) { if (Test-Path $c) { return $c } }
     $cmd = Get-Command uv -ErrorAction SilentlyContinue

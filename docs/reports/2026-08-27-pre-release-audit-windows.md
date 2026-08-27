@@ -20,7 +20,7 @@ Read-only by instruction — nothing fixed.
 **Two honest limits on this measurement, stated up front because they change how to read it:**
 
 1. **The clean `HOME` isolates `~/.h2t`, not the toolchain.** `uv`, and all 9 entry points in
-   `C:\Users\stani\.local\bin`, are already installed on this machine and stay on `PATH` under
+   `C:\Users\<user>\.local\bin`, are already installed on this machine and stay on `PATH` under
    the override. A *genuinely* fresh clone has neither. So every "ready" below that concerns the
    toolchain (`uv: ready`, `entry points: ready`) is an artefact of this machine, not a
    measurement of a newcomer's. The `~/.h2t`-dependent findings are sound; the toolchain ones
@@ -106,7 +106,7 @@ rather than calling a defect.
 
 `HOME`/`USERPROFILE` were never overridden globally (per-invocation only), so nothing needed
 un-setting. Confirmed: without override, `h2t-ops doctor` reports `NOTION_API_TOKEN=present`,
-`gmail credentials=present`; `expanduser('~')` → `C:\Users\stani`; `~/.h2t exists: True`.
+`gmail credentials=present`; `expanduser('~')` → `C:\Users\<user>`; `~/.h2t exists: True`.
 RESTORED: yes.
 
 ## The quiet column, summarised

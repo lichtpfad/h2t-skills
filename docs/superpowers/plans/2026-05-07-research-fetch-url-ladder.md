@@ -44,8 +44,8 @@ milestone: ""
 
 **Shell environment:** Windows. PowerShell default; Bash tool available. CLAUDE.md prohibits venv activation — use direct paths:
 
-- Python: `C:/Users/stani/.h2t/venv/Scripts/python.exe`
-- Pytest: `C:/Users/stani/.h2t/venv/Scripts/python.exe -m pytest`
+- Python: `C:/Users/<user>/.h2t/venv/Scripts/python.exe`
+- Pytest: `C:/Users/<user>/.h2t/venv/Scripts/python.exe -m pytest`
 - Test file: `plugins/h2t-ops/skills/research/tests/test_fetch_url.py`
 
 For pattern matching prefer the **Grep tool** over `grep`/`Select-String` in shell.
@@ -87,17 +87,17 @@ Expected:
 
 - [ ] **Pre-2: Verify Python**
 
-Run: `C:/Users/stani/.h2t/venv/Scripts/python.exe --version`
+Run: `C:/Users/<user>/.h2t/venv/Scripts/python.exe --version`
 Expected: `Python 3.11.9` (или 3.11.x)
 
 - [ ] **Pre-3: Verify pytest installed**
 
-Run: `C:/Users/stani/.h2t/venv/Scripts/python.exe -m pytest --version`
+Run: `C:/Users/<user>/.h2t/venv/Scripts/python.exe -m pytest --version`
 Expected: `pytest 7.x` или `8.x`
 
 - [ ] **Pre-4: Verify trafilatura is NOT installed (baseline policy)**
 
-Run: `C:/Users/stani/.h2t/venv/Scripts/python.exe -c "import trafilatura"`
+Run: `C:/Users/<user>/.h2t/venv/Scripts/python.exe -c "import trafilatura"`
 Expected: `ModuleNotFoundError: No module named 'trafilatura'`
 
 If installed — skip; baseline tests должны пройти и с ним. Просто проверьте отдельно task 28 (uplift) после.
@@ -152,7 +152,7 @@ def test_fetch_url_module_imports():
 
 - [ ] **Step 2: Run test, expect FAIL (no module)**
 
-Run: `C:/Users/stani/.h2t/venv/Scripts/python.exe -m pytest plugins/h2t-ops/skills/research/tests/test_fetch_url.py -v`
+Run: `C:/Users/<user>/.h2t/venv/Scripts/python.exe -m pytest plugins/h2t-ops/skills/research/tests/test_fetch_url.py -v`
 Expected: `ModuleNotFoundError: No module named 'fetch_url'`
 
 - [ ] **Step 3: Create skeleton module**
@@ -173,7 +173,7 @@ __version__ = "0.0.1"
 
 - [ ] **Step 4: Run test, expect PASS**
 
-Run: `C:/Users/stani/.h2t/venv/Scripts/python.exe -m pytest plugins/h2t-ops/skills/research/tests/test_fetch_url.py -v`
+Run: `C:/Users/<user>/.h2t/venv/Scripts/python.exe -m pytest plugins/h2t-ops/skills/research/tests/test_fetch_url.py -v`
 Expected: `1 passed`
 
 - [ ] **Step 5: Commit**
@@ -3495,7 +3495,7 @@ git -C C:/dev/h2t-skills-fetch-ladder commit -m "feat(research): public __all__ 
 - [ ] **Step 1: Run entire test module**
 
 ```
-C:/Users/stani/.h2t/venv/Scripts/python.exe -m pytest plugins/h2t-ops/skills/research/tests/test_fetch_url.py -v
+C:/Users/<user>/.h2t/venv/Scripts/python.exe -m pytest plugins/h2t-ops/skills/research/tests/test_fetch_url.py -v
 ```
 
 Expected: **all** tests pass — including `@pytest.mark.optional`, since that decorator is a label here, not a skip. The `optional` test monkeypatches a fake trafilatura module and does not require real install.
@@ -3516,7 +3516,7 @@ def pytest_configure(config):
 …or, if the project already has a `conftest.py`, add the marker there instead. Run:
 
 ```bash
-C:/Users/stani/.h2t/venv/Scripts/python.exe -m pytest plugins/h2t-ops/skills/research/tests/test_fetch_url.py -v 2>&1 | tail -10
+C:/Users/<user>/.h2t/venv/Scripts/python.exe -m pytest plugins/h2t-ops/skills/research/tests/test_fetch_url.py -v 2>&1 | tail -10
 ```
 
 Expected: clean run, no `PytestUnknownMarkWarning`. Again — **no tests should be reported as skipped** under this configuration; the marker is purely informational.
@@ -3524,7 +3524,7 @@ Expected: clean run, no `PytestUnknownMarkWarning`. Again — **no tests should 
 - [ ] **Step 3: Run sister test file too (no regressions)**
 
 ```
-C:/Users/stani/.h2t/venv/Scripts/python.exe -m pytest plugins/h2t-ops/skills/research/tests/ -v
+C:/Users/<user>/.h2t/venv/Scripts/python.exe -m pytest plugins/h2t-ops/skills/research/tests/ -v
 ```
 
 Expected: existing `test_exa_search.py` still green.
@@ -3689,7 +3689,7 @@ The repo ships a helper that bumps **both** files atomically — `scripts/bump_p
 - [ ] **Step 1: Run bump helper**
 
 ```
-C:/Users/stani/.h2t/venv/Scripts/python.exe scripts/bump_plugin.py h2t-ops 1.1.2
+C:/Users/<user>/.h2t/venv/Scripts/python.exe scripts/bump_plugin.py h2t-ops 1.1.2
 ```
 
 Expected: prints recommended commit command, exits 0. Both files now contain `"version": "1.1.2"`.
@@ -3712,7 +3712,7 @@ git -C C:/dev/h2t-skills-fetch-ladder commit -m "chore(h2t-ops): bump plugin to 
 - [ ] **Step 1: Full test run**
 
 ```
-C:/Users/stani/.h2t/venv/Scripts/python.exe -m pytest plugins/h2t-ops/skills/research/tests/ -v 2>&1 | tail -20
+C:/Users/<user>/.h2t/venv/Scripts/python.exe -m pytest plugins/h2t-ops/skills/research/tests/ -v 2>&1 | tail -20
 ```
 
 Expected: all green. `@pytest.mark.optional` tests pass when triggered (use `-m optional` to opt in if you'd like to verify trafilatura uplift; otherwise they should be marked-but-not-run as configured).
@@ -3722,7 +3722,7 @@ Expected: all green. `@pytest.mark.optional` tests pass when triggered (use `-m 
 Open `docs/superpowers/specs/2026-05-07-research-fetch-url-ladder.md` §12. For each checkbox confirm a passing test or wired-up code path:
 
 - [ ] Spec written before code → done in PR predecessor commit `85f86d6`.
-- [ ] CLI `fetch_url.py` callable → run: `C:/Users/stani/.h2t/venv/Scripts/python.exe plugins/h2t-ops/skills/research/scripts/fetch_url.py preflight` and capture exit.
+- [ ] CLI `fetch_url.py` callable → run: `C:/Users/<user>/.h2t/venv/Scripts/python.exe plugins/h2t-ops/skills/research/scripts/fetch_url.py preflight` and capture exit.
 - [ ] Envelope shape — covered by Task 2, 18, 34.
 - [ ] Baseline tests don't require paid keys / browser / network / pip installs sverh stdlib — confirm by running tests on a venv where only pytest is installed.
 - [ ] No hard dep on Firecrawl/Browserless/Crawl4AI/Playwright — Task 16 + Task 24.

@@ -363,7 +363,7 @@ screenshots.
 
 **Status of this appendix:** triangulated 2026-05-08 against an
 independent research run (h2t:research-agent, 19 sources, exa-ai
-adapter — see `C:/Users/stani/.h2t/research/h2t-creative-landing-block-
+adapter — see `C:/Users/<user>/.h2t/research/h2t-creative-landing-block-
 taxonomy-mobile-2026-05-07.sources.json`). The user-supplied initial
 synthesis (Baymard + Leadpages, 4 sources) was **mostly confirmed**
 with three additions and one demotion. Diff vs user hypothesis is in
@@ -668,7 +668,7 @@ Anti-pattern / clutter (2 sources):
 - https://landerlab.io/blog/10-common-landing-page-mistakes — clutter = mistake #1
 
 Research artifact:
-- `C:/Users/stani/.h2t/research/h2t-creative-landing-block-taxonomy-mobile-2026-05-07.sources.json` — full sources persistence (exa-ai adapter, 6 queries).
+- `C:/Users/<user>/.h2t/research/h2t-creative-landing-block-taxonomy-mobile-2026-05-07.sources.json` — full sources persistence (exa-ai adapter, 6 queries).
 
 ## A.8 Approval gate (additional)
 

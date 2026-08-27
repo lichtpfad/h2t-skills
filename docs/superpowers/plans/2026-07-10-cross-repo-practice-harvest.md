@@ -882,7 +882,7 @@ git commit -m "feat(practice-harvest): sealed registry validator (schema + sourc
 
 Run (одной строкой, реальные корни):
 ```bash
-C:/dev/h2t-skills/.venv/Scripts/python -m lib.practice_harvest.build_index --repo-root C:/dev/crypto-regime-spike --repo-root C:/dev/quant-kb --repo-root C:/dev/h2t-skills --repo-root C:/dev/POS --repo-root C:/dev/kraken --repo-root C:/dev/h2t-business --repo-root C:/dev/invest-research --repo-root C:/work/rejuve --repo-root C:/work/claudeworking --session-root "C:/Users/stani/.h2t/sessions/AUTOMATA" --memory-root "C:/Users/stani/.claude/projects/C--dev-h2t-skills/memory"
+C:/dev/h2t-skills/.venv/Scripts/python -m lib.practice_harvest.build_index --repo-root C:/dev/crypto-regime-spike --repo-root C:/dev/quant-kb --repo-root C:/dev/h2t-skills --repo-root C:/dev/POS --repo-root C:/dev/kraken --repo-root C:/dev/h2t-business --repo-root C:/dev/invest-research --repo-root C:/work/rejuve --repo-root C:/work/claudeworking --session-root "C:/Users/<user>/.h2t/sessions/AUTOMATA" --memory-root "C:/Users/<user>/.claude/projects/C--dev-h2t-skills/memory"
 ```
 Expected: `corpus: N records across M lineages -> docs/reports/2026-07-10-practice-harvest-corpus.json`
 

@@ -7,5 +7,5 @@
 
 ## LLM-extraction faithfulness gate: LLM emits locators, code owns quotes
 - **Evidence:** lineages rejuve, quant-kb, POS · recurrence 3 · domain-indep high
-- **Source:** `C:/work/rejuve/docs/superpowers/plans/2026-07-03-jtbd-segmentation.md`, `C:/Users/stani/.h2t/sessions/AUTOMATA/quant-kb/quant-quant-kb-plan5-llm-extraction-2026-07-06.md`, `C:/dev/POS/docs/superpowers/plans/2026-06-07-meeting-graph-v0-3.md`
+- **Source:** `C:/work/rejuve/docs/superpowers/plans/2026-07-03-jtbd-segmentation.md`, `C:/Users/<user>/.h2t/sessions/AUTOMATA/quant-kb/quant-quant-kb-plan5-llm-extraction-2026-07-06.md`, `C:/dev/POS/docs/superpowers/plans/2026-06-07-meeting-graph-v0-3.md`
 - **What to add:** In LLM-extraction pipelines, the LLM must emit only locators (e.g., start/end character offsets or span IDs), never the quote text itself. A deterministic script extracts the verbatim quote from the source document using those locators. If the LLM-returned span diverges from the source (faithfulness mismatch), the extraction fails closed — the item is skipped, logged, and does not appear in the output corpus.

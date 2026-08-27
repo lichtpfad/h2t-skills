@@ -30,7 +30,7 @@ supersedes: null
 См. umbrella issue #107 для полной картины. Кратко:
 
 - Секреты живут в трёх местах (`~/.dor/secrets.env`, `~/.h2t/config/secrets/`, shell env), нет единого loader'а.
-- Реальный drift-баг: `EXA_API_KEY` был в shell env на AUTOMATA, отсутствовал в `~/.dor/secrets.env`. Сессия из `C:\Users\stani` без активного shell-export получила `EXA_ERROR:ENV` на preflight, агент задиспатчил deprecated `h2t:research-agent`, silent fallback на WebSearch.
+- Реальный drift-баг: `EXA_API_KEY` был в shell env на AUTOMATA, отсутствовал в `~/.dor/secrets.env`. Сессия из `C:\Users\<user>` без активного shell-export получила `EXA_ERROR:ENV` на preflight, агент задиспатчил deprecated `h2t:research-agent`, silent fallback на WebSearch.
 - Фикс на уровне skill'а недостаточен — нужен общий contract: где хранятся ключи, кто их грузит, как откатывать на shell env при экспериментах.
 
 ---

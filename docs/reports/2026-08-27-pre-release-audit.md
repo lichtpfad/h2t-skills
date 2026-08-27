@@ -188,7 +188,7 @@ the synthetic HOME **and** must resolve under the real one. Without the second h
 
 ```
 synthetic:  ls: /tmp/cleanhome.SuecEp/.h2t: No such file or directory
-real:       /Users/stanislav_glazov/.h2t
+real:       /Users/<user>/.h2t
 ```
 
 ### D1. All nine entry points start; two misbehave
@@ -634,7 +634,7 @@ Asked during the run: how many config directories are synced. The Syncthing conf
 (`~/Library/Application Support/Syncthing/config.xml`) has exactly **one folder**:
 
 ```
-DOR Registry    /Users/stanislav_glazov/.dor
+DOR Registry    /Users/<user>/.dor
    type=sendreceive   devices=MacBook-Pro-3.local, AUTOMATA
 ```
 
@@ -798,7 +798,7 @@ Both are about the instrument rather than the result, and the second is a catch 
 would otherwise have got wrong:
 
 1. **The clean HOME isolates `~/.h2t`, not the toolchain.** `uv` and all nine entry points live
-   in `C:\Users\stani\.local\bin` and stayed on `PATH` under the override. A genuine fresh
+   in `C:\Users\<user>\.local\bin` and stayed on `PATH` under the override. A genuine fresh
    clone has neither, so every "ready" concerning the toolchain is an artefact of that machine
    — strictly optimistic. The `~/.h2t`-dependent findings are sound.
 

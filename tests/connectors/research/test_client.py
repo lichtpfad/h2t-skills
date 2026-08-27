@@ -160,7 +160,7 @@ def test_validate_public_http_url_allows_public_http_url():
 @pytest.mark.parametrize(
     "url",
     [
-        "file:///C:/Users/stani/.dor/secrets.env",
+        "file:///C:/Users/testuser/.dor/secrets.env",
         "https://user:password@example.com/page",
         "https://localhost/private",
         "http://127.0.0.1:8080/",
@@ -1027,7 +1027,7 @@ def test_research_client_fetch_keep_raw_redacts_url_secrets_in_raw_ref(tmp_path)
 def test_research_client_url_methods_reject_file_and_private_targets(tmp_path, method):
     research = client.ResearchClient(output_dir=tmp_path)
     with pytest.raises(UsageError):
-        getattr(research, method)("file:///C:/Users/stani/.dor/secrets.env")
+        getattr(research, method)("file:///C:/Users/testuser/.dor/secrets.env")
 
 
 def test_research_client_preflight_resolves_key_and_calls_exa(monkeypatch):

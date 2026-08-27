@@ -32,7 +32,7 @@ milestone: ""
 | `plugins/h2t-core/scripts/secrets-readme-template.md` | NEW | Rotation runbook template, copied by user to `~/.dor/secrets/README.md` |
 | `plugins/h2t-core/.claude-plugin/plugin.json` | modify | h2t-core version patch bump |
 
-**Test runner:** `C:/Users/stani/.h2t/venv/Scripts/python.exe -m pytest <path> -v`
+**Test runner:** `C:/Users/<user>/.h2t/venv/Scripts/python.exe -m pytest <path> -v`
 
 **Frequent commits:** один task = один commit. Conventional Commits scope `(secrets)` или `(research)` где уместно.
 
@@ -152,7 +152,7 @@ def test_get_blob_raises_not_implemented_initially():
 - [ ] **Step 5: Run tests to verify pass**
 
 ```
-C:/Users/stani/.h2t/venv/Scripts/python.exe -m pytest C:/dev/h2t-skills/plugins/h2t-core/scripts/tests/test_h2t_secrets.py -v
+C:/Users/<user>/.h2t/venv/Scripts/python.exe -m pytest C:/dev/h2t-skills/plugins/h2t-core/scripts/tests/test_h2t_secrets.py -v
 ```
 
 Expected: 6 tests PASS.
@@ -287,7 +287,7 @@ Also DELETE the obsolete `test_bootstrap_raises_not_implemented_initially` test 
 - [ ] **Step 2: Run tests to verify FAIL**
 
 ```
-C:/Users/stani/.h2t/venv/Scripts/python.exe -m pytest C:/dev/h2t-skills/plugins/h2t-core/scripts/tests/test_h2t_secrets.py -v
+C:/Users/<user>/.h2t/venv/Scripts/python.exe -m pytest C:/dev/h2t-skills/plugins/h2t-core/scripts/tests/test_h2t_secrets.py -v
 ```
 
 Expected: 8 new tests FAIL (bootstrap is still a stub raising NotImplementedError).
@@ -349,7 +349,7 @@ def bootstrap(*, env_file: Path | None = None) -> dict[str, str]:
 - [ ] **Step 4: Run to verify PASS**
 
 ```
-C:/Users/stani/.h2t/venv/Scripts/python.exe -m pytest C:/dev/h2t-skills/plugins/h2t-core/scripts/tests/test_h2t_secrets.py -v
+C:/Users/<user>/.h2t/venv/Scripts/python.exe -m pytest C:/dev/h2t-skills/plugins/h2t-core/scripts/tests/test_h2t_secrets.py -v
 ```
 
 Expected: all 13 tests PASS (5 from Task 1 + 8 new).
@@ -410,7 +410,7 @@ def test_get_blob_fail_loud_on_missing(tmp_path, monkeypatch):
 - [ ] **Step 2: Run to verify FAIL**
 
 ```
-C:/Users/stani/.h2t/venv/Scripts/python.exe -m pytest C:/dev/h2t-skills/plugins/h2t-core/scripts/tests/test_h2t_secrets.py -v -k "get_blob"
+C:/Users/<user>/.h2t/venv/Scripts/python.exe -m pytest C:/dev/h2t-skills/plugins/h2t-core/scripts/tests/test_h2t_secrets.py -v -k "get_blob"
 ```
 
 Expected: 2 FAIL (NotImplementedError or AttributeError).
@@ -444,7 +444,7 @@ def get_blob(relative_path: str) -> Path:
 - [ ] **Step 4: Run to verify PASS**
 
 ```
-C:/Users/stani/.h2t/venv/Scripts/python.exe -m pytest C:/dev/h2t-skills/plugins/h2t-core/scripts/tests/test_h2t_secrets.py -v
+C:/Users/<user>/.h2t/venv/Scripts/python.exe -m pytest C:/dev/h2t-skills/plugins/h2t-core/scripts/tests/test_h2t_secrets.py -v
 ```
 
 Expected: all 14 tests PASS (4 constants + 8 bootstrap + 2 get_blob).
@@ -518,7 +518,7 @@ def test_main_handles_missing_secrets_file(monkeypatch, capsys):
 - [ ] **Step 2: Run to verify FAIL**
 
 ```
-C:/Users/stani/.h2t/venv/Scripts/python.exe -m pytest C:/dev/h2t-skills/plugins/h2t-ops/skills/research/tests/test_exa_search.py -v -k "h2t_secrets_bootstrap or missing_secrets_file"
+C:/Users/<user>/.h2t/venv/Scripts/python.exe -m pytest C:/dev/h2t-skills/plugins/h2t-ops/skills/research/tests/test_exa_search.py -v -k "h2t_secrets_bootstrap or missing_secrets_file"
 ```
 
 Expected: 2 FAIL (`AttributeError: _h2t_secrets_bootstrap` not present in module).
@@ -586,7 +586,7 @@ Then in `main()`, immediately after the stdout/stderr UTF-8 reconfigure block (c
 - [ ] **Step 4: Run new tests to verify PASS**
 
 ```
-C:/Users/stani/.h2t/venv/Scripts/python.exe -m pytest C:/dev/h2t-skills/plugins/h2t-ops/skills/research/tests/test_exa_search.py -v -k "h2t_secrets_bootstrap or missing_secrets_file"
+C:/Users/<user>/.h2t/venv/Scripts/python.exe -m pytest C:/dev/h2t-skills/plugins/h2t-ops/skills/research/tests/test_exa_search.py -v -k "h2t_secrets_bootstrap or missing_secrets_file"
 ```
 
 Expected: 2 PASS.
@@ -594,7 +594,7 @@ Expected: 2 PASS.
 - [ ] **Step 5: Run full research test suite — verify no regressions**
 
 ```
-C:/Users/stani/.h2t/venv/Scripts/python.exe -m pytest C:/dev/h2t-skills/plugins/h2t-ops/skills/research/tests/test_exa_search.py -v
+C:/Users/<user>/.h2t/venv/Scripts/python.exe -m pytest C:/dev/h2t-skills/plugins/h2t-ops/skills/research/tests/test_exa_search.py -v
 ```
 
 Expected: 90 tests pass (88 existing + 2 new).
@@ -637,7 +637,7 @@ This fixture runs before every test in this directory. Tests that already monkey
 - [ ] **Step 6: Run full suite again — confirm 90 PASS**
 
 ```
-C:/Users/stani/.h2t/venv/Scripts/python.exe -m pytest C:/dev/h2t-skills/plugins/h2t-ops/skills/research/tests/test_exa_search.py -v
+C:/Users/<user>/.h2t/venv/Scripts/python.exe -m pytest C:/dev/h2t-skills/plugins/h2t-ops/skills/research/tests/test_exa_search.py -v
 ```
 
 - [ ] **Step 7: Commit**
@@ -761,7 +761,7 @@ Refs: lichtpfad/h2t-skills#108"
 - [ ] **Step 1: Inspect current h2t-core version**
 
 ```
-C:/Users/stani/.h2t/venv/Scripts/python.exe -c "import json; print(json.load(open('C:/dev/h2t-skills/plugins/h2t-core/.claude-plugin/plugin.json'))['version'])"
+C:/Users/<user>/.h2t/venv/Scripts/python.exe -c "import json; print(json.load(open('C:/dev/h2t-skills/plugins/h2t-core/.claude-plugin/plugin.json'))['version'])"
 ```
 
 Note the current version (let's call it `X.Y.Z`).
@@ -769,7 +769,7 @@ Note the current version (let's call it `X.Y.Z`).
 - [ ] **Step 2: Patch bump**
 
 ```
-C:/Users/stani/.h2t/venv/Scripts/python.exe C:/dev/h2t-skills/scripts/bump_plugin.py h2t-core <X.Y.Z+1>
+C:/Users/<user>/.h2t/venv/Scripts/python.exe C:/dev/h2t-skills/scripts/bump_plugin.py h2t-core <X.Y.Z+1>
 ```
 
 E.g., if current is `1.0.0`, bump to `1.0.1`. Per user CLAUDE.md: minor only after live verification → first PR is patch.
@@ -799,7 +799,7 @@ Refs: lichtpfad/h2t-skills#108"
 - [ ] **Step 1: Run full test suite — both new and existing**
 
 ```
-C:/Users/stani/.h2t/venv/Scripts/python.exe -m pytest C:/dev/h2t-skills/plugins/h2t-core/scripts/tests/ C:/dev/h2t-skills/plugins/h2t-ops/skills/research/tests/ -v
+C:/Users/<user>/.h2t/venv/Scripts/python.exe -m pytest C:/dev/h2t-skills/plugins/h2t-core/scripts/tests/ C:/dev/h2t-skills/plugins/h2t-ops/skills/research/tests/ -v
 ```
 
 Expected: 14 (h2t_secrets) + 90 (research) = 104 tests pass.
@@ -809,7 +809,7 @@ Expected: 14 (h2t_secrets) + 90 (research) = 104 tests pass.
 Quick smoke without running tests:
 
 ```
-C:/Users/stani/.h2t/venv/Scripts/python.exe -c "
+C:/Users/<user>/.h2t/venv/Scripts/python.exe -c "
 import sys
 sys.path.insert(0, 'C:/dev/h2t-skills/plugins/h2t-ops/skills/research/scripts')
 import exa_search

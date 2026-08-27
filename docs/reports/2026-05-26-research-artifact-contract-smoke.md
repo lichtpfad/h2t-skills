@@ -65,11 +65,11 @@ Result:
 
 Verified files:
 
-- `C:/Users/stani/.h2t/research/objects/threads/research-thread:914af17221fd2893239bde34.json`
-- `C:/Users/stani/.h2t/research/objects/runs/research-run:8bacbde04f27a794098929c1.json`
-- `C:/Users/stani/.h2t/research/objects/syntheses/research-synthesis:faa6b88f8c3da5997e3f6837.json`
-- `C:/Users/stani/.h2t/research/indexes/threads.index.json`
-- `C:/Users/stani/.h2t/research/indexes/syntheses.index.json`
+- `C:/Users/<user>/.h2t/research/objects/threads/research-thread:914af17221fd2893239bde34.json`
+- `C:/Users/<user>/.h2t/research/objects/runs/research-run:8bacbde04f27a794098929c1.json`
+- `C:/Users/<user>/.h2t/research/objects/syntheses/research-synthesis:faa6b88f8c3da5997e3f6837.json`
+- `C:/Users/<user>/.h2t/research/indexes/threads.index.json`
+- `C:/Users/<user>/.h2t/research/indexes/syntheses.index.json`
 
 Verified contract:
 

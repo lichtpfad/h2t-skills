@@ -756,5 +756,5 @@ SkillGraphClient.add_pattern(pattern_type, title, body, source, ...) → node_id
 - h2t-evals integration standard: `github.com/lichtpfad/h2t-evals/docs/h2t-evals-repo-integration-standard.md`
 - Agent runbook M3-M5: `C:/dev/h2t-evals/docs/ops/agent-runbook-m3-m5.md`
 - POS architecture v2: `github.com/lichtpfad/POS/docs/specs/2026-03-21-pos-architecture-v2.md`
-- AIM Sprint week 1-2: `C:/Users/stani/aim-sprint/`
+- AIM Sprint week 1-2: `C:/Users/<user>/aim-sprint/`
 - Project registry: `github.com/lichtpfad/h2t-landings/projects.yaml`

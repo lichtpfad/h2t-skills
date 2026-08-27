@@ -6,8 +6,8 @@
 # claude-agent-skills (h2t plugin) — Инвентарь инструментов
 
 **Репо:** `C:/dev/claude-agent-skills` (GitHub: `lichtpfad/h2t`)
-**Версия:** 2.12.1 | **Python venv:** `C:/Users/stani/.h2t/venv`
-**Тесты:** `C:/Users/stani/.h2t/venv/Scripts/python.exe -m pytest`
+**Версия:** 2.12.1 | **Python venv:** `C:/Users/<user>/.h2t/venv`
+**Тесты:** `C:/Users/<user>/.h2t/venv/Scripts/python.exe -m pytest`
 
 ---
 
@@ -119,16 +119,16 @@
 
 | Файл | Путь | Что хранит |
 |------|------|------------|
-| **repo-mapping.yaml** | `C:/Users/stani/.h2t/config/repo-mapping.yaml` | Маппинг git repo name → domain/project. cwd_patterns для non-git dirs. |
-| **domains.yaml** | `C:/Users/stani/.h2t/config/domains.yaml` | 9 доменов, 50+ проектов. notion_db_id для hou2touch. |
-| **about-me/** | `C:/Users/stani/.h2t/config/about-me/` | User context: core.md, psychology.md, health.md, vision.md |
-| **evals/** | `C:/Users/stani/.h2t/evals/` | Eval metrics storage: JSON per skill invocation |
+| **repo-mapping.yaml** | `C:/Users/<user>/.h2t/config/repo-mapping.yaml` | Маппинг git repo name → domain/project. cwd_patterns для non-git dirs. |
+| **domains.yaml** | `C:/Users/<user>/.h2t/config/domains.yaml` | 9 доменов, 50+ проектов. notion_db_id для hou2touch. |
+| **about-me/** | `C:/Users/<user>/.h2t/config/about-me/` | User context: core.md, psychology.md, health.md, vision.md |
+| **evals/** | `C:/Users/<user>/.h2t/evals/` | Eval metrics storage: JSON per skill invocation |
 
 ---
 
 ## 6. Тесты
 
-**Запуск:** `C:/Users/stani/.h2t/venv/Scripts/python.exe -m pytest <path> -v`
+**Запуск:** `C:/Users/<user>/.h2t/venv/Scripts/python.exe -m pytest <path> -v`
 
 | Тесты | Путь | Кол-во |
 |-------|------|--------|

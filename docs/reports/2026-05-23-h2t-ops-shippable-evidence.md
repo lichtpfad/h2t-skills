@@ -21,7 +21,7 @@ Track clean-install / shareability execution results with exit codes and evidenc
 ## Command runs
 
 - timestamp: "2026-05-23T17:23:12.7115355+03:00"
-  - command: "py -3 \"C:/Users/stani/.claude/plugins/cache/lichtpfad/h2t-core/3.1.10/skills/setup/scripts/setup_h2t.py\" doctor --json"
+  - command: "py -3 \"C:/Users/<user>/.claude/plugins/cache/lichtpfad/h2t-core/3.1.10/skills/setup/scripts/setup_h2t.py\" doctor --json"
   - expected_exit: 0
   - exit_code: 112
   - output_path: "C:\\dev\\h2t-skills\\.agent_evidence\\doctor_json.log"
@@ -34,7 +34,7 @@ Track clean-install / shareability execution results with exit codes and evidenc
   - follow_up_issue: "#148 (runtime/environment hygiene)"
 
 - timestamp: "2026-05-23T17:23:13.7548663+03:00"
-  - command: "py -3 \"C:/Users/stani/.claude/plugins/cache/lichtpfad/h2t-core/3.1.10/skills/setup/scripts/setup_h2t.py\" connectors-check --json"
+  - command: "py -3 \"C:/Users/<user>/.claude/plugins/cache/lichtpfad/h2t-core/3.1.10/skills/setup/scripts/setup_h2t.py\" connectors-check --json"
   - expected_exit: 0
   - exit_code: 112
   - output_path: "C:\\dev\\h2t-skills\\.agent_evidence\\connectors_json.log"
@@ -47,7 +47,7 @@ Track clean-install / shareability execution results with exit codes and evidenc
   - follow_up_issue: "#148 (runtime/environment hygiene)"
 
 - timestamp: "2026-05-23T17:23:14.8383747+03:00"
-  - command: "py -3 \"C:/Users/stani/.claude/plugins/cache/lichtpfad/h2t-core/3.1.10/skills/setup/scripts/setup_h2t.py\" doctor"
+  - command: "py -3 \"C:/Users/<user>/.claude/plugins/cache/lichtpfad/h2t-core/3.1.10/skills/setup/scripts/setup_h2t.py\" doctor"
   - expected_exit: 0
   - exit_code: 112
   - output_path: "C:\\dev\\h2t-skills\\.agent_evidence\\doctor_text.log"

@@ -148,7 +148,7 @@ The recovery spec (`2026-05-04-h2t-creative-recovery-spec.md`) must cover:
 |-------|------|
 | specdesigner.netlify.app screenshot | `docs/visual-regression/reference/specdesigner.netlify.app/desktop_20260504_000404.png` |
 | graphs.lichtpfadstudio.com screenshot | `docs/visual-regression/reference/graphs.lichtpfadstudio.com/desktop_20260504_000404.png` |
-| h2t:landing legacy skill | `C:/Users/stani/.claude/plugins/cache/lichtpfad/h2t/2.14.1/skills/landing/SKILL.md` |
-| h2t:deck legacy skill | `C:/Users/stani/.claude/plugins/cache/lichtpfad/h2t/2.14.1/skills/deck/SKILL.md` |
-| h2t:design legacy skill | `C:/Users/stani/.claude/plugins/cache/lichtpfad/h2t/2.14.1/skills/design/SKILL.md` |
+| h2t:landing legacy skill | `C:/Users/<user>/.claude/plugins/cache/lichtpfad/h2t/2.14.1/skills/landing/SKILL.md` |
+| h2t:deck legacy skill | `C:/Users/<user>/.claude/plugins/cache/lichtpfad/h2t/2.14.1/skills/deck/SKILL.md` |
+| h2t:design legacy skill | `C:/Users/<user>/.claude/plugins/cache/lichtpfad/h2t/2.14.1/skills/design/SKILL.md` |
 | h2t-landings/graphs source | `C:/dev/h2t-landings/graphs/index.html` |

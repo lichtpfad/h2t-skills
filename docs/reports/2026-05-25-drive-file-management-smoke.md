@@ -22,8 +22,8 @@ Branch during validation: `codex-drive-file-management-ops`
 - local source file:
   - `C:\dev\h2t-skills\.codex-smoke\drive-smoke-20260525-213408.txt`
 - destination folders:
-  - `1KN1j9H232w7quz1YL5Z-5KMOdp5M1ETA` — `h2t-ops-move-smoke-a-20260525-213408`
-  - `1ROy-2fF4OpBjdYdYAhJYukL40L8BIb5p` — `h2t-ops-move-smoke-b-20260525-213408`
+  - `DRIVE_FILE_ID_1` — `h2t-ops-move-smoke-a-20260525-213408`
+  - `DRIVE_FILE_ID_2` — `h2t-ops-move-smoke-b-20260525-213408`
 
 ## Commands and Results
 
@@ -37,7 +37,7 @@ uv.exe run h2t-ops drive create-folder "h2t-ops-move-smoke-a-20260525-213408" --
 
 Result: PASS
 
-- `file_id`: `1KN1j9H232w7quz1YL5Z-5KMOdp5M1ETA`
+- `file_id`: `DRIVE_FILE_ID_1`
 
 ### 2. Create smoke folder B
 
@@ -49,32 +49,32 @@ uv.exe run h2t-ops drive create-folder "h2t-ops-move-smoke-b-20260525-213408" --
 
 Result: PASS
 
-- `file_id`: `1ROy-2fF4OpBjdYdYAhJYukL40L8BIb5p`
+- `file_id`: `DRIVE_FILE_ID_2`
 
 ### 3. Upload disposable source file
 
 Command:
 
 ```bash
-uv.exe run h2t-ops drive upload C:\dev\h2t-skills\.codex-smoke\drive-smoke-20260525-213408.txt --folder 1KN1j9H232w7quz1YL5Z-5KMOdp5M1ETA --json
+uv.exe run h2t-ops drive upload C:\dev\h2t-skills\.codex-smoke\drive-smoke-20260525-213408.txt --folder DRIVE_FILE_ID_1 --json
 ```
 
 Result: PASS
 
 - uploaded file id:
-  - `1ymuOuWxptJ8sDTaNBYobyfnJq2AauVze0et-lxB4QgM`
+  - `DRIVE_FILE_ID_3`
 
 ### 4. Rename
 
 Command:
 
 ```bash
-uv.exe run h2t-ops drive rename 1ymuOuWxptJ8sDTaNBYobyfnJq2AauVze0et-lxB4QgM h2t-ops-smoke-renamed-20260525-213408 --json
+uv.exe run h2t-ops drive rename DRIVE_FILE_ID_3 h2t-ops-smoke-renamed-20260525-213408 --json
 ```
 
 Result: PASS
 
-- `file_id`: `1ymuOuWxptJ8sDTaNBYobyfnJq2AauVze0et-lxB4QgM`
+- `file_id`: `DRIVE_FILE_ID_3`
 - `name`: `h2t-ops-smoke-renamed-20260525-213408`
 
 ### 5. Copy into folder B
@@ -82,30 +82,30 @@ Result: PASS
 Command:
 
 ```bash
-uv.exe run h2t-ops drive copy 1ymuOuWxptJ8sDTaNBYobyfnJq2AauVze0et-lxB4QgM --name h2t-ops-copy-20260525-213408 --folder 1ROy-2fF4OpBjdYdYAhJYukL40L8BIb5p --json
+uv.exe run h2t-ops drive copy DRIVE_FILE_ID_3 --name h2t-ops-copy-20260525-213408 --folder DRIVE_FILE_ID_2 --json
 ```
 
 Result: PASS
 
 - copied file id:
-  - `1bfQWLihNvuPgKdYCY6BdlKgoM3181QEk6SDSKN4ZuMs`
+  - `DRIVE_FILE_ID_4`
 - `parents`:
-  - `["1ROy-2fF4OpBjdYdYAhJYukL40L8BIb5p"]`
+  - `["DRIVE_FILE_ID_2"]`
 
 ### 6. Move original into folder B
 
 Command:
 
 ```bash
-uv.exe run h2t-ops drive move 1ymuOuWxptJ8sDTaNBYobyfnJq2AauVze0et-lxB4QgM --to 1ROy-2fF4OpBjdYdYAhJYukL40L8BIb5p --json
+uv.exe run h2t-ops drive move DRIVE_FILE_ID_3 --to DRIVE_FILE_ID_2 --json
 ```
 
 Result: PASS
 
 - moved file id:
-  - `1ymuOuWxptJ8sDTaNBYobyfnJq2AauVze0et-lxB4QgM`
+  - `DRIVE_FILE_ID_3`
 - final `parents`:
-  - `["1ROy-2fF4OpBjdYdYAhJYukL40L8BIb5p"]`
+  - `["DRIVE_FILE_ID_2"]`
 
 ## Conclusion
 

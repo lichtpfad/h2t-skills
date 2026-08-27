@@ -33,8 +33,8 @@ Reference screenshots:
 Legacy/source files:
 
 - `C:/dev/h2t-landings/graphs/index.html`
-- `C:/Users/stani/.claude/plugins/cache/lichtpfad/h2t/2.14.1/skills/landing/SKILL.md`
-- `C:/Users/stani/.claude/plugins/cache/lichtpfad/h2t/2.14.1/skills/deck/SKILL.md`
+- `C:/Users/<user>/.claude/plugins/cache/lichtpfad/h2t/2.14.1/skills/landing/SKILL.md`
+- `C:/Users/<user>/.claude/plugins/cache/lichtpfad/h2t/2.14.1/skills/deck/SKILL.md`
 
 ## Environment
 
@@ -197,7 +197,7 @@ references:
     screenshot: screenshots/reference-desktop.png
   - id: legacy-h2t-landing
     type: legacy-skill
-    path: C:/Users/stani/.claude/plugins/cache/lichtpfad/h2t/2.14.1/skills/landing/SKILL.md
+    path: C:/Users/<user>/.claude/plugins/cache/lichtpfad/h2t/2.14.1/skills/landing/SKILL.md
 visual_invariants:
   - HUD surface panels with four corner brackets
   - JetBrains Mono body/labels and Inter display headings

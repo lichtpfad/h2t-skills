@@ -408,5 +408,5 @@ Sources must be queryable before Step 6.1.
 
 - Skills v3 architecture: `docs/superpowers/specs/2026-04-03-skills-v3-architecture-design.md`
 - Hook injection research: `docs/research/2026-03-31-hook-injection-vs-skill-instructions.md`
-- h2t-graphs API: `C:/Users/stani/.h2t/config/rules/graphs-api.md`
+- h2t-graphs API: `C:/Users/<user>/.h2t/config/rules/graphs-api.md`
 - h2t-evals design: `github.com/lichtpfad/h2t-evals/docs/h2t-evals-design.md`

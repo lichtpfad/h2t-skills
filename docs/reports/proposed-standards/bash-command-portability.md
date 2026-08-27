@@ -11,7 +11,7 @@ One command per Bash call; no compound operators (`&&`, `||`, `|`, `;`, `$()`). 
 - Source files:
   - `C:/dev/POS/.claude/rules/governance.md`
   - `C:/dev/kraken/.claude/rules/environment.md`
-  - `C:/Users/stani/.claude/projects/C--dev-h2t-skills/memory/feedback_no_shell_postprocess_gather.md`
+  - `C:/Users/<user>/.claude/projects/C--dev-h2t-skills/memory/feedback_no_shell_postprocess_gather.md`
 
 ## Notes for operator
 Tied for highest recurrence (4 lineages). Partially present in current CLAUDE.md but scattered. A single canonical standard makes it citable in plans and subagent prompts. Ready to lift as-is.

@@ -59,7 +59,7 @@
       "lift_verdict": "deferred:skill",
       "source_paths": [
         "C:/dev/crypto-regime-spike/.claude/rules/autonomous-execution-runbook.md",
-        "C:/Users/stani/.claude/projects/C--dev-h2t-skills/memory/reference_autonomous_run_skill.md"
+        "C:/Users/<user>/.claude/projects/C--dev-h2t-skills/memory/reference_autonomous_run_skill.md"
       ]
     },
     {
@@ -75,7 +75,7 @@
       "lift_verdict": "append:branching.md",
       "source_paths": [
         "C:/dev/crypto-regime-spike/.claude/rules/git.md",
-        "C:/Users/stani/.claude/projects/C--dev-h2t-skills/memory/feedback_concurrent_chat_branch_hazard.md"
+        "C:/Users/<user>/.claude/projects/C--dev-h2t-skills/memory/feedback_concurrent_chat_branch_hazard.md"
       ]
     },
     {
@@ -122,7 +122,7 @@
       "source_paths": [
         "C:/dev/POS/.claude/rules/governance.md",
         "C:/work/rejuve/.claude/rules/research-execution.md",
-        "C:/Users/stani/.claude/projects/C--dev-h2t-skills/memory/reference_subagent_context_inheritance.md"
+        "C:/Users/<user>/.claude/projects/C--dev-h2t-skills/memory/reference_subagent_context_inheritance.md"
       ]
     },
     {
@@ -141,7 +141,7 @@
       "source_paths": [
         "C:/dev/POS/.claude/rules/governance.md",
         "C:/dev/kraken/.claude/rules/environment.md",
-        "C:/Users/stani/.claude/projects/C--dev-h2t-skills/memory/feedback_no_shell_postprocess_gather.md"
+        "C:/Users/<user>/.claude/projects/C--dev-h2t-skills/memory/feedback_no_shell_postprocess_gather.md"
       ]
     },
     {
@@ -303,7 +303,7 @@
       "lift_verdict": "skip",
       "source_paths": [
         "C:/work/rejuve/.claude/rules/evidence-rules.md",
-        "C:/Users/stani/.claude/projects/C--dev-h2t-skills/memory/project_tracker_lags_code.md"
+        "C:/Users/<user>/.claude/projects/C--dev-h2t-skills/memory/project_tracker_lags_code.md"
       ]
     },
     {
@@ -318,7 +318,7 @@
       "lift_verdict": "deferred:skill",
       "source_paths": [
         "C:/dev/h2t-skills/.claude/rules/connectors.md",
-        "C:/Users/stani/.claude/projects/C--dev-h2t-skills/memory/reference_meetgeek_upload_flow.md"
+        "C:/Users/<user>/.claude/projects/C--dev-h2t-skills/memory/reference_meetgeek_upload_flow.md"
       ]
     },
     {
@@ -333,7 +333,7 @@
       "lift_verdict": "deferred:code",
       "source_paths": [
         "C:/dev/h2t-skills/.claude/rules/plugin-deploy.md",
-        "C:/Users/stani/.claude/projects/C--dev-h2t-skills/memory/feedback_plugin_reload.md"
+        "C:/Users/<user>/.claude/projects/C--dev-h2t-skills/memory/feedback_plugin_reload.md"
       ]
     },
     {
@@ -378,7 +378,7 @@
       "current_location": "memory/feedback_preserve_query_language.md",
       "lift_verdict": "deferred:skill",
       "source_paths": [
-        "C:/Users/stani/.claude/projects/C--dev-h2t-skills/memory/feedback_preserve_query_language.md"
+        "C:/Users/<user>/.claude/projects/C--dev-h2t-skills/memory/feedback_preserve_query_language.md"
       ]
     },
     {
@@ -469,7 +469,7 @@
       "lift_verdict": "append:evidence-grounded-synthesis.md",
       "source_paths": [
         "C:/work/rejuve/docs/superpowers/plans/2026-07-03-jtbd-segmentation.md",
-        "C:/Users/stani/.h2t/sessions/AUTOMATA/quant-kb/quant-quant-kb-plan5-llm-extraction-2026-07-06.md",
+        "C:/Users/<user>/.h2t/sessions/AUTOMATA/quant-kb/quant-quant-kb-plan5-llm-extraction-2026-07-06.md",
         "C:/dev/POS/docs/superpowers/plans/2026-06-07-meeting-graph-v0-3.md"
       ]
     },
@@ -486,7 +486,7 @@
       "lift_verdict": "deferred:code",
       "source_paths": [
         "C:/dev/crypto-regime-spike/docs/superpowers/plans/2026-06-27-plan4-statistical-multiplicity-oos.md",
-        "C:/Users/stani/.h2t/sessions/AUTOMATA/quant-kb/quant-quant-kb-plan16-two-gate-verdict-2026-07-10.md"
+        "C:/Users/<user>/.h2t/sessions/AUTOMATA/quant-kb/quant-quant-kb-plan16-two-gate-verdict-2026-07-10.md"
       ]
     },
     {
@@ -521,8 +521,8 @@
       "lift_verdict": "append:research-pipeline-runbook.md",
       "source_paths": [
         "C:/work/claudeworking/docs/superpowers/specs/2026-07-04-grants-phase2-cards-and-explorer-design.md",
-        "C:/Users/stani/.h2t/sessions/AUTOMATA/quant-kb/quant-kb-plan6-typization-2026-07-06.md",
-        "C:/Users/stani/.h2t/sessions/AUTOMATA/rejuve/analytics-rejuve-audience-dashboard-2026-07-04.md"
+        "C:/Users/<user>/.h2t/sessions/AUTOMATA/quant-kb/quant-kb-plan6-typization-2026-07-06.md",
+        "C:/Users/<user>/.h2t/sessions/AUTOMATA/rejuve/analytics-rejuve-audience-dashboard-2026-07-04.md"
       ]
     },
     {
@@ -534,10 +534,10 @@
       ],
       "recurrence": 2,
       "domain_independence": "high",
-      "current_location": "C:/Users/stani/.h2t/sessions/AUTOMATA/quant-kb/quant-kb-plan9-council-rekey-2026-07-07.md",
+      "current_location": "C:/Users/<user>/.h2t/sessions/AUTOMATA/quant-kb/quant-kb-plan9-council-rekey-2026-07-07.md",
       "lift_verdict": "deferred:code",
       "source_paths": [
-        "C:/Users/stani/.h2t/sessions/AUTOMATA/quant-kb/quant-kb-plan9-council-rekey-2026-07-07.md",
+        "C:/Users/<user>/.h2t/sessions/AUTOMATA/quant-kb/quant-kb-plan9-council-rekey-2026-07-07.md",
         "C:/work/rejuve/docs/superpowers/plans/2026-07-03-jtbd-segmentation.md"
       ]
     },
@@ -553,8 +553,8 @@
       "current_location": "C:/dev/crypto-regime-spike/docs/superpowers/specs/2026-06-27-multiplicity-denominator.md",
       "lift_verdict": "deferred:code",
       "source_paths": [
-        "C:/Users/stani/.h2t/sessions/AUTOMATA/crypto-regime-spike/crypto-regime-spike-multiplicity-denominator-2026-06-27.md",
-        "C:/Users/stani/.h2t/sessions/AUTOMATA/quant-kb/quant-kb-operator-freeze-2026-07-08.md"
+        "C:/Users/<user>/.h2t/sessions/AUTOMATA/crypto-regime-spike/crypto-regime-spike-multiplicity-denominator-2026-06-27.md",
+        "C:/Users/<user>/.h2t/sessions/AUTOMATA/quant-kb/quant-kb-operator-freeze-2026-07-08.md"
       ]
     },
     {
@@ -566,11 +566,11 @@
       ],
       "recurrence": 2,
       "domain_independence": "high",
-      "current_location": "C:/Users/stani/.h2t/sessions/AUTOMATA/crypto-regime-spike/crypto-regime-spike-money-hypoth-plan4-2026-06-27.md",
+      "current_location": "C:/Users/<user>/.h2t/sessions/AUTOMATA/crypto-regime-spike/crypto-regime-spike-money-hypoth-plan4-2026-06-27.md",
       "lift_verdict": "deferred:code",
       "source_paths": [
-        "C:/Users/stani/.h2t/sessions/AUTOMATA/crypto-regime-spike/crypto-regime-spike-money-hypoth-plan4-2026-06-27.md",
-        "C:/Users/stani/.h2t/sessions/AUTOMATA/quant-kb/quant-kb-plan6-typization-2026-07-06.md"
+        "C:/Users/<user>/.h2t/sessions/AUTOMATA/crypto-regime-spike/crypto-regime-spike-money-hypoth-plan4-2026-06-27.md",
+        "C:/Users/<user>/.h2t/sessions/AUTOMATA/quant-kb/quant-kb-plan6-typization-2026-07-06.md"
       ]
     },
     {
@@ -582,11 +582,11 @@
       ],
       "recurrence": 2,
       "domain_independence": "high",
-      "current_location": "C:/Users/stani/.h2t/sessions/AUTOMATA/crypto-regime-spike/crypto-regime-spike-pr76-merge-2026-07-09.md",
+      "current_location": "C:/Users/<user>/.h2t/sessions/AUTOMATA/crypto-regime-spike/crypto-regime-spike-pr76-merge-2026-07-09.md",
       "lift_verdict": "deferred:code",
       "source_paths": [
-        "C:/Users/stani/.h2t/sessions/AUTOMATA/crypto-regime-spike/crypto-regime-spike-pr76-merge-2026-07-09.md",
-        "C:/Users/stani/.h2t/sessions/AUTOMATA/quant-kb/quant-kb-plan19-sonnet-extract-2026-07-09.md"
+        "C:/Users/<user>/.h2t/sessions/AUTOMATA/crypto-regime-spike/crypto-regime-spike-pr76-merge-2026-07-09.md",
+        "C:/Users/<user>/.h2t/sessions/AUTOMATA/quant-kb/quant-kb-plan19-sonnet-extract-2026-07-09.md"
       ]
     },
     {
@@ -612,11 +612,11 @@
       ],
       "recurrence": 1,
       "domain_independence": "high",
-      "current_location": "C:/Users/stani/.h2t/sessions/AUTOMATA/quant-kb/quant-kb-plan19-benchmark-2026-07-09.md",
+      "current_location": "C:/Users/<user>/.h2t/sessions/AUTOMATA/quant-kb/quant-kb-plan19-benchmark-2026-07-09.md",
       "lift_verdict": "deferred:code",
       "source_paths": [
-        "C:/Users/stani/.h2t/sessions/AUTOMATA/quant-kb/quant-kb-plan19-benchmark-2026-07-09.md",
-        "C:/Users/stani/.h2t/sessions/AUTOMATA/quant-kb/quant-kb-ingest-model-benchmark-2026-07-09.md"
+        "C:/Users/<user>/.h2t/sessions/AUTOMATA/quant-kb/quant-kb-plan19-benchmark-2026-07-09.md",
+        "C:/Users/<user>/.h2t/sessions/AUTOMATA/quant-kb/quant-kb-ingest-model-benchmark-2026-07-09.md"
       ]
     },
     {
@@ -627,10 +627,10 @@
       ],
       "recurrence": 1,
       "domain_independence": "medium",
-      "current_location": "C:/Users/stani/.h2t/sessions/AUTOMATA/crypto-regime-spike/crypto-regime-spike-money-hypoth-phase1-2026-07-04.md",
+      "current_location": "C:/Users/<user>/.h2t/sessions/AUTOMATA/crypto-regime-spike/crypto-regime-spike-money-hypoth-phase1-2026-07-04.md",
       "lift_verdict": "deferred:code",
       "source_paths": [
-        "C:/Users/stani/.h2t/sessions/AUTOMATA/crypto-regime-spike/crypto-regime-spike-money-hypoth-phase1-2026-07-04.md"
+        "C:/Users/<user>/.h2t/sessions/AUTOMATA/crypto-regime-spike/crypto-regime-spike-money-hypoth-phase1-2026-07-04.md"
       ]
     },
     {
@@ -641,10 +641,10 @@
       ],
       "recurrence": 1,
       "domain_independence": "medium",
-      "current_location": "C:/Users/stani/.h2t/sessions/AUTOMATA/crypto-regime-spike/crypto-regime-spike-money-hypoth-phaseB-2026-07-03.md",
+      "current_location": "C:/Users/<user>/.h2t/sessions/AUTOMATA/crypto-regime-spike/crypto-regime-spike-money-hypoth-phaseB-2026-07-03.md",
       "lift_verdict": "deferred:code",
       "source_paths": [
-        "C:/Users/stani/.h2t/sessions/AUTOMATA/crypto-regime-spike/crypto-regime-spike-money-hypoth-phaseB-2026-07-03.md"
+        "C:/Users/<user>/.h2t/sessions/AUTOMATA/crypto-regime-spike/crypto-regime-spike-money-hypoth-phaseB-2026-07-03.md"
       ]
     }
   ]

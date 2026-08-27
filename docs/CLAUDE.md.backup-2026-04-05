@@ -2,16 +2,16 @@
 
 ## Центральный контекст
 
-Перед началом работы прочитай `C:/Users/stani/.h2t/config/about-me/core.md` — минимальный контекст о пользователе (ADHD, стиль работы, тон коммуникации).
+Перед началом работы прочитай `C:/Users/<user>/.h2t/config/about-me/core.md` — минимальный контекст о пользователе (ADHD, стиль работы, тон коммуникации).
 
-Для стратегических сессий также: `C:/Users/stani/.h2t/config/docs/strategy-summary.md`.
-Для личных/DOR сессий: `C:/Users/stani/.h2t/config/about-me/psychology.md`.
+Для стратегических сессий также: `C:/Users/<user>/.h2t/config/docs/strategy-summary.md`.
+Для личных/DOR сессий: `C:/Users/<user>/.h2t/config/about-me/psychology.md`.
 
-Полная структура: `C:/Users/stani/.h2t/config/CLAUDE.md`.
+Полная структура: `C:/Users/<user>/.h2t/config/CLAUDE.md`.
 
 ## h2t-graphs API
 
-При работе с knowledge graph (поиск операторов, frameworks, курсов) — читай `C:/Users/stani/.h2t/config/rules/graphs-api.md`. Использовать HTTP API, не Python import.
+При работе с knowledge graph (поиск операторов, frameworks, курсов) — читай `C:/Users/<user>/.h2t/config/rules/graphs-api.md`. Использовать HTTP API, не Python import.
 
 ## Versioning (semver)
 
