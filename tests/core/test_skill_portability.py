@@ -46,11 +46,9 @@ KNOWN_DEBT = frozenset({
     "h2t-dev:docs-lint",
     "h2t-dev:docs-sync-labels",
     "h2t-dev:milestone-closure",
-    # CLAUDE_SKILL_DIR joined FORBIDDEN once it was measured empty too (#456). These four
-    # resolve scripts through it and need a bin/ entry each, the way h2t-creative got one.
-    "h2t-edu:process-transcripts",
-    "h2t-edu:convert-meeting-transcript",
-    "h2t-edu:youtube-transcript",
+    # CLAUDE_SKILL_DIR joined FORBIDDEN once it was measured empty too (#456). drawio
+    # resolves its scripts through it and needs a bin/ entry, the way h2t-creative got one.
+    # The three h2t-edu skills that shared the defect left with their plugin.
     "h2t-arch:drawio",
 })
 
