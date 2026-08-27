@@ -40,9 +40,24 @@ Run it through `uv`, which is a prerequisite of this skill anyway — `doctor` r
 `uv` status, and `install-h2t-ops` cannot work without it. One form on every platform:
 
 ```bash
+if ! command -v uv >/dev/null 2>&1; then
+  echo "ERROR: uv is not on PATH, and every remedy this skill offers needs it." >&2
+  echo "Install it, then re-run:" >&2
+  echo "  macOS/Linux  curl -LsSf https://astral.sh/uv/install.sh | sh" >&2
+  echo "  Windows      powershell -c \"irm https://astral.sh/uv/install.ps1 | iex\"" >&2
+  exit 3
+fi
+
 RUN="uv run --no-project --python 3.11 python"
 $RUN scripts/setup_h2t.py doctor --json
 ```
+
+The preflight is what keeps this honest. `doctor` is the diagnostic, and a diagnostic
+that will not start because the thing it diagnoses is missing is useless at exactly the
+moment it is needed. Without the check, a machine with Python 3.11 but no uv would see
+`uv: command not found` and nothing else. With it, the message names the missing
+prerequisite and how to install it, and exits 3 — the config exit code the connector
+contract already uses.
 
 `--python 3.11` because the package declares `requires-python = ">=3.11"`; a bare
 `uv run` resolves to whatever uv considers current, measured as 3.10 on 2026-08-27.
