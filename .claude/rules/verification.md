@@ -46,3 +46,29 @@ parsed value and the bytes are not the same representation.
 
 Cheapest defense, and the only one that has actually worked here: revert the fix, watch
 the test go red, restore. Two commands.
+
+## Name the area yourself; do not inherit it from the tool
+
+A tool answers the question its defaults ask, not the one you meant. Before running a
+check, say out loud what it must cover — then confirm the invocation covers that.
+
+Measured 2026-08-27, after rewriting history to remove two tokens:
+
+```
+gitleaks detect                      -> no leaks found
+gitleaks detect --log-opts="--all"   -> leaks found: 2
+```
+
+Both true. `detect` walks what a clone reaches, and `refs/pull/*` are not fetched by
+default, so 147 of 148 pull-request refs still carried the secret while the first command
+reported the repository clean. The result was announced as "history is clean" on the
+strength of the narrower run.
+
+The same shape appears wherever a default bounds the scan: a `grep --include=*.py` that
+answers about Python and gets read as answering about the tree; a probe writing to a file
+when the defect lives on the console path; a suite run on one directory when CI runs
+fourteen. In each case the tool is honest and the conclusion is wrong.
+
+Two habits close it. State the area before the command, not after the output. And when a
+check returns clean on something that was dirty a moment ago, widen it once before
+believing it.
