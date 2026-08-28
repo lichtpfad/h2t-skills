@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- chore: `gh-memory` removed. It had declared itself deprecated since #197 — "Deprecated
+  compatibility shim ... prefer h2t-core:session-start and h2t-core:handoff" — and was the
+  only skill in the pack carrying `status: deprecated` in its own frontmatter. A shim that
+  announces its own obsolescence still occupies a name, still lands in the skill index of
+  every session, and still has to be read past. Three tests existed only to assert the
+  deprecation text; they go with it (#463)
+
 - chore(pre-merge-check): `compatibility` names git and npx, and states that the skill
   runs against a feature branch rather than main (#464)
 
