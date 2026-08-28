@@ -1,7 +1,8 @@
 ---
 name: pre-merge-check
 description: This skill should be used before merging a feature branch to main or creating a PR. Triggers on "pre-merge", "ready to merge", "готов к мерджу", or when superpowers finishing-a-development-branch is about to run. Runs security, test, and build gates.
-compatibility: "Claude Code"
+compatibility: "Requires git and npx (ships with Node) for the build gate. Runs against a
+  feature branch, not main."
 metadata:
   author: lichtpfad
   version: 1.0.0

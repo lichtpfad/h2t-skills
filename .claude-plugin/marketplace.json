@@ -9,7 +9,7 @@
     {
       "name": "h2t-core",
       "description": "H2T Core — session lifecycle: session-start, handoff, scaffold-project, init-project, setup, agent-profile",
-      "version": "3.2.36",
+      "version": "3.2.37",
       "author": {
         "name": "lichtpfad"
       },
@@ -31,7 +31,7 @@
     {
       "name": "h2t-dev",
       "description": "H2T Dev — development workflow: docs-lint, github-issues, pre-merge-check, milestone-closure",
-      "version": "1.0.36",
+      "version": "1.0.37",
       "author": {
         "name": "lichtpfad"
       },
@@ -42,7 +42,7 @@
     {
       "name": "h2t-arch",
       "description": "H2T Arch — architecture and diagram tools: drawio, diagram-node",
-      "version": "1.0.9",
+      "version": "1.0.10",
       "author": {
         "name": "lichtpfad"
       },
@@ -53,7 +53,7 @@
     {
       "name": "h2t-creative",
       "description": "H2T Creative v2 — modular landing pages and decks: Swiss grid base, swappable profiles, Python assembler, Playwright QA.",
-      "version": "1.6.0",
+      "version": "1.6.1",
       "author": {
         "name": "lichtpfad"
       },

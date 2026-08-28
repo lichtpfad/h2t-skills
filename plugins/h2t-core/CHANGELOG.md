@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- chore(snap): `compatibility` says what the skill needs before it is run — the h2t-snap
+  binary on PATH, prebuilt and free for both platforms, plus Screen Recording and
+  Accessibility on macOS, where exit code 5 is a permission refusal and not a missing
+  window. Previously the field read "Claude Code", which is true of every skill and
+  therefore tells an agent nothing (#464)
+
 - fix(inject-h2t-context): the injected skill index no longer advertises
   `h2t-dev:docs-init`, which has no `SKILL.md` in the tree nor in any of the eleven cached
   versions back to 1.0.20. Not a lost file: `bc335d8` removed `SKILL.md` from four skills

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- chore(landing, deck): `compatibility` separates the two halves — assembly needs only uv,
+  QA needs Node for browser-qa, and its absence marks the result unverified instead of
+  stopping delivery (#464)
+
 - feat(browser-qa): the QA agent ships with the plugin. `landing` and `deck` required
   `h2t-tools:playwright-agent` and halted delivery without it — a plugin in nobody's install,
   which made both skills unexecutable as written rather than merely unverified. What was

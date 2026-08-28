@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- chore(pre-merge-check): `compatibility` names git and npx, and states that the skill
+  runs against a feature branch rather than main (#464)
+
 - fix: the plugin reaches its own files through `bin/h2t-dev` on PATH instead of
   `CLAUDE_PLUGIN_ROOT`, which the harness never sets in skill bash. Thirteen sites across
   three skills built a path from it — docs-lint 8, milestone-closure 3, github-issues 2 —

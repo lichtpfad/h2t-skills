@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- chore(drawio): `compatibility` names the draw.io desktop app and Node instead of
+  repeating "Claude Code" (#464)
+
 - chore: `node-researcher` removed. Its description pinned the skill to one project's
   diagram ("crypto-regime-orchestrator", "L5-L10 node") while occupying a slot in every
   user's skill listing, and its nonstandard `trigger:` key was read by nothing — the

@@ -1,7 +1,9 @@
 ---
 name: landing
 description: "Generates a multi-file landing page using the h2t-creative assembler pipeline. Reads DESIGN.md profile as context, collaborates on recipe.yaml content, runs assembler.py, then performs mandatory Playwright QA at 375px and 1440px. Delivery halted if Playwright unavailable. Triggers: 'landing', 'create landing', 'landing page', 'h2t-creative:landing'"
-compatibility: "Claude Code"
+compatibility: "Assembly needs only uv. The QA step runs h2t-creative:browser-qa, whose
+  browser comes from npx @playwright/mcp — Node is the prerequisite, and its absence marks
+  the result unverified rather than stopping delivery."
 metadata:
   author: lichtpfad
   version: 1.0.1

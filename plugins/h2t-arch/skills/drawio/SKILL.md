@@ -1,7 +1,8 @@
 ---
 name: drawio
 description: "Generates, exports, and validates draw.io architecture diagrams. Creates styled .drawio files from graph descriptions using project-specific shape libraries (TOML). Supports PNG/SVG/PDF export via draw.io Desktop CLI. Triggers on: /drawio, 'create diagram', 'architecture diagram', 'draw.io diagram', 'export diagram', 'generate drawio'., 'h2t-arch:drawio'"
-compatibility: "Claude Code"
+compatibility: "Requires the draw.io desktop app for export and Node for the validators.
+  The plugin root is reached through `$(h2t-arch root)`, so no interpreter path is needed."
 metadata:
   author: lichtpfad
   version: 1.0.1

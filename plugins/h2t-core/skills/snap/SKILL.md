@@ -1,7 +1,9 @@
 ---
 name: snap
 description: "Desktop screenshot & interact utility for AI agents. Capture windows, click, type, hover in any desktop app. Use when agent needs visual feedback from native applications (not browsers). Triggers: 'snap', 'h2t:snap', 'h2t-snap', 'screenshot desktop', 'capture window', 'click in app', 'скриншот приложения', 'кликни в окне'."
-compatibility: "Claude Code"
+compatibility: "Requires the h2t-snap binary on PATH — prebuilt for macOS and Windows in
+  lichtpfad/h2t-snap, free. On macOS it also needs Screen Recording (capture) and
+  Accessibility (click, type); exit code 5 is a permission refusal, not a missing window."
 metadata:
   author: lichtpfad
   version: 0.1.0
