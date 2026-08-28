@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- fix(scaffold-project): a broken h2t-dev no longer reads as an absent one. `run_docs_init`
+  returned `skip` both when the plugin was missing and when the plugin was there without its
+  script — so a broken delivery produced a project with no `docs/` and said nothing, which is
+  the failure the call exists to prevent. The second case is now an error naming the path and
+  what to do. Also follows docs-init to its new home under `scripts/` (#458)
+
 - chore(snap): `compatibility` says what the skill needs before it is run — the h2t-snap
   binary on PATH, prebuilt and free for both platforms, plus Screen Recording and
   Accessibility on macOS, where exit code 5 is a permission refusal and not a missing

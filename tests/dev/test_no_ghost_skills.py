@@ -20,9 +20,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 
 # Directory -> why it has no SKILL.md.
+#
+# Every entry here is a directory sitting under skills/ that is not a skill, which is a
+# contradiction the list only manages. docs-init left it in #458 the right way: the script
+# moved to plugins/h2t-dev/scripts/docs-init/, where its name no longer claims to be
+# something the harness can reach. The remaining three are candidates for the same move.
 _CODE_NOT_SKILLS = {
     "h2t-dev/docs-index": "index.py — the navigation generator docs-lint calls",
-    "h2t-dev/docs-init": "scaffolding scripts",
     "h2t-ops/drive": "connector scripts",
     "h2t-ops/meetgeek": "connector scripts and their tests",
 }

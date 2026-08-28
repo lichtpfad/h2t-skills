@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- refactor: `skills/docs-init/` moved to `scripts/docs-init/`. It has had no `SKILL.md`
+  since `bc335d8` demoted it into h2t-core:scaffold-project, so its place under `skills/`
+  claimed a reachability it does not have. The README documented `docs-init <repo> --apply`
+  as a command for four months after that demotion; there was never such a command. Both the
+  README and `references/standards/documentation-structure.md` now name the real entry point,
+  `/h2t-core:scaffold-project` (#458)
+
 - chore: `gh-memory` removed. It had declared itself deprecated since #197 — "Deprecated
   compatibility shim ... prefer h2t-core:session-start and h2t-core:handoff" — and was the
   only skill in the pack carrying `status: deprecated` in its own frontmatter. A shim that

@@ -7,7 +7,6 @@ Documentation and tooling skills for h2t platform. Includes standards compliance
 | Skill | Purpose | Key args |
 |-------|---------|----------|
 | `docs-lint` | Check docs standards compliance | `[repo...]`, `--fix`, `--no-pymarkdown` |
-| `docs-init` | Scaffold docs/ structure | `<repo>`, `--apply`, `--commit` |
 | `docs-sync-labels` | Sync canonical GitHub labels | `[repo...]`, `--apply` |
 
 All skills default to **dry-run** — safe to run anytime. Pass `--apply` to make real changes.
@@ -30,17 +29,21 @@ docs-lint fix-index --root .       # Dry-run README/navigation rebuild
 docs-lint doctor --root . --json   # Machine-readable report
 ```
 
-### docs-init
+### docs-init — not a command, and not a skill
 
-Scaffolds standard docs/ structure in a repo. Reads `projects.yaml` for conditional dirs.
-Always idempotent — skips existing files.
+`scripts/docs-init/init.py` scaffolds the standard `docs/` structure and reads
+`projects.yaml` for conditional directories. It has no entry point of its own and no
+`SKILL.md`: `bc335d8` demoted it out of `skills/` deliberately, absorbing it into
+`h2t-core:scaffold-project`, which calls it directly.
 
-**Usage:**
-```bash
-docs-init h2t-graphs        # Dry-run scaffold
-docs-init h2t-graphs --apply # Create dirs and files
-docs-init h2t-graphs --commit # Apply + commit
+The only supported way in is creating a project:
+
 ```
+/h2t-core:scaffold-project
+```
+
+This README documented `docs-init <repo> --apply` as a command for four months after that
+demotion. There was never such a command — not in `[project.scripts]`, not on PATH (#458).
 
 
 ### docs-sync-labels

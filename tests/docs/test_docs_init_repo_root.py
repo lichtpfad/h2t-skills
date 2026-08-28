@@ -1,7 +1,7 @@
 import sys
 from pathlib import Path
 
-_SCRIPT_DIR = Path(__file__).parents[2] / "plugins/h2t-dev/skills/docs-init/scripts"
+_SCRIPT_DIR = Path(__file__).parents[2] / "plugins/h2t-dev/scripts/docs-init"
 sys.path.insert(0, str(_SCRIPT_DIR))
 
 from init import init_repo

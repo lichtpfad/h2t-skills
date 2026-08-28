@@ -11,10 +11,10 @@ from scaffold_project import run_docs_init
 
 def _make_fake_init(tmp_path: Path) -> Path:
     """Create a fake docs-init init.py under tmp_path and return plugin_root."""
-    # init_script = _PLUGIN_ROOT.parent / "h2t-dev" / "skills" / "docs-init" / "scripts" / "init.py"
-    # So we need: tmp_path / "h2t-dev" / "skills" / "docs-init" / "scripts" / "init.py"
+    # init_script = _H2T_DEV_ROOT / "scripts" / "docs-init" / "init.py"
+    # So we need: tmp_path / "h2t-dev" / "scripts" / "docs-init" / "init.py"
     # _PLUGIN_ROOT.parent == tmp_path  →  _PLUGIN_ROOT = tmp_path / "any-child"
-    fake_init_dir = tmp_path / "h2t-dev" / "skills" / "docs-init" / "scripts"
+    fake_init_dir = tmp_path / "h2t-dev" / "scripts" / "docs-init"
     fake_init_dir.mkdir(parents=True)
     (fake_init_dir / "init.py").write_text("# stub")
     plugin_root = tmp_path / "h2t-skills"  # .parent == tmp_path
@@ -95,8 +95,16 @@ def test_run_docs_init_returns_error_on_failure(tmp_path, monkeypatch):
     assert result["status"] == "error"
 
 
-def test_run_docs_init_skips_when_script_not_found(tmp_path, monkeypatch):
-    """Skips gracefully when docs-init script is not found."""
+def test_run_docs_init_errors_when_the_plugin_is_present_but_its_script_is_not(
+    tmp_path, monkeypatch
+):
+    """A broken h2t-dev must not read as an optional one.
+
+    This asserted `skip` until #458. The two absences differ: the plugin not installed is
+    a choice, the plugin installed without its script is a broken delivery. Reporting both
+    as `skip` produced projects with no docs/ and said nothing about it — the very failure
+    this call exists to prevent.
+    """
     import scaffold_project
     # run_docs_init reads the module-level _H2T_DEV_ROOT (resolved once at import),
     # not _DEV_ROOT/_PLUGIN_ROOT — point it at a dir with no docs-init script.
@@ -104,7 +112,19 @@ def test_run_docs_init_skips_when_script_not_found(tmp_path, monkeypatch):
     project_dir = tmp_path / "my-repo"
     project_dir.mkdir()
     result = run_docs_init("my-repo", project_dir)
+    assert result["status"] == "error"
+    assert "reinstall" in result["error"], "the message must say what to do, not just what failed"
+
+
+def test_run_docs_init_skips_when_the_plugin_is_not_installed(tmp_path, monkeypatch):
+    """h2t-dev is optional; its absence is a choice and stays a skip."""
+    import scaffold_project
+    monkeypatch.setattr(scaffold_project, "_H2T_DEV_ROOT", None)
+    project_dir = tmp_path / "my-repo"
+    project_dir.mkdir()
+    result = run_docs_init("my-repo", project_dir)
     assert result["status"] == "skip"
+    assert "not installed" in result["reason"]
 
 
 def test_gitignore_python_includes_lint_temp_files():

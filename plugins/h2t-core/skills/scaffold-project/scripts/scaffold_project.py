@@ -437,11 +437,25 @@ _H2T_DEV_ROOT = _find_h2t_dev_root()
 
 
 def run_docs_init(repo_name: str, project_dir: Path, *, template: str = "code_repo") -> dict:
+    """Scaffold docs/ in a new project through h2t-dev's docs-init script.
+
+    The two absences are not the same and must not report the same way. h2t-dev not
+    installed is a legitimate skip: the plugin is optional. h2t-dev installed but missing
+    its script is a broken delivery, and a broken delivery reporting `skip` produces a
+    project with no docs/ and says nothing — the failure this call exists to prevent (#458).
+    """
     if _H2T_DEV_ROOT is None:
-        return {"status": "skip", "reason": "h2t-dev plugin not found"}
-    init_script = _H2T_DEV_ROOT / "skills" / "docs-init" / "scripts" / "init.py"
+        return {"status": "skip", "reason": "h2t-dev plugin not installed"}
+    init_script = _H2T_DEV_ROOT / "scripts" / "docs-init" / "init.py"
     if not init_script.exists():
-        return {"status": "skip", "reason": "docs-init script not found"}
+        return {
+            "status": "error",
+            "error": (
+                f"h2t-dev is installed at {_H2T_DEV_ROOT} but {init_script} is missing. "
+                "The plugin is broken, not absent — reinstall it rather than proceeding "
+                "with a project that has no docs/ structure."
+            ),
+        }
     r = subprocess.run(
         [
             sys.executable,

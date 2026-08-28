@@ -140,7 +140,7 @@ Generated output must never be placed where source files live (see
 
 ## docs/README.md Template
 
-Every repo's `docs/README.md` must follow this structure. **Include only sections that actually exist** — omit rows for directories the repo doesn't have. The template below shows all possible rows; `/docs-init` generates only the applicable subset based on `projects.yaml` flags and repo reality.
+Every repo's `docs/README.md` must follow this structure. **Include only sections that actually exist** — omit rows for directories the repo doesn't have. The template below shows all possible rows; the scaffolding step of `/h2t-core:scaffold-project` generates only the applicable subset based on `projects.yaml` flags and repo reality.
 
 ```markdown
 # {Repo Name} Documentation
