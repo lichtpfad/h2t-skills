@@ -19,8 +19,7 @@ Measured 2026-08-28 across the 29 shipped `SKILL.md`.
 | `drawio`, `node` | `h2t-arch:drawio` | draw.io desktop app + Node runtime |
 | `npx` | `h2t-dev:pre-merge-check` | ships with Node |
 | `llm-kb-engine` | `h2t-ops:kb` | `uv tool install`; KB location from `H2T_KB_ROOT` |
-| `h2t-tools:playwright-agent` | `h2t-creative:landing`, `:deck` | **not in the pack, not installed** — #460 |
-| `h2t-tools:screenshot` | `h2t-ops:research` | not in the pack; optional there, unlike the above |
+| `npx` + `@playwright/mcp` | `h2t-creative:browser-qa` | fetched on demand; Node is the prerequisite, first run pulls a Chromium build |
 | `mcp__anysite` | `h2t-ops:research` | MCP server, alternative path |
 
 Environment variables that gate behaviour: `H2T_KB_ROOT`, `H2T_SESSION_ROOT`,
@@ -63,7 +62,12 @@ and simply assume.
 ## Degradation
 
 Missing a dependency is not automatically fatal, and treating it as fatal has its own cost.
-`h2t-creative:landing` halts delivery outright when `h2t-tools:playwright-agent` is absent — a
-plugin that is in nobody's install — which makes the skill unexecutable as written rather than
-merely unverified. Prefer marking the result unverified and saying so; reserve the stop for the
-case where continuing would produce something harmful.
+`h2t-creative:landing` used to halt delivery outright when `h2t-tools:playwright-agent` was
+absent — a plugin in nobody's install — which made the skill unexecutable as written rather
+than merely unverified. #460 absorbed that agent as `h2t-creative:browser-qa` and turned the
+stop into a statement: deliver, and say which widths went unchecked. Prefer that everywhere;
+reserve the stop for the case where continuing would produce something harmful.
+
+The absorption is also the general answer to a hard dependency on someone else's plugin. What
+was needed here was 40 lines of agent frontmatter — an MCP command and a tool allowlist. Copy
+that, and the pack stops depending on an install it does not control.

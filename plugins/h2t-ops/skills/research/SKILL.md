@@ -233,7 +233,8 @@ degraded reasons. It creates a review-required artifact from one fetch sidecar a
 one existing page image.
 
 Screenshot capture is an operator concern, not a research connector concern.
-Preferred workflow: capture the page with `h2t-tools:screenshot`, then pass that
+Preferred workflow: capture the page with a browser agent — `h2t-creative:browser-qa`
+when h2t-creative is installed — then pass that
 image into `h2t-ops research visual-ocr`.
 
 ## References
@@ -256,7 +257,7 @@ Load only what the request needs:
 1. Pick a template if the request has a clear domain.
 2. Run the relevant `h2t-ops research ...` command.
 3. For `visual-ocr`, first produce the fetch sidecar with `h2t-ops research fetch`,
-   then capture the page screenshot via `h2t-tools:screenshot`.
+   then capture the page screenshot with a browser agent, if one is available.
 4. Inspect `result.status`; `exit 0` can still mean `DEGRADED`.
 5. Write final findings only with source URL + quote + confidence.
 6. Preserve artifact paths and telemetry.
@@ -268,7 +269,8 @@ Load only what the request needs:
 - No `--project default` — forbidden. Always pass real project id from session context.
 - No silent WebSearch/WebFetch fallback.
 - No paywall/login bypass.
-- No screenshot capture inside `h2t-ops research`; use `h2t-tools:screenshot`.
+- No screenshot capture inside `h2t-ops research`; delegate it to a browser agent, and
+  say the capture is missing rather than substituting prose for it.
 - No POS DB/vault/lake/context writes.
 - No finding without URL + quote + confidence.
 - No automatic KB promotion.

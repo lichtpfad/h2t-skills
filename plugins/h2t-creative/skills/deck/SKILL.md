@@ -79,17 +79,16 @@ On error: print assembler's stderr and stop.
 
 ## Step 4: Playwright QA
 
-**Dependency check:** Verify `h2t-tools:playwright-agent` is available. If not:
-> "ERROR: h2t-tools:playwright-agent plugin is required for delivery but is not installed.
-> Install it from the Claude plugin store (search 'Playwright' by Microsoft), then retry.
-> Delivery halted — dist/ is not ready until QA passes."
-> **Stop here. Do not deliver dist/.**
+Use the `Agent` tool with `subagent_type: "h2t-creative:browser-qa"`. The agent ships with
+this plugin and pulls its browser through `npx` on demand, so there is nothing to install
+beyond Node.
 
-If available, use the `Agent` tool with `subagent_type: "h2t-tools:playwright-agent"`:
+1. Screenshot slide 1 at 1440px
+2. Press `→` → screenshot slide 2, and confirm the slide actually changed
+3. Click the menu link for slide 3 → screenshot (if there are three or more)
 
-1. Screenshot slide 1 at 1440px viewport
-2. Press `→` key → screenshot slide 2 (keyboard nav smoke test)
-3. Click menu link for slide 3 → screenshot (if ≥3 slides)
+**If the agent cannot run** (no Node, `npx` blocked, MCP refused to start): do not halt.
+Deliver `dist/` and say plainly that it is **unverified**, and what was not checked.
 
 ## Step 5: Review and iterate
 

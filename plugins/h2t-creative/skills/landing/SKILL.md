@@ -82,17 +82,23 @@ On error: print assembler's stderr and stop.
 
 ## Step 4: Playwright QA
 
-**Dependency check:** Verify `h2t-tools:playwright-agent` is available. If not:
-> "ERROR: h2t-tools:playwright-agent plugin is required for delivery but is not installed.
-> Install it from the Claude plugin store (search 'Playwright' by Microsoft), then retry.
-> Delivery halted — dist/ is not ready until QA passes."
-> **Stop here. Do not deliver dist/.**
+Use the `Agent` tool with `subagent_type: "h2t-creative:browser-qa"`. The agent ships with
+this plugin and pulls its browser through `npx` on demand, so there is nothing to install
+beyond Node.
 
-If available, use the `Agent` tool with `subagent_type: "h2t-tools:playwright-agent"`:
+Give it the absolute path to `dist/index.html`. It reports, per width:
 
-1. Open `dist/index.html` at 375px viewport → screenshot
-2. Open `dist/index.html` at 1440px viewport → screenshot
-3. Check for: text clipping, horizontal overflow, element collisions
+1. **1440, 768 and 375** — screenshot plus `scrollWidth` against `clientWidth`
+2. Console errors and warnings
+3. Clipped text, collisions, elements wider than their container
+
+The overflow numbers are the part that matters. Horizontal overflow does not show in a
+screenshot — the page looks right and slides sideways under a finger.
+
+**If the agent cannot run** (no Node, `npx` blocked, MCP refused to start): do not halt.
+Deliver `dist/` and say plainly, in the same message, that it is **unverified** and at which
+widths it was not checked. A page nobody looked at is worth more than a page nobody built;
+what is not acceptable is delivering one and implying the other.
 
 ## Step 5: Review and iterate
 
