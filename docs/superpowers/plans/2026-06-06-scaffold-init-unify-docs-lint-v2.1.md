@@ -1,3 +1,9 @@
+---
+title: "Scaffold/Init Unify + docs-lint v2.1 Implementation Plan"
+status: "draft"
+date: "2026-06-06"
+milestone: ""
+---
 # Scaffold/Init Unify + docs-lint v2.1 Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.

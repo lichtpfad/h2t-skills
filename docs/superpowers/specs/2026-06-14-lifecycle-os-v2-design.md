@@ -3,6 +3,9 @@ title: Lifecycle OS v2 — Unified Agent Workspace
 status: draft
 created: 2026-06-14
 author: Stanislav Glazov
+owner: "Stanislav Glazov"
+date: "2026-06-14"
+milestone: ""
 ---
 
 # Lifecycle OS v2 — Unified Agent Workspace

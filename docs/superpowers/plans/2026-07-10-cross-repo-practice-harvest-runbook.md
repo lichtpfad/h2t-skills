@@ -1,3 +1,9 @@
+---
+title: "Autonomous run — Cross-repo practice harvest"
+status: "draft"
+date: "2026-07-10"
+milestone: ""
+---
 # Autonomous run — Cross-repo practice harvest
 
 > **Durable spine (autonomous run, 2026-07-10).** Survives context compaction / blocker.

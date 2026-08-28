@@ -1,3 +1,9 @@
+---
+title: "Autonomous run — Wave 1 — one behaviour, one code path"
+status: "draft"
+date: "2026-08-23"
+milestone: ""
+---
 # Autonomous run — Wave 1 — one behaviour, one code path
 
 > **Durable spine (autonomous run, 2026-08-23).** Survives context compaction / blocker.

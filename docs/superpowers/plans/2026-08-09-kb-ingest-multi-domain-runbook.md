@@ -1,3 +1,9 @@
+---
+title: "Autonomous run — kb-ingest Multi-Domain Awareness"
+status: "draft"
+date: "2026-08-09"
+milestone: ""
+---
 # Autonomous run — kb-ingest Multi-Domain Awareness
 
 > **Durable spine (autonomous run, 2026-08-09).** Survives context compaction / blocker.

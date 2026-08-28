@@ -48,3 +48,46 @@ Confirm by absence, not by display: grep for the literal and report the match co
 mask all but a few characters. A `diff` that shows the redaction shows the original — on
 2026-08-27 that put both tokens into a session transcript they had never been in before,
 and turned a rotation that could wait into one that could not.
+
+## Verify a revocation with the value from the leak, never from your own store
+
+Two questions look identical and are not. *Does my access still work?* is answered by the
+value in `~/.dor/secrets.env`. *Does the attacker's copy still work?* is answered only by the
+literal sitting in the public artifact. Publication turns on the second.
+
+Measured 2026-08-28, and it cost three hours on the day of a talk. A rotation had landed; the
+peer reported the leaked pair dead with a control (`old → 401 ×8`, `new → 200`, `fake → 401`).
+This side probed with the value read from `~/.dor/secrets.env`, got 200, and declared the
+leak live. The file had been synced from the machine that performed the rotation minutes
+earlier — the probe was sending the **new** token and getting a legitimate 200.
+
+The discriminator was one hash:
+
+```
+sha256[:12] of what was actually being sent   59e311ce09e1   ← the new ro
+sha256[:12] of the literal in the leak        a0d4dbd035ab
+```
+
+Re-probed with the literal taken from history, not from the file:
+
+```
+git show <sha>:<path> | sed -n '<line>p'     → 401 E_AUTH_INVALID
+value from the local file                    → 200            (positive control)
+sixty-four zeroes                            → 401            (negative control)
+```
+
+So: take the value from `git show <sha>:<file>`, which cannot change under you. A local
+secrets file is a moving target — Syncthing, a peer's rotation, a manual edit — and it moved
+between two commands in one session here.
+
+## The redaction a tool promises is not redaction you have
+
+`gstack browse` documents that `header` auto-redacts sensitive values. It printed the token
+verbatim in its `Header set:` line on 2026-08-28. Earlier the same session, `gitleaks --redact`
+blanked its own `Secret` field, which broke a masking routine built on substring replacement —
+the substring no longer matched the file line, and the raw line was printed instead.
+
+Both failures share a shape: **the defence assumed a property of someone else's output.** The
+working form assumes nothing. Never print a line that contains the match, in any form. Emit
+metadata only — rule, file, commit, line number, length — and compare by hash. That is what
+the rotation check above did, and nothing leaked through it.

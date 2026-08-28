@@ -1,3 +1,10 @@
+---
+title: "Research Artifact Roles, Retention, and Routing"
+status: "draft"
+owner: "Stanislav Glazov"
+date: "2026-05-26"
+milestone: ""
+---
 # Research Artifact Roles, Retention, and Routing
 
 ## Metadata

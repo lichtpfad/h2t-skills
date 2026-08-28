@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- fix(inject-h2t-context): the injected skill index no longer advertises
+  `h2t-dev:docs-init`, which has no `SKILL.md` in the tree nor in any of the eleven cached
+  versions back to 1.0.20. Not a lost file: `bc335d8` removed `SKILL.md` from four skills
+  deliberately ("demote to CLI") and the index was never updated, so every session since
+  carried a name the harness cannot reach. Eleven of the twelve names checked out; that one
+  did not. `tests/core/test_injected_index_matches_tree.py` is the gate, and it was seen red
+  against the restored defect before being trusted (#458)
+
+- chore(agent-profile, autonomous-run): both now declare `compatibility` and `metadata` —
+  the only two of the pack's skills that carried neither. The strings say what the skill
+  actually needs rather than repeating "Claude Code": agent-profile operates on the
+  h2t-skills checkout and refuses to write without it, autonomous-run requires the codex
+  CLI because both of its gates call it and both cost money (#464)
 - fix(plan-closer): a merged PR closes a plan only if it changed something other than
   documentation. The hook read "the PR listed this document" as "this document is
   finished" — two different claims. Measured on h2t-business 2026-08-27: PRs #58, #59

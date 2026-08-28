@@ -1,3 +1,10 @@
+---
+title: "KB Skill Consolidation — Design"
+status: "draft"
+owner: "lichtpfad"
+date: "2026-07-24"
+milestone: ""
+---
 # KB Skill Consolidation — Design
 
 *Date: 2026-07-24 · Repo: h2t-skills · Branch: `feat/kb-skill-consolidation`*

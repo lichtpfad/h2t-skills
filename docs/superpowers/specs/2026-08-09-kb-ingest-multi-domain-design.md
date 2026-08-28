@@ -1,3 +1,10 @@
+---
+title: "kb-ingest Multi-Domain Awareness — Design"
+status: "draft"
+owner: "lichtpfad"
+date: "2026-08-09"
+milestone: ""
+---
 # kb-ingest Multi-Domain Awareness — Design
 
 **Date:** 2026-08-09

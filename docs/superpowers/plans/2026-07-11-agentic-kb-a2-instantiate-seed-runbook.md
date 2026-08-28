@@ -1,3 +1,9 @@
+---
+title: "Autonomous run — Agentic KB A2 - instantiate + seed"
+status: "draft"
+date: "2026-07-11"
+milestone: ""
+---
 # Autonomous run — Agentic KB A2 - instantiate + seed
 
 > **Durable spine (autonomous run, 2026-07-11).** Survives context compaction / blocker.

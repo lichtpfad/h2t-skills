@@ -1,3 +1,9 @@
+---
+title: "kb-ingest Multi-Domain — Implementation Plan"
+status: "draft"
+date: "2026-08-09"
+milestone: ""
+---
 # kb-ingest Multi-Domain — Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: superpowers:executing-plans (or subagent-driven).

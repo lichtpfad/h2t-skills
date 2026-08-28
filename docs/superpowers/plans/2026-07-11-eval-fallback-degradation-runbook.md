@@ -1,3 +1,9 @@
+---
+title: "Autonomous run — Eval fallback degradation"
+status: "draft"
+date: "2026-07-11"
+milestone: ""
+---
 # Autonomous run — Eval fallback degradation
 
 > **Durable spine (autonomous run, 2026-07-11).** Survives context compaction / blocker.

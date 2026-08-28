@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- fix: the plugin reaches its own files through `bin/h2t-dev` on PATH instead of
+  `CLAUDE_PLUGIN_ROOT`, which the harness never sets in skill bash. Thirteen sites across
+  three skills built a path from it — docs-lint 8, milestone-closure 3, github-issues 2 —
+  so `"${CLAUDE_PLUGIN_ROOT}/skills/docs-lint/scripts/lint.py"` expanded to
+  `/skills/docs-lint/scripts/lint.py` and the skill failed naming the filesystem root.
+  Invisible from this checkout, where the documented invocation uses a path from the clone;
+  fatal for anyone who installed only the plugin. Measured empty on 2.1.247 and 2.1.160,
+  so not version dependent. docs-sync-labels keeps the variable behind its cache-guessing
+  fallback and stays tracked as debt (#459)
 - fix(docs-lint, docs-index): the repository is resolved with `git rev-parse
   --show-toplevel` before falling back to the name walk. The walk looked for a directory
   whose name is one of sixteen private repositories, so anywhere else it fell through —
