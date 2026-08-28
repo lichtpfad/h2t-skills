@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- feat(docs-lint): a plan or spec must name the work it belongs to. `issue` joins
+  FRONTMATTER_RULES for plans and specs; `docs-lint new` requires one of `--issue N`,
+  `--new-issue "<title>"` (creates it and writes `Plan: <path>` back into the body) or
+  `--no-issue "<reason>"`, and refuses without one, leaving no file. A new `unlinked`
+  dimension counts the gap — separately from `metadata`, because `issue: ""` satisfies
+  "the key is present" and fails "the value is an address", and the backfill must not
+  close the gap it exists to reveal. `--fail-on DIMENSION` gives a gate that can be
+  narrower than the report (#421, #422, #423)
+
 - refactor: `skills/docs-init/` moved to `scripts/docs-init/`. It has had no `SKILL.md`
   since `bc335d8` demoted it into h2t-core:scaffold-project, so its place under `skills/`
   claimed a reachability it does not have. The README documented `docs-init <repo> --apply`

@@ -3,6 +3,7 @@ title: "R2a — h2t-terminal deck modularization plan"
 status: "draft"
 date: "2026-05-05"
 milestone: ""
+issue: ""
 ---
 # R2a — h2t-terminal deck modularization plan
 

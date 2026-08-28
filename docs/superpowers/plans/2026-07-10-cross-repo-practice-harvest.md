@@ -3,6 +3,7 @@ title: "Cross-repo practice harvest"
 status: "draft"
 date: "2026-07-10"
 milestone: ""
+issue: ""
 ---
 
 # Cross-repo practice harvest Implementation Plan

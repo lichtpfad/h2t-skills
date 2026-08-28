@@ -239,6 +239,45 @@ def check_frontmatter_presence(
     )
 
 
+_LINKED_DIRS = ("docs/superpowers/plans", "docs/superpowers/specs")
+
+
+def check_issue_link(file_path: str, content: str, config: dict) -> tuple[int, str]:
+    """Block (code 2) a plan or spec that names no work.
+
+    The third entry path a document can take — a hand edit in an editor, or a merge from
+    elsewhere — is covered by neither the generator gate nor CI. Without this, #421 and
+    #422 are a habit rather than an invariant (#423).
+
+    Presence of the key is not enough: `issue: ""` is what the backfill leaves behind, and
+    it is exactly the state this exists to catch.
+    """
+    del config  # the directories are fixed by the frontmatter rules, not configurable
+    norm = file_path.replace("\\", "/")
+    if not norm.lower().endswith(".md"):
+        return 0, ""
+    if not any(d in norm for d in _LINKED_DIRS):
+        return 0, ""
+    if not _has_frontmatter(content):
+        return 0, ""  # check_frontmatter_presence owns that case; one write, one message
+    fields = {}
+    for line in content.split("---", 2)[1].splitlines():
+        if ":" in line:
+            k, _, v = line.partition(":")
+            fields[k.strip()] = v.strip().strip('"').strip("'")
+    raw = fields.get("issue", "").strip()
+    hint = (
+        "  issue: \"123\"                       — номер существующей задачи\n"
+        "  issue: \"none\" + reason: \"...\"     — отказ, с причиной\n"
+        "  docs-lint new plan <slug> --new-issue \"...\"  — создать задачу и связать обе стороны"
+    )
+    if not raw:
+        return 2, f"BLOCKED: {norm!r} — план или спека без поля issue.\n{hint}"
+    if raw.lower() == "none" and not fields.get("reason", "").strip():
+        return 2, f"BLOCKED: {norm!r} — issue: none без reason.\n{hint}"
+    return 0, ""
+
+
 def _load_payload() -> dict:
     try:
         raw = sys.stdin.read()
@@ -289,6 +328,11 @@ def main() -> int:
             return 2
         if fm_msg:
             messages.append(fm_msg)
+
+        link_code, link_msg = check_issue_link(norm, tool_input.get("content", ""), config)
+        if link_code == 2:
+            print("\n".join([*messages, link_msg]), file=sys.stderr)
+            return 2
 
     if messages:
         print("\n".join(messages), file=sys.stderr)

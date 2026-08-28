@@ -5,6 +5,7 @@ owner: stanislav
 date: 2026-06-06
 revised: 2026-06-06
 milestone: ""
+issue: ""
 ---
 
 # docs-lint v2: Full Audit + Maintenance Pipeline

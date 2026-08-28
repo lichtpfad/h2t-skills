@@ -4,6 +4,7 @@ status: "draft"
 owner: "lichtpfad"
 date: "2026-08-24"
 milestone: ""
+issue: ""
 ---
 
 # Repo governance architecture

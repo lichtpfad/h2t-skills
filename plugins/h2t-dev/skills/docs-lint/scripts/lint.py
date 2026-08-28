@@ -32,6 +32,8 @@ for _lib in [_PLUGIN_ROOT / "lib", _PLUGIN_ROOT.parent.parent / "lib"]:
 from docs.common import (
     DEV_ROOT,
     FRONTMATTER_RULES,
+    GH,
+    LINKED_DOC_DIRS,
     REPO_EXTRA_DIRS,
     REPO_MANIFEST,
     REQUIRED_CORE_DIRS,
@@ -39,6 +41,7 @@ from docs.common import (
     ensure_dir,
     excluded_predicate,
     git_repo_root,
+    issue_link_problem,
     parse_frontmatter,
     print_header,
     repo_path,
@@ -433,6 +436,37 @@ def check_frontmatter(rp: Path, exclude_dirs: list[str] | None = None) -> list[s
     return failures
 
 
+def check_issue_link(rp: Path, exclude_dirs: list[str] | None = None) -> list[str]:
+    """A plan or spec must name the work it belongs to, or say why it does not.
+
+    Separate from check_frontmatter on purpose. That one asks whether the key is present;
+    this asks whether the value is an address. `issue: ""` satisfies the first and fails the
+    second, which is exactly the state fix-safe leaves behind when it backfills the new
+    field — the gap has to stay visible after the backfill, not be closed by it (#421).
+
+    Accepted: an integer, optionally `#`-prefixed. Or the literal `none` with a non-empty
+    `reason:` — an opt-out that has to be argued rather than merely typed.
+    """
+    failures = []
+    docs_dir = rp / "docs"
+    if not docs_dir.exists():
+        return failures
+    is_excluded = excluded_predicate(rp, exclude_dirs)
+    for md_file in docs_dir.rglob("*.md"):
+        if is_excluded(md_file):
+            continue
+        rel = str(md_file.relative_to(rp)).replace("\\", "/")
+        if not any(k in rel for k in LINKED_DOC_DIRS):
+            continue
+        fm = parse_frontmatter(md_file.read_text(encoding="utf-8", errors="replace"))
+        if fm is None:
+            continue  # missing frontmatter is check_frontmatter's finding, not a second one
+        problem = issue_link_problem(fm)
+        if problem:
+            failures.append(f"{rel}: {problem}")
+    return failures
+
+
 _PYMD_LIMIT = 20
 
 
@@ -727,6 +761,9 @@ def _collect_all_findings(rp: Path, no_pymarkdown: bool = False) -> list[dict]:
     for msg in check_frontmatter(rp, exclude_dirs=exclude_dirs):
         path = msg.split(":")[0].strip() if ":" in msg else ""
         all_findings.append(finding("frontmatter", "info", path, msg))
+    for msg in check_issue_link(rp, exclude_dirs=exclude_dirs):
+        path = msg.split(":")[0].strip() if ":" in msg else ""
+        all_findings.append(finding("unlinked", "info", path, msg))
 
     if _PROJECT_LAYER_AVAILABLE and cfg.get("project_checks"):
         custom_root_dirs = cfg.get("custom_root_dirs") or []
@@ -1150,7 +1187,8 @@ def _run_fix_index(rp: Path, apply: bool = False, plan_file: str | None = None) 
         print("  Note: README has no markers — run with --apply to append index section.")
 
 
-def _run_doctor(rp: Path, json_output: bool = False, no_pymarkdown: bool = False) -> None:
+def _run_doctor(rp: Path, json_output: bool = False, no_pymarkdown: bool = False,
+                fail_on: str | None = None) -> None:
     all_findings = _collect_all_findings(rp, no_pymarkdown=no_pymarkdown)
     status = status_from_findings(all_findings)
     orphans = [f for f in all_findings if f["type"] == "orphan"]
@@ -1158,6 +1196,7 @@ def _run_doctor(rp: Path, json_output: bool = False, no_pymarkdown: bool = False
     structure = [f for f in all_findings if f["type"] == "structure"]
     frontmatter = [f for f in all_findings if f["type"] == "frontmatter"]
     project = [f for f in all_findings if f["type"] in _PROJECT_TYPES]
+    unlinked = [f for f in all_findings if f["type"] == "unlinked"]
 
     def _full(items: list[dict], dims: list[str]) -> int:
         return sum(_dimension_total(all_findings, d) for d in dims)
@@ -1167,11 +1206,12 @@ def _run_doctor(rp: Path, json_output: bool = False, no_pymarkdown: bool = False
     n_structure = _full(structure, ["structure"])
     n_frontmatter = _full(frontmatter, ["frontmatter"])
     n_project = _full(project, _PROJECT_TYPES)
-    total = n_orphans + n_naming + n_structure + n_frontmatter + n_project
+    n_unlinked = _full(unlinked, ["unlinked"])
+    total = n_orphans + n_naming + n_structure + n_frontmatter + n_project + n_unlinked
     summary = (
         f"{n_orphans} orphan(s), {n_naming} naming issue(s), "
         f"{n_structure} structure issue(s), {n_frontmatter} metadata issue(s), "
-        f"{n_project} project issue(s)"
+        f"{n_project} project issue(s), {n_unlinked} unlinked"
     )
     safe_next = "Run 'docs-lint plan' for cleanup plan" if total else "No issues found"
     report = build_report(
@@ -1190,8 +1230,18 @@ def _run_doctor(rp: Path, json_output: bool = False, no_pymarkdown: bool = False
         print_header(f"docs-lint doctor: {rp}")
         print(f"  status: {status}")
         print(f"  {summary}")
-        if total:
+
+    # A dimension-scoped exit exists so a gate can be narrower than the report. Every other
+    # dimension carries a known non-zero baseline here, so a CI step reading the process
+    # code would be red on day one for reasons unrelated to what it guards (#423).
+    if fail_on:
+        n = _dimension_total(all_findings, fail_on)
+        if n:
+            print(f"  FAIL: {n} finding(s) in dimension {fail_on!r}", file=sys.stderr)
             sys.exit(1)
+        return
+    if total and not json_output:
+        sys.exit(1)
 
 
 def _detect_current_repo() -> str | None:
@@ -1277,8 +1327,60 @@ def _legacy_main(args: argparse.Namespace) -> None:
         print(f"  RESULT: all {len(targets)} repos compliant")
 
 
+def _verify_issue_exists(number: str) -> None:
+    """Refuse a number that names nothing. An address that does not resolve is worse than
+    none: it reads as linked to every later check, including the CI gate."""
+    if not GH:
+        print(f"WARNING: gh not on PATH — issue {number} not verified", file=sys.stderr)
+        return
+    r = subprocess.run([GH, "issue", "view", number, "--json", "number"],
+                       capture_output=True, text=True)
+    if r.returncode != 0:
+        print(f"ERROR: issue {number} not found in this repository", file=sys.stderr)
+        sys.exit(2)
+
+
+def _create_issue(title: str) -> str:
+    """Create the issue and return its number. Body is filled in by the caller once the
+    document path is known — that back-link is what lets the edge be walked in reverse."""
+    if not GH:
+        print("ERROR: --new-issue needs gh on PATH", file=sys.stderr)
+        sys.exit(3)
+    r = subprocess.run([GH, "issue", "create", "--title", title, "--body", "(pending plan link)"],
+                       capture_output=True, text=True)
+    if r.returncode != 0:
+        print(f"ERROR: gh issue create failed: {r.stderr.strip()}", file=sys.stderr)
+        sys.exit(1)
+    m = re.search(r"/issues/(\d+)", r.stdout)
+    if not m:
+        print(f"ERROR: cannot read the issue number from: {r.stdout.strip()}", file=sys.stderr)
+        sys.exit(1)
+    return m.group(1)
+
+
+def _link_issue_back(number: str, rel: str) -> None:
+    """Write `Plan: <path>` into the issue body, so `gh issue view --json body` walks the
+    link the other way with no extra storage."""
+    if not GH:
+        return
+    cur = subprocess.run([GH, "issue", "view", number, "--json", "body", "-q", ".body"],
+                         capture_output=True, text=True)
+    body = (cur.stdout or "").strip()
+    if body == "(pending plan link)":
+        body = ""
+    new_body = (body + f"\n\nPlan: `{rel}`").strip()
+    subprocess.run([GH, "issue", "edit", number, "--body", new_body],
+                   capture_output=True, text=True)
+
+
 def _run_new(raw: list[str]) -> None:
-    """Create a plan/spec/adr file with correct frontmatter (`docs-lint new`)."""
+    """Create a plan/spec/adr file with correct frontmatter (`docs-lint new`).
+
+    A plan or spec must name the work it belongs to. One of --issue / --new-issue /
+    --no-issue is required, and none of them defaults: an address that is optional at
+    creation is an address most documents will not have, which is how 111 overdue documents
+    accumulated (#422). ADRs are unaffected — they record a decision, not work with a state.
+    """
     from docs.new_doc import create_doc
 
     p = argparse.ArgumentParser(prog="docs-lint new")
@@ -1288,13 +1390,40 @@ def _run_new(raw: list[str]) -> None:
     p.add_argument("--milestone", default="", help="milestone tag, e.g. M3 (plans/specs)")
     p.add_argument("--title", default=None, help="override the derived H1/title")
     p.add_argument("--root", default=None)
+    g = p.add_mutually_exclusive_group()
+    g.add_argument("--issue", default=None, metavar="N", help="link to an existing issue")
+    g.add_argument("--new-issue", dest="new_issue", default=None, metavar="TITLE",
+                   help="create the issue, stamp its number, link back from its body")
+    g.add_argument("--no-issue", dest="no_issue", default=None, metavar="REASON",
+                   help="opt out, with the reason recorded in the document")
     args = p.parse_args(raw)
     rp = _resolve_root(args.root)
     today = datetime.date.today().isoformat()
+
+    issue, reason = "", ""
+    if args.kind != "adr":
+        if not (args.issue or args.new_issue or args.no_issue):
+            print(
+                "ERROR: a plan or spec must name its work. Pass one of:\n"
+                "  --issue N              link to an existing issue\n"
+                '  --new-issue "<title>"  create it and link both ways\n'
+                '  --no-issue "<reason>"  opt out, and say why',
+                file=sys.stderr,
+            )
+            sys.exit(2)
+        if args.issue:
+            issue = str(args.issue).lstrip("#")
+            _verify_issue_exists(issue)
+        elif args.new_issue:
+            issue = _create_issue(args.new_issue)
+        else:
+            issue, reason = "none", args.no_issue
+
     try:
         path = create_doc(
             rp, args.kind, args.slug,
             today=today, milestone=args.milestone, title=args.title,
+            issue=issue, reason=reason,
         )
     except FileExistsError as e:
         print(f"ERROR: file already exists: {e}", file=sys.stderr)
@@ -1303,7 +1432,11 @@ def _run_new(raw: list[str]) -> None:
         print(f"ERROR: {e}", file=sys.stderr)
         sys.exit(2)
     rel = str(path.relative_to(rp)).replace("\\", "/")
-    print(f"created: {rel}")
+    if args.new_issue:
+        _link_issue_back(issue, rel)
+        print(f"created: {rel}  (issue #{issue}, linked both ways)")
+    else:
+        print(f"created: {rel}")
 
 
 def _run_retire(
@@ -1425,6 +1558,15 @@ def main() -> None:
         parser.add_argument("--save", default=None, metavar="FILE",
                             help="Save fix plan JSON to FILE (plan command only)")
         parser.add_argument("--no-pymarkdown", dest="no_pymarkdown", action="store_true")
+        parser.add_argument(
+            "--fail-on", dest="fail_on", default=None, metavar="DIMENSION",
+            help=(
+                "exit non-zero only when this dimension has findings. Without it the "
+                "process exits 1 on any finding at all, and every other dimension here "
+                "carries a known non-zero baseline — so a CI step gated on the process "
+                "code would be red on day one for unrelated reasons (#423)."
+            ),
+        )
         parser.add_argument("--plan", default=None, metavar="FILE")
         parser.add_argument("--older-than", dest="older_than", type=int, default=60,
                             metavar="DAYS",
@@ -1445,7 +1587,8 @@ def main() -> None:
         elif cmd == "fix-index":
             _run_fix_index(rp, apply=args.apply, plan_file=args.plan)
         elif cmd == "doctor":
-            _run_doctor(rp, json_output=args.json_output, no_pymarkdown=args.no_pymarkdown)
+            _run_doctor(rp, json_output=args.json_output, no_pymarkdown=args.no_pymarkdown,
+                    fail_on=getattr(args, "fail_on", None))
         elif cmd == "retire":
             _run_retire(rp, apply=args.apply, stale_days=args.older_than,
                         json_output=args.json_output,

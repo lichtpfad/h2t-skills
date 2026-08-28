@@ -3,6 +3,7 @@ title: "Skill telemetry l1 activation"
 status: "draft"
 date: "2026-07-12"
 milestone: ""
+issue: ""
 ---
 
 # Skill telemetry L1 activation — Implementation Plan

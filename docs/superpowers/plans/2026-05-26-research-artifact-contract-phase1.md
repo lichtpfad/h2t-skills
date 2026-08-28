@@ -3,6 +3,7 @@ title: "Research Artifact Contract Phase 1 Implementation Plan"
 status: "draft"
 date: "2026-05-26"
 milestone: ""
+issue: ""
 ---
 # Research Artifact Contract Phase 1 Implementation Plan
 

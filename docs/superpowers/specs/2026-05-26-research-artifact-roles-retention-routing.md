@@ -4,6 +4,7 @@ status: "draft"
 owner: "Stanislav Glazov"
 date: "2026-05-26"
 milestone: ""
+issue: ""
 ---
 # Research Artifact Roles, Retention, and Routing
 

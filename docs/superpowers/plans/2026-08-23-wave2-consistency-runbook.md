@@ -3,6 +3,7 @@ title: "Autonomous run — Wave 2 — consistency before the skills release"
 status: "draft"
 date: "2026-08-23"
 milestone: ""
+issue: ""
 ---
 # Autonomous run — Wave 2 — consistency before the skills release
 

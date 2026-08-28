@@ -5,6 +5,7 @@ owner: "Stanislav Glazov"
 date: "2026-05-27"
 milestone: "skills-release"
 related: ["docs/superpowers/specs/docs-skills-v2.md"]
+issue: ""
 ---
 
 # Project Lifecycle OS — Skills Refactor

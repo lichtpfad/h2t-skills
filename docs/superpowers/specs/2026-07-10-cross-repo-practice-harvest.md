@@ -4,6 +4,7 @@ status: "draft"
 owner: "Stanislav Glazov"
 date: "2026-07-10"
 milestone: ""
+issue: ""
 ---
 
 # Cross-repo practice harvest (monthly session meta-review)

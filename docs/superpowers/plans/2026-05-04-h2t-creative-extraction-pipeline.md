@@ -3,6 +3,7 @@ title: "h2t-creative: Style Extraction Pipeline"
 status: "draft"
 date: "2026-05-04"
 milestone: ""
+issue: ""
 ---
 # h2t-creative: Style Extraction Pipeline
 

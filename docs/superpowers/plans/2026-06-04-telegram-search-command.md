@@ -3,6 +3,7 @@ title: "Telegram Search Command Implementation Plan"
 status: "draft"
 date: "2026-06-04"
 milestone: ""
+issue: ""
 ---
 # Telegram Search Command Implementation Plan
 

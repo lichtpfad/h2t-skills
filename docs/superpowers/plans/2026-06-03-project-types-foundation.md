@@ -3,6 +3,7 @@ title: "project_types Foundation — Implementation Plan"
 status: "draft"
 date: "2026-06-03"
 milestone: ""
+issue: ""
 ---
 # project_types Foundation — Implementation Plan
 

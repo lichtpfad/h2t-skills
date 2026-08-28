@@ -3,6 +3,7 @@ title: "KB Skill Consolidation Implementation Plan"
 status: "draft"
 date: "2026-07-24"
 milestone: ""
+issue: ""
 ---
 # KB Skill Consolidation Implementation Plan
 

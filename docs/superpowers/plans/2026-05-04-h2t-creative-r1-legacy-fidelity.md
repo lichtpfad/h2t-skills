@@ -3,6 +3,7 @@ title: "h2t-creative R1 Legacy Fidelity Implementation Plan"
 status: "draft"
 date: "2026-05-04"
 milestone: ""
+issue: ""
 ---
 # h2t-creative R1 Legacy Fidelity Implementation Plan
 

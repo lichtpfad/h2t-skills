@@ -4,6 +4,7 @@ status: "draft"
 owner: "Stanislav Glazov"
 date: "2026-05-08"
 milestone: ""
+issue: ""
 ---
 # h2t-creative Semantic Rendering Architecture
 

@@ -3,6 +3,7 @@ title: "h2t-creative semantic renderer v0 — implementation plan"
 status: "draft"
 date: "2026-05-08"
 milestone: ""
+issue: ""
 ---
 # h2t-creative semantic renderer v0 — implementation plan
 

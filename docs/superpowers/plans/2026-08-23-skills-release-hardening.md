@@ -3,6 +3,7 @@ title: "Skills release hardening"
 status: "done"
 date: "2026-08-23"
 milestone: ""
+issue: ""
 ---
 
 # Skills Release Hardening Implementation Plan

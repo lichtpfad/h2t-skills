@@ -4,6 +4,7 @@ status: "draft"
 owner: "Stanislav Glazov"
 date: "2026-07-12"
 milestone: ""
+issue: ""
 ---
 
 # Skill telemetry L1 activation

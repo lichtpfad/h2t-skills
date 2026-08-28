@@ -3,6 +3,7 @@ title: "docs-lint Harvest Fixes — Implementation Plan"
 status: "draft"
 date: "2026-06-04"
 milestone: ""
+issue: ""
 ---
 # docs-lint Harvest Fixes — Implementation Plan
 

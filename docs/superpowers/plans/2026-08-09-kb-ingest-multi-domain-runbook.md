@@ -3,6 +3,7 @@ title: "Autonomous run — kb-ingest Multi-Domain Awareness"
 status: "draft"
 date: "2026-08-09"
 milestone: ""
+issue: ""
 ---
 # Autonomous run — kb-ingest Multi-Domain Awareness
 

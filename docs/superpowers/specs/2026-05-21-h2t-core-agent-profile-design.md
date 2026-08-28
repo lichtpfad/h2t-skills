@@ -4,6 +4,7 @@ status: "draft"
 owner: "Stanislav Glazov"
 date: "2026-05-21"
 milestone: ""
+issue: ""
 ---
 # h2t-core:agent-profile design
 

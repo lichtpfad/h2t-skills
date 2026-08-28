@@ -3,6 +3,7 @@ title: "Research capability phase 1"
 status: "draft"
 date: "2026-07-08"
 milestone: "research-exa"
+issue: ""
 ---
 
 # Research capability (Exa Research API) — Phase 1 Implementation Plan

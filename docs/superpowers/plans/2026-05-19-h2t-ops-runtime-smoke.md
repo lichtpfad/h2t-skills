@@ -3,6 +3,7 @@ title: "h2t-ops Local Runtime Smoke (#139) Implementation Plan"
 status: "draft"
 date: "2026-05-19"
 milestone: ""
+issue: ""
 ---
 # h2t-ops Local Runtime Smoke (#139) Implementation Plan
 

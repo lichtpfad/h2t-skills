@@ -72,6 +72,8 @@ def create_doc(
     milestone: str = "",
     title: str | None = None,
     author: str | None = None,
+    issue: str = "",
+    reason: str = "",
 ) -> Path:
     """Create a plan/spec/adr file with required frontmatter. Returns its path.
 
@@ -102,11 +104,16 @@ def create_doc(
         "owner": author or _git_user(rp),
         "date": today,
         "milestone": milestone,
+        "issue": issue,
     }
     fields = FRONTMATTER_RULES[_KIND_RULE[kind]]
     lines = ["---"]
     for f in fields:
         lines.append(f'{f}: "{values.get(f, "")}"')
+    # `reason` is not in FRONTMATTER_RULES: it is required only when `issue` is `none`,
+    # and a field required always would be a finding on every linked document.
+    if reason:
+        lines.append(f'reason: "{reason}"')
     lines += ["---", "", f"# {doc_title}", ""]
 
     target_dir.mkdir(parents=True, exist_ok=True)

@@ -4,6 +4,7 @@ status: "done"
 pr: 323
 date: "2026-07-14"
 milestone: ""
+issue: ""
 ---
 
 # Evals Telemetry Consumer — Phase 1 Implementation Plan

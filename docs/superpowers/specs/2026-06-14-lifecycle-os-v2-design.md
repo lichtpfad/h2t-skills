@@ -6,6 +6,7 @@ author: Stanislav Glazov
 owner: "Stanislav Glazov"
 date: "2026-06-14"
 milestone: ""
+issue: ""
 ---
 
 # Lifecycle OS v2 — Unified Agent Workspace

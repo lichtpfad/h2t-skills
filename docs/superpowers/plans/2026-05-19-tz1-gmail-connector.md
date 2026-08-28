@@ -3,6 +3,7 @@ title: "TZ-1 Gmail Connector Implementation Plan"
 status: "draft"
 date: "2026-05-19"
 milestone: ""
+issue: ""
 ---
 # TZ-1 Gmail Connector Implementation Plan
 

@@ -5,6 +5,7 @@ pr: 323
 owner: "Stanislav Glazov"
 date: "2026-07-14"
 milestone: ""
+issue: ""
 ---
 
 # Evals telemetry consumer — phase 1 (operational health report)

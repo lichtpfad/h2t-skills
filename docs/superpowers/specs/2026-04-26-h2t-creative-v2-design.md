@@ -4,6 +4,7 @@ status: "draft"
 owner: "Stanislav Glazov"
 date: "2026-04-26"
 milestone: ""
+issue: ""
 ---
 # h2t-creative v2 Design Spec
 

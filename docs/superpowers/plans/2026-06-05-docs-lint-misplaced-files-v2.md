@@ -3,6 +3,7 @@ title: "docs-lint v2: Misplaced Deliverable Files Detection + git mv Apply"
 status: "draft"
 date: "2026-06-05"
 milestone: ""
+issue: ""
 ---
 # docs-lint v2: Misplaced Deliverable Files Detection + git mv Apply
 

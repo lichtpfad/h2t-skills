@@ -3,6 +3,7 @@ title: "Agentic KB — A1: configurable verdict / strength-axis in llm-kb-templa
 status: "draft"
 date: "2026-07-10"
 milestone: ""
+issue: ""
 ---
 
 # Agentic KB — A1: configurable verdict / strength-axis Implementation Plan

@@ -4,6 +4,7 @@ status: "draft"
 owner: "Stanislav Glazov"
 date: "2026-07-11"
 milestone: ""
+issue: ""
 ---
 
 # Eval fallback degradation

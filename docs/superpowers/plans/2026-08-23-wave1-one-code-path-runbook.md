@@ -3,6 +3,7 @@ title: "Autonomous run — Wave 1 — one behaviour, one code path"
 status: "draft"
 date: "2026-08-23"
 milestone: ""
+issue: ""
 ---
 # Autonomous run — Wave 1 — one behaviour, one code path
 

@@ -3,6 +3,7 @@ title: "lifecycle OS fixes — scaffold + docs-init + fix-index"
 status: "draft"
 date: "2026-06-08"
 milestone: ""
+issue: ""
 ---
 
 # Lifecycle OS Fixes — scaffold + docs-init + fix-index

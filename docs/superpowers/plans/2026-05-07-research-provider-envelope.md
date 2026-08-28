@@ -3,6 +3,7 @@ title: "Research Provider Envelope Implementation Plan"
 status: "draft"
 date: "2026-05-07"
 milestone: ""
+issue: ""
 ---
 # Research Provider Envelope Implementation Plan
 

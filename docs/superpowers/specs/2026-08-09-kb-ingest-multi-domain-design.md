@@ -4,6 +4,7 @@ status: "draft"
 owner: "lichtpfad"
 date: "2026-08-09"
 milestone: ""
+issue: ""
 ---
 # kb-ingest Multi-Domain Awareness — Design
 

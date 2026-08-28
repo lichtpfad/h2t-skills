@@ -7,6 +7,7 @@ related:
   - "#196"
   - "docs/superpowers/specs/2026-05-28-lifecycle-os-harness-contract.md"
   - "docs/superpowers/plans/2026-05-27-scaffold-project-enhancement.md"
+issue: ""
 ---
 
 # Lifecycle OS #196 Implementation Plan

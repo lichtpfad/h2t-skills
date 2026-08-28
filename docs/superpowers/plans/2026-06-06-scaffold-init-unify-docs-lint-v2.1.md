@@ -3,6 +3,7 @@ title: "Scaffold/Init Unify + docs-lint v2.1 Implementation Plan"
 status: "draft"
 date: "2026-06-06"
 milestone: ""
+issue: ""
 ---
 # Scaffold/Init Unify + docs-lint v2.1 Implementation Plan
 

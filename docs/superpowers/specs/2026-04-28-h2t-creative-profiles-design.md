@@ -4,6 +4,7 @@ status: "draft"
 owner: "Stanislav Glazov"
 date: "2026-04-28"
 milestone: ""
+issue: ""
 ---
 # h2t-creative v3 · Phase 1 — Profiles Design Spec
 

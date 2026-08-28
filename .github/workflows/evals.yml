@@ -33,10 +33,28 @@ jobs:
         shell: bash
     steps:
       - uses: actions/checkout@v4
+        with:
+          # The issue-link ratchet diffs against the base, so a shallow clone with one
+          # commit gives it nothing to compare and it passes on everything.
+          fetch-depth: 0
 
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+
+      - name: Plans and specs name their work
+        # Scoped to what this change touched, not to the tree. 74 documents predate the
+        # `issue` field (#421); a gate red on day one for historical reasons is disabled
+        # within a week, and then guards nothing. History is fixed deliberately, growth is
+        # stopped here (#423).
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          pip install pyyaml
+          BASE="${{ github.event.pull_request.base.sha || github.event.before }}"
+          if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
+            BASE=$(git rev-parse HEAD~1 2>/dev/null || git rev-parse HEAD)
+          fi
+          python scripts/check_issue_links.py "$BASE"
 
       - name: Lint
         # The rule set is pinned in pyproject.toml; ruff's own default grows with each

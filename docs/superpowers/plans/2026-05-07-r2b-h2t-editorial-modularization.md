@@ -3,6 +3,7 @@ title: "R2b — h2t-editorial deck + landing modularization plan"
 status: "draft"
 date: "2026-05-07"
 milestone: ""
+issue: ""
 ---
 # R2b — h2t-editorial deck + landing modularization plan
 

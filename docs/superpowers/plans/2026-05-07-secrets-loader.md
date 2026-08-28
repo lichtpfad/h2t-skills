@@ -3,6 +3,7 @@ title: "Minimal h2t_secrets Loader Implementation Plan"
 status: "draft"
 date: "2026-05-07"
 milestone: ""
+issue: ""
 ---
 # Minimal h2t_secrets Loader Implementation Plan
 

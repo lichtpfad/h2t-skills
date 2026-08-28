@@ -4,6 +4,7 @@ status: "draft"
 owner: "Stanislav Glazov"
 date: "2026-03-25"
 milestone: ""
+issue: ""
 ---
 # Session Gatherer Agent — Design Spec
 

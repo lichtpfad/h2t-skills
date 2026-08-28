@@ -4,6 +4,7 @@ status: "draft"
 owner: "Stanislav Glazov"
 date: "2026-05-07"
 milestone: ""
+issue: ""
 ---
 # R2b — Landing Source Arbitration Visual Gate (h2t-editorial landing, #88)
 

@@ -3,6 +3,7 @@ title: "Autonomous run — Skill telemetry L1 activation"
 status: "draft"
 date: "2026-07-12"
 milestone: ""
+issue: ""
 ---
 # Autonomous run — Skill telemetry L1 activation
 

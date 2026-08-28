@@ -4,6 +4,7 @@ status: "draft"
 owner: "lichtpfad"
 date: "2026-05-22"
 milestone: ""
+issue: ""
 ---
 # h2t-ops Calendar Provider Features - Design
 

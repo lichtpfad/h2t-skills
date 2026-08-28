@@ -125,11 +125,44 @@ STANDARDS_FILES = [
     "api-contracts.md", "adr-process.md", "linting.md", "labels.json",
 ]
 
+# `issue` is what makes `status` checkable. Written once by the generator and never again
+# by anything that knows whether the work happened, `status` is unfalsifiable: no check can
+# call a value wrong, because there is nothing to compare it against. Measured over the 42
+# legacy documents reviewed by hand 2026-08-26 — 41 carried `status: draft`, 29 had shipped
+# in full and 10 in part, and the field had never moved (#421).
+#
+# Accepted values: an issue number, or the literal `none` paired with a `reason:` line.
+# ADRs are unaffected — they record a decision, not work with a state.
 FRONTMATTER_RULES = {
-    "superpowers/specs": ["title", "status", "owner", "date", "milestone"],
-    "superpowers/plans": ["title", "status", "date", "milestone"],
+    "superpowers/specs": ["title", "status", "owner", "date", "milestone", "issue"],
+    "superpowers/plans": ["title", "status", "date", "milestone", "issue"],
     "adr": ["title", "status", "date"],
 }
+
+LINKED_DOC_DIRS = ("docs/superpowers/plans", "docs/superpowers/specs")
+
+
+def issue_link_problem(fields: dict) -> str | None:
+    """One rule, one place: what makes a plan's `issue` an address rather than a key.
+
+    Returns a message, or None when the document is linked. Presence of the key is not
+    enough — `issue: ""` is what `fix-safe --only=frontmatter` leaves behind after the
+    field was introduced, and it is exactly the state the checks exist to catch (#421).
+
+    Callers: docs-lint's `check_issue_link` and the CI ratchet. The PreToolUse hook in
+    h2t-core carries its own copy because a plugin cannot import another plugin's lib;
+    keep the two in step.
+    """
+    raw = str(fields.get("issue", "")).strip().strip('"').strip("'")
+    if not raw:
+        return "no issue — use a number, or 'none' with a reason"
+    if raw.lower() == "none":
+        reason = str(fields.get("reason", "")).strip().strip('"').strip("'")
+        return None if reason else "issue is 'none' without a reason"
+    if not raw.lstrip("#").isdigit():
+        return f"issue {raw!r} is neither a number nor 'none'"
+    return None
+
 
 # `gh` or nothing. The fallback here used to name a Windows install directory, so on a
 # machine without gh the callers received a path that cannot exist and failed on exec

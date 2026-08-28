@@ -3,6 +3,7 @@ title: "Autonomous run — Eval fallback degradation"
 status: "draft"
 date: "2026-07-11"
 milestone: ""
+issue: ""
 ---
 # Autonomous run — Eval fallback degradation
 

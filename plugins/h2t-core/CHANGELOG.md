@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- feat(structure-guard): a plan or spec written by hand is blocked when it names no
+  issue, or says `none` without a reason. The generator and CI cover two of the three
+  entry paths a document can take; this is the third, and without it the other two are a
+  habit rather than an invariant (#423)
+
 - fix(scaffold-project): a broken h2t-dev no longer reads as an absent one. `run_docs_init`
   returned `skip` both when the plugin was missing and when the plugin was there without its
   script — so a broken delivery produced a project with no `docs/` and said nothing, which is

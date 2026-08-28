@@ -3,6 +3,7 @@ title: "Autonomous run — Pre-release audit: the tree against a machine that is
 status: "draft"
 date: "2026-08-27"
 milestone: ""
+issue: ""
 ---
 # Autonomous run — Pre-release audit: the tree against a machine that is not the author's
 

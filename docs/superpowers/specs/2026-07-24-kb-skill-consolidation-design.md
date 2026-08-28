@@ -4,6 +4,7 @@ status: "draft"
 owner: "lichtpfad"
 date: "2026-07-24"
 milestone: ""
+issue: ""
 ---
 # KB Skill Consolidation — Design
 

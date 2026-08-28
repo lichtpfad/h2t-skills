@@ -3,6 +3,7 @@ title: "Autonomous run — Cross-repo practice harvest"
 status: "draft"
 date: "2026-07-10"
 milestone: ""
+issue: ""
 ---
 # Autonomous run — Cross-repo practice harvest
 

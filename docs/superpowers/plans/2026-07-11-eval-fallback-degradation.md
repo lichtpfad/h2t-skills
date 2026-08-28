@@ -3,6 +3,7 @@ title: "Eval fallback degradation"
 status: "draft"
 date: "2026-07-11"
 milestone: ""
+issue: ""
 ---
 
 # Eval fallback degradation Implementation Plan

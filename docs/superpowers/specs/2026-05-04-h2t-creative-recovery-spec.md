@@ -4,6 +4,7 @@ status: "draft"
 owner: "Stanislav Glazov"
 date: "2026-05-04"
 milestone: ""
+issue: ""
 ---
 # h2t-creative Recovery Spec — Phase 2c: Legacy Fidelity Recovery
 

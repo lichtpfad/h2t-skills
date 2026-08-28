@@ -3,6 +3,7 @@ title: "kb-ingest Multi-Domain — Implementation Plan"
 status: "draft"
 date: "2026-08-09"
 milestone: ""
+issue: ""
 ---
 # kb-ingest Multi-Domain — Implementation Plan
 

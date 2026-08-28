@@ -3,6 +3,7 @@ title: "Research Fetch URL Provider Ladder Implementation Plan"
 status: "draft"
 date: "2026-05-07"
 milestone: ""
+issue: ""
 ---
 # Research Fetch URL Provider Ladder Implementation Plan
 

@@ -4,6 +4,7 @@ status: "draft"
 owner: "lichtpfad"
 date: "2026-08-26"
 milestone: ""
+issue: ""
 ---
 
 # Derived status: binding plans to issues

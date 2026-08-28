@@ -4,6 +4,7 @@ status: "draft"
 owner: "Stanislav Glazov"
 date: "2026-07-10"
 milestone: ""
+issue: ""
 ---
 
 # Agentic KB — evidence-grounded методология агентной разработки

@@ -4,6 +4,7 @@ status: "draft"
 owner: "Stanislav Glazov"
 date: "unknown"
 milestone: ""
+issue: ""
 ---
 # Docs & Repo Management Skills v2
 

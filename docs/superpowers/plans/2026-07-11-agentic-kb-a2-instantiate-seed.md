@@ -3,6 +3,7 @@ title: "Agentic KB — A2: instantiate agentic-kb + seed 40 findings as HYPOTHES
 status: "draft"
 date: "2026-07-11"
 milestone: ""
+issue: ""
 ---
 
 # Agentic KB — A2: instantiate + seed Implementation Plan

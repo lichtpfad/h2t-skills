@@ -3,6 +3,7 @@ title: "Autonomous run — Agentic KB A2 - instantiate + seed"
 status: "draft"
 date: "2026-07-11"
 milestone: ""
+issue: ""
 ---
 # Autonomous run — Agentic KB A2 - instantiate + seed
 
