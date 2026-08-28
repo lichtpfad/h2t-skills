@@ -15,13 +15,15 @@ escape_for_json() {
 INDEX="H2T SKILLS — invoke with the Skill tool when relevant:
 
 Session:   h2t-core:session-start | h2t-core:handoff | h2t-core:init-project | h2t-core:scaffold-project
+Setup:     h2t-core:setup           (install, repair, doctor, connector readiness)
 Research:  h2t-ops:research        (Exa semantic search — use for any web/news/paper lookup)
 Connectors: h2t-ops:connectors     (Google, Notion, Telegram, MeetGeek command map and safety)
 Daily:     h2t-ops:daily-brief     (daily ops brief from connected sources)
 Docs:      h2t-dev:docs-lint | h2t-dev:docs-sync-labels
 Diagrams:  h2t-arch:drawio | h2t-arch:diagram-node
 
-Python:    ~/.h2t/venv/Scripts/python.exe  (Windows) | ~/.h2t/venv/bin/python  (Mac/Linux)
+Commands:  h2t-ops | h2t-gather | h2t-handoff | h2t-activity-log  (on PATH after 'uv tool install')
+Python:    skills resolve their own interpreter — never build a path to one
 Config:    ~/.h2t/config/  (domains.yaml, repo-mapping.yaml, secrets/)
 Standards: bundled in h2t-dev skill references — load via Read when needed"
 

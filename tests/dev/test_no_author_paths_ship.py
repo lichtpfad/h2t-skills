@@ -30,7 +30,10 @@ ROOT = Path(__file__).resolve().parents[2]
 # docs/ would mean rewriting several hundred lines of historical reports to no benefit;
 # the audit that counted them said the same.
 CODE_ROOTS = [ROOT / "plugins", ROOT / "h2t_ops", ROOT / "lib", ROOT / "scripts"]
-PROSE_ROOTS = [ROOT / "docs", ROOT / "tests", ROOT / "tools"]
+PROSE_ROOTS = [ROOT / "docs", ROOT / "tests", ROOT / "tools",
+                # The two files a stranger opens first, and the only shipped prose that
+                # lived outside every root above (#443).
+                ROOT / "README.md", ROOT / "CLAUDE.md", ROOT / "CONTRIBUTING.md"]
 
 DEV_ROOT_PATH = re.compile(r"[A-Za-z]:[\\/]dev\b", re.IGNORECASE)
 # Two or more characters in the home-directory name: `/Users/x/` is a placeholder in a
@@ -71,9 +74,13 @@ EXPECTED = {
 def _offenders(roots, pattern) -> dict[str, list[str]]:
     found: dict[str, list[str]] = {}
     for root in roots:
-        if not root.is_dir():
+        if root.is_file():
+            candidates = [root]
+        elif root.is_dir():
+            candidates = sorted(root.rglob("*"))
+        else:
             continue
-        for path in sorted(root.rglob("*")):
+        for path in candidates:
             if not path.is_file() or path.name in SKIP_NAMES:
                 continue
             if path.suffix.lower() not in SCANNED_SUFFIXES:

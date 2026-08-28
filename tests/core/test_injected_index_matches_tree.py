@@ -36,3 +36,47 @@ def test_every_advertised_skill_exists():
         "Either the skill was removed and the index was not updated, or the name is a typo. "
         "A directory holding only scripts/ is not a skill — the harness cannot reach it."
     )
+
+
+# The same file carries paths, and the name guard above never looks at them. `~/.h2t/venv`
+# was the interpreter contract until #449 deleted it; `resolve-h2t-python.sh` replaced it
+# with a probe whose first candidate is `$H2T_PYTHON`. Nothing in the pack ever created the
+# venv — `plugins/h2t-dev/CHANGELOG.md` says so outright — so on a machine that is not the
+# author's, this line injects a path that does not exist into every session (#443).
+DEAD_PATHS = ("~/.h2t/venv", "$HOME/.h2t/venv", ".h2t/venv")
+
+
+def test_index_names_no_path_the_installer_never_creates():
+    text = INDEX.read_text(encoding="utf-8")
+    found = [p for p in DEAD_PATHS if p in text]
+    assert not found, (
+        f"{INDEX.relative_to(REPO)} injects {found} into every session. Nothing in this pack "
+        "creates that directory; it survives only on machines that predate #449. State the "
+        "resolver instead of an interpreter path."
+    )
+
+
+# README prints the same index verbatim, for a harness that runs no hooks (#443). Two copies
+# of one artifact drift silently; this is the seam, so it is tested as a round trip rather
+# than each side asserting about itself.
+README = REPO / "README.md"
+
+
+def _readme_index() -> str:
+    text = README.read_text(encoding="utf-8")
+    marker = "H2T SKILLS — invoke with the Skill tool when relevant:"
+    start = text.index(marker)
+    return text[start : text.index("```", start)].rstrip()
+
+
+def _hook_index() -> str:
+    text = INDEX.read_text(encoding="utf-8")
+    start = text.index('INDEX="') + len('INDEX="')
+    return text[start : text.index('"\n', start)].rstrip()
+
+
+def test_readme_prints_the_index_the_hook_injects():
+    assert _readme_index() == _hook_index(), (
+        "README.md and inject-h2t-context disagree about the skill index. The README copy is "
+        "what a reader gets when the hook does not fire; a stale copy is worse than none."
+    )

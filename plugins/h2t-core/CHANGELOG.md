@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- fix(session-context): the index injected into every session no longer names
+  `~/.h2t/venv`. That contract was deleted in #449 and nothing in the pack ever created the
+  directory, so on any machine but the author's the hook was handing each agent a path to a
+  non-existent interpreter. It now names the CLI commands and says the resolver picks the
+  interpreter. `h2t-core:setup` was added to the index — the first skill an onboarding user
+  needs was the one it did not mention (#443)
+
 - feat(structure-guard): a plan or spec written by hand is blocked when it names no
   issue, or says `none` without a reason. The generator and CI cover two of the three
   entry paths a document can take; this is the third, and without it the other two are a
