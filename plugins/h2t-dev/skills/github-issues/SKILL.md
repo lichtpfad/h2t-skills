@@ -41,7 +41,7 @@ Product value. Why this matters for users or agents.
 
 ## Labels (required)
 
-**Canonical source:** bundled in `h2t-dev:docs-sync-labels` — see `references/labels-schema.md` in that skill for the full table. Load on demand: `${CLAUDE_PLUGIN_ROOT}/skills/docs-sync-labels/references/labels-schema.md`
+**Canonical source:** bundled in `h2t-dev:docs-sync-labels` — see `references/labels-schema.md` in that skill for the full table. Load on demand: `$(h2t-dev root)/skills/docs-sync-labels/references/labels-schema.md`
 
 Every issue MUST carry labels from at least these namespaces:
 
@@ -94,7 +94,7 @@ EOF
 
 Load on demand when you need full naming/commit conventions:
 
-- `${CLAUDE_PLUGIN_ROOT}/references/standards/git-naming-conventions.md` — issue title format, commit types, branch naming, milestone format
+- `$(h2t-dev root)/references/standards/git-naming-conventions.md` — issue title format, commit types, branch naming, milestone format
 
 ## Common Mistakes
 

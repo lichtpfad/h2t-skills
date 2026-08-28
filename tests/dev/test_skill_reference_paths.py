@@ -1,4 +1,4 @@
-"""Every ${CLAUDE_PLUGIN_ROOT} path a shipped skill names must exist (#439).
+"""Every plugin-root path a shipped skill names must exist (#439, retargeted by #459).
 
 #433 fixed nine hints that pointed at a plugin which was never shipped, and left a guard
 for skill directories without a SKILL.md. It did not cover the paths *inside* a SKILL.md,
@@ -6,6 +6,12 @@ and one was already wrong: github-issues reached for
 `${CLAUDE_PLUGIN_ROOT}/../docs-sync-labels/...`, which climbs out of the plugin. The
 author had assumed the variable points at the skill directory; the hooks show it points at
 the plugin root.
+
+#459 changed the spelling, not the obligation. The variable is empty in skill bash, so
+skills now reach their files through the plugin's PATH wrapper — `$(h2t-dev root)/...`.
+This scan follows that form. The sibling guard
+(test_skill_paths_resolve_without_harness_vars) forbids the old one; together they say
+"name the root this way, and let the target exist".
 
 An agent that follows a dead reference does not fail loudly — it reads nothing and carries
 on with less than it was told it had.
@@ -16,7 +22,7 @@ import re
 from pathlib import Path
 
 PLUGINS = Path(__file__).parents[2] / "plugins"
-REF = re.compile(r'\$\{CLAUDE_PLUGIN_ROOT\}(/[^\s`"\')]+)')
+REF = re.compile(r'\$\((?:h2t-[a-z]+) root\)(/[^\s`"\')]+)')
 
 
 def _references() -> list[tuple[Path, str, Path]]:

@@ -14,7 +14,7 @@ Claude Code plugin suite for H2T workflows: lifecycle context, provider connecto
 
 ## Install For A User
 
-The repository is currently private. External users need GitHub read access to `lichtpfad/h2t-skills` before installing.
+The repository is public. Nothing has to be granted before installing.
 
 In Claude Code:
 

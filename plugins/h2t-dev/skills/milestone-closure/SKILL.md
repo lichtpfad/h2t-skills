@@ -18,7 +18,7 @@ This skill is a thin orchestrator. Deterministic state is gathered by
 
 ```bash
 RUN="uv run --no-project --with pyyaml python"
-CLOSURE="$CLAUDE_PLUGIN_ROOT/skills/milestone-closure/scripts/closure.py"
+CLOSURE="$(h2t-dev root)/skills/milestone-closure/scripts/closure.py"
 ```
 
 ## Procedure
@@ -45,8 +45,8 @@ Read the JSON:
 Run docs cleanup manually through unified docs-lint:
 
 ```bash
-$RUN "$CLAUDE_PLUGIN_ROOT/skills/docs-lint/scripts/lint.py" plan --root "$(pwd)"
-$RUN "$CLAUDE_PLUGIN_ROOT/skills/docs-lint/scripts/lint.py" fix-index --root "$(pwd)"
+$RUN "$(h2t-dev root)/skills/docs-lint/scripts/lint.py" plan --root "$(pwd)"
+$RUN "$(h2t-dev root)/skills/docs-lint/scripts/lint.py" fix-index --root "$(pwd)"
 ```
 
 `fix-index` without `--apply` is dry-run. Ask before using `--apply`.

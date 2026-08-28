@@ -43,9 +43,12 @@ SHIPPED = list(_shipped_skills())
 # base is reachable from a script that knows its own location. This list may only shrink:
 # a skill that gets fixed must be deleted from it, or the test below fails as a stale entry.
 KNOWN_DEBT = frozenset({
-    "h2t-dev:docs-lint",
+    # docs-lint and milestone-closure left this list in #459, the same way h2t-creative
+    # did: plugins/h2t-dev/bin/h2t-dev derives the root from its own location, and the
+    # thirteen `${CLAUDE_PLUGIN_ROOT}/...` sites became `$(h2t-dev root)/...`.
+    # docs-sync-labels stays: it reads the variable too, but behind a fallback that
+    # guesses the newest cache directory — working, and still a guess.
     "h2t-dev:docs-sync-labels",
-    "h2t-dev:milestone-closure",
 })
 
 

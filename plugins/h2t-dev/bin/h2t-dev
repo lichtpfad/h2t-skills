@@ -1,0 +1,25 @@
+#!/bin/sh
+# The plugin's portable surface.
+#
+# The harness exports neither CLAUDE_PLUGIN_ROOT nor CLAUDE_SKILL_DIR to the bash a skill
+# runs. Measured 2026-08-28 on Claude Code 2.1.247 and confirmed on 2.1.160 — not version
+# dependent, both are empty everywhere. So `"${CLAUDE_PLUGIN_ROOT}/skills/docs-lint/scripts/lint.py"`
+# expanded to `/skills/docs-lint/scripts/lint.py`, and docs-lint failed naming the filesystem
+# root instead of the real cause (#459).
+#
+# What the harness does provide is PATH: every installed plugin's bin/ is on it, verified in
+# `env` on both machines. So this script is reachable by bare name and derives the plugin root
+# from its own location — the one thing a script always knows about itself.
+set -eu
+
+PLUGIN_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+
+case "${1:-}" in
+  root)
+    echo "$PLUGIN_ROOT"
+    ;;
+  *)
+    echo "usage: h2t-dev root" >&2
+    exit 2
+    ;;
+esac

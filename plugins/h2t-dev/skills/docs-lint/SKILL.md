@@ -18,7 +18,7 @@ Scope: h2t-stack repos (Claude Code, `.claude/rules/`, `docs/superpowers/`, h2t 
 
 ```bash
 RUN="uv run --no-project --with pyyaml python"
-LINT="${CLAUDE_PLUGIN_ROOT}/skills/docs-lint/scripts/lint.py"
+LINT="$(h2t-dev root)/skills/docs-lint/scripts/lint.py"
 ROOT="${1:-.}"
 DRY_RUN="${2:-}"   # pass "--dry-run" to skip issue creation and commits
 ```
@@ -161,9 +161,9 @@ BEFORE_COUNT=$(jq '.findings | length' "$ROOT/.h2t/lint-before.json" 2>/dev/null
 ### Step C: Multi-angle analysis
 
 Load references on demand (skip with log if missing):
-- `${CLAUDE_PLUGIN_ROOT}/references/standards/documentation-structure.md` — dims 1,2,6
-- `${CLAUDE_PLUGIN_ROOT}/references/standards/code-organization.md` — dims 3,4
-- `${CLAUDE_PLUGIN_ROOT}/skills/docs-lint/references/non-standard-resolution.md` — dim 8
+- `$(h2t-dev root)/references/standards/documentation-structure.md` — dims 1,2,6
+- `$(h2t-dev root)/references/standards/code-organization.md` — dims 3,4
+- `$(h2t-dev root)/skills/docs-lint/references/non-standard-resolution.md` — dim 8
 
 | # | Dimension | Source |
 |---|---|---|
@@ -365,7 +365,7 @@ $RUN "$LINT" retire --root .
 ## References
 
 Load on demand:
-- `${CLAUDE_PLUGIN_ROOT}/references/standards/documentation-structure.md`
-- `${CLAUDE_PLUGIN_ROOT}/references/standards/naming-conventions.md`
-- `${CLAUDE_PLUGIN_ROOT}/references/standards/code-organization.md`
-- `${CLAUDE_PLUGIN_ROOT}/skills/docs-lint/references/non-standard-resolution.md`
+- `$(h2t-dev root)/references/standards/documentation-structure.md`
+- `$(h2t-dev root)/references/standards/naming-conventions.md`
+- `$(h2t-dev root)/references/standards/code-organization.md`
+- `$(h2t-dev root)/skills/docs-lint/references/non-standard-resolution.md`
