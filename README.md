@@ -94,6 +94,19 @@ uv run pytest plugins/h2t-core/skills/setup/scripts/test_setup_h2t.py -q
 python scripts/check_marketplace_sync.py
 ```
 
+## Public Landing
+
+The page explaining the pack lives in a different repository; only its source is here.
+
+| what | where |
+|---|---|
+| source recipe | `docs/landing/recipe.yaml` |
+| built page | `skills/index.html` in `lichtpfad/h2t-landings` |
+| public URL | https://lichtpfad.github.io/h2t-landings/skills/ |
+
+Rebuild and deploy steps: [docs/landing/README.md](docs/landing/README.md). The built HTML
+is deliberately not committed here — one artifact in two repositories drifts silently.
+
 ## Structure
 
 ```text
@@ -110,6 +123,7 @@ h2t_ops/
 docs/
   h2t-ops-external-install-debug.md
   h2t-ops-testing-plan.md
+  landing/          # recipe for the public landing (built into h2t-landings)
   reports/
   superpowers/
 ```

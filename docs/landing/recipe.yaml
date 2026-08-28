@@ -1,0 +1,607 @@
+type: landing
+profile: h2t-graphs
+palette: default
+title: "h2t-skills — экосистема агентной работы"
+
+sections:
+  - component: nav
+    content:
+      brand_name: "h2t-skills"
+      home_href: "#"
+
+  - component: hero
+    content:
+      badge: "RELEASE · 2026-08-28"
+      headline: "h2t-skills — экосистема агентной работы"
+      subline: "Пять плагинов для Claude Code: непрерывность сессий, провайдерский ввод-вывод, дисциплина документации, диаграммы, генерация страниц. Один marketplace-пак, девять команд CLI."
+
+  - component: stats
+    content:
+      stat1_value: "5"
+      stat1_label: "плагинов"
+      stat2_value: "29"
+      stat2_label: "скилла"
+      stat3_value: "9"
+      stat3_label: "команд CLI"
+
+  - component: section
+    content:
+      title: "Что это"
+      body: |
+        <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&family=JetBrains+Mono:wght@400;500;700&display=swap');
+        body { counter-reset: sec; }
+        .content-section { counter-increment: sec; }
+        .section__label { font-size: 0; }
+        .section__label::after {
+          content: "// " counter(sec, decimal-leading-zero);
+          font-size: 0.55rem; letter-spacing: 0.25em;
+        }
+        .section__body p { margin-bottom: 1.1rem; max-width: 78ch; }
+        .section__body strong { color: var(--color-text-hi); font-weight: 500; }
+        .section__body code {
+          font-family: var(--font-mono); font-size: 0.85em;
+          color: var(--color-accent); background: rgba(233,69,96,0.07);
+          padding: 0.1em 0.35em; border-radius: 2px;
+        }
+        .h-code {
+          background: var(--color-surface); border: 1px solid var(--color-border);
+          border-left: 2px solid var(--color-accent);
+          padding: 1rem 1.15rem; margin: 1.25rem 0; overflow-x: auto;
+          font-size: 0.8rem; line-height: 1.75; color: var(--color-text-hi);
+          font-variant-ligatures: none;
+          white-space: pre-wrap; word-break: break-word;
+        }
+        .h-code .c { color: var(--color-text-dim); }
+        .h-cards { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; margin: 1.5rem 0; }
+        .h-cards--3 { grid-template-columns: repeat(3, 1fr); }
+        .h-card {
+          background: var(--color-surface); border: 1px solid var(--color-border);
+          padding: 1.1rem 1.2rem; position: relative;
+        }
+        .h-card::before {
+          content: ''; position: absolute; top: -1px; left: -1px;
+          width: 10px; height: 10px;
+          border-top: 1px solid var(--color-accent); border-left: 1px solid var(--color-accent);
+        }
+        .h-card h4 {
+          font-family: var(--font-mono); font-size: 0.75rem; font-weight: 500;
+          letter-spacing: 0.12em; text-transform: uppercase;
+          color: var(--color-accent); margin-bottom: 0.5rem;
+        }
+        .h-card p { font-size: 0.8rem; line-height: 1.7; margin: 0; color: var(--color-text); }
+        .h-card p + p { margin-top: 0.6rem; }
+        .h-table { width: 100%; border-collapse: collapse; margin: 1.4rem 0; font-size: 0.78rem; }
+        .h-table th {
+          text-align: left; padding: 0.55rem 0.8rem;
+          border-bottom: 1px solid var(--color-border);
+          color: var(--color-text-dim); font-weight: 500;
+          letter-spacing: 0.12em; text-transform: uppercase; font-size: 0.62rem;
+          white-space: nowrap;
+        }
+        .h-table td {
+          padding: 0.55rem 0.8rem; border-bottom: 1px solid rgba(255,255,255,0.04);
+          vertical-align: top; line-height: 1.6;
+        }
+        .h-table td:first-child { color: var(--color-text-hi); white-space: nowrap; }
+        .h-scroll { overflow-x: auto; }
+        .h-note b { color: var(--color-text); font-weight: 500; }
+        .h-tabbar {
+          display: flex; flex-wrap: wrap; margin: 1.75rem 0 0;
+          background: var(--color-surface); border: 1px solid var(--color-border);
+        }
+        .h-tab {
+          flex: 1 1 auto;
+          font-family: var(--font-mono); font-size: 0.75rem; letter-spacing: 0.08em;
+          background: none; border: none;
+          border-right: 1px solid var(--color-border);
+          border-bottom: 2px solid transparent;
+          color: var(--color-text); padding: 0.85rem 1.1rem; cursor: pointer;
+          transition: background 150ms, color 150ms, border-color 150ms;
+        }
+        .h-tab:last-child { border-right: none; }
+        .h-tab:hover { background: rgba(233,69,96,0.06); color: var(--color-text-hi); }
+        .h-tab[aria-selected="true"] {
+          color: var(--color-accent); background: rgba(233,69,96,0.10);
+          border-bottom-color: var(--color-accent);
+        }
+        .h-tab:focus-visible { outline: 1px solid var(--color-accent); outline-offset: -3px; }
+        .h-panel { display: none; padding-top: 1.6rem; }
+        .h-panel[data-on="1"] { display: block; }
+        .h-meta {
+          font-family: var(--font-mono); font-size: 0.68rem; letter-spacing: 0.14em;
+          text-transform: uppercase; color: var(--color-text-dim); margin-bottom: 1rem;
+        }
+        .h-meta b { color: var(--color-accent); font-weight: 500; }
+        .h-list { list-style: none; margin: 1.1rem 0; }
+        .h-list li {
+          font-size: 0.78rem; line-height: 1.5; padding: 0.4rem 0 0.4rem 1.1rem;
+          border-bottom: 1px solid rgba(255,255,255,0.04); position: relative;
+        }
+        .h-list li::before { content: '·'; position: absolute; left: 0; color: var(--color-accent); }
+        .h-list code { white-space: nowrap; }
+        .h-note {
+          border-left: 2px solid var(--color-text-dim); padding-left: 1rem;
+          margin: 1.4rem 0; font-size: 0.8rem; color: var(--color-text-dim); line-height: 1.75;
+        }
+        @media (max-width: 768px) {
+          .h-cards, .h-cards--3 { grid-template-columns: 1fr; }
+          .h-code { font-size: 0.72rem; }
+        }
+        </style>
+        <p>Агент в Claude Code начинает каждую сессию с нуля: не помнит прошлую работу,
+        не имеет доступа к почте и календарю, не знает правил проекта. Каждая из пяти
+        частей пака закрывает одну такую дыру.</p>
+        <p><strong>h2t-core</strong> держит непрерывность: старт сессии, запись в конце,
+        сборку контекста, регистрацию проектов.
+        <strong>h2t-ops</strong> даёт провайдерский ввод-вывод — Google, Notion, Telegram,
+        MeetGeek, Granola, веб-исследование.
+        <strong>h2t-dev</strong> следит за документацией и issue.
+        <strong>h2t-arch</strong> рисует диаграммы.
+        <strong>h2t-creative</strong> собирает страницы и презентации — этой страницей в том числе.</p>
+
+  - component: section
+    content:
+      title: "Пять плагинов"
+      body: |
+        <p>Плагины независимы: каждый ставится и обновляется отдельно, версии не связаны.
+        Переключай вкладки — внутри каждой: зачем плагин нужен, что в нём лежит и в какой
+        он стадии.</p>
+        <div class="h-tabbar" role="tablist">
+          <button class="h-tab" role="tab" aria-selected="true"  data-p="core">h2t-core</button>
+          <button class="h-tab" role="tab" aria-selected="false" data-p="ops">h2t-ops</button>
+          <button class="h-tab" role="tab" aria-selected="false" data-p="dev">h2t-dev</button>
+          <button class="h-tab" role="tab" aria-selected="false" data-p="arch">h2t-arch</button>
+          <button class="h-tab" role="tab" aria-selected="false" data-p="creative">h2t-creative</button>
+        </div>
+
+        <div class="h-panel" data-p="core" data-on="1">
+          <div class="h-meta">версия <b>3.2.35</b> · скиллов <b>10</b> · зависимостей нет</div>
+          <p><strong>Зачем.</strong> Без него агент начинает каждую сессию с нуля.
+          h2t-core держит непрерывность: собирает контекст до начала работы, показывает
+          брифинг, в конце пишет запись, которую прочитает следующая сессия — в том числе
+          на другой машине.</p>
+          <ul class="h-list">
+            <li><code>session-start</code> — брифинг: проект, ветка, задачи, долг документации, прошлая сессия</li>
+            <li><code>handoff</code> — запись сессии; пишет сразу, без единого вопроса</li>
+            <li><code>init-project</code> — регистрация существующей папки в онтологии</li>
+            <li><code>scaffold-project</code> — новый проект вместе с регистрацией</li>
+            <li><code>autonomous-run</code> — прогон плана без человека: рунбук, гейты, протокол решений</li>
+            <li><code>setup</code> — установка, починка и диагностика поставки</li>
+            <li><code>project-audit</code> — аудит проекта: скан, позиционирование, готовность</li>
+            <li><code>dev-overview</code> — сводка по всем проектам сразу</li>
+            <li><code>agent-profile</code> — профиль агента</li>
+            <li><code>snap</code> — скриншот и клики в десктопных приложениях</li>
+          </ul>
+          <div class="h-note"><b>Стадия: рабочий, меняется чаще остальных.</b> Номер версии
+          — самый длинный в паке. Путь «старт → работа → запись» проходится каждой сессией,
+          поэтому дефекты находятся быстро и правятся сразу. Свежая часть — autonomous-run:
+          протокол есть, скрипты и тесты есть, но прогонов пока мало.</div>
+        </div>
+
+        <div class="h-panel" data-p="ops">
+          <div class="h-meta">версия <b>1.6.13</b> · скиллов <b>5</b> · коннекторов <b>9</b></div>
+          <p><strong>Зачем.</strong> Единственная разрешённая дверь к внешним данным.
+          Без неё агент лезет к провайдерам чем попало — <code>gdown</code>, сырой API,
+          браузер — и аутентификация, ошибки и форматы расползаются по десяти местам.</p>
+          <ul class="h-list">
+            <li><code>connectors</code> — карта команд девяти провайдеров и границы безопасности</li>
+            <li><code>research</code> — веб-исследование через Exa: десять режимов поиска, от мгновенного до глубокого</li>
+            <li><code>daily-brief</code> — утренний брифинг: календарь, почта, задачи</li>
+            <li><code>kb</code> — база знаний исследований</li>
+            <li><code>deploy</code> — деплой зарегистрированных сервисов</li>
+          </ul>
+          <div class="h-note"><b>Стадия: рабочий, с известными краями.</b> Google, Notion,
+          Telegram, Granola и research проверены в деле. Открыто: #386 — конвейер загрузки
+          MeetGeek оставляет staging-файлы и раздаёт ACL шире нужного; #371 — поиск по
+          Notion отдаёт лимит выдачи вместо общего числа. Аккаунт MeetGeek с 23 августа на
+          бесплатном тарифе, часть API оттуда недоступна.</div>
+        </div>
+
+        <div class="h-panel" data-p="dev">
+          <div class="h-meta">версия <b>1.0.35</b> · скиллов <b>6</b></div>
+          <p><strong>Зачем.</strong> Документация и задачи разъезжаются молча. Этот плагин
+          держит их форму: имена файлов, обязательные поля, связь плана с issue, единый
+          набор меток во всех репозиториях, проверки перед мерджем.</p>
+          <ul class="h-list">
+            <li><code>docs-lint</code> — аудит структуры документации: сироты, именование, метаданные</li>
+            <li><code>github-issues</code> — единый формат issue: секции, метки, вехи</li>
+            <li><code>docs-sync-labels</code> — раскатка канонических меток по всем репозиториям</li>
+            <li><code>milestone-closure</code> — закрытие вехи, когда все задачи в ней закрыты</li>
+            <li><code>pre-merge-check</code> — гейты безопасности, тестов и сборки перед PR</li>
+            <li><code>gh-memory</code> — совместимость со старой схемой «issue вместо памяти», помечен устаревшим</li>
+          </ul>
+          <div class="h-note"><b>Стадия: рабочий, долг не выплачен.</b> Инструмент честно
+          показывает состояние — и на этом же репозитории показывает 93 документа-сироты и
+          22 нарушения именования (замер 24 августа). Починка индекса, которая закрывает
+          большую часть, до сих пор не запускалась.</div>
+        </div>
+
+        <div class="h-panel" data-p="arch">
+          <div class="h-meta">версия <b>1.0.8</b> · скиллов <b>3</b></div>
+          <p><strong>Зачем.</strong> Архитектурная диаграмма, нарисованная руками, устаревает
+          в день рисования. Здесь она собирается из описания и валидируется, а узлы
+          документируются отдельно от картинки.</p>
+          <ul class="h-list">
+            <li><code>drawio</code> — генерация, экспорт и валидация файлов .drawio</li>
+            <li><code>diagram-node</code> — аннотация узла: шесть строк на схеме плюс документ</li>
+            <li><code>node-researcher</code> — сбор материала по API или алгоритму для такого узла</li>
+          </ul>
+          <div class="h-note"><b>Стадия: узкий и устойчивый.</b> Самая маленькая поверхность
+          в паке и самый низкий номер версии — не потому, что заброшен, а потому, что задача
+          очерчена и почти не менялась.</div>
+        </div>
+
+        <div class="h-panel" data-p="creative">
+          <div class="h-meta">версия <b>1.5.1</b> · скиллов <b>5</b> · профилей <b>6</b></div>
+          <p><strong>Зачем.</strong> Показать результат страницей, а не пересказом. Конвейер
+          один: рецепт в YAML → ассемблер → три файла. Оформление живёт в профиле, содержание
+          в рецепте, поэтому смена эстетики — это одна строка.</p>
+          <ul class="h-list">
+            <li><code>landing</code> — лендинг из рецепта, с обязательным QA на трёх ширинах</li>
+            <li><code>deck</code> — HTML-презентация с клавиатурной навигацией</li>
+            <li><code>design</code> — дашборды и интерфейсные макеты</li>
+            <li><code>style-create</code> — мастер нового стилевого профиля</li>
+            <li><code>style-validate</code> — проверка профиля на полноту</li>
+          </ul>
+          <div class="h-note"><b>Стадия: восстановленное ядро.</b> 27 августа плагин был изъят
+          из релиза решением оператора как недоделанный, затем в пак вернулась рабочая часть.
+          Открытыми и заблокированными остаются богатая библиотека компонентов (#83) и форма
+          презентации h2t-mono (#91). Эта страница собрана им же — профиль h2t-graphs,
+          одиннадцать секций, ноль зависимостей.</div>
+        </div>
+
+        <script>
+        (function () {
+          var bar = document.querySelector('.h-tabbar');
+          if (!bar) return;
+          var tabs = [].slice.call(bar.querySelectorAll('.h-tab'));
+          var panels = [].slice.call(document.querySelectorAll('.h-panel'));
+          function show(key) {
+            tabs.forEach(function (t) { t.setAttribute('aria-selected', String(t.dataset.p === key)); });
+            panels.forEach(function (p) {
+              if (p.dataset.p === key) { p.setAttribute('data-on', '1'); }
+              else { p.removeAttribute('data-on'); }
+            });
+          }
+          bar.addEventListener('click', function (e) {
+            var t = e.target.closest('.h-tab');
+            if (t) show(t.dataset.p);
+          });
+          bar.addEventListener('keydown', function (e) {
+            var i = tabs.indexOf(document.activeElement);
+            if (i < 0) return;
+            var n = e.key === 'ArrowRight' ? i + 1 : e.key === 'ArrowLeft' ? i - 1 : -1;
+            if (n < 0) return;
+            e.preventDefault();
+            var next = tabs[(n + tabs.length) % tabs.length];
+            next.focus(); show(next.dataset.p);
+          });
+        })();
+        </script>
+
+  - component: section
+    content:
+      title: "Установка"
+      body: |
+        <p>Две независимые поставки. Плагины приходят через marketplace Claude Code,
+        команды CLI — через <code>uv</code>. Одно не заменяет другое: обновление
+        маркетплейса не трогает ни одной команды.</p>
+        <p><strong>1. Плагины.</strong> В Claude Code:</p>
+        <div class="h-code">/plugin marketplace add lichtpfad/h2t-skills
+
+        /plugin install h2t-core@lichtpfad      <span class="c"># сессии, gather, установка</span>
+        /plugin install h2t-ops@lichtpfad       <span class="c"># коннекторы к провайдерам</span>
+        /plugin install h2t-dev@lichtpfad       <span class="c"># документация, issue, гейты</span>
+        /plugin install h2t-arch@lichtpfad      <span class="c"># диаграммы</span>
+        /plugin install h2t-creative@lichtpfad  <span class="c"># лендинги и презентации</span>
+
+        /reload-plugins</div>
+        <p>Ставить можно любое подмножество: плагины независимы. Минимум, с которого
+        есть смысл начинать — <code>h2t-core</code>: без него нет ни сборки контекста,
+        ни записи сессий.</p>
+        <p><strong>2. Команды CLI.</strong> Из клона репозитория:</p>
+        <div class="h-code">uv tool install --editable .
+        uv tool list   <span class="c"># должно быть 9 команд одним пакетом</span></div>
+        <p><strong>3. Проверка.</strong> Скилл установки умеет диагностировать сам себя:</p>
+        <div class="h-code">/h2t-core:setup doctor
+        /h2t-core:setup install-h2t-ops
+        /h2t-core:setup connectors-check</div>
+        <div class="h-note">Плагин <code>h2t-ops</code> и Python-пакет <code>h2t-ops</code> — разные вещи
+        с одним именем и разными версиями. Версию команд читать из <code>uv tool list</code>,
+        а не из списка плагинов: они обновляются независимо и расходятся молча.</div>
+
+  - component: section
+    content:
+      title: "Как устроена система"
+      body: |
+        <p>Четыре слоя. Каждый следующий не знает о предыдущем больше, чем нужно.</p>
+        <div class="h-cards">
+          <div class="h-card"><h4>Плагин</h4><p>Единица поставки. Версия в <code>plugin.json</code>, кэш адресуется версией — без бампа исправление не доедет ни до одной машины.</p></div>
+          <div class="h-card"><h4>Скилл</h4><p>Папка с <code>SKILL.md</code> — инструкция агенту на естественном языке. Грузится по требованию, а не при старте.</p></div>
+          <div class="h-card"><h4>Хук</h4><p>Принуждение, а не удобство. Выполняется харнессом до модели, поэтому его нельзя проигнорировать или «упростить» в инструкцию.</p></div>
+          <div class="h-card"><h4>CLI</h4><p>Девять точек входа одного Python-пакета. Всё, что должно работать одинаково из скилла, из хука и из терминала.</p></div>
+        </div>
+        <p>Хуки — то, что отличает пак от набора подсказок. Инструкцию в
+        <code>SKILL.md</code> модель может не выполнить; хук выполняется всегда:</p>
+        <div class="h-scroll"><table class="h-table">
+          <tr><th>событие</th><th>обработчик</th><th>что делает</th></tr>
+          <tr><td>SessionStart</td><td>inject-h2t-context</td><td>кладёт в контекст индекс доступных скиллов</td></tr>
+          <tr><td>PreToolUse: Skill</td><td>gather-on-skill</td><td>собирает контекст до того, как скилл начнёт работу</td></tr>
+          <tr><td>UserPromptSubmit</td><td>gather-on-prompt</td><td>та же сборка для слэш-команд, где Skill не вызывается</td></tr>
+          <tr><td>PreToolUse: Write / Edit</td><td>structure-guard</td><td>не даёт создать документ мимо структуры</td></tr>
+          <tr><td>PostToolUse: git commit</td><td>plan-closer</td><td>закрывает план, если PR его реализовал</td></tr>
+        </table></div>
+        <div class="h-note">Слэш-команда и обращение словами приходят разными путями:
+        <code>/plugin:skill</code> раскрывается прямо в промпт и вызова инструмента Skill не порождает.
+        Поэтому одна и та же сборка подписана на два события — иначе половина запусков идёт без контекста.</div>
+
+  - component: section
+    content:
+      title: "Устройство скилла"
+      body: |
+        <p>Скилл — это каталог, а не файл. Обязателен один <code>SKILL.md</code>; всё
+        остальное появляется по мере надобности.</p>
+        <div class="h-code">skills/handoff/
+          SKILL.md          <span class="c">← обязателен: без него каталог не скилл</span>
+          references/       <span class="c">← читается по требованию, не при старте</span>
+          scripts/          <span class="c">← детерминированная работа, которую нельзя доверять модели</span></div>
+        <p>Из 29 скиллов пака четырнадцать — это только <code>SKILL.md</code>, у четырнадцати
+        есть скрипты, у восьми — справочники. Медиана самого файла — 141 строка.</p>
+        <p>Каталог без <code>SKILL.md</code> скиллом не является, даже лежа среди них: в
+        дереве таких четыре, они держат <code>scripts/</code> для чужих скиллов. Разница не
+        косметическая — харнесс их не видит и вызвать их нельзя.</p>
+
+        <p><strong>Frontmatter — единственное, что агент видит всегда.</strong> Тела скиллов
+        грузятся по требованию, а эти четыре поля лежат в контексте каждой сессии.</p>
+        <div class="h-code">---
+        name: handoff              <span class="c"># обязан совпадать с именем каталога</span>
+        description: "..."         <span class="c"># отсюда берутся триггеры вызова</span>
+        compatibility: "..."       <span class="c"># внешние требования — до запуска, не из ошибки</span>
+        metadata: {author, version}
+        ---</div>
+        <p><code>name</code> пишется без префикса плагина: пространство имён добавляет
+        харнесс. Написанное руками <code>h2t-core:handoff</code> превращается в
+        <code>/h2t-core:h2t-core:handoff</code> — это уже случалось и теперь закрыто тестом,
+        единственным на весь frontmatter.</p>
+        <p><code>compatibility</code> окупается там, где у скилла есть внешние требования.
+        Образец — <code>kb</code>: «требует установленный llm-kb-engine, каталог базы в
+        <code>H2T_KB_ROOT</code> и коннектор research для харвеста». Агент читает это до
+        запуска, а не узнаёт из падения на первой команде.</p>
+
+        <p><strong>Тело — инструкция, а не код.</strong> Естественный язык, который агент
+        читает и выполняет: шаги, гейты, форматы вывода, что делать при отказе. Код там
+        появляется как команда для запуска, а не как программа.</p>
+        <p><strong>Свои файлы скилл находит через PATH</strong> — командой, которую плагин
+        кладёт в <code>bin/</code>. Не через переменную харнесса: замерено 28 августа в живой
+        сессии, что <code>CLAUDE_PLUGIN_ROOT</code> в bash скилла приходит пустой, и путь
+        <code>${CLAUDE_PLUGIN_ROOT}/skills/…/lint.py</code> схлопывается в
+        <code>/skills/…/lint.py</code>. Молча: команда отрабатывает, файла нет.</p>
+        <div class="h-code">PLUGIN_ROOT="$(h2t-creative root)"   <span class="c">✓ работает: bin/ лежит в PATH</span>
+        PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}"  <span class="c">✗ пусто в bash скилла</span></div>
+
+  - component: section
+    content:
+      title: "Сессия: старт, работа, запись"
+      body: |
+        <p>Сессия — единица непрерывности. Она начинается брифингом и заканчивается
+        записью, которую прочитает следующая сессия — на этой машине или на другой.</p>
+        <div class="h-code"><span class="c"># начало</span>
+        /h2t-core:session-start
+        <span class="c">→ хук уже собрал контекст, скилл его показывает: проект, ветка,</span>
+        <span class="c">  открытые задачи, долг документации, сводка прошлой сессии</span>
+
+        <span class="c"># конец</span>
+        /h2t-core:handoff
+        <span class="c">→ ~/.h2t/sessions/&lt;машина&gt;/&lt;проект&gt;/&lt;имя&gt;.md   — полная запись</span>
+        <span class="c">→ ~/.h2t/sessions/&lt;машина&gt;/&lt;проект&gt;/latest.json — ограниченная сводка</span>
+        <span class="c">→ ~/.h2t/activity/spool.jsonl                 — session.start / session.end</span></div>
+        <p>Запись пишется <strong>до</strong> любого вопроса. Это правило, а не деталь
+        реализации: handoff однажды спросил имя сессии после того, как собрал сводку из
+        двух смерженных PR, пяти раундов ревью и 25 тестов. Пользователь спал. Не записалось
+        ничего.</p>
+        <p>Отсюда граница: гейт может стоять перед <em>внешним изменением</em> —
+        правкой чужого конфига, отправкой, удалением. Он не может стоять между работой,
+        которую сессия уже сделала, и её сохранением. Проверка простая: <em>если ответа
+        не будет никогда — что потеряется?</em></p>
+        <p>Следующая сессия читает не markdown, а <code>latest.json</code>: сводка
+        обрезана по длине и по числу элементов. Полный файл — архив, его открывают,
+        только если попросили подробностей.</p>
+
+  - component: section
+    content:
+      title: "Онтология: домен → проект → сессия"
+      body: |
+        <p>Всё, что система знает о работе, держится на трёх понятиях. <strong>Домен</strong> —
+        крупная область: dev, personal-os, hou2touch. <strong>Проект</strong> — единица
+        работы внутри домена: id, человекочитаемая метка, описание.
+        <strong>Сессия</strong> принадлежит проекту и хранится под машиной, на которой
+        шла.</p>
+        <div class="h-code">domains:
+          personal-os:
+            label: "Personal OS"
+            projects:
+              - id: agent-skills
+                label: "Agent Skills (h2t plugin)"
+                description: "Claude Code plugin — session management, handoff, ..."</div>
+        <p>Поле <code>description</code> написано не для человека. По нему модель
+        классифицирует входящую задачу в проект, поэтому оно формулируется как признаки
+        принадлежности, а не как реклама.</p>
+        <p>Проект и репозиторий — не одно и то же, и это сделано намеренно.
+        <code>DocGraph</code> и <code>SpecDesigner</code> отображаются на один проект
+        <code>docgraph</code>: их история сессий остаётся общей, хотя репозитория два.
+        Обратное тоже верно — рабочей папкой может быть каталог Dropbox или хранилище
+        Obsidian, где git нет вовсе.</p>
+        <p>Опознание идёт лестницей: первая сработавшая ступень отвечает.</p>
+        <div class="h-scroll"><table class="h-table">
+          <tr><th>ступень</th><th>источник</th><th>зачем именно она</th></tr>
+          <tr><td>0</td><td>&lt;cwd&gt;/.claude/project-id</td><td>единственная identity, которая едет вместе с клоном — работает на машине без конфига</td></tr>
+          <tr><td>1</td><td>git remote → repo-mapping.yaml</td><td>основной путь для зарегистрированного репозитория</td></tr>
+          <tr><td>2</td><td>путь cwd → cwd_patterns</td><td>для папок без git</td></tr>
+          <tr><td>3</td><td>default из repo-mapping.yaml</td><td>чтобы неизвестная папка не роняла сбор</td></tr>
+        </table></div>
+        <div class="h-note">Remote читается до всех ступеней, даже когда ответ уже найден на
+        нулевой: сбор задач с GitHub пропускается целиком, если у проекта нет слага —
+        и тогда именно у зарегистрированных репозиториев молча пустеют issue.</div>
+
+  - component: section
+    content:
+      title: "Gather: контекст собирается один раз"
+      body: |
+        <p>Скилл старта сессии раньше делал 10–12 отдельных вызовов инструментов:
+        четыре раза git, пять раз gh, чтение папки сессий, определение стека. Каждый
+        вызов — два-пять секунд туда-обратно. Двадцать-шестьдесят секунд, чтобы узнать,
+        на какой ты ветке.</p>
+        <p><code>h2t-gather</code> делает это одной командой и параллельно. Источники
+        независимы, поэтому идут в пуле потоков; упавший источник не роняет остальные,
+        а попадает в <code>sources_failed</code>.</p>
+        <div class="h-code">$ h2t-gather --cwd "$(pwd)" --briefing-only
+
+        GATHER_META: {"sources_used": ["project","git","github","docs_debt"],
+                      "sources_failed": [], "gather_ms": 1278, ...}</div>
+        <p>Собранное отдаётся не как JSON для разбора, а как готовый брифинг —
+        текст, который скилл показывает дословно. Разбор JSON моделью — лишний шаг,
+        на котором теряется половина полей.</p>
+        <div class="h-note">Данные приходят к модели двумя разными каналами, и это не
+        взаимозаменяемо: модель читает <code>hookSpecificOutput.additionalContext</code>,
+        а пользователь видит <code>systemMessage</code>. Обработчик, который вернул
+        текст не в тот канал, выглядит как молчащий хук.</div>
+
+  - component: section
+    content:
+      title: "Progressive disclosure: не грузить то, что не спросили"
+      body: |
+        <p>Контекстное окно — бюджет, и главный вопрос не «что загрузить», а «чем
+        ограничен объём». Ответ: <strong>рабочей папкой</strong>. Никакого выбора режима
+        на старте нет — <code>cd</code> в проект уже определил, что войдёт в контекст,
+        а что нет.</p>
+        <div class="h-code">cd ~/Projects/h2t-skills   <span class="c">→ проект agent-skills, домен personal-os</span>
+                                   <span class="c">→ грузятся: about-me, психологический профиль, стратегия</span>
+
+        cd ~/Projects/DocGraph      <span class="c">→ проект docgraph, домен dev</span>
+                                   <span class="c">→ грузится: about-me. И всё.</span></div>
+        <p>Домен решает, какие глубокие источники подтягиваются автоматически. Один и
+        тот же скилл, запущенный в двух папках, получает разный объём знания о человеке —
+        не потому, что его настроили, а потому, что папка другая.</p>
+        <p>Внутри этой границы работают ещё два уровня отсечения.</p>
+        <p><strong>В сборе контекста</strong> — четыре слоя. Скилл объявляет, какие ему
+        нужны: <code>gather(layers=[0,1,2], deep=["sessions"])</code>. Ничего сверх
+        объявленного не собирается.</p>
+        <div class="h-scroll"><table class="h-table">
+          <tr><th>слой</th><th>что</th><th>откуда</th><th>цена</th></tr>
+          <tr><td>0 · Identity</td><td>кто пользователь, что за проект, какая машина</td><td>~/.h2t/config/</td><td>мгновенно</td></tr>
+          <tr><td>1 · State</td><td>ветка, статус, лог, стек проекта</td><td>локальные подпроцессы</td><td>быстро</td></tr>
+          <tr><td>2 · Work</td><td>issue, вехи, PR, файлы прошлых сессий</td><td>gh CLI, файловая система</td><td>сеть, параллельно</td></tr>
+          <tr><td>3 · Deep</td><td>содержимое сессий, психологический профиль, стратегия</td><td>чтение файлов, внешние API</td><td>по требованию</td></tr>
+        </table></div>
+        <p><strong>В самих скиллах</strong> — тот же приём на уровне текста.
+        <code>SKILL.md</code> коннекторов — 151 строка: карта команд и границы
+        безопасности. Подробности каждого провайдера лежат в
+        <code>references/</code> — ещё 908 строк, которые агент читает, только когда
+        дошёл до конкретного провайдера.</p>
+        <div class="h-code">skills/connectors/
+          SKILL.md              151 строка  <span class="c">← всегда</span>
+          references/notion.md  167 строк   <span class="c">← только для Notion</span>
+          references/drive.md   164 строки  <span class="c">← только для Drive</span>
+          references/meetgeek.md 130 строк  <span class="c">← только для MeetGeek</span>
+          <span class="c">… ещё пять файлов</span></div>
+
+  - component: section
+    content:
+      title: "Vault: секреты вне репозитория"
+      body: |
+        <p>Ни один ключ не живёт в коде и не приходит с плагином. Всё, что даёт доступ,
+        лежит в одном каталоге под домашней папкой, и пак читает его на старте.</p>
+        <div class="h-code">~/.h2t/config/secrets/
+          secrets.env      <span class="c"># KEY=VALUE, обычный dotenv</span>
+          google/          <span class="c"># OAuth-джейсоны: Gmail, Calendar, Drive</span>
+          telegram/        <span class="c"># сессия Telethon</span></div>
+        <p>Разрешение значения идёт по порядку и останавливается на первом найденном:
+        <strong>переменная окружения → <code>secrets.env</code> → унаследованные пути →
+        файл токена</strong>. Экспорт в шелле выигрывает у файла всегда — это позволяет
+        подменить ключ на один запуск, ничего не редактируя.</p>
+        <p>Загрузчик падает громко. Отсутствующий <code>secrets.env</code> — ошибка, а не
+        пустой словарь; кривая строка — <code>ValueError</code> с номером строки. Тихий
+        пропуск здесь дороже: он превращается в «провайдер не отвечает» через два часа
+        отладки.</p>
+        <div class="h-note">Ротация — единственный работающий контроль. Секрет, попавший
+        в репозиторий, где когда-либо был pull request, не удаляется переписыванием
+        истории: <code>refs/pull/*</code> остаются на сервере, и force-push их не трогает.
+        Замерено на этом репозитории: чистый клон — ноль находок, тот же клон с
+        подтянутыми pull-ref — две. Переписывание истории делается для порядка, а не
+        вместо ротации.</div>
+
+  - component: section
+    content:
+      title: "Конфигурация: один каталог, не в репозитории"
+      body: |
+        <p>Всё, что специфично для человека и машины, вынесено из репозитория в
+        <code>~/.h2t/config/</code>. Поэтому пак ставится на чужую машину без правки
+        кода, а публикация репозитория не выносит наружу ничьих идентификаторов.</p>
+        <div class="h-scroll"><table class="h-table">
+          <tr><th>файл</th><th>что описывает</th></tr>
+          <tr><td>domains.yaml</td><td>домены работы: dev, personal-os, taxes — и правила маршрутизации контекста</td></tr>
+          <tr><td>repo-mapping.yaml</td><td>какая директория какому проекту принадлежит; несколько репозиториев могут вести на один проект</td></tr>
+          <tr><td>about-me/</td><td>контекст о пользователе слоями: core, business, psychology, health — грузится по домену сессии</td></tr>
+          <tr><td>rules/</td><td>правила, общие для всех проектов</td></tr>
+          <tr><td>secrets/</td><td>ключи и OAuth-блобы</td></tr>
+          <tr><td>registry/</td><td>реестр активных сессий между машинами</td></tr>
+        </table></div>
+        <p>Корень репозитория определяется <code>git rev-parse --show-toplevel</code>, а не
+        поиском знакомого имени вверх по дереву: иначе подкаталог с документацией
+        принимается за весь репозиторий, что здесь уже случалось.</p>
+
+  - component: section
+    content:
+      title: "Коннекторы: девять провайдеров, один контракт"
+      body: |
+        <p>Любой ввод-вывод к провайдеру идёт через <code>h2t-ops</code> и только через
+        него. Не <code>gdown</code>, не <code>rclone</code>, не сырой Google API, не
+        браузер. Одна дверь — одно место, где живут аутентификация, обработка ошибок и
+        форматы вывода.</p>
+        <div class="h-scroll"><table class="h-table">
+          <tr><th>коннектор</th><th>что делает</th></tr>
+          <tr><td>calendar</td><td>события Google Calendar, занятость, встречи Meet</td></tr>
+          <tr><td>gmail</td><td>письма и метки: чтение, черновики, отправка</td></tr>
+          <tr><td>drive</td><td>файлы и папки Drive, экспорт Docs / Sheets / Slides</td></tr>
+          <tr><td>notion</td><td>страницы и базы, синхронизация рабочего пространства</td></tr>
+          <tr><td>telegram</td><td>диалоги и сообщения, упоминания</td></tr>
+          <tr><td>meetgeek</td><td>встречи, транскрипты, саммари, записи</td></tr>
+          <tr><td>granola</td><td>заметки, AI-саммари, дословные транскрипты</td></tr>
+          <tr><td>research</td><td>веб-исследование через Exa: поиск, новости, статьи, люди</td></tr>
+          <tr><td>evals</td><td>телеметрия скиллов, режим и статус — только чтение</td></tr>
+        </table></div>
+        <p>Реестр ленивый: <code>h2t-ops connectors</code> перечисляет всех, но клиент
+        провайдера импортируется только когда до него дошло дело. Коннектор, чей импорт
+        упал, пропускается с предупреждением и не роняет остальные восемь.</p>
+        <p>Вывод у всех один: человекочитаемый по умолчанию,
+        <code>--format md</code> для вставки в документ, <code>--json</code> —
+        универсальный конверт. Коды выхода тоже общие, и по ним отличается «нет такого
+        файла» от «протух токен»:</p>
+        <div class="h-code">0 ok      1 provider   2 usage     3 config
+        4 auth    5 not found  6 network</div>
+
+  - component: section
+    content:
+      title: "Как это проверялось"
+      body: |
+        <p>1953 теста, ruff с фиксированным набором правил и закреплённой версией,
+        линтер документации, guard структуры на каждую запись файла, git-хук,
+        не дающий разъехаться <code>marketplace.json</code> и <code>plugin.json</code>.</p>
+        <p>Два правила, выведенные из собственных ошибок, стоят отдельного упоминания.
+        <strong>Зелёный тест ничего не доказывает</strong>, пока его не видели красным:
+        три теста в одну сессию проходили на сломанном коде, потому что проверяли
+        представление, в котором дефекта не видно. Контроль — откатить исправление,
+        увидеть красное, вернуть.</p>
+        <p><strong>Аудит — это измерение, гейтом является только тест.</strong> Аудит
+        отвечает «сколько сейчас», тест — «стало ли хуже». Первый истекает в момент
+        печати, второй переживает сессию и смену рук.</p>
+
+  - component: cta
+    content:
+      text: "GitHub → lichtpfad/h2t-skills"
+      href: "https://github.com/lichtpfad/h2t-skills"
+
+  - component: footer
+    content:
+      copy: "h2t-skills · 5 плагинов · 29 скиллов · 9 команд CLI · собрано скиллом h2t-creative:landing"
