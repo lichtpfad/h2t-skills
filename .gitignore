@@ -62,3 +62,4 @@ service-account*.json
 !*.env.example
 !*.env.sample
 !*.env.template
+.gstack/

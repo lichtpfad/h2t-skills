@@ -9,7 +9,7 @@ Claude Code plugin suite for H2T workflows: lifecycle context, provider connecto
 | `h2t-core` | `h2t-core:setup`, `session-start`, `handoff`, `init-project`, `scaffold-project`, `agent-profile` | Session lifecycle, setup, project registration, local context continuity |
 | `h2t-ops` | `h2t-ops:connectors`, `h2t-ops:research`, `h2t-ops:daily-brief` | Provider I/O through `h2t-ops`: Drive, Gmail, Calendar, Notion, Telegram, MeetGeek, Granola, research |
 | `h2t-dev` | `docs-lint`, `pre-merge-check`, `milestone-closure`, `github-issues` | Development and documentation lifecycle automation |
-| `h2t-arch` | `drawio`, `diagram-node`, `node-researcher` | Architecture and diagram workflows |
+| `h2t-arch` | `drawio`, `diagram-node` | Architecture and diagram workflows |
 | `h2t-creative` | `deck`, `landing`, `design`, `style-create`, `style-validate` | Landing pages, decks, and visual asset generation |
 
 ## Install For A User

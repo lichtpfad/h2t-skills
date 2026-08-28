@@ -18,7 +18,7 @@ Session:   h2t-core:session-start | h2t-core:handoff | h2t-core:init-project | h
 Research:  h2t-ops:research        (Exa semantic search — use for any web/news/paper lookup)
 Connectors: h2t-ops:connectors     (Google, Notion, Telegram, MeetGeek command map and safety)
 Daily:     h2t-ops:daily-brief     (daily ops brief from connected sources)
-Docs:      h2t-dev:docs-lint | h2t-dev:docs-init | h2t-dev:docs-sync-labels
+Docs:      h2t-dev:docs-lint | h2t-dev:docs-sync-labels
 Diagrams:  h2t-arch:drawio | h2t-arch:diagram-node
 
 Python:    ~/.h2t/venv/Scripts/python.exe  (Windows) | ~/.h2t/venv/bin/python  (Mac/Linux)

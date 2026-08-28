@@ -9,7 +9,7 @@
     {
       "name": "h2t-core",
       "description": "H2T Core — session lifecycle: session-start, handoff, scaffold-project, init-project, setup, agent-profile",
-      "version": "3.2.35",
+      "version": "3.2.36",
       "author": {
         "name": "lichtpfad"
       },
@@ -41,8 +41,8 @@
     },
     {
       "name": "h2t-arch",
-      "description": "H2T Arch — architecture and diagram tools: drawio, diagram-node, node-researcher",
-      "version": "1.0.8",
+      "description": "H2T Arch — architecture and diagram tools: drawio, diagram-node",
+      "version": "1.0.9",
       "author": {
         "name": "lichtpfad"
       },

@@ -6,6 +6,12 @@ description: >
   Supports profile:name and overlay:name explicit refs plus bare-name legacy compat.
   Triggers: "agent-profile", "apply profile", "plugin profile", "set profile", "configure plugins",
   "профиль плагинов", "конфигуратор профиля".
+compatibility: "Claude Code. Operates on the h2t-skills checkout — it edits the source
+  profile catalog and refuses to write when that catalog is absent. The interpreter comes
+  from uv, so none has to be installed."
+metadata:
+  author: lichtpfad
+  version: 0.2.0
 ---
 
 # h2t-core:agent-profile

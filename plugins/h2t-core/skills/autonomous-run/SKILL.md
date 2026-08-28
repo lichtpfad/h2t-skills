@@ -1,6 +1,12 @@
 ---
 name: autonomous-run
 description: Launch or resume an autonomous, unattended plan-execution run after brainstorm is complete. Generates a durable, self-contained runbook artifact, materializes a TodoWrite mirror of the pipeline, and carries the decision + gate protocols through to handoff. Use for "работай сам", "автономно", "overnight", "выполни план сам", "autonomous run", "resume runbook".
+compatibility: "Claude Code. Requires the codex CLI — both gates call it, the per-checkpoint
+  review and the final council, and both cost money. Runbook scripts run through uv, so no
+  interpreter has to be installed."
+metadata:
+  author: lichtpfad
+  version: 0.1.0
 ---
 
 # autonomous-run
