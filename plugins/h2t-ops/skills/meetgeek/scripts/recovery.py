@@ -148,8 +148,8 @@ def title_from_filename(stem: str) -> str:
 def ffmpeg_exe() -> str:
     if imageio_ffmpeg is None:
         raise RecoveryError(
-            "imageio-ffmpeg not installed; run: "
-            "~/.h2t/venv/Scripts/python.exe -m pip install imageio-ffmpeg",
+            "imageio-ffmpeg not installed; install it into the environment "
+            "running h2t-ops: uv pip install imageio-ffmpeg",
             exit_code=2,
         )
     return imageio_ffmpeg.get_ffmpeg_exe()

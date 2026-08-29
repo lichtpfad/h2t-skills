@@ -44,15 +44,44 @@ def test_every_advertised_skill_exists():
 # venv — `plugins/h2t-dev/CHANGELOG.md` says so outright — so on a machine that is not the
 # author's, this line injects a path that does not exist into every session (#443).
 DEAD_PATHS = ("~/.h2t/venv", "$HOME/.h2t/venv", ".h2t/venv")
+PLUGINS = REPO / "plugins"
+# A probe tests for the directory and falls through when it is absent; that is what a
+# resolver does and it is correct. An instruction tells a human to use the path, and on
+# every machine but one it sends them nowhere. Only probes are listed.
+PROBES = {
+    "plugins/h2t-core/scripts/resolve-h2t-python.sh": "the resolver — probing is its job",
+    "plugins/h2t-core/scripts/update-plugin.sh": "probe with a python3 fallback",
+    "plugins/h2t-dev/scripts/update-plugin.sh": "probe with a python3 fallback",
+    "plugins/h2t-ops/scripts/update-plugin.sh": "probe with a python3 fallback",
+}
 
 
-def test_index_names_no_path_the_installer_never_creates():
-    text = INDEX.read_text(encoding="utf-8")
-    found = [p for p in DEAD_PATHS if p in text]
-    assert not found, (
-        f"{INDEX.relative_to(REPO)} injects {found} into every session. Nothing in this pack "
-        "creates that directory; it survives only on machines that predate #449. State the "
-        "resolver instead of an interpreter path."
+def test_no_shipped_file_instructs_a_path_the_installer_never_creates():
+    """Every shipped file, not just the index.
+
+    Scoping this to one file was the first version, and it was wrong within the hour: the
+    grep that verified the deploy hit `gather-on-skill`, whose failure message told the
+    reader to "recreate ~/.h2t/venv" — the same dead contract, offered as the remedy. Only
+    `scripts/resolve-h2t-python.sh` may name the path, because probing for a directory that
+    may not exist is what a resolver does.
+    """
+    offenders = {}
+    for path in sorted(PLUGINS.rglob("*")):
+        if not path.is_file() or path.name == "CHANGELOG.md":
+            continue
+        rel = path.relative_to(REPO).as_posix()
+        if rel in PROBES:
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        found = [p for p in DEAD_PATHS if p in text]
+        if found:
+            offenders[rel] = found
+    assert not offenders, (
+        f"files instructing a path the installer never creates: {offenders}. It survives only "
+        "on machines that predate #449. Name the resolver, or /h2t-core:setup, instead."
     )
 
 

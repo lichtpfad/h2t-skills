@@ -157,7 +157,7 @@ elif ! run_script "$PLUGIN_ROOT/skills/session-start/scripts/gather.py" --cwd "$
   exit 0
 fi
 if [ -z "$SCRIPT_STDOUT" ]; then
-  emit "GATHER_ERROR: h2t gather returned no output. Check Python resolution or recreate ~/.h2t/venv."
+  emit "GATHER_ERROR: h2t gather returned no output. Run /h2t-core:setup doctor, or reinstall the CLI with uv tool install."
   exit 0
 fi
 echo "$NOW" > "$LOCK_FILE"

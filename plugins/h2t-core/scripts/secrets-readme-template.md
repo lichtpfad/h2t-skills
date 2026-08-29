@@ -53,9 +53,9 @@ GRANOLA_MAX_PAGES=1000
 
 | Key | Source | Test command |
 |---|---|---|
-| `EXA_API_KEY` / `EXA_API_KEY_BACKUP` | https://dashboard.exa.ai/api-keys | `~/.h2t/venv/Scripts/python.exe plugins/h2t-ops/skills/research/scripts/exa_search.py preflight` |
+| `EXA_API_KEY` / `EXA_API_KEY_BACKUP` | https://dashboard.exa.ai/api-keys | `h2t-ops research preflight` |
 | `GEMINI_API_KEY` | https://aistudio.google.com/apikey | (no built-in preflight; run any Gemini-using skill) |
-| `MEETGEEK_API_KEY` | https://meetgeek.ai/settings/api | `python plugins/h2t-ops/skills/meetgeek/scripts/meetgeek_cli.py meetings --limit 1` |
+| `MEETGEEK_API_KEY` | https://meetgeek.ai/settings/api | `h2t-ops meetgeek auth-check --json` |
 | `GRANOLA_API_KEY` | https://notes.granola.ai/settings/api | `h2t-ops granola auth-check --json` |
 
 ## Multi-machine

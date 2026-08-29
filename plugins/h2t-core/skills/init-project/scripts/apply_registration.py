@@ -16,7 +16,8 @@ try:
 except ImportError:
     print(json.dumps({
         "status": "error",
-        "error": "ruamel.yaml required. Install: pip install ruamel.yaml into ~/.h2t/venv",
+        "error": "ruamel.yaml required. Install it for the interpreter running this "
+                 "script: uv pip install ruamel.yaml",
     }))
     sys.exit(1)
 

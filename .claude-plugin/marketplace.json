@@ -9,7 +9,7 @@
     {
       "name": "h2t-core",
       "description": "H2T Core — session lifecycle: session-start, handoff, scaffold-project, init-project, setup, agent-profile",
-      "version": "3.2.40",
+      "version": "3.2.41",
       "author": {
         "name": "lichtpfad"
       },
@@ -20,7 +20,7 @@
     {
       "name": "h2t-ops",
       "description": "H2T Ops — provider I/O connectors, daily-brief, research (Exa), and the Ecosystem Research KB skill (ingest/query/lint).",
-      "version": "1.6.14",
+      "version": "1.6.15",
       "author": {
         "name": "lichtpfad"
       },

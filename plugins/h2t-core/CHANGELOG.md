@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- fix(handlers): three messages told the reader to use `~/.h2t/venv` — the gather failure
+  offered "recreate" it as the remedy, `apply_registration` named it as where to pip-install
+  ruamel.yaml, and the secrets README template used it to build a rotation test command.
+  The guard that caught the injected index read one file; it now reads every shipped file,
+  with the four resolver probes allowlisted by name and reason (#443)
+
 - fix(session-context): the index injected into every session no longer names
   `~/.h2t/venv`. That contract was deleted in #449 and nothing in the pack ever created the
   directory, so on any machine but the author's the hook was handing each agent a path to a
