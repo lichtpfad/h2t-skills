@@ -438,16 +438,21 @@ class TelegramClientAdapter:
                 rows = []
                 last_exc: Exception | None = None
                 for candidate in candidates:
+                    # A candidate can yield rows and then fail mid-iteration, so
+                    # collect per candidate and keep only a run that completed.
+                    found: list[dict[str, Any]] = []
                     try:
                         for msg in client.iter_messages(candidate, limit=limit):
                             msg_date = _get_attr(msg, "date")
                             if cutoff is not None and isinstance(msg_date, datetime) and msg_date < cutoff:
                                 continue
-                            rows.append(self._message_row(msg))
-                        last_exc = None
-                        break
+                            found.append(self._message_row(msg))
                     except ValueError as exc:
                         last_exc = exc
+                        continue
+                    last_exc = None
+                    rows.extend(found)
+                    break
                 if last_exc is not None:
                     raise _peer_unresolved_error(entity, last_exc) from last_exc
         except (ValueError, sqlite3.OperationalError) as exc:

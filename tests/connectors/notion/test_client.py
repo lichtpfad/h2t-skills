@@ -1170,3 +1170,48 @@ def test_parse_inline_image_is_not_linkified(conv):
     spans = conv.parse_inline("![alt](https://example.com)")
     assert not any(s["text"].get("link") for s in spans)
     assert "".join(s["text"]["content"] for s in spans) == "![alt](https://example.com)"
+
+
+# --- adversarial review findings ---------------------------------------------
+
+
+def test_parse_inline_link_target_keeps_balanced_parentheses(conv):
+    url = "https://en.wikipedia.org/wiki/Foo_(bar)"
+    spans = conv.parse_inline(f"see [w]({url}) now")
+    linked = [s for s in spans if s["text"].get("link")]
+    assert linked[0]["text"]["link"] == {"url": url}
+    assert "".join(s["text"]["content"] for s in spans) == "see w now"
+
+
+def test_parse_inline_code_label_keeps_both_the_link_and_the_annotation(conv):
+    spans = conv.parse_inline("[`code`](https://x.com)")
+    assert len(spans) == 1
+    assert spans[0]["text"]["link"] == {"url": "https://x.com"}
+    assert spans[0]["annotations"] == {"code": True}
+    assert spans[0]["text"]["content"] == "code"
+
+
+def test_parse_inline_bold_label_keeps_both_the_link_and_the_annotation(conv):
+    spans = conv.parse_inline("[**bold**](https://x.com)")
+    assert spans[0]["text"]["link"] == {"url": "https://x.com"}
+    assert spans[0]["annotations"] == {"bold": True}
+
+
+def test_parse_inline_bare_url_keeps_balanced_parentheses(conv):
+    spans = conv.parse_inline("see https://example.com/a(b)c now")
+    linked = [s for s in spans if s["text"].get("link")]
+    assert linked[0]["text"]["link"] == {"url": "https://example.com/a(b)c"}
+
+
+def test_parse_inline_bare_url_stops_before_a_closing_paren_of_prose(conv):
+    spans = conv.parse_inline("(see https://example.com)")
+    linked = [s for s in spans if s["text"].get("link")]
+    assert linked[0]["text"]["link"] == {"url": "https://example.com"}
+    assert "".join(s["text"]["content"] for s in spans) == "(see https://example.com)"
+
+
+@pytest.mark.parametrize("text", [
+    "literal * star", "literal ` tick", "a [b] c", "5 * 3 = 15", "**unclosed bold",
+])
+def test_parse_inline_never_loses_characters(conv, text):
+    assert "".join(s["text"]["content"] for s in conv.parse_inline(text)) == text

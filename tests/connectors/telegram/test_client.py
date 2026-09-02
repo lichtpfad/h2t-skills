@@ -899,3 +899,25 @@ def test_download_media_unresolved_peer_is_not_a_session_error(tmp_path, monkeyp
     with pytest.raises(NotFoundError) as exc:
         tmod.TelegramClientAdapter(config_dir=tmp_path).download_media("10", 5, out_dir=str(tmp_path))
     assert "SESSION_INCOMPATIBLE" not in str(exc.value)
+
+
+def test_list_messages_does_not_emit_rows_from_a_failed_candidate(tmp_path, monkeypatch):
+    """A candidate that yields and then dies must contribute nothing, not duplicates."""
+    from h2t_ops.connectors.telegram import client as tmod
+
+    (tmp_path / "config.json").write_text(json.dumps({"api_id": 1, "api_hash": "h"}), encoding="utf-8")
+    msg = SimpleNamespace(
+        id=1, chat_id=10, date=None, sender_id=None, sender=None,
+        text="hello", entities=[], reply_to_msg_id=None,
+    )
+
+    class FakeInner:
+        def iter_messages(self, entity, limit=None):
+            if entity == -10:
+                yield msg
+                raise ValueError("Could not find the input entity for PeerUser(user_id=10)")
+            yield msg
+
+    monkeypatch.setattr(tmod.TelegramClientAdapter, "_client", lambda self: _CtxClient(FakeInner()))
+    rows = tmod.TelegramClientAdapter(config_dir=tmp_path).list_messages("10", limit=5)
+    assert [r["id"] for r in rows] == [1]

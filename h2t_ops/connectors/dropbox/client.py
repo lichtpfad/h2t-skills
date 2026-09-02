@@ -96,6 +96,7 @@ class DropboxClient:
         _load_provider_env()
         self._timeout = int(os.environ.get("DROPBOX_TIMEOUT", "60"))
         self._path_root: str | None = None
+        self._resolving_root = False
         token = os.environ.get("DROPBOX_TOKEN", "").strip()
         if not token:
             token = self._refresh_access_token()
@@ -140,26 +141,49 @@ class DropboxClient:
         headers = {"Authorization": f"Bearer {self._token}"}
         # A Business account's team folders live outside the member's home namespace
         # and are unreachable without this header.
-        root = self.path_root()
+        root = "" if getattr(self, "_resolving_root", False) else self.path_root()
         if root:
             headers["Dropbox-API-Path-Root"] = json.dumps({".tag": "root", "root": root})
         headers.update(extra or {})
         return headers
 
     def path_root(self) -> str:
+        # Assign only on success: a transient failure here used to leave "" cached,
+        # and every later call then read the wrong namespace in silence.
         if self._path_root is None:
             self._path_root = self._resolve_path_root()
         return self._path_root
 
     def _resolve_path_root(self) -> str:
-        self._path_root = ""  # break the recursion: this one call carries no root header
-        account = self.account()
+        self._resolving_root = True  # the resolving call itself carries no root header
+        try:
+            account = self.account()
+        finally:
+            self._resolving_root = False
         root_info = account.get("root_info") or {}
         root = str(root_info.get("root_namespace_id", "") or "")
         home = str(root_info.get("home_namespace_id", "") or "")
         return root if root and root != home else ""
 
-    def _rpc(self, endpoint: str, arg: Any) -> Any:
+    def _can_refresh(self) -> bool:
+        return all(
+            os.environ.get(key, "").strip()
+            for key in ("DROPBOX_REFRESH_TOKEN", "DROPBOX_APP_KEY", "DROPBOX_APP_SECRET")
+        )
+
+    def _should_refresh(self, resp: Any, retried: bool) -> bool:
+        """A 401 on a refreshable account means the ~4h access token aged out.
+
+        missing_scope is excluded: a new access token carries the same scopes, so
+        retrying would only spend a round trip to fail identically.
+        """
+        if retried or resp.status_code != 401:
+            return False
+        if "missing_scope" in (getattr(resp, "text", "") or ""):
+            return False
+        return self._can_refresh()
+
+    def _rpc(self, endpoint: str, arg: Any, _retried: bool = False) -> Any:
         import requests as _r  # lazy — module-scope import forbidden
 
         try:
@@ -171,6 +195,9 @@ class DropboxClient:
             )
         except _r.RequestException as exc:
             raise NetworkError(f"Dropbox request to {endpoint} failed: {exc}") from exc
+        if self._should_refresh(resp, _retried):
+            self._token = self._refresh_access_token()
+            return self._rpc(endpoint, arg, _retried=True)
         _raise_for_status(resp, endpoint)
         return resp.json() if resp.text else {}
 
@@ -193,7 +220,9 @@ class DropboxClient:
             entries.extend(page.get("entries", []))
         return entries[:limit] if limit is not None else entries
 
-    def download(self, path: str, dest: str, *, gunzip: bool = False) -> dict[str, Any]:
+    def download(
+        self, path: str, dest: str, *, gunzip: bool = False, _retried: bool = False
+    ) -> dict[str, Any]:
         import requests as _r  # lazy — module-scope import forbidden
 
         api_path = normalize_path(path)
@@ -212,23 +241,61 @@ class DropboxClient:
             )
         except _r.RequestException as exc:
             raise NetworkError(f"Dropbox download of {api_path} failed: {exc}") from exc
+        if self._should_refresh(resp, _retried):
+            self._token = self._refresh_access_token()
+            return self.download(path, dest, gunzip=gunzip, _retried=True)
         _raise_for_status(resp, f"download {api_path}")
+        # Stream into a sibling and rename at the end: a mid-stream failure used to
+        # leave a truncated file at the destination, on top of whatever was there.
+        part = target.with_name(target.name + ".part")
         written = 0
-        with open(target, "wb") as fh:
-            for chunk in resp.iter_content(chunk_size=1 << 20):
-                if chunk:
-                    fh.write(chunk)
-                    written += len(chunk)
-        if gunzip:
-            written = self._gunzip_in_place(target)
+        try:
+            with open(part, "wb") as fh:
+                for chunk in resp.iter_content(chunk_size=1 << 20):
+                    if chunk:
+                        fh.write(chunk)
+                        written += len(chunk)
+            if gunzip:
+                written = self._gunzip_in_place(part)
+            os.replace(part, target)
+        except _r.RequestException as exc:
+            part.unlink(missing_ok=True)
+            raise NetworkError(
+                f"Dropbox download of {api_path} failed mid-stream: {exc}"
+            ) from exc
+        except BaseException:
+            part.unlink(missing_ok=True)
+            raise
         return {"path": api_path, "saved_to": str(target), "bytes": written}
 
     @staticmethod
     def _gunzip_in_place(target: Path) -> int:
-        """.prproj and friends are gzip under a non-gz name; leave a non-gzip file alone."""
-        raw = target.read_bytes()
-        if raw[:2] != b"\x1f\x8b":
-            return len(raw)
-        plain = gzip.decompress(raw)
-        target.write_bytes(plain)
-        return len(plain)
+        """.prproj and friends are gzip under a non-gz name; leave a non-gzip file alone.
+
+        Decompressed in chunks against a ceiling, because the compression ratio is
+        the uploader's choice: a few MB of gzip expands to as much as it likes.
+        """
+        with open(target, "rb") as probe:
+            if probe.read(2) != b"\x1f\x8b":
+                return target.stat().st_size
+        cap = int(os.environ.get("DROPBOX_MAX_GUNZIP_BYTES", str(512 << 20)))
+        plain = target.with_name(target.name + ".gunzip")
+        written = 0
+        try:
+            with gzip.open(target, "rb") as src, open(plain, "wb") as dst:
+                while True:
+                    chunk = src.read(1 << 20)
+                    if not chunk:
+                        break
+                    written += len(chunk)
+                    if written > cap:
+                        raise ProviderError(
+                            f"{target.name}: gunzip exceeded the {cap} byte cap. "
+                            "Raise DROPBOX_MAX_GUNZIP_BYTES or download without --gunzip."
+                        )
+                    dst.write(chunk)
+            os.replace(plain, target)
+        except BaseException:
+            plain.unlink(missing_ok=True)
+            raise
+        return written

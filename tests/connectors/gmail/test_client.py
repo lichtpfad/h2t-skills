@@ -770,3 +770,23 @@ def test_list_messages_returns_draft_headers():
     c, _ = _client_with(_FakeService(list={"messages": [{"id": "d1"}]}, get=_draft_payload()))
     out = c.list_messages(max_results=1, query="in:drafts")
     assert (out[0]["to"], out[0]["subject"]) == ("recipient@example.com", "Synthetic subject")
+
+
+def test_duplicate_headers_keep_the_first_occurrence():
+    """A trailing duplicate must not override the header a mail client displays.
+
+    trash --confirm-subject validates against this value, so last-wins would let an
+    appended `subject:` line decide what a destructive command thinks it is deleting.
+    """
+    c, _ = _client_with(_FakeService())
+    out = c._parse_message({
+        "id": "m", "threadId": "t", "labelIds": [], "snippet": "",
+        "payload": {"headers": [
+            {"name": "Subject", "value": "the real subject"},
+            {"name": "From", "value": "real@example.com"},
+            {"name": "subject", "value": "spoofed"},
+            {"name": "from", "value": "spoofed@example.com"},
+        ]},
+    })
+    assert out["subject"] == "the real subject"
+    assert out["from"] == "real@example.com"
