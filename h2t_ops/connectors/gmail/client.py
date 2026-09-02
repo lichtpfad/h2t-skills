@@ -411,16 +411,18 @@ class GmailClient:
     # --- Helpers ---
 
     def _parse_message(self, message: dict[str, Any]) -> dict[str, Any]:
-        headers = {h["name"]: h["value"] for h in message["payload"]["headers"]}
+        # RFC 5322 field names are case-insensitive, and Gmail returns them in the
+        # case the sender wrote them: our own drafts arrive as "to" / "subject".
+        headers = {h["name"].lower(): h["value"] for h in message["payload"]["headers"]}
         return {
             "id": message["id"],
             "threadId": message["threadId"],
             "labelIds": message.get("labelIds", []),
             "snippet": message.get("snippet", ""),
-            "from": headers.get("From", ""),
-            "to": headers.get("To", ""),
-            "subject": headers.get("Subject", ""),
-            "date": headers.get("Date", ""),
+            "from": headers.get("from", ""),
+            "to": headers.get("to", ""),
+            "subject": headers.get("subject", ""),
+            "date": headers.get("date", ""),
             "body": self._get_message_body(message["payload"]),
             "attachments": self._collect_attachments(message["payload"]),
         }

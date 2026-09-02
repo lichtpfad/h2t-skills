@@ -727,3 +727,46 @@ def test_label_delete_mismatch_raises_usageerror():
     c, _ = _client_with(_Svc())
     with pytest.raises(UsageError, match="label mismatch"):
         c.delete_label("Label_1", confirm_name="Wrong Name")
+
+
+# --- draft headers arrive in the case the writer used them (#468) --------------
+
+
+def _draft_payload():
+    """Header casing observed on live compose drafts: the raw MIME keeps the
+    lowercase names send_message wrote, the server adds its own capitalized."""
+    return {
+        "id": "d1",
+        "threadId": "t1",
+        "labelIds": ["DRAFT"],
+        "snippet": "",
+        "payload": {
+            "headers": [
+                {"name": "Received", "value": "by 127.0.0.1"},
+                {"name": "to", "value": "recipient@example.com"},
+                {"name": "subject", "value": "Synthetic subject"},
+                {"name": "Date", "value": "Mon"},
+                {"name": "From", "value": "me@example.com"},
+            ],
+        },
+    }
+
+
+def test_parse_message_header_lookup_is_case_insensitive():
+    c, _ = _client_with(_FakeService())
+    out = c._parse_message(_draft_payload())
+    assert out["to"] == "recipient@example.com"
+    assert out["subject"] == "Synthetic subject"
+    assert out["from"] == "me@example.com"
+
+
+def test_get_message_returns_draft_headers():
+    c, _ = _client_with(_FakeService(get=_draft_payload()))
+    out = c.get_message("d1")
+    assert (out["to"], out["subject"]) == ("recipient@example.com", "Synthetic subject")
+
+
+def test_list_messages_returns_draft_headers():
+    c, _ = _client_with(_FakeService(list={"messages": [{"id": "d1"}]}, get=_draft_payload()))
+    out = c.list_messages(max_results=1, query="in:drafts")
+    assert (out[0]["to"], out[0]["subject"]) == ("recipient@example.com", "Synthetic subject")
