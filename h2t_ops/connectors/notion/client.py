@@ -1011,6 +1011,9 @@ class NotionClient:
             return f"### {self._rich_text_to_markdown(block['heading_3']['rich_text'])}\n\n"
         elif t == "bulleted_list_item":
             return f"- {self._rich_text_to_markdown(block['bulleted_list_item']['rich_text'])}\n"
+        elif t == "to_do":
+            td = block["to_do"]
+            return f"- [{'x' if td.get('checked') else ' '}] {self._rich_text_to_markdown(td['rich_text'])}\n"
         elif t == "numbered_list_item":
             return f"1. {self._rich_text_to_markdown(block['numbered_list_item']['rich_text'])}\n"
         elif t == "quote":
@@ -1087,8 +1090,38 @@ class NotionClient:
                 result.append(text)
         return "".join(result)
 
+    def _parse_links(self, text: str) -> list[dict[str, Any]]:
+        # Runs only on plain chunks of parse_inline's grammar, so a URL inside a
+        # code span or bold run keeps its annotation and is never linkified.
+        pattern = re.compile(
+            r"(?<!!)\[([^\]]+)\]\((https?://[^\s)]+)\)"  # [label](url), not an image
+            r"|<(https?://[^>\s]+)>"  # <url>
+            r"|(?<!\]\()(https?://[^\s<>()]+)"  # bare url, not the target of a markdown image
+        )
+        spans: list[dict[str, Any]] = []
+        pos = 0
+        for m in pattern.finditer(text):
+            if m.group(1):
+                label, url, end = m.group(1), m.group(2), m.end()
+            elif m.group(3):
+                label = url = m.group(3)
+                end = m.end()
+            else:
+                url = m.group(4).rstrip(".,;:!?")
+                label = url
+                end = m.start(4) + len(url)
+            if m.start() > pos:
+                spans.append({"type": "text", "text": {"content": text[pos:m.start()]}})
+            spans.append({"type": "text", "text": {"content": label, "link": {"url": url}}})
+            pos = end
+        if not spans:
+            return [{"type": "text", "text": {"content": text}}]
+        if pos < len(text):
+            spans.append({"type": "text", "text": {"content": text[pos:]}})
+        return spans
+
     def parse_inline(self, text: str) -> list[dict[str, Any]]:
-        spans = []
+        spans: list[dict[str, Any]] = []
         pattern = re.compile(r"\*\*(.+?)\*\*|\*(.+?)\*|`(.+?)`|([^*`]+)", re.DOTALL)
         for m in pattern.finditer(text):
             if m.group(1):
@@ -1098,7 +1131,7 @@ class NotionClient:
             elif m.group(3):
                 spans.append({"type": "text", "text": {"content": m.group(3)}, "annotations": {"code": True}})
             elif m.group(4):
-                spans.append({"type": "text", "text": {"content": m.group(4)}})
+                spans.extend(self._parse_links(m.group(4)))
         return spans or [{"type": "text", "text": {"content": text}}]
 
     def markdown_to_blocks(self, markdown: str) -> list[dict[str, Any]]:  # noqa: C901
@@ -1115,6 +1148,10 @@ class NotionClient:
                 i += 1
             elif line.startswith("### "):
                 blocks.append({"type": "heading_3", "heading_3": {"rich_text": self.parse_inline(line[4:])}})
+                i += 1
+            elif re.match(r"^[-*+] \[[ xX]\] ", line):
+                todo = re.match(r"^[-*+] \[([ xX])\] (.*)$", line)
+                blocks.append({"type": "to_do", "to_do": {"rich_text": self.parse_inline(todo.group(2)), "checked": todo.group(1) in ("x", "X")}})
                 i += 1
             elif line.startswith("- "):
                 blocks.append({"type": "bulleted_list_item", "bulleted_list_item": {"rich_text": self.parse_inline(line[2:])}})
