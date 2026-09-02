@@ -1135,7 +1135,10 @@ class NotionClient:
                     {"type": "text", "text": {"content": m.group(1)}}
                 ]
                 for span in inner:
-                    span["text"].setdefault("link", {"url": url})
+                    # The outer target always wins: a label that is itself a URL
+                    # gets auto-linked while parsing, and keeping that would drop
+                    # the target the author actually wrote.
+                    span["text"]["link"] = {"url": url}
                 return m.end(), inner
             if kind == "autolink":
                 url = m.group(1)

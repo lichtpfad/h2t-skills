@@ -45,7 +45,12 @@ For durable access set `DROPBOX_APP_KEY`, `DROPBOX_APP_SECRET` and
 `DROPBOX_REFRESH_TOKEN`; the connector exchanges them for an access token when
 `DROPBOX_TOKEN` is absent.
 
-Scopes: `files.metadata.read` and `files.content.read`.
+Scopes: `account_info.read`, `files.metadata.read`, `files.content.read`.
+
+`account_info.read` is not optional even for a pure file read: the namespace gate
+above resolves through `users/get_current_account` on the first request, so a token
+carrying only the two `files.*` scopes fails with `missing_scope` before it reaches
+a single file.
 
 When the refresh triple is configured, a 401 on an aged-out access token is
 refreshed once and the call retried. `missing_scope` is not retried: a new token

@@ -1215,3 +1215,10 @@ def test_parse_inline_bare_url_stops_before_a_closing_paren_of_prose(conv):
 ])
 def test_parse_inline_never_loses_characters(conv, text):
     assert "".join(s["text"]["content"] for s in conv.parse_inline(text)) == text
+
+
+def test_parse_inline_outer_link_target_wins_over_a_url_label(conv):
+    """[https://label](https://target) must link to the target, not the label."""
+    spans = conv.parse_inline("[https://label.example](https://target.example)")
+    assert spans[0]["text"]["link"] == {"url": "https://target.example"}
+    assert spans[0]["text"]["content"] == "https://label.example"
