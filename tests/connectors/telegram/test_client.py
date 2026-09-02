@@ -794,3 +794,108 @@ def test_search_channels_flood_wait_missing_seconds_fallback(tmp_path, monkeypat
         adapter.search_channels("flood test")
     assert "FLOOD_WAIT" in str(ei.value)
     assert ei.value.details["wait_seconds"] == 0  # fallback when .seconds absent
+
+
+# --- mentions resolves peers the way messages does (#466) ---------------------
+
+
+def _mentions_env(tmp_path):
+    (tmp_path / "config.json").write_text(json.dumps({"api_id": 1, "api_hash": "h"}), encoding="utf-8")
+    return SimpleNamespace(
+        id=1, chat_id=10, date=None, sender_id=None, sender=None,
+        text="ping @stan", entities=[], reply_to_msg_id=None,
+    )
+
+
+def test_list_mentions_resolves_numeric_chat_id_like_messages(tmp_path, monkeypatch):
+    from h2t_ops.connectors.telegram import client as tmod
+
+    hit = _mentions_env(tmp_path)
+    tried = []
+
+    class FakeInner:
+        def get_me(self):
+            return SimpleNamespace(username="stan", id=7, first_name="Stan", last_name="")
+
+        def iter_messages(self, entity, limit=None):
+            tried.append(entity)
+            if entity != -10:  # only the negated form resolves, as for groups
+                raise ValueError("Could not find the input entity for PeerUser(user_id=10)")
+            return [hit]
+
+    monkeypatch.setattr(tmod.TelegramClientAdapter, "_client", lambda self: _CtxClient(FakeInner()))
+    rows = tmod.TelegramClientAdapter(config_dir=tmp_path).list_mentions(["10"], limit=50)
+    assert [r["id"] for r in rows] == [1]
+    assert tried[0] == -10
+
+
+def test_list_mentions_unresolved_peer_is_not_a_session_error(tmp_path, monkeypatch):
+    from h2t_ops.connectors.telegram import client as tmod
+    from h2t_ops.core.errors import NotFoundError
+
+    _mentions_env(tmp_path)
+
+    class FakeInner:
+        def get_me(self):
+            return SimpleNamespace(username="stan", id=7, first_name="Stan", last_name="")
+
+        def iter_messages(self, entity, limit=None):
+            raise ValueError("Could not find the input entity for PeerChannel(channel_id=10)")
+
+    monkeypatch.setattr(tmod.TelegramClientAdapter, "_client", lambda self: _CtxClient(FakeInner()))
+    with pytest.raises(NotFoundError) as exc:
+        tmod.TelegramClientAdapter(config_dir=tmp_path).list_mentions(["10"], limit=50)
+    assert "SESSION_INCOMPATIBLE" not in str(exc.value)
+    assert "10" in str(exc.value)
+
+
+def test_list_mentions_does_not_emit_rows_from_a_failed_candidate(tmp_path, monkeypatch):
+    from h2t_ops.connectors.telegram import client as tmod
+
+    hit = _mentions_env(tmp_path)
+
+    class FakeInner:
+        def get_me(self):
+            return SimpleNamespace(username="stan", id=7, first_name="Stan", last_name="")
+
+        def iter_messages(self, entity, limit=None):
+            if entity == -10:  # yields, then dies mid-iteration
+                yield hit
+                raise ValueError("Could not find the input entity for PeerUser(user_id=10)")
+            yield hit
+
+    monkeypatch.setattr(tmod.TelegramClientAdapter, "_client", lambda self: _CtxClient(FakeInner()))
+    rows = tmod.TelegramClientAdapter(config_dir=tmp_path).list_mentions(["10"], limit=50)
+    assert [r["id"] for r in rows] == [1]
+
+
+def test_list_messages_unresolved_peer_is_not_a_session_error(tmp_path, monkeypatch):
+    from h2t_ops.connectors.telegram import client as tmod
+    from h2t_ops.core.errors import NotFoundError
+
+    (tmp_path / "config.json").write_text(json.dumps({"api_id": 1, "api_hash": "h"}), encoding="utf-8")
+
+    class FakeInner:
+        def iter_messages(self, entity, limit=None):
+            raise ValueError("Could not find the input entity for PeerChannel(channel_id=10)")
+
+    monkeypatch.setattr(tmod.TelegramClientAdapter, "_client", lambda self: _CtxClient(FakeInner()))
+    with pytest.raises(NotFoundError) as exc:
+        tmod.TelegramClientAdapter(config_dir=tmp_path).list_messages("10", limit=5)
+    assert "SESSION_INCOMPATIBLE" not in str(exc.value)
+
+
+def test_download_media_unresolved_peer_is_not_a_session_error(tmp_path, monkeypatch):
+    from h2t_ops.connectors.telegram import client as tmod
+    from h2t_ops.core.errors import NotFoundError
+
+    (tmp_path / "config.json").write_text(json.dumps({"api_id": 1, "api_hash": "h"}), encoding="utf-8")
+
+    class FakeInner:
+        def get_messages(self, entity, ids=None):
+            raise ValueError("Could not find the input entity for PeerChannel(channel_id=10)")
+
+    monkeypatch.setattr(tmod.TelegramClientAdapter, "_client", lambda self: _CtxClient(FakeInner()))
+    with pytest.raises(NotFoundError) as exc:
+        tmod.TelegramClientAdapter(config_dir=tmp_path).download_media("10", 5, out_dir=str(tmp_path))
+    assert "SESSION_INCOMPATIBLE" not in str(exc.value)

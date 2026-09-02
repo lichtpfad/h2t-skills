@@ -54,6 +54,9 @@ In Claude Code, check readiness through:
 ## Common Failures
 
 - `SESSION_INCOMPATIBLE`: move the old Telethon session aside and re-authenticate.
+- `PEER_UNRESOLVED`: the peer, not the session. `ENTITY` and `--chat-id` resolve a
+  chat title or `@username` directly; a numeric `id` from `dialogs` carries no
+  access hash, so it works only once `bootstrap --force` has cached that peer.
 - Two-factor password required: run auth complete with the password after explicit user consent.
 - Workflow request such as digest or task extraction: keep provider reads here, then route analytics to portable workflow scripts or POS/coordinator.
 
