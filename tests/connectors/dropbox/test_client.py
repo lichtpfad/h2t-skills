@@ -344,3 +344,16 @@ def test_missing_scope_is_not_retried_as_a_stale_token(client_obj, monkeypatch):
     with pytest.raises(AuthError) as exc:
         client_obj.list_folder("/x")
     assert "generate a NEW token" in (exc.value.hint or "")
+
+
+def test_missing_scope_hint_names_every_scope_the_connector_calls(client_obj, monkeypatch):
+    """path_root() hits users/get_current_account on the first request, and that
+    route needs account_info.read — a hint listing only files.* sends the user
+    back for an identically insufficient token."""
+    fake, _ = _fake_requests(lambda *a, **k: _Resp(401, text='{"error_summary": "missing_scope/.."}'))
+    monkeypatch.setitem(sys.modules, "requests", fake)
+    with pytest.raises(AuthError) as exc:
+        client_obj._rpc("files/list_folder", {"path": ""})
+    hint = exc.value.hint or ""
+    for scope in ("account_info.read", "files.metadata.read", "files.content.read"):
+        assert scope in hint, f"hint does not name {scope}"

@@ -67,9 +67,11 @@ def _raise_for_status(resp: Any, context: str) -> None:
             raise AuthError(
                 f"DROPBOX_SCOPE_MISSING: the token lacks a required scope ({context})",
                 hint=(
-                    "Enable files.metadata.read and files.content.read on the app, then "
-                    "generate a NEW token — a token issued before the scope was added "
-                    "keeps the scopes it was born with."
+                    "Enable account_info.read, files.metadata.read and files.content.read "
+                    "on the app, then generate a NEW token — a token issued before a scope "
+                    "was added keeps the scopes it was born with. account_info.read is not "
+                    "optional: every command resolves the team namespace through "
+                    "users/get_current_account before it touches a file."
                 ),
             )
         raise AuthError(
