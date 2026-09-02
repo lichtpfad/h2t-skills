@@ -47,6 +47,19 @@ For durable access set `DROPBOX_APP_KEY`, `DROPBOX_APP_SECRET` and
 
 Scopes: `files.metadata.read` and `files.content.read`.
 
+When the refresh triple is configured, a 401 on an aged-out access token is
+refreshed once and the call retried. `missing_scope` is not retried: a new token
+carries the same scopes.
+
+## Download safety
+
+`download` streams to a `.part` sibling and renames on success, so a dropped
+connection leaves the destination untouched rather than truncated.
+
+`--gunzip` decompresses in chunks against a ceiling — 512 MiB by default,
+`DROPBOX_MAX_GUNZIP_BYTES` to change it. The compression ratio is the uploader's
+choice, so a few MB of gzip can expand to as much as it likes.
+
 ## Common Failures
 
 - `DROPBOX_SCOPE_MISSING`: a token issued **before** a scope was enabled keeps the

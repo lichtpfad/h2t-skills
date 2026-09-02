@@ -248,3 +248,99 @@ def test_download_leaves_a_non_gzip_file_alone_under_gunzip(client_obj, monkeypa
 def test_download_rejects_the_root_path(client_obj):
     with pytest.raises(UsageError):
         client_obj.download("/", "/tmp/whatever")
+
+
+# --- adversarial review findings ---------------------------------------------
+
+
+def test_path_root_is_retried_after_a_transient_failure(client_obj):
+    """A failed account() must not leave the client believing it has no namespace."""
+    client_obj._path_root = None
+    calls = {"n": 0}
+
+    def rpc(endpoint, arg):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise NetworkError("transient")
+        return {"root_info": {"root_namespace_id": "9001", "home_namespace_id": "42"}}
+
+    client_obj._rpc = rpc
+    with pytest.raises(NetworkError):
+        client_obj.path_root()
+    assert client_obj.path_root() == "9001"
+
+
+def test_download_leaves_the_previous_file_intact_when_the_stream_dies(
+    client_obj, monkeypatch, tmp_path
+):
+    target = tmp_path / "clip.wav"
+    target.write_bytes(b"the good original")
+
+    class _Dying(_Resp):
+        def iter_content(self, chunk_size=None):
+            yield b"partial"
+            raise _boom("connection reset mid-stream")
+
+    fake, _boom = _fake_requests(lambda *a, **k: _Dying(200))
+    monkeypatch.setitem(sys.modules, "requests", fake)
+    with pytest.raises(NetworkError):
+        client_obj.download("/x/clip.wav", str(target))
+    assert target.read_bytes() == b"the good original"
+    assert list(tmp_path.iterdir()) == [target]
+
+
+def test_download_writes_nothing_when_the_stream_dies_on_a_new_path(
+    client_obj, monkeypatch, tmp_path
+):
+    class _Dying(_Resp):
+        def iter_content(self, chunk_size=None):
+            yield b"partial"
+            raise _boom("connection reset mid-stream")
+
+    fake, _boom = _fake_requests(lambda *a, **k: _Dying(200))
+    monkeypatch.setitem(sys.modules, "requests", fake)
+    with pytest.raises(NetworkError):
+        client_obj.download("/x/clip.wav", str(tmp_path / "clip.wav"))
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_gunzip_refuses_to_expand_past_the_cap(client_obj, monkeypatch, tmp_path):
+    bomb = gzip.compress(b"\0" * (4 << 20))
+    monkeypatch.setenv("DROPBOX_MAX_GUNZIP_BYTES", str(1 << 20))
+    fake, _ = _fake_requests(lambda *a, **k: _Resp(200, chunks=[bomb]))
+    monkeypatch.setitem(sys.modules, "requests", fake)
+    with pytest.raises(ProviderError) as exc:
+        client_obj.download("/x/seq.prproj", str(tmp_path / "seq.prproj"), gunzip=True)
+    assert "cap" in str(exc.value).lower() or "limit" in str(exc.value).lower()
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_expired_token_is_refreshed_once_and_the_call_retried(client_obj, monkeypatch):
+    monkeypatch.setenv("DROPBOX_REFRESH_TOKEN", "r")
+    monkeypatch.setenv("DROPBOX_APP_KEY", "k")
+    monkeypatch.setenv("DROPBOX_APP_SECRET", "s")
+    calls = {"n": 0}
+
+    def post(url, **kw):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return _Resp(401, text='{"error_summary": "expired_access_token/"}')
+        if "oauth2/token" in url:
+            return _Resp(200, payload={"access_token": "fresh"})
+        return _Resp(200, payload={"entries": [], "has_more": False})
+
+    fake, _ = _fake_requests(post)
+    monkeypatch.setitem(sys.modules, "requests", fake)
+    assert client_obj.list_folder("/x") == []
+    assert client_obj._token == "fresh"
+
+
+def test_missing_scope_is_not_retried_as_a_stale_token(client_obj, monkeypatch):
+    monkeypatch.setenv("DROPBOX_REFRESH_TOKEN", "r")
+    monkeypatch.setenv("DROPBOX_APP_KEY", "k")
+    monkeypatch.setenv("DROPBOX_APP_SECRET", "s")
+    fake, _ = _fake_requests(lambda *a, **k: _Resp(401, text='{"error_summary": "missing_scope/.."}'))
+    monkeypatch.setitem(sys.modules, "requests", fake)
+    with pytest.raises(AuthError) as exc:
+        client_obj.list_folder("/x")
+    assert "generate a NEW token" in (exc.value.hint or "")
