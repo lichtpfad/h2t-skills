@@ -125,7 +125,12 @@ test_custom_probe_all_fail_returns_nonzero() {
     unset H2T_PYTHON
 
     source "$RESOLVER"
-    if resolve_h2t_python "import lib.cli.main"; then
+    # A module that cannot exist, not `import lib.cli.main`. PATH keeps /usr/bin:/bin
+    # because the fakes need a shell, so whatever real interpreter the host puts there
+    # stays reachable — and `lib.cli.main` is importable from the repository root, which
+    # is where the suite runs. On ubuntu `python` is one of those, so the probe this case
+    # calls unsatisfiable was satisfied and the resolver correctly returned zero (#471).
+    if resolve_h2t_python "import h2t_probe_that_cannot_exist_471"; then
       echo "FAIL: custom probe with no satisfying python should return non-zero"
       exit 1
     fi
@@ -139,6 +144,12 @@ test_uv_used_only_when_nothing_local_satisfies_the_probe() {
   local bin_dir="$TMPDIR_TEST/bin6"
 
   make_fake_python "$bin_dir/python3" \
+    '[[ "${1:-}" == "-c" && "${2:-}" == "import sys" ]] && exit 0; exit 1'
+  # `python` as well, the way the two cases below already do it. Shadowing only python3
+  # left the host's `python` reachable through /usr/bin:/bin, and on ubuntu that one has
+  # PyYAML — so a local candidate satisfied `import yaml`, uv was never reached, and the
+  # case measured the runner's packages instead of the resolver (#471).
+  make_fake_python "$bin_dir/python" \
     '[[ "${1:-}" == "-c" && "${2:-}" == "import sys" ]] && exit 0; exit 1'
   make_fake_python "$bin_dir/uv" 'exit 0'
 

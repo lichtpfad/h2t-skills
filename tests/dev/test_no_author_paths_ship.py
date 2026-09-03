@@ -12,7 +12,7 @@ otherwise the list outlives the problem and the next reader trusts it.
 """
 
 import re
-from pathlib import Path
+from pathlib import Path, PurePath, PureWindowsPath
 
 ROOT = Path(__file__).resolve().parents[2]
 # Everything that ships. `plugins/` alone was the first version of this list, and
@@ -71,6 +71,17 @@ EXPECTED = {
 }
 
 
+def _rel_key(path: PurePath, root: PurePath) -> str:
+    """The key `EXPECTED` is looked up by, and it must be spelled the same on every runner.
+
+    `str()` on a `WindowsPath` yields backslashes while `EXPECTED` is written with forward
+    slashes, so on the Windows leg every allow-listed file missed the lookup at once and
+    both assertions below fired from opposite directions — one naming the five as
+    offenders, the other naming the same five as already clean (#471).
+    """
+    return path.relative_to(root).as_posix()
+
+
 def _offenders(roots, pattern) -> dict[str, list[str]]:
     found: dict[str, list[str]] = {}
     for root in roots:
@@ -97,7 +108,7 @@ def _offenders(roots, pattern) -> dict[str, list[str]]:
                 if not line.lstrip().startswith("echo ") and pattern.search(line)
             ]
             if hits:
-                found[str(path.relative_to(ROOT))] = hits
+                found[_rel_key(path, ROOT)] = hits
     return found
 
 
@@ -124,3 +135,13 @@ def test_expected_list_is_not_stale():
         _offenders(CODE_ROOTS + PROSE_ROOTS, HOME_PATH))
     clean = set(EXPECTED) - seen
     assert not clean, f"EXPECTED names files that are already clean: {sorted(clean)}"
+
+
+def test_offender_keys_are_posix_on_any_platform():
+    """A Windows runner must produce the same key a POSIX runner does.
+
+    `PureWindowsPath` models that runner from here: `str()` on it yields backslashes,
+    which is the whole of #471's first defect.
+    """
+    win = PureWindowsPath(r"C:\\repo\\plugins\\h2t-core\\skills\\x\\scripts\\y.py")
+    assert _rel_key(win, PureWindowsPath(r"C:\\repo")) == "plugins/h2t-core/skills/x/scripts/y.py"
