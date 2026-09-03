@@ -78,10 +78,13 @@ def test_research_expands_tilde_in_override(tmp_path, monkeypatch):
     monkeypatch.delenv(KEY, raising=False)
     secrets = tmp_path / "tilde-secrets.env"
     secrets.write_text(f"{KEY}=tilde-value\n", encoding="utf-8")
-    # setenv("HOME"), not setattr(Path, "home"): Path.expanduser() resolves ~ through
-    # os.environ["HOME"], so patching the classmethod leaves the tilde pointing at the
-    # real home. Same shape as the resolver bug this test guards.
+    # setenv, not setattr(Path, "home"): Path.expanduser() resolves ~ through the
+    # environment, so patching the classmethod leaves the tilde pointing at the real home.
+    # Both names, because the environment variable differs by platform: ntpath.expanduser
+    # reads USERPROFILE and never HOME, so the HOME-only patch was inert on the Windows leg
+    # and the tilde resolved to the real profile, where no secrets file sits (#471).
     monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
     monkeypatch.setenv("H2T_SECRETS_FILE", "~/tilde-secrets.env")
 
     assert client.resolve_secret(KEY) == "tilde-value"

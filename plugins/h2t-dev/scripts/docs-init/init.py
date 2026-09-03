@@ -5,7 +5,11 @@ import argparse
 import sys
 from pathlib import Path
 
-_PLUGIN_ROOT = Path(__file__).resolve().parents[3]
+# parents[2], not [3]: #458 moved this script from skills/docs-init/scripts/ up to
+# scripts/docs-init/, one level shallower, and the bootstrap copied from a skill script
+# did not move with it. `plugins/` has no lib/, so nothing was ever inserted and the
+# import below died on every machine.
+_PLUGIN_ROOT = Path(__file__).resolve().parents[2]
 for _lib in [_PLUGIN_ROOT / "lib", _PLUGIN_ROOT.parent.parent / "lib"]:
     if _lib.exists():
         sys.path.insert(0, str(_lib))

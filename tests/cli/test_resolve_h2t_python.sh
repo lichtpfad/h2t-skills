@@ -125,7 +125,12 @@ test_custom_probe_all_fail_returns_nonzero() {
     unset H2T_PYTHON
 
     source "$RESOLVER"
-    if resolve_h2t_python "import lib.cli.main"; then
+    # A module that cannot exist, not `import lib.cli.main`. PATH keeps /usr/bin:/bin
+    # because the fakes need a shell, so whatever real interpreter the host puts there
+    # stays reachable — and `lib.cli.main` is importable from the repository root, which
+    # is where the suite runs. On ubuntu `python` is one of those, so the probe this case
+    # calls unsatisfiable was satisfied and the resolver correctly returned zero (#471).
+    if resolve_h2t_python "import h2t_probe_that_cannot_exist_471"; then
       echo "FAIL: custom probe with no satisfying python should return non-zero"
       exit 1
     fi
