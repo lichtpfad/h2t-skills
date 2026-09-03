@@ -145,6 +145,12 @@ test_uv_used_only_when_nothing_local_satisfies_the_probe() {
 
   make_fake_python "$bin_dir/python3" \
     '[[ "${1:-}" == "-c" && "${2:-}" == "import sys" ]] && exit 0; exit 1'
+  # `python` as well, the way the two cases below already do it. Shadowing only python3
+  # left the host's `python` reachable through /usr/bin:/bin, and on ubuntu that one has
+  # PyYAML — so a local candidate satisfied `import yaml`, uv was never reached, and the
+  # case measured the runner's packages instead of the resolver (#471).
+  make_fake_python "$bin_dir/python" \
+    '[[ "${1:-}" == "-c" && "${2:-}" == "import sys" ]] && exit 0; exit 1'
   make_fake_python "$bin_dir/uv" 'exit 0'
 
   (
