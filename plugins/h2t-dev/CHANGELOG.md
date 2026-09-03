@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- fix(docs-init): the sys.path bootstrap resolved to `plugins/`, which has no `lib/`, so
+  `from docs.common import ...` died before the script did anything. #458 moved this file
+  from `skills/docs-init/scripts/` up to `scripts/docs-init/` — one level shallower — and
+  left the `parents[3]` it had copied from a skill script. The same commit stopped
+  `run_docs_init` failing quietly, so `h2t-core:scaffold-project` has been erroring on its
+  first `create` on every platform since (#471)
+
 - feat(docs-lint): a plan or spec must name the work it belongs to. `issue` joins
   FRONTMATTER_RULES for plans and specs; `docs-lint new` requires one of `--issue N`,
   `--new-issue "<title>"` (creates it and writes `Plan: <path>` back into the body) or
