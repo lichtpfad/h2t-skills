@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- fix(handoff): the writer's response counted the bounded index, not the record. Eleven
+  artifacts in produced `"artifacts": 10` with `"status": "ok"` — and no field told a
+  capped index apart from a caller that simply passed ten. Nothing was ever lost: the
+  markdown and the activity spool carry every artifact, and `latest.json` already flagged
+  itself `truncated`. `artifacts` now counts the distinct artifacts recorded and a new
+  `index_truncated` says whether `latest.json` holds all of them; the degraded path
+  returns the same shape (#438)
+
 - fix(handlers): three messages told the reader to use `~/.h2t/venv` — the gather failure
   offered "recreate" it as the remedy, `apply_registration` named it as where to pip-install
   ruamel.yaml, and the secrets README template used it to build a rotation test command.

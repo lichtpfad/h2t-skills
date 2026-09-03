@@ -109,3 +109,57 @@ def test_write_handoff_returns_degraded_when_markdown_write_fails(tmp_path, monk
     assert result["markdown"] == ""
     assert Path(result["latest"]).is_file()
     assert latest["markdown_path"] == ""
+
+
+def test_response_counts_what_was_recorded_not_the_capped_index(tmp_path, monkeypatch):
+    """`artifacts` in the response must describe the durable record, not latest.json.
+
+    Reproduced in a real handoff on 2026-09-03: eleven artifacts in, `"artifacts": 10`
+    and `"status": "ok"` out. Nothing was lost — the markdown carries all eleven and the
+    index flags itself `truncated` — but the number the caller reads counts the bounded
+    index while its name promises the handoff's artifacts, and no field in the response
+    tells the two apart (#438). `_degraded` already reports `len(parsed_artifacts)`, so
+    the two exit paths disagreed about what the field means.
+    """
+    writer = _load_writer()
+    monkeypatch.setenv("H2T_SESSION_ROOT", str(tmp_path / "sessions"))
+    monkeypatch.setenv("H2T_MACHINE_NAME", "test-machine")
+    monkeypatch.setenv("H2T_ACTIVITY_SPOOL", str(tmp_path / "activity" / "spool.jsonl"))
+
+    given = [f"commit:{i:02d}" for i in range(writer.MAX_ARTIFACTS + 1)]
+    result = writer.write_handoff(
+        session_id="dev-repo-count-2026-09-03",
+        domain="dev",
+        project="repo",
+        what_done="- one line",
+        what_remains="- [ ] one item",
+        artifacts=given,
+    )
+
+    assert result["artifacts"] == len(given)
+    assert result["index_truncated"] is True
+
+    # the last one is the one that fell out of the index, and it must still be recorded
+    latest = json.loads(Path(result["latest"]).read_text(encoding="utf-8"))
+    assert len(latest["artifacts"]) == writer.MAX_ARTIFACTS
+    assert Path(result["markdown"]).read_text(encoding="utf-8").count("commit: ") == len(given)
+
+
+def test_response_says_not_truncated_when_everything_fits(tmp_path, monkeypatch):
+    """The flag has to distinguish, or it carries no information."""
+    writer = _load_writer()
+    monkeypatch.setenv("H2T_SESSION_ROOT", str(tmp_path / "sessions"))
+    monkeypatch.setenv("H2T_MACHINE_NAME", "test-machine")
+    monkeypatch.setenv("H2T_ACTIVITY_SPOOL", str(tmp_path / "activity" / "spool.jsonl"))
+
+    result = writer.write_handoff(
+        session_id="dev-repo-fits-2026-09-03",
+        domain="dev",
+        project="repo",
+        what_done="- one line",
+        what_remains="- [ ] one item",
+        artifacts=["commit:abc1234", "pr:470"],
+    )
+
+    assert result["artifacts"] == 2
+    assert result["index_truncated"] is False
