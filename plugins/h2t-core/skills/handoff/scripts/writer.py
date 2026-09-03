@@ -171,7 +171,7 @@ def _write_json_atomic(path: Path, data: dict) -> None:
     tmp.replace(path)
 
 
-def _degraded(session_id: str, spool_path, parsed_artifacts: list, exc: Exception) -> dict:
+def _degraded(session_id: str, spool_path, distinct_artifacts: list, exc: Exception) -> dict:
     """The record is written; the configured mirror is not usable.
 
     Every mirror failure returns through here so the caller sees one shape, and so no
@@ -183,7 +183,10 @@ def _degraded(session_id: str, spool_path, parsed_artifacts: list, exc: Exceptio
         "spool": spool_path,
         "markdown": "",
         "latest": "",
-        "artifacts": len(parsed_artifacts),
+        "artifacts": len(distinct_artifacts),
+        # No index was written, so nothing was dropped from one. Present anyway: this
+        # function exists so every failure returns the same shape as the success path.
+        "index_truncated": False,
         "mirror_write_failed": True,
         "mirror_error": f"{type(exc).__name__}: {exc}",
     }
@@ -212,6 +215,10 @@ def write_handoff(
         else:
             parsed_artifacts.append({"type": "artifact", "ref": a})
 
+    # Deduped once, here: a repeated ref is not a second artifact, and the response,
+    # the index and every _degraded exit must agree on that one number.
+    distinct_artifacts = _dedupe_artifacts(parsed_artifacts)
+
     spool_path = log_session_end(
         session_id=session_id,
         domain=domain,
@@ -223,7 +230,7 @@ def write_handoff(
     try:
         md_dir.mkdir(parents=True, exist_ok=True)
     except OSError as exc:
-        return _degraded(session_id, spool_path, parsed_artifacts, exc)
+        return _degraded(session_id, spool_path, distinct_artifacts, exc)
     md_path = md_dir / f"{session_id}.md"
 
     now = datetime.now(UTC)
@@ -265,7 +272,7 @@ def write_handoff(
         # latest.json is part of the same mirror. It used to sit outside every guard, so a
         # directory named latest.json.tmp raised IsADirectoryError out of main() — exit 1
         # and a traceback, with the spool already on disk. Same invariant, same answer.
-        return _degraded(session_id, spool_path, parsed_artifacts, exc)
+        return _degraded(session_id, spool_path, distinct_artifacts, exc)
 
     try:
         md_path.write_text(md_content, encoding="utf-8")
@@ -293,7 +300,13 @@ def write_handoff(
         "spool": spool_path,
         "markdown": str(md_path) if persisted_md_path else "",
         "latest": str(latest_path),
-        "artifacts": len(latest["artifacts"]),
+        # The distinct artifacts recorded, not the count that fit in the index. These are
+        # two numbers and the response printed the second under the first one's name:
+        # eleven in, `"artifacts": 10` and `"status": "ok"` out, with nothing saying
+        # which of the two had happened (#438). The markdown and the spool carry every
+        # one; latest.json is the bounded view, and index_truncated is where that is said.
+        "artifacts": len(distinct_artifacts),
+        "index_truncated": latest["truncated"],
         "mirror_write_failed": markdown_failed,
     }
 
