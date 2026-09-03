@@ -1072,3 +1072,153 @@ def test_replace_content_fails_fast_on_delete_error(conv, tmp_path):
         conv.replace_page_content_safe("page1", str(md_file), confirm_title="Page Title")
     # CRITICAL: append must NOT have been called because deletion failed
     assert not conv.client.blocks.children.append.called
+
+
+# --- markdown -> blocks: to_do (#465) and links (#467) -------------------------
+
+
+def test_markdown_to_blocks_todo_unchecked(conv):
+    blocks = conv.markdown_to_blocks("- [ ] first task")
+    assert blocks[0]["type"] == "to_do"
+    assert blocks[0]["to_do"]["checked"] is False
+    assert blocks[0]["to_do"]["rich_text"][0]["text"]["content"] == "first task"
+
+
+def test_markdown_to_blocks_todo_checked(conv):
+    blocks = conv.markdown_to_blocks("- [x] second task")
+    assert blocks[0]["type"] == "to_do"
+    assert blocks[0]["to_do"]["checked"] is True
+    assert blocks[0]["to_do"]["rich_text"][0]["text"]["content"] == "second task"
+
+
+@pytest.mark.parametrize("marker", ["-", "*", "+"])
+def test_markdown_to_blocks_todo_accepts_all_list_markers(conv, marker):
+    blocks = conv.markdown_to_blocks(f"{marker} [X] task")
+    assert blocks[0]["type"] == "to_do"
+    assert blocks[0]["to_do"]["checked"] is True
+
+
+def test_markdown_to_blocks_plain_bullet_stays_bulleted(conv):
+    blocks = conv.markdown_to_blocks("- [not a checkbox] text")
+    assert blocks[0]["type"] == "bulleted_list_item"
+
+
+def test_block_to_markdown_todo(conv):
+    block = {
+        "type": "to_do",
+        "to_do": {"rich_text": [{"type": "text", "text": {"content": "task"}}], "checked": True},
+    }
+    assert conv._block_to_markdown(block) == "- [x] task\n"
+
+
+def test_todo_roundtrip(conv):
+    md = "- [ ] open\n- [x] done"
+    assert conv.blocks_to_markdown(conv.markdown_to_blocks(md)).strip() == md.strip()
+
+
+def test_parse_inline_markdown_link(conv):
+    spans = conv.parse_inline("see [the docs](https://example.com) now")
+    linked = [s for s in spans if s["text"].get("link")]
+    assert len(linked) == 1
+    assert linked[0]["text"]["content"] == "the docs"
+    assert linked[0]["text"]["link"] == {"url": "https://example.com"}
+    assert "".join(s["text"]["content"] for s in spans) == "see the docs now"
+
+
+def test_parse_inline_angle_bracket_url(conv):
+    spans = conv.parse_inline("see <https://example.com> now")
+    linked = [s for s in spans if s["text"].get("link")]
+    assert len(linked) == 1
+    assert linked[0]["text"]["content"] == "https://example.com"
+    assert linked[0]["text"]["link"] == {"url": "https://example.com"}
+
+
+def test_parse_inline_bare_url(conv):
+    spans = conv.parse_inline("see https://example.com now")
+    linked = [s for s in spans if s["text"].get("link")]
+    assert len(linked) == 1
+    assert linked[0]["text"]["link"] == {"url": "https://example.com"}
+
+
+def test_parse_inline_bare_url_drops_trailing_punctuation(conv):
+    spans = conv.parse_inline("see https://example.com.")
+    linked = [s for s in spans if s["text"].get("link")]
+    assert linked[0]["text"]["link"] == {"url": "https://example.com"}
+    assert "".join(s["text"]["content"] for s in spans) == "see https://example.com."
+
+
+def test_parse_inline_link_roundtrip(conv):
+    md = "see [the docs](https://example.com) now"
+    assert conv._rich_text_to_markdown(conv.parse_inline(md)) == md
+
+
+def test_parse_inline_url_in_code_span_keeps_annotation(conv):
+    spans = conv.parse_inline("`https://example.com`")
+    assert spans == [
+        {"type": "text", "text": {"content": "https://example.com"}, "annotations": {"code": True}}
+    ]
+
+
+def test_parse_inline_url_in_bold_span_keeps_annotation(conv):
+    spans = conv.parse_inline("**https://example.com**")
+    assert spans == [
+        {"type": "text", "text": {"content": "https://example.com"}, "annotations": {"bold": True}}
+    ]
+
+
+def test_parse_inline_image_is_not_linkified(conv):
+    spans = conv.parse_inline("![alt](https://example.com)")
+    assert not any(s["text"].get("link") for s in spans)
+    assert "".join(s["text"]["content"] for s in spans) == "![alt](https://example.com)"
+
+
+# --- adversarial review findings ---------------------------------------------
+
+
+def test_parse_inline_link_target_keeps_balanced_parentheses(conv):
+    url = "https://en.wikipedia.org/wiki/Foo_(bar)"
+    spans = conv.parse_inline(f"see [w]({url}) now")
+    linked = [s for s in spans if s["text"].get("link")]
+    assert linked[0]["text"]["link"] == {"url": url}
+    assert "".join(s["text"]["content"] for s in spans) == "see w now"
+
+
+def test_parse_inline_code_label_keeps_both_the_link_and_the_annotation(conv):
+    spans = conv.parse_inline("[`code`](https://x.com)")
+    assert len(spans) == 1
+    assert spans[0]["text"]["link"] == {"url": "https://x.com"}
+    assert spans[0]["annotations"] == {"code": True}
+    assert spans[0]["text"]["content"] == "code"
+
+
+def test_parse_inline_bold_label_keeps_both_the_link_and_the_annotation(conv):
+    spans = conv.parse_inline("[**bold**](https://x.com)")
+    assert spans[0]["text"]["link"] == {"url": "https://x.com"}
+    assert spans[0]["annotations"] == {"bold": True}
+
+
+def test_parse_inline_bare_url_keeps_balanced_parentheses(conv):
+    spans = conv.parse_inline("see https://example.com/a(b)c now")
+    linked = [s for s in spans if s["text"].get("link")]
+    assert linked[0]["text"]["link"] == {"url": "https://example.com/a(b)c"}
+
+
+def test_parse_inline_bare_url_stops_before_a_closing_paren_of_prose(conv):
+    spans = conv.parse_inline("(see https://example.com)")
+    linked = [s for s in spans if s["text"].get("link")]
+    assert linked[0]["text"]["link"] == {"url": "https://example.com"}
+    assert "".join(s["text"]["content"] for s in spans) == "(see https://example.com)"
+
+
+@pytest.mark.parametrize("text", [
+    "literal * star", "literal ` tick", "a [b] c", "5 * 3 = 15", "**unclosed bold",
+])
+def test_parse_inline_never_loses_characters(conv, text):
+    assert "".join(s["text"]["content"] for s in conv.parse_inline(text)) == text
+
+
+def test_parse_inline_outer_link_target_wins_over_a_url_label(conv):
+    """[https://label](https://target) must link to the target, not the label."""
+    spans = conv.parse_inline("[https://label.example](https://target.example)")
+    assert spans[0]["text"]["link"] == {"url": "https://target.example"}
+    assert spans[0]["text"]["content"] == "https://label.example"

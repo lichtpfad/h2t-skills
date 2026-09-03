@@ -12,7 +12,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from h2t_ops.core.errors import AuthError, ConfigError, ProviderError
+from h2t_ops.core.errors import AuthError, ConfigError, NotFoundError, ProviderError
 
 DEFAULT_CONFIG_DIR = Path.home() / ".config" / "telegram"
 
@@ -24,6 +24,17 @@ def _session_incompatible_error(exc: BaseException) -> AuthError:
         hint=(
             "Move ~/.config/telegram/session aside, then run "
             "h2t-ops telegram auth request-code --phone +..."
+        ),
+    )
+
+
+def _peer_unresolved_error(entity: Any, exc: BaseException) -> NotFoundError:
+    return NotFoundError(
+        f"PEER_UNRESOLVED: could not resolve telegram peer {entity!r}: {exc}",
+        hint=(
+            "Pass the chat title or @username. A numeric id from `dialogs` only "
+            "resolves once the peer is cached in the session — run "
+            "h2t-ops telegram bootstrap --force first."
         ),
     )
 
@@ -397,6 +408,18 @@ class TelegramClientAdapter:
             rows = [row for row in rows if row["kind"] == kind]
         return rows
 
+    def _entity_candidates(self, entity: Any) -> list[Any]:
+        """Peer forms to try, most specific first.
+
+        Prefer the InputPeer cached in the SQLite session: get_entity() on an
+        uncached numeric peer triggers GetContactsRequest and a FloodWait.
+        """
+        if isinstance(entity, str) and entity.lstrip("-").isdigit():
+            input_peer = _input_peer_from_sqlite(self.session_sqlite_file, int(entity))
+            if input_peer is not None:
+                return [input_peer]
+        return _peer_candidates(entity) if isinstance(entity, str) else [entity]
+
     def list_messages(
         self,
         entity: str,
@@ -409,31 +432,29 @@ class TelegramClientAdapter:
             from datetime import timedelta
 
             cutoff = datetime.now(UTC) - timedelta(days=days)
-        # Prefer direct InputPeer from SQLite session to avoid get_entity() API calls
-        # that trigger GetContactsRequest → FloodWait on uncached entities.
-        if isinstance(entity, str) and entity.lstrip("-").isdigit():
-            input_peer = _input_peer_from_sqlite(self.session_sqlite_file, int(entity))
-        else:
-            input_peer = None
-
-        candidates: list[Any] = [input_peer] if input_peer is not None else _peer_candidates(entity) if isinstance(entity, str) else [entity]
+        candidates: list[Any] = self._entity_candidates(entity)
         try:
             with self._connected_client() as client:
                 rows = []
                 last_exc: Exception | None = None
                 for candidate in candidates:
+                    # A candidate can yield rows and then fail mid-iteration, so
+                    # collect per candidate and keep only a run that completed.
+                    found: list[dict[str, Any]] = []
                     try:
                         for msg in client.iter_messages(candidate, limit=limit):
                             msg_date = _get_attr(msg, "date")
                             if cutoff is not None and isinstance(msg_date, datetime) and msg_date < cutoff:
                                 continue
-                            rows.append(self._message_row(msg))
-                        last_exc = None
-                        break
+                            found.append(self._message_row(msg))
                     except ValueError as exc:
                         last_exc = exc
+                        continue
+                    last_exc = None
+                    rows.extend(found)
+                    break
                 if last_exc is not None:
-                    raise last_exc
+                    raise _peer_unresolved_error(entity, last_exc) from last_exc
         except (ValueError, sqlite3.OperationalError) as exc:
             raise _session_incompatible_error(exc) from exc
         return rows
@@ -465,13 +486,27 @@ class TelegramClientAdapter:
                 needle = f"@{username}" if username else ""
                 rows: list[dict[str, Any]] = []
                 for chat_id in chat_ids:
-                    for msg in client.iter_messages(chat_id, limit=limit):
-                        msg_date = _get_attr(msg, "date")
-                        if cutoff is not None and isinstance(msg_date, datetime) and msg_date < cutoff:
+                    last_exc: Exception | None = None
+                    for candidate in self._entity_candidates(chat_id):
+                        # A candidate can yield rows and then fail mid-iteration, so
+                        # collect per candidate and keep only a run that completed.
+                        found: list[dict[str, Any]] = []
+                        try:
+                            for msg in client.iter_messages(candidate, limit=limit):
+                                msg_date = _get_attr(msg, "date")
+                                if cutoff is not None and isinstance(msg_date, datetime) and msg_date < cutoff:
+                                    continue
+                                text = (_get_attr(msg, "text", "") or "").lower()
+                                if needle and needle in text:
+                                    found.append(self._message_row(msg))
+                        except ValueError as exc:
+                            last_exc = exc
                             continue
-                        text = (_get_attr(msg, "text", "") or "").lower()
-                        if needle and needle in text:
-                            rows.append(self._message_row(msg))
+                        last_exc = None
+                        rows.extend(found)
+                        break
+                    if last_exc is not None:
+                        raise _peer_unresolved_error(chat_id, last_exc) from last_exc
         except (ValueError, sqlite3.OperationalError) as exc:
             raise _session_incompatible_error(exc) from exc
         return rows
@@ -540,15 +575,7 @@ class TelegramClientAdapter:
         """
         dest = Path(out_dir) if out_dir else Path.home() / "Downloads"
         dest.mkdir(parents=True, exist_ok=True)
-        if isinstance(entity, str) and entity.lstrip("-").isdigit():
-            input_peer = _input_peer_from_sqlite(self.session_sqlite_file, int(entity))
-        else:
-            input_peer = None
-        candidates: list[Any] = (
-            [input_peer]
-            if input_peer is not None
-            else _peer_candidates(entity) if isinstance(entity, str) else [entity]
-        )
+        candidates: list[Any] = self._entity_candidates(entity)
         saved_path: Any = None
         msg: Any = None
         try:
@@ -562,7 +589,7 @@ class TelegramClientAdapter:
                     except ValueError as exc:
                         last_exc = exc
                 if last_exc is not None:
-                    raise last_exc
+                    raise _peer_unresolved_error(entity, last_exc) from last_exc
                 if msg is None or _get_attr(msg, "media", None) is None:
                     raise ProviderError(
                         f"message {message_id} in {entity} has no downloadable media"

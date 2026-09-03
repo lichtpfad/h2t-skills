@@ -57,6 +57,22 @@ def _map_sdk_exc(e: Exception, *, op: str):
     return ProviderError(f"Failed to {op}: {e}")
 
 
+# A markdown link target may carry balanced parentheses — Wikipedia titles do, and
+# stopping at the first ")" silently truncated the URL while the rendered markdown
+# still looked right.
+_MD_TARGET = r"(?:[^\s()]+|\([^\s()]*\))+"
+
+_INLINE_TOKENS = (
+    ("bold", re.compile(r"\*\*(.+?)\*\*", re.DOTALL)),
+    ("italic", re.compile(r"\*(.+?)\*", re.DOTALL)),
+    ("code", re.compile(r"`(.+?)`", re.DOTALL)),
+    ("image", re.compile(r"!\[[^\]]*\]\(" + _MD_TARGET + r"\)")),
+    ("link", re.compile(r"\[([^\]]+)\]\((" + _MD_TARGET + r")\)")),
+    ("autolink", re.compile(r"<(https?://[^>\s]+)>")),
+    ("bare", re.compile(r"(?<!\]\()https?://" + _MD_TARGET)),
+)
+
+
 class NotionClient:
     """Notion API client — read and write pages and databases."""
 
@@ -1011,6 +1027,9 @@ class NotionClient:
             return f"### {self._rich_text_to_markdown(block['heading_3']['rich_text'])}\n\n"
         elif t == "bulleted_list_item":
             return f"- {self._rich_text_to_markdown(block['bulleted_list_item']['rich_text'])}\n"
+        elif t == "to_do":
+            td = block["to_do"]
+            return f"- [{'x' if td.get('checked') else ' '}] {self._rich_text_to_markdown(td['rich_text'])}\n"
         elif t == "numbered_list_item":
             return f"1. {self._rich_text_to_markdown(block['numbered_list_item']['rich_text'])}\n"
         elif t == "quote":
@@ -1087,19 +1106,69 @@ class NotionClient:
                 result.append(text)
         return "".join(result)
 
+    def _match_inline_token(self, text: str, pos: int) -> tuple[int, list[dict[str, Any]]] | None:
+        """Longest-priority token starting exactly at pos, or None if none does.
+
+        Order is the whole design. Annotations are tried before links, so a URL
+        inside a code span or a bold run is never turned into a link; the link
+        pattern is tried before the bare-URL one, so a link target is never eaten
+        piecemeal. A position that matches nothing is left to the plain run, which
+        is what keeps a lone `*` or backtick in the text instead of dropping it.
+        """
+        for kind, pattern in _INLINE_TOKENS:
+            m = pattern.match(text, pos)
+            if m is None:
+                continue
+            if kind in ("bold", "italic", "code"):
+                return m.end(), [{
+                    "type": "text",
+                    "text": {"content": m.group(1)},
+                    "annotations": {kind: True},
+                }]
+            if kind == "image":
+                # Not a link: markdown_to_blocks has no image block, and linkifying
+                # the target would leave a stray "!" beside it.
+                return m.end(), [{"type": "text", "text": {"content": m.group(0)}}]
+            if kind == "link":
+                url = m.group(2)
+                inner = self._parse_spans(m.group(1)) or [
+                    {"type": "text", "text": {"content": m.group(1)}}
+                ]
+                for span in inner:
+                    # The outer target always wins: a label that is itself a URL
+                    # gets auto-linked while parsing, and keeping that would drop
+                    # the target the author actually wrote.
+                    span["text"]["link"] = {"url": url}
+                return m.end(), inner
+            if kind == "autolink":
+                url = m.group(1)
+                return m.end(), [{"type": "text", "text": {"content": url, "link": {"url": url}}}]
+            # bare url: trailing sentence punctuation belongs to the prose
+            url = m.group(0).rstrip(".,;:!?")
+            return pos + len(url), [
+                {"type": "text", "text": {"content": url, "link": {"url": url}}}
+            ]
+        return None
+
+    def _parse_spans(self, text: str) -> list[dict[str, Any]]:
+        spans: list[dict[str, Any]] = []
+        pos = plain_start = 0
+        while pos < len(text):
+            matched = self._match_inline_token(text, pos)
+            if matched is None:
+                pos += 1
+                continue
+            end, produced = matched
+            if pos > plain_start:
+                spans.append({"type": "text", "text": {"content": text[plain_start:pos]}})
+            spans.extend(produced)
+            pos = plain_start = end
+        if plain_start < len(text):
+            spans.append({"type": "text", "text": {"content": text[plain_start:]}})
+        return spans
+
     def parse_inline(self, text: str) -> list[dict[str, Any]]:
-        spans = []
-        pattern = re.compile(r"\*\*(.+?)\*\*|\*(.+?)\*|`(.+?)`|([^*`]+)", re.DOTALL)
-        for m in pattern.finditer(text):
-            if m.group(1):
-                spans.append({"type": "text", "text": {"content": m.group(1)}, "annotations": {"bold": True}})
-            elif m.group(2):
-                spans.append({"type": "text", "text": {"content": m.group(2)}, "annotations": {"italic": True}})
-            elif m.group(3):
-                spans.append({"type": "text", "text": {"content": m.group(3)}, "annotations": {"code": True}})
-            elif m.group(4):
-                spans.append({"type": "text", "text": {"content": m.group(4)}})
-        return spans or [{"type": "text", "text": {"content": text}}]
+        return self._parse_spans(text) or [{"type": "text", "text": {"content": text}}]
 
     def markdown_to_blocks(self, markdown: str) -> list[dict[str, Any]]:  # noqa: C901
         blocks = []
@@ -1115,6 +1184,10 @@ class NotionClient:
                 i += 1
             elif line.startswith("### "):
                 blocks.append({"type": "heading_3", "heading_3": {"rich_text": self.parse_inline(line[4:])}})
+                i += 1
+            elif re.match(r"^[-*+] \[[ xX]\] ", line):
+                todo = re.match(r"^[-*+] \[([ xX])\] (.*)$", line)
+                blocks.append({"type": "to_do", "to_do": {"rich_text": self.parse_inline(todo.group(2)), "checked": todo.group(1) in ("x", "X")}})
                 i += 1
             elif line.startswith("- "):
                 blocks.append({"type": "bulleted_list_item", "bulleted_list_item": {"rich_text": self.parse_inline(line[2:])}})

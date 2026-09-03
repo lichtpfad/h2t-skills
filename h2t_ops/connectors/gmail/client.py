@@ -411,16 +411,23 @@ class GmailClient:
     # --- Helpers ---
 
     def _parse_message(self, message: dict[str, Any]) -> dict[str, Any]:
-        headers = {h["name"]: h["value"] for h in message["payload"]["headers"]}
+        # RFC 5322 field names are case-insensitive, and Gmail returns them in the
+        # case the sender wrote them: our own drafts arrive as "to" / "subject".
+        # First occurrence wins — folding the case made a duplicate spelling able to
+        # override the header a mail client shows, and trash --confirm-subject reads
+        # its answer from here.
+        headers: dict[str, str] = {}
+        for h in message["payload"]["headers"]:
+            headers.setdefault(h["name"].lower(), h["value"])
         return {
             "id": message["id"],
             "threadId": message["threadId"],
             "labelIds": message.get("labelIds", []),
             "snippet": message.get("snippet", ""),
-            "from": headers.get("From", ""),
-            "to": headers.get("To", ""),
-            "subject": headers.get("Subject", ""),
-            "date": headers.get("Date", ""),
+            "from": headers.get("from", ""),
+            "to": headers.get("to", ""),
+            "subject": headers.get("subject", ""),
+            "date": headers.get("date", ""),
             "body": self._get_message_body(message["payload"]),
             "attachments": self._collect_attachments(message["payload"]),
         }
