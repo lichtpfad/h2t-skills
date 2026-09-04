@@ -24,6 +24,14 @@ def _load(path: Path) -> dict[str, Any]:
 
 
 def main() -> int:
+    # The success and drift lines carry ✓/❌; a Windows console encodes stdout as
+    # cp1252 whatever the source encoding, so printing them raised UnicodeEncodeError
+    # and failed the pre-commit hook on the very bump it guards. Same trap the hook
+    # handlers already reconfigure around.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8")
+
     market_path = ROOT / ".claude-plugin" / "marketplace.json"
     if not market_path.is_file():
         print(f"error: {market_path} not found", file=sys.stderr)
