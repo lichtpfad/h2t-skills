@@ -4,9 +4,9 @@
 On Windows the Codex CLI (`@openai/codex`) leaves its `app-server-broker.mjs`
 process running after the chat that spawned it ends. Measured on AUTOMATA
 2026-09-04: nine broker processes had accumulated over eight days — one per
-session — and the oldest was 7.8 days old. One of them held its `--cwd`
-(`C:/dev/kraken-32`, a git worktree that had since been removed) open, so the
-directory could not be deleted ("Device or resource busy") until the broker was
+session — and the oldest was 7.8 days old. One of them held its `--cwd` — a git
+worktree that had since been removed — open, so the directory could not be
+deleted ("Device or resource busy") until the broker was
 killed. The broker is the leak that matters: it is the only Codex process that
 records a working directory, and it is the one that pins a directory open.
 
@@ -60,8 +60,8 @@ _CWD_ARG = re.compile(r"--cwd\s+(\S+)")
 def _norm(path: str) -> str:
     """Canonical form for comparing two Windows paths.
 
-    Codex writes `--cwd C:/dev/x` with forward slashes; the SessionEnd payload
-    carries the cwd in whatever form the harness used (often `C:\\dev\\x`).
+    Codex writes `--cwd` with forward slashes (`C:/proj`); the SessionEnd
+    payload carries the cwd in whatever form the harness used (often `C:\\proj`).
     Compare on unified separators, no trailing slash, case-folded — Windows
     paths are case-insensitive.
     """
