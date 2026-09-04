@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- feat(hooks): a SessionEnd hook reaps the Codex `app-server-broker` this session
+  leaked (Windows only). Codex orphans the broker on Windows; measured on AUTOMATA
+  2026-09-04, nine had accumulated over eight days, one per session, and the oldest
+  pinned a removed git worktree open (`Device or resource busy`) until killed. The
+  broker is the only Codex process that records a `--cwd`, so it is both the leak
+  and the lock. The hook kills the broker whose `--cwd` is this session's own or no
+  longer exists on disk, and leaves a live sibling in another worktree alone — under
+  the one-worktree-per-session rule that cwd is unique, so it is exactly this chat's
+  Codex. Ancestry cannot scope it (the broker is detached — its parent has exited),
+  and only the per-session `cxc-<token>`, which lives in the Codex plugin, could tell
+  two chats sharing one tree apart. No-op off Windows, where Codex does not orphan
+  this way (#477)
+
 - fix(handoff): the writer's response counted the bounded index, not the record. Eleven
   artifacts in produced `"artifacts": 10` with `"status": "ok"` — and no field told a
   capped index apart from a caller that simply passed ten. Nothing was ever lost: the
@@ -53,6 +66,7 @@
   actually needs rather than repeating "Claude Code": agent-profile operates on the
   h2t-skills checkout and refuses to write without it, autonomous-run requires the codex
   CLI because both of its gates call it and both cost money (#464)
+
 - fix(plan-closer): a merged PR closes a plan only if it changed something other than
   documentation. The hook read "the PR listed this document" as "this document is
   finished" — two different claims. Measured on h2t-business 2026-08-27: PRs #58, #59
