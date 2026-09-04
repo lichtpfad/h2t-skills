@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# SessionEnd: kill the Codex app-server broker this session leaked (Windows only).
+#
+# The Codex CLI orphans its broker on Windows; over days they accumulate and one
+# can pin a git worktree open so it cannot be removed. reap_codex.py kills the
+# broker whose --cwd is this session's (own) or no longer exists (orphan), and
+# leaves live siblings in other worktrees alone. See reap_codex.py for the why.
+#
+# Guard to Windows here so Mac/Linux never even pay a Python start: the harness
+# runs this through Git bash on Windows (uname -> MINGW*/MSYS*), Darwin on Mac.
+set -euo pipefail
+
+case "$(uname -s 2>/dev/null || echo unknown)" in
+  MINGW*|MSYS*|CYGWIN*|Windows_NT) ;;
+  *) exit 0 ;;
+esac
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PLUGIN_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+PAYLOAD="$(cat)"
+
+source "$PLUGIN_ROOT/scripts/resolve-h2t-python.sh"
+if ! resolve_h2t_python; then
+  # Fail open and silent: a teardown chore must never look like a failed session.
+  exit 0
+fi
+
+printf '%s' "$PAYLOAD" | exec "${H2T_PYTHON_CMD[@]}" "$SCRIPT_DIR/reap_codex.py"
