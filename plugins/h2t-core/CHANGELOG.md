@@ -67,6 +67,26 @@
   h2t-skills checkout and refuses to write without it, autonomous-run requires the codex
   CLI because both of its gates call it and both cost money (#464)
 
+- feat(init-project): truth gate — before the first line of code the project answers
+  three questions by command (source of truth, stage-run record, data contract); each
+  command is run, empty output is red, the result lands in the project `CLAUDE.md` under
+  `## Truth gate`. Reference: `skills/init-project/references/truth-gate.md`; scaffold-project
+  runs the same gate after registration. Origin: cross-repo audit 2026-09 — "flag says done,
+  content missing" in 11 of 21 repos, and crypto-machine starting with 1541 lines of rules and
+  0 code (`C:/dev/docs/research/2026-09-repo-audit/summary.md`)
+
+- feat(hooks): `grade-guard` — Stop hook: the last answer claims a state (готово / done /
+  green / closed / passed…) but shows neither a code block with command output nor a grade
+  tag `[B …]` / `[C …]` / `[D …]` → one warning line in the terminal. Warn only, never block
+  (a blocking Stop hook re-enters the model). Pairs with the grade rule in
+  `~/.claude/rules/engineering-discipline.md`: A = command output shown, B = read not run,
+  C = inferred, D = not found; a state claim at C is forbidden
+
+- feat(hooks): `new-repo-hint` — PostToolUse(Bash) after `git init` / `gh repo create` /
+  `h2t-scaffold-project create` (not `--dry-run`) offers `/h2t-core:init-project`. Read-only,
+  fails open. The gate can only be asked at the moment the repo appears; the audit counted
+  24 unregistered repos across two roots that nobody asked
+
 - fix(plan-closer): a merged PR closes a plan only if it changed something other than
   documentation. The hook read "the PR listed this document" as "this document is
   finished" — two different claims. Measured on h2t-business 2026-08-27: PRs #58, #59

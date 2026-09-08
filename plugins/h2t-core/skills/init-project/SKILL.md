@@ -4,7 +4,7 @@ description: Register existing repo or directory in h2t ecosystem. Triggers on "
 compatibility: "Claude Code"
 metadata:
   author: lichtpfad
-  version: 1.1.0
+  version: 1.2.0
 ---
 
 # Instructions
@@ -66,6 +66,13 @@ h2t-project-register \
 
 Show the result JSON `actions` and `next_steps` to user.
 
+### Step 4: Truth Gate (mandatory, also on re-run)
+
+Load `references/truth-gate.md` (next to this file) and follow it: three questions, each
+answered by a command that is run, empty output = red, result written into the project
+`CLAUDE.md` under `## Truth gate`. If the heading already exists — re-run the commands and
+update statuses; do not skip because "already answered".
+
 ## Common Mistakes
 
 | Mistake | Fix |
@@ -75,3 +82,4 @@ Show the result JSON `actions` and `next_steps` to user.
 | Writing YAML manually | Call apply_registration.py. It handles backups and comment preservation |
 | Skipping domain question when needs_input | User MUST confirm domain before apply |
 | Resolving tracker before domain is known | Tracker depends on domain. Wait for domain first |
+| Ending after registration | Step 4 (truth gate) is part of this skill. Registration without the gate is the audit's root finding: flag says done, content missing |

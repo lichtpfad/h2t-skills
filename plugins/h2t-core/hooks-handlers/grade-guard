@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# Stop: a state claim without evidence gets a warning line. Warn only, never block.
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PLUGIN_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+PAYLOAD="$(cat)"
+case "$PAYLOAD" in
+  *'"stop_hook_active":true'*|*'"stop_hook_active": true'*) exit 0 ;;
+esac
+
+source "$PLUGIN_ROOT/scripts/resolve-h2t-python.sh"
+if ! resolve_h2t_python; then
+  exit 0  # fail open: a missing warning must never look like a failed stop
+fi
+
+printf '%s' "$PAYLOAD" | exec "${H2T_PYTHON_CMD[@]}" "$SCRIPT_DIR/grade_guard.py"

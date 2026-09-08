@@ -11,7 +11,7 @@ description: >
 compatibility: "Claude Code"
 metadata:
   author: lichtpfad
-  version: 1.0.2
+  version: 1.1.0
 ---
 
 # Instructions
@@ -176,6 +176,10 @@ Where:
 
 Show `actions` and `next_steps` from JSON output.
 
+Then run the truth gate: load `../init-project/references/truth-gate.md` and follow it
+(three answers by command, written into the new project's `CLAUDE.md`). For a brand-new
+repo most rows will be red — that is fine and recorded; a missing row is not.
+
 ---
 
 ## Step 6: GitHub Remote (code-github only)
@@ -224,6 +228,7 @@ Show:
 ```
 ✓ Проект создан: {project_path}
 ✓ Зарегистрирован: {domain}/{id}
+✓ Truth gate: {n_green}/3 green (см. CLAUDE.md → Truth gate)
 [✓ GitHub: https://github.com/{github_slug}]
 
 Открыть сессию в новом проекте?

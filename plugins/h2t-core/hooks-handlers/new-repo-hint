@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# PostToolUse: a command that created a repository offers /h2t-core:init-project.
+# Same shape as plan-closer: cheap string match first, Python only on a hit.
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PLUGIN_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+PAYLOAD="$(cat)"
+case "$PAYLOAD" in
+  *"git init"*|*"gh repo create"*|*"h2t-scaffold-project create"*) ;;
+  *) exit 0 ;;
+esac
+
+source "$PLUGIN_ROOT/scripts/resolve-h2t-python.sh"
+if ! resolve_h2t_python; then
+  exit 0  # fail open: a missing hint must never look like a failed command
+fi
+
+printf '%s' "$PAYLOAD" | exec "${H2T_PYTHON_CMD[@]}" "$SCRIPT_DIR/new_repo_hint.py"

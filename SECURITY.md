@@ -27,6 +27,8 @@ them. Installing them grants:
   | `PreToolUse` | `Skill` | `gather-on-skill` |
   | `PreToolUse` | `Write` / `Edit` / `MultiEdit` | `structure-guard` — can block the write |
   | `PostToolUse` | `Bash` | `plan-closer` — writes to your working tree after `gh pr merge` |
+  | `Stop` | — | `grade-guard` — read-only; warns when the last answer claims a state without command output or a grade tag |
+  | `PostToolUse` | `Bash` | `new-repo-hint` — read-only; after `git init` / `gh repo create` / `h2t-scaffold-project create` suggests `/h2t-core:init-project` |
 
   `plan-closer` is the only one that modifies files you did not ask it to touch:
   it stamps `status: done` on plans a merged pull request implemented, and says

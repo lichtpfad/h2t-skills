@@ -1,0 +1,17 @@
+# Shared h2t checks (ruff, gitleaks, standards tier). Unit tests stay in evals.yml,
+# which already runs them on both Linux and Windows — pytest here would be a duplicate.
+name: h2t-checks
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  checks:
+    uses: lichtpfad/h2t-infra/.github/workflows/h2t-checks.yml@main
+    with:
+      ruff: true
+      pytest: false
+    secrets:
+      INFRA_TOKEN: ${{ secrets.H2T_INFRA_TOKEN }}
