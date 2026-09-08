@@ -1,0 +1,17 @@
+# Shared h2t checks (ruff, gitleaks, standards tier), called locally — the reusable
+# workflow lives in this repo. Unit tests stay in evals.yml, which already runs them on
+# both Linux and Windows; pytest here would be a duplicate.
+name: checks
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  checks:
+    uses: ./.github/workflows/h2t-checks.yml
+    with:
+      ruff: true
+      pytest: false
+    secrets: inherit   # standards tier runs once the repo has an INFRA_TOKEN secret
