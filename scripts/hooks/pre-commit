@@ -10,6 +10,12 @@
 
 set -e
 
+# Layout: docs/superpowers/plans|specs take dated Markdown only. This repo's own
+# core.hooksPath overrides the machine-global hook, so it is chained here.
+if command -v h2t-hook >/dev/null 2>&1; then
+  h2t-hook layout-precommit
+fi
+
 # Only run when plugin or marketplace files change. Cheap guard.
 if git diff --cached --name-only | grep -qE '(^|/)(plugin|marketplace)\.json$'; then
   python_bin=""

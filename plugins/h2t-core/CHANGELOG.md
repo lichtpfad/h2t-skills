@@ -75,6 +75,16 @@
   content missing" in 11 of 21 repos, and crypto-machine starting with 1541 lines of rules and
   0 code (`C:/dev/docs/research/2026-09-repo-audit/summary.md`)
 
+- feat(structure-guard, hooks, ci): `docs/superpowers/plans|specs` hold dated Markdown
+  only, enforced without opt-in at three points. `structure-guard` applies the rule with
+  no `.h2t/structure.yaml` (the opt-in `plan_dirs` rule protected only repos that had
+  opted in; h2t-transcription had not and held 200 non-plan files there at the 2026-09
+  audit — 54 json, 32 jsonl capture dumps carrying Dropbox share keys, 24 srt
+  transcripts, 21 scripts). `layout-precommit` (git pre-commit via `h2t-hook`, machine-
+  global `core.hooksPath` or chained from a repo's own hook) refuses the commit — the
+  dumps were written by a script, which no PreToolUse hook sees. The reusable CI
+  workflow's `layout` job refuses the merge. Exempt: README.md, index.md, .gitkeep
+
 - feat(hooks): `grade-guard` — Stop hook: the last answer claims a state (готово / done /
   green / closed / passed…) but shows neither a code block with command output nor a grade
   tag `[B …]` / `[C …]` / `[D …]` → one warning line in the terminal. Warn only, never block

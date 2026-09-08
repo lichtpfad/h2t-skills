@@ -89,6 +89,25 @@ jobs:
         working-directory: ${{ inputs.working-dir }}
         run: python -m pytest ${{ inputs.pytest-args }}
 
+  layout:
+    # Self-contained and blocking: docs/superpowers/plans|specs hold dated Markdown only.
+    # h2t-transcription had 200 other files there at the 2026-09 audit (dumps, scripts,
+    # transcripts, logs) — the directory nearest to the work became the scratch place.
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@v4
+      - name: plans/specs contain plans only
+        run: |
+          bad=$(git ls-files docs/superpowers/plans docs/superpowers/specs \
+                | grep -vE '^docs/superpowers/(plans|specs)/([0-9]{4}-[0-9]{2}-[0-9]{2}-[^/]+\.md|README\.md|index\.md|\.gitkeep)$' || true)
+          if [ -n "$bad" ]; then
+            echo "::error title=layout::$(echo "$bad" | wc -l) file(s) in docs/superpowers/{plans,specs} are not plans"
+            echo "$bad"
+            exit 1
+          fi
+          echo "plans/specs clean"
+
   gitleaks:
     if: ${{ inputs.gitleaks }}
     runs-on: ubuntu-latest

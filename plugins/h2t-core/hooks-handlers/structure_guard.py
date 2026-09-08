@@ -197,6 +197,43 @@ def _check_docs_section(
     )
 
 
+_PLAN_DIRS_UNIVERSAL = ("docs/superpowers/plans/", "docs/superpowers/specs/")
+_DATED_MD_RE = re.compile(r"^\d{4}-\d{2}-\d{2}-.+\.md$")
+_PLAN_DIR_EXEMPT = {"README.md", "index.md", ".gitkeep"}
+
+
+def check_plan_dirs_universal(norm: str) -> tuple[int, str]:
+    """Block (code 2) anything but a dated Markdown file under plans/ or specs/.
+
+    Unconditional — applies with no `.h2t/structure.yaml` at all. The per-repo
+    `plan_dirs` rule was opt-in, and the repo that needed it most had never opted in:
+    h2t-transcription's docs/superpowers/plans/ held 200 non-plan files at the 2026-09
+    audit — 54 json, 32 jsonl capture dumps (with Dropbox share keys in them), 24 srt
+    transcripts, 21 scripts, 3 logs — every one of them a scratch file that found the
+    nearest directory. Scripts belong in scripts/, run evidence in docs/.artifacts/,
+    drafts outside the repo until they have a date and an issue.
+    """
+    for d in _PLAN_DIRS_UNIVERSAL:
+        if not norm.startswith(d):
+            continue
+        rest = norm[len(d):]
+        name = rest.split("/", 1)[0] if "/" in rest else rest
+        if "/" in rest:
+            return 2, (
+                f"BLOCKED: {norm!r} — поддиректория в {d}. Здесь лежат только планы "
+                f"YYYY-MM-DD-<slug>.md; данные → docs/.artifacts/<run>/, скрипты → scripts/, "
+                f"черновики — вне репо."
+            )
+        if name in _PLAN_DIR_EXEMPT or _DATED_MD_RE.match(name):
+            return 0, ""
+        return 2, (
+            f"BLOCKED: {norm!r} — не план. В {d} допустимы только YYYY-MM-DD-<slug>.md. "
+            f"Скрипт → scripts/; вывод/дамп/лог → docs/.artifacts/<run>/ или вне репо; "
+            f"черновик — дать дату и issue, либо держать вне репо."
+        )
+    return 0, ""
+
+
 _FM_EXEMPT_NAMES = {"readme.md", "index.md"}
 
 
@@ -299,9 +336,6 @@ def main() -> int:
         return 0
 
     repo_root = Path.cwd().resolve()
-    config = load_config(repo_root)
-    if config is None:
-        return 0  # fail open — no .h2t/structure.yaml
 
     # Normalise to repo-relative path
     try:
@@ -309,6 +343,16 @@ def main() -> int:
         norm = str(rel).replace("\\", "/")
     except ValueError:
         return 0  # outside repo — not our concern
+
+    # The one rule that does not wait for a config file.
+    plan_code, plan_msg = check_plan_dirs_universal(norm)
+    if plan_code == 2:
+        print(plan_msg, file=sys.stderr)
+        return 2
+
+    config = load_config(repo_root)
+    if config is None:
+        return 0  # fail open — no .h2t/structure.yaml (except the universal rule above)
 
     exit_code, message = check_file(norm, config, repo_root)
     if exit_code == 2:
