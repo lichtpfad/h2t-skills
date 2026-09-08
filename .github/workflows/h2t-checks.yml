@@ -13,5 +13,4 @@ jobs:
     with:
       ruff: true
       pytest: false
-    secrets:
-      INFRA_TOKEN: ${{ secrets.H2T_INFRA_TOKEN }}
+    secrets: inherit   # standards tier runs once the repo has an INFRA_TOKEN secret
