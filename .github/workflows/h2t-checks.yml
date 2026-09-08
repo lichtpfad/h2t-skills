@@ -131,7 +131,8 @@ jobs:
           while IFS=$'\t' read -r num reason; do
             [ -z "$num" ] && continue
             [ "$reason" = "NOT_PLANNED" ] && continue
-            if ! git log --all --oneline -E --grep="(^|[^0-9])#${num}([^0-9]|$)" | grep -q .; then
+            # `#394` (closing keywords) or `[394]` (h2t-transcription titles its commits that way)
+            if ! git log --all --oneline -E --grep="(#|\[)${num}([^0-9]|$)" | grep -q .; then
               bad="$bad #$num"
             fi
           done < <(gh issue list --state closed --search "closed:>=$since" --limit 100 --json number,stateReason --jq '.[] | "\(.number)\t\(.stateReason)"')
