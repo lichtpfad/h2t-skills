@@ -56,6 +56,10 @@ def claim_without_evidence(text: str) -> str | None:
 
 
 def main() -> int:
+    # The warning carries Cyrillic; a cp1252 console would raise on print.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8")
     try:
         payload = json.loads(sys.stdin.read() or "{}")
     except json.JSONDecodeError:

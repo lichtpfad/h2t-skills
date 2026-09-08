@@ -34,6 +34,10 @@ def command_creates_repo(command: str) -> bool:
 
 
 def main() -> int:
+    # The hint carries Cyrillic; a cp1252 console would raise on print (tests/dev/test_stdout_is_utf8.py).
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8")
     try:
         payload = json.loads(sys.stdin.read() or "{}")
     except json.JSONDecodeError:
