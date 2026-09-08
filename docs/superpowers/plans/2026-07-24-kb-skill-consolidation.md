@@ -35,7 +35,7 @@ issue: ""
 - `C:/dev/research-kb/.claude/rules/kb-lookup.md` → pointer stub
 
 **Test scaffolding (h2t-skills):**
-- `docs/superpowers/plans/kb-consolidation-tests/fixture-kb/taxonomy.md` + minimal artifacts — for the KB-agnostic test (Task 8)
+- `tests/fixtures/kb-consolidation/fixture-kb/taxonomy.md` + minimal artifacts — for the KB-agnostic test (Task 8)
 
 ### Shared-snippet convention (DRY vs self-contained)
 
@@ -406,10 +406,10 @@ git -C C:/dev/h2t-skills commit -m "test(kb): GREEN — routing 6/6, 0/3 false t
 ## Task 8: KB-agnostic proof against a second instance
 
 **Files:**
-- Create: `docs/superpowers/plans/kb-consolidation-tests/fixture-kb/taxonomy.md`
-- Create: `docs/superpowers/plans/kb-consolidation-tests/fixture-kb/index.md`
-- Create: `docs/superpowers/plans/kb-consolidation-tests/fixture-kb/wiki/widget-testing.md`
-- Create: `docs/superpowers/plans/kb-consolidation-tests/fixture-kb/data/pipeline-state.json`
+- Create: `tests/fixtures/kb-consolidation/fixture-kb/taxonomy.md`
+- Create: `tests/fixtures/kb-consolidation/fixture-kb/index.md`
+- Create: `tests/fixtures/kb-consolidation/fixture-kb/wiki/widget-testing.md`
+- Create: `tests/fixtures/kb-consolidation/fixture-kb/data/pipeline-state.json`
 
 - [ ] **Step 1: Build a minimal fixture KB with a DIFFERENT taxonomy**
 
@@ -469,7 +469,7 @@ Dispatch one `general-purpose` subagent:
 
 ```
 Below is the FULL text of references/query.md. Then follow it to answer, treating
-H2T_KB_ROOT = docs/superpowers/plans/kb-consolidation-tests/fixture-kb (read files there).
+H2T_KB_ROOT = tests/fixtures/kb-consolidation/fixture-kb (read files there).
 
 <paste plugins/h2t-ops/skills/kb/references/query.md>
 
@@ -489,7 +489,7 @@ KB-agnostic claim. Mis-behavior → fix query.md's KB-root handling.
 - [ ] **Step 4: Commit the fixture + result**
 
 ```bash
-git -C C:/dev/h2t-skills add docs/superpowers/plans/kb-consolidation-tests docs/superpowers/plans/2026-07-24-kb-skill-consolidation.md
+git -C C:/dev/h2t-skills add tests/fixtures/kb-consolidation docs/superpowers/plans/2026-07-24-kb-skill-consolidation.md
 git -C C:/dev/h2t-skills commit -m "test(kb): KB-agnostic proof — query grounds against a 2nd instance"
 ```
 
