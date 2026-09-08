@@ -10,6 +10,7 @@ on:
 
 jobs:
   checks:
+    permissions: { contents: read, issues: read }   # closed-without-trace reads issues
     uses: ./.github/workflows/h2t-checks.yml
     with:
       ruff: true

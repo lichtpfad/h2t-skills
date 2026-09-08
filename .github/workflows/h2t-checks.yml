@@ -14,6 +14,7 @@
 #
 #   jobs:
 #     checks:
+#       permissions: { contents: read, issues: read }   # closed-without-trace reads issues
 #       uses: lichtpfad/h2t-skills/.github/workflows/h2t-checks.yml@main
 #       with: { ruff: true, pytest: true }
 #       secrets: inherit      # the caller repo defines INFRA_TOKEN (or does not — then the standards tier says so)
@@ -112,11 +113,12 @@ jobs:
     # An issue closed in the last 7 days must have a commit that names it (#N) — anywhere in
     # history — unless it was closed as not planned. "closes #N" is written in CLAUDE.md;
     # this is the mechanism. Self-contained: GITHUB_TOKEN reads issues of the calling repo.
+    # Needs `issues: read` on the token. A called workflow may only DOWNGRADE the caller's
+    # permissions; asking for more here is a startup_failure ("nested job is requesting
+    # issues: read but is only allowed issues: none") — that is how run e40544e died. So the
+    # CALLER grants it: `permissions: { contents: read, issues: read }` on its `checks` job.
     runs-on: ubuntu-latest
     timeout-minutes: 3
-    permissions:
-      contents: read
-      issues: read
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
