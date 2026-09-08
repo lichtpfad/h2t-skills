@@ -234,6 +234,50 @@ def check_plan_dirs_universal(norm: str) -> tuple[int, str]:
     return 0, ""
 
 
+_ROOT_SCRATCH_NAMES = {"null", "nul", "tmp", "temp", "scratch", "_scratch", "_wd", "_wt"}
+_ROOT_SCRATCH_SUFFIXES = (".log", ".bak", ".tmp", ".jsonl", ".orig", ".rej")
+_ROOT_SCRATCH_PREFIXES = ("tmp_", "diag_", "debug_", "scratch_")
+# Directories any repo may grow without a decision — everything else new at the root is one.
+_ROOT_DIRS_ALWAYS = {"docs", "tests", "scripts", "src", ".claude", ".h2t", ".github", ".vscode"}
+
+
+def check_root_universal(norm: str, config: dict | None, repo_root: Path | None) -> tuple[int, str]:
+    """Block (code 2) scratch at the repo root and a new top-level directory nobody declared.
+
+    Unconditional, like the plans rule. The per-repo `allowed_root_dirs` allowlist stays
+    the way to declare a directory; this only asks that the declaration happens. At the
+    2026-09 audit `audit_tree` found root scratch in 9 of 21 repos (`null`, `tmp`, logs,
+    `diag_*.py`) and 24 undeclared root dirs — every one a decision that was never made.
+    """
+    if "/" not in norm:
+        name = norm
+        low = name.lower()
+        if (
+            low in _ROOT_SCRATCH_NAMES
+            or low.endswith(_ROOT_SCRATCH_SUFFIXES)
+            or low.startswith(_ROOT_SCRATCH_PREFIXES)
+        ):
+            return 2, (
+                f"BLOCKED: {name!r} в корне репозитория — это одноразовое. Вывод/лог → "
+                f"docs/.artifacts/<run>/, проба → scratchpad сессии вне репо."
+            )
+        return 0, ""
+
+    top = norm.split("/", 1)[0]
+    if top in _ROOT_DIRS_ALWAYS:
+        return 0, ""
+    allowed = {a.rstrip("/") for a in (config or {}).get("allowed_root_dirs", [])}
+    if top in allowed:
+        return 0, ""
+    if repo_root is not None and (repo_root / top).is_dir():
+        return 0, ""  # existing directory: grandfathered, the allowlist is for new ones
+    return 2, (
+        f"BLOCKED: новая директория {top!r} в корне репозитория. Объявите её в "
+        f"allowed_root_dirs в .h2t/structure.yaml (создайте файл, если его нет) и повторите "
+        f"запись. Новый корневой каталог — решение, не побочный эффект."
+    )
+
+
 _FM_EXEMPT_NAMES = {"readme.md", "index.md"}
 
 
@@ -351,8 +395,14 @@ def main() -> int:
         return 2
 
     config = load_config(repo_root)
+
+    root_code, root_msg = check_root_universal(norm, config, repo_root)
+    if root_code == 2:
+        print(root_msg, file=sys.stderr)
+        return 2
+
     if config is None:
-        return 0  # fail open — no .h2t/structure.yaml (except the universal rule above)
+        return 0  # fail open — no .h2t/structure.yaml (except the two universal rules above)
 
     exit_code, message = check_file(norm, config, repo_root)
     if exit_code == 2:

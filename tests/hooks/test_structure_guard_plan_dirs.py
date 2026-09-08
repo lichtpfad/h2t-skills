@@ -63,7 +63,7 @@ def test_main_blocks_without_structure_yaml(tmp_path, monkeypatch, capsys):
 def test_main_still_fails_open_elsewhere_without_config(tmp_path, monkeypatch):
     m = _load()
     monkeypatch.chdir(tmp_path)
-    target = tmp_path / "anything" / "x.jsonl"
+    target = tmp_path / "docs" / "x.jsonl"  # docs/ always allowed at root; not a plan dir
     payload = {"tool_name": "Write", "tool_input": {"file_path": str(target), "content": ""}}
     monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(payload)))
     assert m.main() == 0

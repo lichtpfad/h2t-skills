@@ -27,6 +27,7 @@ them. Installing them grants:
   | `PreToolUse` | `Skill` | `gather-on-skill` |
   | `PreToolUse` | `Write` / `Edit` / `MultiEdit` | `structure-guard` — can block the write |
   | `PostToolUse` | `Bash` | `plan-closer` — writes to your working tree after `gh pr merge` |
+  | git `pre-commit` | — | `secrets-precommit` — runs `gitleaks git --staged` if the binary is present; `bulk-precommit` — refuses a >20-file staging that carries logs/dumps/backups |
   | git `pre-commit` | — | `layout-precommit` — read-only; refuses a commit that adds a non-plan file to `docs/superpowers/plans|specs` (installed by you via `core.hooksPath`, not by hooks.json) |
   | `Stop` | — | `grade-guard` — read-only; warns when the last answer claims a state without command output or a grade tag |
   | `PostToolUse` | `Bash` | `new-repo-hint` — read-only; after `git init` / `gh repo create` / `h2t-scaffold-project create` suggests `/h2t-core:init-project` |

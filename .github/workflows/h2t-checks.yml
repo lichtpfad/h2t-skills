@@ -108,6 +108,67 @@ jobs:
           fi
           echo "plans/specs clean"
 
+  closed-without-trace:
+    # An issue closed in the last 7 days must have a commit that names it (#N) — anywhere in
+    # history — unless it was closed as not planned. "closes #N" is written in CLAUDE.md;
+    # this is the mechanism. Self-contained: GITHUB_TOKEN reads issues of the calling repo.
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      contents: read
+      issues: read
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - name: closed issues have a commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          since=$(date -u -d '7 days ago' +%Y-%m-%d)
+          bad=""
+          while IFS=$'\t' read -r num reason; do
+            [ -z "$num" ] && continue
+            [ "$reason" = "NOT_PLANNED" ] && continue
+            if ! git log --all --oneline -E --grep="(^|[^0-9])#${num}([^0-9]|$)" | grep -q .; then
+              bad="$bad #$num"
+            fi
+          done < <(gh issue list --state closed --search "closed:>=$since" --limit 100 --json number,stateReason --jq '.[] | "\(.number)\t\(.stateReason)"')
+          if [ -n "$bad" ]; then
+            echo "::error title=closed-without-trace::issues closed since $since with no commit naming them:$bad"
+            echo "Reopen, or close as 'not planned', or push the commit with 'closes #N'."
+            exit 1
+          fi
+          echo "every issue closed since $since has a commit"
+
+  truth-gate:
+    # The three answers written by /h2t-core:init-project (source of truth, stage-run record,
+    # data contract) are commands; here they run. Empty output or non-zero exit = red.
+    # No `## Truth gate` table in CLAUDE.md → notice, green: the gate has not been asked yet.
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "${{ inputs.python-version }}" }
+      - name: run the truth gate commands
+        shell: bash
+        run: |
+          [ -f CLAUDE.md ] || { echo "::notice title=truth-gate::no CLAUDE.md"; exit 0; }
+          table=$(awk '/^## Truth gate/{f=1;next} /^## /{f=0} f' CLAUDE.md)
+          [ -n "$table" ] || { echo "::notice title=truth-gate::no '## Truth gate' table in CLAUDE.md — run /h2t-core:init-project"; exit 0; }
+          fail=0
+          while IFS= read -r line; do
+            cmd=$(printf '%s' "$line" | sed -nE 's/^\|[^|]*\|[^|]*\|[[:space:]]*`([^`]+)`[[:space:]]*\|.*$/\1/p')
+            [ -z "$cmd" ] && continue
+            q=$(printf '%s' "$line" | awk -F'|' '{gsub(/^ +| +$/,"",$3); print $3}')
+            out=$(bash -c "$cmd" 2>&1) || { echo "::error title=truth-gate::[$q] exit≠0: $cmd"; echo "$out" | head -5; fail=1; continue; }
+            if [ -z "$(printf '%s' "$out" | tr -d '[:space:]')" ]; then
+              echo "::error title=truth-gate::[$q] empty output: $cmd"; fail=1; continue
+            fi
+            echo "[$q] green: $cmd"; echo "$out" | head -3
+          done <<< "$table"
+          exit $fail
+
   gitleaks:
     if: ${{ inputs.gitleaks }}
     runs-on: ubuntu-latest
@@ -160,3 +221,6 @@ jobs:
         run: |
           pip install pyyaml
           python _skills/plugins/h2t-dev/skills/docs-lint/scripts/lint.py audit --root . --no-pymarkdown
+      - name: stale plans (report only — docs-lint retire always exits 0 by design)
+        if: steps.tok.outputs.present == 'true'
+        run: python _skills/plugins/h2t-dev/skills/docs-lint/scripts/lint.py retire --root . --older-than 60

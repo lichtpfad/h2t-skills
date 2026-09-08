@@ -75,6 +75,24 @@
   content missing" in 11 of 21 repos, and crypto-machine starting with 1541 lines of rules and
   0 code (`C:/dev/docs/research/2026-09-repo-audit/summary.md`)
 
+- feat(structure-guard): two more rules that need no `.h2t/structure.yaml` — scratch at the
+  repo root is refused (`null`, `*.log`, `*.bak`, `*.jsonl`, `diag_*`, `tmp_*`: the audit's
+  root-scratch list, found in 9 of 21 repos) and a new top-level directory must be declared
+  in `allowed_root_dirs` first (24 undeclared root dirs at the audit; an existing directory
+  is grandfathered, `docs tests scripts src .claude .h2t .github .vscode` always pass)
+
+- feat(hooks): two more git pre-commit handlers next to `layout-precommit`, wired into the
+  machine-global hook and this repo's `scripts/hooks/pre-commit`: `secrets-precommit` runs
+  `gitleaks git --staged` when the binary is on PATH (says so and passes when it is not —
+  the HuggingFace token in h2t-transcription sat seven weeks before any scan ran);
+  `bulk-precommit` refuses a staging of more than 20 files that also carries debris (logs,
+  dumps, backups) — the signature of `git add -A`, which three repos forbid in writing
+
+- feat(ci): `closed-without-trace` job — an issue closed in the last 7 days (not as
+  not-planned) must have a commit naming `#N` anywhere in history; `truth-gate` job — the
+  commands in the project CLAUDE.md `## Truth gate` table are run, empty output is red,
+  no table is a notice; standards tier reports `docs-lint retire --older-than 60`
+
 - feat(structure-guard, hooks, ci): `docs/superpowers/plans|specs` hold dated Markdown
   only, enforced without opt-in at three points. `structure-guard` applies the rule with
   no `.h2t/structure.yaml` (the opt-in `plan_dirs` rule protected only repos that had

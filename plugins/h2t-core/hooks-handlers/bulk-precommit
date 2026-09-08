@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# git pre-commit: a bulk staging that swept in scratch is refused.
+#
+# `git add -A` / `git add .` / `commit -am` are written down as forbidden in three repos'
+# rules and still happen — a rule without a mechanism. The signature of a sweep is not
+# the count alone (a refactor stages 50 files legitimately) but count plus debris: logs,
+# dumps, backups, editor leftovers. Both together → refuse and name the debris.
+# Exit 1 blocks the commit.
+set -euo pipefail
+
+THRESHOLD="${H2T_BULK_THRESHOLD:-20}"
+staged=$(git diff --cached --name-only --diff-filter=AM)
+count=$(printf '%s\n' "$staged" | grep -c . || true)
+[ "$count" -le "$THRESHOLD" ] && exit 0
+
+debris=$(printf '%s\n' "$staged" | grep -Ei '\.(log|jsonl|bak|bak[0-9]*|tmp|orig|rej|swp)$|(^|/)(null|nul|tmp_[^/]*|diag_[^/]*|debug_[^/]*)$' || true)
+[ -z "$debris" ] && exit 0
+
+echo "h2t bulk-precommit: $count files staged and among them scratch — looks like git add -A. Refused." >&2
+printf '%s\n' "$debris" | sed 's/^/  /' >&2
+echo "  Stage files by name; scratch goes to docs/.artifacts/<run>/ or outside the repo. (H2T_BULK_THRESHOLD=$THRESHOLD)" >&2
+exit 1
