@@ -75,6 +75,13 @@
   content missing" in 11 of 21 repos, and crypto-machine starting with 1541 lines of rules and
   0 code (`C:/dev/docs/research/2026-09-repo-audit/summary.md`)
 
+- feat(scaffold-project): every new repo gets the three places the scratch standard names
+  (h2t-infra `standards/scratch-and-run-records.md`): `/.scratch/` in `.gitignore` (all
+  stacks, DCC included), `docs/.artifacts/.gitkeep` as the committed evidence store, and a
+  "Scratch and evidence" section in the generated CLAUDE.md — naming the path in the agent
+  file is what makes agents use it (KB ev-f6j8). `.scratch` joined the root directories the
+  structure-guard always allows
+
 - feat(structure-guard): two more rules that need no `.h2t/structure.yaml` — scratch at the
   repo root is refused (`null`, `*.log`, `*.bak`, `*.jsonl`, `diag_*`, `tmp_*`: the audit's
   root-scratch list, found in 9 of 21 repos) and a new top-level directory must be declared

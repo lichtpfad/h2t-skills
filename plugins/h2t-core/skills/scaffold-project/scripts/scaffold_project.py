@@ -41,6 +41,9 @@ _H2T_LINT_ENTRIES = """\
 # docs-lint temp files
 .h2t/lint-before.json
 .h2t/lint-after.json
+# scratch: probes, dumps, drafts — per task, never committed. Run EVIDENCE goes to
+# docs/.artifacts/<run_id>/ and IS committed. Standard: h2t-infra standards/scratch-and-run-records.md
+/.scratch/
 """
 
 GITIGNORE_TEMPLATES: dict[str, str] = {
@@ -109,6 +112,13 @@ CLAUDE_MD_TEMPLATE = """\
 ```bash
 # TODO: fill in
 ```
+
+## Scratch and evidence
+
+- Probes, dumps, drafts → `.scratch/<issue>-<slug>/` (git-ignored; emptied when the issue closes).
+- Evidence that a run happened (receipt, gate output, log tail) → `docs/.artifacts/<run_id>/`, committed.
+- Scripts that survive their first use → `scripts/`, with `--help` and dry-run by default.
+- Never write scripts, dumps or drafts into `docs/superpowers/plans|specs` (guarded).
 """
 
 README_TEMPLATE = "# {id}\n\n{description}\n"
@@ -310,6 +320,15 @@ def cmd_create(args: argparse.Namespace) -> dict:
         )
         actions.append("Created CLAUDE.md")
         created_files.append("CLAUDE.md")
+
+    # Evidence store: docs/.artifacts/<run_id>/ is committed (standards/scratch-and-run-records.md).
+    # .gitkeep so the directory exists from day one and CI's truth-gate can point a command at it.
+    artifacts_dir = project_dir / "docs" / ".artifacts"
+    if (project_dir / "docs").is_dir() and not artifacts_dir.exists():
+        artifacts_dir.mkdir(parents=True)
+        (artifacts_dir / ".gitkeep").write_text("", encoding="utf-8")
+        actions.append("Created docs/.artifacts/ (run evidence store)")
+        created_files.append("docs/.artifacts/.gitkeep")
 
     # Generate .h2t/structure.yaml (idempotent — skip if exists)
     if write_structure_yaml(project_dir):

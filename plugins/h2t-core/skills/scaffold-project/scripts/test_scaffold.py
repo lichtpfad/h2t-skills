@@ -115,3 +115,21 @@ def test_structure_yaml_idempotent_on_merge(tmp_path):
     _run("create", "--id", "myproj", "--type", "code-local",
          "--stack", "python", "--dir", str(tmp_path), "--merge")
     assert yaml_path.read_text(encoding="utf-8") == original
+
+
+def test_scaffold_writes_scratch_ignore_evidence_dir_and_claude_md_section(tmp_path):
+    """Standard scratch-and-run-records.md: the scaffold is the mechanism that gives every
+    new repo the ignored scratch place, the committed evidence store, and the instruction
+    line an agent reads (ev-f6j8: naming the path in the agent file is what makes agents
+    use it)."""
+    _run("create", "--id", "p", "--type", "code-local", "--stack", "python", "--dir", str(tmp_path))
+    repo = tmp_path / "p"
+    assert "/.scratch/" in (repo / ".gitignore").read_text(encoding="utf-8").splitlines()
+    assert (repo / "docs" / ".artifacts" / ".gitkeep").exists()
+    claude = (repo / "CLAUDE.md").read_text(encoding="utf-8")
+    assert ".scratch/" in claude and "docs/.artifacts/<run_id>/" in claude
+
+
+def test_dcc_gitignore_also_ignores_scratch(tmp_path):
+    _run("create", "--id", "d", "--type", "dcc", "--dir", str(tmp_path))
+    assert "/.scratch/" in (tmp_path / "d" / ".gitignore").read_text(encoding="utf-8").splitlines()

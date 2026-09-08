@@ -238,7 +238,7 @@ _ROOT_SCRATCH_NAMES = {"null", "nul", "tmp", "temp", "scratch", "_scratch", "_wd
 _ROOT_SCRATCH_SUFFIXES = (".log", ".bak", ".tmp", ".jsonl", ".orig", ".rej")
 _ROOT_SCRATCH_PREFIXES = ("tmp_", "diag_", "debug_", "scratch_")
 # Directories any repo may grow without a decision — everything else new at the root is one.
-_ROOT_DIRS_ALWAYS = {"docs", "tests", "scripts", "src", ".claude", ".h2t", ".github", ".vscode"}
+_ROOT_DIRS_ALWAYS = {"docs", "tests", "scripts", "src", ".claude", ".h2t", ".github", ".vscode", ".scratch"}
 
 
 def check_root_universal(norm: str, config: dict | None, repo_root: Path | None) -> tuple[int, str]:
