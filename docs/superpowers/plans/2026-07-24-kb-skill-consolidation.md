@@ -3,7 +3,8 @@ title: "KB Skill Consolidation Implementation Plan"
 status: "draft"
 date: "2026-07-24"
 milestone: ""
-issue: ""
+issue: "none"
+reason: "predates the issue field; the consolidation it describes shipped as h2t-ops:kb (SKILL.md v0.1.x) — edited 2026-09-09 only to repoint fixture paths (#480)"
 ---
 # KB Skill Consolidation Implementation Plan
 

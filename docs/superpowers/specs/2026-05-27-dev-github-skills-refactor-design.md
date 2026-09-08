@@ -5,7 +5,7 @@ owner: "Stanislav Glazov"
 date: "2026-05-27"
 milestone: "skills-release"
 related: []   # docs-skills-v2.md was merged into the two sections below and removed (#480)
-issue: ""
+issue: "196"
 ---
 
 # Project Lifecycle OS — Skills Refactor
