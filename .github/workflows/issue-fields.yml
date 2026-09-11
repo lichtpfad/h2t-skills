@@ -1,0 +1,102 @@
+name: issue-fields
+
+# Форма в браузере обязательные поля проверяет сама, но `gh issue create` её не применяет.
+# Этот джоб — замок для задач, заведённых из терминала: без полей задача помечается и не считается принятой.
+
+on:
+  issues:
+    types: [opened, edited]
+
+permissions:
+  issues: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const NEEDS = 'status:needs-fields';
+
+            const TASK_SECTIONS = [
+              'Что станет возможно',
+              'Готовое решение проверено',
+              'Где живёт истина',
+              'Инвариант и чем он удержан',
+              'Приёмка',
+              'Что НЕ входит',
+              'Необратимое решение',
+            ];
+            const DECISION_SECTIONS = [
+              'Что решаем',
+              'Почему это необратимо',
+              'Вариант A',
+              'Вариант B',
+              'Что ломается',
+            ];
+            const NAMESPACES = ['type:', 'priority:', 'domain:'];
+
+            const issue = context.payload.issue;
+            const body = issue.body || '';
+            const labels = issue.labels.map(l => l.name);
+            const isDecision = labels.includes('type:decision');
+
+            const required = isDecision ? DECISION_SECTIONS : TASK_SECTIONS;
+            const missingSections = required.filter(s => !body.includes(s));
+            const missingLabels = NAMESPACES.filter(
+              ns => !labels.some(l => l.startsWith(ns))
+            );
+
+            const problems = [
+              ...missingSections.map(s => `отсутствует раздел «${s}»`),
+              ...missingLabels.map(ns => `нет метки из namespace \`${ns}\``),
+            ];
+
+            const hasNeeds = labels.includes(NEEDS);
+
+            if (problems.length === 0) {
+              if (hasNeeds) {
+                await github.rest.issues.removeLabel({
+                  ...context.repo, issue_number: issue.number, name: NEEDS,
+                });
+              }
+              core.info('Все обязательные поля на месте.');
+              return;
+            }
+
+            // метка может ещё не существовать в репозитории — создаём один раз
+            try {
+              await github.rest.issues.getLabel({ ...context.repo, name: NEEDS });
+            } catch (e) {
+              if (e.status !== 404) throw e;
+              await github.rest.issues.createLabel({
+                ...context.repo,
+                name: NEEDS,
+                color: 'd93f0b',
+                description: 'Задача заведена без обязательных полей контракта',
+              });
+            }
+
+            await github.rest.issues.addLabels({
+              ...context.repo, issue_number: issue.number, labels: [NEEDS],
+            });
+
+            if (!hasNeeds) {
+              const list = problems.map(p => `- ${p}`).join('\n');
+              const shape = isDecision ? 'decision.yml' : 'task.yml';
+              await github.rest.issues.createComment({
+                ...context.repo,
+                issue_number: issue.number,
+                body: [
+                  'Задача не принята: контракт неполный.',
+                  '',
+                  list,
+                  '',
+                  `Форма с обязательными полями — \`.github/ISSUE_TEMPLATE/${shape}\`.`,
+                  'Допиши недостающее в теле задачи — метка снимется сама.',
+                ].join('\n'),
+              });
+            }
+
+            core.setFailed(`Не хватает: ${problems.join('; ')}`);

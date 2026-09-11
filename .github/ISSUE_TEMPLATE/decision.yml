@@ -1,0 +1,66 @@
+name: Решение
+description: Необратимый выбор. Это не задача — здесь агент приносит варианты, а решает человек.
+title: "decision: "
+labels: ["type:decision", "status:triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Сюда попадает то, что завтра переиграть дороже, чем сегодня, и цена растёт вместе с объёмом
+        уже произведённых данных: единица предметной области и её ключ, карта «где живёт истина»,
+        выбор хранилища, жизненный цикл и поведение при отказе, внешний контракт.
+        **Готовый документ на утверждение — не то, что здесь нужно. Нужны названные варианты с последствиями.**
+
+  - type: textarea
+    id: question
+    attributes:
+      label: Что решаем
+      description: Вопрос одним предложением, без предлагаемого ответа.
+    validations:
+      required: true
+
+  - type: textarea
+    id: irreversibility
+    attributes:
+      label: Почему это необратимо
+      description: >
+        Что именно станет дороже переиграть и от чего растёт цена: объём уже произведённых записей,
+        внешние ссылки, опубликованные материалы, чужие интеграции. По возможности числом.
+    validations:
+      required: true
+
+  - type: textarea
+    id: option-a
+    attributes:
+      label: Вариант A
+      description: Что даёт, чего стоит, что закрывает навсегда.
+    validations:
+      required: true
+
+  - type: textarea
+    id: option-b
+    attributes:
+      label: Вариант B
+      description: Что даёт, чего стоит, что закрывает навсегда.
+    validations:
+      required: true
+
+  - type: textarea
+    id: option-c
+    attributes:
+      label: Вариант C
+      description: Если есть третий разумный путь. Если нет — так и напиши.
+
+  - type: textarea
+    id: blast
+    attributes:
+      label: Что ломается, если выбор окажется неверным
+      description: Как узнаем, что ошиблись, и что придётся переделать.
+    validations:
+      required: true
+
+  - type: input
+    id: links
+    attributes:
+      label: Связи
+      description: Затронутые задачи, спеки, предыдущий ADR, который это решение заменяет.
