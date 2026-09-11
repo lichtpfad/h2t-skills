@@ -252,6 +252,17 @@ Load only what the request needs:
 - `references/templates/news-monitoring.md`
 - `references/templates/person.md`
 
+Method references (tool-agnostic, load when the judgment call is the hard part):
+
+- `references/claim-verification-checklist.md` — before a finding enters a report: what is
+  actually asserted, does the logic hold, bias sweep, hidden assumptions, red flags.
+- `references/evidence-quality-checklists.md` — source tiers A–D, recurring anti-patterns and
+  stress-test questions per domain (health, macro, company, science).
+- `references/search-technique-toolkit.md` — widening a shallow search, citation chaining,
+  coverage check, searching for disconfirming evidence.
+- `references/domain-query-frameworks.md` — shaping queries per domain (PICO / STEEP / PROFIT /
+  CREAM) plus per-domain coverage checklists.
+
 ## Required Workflow
 
 1. Pick a template if the request has a clear domain.

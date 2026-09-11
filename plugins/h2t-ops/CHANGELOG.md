@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- feat(research): four method references the skill was missing — how to judge a claim before
+  it enters a report (logic traps, bias sweep, hidden assumptions, red flags), per-domain
+  source tiers and anti-patterns, search expansion and citation chaining, and PICO/STEEP/
+  PROFIT/CREAM query shaping. Extracted from a legacy multi-agent `/research` command that is
+  being retired; its memory-fallback, self-fact-checking and vault-write parts were dropped
+  as they contradict this skill's no-silent-fallback rule and evidence-grounded-synthesis
+  (#481)
+
 - fix(meetgeek): the missing-ffmpeg error named a Windows path inside `~/.h2t/venv`, a
   directory the installer never creates and which has no pip when it exists. It now names
   the package and `uv pip install` (#443)
