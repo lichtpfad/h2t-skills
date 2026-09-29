@@ -108,3 +108,8 @@ if thread_id:
 - Missing OAuth token: run Google OAuth setup.
 - Expired token: refresh OAuth through the configured Google auth flow.
 - Write command ambiguity: create a draft unless the user explicitly says send.
+- `reply` takes the recipient from the **last message in the thread**. In a thread whose
+  last message is your own outgoing mail, the draft is addressed back to yourself. Always
+  read the draft back and check its `to` field; in such a thread use
+  `gmail draft <address> <subject> --file <body> --thread-id <id>`, where the recipient is
+  explicit.
