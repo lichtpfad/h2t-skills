@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- fix(gmail): `reply` no longer addresses the account owner when the owner wrote last. It took
+  the newest message's From; a 2026-09-28 reply with delivery questions for an external partner
+  went to the owner's own inbox and sat unnoticed for six days. The recipient now follows
+  Gmail's Reply: own drafts are skipped, the owner's messages are known by the SENT label and
+  every From seen on them (so a send-as alias counts), an incoming message is answered at its
+  Reply-To, a newest own message answers its other To recipients, else the last other sender,
+  and a thread of only own messages or a message without a sender fails loud. `reply` and `forward` print the
+  resolved `to` in human and JSON output. `In-Reply-To` / `References` now carry the RFC 822
+  Message-ID (plus the prior References chain) instead of the Gmail API id, which other mail
+  clients could not thread. Cc of an own message is not added — Gmail's Reply does not either
+  (#498)
+
 - feat(research): four method references the skill was missing — how to judge a claim before
   it enters a report (logic traps, bias sweep, hidden assumptions, red flags), per-domain
   source tiers and anti-patterns, search expansion and citation chaining, and PICO/STEEP/

@@ -14,6 +14,7 @@ from email import encoders
 from email.mime.base import MIMEBase
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from email.utils import formataddr, getaddresses, parseaddr
 from pathlib import Path
 from typing import Any
 
@@ -234,6 +235,7 @@ class GmailClient:
         as_draft: bool = False,
         thread_id: str | None = None,
         reply_to_message_id: str | None = None,
+        references: str | None = None,
     ) -> dict[str, Any]:
         try:
             message = MIMEMultipart() if attachments else MIMEText(body)
@@ -241,7 +243,7 @@ class GmailClient:
             message["subject"] = subject
             if reply_to_message_id:
                 message["In-Reply-To"] = reply_to_message_id
-                message["References"] = reply_to_message_id
+                message["References"] = references or reply_to_message_id
             if attachments:
                 message.attach(MIMEText(body, "plain"))
                 for file_path in attachments:
@@ -300,17 +302,60 @@ class GmailClient:
         messages = thread.get("messages") or []
         if not messages:
             raise UsageError(f"gmail reply: thread has no messages: {thread_id}")
-        last = messages[-1]
+        last, to_addr = self._reply_target(thread_id, messages)
+        if not to_addr:
+            raise UsageError(f"gmail reply: no recipient — newest message in {thread_id} has no From")
         subject = last.get("subject") or ""
-        to_addr = last.get("from") or ""
+        # Threading headers carry the RFC 822 Message-ID; the Gmail API id means
+        # nothing to other mail clients (#498).
+        message_id = last.get("message_id") or None
+        references = f"{last.get('references') or ''} {message_id or ''}".strip() or None
         reply_body = Path(body_file).read_text(encoding="utf-8") if body_file else body
-        return self.send_message(
+        result = self.send_message(
             to=to_addr,
             subject=subject if subject.lower().startswith("re:") else f"Re: {subject}",
             body=reply_body,
             thread_id=thread_id,
-            reply_to_message_id=last.get("id"),
+            reply_to_message_id=message_id,
+            references=references,
             as_draft=not send,
+        )
+        return {**result, "to": to_addr}
+
+    @staticmethod
+    def _reply_target(thread_id: str, messages: list[dict[str, Any]]) -> tuple[dict[str, Any], str]:
+        """The message being answered and its recipient, by Gmail's own Reply rule.
+
+        #498: the newest message's From addressed the reply to the owner whenever the
+        owner wrote last. Own drafts are not part of the conversation; the owner's own
+        messages carry the SENT label; every From on them counts as an owner address, so a
+        send-as alias is recognised. An incoming message is answered at its Reply-To.
+        """
+        def labels(m: dict[str, Any]) -> list[str]:
+            return m.get("labelIds") or []
+
+        def addr(value: str | None) -> str:
+            return parseaddr(value or "")[1].lower()
+
+        thread = [m for m in messages if "DRAFT" not in labels(m)]
+        if not thread:
+            raise UsageError(f"gmail reply: no recipient — thread {thread_id} holds only drafts")
+        owner = {addr(m.get("from")) for m in thread if "SENT" in labels(m)} - {""}
+
+        def own(m: dict[str, Any]) -> bool:
+            return "SENT" in labels(m) or addr(m.get("from")) in owner
+
+        last = thread[-1]
+        if not own(last):
+            return last, last.get("reply_to") or last.get("from") or ""
+        others = [a for a in getaddresses([last.get("to") or ""]) if a[1] and a[1].lower() not in owner]
+        if others:
+            return last, ", ".join(formataddr(a) for a in others)
+        for m in reversed(thread):
+            if not own(m) and m.get("from"):
+                return last, m.get("reply_to") or m["from"]
+        raise UsageError(
+            f"gmail reply: no recipient — every message in thread {thread_id} is the owner's own"
         )
 
     def forward_message(
@@ -428,6 +473,9 @@ class GmailClient:
             "to": headers.get("to", ""),
             "subject": headers.get("subject", ""),
             "date": headers.get("date", ""),
+            "message_id": headers.get("message-id", ""),
+            "references": headers.get("references", ""),
+            "reply_to": headers.get("reply-to", ""),
             "body": self._get_message_body(message["payload"]),
             "attachments": self._collect_attachments(message["payload"]),
         }

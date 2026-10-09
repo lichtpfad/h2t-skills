@@ -62,7 +62,7 @@ h2t-ops gmail label-delete LABEL_ID --confirm-name "Project X" --json
 
 - `reply` and `forward` always default to draft — real send requires both `--send` AND `--confirm-send`.
 - `label-delete` requires `--confirm-name` with the exact label name (case-insensitive match).
-- **Verify the recipient after every `draft`, `reply`, `forward` and `send`.** Find the created message (`gmail search "in:drafts newer_than:1d" --json` for drafts) and run `h2t-ops gmail read <message_id> --json`; compare `to` with the intended person. Do not report the draft as ready until `to` matches, and show the `to` line to the user. `reply` addresses the sender of the last message in the thread — when that is the account owner, the reply goes back to the owner (#498). Negative case: 2026-09-28 a reply with delivery questions for an exhibition curator was sent to the owner's own address and went unnoticed for six days.
+- **Verify the recipient after every `draft`, `reply`, `forward` and `send`.** Find the created message (`gmail search "in:drafts newer_than:1d" --json` for drafts) and run `h2t-ops gmail read <message_id> --json`; compare `to` with the intended person. Do not report the draft as ready until `to` matches, and show the `to` line to the user. `reply` and `forward` print the resolved `to` (also in `--json`). `reply` follows Gmail's own Reply: own drafts are skipped; if the newest message is your own, it goes to that message's other recipients, else to the last other sender; a thread of only your own messages fails loud (#498, fixed in 1.6.19). Negative case: 2026-09-28 a reply with delivery questions for an exhibition curator was sent to the owner's own address and went unnoticed for six days.
 
 ## Manual E2E Smoke Recipe
 
@@ -109,4 +109,4 @@ if thread_id:
 - Missing OAuth token: run Google OAuth setup.
 - Expired token: refresh OAuth through the configured Google auth flow.
 - Write command ambiguity: create a draft unless the user explicitly says send.
-- Reply addressed to yourself: the last message in the thread is your own. Reply in the thread where the other party wrote last, or use `gmail draft <address> ...` with the address set explicitly, then verify `to` with `gmail read`.
+- Reply addressed to yourself (before 1.6.19): the last message in the thread was your own. Upgrade; on an old install use `gmail draft <address> ...` with the address set explicitly, then verify `to` with `gmail read`.

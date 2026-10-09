@@ -302,6 +302,24 @@ def test_reply_dispatch_defaults_to_draft(monkeypatch):
     assert calls["send"] is False
 
 
+def test_reply_output_names_the_resolved_recipient(monkeypatch):
+    """#498: a wrong recipient must be visible in the command output."""
+    _patch(monkeypatch)
+
+    class _Stub(_FakeClient):
+        def reply_to_thread(self, thread_id, *, body, body_file=None, send=False, confirm_send=False):
+            return {"id": "reply1", "to": "partner@x.com"}
+
+    import h2t_ops.connectors.gmail.client as client_mod
+    monkeypatch.setattr(client_mod, "GmailClient", lambda: _Stub())
+    as_json = gc.run(_ns(gmail_cmd="reply", thread_id="T1", body="OK", file=None,
+                         send=False, confirm_send=False, as_json=True, fmt="human"))
+    human = gc.run(_ns(gmail_cmd="reply", thread_id="T1", body="OK", file=None,
+                       send=False, confirm_send=False, as_json=False, fmt="human"))
+    assert as_json["to"] == "partner@x.com"
+    assert "to partner@x.com" in human
+
+
 def test_reply_requires_body(monkeypatch):
     _patch(monkeypatch)
     with pytest.raises(UsageError, match="body"):
