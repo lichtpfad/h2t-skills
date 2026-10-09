@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- feat(hooks): a Stop hook, `plain-guard`, checks the measurable part of the
+  plain-language rule on every answer, after Simplified Technical Russian
+  (ГОСТ Р 58049-2017) and ASD-STE100: a sentence over 25 words, a banned machine-slang
+  word outside backticks, and «должен быть» / «является». Code, inline code, quoted
+  examples, tables, URLs and paths are not counted; noun chains are not measured (no
+  stdlib morphology). The rule had been asked for repeatedly and ignored with no check
+  on the answer. Warn only, like `grade-guard`: a blocking Stop hook would make the model
+  rewrite and double output tokens. Every answer is logged to
+  `~/.h2t/logs/plain-guard.jsonl` for a one-week trial review of the hit rate. Measured
+  0.18 s per stop end to end; replay over one real session flagged 2 of 7 answers before
+  the quoted-example exclusion, 0 after
+
 - feat(hooks): a SessionEnd hook reaps the Codex `app-server-broker` this session
   leaked (Windows only). Codex orphans the broker on Windows; measured on AUTOMATA
   2026-09-04, nine had accumulated over eight days, one per session, and the oldest
