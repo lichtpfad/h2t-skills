@@ -721,6 +721,24 @@ def test_reply_non_ascii_name_is_rfc2047_encoded(messages):
     assert result["to"] == '"Fachübersetzungsdienst" <a@b.de>'
 
 
+def test_reply_after_own_message_reports_non_ascii_recipient_readably():
+    """The owner-wrote-last branch must not hand back an already-encoded word."""
+    result, raw = _reply_raw(
+        _thread_msg("m1", from_addr="me@x.com", to_addr="me@x.com", labels=["INBOX"]),
+        _thread_msg("m2", from_addr="me@x.com", to_addr="Fachübersetzungsdienst <a@b.de>",
+                    labels=["SENT"]),
+    )
+    assert _to_header(raw) == "to: =?utf-8?q?Fach=C3=BCbersetzungsdienst?= <a@b.de>"
+    assert result["to"] == '"Fachübersetzungsdienst" <a@b.de>'
+
+
+def test_send_message_without_a_parseable_recipient_fails_loud():
+    from h2t_ops.core.errors import UsageError
+    c, _ = _client_with(_FakeService())
+    with pytest.raises(UsageError, match="no recipient"):
+        c.send_message(to="undisclosed-recipients:;", subject="s", body="b", as_draft=True)
+
+
 def test_reply_to_message_without_sender_fails_loud():
     from h2t_ops.core.errors import UsageError
     with pytest.raises(UsageError, match="no recipient"):
