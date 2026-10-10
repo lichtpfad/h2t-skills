@@ -107,6 +107,9 @@ In Claude Code, check readiness through:
 - Sheets requires the Google Sheets API enabled in the OAuth client's GCP project (the `drive` scope is sufficient — no re-auth). If disabled: `SERVICE_DISABLED` error with an activation URL.
 - Markdown export works without optional `html2text`; when `html2text` is not installed, h2t-ops uses a smaller stdlib HTML-to-Markdown fallback.
 - Ambiguous folder name: use `upload-folder --parent-id` or inspect folders first.
+- `upload-folder <dir>` uploads the **contents** of `<dir>` into `--parent-id`; it does not
+  create a folder named after `<dir>`. To create a subfolder, pass a wrapper directory that
+  contains it: `upload-folder ./wrap --parent-id X` where `./wrap/Target/` holds the files.
 - Existing same-name file: default is skip; use `--update-existing` only when replacement is intended.
 - Cloud HTML deployment: preserve relative paths with `upload-folder`, not single-file upload.
 - `delete` without `--confirm-permanent` raises UsageError — this is intentional.
