@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- fix(drive, meetgeek): `drive_cli.py` and `meetgeek_cli.py` report a missing Google client
+  or `requests` from `main()` with the same exit code, instead of `sys.exit` at import (#429)
+
 - fix(activity): `h2t-activity-log` records the machine by the session-path rule, not the
   raw hostname (#491)
 
