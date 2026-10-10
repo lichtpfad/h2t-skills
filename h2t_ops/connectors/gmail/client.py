@@ -239,7 +239,10 @@ class GmailClient:
     ) -> dict[str, Any]:
         try:
             message = MIMEMultipart() if attachments else MIMEText(body)
-            message["to"] = to
+            # Encode each display name on its own (#504). Assigned raw, a non-ASCII name
+            # turns the whole value, address included, into one encoded word, and Gmail
+            # answers "Invalid To header".
+            message["to"] = ", ".join(formataddr(a) for a in getaddresses([to]) if a[1])
             message["subject"] = subject
             if reply_to_message_id:
                 message["In-Reply-To"] = reply_to_message_id

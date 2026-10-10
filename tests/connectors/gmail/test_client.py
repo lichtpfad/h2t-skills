@@ -695,6 +695,32 @@ def test_reply_honours_reply_to_of_incoming_message():
     assert result["to"] == "owner@vendor.com"
 
 
+def _to_header(raw):
+    return next(line for line in raw.splitlines() if line.lower().startswith("to:"))
+
+
+@pytest.mark.parametrize("messages", [
+    pytest.param(
+        [_thread_msg("m1", from_addr='"Fachübersetzungsdienst" <a@b.de>', to_addr="me@x.com",
+                     labels=["INBOX"])],
+        id="incoming-from"),
+    pytest.param(
+        [_thread_msg("m1", from_addr="list@b.de", to_addr="me@x.com", labels=["INBOX"],
+                     reply_to='"Fachübersetzungsdienst" <a@b.de>')],
+        id="incoming-reply-to"),
+    pytest.param(
+        [_thread_msg("m1", from_addr='"Fachübersetzungsdienst" <a@b.de>', to_addr="me@x.com",
+                     labels=["INBOX"]),
+         _thread_msg("m2", from_addr="me@x.com", to_addr="me@x.com", labels=["SENT"])],
+        id="last-other-sender"),
+])
+def test_reply_non_ascii_name_is_rfc2047_encoded(messages):
+    """#504: Gmail rejects a raw non-ASCII To header with 'Invalid To header'."""
+    result, raw = _reply_raw(*messages)
+    assert _to_header(raw) == "to: =?utf-8?q?Fach=C3=BCbersetzungsdienst?= <a@b.de>"
+    assert result["to"] == '"Fachübersetzungsdienst" <a@b.de>'
+
+
 def test_reply_to_message_without_sender_fails_loud():
     from h2t_ops.core.errors import UsageError
     with pytest.raises(UsageError, match="no recipient"):
