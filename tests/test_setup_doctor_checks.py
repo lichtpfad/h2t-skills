@@ -2,8 +2,11 @@
 import sys
 from pathlib import Path
 
+import pytest
+
 from h2t_ops import cli
 from h2t_ops.core import secrets as core_secrets
+from lib.activity import writer as activity_writer
 
 SCRIPTS_DIR = Path(__file__).parent.parent / "plugins" / "h2t-core" / "skills" / "setup" / "scripts"
 sys.path.insert(0, str(SCRIPTS_DIR))
@@ -108,17 +111,10 @@ def test_doctor_is_a_report_and_exits_0_on_an_unconfigured_machine(tmp_path, mon
     assert "NOTION_API_TOKEN=MISSING" in capsys.readouterr().out
 
 
-def test_activity_log_help_names_the_command(capsys):
-    import pytest
-    from lib.activity import writer
+def test_activity_log_help_names_the_command(monkeypatch, capsys):
+    monkeypatch.setattr(sys, "argv", ["h2t-activity-log", "--help"])
 
-    monkeypatch_argv = ["h2t-activity-log", "--help"]
-    old = sys.argv
-    sys.argv = monkeypatch_argv
-    try:
-        with pytest.raises(SystemExit):
-            writer.main()
-    finally:
-        sys.argv = old
+    with pytest.raises(SystemExit):
+        activity_writer.main()
 
     assert capsys.readouterr().out.startswith("usage: h2t-activity-log")
