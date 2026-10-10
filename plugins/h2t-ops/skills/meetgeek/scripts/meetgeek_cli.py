@@ -27,8 +27,8 @@ from typing import Any
 try:
     import requests
 except ImportError:
-    print("ERROR: 'requests' not installed. Run: pip install requests", file=sys.stderr)
-    sys.exit(2)
+    # No exit at import (#429); main() reports it.
+    requests = None
 
 def _load_secret_env_files() -> None:
     """Load canonical then legacy h2t secrets files without overriding env."""
@@ -1038,6 +1038,9 @@ def main(argv: list[str] | None = None) -> int:
     # where cp1252 has no byte for the character. Every caller decodes UTF-8 (#428).
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
+    if requests is None:
+        print("ERROR: 'requests' not installed. Run: pip install requests", file=sys.stderr)
+        return 2
     args = build_parser().parse_args(argv)
     try:
         return args.func(args)

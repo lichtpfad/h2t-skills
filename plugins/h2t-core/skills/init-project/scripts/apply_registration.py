@@ -14,12 +14,9 @@ from pathlib import Path
 try:
     from ruamel.yaml import YAML
 except ImportError:
-    print(json.dumps({
-        "status": "error",
-        "error": "ruamel.yaml required. Install it for the interpreter running this "
-                 "script: uv pip install ruamel.yaml",
-    }))
-    sys.exit(1)
+    # No exit at import: that turned one missing package into a pytest INTERNALERROR for the
+    # whole directory (#429). main() reports it, which is the CLI's contract.
+    YAML = None
 
 
 def _backup(path: Path) -> None:
@@ -167,6 +164,13 @@ def main():
     # where cp1252 has no byte for the character. Every caller decodes UTF-8 (#428).
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
+    if YAML is None:
+        print(json.dumps({
+            "status": "error",
+            "error": "ruamel.yaml required. Install it for the interpreter running this "
+                     "script: uv pip install ruamel.yaml",
+        }))
+        sys.exit(1)
     parser = argparse.ArgumentParser()
     parser.add_argument("--id", required=True)
     parser.add_argument("--domain", required=True)
