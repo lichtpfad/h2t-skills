@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- fix(setup): the setup skill no longer leaves four branches to guess (#520). Install runs
+  for first setup / repair only when `entry_points` is not `ready`, and always for update —
+  the Modes table and Step 2 now say the same. The install source follows `h2t_ops.version`:
+  an editable checkout stays editable instead of being replaced by `--source main`.
+  `plugin_cache: missing` is explained, with the `/plugin` commands that fix it. The Secrets
+  Wizard calls `scripts/setup_h2t.py`, which resolves from the skill directory. Every call
+  spells out `uv run --no-project --python 3.11 python` instead of `$RUN`: an agent's shell
+  calls share no variables, so `$RUN` was empty after Step 1 and the script failed with exit
+  126. Step 1 is the uv preflight only; first setup / repair / update start from `setup`,
+  and the Modes table says where `connectors-check` belongs
+
 - fix(setup): the setup skill now runs `setup --json` in its first-setup / repair / update
   flow; it ran only `doctor`, so the machine-name pin was never reached through the skill
   (#518). `setup` no longer pins a hostname that has drifted from the session history: if
