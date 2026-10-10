@@ -23,13 +23,19 @@ def build_parser() -> argparse.ArgumentParser:
     sub = p.add_subparsers(dest="connector")
     sub.add_parser("connectors", help="List available connectors")
     sub.add_parser("deploy", help="Profile-driven deploy commands")
-    sub.add_parser("doctor", help="Installed CLI health (version, path, connectors, secrets)")
+    sub.add_parser("doctor", help="Report installed CLI state (version, path, connectors, secrets); always exits 0, connectors-check is the gate")
     for spec in discover():
         spec.register(sub)
     return p
 
 
 def _doctor() -> int:
+    """Report install state; always exits 0 (#451, owner's decision 2026-10-10).
+
+    doctor is a report, not a gate: a non-zero exit when any connector is unconfigured
+    would be red on every machine that does not use all of them. The readiness gate is
+    the h2t-core setup skill's `connectors-check`.
+    """
     print(build_info.version_line())
     print(f"executable: {shutil.which('h2t-ops') or sys.executable}")
     print("connectors:")

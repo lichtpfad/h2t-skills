@@ -88,7 +88,7 @@ def main() -> None:
         sys.stdout.reconfigure(encoding="utf-8")
     import argparse as _argparse
 
-    parser = _argparse.ArgumentParser(prog="writer.py", description="Activity stream writer CLI")
+    parser = _argparse.ArgumentParser(prog="h2t-activity-log", description="Activity stream writer CLI")
     sub = parser.add_subparsers(dest="cmd")
 
     start_cmd = sub.add_parser("start", help="Log session start")

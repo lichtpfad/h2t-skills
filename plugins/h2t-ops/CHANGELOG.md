@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- fix(cli): `h2t-ops doctor` is a report and always exits 0, now stated in its help and
+  docstring and pinned by a test; the readiness gate is the setup skill's
+  `connectors-check` (owner's decision on #451). `h2t-activity-log --help` names itself
+  instead of `writer.py` (#451)
+
 - fix(doctor): `h2t-ops doctor` checks credentials the way the connectors read them. Notion
   goes through `resolve_notion_token` (so a token in a secrets file counts), and gmail looks
   for a signed-in token, not the OAuth client file it used to take for one. It also names the

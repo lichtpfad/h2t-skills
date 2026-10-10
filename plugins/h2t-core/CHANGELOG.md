@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- fix(activity): the vendored `lib/activity/writer.py` names itself `h2t-activity-log` in
+  `--help`, kept in step with the package copy (#451)
+
 - fix(handoff): the rule-promotion scan (step 4b) finds the session transcript. It stripped
   the leading `-` and kept `_` when rebuilding the directory name, so it never found one on
   POSIX and printed nothing, read as "no rules". It now names the directory as Claude Code
