@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- fix(setup): `doctor` reports a legacy `h2t` command left in the old per-user venv whose
+  editable install points at a plugin-cache directory that no longer exists. It names the
+  package and the missing directory and prints the `uv pip uninstall` command; it removes
+  nothing itself (#476)
+
 - fix(init-project): `apply_registration.py` reports a missing `ruamel.yaml` from `main()`
   instead of exiting at import, which turned one absent package into a pytest INTERNALERROR
   for the whole directory (#429)
