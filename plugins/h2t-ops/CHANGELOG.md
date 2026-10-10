@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- fix(gmail): a recipient whose display name is not ASCII no longer fails with
+  "Invalid To header" — each name is RFC 2047-encoded on its own instead of the whole
+  value, address included, becoming one encoded word (#504)
+
 - feat(dropbox): read-only `h2t-ops dropbox` connector — `account`, `list`, `meta`,
   `download` over HTTP API v2, for online-only files the desktop client cannot read (#469)
 

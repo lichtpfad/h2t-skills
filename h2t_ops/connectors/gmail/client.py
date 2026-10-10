@@ -239,7 +239,13 @@ class GmailClient:
     ) -> dict[str, Any]:
         try:
             message = MIMEMultipart() if attachments else MIMEText(body)
-            message["to"] = to
+            # Encode each display name on its own (#504). Assigned raw, a non-ASCII name
+            # turns the whole value, address included, into one encoded word, and Gmail
+            # answers "Invalid To header".
+            encoded_to = ", ".join(formataddr(a) for a in getaddresses([to]) if a[1])
+            if not encoded_to:
+                raise UsageError(f"gmail: no recipient address in {to!r}")
+            message["to"] = encoded_to
             message["subject"] = subject
             if reply_to_message_id:
                 message["In-Reply-To"] = reply_to_message_id
@@ -350,7 +356,10 @@ class GmailClient:
             return last, last.get("reply_to") or last.get("from") or ""
         others = [a for a in getaddresses([last.get("to") or ""]) if a[1] and a[1].lower() not in owner]
         if others:
-            return last, ", ".join(formataddr(a) for a in others)
+            # Readable here; send_message does the RFC 2047 encoding (#504).
+            return last, ", ".join(
+                formataddr(a) if a[0].isascii() else f'"{a[0]}" <{a[1]}>' for a in others
+            )
         for m in reversed(thread):
             if not own(m) and m.get("from"):
                 return last, m.get("reply_to") or m["from"]
