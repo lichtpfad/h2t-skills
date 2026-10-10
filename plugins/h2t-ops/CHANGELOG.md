@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- feat(drive): `docs-tab write` builds real tables from GFM markdown tables, header row
+  bold, in the same single batch; table-free markdown produces the same requests as before (#493)
+
 - feat(drive): `sheets update --input-mode user-entered` — formulas evaluate and numeric
   strings become numbers; the default stays `raw` (#492)
 

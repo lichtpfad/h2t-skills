@@ -36,6 +36,7 @@
 - List, search, folders, download, export, get-file, and docs-tab read are read-only.
 - Upload and upload-folder write to Drive and require explicit user intent.
 - `docs-tab write` inserts content at the start of an existing tab — use `--clear-first` to replace content instead of appending.
+- `docs-tab write` turns a GFM table (header row, then a `|---|---|` separator) into a real Docs table with a bold header. Markup inside cells is dropped to plain text; column alignment and escaped `\|` are not supported. Docs adds an empty paragraph before each table.
 - `trash` is recoverable from Drive Trash. `delete` is **permanent and irreversible** — requires `--confirm-permanent`.
 - Both `trash` and `delete` require `--confirm-name` matching the exact file name (case-insensitive) as a safety guard.
 - Run `upload-folder --dry-run --json` before a real recursive upload.
