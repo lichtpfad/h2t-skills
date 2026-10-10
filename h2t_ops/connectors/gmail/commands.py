@@ -211,10 +211,13 @@ def run(args) -> Any:
             send=getattr(args, "send", False),
             confirm_send=getattr(args, "confirm_send", False),
         )
+        # The resolved recipient is printed so a wrong address is visible at once (#498).
         if _fmt(args) == "json":
-            return {"id": result.get("id"), "draft": not getattr(args, "send", False)}
+            return {"id": result.get("id"), "draft": not getattr(args, "send", False),
+                    "to": result.get("to")}
         is_draft = not getattr(args, "send", False)
-        return f"✓ {'Draft reply created' if is_draft else 'Reply sent'} (ID: {result.get('id')})"
+        return (f"✓ {'Draft reply created' if is_draft else 'Reply sent'} "
+                f"to {result.get('to')} (ID: {result.get('id')})")
     if cmd == "forward":
         result = client.forward_message(
             args.message_id,
@@ -224,9 +227,11 @@ def run(args) -> Any:
             confirm_send=getattr(args, "confirm_send", False),
         )
         if _fmt(args) == "json":
-            return {"id": result.get("id"), "draft": not getattr(args, "send", False)}
+            return {"id": result.get("id"), "draft": not getattr(args, "send", False),
+                    "to": args.to}
         is_draft = not getattr(args, "send", False)
-        return f"✓ {'Draft forward created' if is_draft else 'Message forwarded'} (ID: {result.get('id')})"
+        return (f"✓ {'Draft forward created' if is_draft else 'Message forwarded'} "
+                f"to {args.to} (ID: {result.get('id')})")
     if cmd == "label-create":
         result = client.create_label(args.name)
         if _fmt(args) == "json":

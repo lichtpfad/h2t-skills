@@ -588,6 +588,130 @@ def test_reply_send_requires_confirm_send():
         c.reply_to_thread("t1", body="Pong", send=True, confirm_send=False)
 
 
+def _thread_msg(msg_id, *, from_addr, to_addr, labels=(), message_id=None, references=None,
+                reply_to=None):
+    headers = [
+        {"name": "Subject", "value": "Questions"},
+        {"name": "From", "value": from_addr},
+        {"name": "To", "value": to_addr},
+        {"name": "Date", "value": "Mon"},
+    ]
+    if message_id:
+        headers.append({"name": "Message-ID", "value": message_id})
+    if references:
+        headers.append({"name": "References", "value": references})
+    if reply_to:
+        headers.append({"name": "Reply-To", "value": reply_to})
+    return {"id": msg_id, "threadId": "t1", "labelIds": list(labels), "snippet": "",
+            "payload": {"headers": headers, "body": {"data": ""}}}
+
+
+def _reply_raw(*messages):
+    """Run reply_to_thread over a fake thread; return (result, decoded MIME of the draft)."""
+    import base64
+    created = {}
+
+    class _Svc(_FakeService):
+        def get(self, **k):
+            return _Exec({"id": "t1", "messages": list(messages)})
+
+        def drafts(self):
+            return self
+
+        def create(self, userId, body):
+            created.update(body)
+            return _Exec({"id": "d1"})
+
+    c, _ = _client_with(_Svc())
+    result = c.reply_to_thread("t1", body="Answer")
+    return result, base64.urlsafe_b64decode(created["message"]["raw"]).decode()
+
+
+def test_reply_after_own_message_goes_to_the_other_party():
+    """#498: the owner wrote last — the reply must not be addressed to the owner."""
+    result, raw = _reply_raw(
+        _thread_msg("m1", from_addr="Partner <partner@x.com>", to_addr="me@x.com", labels=["INBOX"]),
+        _thread_msg("m2", from_addr="Me <me@x.com>", to_addr="Partner <partner@x.com>", labels=["SENT"]),
+    )
+    assert "to: Partner <partner@x.com>" in raw
+    assert result["to"] == "Partner <partner@x.com>"
+
+
+def test_reply_to_incoming_message_goes_to_its_sender():
+    result, raw = _reply_raw(
+        _thread_msg("m1", from_addr="me@x.com", to_addr="partner@x.com", labels=["SENT"]),
+        _thread_msg("m2", from_addr="partner@x.com", to_addr="me@x.com", labels=["INBOX"]),
+    )
+    assert "to: partner@x.com" in raw
+    assert result["to"] == "partner@x.com"
+
+
+def test_reply_ignores_own_draft_at_the_end_of_the_thread():
+    result, _ = _reply_raw(
+        _thread_msg("m1", from_addr="partner@x.com", to_addr="me@x.com", labels=["INBOX"]),
+        _thread_msg("m2", from_addr="me@x.com", to_addr="me@x.com", labels=["DRAFT"]),
+    )
+    assert result["to"] == "partner@x.com"
+
+
+def test_reply_falls_back_to_last_other_sender_when_own_message_has_no_other_recipient():
+    result, _ = _reply_raw(
+        _thread_msg("m1", from_addr="partner@x.com", to_addr="me@x.com", labels=["INBOX"]),
+        _thread_msg("m2", from_addr="me@x.com", to_addr="me@x.com", labels=["SENT"]),
+    )
+    assert result["to"] == "partner@x.com"
+
+
+def test_reply_in_thread_with_only_own_messages_fails_loud():
+    from h2t_ops.core.errors import UsageError
+    with pytest.raises(UsageError, match="no recipient"):
+        _reply_raw(_thread_msg("m1", from_addr="me@x.com", to_addr="me@x.com", labels=["SENT"]))
+
+
+def test_reply_excludes_every_owner_address_seen_in_the_thread():
+    """An alias sends the newest message; the primary address (seen on an earlier SENT) is dropped."""
+    result, _ = _reply_raw(
+        _thread_msg("m1", from_addr="me@x.com", to_addr="partner@x.com", labels=["SENT"]),
+        _thread_msg("m2", from_addr="Me <alias@x.com>", to_addr="Me <me@x.com>, partner@x.com",
+                    labels=["SENT"]),
+    )
+    assert result["to"] == "partner@x.com"
+
+
+def test_reply_treats_unlabelled_message_from_owner_address_as_own():
+    result, _ = _reply_raw(
+        _thread_msg("m1", from_addr="partner@x.com", to_addr="me@x.com", labels=["INBOX"]),
+        _thread_msg("m2", from_addr="me@x.com", to_addr="partner@x.com", labels=["SENT"]),
+        _thread_msg("m3", from_addr="me@x.com", to_addr="partner@x.com"),
+    )
+    assert result["to"] == "partner@x.com"
+
+
+def test_reply_honours_reply_to_of_incoming_message():
+    result, _ = _reply_raw(
+        _thread_msg("m1", from_addr="list@vendor.com", to_addr="me@x.com", labels=["INBOX"],
+                    reply_to="owner@vendor.com"),
+    )
+    assert result["to"] == "owner@vendor.com"
+
+
+def test_reply_to_message_without_sender_fails_loud():
+    from h2t_ops.core.errors import UsageError
+    with pytest.raises(UsageError, match="no recipient"):
+        _reply_raw(_thread_msg("m1", from_addr="", to_addr="me@x.com", labels=["INBOX"]))
+
+
+def test_reply_threads_by_rfc822_message_id_not_api_id():
+    """#498 second defect: In-Reply-To / References carry the Message-ID header."""
+    _, raw = _reply_raw(
+        _thread_msg("api-id-1", from_addr="partner@x.com", to_addr="me@x.com", labels=["INBOX"],
+                    message_id="<abc@mail.x.com>", references="<root@mail.x.com>"),
+    )
+    assert "In-Reply-To: <abc@mail.x.com>" in raw
+    assert "References: <root@mail.x.com> <abc@mail.x.com>" in raw
+    assert "api-id-1" not in raw
+
+
 def test_forward_reads_message_and_sends_new_message():
     import base64
     created = {}
