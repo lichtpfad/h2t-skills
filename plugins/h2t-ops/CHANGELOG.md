@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- docs(drive): `upload-folder <dir>` puts the contents of `<dir>` into `--parent-id` and
+  creates no folder named after it; the reference now says so (from #496)
+
 - fix(drive, meetgeek): `drive_cli.py` and `meetgeek_cli.py` report a missing Google client
   or `requests` from `main()` with the same exit code, instead of `sys.exit` at import (#429)
 
