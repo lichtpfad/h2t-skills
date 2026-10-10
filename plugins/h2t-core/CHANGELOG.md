@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- fix(handoff): the rule-promotion scan (step 4b) finds the session transcript. It stripped
+  the leading `-` and kept `_` when rebuilding the directory name, so it never found one on
+  POSIX and printed nothing, read as "no rules". It now names the directory as Claude Code
+  does, reads list-shaped user messages, prints how many messages it scanned, says so when no
+  transcript exists, and writes UTF-8 so Cyrillic hits do not crash on Windows (#475)
+
+- fix(setup): `setup doctor` finds the h2t-core plugin cache under any marketplace name and
+  under Codex, ordered by version number. It looked only in `cache/lichtpfad/h2t-core` and
+  sorted `3.2.10` before `3.2.9` (#451)
+
 - fix(secrets): `setup doctor` and `h2t_secrets.bootstrap` read every `*.env` in
   `~/.h2t/config/secrets/` after `secrets.env`, alphabetically — the same list as
   `h2t_ops.core.secrets` (#483). The directory is one file per provider; before this,

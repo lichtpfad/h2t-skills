@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- fix(doctor): `h2t-ops doctor` checks credentials the way the connectors read them. Notion
+  goes through `resolve_notion_token` (so a token in a secrets file counts), and gmail looks
+  for a signed-in token, not the OAuth client file it used to take for one. It also names the
+  connectors it does not check and points at the setup skill's `connectors-check`. The exit
+  code is still always 0; what a failing doctor should mean is open on #451
+
 - fix(secrets): `load_secrets` and research's `resolve_secret` read every `*.env` in
   `~/.h2t/config/secrets/`, not only `secrets.env`. The directory is one file per provider
   (`anysite.env`, `fred.env`, ...), so every key kept that way was invisible and the

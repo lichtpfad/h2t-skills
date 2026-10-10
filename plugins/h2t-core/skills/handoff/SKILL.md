@@ -112,7 +112,7 @@ import os, pathlib, json, re, sys
 sys.stdout.reconfigure(encoding='utf-8')  # Windows pipes default to cp1252; triggers are Cyrillic
 TRIGGERS = re.compile(r'не делай|не используй|стоп|запомни|договорились|принято|всегда|никогда|правило:|протокол:|важно:|запрет|нельзя|не надо', re.I)
 # Claude Code names the transcript directory by replacing every character that is not
-# an ASCII letter or digit with '-' (/Users/a_b/x -> -Users-a-b-x, C:/dev/x -> C--dev-x).
+# an ASCII letter or digit with '-' (a leading '/' becomes '-', and so does every '_').
 proj = pathlib.Path.home() / '.claude' / 'projects' / re.sub(r'[^A-Za-z0-9]', '-', os.getcwd())
 files = sorted(proj.glob('*.jsonl'), key=os.path.getmtime, reverse=True)
 if not files: sys.exit(f'RULE_SCAN: no transcript found in {proj}')

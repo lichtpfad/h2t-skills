@@ -2,10 +2,8 @@
 from __future__ import annotations
 
 import argparse
-import os
 import shutil
 import sys
-from pathlib import Path
 
 from h2t_ops import build_info
 from h2t_ops.core.errors import UsageError
@@ -35,14 +33,25 @@ def _doctor() -> int:
     print(build_info.version_line())
     print(f"executable: {shutil.which('h2t-ops') or sys.executable}")
     print("connectors:")
+    names = []
     for spec in discover():
+        names.append(spec.name)
         print(f"  - {spec.name}: {spec.help}")
-    notion = bool(os.getenv("NOTION_API_TOKEN")) or \
-        (Path.home() / ".config" / "notion" / "token").is_file()
+    # Ask the same code the connectors use (#451): the literals here missed a token kept in
+    # a secrets file, and took gmail's client credentials for a signed-in token.
+    from h2t_ops.core import google_auth
+    from h2t_ops.core.errors import ConfigError
+    from h2t_ops.core.secrets import resolve_notion_token
+    try:
+        resolve_notion_token()
+        notion = True
+    except ConfigError:
+        notion = False
     print(f"secrets: NOTION_API_TOKEN={'present' if notion else 'MISSING'}")
-    gmail_creds = (Path.home() / ".config" / "gmail" / "credentials.json").is_file() or \
-        (Path.home() / ".config" / "google-calendar-mcp" / "credentials.json").is_file()
-    print(f"secrets: gmail credentials={'present' if gmail_creds else 'MISSING'}")
+    gmail_token = any(token.is_file() for token, _ in google_auth._candidate_paths("gmail"))
+    print(f"secrets: gmail token={'present' if gmail_token else 'MISSING'}")
+    unchecked = [name for name in names if name not in ("notion", "gmail")]
+    print(f"not checked here: {', '.join(unchecked)}; run the h2t-core setup skill's connectors-check")
     return 0
 
 
