@@ -186,3 +186,27 @@ def test_upsert_with_corrupt_index_keeps_file_and_warns(tmp_path, capsys):
 
     assert path.read_bytes() == before
     assert "rebuild-indexes" in capsys.readouterr().err
+
+
+def test_upsert_with_corrupt_index_of_non_objects_keeps_file_and_warns(tmp_path, capsys):
+    root = tmp_path / "research"
+    document = store.build_research_document(
+        canonical_url="https://example.com",
+        source_url="https://example.com",
+        provider="exa",
+        title="Example",
+        fetched_at="2026-10-10T10:00:00Z",
+        content_hash="abc",
+        artifact_refs={},
+        project_ids=["project:demo"],
+        thread_ids=[],
+        entity_ids=[],
+    )
+    path = store.index_path(root, "documents")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("[null]\n", encoding="utf-8")
+
+    store.upsert_document_index(root, document)
+
+    assert path.read_text(encoding="utf-8") == "[null]\n"
+    assert "rebuild-indexes" in capsys.readouterr().err

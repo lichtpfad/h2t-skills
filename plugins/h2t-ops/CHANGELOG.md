@@ -11,8 +11,9 @@
 - fix(research): a corrupt index no longer blocks work. `crawl` and the other writers save the
   object, leave the unreadable index untouched and warn on stderr to run `rebuild-indexes`.
   `rebuild-indexes` regenerates an unreadable aliases index from objects instead of refusing;
-  the old file is kept as `aliases.index.json.corrupt` because non-url alias rows cannot be
-  derived from objects (#495)
+  the old file is kept as `aliases.index.json.corrupt` (`.corrupt.N` when one exists) because
+  non-url alias rows cannot be derived from objects. An index whose rows are not objects
+  (`[null]`) counts as unreadable too (#495)
 
 - fix(gmail): `reply` no longer addresses the account owner when the owner wrote last. It took
   the newest message's From; a 2026-09-28 reply with delivery questions for an external partner

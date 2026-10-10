@@ -99,8 +99,8 @@ def _load_index(path: Path) -> list[dict[str, Any]]:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, UnicodeDecodeError) as exc:
         raise IndexUnreadable(str(exc)) from exc
-    if not isinstance(data, list):
-        raise IndexUnreadable("index is not a list")
+    if not isinstance(data, list) or not all(isinstance(row, dict) for row in data):
+        raise IndexUnreadable("index is not a list of objects")
     return data
 
 

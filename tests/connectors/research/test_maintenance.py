@@ -522,3 +522,21 @@ def test_cleanup_execute_mode_is_rejected_in_v1(tmp_path):
         result["message"]
         == "cleanup execution is intentionally disabled in v1; rerun with dry_run=True"
     )
+
+
+def test_rebuild_indexes_with_corrupt_index_never_overwrites_an_earlier_backup(tmp_path):
+    root = tmp_path / "research"
+    _demo_document(root)
+    alias_path = store.index_path(root, "aliases")
+    alias_path.parent.mkdir(parents=True, exist_ok=True)
+    first_backup = alias_path.with_name(alias_path.name + ".corrupt")
+    first_backup.write_text("first corrupt copy", encoding="utf-8")
+    alias_path.write_text("[null]\n", encoding="utf-8")
+
+    result = maintenance.rebuild_indexes(root)
+
+    assert result["status"] == "ok"
+    assert first_backup.read_text(encoding="utf-8") == "first corrupt copy"
+    second_backup = alias_path.with_name(alias_path.name + ".corrupt.1")
+    assert second_backup.read_text(encoding="utf-8") == "[null]\n"
+    assert second_backup.name in result["findings"][0]["message"]

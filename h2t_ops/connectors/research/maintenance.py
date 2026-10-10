@@ -650,12 +650,18 @@ def _alias_rows(objects: dict[str, dict[str, dict[str, Any]]]) -> list[dict[str,
     return sorted(keyed.values(), key=lambda row: tuple(row[key] for key in ALIAS_SORT_KEYS))
 
 
-UNREADABLE_INDEX_CODES = {"index_json_invalid", "index_not_list"}
+UNREADABLE_INDEX_CODES = {"index_json_invalid", "index_not_list", "index_row_not_mapping"}
 
 
 def _alias_backup_path(root: Path) -> Path:
+    """First free aliases.index.json.corrupt[.N], so an earlier backup is never overwritten."""
     path = store.index_path(root, "aliases")
-    return path.with_name(path.name + ".corrupt")
+    backup = path.with_name(path.name + ".corrupt")
+    n = 1
+    while backup.exists():
+        backup = path.with_name(f"{path.name}.corrupt.{n}")
+        n += 1
+    return backup
 
 
 def _preserved_alias_rows(root: Path) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
