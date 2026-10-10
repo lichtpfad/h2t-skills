@@ -250,11 +250,26 @@ def optional_pos_status(home: Path | None = None) -> dict[str, Any]:
 
 
 def plugin_cache_status(home: Path | None = None) -> dict[str, Any]:
+    """Installed h2t-core versions under any marketplace, for Claude Code and Codex (#451).
+
+    The same search as h2t_ops.plugin_entrypoints._cache_plugin_roots, duplicated because
+    this script cannot import h2t_ops. A hardcoded `cache/lichtpfad/h2t-core` reported a
+    working install under another marketplace name as missing.
+    """
     home = home or _home()
     root = home / ".claude" / "plugins" / "cache" / "lichtpfad" / "h2t-core"
-    versions = []
-    if root.is_dir():
-        versions = [str(path) for path in sorted(root.iterdir()) if path.is_dir()]
+    found: list[Path] = []
+    for var, default in (("CLAUDE_CONFIG_DIR", ".claude"), ("CODEX_HOME", ".codex")):
+        override = os.environ.get(var)
+        cache = (Path(override).expanduser() if override else home / default) / "plugins" / "cache"
+        if cache.is_dir():
+            found.extend(path for path in cache.glob("*/h2t-core/*") if path.is_dir())
+    # Oldest first, so the last is latest: non-semver dirs (Codex `local`, content hashes)
+    # by mtime, then semver ones by version, which win when both exist.
+    found.sort(key=lambda path: (_semver_key(path.name) != (0, 0, 0), _semver_key(path.name), path.stat().st_mtime))
+    versions = [str(path) for path in found]
+    if found:
+        root = found[-1].parent
     return {
         "h2t_core_cache": str(root),
         "versions": versions,
