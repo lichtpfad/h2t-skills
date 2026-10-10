@@ -211,3 +211,62 @@ def test_the_documented_path_wins_a_tie(tmp_path, monkeypatch):
         assert os.environ["WHO_WINS"] == "documented"
     finally:
         os.environ.pop("WHO_WINS", None)
+
+
+@pytest.fixture
+def documented_dir(tmp_path, monkeypatch):
+    """The documented directory, empty, with the shared and legacy paths absent (#483)."""
+    directory = tmp_path / ".h2t" / "config" / "secrets"
+    directory.mkdir(parents=True)
+    monkeypatch.setattr(mod, "H2T_CONFIG_SECRETS", directory / "secrets.env")
+    monkeypatch.setattr(mod, "DEFAULT_SECRETS", tmp_path / "absent-dor")
+    monkeypatch.setattr(mod, "LEGACY_SECRETS", tmp_path / "absent-legacy")
+    monkeypatch.delenv("H2T_SECRETS_FILE", raising=False)
+    yield directory
+    for key in ("PROVIDER_ONLY", "WHO_WINS", "SHELL_WINS"):
+        os.environ.pop(key, None)
+
+
+def test_a_per_provider_file_in_the_documented_directory_is_read(documented_dir, monkeypatch):
+    """#483: keys live one file per provider (anysite.env, fred.env); none of them was read."""
+    monkeypatch.delenv("PROVIDER_ONLY", raising=False)
+    (documented_dir / "anysite.env").write_text("PROVIDER_ONLY=yes\n", encoding="utf-8")
+    (documented_dir / "notes.md").write_text("PROVIDER_ONLY=not-an-env-file\n", encoding="utf-8")
+
+    mod.load_secrets()
+
+    assert os.environ["PROVIDER_ONLY"] == "yes"
+
+
+def test_secrets_env_wins_over_a_per_provider_file(documented_dir, monkeypatch):
+    monkeypatch.delenv("WHO_WINS", raising=False)
+    (documented_dir / "secrets.env").write_text("WHO_WINS=secrets\n", encoding="utf-8")
+    (documented_dir / "anysite.env").write_text("WHO_WINS=anysite\n", encoding="utf-8")
+
+    mod.load_secrets()
+
+    assert os.environ["WHO_WINS"] == "secrets"
+
+
+def test_per_provider_files_resolve_a_duplicate_alphabetically(documented_dir, monkeypatch):
+    monkeypatch.delenv("WHO_WINS", raising=False)
+    (documented_dir / "zeta.env").write_text("WHO_WINS=zeta\n", encoding="utf-8")
+    (documented_dir / "alpha.env").write_text("WHO_WINS=alpha\n", encoding="utf-8")
+
+    mod.load_secrets()
+
+    assert os.environ["WHO_WINS"] == "alpha"
+
+
+def test_a_per_provider_file_never_overrides_the_environment(documented_dir, monkeypatch):
+    monkeypatch.setenv("SHELL_WINS", "shell")
+    (documented_dir / "anysite.env").write_text("SHELL_WINS=file\n", encoding="utf-8")
+
+    mod.load_secrets()
+
+    assert os.environ["SHELL_WINS"] == "shell"
+
+
+def test_an_empty_documented_directory_adds_nothing(documented_dir):
+    assert mod.candidate_secret_files()[0] == documented_dir / "secrets.env"
+    assert len(mod.candidate_secret_files()) == 3

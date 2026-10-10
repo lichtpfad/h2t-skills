@@ -196,8 +196,16 @@ def _candidate_secret_files(home: Path) -> list[Path]:
     override = os.environ.get("H2T_SECRETS_FILE")
     if override:
         files.append(Path(override))
+    documented = home / ".h2t" / "config" / "secrets" / "secrets.env"
+    # Every other *.env beside it, alphabetically: the directory is one file per provider (#483).
+    others = (
+        sorted((p for p in documented.parent.glob("*.env") if p.name != documented.name), key=lambda p: p.name)
+        if documented.parent.is_dir()
+        else []
+    )
     files.extend([
-        home / ".h2t" / "config" / "secrets" / "secrets.env",
+        documented,
+        *others,
         home / ".dor" / "secrets" / "secrets.env",
         home / ".dor" / "secrets.env",
     ])
