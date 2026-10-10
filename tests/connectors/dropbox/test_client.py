@@ -55,7 +55,8 @@ def _fake_requests(post):
 
 
 def test_module_has_no_module_level_requests_import():
-    src = pathlib.Path("h2t_ops/connectors/dropbox/client.py").read_text(encoding="utf-8")
+    repo = pathlib.Path(__file__).resolve().parents[3]
+    src = (repo / "h2t_ops/connectors/dropbox/client.py").read_text(encoding="utf-8")
     for i, line in enumerate(src.splitlines(), 1):
         if line.lstrip().startswith(("import requests", "from requests")):
             assert line[0] == " ", f"line {i}: module-scope 'requests' import forbidden: {line!r}"
