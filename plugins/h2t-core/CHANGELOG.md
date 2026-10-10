@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- fix(sessions): one machine-name rule (`gather.sessions.get_machine_name`) for the handoff
+  writer, the session reader and the activity spool; the spool used the raw hostname, so one
+  Mac wrote `Mac` to the spool and `mac/` to the path. `setup` now pins
+  `env.H2T_MACHINE_NAME` in `~/.claude/settings.json` once, with today's name, so a macOS
+  hostname that follows the network no longer splits session history. An existing value is
+  kept; an unreadable settings file is left untouched and reported. ADR 0003 (#491)
+
 - fix(activity): the vendored `lib/activity/writer.py` names itself `h2t-activity-log` in
   `--help`, kept in step with the package copy (#451)
 

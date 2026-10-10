@@ -65,11 +65,9 @@ def resolve_identity(project: str = "", domain: str = "", cwd: str = "") -> tupl
 
 def default_markdown_dir(project: str) -> Path:
     root = Path(os.environ.get("H2T_SESSION_ROOT", str(Path.home() / ".h2t" / "sessions")))
-    machine = os.environ.get("H2T_MACHINE_NAME") or os.environ.get("DOR_MACHINE_NAME", "")
-    if not machine:
-        import platform
-        machine = platform.node().lower().split(".")[0]
-    return root / machine / project
+    # The reader's own rule, so writer and gather cannot disagree on the directory (#491).
+    from gather.sessions import get_machine_name
+    return root / get_machine_name() / project
 
 
 def _truncate(text: str, limit: int) -> tuple[str, bool]:
