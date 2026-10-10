@@ -129,6 +129,21 @@ def test_path_root_is_resolved_once(client_obj):
     assert client_obj._rpc.call_count == 1
 
 
+def test_account_sends_json_null_body(client_obj, monkeypatch):
+    # Live API, 2026-10-10: an empty body under Content-Type application/json gets
+    # a 500 from users/get_current_account; the literal `null` gets a 200.
+    seen = {}
+
+    def post(url, **kw):
+        seen.update(kw)
+        return _Resp(200, payload={"account_id": "dbid:x"})
+
+    fake, _ = _fake_requests(post)
+    monkeypatch.setitem(sys.modules, "requests", fake)
+    client_obj.account()
+    assert seen["data"] == b"null"
+
+
 # --- listing -----------------------------------------------------------------
 
 

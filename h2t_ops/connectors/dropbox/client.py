@@ -191,7 +191,9 @@ class DropboxClient:
         try:
             resp = _r.post(
                 f"{RPC_BASE}/{endpoint}",
-                data=json.dumps(arg).encode("utf-8") if arg is not None else None,
+                # A no-argument endpoint still needs a JSON body: `null`, not an empty one,
+                # which users/get_current_account answers with a 500.
+                data=json.dumps(arg).encode("utf-8"),
                 headers=self._headers({"Content-Type": "application/json"}),
                 timeout=self._timeout,
             )
