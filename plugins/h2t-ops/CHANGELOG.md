@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- feat(dropbox): read-only `h2t-ops dropbox` connector — `account`, `list`, `meta`,
+  `download` over HTTP API v2, for online-only files the desktop client cannot read (#469)
+
 - docs(drive): `upload-folder <dir>` puts the contents of `<dir>` into `--parent-id` and
   creates no folder named after it; the reference now says so (from #496)
 
