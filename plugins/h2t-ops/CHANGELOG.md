@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- feat(drive): `sheets update --input-mode user-entered` — formulas evaluate and numeric
+  strings become numbers; the default stays `raw` (#492)
+
 - fix(gmail): a recipient whose display name is not ASCII no longer fails with
   "Invalid To header" — each name is RFC 2047-encoded on its own instead of the whole
   value, address included, becoming one encoded word (#504)

@@ -452,13 +452,19 @@ class DriveClient:
         cell_range: str,
         value: str | None = None,
         values_file: str | None = None,
+        input_mode: str = "raw",
     ) -> dict[str, Any]:
         """Write values into a range in place via Sheets ``values.update``.
 
-        Values-only update (``valueInputOption=RAW``) — cell/column formatting,
-        merges, and frozen rows are preserved (unlike a full-file re-upload).
+        Values-only update — cell/column formatting, merges, and frozen rows are
+        preserved (unlike a full-file re-upload). ``input_mode="raw"`` stores values
+        as given, so ``"=1+1"`` stays text; ``"user-entered"`` parses them the way
+        typing into the cell does: formulas evaluate, numeric strings become numbers.
         """
         import json
+        option = {"raw": "RAW", "user-entered": "USER_ENTERED"}.get(input_mode)
+        if option is None:
+            raise UsageError(f"sheets update: unknown input mode {input_mode!r} (raw | user-entered)")
         if (value is None) == (not values_file):
             raise UsageError("sheets update: specify exactly one of --value or --values-file")
         if values_file:
@@ -478,7 +484,7 @@ class DriveClient:
             resp = self._sheets().spreadsheets().values().update(
                 spreadsheetId=sheet_id,
                 range=cell_range,
-                valueInputOption="RAW",
+                valueInputOption=option,
                 body={"values": values},
             ).execute()
         except Exception as e:

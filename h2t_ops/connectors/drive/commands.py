@@ -121,9 +121,13 @@ def register(subparsers: Any) -> None:
     shu.add_argument("sheet_id")
     shu.add_argument("--range", required=True, metavar="A1",
                      help='A1 range, e.g. "Sheet1!B12" or "Sheet1!B12:H12"')
-    shu.add_argument("--value", help="Single cell value (RAW)")
+    shu.add_argument("--value", help="Single cell value")
     shu.add_argument("--values-file", metavar="PATH",
                      help="JSON file with a 2D array of values, e.g. [[\"a\",\"b\"]]")
+    shu.add_argument("--input-mode", choices=["raw", "user-entered"], default="raw",
+                     help="raw (default): store as given, '=1+1' stays text; "
+                          "user-entered: parse like typing — formulas evaluate, "
+                          "numeric strings become numbers")
     add_fmt(shu)
 
     dp = cmds.add_parser("download", help="Download a Drive file by id")
@@ -307,6 +311,7 @@ def run(args) -> Any:
                 cell_range=args.range,
                 value=getattr(args, "value", None),
                 values_file=getattr(args, "values_file", None),
+                input_mode=getattr(args, "input_mode", "raw"),
             )
         raise UsageError(f"unknown drive sheets subcommand: {args.sheets_cmd}")
     if cmd == "download":

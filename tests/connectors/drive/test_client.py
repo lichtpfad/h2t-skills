@@ -738,6 +738,21 @@ def test_sheets_update_single_value_uses_raw_and_wraps_2d(client_obj):
     assert result["updated_cells"] == 1
 
 
+def test_sheets_update_user_entered_mode_parses_formulas(client_obj):
+    """#492: RAW stores "=1+1" as text; USER_ENTERED makes Sheets evaluate it."""
+    values = _sheets_values_mock(client_obj)
+    values.update.return_value.execute.return_value = {"updatedRange": "Sheet1!H2"}
+    client_obj.sheets_update("sheet1", cell_range="Sheet1!H2", value="=1+1",
+                             input_mode="user-entered")
+    assert values.update.call_args.kwargs["valueInputOption"] == "USER_ENTERED"
+
+
+def test_sheets_update_rejects_unknown_input_mode(client_obj):
+    from h2t_ops.core.errors import UsageError
+    with pytest.raises(UsageError, match="input mode"):
+        client_obj.sheets_update("sheet1", cell_range="A1", value="v", input_mode="formula")
+
+
 def test_sheets_update_values_file_reads_2d_array(client_obj, tmp_path):
     values = _sheets_values_mock(client_obj)
     values.update.return_value.execute.return_value = {"updatedRange": "Sheet1!B12:C12"}
