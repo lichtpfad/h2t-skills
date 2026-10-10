@@ -108,25 +108,38 @@ Scan for agent behavioral rules discovered this session. These become candidates
 
 ```bash
 uv run --no-project --python 3.11 python -c "
-import os, pathlib, json, re
+import os, pathlib, json, re, sys
+sys.stdout.reconfigure(encoding='utf-8')  # Windows pipes default to cp1252; triggers are Cyrillic
 TRIGGERS = re.compile(r'не делай|не используй|стоп|запомни|договорились|принято|всегда|никогда|правило:|протокол:|важно:|запрет|нельзя|не надо', re.I)
-cwd = os.getcwd().replace('\\\\', '-').replace('/', '-').replace(':', '-').lstrip('-')
-proj = pathlib.Path.home() / '.claude' / 'projects' / cwd
+# Claude Code names the transcript directory by replacing every character that is not
+# an ASCII letter or digit with '-' (/Users/a_b/x -> -Users-a-b-x, C:/dev/x -> C--dev-x).
+proj = pathlib.Path.home() / '.claude' / 'projects' / re.sub(r'[^A-Za-z0-9]', '-', os.getcwd())
 files = sorted(proj.glob('*.jsonl'), key=os.path.getmtime, reverse=True)
-if not files: exit(0)
-hits = []
+if not files: sys.exit(f'RULE_SCAN: no transcript found in {proj}')
+hits, scanned = [], 0
 with open(files[0], encoding='utf-8', errors='replace') as f:
     for line in f:
         try:
             obj = json.loads(line)
-            if obj.get('type') == 'user':
-                c = obj.get('message', {}).get('content', '')
-                if isinstance(c, str) and TRIGGERS.search(c):
-                    hits.append(c[:200])
-        except: pass
+        except ValueError:
+            continue
+        if obj.get('type') != 'user':
+            continue
+        c = obj.get('message', {}).get('content', '')
+        if isinstance(c, list):
+            c = ' '.join(b.get('text', '') for b in c if isinstance(b, dict) and b.get('type') == 'text')
+        if not isinstance(c, str) or not c:
+            continue
+        scanned += 1
+        if TRIGGERS.search(c):
+            hits.append(c[:200])
 print('\n---\n'.join(hits))
-" 2>/dev/null || true
+print(f'RULE_SCAN: scanned {scanned} user messages in {files[0].name}, {len(hits)} hits')
+" || true
 ```
+
+A missing transcript prints `RULE_SCAN: no transcript found in <dir>` — report it, do not read it as
+"no rules". `scanned 0` means the scan saw nothing, not that the session had no rules.
 
 Cross-reference against existing `.claude/rules/*.md` — skip rules already captured there.
 
