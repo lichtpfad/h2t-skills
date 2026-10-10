@@ -33,7 +33,17 @@ def _candidate_secrets_files() -> list[Path]:
     override = os.environ.get(ENV_OVERRIDE)
     if override:
         return [Path(override).expanduser()]
-    return [H2T_CONFIG_SECRETS_FILE, DEFAULT_SECRETS_FILE, LEGACY_SECRETS_FILE]
+    directory = H2T_CONFIG_SECRETS_FILE.parent
+    # Every other *.env beside it, alphabetically: the directory is one file per provider (#483).
+    others = (
+        sorted(
+            (p for p in directory.glob("*.env") if p.name != H2T_CONFIG_SECRETS_FILE.name),
+            key=lambda p: p.name,
+        )
+        if directory.is_dir()
+        else []
+    )
+    return [H2T_CONFIG_SECRETS_FILE, *others, DEFAULT_SECRETS_FILE, LEGACY_SECRETS_FILE]
 
 
 def bootstrap(*, env_file: Path | None = None) -> dict[str, str]:
@@ -69,6 +79,10 @@ def bootstrap(*, env_file: Path | None = None) -> dict[str, str]:
             if not line or line.startswith("#"):
                 continue
             if "=" not in line:
+                if path.name != H2T_CONFIG_SECRETS_FILE.name and path.parent == H2T_CONFIG_SECRETS_FILE.parent:
+                    # A per-provider file (#483) was never read before; a stray line in it
+                    # must not stop every other key from loading.
+                    continue
                 raise ValueError(
                     f"h2t_secrets: malformed line {lineno} in {path}: {raw!r} "
                     f"(expected KEY=VALUE)"

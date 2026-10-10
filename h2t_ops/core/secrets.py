@@ -33,14 +33,32 @@ def candidate_secret_files(env_file: Path | None = None) -> list[Path]:
         # where a quoted ~ stays literal. The research connector expanded it before #448
         # moved it here; dropping that made every lookup miss the file.
         return [Path(override).expanduser()]
-    return [H2T_CONFIG_SECRETS, DEFAULT_SECRETS, LEGACY_SECRETS]
+    return [*documented_dir_files(), DEFAULT_SECRETS, LEGACY_SECRETS]
+
+
+def documented_dir_files() -> list[Path]:
+    """secrets.env, then every other *.env in its directory, alphabetically (#483).
+
+    The documented directory holds one file per provider (anysite.env, fred.env, ...);
+    reading only secrets.env left every key stored that way invisible. Earlier files win
+    a duplicated key, so secrets.env stays authoritative and the rest resolve by name.
+    """
+    directory = H2T_CONFIG_SECRETS.parent
+    if not directory.is_dir():
+        return [H2T_CONFIG_SECRETS]
+    others = sorted(
+        (path for path in directory.glob("*.env") if path.name != H2T_CONFIG_SECRETS.name),
+        key=lambda path: path.name,
+    )
+    return [H2T_CONFIG_SECRETS, *others]
 
 
 def load_secrets(env_file: Path | None = None) -> None:
     """Merge KEY=VALUE lines into os.environ WITHOUT overriding existing keys.
 
     Read in order: an explicit path, ~/.h2t/config/secrets/secrets.env (the location
-    every user-facing message names), ~/.dor/secrets/secrets.env (shared between the
+    every user-facing message names) followed by the other *.env files in that directory
+    in alphabetical order, ~/.dor/secrets/secrets.env (shared between the
     author's machines over Syncthing), then the older ~/.dor/secrets.env. Files are
     merged, not chosen, so an existing machine needs no cutover.
     """

@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- fix(secrets): `setup doctor` and `h2t_secrets.bootstrap` read every `*.env` in
+  `~/.h2t/config/secrets/` after `secrets.env`, alphabetically — the same list as
+  `h2t_ops.core.secrets` (#483). The directory is one file per provider; before this,
+  doctor answered MISSING for a key the connectors are now able to read
+
 - feat(hooks): a Stop hook, `plain-guard`, checks the measurable part of the
   plain-language rule on every answer, after Simplified Technical Russian
   (ГОСТ Р 58049-2017) and ASD-STE100: a sentence over 25 words, a banned machine-slang

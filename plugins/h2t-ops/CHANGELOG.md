@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- fix(secrets): `load_secrets` and research's `resolve_secret` read every `*.env` in
+  `~/.h2t/config/secrets/`, not only `secrets.env`. The directory is one file per provider
+  (`anysite.env`, `fred.env`, ...), so every key kept that way was invisible and the
+  connector reported it MISSING. Order: `secrets.env`, then the other files alphabetically;
+  an earlier file and the environment still win. On the author's machine this exposes 20
+  keys that no surface read before (#483)
+
+- fix(research): the provider cost table no longer writes prices as `$0.02`. A skill invoked
+  with arguments has `$0`, `$1`, ... replaced by those arguments, so every price rendered as
+  the first word of the query. Amounts are plain numbers under a `USD` column; a test fails
+  on any `$<digit>` in a SKILL.md (#484)
+
 - fix(research): index and object JSON is written to a sibling temp file and moved into place
   with `os.replace`, so a crash or a second writer can no longer leave a short new version
   followed by the tail of the old one. Object files whose id holds a colon live in NTFS

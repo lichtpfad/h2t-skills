@@ -196,3 +196,35 @@ def test_bootstrap_raises_only_when_no_candidate_exists(tmp_path, monkeypatch):
 
     with pytest.raises(FileNotFoundError):
         h2t_secrets.bootstrap()
+
+
+def test_bootstrap_reads_per_provider_files_in_the_documented_directory(tmp_path, monkeypatch):
+    """#483: the documented directory is one file per provider; secrets.env need not exist."""
+    directory = tmp_path / ".h2t" / "config" / "secrets"
+    directory.mkdir(parents=True)
+    (directory / "anysite.env").write_text("PROVIDER_ONLY=anysite\n", encoding="utf-8")
+    monkeypatch.setattr(h2t_secrets, "H2T_CONFIG_SECRETS_FILE", directory / "secrets.env")
+    monkeypatch.setattr(h2t_secrets, "DEFAULT_SECRETS_FILE", tmp_path / "absent-shared.env")
+    monkeypatch.setattr(h2t_secrets, "LEGACY_SECRETS_FILE", tmp_path / "absent-legacy.env", raising=False)
+    monkeypatch.delenv("H2T_SECRETS_FILE", raising=False)
+    monkeypatch.delenv("PROVIDER_ONLY", raising=False)
+
+    h2t_secrets.bootstrap()
+
+    assert os.environ["PROVIDER_ONLY"] == "anysite"
+
+
+def test_bootstrap_skips_a_stray_line_in_a_per_provider_file(tmp_path, monkeypatch):
+    """A per-provider file was never read before #483; one prose line must not abort the load."""
+    directory = tmp_path / ".h2t" / "config" / "secrets"
+    directory.mkdir(parents=True)
+    (directory / "anysite.env").write_text("token from the dashboard\nGOOD_KEY=ok\n", encoding="utf-8")
+    monkeypatch.setattr(h2t_secrets, "H2T_CONFIG_SECRETS_FILE", directory / "secrets.env")
+    monkeypatch.setattr(h2t_secrets, "DEFAULT_SECRETS_FILE", tmp_path / "absent-shared.env")
+    monkeypatch.setattr(h2t_secrets, "LEGACY_SECRETS_FILE", tmp_path / "absent-legacy.env", raising=False)
+    monkeypatch.delenv("H2T_SECRETS_FILE", raising=False)
+    monkeypatch.delenv("GOOD_KEY", raising=False)
+
+    h2t_secrets.bootstrap()
+
+    assert os.environ["GOOD_KEY"] == "ok"

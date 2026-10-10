@@ -88,20 +88,20 @@ h2t-ops research agent --query "Profile Anthropic: funding + monthly web traffic
 ```
 
 **Cost gate:** paid providers run **only** when you pass `--data-source`. Omit it →
-web-only (agentCompute + search only; a trivial query costs ~$0). Providers are
+web-only (agentCompute + search only; a trivial query costs ~0 USD). Providers are
 pass-through: an unknown name returns a clean `400 INVALID_DATA_SOURCE` **before any
 charge**.
 
 **Provider catalog** (per-provider base cost, as of 2026-07 — verify at
 <https://exa.ai/pricing>; the code catalog is `exa.AGENT_PROVIDERS`):
 
-| `--data-source` | Returns | ~Base cost |
+| `--data-source` | Returns | ~Base cost, USD |
 |---|---|---|
-| `fiber_ai` | B2B contact data (emails, titles) | $0.02 |
-| `similar_web` | website traffic estimates | $0.03 |
-| `baselayer` | US business verification | $0.022 |
-| `financial_datasets` | company financials | $0.01 |
-| `particle_news` | podcast transcripts / news | $0.015 |
+| `fiber_ai` | B2B contact data (emails, titles) | 0.02 |
+| `similar_web` | website traffic estimates | 0.03 |
+| `baselayer` | US business verification | 0.022 |
+| `financial_datasets` | company financials | 0.01 |
+| `particle_news` | podcast transcripts / news | 0.015 |
 
 **Cost logging:** Exa has **no** pre-execution cost endpoint. The envelope telemetry
 reports `total_cost_usd` + `cost_breakdown` (agentCompute / search / emails /

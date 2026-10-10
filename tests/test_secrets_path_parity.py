@@ -88,3 +88,34 @@ def test_research_expands_tilde_in_override(tmp_path, monkeypatch):
     monkeypatch.setenv("H2T_SECRETS_FILE", "~/tilde-secrets.env")
 
     assert client.resolve_secret(KEY) == "tilde-value"
+
+
+@pytest.fixture
+def provider_file_only(tmp_path, monkeypatch):
+    """A home whose ONLY secret sits in a per-provider file of the documented directory (#483)."""
+    for name in (KEY, "H2T_SECRETS_FILE"):
+        monkeypatch.delenv(name, raising=False)
+    directory = tmp_path / ".h2t" / "config" / "secrets"
+    directory.mkdir(parents=True)
+    (directory / "exa.env").write_text(f"{KEY}={VALUE}\n", encoding="utf-8")
+    monkeypatch.setattr(core_secrets, "H2T_CONFIG_SECRETS", directory / "secrets.env")
+    monkeypatch.setattr(core_secrets, "DEFAULT_SECRETS", tmp_path / ".dor" / "absent.env")
+    monkeypatch.setattr(core_secrets, "LEGACY_SECRETS", tmp_path / ".dor" / "absent-legacy.env")
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    yield tmp_path
+    import os
+    os.environ.pop(KEY, None)
+
+
+def test_core_reads_a_per_provider_file(provider_file_only):
+    core_secrets.load_secrets()
+    import os
+    assert os.environ.get(KEY) == VALUE
+
+
+def test_research_reads_a_per_provider_file(provider_file_only):
+    assert client.resolve_secret(KEY) == VALUE
+
+
+def test_setup_sees_a_per_provider_file(provider_file_only):
+    assert setup_h2t._secret_present(KEY, provider_file_only) is True
