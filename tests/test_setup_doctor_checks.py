@@ -118,3 +118,42 @@ def test_activity_log_help_names_the_command(monkeypatch, capsys):
         activity_writer.main()
 
     assert capsys.readouterr().out.startswith("usage: h2t-activity-log")
+
+
+def _legacy_venv(home, target):
+    """A ~/.h2t/venv whose `h2t` comes from an editable install pointing at `target` (#476)."""
+    venv = home / ".h2t" / "venv"
+    windows = sys.platform.startswith("win")
+    scripts = venv / ("Scripts" if windows else "bin")
+    site = venv / ("Lib/site-packages" if windows else "lib/python3.11/site-packages")
+    scripts.mkdir(parents=True)
+    site.mkdir(parents=True)
+    (scripts / ("h2t.exe" if windows else "h2t")).write_text("", encoding="utf-8")
+    dist = site / "h2t_core_cli-3.0.7.dist-info"
+    dist.mkdir()
+    (dist / "entry_points.txt").write_text("[console_scripts]\nh2t = lib.cli.main:main\n", encoding="utf-8")
+    (site / "__editable___h2t_core_cli_3_0_7_finder.py").write_text(
+        f"MAPPING: dict[str, str] = {{'lib': {str(target)!r}}}\n", encoding="utf-8"
+    )
+
+
+def test_doctor_reports_a_legacy_h2t_pinned_to_a_deleted_cache(tmp_path):
+    _legacy_venv(tmp_path, tmp_path / "plugins" / "cache" / "h2t-core" / "3.0.7" / "lib")
+
+    status = setup_h2t.legacy_shim_status(tmp_path)
+
+    assert status["status"] == "stale"
+    assert status["package"] == "h2t_core_cli 3.0.7"
+    assert status["remediation"].startswith("uv pip uninstall --python ")
+
+
+def test_doctor_is_quiet_when_the_legacy_h2t_still_resolves(tmp_path):
+    target = tmp_path / "live-lib"
+    target.mkdir()
+    _legacy_venv(tmp_path, target)
+
+    assert setup_h2t.legacy_shim_status(tmp_path)["status"] == "ok"
+
+
+def test_doctor_is_quiet_without_a_legacy_venv(tmp_path):
+    assert setup_h2t.legacy_shim_status(tmp_path) == {"status": "ok"}

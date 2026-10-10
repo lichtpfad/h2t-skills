@@ -7,6 +7,7 @@ state and never treated as setup prerequisites.
 from __future__ import annotations
 
 import argparse
+import ast
 import json
 import os
 import platform
@@ -279,6 +280,50 @@ def plugin_cache_status(home: Path | None = None) -> dict[str, Any]:
     }
 
 
+def legacy_shim_status(home: Path | None = None) -> dict[str, Any]:
+    """Report an `h2t` command left in the pre-#449 venv under ~/.h2t by a dead install (#476).
+
+    The 3.0.x line installed `h2t-core-cli` editable into that venv, pinned to a
+    version-numbered plugin cache directory that the next plugin update removes. Agents find
+    tools by listing bin/, so this broken `h2t` is the first thing they run. Report only: a
+    diagnostic must not delete anything.
+    """
+    home = home or _home()
+    venv = home / ".h2t" / "venv"
+    windows = sys.platform.startswith("win")
+    shim = venv / ("Scripts" if windows else "bin") / ("h2t.exe" if windows else "h2t")
+    if not shim.is_file():
+        return {"status": "ok"}
+    site_dirs = [venv / "Lib" / "site-packages"] if windows else sorted(venv.glob("lib/python*/site-packages"))
+    for site in site_dirs:
+        for entry_points in site.glob("*.dist-info/entry_points.txt"):
+            text = entry_points.read_text(encoding="utf-8", errors="replace")
+            if not re.search(r"^h2t\s*=", text, re.M):
+                continue
+            name, _, version = entry_points.parent.name.removesuffix(".dist-info").partition("-")
+            finder = site / f"__editable___{name.replace('-', '_')}_{version.replace('.', '_')}_finder.py"
+            targets: list[str] = []
+            if finder.is_file():
+                match = re.search(r"MAPPING[^=]*=\s*(\{.*?\})", finder.read_text(encoding="utf-8", errors="replace"), re.S)
+                if match:
+                    try:
+                        targets = list(ast.literal_eval(match.group(1)).values())
+                    except (ValueError, SyntaxError):
+                        targets = []
+            missing = [target for target in targets if not Path(target).exists()]
+            python = venv / ("Scripts/python.exe" if windows else "bin/python")
+            return {
+                "status": "stale" if missing else "ok",
+                "path": str(shim),
+                "package": f"{name} {version}",
+                "editable_targets": targets,
+                "missing_targets": missing,
+                # uv, not `python -m pip`: this venv is not guaranteed to have pip.
+                "remediation": f"uv pip uninstall --python {python} {name}" if missing else "",
+            }
+    return {"status": "ok", "path": str(shim), "package": "", "editable_targets": [], "missing_targets": []}
+
+
 def doctor(runner: Runner = _run) -> dict[str, Any]:
     h2t_ops = resolve_h2t_ops()
     h2t_ops.update(_version_for_h2t_ops(h2t_ops.get("path", ""), runner))
@@ -290,6 +335,7 @@ def doctor(runner: Runner = _run) -> dict[str, Any]:
         "entry_points": resolve_entry_points(),
         "plugin_cache": plugin_cache_status(),
         "optional_pos": optional_pos_status(),
+        "legacy_shims": legacy_shim_status(),
         "boundaries": {
             "root_h2t_touched": False,
             "pos_required": False,
@@ -481,6 +527,15 @@ def _machine_name_line(info: dict[str, Any] | None) -> str:
     return f"- machine name: {info['status']} {detail} ({info['path']})\n"
 
 
+def _legacy_shim_line(info: dict[str, Any] | None) -> str:
+    if not info or info.get("status") != "stale":
+        return ""
+    return (
+        f"- legacy h2t command: stale {info['path']} ({info['package']}, its code is gone); "
+        f"use h2t-ops. Remove with: {info['remediation']}\n"
+    )
+
+
 def _human(obj: dict[str, Any]) -> str:
     if obj.get("kind") == KIND_DOCTOR:
         ep = obj.get("entry_points", {})
@@ -495,6 +550,7 @@ def _human(obj: dict[str, Any]) -> str:
             f"- entry points: {ep_status}{ep_detail}\n"
             f"- optional POS/DOR: {obj['optional_pos']['status']}\n"
             + _machine_name_line(obj.get("machine_name"))
+            + _legacy_shim_line(obj.get("legacy_shims"))
         )
     if obj.get("kind") == KIND_CONNECTORS:
         rows = [f"- {c['connector']}: {c['status']} ({c['live']})" for c in obj["connectors"]]
