@@ -50,6 +50,35 @@ def test_load_known_secrets_starts_with_value(tmp_path):
 
 # --- secrets_skeleton tests ---
 
+@pytest.fixture(autouse=True)
+def _no_real_secrets(tmp_path, monkeypatch):
+    """skeleton reads the connectors' sources since #524; keep the real ones out."""
+    monkeypatch.setattr(setup_h2t, "_home", lambda: tmp_path)
+    monkeypatch.delenv("H2T_SECRETS_FILE", raising=False)
+    for key in (*REGISTRY, "GRANOLA_API_KEY"):
+        monkeypatch.delenv(key, raising=False)
+
+
+def test_skeleton_skips_a_key_the_connectors_read_elsewhere(tmp_path):
+    """A key kept only in the documented per-provider file is not missing (#524)."""
+    documented = tmp_path / ".h2t" / "config" / "secrets"
+    documented.mkdir(parents=True)
+    (documented / "notion.env").write_text("NOTION_API_TOKEN=secret_x\n", encoding="utf-8")
+    secrets_file = tmp_path / ".dor" / "secrets" / "secrets.env"
+
+    result = setup_h2t.secrets_skeleton(secrets_file, REGISTRY)
+
+    assert "NOTION_API_TOKEN" not in result["added"]
+    assert "NOTION_API_TOKEN" in result["skipped"]
+    assert "NOTION_API_TOKEN" not in secrets_file.read_text(encoding="utf-8")
+
+
+def test_skeleton_still_adds_a_key_set_nowhere(tmp_path):
+    result = setup_h2t.secrets_skeleton(tmp_path / ".dor" / "secrets" / "secrets.env", REGISTRY)
+
+    assert set(result["added"]) == set(REGISTRY)
+
+
 def test_skeleton_creates_file_when_absent(tmp_path):
     secrets_file = tmp_path / "secrets.env"
     result = setup_h2t.secrets_skeleton(secrets_file, REGISTRY)

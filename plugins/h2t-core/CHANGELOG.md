@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- fix(setup): `secrets skeleton` skips a key the connectors already resolve — environment
+  or any secrets file they read, `~/.h2t/config/secrets/*.env` included; it asked the user
+  to paste keys that already worked (#524). The Secrets Wizard takes the keys and the file
+  from the skeleton result instead of a hand-kept list that had lost `GRANOLA_API_KEY`, and
+  its editor command is one line that also runs in Git Bash (#525). `doctor` reports the
+  h2t-ops on the user's PATH, not the one in the venv running the script — `uv run` inside
+  a checkout puts the repo `.venv/bin` first (#523) — and `plugin_cache.h2t_core_cache`
+  names the directory actually searched under `CLAUDE_CONFIG_DIR` (#522)
+
 - fix(setup): the setup skill no longer leaves four branches to guess (#520). Install runs
   for first setup / repair only when `entry_points` is not `ready`, and always for update —
   the Modes table and Step 2 now say the same. The install source follows `h2t_ops.version`:
