@@ -6,6 +6,7 @@ of the rule — split one machine's records across directories and casings.
 """
 import importlib.util
 import json
+import os
 import platform
 import sys
 from pathlib import Path
@@ -92,3 +93,31 @@ def test_setup_leaves_an_invalid_settings_file_alone(renamed_host, monkeypatch):
 
     assert result["status"] == "error"
     assert settings.read_text(encoding="utf-8") == "{ not json"
+
+
+def test_setup_does_not_overwrite_a_preference_saved_meanwhile(renamed_host, monkeypatch):
+    monkeypatch.delenv("CLAUDE_CONFIG_DIR", raising=False)
+    settings = _settings(renamed_host)
+    settings.parent.mkdir(parents=True)
+    settings.write_text(json.dumps({"model": "x"}), encoding="utf-8")
+    real_mkstemp = setup_h2t.tempfile.mkstemp
+    calls = []
+
+    def claude_code_saves_meanwhile(*args, **kwargs):
+        if not calls:
+            settings.write_text(json.dumps({"model": "x", "theme": "dark"}), encoding="utf-8")
+            os.utime(settings, ns=(1, 10**18))
+        calls.append(1)
+        return real_mkstemp(*args, **kwargs)
+
+    monkeypatch.setattr(setup_h2t.tempfile, "mkstemp", claude_code_saves_meanwhile)
+
+    result = setup_h2t.ensure_machine_name(renamed_host)
+
+    assert result["status"] == "written"
+    assert json.loads(settings.read_text(encoding="utf-8")) == {
+        "model": "x",
+        "theme": "dark",
+        "env": {"H2T_MACHINE_NAME": "mac"},
+    }
+    assert sorted(p.name for p in settings.parent.iterdir()) == ["settings.json"]

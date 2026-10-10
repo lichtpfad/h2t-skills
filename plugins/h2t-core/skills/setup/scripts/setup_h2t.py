@@ -14,6 +14,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -307,30 +308,41 @@ def ensure_machine_name(home: Path | None = None) -> dict[str, Any]:
     home = home or _home()
     override = os.environ.get("CLAUDE_CONFIG_DIR")
     settings = (Path(override).expanduser() if override else home / ".claude") / "settings.json"
-    data: Any = {}
-    if settings.is_file():
-        try:
-            data = json.loads(settings.read_text(encoding="utf-8"))
-        except ValueError as exc:
-            return {"status": "error", "path": str(settings), "error": f"not valid JSON, left untouched: {exc}"}
-    if not isinstance(data, dict) or not isinstance(data.get("env", {}), dict):
-        return {"status": "error", "path": str(settings), "error": "unexpected shape, left untouched"}
-    current = data.get("env", {}).get("H2T_MACHINE_NAME")
-    if current:
-        return {"status": "unchanged", "path": str(settings), "value": current}
     # The rule lives in the plugin's lib (gather/sessions.py); this script sits in the same plugin.
     lib = str(Path(__file__).resolve().parents[3] / "lib")
     if lib not in sys.path:
         sys.path.insert(0, lib)
     from gather.sessions import get_machine_name
 
-    name = get_machine_name()
-    data.setdefault("env", {})["H2T_MACHINE_NAME"] = name
-    settings.parent.mkdir(parents=True, exist_ok=True)
-    tmp = settings.with_name(settings.name + ".tmp")
-    tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    os.replace(tmp, settings)
-    return {"status": "written", "path": str(settings), "value": name}
+    # Claude Code writes this file too. Replace it only if it is unchanged since it was
+    # read, so a preference saved meanwhile is not overwritten with the stale copy.
+    for _ in range(3):
+        stamp = settings.stat().st_mtime_ns if settings.is_file() else None
+        data: Any = {}
+        if stamp is not None:
+            try:
+                data = json.loads(settings.read_text(encoding="utf-8"))
+            except ValueError as exc:
+                return {"status": "error", "path": str(settings), "error": f"not valid JSON, left untouched: {exc}"}
+        if not isinstance(data, dict) or not isinstance(data.get("env", {}), dict):
+            return {"status": "error", "path": str(settings), "error": "unexpected shape, left untouched"}
+        current = data.get("env", {}).get("H2T_MACHINE_NAME")
+        if current:
+            return {"status": "unchanged", "path": str(settings), "value": current}
+        name = get_machine_name()
+        data.setdefault("env", {})["H2T_MACHINE_NAME"] = name
+        settings.parent.mkdir(parents=True, exist_ok=True)
+        fd, tmp = tempfile.mkstemp(dir=settings.parent, prefix=".settings.", suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                handle.write(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
+            if (settings.stat().st_mtime_ns if settings.is_file() else None) != stamp:
+                continue
+            os.replace(tmp, settings)
+            return {"status": "written", "path": str(settings), "value": name}
+        finally:
+            Path(tmp).unlink(missing_ok=True)
+    return {"status": "error", "path": str(settings), "error": "kept changing while being updated, left untouched"}
 
 
 def _google_oauth_status(home: Path) -> dict[str, Any]:
