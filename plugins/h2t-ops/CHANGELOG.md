@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- fix(activity): `h2t-activity-log` records the machine by the session-path rule, not the
+  raw hostname (#491)
+
 - fix(cli): `h2t-ops doctor` is a report and always exits 0, now stated in its help and
   docstring and pinned by a test; the readiness gate is the setup skill's
   `connectors-check` (owner's decision on #451). `h2t-activity-log --help` names itself

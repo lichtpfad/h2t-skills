@@ -6,7 +6,6 @@ Phase 2: replace _write() with POST to POS API; local spool becomes fallback.
 
 import json
 import os
-import platform
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
@@ -46,6 +45,20 @@ def log_session_end(
     )
 
 
+def _machine_name() -> str:
+    # The same rule as the session paths (#491). Relative inside the `lib.activity`
+    # package; otherwise this file was loaded on its own (h2t-activity-log loads it by
+    # path) or as top-level `activity`, and its own lib/ holds `gather`.
+    try:
+        from ..gather.sessions import get_machine_name
+    except ImportError:
+        lib = str(Path(__file__).resolve().parent.parent)
+        if lib not in sys.path:
+            sys.path.insert(0, lib)
+        from gather.sessions import get_machine_name
+    return get_machine_name()
+
+
 def _spool_path() -> Path:
     default = Path.home() / ".h2t" / "activity" / "spool.jsonl"
     return Path(os.environ.get("H2T_ACTIVITY_SPOOL", str(default)))
@@ -67,7 +80,7 @@ def _write(
         "action": action,
         "domain": domain,
         "project": project,
-        "machine": machine or platform.node(),
+        "machine": machine or _machine_name(),
         "timestamp": datetime.now(UTC).isoformat(),
     }
     if artifacts:

@@ -296,6 +296,43 @@ def doctor(runner: Runner = _run) -> dict[str, Any]:
     }
 
 
+def ensure_machine_name(home: Path | None = None) -> dict[str, Any]:
+    """Pin H2T_MACHINE_NAME in Claude Code's settings `env`, once (#491, ADR 0003).
+
+    On macOS the hostname follows the network, so session records of one machine split
+    across two directories. Claude Code passes `env` from settings.json to every process
+    it starts, hooks included, whatever the shell. An existing value is never changed;
+    the value written is today's name by the shared rule, so existing directories stay.
+    """
+    home = home or _home()
+    override = os.environ.get("CLAUDE_CONFIG_DIR")
+    settings = (Path(override).expanduser() if override else home / ".claude") / "settings.json"
+    data: Any = {}
+    if settings.is_file():
+        try:
+            data = json.loads(settings.read_text(encoding="utf-8"))
+        except ValueError as exc:
+            return {"status": "error", "path": str(settings), "error": f"not valid JSON, left untouched: {exc}"}
+    if not isinstance(data, dict) or not isinstance(data.get("env", {}), dict):
+        return {"status": "error", "path": str(settings), "error": "unexpected shape, left untouched"}
+    current = data.get("env", {}).get("H2T_MACHINE_NAME")
+    if current:
+        return {"status": "unchanged", "path": str(settings), "value": current}
+    # The rule lives in the plugin's lib (gather/sessions.py); this script sits in the same plugin.
+    lib = str(Path(__file__).resolve().parents[3] / "lib")
+    if lib not in sys.path:
+        sys.path.insert(0, lib)
+    from gather.sessions import get_machine_name
+
+    name = get_machine_name()
+    data.setdefault("env", {})["H2T_MACHINE_NAME"] = name
+    settings.parent.mkdir(parents=True, exist_ok=True)
+    tmp = settings.with_name(settings.name + ".tmp")
+    tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    os.replace(tmp, settings)
+    return {"status": "written", "path": str(settings), "value": name}
+
+
 def _google_oauth_status(home: Path) -> dict[str, Any]:
     cfg = home / ".config" / "google-calendar-mcp"
     return {
@@ -425,6 +462,13 @@ def install_h2t_ops(source: str, *, dry_run: bool = False, runner: Runner = _run
     }
 
 
+def _machine_name_line(info: dict[str, Any] | None) -> str:
+    if not info:
+        return ""
+    detail = info.get("value") or info.get("error", "")
+    return f"- machine name: {info['status']} {detail} ({info['path']})\n"
+
+
 def _human(obj: dict[str, Any]) -> str:
     if obj.get("kind") == KIND_DOCTOR:
         ep = obj.get("entry_points", {})
@@ -438,6 +482,7 @@ def _human(obj: dict[str, Any]) -> str:
             f"- h2t-ops: {obj['h2t_ops']['status']} {obj['h2t_ops'].get('version', '')}\n"
             f"- entry points: {ep_status}{ep_detail}\n"
             f"- optional POS/DOR: {obj['optional_pos']['status']}\n"
+            + _machine_name_line(obj.get("machine_name"))
         )
     if obj.get("kind") == KIND_CONNECTORS:
         rows = [f"- {c['connector']}: {c['status']} ({c['live']})" for c in obj["connectors"]]
@@ -625,6 +670,10 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.command in {"doctor", "setup", "repair", "update"}:
             result = doctor()
+            if args.command == "setup":
+                result["machine_name"] = ensure_machine_name()
+                if result["machine_name"]["status"] == "error":
+                    result["status"] = "error"
         elif args.command == "connectors-check":
             result = connector_matrix(live=args.live, include_paid=args.include_paid)
         elif args.command == "install-h2t-ops":
