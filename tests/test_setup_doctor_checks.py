@@ -98,3 +98,27 @@ def test_doctor_reports_an_unreadable_secrets_file_instead_of_crashing(tmp_path,
     cli._doctor()
 
     assert "NOTION_API_TOKEN=UNREADABLE" in capsys.readouterr().out
+
+
+def test_doctor_is_a_report_and_exits_0_on_an_unconfigured_machine(tmp_path, monkeypatch, capsys):
+    """#451, owner's decision: doctor reports, connectors-check gates."""
+    _home(tmp_path, monkeypatch)
+
+    assert cli._doctor() == 0
+    assert "NOTION_API_TOKEN=MISSING" in capsys.readouterr().out
+
+
+def test_activity_log_help_names_the_command(capsys):
+    import pytest
+    from lib.activity import writer
+
+    monkeypatch_argv = ["h2t-activity-log", "--help"]
+    old = sys.argv
+    sys.argv = monkeypatch_argv
+    try:
+        with pytest.raises(SystemExit):
+            writer.main()
+    finally:
+        sys.argv = old
+
+    assert capsys.readouterr().out.startswith("usage: h2t-activity-log")
