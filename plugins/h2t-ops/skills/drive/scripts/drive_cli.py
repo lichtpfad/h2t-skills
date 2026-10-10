@@ -19,8 +19,8 @@ try:
     from googleapiclient.discovery import build
     from googleapiclient.http import MediaFileUpload, MediaIoBaseDownload
 except ImportError:
-    print("Error: google-api-python-client not installed", file=sys.stderr)
-    sys.exit(1)
+    # No exit at import (#429); main() reports it.
+    Request = Credentials = build = MediaFileUpload = MediaIoBaseDownload = None
 
 CONFIG_DIR = Path.home() / '.config' / 'google-calendar-mcp'
 TOKEN_FILE = CONFIG_DIR / 'tokens.json'
@@ -455,6 +455,9 @@ def sync_meetings(dry_run=False, folder_name='MeetGeek Files'):
 
 
 def main():
+    if build is None:
+        print("Error: google-api-python-client not installed", file=sys.stderr)
+        sys.exit(1)
     parser = argparse.ArgumentParser(description='Google Drive CLI (read-only)')
     subparsers = parser.add_subparsers(dest='command')
 

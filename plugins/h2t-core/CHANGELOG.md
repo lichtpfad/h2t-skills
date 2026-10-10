@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- fix(init-project): `apply_registration.py` reports a missing `ruamel.yaml` from `main()`
+  instead of exiting at import, which turned one absent package into a pytest INTERNALERROR
+  for the whole directory (#429)
+
 - fix(sessions): one machine-name rule (`gather.sessions.get_machine_name`) for the handoff
   writer, the session reader and the activity spool; the spool used the raw hostname, so one
   Mac wrote `Mac` to the spool and `mac/` to the path. `setup` now pins
