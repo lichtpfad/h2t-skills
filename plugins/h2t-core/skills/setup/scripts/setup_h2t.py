@@ -88,6 +88,19 @@ def _windows_uv_candidates(home: Path) -> list[Path]:
     return candidates
 
 
+def _user_which(name: str) -> str | None:
+    """shutil.which over PATH minus the bin directory of the venv running this script (#523).
+
+    `uv run` started inside a checkout picks up the repo's .venv and puts its bin first on
+    PATH, so the doctor reported that venv's h2t-ops, not the one `uv tool install` replaces.
+    """
+    if sys.prefix == sys.base_prefix:
+        return shutil.which(name)
+    own = os.path.normcase(os.path.realpath(Path(sys.prefix) / ("Scripts" if sys.platform.startswith("win") else "bin")))
+    entries = [e for e in os.environ.get("PATH", "").split(os.pathsep) if e and os.path.normcase(os.path.realpath(e)) != own]
+    return shutil.which(name, path=os.pathsep.join(entries))
+
+
 def resolve_uv(which: Callable[[str], str | None] = shutil.which, home: Path | None = None) -> dict[str, Any]:
     home = home or _home()
     names = ["uv.exe", "uv"] if sys.platform.startswith("win") else ["uv", "uv.exe"]
@@ -110,7 +123,7 @@ def resolve_uv(which: Callable[[str], str | None] = shutil.which, home: Path | N
 ENTRY_POINT_NAMES = ["h2t-ops", "h2t-gather", "h2t-activity-log", "h2t-handoff"]
 
 
-def _resolve_cli(name: str, which: Callable[[str], str | None] = shutil.which, home: Path | None = None) -> dict[str, Any]:
+def _resolve_cli(name: str, which: Callable[[str], str | None] = _user_which, home: Path | None = None) -> dict[str, Any]:
     home = home or _home()
     is_win = sys.platform.startswith("win")
     names = [f"{name}.exe", name] if is_win else [name, f"{name}.exe"]
@@ -124,14 +137,14 @@ def _resolve_cli(name: str, which: Callable[[str], str | None] = shutil.which, h
     return {"status": "missing", "path": "", "source": "not-found"}
 
 
-def resolve_h2t_ops(which: Callable[[str], str | None] = shutil.which, home: Path | None = None) -> dict[str, Any]:
+def resolve_h2t_ops(which: Callable[[str], str | None] = _user_which, home: Path | None = None) -> dict[str, Any]:
     result = _resolve_cli("h2t-ops", which, home)
     if result["status"] == "missing":
         result["hint"] = "Run setup_h2t.py install-h2t-ops --source main"
     return result
 
 
-def resolve_entry_points(which: Callable[[str], str | None] = shutil.which, home: Path | None = None) -> dict[str, Any]:
+def resolve_entry_points(which: Callable[[str], str | None] = _user_which, home: Path | None = None) -> dict[str, Any]:
     commands = {name: _resolve_cli(name, which, home) for name in ENTRY_POINT_NAMES}
     statuses = [v["status"] for v in commands.values()]
     if all(s == "ready" for s in statuses):
@@ -259,11 +272,14 @@ def plugin_cache_status(home: Path | None = None) -> dict[str, Any]:
     working install under another marketplace name as missing.
     """
     home = home or _home()
-    root = home / ".claude" / "plugins" / "cache" / "lichtpfad" / "h2t-core"
+    root: Path | None = None
     found: list[Path] = []
     for var, default in (("CLAUDE_CONFIG_DIR", ".claude"), ("CODEX_HOME", ".codex")):
         override = os.environ.get(var)
         cache = (Path(override).expanduser() if override else home / default) / "plugins" / "cache"
+        # Name the directory actually searched, even when nothing is there (#522): a fixed
+        # ~/.claude here sat beside `missing` while CLAUDE_CONFIG_DIR pointed elsewhere.
+        root = root or cache / "lichtpfad" / "h2t-core"
         if cache.is_dir():
             found.extend(path for path in cache.glob("*/h2t-core/*") if path.is_dir())
     # Oldest first, so the last is latest: non-semver dirs (Codex `local`, content hashes)
@@ -590,11 +606,15 @@ def _load_known_secrets(registry_path: Path) -> dict[str, dict[str, str]]:
     return result
 
 
-def secrets_skeleton(secrets_file: Path, registry: dict[str, dict[str, str]]) -> dict[str, Any]:
+def secrets_skeleton(secrets_file: Path, registry: dict[str, dict[str, str]], home: Path | None = None) -> dict[str, Any]:
     """Create or extend secrets.env with placeholder KEY= lines for missing keys.
+
+    A key the connectors already resolve — environment or any candidate file — is not
+    missing (#524): a placeholder for it told the user to paste a key that already worked.
 
     Uses atomic write (temp file + rename) so a crash leaves no partial state.
     """
+    home = home or _home()
     secrets_file.parent.mkdir(parents=True, exist_ok=True)
     existing_content = ""
     existing_keys: set[str] = set()
@@ -608,7 +628,7 @@ def secrets_skeleton(secrets_file: Path, registry: dict[str, dict[str, str]]) ->
     skipped: list[str] = []
     new_lines: list[str] = []
     for key, meta in registry.items():
-        if key in existing_keys:
+        if key in existing_keys or _resolve_secret_value(key, home):
             skipped.append(key)
         else:
             desc = meta.get("description", "")

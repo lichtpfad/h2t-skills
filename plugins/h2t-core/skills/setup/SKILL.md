@@ -235,26 +235,26 @@ uv run --no-project --python 3.11 python scripts/setup_h2t.py secrets skeleton -
 ```
 
 From the result, show the user:
-- Path to `secrets.env`
+- `path` — the file the placeholders went into
 - For each key in `added`: its description and URL from `known_secrets.yaml`
+
+`skipped` holds keys that are already set — in that file, in the environment, or in any
+other secrets file the connectors read, `~/.h2t/config/secrets/*.env` included. Do not ask
+for them.
 
 ### Step 2 — Fill API Keys
 
-Tell the user:
+If `added` is empty, skip to Step 3. Otherwise tell the user to open `path` and paste a
+value after each `KEY=` from `added` — one message together with Step 1, the list shown
+once. Do not list keys from memory: the registry is the list, and a list copied here falls
+behind it.
 
-> "Open `~/.dor/secrets/secrets.env` and paste your API keys. Here is where to get each one:
-> - **EXA_API_KEY** — https://dashboard.exa.ai/api-keys
-> - **NOTION_API_TOKEN** — https://www.notion.so/profile/integrations
-> - **MEETGEEK_API_KEY** — https://app.meetgeek.ai/settings/api"
-
-Open the file in an editor:
+Open the file in an editor — the same line on macOS, Linux and Git Bash on Windows, with
+`path` from Step 1 quoted as is. If `code` is not on PATH, give the user `path` to open in
+any editor instead:
 
 ```bash
-# macOS / Linux
-code ~/.dor/secrets/secrets.env
-
-# Windows
-code $env:USERPROFILE\.dor\secrets\secrets.env
+code "<path>"
 ```
 
 Wait for user to say "done" or "готово" before proceeding.

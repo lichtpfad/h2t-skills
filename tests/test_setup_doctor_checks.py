@@ -44,6 +44,41 @@ def test_plugin_cache_missing_when_nothing_is_installed(tmp_path, monkeypatch):
     assert setup_h2t.plugin_cache_status(tmp_path)["status"] == "missing"
 
 
+def test_plugin_cache_names_the_directory_it_searched(tmp_path, monkeypatch):
+    """CLAUDE_CONFIG_DIR set and empty: the report must not point at ~/.claude (#522)."""
+    _no_host_overrides(monkeypatch)
+    config = tmp_path / "cfg"
+    config.mkdir()
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(config))
+    (tmp_path / ".claude" / "plugins" / "cache" / "lichtpfad" / "h2t-core" / "3.2.55").mkdir(parents=True)
+
+    status = setup_h2t.plugin_cache_status(tmp_path)
+
+    assert status["status"] == "missing"
+    assert Path(status["h2t_core_cache"]).is_relative_to(config)
+
+
+def _executable(directory: Path, name: str) -> Path:
+    directory.mkdir(parents=True, exist_ok=True)
+    path = directory / name
+    path.write_text("#!/bin/sh\n", encoding="utf-8")
+    path.chmod(0o755)
+    return path
+
+
+@pytest.mark.skipif(sys.platform.startswith("win"), reason="POSIX bin layout and exec bits")
+def test_doctor_reports_the_users_h2t_ops_not_the_running_venvs(tmp_path, monkeypatch):
+    """`uv run` inside a checkout runs from the repo .venv and puts its bin first (#523)."""
+    venv = tmp_path / "repo" / ".venv"
+    _executable(venv / "bin", "h2t-ops")
+    users = _executable(tmp_path / "local" / "bin", "h2t-ops")
+    monkeypatch.setattr(sys, "prefix", str(venv))
+    monkeypatch.setattr(sys, "base_prefix", str(tmp_path / "python"))
+    monkeypatch.setenv("PATH", f"{venv / 'bin'}:{users.parent}")
+
+    assert setup_h2t.resolve_h2t_ops(home=tmp_path)["path"] == str(users)
+
+
 def _home(tmp_path, monkeypatch):
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     monkeypatch.delenv("NOTION_API_TOKEN", raising=False)
