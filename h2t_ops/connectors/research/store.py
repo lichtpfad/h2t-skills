@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import sys
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -66,16 +69,47 @@ def index_path(root: Path, index_name: str) -> Path:
 
 
 def write_json(path: Path, payload: Any) -> None:
+    """Write via a sibling temp file and os.replace so readers never see a partial file."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    text = json.dumps(payload, indent=2, ensure_ascii=False) + "\n"
+    if os.name == "nt" and ":" in path.name:
+        # On NTFS "id:x.json" is an alternate data stream (see maintenance), and a
+        # stream cannot be the target of os.replace; write it in place.
+        path.write_text(text, encoding="utf-8")
+        return
+    fd, tmp_name = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(text)
+        os.replace(tmp_name, path)
+    except BaseException:
+        Path(tmp_name).unlink(missing_ok=True)
+        raise
+
+
+class IndexUnreadable(Exception):
+    """An index file exists but is not a JSON list; objects stay canonical."""
 
 
 def _load_index(path: Path) -> list[dict[str, Any]]:
     if not path.is_file():
         return []
-    data = json.loads(path.read_text(encoding="utf-8"))
-    return data if isinstance(data, list) else []
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+        raise IndexUnreadable(str(exc)) from exc
+    if not isinstance(data, list):
+        raise IndexUnreadable("index is not a list")
+    return data
+
+
+def _skip_unreadable_index(path: Path, exc: IndexUnreadable) -> None:
+    print(
+        f"warning: research index {path} is unreadable ({exc}); object saved, index not "
+        "updated. Run `h2t-ops research rebuild-indexes` to regenerate it.",
+        file=sys.stderr,
+    )
 
 
 def write_object(root: Path, object_kind: str, object_id: str, payload: dict[str, Any]) -> Path:
@@ -211,7 +245,12 @@ def build_research_synthesis(
 
 def upsert_document_index(root: Path, document: dict[str, Any]) -> None:
     path = index_path(root, "documents")
-    rows = [row for row in _load_index(path) if row.get("document_id") != document["document_id"]]
+    try:
+        existing = _load_index(path)
+    except IndexUnreadable as exc:
+        _skip_unreadable_index(path, exc)
+        return
+    rows = [row for row in existing if row.get("document_id") != document["document_id"]]
     rows.append(
         {
             "document_id": document["document_id"],
@@ -232,7 +271,12 @@ def upsert_document_index(root: Path, document: dict[str, Any]) -> None:
 
 def upsert_thread_index(root: Path, thread: dict[str, Any]) -> None:
     path = index_path(root, "threads")
-    rows = [row for row in _load_index(path) if row.get("thread_id") != thread["thread_id"]]
+    try:
+        existing = _load_index(path)
+    except IndexUnreadable as exc:
+        _skip_unreadable_index(path, exc)
+        return
+    rows = [row for row in existing if row.get("thread_id") != thread["thread_id"]]
     rows.append(
         {
             "thread_id": thread["thread_id"],
@@ -255,7 +299,12 @@ def upsert_synthesis_index(
     project_ids: list[str],
 ) -> None:
     path = index_path(root, "syntheses")
-    rows = [row for row in _load_index(path) if row.get("synthesis_id") != synthesis["synthesis_id"]]
+    try:
+        existing = _load_index(path)
+    except IndexUnreadable as exc:
+        _skip_unreadable_index(path, exc)
+        return
+    rows = [row for row in existing if row.get("synthesis_id") != synthesis["synthesis_id"]]
     rows.append(
         {
             "synthesis_id": synthesis["synthesis_id"],
@@ -274,7 +323,11 @@ def upsert_synthesis_index(
 
 def upsert_alias_index(root: Path, entries: list[dict[str, Any]]) -> None:
     path = index_path(root, "aliases")
-    rows = _load_index(path)
+    try:
+        rows = _load_index(path)
+    except IndexUnreadable as exc:
+        _skip_unreadable_index(path, exc)
+        return
     keyed = {
         (
             row["alias_type"],

@@ -137,3 +137,52 @@ def test_thread_run_and_synthesis_indexes_are_written(tmp_path):
     assert threads[0]["thread_id"] == thread["thread_id"]
     assert syntheses[0]["thread_id"] == thread["thread_id"]
     assert syntheses[0]["has_open_questions"] is False
+
+
+def test_write_json_atomic_keeps_previous_file_when_replace_fails(tmp_path, monkeypatch):
+    path = tmp_path / "indexes" / "aliases.index.json"
+    store.write_json(path, [{"row": i} for i in range(50)])
+    before = path.read_text(encoding="utf-8")
+
+    def failing_replace(src, dst):
+        raise OSError("simulated crash before rename")
+
+    monkeypatch.setattr(store.os, "replace", failing_replace)
+    try:
+        store.write_json(path, [{"row": "short"}])
+    except OSError:
+        pass
+
+    assert path.read_text(encoding="utf-8") == before
+    assert json.loads(before) == [{"row": i} for i in range(50)]
+    assert sorted(p.name for p in path.parent.iterdir()) == ["aliases.index.json"]
+
+
+def _corrupt_alias_index(root):
+    path = store.index_path(root, "aliases")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    # The shape observed in the field: a valid array followed by a tail of an older version.
+    path.write_text('[\n  {"alias_type": "url"}\n]\n  "target_id": "x"\n}\n]\n', encoding="utf-8")
+    return path
+
+
+def test_upsert_with_corrupt_index_keeps_file_and_warns(tmp_path, capsys):
+    root = tmp_path / "research"
+    path = _corrupt_alias_index(root)
+    before = path.read_bytes()
+
+    store.upsert_alias_index(
+        root,
+        [
+            {
+                "alias_type": "url",
+                "alias_value": "https://example.com",
+                "target_object_type": "document",
+                "target_id": "research-doc:x",
+                "confidence": "high",
+            }
+        ],
+    )
+
+    assert path.read_bytes() == before
+    assert "rebuild-indexes" in capsys.readouterr().err

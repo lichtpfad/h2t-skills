@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- fix(research): index and object JSON is written to a sibling temp file and moved into place
+  with `os.replace`, so a crash or a second writer can no longer leave a short new version
+  followed by the tail of the old one. Object files whose id holds a colon live in NTFS
+  alternate streams on Windows and cannot be renamed into; those are still written in place
+  (#494)
+
+- fix(research): a corrupt index no longer blocks work. `crawl` and the other writers save the
+  object, leave the unreadable index untouched and warn on stderr to run `rebuild-indexes`.
+  `rebuild-indexes` regenerates an unreadable aliases index from objects instead of refusing;
+  the old file is kept as `aliases.index.json.corrupt` because non-url alias rows cannot be
+  derived from objects (#495)
+
 - fix(gmail): `reply` no longer addresses the account owner when the owner wrote last. It took
   the newest message's From; a 2026-09-28 reply with delivery questions for an external partner
   went to the owner's own inbox and sat unnoticed for six days. The recipient now follows

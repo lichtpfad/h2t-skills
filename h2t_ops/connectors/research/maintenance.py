@@ -650,8 +650,28 @@ def _alias_rows(objects: dict[str, dict[str, dict[str, Any]]]) -> list[dict[str,
     return sorted(keyed.values(), key=lambda row: tuple(row[key] for key in ALIAS_SORT_KEYS))
 
 
+UNREADABLE_INDEX_CODES = {"index_json_invalid", "index_not_list"}
+
+
+def _alias_backup_path(root: Path) -> Path:
+    path = store.index_path(root, "aliases")
+    return path.with_name(path.name + ".corrupt")
+
+
 def _preserved_alias_rows(root: Path) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     rows, findings = _read_index(root, "aliases")
+    if findings and all(finding["code"] in UNREADABLE_INDEX_CODES for finding in findings):
+        # The index is a cache: regenerate url aliases from objects and keep the
+        # unreadable file aside, so any non-derivable rows in it are not lost.
+        return [], [
+            _finding(
+                "warning",
+                "alias_index_unreadable",
+                f"{findings[0]['message']}; moved aside to {_alias_backup_path(root).name} "
+                "and regenerated from objects",
+                path=store.index_path(root, "aliases"),
+            )
+        ]
     if findings:
         return [], findings
     alias_integrity_findings = _check_alias_refs(root, _empty_objects())
@@ -743,8 +763,10 @@ def rebuild_indexes(root: Path) -> dict[str, Any]:
     findings = _validate_rebuild_objects(root, objects)
     preserved_aliases, alias_findings = _preserved_alias_rows(root)
     findings.extend(alias_findings)
-    if findings:
+    if any(finding["severity"] == "error" for finding in findings):
         return _rebuild_error_envelope(root, findings)
+    if any(finding["code"] == "alias_index_unreadable" for finding in findings):
+        os.replace(store.index_path(root, "aliases"), _alias_backup_path(root))
 
     documents = [
         _document_index_row(document)
@@ -781,7 +803,7 @@ def rebuild_indexes(root: Path) -> dict[str, Any]:
         "status": "ok",
         "written": written,
         "counts": _rebuild_counts(objects, len(aliases)),
-        "findings": [],
+        "findings": findings,
     }
 
 
