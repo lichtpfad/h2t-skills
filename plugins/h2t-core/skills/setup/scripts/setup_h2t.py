@@ -264,7 +264,9 @@ def plugin_cache_status(home: Path | None = None) -> dict[str, Any]:
         cache = (Path(override).expanduser() if override else home / default) / "plugins" / "cache"
         if cache.is_dir():
             found.extend(path for path in cache.glob("*/h2t-core/*") if path.is_dir())
-    found.sort(key=lambda path: _semver_key(path.name))
+    # Oldest first, so the last is latest: non-semver dirs (Codex `local`, content hashes)
+    # by mtime, then semver ones by version, which win when both exist.
+    found.sort(key=lambda path: (_semver_key(path.name) != (0, 0, 0), _semver_key(path.name), path.stat().st_mtime))
     versions = [str(path) for path in found]
     if found:
         root = found[-1].parent

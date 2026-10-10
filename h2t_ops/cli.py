@@ -44,10 +44,12 @@ def _doctor() -> int:
     from h2t_ops.core.secrets import resolve_notion_token
     try:
         resolve_notion_token()
-        notion = True
+        notion = "present"
     except ConfigError:
-        notion = False
-    print(f"secrets: NOTION_API_TOKEN={'present' if notion else 'MISSING'}")
+        notion = "MISSING"
+    except (OSError, UnicodeDecodeError) as exc:
+        notion = f"UNREADABLE ({exc})"
+    print(f"secrets: NOTION_API_TOKEN={notion}")
     gmail_token = any(token.is_file() for token, _ in google_auth._candidate_paths("gmail"))
     print(f"secrets: gmail token={'present' if gmail_token else 'MISSING'}")
     unchecked = [name for name in names if name not in ("notion", "gmail")]

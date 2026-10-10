@@ -76,3 +76,25 @@ def test_doctor_does_not_take_client_credentials_for_a_gmail_token(tmp_path, mon
 
     assert "gmail token=MISSING" in out
     assert "not checked here:" in out and "telegram" in out
+
+
+def test_plugin_cache_orders_non_semver_dirs_by_mtime(tmp_path, monkeypatch):
+    _no_host_overrides(monkeypatch)
+    plugin = tmp_path / ".codex" / "plugins" / "cache" / "curated" / "h2t-core"
+    older, newer = plugin / "zzzz-old-hash", plugin / "aaaa-new-hash"
+    older.mkdir(parents=True)
+    newer.mkdir(parents=True)
+    import os
+    os.utime(older, (1_000_000, 1_000_000))
+    os.utime(newer, (2_000_000, 2_000_000))
+
+    assert Path(setup_h2t.plugin_cache_status(tmp_path)["latest"]).name == "aaaa-new-hash"
+
+
+def test_doctor_reports_an_unreadable_secrets_file_instead_of_crashing(tmp_path, monkeypatch, capsys):
+    secrets_dir = _home(tmp_path, monkeypatch)
+    (secrets_dir / "notion.env").write_bytes(b"NOTION_API_TOKEN=\xff\xfe\n")
+
+    cli._doctor()
+
+    assert "NOTION_API_TOKEN=UNREADABLE" in capsys.readouterr().out
