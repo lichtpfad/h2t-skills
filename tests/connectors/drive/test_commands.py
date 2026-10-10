@@ -327,20 +327,21 @@ def test_sheets_update_dispatch_calls_client(monkeypatch, capsys):
     calls = {}
 
     class _Stub:
-        def sheets_update(self, sheet_id, *, cell_range, value=None, values_file=None):
+        def sheets_update(self, sheet_id, *, cell_range, value=None, values_file=None,
+                          input_mode="raw"):
             calls.update(sheet_id=sheet_id, cell_range=cell_range,
-                         value=value, values_file=values_file)
+                         value=value, values_file=values_file, input_mode=input_mode)
             return {"sheet_id": sheet_id, "updated_cells": 1, "updated_range": cell_range}
 
     monkeypatch.setattr(client_mod, "DriveClient", lambda: _Stub())
     args = SimpleNamespace(drive_cmd="sheets", sheets_cmd="update", sheet_id="sh1",
                            range="Sheet1!B12", value="hi", values_file=None,
-                           as_json=True, fmt="human")
+                           input_mode="user-entered", as_json=True, fmt="human")
     rc = emit("drive", result=cmds_mod.run(args), fmt="json")
     out = json.loads(capsys.readouterr().out)
     assert rc == 0
     assert calls == {"sheet_id": "sh1", "cell_range": "Sheet1!B12",
-                     "value": "hi", "values_file": None}
+                     "value": "hi", "values_file": None, "input_mode": "user-entered"}
     assert out["result"]["updated_cells"] == 1
 
 
