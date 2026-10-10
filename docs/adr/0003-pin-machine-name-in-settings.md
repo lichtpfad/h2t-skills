@@ -32,6 +32,15 @@ Option B, chosen by the owner on 2026-09-19 (#491):
   keep their name. Claude Code passes `env` to every process it starts, hooks included,
   independent of the shell. An existing value is never changed; an unreadable settings file
   is left untouched and reported.
+- Today's value is written only if the session root has a folder by that name or no folders
+  at all. Otherwise `setup` writes nothing and returns `needs_choice` with the folders as
+  candidates; the setup skill asks the user and pins the answer with `--machine-name`
+  (#517). "Existing directories keep their name" held only while the hostname still matched
+  the folder at the moment of `setup`: on 2026-10-10 the MacBook read `Mac` while its history
+  sat in `macbook-pro-3/`. The candidates are not chosen automatically because the root may
+  hold other machines' folders once it is replicated (#454).
+- The setup skill runs `setup` in its first-setup / repair / update flow. Until #518 it ran
+  only `doctor`, so the pin was reachable by calling the script by hand and by nothing else.
 
 ## Rejected
 

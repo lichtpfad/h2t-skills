@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- fix(setup): the setup skill now runs `setup --json` in its first-setup / repair / update
+  flow; it ran only `doctor`, so the machine-name pin was never reached through the skill
+  (#518). `setup` no longer pins a hostname that has drifted from the session history: if
+  the session root has folders and none is today's name, it writes nothing and returns
+  `needs_choice` with the candidates, and the skill asks and pins the answer with
+  `--machine-name` (#517). ADR 0003 amended
+
 - fix(setup): `doctor` reports a legacy `h2t` command left in the old per-user venv whose
   editable install points at a plugin-cache directory that no longer exists. It names the
   package and the missing directory and prints the `uv pip uninstall` command; it removes

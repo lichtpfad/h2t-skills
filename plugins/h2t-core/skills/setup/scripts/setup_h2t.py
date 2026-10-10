@@ -343,13 +343,17 @@ def doctor(runner: Runner = _run) -> dict[str, Any]:
     }
 
 
-def ensure_machine_name(home: Path | None = None) -> dict[str, Any]:
+def ensure_machine_name(home: Path | None = None, name: str = "") -> dict[str, Any]:
     """Pin H2T_MACHINE_NAME in Claude Code's settings `env`, once (#491, ADR 0003).
 
     On macOS the hostname follows the network, so session records of one machine split
     across two directories. Claude Code passes `env` from settings.json to every process
-    it starts, hooks included, whatever the shell. An existing value is never changed;
-    the value written is today's name by the shared rule, so existing directories stay.
+    it starts, hooks included, whatever the shell. An existing value is never changed.
+
+    Without `name`, today's name by the shared rule is written only if the session root
+    has a folder under it or no folders at all. Otherwise the hostname may already have
+    drifted from the history (#517), and the root may hold other machines' folders too,
+    so nothing is written and the folders come back as candidates for the user to pick.
     """
     home = home or _home()
     override = os.environ.get("CLAUDE_CONFIG_DIR")
@@ -375,7 +379,14 @@ def ensure_machine_name(home: Path | None = None) -> dict[str, Any]:
         current = data.get("env", {}).get("H2T_MACHINE_NAME")
         if current:
             return {"status": "unchanged", "path": str(settings), "value": current}
-        name = get_machine_name()
+        if not name:
+            today = get_machine_name()
+            # The handoff writer's root; the legacy ~/.dor/sessions is shared between machines.
+            root = Path(os.environ.get("H2T_SESSION_ROOT", str(home / ".h2t" / "sessions")))
+            folders = sorted(p.name for p in root.iterdir() if p.is_dir() and not p.name.startswith(".")) if root.is_dir() else []
+            if folders and today not in folders:
+                return {"status": "needs_choice", "path": str(settings), "today": today, "candidates": folders}
+            name = today
         data.setdefault("env", {})["H2T_MACHINE_NAME"] = name
         settings.parent.mkdir(parents=True, exist_ok=True)
         fd, tmp = tempfile.mkstemp(dir=settings.parent, prefix=".settings.", suffix=".tmp")
@@ -710,6 +721,8 @@ def build_parser() -> argparse.ArgumentParser:
     for name in ("doctor", "setup", "repair", "update"):
         p = sub.add_parser(name)
         p.add_argument("--json", action="store_true")
+        if name == "setup":
+            p.add_argument("--machine-name", default="", help="Pin this name; the answer to needs_choice")
     cc = sub.add_parser("connectors-check")
     cc.add_argument("--json", action="store_true")
     cc.add_argument("--live", action="store_true", help="Run explicit read-only provider checks where safe")
@@ -739,7 +752,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.command in {"doctor", "setup", "repair", "update"}:
             result = doctor()
             if args.command == "setup":
-                result["machine_name"] = ensure_machine_name()
+                result["machine_name"] = ensure_machine_name(name=args.machine_name)
                 if result["machine_name"]["status"] == "error":
                     result["status"] = "error"
         elif args.command == "connectors-check":

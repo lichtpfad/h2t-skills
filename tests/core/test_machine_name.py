@@ -121,3 +121,65 @@ def test_setup_does_not_overwrite_a_preference_saved_meanwhile(renamed_host, mon
         "env": {"H2T_MACHINE_NAME": "mac"},
     }
     assert sorted(p.name for p in settings.parent.iterdir()) == ["settings.json"]
+
+
+def _history(renamed_host, *machines):
+    for machine in machines:
+        (renamed_host / "sessions" / machine / "proj").mkdir(parents=True)
+
+
+def test_setup_does_not_pin_a_hostname_that_drifted_from_the_history(renamed_host, monkeypatch):
+    # #517: the MacBook's history sits in macbook-pro-3/ while the hostname now reads Mac.
+    monkeypatch.delenv("CLAUDE_CONFIG_DIR", raising=False)
+    _history(renamed_host, "macbook-pro-3")
+
+    result = setup_h2t.ensure_machine_name(renamed_host)
+
+    assert result["status"] == "needs_choice"
+    assert result["today"] == "mac"
+    assert result["candidates"] == ["macbook-pro-3"]
+    assert not _settings(renamed_host).exists()
+
+
+def test_setup_pins_today_s_name_when_its_folder_exists(renamed_host, monkeypatch):
+    monkeypatch.delenv("CLAUDE_CONFIG_DIR", raising=False)
+    _history(renamed_host, "automata", "mac")
+
+    result = setup_h2t.ensure_machine_name(renamed_host)
+
+    assert result["status"] == "written"
+    assert result["value"] == "mac"
+
+
+def test_setup_pins_the_name_it_is_given(renamed_host, monkeypatch):
+    monkeypatch.delenv("CLAUDE_CONFIG_DIR", raising=False)
+    _history(renamed_host, "macbook-pro-3")
+
+    result = setup_h2t.ensure_machine_name(renamed_host, name="macbook-pro-3")
+
+    assert result["status"] == "written"
+    assert json.loads(_settings(renamed_host).read_text(encoding="utf-8")) == {
+        "env": {"H2T_MACHINE_NAME": "macbook-pro-3"},
+    }
+
+
+def test_setup_command_takes_the_chosen_name(renamed_host, monkeypatch, capsys):
+    monkeypatch.delenv("CLAUDE_CONFIG_DIR", raising=False)
+    monkeypatch.setattr(setup_h2t, "_home", lambda: renamed_host)
+    monkeypatch.setattr(setup_h2t, "doctor", lambda: {"status": "ok"})
+    _history(renamed_host, "macbook-pro-3")
+
+    assert setup_h2t.main(["setup", "--json"]) == 0
+    assert json.loads(capsys.readouterr().out)["machine_name"]["status"] == "needs_choice"
+
+    assert setup_h2t.main(["setup", "--machine-name", "macbook-pro-3", "--json"]) == 0
+    assert json.loads(capsys.readouterr().out)["machine_name"]["value"] == "macbook-pro-3"
+
+
+def test_the_setup_skill_reaches_the_pin():
+    # #518: the pin lived only in the `setup` subcommand, which SKILL.md never ran.
+    skill = (SETUP_DIR.parent / "SKILL.md").read_text(encoding="utf-8")
+
+    assert "setup_h2t.py setup --json" in skill
+    assert "needs_choice" in skill
+    assert "--machine-name" in skill

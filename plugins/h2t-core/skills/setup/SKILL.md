@@ -25,7 +25,7 @@ output, and only then explain the next action.
 | User intent | Backend command |
 | --- | --- |
 | diagnose current install | `doctor --json` |
-| first setup / repair / update | `doctor --json`, then `install-h2t-ops --source main --dry-run --json`, then ask before real install |
+| first setup / repair / update | `setup --json` (the doctor report plus the machine-name pin), then `install-h2t-ops --source main --dry-run --json`, then ask before real install |
 | check connector readiness | `connectors-check --json` |
 | run live connector status checks | `connectors-check --live --json` |
 | include paid Research/Exa preflight | `connectors-check --live --include-paid --json` only after explicit user confirmation |
@@ -102,6 +102,33 @@ POS/DOR absence is not an error. Phrase it as:
 optional_pos: not_configured
 impact: lifecycle and connector provider I/O still work; POS publishing disabled
 ```
+
+### Step 2b: Pin the machine name
+
+For first setup, repair and update — in place of Step 2's `doctor`, not after it; a plain
+diagnosis stays `doctor`:
+
+```bash
+$RUN scripts/setup_h2t.py setup --json
+```
+
+It is `doctor` plus one write: `env.H2T_MACHINE_NAME` in `~/.claude/settings.json`, so
+session records stop following a macOS hostname (ADR 0003). Read `machine_name.status`:
+
+- `unchanged` / `written` — report the value.
+- `needs_choice` — nothing was written: today's name (`today`) has no folder in the
+  session root, while other folders (`candidates`) do. One of them may be this machine
+  under an older hostname; another may belong to a different machine. Show both and ask
+  which name this machine's history lives under, then pin the answer:
+
+  ```bash
+  $RUN scripts/setup_h2t.py setup --machine-name <answer> --json
+  ```
+
+  If the user says the machine is new, pin the value of the `today` field
+  (`--machine-name <today>`). `today` is `H2T_MACHINE_NAME`, else `DOR_MACHINE_NAME`, else
+  the hostname lowercased up to the first dot.
+- `error` — report it; the settings file was left untouched.
 
 ### Step 3: Install or repair h2t-ops
 
