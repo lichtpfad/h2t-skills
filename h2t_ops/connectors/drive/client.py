@@ -343,18 +343,80 @@ def _find_tab_end_index(doc: dict[str, Any], tab_id: str) -> int | None:
     return None
 
 
+_TABLE_SEPARATOR_RE = re.compile(r'^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$')
+
+
+def _table_cells(line: str) -> list[str]:
+    """Split a GFM table row into plain cell texts; inline markup is dropped (#493)."""
+    inner = line.strip()
+    if inner.startswith("|"):
+        inner = inner[1:]
+    if inner.endswith("|"):
+        inner = inner[:-1]
+    return [_strip_inline(cell.strip()).replace("`", "") for cell in inner.split("|")]
+
+
+def _table_requests(table: list[list[str]], slot: int, tab_id: str) -> list[dict[str, Any]]:
+    """insertTable at the empty paragraph *slot*, then fill cells last-first.
+
+    Layout measured on the live Docs API: the table starts at slot + 1, a row spans
+    1 + 2 * columns units, and cell (r, c) holds its text at
+    slot + 4 + r * (1 + 2 * columns) + 2 * c. Filling from the last cell keeps every
+    earlier cell's index valid. The header row is bold.
+    """
+    columns = len(table[0])
+    requests: list[dict[str, Any]] = [{
+        "insertTable": {"rows": len(table), "columns": columns,
+                        "location": {"index": slot, "tabId": tab_id}}
+    }]
+    for r in reversed(range(len(table))):
+        for c in reversed(range(columns)):
+            text = table[r][c]
+            if not text:
+                continue
+            index = slot + 4 + r * (1 + 2 * columns) + 2 * c
+            requests.append({"insertText": {"location": {"index": index, "tabId": tab_id},
+                                            "text": text}})
+            if r == 0:
+                requests.append({
+                    "updateTextStyle": {
+                        "range": {"startIndex": index, "endIndex": index + _utf16_len(text),
+                                  "tabId": tab_id},
+                        "textStyle": {"bold": True},
+                        "fields": "bold",
+                    }
+                })
+    return requests
+
+
 def _md_to_docs_requests(markdown_text: str, tab_id: str) -> list[dict[str, Any]]:
     """Convert markdown to Docs API batchUpdate requests targeting *tab_id*.
 
-    v1 scope: H1–H3 headings, paragraphs, unordered bullets (- or *).
+    v1 scope: H1–H3 headings, paragraphs, unordered bullets (- or *), GFM tables.
     Inline bold (**text**) and italic (*text*) emit updateTextStyle ranges.
 
     All text is inserted at index 1 (start of an empty tab body) in one
     insertText request, followed by style/bullet requests with pre-computed
-    stable indices.
+    stable indices. A table leaves one empty paragraph in that text; tables are
+    inserted into those paragraphs last, from the end of the tab backwards, so
+    no insertion moves an index computed before it.
     """
     paragraphs: list[dict[str, Any]] = []
-    for line in markdown_text.splitlines():
+    lines = markdown_text.splitlines()
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        i += 1
+        if "|" in line and i < len(lines) and _TABLE_SEPARATOR_RE.match(lines[i]):
+            header = _table_cells(line)
+            rows = [header]
+            i += 1
+            while i < len(lines) and "|" in lines[i] and lines[i].strip():
+                cells = _table_cells(lines[i])
+                rows.append((cells + [""] * len(header))[:len(header)])
+                i += 1
+            paragraphs.append({"type": "table", "text": "", "raw": "", "table": rows})
+            continue
         m = re.match(r'^(#{1,3})\s+(.*)', line)
         if m:
             raw = m.group(2)
@@ -379,6 +441,7 @@ def _md_to_docs_requests(markdown_text: str, tab_id: str) -> list[dict[str, Any]
     }]
 
     current = 1
+    tables: list[tuple[int, list[list[str]]]] = []
     for p in paragraphs:
         plain = p["text"]
         raw = p.get("raw", plain)
@@ -387,6 +450,9 @@ def _md_to_docs_requests(markdown_text: str, tab_id: str) -> list[dict[str, Any]
         current = end
 
         ptype = p["type"]
+        if ptype == "table":
+            tables.append((start, p["table"]))
+            continue
         if ptype.startswith("heading"):
             level = int(ptype[-1])
             requests.append({
@@ -407,6 +473,9 @@ def _md_to_docs_requests(markdown_text: str, tab_id: str) -> list[dict[str, Any]
         # Inline styles (bold/italic)
         inline_reqs = _inline_style_requests(plain, raw, start, tab_id)
         requests.extend(inline_reqs)
+
+    for slot, table in reversed(tables):
+        requests.extend(_table_requests(table, slot, tab_id))
 
     return requests
 
@@ -1069,7 +1138,7 @@ class DriveClient:
     ) -> dict[str, Any]:
         """Write markdown content to an existing Google Docs tab via batchUpdate.
 
-        v1 scope: H1–H3 headings, paragraphs, unordered bullet lists.
+        v1 scope: H1–H3 headings, paragraphs, unordered bullet lists, GFM tables.
         Inline bold (**text**) and italic (*text*) emit updateTextStyle ranges.
         When *clear_first* is True, existing tab content is deleted before writing.
         """

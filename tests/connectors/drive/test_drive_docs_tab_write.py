@@ -316,3 +316,77 @@ def test_emoji_before_bullet_correct_offset():
     assert len(bullets) == 1
     emoji_para_len = _utf16_len("🎉 intro") + 1
     assert bullets[0]["createParagraphBullets"]["range"]["startIndex"] == 1 + emoji_para_len
+
+
+# ---------------------------------------------------------------------------
+# Tables (#493). Index layout measured on the live Docs API, 2026-10-10:
+# insertTable(R, C) at an empty paragraph L adds a newline at L, the table at L+1,
+# rows of 1 + 2C units, and puts cell (r, c)'s text at L + 4 + r*(1 + 2C) + 2c.
+# ---------------------------------------------------------------------------
+
+
+def test_markdown_without_tables_is_unchanged():
+    """Snapshot of main's output before tables existed: no table, no difference."""
+    md = "# Title\n\nSome **bold** and *italic* text\n- item one\n* item two\n## Sub ü 😀\na | b on one line\n"
+    T = "t.0"
+
+    def rng(s, e):
+        return {"startIndex": s, "endIndex": e, "tabId": T}
+
+    assert _md_to_docs_requests(md, T) == [
+        {"insertText": {"location": {"index": 1, "tabId": T},
+                        "text": "Title\n\nSome bold and italic text\nitem one\nitem two\n"
+                                "Sub ü 😀\na | b on one line\n"}},
+        {"updateParagraphStyle": {"range": rng(1, 7), "paragraphStyle": {"namedStyleType": "HEADING_1"},
+                                  "fields": "namedStyleType"}},
+        {"updateTextStyle": {"range": rng(13, 17), "textStyle": {"bold": True}, "fields": "bold"}},
+        {"updateTextStyle": {"range": rng(22, 28), "textStyle": {"italic": True}, "fields": "italic"}},
+        {"createParagraphBullets": {"range": rng(34, 43), "bulletPreset": "BULLET_DISC_CIRCLE_SQUARE"}},
+        {"createParagraphBullets": {"range": rng(43, 52), "bulletPreset": "BULLET_DISC_CIRCLE_SQUARE"}},
+        {"updateParagraphStyle": {"range": rng(52, 61), "paragraphStyle": {"namedStyleType": "HEADING_2"},
+                                  "fields": "namedStyleType"}},
+    ]
+
+
+def test_table_becomes_insert_table_with_cells_filled_from_the_end():
+    md = "# T\n| A | B |\n|---|:-:|\n| 1 | **2** |\nend\n"
+    reqs = _md_to_docs_requests(md, "t.0")
+    assert reqs[0]["insertText"]["text"] == "T\n\nend\n"  # the table leaves one empty paragraph
+    tail = reqs[reqs.index(next(r for r in reqs if "insertTable" in r)):]
+
+    def ins(i, text):
+        return {"insertText": {"location": {"index": i, "tabId": "t.0"}, "text": text}}
+
+    def bold(s, e):
+        return {"updateTextStyle": {"range": {"startIndex": s, "endIndex": e, "tabId": "t.0"},
+                                    "textStyle": {"bold": True}, "fields": "bold"}}
+
+    # L = 3; cells at 7, 9 (header) and 12, 14; markup inside cells is stripped.
+    assert tail == [
+        {"insertTable": {"rows": 2, "columns": 2, "location": {"index": 3, "tabId": "t.0"}}},
+        ins(14, "2"), ins(12, "1"),
+        ins(9, "B"), bold(9, 10),
+        ins(7, "A"), bold(7, 8),
+    ]
+
+
+def test_two_tables_are_inserted_last_first():
+    md = "| a |\n|---|\n| 1 |\nmid\n| b |\n|---|\n| 2 |\n"
+    reqs = _md_to_docs_requests(md, "t.0")
+    locations = [r["insertTable"]["location"]["index"] for r in reqs if "insertTable" in r]
+    assert locations == [6, 1]  # "\n" at 1, "mid\n" 2..5, second slot at 6
+
+
+def test_short_rows_are_padded_and_empty_cells_get_no_insert():
+    md = "| A | B |\n|---|---|\n| only |\n"
+    reqs = _md_to_docs_requests(md, "t.0")
+    table = next(r["insertTable"] for r in reqs if "insertTable" in r)
+    assert (table["rows"], table["columns"]) == (2, 2)
+    cell_texts = [r["insertText"]["text"] for r in reqs if "insertText" in r][1:]
+    assert cell_texts == ["only", "B", "A"]
+
+
+def test_pipe_line_without_separator_stays_a_paragraph():
+    reqs = _md_to_docs_requests("| a | b |\n| c | d |\n", "t.0")
+    assert not any("insertTable" in r for r in reqs)
+    assert reqs[0]["insertText"]["text"] == "| a | b |\n| c | d |\n"
