@@ -79,6 +79,10 @@ def bootstrap(*, env_file: Path | None = None) -> dict[str, str]:
             if not line or line.startswith("#"):
                 continue
             if "=" not in line:
+                if path.name != H2T_CONFIG_SECRETS_FILE.name and path.parent == H2T_CONFIG_SECRETS_FILE.parent:
+                    # A per-provider file (#483) was never read before; a stray line in it
+                    # must not stop every other key from loading.
+                    continue
                 raise ValueError(
                     f"h2t_secrets: malformed line {lineno} in {path}: {raw!r} "
                     f"(expected KEY=VALUE)"
