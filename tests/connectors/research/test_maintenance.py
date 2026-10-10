@@ -348,21 +348,31 @@ def test_rebuild_indexes_with_incomplete_object_does_not_overwrite_existing_inde
     } == before
 
 
-def test_rebuild_indexes_with_malformed_alias_index_does_not_overwrite_existing_indexes(tmp_path):
+def test_rebuild_indexes_with_corrupt_index_regenerates_and_keeps_corrupt_copy(tmp_path):
     root = tmp_path / "research"
-    before = _write_existing_indexes(root)
-    store.index_path(root, "aliases").write_text("{bad json", encoding="utf-8")
-    before["aliases"] = store.index_path(root, "aliases").read_text(encoding="utf-8")
+    document = _demo_document(root)
+    alias_path = store.index_path(root, "aliases")
+    alias_path.parent.mkdir(parents=True, exist_ok=True)
+    # A valid array followed by the tail of a longer previous version.
+    corrupt = '[\n  {"alias_type": "url"}\n]\n  "target_id": "x"\n}\n]\n'
+    alias_path.write_text(corrupt, encoding="utf-8")
 
     result = maintenance.rebuild_indexes(root)
 
-    assert result["status"] == "error"
-    assert result["written"] == []
-    assert result["findings"][0]["code"] == "index_json_invalid"
-    assert {
-        index_name: store.index_path(root, index_name).read_text(encoding="utf-8")
-        for index_name in before
-    } == before
+    assert result["status"] == "ok"
+    assert len(result["written"]) == 4
+    assert [finding["code"] for finding in result["findings"]] == ["alias_index_unreadable"]
+    assert json.loads(alias_path.read_text(encoding="utf-8")) == [
+        {
+            "alias_type": "url",
+            "alias_value": "https://example.com/post",
+            "target_object_type": "document",
+            "target_id": document["document_id"],
+            "confidence": "high",
+        }
+    ]
+    backup = alias_path.with_name(alias_path.name + ".corrupt")
+    assert backup.read_text(encoding="utf-8") == corrupt
 
 
 def test_rebuild_indexes_with_unknown_alias_target_type_does_not_overwrite_indexes(tmp_path):
@@ -512,3 +522,21 @@ def test_cleanup_execute_mode_is_rejected_in_v1(tmp_path):
         result["message"]
         == "cleanup execution is intentionally disabled in v1; rerun with dry_run=True"
     )
+
+
+def test_rebuild_indexes_with_corrupt_index_never_overwrites_an_earlier_backup(tmp_path):
+    root = tmp_path / "research"
+    _demo_document(root)
+    alias_path = store.index_path(root, "aliases")
+    alias_path.parent.mkdir(parents=True, exist_ok=True)
+    first_backup = alias_path.with_name(alias_path.name + ".corrupt")
+    first_backup.write_text("first corrupt copy", encoding="utf-8")
+    alias_path.write_text("[null]\n", encoding="utf-8")
+
+    result = maintenance.rebuild_indexes(root)
+
+    assert result["status"] == "ok"
+    assert first_backup.read_text(encoding="utf-8") == "first corrupt copy"
+    second_backup = alias_path.with_name(alias_path.name + ".corrupt.1")
+    assert second_backup.read_text(encoding="utf-8") == "[null]\n"
+    assert second_backup.name in result["findings"][0]["message"]
