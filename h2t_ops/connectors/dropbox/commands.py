@@ -65,7 +65,7 @@ def _upload(client: Any, local: str, dest: str) -> list[dict]:
     """A file goes to `dest`; a folder's files go under `dest` keeping their sub-paths."""
     from pathlib import Path
 
-    from h2t_ops.core.errors import ProviderError, UsageError
+    from h2t_ops.core.errors import H2TError, ProviderError, UsageError
 
     src = Path(local)
     if src.is_file():
@@ -80,7 +80,7 @@ def _upload(client: Any, local: str, dest: str) -> list[dict]:
         target = dest.rstrip("/") + "/" + f.relative_to(src).as_posix()
         try:
             rows.append(client.upload(str(f), target))
-        except ProviderError as exc:  # keep going; the summary below fails loud
+        except H2TError as exc:  # network, auth, size too: keep going; the summary fails loud
             failed.append(f"{target}: {exc}")
     if failed:
         raise ProviderError(f"{len(failed)} of {len(files)} uploads failed: " + "; ".join(failed))
