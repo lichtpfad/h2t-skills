@@ -546,9 +546,22 @@ class TelegramClientAdapter:
         *,
         caption: str | None = None,
     ) -> dict[str, Any]:
+        # Resolve the peer as reads do: a numeric id given as text would reach
+        # Telethon as a string and be looked up as a username.
+        candidates: list[Any] = self._entity_candidates(entity)
+        msg: Any = None
         try:
             with self._connected_client() as client:
-                msg = client.send_file(entity, path, caption=caption)
+                last_exc: Exception | None = None
+                for candidate in candidates:
+                    try:
+                        msg = client.send_file(candidate, path, caption=caption)
+                        last_exc = None
+                        break
+                    except ValueError as exc:
+                        last_exc = exc
+                if last_exc is not None:
+                    raise _peer_unresolved_error(entity, last_exc) from last_exc
         except (ValueError, sqlite3.OperationalError) as exc:
             raise _session_incompatible_error(exc) from exc
         row = self._message_row(msg)

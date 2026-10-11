@@ -11,7 +11,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from h2t_ops.core.errors import AuthError, ConfigError, ProviderError
+from h2t_ops.core.errors import AuthError, ConfigError, NotFoundError, ProviderError
 
 
 def test_module_has_no_module_level_telethon_import():
@@ -435,6 +435,51 @@ def test_send_file_without_caption(tmp_path, monkeypatch):
     monkeypatch.setattr(tmod.TelegramClientAdapter, "_client", lambda self: _CtxClient(FakeInner()))
     out = tmod.TelegramClientAdapter(config_dir=tmp_path).send_file("chatname", "photo.jpg")
     assert out["message_id"] == 21
+
+
+def test_send_file_resolves_numeric_chat_id(tmp_path, monkeypatch):
+    # A numeric id passed as text used to reach Telethon as a string, which it
+    # looks up as a username: "Cannot find any entity", while reads of the same
+    # chat worked. send_file must resolve the peer the way reads do.
+    from h2t_ops.connectors.telegram import client as tmod
+
+    (tmp_path / "config.json").write_text(json.dumps({"api_id": 1, "api_hash": "h"}), encoding="utf-8")
+    monkeypatch.setattr(tmod, "_input_peer_from_sqlite", lambda *_: None)
+
+    sent = SimpleNamespace(
+        id=22, chat_id=-1002670981496, date=None,
+        sender_id=None, sender=None, text="", entities=[], reply_to_msg_id=None,
+    )
+    tried = []
+
+    class FakeInner:
+        def send_file(self, entity, path, caption=None):
+            tried.append(entity)
+            if entity != -1002670981496:
+                raise ValueError(f'Cannot find any entity corresponding to "{entity}"')
+            return sent
+
+    monkeypatch.setattr(tmod.TelegramClientAdapter, "_client", lambda self: _CtxClient(FakeInner()))
+    out = tmod.TelegramClientAdapter(config_dir=tmp_path).send_file("-1002670981496", "photo.png", caption="c")
+    assert out["message_id"] == 22
+    assert all(isinstance(e, int) for e in tried)
+    assert tried[-1] == -1002670981496
+
+
+def test_send_file_unresolvable_peer_is_not_reported_as_session_error(tmp_path, monkeypatch):
+    from h2t_ops.connectors.telegram import client as tmod
+
+    (tmp_path / "config.json").write_text(json.dumps({"api_id": 1, "api_hash": "h"}), encoding="utf-8")
+    monkeypatch.setattr(tmod, "_input_peer_from_sqlite", lambda *_: None)
+
+    class FakeInner:
+        def send_file(self, entity, path, caption=None):
+            raise ValueError(f'Cannot find any entity corresponding to "{entity}"')
+
+    monkeypatch.setattr(tmod.TelegramClientAdapter, "_client", lambda self: _CtxClient(FakeInner()))
+    with pytest.raises(NotFoundError) as exc:
+        tmod.TelegramClientAdapter(config_dir=tmp_path).send_file("12345", "photo.png")
+    assert "PEER_UNRESOLVED" in str(exc.value)
 
 
 def test_forward_message_returns_normalized_row(tmp_path, monkeypatch):
