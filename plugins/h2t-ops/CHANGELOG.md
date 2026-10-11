@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- feat(dropbox): `upload` (file or folder, never overwrites, size read back, 150 MB cap)
+  and `link` (existing shared link or a new public one); both refuse without
+  `--confirm-write` / `--confirm-public` before reading a token. Replaces the
+  h2t-transcription script `dropbox_share.py` (#527)
+
 - feat(drive): `docs-tab write` builds real tables from GFM markdown tables, header row
   bold, in the same single batch; table-free markdown produces the same requests as before (#493)
 

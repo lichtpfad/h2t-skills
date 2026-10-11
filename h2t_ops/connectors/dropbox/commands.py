@@ -17,7 +17,7 @@ def _entry_row(entry: dict) -> dict:
 
 
 def register(subparsers: Any) -> None:
-    p = subparsers.add_parser("dropbox", help="Read Dropbox folders and files over HTTP API v2")
+    p = subparsers.add_parser("dropbox", help="Dropbox folders and files over HTTP API v2 (read; upload, link)")
     cmds = p.add_subparsers(dest="dropbox_cmd", required=True)
 
     def add_fmt(sp):
@@ -45,15 +45,61 @@ def register(subparsers: Any) -> None:
                     help="decompress gzip content stored under a plain name (.prproj)")
     add_fmt(dp)
 
+    up = cmds.add_parser("upload", help="Upload a local file or folder; never overwrites")
+    up.add_argument("local", help="local file, or folder (its files go under dest, same layout)")
+    up.add_argument("dest", help="destination path from the Dropbox root")
+    up.add_argument("--confirm-write", dest="confirm_write", action="store_true",
+                    help="required: acknowledge a write to Dropbox")
+    add_fmt(up)
+
+    kp = cmds.add_parser("link", help="Existing shared link, or a new public one")
+    kp.add_argument("path")
+    kp.add_argument("--confirm-public", dest="confirm_public", action="store_true",
+                    help="required: the link opens the file to anyone who has it")
+    add_fmt(kp)
+
     p.set_defaults(_handler=run)
+
+
+def _upload(client: Any, local: str, dest: str) -> list[dict]:
+    """A file goes to `dest`; a folder's files go under `dest` keeping their sub-paths."""
+    from pathlib import Path
+
+    from h2t_ops.core.errors import ProviderError, UsageError
+
+    src = Path(local)
+    if src.is_file():
+        return [client.upload(str(src), dest)]
+    if not src.is_dir():
+        raise UsageError(f"dropbox upload: no such file or folder: {local}")
+    files = sorted(f for f in src.rglob("*") if f.is_file())
+    if not files:
+        raise UsageError(f"dropbox upload: {local} has no files")
+    rows, failed = [], []
+    for f in files:
+        target = dest.rstrip("/") + "/" + f.relative_to(src).as_posix()
+        try:
+            rows.append(client.upload(str(f), target))
+        except ProviderError as exc:  # keep going; the summary below fails loud
+            failed.append(f"{target}: {exc}")
+    if failed:
+        raise ProviderError(f"{len(failed)} of {len(files)} uploads failed: " + "; ".join(failed))
+    return rows
 
 
 def run(args: Any) -> Any:
     """Dispatch a dropbox subcommand. Returns result or raises core.errors."""
     from h2t_ops.connectors.dropbox.client import DropboxClient  # lazy
+    from h2t_ops.core.errors import UsageError
 
-    client = DropboxClient()
     cmd = args.dropbox_cmd
+    # refused before a client exists: no token is read, no request is sent
+    if cmd == "upload" and not getattr(args, "confirm_write", False):
+        raise UsageError("dropbox upload writes to Dropbox: --confirm-write is required")
+    if cmd == "link" and not getattr(args, "confirm_public", False):
+        raise UsageError("dropbox link opens the path to anyone with the link: "
+                         "--confirm-public is required")
+    client = DropboxClient()
 
     if cmd == "account":
         acc = client.account()
@@ -73,6 +119,9 @@ def run(args: Any) -> Any:
         return _entry_row(client.meta(args.path))
     if cmd == "download":
         return client.download(args.path, args.dest, gunzip=args.gunzip)
+    if cmd == "upload":
+        return _upload(client, args.local, args.dest)
+    if cmd == "link":
+        return client.link(args.path)
 
-    from h2t_ops.core.errors import UsageError
     raise UsageError(f"unknown dropbox subcommand: {cmd!r}")

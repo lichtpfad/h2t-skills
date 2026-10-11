@@ -362,6 +362,115 @@ def test_missing_scope_is_not_retried_as_a_stale_token(client_obj, monkeypatch):
     assert "generate a NEW token" in (exc.value.hint or "")
 
 
+# --- writes: upload, link (#527) ---------------------------------------------
+
+
+def _upload_post(seen, answer):
+    def post(url, data=None, headers=None, timeout=None, **kw):
+        seen.append({"url": url, "body": data.read() if hasattr(data, "read") else data,
+                     "arg": json.loads(headers.get("Dropbox-API-Arg", "null")),
+                     "raw_arg": headers.get("Dropbox-API-Arg", "")})
+        return answer(len(seen))
+    return post
+
+
+def test_upload_adds_never_overwrites_and_reads_the_size_back(client_obj, monkeypatch, tmp_path):
+    src = tmp_path / "a.py"
+    src.write_bytes(b"12345")
+    seen = []
+    fake, _ = _fake_requests(_upload_post(seen, lambda n: _Resp(200, payload={"size": 5})))
+    monkeypatch.setitem(sys.modules, "requests", fake)
+    out = client_obj.upload(str(src), "/HOU2TOUCH/x/a.py")
+    assert out == {"path": "/HOU2TOUCH/x/a.py", "bytes": 5, "status": "uploaded"}
+    assert seen[0]["url"].endswith("/files/upload")
+    assert seen[0]["body"] == b"12345"
+    assert seen[0]["arg"]["mode"] == "add" and seen[0]["arg"]["autorename"] is False
+
+
+def test_upload_reports_an_existing_path_and_leaves_it(client_obj, monkeypatch, tmp_path):
+    src = tmp_path / "a.py"
+    src.write_bytes(b"1")
+    conflict = '{"error_summary": "path/conflict/file/.."}'
+    fake, _ = _fake_requests(_upload_post([], lambda n: _Resp(409, text=conflict)))
+    monkeypatch.setitem(sys.modules, "requests", fake)
+    assert client_obj.upload(str(src), "/x/a.py")["status"] == "exists"
+
+
+def test_upload_size_mismatch_is_a_provider_error(client_obj, monkeypatch, tmp_path):
+    src = tmp_path / "a.py"
+    src.write_bytes(b"12345")
+    fake, _ = _fake_requests(_upload_post([], lambda n: _Resp(200, payload={"size": 4})))
+    monkeypatch.setitem(sys.modules, "requests", fake)
+    with pytest.raises(ProviderError):
+        client_obj.upload(str(src), "/x/a.py")
+
+
+def test_upload_over_the_single_request_limit_is_refused_before_sending(
+        client_obj, monkeypatch, tmp_path):
+    from h2t_ops.connectors.dropbox import client as dmod
+
+    src = tmp_path / "big.bin"
+    src.write_bytes(b"123")
+    monkeypatch.setattr(dmod, "UPLOAD_LIMIT", 2)
+    fake, _ = _fake_requests(lambda *a, **k: pytest.fail("nothing may be sent"))
+    monkeypatch.setitem(sys.modules, "requests", fake)
+    with pytest.raises(UsageError):
+        client_obj.upload(str(src), "/x/big.bin")
+
+
+def test_upload_header_is_ascii_for_a_non_ascii_name(client_obj, monkeypatch, tmp_path):
+    src = tmp_path / "a.py"
+    src.write_bytes(b"1")
+    seen = []
+    fake, _ = _fake_requests(_upload_post(seen, lambda n: _Resp(200, payload={"size": 1})))
+    monkeypatch.setitem(sys.modules, "requests", fake)
+    client_obj.upload(str(src), "/Курс/a.py")
+    seen[0]["raw_arg"].encode("ascii")  # raises if not ASCII
+    assert seen[0]["arg"]["path"] == "/Курс/a.py"
+
+
+def test_upload_refreshes_an_expired_token_and_resends(client_obj, monkeypatch, tmp_path):
+    monkeypatch.setenv("DROPBOX_REFRESH_TOKEN", "r")
+    monkeypatch.setenv("DROPBOX_APP_KEY", "k")
+    monkeypatch.setenv("DROPBOX_APP_SECRET", "s")
+    src = tmp_path / "a.py"
+    src.write_bytes(b"12")
+    bodies = []
+
+    def post(url, data=None, headers=None, timeout=None, **kw):
+        if "oauth2/token" in url:
+            return _Resp(200, payload={"access_token": "fresh"})
+        bodies.append(data.read())
+        if len(bodies) == 1:
+            return _Resp(401, text='{"error_summary": "expired_access_token/"}')
+        return _Resp(200, payload={"size": 2})
+
+    fake, _ = _fake_requests(post)
+    monkeypatch.setitem(sys.modules, "requests", fake)
+    assert client_obj.upload(str(src), "/x/a.py")["status"] == "uploaded"
+    assert client_obj._token == "fresh"
+    assert bodies == [b"12", b"12"]  # the whole file is sent again
+
+
+def test_link_returns_the_existing_link_without_creating(client_obj):
+    client_obj._rpc = MagicMock(return_value={"links": [{
+        "url": "https://dropbox/x",
+        "link_permissions": {"resolved_visibility": {".tag": "public"}}}]})
+    out = client_obj.link("/x/a.py")
+    assert out == {"path": "/x/a.py", "url": "https://dropbox/x", "created": False,
+                   "visibility": "public"}
+    assert client_obj._rpc.call_count == 1
+
+
+def test_link_creates_a_public_one_when_none_exists(client_obj):
+    client_obj._rpc = MagicMock(side_effect=[{"links": []}, {"url": "https://dropbox/new"}])
+    out = client_obj.link("/x/a.py")
+    assert out["created"] is True and out["url"] == "https://dropbox/new"
+    endpoint, arg = client_obj._rpc.call_args_list[1].args
+    assert endpoint == "sharing/create_shared_link_with_settings"
+    assert arg["settings"] == {"requested_visibility": "public"}
+
+
 def test_missing_scope_hint_names_every_scope_the_connector_calls(client_obj, monkeypatch):
     """path_root() hits users/get_current_account on the first request, and that
     route needs account_info.read — a hint listing only files.* sends the user

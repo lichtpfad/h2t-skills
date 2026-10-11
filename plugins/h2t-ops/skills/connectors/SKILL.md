@@ -54,7 +54,7 @@ Load this skill whenever the user provides a provider-owned URL, even if they do
 | `notion.so/...`, `notion.site/...` | Notion | Extract page/database ID when present and use `h2t-ops notion` |
 | `t.me/...`, `telegram.me/...` | Telegram | Use `h2t-ops telegram`; do not scrape Telegram URLs directly |
 | MeetGeek recording/transcript/share URLs | MeetGeek | Use `h2t-ops meetgeek` |
-| `dropbox.com/...`, `dropbox.com/scl/...` | Dropbox | Use `h2t-ops dropbox list/meta/download` |
+| `dropbox.com/...`, `dropbox.com/scl/...` | Dropbox | Use `h2t-ops dropbox list/meta/download`; writes `upload`/`link` need a flag and the user's yes |
 
 Do not use Fetch/WebFetch/Playwright as the primary path for these URLs when an `h2t-ops` connector command exists.
 
@@ -68,7 +68,7 @@ Do not use Fetch/WebFetch/Playwright as the primary path for these URLs when an 
 | MeetGeek meetings, transcripts, summaries, recordings | MeetGeek | `references/meetgeek.md` | `h2t-ops meetgeek` |
 | local .webm / .mp4 recording files to upload to MeetGeek | MeetGeek + Drive | `references/meetgeek.md` → "Local File Upload Flow" | `h2t-ops drive upload` then `h2t-ops meetgeek submit-url` |
 | Granola notes, AI summaries, verbatim transcripts, folders, sync to disk | Granola | `references/granola.md` | `h2t-ops granola` |
-| Dropbox folders and files, online-only placeholders the desktop client cannot read | Dropbox | `references/dropbox.md` | `h2t-ops dropbox` |
+| Dropbox folders and files, online-only placeholders the desktop client cannot read; upload, public link | Dropbox | `references/dropbox.md` | `h2t-ops dropbox` |
 
 ### Drive-specific intent routing (important)
 
