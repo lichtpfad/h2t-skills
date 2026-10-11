@@ -25,6 +25,7 @@ from h2t_ops.core.secrets import load_secrets
 
 RPC_BASE = "https://api.dropboxapi.com/2"
 CONTENT_BASE = "https://content.dropboxapi.com/2"
+UPLOAD_LIMIT = 150 * 1024 * 1024  # files/upload takes at most 150 MB in one request
 # The path the issue named. load_secrets only reads secrets.env, so a token written
 # here would otherwise be read by nothing at all.
 PROVIDER_ENV_FILE = Path.home() / ".h2t" / "config" / "secrets" / "dropbox.env"
@@ -71,7 +72,8 @@ def _raise_for_status(resp: Any, context: str) -> None:
                     "on the app, then generate a NEW token — a token issued before a scope "
                     "was added keeps the scopes it was born with. account_info.read is not "
                     "optional: every command resolves the team namespace through "
-                    "users/get_current_account before it touches a file."
+                    "users/get_current_account before it touches a file. Writes need more: "
+                    "upload needs files.content.write, link needs sharing.write."
                 ),
             )
         raise AuthError(
@@ -91,7 +93,7 @@ def _raise_for_status(resp: Any, context: str) -> None:
 
 
 class DropboxClient:
-    """Read-only Dropbox adapter: account, meta, list, download."""
+    """Dropbox adapter: account, meta, list, download; writes: upload, link."""
 
     def __init__(self) -> None:
         load_secrets()
@@ -271,6 +273,64 @@ class DropboxClient:
             part.unlink(missing_ok=True)
             raise
         return {"path": api_path, "saved_to": str(target), "bytes": written}
+
+    def upload(self, local: str, dest: str, *, _retried: bool = False) -> dict[str, Any]:
+        """Send one local file to `dest`. Never overwrites: an existing path is reported
+        as "exists" and left alone. The stored size is read back from the answer."""
+        import requests as _r  # lazy — module-scope import forbidden
+
+        src = Path(local)
+        if not src.is_file():
+            raise UsageError(f"dropbox upload: not a file: {local}")
+        api_path = normalize_path(dest)
+        if not api_path:
+            raise UsageError("dropbox upload: a destination path is required")
+        size = src.stat().st_size
+        if size > UPLOAD_LIMIT:
+            raise UsageError(
+                f"dropbox upload: {src.name} is {size} bytes, over the 150 MB single-request "
+                "limit; upload sessions are not implemented"
+            )
+        # The header must be ASCII: json.dumps escapes non-ASCII names as \uXXXX.
+        arg = json.dumps({"path": api_path, "mode": "add", "autorename": False, "mute": True})
+        try:
+            with open(src, "rb") as fh:
+                resp = _r.post(
+                    f"{CONTENT_BASE}/files/upload",
+                    data=fh,
+                    headers=self._headers({"Content-Type": "application/octet-stream",
+                                           "Dropbox-API-Arg": arg}),
+                    timeout=self._timeout,
+                )
+        except _r.RequestException as exc:
+            raise NetworkError(f"Dropbox upload of {api_path} failed: {exc}") from exc
+        if self._should_refresh(resp, _retried):
+            self._token = self._refresh_access_token()
+            return self.upload(local, dest, _retried=True)
+        if resp.status_code == 409 and "conflict" in (getattr(resp, "text", "") or ""):
+            return {"path": api_path, "bytes": None, "status": "exists"}
+        _raise_for_status(resp, f"upload {api_path}")
+        stored = (resp.json() or {}).get("size")
+        if stored != size:
+            raise ProviderError(f"Dropbox stored {stored} bytes for {api_path}, sent {size}")
+        return {"path": api_path, "bytes": size, "status": "uploaded"}
+
+    def link(self, path: str) -> dict[str, Any]:
+        """The path's existing shared link, or a new public one."""
+        api_path = normalize_path(path)
+        if not api_path:
+            raise UsageError("dropbox link: a path is required")
+        links = self._rpc("sharing/list_shared_links",
+                          {"path": api_path, "direct_only": True}).get("links") or []
+        if links:
+            found = links[0]
+            visibility = ((found.get("link_permissions") or {})
+                          .get("resolved_visibility") or {}).get(".tag", "")
+            return {"path": api_path, "url": found["url"], "created": False,
+                    "visibility": visibility}
+        made = self._rpc("sharing/create_shared_link_with_settings",
+                         {"path": api_path, "settings": {"requested_visibility": "public"}})
+        return {"path": api_path, "url": made["url"], "created": True, "visibility": "public"}
 
     @staticmethod
     def _gunzip_in_place(target: Path) -> int:

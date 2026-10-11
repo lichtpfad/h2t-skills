@@ -41,6 +41,67 @@ def test_parser_exposes_the_four_verbs():
         assert build_parser().parse_args(["dropbox", verb, *extra]).dropbox_cmd == verb
 
 
+def test_parser_exposes_upload_and_link():
+    from h2t_ops.cli import build_parser
+
+    ns = build_parser().parse_args(["dropbox", "upload", "a.py", "/x", "--confirm-write"])
+    assert (ns.dropbox_cmd, ns.local, ns.dest, ns.confirm_write) == ("upload", "a.py", "/x", True)
+    ns = build_parser().parse_args(["dropbox", "link", "/x/a.py", "--confirm-public"])
+    assert (ns.dropbox_cmd, ns.confirm_public) == ("link", True)
+
+
+@pytest.mark.parametrize("cmd, extra", [
+    ("upload", {"local": "a.py", "dest": "/x", "confirm_write": False}),
+    ("link", {"path": "/x", "confirm_public": False}),
+])
+def test_writes_are_refused_without_the_flag_before_any_client(monkeypatch, cmd, extra):
+    from h2t_ops.core.errors import UsageError
+
+    def no_client():
+        pytest.fail("no client may be built without the flag")
+
+    monkeypatch.setattr("h2t_ops.connectors.dropbox.client.DropboxClient", no_client)
+    with pytest.raises(UsageError):
+        cmds.run(_args(dropbox_cmd=cmd, **extra))
+
+
+def test_upload_folder_keeps_the_layout_under_dest(fake_client, tmp_path):
+    (tmp_path / "sub").mkdir()
+    (tmp_path / "a.py").write_bytes(b"1")
+    (tmp_path / "sub" / "b.txt").write_bytes(b"2")
+    fake_client.upload.side_effect = lambda local, dest: {"path": dest, "status": "uploaded"}
+    out = cmds.run(_args(dropbox_cmd="upload", local=str(tmp_path), dest="/X/",
+                         confirm_write=True))
+    assert [r["path"] for r in out] == ["/X/a.py", "/X/sub/b.txt"]
+
+
+def test_upload_empty_folder_is_an_error(fake_client, tmp_path):
+    from h2t_ops.core.errors import UsageError
+
+    with pytest.raises(UsageError):
+        cmds.run(_args(dropbox_cmd="upload", local=str(tmp_path), dest="/X",
+                       confirm_write=True))
+
+
+def test_upload_folder_goes_on_after_a_failure_and_then_fails_loud(fake_client, tmp_path):
+    from h2t_ops.core.errors import ProviderError
+
+    (tmp_path / "a.py").write_bytes(b"1")
+    (tmp_path / "b.py").write_bytes(b"2")
+
+    def up(local, dest):
+        if dest.endswith("a.py"):
+            raise ProviderError("boom")
+        return {"path": dest, "status": "uploaded"}
+
+    fake_client.upload.side_effect = up
+    with pytest.raises(ProviderError) as exc:
+        cmds.run(_args(dropbox_cmd="upload", local=str(tmp_path), dest="/X",
+                       confirm_write=True))
+    assert "1 of 2" in str(exc.value)
+    assert fake_client.upload.call_count == 2
+
+
 def test_list_path_defaults_to_the_root():
     from h2t_ops.cli import build_parser
 

@@ -1,6 +1,6 @@
 # Dropbox Connector
 
-Read-only Dropbox over HTTP API v2. Its reason to exist is the case the desktop
+Dropbox over HTTP API v2: reads, plus two writes (`upload`, `link`). Its reason to exist is the case the desktop
 client cannot serve: an **online-only placeholder** has no bytes on disk, so
 `ffmpeg` and ordinary reads fail on it with `Invalid argument` while the API
 streams the content fine (~11 MB/s measured).
@@ -15,6 +15,24 @@ streams the content fine (~11 MB/s measured).
 | metadata for one path | `h2t-ops dropbox meta /HOU2TOUCH/clip.wav --json` |
 | stream a file to disk | `h2t-ops dropbox download /HOU2TOUCH/clip.wav ~/Downloads --json` |
 | gzip content under a plain name | `h2t-ops dropbox download /x/seq.prproj ./seq.prproj --gunzip --json` |
+| upload a file (write) | `h2t-ops dropbox upload ./a.py "/HOU2TOUCH/X/a.py" --confirm-write --json` |
+| upload a folder (write) | `h2t-ops dropbox upload ./dir "/HOU2TOUCH/X" --confirm-write --json` |
+| public link (write) | `h2t-ops dropbox link "/HOU2TOUCH/X/a.py" --confirm-public --json` |
+
+## Writes
+
+- `upload` never overwrites: mode `add`, no autorename. A different file already at the
+  path comes back as `"status": "exists"` and stays as it was. A file with the **same
+  content** is accepted by Dropbox as a no-op and reported as `uploaded`; no copy is made.
+  The stored size is read back and must equal the local size. A folder's files go under
+  `dest` with their sub-paths; one failure does not stop the rest, and the command then
+  fails with the list. Files over 150 MB are refused (upload sessions not implemented).
+- `link` returns the path's existing shared link (with its visibility) or creates a
+  public one.
+- Both refuse without their flag (`--confirm-write`, `--confirm-public`) before any token
+  is read. Restate the target and get the user's yes before running them.
+- Run them from PowerShell or cmd, not Git Bash: MSYS rewrites `/HOU2TOUCH/...` into
+  `C:/Program Files/Git/HOU2TOUCH/...` and the write lands on a wrong path or is refused.
 
 ## Paths are from the Dropbox root, not from the disk
 
@@ -45,7 +63,13 @@ For durable access set `DROPBOX_APP_KEY`, `DROPBOX_APP_SECRET` and
 `DROPBOX_REFRESH_TOKEN`; the connector exchanges them for an access token when
 `DROPBOX_TOKEN` is absent.
 
-Scopes: `account_info.read`, `files.metadata.read`, `files.content.read`.
+Scopes: `account_info.read`, `files.metadata.read`, `files.content.read`; for writes also
+`files.content.write` (upload) and `sharing.write` (link).
+
+To get the refresh token once: open
+`https://www.dropbox.com/oauth2/authorize?client_id=<APP_KEY>&response_type=code&token_access_type=offline`,
+Allow, and exchange the code at `oauth2/token` (`grant_type=authorization_code`, app key and
+secret). The code is single-use and useless without the secret.
 
 `account_info.read` is not optional even for a pure file read: the namespace gate
 above resolves through `users/get_current_account` on the first request, so a token
