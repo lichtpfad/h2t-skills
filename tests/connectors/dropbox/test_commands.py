@@ -102,6 +102,26 @@ def test_upload_folder_goes_on_after_a_failure_and_then_fails_loud(fake_client, 
     assert fake_client.upload.call_count == 2
 
 
+@pytest.mark.parametrize("kind", ["NetworkError", "AuthError"])
+def test_upload_folder_does_not_abort_on_a_network_or_auth_error(fake_client, tmp_path, kind):
+    from h2t_ops.core import errors
+
+    (tmp_path / "a.py").write_bytes(b"1")
+    (tmp_path / "b.py").write_bytes(b"2")
+
+    def up(local, dest):
+        if dest.endswith("a.py"):
+            raise getattr(errors, kind)("dropped")
+        return {"path": dest, "status": "uploaded"}
+
+    fake_client.upload.side_effect = up
+    with pytest.raises(errors.ProviderError) as exc:
+        cmds.run(_args(dropbox_cmd="upload", local=str(tmp_path), dest="/X",
+                       confirm_write=True))
+    assert "1 of 2" in str(exc.value) and "/X/a.py" in str(exc.value)
+    assert fake_client.upload.call_count == 2
+
+
 def test_list_path_defaults_to_the_root():
     from h2t_ops.cli import build_parser
 

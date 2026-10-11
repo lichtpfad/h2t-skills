@@ -396,6 +396,16 @@ def test_upload_reports_an_existing_path_and_leaves_it(client_obj, monkeypatch, 
     assert client_obj.upload(str(src), "/x/a.py")["status"] == "exists"
 
 
+def test_upload_other_409_is_an_error_not_exists(client_obj, monkeypatch, tmp_path):
+    src = tmp_path / "a.py"
+    src.write_bytes(b"1")
+    other = '{"error_summary": "path/disallowed_name/.. conflict-free"}'
+    fake, _ = _fake_requests(_upload_post([], lambda n: _Resp(409, text=other)))
+    monkeypatch.setitem(sys.modules, "requests", fake)
+    with pytest.raises(UsageError):
+        client_obj.upload(str(src), "/x/a.py")
+
+
 def test_upload_size_mismatch_is_a_provider_error(client_obj, monkeypatch, tmp_path):
     src = tmp_path / "a.py"
     src.write_bytes(b"12345")

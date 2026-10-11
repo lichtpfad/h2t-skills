@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- fix(dropbox): a folder `upload` no longer stops at a network or auth error on one file —
+  every error is recorded per file, the rest are sent, then the command fails with the list;
+  only a 409 `path/conflict` reads as `exists`, any other 409 is an error (codex review of #528)
+
 - feat(dropbox): `upload` (file or folder, never overwrites, size read back, 150 MB cap)
   and `link` (existing shared link or a new public one); both refuse without
   `--confirm-write` / `--confirm-public` before reading a token. Replaces the

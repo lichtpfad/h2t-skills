@@ -307,7 +307,8 @@ class DropboxClient:
         if self._should_refresh(resp, _retried):
             self._token = self._refresh_access_token()
             return self.upload(local, dest, _retried=True)
-        if resp.status_code == 409 and "conflict" in (getattr(resp, "text", "") or ""):
+        # only the path conflict means "something is already there"; any other 409 is an error
+        if resp.status_code == 409 and "path/conflict" in (getattr(resp, "text", "") or ""):
             return {"path": api_path, "bytes": None, "status": "exists"}
         _raise_for_status(resp, f"upload {api_path}")
         stored = (resp.json() or {}).get("size")
