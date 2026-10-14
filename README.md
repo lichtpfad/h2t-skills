@@ -63,6 +63,30 @@ uv tool install --reinstall git+https://github.com/lichtpfad/h2t-skills.git
 
 For external install troubleshooting, use [H2T Ops External Install + Debug Log](docs/h2t-ops-external-install-debug.md).
 
+### Codex
+
+Codex reads the same marketplace file, so channel 1 is one command per plugin. Channel 2
+is unchanged — the CLI is shared by both harnesses.
+
+```bash
+codex plugin marketplace add lichtpfad/h2t-skills
+codex plugin add h2t-core@lichtpfad
+codex plugin add h2t-ops@lichtpfad
+codex plugin list | grep lichtpfad      # installed, enabled
+```
+
+Measured on Codex 0.159.2, 2026-10-14. What carries over and what does not:
+
+| | Codex |
+|---|---|
+| skills, with their `h2t-core:` / `h2t-ops:` namespaces | yes |
+| CLI commands from channel 2 | yes |
+| hooks (`<h2t-context>`, gather-on-skill, the guards) | **no** — Codex reports `plugin_hooks: removed`; see #452 |
+| `h2t-creative` | listed twice, as `deck` and `source-command-deck` (#533) |
+
+Without hooks nothing injects the briefing; `session-start` falls back to running
+`h2t-gather` itself, so it still works. The guards have no fallback.
+
 ## h2t-ops Connectors
 
 `h2t-ops:connectors` is the provider I/O hub. It should be loaded for provider-owned URLs and provider tasks:
@@ -93,9 +117,44 @@ h2t-ops granola list --limit 10 --format md
 
 - `h2t-core:setup` owns install, repair, doctor, and connector readiness checks.
 - POS/DOR configuration is optional for connector I/O.
-- Google connectors require a local OAuth token store.
+- Google connectors require a local OAuth token store — `credentials.json` (a Desktop OAuth
+  client) and `tokens.json` in `~/.config/google-calendar-mcp/`. The pack has no command
+  that creates `tokens.json` on a fresh machine yet (#532); see
+  [First Google Login](#first-google-login) below.
+- Every connector is optional. Setup reports the ones you skip as `missing`; leave their
+  `KEY=` lines empty and answer "no" to their auth prompts (#534).
 - Notion, MeetGeek, Granola, and Exa use API keys in `~/.dor/secrets/secrets.env` or environment variables.
 - Telegram requires `~/.config/telegram/config.json` with `api_id` / `api_hash`, then `h2t-ops telegram auth`.
+
+### First Google Login
+
+Until #532 ships a command, mint the token once by hand. Two files are involved and they
+are not alike:
+
+- `credentials.json` identifies the **app** — a Desktop OAuth client from a Google Cloud
+  project with the Gmail, Calendar and Drive APIs enabled. It may be shared; if the app is
+  in Testing mode, the owner adds the user under *Test users* first.
+- `tokens.json` is the **user's** access to their own account. Never copy it between
+  people — whoever holds it reads that mailbox.
+
+With `credentials.json` in `~/.config/google-calendar-mcp/`:
+
+```bash
+uv run --no-project --python 3.11 --with google-auth-oauthlib python - <<'PY'
+from pathlib import Path
+from google_auth_oauthlib.flow import InstalledAppFlow
+store = Path.home() / ".config" / "google-calendar-mcp"
+scopes = [f"https://www.googleapis.com/auth/{s}" for s in (
+    "calendar", "drive", "gmail.readonly", "gmail.send", "gmail.modify", "gmail.labels")]
+creds = InstalledAppFlow.from_client_secrets_file(store / "credentials.json", scopes).run_local_server(port=0)
+(store / "tokens.json").write_text(creds.to_json())
+PY
+h2t-ops gmail list --max 1 --json
+```
+
+A browser opens for consent; the last line should print a message, not `error[config]`.
+Asking for all six scopes at once matters: `h2t-ops` checks scopes up front, and a token
+without `drive` fails every Drive command with `missing required scope(s)`.
 
 ## Configuration
 
