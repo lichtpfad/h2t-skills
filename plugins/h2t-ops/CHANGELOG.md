@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- feat(telegram): `auth qr` logs in by scanning a QR on a logged-in phone — no code is
+  sent. On the first external install a code went to `SentCodeTypeApp`, was never found,
+  and `auth.resendCode` answered `SEND_CODE_UNAVAILABLE`; only QR got the user in.
+  `request-code` now reports where the code went (`channel`, `where`, `email_pattern`,
+  `next_channel`) instead of a bare `code_requested: true`, and fails on
+  `SetUpEmailRequired`, which sends nothing. `auth resend` asks for the next channel.
+  `--password` without a value asks for the 2FA password hidden, and `complete` asks
+  instead of failing when a person is at the terminal. New dependency: `qrcode`.
+
 - fix(connectors): the issue policy filed with `--label phase:triage`, a label the repository
   does not have, so its own command could not create an issue; filing now goes through
   `h2t-core:report-issue`, and the policy keeps only the connector bug-vs-feature split.

@@ -5,8 +5,10 @@
 | Intent | Command |
 | --- | --- |
 | auth status | `h2t-ops telegram auth status --json` |
+| log in by QR (preferred) | `h2t-ops telegram auth qr` — run by the person in a terminal |
 | request login code | `h2t-ops telegram auth request-code --phone +10000000000 --json` |
-| complete login | `h2t-ops telegram auth complete --phone +10000000000 --code 12345 --json` |
+| resend code by next channel | `h2t-ops telegram auth resend --json` |
+| complete login | `h2t-ops telegram auth complete --phone +10000000000 --code 12345 --password --json` |
 | list dialogs | `h2t-ops telegram dialogs --limit 20 --json` |
 | list folders | `h2t-ops telegram folders --json` |
 | read messages | `h2t-ops telegram messages ENTITY_FROM_DIALOGS --limit 20 --json` |
@@ -23,7 +25,7 @@
 - Auth status, dialogs, folders, messages, saved messages, mentions, bootstrap, and download-media are provider reads.
 - `messages` output now carries a `media` field (kind/name/size/mime_type/ext) per message, or `null` when there is no attachment — use it to find `MSG_ID` before `download-media`.
 - `download-media` writes to `--out` (default `~/Downloads`); it fails loud with a ProviderError when the message has no downloadable media.
-- Request-code and complete modify local Telegram session state and require explicit user intent.
+- Auth qr, request-code, resend and complete modify local Telegram session state and require explicit user intent.
 - `send-file`, `forward-message`, and `delete-message` are write/destructive operations. Require explicit user approval per command.
 - `send-file` requires `--confirm-send` flag; the CLI raises UsageError without it.
 - `forward-message` requires `--confirm-forward` flag; the CLI raises UsageError without it.
@@ -43,7 +45,25 @@ h2t-ops telegram messages ENTITY_FROM_DIALOGS --limit 20 --json
 
 ## Auth
 
-Telegram expects `~/.config/telegram/config.json` with `api_id` and `api_hash`, plus a Telethon session file after login.
+Telegram expects `~/.config/telegram/config.json` with `api_id` and `api_hash` (from
+https://my.telegram.org/apps), plus a Telethon session file after login.
+
+**Log in by QR first.** `auth qr` draws a QR in the terminal; the person scans it on a
+phone already logged in (Settings → Devices → Link Desktop Device). No code is sent, so
+nothing can get lost. It is interactive — the QR, the wait, a hidden 2FA prompt — so the
+person runs it in their own terminal; an agent does not run it for them.
+
+The code path is the fallback, for an account with no other logged-in device:
+
+- `request-code` reports where the code went: `channel` (`app`, `sms`, `call`, `email`),
+  `where` in words, `email_pattern` when it went to email, and `next_channel`. A code with
+  `channel: app` is a message in the verified "Telegram" chat on a logged-in device — not SMS.
+- `resend` asks for the next channel. `SEND_CODE_UNAVAILABLE` means there is none: stop
+  requesting codes and use `auth qr`. Every new request voids the previous code.
+- `--password` with no value asks for the 2FA password hidden; a value on the command line
+  lands in shell history and in an agent transcript.
+- Never advise logging out of Telegram on any device to "get a code": the logged-in
+  devices are where app codes arrive, and the QR is scanned from them.
 
 In Claude Code, check readiness through:
 

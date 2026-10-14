@@ -160,7 +160,7 @@ def test_request_code_uses_connect_without_context_prompt(tmp_path, monkeypatch)
 
     monkeypatch.setattr(tmod.TelegramClientAdapter, "_telegram_client_class", lambda self: FakeClient)
     result = tmod.TelegramClientAdapter(config_dir=tmp_path).request_code("+100")
-    assert result == {"phone": "+100", "code_requested": True}
+    assert result["phone"] == "+100" and result["code_requested"] is True
     assert calls == ["connect", ("send_code_request", "+100"), "disconnect"]
 
 
