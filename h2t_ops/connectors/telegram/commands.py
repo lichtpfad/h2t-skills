@@ -41,9 +41,22 @@ def register(subparsers: Any) -> None:
     auth_complete = auth_sub.add_parser("complete", help="Complete Telegram login")
     auth_complete.add_argument("--phone", required=True)
     auth_complete.add_argument("--code")
-    auth_complete.add_argument("--password")
+    auth_complete.add_argument(
+        "--password", nargs="?", const="",
+        help="2FA password; give the flag without a value to type it hidden",
+    )
     add_json(auth_complete)
     auth_complete.set_defaults(telegram_cmd="auth-complete")
+
+    auth_qr = auth_sub.add_parser(
+        "qr", help="Log in by scanning a QR on a logged-in device (no code needed)")
+    add_json(auth_qr)
+    auth_qr.set_defaults(telegram_cmd="auth-qr")
+
+    auth_resend = auth_sub.add_parser(
+        "resend", help="Ask Telegram to send the pending code by its next channel")
+    add_json(auth_resend)
+    auth_resend.set_defaults(telegram_cmd="auth-resend")
 
     dialogs = cmds.add_parser("dialogs", help="List Telegram dialogs")
     dialogs.add_argument("--limit", type=int, default=50)
@@ -138,6 +151,36 @@ def _rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
     return {"rows": rows, "count": len(rows)}
 
 
+def _ask_password() -> str:
+    import getpass
+
+    return getpass.getpass("Telegram 2FA password (hidden): ")
+
+
+def _password_prompt() -> Any:
+    """A hidden prompt when a person is at the terminal, else None (an agent gets an error)."""
+    import sys
+
+    return _ask_password if sys.stdin.isatty() else None
+
+
+def _render_qr(url: str) -> None:
+    """Draw the login QR on stderr, so stdout stays a clean envelope under --json."""
+    import sys
+
+    from h2t_ops.core.errors import ConfigError, broken_install_hint
+
+    try:
+        import qrcode
+    except ImportError as exc:
+        raise ConfigError("qrcode is not installed.", hint=broken_install_hint("qrcode")) from exc
+    code = qrcode.QRCode(border=1)
+    code.add_data(url)
+    code.print_ascii(out=sys.stderr, invert=True)
+    print("Scan on your phone: Telegram → Settings → Devices → Link Desktop Device. "
+          "A new code appears every 60 s.", file=sys.stderr)
+
+
 def run(args: Any) -> Any:
     """Dispatch a Telegram subcommand. Returns a result or raises core.errors."""
     from h2t_ops.connectors.telegram.client import TelegramClientAdapter
@@ -156,7 +199,13 @@ def run(args: Any) -> Any:
     if cmd == "auth-request-code":
         return client.request_code(args.phone)
     if cmd == "auth-complete":
-        return client.complete_auth(args.phone, code=args.code, password=args.password)
+        password = _ask_password() if args.password == "" else args.password
+        return client.complete_auth(args.phone, code=args.code, password=password,
+                                    password_prompt=_password_prompt())
+    if cmd == "auth-qr":
+        return client.qr_login(render=_render_qr, password_prompt=_password_prompt())
+    if cmd == "auth-resend":
+        return client.resend_code()
     if cmd == "dialogs":
         return _rows(client.list_dialogs(limit=args.limit, kind=args.kind))
     if cmd == "folders":

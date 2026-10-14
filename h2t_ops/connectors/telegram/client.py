@@ -28,6 +28,54 @@ def _session_incompatible_error(exc: BaseException) -> AuthError:
     )
 
 
+_QR_HINT = "Log in by QR instead — no code needed: h2t-ops telegram auth qr"
+
+# Where a login code went, keyed by the Telethon class name of SentCode.type (SentCodeType*)
+# or SentCode.next_type (CodeType*). The CLI used to drop this and print only
+# `code_requested: true`, so nobody knew where to look (2026-10-14).
+_CODE_CHANNELS = {
+    "App": ("app", "in the Telegram app: the verified 'Telegram' chat on a logged-in device"),
+    "Sms": ("sms", "by SMS"),
+    "SmsWord": ("sms", "by SMS (a word)"),
+    "SmsPhrase": ("sms", "by SMS (a phrase)"),
+    "FirebaseSms": ("sms", "by SMS"),
+    "FragmentSms": ("fragment", "through Fragment"),
+    "Call": ("call", "by a phone call"),
+    "FlashCall": ("call", "by a flash call: the code is the last digits of the calling number"),
+    "MissedCall": ("call", "by a missed call: the code is the last digits of the calling number"),
+    "EmailCode": ("email", "by email, to the account's login email"),
+}
+
+
+def _code_channel(code_type: Any) -> tuple[str, str] | None:
+    if code_type is None:
+        return None
+    name = type(code_type).__name__.removeprefix("SentCodeType").removeprefix("CodeType")
+    return _CODE_CHANNELS.get(name, (name.lower(), name))
+
+
+def _sent_code_view(sent: Any) -> dict[str, Any]:
+    code_type = _get_attr(sent, "type")
+    if type(code_type).__name__ == "SentCodeTypeSetUpEmailRequired":
+        raise AuthError(
+            "Telegram sent no code: it requires a login email on this account first.",
+            hint=_QR_HINT,
+        )
+    channel, where = _code_channel(code_type) or ("unknown", "unknown")
+    following = _code_channel(_get_attr(sent, "next_type"))
+    view = {
+        "code_requested": True,
+        "channel": channel,
+        "where": where,
+        "next_channel": following[0] if following else None,
+        "resend_after_s": _get_attr(sent, "timeout"),
+    }
+    pattern = _get_attr(code_type, "email_pattern")
+    if pattern:
+        view["email_pattern"] = pattern
+    return view
+
+
 def _peer_unresolved_error(entity: Any, exc: BaseException) -> NotFoundError:
     return NotFoundError(
         f"PEER_UNRESOLVED: could not resolve telegram peer {entity!r}: {exc}",
@@ -195,8 +243,9 @@ class TelegramClientAdapter:
                 f"Telegram config not found: {self.config_file}",
                 hint=(
                     'Create ~/.config/telegram/config.json with {"api_id": ..., '
-                    '"api_hash": "..."}, then run h2t-ops telegram auth '
-                    "request-code --phone +..."
+                    '"api_hash": "..."} (from https://my.telegram.org/apps), then run '
+                    "h2t-ops telegram auth qr — or, without a second device, "
+                    "h2t-ops telegram auth request-code --phone +..."
                 ),
             )
         data = json.loads(self.config_file.read_text(encoding="utf-8"))
@@ -314,18 +363,90 @@ class TelegramClientAdapter:
                 sent = client.send_code_request(phone)
         except (ValueError, sqlite3.OperationalError) as exc:
             raise _session_incompatible_error(exc) from exc
-        phone_code_hash = _get_attr(sent, "phone_code_hash", None)
+        view = _sent_code_view(sent)
+        self._save_auth_state(phone, _get_attr(sent, "phone_code_hash", None))
+        return {"phone": phone, **view}
+
+    def _save_auth_state(self, phone: str, phone_code_hash: str | None) -> None:
         self.auth_state_file.write_text(
             json.dumps({"phone": phone, "phone_code_hash": phone_code_hash}, indent=2),
             encoding="utf-8",
         )
-        return {"phone": phone, "code_requested": True}
+
+    def resend_code(self) -> dict[str, Any]:
+        """Ask Telegram to deliver the pending code by its next channel (auth.resendCode)."""
+        from h2t_ops.core.errors import UsageError
+
+        if not self.auth_state_file.exists():
+            raise UsageError("No pending code request.",
+                             hint="Run h2t-ops telegram auth request-code --phone +... first.")
+        state = json.loads(self.auth_state_file.read_text(encoding="utf-8"))
+        try:
+            from telethon.errors import SendCodeUnavailableError
+            from telethon.tl.functions.auth import ResendCodeRequest
+        except ImportError as exc:
+            raise ConfigError("Telethon not installed.",
+                              hint="Install h2t-ops dependencies with telethon>=1.36,<1.43.") from exc
+        try:
+            with self._connected_client() as client:
+                sent = client(ResendCodeRequest(state["phone"], state["phone_code_hash"]))
+        except SendCodeUnavailableError as exc:
+            raise AuthError("Telegram has no other channel left for this code.",
+                            hint=_QR_HINT) from exc
+        except (ValueError, sqlite3.OperationalError) as exc:
+            raise _session_incompatible_error(exc) from exc
+        view = _sent_code_view(sent)
+        self._save_auth_state(state["phone"], _get_attr(sent, "phone_code_hash", None))
+        return {"phone": state["phone"], **view}
+
+    def qr_login(
+        self,
+        *,
+        render: Any,
+        password_prompt: Any = None,
+        attempts: int = 5,
+        wait_s: int = 60,
+    ) -> dict[str, Any]:
+        """Log in by scanning a QR on a device already logged in — no code is sent.
+
+        `render(url)` shows each QR; it is called again with a fresh token after every
+        timeout. `password_prompt()` returns the 2FA password when the account has one.
+        """
+        password_needed = self._session_password_error_class()
+        self.config_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            with self._connected_client() as client:
+                if client.is_user_authorized():
+                    return {"authorized": True, "already": True, "user": self._user_row(client.get_me())}
+                qr = client.qr_login()
+                for _ in range(attempts):
+                    render(qr.url)
+                    try:
+                        client.loop.run_until_complete(qr.wait(wait_s))
+                        break
+                    except TimeoutError:
+                        client.loop.run_until_complete(qr.recreate())
+                    except password_needed:
+                        if password_prompt is None:
+                            raise AuthError("Telegram account requires its 2FA password.",
+                                            hint="Run h2t-ops telegram auth qr in a terminal.") from None
+                        client.sign_in(password=password_prompt())
+                        break
+                if not client.is_user_authorized():
+                    raise AuthError(f"The QR was not scanned within {attempts} tries.",
+                                    hint="Run h2t-ops telegram auth qr again; scan with "
+                                         "Settings → Devices → Link Desktop Device.")
+                user = self._user_row(client.get_me())
+        except (ValueError, sqlite3.OperationalError) as exc:
+            raise _session_incompatible_error(exc) from exc
+        return {"authorized": True, "user": user}
 
     def complete_auth(
         self,
         phone: str,
         code: str | None = None,
         password: str | None = None,
+        password_prompt: Any = None,
     ) -> dict[str, Any]:
         state: dict[str, Any] = {}
         if self.auth_state_file.exists():
@@ -345,10 +466,12 @@ class TelegramClientAdapter:
                             hint="Run auth complete --phone +... --code CODE.",
                         )
                 except password_needed:
+                    if not password and password_prompt is not None:
+                        password = password_prompt()
                     if not password:
                         raise AuthError(
                             "Telegram account requires 2FA password.",
-                            hint="Run auth complete again with --password.",
+                            hint="Run auth complete --phone +... --password (no value: it asks, hidden).",
                         )
                     client.sign_in(password=password)
                 user = self._user_row(client.get_me())
