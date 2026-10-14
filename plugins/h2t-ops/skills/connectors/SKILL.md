@@ -110,7 +110,7 @@ User: "почитай документ https://docs.google.com/document/d/159Ier
 4. For write commands, restate the intended write and require explicit user approval unless the user already gave clear write intent.
 5. Run the `h2t-ops` command.
 6. Summarize results without dumping private provider bodies.
-7. If the command does not exist or provider behavior is wrong, use `references/issue-policy.md`.
+7. If the command does not exist or provider behavior is wrong, use `references/issue-policy.md` to classify it, then `h2t-core:report-issue` to file it upstream.
 
 ## Preflight
 

@@ -35,11 +35,37 @@ jobs:
               'Вариант B',
               'Что ломается',
             ];
+            // Баг-репорт пользователя пака (bug.yml или h2t-core:report-issue из терминала).
+            // Метки внешний автор поставить не может, поэтому их ставит этот джоб;
+            // priority и domain — дело мейнтейнера на триаже, а не автора.
+            const BUG_SECTIONS = [
+              '### What happened',
+              '### Steps to reproduce',
+              '### Expected',
+              '### Environment',
+            ];
+            const BUG_LABELS = ['type:bug', 'status:triage'];
             const NAMESPACES = ['type:', 'priority:', 'domain:'];
 
             const issue = context.payload.issue;
             const body = issue.body || '';
             const labels = issue.labels.map(l => l.name);
+
+            if (BUG_SECTIONS.every(s => body.includes(s))) {
+              const add = BUG_LABELS.filter(l => !labels.includes(l));
+              if (add.length) {
+                await github.rest.issues.addLabels({
+                  ...context.repo, issue_number: issue.number, labels: add,
+                });
+              }
+              if (labels.includes('status:needs-fields')) {
+                await github.rest.issues.removeLabel({
+                  ...context.repo, issue_number: issue.number, name: 'status:needs-fields',
+                });
+              }
+              core.info('Баг-репорт: метки триажа на месте.');
+              return;
+            }
             const isDecision = labels.includes('type:decision');
 
             const required = isDecision ? DECISION_SECTIONS : TASK_SECTIONS;

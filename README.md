@@ -151,6 +151,17 @@ h2t-ops gmail list --max 1 --json      # a message, not error[config]
 Rerunning is harmless: a token that already carries every scope is left alone
 (`already_authorized`); `--force` asks again.
 
+## Reporting Problems
+
+Something in the pack broken — a skill, a hook, an `h2t-*` command, or docs that contradict
+what happens? Report it here, in `lichtpfad/h2t-skills`, rather than patching the installed
+copy: the next update overwrites the plugin cache, and the fix reaches nobody else.
+
+Ask your agent to "report an h2t bug". The `h2t-core:report-issue` skill sorts a pack defect
+from a setup gap, strips private data, shows you the draft and files it only after your yes.
+Without the GitHub CLI, use the [bug form](https://github.com/lichtpfad/h2t-skills/issues/new?template=bug.yml).
+The repository is public — no tokens, mail or chat content in a report.
+
 ## Configuration
 
 **Nothing here has to be set.** Every variable below has a working default, and the
@@ -192,6 +203,7 @@ H2T SKILLS — invoke with the Skill tool when relevant:
 
 Session:   h2t-core:session-start | h2t-core:handoff | h2t-core:init-project | h2t-core:scaffold-project
 Setup:     h2t-core:setup           (install, repair, doctor, connector readiness)
+Report:    h2t-core:report-issue    (an h2t skill, hook or command is broken → upstream issue, never a local patch)
 Research:  h2t-ops:research        (Exa semantic search — use for any web/news/paper lookup)
 Connectors: h2t-ops:connectors     (Google, Notion, Telegram, MeetGeek command map and safety)
 Daily:     h2t-ops:daily-brief     (daily ops brief from connected sources)

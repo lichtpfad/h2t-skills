@@ -1,0 +1,50 @@
+name: Bug report
+description: Something in the h2t pack — a skill, hook or h2t-* command — fails or misbehaves.
+title: "bug: <component>: <symptom>"
+labels: ["type:bug", "status:triage"]
+body:
+  - type: markdown
+    attributes:
+      value: >
+        This repository is public. Leave out tokens, API keys, email or chat content,
+        transcripts, and names of people or clients. Truncate ids.
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: The symptom, in one or two sentences.
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: The exact command or skill invocation, and what came before it.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected
+    validations:
+      required: true
+
+  - type: textarea
+    id: env
+    attributes:
+      label: Environment
+      description: >
+        `h2t-ops --version`, the plugin and its version, Claude Code or Codex and its
+        version, OS.
+    validations:
+      required: true
+
+  - type: textarea
+    id: output
+    attributes:
+      label: Error output
+      description: Exit code, error class and message — sanitized.
+      render: text
