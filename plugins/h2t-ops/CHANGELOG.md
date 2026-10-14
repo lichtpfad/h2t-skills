@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- feat(google): `h2t-ops google auth` mints the shared Gmail/Calendar/Drive token in one
+  browser consent with every scope the three connectors check; a fresh machine had no way
+  to create `tokens.json` at all, and the missing-token hint pointed at a command that did
+  not exist (#532). Without `credentials.json` it exits 3 naming the Console steps; a
+  token that already covers every scope is left alone unless `--force`.
+- test: connector tests run with HOME in a temp dir, and the gmail client re-import test
+  restores the package attribute it rebinds — that desync sent fourteen gmail tests to the
+  live API with the developer's token, the moment another test imported the client first.
+
 - fix(telegram): `send-file` resolves the chat the way reads do — a numeric id given as text
   (`-100…`) reached Telethon as a string and was looked up as a username, failing with a
   misleading `SESSION_INCOMPATIBLE`; an unresolvable chat now fails as `PEER_UNRESOLVED` (exit 5)

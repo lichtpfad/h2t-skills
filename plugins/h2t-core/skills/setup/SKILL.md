@@ -267,23 +267,32 @@ First, check which Google connectors are actually missing:
 uv run --no-project --python 3.11 python scripts/setup_h2t.py connectors-check --json
 ```
 
-For each connector in `["calendar", "gmail", "drive"]` where status is `missing`:
-- Tell the user: "Connector **<name>** needs Google OAuth. This will open a browser window. Proceed? (yes/no)"
-- Only after explicit confirmation, run the trigger command for that specific connector:
+Calendar, Gmail and Drive share one token, so this is one question and one command, not
+three. If none of the three is `missing`, skip this step. Otherwise ask: "Gmail, Calendar
+and Drive need one Google sign-in in the browser. Proceed? (yes/no)" — a user who wants
+none of them answers no, and that is a finished setup, not a failure.
+
+Only after an explicit yes:
 
 ```bash
-# calendar missing → ask → if yes:
-h2t-ops calendar list --max 1 --json
-
-# gmail missing → ask → if yes:
-h2t-ops gmail list --max 1 --json
-
-# drive missing → ask → if yes:
-h2t-ops drive folders --json
+h2t-ops google auth --json
 ```
 
-Exit code 0 means authenticated. Exit code 4 (AuthError) means OAuth failed — report and
-ask user to retry. Skip any connector that is already `ready`.
+- exit 0, `status: authorized` or `already_authorized` — done; report `token_path`.
+- exit 3 — `credentials.json` is missing. That file is the user's own Google Cloud OAuth
+  client, and nothing here can create it. Show the error's `hint` (the Console steps) and
+  the path, wait for "done", rerun. Never offer someone else's file.
+- exit 4 — consent was refused or failed; report and offer to rerun.
+
+`--no-browser` prints the consent URL instead of opening it. Google still redirects to
+`localhost` on the machine running the command, so over SSH the printed port must be
+forwarded (`ssh -L <port>:localhost:<port>`) for the consent to complete.
+
+Verify by state, not by the exit code alone:
+
+```bash
+h2t-ops gmail list --max 1 --json
+```
 
 ### Step 4 — Telegram Auth
 

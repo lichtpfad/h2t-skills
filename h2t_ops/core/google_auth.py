@@ -32,8 +32,24 @@ def _oauth_store_dir() -> Path:
 
 
 _BOOTSTRAP_HINT = (
-    "Run an explicit Google OAuth bootstrap/setup flow to create the "
-    "Google OAuth token store, then retry."
+    "Google OAuth bootstrap: run `h2t-ops google auth` once (opens a browser), then retry."
+)
+
+# Every scope any Google connector checks, so one consent serves all three (#532).
+GOOGLE_SCOPES = [
+    "https://www.googleapis.com/auth/calendar",
+    "https://www.googleapis.com/auth/drive",
+    "https://www.googleapis.com/auth/gmail.readonly",
+    "https://www.googleapis.com/auth/gmail.send",
+    "https://www.googleapis.com/auth/gmail.modify",
+    "https://www.googleapis.com/auth/gmail.labels",
+]
+
+_CLIENT_HINT = (
+    "Create a Desktop OAuth client: Google Cloud Console → a project with the Gmail, "
+    "Calendar and Drive APIs enabled → APIs & Services → Credentials → Create credentials → "
+    "OAuth client ID → Desktop app → Download JSON. Save it at that path, then rerun "
+    "`h2t-ops google auth`."
 )
 
 _GOOGLE_HINT = broken_install_hint("google-api-python-client", "google-auth", "google-auth-oauthlib")
@@ -212,6 +228,35 @@ def resolve_google_credentials(service_name: str,
                 hint=_BOOTSTRAP_HINT,
             )
     return creds
+
+
+def bootstrap_google_token(*, force: bool = False, open_browser: bool = True) -> dict:
+    """Mint the shared token store once — the only path that reaches the browser flow.
+
+    A token that already carries every scope and can refresh itself is left alone unless
+    `force`, so setup can call this on every run without a consent screen each time.
+    """
+    store = _oauth_store_dir()
+    client_path = store / "credentials.json"
+    token_path = store / "tokens.json"
+    if not client_path.is_file():
+        raise ConfigError(f"Google OAuth client not found: {client_path}", hint=_CLIENT_HINT)
+
+    if not force:
+        current = _load_credentials(token_path, client_path)
+        have = set(getattr(current, "scopes", None) or [])
+        if current is not None and set(GOOGLE_SCOPES) <= have and (current.valid or current.refresh_token):
+            return {"status": "already_authorized", "token_path": str(token_path),
+                    "scopes": sorted(have)}
+
+    flow = _install_app_flow().from_client_secrets_file(str(client_path), GOOGLE_SCOPES)
+    creds = flow.run_local_server(port=0, open_browser=open_browser)
+    tmp = token_path.with_suffix(token_path.suffix + ".tmp")
+    tmp.write_text(creds.to_json(), encoding="utf-8")
+    tmp.chmod(0o600)
+    os.replace(tmp, token_path)
+    return {"status": "authorized", "token_path": str(token_path),
+            "scopes": sorted(creds.scopes or GOOGLE_SCOPES)}
 
 
 def build_google_service(api: str, version: str, creds):

@@ -106,7 +106,7 @@ if thread_id:
 
 ## Common Failures
 
-- Missing OAuth token: run Google OAuth setup.
-- Expired token: refresh OAuth through the configured Google auth flow.
+- Missing OAuth token: run `h2t-ops google auth` once (one browser consent for Gmail, Calendar and Drive).
+- Expired token that cannot refresh: `h2t-ops google auth --force`.
 - Write command ambiguity: create a draft unless the user explicitly says send.
 - Reply addressed to yourself (before 1.6.19): the last message in the thread was your own. Upgrade; on an old install use `gmail draft <address> ...` with the address set explicitly, then verify `to` with `gmail read`.

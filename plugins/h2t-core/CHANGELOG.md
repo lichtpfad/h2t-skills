@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- fix(setup): Secrets Wizard step 3 asks once and runs `h2t-ops google auth` instead of three
+  connector calls that could only exit 3 on a fresh machine; it handles a missing OAuth
+  client (exit 3) and says that declining Google is a finished setup (#532).
+
 - fix(setup): `secrets skeleton` skips a key the connectors already resolve — environment
   or any secrets file they read, `~/.h2t/config/secrets/*.env` included; it asked the user
   to paste keys that already worked (#524). The Secrets Wizard takes the keys and the file

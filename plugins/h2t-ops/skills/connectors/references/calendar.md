@@ -47,7 +47,7 @@ In Claude Code, check readiness through:
 
 ## Common Failures
 
-- Missing token: run Google OAuth setup before Calendar commands.
+- Missing token: run `h2t-ops google auth` once (one browser consent for Gmail, Calendar and Drive).
 - Timezone error on Windows: ensure `tzdata` is installed in the `h2t-ops` environment.
 - Delete without `--confirm`: command should fail instead of deleting.
 
