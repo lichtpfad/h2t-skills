@@ -83,11 +83,15 @@ def test_skill_references_section_lists_every_reference_file():
 
 
 def test_issue_policy_contains_privacy_checklist():
+    # The privacy rules and the filing command moved to h2t-core:report-issue, their one
+    # home; the policy keeps the connector bug-vs-feature split and must point there.
     policy = _text(ROOT / "references" / "issue-policy.md")
-    assert "No tokens/API keys/cookies/session files" in policy
-    assert "No raw email bodies, transcripts, calendar descriptions, chat text" in policy
-    assert "type:bug|feature" in policy
+    assert "Bug vs Feature" in policy
     assert "h2t-ops" in policy
+    assert "h2t-core:report-issue" in policy
+    report = _text(SKILLS_ROOT.parent.parent / "h2t-core" / "skills" / "report-issue" / "SKILL.md")
+    assert "secrets, tokens, API keys, OAuth codes, cookies, session files" in report
+    assert "email bodies, transcripts, calendar descriptions, chat text" in report
 
 
 def test_connector_references_have_required_sections():
