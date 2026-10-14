@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 import stat
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -100,7 +101,8 @@ def test_auth_writes_a_token_every_connector_then_accepts(store, flow):
     token = store / "tokens.json"
     assert result["status"] == "authorized"
     assert flow.secrets == store / "credentials.json"
-    assert stat.S_IMODE(token.stat().st_mode) == 0o600
+    if os.name != "nt":  # Windows keeps no POSIX mode bits: chmod(0o600) reads back as 0o666
+        assert stat.S_IMODE(token.stat().st_mode) == 0o600
     for service, scopes in (("gmail", _GMAIL_SCOPES), ("calendar", CALENDAR_SCOPES),
                             ("drive", DRIVE_SCOPES)):
         assert mod.resolve_google_credentials(service, scopes).valid
