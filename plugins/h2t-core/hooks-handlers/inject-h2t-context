@@ -16,6 +16,7 @@ INDEX="H2T SKILLS — invoke with the Skill tool when relevant:
 
 Session:   h2t-core:session-start | h2t-core:handoff | h2t-core:init-project | h2t-core:scaffold-project
 Setup:     h2t-core:setup           (install, repair, doctor, connector readiness)
+Report:    h2t-core:report-issue    (an h2t skill, hook or command is broken → upstream issue, never a local patch)
 Research:  h2t-ops:research        (Exa semantic search — use for any web/news/paper lookup)
 Connectors: h2t-ops:connectors     (Google, Notion, Telegram, MeetGeek command map and safety)
 Daily:     h2t-ops:daily-brief     (daily ops brief from connected sources)

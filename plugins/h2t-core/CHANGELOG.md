@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- feat(report-issue): new skill — a client's agent files a pack defect upstream in
+  `lichtpfad/h2t-skills` instead of patching the plugin cache: pack defect vs setup gap,
+  privacy strip, draft shown and filed only on the user's yes, `--repo` always and no
+  `--label` (a reporter cannot set them). Advertised in the injected index. A `bug.yml`
+  form covers clients without gh; `issue-fields` labels a report by its headings
+  (`type:bug`, `status:triage`) instead of rejecting it as an incomplete task. A test
+  holds the form, the skill and the workflow to the same headings.
+
 - fix(setup): Secrets Wizard step 3 asks once and runs `h2t-ops google auth` instead of three
   connector calls that could only exit 3 on a fresh machine; it handles a missing OAuth
   client (exit 3) and says that declining Google is a finished setup (#532).

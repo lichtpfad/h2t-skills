@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- fix(connectors): the issue policy filed with `--label phase:triage`, a label the repository
+  does not have, so its own command could not create an issue; filing now goes through
+  `h2t-core:report-issue`, and the policy keeps only the connector bug-vs-feature split.
+
 - feat(google): `h2t-ops google auth` mints the shared Gmail/Calendar/Drive token in one
   browser consent with every scope the three connectors check; a fresh machine had no way
   to create `tokens.json` at all, and the missing-token hint pointed at a command that did
