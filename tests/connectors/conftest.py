@@ -12,4 +12,7 @@ def _no_real_credentials(monkeypatch, tmp_path_factory):
     with the developer's token. With no credentials reachable, the same failure is a
     ConfigError instead of a request. Tests that need a home patch Path.home themselves.
     """
-    monkeypatch.setenv("HOME", str(tmp_path_factory.mktemp("connector-home")))
+    home = str(tmp_path_factory.mktemp("connector-home"))
+    monkeypatch.setenv("HOME", home)
+    # Windows resolves ~ from USERPROFILE and ignores HOME (ntpath.expanduser, Python 3.8+).
+    monkeypatch.setenv("USERPROFILE", home)
