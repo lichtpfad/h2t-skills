@@ -23,6 +23,11 @@ import pytest
 
 
 def test_missing_google_libs_raises_configerror(monkeypatch):
+    # The re-import below rebinds the package attribute too; restore both, or a later
+    # `import ...gmail.client as m` patches one module while run() reads the other — and
+    # the unpatched one called the live Gmail API with the developer's token (#532).
+    import h2t_ops.connectors.gmail as pkg
+    monkeypatch.delattr(pkg, "client", raising=False)
     monkeypatch.delitem(sys.modules, "h2t_ops.connectors.gmail.client", raising=False)
     real = builtins.__import__
 

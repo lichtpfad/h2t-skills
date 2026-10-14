@@ -118,9 +118,8 @@ h2t-ops granola list --limit 10 --format md
 - `h2t-core:setup` owns install, repair, doctor, and connector readiness checks.
 - POS/DOR configuration is optional for connector I/O.
 - Google connectors require a local OAuth token store — `credentials.json` (a Desktop OAuth
-  client) and `tokens.json` in `~/.config/google-calendar-mcp/`. The pack has no command
-  that creates `tokens.json` on a fresh machine yet (#532); see
-  [First Google Login](#first-google-login) below.
+  client) and `tokens.json` in `~/.config/google-calendar-mcp/`. `h2t-ops google auth`
+  creates the second from the first; see [First Google Login](#first-google-login) below.
 - Every connector is optional. Setup reports the ones you skip as `missing`; leave their
   `KEY=` lines empty and answer "no" to their auth prompts (#534).
 - Notion, MeetGeek, Granola, and Exa use API keys in `~/.dor/secrets/secrets.env` or environment variables.
@@ -128,33 +127,29 @@ h2t-ops granola list --limit 10 --format md
 
 ### First Google Login
 
-Until #532 ships a command, mint the token once by hand. Two files are involved and they
-are not alike:
+Two files are involved and they are not alike:
 
-- `credentials.json` identifies the **app** — a Desktop OAuth client from a Google Cloud
-  project with the Gmail, Calendar and Drive APIs enabled. It may be shared; if the app is
-  in Testing mode, the owner adds the user under *Test users* first.
+- `credentials.json` identifies the **app** — a Desktop OAuth client. Create your own:
+  Google Cloud Console → a project with the Gmail, Calendar and Drive APIs enabled → APIs &
+  Services → Credentials → Create credentials → OAuth client ID → Desktop app → Download
+  JSON, saved as `~/.config/google-calendar-mcp/credentials.json`. Add yourself under the
+  consent screen's *Test users* while the app is in Testing. Google's documented policy is
+  that a Testing app's refresh token expires after 7 days; switching the consent screen to
+  *In production* avoids that, and for your own account needs no verification — the
+  consent shows an "unverified app" warning you click through. (Policy as documented by
+  Google, not measured here.)
 - `tokens.json` is the **user's** access to their own account. Never copy it between
   people — whoever holds it reads that mailbox.
 
-With `credentials.json` in `~/.config/google-calendar-mcp/`:
+Then one consent covers all three connectors:
 
 ```bash
-uv run --no-project --python 3.11 --with google-auth-oauthlib python - <<'PY'
-from pathlib import Path
-from google_auth_oauthlib.flow import InstalledAppFlow
-store = Path.home() / ".config" / "google-calendar-mcp"
-scopes = [f"https://www.googleapis.com/auth/{s}" for s in (
-    "calendar", "drive", "gmail.readonly", "gmail.send", "gmail.modify", "gmail.labels")]
-creds = InstalledAppFlow.from_client_secrets_file(store / "credentials.json", scopes).run_local_server(port=0)
-(store / "tokens.json").write_text(creds.to_json())
-PY
-h2t-ops gmail list --max 1 --json
+h2t-ops google auth
+h2t-ops gmail list --max 1 --json      # a message, not error[config]
 ```
 
-A browser opens for consent; the last line should print a message, not `error[config]`.
-Asking for all six scopes at once matters: `h2t-ops` checks scopes up front, and a token
-without `drive` fails every Drive command with `missing required scope(s)`.
+Rerunning is harmless: a token that already carries every scope is left alone
+(`already_authorized`); `--force` asks again.
 
 ## Configuration
 
