@@ -148,8 +148,8 @@ cost: free
 
 | Карточка | От человека | Шаги | Живая проверка |
 |---|---|---|---|
-| google (Gmail, Calendar, Drive) | свой OAuth-клиент Desktop | `user_action` Cloud Console, три API, consent screen с объяснением Testing/Test users против In production → `user_action` скачать JSON → `auto` `h2t-ops google auth` | `gmail list --max 1`, `calendar list --max 1`, `drive folders` |
-| telegram | api_id/api_hash, телефон, код, 2FA | `secret` api_id+api_hash → `secret` телефон → `auto` request-code → `secret` код (+ пароль 2FA) | `telegram auth status`, `telegram dialogs --limit 1` |
+| google (Gmail, Calendar, Drive) | свой OAuth-клиент Desktop | `user_action` Cloud Console, три API, consent screen с объяснением Testing/Test users против In production → `secret` **загрузить скачанный JSON через страницу** (перетащить файл в форму; программа сама кладёт его в `~/.config/google-calendar-mcp/credentials.json`) → `auto` `h2t-ops google auth` | `gmail list --max 1`, `calendar list --max 1`, `drive folders` |
+| telegram | api_id/api_hash; телефон с уже залогиненным Telegram | `secret` api_id+api_hash → **вход по QR на странице** (сканировать телефоном: Настройки → Устройства → Подключить устройство), пароль 2FA — полем на той же странице. Запасной путь — код: канал доставки показывается человеку (`SentCodeTypeApp` → «ищи в приложении»), `SetUpEmailRequired` и `SEND_CODE_UNAVAILABLE` — явные ошибки, а не «код запрошен» | `telegram auth status`, `telegram dialogs --limit 1` |
 | dropbox | приложение в App Console | `user_action` создать app → `secret` app key/secret → `user_action` URL авторизации → `secret` код → обмен на refresh-токен | `dropbox account` |
 | notion | integration token, подключённые страницы | `user_action` + `secret` | `notion search-workspace --limit 1` |
 | meetgeek | API key | `user_action` + `secret` | `meetgeek auth-check` |
@@ -185,6 +185,10 @@ cost: free
 | API-ключи, Dropbox app key/secret | `~/.h2t/config/secrets/secrets.env`, атомарно, права 600 |
 | Telegram api_id/api_hash | `~/.config/telegram/config.json` |
 | код Telegram, пароль 2FA, код авторизации Dropbox | никуда: сервер сам выполняет действие и пишет в состояние только результат |
+
+Страница умеет три вида полей: текст (ключ), **файл** (перетащить скачанный JSON —
+браузер читает «Загрузки», терминал нет, §12) и **QR** (картинка для входа в Telegram,
+обновляется сама, пока не отсканирована).
 
 Запасной путь — `h2t-setup secret <card>`: скрытый ввод (getpass), то же сохранение.
 `next` предлагает его, если сервер не поднялся.
@@ -270,3 +274,23 @@ CI: Linux и Windows, все пути `evals.yml`, не только `tests/`.
   на автоматический запуск хуков, вызывать скиллы явно.
 - «Свой OAuth-клиент снимает 7-дневный лимит токена» — лимит зависит от режима
   приложения (Testing), а не от владельца клиента; политика Google не проверялась здесь.
+- «Код Telegram иногда приходит на почту» как совет «проверь почту» — канал
+  `SentCodeTypeEmailCode` в схеме есть (Telethon 1.42), но выбирает его Telegram; совет
+  без знания канала — гадание. Отсюда требование R3.
+
+## 12. Первая раскатка — что сломалось и что из этого следует
+
+2026-10-14, внешний пользователь, macOS, Codex. Каждая строка — наблюдение и
+требование к wizard'у, которое его закрывает.
+
+| # | Что произошло | Требование |
+|---|---|---|
+| R1 | Код Telegram запрошен (`SentCodeTypeApp`), не найден ни в одном приложении; `auth.resendCode` → `SEND_CODE_UNAVAILABLE`. Вошли только по QR | Telegram: **QR — основной путь**, код — запасной (карточка §5) |
+| R2 | `request-code` вернул `code_requested: true`, выбросив тип доставки — никто не знал, где искать | код-путь показывает канал доставки и маску почты; `SetUpEmailRequired` и `SEND_CODE_UNAVAILABLE` — ошибки с объяснением |
+| R3 | Агент пользователя советовал «выйти из Telegram на телефоне и начать вход» — потеря сессии, куда приходят коды | тексты шагов только из карточек (§4); протокол запрещает агенту советы вне `instructions` |
+| R4 | Многострочные блоки (`cat <<'PY'`) из чата ломались при вставке: незакрытый heredoc / `dquote>`, команды молча копились, «echo ничего не печатает» | человеку — **только однострочные команды**, никаких heredoc и вставки кода; файлы создаёт программа |
+| R5 | Агент переписал присланный скрипт, и `__name__` стал `.name` — markdown съел подчёркивания | агент не перепечатывает код; всё, что исполняется, поставляется программой |
+| R6 | `cp ~/Downloads/… → Operation not permitted`: у приложения терминала нет доступа macOS к «Загрузкам» | программа **не читает** `~/Downloads`, `~/Desktop`, `~/Documents`; файлы (Google JSON) принимаются через страницу, у браузера доступ есть |
+| R7 | Агент Codex буквально исполнил «остановись на ошибке» и отказался от следующего шага | правила остановки живут в состоянии программы (`blocked` с причиной и следующим путём), а не в тексте для агента |
+| R8 | Интерактивные шаги (QR, ожидание, скрытый пароль) агент выполнить не может | такие шаги — `kind: secret` на странице или `h2t-setup secret` в терминале человека, никогда не `auto` |
+| R9 | Пользователь рапортовал `FILE OK`, которого не было — вывод длинный, строку легко пропустить | выполненность — только по `check()`; человеку не нужно читать вывод команд, чтобы понять результат |
