@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- docs(install): no install path leads to a clone (D20, #541). An agent installing the pack
+  cloned the repository, and again after it was stopped: the README gave plugins only as
+  slash commands an agent cannot type, offered a checkout first for the CLI, and setup's
+  hint said `--source /path/to/h2t-skills for local checkout`. Channel 1 now has the
+  agent form (`claude plugin marketplace add` / `claude plugin install … --json`, checked in
+  an isolated config dir), channel 2 is one `uv tool install git+…` line, the checkout moved
+  to Development, and `h2t-core:setup` forbids cloning. `test_install_needs_no_clone`
+  holds README and setup hints to it.
+
 - feat(report-issue): new skill — a client's agent files a pack defect upstream in
   `lichtpfad/h2t-skills` instead of patching the plugin cache: pack defect vs setup gap,
   privacy strip, draft shown and filed only on the user's yes, `--repo` always and no

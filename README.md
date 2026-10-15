@@ -21,7 +21,10 @@ delivers skills, hooks and agents into the plugin cache; `uv tool install` puts 
 commands on PATH. Skills call those commands. Stop after the first channel and the skills
 load, then die on their first command.
 
-**Channel 1 — plugins.** In Claude Code:
+**Neither channel needs a checkout.** Do not `git clone` this repository to install it — a
+clone is only for developing the pack. This applies to an agent installing for a person.
+
+**Channel 1 — plugins.** Typed by a person in Claude Code:
 
 ```text
 /plugin marketplace add lichtpfad/h2t-skills
@@ -30,7 +33,27 @@ load, then die on their first command.
 /reload-plugins
 ```
 
-**Channel 2 — the CLI.** `/h2t-core:setup install-h2t-ops` runs it for you:
+The same, run by an agent or in any terminal — an agent cannot type slash commands:
+
+```bash
+claude plugin marketplace add lichtpfad/h2t-skills --json
+claude plugin install h2t-core@lichtpfad --scope user --json
+claude plugin install h2t-ops@lichtpfad --scope user --json
+```
+
+Each prints one JSON line with `"outcome":"ok"`. `marketplace add` reports "cloning via
+HTTPS": that is Claude Code filling its own plugin cache, not a checkout you need. Start a
+new session (or `/reload-plugins`) to load the skills. Codex: see [Codex](#codex) below.
+
+**Channel 2 — the CLI.** One line, no checkout:
+
+```bash
+uv tool install "git+https://github.com/lichtpfad/h2t-skills.git"
+```
+
+uv fetches the source into its own cache and builds the nine commands from there; nothing
+lands in your working directory. Append `@<commit>` to the URL to pin a version.
+`/h2t-core:setup install-h2t-ops` runs the same install for you, after a dry run:
 
 ```text
 /h2t-core:setup doctor
@@ -54,11 +77,11 @@ h2t-ops v0.2.1
 - h2t-handoff           - h2t-project-audit-report   - h2t-project-audit-scan
 ```
 
-Fewer than nine, or no `h2t-ops` package at all, means channel 2 did not land. Rerun it
-from a checkout with `uv tool install --editable .`, or from the remote:
+Fewer than nine, or no `h2t-ops` package at all, means channel 2 did not land. Rerun it —
+`--reinstall` also fetches dependencies a newer version added:
 
 ```bash
-uv tool install --reinstall git+https://github.com/lichtpfad/h2t-skills.git
+uv tool install --reinstall "git+https://github.com/lichtpfad/h2t-skills.git"
 ```
 
 For external install troubleshooting, use [H2T Ops External Install + Debug Log](docs/h2t-ops-external-install-debug.md).
@@ -226,9 +249,12 @@ Working on the pack itself is [CONTRIBUTING.md](CONTRIBUTING.md) — setup, the 
 CI runs, and the two gates that bite first.
 
 ```bash
+git clone https://github.com/lichtpfad/h2t-skills.git
+cd h2t-skills
 uv sync
 uv run pytest
 uv run h2t-ops --help
+uv tool install --editable .   # the nine commands from this checkout, edits take effect
 ```
 
 Useful checks:

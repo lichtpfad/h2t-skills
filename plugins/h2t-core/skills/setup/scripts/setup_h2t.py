@@ -155,7 +155,7 @@ def resolve_entry_points(which: Callable[[str], str | None] = _user_which, home:
         overall = "missing"
     result: dict[str, Any] = {"status": overall, "commands": commands}
     if overall != "ready":
-        result["hint"] = "Run setup_h2t.py install-h2t-ops --source main (or --source /path/to/h2t-skills for local checkout)"
+        result["hint"] = "Run setup_h2t.py install-h2t-ops --source main (installs from GitHub through uv; no clone)"
     return result
 
 
