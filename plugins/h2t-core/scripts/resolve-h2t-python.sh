@@ -36,6 +36,25 @@ resolve_h2t_python() {
     _h2t_try_python "$candidate" && return 0
   done
 
+  # The CLI's own environment. `uv tool install` of h2t-ops — an install step anyway —
+  # leaves a 3.11+ interpreter that has PyYAML, which h2t-ops declares. Without this a
+  # machine with no Python of its own reached `uv run` on every hook: 0.91 s per Stop hook
+  # on Windows, measured 2026-10-16. A file check, not `uv tool dir`, so it costs no spawn;
+  # the defaults are the ones `uv help tool dir` documents. APPDATA arrives with
+  # backslashes, and Git Bash takes C:/ form.
+  local tool_dir="${UV_TOOL_DIR:-}"
+  if [ -z "$tool_dir" ]; then
+    if [ -n "${APPDATA:-}" ]; then
+      tool_dir="${APPDATA//\\//}/uv/data/tools"
+    else
+      tool_dir="${XDG_DATA_HOME:-$HOME/.local/share}/uv/tools"
+    fi
+  fi
+  for candidate in "$tool_dir/h2t-ops/Scripts/python.exe" "$tool_dir/h2t-ops/bin/python"; do
+    [ -f "$candidate" ] || continue
+    _h2t_try_python "$candidate" && return 0
+  done
+
   if command -v py >/dev/null 2>&1; then
     _h2t_try_python py -3.11 && return 0
     _h2t_try_python py -3 && return 0
