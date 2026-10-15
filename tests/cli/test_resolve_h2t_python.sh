@@ -7,6 +7,10 @@ RESOLVER="$REPO_ROOT/plugins/h2t-core/scripts/resolve-h2t-python.sh"
 TMPDIR_TEST="$(mktemp -d)"
 trap 'rm -rf "$TMPDIR_TEST"' EXIT
 
+# The resolver finds the CLI's tool venv through these. Left set, a case would see the
+# host's real h2t-ops install — APPDATA is set on every Windows runner.
+unset UV_TOOL_DIR XDG_DATA_HOME APPDATA
+
 make_fake_python() {
   local target="$1"
   local body="$2"
@@ -232,6 +236,60 @@ test_no_requirements_is_not_a_dangling_with() {
   )
 }
 
+# `uv tool install` of the CLI leaves a 3.11+ interpreter that has PyYAML (h2t-ops declares
+# it). Found by a file check, it saves the `uv run` a machine without Python otherwise pays
+# on every hook: 0.9 s per Stop hook on Windows, measured 2026-10-16.
+test_cli_tool_venv_beats_python3_and_uv() {
+  local home_dir="$TMPDIR_TEST/home10"
+  local bin_dir="$TMPDIR_TEST/bin10"
+
+  make_fake_python "$bin_dir/python3" \
+    '[[ "${1:-}" == "-c" && "${2:-}" == "import sys" ]] && exit 0; exit 1'
+  make_fake_python "$bin_dir/python" 'exit 1'
+  make_fake_python "$bin_dir/uv" 'exit 0'
+  make_fake_python "$home_dir/.local/share/uv/tools/h2t-ops/bin/python" 'exit 0'
+
+  (
+    export HOME="$home_dir"
+    export PATH="$bin_dir:/usr/bin:/bin"
+    unset H2T_PYTHON
+
+    source "$RESOLVER"
+    resolve_h2t_python "import yaml" pyyaml
+    assert_eq "${H2T_PYTHON_CMD[*]}" "$home_dir/.local/share/uv/tools/h2t-ops/bin/python" \
+      "the CLI's tool venv should win over python3 without the package and over uv"
+  )
+}
+
+test_cli_tool_venv_honours_uv_tool_dir_and_windows_layout() {
+  local home_dir="$TMPDIR_TEST/home11"
+  local bin_dir="$TMPDIR_TEST/bin11"
+  local tools="$TMPDIR_TEST/custom-tools"
+  local appdata="$TMPDIR_TEST/appdata"
+
+  make_fake_python "$bin_dir/python3" 'exit 1'
+  make_fake_python "$bin_dir/python" 'exit 1'
+  make_fake_python "$tools/h2t-ops/bin/python" 'exit 0'
+  make_fake_python "$appdata/uv/data/tools/h2t-ops/Scripts/python.exe" 'exit 0'
+
+  (
+    export HOME="$home_dir"
+    export PATH="$bin_dir:/usr/bin:/bin"
+    unset H2T_PYTHON
+
+    source "$RESOLVER"
+    export UV_TOOL_DIR="$tools"
+    resolve_h2t_python
+    assert_eq "${H2T_PYTHON_CMD[*]}" "$tools/h2t-ops/bin/python" "UV_TOOL_DIR should be read"
+
+    unset UV_TOOL_DIR
+    export APPDATA="$appdata"
+    resolve_h2t_python
+    assert_eq "${H2T_PYTHON_CMD[*]}" "$appdata/uv/data/tools/h2t-ops/Scripts/python.exe" \
+      "on Windows the tool dir is %APPDATA%\\uv\\data\\tools"
+  )
+}
+
 
 test_broken_venv_falls_back_to_python3
 test_broken_env_var_falls_back_to_python3
@@ -242,5 +300,7 @@ test_uv_used_only_when_nothing_local_satisfies_the_probe
 test_uv_is_not_reached_when_a_local_python_satisfies
 test_every_requirement_reaches_uv
 test_no_requirements_is_not_a_dangling_with
+test_cli_tool_venv_beats_python3_and_uv
+test_cli_tool_venv_honours_uv_tool_dir_and_windows_layout
 
 echo "OK: resolve-h2t-python"

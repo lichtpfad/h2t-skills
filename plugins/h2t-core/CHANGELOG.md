@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- fix(hooks): installing the CLI is all the hooks need (D9, #541). On a machine with no
+  Python of its own the interpreter resolver fell through to `uv run` on every hook — 0.91 s
+  per Stop hook on Windows, two of them per turn — because the `~/.h2t/venv` it tries first
+  is created by nothing. It now tries the venv `uv tool install` made for h2t-ops, which has
+  3.11+ and PyYAML, by a file check at the path `uv help tool dir` documents (`UV_TOOL_DIR`,
+  `%APPDATA%\uv\data\tools`, `~/.local/share/uv/tools`). Measured on macOS with Python off
+  PATH: 152 → 58 ms.
+
 - fix(hooks): no hook needs jq (D1, #541). Git Bash on Windows ships none, so
   `gather-on-prompt` failed on every message and the slash path to a session skill never
   gathered — the other hook tests skip on Windows and a POSIX runner has jq, so nothing saw

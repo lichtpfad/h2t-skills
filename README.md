@@ -207,7 +207,7 @@ without it.
 | `H2T_CALENDAR_TZ` | `Asia/Jerusalem` | the timezone calendar commands assume |
 | `H2T_EVALS_ROOT` | `~/.h2t/evals` | the eval telemetry tree |
 | `H2T_LAKE_ROOT` | `~/.dor/lake` | the MeetGeek media lake |
-| `H2T_PYTHON` | resolved: `~/.h2t/venv` → `py -3.11` → `python3` → `uv run` | the interpreter hooks use, tried first |
+| `H2T_PYTHON` | resolved: `~/.h2t/venv` → the h2t-ops CLI's own venv → `py -3.11` → `python3` → `uv run` | the interpreter hooks use, tried first |
 | `H2T_KB_ROOT` | **none — required by `h2t-ops:kb`** | the knowledge base `llm-kb-engine` opens |
 
 `H2T_OPS`, `H2T_PLUGIN_ROOT`, `H2T_DOCS_LINT_SCRIPT`, `H2T_LINT_HOOK_TIMEOUT` and the
