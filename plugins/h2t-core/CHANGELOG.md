@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- fix(hooks): no hook needs jq (D1, #541). Git Bash on Windows ships none, so
+  `gather-on-prompt` failed on every message and the slash path to a session skill never
+  gathered — the other hook tests skip on Windows and a POSIX runner has jq, so nothing saw
+  it. `gather-on-prompt` now decides with bash alone and starts no interpreter on an
+  ordinary message (34 ms, measured); `gather-on-skill` parses both payload shapes with the
+  interpreter it resolves for its reply anyway. `test_hooks_need_no_jq` puts a recording
+  stub jq on PATH, so the dependency shows on any OS.
+
 - docs(install): no install path leads to a clone (D20, #541). An agent installing the pack
   cloned the repository, and again after it was stopped: the README gave plugins only as
   slash commands an agent cannot type, offered a checkout first for the CLI, and setup's
