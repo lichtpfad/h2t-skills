@@ -248,7 +248,9 @@ class TelegramClientAdapter:
                     "h2t-ops telegram auth request-code --phone +..."
                 ),
             )
-        data = json.loads(self.config_file.read_text(encoding="utf-8"))
+        from h2t_ops.core.jsonfile import read_json_config
+
+        data = read_json_config(self.config_file)
         missing = [key for key in ("api_id", "api_hash") if not data.get(key)]
         if missing:
             raise ConfigError(

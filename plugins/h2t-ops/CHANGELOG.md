@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- fix(config): a JSON config saved by Windows Notepad loads (D2, #541). Notepad writes a
+  UTF-8 byte-order mark: the Telegram `config.json` failed as a provider error with no hint,
+  and Google's `tokens.json` / `credentials.json`, opened without an encoding, read as a
+  missing token — on macOS too. Hand-edited configs (Telegram, research) now go through
+  `core/jsonfile.read_json_config`: BOM tolerated, invalid JSON a ConfigError (exit 3)
+  naming the file and position. Google opens both files as `utf-8-sig`.
+
 - feat(telegram): `auth qr` logs in by scanning a QR on a logged-in phone — no code is
   sent. On the first external install a code went to `SentCodeTypeApp`, was never found,
   and `auth.resendCode` answered `SEND_CODE_UNAVAILABLE`; only QR got the user in.
