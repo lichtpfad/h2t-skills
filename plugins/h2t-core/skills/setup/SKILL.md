@@ -161,6 +161,13 @@ the same:
   checkout with the GitHub version, and edits in the checkout would stop taking effect.
 - anything else, or h2t-ops is missing — `--source main`.
 
+**Never clone the repository to install.** `--source main` is
+`git+https://github.com/lichtpfad/h2t-skills.git`: uv fetches it into its own cache, and
+that is the whole install. A `<path>` source is only ever a checkout that is *already* the
+editable install the report shows — never one you create. The same holds for plugins: a
+person types `/plugin …`, an agent runs `claude plugin marketplace add lichtpfad/h2t-skills`
+and `claude plugin install h2t-core@lichtpfad` (README, Channel 1). Neither needs a clone.
+
 First run a dry-run:
 
 ```bash
