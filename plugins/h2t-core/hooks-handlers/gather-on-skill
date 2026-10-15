@@ -7,31 +7,22 @@
 set -euo pipefail
 
 input=$(cat)
-skill=$(echo "$input" | jq -r '.tool_input.skill // ""')
-cwd=$(echo "$input" | jq -r '.cwd // "."')
-# gather-on-prompt re-enters here for the slash path and says so, because the output
-# contract is not symmetric across events (see emit).
-event=$(echo "$input" | jq -r '.hook_event_name // "PreToolUse"')
 
-# Only fire for h2t-core session skills
-case "$skill" in
+# No jq (D1, #541): Git Bash on Windows has none. The payload is parsed below with the
+# interpreter this hook resolves for its reply anyway; until then, bash only. A relevant
+# payload names one of the three skills verbatim — tool_input.skill, or the slash prompt
+# gather-on-prompt hands over — so anything else leaves before an interpreter is sought.
+case "$input" in
   *session-start*|*handoff*|*init-project*) ;;
   *) exit 0 ;;
 esac
-
-# Deduplicate: skip if the same skill was gathered for the same directory in the last 30s.
-# Keyed by cwd as well as skill, so a run in one repo cannot silence another; written only
-# after a successful run, so a failure does not suppress the retry.
-LOCK_KEY="$(echo "$skill" | tr '/:' '__')_$(printf '%s' "$cwd" | cksum | awk '{print $1}')"
-LOCK_FILE="${TMPDIR:-/tmp}/h2t_gather_${LOCK_KEY}.lock"
-NOW=$(date +%s)
-if [ -f "$LOCK_FILE" ]; then
-  LOCK_TIME=$(cat "$LOCK_FILE" 2>/dev/null || echo 0)
-  AGE=$(( NOW - LOCK_TIME )) || AGE=99
-  if [ "$AGE" -lt 30 ]; then
-    exit 0
-  fi
-fi
+# The event picks the reply channel, and the error path below needs it before an
+# interpreter exists. The parse confirms it; a prompt quoting the event name can only
+# mislabel an error that is printed anyway.
+case "$input" in
+  *'"hook_event_name"'*'"UserPromptSubmit"'*) event="UserPromptSubmit" ;;
+  *) event="PreToolUse" ;;
+esac
 
 # Cache layout: scripts/resolve-h2t-python.sh is at ../scripts/ (plugin root = ../)
 # Dev layout: scripts/ is at plugins/h2t-core/ (repo root = ../../..)
@@ -123,6 +114,47 @@ run_script() {
   rm -f "$out" "$err"
   return "$rc"
 }
+
+# Parse both payload shapes: PreToolUse carries tool_input.skill; UserPromptSubmit (handed
+# over by gather-on-prompt) carries the prompt, whose leading slash command names the skill.
+# Read as bytes for the same reason as emit(). One field per line; cwd last, so a path
+# with any character but a newline survives.
+if ! parsed=$(printf '%s' "$input" | "${H2T_PYTHON_CMD[@]}" -c \
+  'import json, re, sys
+d = json.loads(sys.stdin.buffer.read().decode("utf-8", "replace"))
+event = d.get("hook_event_name") or ("UserPromptSubmit" if "prompt" in d or "user_prompt" in d else "PreToolUse")
+skill = (d.get("tool_input") or {}).get("skill") or ""
+if event == "UserPromptSubmit":
+    prompt = d.get("prompt") or d.get("user_prompt") or ""
+    m = re.match(r"\s*/((?:[A-Za-z0-9_.-]+:)?(?:session-start|handoff|init-project))(?:\s|$)", prompt)
+    skill = m.group(1) if m else ""
+sys.stdout.write("\n".join([event, skill, d.get("cwd") or "."]))' 2>/dev/null); then
+  emit "GATHER_ERROR: could not parse the hook payload."
+  exit 0
+fi
+event=$(printf '%s\n' "$parsed" | sed -n 1p)
+skill=$(printf '%s\n' "$parsed" | sed -n 2p)
+cwd=$(printf '%s\n' "$parsed" | sed -n '3,$p')
+
+# Only fire for h2t-core session skills
+case "$skill" in
+  *session-start*|*handoff*|*init-project*) ;;
+  *) exit 0 ;;
+esac
+
+# Deduplicate: skip if the same skill was gathered for the same directory in the last 30s.
+# Keyed by cwd as well as skill, so a run in one repo cannot silence another; written only
+# after a successful run, so a failure does not suppress the retry.
+LOCK_KEY="$(echo "$skill" | tr '/:' '__')_$(printf '%s' "$cwd" | cksum | awk '{print $1}')"
+LOCK_FILE="${TMPDIR:-/tmp}/h2t_gather_${LOCK_KEY}.lock"
+NOW=$(date +%s)
+if [ -f "$LOCK_FILE" ]; then
+  LOCK_TIME=$(cat "$LOCK_FILE" 2>/dev/null || echo 0)
+  AGE=$(( NOW - LOCK_TIME )) || AGE=99
+  if [ "$AGE" -lt 30 ]; then
+    exit 0
+  fi
+fi
 
 if [[ "$skill" == *init-project* ]]; then
   # SKILL.md step 1 reads INIT_DATA; detection is what it asks for, not a briefing.
