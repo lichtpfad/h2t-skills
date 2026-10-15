@@ -142,7 +142,7 @@ def _load_credentials(token_path: Path, creds_path: Path):
     if not token_path.exists():
         return None
     try:
-        with open(token_path) as f:
+        with open(token_path, encoding="utf-8-sig") as f:
             token_data = json.load(f)
         if "normal" in token_data:
             token_data = token_data["normal"]
@@ -157,7 +157,7 @@ def _load_credentials(token_path: Path, creds_path: Path):
         if isinstance(token_data.get("scopes"), str):
             token_data["scopes"] = token_data["scopes"].split()
         if "client_id" not in token_data and creds_path.exists():
-            with open(creds_path) as f:
+            with open(creds_path, encoding="utf-8-sig") as f:
                 creds_data = json.load(f)
             installed = creds_data.get("installed", creds_data)
             token_data["client_id"] = installed.get("client_id")

@@ -8,7 +8,6 @@ from __future__ import annotations
 
 __version__ = "0.0.1"
 
-import json
 import os
 import re
 import time
@@ -792,7 +791,9 @@ def load_config(path: Path | str | None) -> dict[str, Any]:
     p = Path(path)
     if not p.is_file():
         return _deep_merge(DEFAULT_CONFIG, {})
-    user = json.loads(p.read_text(encoding="utf-8"))
+    from h2t_ops.core.jsonfile import read_json_config
+
+    user = read_json_config(p)
     return _deep_merge(DEFAULT_CONFIG, user)
 
 
