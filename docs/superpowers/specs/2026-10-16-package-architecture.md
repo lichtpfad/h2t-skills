@@ -238,7 +238,7 @@ release.json                   манифест выпуска в корне, н
 STATE=ready
 VERSION=4.1.0
 GENERATION=<тот же uuid, что в install.json>
-H2T_HOOK=C:/Users/Admin/.local/bin/h2t-hook.exe      ← прямые слеши, без кавычек
+H2T_HOOK=C:/Users/<user>/.local/bin/h2t-hook.exe      ← прямые слеши, без кавычек
 EDITABLE_ROOT=
 ```
 
