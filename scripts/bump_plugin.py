@@ -60,7 +60,9 @@ def main(argv: list[str]) -> int:
         )
         return 2
 
-    plugin_path = ROOT / entry["source"].lstrip("./") / ".claude-plugin" / "plugin.json"
+    src = entry["source"]
+    src_path = src["path"] if isinstance(src, dict) else src.lstrip("./")
+    plugin_path = ROOT / src_path / ".claude-plugin" / "plugin.json"
     plugin = _load(plugin_path)
     old_ver = plugin["version"]
 
