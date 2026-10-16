@@ -1,0 +1,1248 @@
+[
+ {
+  "argv": [
+   "h2t-gather",
+   "--cwd",
+   "<dir>",
+   "--briefing-only"
+  ],
+  "source": "plugins/h2t-core/skills/session-start/SKILL.md:48"
+ },
+ {
+  "argv": [
+   "h2t-gather",
+   "--cwd",
+   "<dir>",
+   "--briefing-only"
+  ],
+  "source": "plugins/h2t-core/hooks-handlers/gather-on-skill:183"
+ },
+ {
+  "argv": [
+   "h2t-activity-log",
+   "start",
+   "--session-id",
+   "<SESSION_NAME>",
+   "--domain",
+   "<DOMAIN>",
+   "--project",
+   "<PROJECT_ID>"
+  ],
+  "source": "plugins/h2t-core/skills/session-start/SKILL.md:125"
+ },
+ {
+  "argv": [
+   "h2t-handoff",
+   "write",
+   "--session-id",
+   "<SESSION_NAME>",
+   "--domain",
+   "<DOMAIN>",
+   "--project",
+   "<PROJECT_ID>",
+   "--what-done",
+   "<WHAT_DONE>",
+   "--what-remains",
+   "<WHAT_REMAINS>",
+   "--artifacts",
+   "<ARTIFACT_LIST>"
+  ],
+  "source": "plugins/h2t-core/skills/handoff/SKILL.md:181"
+ },
+ {
+  "argv": [
+   "h2t-project-register",
+   "--id",
+   "{id}",
+   "--domain",
+   "{domain}",
+   "--type",
+   "{type}",
+   "--label",
+   "{label}",
+   "--task-tracker",
+   "{tracker}",
+   "--description",
+   "{description}",
+   "--cwd",
+   "<dir>",
+   "--config-root",
+   "<config-root>",
+   "--github",
+   "{github}"
+  ],
+  "source": "plugins/h2t-core/skills/init-project/SKILL.md:57"
+ },
+ {
+  "argv": [
+   "h2t-project-register",
+   "--id",
+   "{id}",
+   "--domain",
+   "{domain}",
+   "--type",
+   "{reg_type}",
+   "--label",
+   "{label}",
+   "--task-tracker",
+   "{tracker}",
+   "--cwd",
+   "{project_path}",
+   "--config-root",
+   "$CONFIG_ROOT",
+   "--github",
+   "{github_slug}",
+   "--stack",
+   "{stack}"
+  ],
+  "source": "plugins/h2t-core/skills/scaffold-project/SKILL.md:165"
+ },
+ {
+  "argv": [
+   "h2t-project-audit-scan",
+   "<repo_path>",
+   "--projects-yaml",
+   "$PROJECTS_YAML"
+  ],
+  "source": "plugins/h2t-core/skills/project-audit/SKILL.md:58"
+ },
+ {
+  "argv": [
+   "h2t-project-audit-report",
+   "{project_id}",
+   "--field",
+   "claude_md=true",
+   "--projects-yaml",
+   "$PROJECTS_YAML"
+  ],
+  "source": "plugins/h2t-core/skills/project-audit/SKILL.md:427"
+ },
+ {
+  "argv": [
+   "h2t-scaffold-project",
+   "create",
+   "--id",
+   "{id}",
+   "--type",
+   "{type}",
+   "--stack",
+   "{stack}",
+   "--dir",
+   "{base_dir}",
+   "--description",
+   "{description}",
+   "--merge",
+   "--dry-run"
+  ],
+  "source": "plugins/h2t-core/skills/scaffold-project/SKILL.md:103"
+ },
+ {
+  "argv": [
+   "h2t-scaffold-project",
+   "create",
+   "--id",
+   "{id}",
+   "--type",
+   "{type}",
+   "--stack",
+   "{stack}",
+   "--dir",
+   "{base_dir}",
+   "--description",
+   "{description}",
+   "--merge"
+  ],
+  "source": "plugins/h2t-core/skills/scaffold-project/SKILL.md:139"
+ },
+ {
+  "argv": [
+   "h2t-scaffold-project",
+   "github",
+   "--github",
+   "{github_slug}",
+   "--description",
+   "{description}",
+   "--source",
+   "{project_path}",
+   "--private"
+  ],
+  "source": "plugins/h2t-core/skills/scaffold-project/SKILL.md:192"
+ },
+ {
+  "argv": [
+   "h2t-hook",
+   "on-stop"
+  ],
+  "source": "plugins/h2t-core/skills/scaffold-project/scripts/scaffold_project.py:525"
+ },
+ {
+  "argv": [
+   "h2t-hook",
+   "post-git-commit-docs-lint"
+  ],
+  "source": "plugins/h2t-core/skills/scaffold-project/scripts/scaffold_project.py:532"
+ },
+ {
+  "argv": [
+   "h2t-hook",
+   "layout-precommit"
+  ],
+  "source": "scripts/hooks/pre-commit:17"
+ },
+ {
+  "argv": [
+   "h2t-hook",
+   "secrets-precommit"
+  ],
+  "source": "scripts/hooks/pre-commit:17"
+ },
+ {
+  "argv": [
+   "h2t-hook",
+   "bulk-precommit"
+  ],
+  "source": "scripts/hooks/pre-commit:17"
+ },
+ {
+  "argv": [
+   "h2t-hook",
+   "layout-precommit"
+  ],
+  "source": "plugins/h2t-core/hooks-handlers/layout-precommit:10"
+ },
+ {
+  "argv": [
+   "h2t-hook",
+   "gather-on-prompt"
+  ],
+  "source": "h2t_ops/hook_entry.py:53"
+ },
+ {
+  "argv": [
+   "h2t-hook",
+   "structure-guard"
+  ],
+  "source": "h2t_ops/hook_entry.py:54"
+ },
+ {
+  "argv": [
+   "h2t-ops",
+   "google",
+   "auth",
+   "--json"
+  ],
+  "source": "plugins/h2t-core/skills/setup/SKILL.md:285"
+ },
+ {
+  "argv": [
+   "h2t-ops",
+   "gmail",
+   "list",
+   "--max",
+   "1",
+   "--json"
+  ],
+  "source": "plugins/h2t-core/skills/setup/SKILL.md:301"
+ },
+ {
+  "argv": [
+   "h2t-ops",
+   "telegram",
+   "auth",
+   "status"
+  ],
+  "source": "plugins/h2t-core/skills/setup/SKILL.md:309"
+ },
+ {
+  "argv": [
+   "h2t-ops",
+   "telegram",
+   "auth",
+   "request-code",
+   "--phone",
+   "<phone>"
+  ],
+  "source": "plugins/h2t-core/skills/setup/SKILL.md:319"
+ },
+ {
+  "argv": [
+   "h2t-ops",
+   "telegram",
+   "auth",
+   "complete",
+   "--phone",
+   "<phone>",
+   "--code",
+   "<code>"
+  ],
+  "source": "plugins/h2t-core/skills/setup/SKILL.md:325"
+ },
+ {
+  "argv": [
+   "h2t-ops",
+   "telegram",
+   "auth",
+   "complete",
+   "--phone",
+   "<phone>",
+   "--code",
+   "<code>",
+   "--password",
+   "<password>"
+  ],
+  "source": "plugins/h2t-core/skills/setup/SKILL.md:331"
+ },
+ {
+  "argv": [
+   "h2t-ops",
+   "doctor"
+  ],
+  "source": "plugins/h2t-ops/skills/connectors/SKILL.md:121"
+ },
+ {
+  "argv": [
+   "h2t-ops",
+   "connectors"
+  ],
+  "source": "plugins/h2t-ops/skills/connectors/SKILL.md:122"
+ },
+ {
+  "argv": [
+   "h2t-ops",
+   "calendar",
+   "calendars",
+   "--json"
+  ],
+  "source": "plugins/h2t-ops/skills/connectors/references/calendar.md:32"
+ },
+ {
+  "argv": [
+   "h2t-ops",
+   "calendar",
+   "list",
+   "--from",
+   "2026-05-23",
+   "--to",
+   "2026-05-23",
+   "--tz",
+   "Asia/Jerusalem",
+   "--max",
+   "250",
+   "--busy-only",
+   "--json"
+  ],
+  "source": "plugins/h2t-ops/skills/connectors/references/calendar.md:33"
+ },
+ {
+  "argv": [
+   "h2t-ops",
+   "calendar",
+   "freebusy",
+   "--from",
+   "2026-05-23",
+   "--to",
+   "2026-05-23",
+   "--tz",
+   "Asia/Jerusalem",
+   "--json"
+  ],
+  "source": "plugins/h2t-ops/skills/connectors/references/calendar.md:34"
+ },
+ {
+  "argv": [
+   "h2t-ops",
+   "calendar",
+   "create",
+   "Planning",
+   "2026-05-23",
+   "14:00",
+   "--duration-min",
+   "60",
+   "--meet",
+   "--json"
+  ],
+  "source": "plugins/h2t-ops/skills/connectors/references/calendar.md:35"
+ },
+ {
+  "argv": [
+   "h2t-ops",
+   "drive",
+   "search",
+   "lecture",
+   "--max",
+   "20",
+   "--json"
+  ],
+  "source": "plugins/h2t-ops/skills/connectors/references/drive.md:49"
+ },
+ {
+  "argv": [
+   "h2t-ops",
+   "drive",
+   "list",
+   "<folder_id_from_url>",
+   "--json"
+  ],
+  "source": "plugins/h2t-ops/skills/connectors/references/drive.md:50"
+ },
+ {
+  "argv": [
+   "h2t-ops",
+   "drive",
+   "export",
+   "FILE_ID_FROM_SEARCH",
+   "--format",
+   "md",
+   "--dest",
+   "./lecture.md",
+   "--json"
+  ],
+  "source": "plugins/h2t-ops/skills/connectors/references/drive.md:51"
+ },
+ {
+  "argv": [
+   "h2t-ops",
+   "drive",
+   "upload-folder",
+   "./deploy",
+   "--parent-id",
+   "DRIVE_FOLDER_ID",
+   "--dry-run",
+   "--json"
+  ],
+  "source": "plugins/h2t-ops/skills/connectors/references/drive.md:53"
+ },
+ {
+  "argv": [
+   "h2t-ops",
+   "drive",
+   "upload-folder",
+   "./deploy",
+   "--parent-id",
+   "DRIVE_FOLDER_ID",
+   "--update-existing",
+   "--json"
+  ],
+  "source": "plugins/h2t-ops/skills/connectors/references/drive.md:54"
+ },
+ {
+  "argv": [
+   "h2t-ops",
+   "drive",
+   "upload",
+   "./note.md",
+   "--folder",
+   "Target",
+   "--update-existing",
+   "--json"
+  ],
+  "source": "plugins/h2t-ops/skills/connectors/references/drive.md:57"
+ },
+ {
+  "argv": [
+   "h2t-ops",
+   "drive",
+   "get-file",
+   "FILE_ID",
+   "--json"
+  ],
+  "source": "plugins/h2t-ops/skills/connectors/references/drive.md:60"
+ },
+ {
+  "argv": [
+   "h2t-ops",
+   "drive",
+   "docs",
+   "create",
+   "My Report",
+   "--json"
+  ],
+  "source": "plugins/h2t-ops/skills/connectors/references/drive.md:63"
+ },
+ {
+  "argv": [
+   "h2t-ops",
+   "drive",
+   "docs",
+   "create",
+   "My Report",
+   "--folder-id",
+   "FOLDER_ID",
+   "--json"
+  ],
+  "source": "plugins/h2t-ops/skills/connectors/references/drive.md:64"
+ },
+ {
+  "argv": [
+   "h2t-ops",
+   "drive",
+   "trash",
+   "FILE_ID",
+   "--confirm-name",
+   "exact-file-name.txt",
+   "--json"
+  ],
+  "source": "plugins/h2t-ops/skills/connectors/references/drive.md:67"
+ },
+ {
+  "argv": [
+   "h2t-ops",
+   "drive",
+   "delete",
+   "FILE_ID",
+   "--confirm-name",
+   "exact-file-name.txt",
+   "--confirm-permanent",
+   "--json"
+  ],
+  "source": "plugins/h2t-ops/skills/connectors/references/drive.md:68"
+ },
+ {
+  "argv": [
+   "h2t-ops",
+   "drive",
+   "docs-tab",
+   "list",
+   "DOC_ID",
+   "--json"
+  ],
+  "source": "plugins/h2t-ops/skills/connectors/references/drive.md:71"
+ },
+ {
+  "argv": [
+   "h2t-ops",
+   "drive",
+   "docs-tab",
+   "write",
+   "DOC_ID",
+   "TAB_ID",
+   "--content-file",
+   "./notes.md",
+   "--json"
+  ],
+  "source": "plugins/h2t-ops/skills/connectors/references/drive.md:74"
+ },
+ {
+  "argv": [
+   "h2t-ops",
+   "drive",
+   "docs-tab",
+   "write",
+   "DOC_ID",
+   "TAB_ID",
+   "--content-file",
+   "./notes.md",
+   "--clear-first",
+   "--json"
+  ],
+  "source": "plugins/h2t-ops/skills/connectors/references/drive.md:75"
+ },
+ {
+  "argv": [
+   "h2t-ops",
+   "gmail",
+   "search",
+   "subject:invoice newer_than:30d",
+   "--max",
+   "10",
+   "--json"
+  ],
+  "source": "plugins/h2t-ops/skills/connectors/references/gmail.md:26"
+ },
+ {
+  "argv": [
+   "h2t-ops",
+   "gmail",
+   "read",
+   "MESSAGE_ID_FROM_SEARCH",
+   "--json"
+  ],
+  "source": "plugins/h2t-ops/skills/connectors/references/gmail.md:27"
+ },
+ {
+  "argv": [
+   "h2t-ops",
+   "gmail",
+   "draft",
+   "person@example.com",
+   "Follow-up",
+   "Draft body",
+   "--json"
+  ],
+  "source": "plugins/h2t-ops/skills/connectors/references/gmail.md:28"
+ },
+ {
+  "argv": [
+   "h2t-ops",
+   "gmail",
+   "reply",
+   "THREAD_ID",
+   "--body",
+   "My reply",
+   "--json"
+  ],
+  "source": "plugins/h2t-ops/skills/connectors/references/gmail.md:45"
+ },
+ {
+  "argv": [
+   "h2t-ops",
+   "gmail",
+   "reply",
+   "THREAD_ID",
+   "--body",
+   "My reply",
+   "--send",
+   "--confirm-send",
+   "--json"
+  ],
+  "source": "plugins/h2t-ops/skills/connectors/references/gmail.md:47"
+ },
+ {
+  "argv": [
+   "h2t-ops",
+   "gmail",
+   "forward",
+   "MESSAGE_ID",
+   "--to",
+   "recipient@example.com",
+   "--json"
+  ],
+  "source": "plugins/h2t-ops/skills/connectors/references/gmail.md:50"
+ },
+ {
+  "argv": [
+   "h2t-ops",
+   "gmail",
+   "forward",
+   "MESSAGE_ID",
+   "--to",
+   "recipient@example.com",
+   "--send",
+   "--confirm-send",
+   "--json"
+  ],
+  "source": "plugins/h2t-ops/skills/connectors/references/gmail.md:52"
+ },
+ {
+  "argv": [
+   "h2t-ops",
+   "gmail",
+   "label-create",
+   "Project X",
+   "--json"
+  ],
+  "source": "plugins/h2t-ops/skills/connectors/references/gmail.md:55"
+ },
+ {
+  "argv": [
+   "h2t-ops",
+   "gmail",
+   "label-delete",
+   "LABEL_ID",
+   "--confirm-name",
+   "Project X",
+   "--json"
+  ],
+  "source": "plugins/h2t-ops/skills/connectors/references/gmail.md:58"
+ },
+ {
+  "argv": [
+   "h2t-ops",
+   "granola",
+   "auth-check",
+   "--json"
+  ],
+  "source": "plugins/h2t-ops/skills/connectors/references/granola.md:35"
+ },
+ {
+  "argv": [
+   "h2t-ops",
+   "granola",
+   "list",
+   "--limit",
+   "20",
+   "--format",
+   "md"
+  ],
+  "source": "plugins/h2t-ops/skills/connectors/references/granola.md:36"
+ },
+ {
+  "argv": [
+   "h2t-ops",
+   "granola",
+   "get",
+   "NOTE_ID_FROM_LIST",
+   "--format",
+   "md"
+  ],
+  "source": "plugins/h2t-ops/skills/connectors/references/granola.md:37"
+ },
+ {
+  "argv": [
+   "h2t-ops",
+   "granola",
+   "transcript",
+   "NOTE_ID_FROM_LIST",
+   "--format",
+   "md"
+  ],
+  "source": "plugins/h2t-ops/skills/connectors/references/granola.md:38"
+ },
+ {
+  "argv": [
+   "h2t-ops",
+   "granola",
+   "sync",
+   "--to",
+   "~/.dor/lake/granola",
+   "--include",
+   "summaries,transcripts",
+   "--since-cursor"
+  ],
+  "source": "plugins/h2t-ops/skills/connectors/references/granola.md:39"
+ },
+ {
+  "argv": [
+   "h2t-ops",
+   "meetgeek",
+   "auth-check",
+   "--json"
+  ],
+  "source": "plugins/h2t-ops/skills/connectors/references/meetgeek.md:31"
+ },
+ {
+  "argv": [
+   "h2t-ops",
+   "meetgeek",
+   "list",
+   "--limit",
+   "20",
+   "--json"
+  ],
+  "source": "plugins/h2t-ops/skills/connectors/references/meetgeek.md:32"
+ },
+ {
+  "argv": [
+   "h2t-ops",
+   "meetgeek",
+   "get",
+   "MEETING_ID_FROM_LIST",
+   "--json"
+  ],
+  "source": "plugins/h2t-ops/skills/connectors/references/meetgeek.md:33"
+ },
+ {
+  "argv": [
+   "h2t-ops",
+   "meetgeek",
+   "transcript",
+   "MEETING_ID_FROM_LIST",
+   "--format",
+   "md"
+  ],
+  "source": "plugins/h2t-ops/skills/connectors/references/meetgeek.md:34"
+ },
+ {
+  "argv": [
+   "h2t-ops",
+   "notion",
+   "search-workspace",
+   "--object",
+   "all",
+   "--limit",
+   "25",
+   "--json"
+  ],
+  "source": "plugins/h2t-ops/skills/connectors/references/notion.md:41"
+ },
+ {
+  "argv": [
+   "h2t-ops",
+   "notion",
+   "graph",
+   "PAGE_ID",
+   "--max-depth",
+   "3",
+   "--json"
+  ],
+  "source": "plugins/h2t-ops/skills/connectors/references/notion.md:42"
+ },
+ {
+  "argv": [
+   "h2t-ops",
+   "notion",
+   "find-databases",
+   "PAGE_ID",
+   "--json"
+  ],
+  "source": "plugins/h2t-ops/skills/connectors/references/notion.md:43"
+ },
+ {
+  "argv": [
+   "h2t-ops",
+   "notion",
+   "search",
+   "DATABASE_ID",
+   "--limit",
+   "25",
+   "--json"
+  ],
+  "source": "plugins/h2t-ops/skills/connectors/references/notion.md:44"
+ },
+ {
+  "argv": [
+   "h2t-ops",
+   "notion",
+   "get-database",
+   "DATABASE_ID",
+   "--limit",
+   "25",
+   "--json"
+  ],
+  "source": "plugins/h2t-ops/skills/connectors/references/notion.md:45"
+ },
+ {
+  "argv": [
+   "h2t-ops",
+   "notion",
+   "archive",
+   "<page_id>",
+   "--confirm-title",
+   "h2t-e2e-updated",
+   "--json"
+  ],
+  "source": "plugins/h2t-ops/skills/connectors/references/notion.md:124"
+ },
+ {
+  "argv": [
+   "h2t-ops",
+   "notion",
+   "replace-content",
+   "<page_id>",
+   "--content-file",
+   "./new-content.md",
+   "--confirm-title",
+   "h2t-e2e-updated",
+   "--json"
+  ],
+  "source": "plugins/h2t-ops/skills/connectors/references/notion.md:130"
+ },
+ {
+  "argv": [
+   "h2t-ops",
+   "telegram",
+   "auth",
+   "status",
+   "--json"
+  ],
+  "source": "plugins/h2t-ops/skills/connectors/references/telegram.md:40"
+ },
+ {
+  "argv": [
+   "h2t-ops",
+   "telegram",
+   "dialogs",
+   "--limit",
+   "20",
+   "--json"
+  ],
+  "source": "plugins/h2t-ops/skills/connectors/references/telegram.md:41"
+ },
+ {
+  "argv": [
+   "h2t-ops",
+   "telegram",
+   "saved-messages",
+   "--limit",
+   "20",
+   "--json"
+  ],
+  "source": "plugins/h2t-ops/skills/connectors/references/telegram.md:42"
+ },
+ {
+  "argv": [
+   "h2t-ops",
+   "telegram",
+   "messages",
+   "ENTITY_FROM_DIALOGS",
+   "--limit",
+   "20",
+   "--json"
+  ],
+  "source": "plugins/h2t-ops/skills/connectors/references/telegram.md:43"
+ },
+ {
+  "argv": [
+   "h2t-ops",
+   "calendar",
+   "list",
+   "--from",
+   "today",
+   "--to",
+   "+2d",
+   "--tz",
+   "$TZ_NAME",
+   "--max",
+   "50",
+   "--json"
+  ],
+  "source": "plugins/h2t-ops/skills/daily-brief/SKILL.md:60"
+ },
+ {
+  "argv": [
+   "h2t-ops",
+   "gmail",
+   "list",
+   "--unread",
+   "--query",
+   "is:important",
+   "--max",
+   "40",
+   "--format",
+   "human"
+  ],
+  "source": "plugins/h2t-ops/skills/daily-brief/SKILL.md:64"
+ },
+ {
+  "argv": [
+   "h2t-ops",
+   "notion",
+   "search",
+   "$TASKS_DB"
+  ],
+  "source": "plugins/h2t-ops/skills/daily-brief/SKILL.md:67"
+ },
+ {
+  "argv": [
+   "h2t-ops",
+   "deploy",
+   "<service>",
+   "[--target",
+   "<target>]",
+   "[--dry-run]",
+   "[--json]"
+  ],
+  "source": "plugins/h2t-ops/skills/deploy/SKILL.md:15"
+ },
+ {
+  "argv": [
+   "h2t-ops",
+   "deploy",
+   "list",
+   "[--json]"
+  ],
+  "source": "plugins/h2t-ops/skills/deploy/SKILL.md:16"
+ },
+ {
+  "argv": [
+   "h2t-ops",
+   "deploy",
+   "status",
+   "<service>",
+   "[--target",
+   "<target>]",
+   "[--json]"
+  ],
+  "source": "plugins/h2t-ops/skills/deploy/SKILL.md:17"
+ },
+ {
+  "argv": [
+   "h2t-ops",
+   "deploy",
+   "list",
+   "--json"
+  ],
+  "source": "plugins/h2t-ops/skills/deploy/SKILL.md:79"
+ },
+ {
+  "argv": [
+   "h2t-ops",
+   "deploy",
+   "<service>",
+   "--dry-run",
+   "--json"
+  ],
+  "source": "plugins/h2t-ops/skills/deploy/SKILL.md:86"
+ },
+ {
+  "argv": [
+   "h2t-ops",
+   "deploy",
+   "status",
+   "<service>",
+   "--json"
+  ],
+  "source": "plugins/h2t-ops/skills/deploy/SKILL.md:97"
+ },
+ {
+  "argv": [
+   "h2t-ops",
+   "deploy",
+   "h2t-graphs",
+   "--dry-run",
+   "--json"
+  ],
+  "source": "plugins/h2t-ops/skills/deploy/SKILL.md:120"
+ },
+ {
+  "argv": [
+   "h2t-ops",
+   "research",
+   "search",
+   "--query",
+   "<the research question>",
+   "--mode",
+   "deep",
+   "--full-text",
+   "--json"
+  ],
+  "source": "plugins/h2t-ops/skills/kb/references/ingest.md:150"
+ },
+ {
+  "argv": [
+   "h2t-ops",
+   "research",
+   "research",
+   "--instructions",
+   "...",
+   "--model",
+   "exa-research-fast",
+   "--project",
+   "$RESEARCH_PROJECT",
+   "--json"
+  ],
+  "source": "plugins/h2t-ops/skills/research/SKILL.md:55"
+ },
+ {
+  "argv": [
+   "h2t-ops",
+   "research",
+   "research",
+   "--instructions",
+   "...",
+   "--no-wait",
+   "--json"
+  ],
+  "source": "plugins/h2t-ops/skills/research/SKILL.md:56"
+ },
+ {
+  "argv": [
+   "h2t-ops",
+   "research",
+   "research-get",
+   "--id",
+   "r_xxx",
+   "--project",
+   "$RESEARCH_PROJECT",
+   "--json"
+  ],
+  "source": "plugins/h2t-ops/skills/research/SKILL.md:57"
+ },
+ {
+  "argv": [
+   "h2t-ops",
+   "research",
+   "agent",
+   "--query",
+   "Profile Anthropic: HQ, founded year"
+  ],
+  "source": "plugins/h2t-ops/skills/research/SKILL.md:82"
+ },
+ {
+  "argv": [
+   "h2t-ops",
+   "research",
+   "index",
+   "documents",
+   "--project",
+   "<project_id_or_context_id>",
+   "--output-dir",
+   "<dir>",
+   "--json"
+  ],
+  "source": "plugins/h2t-ops/skills/research/SKILL.md:151"
+ },
+ {
+  "argv": [
+   "h2t-ops",
+   "research",
+   "index",
+   "threads",
+   "--output-dir",
+   "<dir>",
+   "--json"
+  ],
+  "source": "plugins/h2t-ops/skills/research/SKILL.md:152"
+ },
+ {
+  "argv": [
+   "h2t-ops",
+   "research",
+   "show",
+   "document",
+   "<document_id>",
+   "--output-dir",
+   "<dir>",
+   "--json"
+  ],
+  "source": "plugins/h2t-ops/skills/research/SKILL.md:154"
+ },
+ {
+  "argv": [
+   "h2t-ops",
+   "research",
+   "resolve",
+   "--url",
+   "<url>",
+   "--output-dir",
+   "<dir>",
+   "--json"
+  ],
+  "source": "plugins/h2t-ops/skills/research/SKILL.md:158"
+ },
+ {
+  "argv": [
+   "h2t-ops",
+   "research",
+   "resolve",
+   "--alias",
+   "<value>",
+   "--alias-type",
+   "<type>",
+   "--output-dir",
+   "<dir>",
+   "--json"
+  ],
+  "source": "plugins/h2t-ops/skills/research/SKILL.md:159"
+ },
+ {
+  "argv": [
+   "h2t-ops",
+   "research",
+   "doctor",
+   "--output-dir",
+   "<dir>",
+   "--json"
+  ],
+  "source": "plugins/h2t-ops/skills/research/SKILL.md:173"
+ },
+ {
+  "argv": [
+   "h2t-ops",
+   "research",
+   "rebuild-indexes",
+   "--output-dir",
+   "<dir>",
+   "--json"
+  ],
+  "source": "plugins/h2t-ops/skills/research/SKILL.md:174"
+ },
+ {
+  "argv": [
+   "h2t-ops",
+   "research",
+   "cleanup",
+   "--dry-run",
+   "--output-dir",
+   "<dir>",
+   "--json"
+  ],
+  "source": "plugins/h2t-ops/skills/research/SKILL.md:175"
+ },
+ {
+  "argv": [
+   "h2t-ops",
+   "research",
+   "preflight",
+   "--json"
+  ],
+  "source": "plugins/h2t-ops/skills/research/SKILL.md:204"
+ },
+ {
+  "argv": [
+   "h2t-ops",
+   "research",
+   "search",
+   "--query",
+   "...",
+   "--mode",
+   "generic",
+   "--num-results",
+   "10",
+   "--project",
+   "$RESEARCH_PROJECT",
+   "--json"
+  ],
+  "source": "plugins/h2t-ops/skills/research/SKILL.md:205"
+ },
+ {
+  "argv": [
+   "h2t-ops",
+   "research",
+   "crawl",
+   "--url",
+   "https://...",
+   "--project",
+   "$RESEARCH_PROJECT",
+   "--json"
+  ],
+  "source": "plugins/h2t-ops/skills/research/SKILL.md:206"
+ },
+ {
+  "argv": [
+   "h2t-ops",
+   "research",
+   "fetch",
+   "--url",
+   "https://...",
+   "--provider",
+   "auto",
+   "--json"
+  ],
+  "source": "plugins/h2t-ops/skills/research/SKILL.md:207"
+ },
+ {
+  "argv": [
+   "h2t-ops",
+   "research",
+   "visual-ocr",
+   "--fetch-sidecar",
+   "...sources.json",
+   "--image-path",
+   "...png",
+   "--json"
+  ],
+  "source": "plugins/h2t-ops/skills/research/SKILL.md:208"
+ },
+ {
+  "argv": [
+   "h2t-ops",
+   "research",
+   "providers",
+   "--json"
+  ],
+  "source": "plugins/h2t-ops/skills/research/SKILL.md:216"
+ },
+ {
+  "argv": [
+   "h2t-ops",
+   "research",
+   "providers",
+   "--capability",
+   "fetch",
+   "--json"
+  ],
+  "source": "plugins/h2t-ops/skills/research/SKILL.md:217"
+ },
+ {
+  "argv": [
+   "h2t-ops",
+   "research",
+   "route",
+   "--capability",
+   "search",
+   "--json"
+  ],
+  "source": "plugins/h2t-ops/skills/research/SKILL.md:218"
+ }
+]
