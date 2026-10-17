@@ -49,7 +49,12 @@ def test_generation_mismatch_reads_as_absent(home):
     assert state.read() is None
 
 
-def test_interrupt_between_json_and_env_reads_as_absent(home, monkeypatch):
+def test_read_hides_mixed_generations_after_interrupt(home, monkeypatch):
+    """Guards read()'s two-guard rule, not the write order.
+
+    Both guards must fail for this to go red; each covers the case alone.
+    The write order itself is pinned by test_commit_writes_json_before_env.
+    """
     state.commit(_install())
     state.begin_update("4.1.0")
     real = state._write_env
@@ -58,3 +63,42 @@ def test_interrupt_between_json_and_env_reads_as_absent(home, monkeypatch):
         state.commit(_install(version="4.1.0", generation="g2"))
     monkeypatch.setattr(state, "_write_env", real)
     assert state.read() is None
+
+
+def test_commit_writes_json_before_env(home, monkeypatch):
+    state.commit(_install())  # committed g1: both files hold generation g1
+    real = state._atomic_write
+    writes = []
+
+    def recording(path, data):
+        writes.append(path.name)
+        if path.name == "install.json":
+            raise OSError("disk full")
+        real(path, data)
+
+    monkeypatch.setattr(state, "_atomic_write", recording)
+    with pytest.raises(OSError):
+        state.commit(_install(version="4.1.0", generation="g2"))
+    assert writes == ["install.json"]
+    env = (home / ".h2t/run/install.env").read_bytes().splitlines()
+    assert env[:3] == [b"STATE=ready", b"VERSION=4.0.0", b"GENERATION=g1"]
+    assert state.read().generation == "g1"
+
+
+def test_failed_replace_leaves_no_temp_file(home, monkeypatch):
+    def refuse(src, dst):
+        raise OSError("replace refused")
+
+    monkeypatch.setattr(state.os, "replace", refuse)
+    with pytest.raises(OSError):
+        state.commit(_install())
+    assert list(state.run_dir().iterdir()) == []
+
+
+def test_read_ignores_unknown_install_json_keys(home):
+    state.commit(_install())
+    path = home / ".h2t/run/install.json"
+    data = json.loads(path.read_text(encoding="utf-8"))
+    data.update(state="ready", future="x")
+    path.write_text(json.dumps(data), encoding="utf-8")
+    assert state.read().version == "4.0.0"

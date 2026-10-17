@@ -2,6 +2,7 @@
 """Install state: install.json for Python, install.env for bash; env is the commit point."""
 from __future__ import annotations
 
+import dataclasses
 import json
 import os
 import tempfile
@@ -27,9 +28,16 @@ class Install:
 def _atomic_write(path: Path, data: bytes) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=path.name + ".")
-    with os.fdopen(fd, "wb") as fh:
-        fh.write(data)
-    os.replace(tmp, path)
+    try:
+        with os.fdopen(fd, "wb") as fh:
+            fh.write(data)
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except FileNotFoundError:
+            pass
+        raise
 
 
 def _fwd(p: str | None) -> str:
@@ -71,9 +79,10 @@ def read() -> Install | None:
     env = _read_env()
     if env.get("STATE") != "ready":
         return None
+    fields = {f.name for f in dataclasses.fields(Install)}
     try:
         data = json.loads((run_dir() / "install.json").read_text(encoding="utf-8"))
-        install = Install(**data)
-    except (FileNotFoundError, ValueError, TypeError):
+        install = Install(**{k: v for k, v in data.items() if k in fields})
+    except (FileNotFoundError, ValueError, TypeError, AttributeError):
         return None
     return install if install.generation == env.get("GENERATION") else None
