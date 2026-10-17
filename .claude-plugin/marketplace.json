@@ -13,7 +13,13 @@
       "author": {
         "name": "lichtpfad"
       },
-      "source": "./plugins/h2t-core",
+      "source": {
+        "source": "git-subdir",
+        "url": "https://github.com/lichtpfad/h2t-skills.git",
+        "path": "plugins/h2t-core",
+        "ref": "v3.3.0",
+        "sha": "1436021e58fbec78e41d449db95a953c5700c525"
+      },
       "category": "development",
       "strict": false
     },
@@ -24,7 +30,13 @@
       "author": {
         "name": "lichtpfad"
       },
-      "source": "./plugins/h2t-ops",
+      "source": {
+        "source": "git-subdir",
+        "url": "https://github.com/lichtpfad/h2t-skills.git",
+        "path": "plugins/h2t-ops",
+        "ref": "v3.3.0",
+        "sha": "1436021e58fbec78e41d449db95a953c5700c525"
+      },
       "category": "productivity",
       "strict": false
     },
@@ -35,7 +47,13 @@
       "author": {
         "name": "lichtpfad"
       },
-      "source": "./plugins/h2t-dev",
+      "source": {
+        "source": "git-subdir",
+        "url": "https://github.com/lichtpfad/h2t-skills.git",
+        "path": "plugins/h2t-dev",
+        "ref": "v3.3.0",
+        "sha": "1436021e58fbec78e41d449db95a953c5700c525"
+      },
       "category": "development",
       "strict": false
     },
@@ -46,7 +64,13 @@
       "author": {
         "name": "lichtpfad"
       },
-      "source": "./plugins/h2t-arch",
+      "source": {
+        "source": "git-subdir",
+        "url": "https://github.com/lichtpfad/h2t-skills.git",
+        "path": "plugins/h2t-arch",
+        "ref": "v3.3.0",
+        "sha": "1436021e58fbec78e41d449db95a953c5700c525"
+      },
       "category": "productivity",
       "strict": false
     },
@@ -57,7 +81,13 @@
       "author": {
         "name": "lichtpfad"
       },
-      "source": "./plugins/h2t-creative",
+      "source": {
+        "source": "git-subdir",
+        "url": "https://github.com/lichtpfad/h2t-skills.git",
+        "path": "plugins/h2t-creative",
+        "ref": "v3.3.0",
+        "sha": "1436021e58fbec78e41d449db95a953c5700c525"
+      },
       "category": "productivity",
       "strict": false
     }
