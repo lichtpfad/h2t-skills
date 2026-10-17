@@ -82,9 +82,10 @@ def test_a_missing_handler_exits_5_and_names_what_it_tried(tmp_path):
 
 
 def test_no_handler_name_is_a_usage_error(monkeypatch):
+    """64, not 2: for a hook, 2 is the harness's block signal (spec §6.1, ruling R8)."""
     from h2t_ops.hook_entry import main
     monkeypatch.setattr(sys, "argv", ["h2t-hook"])
-    assert main() == 2
+    assert main() == 64
 
 
 @pytest.mark.parametrize("shebang", ["#!/usr/bin/env bash\n", "#!/bin/sh\n"])
