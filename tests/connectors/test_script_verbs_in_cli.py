@@ -525,9 +525,15 @@ def test_research_search_envelope_matches(capsys, monkeypatch, tmp_path):
         assert result["meta"][key] == script_env["meta"][key]
 
 
-def test_research_fetch_matches(capsys, monkeypatch, tmp_path):
+def _lf(text: str) -> str:
+    return text.replace("\r\n", "\n").replace("\r", "\n")
+
+
+@pytest.mark.parametrize("newline", [b"\n", b"\r\n"], ids=["lf", "crlf"])
+def test_research_fetch_matches(capsys, monkeypatch, tmp_path, newline):
+    # The fixture is served with both line endings: Git for Windows checks it out as CRLF.
     html = (ROOT / "tests" / "connectors" / "research" / "fixtures" / "fetch"
-            / "public_article.html").read_bytes()
+            / "public_article.html").read_bytes().replace(b"\r\n", b"\n").replace(b"\n", newline)
     url = "https://example.com/pops-intro"
     monkeypatch.setattr(urllib.request, "urlopen",
                         lambda req, timeout=None: _urlopen_response(html, url=url))
@@ -539,8 +545,14 @@ def test_research_fetch_matches(capsys, monkeypatch, tmp_path):
     cli_code, result = _cli(capsys, ["research", "fetch", *common, "--json",
                                      "--output-dir", str(tmp_path / "c")])
     assert cli_code == 0, result
-    for key in ("status", "provider_used", "title", "body_markdown", "body_chars", "content_type"):
+    for key in ("status", "provider_used", "title", "content_type"):
         assert result[key] == script_env[key], key
+    # Deliberate difference (d0a94e0f): the package turns CRLF and a lone CR into LF before
+    # parsing, as the HTML spec does; the old script keeps a \r at every preserved line break.
+    # Body text is compared after the same normalisation; body_chars follows the body.
+    assert "\r" not in result["body_markdown"]
+    assert result["body_markdown"] == _lf(script_env["body_markdown"])
+    assert result["body_chars"] == script_env["body_chars"] - script_env["body_markdown"].count("\r")
 
 
 def test_research_preflight_jina_matches(capsys, monkeypatch):
