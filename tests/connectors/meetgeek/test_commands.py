@@ -315,22 +315,15 @@ class TestCmdUploadDirectUrl:
     """
 
     def test_delegates_to_submit_url_not_inline_post(self, tmp_path, monkeypatch):
+        # The script's cmd_upload became pipeline.upload when meetgeek_cli.py was deleted
+        # (Task 12); the delegation it guards is the same.
         import argparse
-        import importlib.util
-        import sys
-        from pathlib import Path
 
-        CLI = (Path(__file__).resolve().parent.parent.parent.parent
-               / "plugins" / "h2t-ops" / "skills" / "meetgeek" / "scripts" / "meetgeek_cli.py")
-        spec = importlib.util.spec_from_file_location("_cli_download_url_test", CLI)
-        assert spec and spec.loader
-        mod = importlib.util.module_from_spec(spec)
-        sys.modules["_cli_download_url_test"] = mod
-        spec.loader.exec_module(mod)
+        from h2t_ops.connectors.meetgeek import pipeline, recovery
 
         captured = []
         monkeypatch.setattr(
-            mod, "_submit_url_via_h2t_ops",
+            recovery, "submit_url_via_h2t_ops",
             lambda url, title, lang: captured.append((url, title, lang)) or {"message": "ok"},
         )
 
@@ -341,7 +334,7 @@ class TestCmdUploadDirectUrl:
             from_file=None,
             dry_run=False,
         )
-        mod.cmd_upload(args)
+        pipeline.upload(args)
 
         assert len(captured) == 1
         assert captured[0][0] == args.download_url

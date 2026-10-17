@@ -11,11 +11,52 @@ metadata:
 
 Scaffold a new visual profile for h2t-creative.
 
-## Setup
+<!-- version-check:begin -->
+## Version check
+
+Run this before any other command of this skill:
 
 ```bash
-PLUGIN_ROOT="$(h2t-creative root)"
-PROFILES_DIR="$PLUGIN_ROOT/profiles"
+h2t-ops version --expect @VERSION@ --json
+```
+
+Act on the result, in this order:
+
+1. JSON with `"ok": true` — continue.
+2. JSON with `"ok": false` — show the user `error.hint` as it is and stop this skill until
+   it is resolved. Do not run anything the hint names unless the user asks you to: on
+   `reason: path` it is a command for the user to decide on. `result.reason` names the
+   case: `not_installed`, `version` or `path`.
+3. `command not found` — read `~/.h2t/run/install.env`
+   (`grep -E '^(STATE|H2T_HOOK)=' ~/.h2t/run/install.env`). With `STATE=ready` the install
+   is fine and PATH does not reach it: show the directory of the `H2T_HOOK=` path, ask the
+   user to restart the harness, and offer `uv tool update-shell` for them to run. Without
+   it there is no install: give the user `@BOOTSTRAP@ sync`.
+4. Anything else (a non-zero exit without JSON, the usage text of an older CLI) — give the
+   user `@BOOTSTRAP@ sync`.
+<!-- version-check:end -->
+
+## Setup
+
+New profiles go to the user's profile directory, outside every install, so an update of
+the CLI or the plugins never touches them:
+
+```bash
+h2t-creative profiles-dir          # $PROFILES_DIR: ~/.h2t/creative/profiles
+echo "$(h2t-creative root)/profiles" # $SHIPPED_PROFILES: the profiles shipped with the CLI
+```
+
+Create `$PROFILES_DIR` if it does not exist. Never write under `h2t-creative root`: that
+directory belongs to the installed CLI and is replaced on every update.
+
+**A profile made before this change** was written into the plugin cache
+(`~/.claude/plugins/cache/lichtpfad/h2t-creative/<version>/profiles/<name>/`). It is still
+there, and nothing moves it. To keep using it, copy that directory once into the one
+`h2t-creative profiles-dir` prints — the user does it, or approves it, since it names a
+path in their plugin cache:
+
+```text
+~/.claude/plugins/cache/lichtpfad/h2t-creative/<version>/profiles/<name>/  →  ~/.h2t/creative/profiles/<name>/
 ```
 
 ## Wizard Steps
@@ -86,7 +127,7 @@ Generate from wizard color palette answers. Must define:
 
 ### Component stubs
 
-Copy component HTML/CSS from `$PROFILES_DIR/h2t-default/components/` as starting point,
+Copy component HTML/CSS from `$SHIPPED_PROFILES/h2t-default/components/` as starting point,
 then update color references to match the new tokens.css palette.
 
 ### fx/ boilerplate (if requested)

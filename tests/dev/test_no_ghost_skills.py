@@ -21,15 +21,11 @@ ROOT = Path(__file__).resolve().parents[2]
 
 # Directory -> why it has no SKILL.md.
 #
-# Every entry here is a directory sitting under skills/ that is not a skill, which is a
-# contradiction the list only manages. docs-init left it in #458 the right way: the script
-# moved to plugins/h2t-dev/scripts/docs-init/, where its name no longer claims to be
-# something the harness can reach. The remaining three are candidates for the same move.
-_CODE_NOT_SKILLS = {
-    "h2t-dev/docs-index": "index.py — the navigation generator docs-lint calls",
-    "h2t-ops/drive": "connector scripts",
-    "h2t-ops/meetgeek": "connector scripts and their tests",
-}
+# Every entry here would be a directory sitting under skills/ that is not a skill, which is
+# a contradiction the list only manages. docs-init left it in #458 by moving out from under
+# skills/; Task 12 (#541) emptied it, when docs-index, drive and meetgeek, which held only
+# scripts, left with the plugin scripts. A new entry has to be argued for in a diff.
+_CODE_NOT_SKILLS: dict[str, str] = {}
 
 
 def _skill_dirs() -> list[tuple[str, Path]]:

@@ -7,11 +7,7 @@ import pytest
 from h2t_ops import cli
 from h2t_ops.core import secrets as core_secrets
 from h2t_ops.lifecycle.activity import writer as activity_writer
-
-SCRIPTS_DIR = Path(__file__).parent.parent / "plugins" / "h2t-core" / "skills" / "setup" / "scripts"
-sys.path.insert(0, str(SCRIPTS_DIR))
-
-import setup_h2t  # noqa: E402
+from h2t_ops.setup import legacy as setup_h2t
 
 
 def _no_host_overrides(monkeypatch):

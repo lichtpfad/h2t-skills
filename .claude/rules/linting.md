@@ -55,18 +55,22 @@ appears locally and not in CI, compare `ruff --version` before assuming it is re
 `docs-lint` for docs structure and frontmatter. `.pymarkdown.yaml` rules apply to all
 `docs/**/*.md`.
 
-There is **no `docs-lint` command** — this repo ships no such entry point, and `uv run
-docs-lint` fails with "Failed to spawn". It is a plugin skill script, invoked the way the
-skill invokes it:
+docs-lint is the `h2t-docs-lint` command (package code in `h2t_ops/tools/docs`, since
+Task 12 of #541; the plugin script it replaced is deleted). Where the tool is not installed,
+run it from the checkout through uv:
 
 ```
-.venv/bin/python plugins/h2t-dev/skills/docs-lint/scripts/lint.py doctor
+h2t-docs-lint doctor
+uv run h2t-docs-lint doctor
 ```
 
-It prints a report and **exits 1 whenever there are findings** (`lint.py:1060`), so `doctor`
-exits 1 here even though it prints `status: ok`. Do not treat a non-zero exit as a broken
-command, and do not gate a step on `doctor` exiting 0 until the findings are cleared.
-Wherever a plan or rule says `docs-lint <subcommand>`, that is the script, not a binary.
+The name `docs-lint` on its own is still not a command: `uv run docs-lint` fails with
+"Failed to spawn". Wherever a plan or rule says `docs-lint <subcommand>`, that is
+`h2t-docs-lint <subcommand>`.
+
+It prints a report and **exits 1 whenever there are findings**, so `doctor` exits 1 here
+even though it prints `status: ok`. Do not treat a non-zero exit as a broken command, and
+do not gate a step on `doctor` exiting 0 until the findings are cleared.
 
 **The baseline this file used to carry — "50 orphans, 32 naming, 6 structure, 39 metadata,
 12 project", verified 2026-08-23 — was the truncated view.** `_DIM_LIMIT = 50` capped every
@@ -93,10 +97,10 @@ kept producing findings from the five it did not reach (#271).
 
 ```
 C:/dev/h2t-skills/.venv/Scripts/pytest tests/        # Windows
-C:/dev/h2t-skills/.venv/Scripts/pytest tests/docs/
+C:/dev/h2t-skills/.venv/Scripts/pytest tests/tools/docs/
 
 .venv/bin/pytest tests/                              # macOS
-.venv/bin/pytest tests/docs/
+.venv/bin/pytest tests/tools/docs/
 ```
 
 Bare `python` is not on PATH on macOS — use `.venv/bin/python` or `python3`. A uv-built venv

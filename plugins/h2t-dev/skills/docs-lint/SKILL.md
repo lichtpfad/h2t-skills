@@ -14,11 +14,36 @@ metadata:
 
 Scope: h2t-stack repos (Claude Code, `.claude/rules/`, `docs/superpowers/`, h2t standards).
 
-## Variables
+<!-- version-check:begin -->
+## Version check
+
+Run this before any other command of this skill:
 
 ```bash
-RUN="uv run --no-project --with pyyaml python"
-LINT="$(h2t-dev root)/skills/docs-lint/scripts/lint.py"
+h2t-ops version --expect @VERSION@ --json
+```
+
+Act on the result, in this order:
+
+1. JSON with `"ok": true` — continue.
+2. JSON with `"ok": false` — show the user `error.hint` as it is and stop this skill until
+   it is resolved. Do not run anything the hint names unless the user asks you to: on
+   `reason: path` it is a command for the user to decide on. `result.reason` names the
+   case: `not_installed`, `version` or `path`.
+3. `command not found` — read `~/.h2t/run/install.env`
+   (`grep -E '^(STATE|H2T_HOOK)=' ~/.h2t/run/install.env`). With `STATE=ready` the install
+   is fine and PATH does not reach it: show the directory of the `H2T_HOOK=` path, ask the
+   user to restart the harness, and offer `uv tool update-shell` for them to run. Without
+   it there is no install: give the user `@BOOTSTRAP@ sync`.
+4. Anything else (a non-zero exit without JSON, the usage text of an older CLI) — give the
+   user `@BOOTSTRAP@ sync`.
+<!-- version-check:end -->
+
+## Variables
+
+The linter is the `h2t-docs-lint` command; no interpreter or script path is involved.
+
+```bash
 ROOT="${1:-.}"
 DRY_RUN="${2:-}"   # pass "--dry-run" to skip issue creation and commits
 ```
@@ -29,7 +54,7 @@ Run in parallel:
 
 ```bash
 git -C "$ROOT" ls-files --cached --others --exclude-standard 2>/dev/null | head -500
-$RUN "$LINT" doctor --json --root "$ROOT" 2>/dev/null
+h2t-docs-lint doctor --json --root "$ROOT" 2>/dev/null
 cat "$ROOT/CLAUDE.md" 2>/dev/null | head -80
 cat "$ROOT/.h2t/docs-lint.yaml" 2>/dev/null
 ls "$ROOT/.claude/rules/" 2>/dev/null
@@ -71,22 +96,8 @@ Output exactly 3 lines:
 
 ```bash
 # Read last valid state (schema=1, handle corrupt lines)
-LAST_STATE=$($RUN - <<'PYEOF'
-import sys, json
-from pathlib import Path
-state_file = Path("$ROOT/.h2t/lint-state.jsonl")
-if not state_file.exists():
-    sys.exit(0)
-for line in reversed(state_file.read_text().splitlines()):
-    try:
-        obj = json.loads(line)
-        if obj.get("schema") == 1:
-            print(json.dumps(obj))
-            sys.exit(0)
-    except Exception:
-        pass
-PYEOF
-)
+# -R reads raw lines and fromjson? drops the corrupt ones; the last schema-1 line wins.
+LAST_STATE=$(jq -cR 'fromjson? | select(.schema == 1)' "$ROOT/.h2t/lint-state.jsonl" 2>/dev/null | tail -1)
 
 # If no valid state → fall back to full audit
 if [ -z "$LAST_STATE" ]; then
@@ -95,7 +106,7 @@ if [ -z "$LAST_STATE" ]; then
 fi
 
 # Capture current finding IDs via doctor --json
-$RUN "$LINT" doctor --json --root "$ROOT" > /tmp/lint-current.json 2>/dev/null
+h2t-docs-lint doctor --json --root "$ROOT" > /tmp/lint-current.json 2>/dev/null
 CURRENT_IDS=$(jq '[.findings[].id]' /tmp/lint-current.json 2>/dev/null || echo "[]")
 LAST_IDS=$(echo "$LAST_STATE" | jq '.finding_ids // []' 2>/dev/null || echo "[]")
 
@@ -103,7 +114,7 @@ LAST_IDS=$(echo "$LAST_STATE" | jq '.finding_ids // []' 2>/dev/null || echo "[]"
 NEW_IDS=$(jq -n --argjson cur "$CURRENT_IDS" --argjson last "$LAST_IDS" '$cur - $last')
 
 # Apply safe fixes automatically
-$RUN "$LINT" fix-safe --root "$ROOT"
+h2t-docs-lint fix-safe --root "$ROOT"
 
 # Show only delta
 jq -r '.[]' <<< "$NEW_IDS" | while read id; do echo "  [NEW] $id"; done
@@ -154,7 +165,7 @@ Dry-run mode (`$DRY_RUN` = `--dry-run`): skip commits and issue creation through
 
 ```bash
 mkdir -p "$ROOT/.h2t"
-$RUN "$LINT" doctor --json --root "$ROOT" > "$ROOT/.h2t/lint-before.json" 2>/dev/null
+h2t-docs-lint doctor --json --root "$ROOT" > "$ROOT/.h2t/lint-before.json" 2>/dev/null
 BEFORE_COUNT=$(jq '.findings | length' "$ROOT/.h2t/lint-before.json" 2>/dev/null || echo 0)
 ```
 
@@ -242,8 +253,8 @@ Dry-run: print issue titles/bodies to stdout instead.
 
 Safe (automatic):
 ```bash
-$RUN "$LINT" fix-safe --root "$ROOT"
-$RUN "$LINT" fix-index --root "$ROOT" --apply
+h2t-docs-lint fix-safe --root "$ROOT"
+h2t-docs-lint fix-index --root "$ROOT" --apply
 ```
 
 Destructive (confirm each before running):
@@ -256,7 +267,7 @@ Stage 4: skip all fixes.
 ### Step H: Validation gate
 
 ```bash
-$RUN "$LINT" doctor --json --root "$ROOT" > "$ROOT/.h2t/lint-after.json" 2>/dev/null
+h2t-docs-lint doctor --json --root "$ROOT" > "$ROOT/.h2t/lint-after.json" 2>/dev/null
 
 DELTA=$(jq -n \
   --slurpfile before "$ROOT/.h2t/lint-before.json" \
@@ -310,9 +321,9 @@ Generate a correctly-named file with required frontmatter (fields sourced from
 over hand-writing — hand-written files trigger frontmatter findings.
 
 ```bash
-$RUN "$LINT" new plan <slug> --root . [--milestone M3] [--title "..."]
-$RUN "$LINT" new spec <slug> --root . [--milestone M3]
-$RUN "$LINT" new adr  <slug> --root .
+h2t-docs-lint new plan <slug> --root . [--milestone M3] [--title "..."]
+h2t-docs-lint new spec <slug> --root . [--milestone M3]
+h2t-docs-lint new adr  <slug> --root .
 ```
 
 - `plan`/`spec` → `docs/superpowers/{plans,specs}/YYYY-MM-DD-<slug>.md` (date = today)
@@ -333,10 +344,10 @@ the document and something outside `docs/` together: the plan was written and
 nothing shipped under it (69 of 111 here).
 
 ```bash
-$RUN "$LINT" retire --root .                    # list candidates
-$RUN "$LINT" retire --root . --older-than 90    # a stricter cut
-$RUN "$LINT" retire --root . --apply            # git mv into docs/archive/
-$RUN "$LINT" retire --root . --never-shipped     # only `с кодом = 0`
+h2t-docs-lint retire --root . --json             # list candidates
+h2t-docs-lint retire --root . --older-than 90 --json  # a stricter cut
+h2t-docs-lint retire --root . --apply --json     # git mv into docs/archive/
+h2t-docs-lint retire --root . --never-shipped --json  # only `с кодом = 0`
 ```
 
 `--never-shipped` narrows the list to that second number being zero. It selects,
@@ -354,12 +365,12 @@ on h2t-skills), so the judgement is a person's and this only makes it cheap.
 ## Legacy sub-commands (still work)
 
 ```bash
-$RUN "$LINT" audit --root .
-$RUN "$LINT" plan --root .
-$RUN "$LINT" fix-safe --root .
-$RUN "$LINT" fix-index --root .
-$RUN "$LINT" doctor --json --root .
-$RUN "$LINT" retire --root .
+h2t-docs-lint audit --root .
+h2t-docs-lint plan --root . --json
+h2t-docs-lint fix-safe --root .
+h2t-docs-lint fix-index --root .
+h2t-docs-lint doctor --json --root .
+h2t-docs-lint retire --root . --json
 ```
 
 ## References

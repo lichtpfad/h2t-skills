@@ -13,7 +13,7 @@ from pathlib import Path
 
 _MODULE = (
     Path(__file__).parents[2]
-    / "plugins" / "h2t-core" / "hooks-handlers" / "reap_codex.py"
+    / "h2t_ops" / "hooks" / "reap_codex.py"
 )
 _spec = importlib.util.spec_from_file_location("reap_codex", _MODULE)
 reap_codex = importlib.util.module_from_spec(_spec)

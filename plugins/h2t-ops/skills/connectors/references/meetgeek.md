@@ -21,7 +21,9 @@
 
 - Auth-check, teams, list, get, transcript, summary, highlights, insights, and download-url are provider reads.
 - Submit-url writes to MeetGeek and requires explicit user intent.
-- Local recording recovery remains a legacy script/coordinator workflow, not connector runtime and not an active per-connector skill.
+- Local recording recovery (`upload`, `sync`, `convert`, `drive-audit`, `staging-purge`) is a set of connector verbs since the recovery script moved into the package; there is no separate skill for it.
+- `list` returns one page: `--limit` is the page size, `--cursor` takes the next one, and a date range needs both `--from` and `--to`. The retired script walked every page and capped the total.
+- `transcript`/`summary`/`highlights`/`insights --format md` fetch the meeting's metadata for the frontmatter, which carries `provider_url`.
 - A public Drive link is a step in the flow, not a resting state — see step 5 of the upload flow.
 - Do not include transcript bodies in GitHub issues.
 
@@ -77,16 +79,16 @@ MeetGeek API accepts only **public URLs** — not local files. For local `.webm`
 
 **Do NOT** route local recording files to `h2t-transcription` — that pipeline is for Vimeo/course content, not meeting recordings.
 
-## Retention (recovery script, not the connector)
+## Retention (the recovery verbs)
 
-The recovery pipeline in `plugins/h2t-ops/skills/meetgeek/scripts/` sweeps after itself:
-every `upload --from-file` batch revokes public ACLs and deletes staged media older than
-24 hours, then reports what it did under `housekeeping` in its JSON. Both sweeps are also
-available on their own:
+The recovery pipeline (`h2t-ops meetgeek upload`, `sync`, `convert` — once a plugin script,
+now verbs of the connector) sweeps after itself: every `upload --from-file` batch revokes
+public ACLs and deletes staged media older than 24 hours, then reports what it did under
+`housekeeping` in its JSON. Both sweeps are also available on their own:
 
 ```bash
-meetgeek_cli.py drive-audit --revoke --min-age-hours 24
-meetgeek_cli.py staging-purge --dry-run
+h2t-ops meetgeek drive-audit --revoke --min-age-hours 24 --json
+h2t-ops meetgeek staging-purge --dry-run --json
 ```
 
 The grace period is not a preference. `submit-url` returns when MeetGeek accepts the URL,

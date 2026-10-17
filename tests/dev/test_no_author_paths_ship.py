@@ -58,14 +58,8 @@ SCANNED_SUFFIXES = {".py", ".md", ".yaml", ".yml", ".json", ".sh", ""}
 # prose recording a default that was removed, and fixtures that assert an old Windows
 # path still resolves — the second is not debt, it is the portability proof.
 EXPECTED = {
-    "plugins/h2t-core/skills/init-project/scripts/detect_project.py":
+    "h2t_ops/lifecycle/detect_project.py":
         "comment recording the C:/dev anchor these patterns replaced",
-    "plugins/h2t-core/skills/init-project/scripts/test_detect.py":
-        "deliberate: fixtures proving a C:/dev path resolves the same as ~/Projects",
-    "plugins/h2t-dev/lib/docs/common.py":
-        "comment recording the removed C:/dev default",
-    "plugins/h2t-core/skills/scaffold-project/scripts/scaffold_project.py":
-        "comment recording the removed _DEV_ROOT default",
     "plugins/h2t-core/skills/scaffold-project/SKILL.md":
         "prose recording the removed C:/dev/{id} default",
 }

@@ -2,13 +2,11 @@
 from __future__ import annotations
 
 import importlib.util
-import io
-import json
 from pathlib import Path
 
 
 def _load():
-    path = Path(__file__).parents[2] / "plugins" / "h2t-core" / "hooks-handlers" / "structure_guard.py"
+    path = Path(__file__).parents[2] / "h2t_ops" / "hooks" / "structure_guard.py"
     spec = importlib.util.spec_from_file_location("structure_guard_root_under_test", path)
     module = importlib.util.module_from_spec(spec)
     assert spec and spec.loader
@@ -40,10 +38,9 @@ def test_new_root_dir_blocked_existing_or_declared_allowed(tmp_path):
     assert m.check_root_universal("newthing/x.py", cfg, tmp_path)[0] == 0         # declared
 
 
-def test_main_blocks_root_scratch_without_config(tmp_path, monkeypatch, capsys):
+def test_handle_blocks_root_scratch_without_config(tmp_path, monkeypatch):
     m = _load()
     monkeypatch.chdir(tmp_path)
     payload = {"tool_name": "Write", "tool_input": {"file_path": str(tmp_path / "null"), "content": ""}}
-    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(payload)))
-    assert m.main() == 2
-    assert "BLOCKED" in capsys.readouterr().err
+    reply = m.handle(payload)
+    assert reply.block is True and "BLOCKED" in reply.text

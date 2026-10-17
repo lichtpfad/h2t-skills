@@ -200,11 +200,11 @@ Persisted in the artifact `.sources.json`; emitted to stdout via `--json`.
 | Network/timeout | yes | 2 | 1.5s + jitter |
 | Malformed JSON | no | 1 | — |
 
-Hard cap on cumulative sleep: 10 seconds. When exceeded: `EXA_WARN:RETRY_BUDGET_EXHAUSTED` to stderr, retry skipped.
+Hard cap on cumulative sleep: 10 seconds. When exceeded, the retry is skipped; nothing is printed, and the envelope's `telemetry.attempts` shows the attempts made.
 
 ---
 
-## Fetch Envelope Schema (fetch_url.py)
+## Fetch Envelope Schema (`h2t-ops research fetch`)
 
 Same `envelope_version: "1"` as Exa search envelope (status semantics OK / DEGRADED / FAILED), but flat single-URL shape:
 

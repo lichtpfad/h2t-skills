@@ -46,9 +46,8 @@ KNOWN_DEBT = frozenset({
     # docs-lint and milestone-closure left this list in #459, the same way h2t-creative
     # did: plugins/h2t-dev/bin/h2t-dev derives the root from its own location, and the
     # thirteen `${CLAUDE_PLUGIN_ROOT}/...` sites became `$(h2t-dev root)/...`.
-    # docs-sync-labels stays: it reads the variable too, but behind a fallback that
-    # guesses the newest cache directory — working, and still a guess.
-    "h2t-dev:docs-sync-labels",
+    # docs-sync-labels left it in Task 12: it runs the h2t-docs-sync-labels command, so
+    # the cache-directory guess behind its fallback has nothing left to find.
 })
 
 

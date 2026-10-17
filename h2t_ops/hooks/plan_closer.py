@@ -21,7 +21,7 @@ itself with `lifecycle: living` in its frontmatter, and is never stamped.
 Exit code is always 0. This is bookkeeping after the fact — a failure here must
 never look like a failed merge.
 
-Port of hooks-handlers/plan_closer.py: the functions are the original's (tests/hooks/test_hook_module_parity.py);
+Port of the 3.x hooks-handlers/plan_closer.py, deleted in Task 12a: the functions are the original's (AST-compared until the deletion);
 `main()` became `handle()`, and the reply goes out through `h2t_ops.hooks.emit`.
 """
 from __future__ import annotations

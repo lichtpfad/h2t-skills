@@ -15,10 +15,11 @@ import pytest
 
 REPO = Path(__file__).resolve().parents[2]
 
+# drive_cli.py and meetgeek_cli.py were cases here until Task 12 deleted them. The
+# connectors that replaced them import their provider libraries lazily, which
+# tests/connectors/*/test_*.py pins (e.g. test_module_has_no_module_level_requests_import).
 CASES = [
-    ("plugins/h2t-core/skills/init-project/scripts/apply_registration.py", "ruamel", 1),
-    ("plugins/h2t-ops/skills/drive/scripts/drive_cli.py", "googleapiclient", 1),
-    ("plugins/h2t-ops/skills/meetgeek/scripts/meetgeek_cli.py", "requests", 2),
+    ("h2t_ops/lifecycle/apply_registration.py", "ruamel", 1),
 ]
 
 

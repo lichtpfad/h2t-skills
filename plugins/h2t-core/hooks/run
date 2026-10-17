@@ -15,7 +15,7 @@ re='"hook_event_name"[[:space:]]*:[[:space:]]*"([A-Za-z]+)"'
 
 # Only a leading slash command is an invocation: UserPromptSubmit also fires for harness
 # messages such as <task-notification>, whose paths contain the same words. JSON escapes
-# leading whitespace as \n, \r, \t. Same pattern as hooks-handlers/gather-on-prompt.
+# leading whitespace as \n, \r, \t. The pattern of the 3.x gather-on-prompt handler.
 if [ "$event" = "UserPromptSubmit" ]; then
   re='"(user_)?prompt"[[:space:]]*:[[:space:]]*"([[:space:]]|\\[nrt])*/([A-Za-z0-9_.-]+:)?(session-start|handoff|init-project)([[:space:]"]|\\[nrt]|$)'
   [[ $input =~ $re ]] || exit 0

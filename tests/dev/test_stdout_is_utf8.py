@@ -78,16 +78,16 @@ def test_every_json_emitter_forces_utf8(path):
 
 
 def test_a_real_run_survives_a_cp1252_pipe():
-    """The behavioural half, on the one script whose --help carries `—` and `→`.
+    """The behavioural half, on a --help that carries `→`.
 
-    Without the guard this exits 1 with an empty stdout; the assertion is on both, so a
-    script that starts printing nothing would fail here too.
+    It ran meetgeek_cli.py --help until Task 12 deleted the script; the same help is now
+    `h2t-ops meetgeek --help`. Without the guard this exits 1 with an empty stdout; the
+    assertion is on both, so a command that starts printing nothing would fail here too.
     """
-    script = ROOT / "plugins/h2t-ops/skills/meetgeek/scripts/meetgeek_cli.py"
     result = subprocess.run(
-        [sys.executable, str(script), "--help"],
+        [sys.executable, "-m", "h2t_ops.cli", "meetgeek", "--help"],
         capture_output=True, encoding="utf-8", timeout=120,
         env={**os.environ, "PYTHONIOENCODING": "cp1252"}, cwd=ROOT,
     )
     assert result.returncode == 0, result.stderr[-400:]
-    assert "—" in result.stdout and "→" in result.stdout, repr(result.stdout[:200])
+    assert "→" in result.stdout, repr(result.stdout[:200])

@@ -1,7 +1,7 @@
 """`h2t-hook <name>`: a name in HANDLERS runs in-process through the one emitter (spec §6.2).
 
-Names outside HANDLERS keep the 3.x path through plugin_script_path; that path is covered
-by tests/core/test_hook_entry.py.
+A name outside HANDLERS exits 5 (tests/core/test_hook_entry.py). The `Command` entries keep
+their own 3.x process contract (tests/hooks/test_command_hooks.py).
 """
 import io
 import json
@@ -26,13 +26,17 @@ def run(monkeypatch, tmp_path):
     return _run
 
 
+# Every name the 3.x plugin shipped in hooks-handlers/, deleted in Task 12a. hooks.json,
+# projects' settings.json and git hooks call these names, so none may be renamed.
+NAMES_3X = {"gather-on-skill", "gather-on-prompt", "inject-h2t-context", "structure-guard",
+            "grade-guard", "plain-guard", "plan-closer", "new-repo-hint",
+            "session-end-reap-codex", "layout-precommit", "bulk-precommit",
+            "secrets-precommit", "on-stop", "post-git-commit-docs-lint"}
+
+
 def test_handlers_are_keyed_by_the_3x_handler_names():
-    """Task 12 writes `hooks/run <name>` from these keys; each must be a 3.x handler name."""
-    from pathlib import Path
-    handlers = Path(__file__).resolve().parents[2] / "plugins" / "h2t-core" / "hooks-handlers"
-    assert hooks.HANDLERS
+    assert set(hooks.HANDLERS) == NAMES_3X
     for name, handle in hooks.HANDLERS.items():
-        assert (handlers / name).is_file(), name
         assert callable(handle), name
 
 

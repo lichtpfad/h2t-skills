@@ -1,9 +1,9 @@
 # Hook Rules
 
-Hooks in `hooks-handlers/` are enforcement, not convenience. 672249e moved gathering out
-of the model's hands ("Closes #12 — gather.py can no longer be ignored by Claude"). Do not
-replace a hook with an instruction in SKILL.md, and do not "simplify" it into something the
-model performs itself.
+Hooks (`h2t_ops/hooks/`, reached through each plugin's `hooks/run`) are enforcement, not
+convenience. 672249e moved gathering out of the model's hands ("Closes #12 — gather.py can
+no longer be ignored by Claude"). Do not replace a hook with an instruction in SKILL.md,
+and do not "simplify" it into something the model performs itself.
 
 A silent hook is a failure, not a steady state.
 

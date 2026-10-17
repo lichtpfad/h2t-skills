@@ -9,8 +9,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-RECOVERY = Path(__file__).resolve().parent.parent.parent.parent / \
-           "plugins" / "h2t-ops" / "skills" / "meetgeek" / "scripts" / "recovery.py"
+RECOVERY = (Path(__file__).resolve().parents[3] / "h2t_ops" / "connectors" / "meetgeek"
+            / "recovery.py")
 
 
 @pytest.fixture()

@@ -18,8 +18,8 @@ dependencies = [
   "qrcode>=7.4",
   "rapidocr-onnxruntime>=1.3.24",
   "youtube-transcript-api>=0.6",
-  # payload scripts the console entrypoints load (#357): apply_registration.py needs
-  # ruamel.yaml to keep comments in the h2t config, scan.py reads projects.yaml
+  # h2t_ops/lifecycle (#357): apply_registration needs ruamel.yaml to keep comments in
+  # the h2t config, project_audit_scan reads projects.yaml
   "ruamel.yaml>=0.18",
   "PyYAML>=6.0",
 ]
@@ -40,8 +40,12 @@ h2t-docs-lint = "h2t_ops.tools.docs.lint:main"
 h2t-docs-sync-labels = "h2t_ops.tools.docs.sync_labels:main"
 h2t-milestone-closure = "h2t_ops.tools.docs.closure:main"
 h2t-drawio = "h2t_ops.tools.drawio.cli:main"
-# h2t-creative = "h2t_ops.tools.creative.cli:main" — added in Task 12 with the plugin bin removal (it would shadow it on PATH)
+h2t-creative = "h2t_ops.tools.creative.cli:main"
 h2t-agent-profile = "h2t_ops.tools.agent_profile.apply_agent_profile:main"
+# Scripts that had no CLI home until the skills stopped calling plugin Python (Task 12).
+h2t-detect-project = "h2t_ops.lifecycle.detect_project:main"
+h2t-docs-init = "h2t_ops.tools.docs.docs_init:main"
+h2t-runbook = "h2t_ops.tools.runbook.cli:main"
 
 [project.optional-dependencies]
 # `h2t-drawio generate` builds diagrams with drawpyo; nothing else in the package needs it,
@@ -50,30 +54,12 @@ drawio = ["drawpyo==0.2.5"]
 
 [tool.hatch.build.targets.wheel]
 # `lib` is not shipped as a top-level package: it is about as generic a name as a
-# distribution can claim in site-packages, and the payload below already carries the
-# same modules where every entry point looks for them.
+# distribution can claim in site-packages, and what the entry points need of it lives in
+# h2t_ops/lifecycle.
 packages = ["h2t_ops"]
 # Non-Python files under a listed package ship too: h2t_ops/resources/** (creative
 # templates, drawio defaults, docs standards, known_secrets.yaml) is in the wheel by this
 # line alone — tests/tools/test_resources_from_wheel.py lists the wheel to prove it.
-
-# The three thin entrypoints load plugin-owned scripts. Ship them inside the wheel so
-# `uv tool install` alone is enough on a host with no plugin cache — Codex-only
-# machines, CI, bare servers. plugin_entrypoints prefers an installed plugin over this
-# copy; it is the last resort, not the default.
-[tool.hatch.build.targets.wheel.force-include]
-"plugins/h2t-core/lib" = "h2t_ops/_plugin_payload/lib"
-"plugins/h2t-core/skills/handoff/scripts/writer.py" = "h2t_ops/_plugin_payload/skills/handoff/scripts/writer.py"
-"plugins/h2t-core/skills/session-start/scripts/gather.py" = "h2t_ops/_plugin_payload/skills/session-start/scripts/gather.py"
-"plugins/h2t-core/skills/project-audit/scripts/scan.py" = "h2t_ops/_plugin_payload/skills/project-audit/scripts/scan.py"
-"plugins/h2t-core/skills/project-audit/scripts/report.py" = "h2t_ops/_plugin_payload/skills/project-audit/scripts/report.py"
-"plugins/h2t-core/skills/init-project/scripts/apply_registration.py" = "h2t_ops/_plugin_payload/skills/init-project/scripts/apply_registration.py"
-"plugins/h2t-core/skills/scaffold-project/scripts/scaffold_project.py" = "h2t_ops/_plugin_payload/skills/scaffold-project/scripts/scaffold_project.py"
-# h2t-hook resolves hooks-handlers/<name> through the same ladder. On a host with no
-# plugin cache the payload is the only carrier, and a hook that resolves to nothing is
-# silent — the whole point of the launcher is that a scaffolded project keeps working
-# on a machine that never installed the plugin.
-"plugins/h2t-core/hooks-handlers" = "h2t_ops/_plugin_payload/hooks-handlers"
 
 [tool.ruff]
 target-version = "py311"
@@ -105,9 +91,8 @@ unfixable = ["F401"]
 # repo-wide any more; the narrow, justified suppressions live in per-file-ignores below.
 
 [tool.ruff.lint.per-file-ignores]
-# Scripts and tests put a directory on sys.path before importing from it, so the import
-# cannot be hoisted above that line.
-"plugins/**/scripts/*.py" = ["E402"]
+# Tests put a directory on sys.path before importing from it, so the import cannot be
+# hoisted above that line.
 "tests/**/*.py" = ["E402"]
 
 [tool.pytest.ini_options]

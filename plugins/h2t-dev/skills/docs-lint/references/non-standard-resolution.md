@@ -70,7 +70,7 @@ exceptions:
 ## ADD PROJECT TYPE
 
 1. Document the pattern in the conversation
-2. Propose extension to `plugins/h2t-dev/lib/docs/project_types.py`
+2. Propose extension to `h2t_ops/tools/docs/project_types.py`
 3. Open GitHub issue: `skills: add project type <name>` with label `type:feature`
 4. Do NOT edit `project_types.py` directly — requires PR + review
 

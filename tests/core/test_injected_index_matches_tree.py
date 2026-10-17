@@ -12,7 +12,7 @@ import re
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
-INDEX = REPO / "plugins" / "h2t-core" / "hooks-handlers" / "inject-h2t-context"
+INDEX = REPO / "h2t_ops" / "hooks" / "inject_context.py"
 NAME = re.compile(r"\bh2t-[a-z]+:[a-z][a-z-]*\b")
 
 
@@ -47,13 +47,9 @@ DEAD_PATHS = ("~/.h2t/venv", "$HOME/.h2t/venv", ".h2t/venv")
 PLUGINS = REPO / "plugins"
 # A probe tests for the directory and falls through when it is absent; that is what a
 # resolver does and it is correct. An instruction tells a human to use the path, and on
-# every machine but one it sends them nowhere. Only probes are listed.
-PROBES = {
-    "plugins/h2t-core/scripts/resolve-h2t-python.sh": "the resolver — probing is its job",
-    "plugins/h2t-core/scripts/update-plugin.sh": "probe with a python3 fallback",
-    "plugins/h2t-dev/scripts/update-plugin.sh": "probe with a python3 fallback",
-    "plugins/h2t-ops/scripts/update-plugin.sh": "probe with a python3 fallback",
-}
+# every machine but one it sends them nowhere. Only probes are listed. The four that were
+# here (resolve-h2t-python.sh and the three update-plugin.sh) were deleted in Task 12.
+PROBES: dict[str, str] = {}
 
 
 def test_no_shipped_file_instructs_a_path_the_installer_never_creates():
@@ -62,8 +58,8 @@ def test_no_shipped_file_instructs_a_path_the_installer_never_creates():
     Scoping this to one file was the first version, and it was wrong within the hour: the
     grep that verified the deploy hit `gather-on-skill`, whose failure message told the
     reader to "recreate ~/.h2t/venv" — the same dead contract, offered as the remedy. Only
-    `scripts/resolve-h2t-python.sh` may name the path, because probing for a directory that
-    may not exist is what a resolver does.
+    a file in PROBES may name the path, because probing for a directory that may not exist
+    is what a resolver does.
     """
     offenders = {}
     for path in sorted(PLUGINS.rglob("*")):
@@ -99,13 +95,12 @@ def _readme_index() -> str:
 
 
 def _hook_index() -> str:
-    text = INDEX.read_text(encoding="utf-8")
-    start = text.index('INDEX="') + len('INDEX="')
-    return text[start : text.index('"\n', start)].rstrip()
+    from h2t_ops.hooks import inject_context
+    return inject_context.INDEX.rstrip()
 
 
 def test_readme_prints_the_index_the_hook_injects():
     assert _readme_index() == _hook_index(), (
-        "README.md and inject-h2t-context disagree about the skill index. The README copy is "
+        "README.md and h2t_ops/hooks/inject_context.py disagree about the skill index. The README copy is "
         "what a reader gets when the hook does not fire; a stale copy is worse than none."
     )

@@ -1,33 +1,33 @@
-"""Every backend call in the setup skill runs as written from the skill directory (#520).
+"""Every backend call in the setup skill runs as written, from any directory (#520, Task 12).
 
 The Secrets Wizard called `... setup_h2t.py` without `scripts/`, which does not resolve
 from the skill directory. And every block after Step 1 called `$RUN ...`, a variable set
 once in Step 1: an agent's shell calls share no variables, so by the second call `$RUN`
 was empty and the script ran as a bare path — exit 126, Permission denied.
+
+Since Task 12 the backend is a command, `h2t-ops setup <verb>`: no path, no interpreter,
+no variable — so neither defect has anything left to attach to. These tests hold that.
 """
 import re
 from pathlib import Path
 
 SKILL = Path(__file__).resolve().parents[2] / "plugins" / "h2t-core" / "skills" / "setup" / "SKILL.md"
-INTERPRETER = "uv run --no-project --python 3.11 python"
+VERBS = r"(?:doctor|setup|repair|update|connectors-check|install-h2t-ops|secrets)"
 
 
 def _text():
     return SKILL.read_text(encoding="utf-8")
 
 
-def test_every_backend_call_names_its_directory():
-    calls = re.findall(r"(\S*setup_h2t\.py) (?:doctor|setup|repair|update|connectors-check|install-h2t-ops|secrets)", _text())
+def test_every_backend_call_is_the_command():
+    calls = re.findall(rf"h2t-ops setup {VERBS}\b", _text())
 
     assert len(calls) > 10
-    assert [c for c in calls if c not in {"scripts/setup_h2t.py", "plugins/h2t-core/skills/setup/scripts/setup_h2t.py"}] == []
+    assert "setup_h2t.py" not in _text()
 
 
-def test_every_backend_call_carries_its_interpreter():
-    lines = [line for line in _text().splitlines() if re.search(r"setup_h2t\.py \w", line)]
-
-    assert len(lines) > 10
-    assert [line for line in lines if INTERPRETER not in line] == []
+def test_no_backend_call_carries_an_interpreter_or_a_variable():
+    assert "uv run" not in _text()
     assert "$RUN" not in _text()
 
 

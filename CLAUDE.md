@@ -1,10 +1,18 @@
 # h2t-skills Agent Notes
 
 This repo is a Claude Code plugin pack. It contains:
-- `plugins/h2t-*` — plugin source directories (skills, hooks, agents)
-- `h2t_ops/` — Python package for operational connectors (Notion, Gmail, Calendar, etc.)
-- `lib/` — shared utilities (activity, cli, eval, gather, practice_harvest)
-- `scripts/` — bump_plugin.py, claude-dev.ps1, hooks/
+- `plugins/h2t-*` — plugin source directories, text only: skills, references, agents, and
+  `hooks/hooks.json` with the `hooks/run` wrapper. No Python ships here (the ratchet in
+  `tests/release/test_ratchets.py` is at 0); the only other programs are the `bin/` `root`
+  helpers of h2t-dev and h2t-arch.
+- `h2t_ops/` — the Python package, the only place code lives:
+  - `connectors/` — Notion, Gmail, Calendar, Drive, MeetGeek, Granola, Telegram, research…
+  - `lifecycle/` — gather, handoff, activity, eval and the project scripts
+  - `tools/` — docs-lint and its siblings, drawio, the creative assembler, agent-profile, runbook
+  - `hooks/` — one module per hook, run by `h2t-hook <name>`
+  - `setup/`, `core/`, `resources/` (the data the tools read)
+- `lib/` — only `cli` (the legacy catch-all) and `practice_harvest`
+- `scripts/` — the repo's dev tooling: bump_plugin.py, exec_map.py, claude-dev.ps1, hooks/
 
 The baseline plan for operational connector work is
 [docs/h2t-ops-roadmap.md](docs/h2t-ops-roadmap.md).
@@ -14,8 +22,10 @@ Use it before creating H2T-OPS specs, plans, PRs, or GitHub issues. It defines t
 
 ## h2t-ops Ownership Boundary
 
-`h2t-ops` owns operational connectors ONLY: Notion, Gmail, Calendar, Drive, MeetGeek, Granola, Telegram, research.
-Root `h2t` command and Python package belong to `h2t-ai`. Do not create `h2t` entrypoints here.
+`h2t-ops` is the whole pack (spec `docs/superpowers/specs/2026-10-16-package-architecture.md`
+§3): the distribution `h2t-ops`, the package `h2t_ops` and every `h2t-*` command below.
+The root `h2t` command and Python package belong to `h2t-ai`. Do not create `h2t`
+entrypoints here.
 
 ## Plugin Development
 
@@ -43,6 +53,11 @@ uvx ruff check plugins/ lib/ h2t_ops/
 # which blocks a commit that drifts marketplace.json against any plugin.json (#74).
 sh scripts/hooks/install.sh
 
+# docs-lint — a command since Task 12; from a checkout without the tool installed, prefix
+# it with `uv run`. `doctor` exits 1 whenever it reports findings (.claude/rules/linting.md).
+h2t-docs-lint doctor
+uv run h2t-docs-lint new plan <slug>
+
 # Version bump — two literal arguments. Updates plugin.json and marketplace.json only;
 # the CHANGELOG is written by hand (grep -c CHANGELOG scripts/bump_plugin.py -> 0).
 .venv/bin/python scripts/bump_plugin.py <plugin-name> <version>
@@ -58,30 +73,40 @@ either way.
 
 ## Global CLI tools (uv tool install)
 
-`h2t-skills` exposes **9** global entry points, all from one package:
+`h2t-skills` exposes **18** global entry points, all from one package (`[project.scripts]` in
+`pyproject.toml`):
 
 | command | what it does |
 |---|---|
-| `h2t-ops` | the connector CLI — Notion, Gmail, Calendar, Drive, MeetGeek, Granola, Telegram, research |
+| `h2t-ops` | the connector CLI — Notion, Gmail, Calendar, Drive, MeetGeek, Granola, Telegram, research — plus `version`, `doctor`, `setup` |
 | `h2t-gather` | collects session context and prints the `BRIEFING:` / `GATHER_META:` block |
-| `h2t-handoff` | writes the session record — spool first, markdown mirror second |
+| `h2t-handoff` | writes the session record — spool first, markdown mirror second; `rule-scan` |
 | `h2t-activity-log` | appends session start/end to the activity spool |
 | `h2t-project-register` | applies a project registration to repo-mapping.yaml and domains.yaml |
 | `h2t-project-audit-scan` | scans a project tree for the audit |
 | `h2t-project-audit-report` | renders that scan |
 | `h2t-scaffold-project` | creates and registers a new project |
-| `h2t-hook` | runs a plugin hook handler, resolved when the hook fires |
+| `h2t-hook` | runs a hook handler from `h2t_ops/hooks` by name (plugin hooks, git pre-commit, project settings) |
+| `h2t-docs-lint` | docs-lint: audit, plan, doctor, fix-safe, fix-index, retire, new |
+| `h2t-docs-sync-labels` | syncs the canonical GitHub labels to a repo |
+| `h2t-milestone-closure` | closes a finished milestone |
+| `h2t-drawio` | generates, exports and lists draw.io shapes (the `drawio` extra) |
+| `h2t-creative` | the creative assembler: `root`, `profiles-dir`, `assemble` |
+| `h2t-agent-profile` | applies Claude plugin profiles per repo |
+| `h2t-detect-project` | detects a project for init-project |
+| `h2t-docs-init` | scaffolds docs/ in a new project |
+| `h2t-runbook` | autonomous-run runbooks: `new`, `validate`, `state` |
 
 **When to re-run:**
 - After `git pull` that adds or renames an entry point in `pyproject.toml`
 - After any session where `h2t-handoff` / `h2t-gather` is not found by `command -v`
-- Verify with `uv tool list` — all 9 under one package. Judge the listing, not the
+- Verify with `uv tool list` — all 18 under one package. Judge the listing, not the
   install command's output.
 
 **`h2t-ops` names two different things, versioned separately.** The plugin in
-`~/.claude/plugins/cache/lichtpfad/h2t-ops/` and the Python package behind these 9 commands
+`~/.claude/plugins/cache/lichtpfad/h2t-ops/` and the Python package behind these commands
 share the name and nothing else. Measured on the Windows machine 2026-08-27: the plugin was
-at 1.6.8 and the package at 0.2.1, with 4 of the 9 commands installed.
+at 1.6.8 and the package at 0.2.1, with 4 of the then 9 commands installed.
 
 `/plugin marketplace update` bumps the plugin cache and touches none of the entry points —
 only `uv tool install --editable` does. So "h2t-ops updated to 1.6.8" is true and says nothing

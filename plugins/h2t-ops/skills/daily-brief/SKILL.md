@@ -9,6 +9,31 @@ metadata:
 
 # Daily Brief
 
+<!-- version-check:begin -->
+## Version check
+
+Run this before any other command of this skill:
+
+```bash
+h2t-ops version --expect @VERSION@ --json
+```
+
+Act on the result, in this order:
+
+1. JSON with `"ok": true` — continue.
+2. JSON with `"ok": false` — show the user `error.hint` as it is and stop this skill until
+   it is resolved. Do not run anything the hint names unless the user asks you to: on
+   `reason: path` it is a command for the user to decide on. `result.reason` names the
+   case: `not_installed`, `version` or `path`.
+3. `command not found` — read `~/.h2t/run/install.env`
+   (`grep -E '^(STATE|H2T_HOOK)=' ~/.h2t/run/install.env`). With `STATE=ready` the install
+   is fine and PATH does not reach it: show the directory of the `H2T_HOOK=` path, ask the
+   user to restart the harness, and offer `uv tool update-shell` for them to run. Without
+   it there is no install: give the user `@BOOTSTRAP@ sync`.
+4. Anything else (a non-zero exit without JSON, the usage text of an older CLI) — give the
+   user `@BOOTSTRAP@ sync`.
+<!-- version-check:end -->
+
 ## POS Boundary
 
 Daily Brief is a read and synthesis workflow, not the POS journal writer. Follow
@@ -157,8 +182,8 @@ h2t-ops notion search "$TASKS_DB" \
 
 ## Обработка ошибок
 
-- **`h2t-ops` не найден**: `/h2t-core:setup`, затем
-  `uv run --no-project --python 3.11 python scripts/setup_h2t.py install-h2t-ops --source main --json`
+- **`h2t-ops` не найден**: исход 3 проверки версии в начале скилла — он различает PATH и
+  отсутствие установки и даёт команду бутстрапа
 - **Calendar/Gmail**: проверь токены — `~/.config/google-calendar-mcp/tokens.json`
 - **Notion**: проверь `NOTION_API_TOKEN` в `~/.dor/secrets.env`
 - Диагностика разом: `h2t-ops doctor`

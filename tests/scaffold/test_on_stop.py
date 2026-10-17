@@ -1,14 +1,12 @@
 import importlib.util
-from importlib.machinery import SourceFileLoader
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 
 def _load_on_stop():
-    path = Path(__file__).parents[2] / "plugins/h2t-core/hooks-handlers/on-stop"
-    spec = importlib.util.spec_from_file_location(
-        "h2t_on_stop", path, loader=SourceFileLoader("h2t_on_stop", str(path))
-    )
+    """A fresh copy of h2t_ops/hooks/on_stop.py: tests patch its subprocess."""
+    path = Path(__file__).parents[2] / "h2t_ops" / "hooks" / "on_stop.py"
+    spec = importlib.util.spec_from_file_location("h2t_on_stop", path)
     module = importlib.util.module_from_spec(spec)
     assert spec.loader is not None
     spec.loader.exec_module(module)

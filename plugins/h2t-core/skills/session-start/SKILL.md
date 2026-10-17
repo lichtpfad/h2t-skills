@@ -11,6 +11,31 @@ metadata:
 
 > ⚠️ **If you are already executing the session-start pipeline, STOP. Do NOT invoke this skill again. Return to the pipeline you were following.**
 
+<!-- version-check:begin -->
+## Version check
+
+Run this before any other command of this skill:
+
+```bash
+h2t-ops version --expect @VERSION@ --json
+```
+
+Act on the result, in this order:
+
+1. JSON with `"ok": true` — continue.
+2. JSON with `"ok": false` — show the user `error.hint` as it is and stop this skill until
+   it is resolved. Do not run anything the hint names unless the user asks you to: on
+   `reason: path` it is a command for the user to decide on. `result.reason` names the
+   case: `not_installed`, `version` or `path`.
+3. `command not found` — read `~/.h2t/run/install.env`
+   (`grep -E '^(STATE|H2T_HOOK)=' ~/.h2t/run/install.env`). With `STATE=ready` the install
+   is fine and PATH does not reach it: show the directory of the `H2T_HOOK=` path, ask the
+   user to restart the harness, and offer `uv tool update-shell` for them to run. Without
+   it there is no install: give the user `@BOOTSTRAP@ sync`.
+4. Anything else (a non-zero exit without JSON, the usage text of an older CLI) — give the
+   user `@BOOTSTRAP@ sync`.
+<!-- version-check:end -->
+
 ## Setup
 
 ```bash
@@ -36,13 +61,25 @@ BRIEFING:
 GATHER_META: <json>
 ```
 
-If `BRIEFING:` is present in your system context:
+**Use that briefing only if it is fresh and for this directory:** its `GATHER_META` JSON
+has `cwd` equal to the current working directory and `at` (ISO-8601 with offset) no more
+than 120 s before now. Compare against the output of:
+
+```bash
+pwd; date +%Y-%m-%dT%H:%M:%S%z
+```
+
+A briefing for another directory, an older one, or one without `cwd`/`at` (a 3.x hook) is
+not this session's: ignore it. In Codex no hook runs at all, so there is never a briefing
+in context — the command below is the only path there.
+
+If the briefing passes the rule:
 - Extract the text between `BRIEFING:\n` and `\n\nGATHER_META:` as `_briefing`
 - Parse `GATHER_META` JSON as `GATHER_RESULT._meta`
 - Parse `GATHER_META.project`, `GATHER_META.sessions`, `GATHER_META.machine` fields
-- **Skip running gather.py** — data is already collected
+- **Do not run `h2t-gather`** — data is already collected
 
-If `BRIEFING:` is NOT in your context, run:
+Otherwise run:
 
 ```bash
 h2t-gather --cwd "$(pwd)" --briefing-only

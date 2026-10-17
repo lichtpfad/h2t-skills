@@ -1,4 +1,4 @@
-"""h2t-ops CLI: dev wrapper + registry dispatch + doctor + legacy delegation + ingest shim."""
+"""h2t-ops CLI: registry dispatch + doctor + legacy delegation + ingest shim."""
 from __future__ import annotations
 
 import argparse
@@ -13,7 +13,6 @@ from h2t_ops.core.errors import UsageError
 # intentionally) so they don't UnicodeEncodeError on Windows consoles (#141 class).
 from h2t_ops.core.output import _finalize, _utf8_writer, emit
 from h2t_ops.core.registry import discover
-from h2t_ops.dev import main as _dev_main
 
 _MIGRATED = {"notion", "gmail", "calendar", "drive", "meetgeek", "granola", "telegram", "research", "evals", "dropbox", "google"}
 
@@ -26,6 +25,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("deploy", help="Profile-driven deploy commands")
     sub.add_parser("version", help="Check the installed version and entry points (--expect V, --json); exit 3 if not ok")
     sub.add_parser("doctor", help="Report installed CLI state (version, path, connectors, secrets); always exits 0, connectors-check is the gate")
+    sub.add_parser("setup", help="The h2t-core setup skill's backend: doctor, setup, install-h2t-ops, connectors-check, secrets")
     for spec in discover():
         spec.register(sub)
     return p
@@ -162,8 +162,6 @@ def _deploy_dispatch(argv: list[str]) -> int:
 
 
 def dispatch(argv: list[str]) -> int:
-    if argv and argv[0] == "dev":
-        return _dev_main(argv[1:])
     if argv and argv[0] == "deploy":
         return _deploy_dispatch(argv[1:])
     if argv and argv[0] in ("--help", "-h"):
@@ -176,6 +174,13 @@ def dispatch(argv: list[str]) -> int:
         return _version(argv[1:])
     if argv and argv[0] == "doctor":
         return _doctor()
+    if argv and argv[0] == "setup":
+        # The setup skill's backend, moved from its plugin script as is (Task 12).
+        from h2t_ops.setup import legacy
+        try:
+            return legacy.main(argv[1:])
+        except SystemExit as e:  # argparse usage errors and --help
+            return e.code if isinstance(e.code, int) else (0 if e.code is None else 2)
     if argv and argv[0] == "connectors":
         for spec in discover():
             print(f"{spec.name:12} {spec.help}")
@@ -280,6 +285,12 @@ def dispatch(argv: list[str]) -> int:
 
 
 def main() -> None:
+    # argparse prints --help and usage errors itself, past emit()'s UTF-8 writer, so a
+    # cp1252 pipe on Windows died on the first `→` in a help string. meetgeek_cli.py had
+    # this guard (#428); it did not come along when the CLI took over its verbs (#541).
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8")
     sys.exit(dispatch(sys.argv[1:]))
 
 

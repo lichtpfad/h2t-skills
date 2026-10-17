@@ -8,20 +8,17 @@ import importlib.util
 import json
 import os
 import platform
-import sys
 from pathlib import Path
 
 import pytest
 
 from h2t_ops.lifecycle.activity import writer as activity_writer
 from h2t_ops.lifecycle.gather import sessions
+from h2t_ops.setup import legacy as setup_h2t
 
 REPO = Path(__file__).resolve().parents[2]
-HANDOFF_WRITER = REPO / "plugins" / "h2t-core" / "skills" / "handoff" / "scripts" / "writer.py"
-SETUP_DIR = REPO / "plugins" / "h2t-core" / "skills" / "setup" / "scripts"
-sys.path.insert(0, str(SETUP_DIR))
-
-import setup_h2t  # noqa: E402
+HANDOFF_WRITER = REPO / "h2t_ops" / "lifecycle" / "handoff.py"
+SETUP_SKILL = REPO / "plugins" / "h2t-core" / "skills" / "setup"
 
 
 def _load_handoff_writer():
@@ -178,8 +175,8 @@ def test_setup_command_takes_the_chosen_name(renamed_host, monkeypatch, capsys):
 
 def test_the_setup_skill_reaches_the_pin():
     # #518: the pin lived only in the `setup` subcommand, which SKILL.md never ran.
-    skill = (SETUP_DIR.parent / "SKILL.md").read_text(encoding="utf-8")
+    skill = (SETUP_SKILL / "SKILL.md").read_text(encoding="utf-8")
 
-    assert "setup_h2t.py setup --json" in skill
+    assert "h2t-ops setup setup --json" in skill
     assert "needs_choice" in skill
     assert "--machine-name" in skill

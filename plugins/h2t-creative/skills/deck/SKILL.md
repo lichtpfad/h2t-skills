@@ -1,7 +1,7 @@
 ---
 name: deck
 description: "Generates a multi-file HTML presentation deck using the h2t-creative assembler pipeline. Keyboard navigation (←/→/Space), fixed slide menu, optional fx/. Performs mandatory Playwright QA per slide at 1440px. Delivery halted if Playwright unavailable. Triggers: 'deck', 'create presentation', 'make slides', 'презентация', 'h2t-creative:deck'"
-compatibility: "Assembly needs only uv. The QA step runs h2t-creative:browser-qa, whose
+compatibility: "Assembly needs the h2t-ops CLI (h2t-creative). The QA step runs h2t-creative:browser-qa, whose
   browser comes from npx @playwright/mcp — Node is the prerequisite, and its absence marks
   the result unverified rather than stopping delivery."
 metadata:
@@ -13,25 +13,57 @@ metadata:
 
 Generate a presentation deck via the assembler pipeline.
 
-## Setup
+<!-- version-check:begin -->
+## Version check
+
+Run this before any other command of this skill:
 
 ```bash
-PLUGIN_ROOT="$(h2t-creative root)"
+h2t-ops version --expect @VERSION@ --json
 ```
+
+Act on the result, in this order:
+
+1. JSON with `"ok": true` — continue.
+2. JSON with `"ok": false` — show the user `error.hint` as it is and stop this skill until
+   it is resolved. Do not run anything the hint names unless the user asks you to: on
+   `reason: path` it is a command for the user to decide on. `result.reason` names the
+   case: `not_installed`, `version` or `path`.
+3. `command not found` — read `~/.h2t/run/install.env`
+   (`grep -E '^(STATE|H2T_HOOK)=' ~/.h2t/run/install.env`). With `STATE=ready` the install
+   is fine and PATH does not reach it: show the directory of the `H2T_HOOK=` path, ask the
+   user to restart the harness, and offer `uv tool update-shell` for them to run. Without
+   it there is no install: give the user `@BOOTSTRAP@ sync`.
+4. Anything else (a non-zero exit without JSON, the usage text of an older CLI) — give the
+   user `@BOOTSTRAP@ sync`.
+<!-- version-check:end -->
+
+## Setup
+
+Profiles live in two places, and a profile is looked up in that order:
+
+```bash
+h2t-creative profiles-dir          # profiles you created: ~/.h2t/creative/profiles
+echo "$(h2t-creative root)/profiles" # profiles shipped with the CLI
+```
+
+Below, `<profile dir>` is `<first>/<name>` when the profile is in the first directory, else
+`<second>/<name>`. A profile of yours shadows a shipped one of the same name, and
+`h2t-creative assemble` resolves it the same way.
 
 ## Step 1: Choose profile
 
 ```bash
-ls "$PLUGIN_ROOT/profiles/"
+ls "$(h2t-creative profiles-dir)" "$(h2t-creative root)/profiles" 2>/dev/null
 ```
 
-Read `$PLUGIN_ROOT/profiles/<name>/DESIGN.md` as context.
+Read `<profile dir>/DESIGN.md` as context.
 
 ## Step 1b: Choose palette
 
 Check for palettes in selected profile:
 ```bash
-ls "$PLUGIN_ROOT/profiles/<name>/palettes/" 2>/dev/null
+ls "<profile dir>/palettes/" 2>/dev/null
 ```
 
 Three states:

@@ -2,8 +2,10 @@
 
 ## Deploying changes to h2t-core / h2t-dev
 
-⛔ NEVER use `update-plugin.sh` as the final deploy — it writes to the local cache only, and
-the next `/plugin marketplace update` wipes all of it.
+⛔ NEVER write the local plugin cache as the final deploy — the next `/plugin marketplace
+update` wipes all of it. The three `update-plugin.sh` scripts that did exactly that were
+deleted in Task 12 of #541; copying files into `~/.claude/plugins/cache/` by hand is the
+same mistake.
 
 **Correct sequence:**
 1. Commit the changes

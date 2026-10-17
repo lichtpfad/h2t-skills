@@ -1,7 +1,7 @@
 """structure-guard (PreToolUse: Write, Edit, MultiEdit): enforce .h2t/structure.yaml.
 
-Port of hooks-handlers/structure_guard.py. Every check function is the original's,
-unchanged (tests/hooks/test_hook_module_parity.py); only `main()` became `handle()`.
+Port of the 3.x hooks-handlers/structure_guard.py, deleted in Task 12a. Every check function is the original's,
+unchanged (AST-compared until the deletion); only `main()` became `handle()`.
 
 Reply:
   Reply(msg, block=True) — block: exit 2, the reason on stderr for the model

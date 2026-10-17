@@ -1,12 +1,9 @@
+import io
 import json
 import sys
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-_HOOK_DIR = Path(__file__).parents[2] / "plugins/h2t-core/hooks-handlers"
-sys.path.insert(0, str(_HOOK_DIR))
-
-import post_git_commit_docs_lint as hook
+from h2t_ops.hooks import post_git_commit_docs_lint as hook
 
 
 def test_is_git_commit_payload_accepts_bash_git_commit():
@@ -54,11 +51,16 @@ def test_changed_docs_returns_empty_on_git_error(tmp_path):
         assert hook.changed_docs_from_head(tmp_path) == []
 
 
-def test_find_docs_lint_script_prefers_env(tmp_path, monkeypatch):
+def test_docs_lint_command_prefers_env(tmp_path, monkeypatch):
     script = tmp_path / "lint.py"
     script.write_text("# lint", encoding="utf-8")
     monkeypatch.setenv("H2T_DOCS_LINT_SCRIPT", str(script))
-    assert hook.find_docs_lint_script() == script
+    assert hook.docs_lint_command() == [sys.executable, str(script)]
+
+
+def test_docs_lint_command_defaults_to_the_package(tmp_path, monkeypatch):
+    monkeypatch.setenv("H2T_DOCS_LINT_SCRIPT", str(tmp_path / "absent.py"))
+    assert hook.docs_lint_command() == [sys.executable, "-m", "h2t_ops.tools.docs.lint"]
 
 
 def test_build_report_records_skipped_state(tmp_path):
@@ -93,7 +95,7 @@ def test_run_docs_lint_doctor_uses_timeout(tmp_path):
     lint.write_text("# lint", encoding="utf-8")
     with patch.object(hook.subprocess, "run") as mock_run:
         mock_run.return_value = MagicMock(returncode=0, stdout='{"status":"ok"}', stderr="")
-        result = hook.run_docs_lint_doctor(tmp_path, lint, timeout=3)
+        result = hook.run_docs_lint_doctor(tmp_path, [sys.executable, str(lint)], timeout=3)
     assert result["status"] == "ok"
     assert mock_run.call_args.kwargs["timeout"] == 3
 
@@ -103,16 +105,16 @@ def test_hook_timeout_seconds_falls_back_on_invalid_env(monkeypatch):
     assert hook.hook_timeout_seconds() == 8
 
 
-def test_main_writes_error_report_when_lint_script_not_found(tmp_path, monkeypatch):
+def test_main_records_the_doctor_result(tmp_path, monkeypatch):
     monkeypatch.setattr(hook, "changed_docs_from_head", lambda _: ["docs/a.md"])
-    monkeypatch.setattr(hook, "find_docs_lint_script", lambda: None)
+    monkeypatch.setattr(hook, "run_docs_lint_doctor", lambda root, command, timeout: {"status": "warn"})
+    monkeypatch.setattr("sys.stdin", io.StringIO(""))
     monkeypatch.chdir(tmp_path)
-    hook.main()
+    assert hook.main([]) == 0
     report_path = tmp_path / ".h2t" / "lifecycle" / "post-git-commit-docs-lint.json"
-    assert report_path.exists()
     data = json.loads(report_path.read_text(encoding="utf-8"))
-    assert data["status"] == "error"
-    assert "not found" in data["summary"]
+    assert data["status"] == "ok"
+    assert data["evidence"]["docs_lint"] == {"status": "warn"}
 
 
 def test_run_docs_lint_doctor_error_on_nonzero_exit(tmp_path):
@@ -120,7 +122,7 @@ def test_run_docs_lint_doctor_error_on_nonzero_exit(tmp_path):
     lint.write_text("# lint", encoding="utf-8")
     with patch.object(hook.subprocess, "run") as mock_run:
         mock_run.return_value = MagicMock(returncode=1, stdout="some output", stderr="some error")
-        result = hook.run_docs_lint_doctor(tmp_path, lint, timeout=3)
+        result = hook.run_docs_lint_doctor(tmp_path, [sys.executable, str(lint)], timeout=3)
     assert result["status"] == "error"
     assert result["exit_code"] == 1
 
@@ -134,13 +136,6 @@ def test_run_docs_lint_doctor_timeout(tmp_path):
         exc.stdout = "partial output"
         exc.stderr = ""
         mock_run.side_effect = exc
-        result = hook.run_docs_lint_doctor(tmp_path, lint, timeout=3)
+        result = hook.run_docs_lint_doctor(tmp_path, [sys.executable, str(lint)], timeout=3)
     assert result["status"] == "error"
     assert result["message"] == "hook timeout"
-
-
-def test_wrapper_exists_and_references_backend():
-    wrapper = Path(__file__).parents[2] / "plugins/h2t-core/hooks-handlers/post-git-commit-docs-lint"
-    text = wrapper.read_text(encoding="utf-8")
-    assert "post_git_commit_docs_lint" in text
-    assert "raise SystemExit" in text

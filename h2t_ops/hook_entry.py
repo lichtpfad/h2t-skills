@@ -1,66 +1,32 @@
-"""Run a plugin hook handler resolved through the same ladder every entry point uses.
+"""`h2t-hook <name>`: run one hook handler from h2t_ops.hooks (spec §6.2).
 
-A hook written into a *project's* `.claude/settings.json` cannot use
-`${CLAUDE_PLUGIN_ROOT}` — the harness defines that only for the plugin's own hooks.json.
-An absolute cache path pins the project to one plugin version and to one machine's home
-directory, and `.claude/settings.json` is normally committed. This launcher resolves at
-fire time instead.
+Every name resolves through `h2t_ops.hooks.HANDLERS`; nothing is looked up on disk. The
+plugin's hooks.json reaches a handler through `hooks/run <name>`, and the 3.x forms keep
+working under the same names: the git pre-commit hooks, and the two hooks scaffold-project
+writes into a project's `.claude/settings.json`, where `${CLAUDE_PLUGIN_ROOT}` does not
+exist (tests/release/legacy_call_forms.json).
 """
 from __future__ import annotations
 
 import json
-import shutil
-import subprocess
 import sys
 import time
 import traceback
 from pathlib import Path
 
-from h2t_ops.plugin_entrypoints import plugin_script_path
-
 # Not 2: for a hook, 2 is the harness's block signal, and a usage error must never read as
 # a deliberate block (spec §6.1, ruling R8). 64 is EX_USAGE.
 EXIT_USAGE = 64
-
-_DEFAULT_INTERPRETER = ["bash"]
-_PYTHON_NAMES = {"python", "python3"}
-
-
-def interpreter_for(path: Path) -> list[str]:
-    """The shebang decides.
-
-    hooks.json hardcodes `bash` for the handlers it declares, but the two handlers
-    scaffold-project writes are python3 — running those under bash is a syntax error.
-    A python shebang resolves to `sys.executable` when PATH has no matching name, which
-    is the normal case on Windows (`python.exe`, no `python3.exe`).
-    """
-    try:
-        first = path.read_text(encoding="utf-8", errors="replace").splitlines()[0]
-    except (OSError, IndexError):
-        return list(_DEFAULT_INTERPRETER)
-    if not first.startswith("#!"):
-        return list(_DEFAULT_INTERPRETER)
-    parts = first[2:].strip().split()
-    if not parts:
-        return list(_DEFAULT_INTERPRETER)
-    if Path(parts[0]).name == "env" and len(parts) > 1:
-        parts = parts[1:]
-    name = Path(parts[0]).name
-    resolved = shutil.which(parts[0]) or shutil.which(name)
-    if resolved is None and Path(name).stem in _PYTHON_NAMES:
-        resolved = sys.executable
-    return [resolved or parts[0], *parts[1:]]
-
+EXIT_NOT_FOUND = 5
 
 _USAGE = """usage: h2t-hook <handler-name> [args...]
 
-Runs a plugin hook handler from the h2t-core plugin, resolving the plugin root the
-same way a skill does. Handlers live in hooks-handlers/ and are named without a path:
+Runs an h2t hook handler from the installed package. The event, if the hook has one,
+comes as JSON on stdin:
 
   h2t-hook gather-on-prompt
   h2t-hook structure-guard
-
-Set H2T_PLUGIN_ROOT to override where the handler is looked for.
+  h2t-hook layout-precommit        (a git pre-commit hook: no event, exit 1 blocks)
 """
 
 
@@ -92,6 +58,12 @@ def _log_failure(name: str, exc: BaseException) -> None:
         pass  # the stderr line is already the signal; a missing log row must not mask it
 
 
+def _failed(name: str, exc: BaseException) -> int:
+    print(f"h2t hook {name} failed: {type(exc).__name__}", file=sys.stderr)
+    _log_failure(name, exc)
+    return 1
+
+
 def run_handler(name: str, handle) -> int:
     """A handler from h2t_ops.hooks: one emitter for every exit path (spec §6.2)."""
     from h2t_ops.hooks import emit
@@ -100,9 +72,19 @@ def run_handler(name: str, handle) -> int:
         event = _read_event()
         return emit.write(str(event.get("hook_event_name") or ""), handle(event))
     except Exception as exc:
-        print(f"h2t hook {name} failed: {type(exc).__name__}", file=sys.stderr)
-        _log_failure(name, exc)
-        return 1
+        return _failed(name, exc)
+
+
+def run_command(name: str, command, args: list[str]) -> int:
+    """A `Command` keeps its 3.x contract: its own stdin and stdout, its exit code.
+
+    An exception is still one stderr line, exit 1 and a log row (spec §6.2). For a git
+    pre-commit hook exit 1 refuses the commit — loud, and never a silent pass.
+    """
+    try:
+        return int(command(args))
+    except Exception as exc:
+        return _failed(name, exc)
 
 
 def main() -> int:
@@ -115,25 +97,20 @@ def main() -> int:
     if sys.argv[1] in ("-h", "--help", "help"):
         print(_USAGE)
         return 0
-    from h2t_ops.hooks import HANDLERS
+    from h2t_ops.hooks import HANDLERS, Command
 
-    handle = HANDLERS.get(sys.argv[1])
-    if handle is not None:
-        if len(sys.argv) > 2:
-            print(f"h2t-hook {sys.argv[1]}: takes no arguments, the event comes on stdin",
-                  file=sys.stderr)
-            return EXIT_USAGE
-        return run_handler(sys.argv[1], handle)
-    relative = f"hooks-handlers/{sys.argv[1]}"
-    try:
-        path = plugin_script_path(relative)
-    except FileNotFoundError as exc:
-        print(str(exc), file=sys.stderr)
-        return 5
-    # check=False: the handler's exit code is the launcher's exit code — a hook that
-    # exits non-zero is signalling, not crashing.
-    completed = subprocess.run([*interpreter_for(path), str(path), *sys.argv[2:]], check=False)
-    return completed.returncode
+    name = sys.argv[1]
+    handle = HANDLERS.get(name)
+    if handle is None:
+        print(f"h2t-hook: no handler named {name!r}. Known: {', '.join(sorted(HANDLERS))}",
+              file=sys.stderr)
+        return EXIT_NOT_FOUND
+    if isinstance(handle, Command):
+        return run_command(name, handle, sys.argv[2:])
+    if len(sys.argv) > 2:
+        print(f"h2t-hook {name}: takes no arguments, the event comes on stdin", file=sys.stderr)
+        return EXIT_USAGE
+    return run_handler(name, handle)
 
 
 if __name__ == "__main__":

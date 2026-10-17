@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-APPLY = REPO_ROOT / "plugins" / "h2t-core" / "skills" / "init-project" / "scripts" / "apply_registration.py"
+APPLY = "h2t_ops.lifecycle.apply_registration"  # the plugin script, deleted in Task 12, ran as this module
 
 
 def _interpreter():
@@ -47,7 +47,7 @@ def config_root(tmp_path):
 def _register(config_root, project_id, *args):
     result = subprocess.run(
         [
-            _interpreter(), str(APPLY),
+            _interpreter(), "-m", APPLY,
             "--id", project_id, "--domain", "fixture-domain",
             "--type", "git", "--label", "Fixture Label",
             "--config-root", str(config_root), *args,
@@ -88,7 +88,7 @@ def test_config_root_env_is_honoured_without_the_flag(config_root, monkeypatch):
     env = dict(os.environ, H2T_CONFIG_ROOT=str(config_root))
     result = subprocess.run(
         [
-            _interpreter(), str(APPLY),
+            _interpreter(), "-m", APPLY,
             "--id", "env-repo", "--domain", "fixture-domain",
             "--type", "git", "--label", "Env Repo",
         ],

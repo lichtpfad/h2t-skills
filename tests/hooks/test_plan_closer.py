@@ -9,12 +9,11 @@ just never written down while it was still free.
 from __future__ import annotations
 
 import importlib.util
-import json
 from pathlib import Path
 
 
 def _load():
-    path = Path(__file__).parents[2] / "plugins" / "h2t-core" / "hooks-handlers" / "plan_closer.py"
+    path = Path(__file__).parents[2] / "h2t_ops" / "hooks" / "plan_closer.py"
     spec = importlib.util.spec_from_file_location("plan_closer_under_test", path)
     module = importlib.util.module_from_spec(spec)
     assert spec and spec.loader
@@ -133,34 +132,25 @@ def test_existing_pr_field_is_replaced_not_duplicated(tmp_path):
 # ── the hook's own output contract ──────────────────────────────────────────
 
 
-def test_hook_reports_on_both_channels(tmp_path, monkeypatch, capsys):
+def test_hook_reports_on_both_channels(tmp_path, monkeypatch):
     """The model reads additionalContext; the user reads systemMessage."""
     m = _load()
     _plan(tmp_path, "docs/superpowers/plans/2026-08-24-thing.md",
           '---\nstatus: "draft"\n---\nx\n')
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(m, "_pr_view", lambda root, n: _VIEW)
-    monkeypatch.setattr(
-        m, "_load_payload",
-        lambda: {"tool_name": "Bash", "tool_input": {"command": "gh pr merge 408 --squash"}},
-    )
-    assert m.main() == 0
-    out = json.loads(capsys.readouterr().out)
-    assert "408" in out["systemMessage"]
-    assert "2026-08-24-thing.md" in out["hookSpecificOutput"]["additionalContext"]
+    reply = m.handle({"tool_name": "Bash", "tool_input": {"command": "gh pr merge 408 --squash"}})
+    assert "408" in reply.notice
+    assert "2026-08-24-thing.md" in reply.text
 
 
-def test_hook_is_silent_for_unrelated_commands(monkeypatch, capsys):
+def test_hook_is_silent_for_unrelated_commands():
     m = _load()
-    monkeypatch.setattr(
-        m, "_load_payload",
-        lambda: {"tool_name": "Bash", "tool_input": {"command": "ls -la"}},
-    )
-    assert m.main() == 0
-    assert capsys.readouterr().out == ""
+    reply = m.handle({"tool_name": "Bash", "tool_input": {"command": "ls -la"}})
+    assert (reply.text, reply.notice, reply.block) == ("", "", False)
 
 
-def test_message_distinguishes_a_plan_from_its_spec(tmp_path, monkeypatch, capsys):
+def test_message_distinguishes_a_plan_from_its_spec(tmp_path, monkeypatch):
     """Plan and spec routinely share a stem — basenames alone read as a duplicate."""
     m = _load()
     _plan(tmp_path, "docs/superpowers/plans/2026-08-24-thing.md",
@@ -176,10 +166,7 @@ def test_message_distinguishes_a_plan_from_its_spec(tmp_path, monkeypatch, capsy
                   {"path": "docs/superpowers/specs/2026-08-24-thing.md"},
                   {"path": "lib/thing.py"}],
     })
-    monkeypatch.setattr(m, "_load_payload", lambda: {
-        "tool_name": "Bash", "tool_input": {"command": "gh pr merge 408"}})
-    m.main()
-    msg = json.loads(capsys.readouterr().out)["systemMessage"]
+    msg = m.handle({"tool_name": "Bash", "tool_input": {"command": "gh pr merge 408"}}).notice
     assert "plans/2026-08-24-thing.md" in msg
     assert "specs/2026-08-24-thing.md" in msg
 
@@ -255,7 +242,7 @@ def test_a_living_document_is_never_closed(tmp_path):
     assert 'status: "draft"' in doc.read_text(encoding="utf-8")
 
 
-def test_the_message_states_what_it_did_not_what_is_true(tmp_path, monkeypatch, capsys):
+def test_the_message_states_what_it_did_not_what_is_true(tmp_path, monkeypatch):
     """It used to announce that the PR "закрыл" the documents — a claim about the
     world, from a hook that can only know what it wrote."""
     m = _load()
@@ -267,10 +254,7 @@ def test_the_message_states_what_it_did_not_what_is_true(tmp_path, monkeypatch, 
         "files": [{"path": "docs/superpowers/plans/2026-08-24-thing.md"},
                   {"path": "lib/thing.py"}],
     })
-    monkeypatch.setattr(m, "_load_payload", lambda: {
-        "tool_name": "Bash", "tool_input": {"command": "gh pr merge 408"}})
-    m.main()
-    msg = json.loads(capsys.readouterr().out)["systemMessage"]
+    msg = m.handle({"tool_name": "Bash", "tool_input": {"command": "gh pr merge 408"}}).notice
     assert "проставлен status: done" in msg
     assert "закрыл" not in msg
 

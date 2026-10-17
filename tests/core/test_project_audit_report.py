@@ -10,14 +10,14 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-REPORT = ROOT / "plugins" / "h2t-core" / "skills" / "project-audit" / "scripts" / "report.py"
+REPORT = "h2t_ops.lifecycle.project_audit_report"  # the plugin report.py, deleted in Task 12
 
 
 def _run(tmp_path, project_id):
     projects = tmp_path / "projects.yaml"
     projects.write_text("projects:\n  - id: something-else\n    claude_md: false\n", encoding="utf-8")
     return subprocess.run(
-        [sys.executable, str(REPORT), project_id, "--field", "claude_md=true",
+        [sys.executable, "-m", REPORT, project_id, "--field", "claude_md=true",
          "--projects-yaml", str(projects)],
         capture_output=True, text=True, encoding="utf-8", check=False,
     )

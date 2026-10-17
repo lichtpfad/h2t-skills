@@ -1,49 +1,36 @@
 """A test directory nobody runs is documentation, not a test.
 
-A coverage tripwire, not proof of execution: it checks that each directory appears in a
-`run:` command invoking pytest. A later `--ignore`, a shell conditional, or a disabled
-workflow trigger would still pass it. It closes the gap that actually happened — a
-directory nobody wired up at all — and nothing wider.
+25 meetgeek tests landed in #389/#390 and never executed on GitHub, and eight of the ten
+plugin test directories outside CI were found green on 2026-08-23 only because someone
+looked (#381). This file used to check that every plugin test directory had a CI step.
 
-25 meetgeek tests landed in #389/#390 and have never executed on GitHub. Eight of the ten
-plugin test directories outside CI were measured green on 2026-08-23 — 1185 assertions
-nobody was checking — and three were red for reasons no one had seen (#381).
+Since Task 12 (#541) the plugins ship text only and their tests live in tests/, which CI
+runs whole. So the guard is now the other way round: no test may land in plugins/, where
+the one CI step does not reach; and every path a workflow hands pytest must exist, since
+a step pointing at a deleted directory fails on an empty collection.
 """
+import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 WORKFLOWS = ROOT / ".github" / "workflows"
 
 
-# drawio's `test_*.py` are manual smoke scripts, not pytest modules: 578 lines of
-# module-level asserts and print() that run on import and define no test function, so
-# `pytest` there exits 5 ("no tests ran") and a CI step would fail on an empty collection.
-# Converting them is #396; until then, naming them here is honest and a green CI is not
-# claiming to have run them.
-NOT_PYTEST = ("plugins/h2t-arch/skills/drawio/scripts",)
-
-
-def _dirs_with_tests():
-    return sorted({
-        path.parent.relative_to(ROOT).as_posix()
-        for path in (ROOT / "plugins").rglob("test_*.py")
+def _plugin_test_files():
+    return sorted(
+        path.relative_to(ROOT).as_posix()
+        for pattern in ("test_*.py", "*_test.py", "conftest.py")
+        for path in (ROOT / "plugins").rglob(pattern)
         if "__pycache__" not in path.parts
-        and path.parent.relative_to(ROOT).as_posix() not in NOT_PYTEST
-    })
+    )
 
 
-def test_the_probe_finds_plugin_test_dirs():
-    """Control: an empty list would make the next test vacuously true."""
-    found = _dirs_with_tests()
-    assert len(found) >= 10, found
+def test_plugins_ship_no_tests():
+    assert _plugin_test_files() == [], "tests belong in tests/, which CI runs"
 
 
 def _pytest_run_lines():
-    """`run:` commands that actually invoke pytest, comments excluded.
-
-    Matching the directory name anywhere in the YAML would accept a mention in a comment,
-    a job name, or a disabled workflow — a guard that can go green while CI runs nothing.
-    """
+    """`run:` commands that actually invoke pytest, comments excluded."""
     lines = []
     for path in WORKFLOWS.glob("*.yml"):
         for raw in path.read_text(encoding="utf-8").splitlines():
@@ -51,7 +38,7 @@ def _pytest_run_lines():
             if stripped.startswith("#") or "run:" not in stripped:
                 continue
             command = stripped.split("run:", 1)[1].strip()
-            if "pytest" in command:
+            if re.search(r"\bpytest\b", command):
                 lines.append(command)
     return lines
 
@@ -59,11 +46,23 @@ def _pytest_run_lines():
 def test_the_workflow_probe_finds_pytest_runs():
     """Control: an empty command list would make the next test vacuously true."""
     commands = _pytest_run_lines()
-    assert len(commands) >= 4, commands
+    assert any("pytest tests/" in c for c in commands), commands
 
 
-def test_every_plugin_test_dir_is_run_by_a_workflow():
-    commands = _pytest_run_lines()
-    missing = [d for d in _dirs_with_tests()
-               if not any(d in command for command in commands)]
-    assert not missing, f"plugin test dirs never run in CI: {missing}"
+def _has_python(path: Path) -> bool:
+    """A deleted test directory can survive on disk as bare __pycache__ dirs."""
+    if path.is_file():
+        return True
+    return any("__pycache__" not in p.parts for p in path.rglob("*.py"))
+
+
+def test_every_path_a_workflow_hands_pytest_exists():
+    missing = []
+    for command in _pytest_run_lines():
+        after = command.split("pytest", 1)[1].split()
+        for arg in after:
+            if arg.startswith("-") or "${{" in arg:
+                continue
+            if "/" in arg and not _has_python(ROOT / arg):
+                missing.append(f"{arg}  ({command})")
+    assert not missing, "\n".join(missing)

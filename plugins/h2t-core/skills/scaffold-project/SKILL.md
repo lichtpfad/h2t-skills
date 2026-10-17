@@ -19,6 +19,31 @@ metadata:
 You are the wizard. Ask the user questions in natural conversation, then run the scaffolding.
 No UI framework — just Claude asking questions and acting on answers.
 
+<!-- version-check:begin -->
+## Version check
+
+Run this before any other command of this skill:
+
+```bash
+h2t-ops version --expect @VERSION@ --json
+```
+
+Act on the result, in this order:
+
+1. JSON with `"ok": true` — continue.
+2. JSON with `"ok": false` — show the user `error.hint` as it is and stop this skill until
+   it is resolved. Do not run anything the hint names unless the user asks you to: on
+   `reason: path` it is a command for the user to decide on. `result.reason` names the
+   case: `not_installed`, `version` or `path`.
+3. `command not found` — read `~/.h2t/run/install.env`
+   (`grep -E '^(STATE|H2T_HOOK)=' ~/.h2t/run/install.env`). With `STATE=ready` the install
+   is fine and PATH does not reach it: show the directory of the `H2T_HOOK=` path, ask the
+   user to restart the harness, and offer `uv tool update-shell` for them to run. Without
+   it there is no install: give the user `@BOOTSTRAP@ sync`.
+4. Anything else (a non-zero exit without JSON, the usage text of an older CLI) — give the
+   user `@BOOTSTRAP@ sync`.
+<!-- version-check:end -->
+
 ## Variables
 
 ```bash
@@ -243,7 +268,7 @@ If yes → instruct: "Открой Claude Code в `{project_path}` и запус
 
 | Situation | Action |
 |-----------|--------|
-| `scaffold_project.py` not found | Show: "SCAFFOLD_ERROR: script not found at $SCAFFOLD. Run `/h2t-core:setup`" |
-| `apply_registration.py` error | Show error, ask: "Зарегистрировать вручную через `/h2t-core:init-project` позже?" |
+| `h2t-scaffold-project` not found | The version check at the top of this skill covers it; follow its outcome |
+| `h2t-project-register` error | Show error, ask: "Зарегистрировать вручную через `/h2t-core:init-project` позже?" |
 | `gh` not found | Skip GitHub steps, remind to install `gh` CLI |
 | Directory already exists | Show warning, ask: "Директория уже существует. Продолжить (дополнить) или выбрать другой путь?" |

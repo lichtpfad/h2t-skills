@@ -11,14 +11,39 @@ metadata:
 
 Use this skill as the install/update/doctor surface for h2t-core and h2t-ops.
 
-The skill is a thin wrapper around the deterministic backend:
+The skill is a thin wrapper around the deterministic backend, a command of the CLI:
 
 ```text
-scripts/setup_h2t.py
+h2t-ops setup <verb> --json
 ```
 
 Do not reimplement setup logic in prose. Run the backend, inspect structured
 output, and only then explain the next action.
+
+<!-- version-check:begin -->
+## Version check
+
+Run this before any other command of this skill:
+
+```bash
+h2t-ops version --expect @VERSION@ --json
+```
+
+Act on the result, in this order:
+
+1. JSON with `"ok": true` — continue.
+2. JSON with `"ok": false` — show the user `error.hint` as it is and stop this skill until
+   it is resolved. Do not run anything the hint names unless the user asks you to: on
+   `reason: path` it is a command for the user to decide on. `result.reason` names the
+   case: `not_installed`, `version` or `path`.
+3. `command not found` — read `~/.h2t/run/install.env`
+   (`grep -E '^(STATE|H2T_HOOK)=' ~/.h2t/run/install.env`). With `STATE=ready` the install
+   is fine and PATH does not reach it: show the directory of the `H2T_HOOK=` path, ask the
+   user to restart the harness, and offer `uv tool update-shell` for them to run. Without
+   it there is no install: give the user `@BOOTSTRAP@ sync`.
+4. Anything else (a non-zero exit without JSON, the usage text of an older CLI) — give the
+   user `@BOOTSTRAP@ sync`.
+<!-- version-check:end -->
 
 ## Modes
 
@@ -33,15 +58,14 @@ output, and only then explain the next action.
 
 ## Procedure
 
-### Step 1: Resolve script path
+### Step 1: Prerequisites
 
-Use the `scripts/setup_h2t.py` file bundled next to this `SKILL.md`. Every command below
-names it by that relative path, so run them from the skill's base directory — the
-`Base directory for this skill` line printed when the skill loads. From the user's own
-project the relative path does not exist.
+The version check above is the first gate: `h2t-ops setup` is part of the CLI it checks, so
+a machine without the CLI is handled there — outcome 3 or 4 hands the user the bootstrap,
+which installs the current release in one command. Everything below assumes the check
+passed.
 
-Run it through `uv`, which is a prerequisite of this skill anyway — `doctor` reports
-`uv` status, and `install-h2t-ops` cannot work without it.
+`install-h2t-ops` drives `uv tool`, so check for `uv` before Step 3:
 
 The snippet below is POSIX shell. On Windows run it from Git Bash, which the audit
 confirmed present as `/usr/bin/sh`; native PowerShell or CMD will not parse `if !
@@ -59,29 +83,9 @@ if ! command -v uv >/dev/null 2>&1; then
 fi
 ```
 
-Every backend call below spells out its interpreter, `uv run --no-project --python 3.11
-python`, instead of a `RUN` variable: an agent's shell calls share no variables, so a
-variable set here is empty by the next call, and the script then runs as a bare path —
-exit 126, Permission denied.
-
-The preflight is what keeps this honest. `doctor` is the diagnostic, and a diagnostic
-that will not start because the thing it diagnoses is missing is useless at exactly the
-moment it is needed. Without the check, a machine with Python 3.11 but no uv would see
-`uv: command not found` and nothing else. With it, the message names the missing
-prerequisite and how to install it, and exits 3 — the config exit code the connector
-contract already uses.
-
-`--python 3.11` because the package declares `requires-python = ">=3.11"`; a bare
-`uv run` resolves to whatever uv considers current, measured as 3.10 on 2026-08-27.
-`--no-project` because the working directory is frequently the user's own Python
-project, and without it uv would build that instead.
-
-From a repo checkout rather than the plugin cache, the same call with the
-repo-relative path:
-
-```bash
-uv run --no-project --python 3.11 python plugins/h2t-core/skills/setup/scripts/setup_h2t.py doctor --json
-```
+The message names the missing prerequisite and how to install it, and exits 3 — the config
+exit code the connector contract already uses. Without it, a machine with no uv would see
+`uv: command not found` from deep inside `install-h2t-ops` and nothing else.
 
 ### Step 2: Doctor first
 
@@ -89,7 +93,7 @@ For a diagnosis, start with the line below. First setup, repair and update start
 2b instead — `setup` returns this same report:
 
 ```bash
-uv run --no-project --python 3.11 python scripts/setup_h2t.py doctor --json
+h2t-ops setup doctor --json
 ```
 
 Report:
@@ -128,7 +132,7 @@ For first setup, repair and update — in place of Step 2's `doctor`, not after 
 diagnosis stays `doctor`:
 
 ```bash
-uv run --no-project --python 3.11 python scripts/setup_h2t.py setup --json
+h2t-ops setup setup --json
 ```
 
 It is `doctor` plus one write: `env.H2T_MACHINE_NAME` in `~/.claude/settings.json`, so
@@ -143,7 +147,7 @@ Step 2 says, including the `plugin_cache` remedy and the rule for Step 3. Then r
   which name this machine's history lives under, then pin the answer:
 
   ```bash
-  uv run --no-project --python 3.11 python scripts/setup_h2t.py setup --machine-name <answer> --json
+  h2t-ops setup setup --machine-name <answer> --json
   ```
 
   If the user says the machine is new, pin the value of the `today` field
@@ -168,27 +172,30 @@ editable install the report shows — never one you create. The same holds for p
 person types `/plugin …`, an agent runs `claude plugin marketplace add lichtpfad/h2t-skills`
 and `claude plugin install h2t-core@lichtpfad` (README, Channel 1). Neither needs a clone.
 
-First run a dry-run:
+Ask the backend for the install line:
 
 ```bash
-uv run --no-project --python 3.11 python scripts/setup_h2t.py install-h2t-ops --source <source> --dry-run --json
+h2t-ops setup install-h2t-ops --source <source> --dry-run --json
 ```
 
-Show the command to the user. Ask before running the real install because it
-modifies the user's `uv tool` environment.
+Show its `command` field to the user. It modifies the user's `uv tool` environment, so
+ask before running it. After an explicit yes, run that `uv tool install …` line yourself,
+exactly as printed — `uv` is a CLI, and the line is the whole install.
 
-Real install:
+Do not drop `--dry-run` to let the backend install: `h2t-ops setup` runs inside the
+h2t-ops tool that the line replaces, and on Windows its running `h2t-ops.exe` and
+`python.exe` are locked. Without `--dry-run` it refuses, exits 1, and its `hint` names the
+same line.
 
-```bash
-uv run --no-project --python 3.11 python scripts/setup_h2t.py install-h2t-ops --source <source> --json
-```
+Verify by state, not by the uv output: rerun `h2t-ops setup doctor --json` and read
+`entry_points.status`.
 
 ### Step 4: Connector readiness
 
 Default connector check is credential-only and read-only:
 
 ```bash
-uv run --no-project --python 3.11 python scripts/setup_h2t.py connectors-check --json
+h2t-ops setup connectors-check --json
 ```
 
 This must not write provider data, POS/DOR state, Notion pages, Drive files, or
@@ -197,14 +204,14 @@ calendar events.
 Live checks require explicit user intent:
 
 ```bash
-uv run --no-project --python 3.11 python scripts/setup_h2t.py connectors-check --live --json
+h2t-ops setup connectors-check --live --json
 ```
 
 Research/Exa preflight can use a paid provider request. Only run it if the user
 explicitly asks:
 
 ```bash
-uv run --no-project --python 3.11 python scripts/setup_h2t.py connectors-check --live --include-paid --json
+h2t-ops setup connectors-check --live --include-paid --json
 ```
 
 ### Step 5: Boundaries
@@ -238,7 +245,7 @@ or when `connectors-check` reports any connector as `missing`.
 ### Step 1 — Skeleton
 
 ```bash
-uv run --no-project --python 3.11 python scripts/setup_h2t.py secrets skeleton --json
+h2t-ops setup secrets skeleton --json
 ```
 
 From the result, show the user:
@@ -271,7 +278,7 @@ Wait for user to say "done" or "готово" before proceeding.
 First, check which Google connectors are actually missing:
 
 ```bash
-uv run --no-project --python 3.11 python scripts/setup_h2t.py connectors-check --json
+h2t-ops setup connectors-check --json
 ```
 
 Calendar, Gmail and Drive share one token, so this is one question and one command, not
@@ -306,7 +313,7 @@ h2t-ops gmail list --max 1 --json
 Phase 1 — check status:
 
 ```bash
-h2t-ops telegram auth status
+h2t-ops telegram auth status --json
 ```
 
 If already authenticated: skip to Step 5.
@@ -316,19 +323,19 @@ Otherwise, ask user: "Telegram needs authentication. This will send a code to yo
 Phase 2 — request code (ask user for phone number first):
 
 ```bash
-h2t-ops telegram auth request-code --phone <phone>
+h2t-ops telegram auth request-code --phone <phone> --json
 ```
 
 Phase 3 — complete login (ask user for the code from Telegram):
 
 ```bash
-h2t-ops telegram auth complete --phone <phone> --code <code>
+h2t-ops telegram auth complete --phone <phone> --code <code> --json
 ```
 
 If 2FA is enabled, also ask for password:
 
 ```bash
-h2t-ops telegram auth complete --phone <phone> --code <code> --password <password>
+h2t-ops telegram auth complete --phone <phone> --code <code> --password <password> --json
 ```
 
 Confirm success by re-running `auth status`.
@@ -338,13 +345,13 @@ Confirm success by re-running `auth status`.
 Default (format-only, free):
 
 ```bash
-uv run --no-project --python 3.11 python scripts/setup_h2t.py secrets preflight --json
+h2t-ops setup secrets preflight --json
 ```
 
 If user asks for a live check (costs Exa tokens — confirm first):
 
 ```bash
-uv run --no-project --python 3.11 python scripts/setup_h2t.py secrets preflight --live --json
+h2t-ops setup secrets preflight --live --json
 ```
 
 Show a summary table: key → found/valid/connector.

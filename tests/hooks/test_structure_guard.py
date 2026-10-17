@@ -2,13 +2,11 @@
 from __future__ import annotations
 
 import importlib.util
-import io
-import json
 from pathlib import Path
 
 
 def _load_guard():
-    path = Path(__file__).parents[2] / "plugins" / "h2t-core" / "hooks-handlers" / "structure_guard.py"
+    path = Path(__file__).parents[2] / "h2t_ops" / "hooks" / "structure_guard.py"
     spec = importlib.util.spec_from_file_location("structure_guard_under_test", path)
     module = importlib.util.module_from_spec(spec)
     assert spec and spec.loader
@@ -330,8 +328,8 @@ def test_hooks_json_has_structure_guard_entry():
 # ── warn → block: the two axes that actually produced the drift ──────────────
 
 
-def test_main_exits_2_when_frontmatter_missing(tmp_path, monkeypatch, capsys):
-    """main() must honour the frontmatter verdict — it used to discard the code."""
+def test_handle_blocks_when_frontmatter_missing(tmp_path, monkeypatch):
+    """handle() must honour the frontmatter verdict — 3.x main() once discarded the code."""
     guard = _load_guard()
     (tmp_path / ".h2t").mkdir()
     (tmp_path / ".h2t" / "structure.yaml").write_text(
@@ -345,8 +343,7 @@ def test_main_exits_2_when_frontmatter_missing(tmp_path, monkeypatch, capsys):
         "tool_name": "Write",
         "tool_input": {"file_path": str(target), "content": "# X\n"},
     }
-    monkeypatch.setattr(guard.sys, "stdin", io.StringIO(json.dumps(payload)))
-    assert guard.main() == 2
+    assert guard.handle(payload).block is True
 
 
 def test_allowlist_covers_every_tracked_root_dir():

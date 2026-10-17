@@ -11,6 +11,31 @@ metadata:
 
 5-stage pipeline: **SCAN → COUNCIL → JUDGE → DOCS → REPORT**
 
+<!-- version-check:begin -->
+## Version check
+
+Run this before any other command of this skill:
+
+```bash
+h2t-ops version --expect @VERSION@ --json
+```
+
+Act on the result, in this order:
+
+1. JSON with `"ok": true` — continue.
+2. JSON with `"ok": false` — show the user `error.hint` as it is and stop this skill until
+   it is resolved. Do not run anything the hint names unless the user asks you to: on
+   `reason: path` it is a command for the user to decide on. `result.reason` names the
+   case: `not_installed`, `version` or `path`.
+3. `command not found` — read `~/.h2t/run/install.env`
+   (`grep -E '^(STATE|H2T_HOOK)=' ~/.h2t/run/install.env`). With `STATE=ready` the install
+   is fine and PATH does not reach it: show the directory of the `H2T_HOOK=` path, ask the
+   user to restart the harness, and offer `uv tool update-shell` for them to run. Without
+   it there is no install: give the user `@BOOTSTRAP@ sync`.
+4. Anything else (a non-zero exit without JSON, the usage text of an older CLI) — give the
+   user `@BOOTSTRAP@ sync`.
+<!-- version-check:end -->
+
 ## Variables
 
 ```bash
@@ -464,7 +489,7 @@ When `--tier product` is specified:
 | Error | Action |
 |-------|--------|
 | Repo path not found | Stop with clear error message |
-| scan.py fails | Show error, suggest checking path and git status |
+| `h2t-project-audit-scan` fails | Show error, suggest checking path and git status |
 | gh not available | Skip issues, note in scan result |
 | Agent timeout | Retry once, then show partial results |
 | User cancels at gate | Skip DOCS writing, still run REPORT with current state |
@@ -473,7 +498,7 @@ When `--tier product` is specified:
 
 | Mistake | Fix |
 |---------|-----|
-| Running scan manually (file reads) | Use scan.py script — faster, structured output |
+| Running scan manually (file reads) | Use `h2t-project-audit-scan` — faster, structured output |
 | Writing docs without human gate | ALWAYS show and wait for confirmation at Stage 4c |
 | Gating Stage 4 on JUDGE prose | Use `scan_result.docs_lint_health.total_findings` — a number, not substring match |
 | Using sonnet for JUDGE | Use opus — evaluation needs strong reasoning |

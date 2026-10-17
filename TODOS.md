@@ -12,7 +12,7 @@ Backlog items captured during plan reviews and implementation. Do not mix with a
 
 **Why:** CLI calls are protected by `choices=[...]`. Programmatic calls (e.g., future callers beyond scaffold_project.py) silently write `template: bad_value` into `.claude/rules/docs-lint.yaml`, creating dead config.
 
-**How to apply:** Add 2-3 lines to `plugins/h2t-dev/skills/docs-init/scripts/init.py` + 1 test `test_init_repo_raises_on_bad_template` in `tests/docs/test_docs_init_repo_root.py`.
+**How to apply:** Add 2-3 lines to `h2t_ops/tools/docs/docs_init.py` + 1 test `test_init_repo_raises_on_bad_template` in `tests/tools/docs/test_docs_init_repo_root.py`.
 
 **Depends on:** Task 1 of #196 (init.py already being modified).
 
@@ -24,7 +24,7 @@ Backlog items captured during plan reviews and implementation. Do not mix with a
 
 **Why:** `init_repo` has `if not X.exists():` guards, but the new `docs-lint.yaml` path is not covered by any idempotency test. A future edit removing an exists-guard would silently break idempotency.
 
-**How to apply:** Add to `tests/docs/test_docs_init_repo_root.py` alongside existing tests.
+**How to apply:** Add to `tests/tools/docs/test_docs_init_repo_root.py` alongside existing tests.
 
 **Depends on:** Task 1 of #196.
 

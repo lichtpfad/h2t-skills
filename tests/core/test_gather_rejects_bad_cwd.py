@@ -10,12 +10,12 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-GATHER = ROOT / "plugins" / "h2t-core" / "skills" / "session-start" / "scripts" / "gather.py"
+GATHER = "h2t_ops.lifecycle.session_start"  # the plugin script, deleted in Task 12, ran as this module
 
 
 def _run(cwd_arg):
     env = dict(os.environ, H2T_EVALS_MODE="off")
-    return subprocess.run([sys.executable, str(GATHER), "--cwd", cwd_arg, "--briefing-only"],
+    return subprocess.run([sys.executable, "-m", GATHER, "--cwd", cwd_arg, "--briefing-only"],
                           capture_output=True, text=True, encoding="utf-8", env=env, check=False)
 
 

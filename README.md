@@ -239,7 +239,7 @@ Config:    ~/.h2t/config/  (domains.yaml, repo-mapping.yaml, secrets/)
 Standards: bundled in h2t-dev skill references — load via Read when needed
 ```
 
-The source is `plugins/h2t-core/hooks-handlers/inject-h2t-context`, and
+The source is `h2t_ops/hooks/inject_context.py`, and
 `tests/core/test_injected_index_matches_tree.py` holds it to the tree: every name it
 advertises must have a `SKILL.md`, and it may not name a path the installer never creates.
 
@@ -261,7 +261,7 @@ Useful checks:
 
 ```bash
 uv run pytest tests/connectors -q
-uv run pytest plugins/h2t-core/skills/setup/scripts/test_setup_h2t.py -q
+uv run pytest tests/tools/setup/test_setup_h2t.py -q
 uv run python scripts/check_marketplace_sync.py
 ```
 

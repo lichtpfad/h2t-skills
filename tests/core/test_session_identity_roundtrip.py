@@ -22,10 +22,10 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-WRITER = ROOT / "plugins" / "h2t-core" / "skills" / "handoff" / "scripts" / "writer.py"
+WRITER = "h2t_ops.lifecycle.handoff"
+# One copy since Task 12; the plugin's vendored lib, which the hook used to run, is gone.
 LIB_COPIES = {
     "root": ROOT / "h2t_ops" / "lifecycle" / "gather" / "sessions.py",
-    "vendored": ROOT / "plugins" / "h2t-core" / "lib" / "gather" / "sessions.py",
 }
 
 
@@ -38,7 +38,7 @@ def _load(path: Path, name: str):
 
 @pytest.fixture(params=sorted(LIB_COPIES), ids=sorted(LIB_COPIES))
 def sessions(request, monkeypatch):
-    """Both copies must agree; the vendored one is what the hook actually runs."""
+    """Loaded from the file, fresh per test, as the copies were while there were two."""
     return _load(LIB_COPIES[request.param], f"sessions_{request.param}")
 
 
@@ -49,7 +49,7 @@ def _write_handoff(root: Path, project: str, session_id: str) -> None:
     env["H2T_EVALS_MODE"] = "off"
     result = subprocess.run(
         [
-            sys.executable, str(WRITER), "write",
+            sys.executable, "-m", WRITER, "write",
             "--session-id", session_id,
             "--domain", "personal-os",
             "--project", project,
@@ -114,8 +114,6 @@ def test_a_single_name_still_works(tmp_path, monkeypatch, sessions):
 
 def test_the_gather_entrypoint_passes_both_keys():
     """The fix is only real if gather.py hands the reader both identities."""
-    source = (
-        ROOT / "plugins" / "h2t-core" / "skills" / "session-start" / "scripts" / "gather.py"
-    ).read_text(encoding="utf-8")
+    source = (ROOT / "h2t_ops" / "lifecycle" / "session_start.py").read_text(encoding="utf-8")
     assert "find_latest_session_index(proj_id, repo_name)" in source
     assert "find_session_files(proj_id, repo_name)" in source

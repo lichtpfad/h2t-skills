@@ -1,0 +1,187 @@
+{
+  "drive_list_stdout": "\nКорень (2 файлов):\n\nИмя                                                Тип             Изменён\n--------------------------------------------------------------------------------\n  Plan.docx                                        openxml         2026-10-01  [1AbCdEfGhIjK...]\n  Notes                                            document        2026-09-30  [2ZyXwVuTsRqP...]\n",
+  "meetgeek_convert_probe": {
+    "audio_streams": 1,
+    "duration_seconds": 65,
+    "has_video": true,
+    "raw_stderr_tail": "Input #0, matroska,webm, from 'in.webm':\n  Duration: 00:01:05.00\n  Stream #0:0: Video: vp8\n  Stream #0:1: Audio: opus\n"
+  },
+  "meetgeek_drive_audit": {
+    "checked": 0,
+    "errors": [],
+    "public": [],
+    "revoked": 0,
+    "skipped_recent": []
+  },
+  "meetgeek_output_file": "{\n  \"language\": \"en\",\n  \"sentences\": [\n    {\n      \"speaker\": \"Ann\",\n      \"timestamp\": 5,\n      \"transcript\": \"hello from m1\"\n    },\n    {\n      \"speaker\": \"Bob\",\n      \"timestamp\": 65,\n      \"transcript\": \"привет\"\n    }\n  ]\n}",
+  "meetgeek_payloads": {
+    "highlights": {
+      "highlights": [
+        {
+          "text": "key moment",
+          "timestamp": "00:01"
+        }
+      ]
+    },
+    "insights": {
+      "topics": [
+        "release"
+      ]
+    },
+    "summary": {
+      "action_items": [
+        {
+          "owner": "Ann",
+          "text": "ship it"
+        }
+      ],
+      "summary": "summary of m1"
+    },
+    "transcript": {
+      "language": "en",
+      "sentences": [
+        {
+          "speaker": "Ann",
+          "timestamp": 5,
+          "transcript": "hello from m1"
+        },
+        {
+          "speaker": "Bob",
+          "timestamp": 65,
+          "transcript": "привет"
+        }
+      ]
+    }
+  },
+  "meetgeek_staging_purge": {
+    "considered": 0,
+    "dry_run": true,
+    "errors": [],
+    "freed_bytes": 0,
+    "kept": [],
+    "orphans": [],
+    "purged": []
+  },
+  "meetgeek_sync": {
+    "cursor": {
+      "cursor_type": "timestamp",
+      "items_ingested": 2,
+      "last_run_status": "ok",
+      "last_seen_id": "m2",
+      "last_seen_ts": "2026-10-02T12:00:00Z",
+      "source": "meetgeek",
+      "version": 1
+    },
+    "files": {
+      "highlights/m1.json": {
+        "text": "{\n  \"highlights\": [\n    {\n      \"text\": \"key moment\",\n      \"timestamp\": \"00:01\"\n    }\n  ]\n}"
+      },
+      "highlights/m1.md": {
+        "md": "---\nmeeting_id: m1\ntitle: Weekly sync\nattendees: [\"Ann\", \"bob@example.org\"]\ndate: 2026-10-01\ntimestamp_start_utc: \"2026-10-01T10:00:00Z\"\ntimestamp_end_utc: \"2026-10-01T10:30:00Z\"\nlanguage: en\nprovider_url: \"https://app2.meetgeek.ai/meeting/m1\"\ntype: highlights\nsource: meetgeek-api\n---\n\n# Highlights — Weekly sync\n\n- [00:01] key moment"
+      },
+      "highlights/m2.json": {
+        "text": "{\n  \"highlights\": [\n    {\n      \"text\": \"key moment\",\n      \"timestamp\": \"00:01\"\n    }\n  ]\n}"
+      },
+      "highlights/m2.md": {
+        "md": "---\nmeeting_id: m2\ntitle: Retro\nattendees: []\ndate: 2026-10-02\ntimestamp_start_utc: \"2026-10-02T12:00:00Z\"\nprovider_url: \"https://app2.meetgeek.ai/meeting/m2\"\ntype: highlights\nsource: meetgeek-api\n---\n\n# Highlights — Retro\n\n- [00:01] key moment"
+      },
+      "insights/m1.json": {
+        "text": "{\n  \"topics\": [\n    \"release\"\n  ]\n}"
+      },
+      "insights/m1.md": {
+        "md": "---\nmeeting_id: m1\ntitle: Weekly sync\nattendees: [\"Ann\", \"bob@example.org\"]\ndate: 2026-10-01\ntimestamp_start_utc: \"2026-10-01T10:00:00Z\"\ntimestamp_end_utc: \"2026-10-01T10:30:00Z\"\nlanguage: en\nprovider_url: \"https://app2.meetgeek.ai/meeting/m1\"\ntype: insights\nsource: meetgeek-api\n---\n\n# Insights\n\n```json\n{\n  \"topics\": [\n    \"release\"\n  ]\n}\n```"
+      },
+      "insights/m2.json": {
+        "text": "{\n  \"topics\": [\n    \"release\"\n  ]\n}"
+      },
+      "insights/m2.md": {
+        "md": "---\nmeeting_id: m2\ntitle: Retro\nattendees: []\ndate: 2026-10-02\ntimestamp_start_utc: \"2026-10-02T12:00:00Z\"\nprovider_url: \"https://app2.meetgeek.ai/meeting/m2\"\ntype: insights\nsource: meetgeek-api\n---\n\n# Insights\n\n```json\n{\n  \"topics\": [\n    \"release\"\n  ]\n}\n```"
+      },
+      "manifest.jsonl": {
+        "text": "{\"meeting_id\": \"m1\", \"title\": \"Weekly sync\", \"attendees\": [\"Ann\", \"bob@example.org\"], \"date\": \"2026-10-01\", \"timestamp_start_utc\": \"2026-10-01T10:00:00Z\", \"timestamp_end_utc\": \"2026-10-01T10:30:00Z\", \"duration_seconds\": null, \"language\": \"en\", \"provider_url\": \"https://app2.meetgeek.ai/meeting/m1\"}\n{\"meeting_id\": \"m2\", \"title\": \"Retro\", \"attendees\": [\"Ann\", \"Bob\"], \"date\": \"2026-10-02\", \"timestamp_start_utc\": \"2026-10-02T12:00:00Z\", \"timestamp_end_utc\": null, \"duration_seconds\": null, \"language\": null, \"provider_url\": \"https://app2.meetgeek.ai/meeting/m2\"}\n"
+      },
+      "recordings/m1.mp4": {
+        "text": "RECORDING-BYTES"
+      },
+      "recordings/m2.mp4": {
+        "text": "RECORDING-BYTES"
+      },
+      "summaries/m1.json": {
+        "text": "{\n  \"summary\": \"summary of m1\",\n  \"action_items\": [\n    {\n      \"owner\": \"Ann\",\n      \"text\": \"ship it\"\n    }\n  ]\n}"
+      },
+      "summaries/m1.md": {
+        "md": "---\nmeeting_id: m1\ntitle: Weekly sync\nattendees: [\"Ann\", \"bob@example.org\"]\ndate: 2026-10-01\ntimestamp_start_utc: \"2026-10-01T10:00:00Z\"\ntimestamp_end_utc: \"2026-10-01T10:30:00Z\"\nlanguage: en\nprovider_url: \"https://app2.meetgeek.ai/meeting/m1\"\ntype: summary\nsource: meetgeek-api\n---\n\n# Summary — Weekly sync\n\nsummary of m1\n\n## Action Items\n\n- [ ] **Ann**: ship it"
+      },
+      "summaries/m2.json": {
+        "text": "{\n  \"summary\": \"summary of m2\",\n  \"action_items\": [\n    {\n      \"owner\": \"Ann\",\n      \"text\": \"ship it\"\n    }\n  ]\n}"
+      },
+      "summaries/m2.md": {
+        "md": "---\nmeeting_id: m2\ntitle: Retro\nattendees: []\ndate: 2026-10-02\ntimestamp_start_utc: \"2026-10-02T12:00:00Z\"\nprovider_url: \"https://app2.meetgeek.ai/meeting/m2\"\ntype: summary\nsource: meetgeek-api\n---\n\n# Summary — Retro\n\nsummary of m2\n\n## Action Items\n\n- [ ] **Ann**: ship it"
+      },
+      "transcripts/m1.json": {
+        "text": "{\n  \"language\": \"en\",\n  \"sentences\": [\n    {\n      \"speaker\": \"Ann\",\n      \"timestamp\": 5,\n      \"transcript\": \"hello from m1\"\n    },\n    {\n      \"speaker\": \"Bob\",\n      \"timestamp\": 65,\n      \"transcript\": \"привет\"\n    }\n  ]\n}"
+      },
+      "transcripts/m1.md": {
+        "md": "---\nmeeting_id: m1\ntitle: Weekly sync\nattendees: [\"Ann\", \"bob@example.org\"]\ndate: 2026-10-01\ntimestamp_start_utc: \"2026-10-01T10:00:00Z\"\ntimestamp_end_utc: \"2026-10-01T10:30:00Z\"\nlanguage: en\nprovider_url: \"https://app2.meetgeek.ai/meeting/m1\"\nsource: meetgeek-api\napi_version: v1\n---\n\n# Weekly sync\n\n## Transcript\n\n**Ann** [00:00:05] — hello from m1\n**Bob** [00:01:05] — привет"
+      },
+      "transcripts/m2.json": {
+        "text": "{\n  \"language\": \"en\",\n  \"sentences\": [\n    {\n      \"speaker\": \"Ann\",\n      \"timestamp\": 5,\n      \"transcript\": \"hello from m2\"\n    },\n    {\n      \"speaker\": \"Bob\",\n      \"timestamp\": 65,\n      \"transcript\": \"привет\"\n    }\n  ]\n}"
+      },
+      "transcripts/m2.md": {
+        "md": "---\nmeeting_id: m2\ntitle: Retro\nattendees: [\"Ann\", \"Bob\"]\ndate: 2026-10-02\ntimestamp_start_utc: \"2026-10-02T12:00:00Z\"\nprovider_url: \"https://app2.meetgeek.ai/meeting/m2\"\nsource: meetgeek-api\napi_version: v1\n---\n\n# Retro\n\n## Transcript\n\n**Ann** [00:00:05] — hello from m2\n**Bob** [00:01:05] — привет"
+      }
+    },
+    "stdout": "synced=2 skipped=0 errors=0 cursor=<tmp>/cursor.json"
+  },
+  "meetgeek_upload_delegate": {
+    "argv": [
+      "h2t-ops-under-test",
+      "meetgeek",
+      "submit-url",
+      "https://example.org/r.mp4",
+      "--json",
+      "--title",
+      "T",
+      "--language-code",
+      "ru"
+    ],
+    "stdout": {
+      "response": {
+        "message": "Processing"
+      },
+      "status": "submitted"
+    }
+  },
+  "meetgeek_upload_dry_run": {
+    "drive_folder": "MeetGeek Uploads/<today>",
+    "errors": 0,
+    "processed": 0,
+    "results_count": 0,
+    "skipped": 0
+  },
+  "research_fetch": {
+    "body_chars": 607,
+    "body_markdown": "# POPs in TouchDesigner — Introduction\n\nPOPs are the new particle context in TouchDesigner. They replace the\n    legacy SOP-based particle workflow with a GPU-driven pipeline.\n\nThis article covers the fundamentals: attributes, cooking, and feedback.\n    POPs introduce attribute-lifecycle as a first-class concept, similar to\n    Houdini's geometry context but adapted for real-time GPU evaluation.\n\n## Attribute lifecycle\n\nEvery attribute has a creation, modification, and consumption phase.\n    Understanding this order is critical for predictable network behaviour.\n\nContinue to GLSL POPs for the next lesson.",
+    "content_type": "article",
+    "provider_used": "direct",
+    "status": "OK",
+    "title": "POPs in TouchDesigner — Introduction"
+  },
+  "research_search": {
+    "meta": {
+      "mode": "generic",
+      "num_results_returned": 1,
+      "query": "contract test"
+    },
+    "results": [
+      {
+        "highlights": [
+          "h"
+        ],
+        "title": "T",
+        "url": "https://example.com/a"
+      }
+    ],
+    "status": "OK"
+  }
+}
