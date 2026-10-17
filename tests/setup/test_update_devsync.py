@@ -128,8 +128,16 @@ def test_a_pinned_marketplace_is_a_second_question_after_the_first(tmp_path, mon
     m.claude.seed(ref="v2.15.0", plugins=[("h2t-core", "3.2.3", "user", True)])
     m.answers = ["да", "нет"]
     report = _run(m)
-    assert len(m.prompts) == 2 and "v2.15.0" in m.prompts[1]
-    assert any("not confirmed" in f[0] for f in report.failed)
+    first, second = m.prompts
+    # The first question warns of the second; the second names what `remove` does.
+    assert "v2.15.0" in first and "второй" in first
+    assert "v2.15.0" in second and "`marketplace remove`" in second
+    assert "во всех scope" in second and "тем же scope" in second and "disabled" in second
+    (subject, _), = [f for f in report.failed if "pinned" in f[0]]
+    assert "plugins unchanged" in subject and "nothing changed" not in subject
+    # A no to the re-pin leaves the plugins; the CLI the first yes allowed has converged.
+    assert state.read().version == V and len(m.uv.installs) == 1
+    assert m.claude.mutations() == []
 
 
 def _wire_cli(monkeypatch, version):
@@ -165,6 +173,7 @@ def test_a_confirmation_never_crosses_the_relaunch(tmp_path, monkeypatch):
         fetch=Pages()))
 
     _wire_cli(monkeypatch, "4.0.0")
+    monkeypatch.setattr(sys, "stdin", Stdin(tty=True))  # a person at a terminal
     with pytest.raises(SystemExit):
         cli.main(["update"])
     (command,) = calls
@@ -187,27 +196,62 @@ def test_no_option_carries_consent_into_the_target():
             cli.build_parser().parse_args(["update", flag])
 
 
-def test_update_json_without_a_terminal_refuses_and_touches_nothing(tmp_path, monkeypatch,
-                                                                    capsys):
+class Stdin:
+    """A stdin that would answer "да" if read; it records whether anyone read it."""
+
+    def __init__(self, tty: bool) -> None:
+        self.tty, self.reads = tty, 0
+
+    def isatty(self):
+        return self.tty
+
+    def readline(self):
+        self.reads += 1
+        return "да\n"
+
+
+@pytest.mark.parametrize("argv", [["update"], ["update", "--json"]])
+def test_update_without_a_terminal_refuses_and_never_reads_the_pipe(tmp_path, monkeypatch,
+                                                                    capsys, argv):
+    """`echo да | h2t-setup update` is an agent answering for the user: refused."""
     m = _old_machine(tmp_path, monkeypatch)
     _wire_cli(monkeypatch, V)
-
-    class NoTty:
-        def isatty(self):
-            return False
-
-        def readline(self):
-            raise AssertionError("read an answer nobody could give")
-    monkeypatch.setattr(sys, "stdin", NoTty())
+    stdin = Stdin(tty=False)
+    monkeypatch.setattr(sys, "stdin", stdin)
 
     def no_target():
         raise AssertionError("the refusal must precede the target")
     monkeypatch.setattr(manifest, "current", no_target)
-    assert cli.main(["update", "--json"]) == 3
-    err = json.loads(capsys.readouterr().err)["error"]
-    assert err["details"]["reason"] == "confirmation_required"
-    assert "h2t-setup update" in err["hint"] and "--json" in err["hint"]
+    assert cli.main(argv) == 3
+    captured = capsys.readouterr()
+    err = json.loads(captured.err)["error"] if "--json" in argv else None
+    if err is not None:
+        assert err["details"]["reason"] == "confirmation_required"
+        assert "h2t-setup update" in err["hint"] and "--json" not in err["hint"]
+    else:
+        assert "terminal" in captured.err
+    assert stdin.reads == 0
     assert m.uv.installs == [] and not state.run_dir().exists()
+
+
+@pytest.mark.parametrize("rest", [[], ["--json"]])
+def test_the_target_executor_refuses_a_pipe_after_the_relaunch(tmp_path, monkeypatch, capsys,
+                                                               rest):
+    """The re-launched process runs the same cli.main: an old executor that never checked
+    (or a terminal that became a pipe) still meets the refusal in the target."""
+    m = _old_machine(tmp_path, monkeypatch)
+    _wire_cli(monkeypatch, V)  # the target's own version: no further re-launch
+    stdin = Stdin(tty=False)
+    monkeypatch.setattr(sys, "stdin", stdin)
+    monkeypatch.setenv(sync.RELAUNCH_ENV, V)  # set by the parent that re-launched us
+    words = sync.relaunch_command(TARGET, "update", rest)[len(BOOT):]
+    assert cli.main(words) == 3
+    err = capsys.readouterr().err
+    if rest:
+        assert json.loads(err)["error"]["details"]["reason"] == "confirmation_required"
+    else:
+        assert "terminal" in err
+    assert stdin.reads == 0 and m.uv.installs == [] and not state.run_dir().exists()
 
 
 def test_the_default_question_goes_to_stderr_and_reads_one_line(monkeypatch, capsys):
@@ -277,7 +321,8 @@ def dev(tmp_path, monkeypatch):
 
 
 def _devsync(m):
-    return sync.run("dev-sync", None, [], uv=m.uv, execute=m.uv.run)
+    return sync.run("dev-sync", None, [], uv=m.uv, execute=m.uv.run,
+                    claude=harness_claude.Claude(exe="claude", run=m.claude))
 
 
 def _programs(m) -> list[str]:
@@ -350,6 +395,9 @@ def test_dev_sync_through_the_cli_is_offline_and_spawns_only_uv(dev, monkeypatch
     monkeypatch.setattr(manifest, "current", no_target)
     monkeypatch.setattr(manifest, "urllib_fetch", no_target)
     monkeypatch.setattr(sync, "run_uv", dev.uv)
+    real_claude = harness_claude.Claude
+    monkeypatch.setattr(harness_claude, "Claude",
+                        lambda: real_claude(exe="claude", run=dev.claude))
     ran = []
 
     def run(cmd, **kwargs):
@@ -395,3 +443,20 @@ def test_dev_sync_on_windows_inside_the_tool_hands_the_uv_command_back(dev, monk
     assert command[:4] == ["uv", "tool", "install", "--editable"]
     assert exc.value.hint == manifest.render(command)
     assert dev.uv.installs == [] and state.read() is None
+
+
+def test_dev_sync_without_install_json_keeps_the_installed_lichtpfad_plugins(dev):
+    """§6.4: install.json; else the lichtpfad plugins Claude Code has; else the default."""
+    dev.claude.seed(plugins=[("h2t-core", "4.0.0", "user", True),
+                             ("h2t-arch", "4.0.0", "user", True)])
+    _devsync(dev)
+    assert json.loads((state.run_dir() / "install.json").read_text())["plugins"] == [
+        "h2t-arch", "h2t-core"]
+    assert dev.claude.mutations() == []
+
+
+def test_dev_sync_without_install_json_or_claude_takes_the_default_set(dev):
+    sync.run("dev-sync", None, [], uv=dev.uv, execute=dev.uv.run,
+             claude=harness_claude.Claude(exe=None, which=lambda name: None))
+    assert json.loads((state.run_dir() / "install.json").read_text())["plugins"] == [
+        "h2t-core", "h2t-ops"]

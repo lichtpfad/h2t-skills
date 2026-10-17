@@ -513,9 +513,13 @@ def _plugins_step(mode: str, target: dict, names: list[str], harness: dict, clau
             if mode != "update":
                 report.failed.append((subject + "; sync changes nothing here", shown))
                 return False
-            answer = confirm(f"Marketplace lichtpfad is pinned to {ref}. Run:\n{shown}\nда? ")
+            answer = confirm(
+                f"Marketplace lichtpfad закреплён на {ref}. Перезакрепление запускает "
+                "`marketplace remove`, а он удаляет плагины lichtpfad во всех scope; затем "
+                "они ставятся заново с тем же scope и тем же состоянием disabled. "
+                f"Команды:\n{shown}\nда? ")
             if (answer or "").strip().lower() not in YES:
-                report.failed.append((subject + "; not confirmed, nothing changed", shown))
+                report.failed.append((subject + "; not confirmed, plugins unchanged", shown))
                 return False
             hold()
             try:
@@ -715,6 +719,14 @@ def _preview(target: dict, root: Path, claude, execute, fetch) -> str:
         for name in _plugin_set(_last_install_json(), {"plugins": plugins}):
             have = [str(e.get("version")) for e in plugins if _name(e) == name]
             lines.append(f"  {name}: {', '.join(have) or 'не установлен'} → {version}")
+    try:
+        market = claude.marketplace() if plugins is not None else None
+    except harness_claude.HarnessError:
+        market = None
+    ref = (market or {}).get("ref")
+    if ref not in (None, "", "main"):
+        lines.append(f"  Marketplace lichtpfad закреплён на {ref}: после этого будет второй "
+                     "вопрос — о перезакреплении, которое переустанавливает плагины")
     lines += ["", f"CHANGELOG {version}:", _changelog(version, was, fetch), ""]
     return "\n".join(lines)
 
@@ -737,6 +749,14 @@ def find_checkout(start: Path) -> Path | None:
     return None
 
 
+def _installed_plugins(claude) -> list[dict]:
+    """What Claude Code has installed, read only; [] when it is absent or does not answer."""
+    try:
+        return claude.plugins() if claude.found() else []
+    except harness_claude.HarnessError:
+        return []
+
+
 def _plugins_note(checkout: Path) -> str:
     return ("Plugins: dev-sync does not touch the marketplace plugins. Load them from the "
             f"checkout: claude --plugin-dir {checkout / 'plugins'}/<name> "
@@ -744,7 +764,7 @@ def _plugins_note(checkout: Path) -> str:
             "yours to run.")
 
 
-def dev_sync(uv, execute, cwd: str | None = None) -> Report:
+def dev_sync(uv, execute, claude, cwd: str | None = None) -> Report:
     """The CLI from the checkout, editable, with the checkout's own constraints and the
     user's options; verified by running it, then install.json and install.env with
     EDITABLE_ROOT. Offline (the lock is exported `--frozen --offline`); no git."""
@@ -800,9 +820,8 @@ def dev_sync(uv, execute, cwd: str | None = None) -> Report:
         report.failed.append((f"CLI h2t-ops {version} (editable {checkout}): installed but "
                               f"does not answer: {problem}", DEV_RETRY))
         return report
-    plugins = (last or {}).get("plugins")
-    plugins = [p for p in plugins if isinstance(p, str)] if isinstance(plugins, list) \
-        else list(DEFAULT_PLUGINS)
+    # §6.4: install.json; else the installed lichtpfad plugins; else the default two.
+    plugins = _plugin_set(last, {"plugins": _installed_plugins(claude)})
     _commit(version, root, entrypoints, options, plugins, editable=str(checkout))
     report.done.append(f"CLI h2t-ops {version}: installed editable from {checkout}; "
                        "answers when run")
@@ -822,10 +841,10 @@ def run(mode: str, target: dict | None, argv: list[str], *, uv=None, claude=None
     # Resolved here, not at definition: the tests refuse the real ones by patching these.
     uv = uv or run_uv
     execute = execute or subprocess.run
-    if mode == "dev-sync":
-        return dev_sync(uv, execute)
-    confirm = confirm or ask
     claude = claude if claude is not None else harness_claude.Claude()
+    if mode == "dev-sync":
+        return dev_sync(uv, execute, claude)
+    confirm = confirm or ask
     root = _tool_dir(uv) / "h2t-ops"
     # cli.main stops here first; this is the same stop for a caller that skips it.
     install = state.read()

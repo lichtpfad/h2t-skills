@@ -4,7 +4,7 @@ The order is the contract: an editable install stops `sync`/`update` before anyt
 then the target is resolved, and a network failure ends the run with nothing touched; then
 the process makes sure it is the target's own isolated executor; only then do the steps run.
 `dev-sync` installs from the checkout, so it reads no target and needs no re-launch.
-`update --json` without a terminal is refused first: its question has nobody to answer it.
+`update` without a terminal is refused first: its question has nobody to answer it.
 """
 from __future__ import annotations
 
@@ -45,13 +45,15 @@ def _editable_stop(mode: str) -> None:
             details={"reason": "editable", "checkout": checkout})
 
 
-def _consent_stop(mode: str, json_out: bool) -> None:
-    # No flag gives consent, by design: one would travel through the re-launch (§7.3.2).
-    if mode == "update" and json_out and not sys.stdin.isatty():
+def _consent_stop(mode: str) -> None:
+    # Consent is a person at a terminal. No flag gives it, and neither does a pipe:
+    # `echo да | h2t-setup update` is an agent answering for the user. The target executor
+    # runs this same check after a re-launch (§7.3.2).
+    if mode == "update" and not sys.stdin.isatty():
         raise ConfigError(
-            "h2t-setup update asks before it changes anything, and with --json and no "
-            "terminal there is nobody to answer",
-            hint="run `h2t-setup update` in a terminal (without --json is fine too); "
+            "h2t-setup update asks before it changes anything, and with no terminal "
+            "there is nobody to answer",
+            hint="run `h2t-setup update` in a terminal; "
                  "`h2t-setup sync` brings the install to the target without asking",
             details={"reason": "confirmation_required"})
 
@@ -63,7 +65,7 @@ def main(argv: list[str] | None = None) -> int:
     fmt = "json" if ns.json else "human"
     try:
         _editable_stop(ns.mode)
-        _consent_stop(ns.mode, ns.json)
+        _consent_stop(ns.mode)
         target = None
         if ns.mode != "dev-sync":
             target = manifest.current()
