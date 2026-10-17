@@ -18,8 +18,10 @@ The repository is public. Nothing has to be granted before installing, and nothi
 be cloned: a checkout is only for developing the pack. This applies to an agent installing
 for a person too.
 
-The one prerequisite is [uv](https://docs.astral.sh/uv/getting-started/installation/); it
-brings its own Python. Then one command, the same for a person and for an agent:
+The one prerequisite for the CLI is [uv](https://docs.astral.sh/uv/getting-started/installation/);
+it brings its own Python. For the plugin steps, Claude Code and git must already be
+installed (`marketplace add` clones over HTTPS); without `claude` on PATH, `sync` skips
+them. Then one command, the same for a person and for an agent:
 
 ```bash
 @BOOTSTRAP@ sync
@@ -45,8 +47,10 @@ Run it again to repair: it compares the machine with the release and redoes only
 differs. Replace `sync` with `update` to see "installed → target" and the CHANGELOG first
 and answer yes; `update` asks in a terminal and refuses without one
 (`reason: confirmation_required`). Once installed, `h2t-setup sync` and `h2t-setup update`
-do the same — they hand over to the bootstrap of the current release themselves (on
-Windows they print that command for you to run, since the running tool is locked).
+do the same — they hand over to the bootstrap of the current release themselves. One
+exception: on Windows, a repair started from inside the installed tool prints that command
+for you to run in a terminal, since the running tool is locked; the bootstrap itself runs
+normally there.
 
 Plugins and the CLI are one version. Plugins carry text only (skills, references, the hook
 wrapper `hooks/run`); every hook runs as `h2t-hook <name>` from the CLI. When the CLI is

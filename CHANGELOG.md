@@ -58,9 +58,10 @@ The pack is rebuilt around one package (#541). Nothing here moves your data; see
   its findings where there were none before.
 - **grade-guard and plain-guard are silent on `Stop`.** They print nothing and log every
   verdict to `~/.h2t/logs/grade-guard.jsonl` and `~/.h2t/logs/plain-guard.jsonl`.
-- **An invalid hook event is logged.** A hook whose JSON input does not parse appends its
-  traceback to `~/.h2t/logs/hooks.jsonl` instead of vanishing, and the next
-  `SessionStart` names the repair.
+- **Failing hooks are logged.** Every failing hook, including one whose JSON input does not
+  parse, is logged to `~/.h2t/logs/hooks.jsonl` instead of vanishing. Only a failure during
+  `SessionStart` is also reported in the session; on every other event h2t hooks print
+  nothing.
 
 ### Creative profiles
 
