@@ -21,7 +21,7 @@ COPIES = ROOT / "h2t_ops" / "hooks"
 # copy -> (dropped from the original, added in the copy)
 PAIRS = {
     "structure_guard.py": ({"_load_payload", "main"}, {"handle"}),
-    "grade_guard.py": ({"main"}, {"handle", "stop_warning"}),
+    "grade_guard.py": ({"main"}, {"handle", "warning", "log", "LOG_PATH"}),
     "plain_guard.py": ({"main"}, {"handle"}),
     "plan_closer.py": ({"_load_payload", "main"}, {"handle"}),
     "new_repo_hint.py": ({"main"}, {"handle", "NOTICE"}),

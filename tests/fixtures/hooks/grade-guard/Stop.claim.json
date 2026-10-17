@@ -9,8 +9,14 @@
     "transcript_path": "{transcript}"
   },
   "expect": {
-    "text": "[h2t] «Готово» без вывода команды и без грейда [B]/[C]/[D] — утверждение о состоянии не проверено (Approach §1).",
+    "text": "",
     "block": false,
     "notice": ""
+  },
+  "plain_stdout_3x": "[h2t] «Готово» без вывода команды и без грейда [B]/[C]/[D] — утверждение о состоянии не проверено (Approach §1).",
+  "log": {
+    "flagged": true,
+    "word": "Готово",
+    "session_id": "s1"
   }
 }

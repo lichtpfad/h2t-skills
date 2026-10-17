@@ -10,8 +10,9 @@ One file is one event for one hook and the reply it must get. Keys:
 - `expect` — the Reply: `text` (exact) or `text_startswith`, `block`, `notice`; `meta` —
   fields the GATHER_META JSON must carry.
 - `after` — {relative path: [substrings]} the tree must hold after the hook ran.
-- `log` — plain-guard: fields of the row it logs, or null for no row.
-- `plain_stdout_3x` — plain-guard: what the 3.x handler printed and the port no longer does.
+- `log` — grade-guard, plain-guard: fields of the row the hook logs to
+  ~/.h2t/logs/<name>.jsonl, or null for no row.
+- `plain_stdout_3x` — the Stop guards: what the 3.x handler printed and the port no longer does.
 
 Shared by test_hook_modules.py (the module, in-process) and test_hook_equivalence.py (the
 3.x handler against `h2t-hook`, as subprocesses).
@@ -102,17 +103,17 @@ def check_after(body: dict, root: Path) -> None:
             assert needle in content, (rel, needle, content)
 
 
-def log_rows(home: Path) -> list[dict]:
-    path = home / ".h2t" / "logs" / "plain-guard.jsonl"
+def log_rows(home: Path, name: str) -> list[dict]:
+    path = home / ".h2t" / "logs" / f"{name}.jsonl"
     if not path.exists():
         return []
     return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line]
 
 
-def check_log(body: dict, home: Path) -> None:
+def check_log(body: dict, home: Path, name: str) -> None:
     if "log" not in body:
         return
-    rows = log_rows(home)
+    rows = log_rows(home, name)
     if body["log"] is None:
         assert rows == []
         return

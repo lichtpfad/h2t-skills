@@ -34,8 +34,8 @@ CASES = hc.all_cases()
 
 # Port decisions a reader can see. Anything else that differs is a defect.
 DECLARED = {
-    # 3.x printed plain stdout on Stop, shown in transcript mode only; now systemMessage.
-    "grade-guard": "plain stdout -> systemMessage",
+    # 3.x printed plain stdout on Stop, shown in transcript mode only; now the log alone.
+    "grade-guard": "plain stdout -> log only",
     # 3.x printed plain stdout on Stop, shown in transcript mode only; now the log alone.
     "plain-guard": "plain stdout -> log only",
 }
@@ -131,14 +131,15 @@ def test_old_handler_and_package_module_decide_the_same(case, tmp_path):
     assert n_block == o_block
     assert n_plain == "", "the package never prints outside an envelope"
 
-    if DECLARED.get(name) == "plain stdout -> systemMessage":
-        assert (n_model, n_human) == ("", o_plain)
-    elif DECLARED.get(name) == "plain stdout -> log only":
+    if DECLARED.get(name) == "plain stdout -> log only":
         assert (n_model, n_human) == ("", "")
+        hc.check_log(body, new_home, name)
+
         def rows(home, root):
             return [_normal(json.dumps({k: v for k, v in row.items() if k != "ts"}), root)
-                    for row in hc.log_rows(home)]
-        assert rows(new_home, new_root) == rows(old_home, old_root)
+                    for row in hc.log_rows(home, name)]
+        if name == "plain-guard":  # 3.x logged too; grade-guard's log is new in the port
+            assert rows(new_home, new_root) == rows(old_home, old_root)
         assert o_plain == hc.load(path).get("plain_stdout_3x", ""), "3.x printed this"
     elif name.startswith("gather-") and hc.META_SEP in o_model + o_human:
         o_brief, o_meta = _gather_parts(o_model or o_human)

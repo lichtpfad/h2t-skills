@@ -84,6 +84,8 @@ def rig(tmp_path):
 
     once.transcript = str(transcript)
     once.work = str(work)
+    once.home = home
+    once.tmp = tmp_path
     return once
 
 
@@ -92,14 +94,19 @@ def _p95(samples: list[float]) -> float:
     return ordered[max(0, int(round(0.95 * len(ordered))) - 1)]
 
 
-def _measure(rig, entries: list[tuple[str, dict]]) -> tuple[float, list]:
-    """One sample = every entry of the event in sequence, as the harness fires them."""
+def _measure(rig, entries: list[tuple[str, dict]], before=lambda: None) -> tuple[float, list]:
+    """One sample = every entry of the event in sequence, as the harness fires them.
+
+    `before` runs ahead of every sample, outside the clock.
+    """
+    before()
     for name, payload in entries:  # warm-up, and a check that the handler really ran
         _, done = rig(name, payload)
         assert done.returncode in (0, 2), (name, done.returncode, done.stderr[-300:])
         assert b"h2t: CLI" not in done.stdout, f"{name}: the wrapper noticed, it did not run"
     samples, last = [], []
     for _ in range(RUNS):
+        before()
         total, last = 0.0, []
         for name, payload in entries:
             elapsed, done = rig(name, payload)
@@ -121,7 +128,9 @@ def test_stop_both_guards(rig):
     payload = {"hook_event_name": "Stop", "session_id": "s1", "cwd": rig.work,
                "transcript_path": rig.transcript, "stop_hook_active": False}
     p95, last = _measure(rig, [("grade-guard", payload), ("plain-guard", payload)])
-    assert b"systemMessage" in last[0].stdout, "grade-guard must have had work to do"
+    assert last[0].stdout == b"" and last[1].stdout == b"", "both Stop guards are silent"
+    rows = (rig.home / ".h2t" / "logs" / "grade-guard.jsonl").read_text(encoding="utf-8")
+    assert '"flagged": true' in rows, "grade-guard must have had work to do"
     _judge("Stop", p95, 0.300)
 
 
@@ -147,3 +156,18 @@ def test_session_start(rig):
     p95, last = _measure(rig, [("inject-h2t-context", payload)])
     assert b"h2t-context" in last[0].stdout
     _judge("SessionStart", p95, 1.0)
+
+
+def test_user_prompt_submit_session_skill_slash_command(rig):
+    """The one UserPromptSubmit that starts Python: a session skill's slash command (3 s)."""
+    payload = {"hook_event_name": "UserPromptSubmit", "session_id": "s1", "cwd": rig.work,
+               "prompt": "/h2t-core:session-start"}
+
+    def unlock():  # the 30 s per-cwd lock would turn every run after the first into a no-op
+        for lock in rig.tmp.glob("h2t_gather_*.lock"):
+            lock.unlink()
+
+    p95, last = _measure(rig, [("gather-on-prompt", payload)], before=unlock)
+    context = json.loads(last[0].stdout)["hookSpecificOutput"]["additionalContext"]
+    assert context.startswith("BRIEFING:"), context[:200]
+    _judge("UserPromptSubmit (slash, gather)", p95, 3.0)

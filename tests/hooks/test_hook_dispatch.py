@@ -51,16 +51,23 @@ def test_a_registered_handler_gets_the_parsed_event_and_its_reply_is_emitted(run
                                          "additionalContext": "BRIEFING: ok"}
 
 
-def test_bad_json_is_an_empty_event(run, capsysbinary):
+@pytest.mark.parametrize("stdin,error", [
+    (b"{not json", "JSONDecodeError"),
+    (b"", "JSONDecodeError"),
+    (b"[1, 2]", "ValueError"),
+    (b'"a string"', "ValueError"),
+])
+def test_an_event_that_is_not_a_json_object_fails_loudly(run, capsys, tmp_path, stdin, error):
+    """A silent hook is a failure (.claude/rules/hooks.md): no handler runs on `{}`."""
     seen = []
-    assert run("probe", lambda e: seen.append(e) or Reply(), b"{not json") == 0
-    assert seen == [{}]
-
-
-def test_a_json_value_that_is_not_an_object_is_an_empty_event(run):
-    seen = []
-    run("probe", lambda e: seen.append(e) or Reply(), b"[1, 2]")
-    assert seen == [{}]
+    assert run("probe", lambda e: seen.append(e) or Reply("ran"), stdin) == 1
+    assert seen == [], "the handler must not run on an event that did not parse"
+    captured = capsys.readouterr()
+    assert captured.err == f"h2t hook probe failed: {error}\n"
+    assert captured.out == ""
+    rows = (tmp_path / ".h2t" / "logs" / "hooks.jsonl").read_text(encoding="utf-8").splitlines()
+    row = json.loads(rows[-1])
+    assert (row["hook"], row["rc"], row["error"]) == ("probe", 1, error)
 
 
 def test_undecodable_bytes_become_replacement_characters(run):

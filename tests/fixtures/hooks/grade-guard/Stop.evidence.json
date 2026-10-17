@@ -10,5 +10,9 @@
     "text": "",
     "block": false,
     "notice": ""
+  },
+  "log": {
+    "flagged": false,
+    "word": null
   }
 }

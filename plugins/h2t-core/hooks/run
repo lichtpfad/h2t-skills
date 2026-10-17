@@ -21,6 +21,14 @@ if [ "$event" = "UserPromptSubmit" ]; then
   [[ $input =~ $re ]] || exit 0
 fi
 
+# PostToolUse fires these two on every Bash call; Python starts only if the handler could
+# act (spec §2.7). Each substring is one the handler's trigger cannot match without, so the
+# filter is never stricter than the handler — tests/hooks/test_hooks_run_prefilter.py.
+case "$name" in
+  plan-closer) [[ $input == *merge* ]] || exit 0 ;;                       # gh\s+pr\s+merge
+  new-repo-hint) [[ $input == *init* || $input == *create* ]] || exit 0 ;; # git init, * create
+esac
+
 # field VAR KEY FILE: the first KEY=value line of FILE into VAR, a trailing CR dropped
 # (install.env written on Windows, read by Git Bash).
 field() {

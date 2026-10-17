@@ -67,12 +67,16 @@ Set H2T_PLUGIN_ROOT to override where the handler is looked for.
 def _read_event() -> dict:
     # Bytes, decoded explicitly: sys.stdin.read() uses the console code page on Windows,
     # and under UTF-8 mode one undecodable byte becomes a lone surrogate (#453).
+    #
+    # An event that is not a JSON object raises, and run_handler turns that into exit 1
+    # plus a log row. Read as `{}`, it ran every handler on nothing and they all stayed
+    # silent — and a silent hook is a failure, not a steady state (.claude/rules/hooks.md).
+    # Undecodable bytes inside valid JSON still become U+FFFD: that is an event, not noise.
     raw = sys.stdin.buffer.read().decode("utf-8", "replace")
-    try:
-        event = json.loads(raw or "{}")
-    except json.JSONDecodeError:
-        return {}
-    return event if isinstance(event, dict) else {}
+    event = json.loads(raw)
+    if not isinstance(event, dict):
+        raise ValueError(f"hook event is a JSON {type(event).__name__}, not an object")
+    return event
 
 
 def _log_failure(name: str, exc: BaseException) -> None:

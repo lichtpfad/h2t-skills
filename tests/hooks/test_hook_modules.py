@@ -46,11 +46,11 @@ def _patch_providers(monkeypatch, name: str, body: dict, home):
         # Never enumerate, let alone kill, the real processes of the machine running tests.
         monkeypatch.setattr(reap_codex, "_list_brokers", lambda: [])
         monkeypatch.setattr(reap_codex, "_kill", lambda pid: pytest.fail(f"kill {pid}"))
-    if name == "plain-guard":
-        from h2t_ops.hooks import plain_guard
+    if name in ("grade-guard", "plain-guard"):
+        import importlib
+        module = importlib.import_module(f"h2t_ops.hooks.{name.replace('-', '_')}")
         # A module constant, resolved at import from the real HOME.
-        monkeypatch.setattr(plain_guard, "LOG_PATH",
-                            home / ".h2t" / "logs" / "plain-guard.jsonl")
+        monkeypatch.setattr(module, "LOG_PATH", home / ".h2t" / "logs" / f"{name}.jsonl")
 
 
 @pytest.mark.parametrize("case", CASES, ids=[hc.case_id(c) for c in CASES])
@@ -66,7 +66,7 @@ def test_recorded_event_gets_recorded_reply(case, box, monkeypatch):
 
     hc.check_reply(hc.expected(body, root), reply.text, reply.block, reply.notice)
     hc.check_after(body, root)
-    hc.check_log(body, home)
+    hc.check_log(body, home, name)
 
 
 def test_every_handler_has_a_recorded_case():
@@ -96,13 +96,17 @@ def test_a_failed_gather_does_not_lock_the_retry(box):
     assert hooks.HANDLERS["gather-on-skill"](event).text.startswith("BRIEFING:")
 
 
-def test_gather_output_never_reaches_the_hook_stdout(box, capsysbinary):
-    """The hook's stdout carries the envelope only; gather prints through sys.stdout.buffer."""
+def test_gather_output_never_reaches_the_hook_stdout(box, capfdbinary):
+    """The hook's stdout carries the envelope only; gather prints through sys.stdout.buffer.
+
+    capfd, not capsys: a write to file descriptor 1 (a subprocess that inherits it, a
+    print before the swap) would bypass sys.stdout and still corrupt the envelope.
+    """
     _, root = box
     reply = hooks.HANDLERS["gather-on-skill"](
         {"hook_event_name": "PreToolUse", "tool_input": {"skill": "handoff"}, "cwd": str(root)})
     assert reply.text.startswith("BRIEFING:")
-    captured = capsysbinary.readouterr()
+    captured = capfdbinary.readouterr()
     assert captured.out == b"" and captured.err == b""
 
 
