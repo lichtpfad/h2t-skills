@@ -383,22 +383,67 @@ def _plugin_set(last: dict | None, harness: dict) -> list[str]:
     return names or list(DEFAULT_PLUGINS)
 
 
-def _cmd(*args: str) -> str:
-    return " ".join(harness_claude.Claude.command(*args))
+def _name(entry: dict) -> str:
+    return str(entry.get("id", "")).split("@")[0]
 
 
-def _repin_commands(names: list[str], before: list[dict]) -> list[list[str]]:
-    scope = {p["id"].split("@")[0]: p.get("scope") or "user" for p in before}
-    out = [list(harness_claude.Claude.remove_args()), list(harness_claude.Claude.add_args())]
-    out += [list(harness_claude.Claude.install_args(n, scope.get(n, "user"))) for n in names]
-    out += [list(harness_claude.Claude.disable_args(p["id"].split("@")[0], p.get("scope") or "user"))
-            for p in before if p.get("enabled") is False]
-    return out
+def _scope(entry: dict) -> str:
+    return entry.get("scope") or "user"
+
+
+def _where(entry: dict) -> str | None:
+    """The directory a command for this entry runs in: its project, or None (neutral)."""
+    if _scope(entry) in harness_claude.PROJECT_SCOPES:
+        return entry.get("projectPath") or ""
+    return None
+
+
+def _gone(cwd: str | None) -> bool:
+    return cwd is not None and not (cwd and Path(cwd).is_dir())
+
+
+def _key(entry: dict) -> tuple:
+    return (entry.get("id"), _scope(entry), _where(entry))
+
+
+def _show(args: tuple[str, ...], cwd: str | None) -> str:
+    line = harness_claude.Claude.shown(args, cwd or None)
+    return f"manual (the project directory is gone): {line}" if _gone(cwd) else line
+
+
+def _restore_plan(names: list[str], before: list[dict]) -> list[tuple[str, tuple, str | None]]:
+    """(kind, args, cwd) that rebuild the snapshot after `remove`: an install for EVERY entry
+    (remove uninstalls every scope, probe 3b), a user-scope one for a set member the snapshot
+    lacks, then a disable for each entry disabled in its own scope."""
+    C = harness_claude.Claude
+    plan = [("install", C.install_args(_name(e), _scope(e)), _where(e)) for e in before]
+    present = {_name(e) for e in before}
+    plan += [("install", C.install_args(n, "user"), None) for n in names if n not in present]
+    plan += [("disable", C.disable_args(_name(e), _scope(e)), _where(e)) for e in before
+             if e.get("enabled") is False]
+    return plan
+
+
+def _apply(claude, kind: str, args: tuple, cwd: str | None) -> None:
+    getattr(claude, kind)(args[1].split("@")[0], args[3], cwd or None)
+
+
+def _redisable(claude, before: list[dict], hold=lambda: None) -> None:
+    """Disable again what the snapshot had disabled in its own scope (remove forgets it,
+    probe 3b; whether update keeps it is not probed)."""
+    now = {_key(p): p for p in claude.plugins()}
+    for p in before:
+        if p.get("enabled") is not False or _gone(_where(p)):
+            continue
+        cur = now.get(_key(p))
+        if cur is not None and cur.get("enabled") is not False:
+            hold()
+            claude.disable(_name(p), _scope(p), _where(p) or None)
 
 
 def _restore(claude, before: dict) -> None:
-    """Put Claude Code back as the snapshot had it: the marketplace on its ref, each plugin
-    in its scope, the disabled ones disabled (remove forgets that, probe 3b)."""
+    """Put Claude Code back as the snapshot had it: the marketplace on its ref, each entry in
+    its scope (and project), the disabled ones disabled."""
     market = before.get("marketplace") or {}
     ref = market.get("ref")
     now = claude.marketplace()
@@ -407,20 +452,11 @@ def _restore(claude, before: dict) -> None:
         now = None
     if now is None:
         claude.marketplace_add(ref, market.get("repo") or harness_claude.SOURCE)
-    have = {(p["id"], p.get("scope")) for p in claude.plugins()}
+    have = {_key(p) for p in claude.plugins()}
     for p in before.get("plugins") or []:
-        if (p["id"], p.get("scope")) not in have:
-            claude.install(p["id"].split("@")[0], p.get("scope") or "user")
+        if _key(p) not in have and not _gone(_where(p)):
+            claude.install(_name(p), _scope(p), _where(p) or None)
     _redisable(claude, before.get("plugins") or [])
-
-
-def _redisable(claude, before: list[dict]) -> None:
-    now = {(p["id"], p.get("scope")): p for p in claude.plugins()}
-    for p in before:
-        if p.get("enabled") is False:
-            cur = now.get((p["id"], p.get("scope")))
-            if cur is not None and cur.get("enabled") is not False:
-                claude.disable(p["id"].split("@")[0], p.get("scope") or "user")
 
 
 def _plugins_step(mode: str, target: dict, names: list[str], harness: dict, claude, confirm,
@@ -437,20 +473,39 @@ def _plugins_step(mode: str, target: dict, names: list[str], harness: dict, clau
     except (OSError, ValueError):
         before = {"marketplace": harness.get("marketplace"),
                   "plugins": harness.get("plugins") or []}
+
+    def hold() -> None:
+        # Before the first mutation: a crash anywhere after it (between an update and the
+        # re-disable, mid re-pin) leaves the rerun the state to restore.
+        if not pending.exists():
+            pending.parent.mkdir(parents=True, exist_ok=True)
+            pending.write_text(json.dumps(before, ensure_ascii=False), encoding="utf-8")
+
     changed = False
+    manual: list[str] = []
+    manual_names: set[str] = set()
+
+    def by_hand(name: str, line: str) -> None:
+        manual_names.add(name)
+        if line not in manual:
+            manual.append(line)
+
     try:
         market = claude.marketplace()
         fresh = False
         if market is None:
+            hold()
             claude.marketplace_add()
             report.done.append(f"Claude Code: marketplace added: {harness_claude.SOURCE}")
             changed = fresh = True
         elif market.get("ref") not in (None, "", "main"):
             ref = market["ref"]
-            commands = _repin_commands(names, before["plugins"])
-            shown = "\n".join(" ".join(harness_claude.Claude.command(*c)) for c in commands)
+            plan = _restore_plan(names, before["plugins"])
+            C = harness_claude.Claude
+            shown = "\n".join([C.shown(C.remove_args()), C.shown(C.add_args())]
+                              + [_show(args, cwd) for _, args, cwd in plan])
             subject = (f"Claude Code: marketplace lichtpfad is pinned to {ref}; re-pinning means "
-                       "`remove`, which uninstalls its plugins")
+                       "`remove`, which uninstalls its plugins in every scope")
             if mode != "update":
                 report.failed.append((subject + "; sync changes nothing here", shown))
                 return False
@@ -458,17 +513,16 @@ def _plugins_step(mode: str, target: dict, names: list[str], harness: dict, clau
             if (answer or "").strip().lower() not in YES:
                 report.failed.append((subject + "; not confirmed, nothing changed", shown))
                 return False
-            pending.parent.mkdir(parents=True, exist_ok=True)
-            pending.write_text(json.dumps(before, ensure_ascii=False), encoding="utf-8")
+            hold()
             try:
                 claude.marketplace_remove()
                 changed = True
                 claude.marketplace_add()
-                for n in names:
-                    scope = next((p.get("scope") or "user" for p in before["plugins"]
-                                  if p["id"] == harness_claude.plugin_id(n)), "user")
-                    claude.install(n, scope)
-                _redisable(claude, before["plugins"])
+                for kind, args, cwd in plan:
+                    if _gone(cwd):
+                        by_hand(args[1].split("@")[0], _show(args, cwd))
+                    else:
+                        _apply(claude, kind, args, cwd)
             except harness_claude.HarnessError as exc:
                 try:
                     _restore(claude, before)
@@ -483,43 +537,57 @@ def _plugins_step(mode: str, target: dict, names: list[str], harness: dict, clau
             report.done.append(f"Claude Code: marketplace lichtpfad re-pinned from {ref} to main")
             fresh = True
 
-        def entries() -> dict[str, list[dict]]:
-            out: dict[str, list[dict]] = {}
-            for p in claude.plugins():
-                out.setdefault(p["id"].split("@")[0], []).append(p)
-            return out
-
-        installed = entries()
-        behind = [n for n in names if any(e.get("version") != version for e in installed.get(n, []))]
-        missing = [n for n in names if n not in installed]
-        if (behind or missing) and not fresh:
+        current = claude.plugins()
+        present = {_name(e) for e in current}
+        missing = [n for n in names if n not in present]
+        behind = [e for e in current if _name(e) in names and e.get("version") != version]
+        if (missing or behind) and not fresh:
+            hold()
             claude.marketplace_update()
+        C = harness_claude.Claude
         for n in missing:
-            scope = next((p.get("scope") or "user" for p in before["plugins"]
-                          if p["id"] == harness_claude.plugin_id(n)), "user")
-            claude.install(n, scope)
+            own = [e for e in before["plugins"] if _name(e) == n] or [
+                {"id": harness_claude.plugin_id(n), "scope": "user"}]
+            for e in own:
+                args, cwd = C.install_args(n, _scope(e)), _where(e)
+                if _gone(cwd):
+                    by_hand(n, _show(args, cwd))
+                    continue
+                hold()
+                _apply(claude, "install", args, cwd)
+                changed = True
+                report.done.append(f"Claude Code: {n} installed ({_scope(e)})")
+        for e in behind:
+            args, cwd = C.update_args(_name(e), _scope(e)), _where(e)
+            if _gone(cwd):
+                by_hand(_name(e), _show(args, cwd))
+                continue
+            hold()
+            _apply(claude, "update", args, cwd)
             changed = True
-            report.done.append(f"Claude Code: {n} installed ({scope})")
-        for n in behind:
-            for e in installed[n]:
-                if e.get("version") != version:
-                    claude.update(n, e.get("scope") or "user")
-                    changed = True
-                    report.done.append(f"Claude Code: {n} {e.get('version')} → {version} "
-                                       f"({e.get('scope')})")
+            report.done.append(f"Claude Code: {_name(e)} {e.get('version')} → {version} "
+                               f"({_scope(e)})")
         # A plugin the user disabled stays disabled (Review Focus 5), whatever an update did.
-        _redisable(claude, before["plugins"])
-        final = entries()
-        wrong = [f"{n} {', '.join(str(e.get('version')) for e in final.get(n, [])) or 'absent'}"
-                 for n in names
-                 if not final.get(n) or any(e.get("version") != version for e in final[n])]
+        _redisable(claude, before["plugins"], hold)
+        # Everything the snapshot asked for has been applied: a later run must not replay an
+        # old disabled state over a choice the user makes after this one.
+        pending.unlink(missing_ok=True)
+        final = [e for e in claude.plugins() if not _gone(_where(e))]
+        wrong = []
+        for n in names:
+            mine = [e for e in final if _name(e) == n]
+            if not mine and n in manual_names:
+                continue
+            if not mine or any(e.get("version") != version for e in mine):
+                wrong.append(f"{n} {', '.join(str(e.get('version')) for e in mine) or 'absent'}")
     except harness_claude.HarnessError as exc:
         report.failed.append((f"Claude Code: {exc}", retry))
         return changed
+    for line in manual:
+        report.notes.append(f"Claude Code: {line}")
     if wrong:
         report.failed.append((f"Claude Code: not at {version}: {'; '.join(wrong)}", retry))
         return changed
-    pending.unlink(missing_ok=True)
     if not changed:
         report.done.append(f"Claude Code: {', '.join(names)} already at {version}")
     return changed
