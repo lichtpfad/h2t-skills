@@ -18,9 +18,9 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "plugins" / "h2t-dev" / "lib"))
+sys.path.insert(0, str(ROOT))
 
-from docs.common import (  # noqa: E402  — path is set on the line above
+from h2t_ops.tools.docs.common import (  # noqa: E402  — path is set on the line above
     LINKED_DOC_DIRS,
     issue_link_problem,
     parse_frontmatter,
