@@ -18,6 +18,22 @@ wheel и `constraints.txt` отдавал локальный `python3 -m http.se
 | 3c. после `add` без ref | `plugin marketplace add lichtpfad/h2t-skills`, `plugin install h2t-core@lichtpfad --scope user`, `plugin list --json`; затем `plugin disable …` | `ref` в `known_marketplaces.json` нет; установлен 3.2.62 (голова main), scope `user`, `enabledPlugins: true` (включён); после `disable` — `false` | **Ни scope, ни disabled сами не сохраняются**: после `remove` → `add` → `install` плагин включён, и выключенное состояние надо записать заново. Scope сохраняется только потому, что передан `--scope user` явно. Восстановление из снимка (§7.3 п.3, п.5) необходимо |
 | 4. полные обработчики 3.2.61 на окружении CLI | каждый файл из `~/.claude/plugins/cache/lichtpfad/h2t-core/3.2.61/hooks-handlers/` (21 файл), `echo '{}' \|`, `H2T_PYTHON=<python venv h2t-ops 0.2.1, 3.12.11>`, временный `HOME`; bash-скрипты через `bash`, `.py` и `on-stop`/`post-git-commit-docs-lint` (shebang `python3`) через python окружения | Код 0 и пустой stderr у 19 из 21 файла (у `bulk-precommit`, `layout-precommit`, `on-stop`, `post-git-commit-docs-lint` — после запуска в корректном окружении, см. ниже); `inject-h2t-context` печатает JSON `additionalContext` (1134 байта); `post_git_commit_docs_lint.py` — код 0, предупреждение `DeprecationWarning: datetime.utcnow()` (не traceback); `bulk-precommit` и `layout-precommit` — код 0 внутри git-репозитория (вне репозитория `git diff --cached` падал с кодом 129 — это поведение git, не обработчика); `on-stop` и `post-git-commit-docs-lint` — код 0 | Tracebackов нет ни у одного. В `HOME` ничего не записано. Старые обработчики работают с интерпретатором окружения CLI — §8 «Переход открытых сессий» подтверждён |
 
+## Windows — 2026-10-17
+
+Ноутбук владельца: Windows, Git Bash (bash 5.2.37), uv 0.11.2. Обёртка `hooks/run` и CLI 4.0 —
+с ветки `feat/pkg-arch-5-release`, установка в `~/h2t-probe` (`UV_TOOL_DIR`, `UV_TOOL_BIN_DIR`);
+подложные `HOME` и `USERPROFILE`. Глобальный h2t-ops 0.2.1 не тронут, `~/h2t-probe` удалён.
+Шаг 1 запускался через `claude -p "привет"`, не в интерактивной сессии.
+
+| проба | команда | что получено | вывод |
+|---|---|---|---|
+| W1. оболочка хуков | хук `UserPromptSubmit` печатает `$0`, `$SHELL`, `$BASH_VERSION`, `ps -p $$`; второй раз — из PowerShell с PATH без записей `Git` (`Get-Command bash` пуст) | оба раза `0=/usr/bin/bash`, `BASH=5.2.37(1)-release`, `HOME=/c/Users/<user>`, `USERPROFILE=C:\Users\<user>`, ошибок нет | Claude Code находит Git Bash сам, не по PATH; внутри хука `/usr/bin` на PATH (`ps` отработал), значит `bash "…/hooks/run"` находится |
+| W2. обёртка без Python | `bash run grade-guard 9` (Stop) и `bash run gather-on-prompt 29` (UserPromptSubmit «привет»), подделка `h2t-hook`, 20 прогонов, три худших | Stop 0.152 / 0.152 / 0.158 с; UserPromptSubmit 0.056 / 0.057 / 0.062 с; вывод пуст, код 0 | бюджет 50 мс на Windows не держится: путь — один `cat` и одно сравнение, остальное — старт bash в Git Bash. Порог Windows 80 мс |
+| W3. полная цепочка | то же, `H2T_HOOK` → `h2t-hook.exe` 4.0, `grade-guard` на Stop | холодно (без перезагрузки) 0.313 / 0.212 / 0.214 с; тепло, три худших из 20: 0.199 / 0.205 / 0.229 с; `hooks.jsonl` нет | Stop укладывается с запасом; порог Windows 400 мс (вместо предварительных 600) |
+| W4. PATH открытой сессии | `[Environment]::GetEnvironmentVariable('Path','User')`; в сессии Claude Code `echo $PATH`, `command -v` | `~/.local/bin` есть в реестре пользователя и в PATH сессии; `h2t-ops`, `h2t-hook`, `uv` находятся там | если каталог уже на PATH, новые команды видны без перезапуска. Первый `uv tool update-shell` на чистой машине не проверен — для него подсказка `version_check.py` «перезапусти харнесс» |
+| W5. раскладка `uv tool dir` | `uv tool dir`, `uv tool dir --bin`, `ls -la`, `cmp`, `uv-receipt.toml` | tool dir `%APPDATA%\uv\tools`, bin `~\.local\bin`; в bin — копии `.exe` (47104 байт), не ссылки, побайтно равны `Scripts/`; в receipt `install-path` — `bin/*.exe` | подтверждает исправление C1: `version --expect` принимает совпадение PATH с записанной точкой входа |
+| W6. HOME и USERPROFILE | Git Bash, PowerShell, `Path.home()`, `expanduser('~')`, `cygpath` | везде `C:\Users\<user>`; `~/.h2t` и `$(cygpath -u $USERPROFILE)/.h2t` — одна папка | обёртка (`$HOME`) и Python (`Path.home()`) читают один `~/.h2t` |
+
 ## Заметки
 
 - Проба 1: «холодный» включает скачивание управляемого Python 3.12.11 и 51 пакета (в том числе
