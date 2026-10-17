@@ -15,8 +15,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-from h2t_ops.lifecycle import plugin_script_anchor
-
 
 def run(cmd: list[str], cwd: str, timeout: int = 10) -> str:
     try:
@@ -251,18 +249,10 @@ def docs_lint_health(repo: Path) -> dict | None:
     Returns the h2t_lifecycle_report/v0.1 dict, or None if docs-lint unavailable.
     Fields callers care about: status ("ok"/"warning"/"error"), total_findings (int).
     """
-    _self = plugin_script_anchor("skills/project-audit/scripts/scan.py",
-                                 Path(__file__).resolve())
-    candidates = [
-        _self.parents[3].parent / "h2t-dev" / "skills" / "docs-lint" / "scripts" / "lint.py",
-        _self.parents[5] / "plugins" / "h2t-dev" / "skills" / "docs-lint" / "scripts" / "lint.py",
-    ]
-    lint_script = next((p for p in candidates if p.exists()), None)
-    if lint_script is None:
-        return None
     try:
         r = subprocess.run(
-            [sys.executable, str(lint_script), "doctor", "--root", str(repo), "--json"],
+            [sys.executable, "-m", "h2t_ops.tools.docs.lint", "doctor", "--root", str(repo),
+             "--json"],
             capture_output=True, encoding="utf-8", errors="replace", timeout=30,
         )
         if r.returncode == 0 and r.stdout.strip():

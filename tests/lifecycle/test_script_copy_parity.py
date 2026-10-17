@@ -43,8 +43,50 @@ for _lib in [_cache_lib, _repo_lib]:
         break
 
 '''
-_ANCHOR_IMPORT = ("from pathlib import Path\n",
-                  "from pathlib import Path\n\nfrom h2t_ops.lifecycle import plugin_script_anchor\n")
+_SCAFFOLD_TYPES = '''# lib path: source sibling plugins/h2t-dev/lib OR cache lichtpfad/h2t-dev/{latest}/lib
+_SCAFFOLD_SCRIPT = Path(__file__).resolve()
+_PLUGIN_ROOT_EARLY = _SCAFFOLD_SCRIPT.parents[3]
+_H2T_DEV_LIB = _PLUGIN_ROOT_EARLY.parent / "h2t-dev" / "lib"  # source
+if not _H2T_DEV_LIB.exists():
+    # Cache: go up to lichtpfad/, find latest h2t-dev version
+    _cache_base = _PLUGIN_ROOT_EARLY.parent.parent / "h2t-dev"
+    if _cache_base.exists():
+        _versions = sorted([p for p in _cache_base.iterdir() if p.is_dir()], reverse=True)
+        for _v in _versions:
+            if (_v / "lib").exists():
+                _H2T_DEV_LIB = _v / "lib"
+                break
+if _H2T_DEV_LIB.exists() and str(_H2T_DEV_LIB) not in sys.path:
+    sys.path.insert(0, str(_H2T_DEV_LIB))
+
+try:
+    from docs.project_types import PROJECT_TYPES, SCAFFOLD_TYPE_TO_TEMPLATE
+    _PROJECT_TYPES_AVAILABLE = True
+except ImportError:
+    _PROJECT_TYPES_AVAILABLE = False
+    PROJECT_TYPES = {}
+    SCAFFOLD_TYPE_TO_TEMPLATE = {}
+'''
+_SCAFFOLD_TYPES_FROM_PACKAGE = '''from h2t_ops.lifecycle import plugin_script_anchor
+from h2t_ops.tools.docs.project_types import PROJECT_TYPES, SCAFFOLD_TYPE_TO_TEMPLATE
+
+# The project types ship in the package (h2t_ops.tools.docs). docs-init does not, and is
+# still looked up in the h2t-dev plugin tree, anchored where the 3.x entry point found it.
+_SCAFFOLD_SCRIPT = plugin_script_anchor(
+    "skills/scaffold-project/scripts/scaffold_project.py", Path(__file__).resolve())
+_PROJECT_TYPES_AVAILABLE = True
+'''
+_SYNC_LABELS_FROM_PLUGIN = '''    if _H2T_DEV_ROOT is None:
+        return {"status": "skip", "reason": "h2t-dev plugin not found"}
+    sync_script = _H2T_DEV_ROOT / "skills" / "docs-sync-labels" / "scripts" / "sync_labels.py"
+    if not sync_script.exists():
+        return {"status": "skip", "reason": "sync_labels script not found"}
+    r = subprocess.run(
+        [sys.executable, str(sync_script), repo_name, "--apply"],
+'''
+_SYNC_LABELS_FROM_PACKAGE = '''    r = subprocess.run(
+        [sys.executable, "-m", "h2t_ops.tools.docs.sync_labels", repo_name, "--apply"],
+'''
 
 # copy -> (original, rewrite imports?, [(old, new), ...])
 PAIRS = {
@@ -52,17 +94,30 @@ PAIRS = {
     "handoff.py": ("handoff/scripts/writer.py", True, [(_WRITER_BOOTSTRAP, "")]),
     "apply_registration.py": ("init-project/scripts/apply_registration.py", False, []),
     "project_audit_report.py": ("project-audit/scripts/report.py", False, []),
+    # docs-lint is the package tool now (Task 10): no plugin tree to find it in.
     "project_audit_scan.py": ("project-audit/scripts/scan.py", False, [
-        _ANCHOR_IMPORT,
-        ("    _self = Path(__file__).resolve()\n",
-         '    _self = plugin_script_anchor("skills/project-audit/scripts/scan.py",\n'
-         "                                 Path(__file__).resolve())\n"),
+        ('''    _self = Path(__file__).resolve()
+    candidates = [
+        _self.parents[3].parent / "h2t-dev" / "skills" / "docs-lint" / "scripts" / "lint.py",
+        _self.parents[5] / "plugins" / "h2t-dev" / "skills" / "docs-lint" / "scripts" / "lint.py",
+    ]
+    lint_script = next((p for p in candidates if p.exists()), None)
+    if lint_script is None:
+        return None
+    try:
+        r = subprocess.run(
+            [sys.executable, str(lint_script), "doctor", "--root", str(repo), "--json"],
+''', '''    try:
+        r = subprocess.run(
+            [sys.executable, "-m", "h2t_ops.tools.docs.lint", "doctor", "--root", str(repo),
+             "--json"],
+'''),
     ]),
+    # The project types and the label sync come from the package (Task 10); docs-init is
+    # not in it, so the h2t-dev lookup stays — anchored where the 3.x entry point was.
     "scaffold_project.py": ("scaffold-project/scripts/scaffold_project.py", False, [
-        _ANCHOR_IMPORT,
-        ("_SCAFFOLD_SCRIPT = Path(__file__).resolve()\n",
-         "_SCAFFOLD_SCRIPT = plugin_script_anchor(\n"
-         '    "skills/scaffold-project/scripts/scaffold_project.py", Path(__file__).resolve())\n'),
+        (_SCAFFOLD_TYPES, _SCAFFOLD_TYPES_FROM_PACKAGE),
+        (_SYNC_LABELS_FROM_PLUGIN, _SYNC_LABELS_FROM_PACKAGE),
         # The dropped comment records the original's own #434 history; in h2t_ops/ it
         # would be a new C:/dev hit for tests/dev/test_no_author_paths_ship.py.
         ('''_PLUGIN_ROOT = Path(__file__).resolve().parents[3]

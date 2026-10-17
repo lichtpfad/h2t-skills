@@ -13,31 +13,13 @@ import sys
 from pathlib import Path
 
 from h2t_ops.lifecycle import plugin_script_anchor
+from h2t_ops.tools.docs.project_types import PROJECT_TYPES, SCAFFOLD_TYPE_TO_TEMPLATE
 
-# lib path: source sibling plugins/h2t-dev/lib OR cache lichtpfad/h2t-dev/{latest}/lib
+# The project types ship in the package (h2t_ops.tools.docs). docs-init does not, and is
+# still looked up in the h2t-dev plugin tree, anchored where the 3.x entry point found it.
 _SCAFFOLD_SCRIPT = plugin_script_anchor(
     "skills/scaffold-project/scripts/scaffold_project.py", Path(__file__).resolve())
-_PLUGIN_ROOT_EARLY = _SCAFFOLD_SCRIPT.parents[3]
-_H2T_DEV_LIB = _PLUGIN_ROOT_EARLY.parent / "h2t-dev" / "lib"  # source
-if not _H2T_DEV_LIB.exists():
-    # Cache: go up to lichtpfad/, find latest h2t-dev version
-    _cache_base = _PLUGIN_ROOT_EARLY.parent.parent / "h2t-dev"
-    if _cache_base.exists():
-        _versions = sorted([p for p in _cache_base.iterdir() if p.is_dir()], reverse=True)
-        for _v in _versions:
-            if (_v / "lib").exists():
-                _H2T_DEV_LIB = _v / "lib"
-                break
-if _H2T_DEV_LIB.exists() and str(_H2T_DEV_LIB) not in sys.path:
-    sys.path.insert(0, str(_H2T_DEV_LIB))
-
-try:
-    from docs.project_types import PROJECT_TYPES, SCAFFOLD_TYPE_TO_TEMPLATE
-    _PROJECT_TYPES_AVAILABLE = True
-except ImportError:
-    _PROJECT_TYPES_AVAILABLE = False
-    PROJECT_TYPES = {}
-    SCAFFOLD_TYPE_TO_TEMPLATE = {}
+_PROJECT_TYPES_AVAILABLE = True
 
 
 _H2T_LINT_ENTRIES = """\
@@ -498,13 +480,8 @@ def run_docs_init(repo_name: str, project_dir: Path, *, template: str = "code_re
 def run_sync_labels(repo_name: str) -> dict:
     if not repo_name:
         return {"status": "skip", "reason": "no repo name"}
-    if _H2T_DEV_ROOT is None:
-        return {"status": "skip", "reason": "h2t-dev plugin not found"}
-    sync_script = _H2T_DEV_ROOT / "skills" / "docs-sync-labels" / "scripts" / "sync_labels.py"
-    if not sync_script.exists():
-        return {"status": "skip", "reason": "sync_labels script not found"}
     r = subprocess.run(
-        [sys.executable, str(sync_script), repo_name, "--apply"],
+        [sys.executable, "-m", "h2t_ops.tools.docs.sync_labels", repo_name, "--apply"],
         capture_output=True, text=True,
     )
     if r.returncode == 0:
