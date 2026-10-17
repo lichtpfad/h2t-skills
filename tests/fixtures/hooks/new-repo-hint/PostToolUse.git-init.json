@@ -1,0 +1,14 @@
+{
+  "event": {
+    "hook_event_name": "PostToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+      "command": "cd /tmp/x; git init"
+    }
+  },
+  "expect": {
+    "text": "Repository created. Offer /h2t-core:init-project now: it registers the repo and runs the truth gate (three answers by command: source of truth, stage-run record, data contract) before the first line of code.",
+    "block": false,
+    "notice": "Новое репо → предложи /h2t-core:init-project (truth gate)."
+  }
+}

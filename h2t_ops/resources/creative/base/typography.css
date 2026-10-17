@@ -1,0 +1,18 @@
+:root {
+  --font-size-base: clamp(1rem, 0.875rem + 0.333vw, 1.125rem);
+  --font-size-h1: clamp(2.5rem, 1.5rem + 2.667vw, 4rem);
+  --font-size-h2: clamp(2rem, 1.25rem + 2vw, 3rem);
+  --font-size-h3: clamp(1.5rem, 1rem + 1.333vw, 2rem);
+  --line-height-body: 1.6;
+  --line-height-heading: 1.1;
+}
+
+body {
+  font-size: var(--font-size-base);
+  line-height: var(--line-height-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1 { font-size: var(--font-size-h1); line-height: var(--line-height-heading); }
+h2 { font-size: var(--font-size-h2); line-height: var(--line-height-heading); }
+h3 { font-size: var(--font-size-h3); line-height: var(--line-height-heading); }

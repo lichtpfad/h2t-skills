@@ -1,7 +1,8 @@
 """Installable entrypoint for activity spool logging."""
 
-from h2t_ops.plugin_entrypoints import run_plugin_main
+from h2t_ops.lifecycle import run_main
+from h2t_ops.lifecycle.activity import writer
 
 
-def main() -> int:
-    return run_plugin_main("lib/activity/writer.py")
+def main(argv: list[str] | None = None) -> int:
+    return run_main(writer.main, "h2t-activity-log", argv)

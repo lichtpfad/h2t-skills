@@ -320,12 +320,17 @@ def _tokens_to_markdown_and_text(tokens: list[tuple[str, str]]) -> tuple[str, st
     return md, txt
 
 
+def _html_newlines(html: str) -> str:
+    """CRLF and a lone CR become LF, as HTML input preprocessing does before parsing."""
+    return html.replace("\r\n", "\n").replace("\r", "\n")
+
+
 def _inline_extract(
     html: str, *, base_url: str,
 ) -> tuple[str | None, str, str, list[dict[str, Any]], str | None, str | None]:
     """Return (title, body_markdown, body_text, links, canonical_url, lang)."""
     p = _InlineExtractor()
-    p.feed(html)
+    p.feed(_html_newlines(html))
     p.finish()
     md, txt = _tokens_to_markdown_and_text(p._tokens)
     # Resolve relative hrefs.
@@ -346,6 +351,7 @@ def _reset_trafilatura_warned_for_tests() -> None:
 def _extract_with_optional_uplift(
     html: str, *, base_url: str,
 ) -> tuple[str | None, str, str, list[dict[str, Any]], str | None, str | None]:
+    html = _html_newlines(html)
     title, md, txt, links, canonical, lang = _inline_extract(
         html, base_url=base_url,
     )
@@ -1055,3 +1061,18 @@ def fetch_via_ladder(
 
 
 STUB_PROVIDERS = {"playwright", "crawl4ai", "firecrawl", "browserless"}
+
+
+def preflight_jina() -> None:
+    """Reach the Jina Reader endpoint root, as `fetch_url.py preflight` did (#541).
+
+    Raises NetworkError when it cannot be reached; returns nothing on success.
+    """
+    from h2t_ops.core.errors import NetworkError
+
+    req = urllib.request.Request(JINA_ENDPOINT_DEFAULT, headers={"User-Agent": DEFAULT_USER_AGENT})
+    try:
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            resp.read()
+    except Exception as exc:  # noqa: BLE001 — the script reported every failure as an env error
+        raise NetworkError(f"jina endpoint unreachable: {exc}") from exc

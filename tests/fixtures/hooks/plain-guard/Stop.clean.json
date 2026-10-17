@@ -1,0 +1,19 @@
+{
+  "transcript": [
+    "Закрой сессию. Потом проверь статус базы."
+  ],
+  "event": {
+    "hook_event_name": "Stop",
+    "session_id": "s1",
+    "transcript_path": "{transcript}"
+  },
+  "expect": {
+    "text": "",
+    "block": false,
+    "notice": ""
+  },
+  "log": {
+    "flagged": false,
+    "long": []
+  }
+}

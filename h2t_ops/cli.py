@@ -5,6 +5,7 @@ import argparse
 import shutil
 import sys
 
+import h2t_ops
 from h2t_ops import build_info
 from h2t_ops.core.errors import UsageError
 
@@ -23,6 +24,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub = p.add_subparsers(dest="connector")
     sub.add_parser("connectors", help="List available connectors")
     sub.add_parser("deploy", help="Profile-driven deploy commands")
+    sub.add_parser("version", help="Check the installed version and entry points (--expect V, --json); exit 3 if not ok")
     sub.add_parser("doctor", help="Report installed CLI state (version, path, connectors, secrets); always exits 0, connectors-check is the gate")
     for spec in discover():
         spec.register(sub)
@@ -119,6 +121,40 @@ def _run_connector(argv: list[str]) -> int:
         return emit(provider, exc=exc, fmt=fmt)
 
 
+_VERSION_MESSAGES = {
+    "not_installed": "h2t-ops is not installed as a tool",
+    "version": "installed version does not match the expected one",
+    "path": "PATH does not lead to the installed entry points",
+}
+
+
+def _version(argv: list[str]) -> int:
+    import json
+
+    from h2t_ops.core.envelope import success_envelope
+    from h2t_ops.setup import version_check
+
+    vp = argparse.ArgumentParser(prog="h2t-ops version")
+    vp.add_argument("--expect", default=None)
+    vp.add_argument("--json", action="store_true")
+    args = vp.parse_args(argv)
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
+    result = version_check.check(args.expect if args.expect is not None else h2t_ops.__version__)
+    if args.json:
+        if result["ok"]:
+            envelope = success_envelope("version", result)
+        else:
+            envelope = {"ok": False, "provider": "version",
+                        "error": {"type": "config", "message": _VERSION_MESSAGES[result["reason"]],
+                                  "hint": result["hint"]},
+                        "result": result}
+        print(json.dumps(envelope, ensure_ascii=False))
+    else:
+        print(result["version"] if result["ok"] else f"{result['reason']}: {result['hint']}")
+    return 0 if result["ok"] else 3
+
+
 def _deploy_dispatch(argv: list[str]) -> int:
     from h2t_ops.deploy.commands import dispatch as deploy_dispatch
 
@@ -136,6 +172,8 @@ def dispatch(argv: list[str]) -> int:
     if argv and argv[0] in ("--version", "-V"):
         print(build_info.version_line())
         return 0
+    if argv and argv[0] == "version":
+        return _version(argv[1:])
     if argv and argv[0] == "doctor":
         return _doctor()
     if argv and argv[0] == "connectors":
@@ -210,10 +248,10 @@ def dispatch(argv: list[str]) -> int:
             "`h2t-ops ingest` is retired — use the connector directly, e.g. `h2t-ops gmail list`"
         ), fmt=_fmt_from(argv))
     if argv and argv[0] == "gather":
-        # One gather implementation: the plugin script, reached through the same ladder
-        # h2t-gather uses. lib/cli/main.py carried a second copy that never gained
-        # find_latest_session_index, so this path silently lost "### Previous Session".
-        from h2t_ops.plugin_entrypoints import run_plugin_main
+        # One gather implementation: the package module h2t-gather runs. lib/cli/main.py
+        # carried a second copy that never gained find_latest_session_index, so this path
+        # silently lost "### Previous Session".
+        from h2t_ops.lifecycle import run_main, session_start
         # Replicate the legacy parser rather than slicing argv: argparse accepts the
         # optional positional anywhere, so `gather --cwd /tmp session-start` is a valid
         # legacy shape that hand-rolled parsing would reject.
@@ -232,8 +270,7 @@ def dispatch(argv: list[str]) -> int:
             forwarded.append("--format-briefing")
         if gathered.briefing_only:
             forwarded.append("--briefing-only")
-        sys.argv = forwarded
-        return run_plugin_main("skills/session-start/scripts/gather.py")
+        return run_main(session_start.main, forwarded[0], forwarded[1:])
     if argv and argv[0] in _MIGRATED:
         return _run_connector(argv)
     if not argv:

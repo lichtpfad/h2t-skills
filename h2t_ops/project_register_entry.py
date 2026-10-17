@@ -1,7 +1,7 @@
 """Installable entrypoint for project registration in the h2t config."""
 
-from h2t_ops.plugin_entrypoints import run_plugin_main
+from h2t_ops.lifecycle import apply_registration, run_main
 
 
-def main() -> int:
-    return run_plugin_main("skills/init-project/scripts/apply_registration.py")
+def main(argv: list[str] | None = None) -> int:
+    return run_main(apply_registration.main, "h2t-project-register", argv)

@@ -1,0 +1,8 @@
+component: cta
+fields:
+  text:
+    type: text
+    required: true
+  href:
+    type: url
+    required: true

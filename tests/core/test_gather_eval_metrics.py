@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from lib.eval.session import SkillEval
+from h2t_ops.lifecycle.eval.session import SkillEval
 
 
 def test_gather_emits_sources_failed_count(tmp_path, monkeypatch):

@@ -1,7 +1,7 @@
 """Installable entrypoint for new-project scaffolding."""
 
-from h2t_ops.plugin_entrypoints import run_plugin_main
+from h2t_ops.lifecycle import run_main, scaffold_project
 
 
-def main() -> int:
-    return run_plugin_main("skills/scaffold-project/scripts/scaffold_project.py")
+def main(argv: list[str] | None = None) -> int:
+    return run_main(scaffold_project.main, "h2t-scaffold-project", argv)

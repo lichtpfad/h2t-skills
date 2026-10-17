@@ -1,0 +1,12 @@
+{
+  "event": {
+    "hook_event_name": "Stop",
+    "transcript_path": "{tmp}/nope.jsonl"
+  },
+  "expect": {
+    "text": "",
+    "block": false,
+    "notice": ""
+  },
+  "log": null
+}

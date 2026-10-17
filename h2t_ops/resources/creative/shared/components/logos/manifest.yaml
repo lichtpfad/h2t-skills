@@ -1,0 +1,9 @@
+component: logos
+fields:
+  title:
+    type: text
+    required: false
+    default: ""
+  logos:
+    type: html
+    required: true

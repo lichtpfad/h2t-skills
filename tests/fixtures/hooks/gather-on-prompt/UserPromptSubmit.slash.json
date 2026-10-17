@@ -1,0 +1,15 @@
+{
+  "event": {
+    "hook_event_name": "UserPromptSubmit",
+    "prompt": "\n/h2t-core:session-start\nnotes",
+    "cwd": "{tmp}"
+  },
+  "expect": {
+    "text_startswith": "BRIEFING:\n",
+    "block": false,
+    "notice": "",
+    "meta": {
+      "cwd": "{tmp}"
+    }
+  }
+}

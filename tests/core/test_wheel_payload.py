@@ -85,9 +85,16 @@ def test_the_wheel_claims_no_generic_top_level_name(wheel_names):
 
 
 def test_each_payload_module_ships_once(wheel_names):
+    """Once in the package, once in the payload — and nowhere else.
+
+    The package copy (h2t_ops/lifecycle) is what the commands run since plan Task 8. The
+    payload copy is the 3.x layout the plugin scripts still expect, and leaves with the
+    force-include in Task 12; then this becomes `== [lifecycle copy]`.
+    """
     for name in ("eval/session.py", "eval/skill_class.py", "activity/writer.py"):
-        copies = [n for n in wheel_names if n.endswith(name)]
-        assert len(copies) == 1, f"{name} ships {len(copies)} times: {copies}"
+        copies = sorted(n for n in wheel_names if n.endswith(name))
+        assert copies == sorted([f"h2t_ops/lifecycle/{name}", f"{PAYLOAD}/lib/{name}"]), (
+            f"{name} ships {len(copies)} times: {copies}")
 
 
 def test_the_payload_lib_is_complete(wheel_names):

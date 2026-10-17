@@ -1,0 +1,40 @@
+{
+  "files": {
+    "docs/superpowers/plans/2026-08-24-thing.md": "---\ntitle: \"T\"\nstatus: \"draft\"\n---\nbody\n",
+    "docs/superpowers/specs/2026-08-24-thing.md": "---\nstatus: draft\npr: 1\n---\nbody\n"
+  },
+  "gh_view": {
+    "state": "MERGED",
+    "files": [
+      {
+        "path": "docs/superpowers/plans/2026-08-24-thing.md"
+      },
+      {
+        "path": "docs/superpowers/specs/2026-08-24-thing.md"
+      },
+      {
+        "path": "lib/thing.py"
+      }
+    ]
+  },
+  "event": {
+    "hook_event_name": "PostToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+      "command": "gh pr merge 408 --squash --delete-branch"
+    }
+  },
+  "expect": {
+    "text": "PR #408 merged. Статус проставлен автоматически:\n  docs/superpowers/plans/2026-08-24-thing.md: draft → done\n  docs/superpowers/specs/2026-08-24-thing.md: draft → done\nФайлы изменены локально и не закоммичены — включите их в следующий коммит или закоммитьте отдельно.",
+    "block": false,
+    "notice": "PR #408: проставлен status: done в 2 документ(ах): plans/2026-08-24-thing.md, specs/2026-08-24-thing.md. Изменения не закоммичены."
+  },
+  "after": {
+    "docs/superpowers/plans/2026-08-24-thing.md": [
+      "status: \"done\"\npr: 408"
+    ],
+    "docs/superpowers/specs/2026-08-24-thing.md": [
+      "status: \"done\"\npr: 408"
+    ]
+  }
+}

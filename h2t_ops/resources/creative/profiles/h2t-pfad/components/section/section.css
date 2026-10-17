@@ -1,0 +1,5 @@
+.content-section { padding: var(--space-xl) var(--space-lg); background: var(--color-bg-card); border-top: 1px solid var(--color-border); }
+.section-inner { max-width: 1200px; margin: 0 auto; }
+.section__label { font-size: 8px; color: var(--color-fg-muted); letter-spacing: 0.18em; text-transform: uppercase; margin-bottom: var(--space-md); border-bottom: 1px solid var(--color-border); padding-bottom: var(--space-sm); }
+.section__label::before { content: '// '; color: var(--color-accent); }
+.section__body { font-size: 11px; color: var(--color-fg-dim); line-height: 1.7; }

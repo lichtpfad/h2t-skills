@@ -132,11 +132,14 @@ def register(subparsers: Any) -> None:
 
     dp = cmds.add_parser("download", help="Download a Drive file by id")
     dp.add_argument("file_id")
+    # drive_cli.py took the destination as a second positional (#541); both spellings work.
+    dp.add_argument("dest_pos", nargs="?", default=None, metavar="DEST")
     dp.add_argument("--dest")
     add_fmt(dp)
 
     ep = cmds.add_parser("export", help="Export a Google Docs editor file")
     ep.add_argument("file_id")
+    ep.add_argument("dest_pos", nargs="?", default=None, metavar="DEST")
     ep.add_argument("--dest")
     ep.add_argument("--format", dest="export_format", choices=EXPORT_FORMATS)
     ep.add_argument("--print", dest="print_stdout", action="store_true")
@@ -221,6 +224,12 @@ def run(args) -> Any:
     from h2t_ops.core.errors import UsageError
 
     cmd = args.drive_cmd
+
+    if cmd in ("download", "export"):
+        dest_pos = getattr(args, "dest_pos", None)
+        if args.dest and dest_pos:
+            raise UsageError(f"drive {cmd}: give the destination once, as DEST or --dest")
+        args.dest = args.dest or dest_pos
 
     if cmd == "export" and getattr(args, "print_stdout", False):
         fmt = normalize_export_format(getattr(args, "export_format", None))

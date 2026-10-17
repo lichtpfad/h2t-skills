@@ -1,0 +1,125 @@
+#!/usr/bin/env bash
+# h2t hook wrapper — spec §6.1. Bash only; no interpreter until a handler has work.
+#
+# Builtins until the handler runs, except one `cat` for stdin. A fork costs real time in
+# Git Bash, and UserPromptSubmit fires on every message with a 50 ms budget (spec §2.7).
+# The tests are tests/hooks/test_hooks_run.py.
+set -u
+name="${1:-}"
+# $(cat), not `read -d ''`: read takes one byte per syscall, and PreToolUse Write/Edit
+# carries a whole file — 1 MB took 0.48 s that way against 0.01 s with cat (macOS).
+input=$(cat)
+event=
+re='"hook_event_name"[[:space:]]*:[[:space:]]*"([A-Za-z]+)"'
+[[ $input =~ $re ]] && event=${BASH_REMATCH[1]}
+
+# Only a leading slash command is an invocation: UserPromptSubmit also fires for harness
+# messages such as <task-notification>, whose paths contain the same words. JSON escapes
+# leading whitespace as \n, \r, \t. Same pattern as hooks-handlers/gather-on-prompt.
+if [ "$event" = "UserPromptSubmit" ]; then
+  re='"(user_)?prompt"[[:space:]]*:[[:space:]]*"([[:space:]]|\\[nrt])*/([A-Za-z0-9_.-]+:)?(session-start|handoff|init-project)([[:space:]"]|\\[nrt]|$)'
+  [[ $input =~ $re ]] || exit 0
+fi
+
+# PostToolUse fires these two on every Bash call; Python starts only if the handler could
+# act (spec §2.7). Each substring is one the handler's trigger cannot match without, so the
+# filter is never stricter than the handler — tests/hooks/test_hooks_run_prefilter.py.
+case "$name" in
+  plan-closer) [[ $input == *merge* ]] || exit 0 ;;                       # gh\s+pr\s+merge
+  new-repo-hint) [[ $input == *init* || $input == *create* ]] || exit 0 ;; # git init, * create
+esac
+
+# field VAR KEY FILE: the first KEY=value line of FILE into VAR, a trailing CR dropped
+# (install.env written on Windows, read by Git Bash).
+field() {
+  local line
+  printf -v "$1" '%s' ""
+  [ -r "$3" ] || return 0
+  while IFS= read -r line || [ -n "$line" ]; do
+    case "$line" in
+      "$2="*) line=${line#"$2="}; printf -v "$1" '%s' "${line%$'\r'}"; return 0 ;;
+    esac
+  done < "$3"
+}
+
+# Every value that reaches JSON goes through here: the bootstrap literal carries double
+# quotes, and a path or a version may carry a quote or a backslash.
+json_escape() {
+  local s=$1
+  s=${s//\\/\\\\}; s=${s//\"/\\\"}; s=${s//$'\t'/\\t}; s=${s//$'\r'/\\r}; s=${s//$'\n'/\\n}
+  REPLY=$s
+}
+
+plugin_root=${CLAUDE_PLUGIN_ROOT:-}
+run_dir="$HOME/.h2t/run"
+field plugin_version VERSION "$plugin_root/release.env"
+field state STATE "$run_dir/install.env"
+field cli_version VERSION "$run_dir/install.env"
+field hook H2T_HOOK "$run_dir/install.env"
+field editable EDITABLE_ROOT "$run_dir/install.env"
+
+# One notice per session_id, marked by an atomic mkdir. When the mark cannot be written,
+# notify every time: a missed notice is worse than a repeated one.
+notice() {
+  [ "$event" = "SessionStart" ] || exit 0
+  local sid= re='"session_id"[[:space:]]*:[[:space:]]*"([^"]*)"'
+  [[ $input =~ $re ]] && sid=${BASH_REMATCH[1]}
+  case "$sid" in *[!A-Za-z0-9_.-]*|.|..) sid= ;; esac
+  if [ -n "$sid" ]; then
+    mkdir -p "$run_dir/notified" 2>/dev/null
+    if ! mkdir "$run_dir/notified/$sid" 2>/dev/null; then
+      [ -d "$run_dir/notified/$sid" ] && exit 0
+    fi
+  fi
+  json_escape "$1"
+  printf '{"systemMessage": "%s"}\n' "$REPLY"
+  exit 0
+}
+
+BOOTSTRAP='@BOOTSTRAP@'   # literal written by the release script (spec §7.1)
+[ "$state" = "ready" ] && [ -n "$hook" ] || notice "h2t: CLI не установлен. Установить: $BOOTSTRAP sync"
+if [ -n "$editable" ]; then
+  # Physical paths: one directory has many spellings (/var and /private/var on macOS, a
+  # symlinked checkout). A spelling mismatch would read as "outside" and silence every
+  # hook but SessionStart. The two forks are paid only on this branch.
+  editable_cmp=$(cd "$editable" 2>/dev/null && pwd -P) || editable_cmp=${editable//\\//}
+  plugin_cmp=$(cd "$plugin_root" 2>/dev/null && pwd -P) || plugin_cmp=${plugin_root//\\//}
+  editable_cmp=${editable_cmp%/}
+  case "$plugin_cmp/" in
+    "$editable_cmp"/*) ;;
+    *) notice "h2t: CLI в режиме разработки ($editable), плагины из marketplace. Плагины грузить из чекаута или выполнить: $BOOTSTRAP sync" ;;
+  esac
+elif [ "$plugin_version" != "$cli_version" ]; then
+  notice "h2t: плагины $plugin_version, CLI $cli_version. Свести к текущему выпуску: $BOOTSTRAP sync"
+fi
+
+tmp=$(mktemp -d 2>/dev/null) || tmp=
+if [ -z "$tmp" ]; then
+  rc=70
+else
+  printf '%s' "$input" > "$tmp/in"
+  limit="${H2T_HOOK_TIMEOUT:-9}"
+  "$hook" "$name" <"$tmp/in" >"$tmp/out" 2>"$tmp/err" & pid=$!
+  # The watchdog must not hold the harness's pipes: a sleeper that inherited stdout keeps
+  # it open after the handler is done, and the harness waits for EOF. Its own stdio goes to
+  # /dev/null, and killing it kills its sleep through the trap.
+  (
+    trap 'kill "$s" 2>/dev/null; exit 0' TERM
+    sleep "$limit" & s=$!
+    wait "$s" && kill "$pid" 2>/dev/null
+  ) </dev/null >/dev/null 2>&1 &
+  watchdog=$!
+  wait "$pid" 2>/dev/null; rc=$?   # 2>/dev/null: bash reports a killed job as "Terminated"
+  kill "$watchdog" 2>/dev/null; wait "$watchdog" 2>/dev/null
+fi
+
+case "$rc" in
+  0) cat "$tmp/out"; rm -rf "$tmp"; exit 0 ;;
+  2) cat "$tmp/err" >&2; rm -rf "$tmp"; exit 2 ;;
+esac
+[ -n "$tmp" ] && rm -rf "$tmp"
+mkdir -p "$HOME/.h2t/logs" 2>/dev/null
+json_escape "$name"
+# The braces: a failing `>>` is reported before a `2>/dev/null` on the same command applies.
+{ printf '{"hook":"%s","rc":%s}\n' "$REPLY" "$rc" >> "$HOME/.h2t/logs/hooks.jsonl"; } 2>/dev/null
+notice "h2t: CLI неисправен (хук $name, код $rc). Починить: $BOOTSTRAP sync"

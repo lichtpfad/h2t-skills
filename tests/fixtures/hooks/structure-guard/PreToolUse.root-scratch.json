@@ -1,0 +1,14 @@
+{
+  "event": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Edit",
+    "tool_input": {
+      "file_path": "{tmp}/debug_x.py"
+    }
+  },
+  "expect": {
+    "text_startswith": "BLOCKED: 'debug_x.py' в корне репозитория",
+    "block": true,
+    "notice": ""
+  }
+}

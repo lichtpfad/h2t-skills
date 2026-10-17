@@ -1,0 +1,33 @@
+{
+  "files": {
+    "docs/superpowers/plans/2026-08-24-thing.md": "---\ntitle: \"T\"\nstatus: \"draft\"\n---\nbody\n"
+  },
+  "gh_view": {
+    "state": "MERGED",
+    "files": [
+      {
+        "path": "docs/superpowers/plans/2026-08-24-thing.md"
+      },
+      {
+        "path": "README.md"
+      }
+    ]
+  },
+  "event": {
+    "hook_event_name": "PostToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+      "command": "gh pr merge 409"
+    }
+  },
+  "expect": {
+    "text": "",
+    "block": false,
+    "notice": ""
+  },
+  "after": {
+    "docs/superpowers/plans/2026-08-24-thing.md": [
+      "status: \"draft\""
+    ]
+  }
+}

@@ -24,7 +24,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 WRITER = ROOT / "plugins" / "h2t-core" / "skills" / "handoff" / "scripts" / "writer.py"
 LIB_COPIES = {
-    "root": ROOT / "lib" / "gather" / "sessions.py",
+    "root": ROOT / "h2t_ops" / "lifecycle" / "gather" / "sessions.py",
     "vendored": ROOT / "plugins" / "h2t-core" / "lib" / "gather" / "sessions.py",
 }
 

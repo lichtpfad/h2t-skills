@@ -1,0 +1,224 @@
+"""Tests for briefing formatter."""
+
+from datetime import datetime
+from unittest.mock import patch
+
+from h2t_ops.lifecycle.gather.briefing import (
+    _build_hints,
+    _build_slug_template,
+    format_briefing,
+)
+
+
+def _minimal_data(**overrides):
+    """Git-only project, no GitHub."""
+    base = {
+        "project": {"id": "my-tool", "domain": "dev", "type": "git", "github": None},
+        "git": {"branch": "main", "status": "", "stash": "", "log": [], "remote": ""},
+        "github": {},
+        "stack": {"name": "python", "commands": {}},
+        "sessions": [],
+        "machine": "automata",
+        "user": {"name": "stan", "core_content": ""},
+        "session_id": "abc123",
+    }
+    base.update(overrides)
+    return base
+
+
+def test_minimal_briefing():
+    """Git-only project, no GitHub — header, stack, slug present."""
+    data = _minimal_data()
+    md, meta = format_briefing(data)
+
+    assert "## Сессия: my-tool (`main`)" in md
+    assert "**Stack:** python" in md
+    assert "### Задачи" not in md
+    assert meta["slug_template"].startswith("my-tool-{task}-")
+    assert meta["project"]["id"] == "my-tool"
+    assert meta["machine"] == "automata"
+    assert meta["session_id"] == "abc123"
+
+
+def test_full_briefing_with_github():
+    """Full briefing: milestones, issues, bugs, PRs, sessions, stash."""
+    data = _minimal_data(
+        github={
+            "current_milestone": {"title": "Phase 5", "open": 3, "closed": 7},
+            "milestone_issues": [
+                {"number": 10, "title": "Add auth", "labels": [{"name": "priority:p0"}]},
+                {"number": 11, "title": "Fix crash", "labels": [{"name": "bug"}]},
+                {"number": 12, "title": "Refactor DB", "labels": []},
+            ],
+            "issues": [{"number": 99, "title": "Other", "labels": []}],
+            "bugs": [{"number": 11, "title": "Fix crash"}],
+            "prs": [{"number": 5, "title": "feat: auth", "headRefName": "feat/auth"}],
+        },
+        git={
+            "branch": "feat/auth",
+            "status": "M  src/main.py\n?? temp.txt",
+            "stash": "stash@{0}: WIP on main",
+            "log": ["abc1234 initial"],
+            "remote": "",
+        },
+        sessions=["session1.md", "session2.md"],
+    )
+    md, meta = format_briefing(data)
+
+    # Milestone
+    assert "**Milestone:** Phase 5" in md
+    assert "70% (7/10)" in md
+
+    # Tasks — uses milestone_issues, not plain issues (table format)
+    assert "| #10 | Add auth |" in md
+    assert "| #11 | Fix crash |" in md
+    assert "| #12 | Refactor DB |" in md
+    assert "#99" not in md  # plain issues skipped when milestone_issues present
+
+    # Uncommitted
+    assert "M  src/main.py" in md
+    assert "**Stash:** stash@{0}: WIP on main" in md
+
+    # PRs
+    assert "- #5 feat: auth (`feat/auth`)" in md
+
+    # Sessions
+    assert "Handoff-файлы: 2" in md
+
+
+def test_slug_template_with_milestone():
+    """Slug with milestone shortening."""
+    project = {"id": "crypto"}
+    github = {"current_milestone": {"title": "Phase 5"}}
+
+    with patch("h2t_ops.lifecycle.gather.briefing.datetime") as mock_dt:
+        mock_dt.now.return_value = datetime(2026, 3, 26, 14, 30)
+        mock_dt.side_effect = lambda *a, **kw: datetime(*a, **kw)
+        slug = _build_slug_template(project, github)
+
+    assert slug == "crypto-p5-{task}-2026-03-26-1430"
+
+
+def test_slug_template_without_milestone():
+    """Slug without milestone."""
+    project = {"id": "art-project"}
+    github = {}
+
+    with patch("h2t_ops.lifecycle.gather.briefing.datetime") as mock_dt:
+        mock_dt.now.return_value = datetime(2026, 3, 26, 10, 15)
+        mock_dt.side_effect = lambda *a, **kw: datetime(*a, **kw)
+        slug = _build_slug_template(project, github)
+
+    assert slug == "art-project-{task}-2026-03-26-1015"
+
+
+def test_workspace_hint():
+    """Workspace type shows children list."""
+    data = _minimal_data(
+        project={
+            "id": "workspace", "type": "workspace", "github": None,
+            "children": [
+                {"id": "h2t-ai", "domain": "dev"},
+                {"id": "h2t-vision", "domain": "dev"},
+            ],
+        },
+    )
+    md, _ = format_briefing(data)
+
+    assert "Workspace с 2 проектами (h2t-ai, h2t-vision)" in md
+
+
+def test_unknown_project_hint():
+    """Unknown project suggests init-project."""
+    data = _minimal_data(
+        project={"id": "unknown", "type": "git", "github": None},
+    )
+    md, _ = format_briefing(data)
+
+    assert "/h2t-core:init-project" in md
+
+
+def test_empty_github_no_crash():
+    """Empty github dict produces no tasks section, no crash."""
+    data = _minimal_data(github={})
+    md, meta = format_briefing(data)
+
+    assert "### Задачи" not in md
+    assert "### Открытые PR" not in md
+    assert "## Сессия:" in md
+
+
+def test_briefing_never_dumps_core_content():
+    """Even when core_content is supplied, core.md is not inlined into the briefing.
+
+    The unbounded ## User Context dump was replaced by the bounded Previous Session
+    section; re-adding it would blow the session-start context budget again.
+    """
+    data = _minimal_data(user={"name": "stan", "core_content": "## Кто я\n\nТестовый контент."})
+    md, meta = format_briefing(data)
+
+    assert "## User Context" not in md
+    assert "Тестовый контент." not in md
+
+
+def test_briefing_without_core_content():
+    """Empty core_content — no User Context section."""
+    data = _minimal_data(user={"name": "stan", "core_content": ""})
+    md, meta = format_briefing(data)
+
+    assert "## User Context" not in md
+    assert "## Сессия:" in md
+
+
+def test_hint_reports_github_outage_instead_of_no_issues():
+    """A failed gh call must not be reported as 'this repo has no issues'."""
+    data = _minimal_data(
+        project={"id": "my-tool", "domain": "dev", "type": "git", "github": "o/r"},
+        github={"issues": [], "milestone_issues": [], "failed": ["issues", "prs"]},
+        sessions=["s"],
+    )
+    hints = _build_hints(data)
+    assert not any("Нет открытых issues" in h for h in hints)
+    assert any("GitHub" in h for h in hints), hints
+
+
+def test_hint_still_reports_empty_backlog_when_github_healthy():
+    """With every gh call successful, an empty backlog is a real fact."""
+    data = _minimal_data(
+        project={"id": "my-tool", "domain": "dev", "type": "git", "github": "o/r"},
+        github={"issues": [], "milestone_issues": [], "failed": []},
+        sessions=["s"],
+    )
+    hints = _build_hints(data)
+    assert any("Нет открытых issues" in h for h in hints), hints
+
+
+def test_hint_when_a_versioned_hook_is_not_wired_into_the_clone():
+    """A hook git never runs looks exactly like a repo with no hook at all."""
+    data = {
+        "project": {"id": "repo", "domain": "dev"},
+        "git": {
+            "branch": "main",
+            "hooks": {"versioned": True, "active": False, "dir": "scripts/hooks"},
+        },
+        "github": {},
+        "stack": {"name": "python"},
+        "sessions": ["s.md"],
+    }
+    md, _ = format_briefing(data)
+    assert "core.hooksPath scripts/hooks" in md
+
+
+def test_no_hook_hint_when_git_runs_it():
+    data = {
+        "project": {"id": "repo", "domain": "dev"},
+        "git": {
+            "branch": "main",
+            "hooks": {"versioned": True, "active": True, "dir": "scripts/hooks"},
+        },
+        "github": {},
+        "stack": {"name": "python"},
+        "sessions": ["s.md"],
+    }
+    md, _ = format_briefing(data)
+    assert "hooksPath" not in md
