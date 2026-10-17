@@ -10,7 +10,7 @@ from __future__ import annotations
 import argparse
 import sys
 
-from h2t_ops.core.errors import ConfigError, H2TError
+from h2t_ops.core.errors import ConfigError, H2TError, ProviderError
 from h2t_ops.core.output import emit
 from h2t_ops.setup import manifest, state, sync
 
@@ -56,6 +56,15 @@ def main(argv: list[str] | None = None) -> int:
             target = manifest.current()
             sync.ensure_executor(target, ns.mode, rest)
         result = sync.run(ns.mode, target, rest)
+        if isinstance(result, sync.Report):
+            if result.failed:
+                # Not a success with a list attached: a run that left something off target
+                # exits non-zero, and the hint is the command that continues it.
+                raise ProviderError(
+                    "h2t-setup {}: not everything reached the target: {}".format(
+                        ns.mode, "; ".join(subject for subject, _ in result.failed)),
+                    hint=result.failed[0][1], details=result.as_dict())
+            result = result.as_dict() if ns.json else result.text()
     except (H2TError, NotImplementedError) as exc:
         return emit("setup", exc=exc, fmt=fmt)
     return emit("setup", result=result, fmt=fmt)

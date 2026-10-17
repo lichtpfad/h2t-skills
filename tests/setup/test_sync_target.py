@@ -271,10 +271,10 @@ def test_the_target_executor_reaches_run(monkeypatch, capsys):
     assert json.loads(capsys.readouterr().out)["result"] == {"mode": "sync"}
 
 
-def test_run_is_not_implemented_yet_and_says_so(monkeypatch, capsys):
+def test_dev_sync_is_not_implemented_yet_and_says_so(monkeypatch, capsys):
     _wire(monkeypatch)
-    assert cli.main(["sync"]) == 1
-    assert "Task 15" in capsys.readouterr().err
+    assert cli.main(["dev-sync"]) == 1
+    assert "Task 16" in capsys.readouterr().err
 
 
 def _editable(home):

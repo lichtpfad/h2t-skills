@@ -6,16 +6,21 @@ environment would be replacing the environment it runs from.
 """
 from __future__ import annotations
 
+import datetime
+import json
 import os
+import re
 import shutil
 import subprocess
 import sys
 import tomllib
+import uuid
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import h2t_ops
 from h2t_ops.core.errors import ConfigError
-from h2t_ops.setup import state
+from h2t_ops.setup import harness_claude, state
 from h2t_ops.setup.manifest import render
 from h2t_ops.setup.version_check import inside
 
@@ -58,17 +63,48 @@ def receipt_editable(tool_root: str | None = None) -> str | None:
     root = tool_root or uv_tool_root()
     if not root:
         return None
+    main, _ = _receipt_requirements(_receipt(root))
+    editable = main.get("editable")
+    return editable if isinstance(editable, str) and editable else None
+
+
+def _receipt(root: str | Path) -> dict:
+    """The `[tool]` table of uv's receipt, or {} when there is none to read."""
     try:
         data = tomllib.loads((Path(root) / "uv-receipt.toml").read_text(encoding="utf-8"))
     except (OSError, ValueError):  # TOMLDecodeError and UnicodeDecodeError are ValueError
-        return None
+        return {}
     tool = data.get("tool")
-    requirements = tool.get("requirements") if isinstance(tool, dict) else None
-    for req in requirements if isinstance(requirements, list) else []:
-        if isinstance(req, dict) and req.get("name") == "h2t-ops":
-            editable = req.get("editable")
-            return editable if isinstance(editable, str) and editable else None
-    return None
+    return tool if isinstance(tool, dict) else {}
+
+
+def _receipt_requirements(tool: dict) -> tuple[dict, list[dict]]:
+    """The `h2t-ops` requirement and the others (the `--with` of that install)."""
+    reqs = [r for r in tool.get("requirements") or [] if isinstance(r, dict)]
+    main = next((r for r in reqs if r.get("name") == "h2t-ops"), {})
+    return main, [r for r in reqs if r is not main and isinstance(r.get("name"), str)]
+
+
+def receipt_entrypoints(tool: dict) -> dict[str, str]:
+    return {e["name"]: e["install-path"] for e in tool.get("entrypoints") or []
+            if isinstance(e, dict) and isinstance(e.get("name"), str)
+            and isinstance(e.get("install-path"), str)}
+
+
+def receipt_user_options(tool: dict) -> dict | None:
+    """What an install without install.json (3.x) was asked for: its extras and `--with`."""
+    main, others = _receipt_requirements(tool)
+    if not main:
+        return None
+    extras = [e for e in main.get("extras") or [] if isinstance(e, str)]
+    with_ = []
+    for r in others:
+        if isinstance(r.get("url"), str):
+            with_.append(f"{r['name']} @ {r['url']}")
+        else:
+            extra = ",".join(e for e in r.get("extras") or [] if isinstance(e, str))
+            with_.append(r["name"] + (f"[{extra}]" if extra else "") + (r.get("specifier") or ""))
+    return {"extras": extras, "with": with_}
 
 
 def relaunch_command(target: dict, mode: str, argv: list[str]) -> list[str]:
@@ -124,10 +160,462 @@ def ensure_executor(target: dict, mode: str, argv: list[str], *, prefix: str | N
     (execvp or os.execvp)(command[0], command)
 
 
-def run(mode: str, target: dict | None, argv: list[str]):
-    """Steps 3–8 of §7.3 (snapshot, CLI, plugins, Codex, cache, report) and dev-sync (§7.4).
 
-    A stub: Task 15 replaces it. It raises rather than reporting success, so nobody reads
-    a run that did nothing as a run that converged."""
-    raise NotImplementedError(
-        f"h2t-setup {mode}: the steps after the executor are not implemented yet (Task 15)")
+
+# --- steps 3–8 of §7.3 ---------------------------------------------------------------------
+
+DEFAULT_PLUGINS = ["h2t-core", "h2t-ops"]
+KEEP_VERSIONS = 2
+YES = {"да", "д", "yes", "y"}
+
+# Sent to the tool environment's own python (`-I`, so nothing in the current directory
+# shadows the package). It loads every console script of h2t-ops and imports what each
+# chosen extra installs; `sync` compares the answer with the target.
+PROBE = r"""
+import importlib, importlib.metadata as md, json, re, sys
+extras = json.loads(sys.argv[1])
+import h2t_ops
+out = {"version": h2t_ops.__version__, "unloadable": [], "missing": []}
+dist = md.distribution("h2t-ops")
+for ep in dist.entry_points:
+    if ep.group == "console_scripts":
+        try:
+            ep.load()
+        except Exception as exc:
+            out["unloadable"].append(f"{ep.name}: {exc}")
+norm = lambda s: re.sub(r"[-_.]+", "-", s).lower()
+top = md.packages_distributions()
+for extra in extras:
+    pattern = r"extra\s*==\s*['\"]" + re.escape(extra) + r"['\"]"
+    names = [re.match(r"[A-Za-z0-9._-]+", r).group(0) for r in dist.requires or []
+             if re.search(pattern, r)]
+    if not names:
+        out["missing"].append(f"{extra}: no such extra")
+    for name in names:
+        try:
+            md.version(name)
+            for mod, dists in top.items():
+                if not mod.startswith("_") and any(norm(d) == norm(name) for d in dists):
+                    importlib.import_module(mod)
+        except Exception as exc:
+            out["missing"].append(f"{extra}: {name}: {exc}")
+print(json.dumps(out))
+"""
+
+
+@dataclass
+class Report:
+    done: list[str] = field(default_factory=list)
+    failed: list[tuple[str, str]] = field(default_factory=list)
+    reload_needed: bool = False
+    notes: list[str] = field(default_factory=list)
+
+    def as_dict(self) -> dict:
+        return {"done": list(self.done), "failed": [list(f) for f in self.failed],
+                "reload_needed": self.reload_needed, "notes": list(self.notes)}
+
+    def text(self) -> str:
+        lines = [f"done: {d}" for d in self.done]
+        for subject, remedy in self.failed:
+            lines.append(f"failed: {subject}")
+            lines += [f"  {r}" for r in remedy.splitlines()]
+        return "\n".join(lines + self.notes)
+
+
+def run_uv(args: list[str]) -> subprocess.CompletedProcess:
+    uv = shutil.which("uv")
+    if not uv:
+        raise ConfigError("uv is not on PATH", hint="the bootstrap runs from uvx; run it again")
+    return subprocess.run([uv, *args], capture_output=True, text=True, encoding="utf-8")
+
+
+def _tool_dir(uv) -> Path:
+    done = uv(["tool", "dir"])
+    if done.returncode != 0 or not (done.stdout or "").strip():
+        raise ConfigError(f"`uv tool dir` failed: {(done.stderr or '').strip()}")
+    return Path(done.stdout.strip())
+
+
+def _last_install_json() -> dict | None:
+    """install.json as written last, whatever install.env says: an interrupted run still
+    knows what the user had chosen."""
+    try:
+        data = json.loads((state.run_dir() / "install.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def _utc_stamp() -> str:
+    return datetime.datetime.now(datetime.UTC).strftime("%Y%m%dT%H%M%S%fZ")
+
+
+def _pending_path() -> Path:
+    # The Claude Code part of a snapshot whose re-pin has not finished: a re-run after an
+    # interruption must still restore the scopes and the disabled plugins it had.
+    return state.run_dir() / "rollback" / "claude-pending.json"
+
+
+def _snapshot(root: Path, claude) -> dict:
+    """Step 3: what is there now, under ~/.h2t/run/rollback/<UTC>/."""
+    where = state.run_dir() / "rollback" / _utc_stamp()
+    where.mkdir(parents=True, exist_ok=True)
+    for src in (state.run_dir() / "install.json", root / "uv-receipt.toml"):
+        if src.is_file():
+            shutil.copyfile(src, where / src.name)
+    harness: dict = {"found": claude.found()}
+    if harness["found"]:
+        try:
+            harness["marketplace"] = claude.marketplace()
+            harness["plugins"] = claude.plugins()
+        except harness_claude.HarnessError as exc:
+            harness["error"] = str(exc)
+    (where / "claude.json").write_text(json.dumps(harness, ensure_ascii=False, indent=2),
+                                       encoding="utf-8")
+    harness["path"] = str(where)
+    return harness
+
+
+def _python(root: Path) -> Path:
+    return root / "Scripts" / "python.exe" if OS_NAME == "nt" else root / "bin" / "python"
+
+
+def _verify(entrypoints: dict[str, str], root: Path, version: str, extras: list[str],
+            execute) -> str | None:
+    """None if the install, run, answers as `version` with `extras`; otherwise what did not."""
+    if "h2t-ops" not in entrypoints:
+        return "no h2t-ops entry point is recorded"
+    absent = sorted(n for n, p in entrypoints.items() if not Path(p).is_file())
+    if absent:
+        return f"entry points missing: {', '.join(absent)}"
+    try:
+        done = execute([entrypoints["h2t-ops"], "--version"], capture_output=True, text=True,
+                       encoding="utf-8", timeout=60)
+        if done.returncode != 0:
+            return f"`h2t-ops --version` exited {done.returncode}"
+        words = (done.stdout or "").split()
+        if words[:2] != ["h2t-ops", version]:
+            return f"`h2t-ops --version` says {' '.join(words[:2]) or 'nothing'}"
+        done = execute([str(_python(root)), "-I", "-c", PROBE, json.dumps(extras)],
+                       capture_output=True, text=True, encoding="utf-8", timeout=120)
+    except (OSError, subprocess.SubprocessError) as exc:
+        return f"cannot run the install: {exc}"
+    if done.returncode != 0:
+        return f"the environment's python failed: {(done.stderr or '').strip()[-300:]}"
+    try:
+        answer = json.loads(done.stdout)
+    except ValueError:
+        return "the environment's python gave no answer"
+    if answer.get("version") != version:
+        return f"the package is {answer.get('version')}"
+    problems = list(answer.get("unloadable") or []) + list(answer.get("missing") or [])
+    return "; ".join(problems) or None
+
+
+def _install_args(target: dict, options: dict) -> list[str]:
+    extras = ",".join(options.get("extras") or [])
+    spec = f"h2t-ops[{extras}] @ {target['wheel']}" if extras else f"h2t-ops @ {target['wheel']}"
+    args = ["tool", "install", "--reinstall", "--python", target["python"], "--managed-python",
+            "-c", target["constraints"], spec]
+    for w in options.get("with") or []:
+        args += ["--with", w]
+    return args
+
+
+def _commit(version: str, root: Path, entrypoints: dict[str, str], options: dict,
+            plugins: list[str]) -> None:
+    # install.json, then install.env STATE=ready last (§6.4); a new generation every time.
+    state.commit(state.Install(version=version, generation=str(uuid.uuid4()),
+                               tool_root=str(root), entrypoints=entrypoints, editable=None,
+                               user_options=options, plugins=plugins))
+
+
+def _cli_step(target: dict, root: Path, last: dict | None, plugins: list[str], uv, execute,
+              report: Report, retry: str) -> bool:
+    """Step 4: check the CLI by running it; reinstall only what does not answer."""
+    version = target["version"]
+    current = state.read()
+    tool = _receipt(root)
+    options = (last or {}).get("user_options") or receipt_user_options(tool) or {}
+    options = {"extras": list(options.get("extras") or []), "with": list(options.get("with") or [])}
+    entrypoints = current.entrypoints if current is not None else receipt_entrypoints(tool)
+    problem = _verify(entrypoints, root, version, options["extras"], execute)
+    if problem is None:
+        _commit(version, root, entrypoints, options, plugins)
+        report.done.append(f"CLI h2t-ops {version}: answers as the target when run")
+        return True
+    state.begin_update(version)
+    done = uv(_install_args(target, options))
+    if done.returncode != 0:
+        tail = (done.stderr or done.stdout or "").strip().splitlines()[-1:] or ["no output"]
+        report.failed.append((f"CLI h2t-ops {version}: uv tool install failed: {tail[0]}", retry))
+        _keep_previous(last, root, execute)
+        return False
+    entrypoints = receipt_entrypoints(_receipt(root))
+    after = _verify(entrypoints, root, version, options["extras"], execute)
+    if after is not None:
+        # install.env stays `updating`: the wrapper and the next sync read it as no install.
+        report.failed.append((f"CLI h2t-ops {version}: installed but does not answer: {after}",
+                              retry))
+        return False
+    _commit(version, root, entrypoints, options, plugins)
+    report.done.append(f"CLI h2t-ops {version}: reinstalled ({problem}); answers when run")
+    return True
+
+
+def _keep_previous(last: dict | None, root: Path, execute) -> None:
+    """A failed resolution leaves the previous CLI working (probe 2026-10-16). If it still
+    answers as the version install.json recorded, write it back as ready."""
+    if not last or not isinstance(last.get("entrypoints"), dict) or not last.get("version"):
+        return
+    options = last.get("user_options") or {"extras": [], "with": []}
+    if _verify(last["entrypoints"], root, last["version"], list(options.get("extras") or []),
+               execute) is None:
+        _commit(last["version"], root, last["entrypoints"], options,
+                list(last.get("plugins") or []))
+
+
+def _plugin_set(last: dict | None, harness: dict) -> list[str]:
+    """§6.4: install.json; else the installed plugins of lichtpfad; else the default two."""
+    if last is not None and isinstance(last.get("plugins"), list):
+        return [p for p in last["plugins"] if isinstance(p, str)]
+    names = sorted({p["id"].split("@")[0] for p in harness.get("plugins") or []})
+    return names or list(DEFAULT_PLUGINS)
+
+
+def _cmd(*args: str) -> str:
+    return " ".join(harness_claude.Claude.command(*args))
+
+
+def _repin_commands(names: list[str], before: list[dict]) -> list[list[str]]:
+    scope = {p["id"].split("@")[0]: p.get("scope") or "user" for p in before}
+    out = [list(harness_claude.Claude.remove_args()), list(harness_claude.Claude.add_args())]
+    out += [list(harness_claude.Claude.install_args(n, scope.get(n, "user"))) for n in names]
+    out += [list(harness_claude.Claude.disable_args(p["id"].split("@")[0], p.get("scope") or "user"))
+            for p in before if p.get("enabled") is False]
+    return out
+
+
+def _restore(claude, before: dict) -> None:
+    """Put Claude Code back as the snapshot had it: the marketplace on its ref, each plugin
+    in its scope, the disabled ones disabled (remove forgets that, probe 3b)."""
+    market = before.get("marketplace") or {}
+    ref = market.get("ref")
+    now = claude.marketplace()
+    if now is not None and now.get("ref") != ref:
+        claude.marketplace_remove()
+        now = None
+    if now is None:
+        claude.marketplace_add(ref, market.get("repo") or harness_claude.SOURCE)
+    have = {(p["id"], p.get("scope")) for p in claude.plugins()}
+    for p in before.get("plugins") or []:
+        if (p["id"], p.get("scope")) not in have:
+            claude.install(p["id"].split("@")[0], p.get("scope") or "user")
+    _redisable(claude, before.get("plugins") or [])
+
+
+def _redisable(claude, before: list[dict]) -> None:
+    now = {(p["id"], p.get("scope")): p for p in claude.plugins()}
+    for p in before:
+        if p.get("enabled") is False:
+            cur = now.get((p["id"], p.get("scope")))
+            if cur is not None and cur.get("enabled") is not False:
+                claude.disable(p["id"].split("@")[0], p.get("scope") or "user")
+
+
+def _plugins_step(mode: str, target: dict, names: list[str], harness: dict, claude, confirm,
+                  report: Report, retry: str) -> bool:
+    """Step 5. Returns whether anything in Claude Code changed."""
+    version = target["version"]
+    if not names:
+        report.failed.append(("Claude Code: the managed plugin set is empty "
+                              "(install.json `plugins`); nothing to bring to the target", retry))
+        return False
+    pending = _pending_path()
+    try:
+        before = json.loads(pending.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        before = {"marketplace": harness.get("marketplace"),
+                  "plugins": harness.get("plugins") or []}
+    changed = False
+    try:
+        market = claude.marketplace()
+        fresh = False
+        if market is None:
+            claude.marketplace_add()
+            report.done.append(f"Claude Code: marketplace added: {harness_claude.SOURCE}")
+            changed = fresh = True
+        elif market.get("ref") not in (None, "", "main"):
+            ref = market["ref"]
+            commands = _repin_commands(names, before["plugins"])
+            shown = "\n".join(" ".join(harness_claude.Claude.command(*c)) for c in commands)
+            subject = (f"Claude Code: marketplace lichtpfad is pinned to {ref}; re-pinning means "
+                       "`remove`, which uninstalls its plugins")
+            if mode != "update":
+                report.failed.append((subject + "; sync changes nothing here", shown))
+                return False
+            answer = confirm(f"Marketplace lichtpfad is pinned to {ref}. Run:\n{shown}\nда? ")
+            if (answer or "").strip().lower() not in YES:
+                report.failed.append((subject + "; not confirmed, nothing changed", shown))
+                return False
+            pending.parent.mkdir(parents=True, exist_ok=True)
+            pending.write_text(json.dumps(before, ensure_ascii=False), encoding="utf-8")
+            try:
+                claude.marketplace_remove()
+                changed = True
+                claude.marketplace_add()
+                for n in names:
+                    scope = next((p.get("scope") or "user" for p in before["plugins"]
+                                  if p["id"] == harness_claude.plugin_id(n)), "user")
+                    claude.install(n, scope)
+                _redisable(claude, before["plugins"])
+            except harness_claude.HarnessError as exc:
+                try:
+                    _restore(claude, before)
+                except harness_claude.HarnessError as again:
+                    report.failed.append((f"Claude Code: re-pin failed ({exc}) and the restore "
+                                          f"failed too ({again})", shown))
+                    return True
+                pending.unlink(missing_ok=True)
+                report.failed.append((f"Claude Code: re-pin failed ({exc}); restored as it was "
+                                      f"(pinned to {ref})", retry))
+                return True
+            report.done.append(f"Claude Code: marketplace lichtpfad re-pinned from {ref} to main")
+            fresh = True
+
+        def entries() -> dict[str, list[dict]]:
+            out: dict[str, list[dict]] = {}
+            for p in claude.plugins():
+                out.setdefault(p["id"].split("@")[0], []).append(p)
+            return out
+
+        installed = entries()
+        behind = [n for n in names if any(e.get("version") != version for e in installed.get(n, []))]
+        missing = [n for n in names if n not in installed]
+        if (behind or missing) and not fresh:
+            claude.marketplace_update()
+        for n in missing:
+            scope = next((p.get("scope") or "user" for p in before["plugins"]
+                          if p["id"] == harness_claude.plugin_id(n)), "user")
+            claude.install(n, scope)
+            changed = True
+            report.done.append(f"Claude Code: {n} installed ({scope})")
+        for n in behind:
+            for e in installed[n]:
+                if e.get("version") != version:
+                    claude.update(n, e.get("scope") or "user")
+                    changed = True
+                    report.done.append(f"Claude Code: {n} {e.get('version')} → {version} "
+                                       f"({e.get('scope')})")
+        # A plugin the user disabled stays disabled (Review Focus 5), whatever an update did.
+        _redisable(claude, before["plugins"])
+        final = entries()
+        wrong = [f"{n} {', '.join(str(e.get('version')) for e in final.get(n, [])) or 'absent'}"
+                 for n in names
+                 if not final.get(n) or any(e.get("version") != version for e in final[n])]
+    except harness_claude.HarnessError as exc:
+        report.failed.append((f"Claude Code: {exc}", retry))
+        return changed
+    if wrong:
+        report.failed.append((f"Claude Code: not at {version}: {'; '.join(wrong)}", retry))
+        return changed
+    pending.unlink(missing_ok=True)
+    if not changed:
+        report.done.append(f"Claude Code: {', '.join(names)} already at {version}")
+    return changed
+
+
+def _semver(name: str) -> tuple[int, int, int] | None:
+    m = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)", name)
+    return (int(m[1]), int(m[2]), int(m[3])) if m else None
+
+
+# A seam for the interruption tests; deletion is the step there.
+_remove_tree = shutil.rmtree
+
+
+def clean_cache(config: Path, installed: list[dict], keep: int = KEEP_VERSIONS) -> list[Path]:
+    """Step 7: under <config>/plugins/cache/lichtpfad/<plugin>/, keep the `keep` highest
+    versions and every installed one; delete the other version directories. Names that are
+    not X.Y.Z are not versions and stay."""
+    root = Path(config) / "plugins" / "cache" / harness_claude.MARKETPLACE
+    if not root.is_dir() or root.is_symlink():
+        return []
+    held = {(p["id"].split("@")[0], str(p.get("version"))) for p in installed
+            if isinstance(p.get("id"), str)}
+    removed = []
+    for plugin in sorted(root.iterdir()):
+        if plugin.is_symlink() or not plugin.is_dir():
+            continue
+        versions = sorted(((_semver(d.name), d) for d in plugin.iterdir()
+                           if d.is_dir() and not d.is_symlink() and _semver(d.name)),
+                          reverse=True)
+        for _, d in versions[keep:]:
+            if (plugin.name, d.name) not in held:
+                _remove_tree(d)
+                removed.append(d)
+    return removed
+
+
+def _codex_note(names: list[str]) -> str:
+    lines = ["Codex: sync does not manage its plugins. Install them for this release by hand:",
+             "  codex plugin marketplace add lichtpfad/h2t-skills"]
+    lines += [f"  codex plugin add {harness_claude.plugin_id(n)}" for n in names]
+    return "\n".join(lines)
+
+
+def run(mode: str, target: dict | None, argv: list[str], *, uv=None, claude=None,
+        confirm=input, execute=subprocess.run, which=shutil.which) -> Report:
+    """Steps 3–8 of §7.3. Every step compares the fact with the target and skips what
+    matches, so a run after any interruption continues from the first mismatch.
+
+    `uv` runs one uv command (default `run_uv`); `execute` runs the installed processes the check starts;
+    `claude` is a harness_claude.Claude (created here when None)."""
+    if mode == "dev-sync":
+        raise NotImplementedError("h2t-setup dev-sync is not implemented yet (Task 16)")
+    # Resolved here, not at definition: the tests refuse the real ones by patching these.
+    uv = uv or run_uv
+    claude = claude if claude is not None else harness_claude.Claude()
+    root = _tool_dir(uv) / "h2t-ops"
+    # cli.main stops here first; this is the same stop for a caller that skips it.
+    install = state.read()
+    checkout = install.editable if install is not None else receipt_editable(str(root))
+    if checkout:
+        raise ConfigError(f"the CLI is installed editable from the checkout {checkout}; "
+                          f"`h2t-setup {mode}` does not touch it",
+                          hint="update the checkout yourself, then run `h2t-setup dev-sync`",
+                          details={"reason": "editable", "checkout": checkout})
+    report = Report()
+    retry = render(relaunch_command(target, "sync", [])) or "h2t-setup sync"
+    harness = _snapshot(root, claude)                                         # 3
+    last = _last_install_json()
+    names = _plugin_set(last, harness)
+    cli_ok = _cli_step(target, root, last, names, uv, execute, report, retry)  # 4
+    changed = False
+    if not harness["found"]:                                                  # 5
+        report.notes.append("Claude Code: `claude` not found; no plugins were managed")
+    elif not cli_ok:
+        report.notes.append(f"Claude Code: plugins left as they are; they follow the CLI, "
+                            f"which is not at {target['version']}")
+    else:
+        changed = _plugins_step(mode, target, names, harness, claude, confirm, report, retry)
+    if which("codex"):                                                        # 6
+        report.notes.append(_codex_note(names))
+    if harness["found"]:                                                      # 7
+        try:
+            removed = clean_cache(harness_claude.config_dir(), claude.plugins())
+        except harness_claude.HarnessError as exc:
+            report.notes.append(f"plugin cache not cleaned: cannot list what is installed ({exc})")
+        else:
+            if removed:
+                changed = True
+                report.done.append("plugin cache: removed " + ", ".join(
+                    f"{d.parent.name} {d.name}" for d in removed))
+    report.reload_needed = changed                                            # 8
+    if changed:
+        report.notes.append("Open Claude Code sessions: run /reload-plugins or start a new "
+                            "session. Sessions more than two releases old must: their plugin "
+                            "files may have been removed from the cache.")
+    if report.failed:
+        report.notes.append(f"Repeat after fixing: {retry}")
+    return report
