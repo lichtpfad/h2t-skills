@@ -7,7 +7,9 @@ plugin root is the checkout's plugins/h2t-core, and install.env carries its rele
 VERSION, so the wrapper takes the "versions equal" path and runs the handler.
 
 Bounds: the spec's on macOS and Linux; four times that under `CI` (shared runners);
-measured only on Windows, whose threshold waits for Task 2. `pytest -s` prints the p95.
+measured only on Windows: its thresholds (Stop 400 ms, UserPromptSubmit 80 ms, spec §2.7)
+come from the owner's laptop, and a shared Windows runner is not that machine. `pytest -s`
+prints the p95.
 """
 from __future__ import annotations
 
@@ -119,7 +121,7 @@ def _measure(rig, entries: list[tuple[str, dict]], before=lambda: None) -> tuple
 def _judge(event: str, p95: float, budget: float) -> None:
     print(f"\nbudget {event}: p95 {p95 * 1000:.1f} ms over {RUNS} runs (budget {budget * 1000:.0f} ms)")
     if WINDOWS:
-        return  # measured only: the Windows threshold comes from Task 2
+        return  # measured only: the Windows thresholds were taken on the owner's laptop
     bound = budget * 4 if CI else budget
     assert p95 <= bound, f"{event}: p95 {p95 * 1000:.1f} ms > {bound * 1000:.0f} ms"
 
