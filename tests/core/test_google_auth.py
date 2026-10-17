@@ -1,6 +1,9 @@
 """Tests for h2t_ops.core.google_auth — Google OAuth substrate."""
 from __future__ import annotations
 
+import os
+import stat
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -163,3 +166,34 @@ def test_resolve_drive_happy_path_via_shared_store(tmp_path, monkeypatch):
                         lambda: pytest.fail("browser flow MUST NOT be reached"))
     creds = mod.resolve_google_credentials("drive", [DRIVE_SCOPE])
     assert creds is not None
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX permission bits")
+def test_refresh_rewrites_token_as_owner_only(tmp_path, monkeypatch):
+    """A refreshed token is written back with 0600, whatever the umask.
+
+    The refresh path used to create the file under the process umask, so
+    with the common 0022 every hourly refresh left the refresh token
+    world-readable — while bootstrap_google_token already chmodded its tmp.
+    """
+    token = tmp_path / "tokens.json"
+    token.write_text("{}", encoding="utf-8")
+    fake_creds = SimpleNamespace(
+        valid=False,
+        expired=True,
+        refresh_token="refresh_t",
+        scopes=[CAL_SCOPE],
+        refresh=lambda request: None,
+        to_json=lambda: "{}",
+    )
+    monkeypatch.setattr(mod, "_candidate_paths",
+                        lambda service: [(token, tmp_path / "credentials.json")])
+    monkeypatch.setattr(mod, "_load_credentials",
+                        lambda token_path, creds_path: fake_creds)
+    monkeypatch.setattr(mod, "_request", lambda: None)
+    old = os.umask(0o022)
+    try:
+        mod.resolve_google_credentials("calendar", [CAL_SCOPE])
+    finally:
+        os.umask(old)
+    assert stat.S_IMODE(token.stat().st_mode) == 0o600
