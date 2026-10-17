@@ -23,7 +23,8 @@ wheel и `constraints.txt` отдавал локальный `python3 -m http.se
 Ноутбук владельца: Windows, Git Bash (bash 5.2.37), uv 0.11.2. Обёртка `hooks/run` и CLI 4.0 —
 с ветки `feat/pkg-arch-5-release`, установка в `~/h2t-probe` (`UV_TOOL_DIR`, `UV_TOOL_BIN_DIR`);
 подложные `HOME` и `USERPROFILE`. Глобальный h2t-ops 0.2.1 не тронут, `~/h2t-probe` удалён.
-Шаг 1 запускался через `claude -p "привет"`, не в интерактивной сессии.
+Шаги W1 и W4 выполнены дважды: через `claude -p "привет"` и руками в интерактивной сессии
+(Claude Code 2.1.302, запущен из PowerShell); результаты совпали.
 
 | проба | команда | что получено | вывод |
 |---|---|---|---|
