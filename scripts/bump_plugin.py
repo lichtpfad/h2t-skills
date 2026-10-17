@@ -72,7 +72,10 @@ def main(argv: list[str]) -> int:
 
     # Atomic-ish: compute both dicts, then write both.
     plugin["version"] = new_ver
-    entry["version"] = new_ver
+    # A pinned entry's label names the content at its pinned commit, so it moves with the
+    # pointer (release_pointer.py set), not with a bump of the working tree.
+    if not (isinstance(src, dict) and src.get("source") == "git-subdir"):
+        entry["version"] = new_ver
 
     _dump(plugin_path, plugin)
     _dump(market_path, market)

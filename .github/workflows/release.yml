@@ -254,6 +254,12 @@ jobs:
             echo "::error::after set the pointer reads $PINS, expected [[\"v$VER\", \"$SHA\"]]"
             exit 1
           fi
+          # `set` wrote each entry's version from plugin.json at $SHA, in this same commit:
+          # the labels move with the content they name. The check reads them back the same way.
+          if ! python3 scripts/check_marketplace_sync.py; then
+            echo "::error::after set the marketplace labels disagree with plugin.json at v$VER"
+            exit 1
+          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add .claude-plugin/marketplace.json

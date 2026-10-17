@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 from datetime import timedelta
 from pathlib import Path
 from typing import Any
@@ -17,9 +18,29 @@ def _evals_root() -> Path:
     return Path(override) if override else Path.home() / ".h2t" / "evals"
 
 
-def _plugins_root() -> Path:
-    # commands.py → connectors → h2t_ops → repo root → plugins
-    return Path(__file__).resolve().parents[3] / "plugins"
+def known_skills(here: Path | None = None) -> set:
+    """The skill catalog: the checkout's `plugins/` beside the package when there is one,
+    else the newest cached version of each lichtpfad plugin Claude Code has installed. An
+    installed wheel has no `plugins/` beside it (commands.py → connectors → h2t_ops → root).
+    Neither found: empty, and the report leaves its coverage lines out."""
+    from h2t_ops.lifecycle.eval.report import catalog_skills
+    from h2t_ops.setup.harness_claude import MARKETPLACE, config_dir
+
+    checkout = Path(here or __file__).resolve().parents[3] / "plugins"
+    if checkout.is_dir():
+        return catalog_skills(checkout)
+    cache = config_dir() / "plugins" / "cache" / MARKETPLACE
+    found: set = set()
+    if not cache.is_dir():
+        return found
+    for plugin in cache.iterdir():
+        versions = [(tuple(int(p) for p in d.name.split(".")), d) for d in plugin.iterdir()
+                    if d.is_dir() and re.fullmatch(r"\d+\.\d+\.\d+", d.name)] \
+            if plugin.is_dir() else []
+        if versions:
+            newest = max(versions)[1]
+            found |= {md.parent.name for md in newest.glob("skills/*/SKILL.md")}
+    return found
 
 
 def _parse_since_days(raw) -> Any:
@@ -38,7 +59,6 @@ def _parse_since_days(raw) -> Any:
 def _cmd_report(ns: Any):
     from h2t_ops.lifecycle.eval.report import (
         build_report,
-        catalog_skills,
         load_sessions,
         render_human,
         render_md,
@@ -61,7 +81,7 @@ def _cmd_report(ns: Any):
         regress_pp=getattr(ns, "regress_pp", 10.0),
         skill_filter=getattr(ns, "skill", None),
         project_filter=getattr(ns, "project", None),
-        known_skills=catalog_skills(_plugins_root()),
+        known_skills=known_skills(),
         load_stats=stats,
     )
     if getattr(ns, "as_json", False):

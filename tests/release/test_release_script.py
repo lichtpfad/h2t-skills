@@ -74,8 +74,6 @@ def _versions(repo: Path) -> set[str]:
              re.search(r'^__version__ = "([^"]*)"$', (repo / "h2t_ops/__init__.py").read_text(), re.M)[1]}
     for pj in (repo / "plugins").glob("*/.claude-plugin/plugin.json"):
         found.add(json.loads(pj.read_text(encoding="utf-8"))["version"])
-    for entry in json.loads((repo / ".claude-plugin/marketplace.json").read_text())["plugins"]:
-        found.add(entry["version"])
     for env in (repo / "plugins").glob("*/release.env"):
         found.add(env.read_text().strip().removeprefix("VERSION="))
     for md in (repo / "plugins").rglob("*.md"):
@@ -140,7 +138,28 @@ def test_manifest_fields_and_previous_is_the_pointer(repo, rel):
                     "bootstrap": rel.bootstrap_argv("4.0.0", wheel, constraints, PY)}
 
 
+def test_stamp_leaves_marketplace_json_alone(repo, rel):
+    """Its versions move with the pointer (release_pointer.py set), never before it: between
+    the release commit and the pointer move main would label the previous tag's content with
+    the new version."""
+    market = repo / ".claude-plugin/marketplace.json"
+    before = market.read_bytes()
+    counts = rel.stamp(repo, "4.0.0")
+    assert market.read_bytes() == before
+    assert ".claude-plugin/marketplace.json" not in counts
+
+
 def test_marketplace_sync_hook_still_passes_after_stamp(repo, rel):
+    """The release commit is on main before the pointer moves: the check compares each pinned
+    entry with plugin.json at the pinned commit, not with the stamped working tree."""
+    _git(repo, "init", "-q")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "the previous release")
+    sha = _git(repo, "rev-parse", "HEAD").strip()
+    pointer = _load(repo / "scripts" / "release_pointer.py", "release_pointer_pin")
+    market = repo / ".claude-plugin" / "marketplace.json"
+    market.write_text(json.dumps(pointer.set_pointer(json.loads(market.read_text()), "v3.9.0", sha),
+                                 indent=2) + "\n", encoding="utf-8")
     rel.stamp(repo, "4.0.0")
     result = subprocess.run([sys.executable, str(repo / "scripts/check_marketplace_sync.py")],
                             capture_output=True, text=True, encoding="utf-8")

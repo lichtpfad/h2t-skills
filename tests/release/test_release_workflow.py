@@ -96,13 +96,15 @@ def test_the_guard_runs_before_anything_is_published(wf):
 
 def test_pointer_rechecks_moves_and_verifies_before_it_pushes(wf):
     script = _script(wf["jobs"]["pointer"])
-    guard, done, view, move, verify, commit, push = _order(
+    guard, done, view, move, verify, labels, commit, push = _order(
         script, 'release_guard.py "v$VER" --allow-done', "already at v$VER", "gh release view",
-        "release_pointer.py set", "release_pointer.py check", "git commit", "git push")
-    assert guard < done < view < move < verify < commit < push
+        "release_pointer.py set", "release_pointer.py check", "check_marketplace_sync.py",
+        "git commit", "git push")
+    assert guard < done < view < move < verify < labels < commit < push
     assert "exit 0" in script[done:view], "a re-run after the push must be a no-op"
     assert "exit 1" in script[view:move], "the pointer could name a tag with no Release"
-    assert "exit 1" in script[verify:commit], "the moved pointer is committed unchecked"
+    assert "exit 1" in script[verify:labels], "the moved pointer is committed unchecked"
+    assert "exit 1" in script[labels:commit], "the moved labels are committed unchecked"
 
 
 def test_every_action_is_pinned(wf):

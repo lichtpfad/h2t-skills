@@ -4,7 +4,7 @@
     python scripts/release.py prepare <X.Y.Z>
 
 Writes `<ver>` into pyproject.toml, h2t_ops/__init__.py, uv.lock (the project's own row),
-every plugin.json, every `version` of marketplace.json and every plugins/*/release.env;
+every plugin.json and every plugins/*/release.env;
 stamps the `--expect` and bootstrap literals into the SKILL.md / reference copies, README.md
 and plugins/*/hooks/run; regenerates h2t_ops/setup/_release.py; exports constraints.txt; writes
 release.json at the repo root.
@@ -12,6 +12,10 @@ release.json at the repo root.
 Substitution is by slot pattern, not by placeholder, so the next release rewrites what this
 one wrote. `@VERSION@` and `@BOOTSTRAP@` are accepted as the initial values. Every slot has
 an exact expected count per file; any other count is an error and nothing is written.
+
+marketplace.json is not touched: its `version` labels move with the pointer, in the commit
+`release_pointer.py set` makes after the Release exists. Stamped here, main would label the
+previous tag's content with the new version until the pointer moved.
 
 The root CHANGELOG.md must already carry a `## <ver>` heading: the notes are written by
 hand, this script only refuses to cut a release without them.
@@ -108,9 +112,6 @@ def _plan(root: Path, ver: str) -> dict[Path, tuple[str, int]]:
 
     edit(root / "pyproject.toml", (_TOML_VERSION, f'version = "{ver}"', 1))
     edit(root / "h2t_ops" / "__init__.py", (_INIT_VERSION, f'__version__ = "{ver}"', 1))
-    market = root / ".claude-plugin" / "marketplace.json"
-    plugins = json.loads(market.read_text(encoding="utf-8"))["plugins"]
-    edit(market, (_JSON_VERSION, f'"version": "{ver}"', len(plugins)))
     for pj in sorted(root.glob("plugins/*/.claude-plugin/plugin.json")):
         edit(pj, (_JSON_VERSION, f'"version": "{ver}"', 1))
     for env in sorted(root.glob("plugins/*/release.env")):
