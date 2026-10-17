@@ -46,6 +46,8 @@ h2t-agent-profile = "h2t_ops.tools.agent_profile.apply_agent_profile:main"
 h2t-detect-project = "h2t_ops.lifecycle.detect_project:main"
 h2t-docs-init = "h2t_ops.tools.docs.docs_init:main"
 h2t-runbook = "h2t_ops.tools.runbook.cli:main"
+# The installer and repairer (spec §7.3); the bootstrap runs it from an isolated uvx.
+h2t-setup = "h2t_ops.setup.cli:main"
 
 [project.optional-dependencies]
 # `h2t-drawio generate` builds diagrams with drawpyo; nothing else in the package needs it,

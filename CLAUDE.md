@@ -73,7 +73,7 @@ either way.
 
 ## Global CLI tools (uv tool install)
 
-`h2t-skills` exposes **18** global entry points, all from one package (`[project.scripts]` in
+`h2t-skills` exposes **19** global entry points, all from one package (`[project.scripts]` in
 `pyproject.toml`):
 
 | command | what it does |
@@ -96,11 +96,12 @@ either way.
 | `h2t-detect-project` | detects a project for init-project |
 | `h2t-docs-init` | scaffolds docs/ in a new project |
 | `h2t-runbook` | autonomous-run runbooks: `new`, `validate`, `state` |
+| `h2t-setup` | installs and repairs the pack: `sync`, `update` (to the release main points at, from an isolated `uvx`), `dev-sync` (editable, from a checkout) |
 
 **When to re-run:**
 - After `git pull` that adds or renames an entry point in `pyproject.toml`
 - After any session where `h2t-handoff` / `h2t-gather` is not found by `command -v`
-- Verify with `uv tool list` — all 18 under one package. Judge the listing, not the
+- Verify with `uv tool list` — all 19 under one package. Judge the listing, not the
   install command's output.
 
 **`h2t-ops` names two different things, versioned separately.** The plugin in
