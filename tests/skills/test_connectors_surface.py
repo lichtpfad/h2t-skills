@@ -3,9 +3,9 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
-SKILLS_ROOT = ROOT.parent
-REPO_ROOT = ROOT.parents[3]
+REPO_ROOT = Path(__file__).resolve().parents[2]
+SKILLS_ROOT = REPO_ROOT / "plugins" / "h2t-ops" / "skills"
+ROOT = SKILLS_ROOT / "connectors"
 REMOVED_SKILL_ENTRYPOINT_RE = re.compile(
     r"h2t-ops:(calendar|drive|gmail|meetgeek|notion|telegram)\b"
 )
@@ -28,7 +28,7 @@ def _text(path: Path) -> str:
 def test_active_runtime_surfaces_do_not_name_removed_skill_entrypoints():
     runtime_surfaces = [
         REPO_ROOT / "h2t_ops" / "hooks" / "inject_context.py",
-        REPO_ROOT / "plugins" / "h2t-ops" / "skills" / "meetgeek" / "scripts" / "recovery.py",
+        REPO_ROOT / "h2t_ops" / "connectors" / "meetgeek" / "recovery.py",
     ]
     for path in runtime_surfaces:
         assert path.is_file(), path

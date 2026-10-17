@@ -1,17 +1,13 @@
 from __future__ import annotations
 
-import importlib.util
 import json
 from pathlib import Path
 
+from h2t_ops.lifecycle import handoff
+
 
 def _load_writer():
-    path = Path(__file__).with_name("writer.py")
-    spec = importlib.util.spec_from_file_location("handoff_writer_under_test", path)
-    module = importlib.util.module_from_spec(spec)
-    assert spec and spec.loader
-    spec.loader.exec_module(module)
-    return module
+    return handoff
 
 
 def test_default_markdown_dir_uses_h2t_session_root(tmp_path, monkeypatch):

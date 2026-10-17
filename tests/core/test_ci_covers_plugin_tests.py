@@ -35,7 +35,7 @@ def _dirs_with_tests():
 def test_the_probe_finds_plugin_test_dirs():
     """Control: an empty list would make the next test vacuously true."""
     found = _dirs_with_tests()
-    assert len(found) >= 10, found
+    assert found  # six left while Task 12 moves the rest into tests/
 
 
 def _pytest_run_lines():

@@ -1,43 +1,159 @@
-"""
-Tests for meetgeek_cli.
+"""The cases of the deleted meetgeek_cli.py suite, run against the package (#541).
 
-Covers spec scenarios:
-- auth-check (200, 401)
-- list (paginated, date filter)
-- transcript (markdown format, unicode, pagination)
-- sync (to temp dir, cursor update, cursor resume, idempotent dedup)
+meetgeek_cli.py was deleted in Task 12. Its 109 tests drove the script through `main(argv)`
+and patched the names it imported from recovery.py. The package serves the same verbs as
+`h2t-ops meetgeek <verb>` (pipeline.py) over the same recovery.py, so the cases stay and
+only the fixture changes: `cli` is the script's surface, served by the package.
+
+- `cli.main(argv)` runs `h2t-ops meetgeek <argv> --json` and prints what the script printed:
+  the result (a string as is, anything else as JSON), or `ERROR: <message>` on stderr with
+  the error's details as JSON on stdout.
+- `cli._<name>` reads and patches `recovery.<name>`, the module pipeline.py calls through.
+- `sys.modules["recovery"]` is the package recovery module, which several cases look up.
 """
 
 from __future__ import annotations
 
-import importlib.util
+import io
 import json
 import sys
 import time
+from contextlib import redirect_stderr, redirect_stdout
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
-SCRIPT = Path(__file__).resolve().parent.parent / "scripts" / "meetgeek_cli.py"
+from h2t_ops.connectors.meetgeek import commands as mg_commands
+from h2t_ops.connectors.meetgeek import pipeline, recovery
+from h2t_ops.core.errors import ProviderError
 
 # Captured before any fixture redirects HOME — the production path the suite must never touch.
 _REAL_HOME = Path.home()
 
+# The script's names for what it imported from recovery.py.
+_RECOVERY_ALIASES = {
+    "_drive_audit_public": "drive_audit_public",
+    "_drive_download_url": "drive_download_url",
+    "_drive_service": "drive_service",
+    "_drive_upload_file": "drive_upload_file",
+    "_ffmpeg_probe": "ffmpeg_probe",
+    "_now_iso": "now_iso",
+    "_process_one_for_upload": "process_one",
+    "_purge_staging": "purge_staging",
+    "_read_uploads_manifest": "read_uploads_manifest",
+    "_run_housekeeping": "run_housekeeping",
+    "_staging_dir": "staging_dir",
+    "_submit_url_via_h2t_ops": "submit_url_via_h2t_ops",
+    "_submitted_record": "submitted_record",
+    "_uploads_manifest_path": "uploads_manifest_path",
+    "convert_media": "convert_media",
+    "RecoveryError": "RecoveryError",
+}
+
+
+class _ApiError(ProviderError):
+    """The script's ApiError: a provider failure with the exit code it carried."""
+
+    def __init__(self, message: str, exit_code: int = 1):
+        super().__init__(message)
+        self.exit_code = exit_code
+
+
+class _Parser:
+    def parse_args(self, argv):
+        from h2t_ops.cli import build_parser
+
+        return build_parser().parse_args(["meetgeek", *argv])
+
+
+class _ScriptSurface:
+    """meetgeek_cli.py's module surface, served by the package."""
+
+    ApiError = _ApiError
+
+    def __getattr__(self, name):
+        if name in _RECOVERY_ALIASES:
+            return getattr(recovery, _RECOVERY_ALIASES[name])
+        if name == "requests":
+            import requests
+
+            return requests
+        if name == "subprocess":
+            import subprocess
+
+            return subprocess
+        if name == "_meeting_pick":
+            return mg_commands._normalize_meeting
+        if name == "_yaml_value":
+            return mg_commands._yaml_value
+        if name == "cmd_webhook_server":
+            return pipeline.webhook_server
+        raise AttributeError(name)
+
+    def __setattr__(self, name, value):
+        if name not in _RECOVERY_ALIASES:
+            raise AttributeError(f"the script surface does not patch {name}")
+        setattr(recovery, _RECOVERY_ALIASES[name], value)
+
+    @staticmethod
+    def build_parser():
+        return _Parser()
+
+    @staticmethod
+    def main(argv):
+        from h2t_ops import cli as h2t_cli
+
+        out, err = io.StringIO(), io.StringIO()
+        with redirect_stdout(out), redirect_stderr(err):
+            code = h2t_cli.dispatch(["meetgeek", *argv, "--json"])
+        # Success: the envelope on stdout. Failure: on the last stderr line, after the
+        # progress lines the verbs write there, which pass through.
+        progress = err.getvalue().splitlines()
+        if code == 0:
+            envelope = json.loads(out.getvalue())
+        else:
+            envelope = json.loads(progress.pop())
+        for line in progress:
+            print(line, file=sys.stderr)
+        if envelope["ok"]:
+            result = envelope["result"]
+            print(result if isinstance(result, str)
+                  else json.dumps(result, ensure_ascii=False, indent=2))
+        else:
+            error = envelope["error"]
+            if "details" in error:
+                print(json.dumps(error["details"], ensure_ascii=False, indent=2))
+            print(f"ERROR: {error['message']}", file=sys.stderr)
+        return code
+
+
+@pytest.fixture(autouse=True)
+def _isolated_lake(tmp_path, monkeypatch):
+    """The script suite's conftest: never the user's real data lake (#386, defect 6)."""
+    home = tmp_path / "home"
+    home.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("USERPROFILE", str(home))
+    monkeypatch.setenv("H2T_LAKE_ROOT", str(home / ".dor" / "lake"))
+
 
 @pytest.fixture()
 def cli(monkeypatch):
-    """Load fresh meetgeek_cli module with deterministic env."""
+    """The script's surface with the script's deterministic env."""
     monkeypatch.setenv("MEETGEEK_API_KEY", "test-key")
     monkeypatch.setenv("MEETGEEK_BASE_URL", "https://api.test")
-    spec = importlib.util.spec_from_file_location("meetgeek_cli_under_test", SCRIPT)
-    assert spec and spec.loader
-    mod = importlib.util.module_from_spec(spec)
-    sys.modules["meetgeek_cli_under_test"] = mod
-    spec.loader.exec_module(mod)
-    mod._ffmpeg_probe.__globals__["ffmpeg_exe"] = lambda: "ffmpeg"
-    return mod
+    monkeypatch.setitem(sys.modules, "recovery", recovery)
+    # A case that forgets its fake must fail here, not reach the network.
+    import requests
+
+    def no_network(*args, **kwargs):
+        raise AssertionError("a test reached the real network")
+    monkeypatch.setattr(requests, "request", no_network)
+    monkeypatch.setattr(requests, "get", no_network)
+    monkeypatch.setattr(recovery, "ffmpeg_exe", lambda: "ffmpeg")
+    return _ScriptSurface()
 
 
 class FakeResponse:
@@ -84,14 +200,16 @@ def test_auth_check_returns_ok(cli, capsys):
     with patch.object(cli.requests, "request", fake):
         rc = cli.main(["auth-check"])
     assert rc == 0
-    assert "OK" in capsys.readouterr().out
+    # The script printed "OK: MEETGEEK_API_KEY valid"; the connector returns true.
+    assert json.loads(capsys.readouterr().out) is True
 
 
 def test_auth_check_invalid_key(cli, capsys):
     fake, _ = _scripted_request([FakeResponse(401, {"error": "bad key"})])
     with patch.object(cli.requests, "request", fake):
         rc = cli.main(["auth-check"])
-    assert rc == 1
+    # The script exited 1; a rejected key is the connector standard's auth exit, 4.
+    assert rc == 4
     assert "401" in capsys.readouterr().err
 
 
@@ -101,12 +219,15 @@ def test_list_paginated(cli, capsys):
     page1 = {"data": [{"meeting_id": "a"}, {"meeting_id": "b"}], "next_cursor": "c1"}
     page2 = {"data": [{"meeting_id": "c"}], "next_cursor": None}
     fake, calls = _scripted_request([FakeResponse(200, page1), FakeResponse(200, page2)])
+    # The script walked every page in one call. The connector returns one page under
+    # "rows" with its cursor, and --cursor takes the next (meetgeek.md, "list").
     with patch.object(cli.requests, "request", fake):
-        rc = cli.main(["list"])
-    assert rc == 0
-    out = json.loads(capsys.readouterr().out)
-    assert [m["meeting_id"] for m in out] == ["a", "b", "c"]
-    assert calls[1]["params"] == {"cursor": "c1"}
+        assert cli.main(["list"]) == 0
+        first = json.loads(capsys.readouterr().out)
+        assert cli.main(["list", "--cursor", first["next_cursor"]]) == 0
+        second = json.loads(capsys.readouterr().out)
+    assert [m["meeting_id"] for m in first["rows"] + second["rows"]] == ["a", "b", "c"]
+    assert calls[1]["params"]["cursor"] == "c1"
 
 
 def test_list_date_filter(cli):

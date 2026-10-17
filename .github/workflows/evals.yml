@@ -83,13 +83,6 @@ jobs:
         if: ${{ !cancelled() }}
         run: python -m pytest plugins/h2t-core/skills/autonomous-run/scripts -q
 
-      - name: Run init-project skill tests
-        if: ${{ !cancelled() }}
-        # Outside CI these rotted into Windows-only assumptions — a literal "E:/DROPBOX/..."
-        # cwd wrote a stray tree into the repo on POSIX, and "/some/path" hit the read-only
-        # root (#378, same family as #355).
-        run: python -m pytest plugins/h2t-core/skills/init-project/scripts -q
-
       # Ten more directories held assertions GitHub had never run (#381) — 968 in
       # h2t-creative alone before it was cut back to the v1.1.0 core (28 now), plus the 87
       # meetgeek tests merged in #389/#390. Each gets its
@@ -98,33 +91,18 @@ jobs:
       # on `ModuleNotFoundError: No module named 'tests.core'`. All twelve directories run
       # now — drawio joined once its smoke scripts became real test functions (#396); its
       # export test skips on a runner, loudly, because the draw.io Desktop CLI is absent.
-      - name: Plugin tests — h2t-core vendored lib
-        if: ${{ !cancelled() }}
-        run: python -m pytest plugins/h2t-core/lib/gather -q
       - name: Plugin tests — h2t-core bootstrap scripts
         if: ${{ !cancelled() }}
         run: python -m pytest plugins/h2t-core/scripts/tests -q
       - name: Plugin tests — agent-profile skill
         if: ${{ !cancelled() }}
         run: python -m pytest plugins/h2t-core/skills/agent-profile/scripts -q
-      - name: Plugin tests — handoff skill
-        if: ${{ !cancelled() }}
-        run: python -m pytest plugins/h2t-core/skills/handoff/scripts -q
-      - name: Plugin tests — scaffold-project skill
-        if: ${{ !cancelled() }}
-        run: python -m pytest plugins/h2t-core/skills/scaffold-project/scripts -q
       - name: Plugin tests — setup skill
         if: ${{ !cancelled() }}
         run: python -m pytest plugins/h2t-core/skills/setup/scripts -q
       - name: Plugin tests — h2t-creative
         if: ${{ !cancelled() }}
         run: python -m pytest plugins/h2t-creative/tests -q
-      - name: Plugin tests — connectors skill
-        if: ${{ !cancelled() }}
-        run: python -m pytest plugins/h2t-ops/skills/connectors/scripts -q
-      - name: Plugin tests — meetgeek skill
-        if: ${{ !cancelled() }}
-        run: python -m pytest plugins/h2t-ops/skills/meetgeek/tests -q
       - name: Plugin tests — research skill
         if: ${{ !cancelled() }}
         run: python -m pytest plugins/h2t-ops/skills/research/tests -q

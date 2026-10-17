@@ -7,7 +7,7 @@ that number anywhere, so nobody saw it grow.
 
 from datetime import date
 
-from gather.docs_debt import gather_docs_debt
+from h2t_ops.lifecycle.gather.docs_debt import gather_docs_debt
 
 TODAY = date(2026, 8, 24)
 

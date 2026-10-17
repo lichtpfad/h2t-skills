@@ -1,25 +1,24 @@
-"""Every verb the plugin connector scripts offer has an `h2t-ops <connector> <verb>` (#541).
+"""Every verb the plugin connector scripts offered has an `h2t-ops <connector> <verb>` (#541).
 
-Task 12 deletes drive_cli.py, meetgeek_cli.py, exa_search.py and fetch_url.py. Before that
-can happen, each verb they parse must exist in the package CLI and accept the same flags,
-or deleting a script deletes a capability.
+Task 12 deleted drive_cli.py, meetgeek_cli.py, exa_search.py and fetch_url.py. Each verb
+they parsed had to exist in the package CLI with the same flags, or deleting a script
+deleted a capability. While the scripts existed, this test read the verbs from their own
+argparse parsers. Before they were deleted, that inventory was frozen into INVENTORY
+below, generated from the parsers at d857c128, so the CLI still answers to it.
 
-The verb list is not written here by hand: it is read from each script's own argparse
-parser, so a verb added to a script is checked without anyone editing this file.
-Three of the scripts expose a builder (`build_parser`, `_build_parser`). drive_cli.py builds
-its parser inside main(), after an import check and before parse_args; that slice of main()
-is lifted out with `ast` and executed alone, so no command ever runs.
+The contract scenarios ran the same input through the script and through the CLI on a fake
+API. The script halves were recorded once, at the same commit, into
+tests/fixtures/connectors/script_contract/goldens.json, and the CLI must still produce them.
+A path under the scenario's tmp dir is recorded as `<tmp>`, today's date as `<today>`.
 """
 from __future__ import annotations
 
 import argparse
-import ast
-import importlib.util
 import json
 import subprocess
-import sys
 import urllib.error
 import urllib.request
+from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -28,15 +27,174 @@ from unittest.mock import MagicMock
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-SCRIPTS_DIR = ROOT / "plugins" / "h2t-ops" / "skills"
+GOLDENS = json.loads((ROOT / "tests" / "fixtures" / "connectors" / "script_contract"
+                      / "goldens.json").read_text(encoding="utf-8"))
 
-# script name -> (connector, path)
-SCRIPTS = {
-    "drive_cli": ("drive", SCRIPTS_DIR / "drive" / "scripts" / "drive_cli.py"),
-    "meetgeek_cli": ("meetgeek", SCRIPTS_DIR / "meetgeek" / "scripts" / "meetgeek_cli.py"),
-    "exa_search": ("research", SCRIPTS_DIR / "research" / "scripts" / "exa_search.py"),
-    "fetch_url": ("research", SCRIPTS_DIR / "research" / "scripts" / "fetch_url.py"),
+# script name -> connector
+CONNECTOR = {"drive_cli": "drive", "meetgeek_cli": "meetgeek", "exa_search": "research",
+             "fetch_url": "research"}
+
+# script -> verb -> (options, positionals). An option is flag -> (takes a value, int/float
+# type or None, choices or None); a positional is (dest, optional).
+INVENTORY: dict[str, dict[str, tuple[dict, list]]] = {
+    "drive_cli": {
+        "download": ({}, [("file_id", False), ("dest", True)]),
+        "export": ({
+            "--format": (True, None, None),
+            "--print": (False, None, None),
+        }, [("file_id", False), ("dest", True)]),
+        "folders": ({}, [("parent", True)]),
+        "list": ({
+            "--max": (True, "int", None),
+        }, [("folder", True)]),
+        "search": ({
+            "--max": (True, "int", None),
+            "--type": (True, None, ("docx", "folder")),
+        }, [("query", False)]),
+        "sync-meetings": ({
+            "--dry-run": (False, None, None),
+            "--folder": (True, None, None),
+        }, []),
+        "upload": ({
+            "--folder": (True, None, None),
+            "--no-convert": (False, None, None),
+        }, [("file", False)]),
+    },
+    "exa_search": {
+        "crawl": ({
+            "--output-dir": (True, None, None),
+            "--project": (True, None, None),
+            "--url": (True, None, None),
+        }, []),
+        "preflight": ({}, []),
+        "search": ({
+            "--additional-queries": (True, None, None),
+            "--country": (True, None, None),
+            "--depth": (True, None, ("deep", "shallow", "standard")),
+            "--end-date": (True, None, None),
+            "--envelope": (False, None, None),
+            "--exclude-domains": (True, None, None),
+            "--exclude-text": (True, None, None),
+            "--full-text": (False, None, None),
+            "--include-domains": (True, None, None),
+            "--include-text": (True, None, None),
+            "--mode": (
+                True, None,
+                ("academic", "competitor", "deep", "fast", "generic", "news", "people")),
+            "--no-retry": (False, None, None),
+            "--num-results": (True, "int", None),
+            "--output-dir": (True, None, None),
+            "--project": (True, None, None),
+            "--query": (True, None, None),
+            "--start-date": (True, None, None),
+        }, []),
+    },
+    "fetch_url": {
+        "fetch": ({
+            "--config": (True, None, None),
+            "--format": (True, None, ("html", "markdown", "text")),
+            "--json": (False, None, None),
+            "--keep-raw": (False, None, None),
+            "--min-body-chars": (True, "int", None),
+            "--output-dir": (True, None, None),
+            "--project": (True, None, None),
+            "--provider": (
+                True, None,
+                ("auto", "browserless", "crawl4ai", "direct", "firecrawl", "jina", "playwright")),
+            "--timeout-ms": (True, "int", None),
+            "--url": (True, None, None),
+            "--user-agent": (True, None, None),
+        }, []),
+        "preflight": ({}, []),
+    },
+    "meetgeek_cli": {
+        "auth-check": ({}, []),
+        "convert": ({
+            "--audio-only": (False, None, None),
+            "--mix-mode": (True, None, ("amix", "first", "keep")),
+            "--output": (True, None, None),
+            "--probe": (False, None, None),
+            "-o": (True, None, None),
+        }, [("input", False)]),
+        "download": ({
+            "--output": (True, None, None),
+            "-o": (True, None, None),
+        }, [("meeting_id", False)]),
+        "drive-audit": ({
+            "--min-age-hours": (True, "float", None),
+            "--revoke": (False, None, None),
+        }, []),
+        "drive-upload": ({
+            "--folder": (True, None, None),
+            "--make-public": (False, None, None),
+            "--no-make-public": (False, None, None),
+        }, [("file", False)]),
+        "get": ({}, [("meeting_id", False)]),
+        "highlights": ({
+            "--format": (True, None, ("json", "md")),
+            "--output": (True, None, None),
+            "-o": (True, None, None),
+        }, [("meeting_id", False)]),
+        "insights": ({
+            "--format": (True, None, ("json", "md")),
+            "--output": (True, None, None),
+            "-o": (True, None, None),
+        }, [("meeting_id", False)]),
+        "list": ({
+            "--cursor": (True, None, None),
+            "--from-date": (True, None, None),
+            "--limit": (True, "int", None),
+            "--to-date": (True, None, None),
+        }, []),
+        "staging-purge": ({
+            "--dry-run": (False, None, None),
+            "--min-age-hours": (True, "float", None),
+            "--no-verify-drive": (False, None, None),
+            "--verify-drive": (False, None, None),
+        }, []),
+        "summary": ({
+            "--format": (True, None, ("json", "md")),
+            "--output": (True, None, None),
+            "-o": (True, None, None),
+        }, [("meeting_id", False)]),
+        "sync": ({
+            "--cursor-file": (True, None, None),
+            "--include": (True, None, None),
+            "--limit": (True, "int", None),
+            "--since": (True, None, None),
+            "--since-cursor": (False, None, None),
+            "--to": (True, None, None),
+            "--to-date": (True, None, None),
+            "--watch": (True, "int", None),
+        }, []),
+        "teams": ({}, []),
+        "transcript": ({
+            "--format": (True, None, ("json", "md")),
+            "--output": (True, None, None),
+            "-o": (True, None, None),
+        }, [("meeting_id", False)]),
+        "upload": ({
+            "--audio-only": (False, None, None),
+            "--download-url": (True, None, None),
+            "--dry-run": (False, None, None),
+            "--from-file": (True, None, None),
+            "--housekeeping": (False, None, None),
+            "--language": (True, None, None),
+            "--mix-mode": (True, None, ("amix", "first", "keep")),
+            "--no-housekeeping": (False, None, None),
+            "--no-skip-existing": (False, None, None),
+            "--skip-existing": (False, None, None),
+            "--title": (True, None, None),
+        }, []),
+        "webhook-server": ({
+            "--bind": (True, None, None),
+            "--out": (True, None, None),
+            "--port": (True, "int", None),
+            "--secret": (True, None, None),
+        }, []),
+    },
 }
+
 
 # Verbs deliberately not carried into h2t-ops, each with the reason.
 EXCLUDED = {
@@ -52,55 +210,6 @@ EXCLUDED = {
 CLI_FORM = {
     ("fetch_url", "preflight"): ("preflight", ["--provider", "jina"]),
 }
-
-
-def _load_script(name: str):
-    _, path = SCRIPTS[name]
-    saved_path = list(sys.path)
-    spec = importlib.util.spec_from_file_location(f"_t11_{name}", path)
-    assert spec and spec.loader
-    mod = importlib.util.module_from_spec(spec)
-    # fetch_url.py declares dataclasses, which look their module up in sys.modules.
-    sys.modules[spec.name] = mod
-    try:
-        spec.loader.exec_module(mod)
-    finally:
-        # meetgeek_cli.py puts its own directory on sys.path to import recovery.py.
-        sys.path[:] = saved_path
-    return mod
-
-
-def _drive_parser(mod) -> argparse.ArgumentParser:
-    """Execute only the parser-building statements of drive_cli.main()."""
-    tree = ast.parse(Path(mod.__file__).read_text(encoding="utf-8"))
-    main = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "main")
-    body, started = [], False
-    for stmt in main.body:
-        src = ast.unparse(stmt)
-        if src.startswith("parser = argparse.ArgumentParser("):
-            started = True
-        if src.startswith("args = parser.parse_args("):
-            break
-        if started:
-            body.append(stmt)
-    assert body, "drive_cli.main() no longer builds `parser` before `parse_args`"
-    body.append(ast.parse("return parser").body[0])
-    fn = ast.FunctionDef(name="_t11_build", args=ast.arguments(
-        posonlyargs=[], args=[], kwonlyargs=[], kw_defaults=[], defaults=[]),
-        body=body, decorator_list=[], returns=None, type_params=[])
-    module = ast.fix_missing_locations(ast.Module(body=[fn], type_ignores=[]))
-    namespace = dict(vars(mod))
-    exec(compile(module, str(mod.__file__), "exec"), namespace)  # noqa: S102 — parser slice only
-    return namespace["_t11_build"]()
-
-
-def _script_parser(name: str) -> argparse.ArgumentParser:
-    mod = _load_script(name)
-    if name == "drive_cli":
-        return _drive_parser(mod)
-    if name == "meetgeek_cli":
-        return mod.build_parser()
-    return mod._build_parser()
 
 
 def _subcommands(parser: argparse.ArgumentParser) -> dict[str, argparse.ArgumentParser]:
@@ -125,7 +234,7 @@ def _positionals(parser: argparse.ArgumentParser) -> list[argparse.Action]:
 
 
 def _script_verbs() -> list[tuple[str, str]]:
-    return [(name, verb) for name in SCRIPTS for verb in _subcommands(_script_parser(name))]
+    return [(name, verb) for name, verbs in INVENTORY.items() for verb in verbs]
 
 
 def _cli_verb(connector: str, verb: str) -> argparse.ArgumentParser | None:
@@ -135,37 +244,38 @@ def _cli_verb(connector: str, verb: str) -> argparse.ArgumentParser | None:
     return _subcommands(conn).get(verb) if conn is not None else None
 
 
-def _mismatches(script_p: argparse.ArgumentParser, cli_p: argparse.ArgumentParser) -> list[str]:
+def _mismatches(script: tuple[dict, list], cli_p: argparse.ArgumentParser) -> list[str]:
+    options, positionals = script
     problems = []
     cli_opts = _options(cli_p)
-    for opt, sa in _options(script_p).items():
+    for opt, (takes_value, type_name, choices) in options.items():
         ca = cli_opts.get(opt)
         if ca is None:
             problems.append(f"missing flag {opt}")
             continue
-        if (sa.nargs == 0) != (ca.nargs == 0):
+        if takes_value != (ca.nargs != 0):
             problems.append(f"{opt}: takes a value in one and not the other")
-        if sa.type in (int, float) and ca.type is not sa.type:
-            problems.append(f"{opt}: type {sa.type.__name__} vs {getattr(ca.type, '__name__', ca.type)}")
-        if sa.choices and ca.choices is not None and not set(sa.choices) <= set(ca.choices):
-            problems.append(f"{opt}: choices {sorted(set(sa.choices) - set(ca.choices))} refused")
-    script_pos, cli_pos = _positionals(script_p), _positionals(cli_p)
-    for i, sa in enumerate(script_pos):
+        if type_name and getattr(ca.type, "__name__", None) != type_name:
+            problems.append(f"{opt}: type {type_name} vs {getattr(ca.type, '__name__', ca.type)}")
+        if choices and ca.choices is not None and not set(choices) <= set(ca.choices):
+            problems.append(f"{opt}: choices {sorted(set(choices) - set(ca.choices))} refused")
+    cli_pos = _positionals(cli_p)
+    for i, (dest, optional) in enumerate(positionals):
         if i >= len(cli_pos):
-            problems.append(f"missing positional {sa.dest}")
-        elif sa.nargs == "?" and cli_pos[i].nargs != "?":
-            problems.append(f"positional {sa.dest} is optional in the script, required in the CLI")
+            problems.append(f"missing positional {dest}")
+        elif optional and cli_pos[i].nargs != "?":
+            problems.append(f"positional {dest} is optional in the script, required in the CLI")
     return problems
 
 
-def test_scripts_still_offer_verbs():
+def test_the_inventory_is_not_empty():
     """Positive control: an empty inventory would make the next test pass vacuously."""
     verbs = _script_verbs()
     assert ("drive_cli", "list") in verbs
     assert ("meetgeek_cli", "sync") in verbs
     assert ("exa_search", "search") in verbs
     assert ("fetch_url", "fetch") in verbs
-    assert set(EXCLUDED) <= set(verbs), "an exclusion names a verb that no longer exists"
+    assert set(EXCLUDED) <= set(verbs), "an exclusion names a verb that is not in the inventory"
 
 
 def test_every_script_verb_has_a_cli_command_with_its_flags():
@@ -173,22 +283,28 @@ def test_every_script_verb_has_a_cli_command_with_its_flags():
     for name, verb in _script_verbs():
         if (name, verb) in EXCLUDED:
             continue
-        connector = SCRIPTS[name][0]
+        connector = CONNECTOR[name]
         cli_verb = CLI_FORM.get((name, verb), (verb, []))[0]
         cli_p = _cli_verb(connector, cli_verb)
         if cli_p is None:
             red.append(f"{name} {verb}: no `h2t-ops {connector} {cli_verb}`")
             continue
-        script_p = _subcommands(_script_parser(name))[verb]
-        red += [f"{name} {verb}: {p}" for p in _mismatches(script_p, cli_p)]
+        red += [f"{name} {verb}: {p}" for p in _mismatches(INVENTORY[name][verb], cli_p)]
     assert not red, "\n".join(red)
+
+
+def test_the_comparison_reports_a_missing_flag():
+    """Control for _mismatches: a flag the CLI lacks must be named, not passed over."""
+    cli_p = _cli_verb("research", "fetch")
+    assert _mismatches(({"--no-such-flag": (False, None, None)}, []), cli_p) == [
+        "missing flag --no-such-flag"]
 
 
 def test_cli_forms_parse():
     from h2t_ops.cli import build_parser
 
     for (name, _verb), (cli_verb, extra) in CLI_FORM.items():
-        build_parser().parse_args([SCRIPTS[name][0], cli_verb, *extra])
+        build_parser().parse_args([CONNECTOR[name], cli_verb, *extra])
 
 
 @pytest.mark.parametrize("argv", [
@@ -217,7 +333,7 @@ def test_pipeline_parser_repeats_the_recovery_grace_period():
     assert _options(staging)["--min-age-hours"].default == recovery.HOUSEKEEPING_MIN_AGE_HOURS
 
 
-# ─── Contract scenarios: same inputs to the script and to the CLI, on a fake API ─────────
+# ─── Contract scenarios: the CLI against the script's recorded output, on a fake API ─────
 
 def _cli(capsys, argv: list[str]) -> tuple[int, Any]:
     from h2t_ops import cli
@@ -228,14 +344,11 @@ def _cli(capsys, argv: list[str]) -> tuple[int, Any]:
     return code, (json.loads(out)["result"] if "--json" in argv and out.strip() else out)
 
 
-def _script(capsys, mod, argv: list[str] | None) -> tuple[int, str]:
-    """argv None: drive_cli.main() takes none and reads sys.argv."""
-    capsys.readouterr()
-    try:
-        code = mod.main() if argv is None else mod.main(argv)
-    except SystemExit as e:  # exa_search exits on failure, drive_cli on everything
-        code = e.code
-    return code or 0, capsys.readouterr().out
+def _recorded(value: Any, tmp_path: Path) -> Any:
+    """A golden with its placeholders filled in for this run."""
+    text = json.dumps(value, ensure_ascii=False)
+    text = text.replace("<tmp>", json.dumps(str(tmp_path))[1:-1])
+    return json.loads(text.replace("<today>", datetime.now(UTC).strftime("%Y-%m-%d")))
 
 
 # MeetGeek ────────────────────────────────────────────────────────────────────────────
@@ -317,78 +430,67 @@ def fake_meetgeek(monkeypatch):
 
 
 @pytest.fixture
-def meetgeek_script(fake_meetgeek, monkeypatch, tmp_path):
+def meetgeek_env(fake_meetgeek, monkeypatch, tmp_path):
     monkeypatch.setenv("H2T_LAKE_ROOT", str(tmp_path / "lake"))
-    return _load_script("meetgeek_cli")  # reads MEETGEEK_* at import
+    return fake_meetgeek
 
 
 @pytest.mark.parametrize("verb", ["transcript", "summary", "highlights", "insights"])
-def test_meetgeek_json_payloads_match(meetgeek_script, capsys, verb):
-    code, out = _script(capsys, meetgeek_script, [verb, "m1", "--format", "json"])
-    assert code == 0
+def test_meetgeek_json_payloads_match(meetgeek_env, capsys, verb):
     cli_code, result = _cli(capsys, ["meetgeek", verb, "m1", "--format", "json", "--json"])
     assert cli_code == 0
-    assert result == json.loads(out)
+    assert result == GOLDENS["meetgeek_payloads"][verb]
 
 
-def test_meetgeek_output_flag_writes_the_same_file(meetgeek_script, capsys, tmp_path):
-    a, b = tmp_path / "script" / "t.json", tmp_path / "cli" / "t.json"
-    code, out = _script(capsys, meetgeek_script, ["transcript", "m1", "--format", "json", "-o", str(a)])
-    assert (code, out.strip()) == (0, str(a))
+def test_meetgeek_output_flag_writes_the_same_file(meetgeek_env, capsys, tmp_path):
+    b = tmp_path / "cli" / "t.json"
     cli_code, result = _cli(capsys, ["meetgeek", "transcript", "m1", "--format", "json",
                                      "-o", str(b), "--json"])
     assert (cli_code, result) == (0, str(b))
-    assert a.read_text(encoding="utf-8") == b.read_text(encoding="utf-8")
+    assert b.read_text(encoding="utf-8") == GOLDENS["meetgeek_output_file"]
 
 
-def test_meetgeek_download_url_and_file(meetgeek_script, capsys, fake_meetgeek, tmp_path):
-    code, out = _script(capsys, meetgeek_script, ["download", "m1"])
-    assert (code, out.strip()) == (0, MG_MEDIA_URL)
+def test_meetgeek_download_url_and_file(meetgeek_env, capsys, tmp_path):
     assert _cli(capsys, ["meetgeek", "download", "m1", "--json"]) == (0, MG_MEDIA_URL)
 
-    a, b = tmp_path / "a.mp4", tmp_path / "b.mp4"
-    assert _script(capsys, meetgeek_script, ["download", "m1", "-o", str(a)])[0] == 0
+    b = tmp_path / "b.mp4"
     assert _cli(capsys, ["meetgeek", "download", "m1", "-o", str(b), "--json"]) == (0, str(b))
-    assert a.read_bytes() == b.read_bytes() == b"RECORDING-BYTES"
-    # A signed media URL carries its own token: neither side sends the API key to it.
-    assert all("Authorization" not in h for h in fake_meetgeek)
+    assert b.read_bytes() == b"RECORDING-BYTES"
+    # A signed media URL carries its own token: the API key is not sent to it.
+    assert all("Authorization" not in h for h in meetgeek_env)
 
 
 def _without_fetched_at(text: str) -> str:
     return "\n".join(ln for ln in text.splitlines() if not ln.startswith("fetched_at:"))
 
 
-def test_meetgeek_sync_writes_the_same_lake(meetgeek_script, capsys, tmp_path):
+def test_meetgeek_sync_writes_the_same_lake(meetgeek_env, capsys, tmp_path):
     include = "transcripts,summaries,highlights,insights,recordings"
-    lake_s, lake_c = tmp_path / "lake-script", tmp_path / "lake-cli"
-    cur_s, cur_c = tmp_path / "cursor-script.json", tmp_path / "cursor-cli.json"
-    code, out = _script(capsys, meetgeek_script, [
-        "sync", "--to", str(lake_s), "--include", include, "--cursor-file", str(cur_s)])
-    assert code == 0, out
-    cli_code, result = _cli(capsys, ["meetgeek", "sync", "--to", str(lake_c), "--include", include,
-                                     "--cursor-file", str(cur_c), "--json"])
+    lake, cursor_file = tmp_path / "lake-cli", tmp_path / "cursor.json"
+    cli_code, result = _cli(capsys, ["meetgeek", "sync", "--to", str(lake), "--include", include,
+                                     "--cursor-file", str(cursor_file), "--json"])
     assert cli_code == 0
-    assert out.strip() == (f"synced={result['synced']} skipped={result['skipped']} "
-                           f"errors={result['errors']} cursor={cur_s}")
+    golden = GOLDENS["meetgeek_sync"]
+    # The script's stdout line, rebuilt from the CLI's result.
+    assert (f"synced={result['synced']} skipped={result['skipped']} errors={result['errors']} "
+            f"cursor=<tmp>/cursor.json") == golden["stdout"]
 
-    files_s = sorted(p.relative_to(lake_s) for p in lake_s.rglob("*") if p.is_file())
-    files_c = sorted(p.relative_to(lake_c) for p in lake_c.rglob("*") if p.is_file())
-    assert files_s == files_c and len(files_s) == 2 * 9 + 1  # 4 pairs + recording, + manifest
-    for rel in files_s:
-        s_bytes, c_bytes = (lake_s / rel).read_bytes(), (lake_c / rel).read_bytes()
-        if rel.suffix == ".md":
-            assert _without_fetched_at(s_bytes.decode()) == _without_fetched_at(c_bytes.decode()), rel
+    files = {p.relative_to(lake).as_posix(): p for p in sorted(lake.rglob("*")) if p.is_file()}
+    assert sorted(files) == sorted(golden["files"])
+    assert len(files) == 2 * 9 + 1  # 4 pairs + recording per meeting, + manifest
+    for rel, path in files.items():
+        want = golden["files"][rel]
+        if "md" in want:
+            assert _without_fetched_at(path.read_text(encoding="utf-8")) == want["md"], rel
         else:
-            assert s_bytes == c_bytes, rel
+            assert path.read_text(encoding="utf-8") == want["text"], rel
 
-    def cursor(p):
-        data = json.loads(p.read_text(encoding="utf-8"))
-        data.pop("last_run_at")
-        return data
-    assert cursor(cur_s) == cursor(cur_c)
+    cursor = json.loads(cursor_file.read_text(encoding="utf-8"))
+    cursor.pop("last_run_at")
+    assert cursor == golden["cursor"]
 
 
-def test_meetgeek_upload_download_url_delegates_identically(meetgeek_script, capsys, monkeypatch):
+def test_meetgeek_upload_download_url_delegates_identically(meetgeek_env, capsys, monkeypatch):
     calls = []
 
     def fake_run(cmd, **kwargs):
@@ -399,53 +501,45 @@ def test_meetgeek_upload_download_url_delegates_identically(meetgeek_script, cap
     monkeypatch.setenv("H2T_OPS", "h2t-ops-under-test")
     monkeypatch.setattr(subprocess, "run", fake_run)
     argv = ["upload", "--download-url", "https://example.org/r.mp4", "--title", "T", "--language", "ru"]
-    code, out = _script(capsys, meetgeek_script, argv)
-    assert code == 0
-    assert _cli(capsys, ["meetgeek", *argv, "--json"]) == (0, json.loads(out))
-    assert calls[0] == calls[1]
+    golden = GOLDENS["meetgeek_upload_delegate"]
+    assert _cli(capsys, ["meetgeek", *argv, "--json"]) == (0, golden["stdout"])
+    assert calls == [golden["argv"]]
 
 
-def test_meetgeek_upload_dry_run_matches(meetgeek_script, capsys, tmp_path):
+def test_meetgeek_upload_dry_run_matches(meetgeek_env, capsys, tmp_path):
     rec_dir = tmp_path / "recordings"
     rec_dir.mkdir()
     (rec_dir / "meetgeek-recording-2026-10-01T10-00-00-1Z.webm").write_bytes(b"webm")
     argv = ["upload", "--from-file", str(rec_dir), "--dry-run"]
-    code, out = _script(capsys, meetgeek_script, argv)
-    assert code == 0
-    assert _cli(capsys, ["meetgeek", *argv, "--json"]) == (0, json.loads(out))
+    assert _cli(capsys, ["meetgeek", *argv, "--json"]) == (
+        0, _recorded(GOLDENS["meetgeek_upload_dry_run"], tmp_path))
 
 
-def test_meetgeek_staging_purge_and_drive_audit_match(meetgeek_script, capsys, monkeypatch):
+def test_meetgeek_staging_purge_and_drive_audit_match(meetgeek_env, capsys, monkeypatch, tmp_path):
     from h2t_ops.connectors.meetgeek import recovery as pkg_recovery
 
     argv = ["staging-purge", "--dry-run", "--no-verify-drive", "--min-age-hours", "0"]
-    code, out = _script(capsys, meetgeek_script, argv)
-    assert code == 0
-    assert _cli(capsys, ["meetgeek", *argv, "--json"]) == (0, json.loads(out))
+    assert _cli(capsys, ["meetgeek", *argv, "--json"]) == (
+        0, _recorded(GOLDENS["meetgeek_staging_purge"], tmp_path))
 
     # drive-audit authenticates to Drive before reading the (empty) manifest.
-    for mod in (sys.modules["recovery"], pkg_recovery):
-        monkeypatch.setattr(mod, "drive_service", lambda: object())
-    code, out = _script(capsys, meetgeek_script, ["drive-audit"])
-    assert code == 0
-    assert _cli(capsys, ["meetgeek", "drive-audit", "--json"]) == (0, json.loads(out))
+    monkeypatch.setattr(pkg_recovery, "drive_service", lambda: object())
+    assert _cli(capsys, ["meetgeek", "drive-audit", "--json"]) == (
+        0, _recorded(GOLDENS["meetgeek_drive_audit"], tmp_path))
 
 
-def test_meetgeek_convert_probe_matches(meetgeek_script, capsys, monkeypatch, tmp_path):
+def test_meetgeek_convert_probe_matches(meetgeek_env, capsys, monkeypatch, tmp_path):
     from h2t_ops.connectors.meetgeek import recovery as pkg_recovery
 
     src = tmp_path / "in.webm"
     src.write_bytes(b"webm")
     stderr = ("Input #0, matroska,webm, from 'in.webm':\n  Duration: 00:01:05.00\n"
               "  Stream #0:0: Video: vp8\n  Stream #0:1: Audio: opus\n")
-    for mod in (sys.modules["recovery"], pkg_recovery):
-        monkeypatch.setattr(mod, "ffmpeg_exe", lambda: "ffmpeg-under-test")
+    monkeypatch.setattr(pkg_recovery, "ffmpeg_exe", lambda: "ffmpeg-under-test")
     monkeypatch.setattr(subprocess, "run",
                         lambda cmd, **kw: SimpleNamespace(returncode=1, stdout="", stderr=stderr))
-    code, out = _script(capsys, meetgeek_script, ["convert", str(src), "--probe"])
-    assert code == 0
     result = _cli(capsys, ["meetgeek", "convert", str(src), "--probe", "--json"])
-    assert result == (0, json.loads(out))
+    assert result == (0, _recorded(GOLDENS["meetgeek_convert_probe"], tmp_path))
     assert result[1]["duration_seconds"] == 65
 
 
@@ -469,21 +563,17 @@ def test_drive_list_shows_the_same_files(capsys, monkeypatch):
          "modifiedTime": "2026-09-30T00:00:00Z"},
     ]
     service = SimpleNamespace(files=lambda: _DriveFiles(files))
-    mod = _load_script("drive_cli")
-    monkeypatch.setattr(mod, "get_drive_service", lambda: service)
-    monkeypatch.setattr(sys, "argv", ["drive_cli.py", "list"])
 
     def fake_init(self):
         self.service = service
     monkeypatch.setattr(drive_client.DriveClient, "__init__", fake_init)
 
-    code, out = _script(capsys, mod, None)
-    assert code == 0
     cli_code, result = _cli(capsys, ["drive", "list", "--json"])
     assert cli_code == 0
     assert [r["name"] for r in result["rows"]] == ["Plan.docx", "Notes"]
+    script_out = GOLDENS["drive_list_stdout"]
     for row in result["rows"]:
-        assert row["name"] in out and f"[{row['id'][:12]}...]" in out
+        assert row["name"] in script_out and f"[{row['id'][:12]}...]" in script_out
 
 
 # Research ────────────────────────────────────────────────────────────────────────────
@@ -506,23 +596,17 @@ def test_research_search_envelope_matches(capsys, monkeypatch, tmp_path):
     monkeypatch.setenv("EXA_API_KEY", "fake-exa-key-for-tests")
     monkeypatch.setattr(urllib.request, "urlopen",
                         lambda req, timeout=None: _urlopen_response(json.dumps(payload).encode()))
-    mod = _load_script("exa_search")
-    monkeypatch.setattr(mod, "_h2t_secrets_bootstrap", lambda: None)
-    monkeypatch.setattr(mod, "_emit_eval", lambda *a, **k: None)
 
     common = ["--query", "contract test", "--project", "t11"]
-    code, out = _script(capsys, mod, ["search", *common, "--envelope",
-                                      "--output-dir", str(tmp_path / "s")])
-    assert code == 0
-    script_env = json.loads(out)
     cli_code, result = _cli(capsys, ["research", "search", *common, "--envelope",
                                      "--output-dir", str(tmp_path / "c")])
     assert cli_code == 0, result
     result = json.loads(result)["result"]  # --envelope is --json: the CLI envelope wraps it
-    assert result["status"] == script_env["status"] == "OK"
-    assert result["results"] == script_env["results"]
+    golden = GOLDENS["research_search"]
+    assert result["status"] == golden["status"] == "OK"
+    assert result["results"] == golden["results"]
     for key in ("query", "mode", "num_results_returned"):
-        assert result["meta"][key] == script_env["meta"][key]
+        assert result["meta"][key] == golden["meta"][key]
 
 
 def test_research_fetch_matches(capsys, monkeypatch, tmp_path):
@@ -531,27 +615,21 @@ def test_research_fetch_matches(capsys, monkeypatch, tmp_path):
     url = "https://example.com/pops-intro"
     monkeypatch.setattr(urllib.request, "urlopen",
                         lambda req, timeout=None: _urlopen_response(html, url=url))
-    mod = _load_script("fetch_url")
     common = ["--url", url, "--provider", "direct", "--format", "text", "--project", "t11"]
-    code, out = _script(capsys, mod, ["fetch", *common, "--json", "--output-dir", str(tmp_path / "s")])
-    assert code == 0
-    script_env = json.loads(out)
     cli_code, result = _cli(capsys, ["research", "fetch", *common, "--json",
                                      "--output-dir", str(tmp_path / "c")])
     assert cli_code == 0, result
-    for key in ("status", "provider_used", "title", "body_markdown", "body_chars", "content_type"):
-        assert result[key] == script_env[key], key
+    for key, value in GOLDENS["research_fetch"].items():
+        assert result[key] == value, key
 
 
-def test_research_preflight_jina_matches(capsys, monkeypatch):
+def test_research_preflight_jina(capsys, monkeypatch):
+    # The script's preflight exited 0 when Jina answered and non-zero when it did not.
     monkeypatch.setattr(urllib.request, "urlopen", lambda req, timeout=None: _urlopen_response(b""))
-    mod = _load_script("fetch_url")
-    assert _script(capsys, mod, ["preflight"])[0] == 0
     assert _cli(capsys, ["research", "preflight", "--provider", "jina", "--json"]) == (
         0, {"status": "OK", "provider": "jina"})
 
     def unreachable(req, timeout=None):
         raise urllib.error.URLError("no route")
     monkeypatch.setattr(urllib.request, "urlopen", unreachable)
-    assert _script(capsys, mod, ["preflight"])[0] != 0
     assert _cli(capsys, ["research", "preflight", "--provider", "jina", "--json"])[0] == 6

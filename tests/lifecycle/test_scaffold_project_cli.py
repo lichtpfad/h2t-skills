@@ -1,14 +1,13 @@
 import json
 import subprocess
 import sys
-from pathlib import Path
 
-SCRIPT = Path(__file__).parent / "scaffold_project.py"
 PY = sys.executable
 
 
 def _run(*args):
-    r = subprocess.run([PY, str(SCRIPT), *args], capture_output=True, text=True, encoding="utf-8")
+    r = subprocess.run([PY, "-m", "h2t_ops.lifecycle.scaffold_project", *args],
+                       capture_output=True, text=True, encoding="utf-8")
     return json.loads(r.stdout)
 
 

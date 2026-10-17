@@ -4,7 +4,7 @@ import json
 import os
 from pathlib import Path
 
-from gather.sessions import (
+from h2t_ops.lifecycle.gather.sessions import (
     find_latest_session_index,
     find_session_files,
     get_machine_name,

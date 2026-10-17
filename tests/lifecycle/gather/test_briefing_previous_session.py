@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from gather.briefing import format_briefing
+from h2t_ops.lifecycle.gather.briefing import format_briefing
 
 
 def test_briefing_formats_bounded_previous_session_hint():

@@ -1,8 +1,7 @@
-# plugins/h2t/skills/init-project/scripts/test_apply.py
 """Tests for apply_registration.py YAML writing."""
 from pathlib import Path
 
-from apply_registration import apply_registration
+from h2t_ops.lifecycle.apply_registration import apply_registration
 
 
 def _make_config(tmp: Path, mapping_content: str, domains_content: str):
