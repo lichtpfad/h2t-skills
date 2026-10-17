@@ -222,6 +222,24 @@ def test_direct_provider_happy_path_extracts_article():
     assert result.raw_html and "<html" in result.raw_html
 
 
+@pytest.mark.parametrize("newline", [b"\r\n", b"\r"])
+def test_a_page_served_with_crlf_extracts_the_same_body_as_lf(newline):
+    # HTML parsing turns CRLF and a lone CR into LF before anything else. Without that a
+    # CRLF page kept a \r per preserved line break: body_chars 611 instead of 607 for
+    # public_article.html, as checked out by Git for Windows (CI on #552).
+    lf = (FIXTURES / "public_article.html").read_bytes().replace(b"\r\n", b"\n")
+    results = []
+    for body in (lf, lf.replace(b"\n", newline)):
+        with patch("urllib.request.urlopen") as mock_urlopen:
+            mock_urlopen.return_value = _make_http_response(body, url="https://example.com/x")
+            results.append(fetch.DirectProvider().fetch(
+                "https://example.com/x", timeout_ms=15000, user_agent="ua/test"))
+    lf_result, crlf_result = results
+    assert "\r" not in crlf_result.body_text + crlf_result.body_markdown
+    assert (crlf_result.body_text, crlf_result.body_markdown, crlf_result.body_chars) == (
+        lf_result.body_text, lf_result.body_markdown, lf_result.body_chars)
+
+
 def test_direct_provider_4xx_raises_permanent():
     provider = fetch.DirectProvider()
     with patch("urllib.request.urlopen") as mock_urlopen:

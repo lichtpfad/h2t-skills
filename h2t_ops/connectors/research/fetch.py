@@ -320,12 +320,17 @@ def _tokens_to_markdown_and_text(tokens: list[tuple[str, str]]) -> tuple[str, st
     return md, txt
 
 
+def _html_newlines(html: str) -> str:
+    """CRLF and a lone CR become LF, as HTML input preprocessing does before parsing."""
+    return html.replace("\r\n", "\n").replace("\r", "\n")
+
+
 def _inline_extract(
     html: str, *, base_url: str,
 ) -> tuple[str | None, str, str, list[dict[str, Any]], str | None, str | None]:
     """Return (title, body_markdown, body_text, links, canonical_url, lang)."""
     p = _InlineExtractor()
-    p.feed(html)
+    p.feed(_html_newlines(html))
     p.finish()
     md, txt = _tokens_to_markdown_and_text(p._tokens)
     # Resolve relative hrefs.
@@ -346,6 +351,7 @@ def _reset_trafilatura_warned_for_tests() -> None:
 def _extract_with_optional_uplift(
     html: str, *, base_url: str,
 ) -> tuple[str | None, str, str, list[dict[str, Any]], str | None, str | None]:
+    html = _html_newlines(html)
     title, md, txt, links, canonical, lang = _inline_extract(
         html, base_url=base_url,
     )

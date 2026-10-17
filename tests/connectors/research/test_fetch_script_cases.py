@@ -22,6 +22,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from h2t_ops.connectors.research import fetch as fetch_url
+from h2t_ops.connectors.research import store
 
 
 @pytest.fixture(autouse=True)
@@ -294,11 +295,13 @@ def test_cli_fetch_writes_sources_json_sidecar(tmp_path, monkeypatch):
     assert len(list(tmp_path.glob("test-*fetch-*.sources.json"))) == 1
     artifacts = list(tmp_path.glob("test-*fetch-*.artifact.json"))
     assert len(artifacts) == 1
-    # The body lives in the document store the artifact points to.
-    documents = list((tmp_path / "objects" / "documents").glob("*.json"))
-    assert len(documents) == 1
-    assert documents[0].name in artifacts[0].read_text(encoding="utf-8")
-    document = documents[0].read_text(encoding="utf-8")
+    # The body lives in the document store the artifact points to. Follow the reference, not
+    # a directory listing: the id holds a colon, and on NTFS `research-doc:<hex>.json` is an
+    # alternate data stream of a file `research-doc` — glob sees no *.json there (CI on #552).
+    refs = json.loads(artifacts[0].read_text(encoding="utf-8"))["research_refs"]
+    document_json = Path(refs["document_json"])
+    assert document_json == store.object_path(tmp_path, "documents", refs["document_id"])
+    document = document_json.read_text(encoding="utf-8")
     assert "POPs in TouchDesigner" in document
     assert "https://example.com/x" in document
 
