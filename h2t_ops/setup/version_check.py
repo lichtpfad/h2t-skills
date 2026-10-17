@@ -6,10 +6,13 @@ import shutil
 from pathlib import Path
 
 import h2t_ops
-from h2t_ops.setup import state
+from h2t_ops.setup import _release, state
 
-# Task 13 replaces this with the bootstrap literal stamped by the release script.
-BOOTSTRAP_HINT = "h2t-ops не установлен как инструмент uv. Выполни: h2t-setup sync"
+
+def _bootstrap_hint() -> str:
+    # _release.py is written by scripts/release.py; in a checkout it is empty.
+    command = _release.BOOTSTRAP_COMMAND or "h2t-setup"
+    return f"h2t-ops не установлен как инструмент uv. Выполни: {command} sync"
 
 
 def _norm(path: str) -> str:
@@ -28,7 +31,7 @@ def _result(ok: bool, reason: str | None, hint: str | None) -> dict:
 def check(expect: str, which=shutil.which) -> dict:
     install = state.read()
     if install is None:
-        return _result(False, "not_installed", BOOTSTRAP_HINT)
+        return _result(False, "not_installed", _bootstrap_hint())
     if h2t_ops.__version__ != expect or h2t_ops.__version__ != install.version:
         return _result(False, "version", (
             f"Ожидалась версия {expect}, запущена {h2t_ops.__version__}, "

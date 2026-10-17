@@ -59,9 +59,10 @@ with a usage error, or with a version line and no JSON. Any of those means the C
 this skill, and the bootstrap brings the machine to the current release whatever state it
 is in (spec §7.2).
 
-`@VERSION@` and `@BOOTSTRAP@` are placeholders. The release script replaces both in every
-file of the release (plan Task 13); in a checkout they stay literal, so the check reports
-`reason: version` there until a release is cut.
+The version after `--expect` and the bootstrap command are slots. `scripts/release.py
+prepare` rewrites both in every file of the release, by pattern, so the next release
+rewrites them again; in a checkout they hold placeholders until a release is cut, and the
+check reports `reason: version` there.
 
 ## Why a copy in every skill, not a link to this file
 
