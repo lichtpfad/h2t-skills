@@ -44,7 +44,7 @@ def main() -> int:
     for entry in market["plugins"]:
         name = entry["name"]
         market_names.add(name)
-        source = entry["source"].lstrip("./")
+        source = entry["source"]["path"] if isinstance(entry["source"], dict) else entry["source"].lstrip("./")
         plugin_path = ROOT / source / ".claude-plugin" / "plugin.json"
         if not plugin_path.is_file():
             drifts.append((name, "missing", f"source path {source} has no plugin.json"))
