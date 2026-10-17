@@ -73,8 +73,9 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "generate":
         if importlib.util.find_spec("drawpyo") is None:  # the remedy beats an ImportError
-            print("h2t-drawio generate needs drawpyo: install h2t-ops with the drawio extra "
-                  "(uv tool install 'h2t-ops[drawio]')", file=sys.stderr)
+            from h2t_ops.setup import hints
+            print("h2t-drawio generate needs drawpyo, the drawio extra of h2t-ops. Add it: "
+                  f"{hints.add_extra('drawio')}", file=sys.stderr)
             return 3
         from h2t_ops.tools.drawio.generate import generate_diagram
 

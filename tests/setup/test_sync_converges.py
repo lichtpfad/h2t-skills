@@ -478,6 +478,32 @@ def test_the_cache_never_deletes_the_installed_version(tmp_path, monkeypatch):
     assert [p.name for p in removed] == ["4.0.0"]
 
 
+
+def test_the_cache_keeps_a_creative_version_that_holds_user_profiles(tmp_path, monkeypatch):
+    """3.x style-create wrote user profiles into the plugin cache,
+    <config>/plugins/cache/lichtpfad/h2t-creative/<ver>/profiles/<name>. Deleting that version
+    would delete them: it stays, and the report says where they are and where they go."""
+    m = Machine(tmp_path, monkeypatch)
+    creative = _cache(m.config, "h2t-creative", "3.0.0", "3.1.0", "4.0.0", "4.0.5")
+    for v in ("3.0.0", "3.1.0"):
+        (creative / v / "profiles" / "h2t-default").mkdir(parents=True)  # shipped: no reason
+    (creative / "3.0.0" / "profiles" / "my-brand").mkdir()
+    (creative / "3.0.0" / "profiles" / "my-brand" / "DESIGN.md").write_text("mine")
+    report = m.run()
+    assert sorted(p.name for p in creative.iterdir()) == ["3.0.0", "4.0.0", "4.0.5"]
+    assert (creative / "3.0.0" / "profiles" / "my-brand" / "DESIGN.md").read_text() == "mine"
+    note = next(n for n in report.notes if "my-brand" in n)
+    assert str(creative / "3.0.0") in note
+    assert str(Path("~/.h2t/creative/profiles")) in note or "~/.h2t/creative/profiles" in note
+    assert any("h2t-creative 3.1.0" in d for d in report.done)
+
+
+def test_clean_cache_reads_the_shipped_profile_names_from_the_package():
+    from h2t_ops.resources import resource_dir
+    shipped = {p.name for p in (resource_dir("creative") / "profiles").iterdir() if p.is_dir()}
+    assert "h2t-default" in shipped and sync.shipped_profiles() == shipped
+
+
 # --- the boundary --------------------------------------------------------------------------
 
 def test_an_editable_install_never_reaches_the_steps(tmp_path, monkeypatch):

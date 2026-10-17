@@ -62,9 +62,11 @@ try:
     _PROJECT_LAYER_AVAILABLE = True
 except ImportError as _e:
     import warnings as _warnings
+
+    from h2t_ops.setup import hints as _hints
     _warnings.warn(
         f"docs-lint project layer unavailable (import failed: {_e}). "
-        "Run: uv tool install --editable <your h2t-skills checkout>",
+        f"Repair the install: {_hints.repair()}",
         RuntimeWarning, stacklevel=1,
     )
     _PROJECT_LAYER_AVAILABLE = False

@@ -20,7 +20,8 @@ def test_a_release_points_at_its_bootstrap(tmp_path, monkeypatch):
 def test_a_checkout_points_at_setup_or_an_editable_install(tmp_path, monkeypatch):
     monkeypatch.setattr(_release, "BOOTSTRAP_COMMAND", "")
     hint = _missing(tmp_path)["hint"]
-    assert "/h2t-core:setup" in hint and "uv tool install --editable ." in hint
+    assert "/h2t-core:setup" in hint and "uv run h2t-setup dev-sync" in hint
+    assert "uv tool install --editable" not in hint
 
 
 def test_neither_hint_needs_the_missing_cli(tmp_path, monkeypatch):

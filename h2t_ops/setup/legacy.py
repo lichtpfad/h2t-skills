@@ -154,7 +154,7 @@ def _install_hint() -> str:
 
     if _release.BOOTSTRAP_COMMAND:
         return f"Run: {_release.BOOTSTRAP_COMMAND} sync"
-    return "Run /h2t-core:setup, or `uv tool install --editable .` from a checkout"
+    return "Run /h2t-core:setup, or from a developer checkout: `uv run h2t-setup dev-sync`"
 
 
 def resolve_h2t_ops(which: Callable[[str], str | None] = _user_which, home: Path | None = None) -> dict[str, Any]:

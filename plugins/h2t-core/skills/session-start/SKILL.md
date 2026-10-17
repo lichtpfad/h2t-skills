@@ -40,11 +40,11 @@ Act on the result, in this order:
 
 ```bash
 command -v h2t-gather >/dev/null 2>&1 || {
-  echo "ERROR: h2t-gather not found. From a checkout: uv tool install --editable ."
+  echo "ERROR: h2t-gather not found. Act on outcome 3 of the Version check above."
   exit 1
 }
 command -v h2t-activity-log >/dev/null 2>&1 || {
-  echo "ERROR: h2t-activity-log not found. From a checkout: uv tool install --editable ."
+  echo "ERROR: h2t-activity-log not found. Act on outcome 3 of the Version check above."
   exit 1
 }
 ```

@@ -38,7 +38,7 @@ Act on the result, in this order:
 
 ```bash
 command -v h2t-handoff >/dev/null 2>&1 || {
-  echo "ERROR: h2t-handoff not found. From a checkout: uv tool install --editable ."
+  echo "ERROR: h2t-handoff not found. Act on outcome 3 of the Version check above."
   exit 1
 }
 ```

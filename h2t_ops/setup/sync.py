@@ -334,14 +334,28 @@ def _commit(version: str, root: Path, entrypoints: dict[str, str], options: dict
                                user_options=options, plugins=plugins))
 
 
+def requested_extras(mode: str, argv: list[str]) -> list[str]:
+    """The `--extra` names of this run. Parsed by the CLI's own parser: argv is what the
+    re-launch carried to this executor (§7.3.2)."""
+    from h2t_ops.setup.cli import build_parser
+    return list(build_parser().parse_args([mode, *argv]).extra)
+
+
+def _options(stored: dict | None, add: list[str]) -> dict:
+    """The user's options, with the extras this run adds appended once each."""
+    stored = stored or {}
+    extras = list(stored.get("extras") or [])
+    extras += [e for e in dict.fromkeys(add) if e not in extras]
+    return {"extras": extras, "with": list(stored.get("with") or [])}
+
+
 def _cli_step(target: dict, root: Path, last: dict | None, plugins: list[str], uv, execute,
-              report: Report, retry: str) -> bool:
+              report: Report, retry: str, add_extras: list[str]) -> bool:
     """Step 4: check the CLI by running it; reinstall only what does not answer."""
     version = target["version"]
     current = state.read()
     tool = _receipt(root)
-    options = (last or {}).get("user_options") or receipt_user_options(tool) or {}
-    options = {"extras": list(options.get("extras") or []), "with": list(options.get("with") or [])}
+    options = _options((last or {}).get("user_options") or receipt_user_options(tool), add_extras)
     entrypoints = current.entrypoints if current is not None else receipt_entrypoints(tool)
     problem = _verify(entrypoints, root, version, options["extras"], execute)
     if problem is None:
@@ -610,16 +624,34 @@ def _semver(name: str) -> tuple[int, int, int] | None:
 _remove_tree = shutil.rmtree
 
 
-def clean_cache(config: Path, installed: list[dict], keep: int = KEEP_VERSIONS) -> list[Path]:
+def shipped_profiles() -> set[str]:
+    """The creative profiles the package ships; any other name in a cache dir is the user's."""
+    from h2t_ops.resources import resource_dir
+    return {p.name for p in (resource_dir("creative") / "profiles").iterdir() if p.is_dir()}
+
+
+def _user_profiles(version_dir: Path, shipped: set[str]) -> list[str]:
+    """3.x style-create wrote user profiles into <h2t-creative>/<ver>/profiles/<name>."""
+    profiles = version_dir / "profiles"
+    if not profiles.is_dir():
+        return []
+    return sorted(p.name for p in profiles.iterdir() if p.is_dir() and p.name not in shipped)
+
+
+def clean_cache(config: Path, installed: list[dict], keep: int = KEEP_VERSIONS,
+                held_back: list[tuple[Path, list[str]]] | None = None) -> list[Path]:
     """Step 7: under <config>/plugins/cache/lichtpfad/<plugin>/, keep the `keep` highest
     versions and every installed one; delete the other version directories. Names that are
-    not X.Y.Z are not versions and stay."""
+    not X.Y.Z are not versions and stay. An h2t-creative version holding a profile the
+    package does not ship is the user's work (3.x wrote profiles there): it stays, and goes
+    into `held_back` with the profile names."""
     root = Path(config) / "plugins" / "cache" / harness_claude.MARKETPLACE
     if not root.is_dir() or root.is_symlink():
         return []
     held = {(p["id"].split("@")[0], str(p.get("version"))) for p in installed
             if isinstance(p.get("id"), str)}
     removed = []
+    shipped: set[str] | None = None
     for plugin in sorted(root.iterdir()):
         if plugin.is_symlink() or not plugin.is_dir():
             continue
@@ -627,10 +659,25 @@ def clean_cache(config: Path, installed: list[dict], keep: int = KEEP_VERSIONS) 
                            if d.is_dir() and not d.is_symlink() and _semver(d.name)),
                           reverse=True)
         for _, d in versions[keep:]:
-            if (plugin.name, d.name) not in held:
-                _remove_tree(d)
-                removed.append(d)
+            if (plugin.name, d.name) in held:
+                continue
+            if plugin.name == "h2t-creative":
+                shipped = shipped_profiles() if shipped is None else shipped
+                mine = _user_profiles(d, shipped)
+                if mine:
+                    if held_back is not None:
+                        held_back.append((d, mine))
+                    continue
+            _remove_tree(d)
+            removed.append(d)
     return removed
+
+
+def _profiles_note(where: Path, names: list[str]) -> str:
+    target = Path("~") / ".h2t" / "creative" / "profiles"
+    return (f"plugin cache: kept {where}: it holds your creative profiles {', '.join(names)} "
+            f"(3.x wrote them into the cache). Move each to {target}/<name>, where 4.x looks "
+            "for them; once they are out, the next sync removes this directory.")
 
 
 def _codex_note(names: list[str]) -> str:
@@ -764,7 +811,7 @@ def _plugins_note(checkout: Path) -> str:
             "yours to run.")
 
 
-def dev_sync(uv, execute, claude, cwd: str | None = None) -> Report:
+def dev_sync(uv, execute, claude, cwd: str | None = None, add_extras=()) -> Report:
     """The CLI from the checkout, editable, with the checkout's own constraints and the
     user's options; verified by running it, then install.json and install.env with
     EDITABLE_ROOT. Offline (the lock is exported `--frozen --offline`); no git."""
@@ -789,8 +836,8 @@ def dev_sync(uv, execute, claude, cwd: str | None = None) -> Report:
                           hint=f"bring the lock up to date in the checkout (`uv lock`), then "
                                f"run `{DEV_RETRY}` again")
     last = _last_install_json()
-    options = (last or {}).get("user_options") or receipt_user_options(_receipt(root)) or {}
-    options = {"extras": list(options.get("extras") or []), "with": list(options.get("with") or [])}
+    options = _options((last or {}).get("user_options") or receipt_user_options(_receipt(root)),
+                       list(add_extras))
     extras = ",".join(options["extras"])
     args = ["tool", "install", "--editable", f"{checkout}[{extras}]" if extras else str(checkout),
             "--reinstall", "-c", str(constraints)]
@@ -842,8 +889,9 @@ def run(mode: str, target: dict | None, argv: list[str], *, uv=None, claude=None
     uv = uv or run_uv
     execute = execute or subprocess.run
     claude = claude if claude is not None else harness_claude.Claude()
+    add_extras = requested_extras(mode, argv)
     if mode == "dev-sync":
-        return dev_sync(uv, execute, claude)
+        return dev_sync(uv, execute, claude, add_extras=add_extras)
     confirm = confirm or ask
     root = _tool_dir(uv) / "h2t-ops"
     # cli.main stops here first; this is the same stop for a caller that skips it.
@@ -868,7 +916,8 @@ def run(mode: str, target: dict | None, argv: list[str], *, uv=None, claude=None
     harness = _snapshot(root, claude)                                         # 3
     last = _last_install_json()
     names = _plugin_set(last, harness)
-    cli_ok = _cli_step(target, root, last, names, uv, execute, report, retry)  # 4
+    cli_ok = _cli_step(target, root, last, names, uv, execute, report, retry,  # 4
+                       add_extras)
     changed = False
     if not harness["found"]:                                                  # 5
         report.notes.append("Claude Code: `claude` not found; no plugins were managed")
@@ -880,8 +929,10 @@ def run(mode: str, target: dict | None, argv: list[str], *, uv=None, claude=None
     if which("codex"):                                                        # 6
         report.notes.append(_codex_note(names))
     if harness["found"]:                                                      # 7
+        held_back: list[tuple[Path, list[str]]] = []
         try:
-            removed = clean_cache(harness_claude.config_dir(), claude.plugins())
+            removed = clean_cache(harness_claude.config_dir(), claude.plugins(),
+                                  held_back=held_back)
         except harness_claude.HarnessError as exc:
             report.notes.append(f"plugin cache not cleaned: cannot list what is installed ({exc})")
         else:
@@ -889,6 +940,7 @@ def run(mode: str, target: dict | None, argv: list[str], *, uv=None, claude=None
                 changed = True
                 report.done.append("plugin cache: removed " + ", ".join(
                     f"{d.parent.name} {d.name}" for d in removed))
+            report.notes += [_profiles_note(d, names) for d, names in held_back]
     report.reload_needed = changed                                            # 8
     if changed:
         report.notes.append("Open Claude Code sessions: run /reload-plugins or start a new "

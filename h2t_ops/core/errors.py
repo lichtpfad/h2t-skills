@@ -38,11 +38,12 @@ class UsageError(H2TError):
 # install rather than to add a package to it.
 def broken_install_hint(*packages: str) -> str:
     """Name what is missing, then how to repair the install it is missing from."""
+    from h2t_ops.setup import hints
+
     named = " ".join(packages)
     return (
         f"{named} is declared in pyproject, so a missing one means a broken install "
-        "rather than an absent extra. Repair it: "
-        "uv tool install --editable <h2t-skills checkout>. `pip` is unavailable here — "
+        f"rather than an absent extra. Repair it: {hints.repair()}. `pip` is unavailable here — "
         "the uv tool environment ships without it; for one package use "
         f"`uv pip install --python <the h2t-ops interpreter> {named}`."
     ).strip()

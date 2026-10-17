@@ -9,8 +9,10 @@ the process makes sure it is the target's own isolated executor; only then do th
 from __future__ import annotations
 
 import argparse
+import importlib.metadata as md
 import sys
 
+import h2t_ops
 from h2t_ops.core.errors import ConfigError, H2TError, ProviderError
 from h2t_ops.core.output import emit
 from h2t_ops.setup import manifest, state, sync
@@ -23,6 +25,9 @@ def build_parser() -> argparse.ArgumentParser:
     # On the mode, not the top level: the re-launch passes the mode first and the original
     # arguments after it, and those must parse the same way in the target.
     common.add_argument("--json", action="store_true", help="the standard envelope")
+    common.add_argument("--extra", action="append", default=[], metavar="NAME",
+                        help="add an extra of h2t-ops to the install (repeatable); recorded "
+                             "in install.json and kept by every later sync")
     parser = argparse.ArgumentParser(prog="h2t-setup")
     sub = parser.add_subparsers(dest="mode", required=True)
     sub.add_parser("sync", parents=[common], help="bring the install to the current release")
@@ -58,6 +63,17 @@ def _consent_stop(mode: str) -> None:
             details={"reason": "confirmation_required"})
 
 
+def _extras_stop(extras: list[str]) -> None:
+    # Checked by the target's own executor (after ensure_executor): an older one does not
+    # know the extras of a newer release.
+    known = sorted(set(md.metadata("h2t-ops").get_all("Provides-Extra") or []))
+    unknown = [e for e in extras if e not in known]
+    if unknown:
+        raise ConfigError(f"h2t-ops has no extra {', '.join(unknown)}",
+                          hint=f"the extras of h2t-ops {h2t_ops.__version__}: {', '.join(known)}",
+                          details={"reason": "unknown_extra", "extras": unknown})
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else list(argv)
     ns = build_parser().parse_args(argv)
@@ -70,6 +86,7 @@ def main(argv: list[str] | None = None) -> int:
         if ns.mode != "dev-sync":
             target = manifest.current()
             sync.ensure_executor(target, ns.mode, rest)
+        _extras_stop(ns.extra)
         result = sync.run(ns.mode, target, rest)
         if isinstance(result, sync.Report):
             if result.failed:

@@ -147,7 +147,10 @@ h2t-setup sync --json
 
 It brings the machine to the release `main` points at, skipping every step that already
 matches, so a second run is the repair. An installed `h2t-setup` hands over to that
-release's own isolated bootstrap by itself. Read the result:
+release's own isolated bootstrap by itself. To add an extra of the CLI (`drawio`, for
+`h2t-drawio generate`), add `--extra <name>`: it is recorded in `install.json` and every
+later `sync` keeps it; `dev-sync` takes the same flag. An unknown name is exit 3,
+`reason: unknown_extra`, with the known extras in `error.hint`. Read the result:
 
 - exit 0 — report `result.done` and every line of `result.notes` as it is (they include the
   `codex plugin add` lines when Codex is present). When `result.reload_needed` is true,
