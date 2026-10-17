@@ -48,9 +48,9 @@ Every plan and spec under `docs/superpowers/` must name the issue it belongs to.
 the file rather than hand-writing frontmatter:
 
 ```bash
-uv run python plugins/h2t-dev/skills/docs-lint/scripts/lint.py new plan <slug> --issue 123
-uv run python plugins/h2t-dev/skills/docs-lint/scripts/lint.py new spec <slug> --issue 123
-uv run python plugins/h2t-dev/skills/docs-lint/scripts/lint.py new adr  <slug>
+uv run h2t-docs-lint new plan <slug> --issue 123
+uv run h2t-docs-lint new spec <slug> --issue 123
+uv run h2t-docs-lint new adr  <slug>
 ```
 
 `--new-issue "title"` files one first; `--no-issue "reason"` records why there is none. A
@@ -66,7 +66,7 @@ and what it cost — read the one that covers what you are touching before you t
 | `verification.md` | how a check is allowed to be believed |
 | `linting.md` | the pinned rule set, and why suppression has three scopes |
 | `git.md` | merge detection, branch deletion, recovering a deleted local branch |
-| `plugin-deploy.md` | why `update-plugin.sh` is never the final deploy |
+| `plugin-deploy.md` | why writing the local plugin cache is never the final deploy |
 | `documentation.md` | issue titles, commit format, where documents live |
 | `secrets.md` | rotation first, and never printing a secret to verify its removal |
 | `connectors.md` | provider I/O goes through `h2t-ops` and nothing else |

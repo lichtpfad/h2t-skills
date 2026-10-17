@@ -261,7 +261,7 @@ Useful checks:
 
 ```bash
 uv run pytest tests/connectors -q
-uv run pytest plugins/h2t-core/skills/setup/scripts/test_setup_h2t.py -q
+uv run pytest tests/tools/setup/test_setup_h2t.py -q
 uv run python scripts/check_marketplace_sync.py
 ```
 

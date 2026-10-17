@@ -8,7 +8,7 @@ Three behavioral assertions (per plan):
 Seam note: the plan's reference test patched `_install_app_flow` and
 `_load_credentials`. Implementer discretion (explicitly permitted, seam shape
 only): we add a third thin seam `_request()` and patch it in test (c). Reason:
-google libs are NOT installed in the `uv run h2t-ops dev pytest` env (Task 7
+google libs are NOT installed in the `uv run pytest` env (Task 7
 declares them later). Without patching `_request`, the byte-identical
 `creds.refresh(_request())` would hit `from google.auth.transport.requests
 import Request` and raise ImportError -> ConfigError, masking the AuthError we

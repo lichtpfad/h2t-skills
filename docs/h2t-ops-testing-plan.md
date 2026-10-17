@@ -68,9 +68,8 @@ Goal: prove the code contract still holds.
 Commands:
 
 ```powershell
-h2t-ops dev pytest tests/core tests/connectors -v
-h2t-ops dev check no-syspath
-h2t-ops dev check lazy-registry
+uv run pytest tests/core tests/connectors -v
+uv run pytest tests/connectors -k no_heavy_import -v
 ```
 
 Pass criteria:
@@ -184,8 +183,8 @@ Known issue:
 Required tests for the core fix:
 
 ```powershell
-h2t-ops dev pytest tests/core/test_output.py -v
-h2t-ops dev python -c "from h2t_ops.core.output import emit; raise SystemExit(emit('gmail', result={'subject':'Привет ✨'}, fmt='json'))"
+uv run pytest tests/core/test_output.py -v
+uv run python -c "from h2t_ops.core.output import emit; raise SystemExit(emit('gmail', result={'subject':'Привет ✨'}, fmt='json'))"
 ```
 
 Pass criteria:
