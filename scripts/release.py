@@ -35,11 +35,14 @@ _PLAIN = re.compile(r"^[A-Za-z0-9_.=+-]+$")
 _UNSAFE = set("'\"\\$`\n\r")
 
 # Slot patterns: each matches the initial placeholder and every value a release writes.
-_MD_VERSION = re.compile(r"(?<=h2t-ops version --expect )(?:@VERSION@|\d+\.\d+\.\d+)(?= --json)")
-_MD_BOOTSTRAP = re.compile(
+# The public ones are also what tests/skills and tests/hooks read the shipped text with.
+_VERSION_SLOT = r"(?:@VERSION@|\d+\.\d+\.\d+)"
+VERSION_CHECK = re.compile(rf"h2t-ops version --expect {_VERSION_SLOT} --json")
+_MD_VERSION = re.compile(rf"(?<=h2t-ops version --expect ){_VERSION_SLOT}(?= --json)")
+BOOTSTRAP_SLOT = re.compile(
     r'@BOOTSTRAP@|uvx --isolated --python [0-9.]+ --managed-python -c "[^"\n]*" '
     r'--from "[^"\n]*" h2t-setup')
-_RUN_BOOTSTRAP = re.compile(r"^BOOTSTRAP='[^'\n]*'", re.M)
+RUN_BOOTSTRAP = re.compile(r"^BOOTSTRAP='[^'\n]*'", re.M)
 _ENV_VERSION = re.compile(r"^VERSION=.*$", re.M)
 _TOML_VERSION = re.compile(r'^version = "[^"\n]*"$', re.M)
 _INIT_VERSION = re.compile(r'^__version__ = "[^"\n]*"$', re.M)
@@ -111,16 +114,16 @@ def _plan(root: Path, ver: str) -> dict[Path, tuple[str, int]]:
     for env in sorted(root.glob("plugins/*/release.env")):
         edit(env, (_ENV_VERSION, f"VERSION={ver}", 1))
     for run in sorted(root.glob("plugins/*/hooks/run")):
-        edit(run, (_RUN_BOOTSTRAP, f"BOOTSTRAP='{command}'", 1))
+        edit(run, (RUN_BOOTSTRAP, f"BOOTSTRAP='{command}'", 1))
     for md in sorted(root.glob("plugins/**/*.md")):
         text = md.read_text(encoding="utf-8")
-        found = (len(_MD_VERSION.findall(text)), len(_MD_BOOTSTRAP.findall(text)))
+        found = (len(_MD_VERSION.findall(text)), len(BOOTSTRAP_SLOT.findall(text)))
         if found == (0, 0):
             continue
         if found != _BLOCK:
             raise ReleaseError(f"{md.relative_to(root)}: {found[0]} --expect and {found[1]} bootstrap "
                                f"slots, expected {_BLOCK[0]} and {_BLOCK[1]} (the version-check block)")
-        edit(md, (_MD_VERSION, ver, 1), (_MD_BOOTSTRAP, command, 2))
+        edit(md, (_MD_VERSION, ver, 1), (BOOTSTRAP_SLOT, command, 2))
     data = root / "h2t_ops" / "setup" / "_release.py"
     plan[data] = (RELEASE_PY.format(argv=json.dumps(argv), command=json.dumps(command)), 1)
     return plan
@@ -205,9 +208,22 @@ def prepare(root: Path, ver: str) -> dict[str, int]:
     if prev == ver:
         raise ReleaseError(f"{ver} is the release the pointer already names")
     _check_changelog(root, ver)
-    counts = stamp(root, ver)
-    export_constraints(root)
-    write_manifest(root, ver)
+    # uv lock reads the stamped pyproject, so the uv steps cannot run first. Every file
+    # prepare may touch is snapshotted as bytes and put back on any failure after stamp.
+    touched = [*_plan(root, ver), *(root / name for name in ("uv.lock", "constraints.txt", "release.json"))]
+    before = {path: path.read_bytes() if path.is_file() else None for path in touched}
+    try:
+        counts = stamp(root, ver)
+        export_constraints(root)
+        write_manifest(root, ver)
+    except Exception as exc:
+        for path, data in before.items():
+            if data is None:
+                path.unlink(missing_ok=True)
+            else:
+                path.write_bytes(data)
+        raise ReleaseError(f"{exc}\nthe tree was restored: {len(before)} files back to their state "
+                           "before prepare") from exc
     return counts
 
 

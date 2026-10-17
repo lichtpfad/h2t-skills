@@ -4,6 +4,7 @@ The CLI is a fake: a bash script that prints known text and exits with a known c
 fixture writes `~/.h2t/run/install.env` under a temporary HOME and a `release.env` in a
 temporary plugin root, so nothing here touches the real installation.
 """
+import importlib.util
 import json
 import os
 import re
@@ -18,6 +19,18 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 RUN = ROOT / "plugins" / "h2t-core" / "hooks" / "run"
+
+
+def _release_slots():
+    """scripts/release.py: the one definition of the slots a release rewrites."""
+    spec = importlib.util.spec_from_file_location("release_slots", ROOT / "scripts" / "release.py")
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+SLOTS = _release_slots()
 BASH = shutil.which("bash")
 WINDOWS = sys.platform == "win32"
 
@@ -147,7 +160,7 @@ def test_decision_table(rig, lines, inside, rc, event, expect):
     if expect.startswith("notice:"):
         message = _message(result)
         assert NOTICE_TEXT[expect] in message
-        assert "@BOOTSTRAP@ sync" in message
+        assert re.search(f"(?:{SLOTS.BOOTSTRAP_SLOT.pattern}) sync$", message), message
     elif expect == "silent":
         assert (result.returncode, result.stdout, result.stderr) == (0, b"", b"")
     elif expect == "ran":
@@ -201,11 +214,11 @@ def test_broken_notice_and_log_row_are_valid_json_when_the_name_holds_a_quote(ri
     assert _log_rows(rig)[-1] == {"hook": 'we"ird\\name', "rc": 1}
 
 
-def test_exactly_one_bootstrap_line_and_it_is_the_placeholder():
-    """Task 13 substitutes by the pattern BOOTSTRAP='...'; two lines would split it."""
-    lines = re.findall(r"^BOOTSTRAP='[^']*'.*$", RUN.read_text(encoding="utf-8"), re.M)
+def test_exactly_one_bootstrap_line_and_it_is_a_bootstrap_slot():
+    """release.py substitutes the one BOOTSTRAP='...' line; two lines would split it."""
+    lines = SLOTS.RUN_BOOTSTRAP.findall(RUN.read_text(encoding="utf-8"))
     assert len(lines) == 1
-    assert lines[0].startswith("BOOTSTRAP='@BOOTSTRAP@'")
+    assert SLOTS.BOOTSTRAP_SLOT.fullmatch(lines[0][len("BOOTSTRAP='"):-1]), lines[0]
 
 
 # ---- reading the two files ---------------------------------------------------------------

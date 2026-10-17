@@ -38,14 +38,12 @@ def _urls(ver):
     return (f"{BASE}/v{ver}/h2t_ops-{ver}-py3-none-any.whl", f"{BASE}/v{ver}/constraints.txt")
 
 
-@pytest.fixture
-def repo(tmp_path):
-    """The tracked and untracked-but-not-ignored shipped files, pinned at v3.9.0."""
+def _copy(dest: Path, prefixes: tuple[str, ...] | None) -> Path:
+    """The tracked and untracked-but-not-ignored files under prefixes, pinned at v3.9.0."""
     listed = subprocess.run(["git", "ls-files", "-co", "--exclude-standard", "-z"], cwd=ROOT,
                             capture_output=True, check=True).stdout.decode().split("\0")
-    dest = tmp_path / "repo"
     for rel in listed:
-        if rel and rel.startswith(SHIPPED) and (ROOT / rel).is_file():
+        if rel and (prefixes is None or rel.startswith(prefixes)) and (ROOT / rel).is_file():
             (dest / rel).parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(ROOT / rel, dest / rel)
     pointer = _load(dest / "scripts" / "release_pointer.py", "release_pointer_copy")
@@ -54,6 +52,16 @@ def repo(tmp_path):
     market.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     (dest / "CHANGELOG.md").write_text("# Changelog\n\n## 4.0.1\n\n## 4.0.0\n", encoding="utf-8")
     return dest
+
+
+@pytest.fixture
+def repo(tmp_path):
+    return _copy(tmp_path / "repo", SHIPPED)
+
+
+def _git(repo: Path, *args: str) -> str:
+    return subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", *args], cwd=repo,
+                          capture_output=True, text=True, check=True).stdout
 
 
 @pytest.fixture
@@ -198,3 +206,35 @@ def test_prepare_cli_twice_exports_constraints_and_locks_the_version(repo):
     assert not [line for line in lines if re.match(r"h2t[-_]ops", line, re.I)]
     lock = (repo / "uv.lock").read_text()
     assert re.search(r'name = "h2t-ops"\nversion = "4.0.1"', lock)
+
+
+def test_the_suites_that_read_the_slots_pass_on_a_stamped_tree(tmp_path):
+    """The release commit has to pass its own CI: the tests over SKILL.md and hooks/run read
+    the slots through release.py's patterns, not through the placeholders."""
+    copy = _copy(tmp_path / "copy", None)
+    _load(copy / "scripts" / "release.py", "release_seam").stamp(copy, "4.0.0")
+    result = subprocess.run(
+        [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", "--rootdir", str(copy),
+         "tests/skills/test_skill_commands_exist.py", "tests/hooks/test_hooks_run.py"],
+        cwd=copy, capture_output=True, text=True, encoding="utf-8", errors="replace")
+    assert result.returncode == 0, result.stdout[-3000:]
+
+
+def test_a_failure_after_stamp_restores_the_tree(repo, rel, monkeypatch):
+    _git(repo, "init", "-q")
+    (repo / "release.json").write_text("{}\n")  # an earlier release's manifest
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "base")
+
+    def uv(root, *args):
+        if args[0] == "lock":
+            (root / "uv.lock").write_text("changed by lock\n")
+            (root / "constraints.txt").write_text("partial\n")
+            return
+        raise rel.ReleaseError("uv export failed: drawpyo was not found in the cache")
+
+    monkeypatch.setattr(rel, "_uv", uv)
+    with pytest.raises(rel.ReleaseError, match="restored") as caught:
+        rel.prepare(repo, "4.0.0")
+    assert "drawpyo" in str(caught.value)
+    assert _git(repo, "status", "--porcelain", "--untracked-files=all") == ""
