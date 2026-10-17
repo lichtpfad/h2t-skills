@@ -64,13 +64,14 @@ def test_wheel_still_ships_the_package_and_its_data(wheel_names):
 
 
 def test_wheel_ships_the_hook_handlers_h2t_hook_resolves(wheel_names):
-    """`h2t-hook <name>` is on PATH as soon as the wheel installs, but it resolves the
-    handler through the plugin ladder — and on a host with no plugin cache the payload is
-    the only rung left. Without these files the command exists and exits 5, which for a
-    hook means silence.
+    """`h2t-hook <name>` is on PATH as soon as the wheel installs, and every name resolves
+    to a module in h2t_ops/hooks (Task 12a). Without these files the command exists and
+    exits 5, which for a hook means silence. The 3.x plugin handlers are not shipped.
     """
-    for handler in ("on-stop", "post-git-commit-docs-lint", "post_git_commit_docs_lint.py"):
-        assert f"{PAYLOAD}/hooks-handlers/{handler}" in wheel_names, handler
+    for module in ("on_stop", "post_git_commit_docs_lint", "layout_precommit",
+                   "bulk_precommit", "secrets_precommit", "gather", "structure_guard"):
+        assert f"h2t_ops/hooks/{module}.py" in wheel_names, module
+    assert not [n for n in wheel_names if "hooks-handlers" in n]
 
 
 def test_the_wheel_claims_no_generic_top_level_name(wheel_names):

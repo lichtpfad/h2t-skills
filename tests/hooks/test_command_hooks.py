@@ -280,6 +280,21 @@ def test_arguments_are_ignored_as_in_3x(tmp_path):
     check(s, done, repo, tmp_path)
 
 
+@pytest.mark.skipif(not POSIX or shutil.which("sh") is None, reason="the git hook is sh")
+def test_the_repo_pre_commit_hook_refuses_through_h2t_hook(tmp_path):
+    """The round trip with the caller: scripts/hooks/pre-commit chains the three names and
+    treats exit 1, and only 1, as a refusal."""
+    hook = h2t_hook()
+    if len(hook) != 1:
+        pytest.skip("no h2t-hook console script to put on PATH")
+    s = next(s for s in SCENARIOS if s["id"] == "a-dump-and-a-note")
+    repo, env = prepare(s, tmp_path)
+    env["PATH"] = os.pathsep.join([str(Path(hook[0]).parent), env["PATH"]])
+    done = run(["sh", str(ROOT / "scripts" / "hooks" / "pre-commit")], repo, env, "")
+    assert done.returncode == 1
+    assert done.stderr.decode("utf-8").startswith(LAYOUT_REFUSED)
+
+
 def test_docs_lint_defaults_to_the_package(tmp_path):
     """3.x looked for a plugin lint.py and reported "not found" without one; the package
     carries docs-lint, so the doctor always runs."""

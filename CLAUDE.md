@@ -70,7 +70,7 @@ either way.
 | `h2t-project-audit-scan` | scans a project tree for the audit |
 | `h2t-project-audit-report` | renders that scan |
 | `h2t-scaffold-project` | creates and registers a new project |
-| `h2t-hook` | runs a plugin hook handler, resolved when the hook fires |
+| `h2t-hook` | runs a hook handler from `h2t_ops/hooks` by name (plugin hooks, git pre-commit, project settings) |
 
 **When to re-run:**
 - After `git pull` that adds or renames an entry point in `pyproject.toml`

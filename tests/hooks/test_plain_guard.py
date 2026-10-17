@@ -2,13 +2,14 @@
 from __future__ import annotations
 
 import importlib.util
-import io
 import json
 from pathlib import Path
 
+from h2t_ops.hooks.emit import Reply
+
 
 def _load():
-    path = Path(__file__).parents[2] / "plugins" / "h2t-core" / "hooks-handlers" / "plain_guard.py"
+    path = Path(__file__).parents[2] / "h2t_ops" / "hooks" / "plain_guard.py"
     spec = importlib.util.spec_from_file_location("plain_guard_under_test", path)
     module = importlib.util.module_from_spec(spec)
     assert spec and spec.loader
@@ -66,35 +67,29 @@ def test_clean_answer_has_no_warning():
     assert m.warning(m.check(SHORT)) is None
 
 
-def test_main_warns_logs_and_never_blocks(tmp_path, monkeypatch, capsys):
+def test_a_long_answer_is_logged_and_never_blocks(tmp_path, monkeypatch):
+    """Silent with a log row since Task 9b: the one-week trial's data is the log."""
     m = _load()
     log = tmp_path / "log.jsonl"
     monkeypatch.setattr(m, "LOG_PATH", log)
     path = _transcript(tmp_path, LONG)
-    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps({"transcript_path": path, "session_id": "s1"})))
-    assert m.main() == 0
-    out = capsys.readouterr().out
-    assert "простой язык" in out and "decision" not in out
+    assert m.handle({"transcript_path": path, "session_id": "s1"}) == Reply()
     row = json.loads(log.read_text(encoding="utf-8").splitlines()[-1])
     assert row["flagged"] is True and row["long"] == [30] and row["session_id"] == "s1"
 
 
-def test_clean_answer_is_logged_silently(tmp_path, monkeypatch, capsys):
+def test_clean_answer_is_logged_silently(tmp_path, monkeypatch):
     m = _load()
     log = tmp_path / "log.jsonl"
     monkeypatch.setattr(m, "LOG_PATH", log)
     path = _transcript(tmp_path, SHORT)
-    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps({"transcript_path": path})))
-    assert m.main() == 0
-    assert capsys.readouterr().out == ""
+    assert m.handle({"transcript_path": path}) == Reply()
     assert json.loads(log.read_text(encoding="utf-8"))["flagged"] is False
 
 
-def test_stop_hook_active_is_silent(tmp_path, monkeypatch, capsys):
+def test_stop_hook_active_is_silent(tmp_path, monkeypatch):
     m = _load()
     monkeypatch.setattr(m, "LOG_PATH", tmp_path / "log.jsonl")
     path = _transcript(tmp_path, LONG)
-    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps({"transcript_path": path, "stop_hook_active": True})))
-    assert m.main() == 0
-    assert capsys.readouterr().out == ""
+    assert m.handle({"transcript_path": path, "stop_hook_active": True}) == Reply()
     assert not (tmp_path / "log.jsonl").exists()

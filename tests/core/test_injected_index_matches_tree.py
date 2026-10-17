@@ -12,7 +12,7 @@ import re
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
-INDEX = REPO / "plugins" / "h2t-core" / "hooks-handlers" / "inject-h2t-context"
+INDEX = REPO / "h2t_ops" / "hooks" / "inject_context.py"
 NAME = re.compile(r"\bh2t-[a-z]+:[a-z][a-z-]*\b")
 
 
@@ -99,13 +99,12 @@ def _readme_index() -> str:
 
 
 def _hook_index() -> str:
-    text = INDEX.read_text(encoding="utf-8")
-    start = text.index('INDEX="') + len('INDEX="')
-    return text[start : text.index('"\n', start)].rstrip()
+    from h2t_ops.hooks import inject_context
+    return inject_context.INDEX.rstrip()
 
 
 def test_readme_prints_the_index_the_hook_injects():
     assert _readme_index() == _hook_index(), (
-        "README.md and inject-h2t-context disagree about the skill index. The README copy is "
+        "README.md and h2t_ops/hooks/inject_context.py disagree about the skill index. The README copy is "
         "what a reader gets when the hook does not fire; a stale copy is worse than none."
     )

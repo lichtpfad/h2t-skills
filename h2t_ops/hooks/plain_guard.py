@@ -17,8 +17,8 @@ Every answer is logged to ~/.h2t/logs/plain-guard.jsonl so the hit rate can be
 reviewed after a trial week. Warn only, never block: a blocking Stop hook makes
 the model rewrite the answer and doubles output tokens.
 
-Port of hooks-handlers/plain_guard.py: the measuring functions and the log row are the
-original's (tests/hooks/test_hook_module_parity.py); `main()` became `handle()`, which
+Port of the 3.x hooks-handlers/plain_guard.py, deleted in Task 12a: the measuring functions and the log row are the
+original's (AST-compared until the deletion); `main()` became `handle()`, which
 logs and stays silent — see the comment there for why.
 """
 from __future__ import annotations

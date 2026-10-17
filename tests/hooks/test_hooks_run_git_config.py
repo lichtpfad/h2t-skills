@@ -2,7 +2,8 @@
 
 - `*.env` is ignored for secrets; each plugin's `release.env` must still be committable.
 - Git for Windows defaults to `autocrlf=true`; a bash script checked out with CRLF does
-  not run, so the wrapper and the bash handlers are pinned to LF.
+  not run, so every plugin's `hooks/run` is pinned to LF. The handlers are Python in the
+  package now; `hooks/run` is the only bash a plugin ships.
 """
 import shutil
 import subprocess
@@ -31,18 +32,14 @@ def test_the_ignore_control_still_ignores_a_secret_env():
     assert _git("check-ignore", "--no-index", "plugins/h2t-core/secrets.env").returncode == 0
 
 
-def _bash_handlers():
-    handlers = ROOT / "plugins" / "h2t-core" / "hooks-handlers"
-    return sorted(f"plugins/h2t-core/hooks-handlers/{p.name}" for p in handlers.iterdir()
-                  if p.is_file() and not p.suffix
-                  and p.read_text(encoding="utf-8", errors="replace").startswith("#!/usr/bin/env bash"))
+WRAPPERS = sorted(p.relative_to(ROOT).as_posix() for p in (ROOT / "plugins").glob("*/hooks/run"))
 
 
-@pytest.mark.parametrize("path", ["plugins/h2t-core/hooks/run", *_bash_handlers()])
+@pytest.mark.parametrize("path", WRAPPERS)
 def test_bash_scripts_check_out_with_lf(path):
     result = _git("check-attr", "eol", "--", path)
     assert result.stdout.strip() == f"{path}: eol: lf", result.stdout
 
 
-def test_the_handler_list_is_not_empty():
-    assert len(_bash_handlers()) >= 10
+def test_the_wrapper_list_is_not_empty():
+    assert "plugins/h2t-core/hooks/run" in WRAPPERS

@@ -8,7 +8,7 @@ the moment the repo appeared. The moment is `git init` / `gh repo create` /
 Replies with a hint when the command matches — `text` for the model, `notice` for
 the human — and with nothing otherwise. Stdlib only, never writes.
 
-Port of hooks-handlers/new_repo_hint.py: the functions are the original's (tests/hooks/test_hook_module_parity.py);
+Port of the 3.x hooks-handlers/new_repo_hint.py, deleted in Task 12a: the functions are the original's (AST-compared until the deletion);
 `main()` became `handle()`, and the reply goes out through `h2t_ops.hooks.emit`.
 """
 from __future__ import annotations

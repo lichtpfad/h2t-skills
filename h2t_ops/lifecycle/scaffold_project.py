@@ -170,7 +170,7 @@ def _run(cmd: list[str], cwd: str | None = None) -> subprocess.CompletedProcess:
 
 _STRUCTURE_YAML_TEMPLATE = """\
 # Structure guard configuration — managed by h2t-core:scaffold-project
-# Used by plugins/h2t-core/hooks-handlers/structure_guard.py
+# Used by h2t_ops/hooks/structure_guard.py (the structure-guard hook)
 
 # An unlisted top-level directory is BLOCKED, not warned about. Add a new one
 # here before writing into it — including any not needed on day one.

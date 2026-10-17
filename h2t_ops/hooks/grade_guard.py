@@ -10,8 +10,8 @@ Warn only, never block: a blocking Stop hook re-enters the model and loops.
 Reads the transcript JSONL named in the payload; stdlib only. Every answer is logged
 to ~/.h2t/logs/grade-guard.jsonl; the hook itself prints nothing (see handle()).
 
-Port of hooks-handlers/grade_guard.py: the detection functions are the original's
-(tests/hooks/test_hook_module_parity.py); `main()` became `handle()`.
+Port of the 3.x hooks-handlers/grade_guard.py, deleted in Task 12a: the detection functions are the original's
+(AST-compared until the deletion); `main()` became `handle()`.
 """
 from __future__ import annotations
 

@@ -14,8 +14,8 @@ One file is one event for one hook and the reply it must get. Keys:
   ~/.h2t/logs/<name>.jsonl, or null for no row.
 - `plain_stdout_3x` — the Stop guards: what the 3.x handler printed and the port no longer does.
 
-Shared by test_hook_modules.py (the module, in-process) and test_hook_equivalence.py (the
-3.x handler against `h2t-hook`, as subprocesses).
+Read by test_hook_modules.py (the module, in-process). Until Task 12a deleted the 3.x
+handlers, test_hook_equivalence.py ran each of them on the same cases and got these replies.
 """
 from __future__ import annotations
 

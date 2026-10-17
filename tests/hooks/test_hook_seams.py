@@ -4,8 +4,8 @@ Every handler a hooks.json names must be a HANDLERS key. Every HANDLERS key must
 by a hooks.json, or it is code no event reaches — except the handlers whose callers live
 outside any plugin, listed in NOT_IN_HOOKS_JSON. And every event a handler is subscribed to
 must have a recorded case, so "the expected output of each hook on each event" (§2.8) is
-checked for the events that actually fire. Today's hooks.json names `hooks-handlers/<name>`;
-after Task 12 it names `hooks/run <name>`. Both spellings are read.
+checked for the events that actually fire. hooks.json names `hooks/run <name>`; the form
+itself is pinned by test_hooks_json.py.
 """
 import json
 import re
@@ -20,7 +20,7 @@ GIT_HOOKS = {"layout-precommit", "bulk-precommit", "secrets-precommit"}
 # written by scaffold-project into a project's .claude/settings.json:
 SETTINGS_HOOKS = {"on-stop", "post-git-commit-docs-lint"}
 NOT_IN_HOOKS_JSON = GIT_HOOKS | SETTINGS_HOOKS
-_NAME = re.compile(r"(?:hooks-handlers/|hooks/run\"?\s+)([A-Za-z0-9_.-]+)")
+_NAME = re.compile(r"hooks/run\"?\s+([A-Za-z0-9_.-]+)")
 
 
 def subscriptions() -> dict[str, set[str]]:
@@ -36,9 +36,8 @@ def subscriptions() -> dict[str, set[str]]:
     return found
 
 
-def test_the_reader_finds_both_spellings():
+def test_the_reader_finds_the_name():
     """Control for the regex: a zero here would make every assertion below vacuous."""
-    assert _NAME.search('bash "${CLAUDE_PLUGIN_ROOT}/hooks-handlers/plan-closer"').group(1) == "plan-closer"
     assert _NAME.search('H2T_HOOK_TIMEOUT=9 bash "${CLAUDE_PLUGIN_ROOT}/hooks/run" gather-on-skill'
                         ).group(1) == "gather-on-skill"
     assert len(subscriptions()) >= 9

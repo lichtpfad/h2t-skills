@@ -6,13 +6,14 @@ repos across two roots that were never registered because nothing asked.
 from __future__ import annotations
 
 import importlib.util
-import io
 import json
 from pathlib import Path
 
+from h2t_ops.hooks import emit
+
 
 def _load():
-    path = Path(__file__).parents[2] / "plugins" / "h2t-core" / "hooks-handlers" / "new_repo_hint.py"
+    path = Path(__file__).parents[2] / "h2t_ops" / "hooks" / "new_repo_hint.py"
     spec = importlib.util.spec_from_file_location("new_repo_hint_under_test", path)
     module = importlib.util.module_from_spec(spec)
     assert spec and spec.loader
@@ -20,11 +21,12 @@ def _load():
     return module
 
 
-def _run(monkeypatch, capsys, command: str) -> str:
+def _run(monkeypatch, capsysbinary, command: str) -> str:
+    """The reply as the harness gets it: through the one emitter."""
     m = _load()
-    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps({"tool_input": {"command": command}})))
-    assert m.main() == 0
-    return capsys.readouterr().out
+    reply = m.handle({"hook_event_name": "PostToolUse", "tool_input": {"command": command}})
+    assert emit.write("PostToolUse", reply) == 0
+    return capsysbinary.readouterr().out.decode("ascii")
 
 
 def test_git_init_hints():
@@ -48,19 +50,12 @@ def test_dry_run_and_unrelated_commands_stay_silent():
     assert not m.command_creates_repo("")
 
 
-def test_hint_reaches_both_readers(monkeypatch, capsys):
-    out = json.loads(_run(monkeypatch, capsys, "git init"))
+def test_hint_reaches_both_readers(monkeypatch, capsysbinary):
+    out = json.loads(_run(monkeypatch, capsysbinary, "git init"))
     assert "init-project" in out["systemMessage"]
     assert out["hookSpecificOutput"]["hookEventName"] == "PostToolUse"
     assert "truth gate" in out["hookSpecificOutput"]["additionalContext"]
 
 
-def test_silence_is_empty_stdout(monkeypatch, capsys):
-    assert _run(monkeypatch, capsys, "ls") == ""
-
-
-def test_malformed_payload_is_silent(monkeypatch, capsys):
-    m = _load()
-    monkeypatch.setattr("sys.stdin", io.StringIO("not json"))
-    assert m.main() == 0
-    assert capsys.readouterr().out == ""
+def test_silence_is_empty_stdout(monkeypatch, capsysbinary):
+    assert _run(monkeypatch, capsysbinary, "ls") == ""

@@ -16,7 +16,6 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(ROOT / "plugins" / "h2t-core" / "hooks-handlers"))
 
 from h2t_ops.tools.docs.common import FRONTMATTER_RULES, issue_link_problem
 
@@ -58,7 +57,7 @@ def test_adr_does_not():
 # --- the hook -------------------------------------------------------------------------
 
 def _guard(path: str, content: str) -> int:
-    import structure_guard
+    from h2t_ops.hooks import structure_guard
     code, _ = structure_guard.check_issue_link(path, content, {})
     return code
 

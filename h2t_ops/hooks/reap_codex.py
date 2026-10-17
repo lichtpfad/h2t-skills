@@ -42,7 +42,7 @@ cannot attribute to a session.
 Exit code is always 0. A SessionEnd hook that errored must never look like a
 failed session teardown.
 
-Port of hooks-handlers/reap_codex.py: the functions are the original's (tests/hooks/test_hook_module_parity.py);
+Port of the 3.x hooks-handlers/reap_codex.py, deleted in Task 12a: the functions are the original's (AST-compared until the deletion);
 `main()` became `handle()`, and the reply goes out through `h2t_ops.hooks.emit`.
 """
 from __future__ import annotations

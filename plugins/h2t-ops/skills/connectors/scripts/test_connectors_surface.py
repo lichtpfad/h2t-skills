@@ -27,7 +27,7 @@ def _text(path: Path) -> str:
 
 def test_active_runtime_surfaces_do_not_name_removed_skill_entrypoints():
     runtime_surfaces = [
-        REPO_ROOT / "plugins" / "h2t-core" / "hooks-handlers" / "inject-h2t-context",
+        REPO_ROOT / "h2t_ops" / "hooks" / "inject_context.py",
         REPO_ROOT / "plugins" / "h2t-ops" / "skills" / "meetgeek" / "scripts" / "recovery.py",
     ]
     for path in runtime_surfaces:
