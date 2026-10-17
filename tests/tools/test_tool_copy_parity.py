@@ -288,6 +288,9 @@ SOURCE_PAIRS = {
     "h2t_ops/tools/drawio/generate.py": (f"{_DRAWIO_SRC}/generate.py", [], _GENERATE),
     "h2t_ops/tools/drawio/export.py": (f"{_DRAWIO_SRC}/export.py", [], _EXPORT),
     "h2t_ops/tools/creative/assembler.py": ("plugins/h2t-creative/assembler.py", [], _ASSEMBLER),
+    "h2t_ops/tools/agent_profile/apply_agent_profile.py": (
+        "plugins/h2t-core/skills/agent-profile/scripts/apply_agent_profile.py", [],
+        _AGENT_PROFILE),
 }
 
 # Package modules written for the package, not copied: nothing to compare them against.
@@ -297,6 +300,7 @@ AUTHORED = {
     "h2t_ops/tools/drawio/cli.py",
     "h2t_ops/tools/creative/__init__.py",
     "h2t_ops/tools/creative/cli.py",
+    "h2t_ops/tools/agent_profile/__init__.py",
 }
 
 _T = "tests/tools"
@@ -355,6 +359,9 @@ TEST_PAIRS = {
                                          CREATIVE_TEST, [_PYTEST_FIRST["test_assembler"]]),
     f"{_T}/creative/test_smoke.py": ("plugins/h2t-creative/tests/test_smoke.py",
                                      CREATIVE_TEST, [_PYTEST_FIRST["test_smoke"]]),
+    f"{_T}/agent_profile/test_apply_agent_profile.py": (
+        "plugins/h2t-core/skills/agent-profile/scripts/test_apply_agent_profile.py",
+        AGENT_TEST, []),
 }
 
 PAIRS = {**SOURCE_PAIRS, **TEST_PAIRS}
@@ -367,6 +374,9 @@ RESOURCE_TREES = {
     "h2t_ops/resources/creative/base": "plugins/h2t-creative/base",
     "h2t_ops/resources/creative/profiles": "plugins/h2t-creative/profiles",
     "h2t_ops/resources/creative/shared": "plugins/h2t-creative/shared",
+    "h2t_ops/resources/agent_profile/agent-profiles.json":
+        "plugins/h2t-core/skills/agent-profile/references/agent-profiles.json",
+    "h2t_ops/resources/known_secrets.yaml": "plugins/h2t-core/skills/setup/known_secrets.yaml",
 }
 
 
