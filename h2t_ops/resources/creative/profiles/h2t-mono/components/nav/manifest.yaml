@@ -1,0 +1,9 @@
+component: nav
+fields:
+  brand_name:
+    type: text
+    required: true
+  home_href:
+    type: url
+    required: false
+    default: "/"

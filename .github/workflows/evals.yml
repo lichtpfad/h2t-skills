@@ -63,7 +63,8 @@ jobs:
           python -m pip install --quiet ruff==0.16.4
           ruff check plugins/ lib/ h2t_ops/ tests/ scripts/
       - name: Install test deps
-        run: pip install -e . pytest
+        # The drawio extra: tests/tools/drawio runs the package generator, which needs drawpyo.
+        run: pip install -e ".[drawio]" pytest
 
       - name: Run lib/ unit tests
         # A step that stops the job hides every step after it: the first Windows probe

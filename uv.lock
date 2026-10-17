@@ -265,6 +265,15 @@ wheels = [
 ]
 
 [[package]]
+name = "drawpyo"
+version = "0.2.5"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/f7/70/a5308052c167fb718fb0b67b608fdda3ebff8516a8d2c6f1541dd963a475/drawpyo-0.2.5.tar.gz", hash = "sha256:28087c5b7975335f88aa5ee289b29b10d634acc1415ae7816bd3629a193f6a8e", size = 49737, upload-time = "2025-12-28T20:39:10.505Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/97/7c/8027e842f290d074163b2b6356a432521c86217f56a3dcc1d41fe7bf9af3/drawpyo-0.2.5-py3-none-any.whl", hash = "sha256:9cab60ecf75963e83c144f8bb440d075f6c7887f9d6e735b8bd44d67d37274a3", size = 59204, upload-time = "2025-12-28T20:39:09.471Z" },
+]
+
+[[package]]
 name = "flatbuffers"
 version = "25.12.19"
 source = { registry = "https://pypi.org/simple" }
@@ -384,6 +393,11 @@ dependencies = [
     { name = "youtube-transcript-api" },
 ]
 
+[package.optional-dependencies]
+drawio = [
+    { name = "drawpyo" },
+]
+
 [package.dev-dependencies]
 dev = [
     { name = "pytest" },
@@ -391,6 +405,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "drawpyo", marker = "extra == 'drawio'", specifier = "==0.2.5" },
     { name = "google-api-python-client", specifier = ">=2.0" },
     { name = "google-auth", specifier = ">=2.0" },
     { name = "google-auth-oauthlib", specifier = ">=1.0" },
@@ -405,6 +420,7 @@ requires-dist = [
     { name = "tzdata", specifier = ">=2024.1" },
     { name = "youtube-transcript-api", specifier = ">=0.6" },
 ]
+provides-extras = ["drawio"]
 
 [package.metadata.requires-dev]
 dev = [{ name = "pytest", specifier = ">=8" }]

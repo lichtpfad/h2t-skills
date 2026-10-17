@@ -39,6 +39,13 @@ h2t-hook = "h2t_ops.hook_entry:main"
 h2t-docs-lint = "h2t_ops.tools.docs.lint:main"
 h2t-docs-sync-labels = "h2t_ops.tools.docs.sync_labels:main"
 h2t-milestone-closure = "h2t_ops.tools.docs.closure:main"
+h2t-drawio = "h2t_ops.tools.drawio.cli:main"
+h2t-creative = "h2t_ops.tools.creative.cli:main"
+
+[project.optional-dependencies]
+# `h2t-drawio generate` builds diagrams with drawpyo; nothing else in the package needs it,
+# so it stays out of the base install. Pinned to the version CI has run against.
+drawio = ["drawpyo==0.2.5"]
 
 [tool.hatch.build.targets.wheel]
 # `lib` is not shipped as a top-level package: it is about as generic a name as a

@@ -1,0 +1,30 @@
+# Default settings for drawio skill
+theme: light
+background: null
+grid: true
+grid_size: 10
+
+layout:
+  algorithm: kk
+  node_spacing: 200
+  level_spacing: 120
+  direction: TB
+
+shapes: null
+
+output_dir: "."
+default_format: drawio
+embed_diagram: true
+
+export:
+  drawio_path: /Applications/draw.io.app/Contents/MacOS/draw.io
+  border: 10
+  scale: 1
+  transparent: false
+
+validation:
+  enabled: false
+  check_overlaps: true
+  check_orphan_nodes: true
+  check_shape_standards: true
+  auto_fix: false

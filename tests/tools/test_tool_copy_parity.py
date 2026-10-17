@@ -285,11 +285,18 @@ SOURCE_PAIRS = {
     f"{_DOCS}/migrate_legacy_labels.py": (
         f"{_DEV}/skills/docs-sync-labels/scripts/migrate_legacy_labels.py", DOCS_SOURCE, _MIGRATE),
     f"{_DOCS}/closure.py": (f"{_DEV}/skills/milestone-closure/scripts/closure.py", [], _CLOSURE),
+    "h2t_ops/tools/drawio/generate.py": (f"{_DRAWIO_SRC}/generate.py", [], _GENERATE),
+    "h2t_ops/tools/drawio/export.py": (f"{_DRAWIO_SRC}/export.py", [], _EXPORT),
+    "h2t_ops/tools/creative/assembler.py": ("plugins/h2t-creative/assembler.py", [], _ASSEMBLER),
 }
 
 # Package modules written for the package, not copied: nothing to compare them against.
 AUTHORED = {
     "h2t_ops/tools/__init__.py",
+    "h2t_ops/tools/drawio/__init__.py",
+    "h2t_ops/tools/drawio/cli.py",
+    "h2t_ops/tools/creative/__init__.py",
+    "h2t_ops/tools/creative/cli.py",
 }
 
 _T = "tests/tools"
@@ -339,6 +346,15 @@ TEST_PAIRS = {
     f"{_T}/docs/test_closure.py": ("tests/milestone/test_closure.py", DOCS_TEST, [
         ('    assert "docs-lint" in " ".join(cmd)\n',
          '    assert "h2t_ops.tools.docs.lint" in cmd\n')]),
+    f"{_T}/drawio/test_generate.py": (f"{_DRAWIO_SRC}/test_generate.py", DRAWIO_TEST, []),
+    f"{_T}/drawio/test_export.py": (f"{_DRAWIO_SRC}/test_export.py", DRAWIO_TEST, [
+        ('    source = (Path(__file__).resolve().parent / "export.py").read_text(encoding="utf-8")\n',
+         '    source = (Path(__file__).resolve().parents[3] / "h2t_ops" / "tools" / "drawio"\n'
+         '              / "export.py").read_text(encoding="utf-8")\n')]),
+    f"{_T}/creative/test_assembler.py": ("tests/h2t_creative/test_assembler.py",
+                                         CREATIVE_TEST, [_PYTEST_FIRST["test_assembler"]]),
+    f"{_T}/creative/test_smoke.py": ("plugins/h2t-creative/tests/test_smoke.py",
+                                     CREATIVE_TEST, [_PYTEST_FIRST["test_smoke"]]),
 }
 
 PAIRS = {**SOURCE_PAIRS, **TEST_PAIRS}
@@ -346,6 +362,11 @@ PAIRS = {**SOURCE_PAIRS, **TEST_PAIRS}
 # copy -> original; every file under each must be byte-identical, and the sets equal.
 RESOURCE_TREES = {
     "h2t_ops/resources/docs/standards": f"{_DEV}/references/standards",
+    "h2t_ops/resources/drawio/defaults.yaml": "plugins/h2t-arch/skills/drawio/config/defaults.yaml",
+    "h2t_ops/resources/drawio/shapes": "plugins/h2t-arch/skills/drawio/config/shapes",
+    "h2t_ops/resources/creative/base": "plugins/h2t-creative/base",
+    "h2t_ops/resources/creative/profiles": "plugins/h2t-creative/profiles",
+    "h2t_ops/resources/creative/shared": "plugins/h2t-creative/shared",
 }
 
 

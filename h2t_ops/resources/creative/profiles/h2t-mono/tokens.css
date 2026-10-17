@@ -1,0 +1,25 @@
+:root {
+  --font: 'JetBrains Mono', monospace;
+
+  --space-xs: 0.25rem;
+  --space-sm: 0.5rem;
+  --space-md: 1rem;
+  --space-lg: 2rem;
+  --space-xl: 4rem;
+
+  --radius-sm: 0;
+  --radius-md: 0;
+  --radius-lg: 0;
+
+  --z-bg: -1;
+  --z-base: 0;
+  --z-nav: 100;
+}
+
+body {
+  font-family: var(--font);
+  font-size: 14px;
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  -webkit-font-smoothing: antialiased;
+}

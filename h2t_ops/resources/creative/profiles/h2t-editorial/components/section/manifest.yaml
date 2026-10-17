@@ -1,0 +1,8 @@
+component: section
+fields:
+  title:
+    type: text
+    required: true
+  body:
+    type: html
+    required: true
