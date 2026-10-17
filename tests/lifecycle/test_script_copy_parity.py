@@ -138,6 +138,8 @@ PAIRS = {
 
 # Moved, not copied: the plugin original is gone, so there is nothing to compare against.
 MOVED = {"detect_project.py"}
+# Written for the package, with no plugin original (fix round 1 of Task 12b).
+AUTHORED = {"rule_scan.py"}
 
 
 def expected_copy(original: str, rewrite_imports: bool, edits) -> str:
@@ -183,7 +185,7 @@ def test_copy_matches_original_up_to_enumerated_edits(copy):
 
 def test_every_lifecycle_script_copy_is_paired():
     """A new copy added to h2t_ops/lifecycle/ must be paired here, or it escapes the check."""
-    copies = {p.name for p in LIFECYCLE.glob("*.py") if p.name not in {"__init__.py", *MOVED}}
+    copies = {p.name for p in LIFECYCLE.glob("*.py") if p.name not in {"__init__.py", *MOVED, *AUTHORED}}
     assert copies == set(PAIRS)
 
 

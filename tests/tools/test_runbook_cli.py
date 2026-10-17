@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from h2t_ops.tools.runbook import cli
 
 FIELDS = ["--title", "T", "--branch", "b", "--spec-path", "s.md", "--issue", "#1",
@@ -41,5 +43,19 @@ def test_an_invalid_field_writes_nothing(tmp_path, capsys):
     dest = tmp_path / "r.md"
     args = [a if a != "N/A (no integration surface)" else "maybe" for a in FIELDS]
     assert cli.main(["new", str(dest), *args, "--json"]) == 2
-    assert json.loads(capsys.readouterr().out)["ok"] is False
+    out = json.loads(capsys.readouterr().out)
+    assert out["ok"] is False and set(out["error"]) == {"message", "hint"}
     assert not dest.exists()
+
+
+@pytest.mark.parametrize("verb", ["validate", "state"])
+def test_a_missing_runbook_is_an_envelope_not_a_traceback(tmp_path, capsys, verb):
+    assert cli.main([verb, str(tmp_path / "nope.md"), "--json"]) == 5
+    out = json.loads(capsys.readouterr().out)
+    assert out["ok"] is False
+    assert "nope.md" in out["error"]["message"] and out["error"]["hint"]
+
+
+def test_a_missing_runbook_without_json_says_so_on_stderr(tmp_path, capsys):
+    assert cli.main(["state", str(tmp_path / "nope.md")]) == 5
+    assert "no runbook at" in capsys.readouterr().err

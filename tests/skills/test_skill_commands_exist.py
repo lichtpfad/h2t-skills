@@ -284,6 +284,68 @@ def test_every_skill_command_and_flag_exists_in_its_parser():
     assert not offenders, "\n".join(sorted(set(offenders)))
 
 
+# Spec §6.3: a skill calls the CLI "always with --json". A call whose deepest --help lists
+# --json and that does not pass it needs an entry here: the command form and the reason.
+NO_JSON = {
+    # Commands with no JSON mode at all (fix round 1, ruling 3b).
+    **{form: "produces an artifact or human text; no machine-readable result consumed by "
+             "the skill"
+       for form in ("h2t-drawio generate", "h2t-drawio export", "h2t-creative root",
+                    "h2t-creative profiles-dir", "h2t-creative assemble",
+                    "h2t-detect-project", "h2t-agent-profile")},
+    # docs-lint's mode parser is shared, so --json is listed for every mode, but only
+    # doctor, plan and retire read it (h2t_ops/tools/docs/lint.py main): these three print
+    # human text whatever is passed, and the flag would promise JSON they do not emit.
+    "h2t-docs-lint audit": "this mode ignores --json and prints the human audit",
+    "h2t-docs-lint fix-safe": "this mode ignores --json and prints what it fixed",
+    "h2t-docs-lint fix-index": "this mode ignores --json and prints the index diff",
+}
+# A deliberate human/markdown format on a call the skill does consume, with the reason the
+# skill gives for it.
+FORMAT_CHOSEN = {
+    "h2t-ops gmail list": "daily-brief: in --json every message carries its full body, "
+                          "~300 KB for 40 messages; --format human is ~13 KB with the ids",
+    "h2t-ops notion search": "daily-brief: --format md resolves the Project relation and the "
+                             "page link, which the brief prints",
+    **{form: "the markdown is the content itself — a note or transcript the user reads or "
+             "keeps — not a result the skill parses"
+       for form in ("h2t-ops granola get", "h2t-ops granola transcript",
+                    "h2t-ops meetgeek transcript")},
+}
+
+
+def has_json_option(help_out: str) -> bool:
+    """`--json` as an option of this parser, not a word in some subcommand's description."""
+    return re.search(r"^\s+(?:-\w, )?--json\b", help_out, re.M) is not None
+
+
+def _form(command: str, words: list[str]) -> str:
+    path, _, _ = resolve(command, words)
+    return " ".join([command, *path])
+
+
+def test_every_call_that_can_emit_json_asks_for_it():
+    offenders = []
+    for doc, line, command, words in CALLS:
+        if not words or command in EXTERNAL or command in PLUGIN_BINS:
+            continue  # `command -v` probes, and commands outside the package
+        form = _form(command, words)
+        _, help_out = help_text(command, resolve(command, words)[0])
+        if form in NO_JSON or not has_json_option(help_out) or "--json" in words:
+            continue
+        if form in FORMAT_CHOSEN and "--format" in words:
+            continue
+        offenders.append(f"{doc}:{line}: {command} {' '.join(words)}")
+    assert not offenders, "calls without --json (add it, or an entry in NO_JSON):\n" + \
+        "\n".join(sorted(set(offenders)))
+
+
+def test_the_json_allow_lists_name_real_forms():
+    forms = {_form(c, w) for _, _, c, w in CALLS if w}
+    stale = (set(NO_JSON) | set(FORMAT_CHOSEN)) - forms
+    assert not stale, f"allow-list entries no skill uses: {sorted(stale)}"
+
+
 @pytest.mark.parametrize(("line", "command", "words"), [
     ('PLUGIN_ROOT="$(h2t-creative root)"', "h2t-creative", ["root"]),
     ("h2t-ops drive get <id> --json | jq .", "h2t-ops", ["drive", "get", "<id>", "--json"]),
@@ -337,6 +399,19 @@ def test_the_canonical_outcomes_block_exists():
     assert -1 not in order and order == sorted(order), order
 
 
+def test_the_block_does_not_tell_the_agent_to_act_on_the_hint():
+    """Outcome 2 shows the hint; it never follows or runs it (spec §6.3).
+
+    The `path` hint names `uv tool update-shell`, which edits the user's shell profile and
+    is the user's to run. An earlier text said "follow it before going on".
+    """
+    block = _outcomes_block(VERSION_CHECK_DOC.read_text(encoding="utf-8"))
+    outcome2 = block.split("\n2. ", 1)[1].split("\n3. ", 1)[0]
+    assert not re.search(r"\bfollow", outcome2, re.I), outcome2
+    assert not re.search(r"(?<!not )\brun (?:it|the hint|what)", outcome2, re.I), outcome2
+    assert "stop" in outcome2 and "unless the user asks" in outcome2, outcome2
+
+
 @pytest.mark.parametrize("skill", SKILLS, ids=_key)
 def test_every_h2t_skill_starts_with_the_version_check(skill):
     text = skill.read_text(encoding="utf-8")
@@ -368,6 +443,9 @@ def test_a_skill_without_h2t_commands_really_has_none():
 PLUGIN_PYTHON = [
     (re.compile(r"(?<![\w*])[\w./${}()-]*\.py\b(?!['\"]?\s*:)"), "runs a .py script"),
     (re.compile(r"\bh2t-python\b"), "names the retired h2t-python interpreter"),
+    # An inline program is plugin Python too, only without a file: the handoff rule scan
+    # was 35 lines of `uv run ... python -c` before it became `h2t-handoff rule-scan`.
+    (re.compile(r"\bpython[0-9.]*(?:\.exe)?\s+-c\b"), "runs an inline python -c program"),
     (re.compile(r"\$\{?CLAUDE_(?:PLUGIN_ROOT|SKILL_DIR)\}?/"), "builds a path from a harness variable"),
     (re.compile(r"(?:\}|\))/(?:skills/[\w-]+/)?scripts\b|/scripts['\"/]"), "reaches into a plugin scripts/ dir"),
 ]
@@ -398,6 +476,9 @@ def test_no_skill_runs_plugin_python(skill):
     ("sys.path.insert(0, '${SKILL_DIR}/scripts')", True),
     ("git diff main...HEAD -- '*.js' '*.py'", False),
     ("h2t-python -c 'print(1)'", True),
+    ('uv run --no-project --python 3.11 python -c "', True),
+    ("python3 -c 'import sys'", True),
+    ("h2t-handoff rule-scan --json", False),
 ])
 def test_the_plugin_python_matcher(tmp_path, line, flagged):
     doc = tmp_path / "SKILL.md"

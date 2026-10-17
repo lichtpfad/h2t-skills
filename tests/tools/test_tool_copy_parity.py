@@ -319,6 +319,33 @@ supersedes it. The note below is the original's and describes the plugin copy.
             registry_path = known_secrets_path()
 '''),
     ('prog="setup_h2t.py"', 'prog="h2t-ops setup"'),
+    ("import shutil\n", "import shlex\nimport shutil\n"),
+    # The reinstall is refused in-process (fix round 1): see the comment in the copy.
+    ('''    result = runner(command, 300)
+    return {
+        "kind": KIND_INSTALL,
+        "status": "ok" if result.get("exit_code") == 0 else "error",
+        "source": normalized,
+        "editable": is_local,
+        "command": command,
+        "result": result,
+        "root_h2t_touched": False,
+    }
+''', '''    # Not run from here: this process is the h2t-ops tool that `uv tool install` replaces,
+    # and on Windows its running h2t-ops.exe and python.exe are locked. The plugin script
+    # ran under a separate interpreter; the package copy hands the line to the caller.
+    line = shlex.join(command)
+    return {
+        "kind": KIND_INSTALL,
+        "status": "error",
+        "error": "h2t-ops cannot reinstall itself from inside its own process",
+        "hint": f"Run this line yourself, after the user approves it: {line}",
+        "source": normalized,
+        "editable": is_local,
+        "command": command,
+        "root_h2t_touched": False,
+    }
+'''),
 ]
 
 # `utcnow()` is deprecated since 3.12 and warns on every report. Same string, aware clock.

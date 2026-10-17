@@ -26,8 +26,10 @@ h2t-ops version --expect @VERSION@ --json
 Act on the result, in this order:
 
 1. JSON with `"ok": true` — continue.
-2. JSON with `"ok": false` — show the user `error.hint` and follow it before going on.
-   `result.reason` names the case: `not_installed`, `version` or `path`.
+2. JSON with `"ok": false` — show the user `error.hint` as it is and stop this skill until
+   it is resolved. Do not run anything the hint names unless the user asks you to: on
+   `reason: path` it is a command for the user to decide on. `result.reason` names the
+   case: `not_installed`, `version` or `path`.
 3. `command not found` — read `~/.h2t/run/install.env`
    (`grep -E '^(STATE|H2T_HOOK)=' ~/.h2t/run/install.env`). With `STATE=ready` the install
    is fine and PATH does not reach it: show the directory of the `H2T_HOOK=` path, ask the
@@ -342,10 +344,10 @@ the document and something outside `docs/` together: the plan was written and
 nothing shipped under it (69 of 111 here).
 
 ```bash
-h2t-docs-lint retire --root .                    # list candidates
-h2t-docs-lint retire --root . --older-than 90    # a stricter cut
-h2t-docs-lint retire --root . --apply            # git mv into docs/archive/
-h2t-docs-lint retire --root . --never-shipped     # only `с кодом = 0`
+h2t-docs-lint retire --root . --json             # list candidates
+h2t-docs-lint retire --root . --older-than 90 --json  # a stricter cut
+h2t-docs-lint retire --root . --apply --json     # git mv into docs/archive/
+h2t-docs-lint retire --root . --never-shipped --json  # only `с кодом = 0`
 ```
 
 `--never-shipped` narrows the list to that second number being zero. It selects,
@@ -364,11 +366,11 @@ on h2t-skills), so the judgement is a person's and this only makes it cheap.
 
 ```bash
 h2t-docs-lint audit --root .
-h2t-docs-lint plan --root .
+h2t-docs-lint plan --root . --json
 h2t-docs-lint fix-safe --root .
 h2t-docs-lint fix-index --root .
 h2t-docs-lint doctor --json --root .
-h2t-docs-lint retire --root .
+h2t-docs-lint retire --root . --json
 ```
 
 ## References

@@ -5,7 +5,7 @@
 | Intent | Command |
 | --- | --- |
 | auth check | `h2t-ops granola auth-check --json` |
-| list notes | `h2t-ops granola list --limit 20 --format md` |
+| list notes | `h2t-ops granola list --limit 20 --json` |
 | list notes by date range | `h2t-ops granola list --since 2026-08-01 --until 2026-08-19 --json` |
 | list notes edited since a date | `h2t-ops granola list --updated-after 2026-08-01 --json` |
 | list notes in a folder | `h2t-ops granola list --folder "opencall-guru" --json` |
@@ -14,7 +14,7 @@
 | summary only, provider markdown | `h2t-ops granola summary NOTE_ID_FROM_LIST --format md` |
 | verbatim transcript | `h2t-ops granola transcript NOTE_ID_FROM_LIST --format md` |
 | transcript without speaker merging | `h2t-ops granola transcript NOTE_ID_FROM_LIST --format md --raw` |
-| pull notes to disk | `h2t-ops granola sync --to ~/.dor/lake/granola --since-cursor` |
+| pull notes to disk | `h2t-ops granola sync --to ~/.dor/lake/granola --since-cursor --json` |
 | list webhook endpoints | `h2t-ops granola webhooks --json` |
 
 `--folder` accepts a folder name or a `fol_...` ID. An ambiguous name fails with the
@@ -33,10 +33,10 @@ candidate IDs rather than guessing.
 
 ```bash
 h2t-ops granola auth-check --json
-h2t-ops granola list --limit 20 --format md
+h2t-ops granola list --limit 20 --json
 h2t-ops granola get NOTE_ID_FROM_LIST --format md
 h2t-ops granola transcript NOTE_ID_FROM_LIST --format md
-h2t-ops granola sync --to ~/.dor/lake/granola --include summaries,transcripts --since-cursor
+h2t-ops granola sync --to ~/.dor/lake/granola --include summaries,transcripts --since-cursor --json
 ```
 
 ## Auth

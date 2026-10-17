@@ -46,3 +46,19 @@ def test_an_unknown_verb_is_a_usage_error(capsys):
 def test_setup_is_listed_in_the_top_level_parser():
     choices = cli.build_parser()._subparsers._group_actions[0].choices
     assert "setup" in choices
+
+
+def test_the_real_install_is_refused_in_process(monkeypatch, capsys):
+    """The process is the h2t-ops tool `uv tool install` replaces; on Windows its exe is
+    locked. So the command hands the exact uv line back instead of running it."""
+    monkeypatch.setattr(legacy, "resolve_uv", lambda: {"status": "ready", "path": "uv", "source": "t"})
+    # `runner` is bound at def time; replace the default itself so nothing can run uv.
+    def never(command, timeout):
+        pytest.fail(f"ran {command}")
+    monkeypatch.setattr(legacy.install_h2t_ops, "__kwdefaults__",
+                        {"dry_run": False, "runner": never})
+    assert cli.dispatch(["setup", "install-h2t-ops", "--source", "main", "--json"]) == 1
+    out = json.loads(capsys.readouterr().out)
+    assert out["status"] == "error"
+    assert out["command"][:4] == ["uv", "tool", "install", "--reinstall"]
+    assert "uv tool install --reinstall" in out["hint"]

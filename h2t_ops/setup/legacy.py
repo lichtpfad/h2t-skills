@@ -17,6 +17,7 @@ import json
 import os
 import platform
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -536,14 +537,18 @@ def install_h2t_ops(source: str, *, dry_run: bool = False, runner: Runner = _run
             "command": command,
             "root_h2t_touched": False,
         }
-    result = runner(command, 300)
+    # Not run from here: this process is the h2t-ops tool that `uv tool install` replaces,
+    # and on Windows its running h2t-ops.exe and python.exe are locked. The plugin script
+    # ran under a separate interpreter; the package copy hands the line to the caller.
+    line = shlex.join(command)
     return {
         "kind": KIND_INSTALL,
-        "status": "ok" if result.get("exit_code") == 0 else "error",
+        "status": "error",
+        "error": "h2t-ops cannot reinstall itself from inside its own process",
+        "hint": f"Run this line yourself, after the user approves it: {line}",
         "source": normalized,
         "editable": is_local,
         "command": command,
-        "result": result,
         "root_h2t_touched": False,
     }
 

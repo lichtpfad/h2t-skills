@@ -43,6 +43,15 @@ def _print(payload: dict) -> None:
     print(json.dumps(payload, ensure_ascii=False))
 
 
+def _fail(as_json: bool, code: int, message: str, hint: str) -> int:
+    """Every error: `{"ok": false, "error": {"message", "hint"}}`, or both lines on stderr."""
+    if as_json:
+        _print({"ok": False, "error": {"message": message, "hint": hint}})
+    else:
+        print(f"ERROR: {message}\n  {hint}", file=sys.stderr)
+    return code
+
+
 def main(argv: list[str] | None = None) -> int:
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
@@ -54,18 +63,25 @@ def main(argv: list[str] | None = None) -> int:
                 runbook_path=args.dest, branch=args.branch, spec_path=args.spec_path,
                 issue=args.issue, venv_test=args.venv_test, e2e_state=args.e2e_state)
         except (ValueError, validate_runbook.RunbookInvalid) as exc:
-            if args.json:
-                _print({"ok": False, "error": str(exc)})
-            else:
-                print(f"ERROR: {exc}", file=sys.stderr)
-            return 2
+            return _fail(args.json, 2, str(exc), "Fix the field named above and run "
+                         "`h2t-runbook new` again; nothing was written.")
+        except OSError as exc:
+            return _fail(args.json, 1, f"cannot write {args.dest}: {exc}",
+                         "Check that the directory is writable.")
         if args.json:
             _print({"ok": True, "path": str(path)})
         else:
             print(path)
         return 0
 
-    text = Path(args.runbook).read_text(encoding="utf-8")
+    try:
+        text = Path(args.runbook).read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return _fail(args.json, 5, f"no runbook at {args.runbook}",
+                     "Give the path of an existing docs/superpowers/plans/*-runbook.md.")
+    except (OSError, UnicodeDecodeError) as exc:
+        return _fail(args.json, 1, f"cannot read {args.runbook}: {exc}",
+                     "Give the path of a readable UTF-8 runbook.")
     if args.command == "validate":
         if not args.json:
             return validate_runbook._main(["validate_runbook.py", args.runbook])

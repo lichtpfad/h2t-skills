@@ -32,8 +32,10 @@ h2t-ops version --expect @VERSION@ --json
 Act on the result, in this order:
 
 1. JSON with `"ok": true` — continue.
-2. JSON with `"ok": false` — show the user `error.hint` and follow it before going on.
-   `result.reason` names the case: `not_installed`, `version` or `path`.
+2. JSON with `"ok": false` — show the user `error.hint` as it is and stop this skill until
+   it is resolved. Do not run anything the hint names unless the user asks you to: on
+   `reason: path` it is a command for the user to decide on. `result.reason` names the
+   case: `not_installed`, `version` or `path`.
 3. `command not found` — read `~/.h2t/run/install.env`
    (`grep -E '^(STATE|H2T_HOOK)=' ~/.h2t/run/install.env`). With `STATE=ready` the install
    is fine and PATH does not reach it: show the directory of the `H2T_HOOK=` path, ask the
@@ -170,20 +172,23 @@ editable install the report shows — never one you create. The same holds for p
 person types `/plugin …`, an agent runs `claude plugin marketplace add lichtpfad/h2t-skills`
 and `claude plugin install h2t-core@lichtpfad` (README, Channel 1). Neither needs a clone.
 
-First run a dry-run:
+Ask the backend for the install line:
 
 ```bash
 h2t-ops setup install-h2t-ops --source <source> --dry-run --json
 ```
 
-Show the command to the user. Ask before running the real install because it
-modifies the user's `uv tool` environment.
+Show its `command` field to the user. It modifies the user's `uv tool` environment, so
+ask before running it. After an explicit yes, run that `uv tool install …` line yourself,
+exactly as printed — `uv` is a CLI, and the line is the whole install.
 
-Real install:
+Do not drop `--dry-run` to let the backend install: `h2t-ops setup` runs inside the
+h2t-ops tool that the line replaces, and on Windows its running `h2t-ops.exe` and
+`python.exe` are locked. Without `--dry-run` it refuses, exits 1, and its `hint` names the
+same line.
 
-```bash
-h2t-ops setup install-h2t-ops --source <source> --json
-```
+Verify by state, not by the uv output: rerun `h2t-ops setup doctor --json` and read
+`entry_points.status`.
 
 ### Step 4: Connector readiness
 
@@ -308,7 +313,7 @@ h2t-ops gmail list --max 1 --json
 Phase 1 — check status:
 
 ```bash
-h2t-ops telegram auth status
+h2t-ops telegram auth status --json
 ```
 
 If already authenticated: skip to Step 5.
@@ -318,19 +323,19 @@ Otherwise, ask user: "Telegram needs authentication. This will send a code to yo
 Phase 2 — request code (ask user for phone number first):
 
 ```bash
-h2t-ops telegram auth request-code --phone <phone>
+h2t-ops telegram auth request-code --phone <phone> --json
 ```
 
 Phase 3 — complete login (ask user for the code from Telegram):
 
 ```bash
-h2t-ops telegram auth complete --phone <phone> --code <code>
+h2t-ops telegram auth complete --phone <phone> --code <code> --json
 ```
 
 If 2FA is enabled, also ask for password:
 
 ```bash
-h2t-ops telegram auth complete --phone <phone> --code <code> --password <password>
+h2t-ops telegram auth complete --phone <phone> --code <code> --password <password> --json
 ```
 
 Confirm success by re-running `auth status`.

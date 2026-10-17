@@ -24,8 +24,10 @@ h2t-ops version --expect @VERSION@ --json
 Act on the result, in this order:
 
 1. JSON with `"ok": true` — continue.
-2. JSON with `"ok": false` — show the user `error.hint` and follow it before going on.
-   `result.reason` names the case: `not_installed`, `version` or `path`.
+2. JSON with `"ok": false` — show the user `error.hint` as it is and stop this skill until
+   it is resolved. Do not run anything the hint names unless the user asks you to: on
+   `reason: path` it is a command for the user to decide on. `result.reason` names the
+   case: `not_installed`, `version` or `path`.
 3. `command not found` — read `~/.h2t/run/install.env`
    (`grep -E '^(STATE|H2T_HOOK)=' ~/.h2t/run/install.env`). With `STATE=ready` the install
    is fine and PATH does not reach it: show the directory of the `H2T_HOOK=` path, ask the
@@ -168,7 +170,7 @@ With `embed_diagram: true` in config, PNG/SVG contain editable XML inside.
 Check available shape types — the shipped library, with the project's file merged on top
 the way `generate` merges it:
 ```bash
-h2t-drawio shapes --shapes .drawio-shapes.toml
+h2t-drawio shapes --shapes .drawio-shapes.toml --json
 ```
 
 ### Edge Color Convention
