@@ -609,9 +609,11 @@ def test_research_search_envelope_matches(capsys, monkeypatch, tmp_path):
         assert result["meta"][key] == golden["meta"][key]
 
 
-def test_research_fetch_matches(capsys, monkeypatch, tmp_path):
+@pytest.mark.parametrize("newline", [b"\n", b"\r\n"], ids=["lf", "crlf"])
+def test_research_fetch_matches(capsys, monkeypatch, tmp_path, newline):
+    # The fixture is served with both line endings: Git for Windows checks it out as CRLF.
     html = (ROOT / "tests" / "connectors" / "research" / "fixtures" / "fetch"
-            / "public_article.html").read_bytes()
+            / "public_article.html").read_bytes().replace(b"\r\n", b"\n").replace(b"\n", newline)
     url = "https://example.com/pops-intro"
     monkeypatch.setattr(urllib.request, "urlopen",
                         lambda req, timeout=None: _urlopen_response(html, url=url))
