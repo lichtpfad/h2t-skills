@@ -1,8 +1,10 @@
-#!/usr/bin/env python3
 """Detect project type, domain, tracker for init-project skill.
 
-Usage: $H2T_PYTHON detect_project.py --cwd <path> [--config-root <path>]
+Usage: h2t-detect-project --cwd <path> [--config-root <path>]
 Outputs JSON to stdout. Config root: --config-root, else $H2T_CONFIG_ROOT, else ~/.h2t/config.
+
+Moved here from plugins/h2t-core/skills/init-project/scripts/ in Task 12; the plugin copy
+is gone, so there is no drift guard — this is the only copy.
 """
 import argparse
 import io
@@ -13,10 +15,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-PLUGIN_ROOT = Path(__file__).resolve().parent.parent.parent.parent
-sys.path.insert(0, str(PLUGIN_ROOT / "lib"))
-
-from gather.stack import detect_stack
+from h2t_ops.lifecycle.gather.stack import detect_stack
 
 # Domain patterns: (regex on the normalized forward-slash path, domain, confidence).
 #

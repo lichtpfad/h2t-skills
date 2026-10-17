@@ -42,11 +42,35 @@ def _parser() -> argparse.ArgumentParser:
     exp.add_argument("--config", help="project .drawio-skill.yaml override")
     exp.add_argument("--page", type=int, dest="page_index", help="page index to export")
     exp.add_argument("--all-pages", action="store_true", help="all pages (pdf)")
+
+    shapes = sub.add_parser("shapes", help="list the node types generate knows: the shipped "
+                            "library with a project override merged on top")
+    shapes.add_argument("--shapes", help="project .drawio-shapes.toml override")
+    shapes.add_argument("--json", action="store_true")
     return parser
 
 
+def _shape_types(shapes_path: str | None) -> dict[str, str]:
+    from h2t_ops.tools.drawio.generate import _load_shapes
+
+    library = _load_shapes(shapes_path)
+    return {name: library[name].get("baseStyle", "") for name in sorted(library)
+            if not name.startswith("_") and name not in ("title", "version")
+            and isinstance(library[name], dict)}
+
+
 def main(argv: list[str] | None = None) -> int:
+    if hasattr(sys.stdout, "reconfigure"):  # a cp1252 console cannot take every style (#428)
+        sys.stdout.reconfigure(encoding="utf-8")
     args = _parser().parse_args(argv)
+    if args.command == "shapes":
+        types = _shape_types(args.shapes)
+        if args.json:
+            print(json.dumps(types, ensure_ascii=False))
+        else:
+            for name, style in types.items():
+                print(f"  {name}: {style}")
+        return 0
     if args.command == "generate":
         if importlib.util.find_spec("drawpyo") is None:  # the remedy beats an ImportError
             print("h2t-drawio generate needs drawpyo: install h2t-ops with the drawio extra "

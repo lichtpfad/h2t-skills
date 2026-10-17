@@ -87,6 +87,14 @@ DRAWIO_TEST = TEST_SETUP + [_tidy_imports] + [
 CREATIVE_TEST = TEST_SETUP + [_tidy_imports] + [
     (re.compile(r"^import assembler\b", re.M), "from h2t_ops.tools.creative import assembler"),
 ]
+# `import runbook_schema as S` / `from validate_runbook import` -> the package modules.
+RUNBOOK_SOURCE = [(re.compile(r"^import runbook_schema as S$", re.M),
+                   "from h2t_ops.tools.runbook import runbook_schema as S"),
+                  (re.compile(r"^from (validate_runbook|new_runbook|runbook_state) import", re.M),
+                   r"from h2t_ops.tools.runbook.\1 import")]
+# isort: the now first-party block after `import pytest` gets its blank line.
+RUNBOOK_TEST = RUNBOOK_SOURCE + [(re.compile(r"^import pytest\n(?=from h2t_ops)", re.M),
+                                  "import pytest\n\n"), _tidy_imports]
 AGENT_TEST = TEST_SETUP + [_tidy_imports] + [
     (re.compile(r"^import apply_agent_profile\b", re.M),
      "from h2t_ops.tools.agent_profile import apply_agent_profile"),
@@ -265,6 +273,54 @@ _AGENT_PROFILE = [
      '_DEFAULT_CATALOG = resource_dir("agent_profile") / "agent-profiles.json"\n'),
 ]
 
+_DOCS_INIT = [
+    ('''# parents[2], not [3]: #458 moved this script from skills/docs-init/scripts/ up to
+# scripts/docs-init/, one level shallower, and the bootstrap copied from a skill script
+# did not move with it. `plugins/` has no lib/, so nothing was ever inserted and the
+# import below died on every machine.
+_PLUGIN_ROOT = Path(__file__).resolve().parents[2]
+for _lib in [_PLUGIN_ROOT / "lib", _PLUGIN_ROOT.parent.parent / "lib"]:
+    if _lib.exists():
+        sys.path.insert(0, str(_lib))
+        break
+
+''', ""),
+]
+
+_NEW_RUNBOOK = [
+    ("from pathlib import Path\n\nimport runbook_schema as S\n",
+     "from pathlib import Path\n\nfrom h2t_ops.resources import resource_dir\n"
+     "import runbook_schema as S\n"),
+    ('_TEMPLATE = Path(__file__).resolve().parents[1] / "references" / "runbook-template.md"\n',
+     '_TEMPLATE = resource_dir("runbook") / "runbook-template.md"\n'),
+]
+
+_SETUP_LEGACY = [
+    ('''"""Deterministic h2t-core setup/update backend.
+
+''', '''"""Deterministic h2t-core setup/update backend, run as `h2t-ops setup <verb>`.
+
+Copied from plugins/h2t-core/skills/setup/scripts/setup_h2t.py in Task 12 so the setup
+skill calls a command instead of a plugin script; parity with the original is held by
+tests/tools/test_tool_copy_parity.py until 12c deletes it. `h2t-setup sync` (Task 14)
+supersedes it. The note below is the original's and describes the plugin copy.
+
+'''),
+    ('''    # The rule lives in the plugin's lib (gather/sessions.py); this script sits in the same plugin.
+    lib = str(Path(__file__).resolve().parents[3] / "lib")
+    if lib not in sys.path:
+        sys.path.insert(0, lib)
+    from gather.sessions import get_machine_name
+''', "    from h2t_ops.lifecycle.gather.sessions import get_machine_name\n"),
+    ('''            script_dir = Path(__file__).parent
+            registry_path = script_dir.parent / "known_secrets.yaml"
+''', '''            from h2t_ops.resources import known_secrets_path
+
+            registry_path = known_secrets_path()
+'''),
+    ('prog="setup_h2t.py"', 'prog="h2t-ops setup"'),
+]
+
 # `utcnow()` is deprecated since 3.12 and warns on every report. Same string, aware clock.
 UTC_NOW = [(re.compile(re.escape('datetime.datetime.utcnow().isoformat() + "Z"')),
             'datetime.datetime.now(datetime.UTC).replace(tzinfo=None).isoformat() + "Z"')]
@@ -274,6 +330,7 @@ _DEV = "plugins/h2t-dev"
 _LIB = f"{_DEV}/lib/docs"
 _DOCS = "h2t_ops/tools/docs"
 _DRAWIO_SRC = "plugins/h2t-arch/skills/drawio/scripts"
+_RUNBOOK_SRC = "plugins/h2t-core/skills/autonomous-run/scripts"
 
 # copy -> (original, rules, edits)
 SOURCE_PAIRS = {
@@ -299,6 +356,13 @@ SOURCE_PAIRS = {
     "h2t_ops/tools/agent_profile/apply_agent_profile.py": (
         "plugins/h2t-core/skills/agent-profile/scripts/apply_agent_profile.py", [],
         _AGENT_PROFILE),
+    # Task 12: the scripts the skills still ran by path.
+    f"{_DOCS}/docs_init.py": (f"{_DEV}/scripts/docs-init/init.py", DOCS_SOURCE, _DOCS_INIT),
+    **{f"h2t_ops/tools/runbook/{m}.py": (f"{_RUNBOOK_SRC}/{m}.py", RUNBOOK_SOURCE,
+                                         _NEW_RUNBOOK if m == "new_runbook" else [])
+       for m in ("runbook_schema", "validate_runbook", "runbook_state", "new_runbook")},
+    "h2t_ops/setup/legacy.py": ("plugins/h2t-core/skills/setup/scripts/setup_h2t.py", [],
+                                _SETUP_LEGACY),
 }
 
 # Package modules written for the package, not copied: nothing to compare them against.
@@ -309,6 +373,8 @@ AUTHORED = {
     "h2t_ops/tools/creative/__init__.py",
     "h2t_ops/tools/creative/cli.py",
     "h2t_ops/tools/agent_profile/__init__.py",
+    "h2t_ops/tools/runbook/__init__.py",
+    "h2t_ops/tools/runbook/cli.py",
 }
 
 _T = "tests/tools"
@@ -345,6 +411,15 @@ DOCS_TEST_RULES = {
         (re.compile(r'REPO / "plugins" / "h2t-dev" / "references" / "standards"'),
          'REPO / "h2t_ops" / "resources" / "docs" / "standards"')],
 }
+_RUNBOOK_TEST_EDITS = {
+    # The references and SKILL.md stay in the plugin as text; the test moved two levels.
+    "test_references": [('''_REF = Path(__file__).resolve().parents[1] / "references"
+_SKILL = Path(__file__).resolve().parents[1] / "SKILL.md"
+''', '''_SKILL_DIR = Path(__file__).resolve().parents[3] / "plugins" / "h2t-core" / "skills" / "autonomous-run"
+_REF = _SKILL_DIR / "references"
+_SKILL = _SKILL_DIR / "SKILL.md"
+''')],
+}
 _PYTEST_FIRST = {  # `import assembler` sorted after pytest once it is first-party
     "test_assembler": ("import assembler\nimport pytest\n", "import pytest\n\nimport assembler\n"),
     "test_smoke": ("import assembler as asm\nimport pytest\n",
@@ -377,6 +452,43 @@ TEST_PAIRS = {
     f"{_T}/agent_profile/test_apply_agent_profile.py": (
         "plugins/h2t-core/skills/agent-profile/scripts/test_apply_agent_profile.py",
         AGENT_TEST, []),
+    f"{_T}/docs/test_docs_init_repo_root.py": ("tests/docs/test_docs_init_repo_root.py", [], [
+        ('''import sys
+from pathlib import Path
+
+_SCRIPT_DIR = Path(__file__).parents[2] / "plugins/h2t-dev/scripts/docs-init"
+sys.path.insert(0, str(_SCRIPT_DIR))
+
+from init import init_repo
+''', "from h2t_ops.tools.docs.docs_init import init_repo\n"),
+        ("    import init as init_mod\n",
+         "    from h2t_ops.tools.docs import docs_init as init_mod\n")]),
+    **{f"{_T}/runbook/{t}.py": (f"{_RUNBOOK_SRC}/{t}.py", RUNBOOK_TEST,
+                                _RUNBOOK_TEST_EDITS.get(t, []))
+       for t in ("test_new_runbook", "test_references", "test_runbook_state",
+                 "test_validate_runbook")},
+    f"{_T}/setup/test_setup_h2t.py": ("plugins/h2t-core/skills/setup/scripts/test_setup_h2t.py",
+                                      [], [('''import importlib.util
+import sys
+from pathlib import Path
+
+
+def _load_setup():
+    path = Path(__file__).with_name("setup_h2t.py")
+    spec = importlib.util.spec_from_file_location("setup_h2t_under_test", path)
+    module = importlib.util.module_from_spec(spec)
+    assert spec and spec.loader
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+''', '''from pathlib import Path
+
+from h2t_ops.setup import legacy
+
+
+def _load_setup():
+    return legacy
+''')]),
 }
 
 PAIRS = {**SOURCE_PAIRS, **TEST_PAIRS}
@@ -392,6 +504,8 @@ RESOURCE_TREES = {
     "h2t_ops/resources/agent_profile/agent-profiles.json":
         "plugins/h2t-core/skills/agent-profile/references/agent-profiles.json",
     "h2t_ops/resources/known_secrets.yaml": "plugins/h2t-core/skills/setup/known_secrets.yaml",
+    "h2t_ops/resources/runbook/runbook-template.md":
+        "plugins/h2t-core/skills/autonomous-run/references/runbook-template.md",
 }
 
 
@@ -449,7 +563,8 @@ def test_resource_copy_is_identical(copy):
 def test_every_tool_module_is_paired_or_authored():
     """A new module under h2t_ops/tools/ must be classified here, or it escapes the check."""
     modules = {p.relative_to(ROOT).as_posix() for p in (ROOT / "h2t_ops" / "tools").rglob("*.py")}
-    assert modules == set(SOURCE_PAIRS) | AUTHORED
+    paired = {copy for copy in SOURCE_PAIRS if copy.startswith("h2t_ops/tools/")}
+    assert modules == paired | AUTHORED
 
 
 def test_every_copied_test_is_paired():

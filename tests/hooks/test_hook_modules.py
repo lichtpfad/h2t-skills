@@ -25,7 +25,6 @@ def box(tmp_path, monkeypatch):
     monkeypatch.setenv("USERPROFILE", str(home))
     for name in hc.ISOLATED_ENV:
         monkeypatch.delenv(name, raising=False)
-    monkeypatch.setenv("H2T_PLUGIN_ROOT", str(hc.PLUGIN))  # detect_project.py, until Task 12
     tmpdir = tmp_path / "tmpdir"
     tmpdir.mkdir()
     monkeypatch.setattr(tempfile, "tempdir", str(tmpdir))  # the gather lock

@@ -12,13 +12,10 @@ import subprocess
 import sys
 from pathlib import Path
 
-from h2t_ops.lifecycle import plugin_script_anchor
 from h2t_ops.tools.docs.project_types import PROJECT_TYPES, SCAFFOLD_TYPE_TO_TEMPLATE
 
-# The project types ship in the package (h2t_ops.tools.docs). docs-init does not, and is
-# still looked up in the h2t-dev plugin tree, anchored where the 3.x entry point found it.
-_SCAFFOLD_SCRIPT = plugin_script_anchor(
-    "skills/scaffold-project/scripts/scaffold_project.py", Path(__file__).resolve())
+# The project types and docs-init ship in the package (h2t_ops.tools.docs): no h2t-dev
+# plugin tree to find them in.
 _PROJECT_TYPES_AVAILABLE = True
 
 
@@ -410,56 +407,18 @@ def cmd_github(args: argparse.Namespace) -> dict:
     return {"status": "error", "error": r.stderr.strip()}
 
 
-_PLUGIN_ROOT = _SCAFFOLD_SCRIPT.parents[3]
-
-
-def _find_h2t_dev_root() -> Path | None:
-    """Find h2t-dev plugin root — works from source tree and installed cache.
-
-    Source layout:  plugins/h2t-core/../h2t-dev  (sibling under plugins/)
-    Cache layout:   cache/lichtpfad/h2t-core/{ver}/ → cache/lichtpfad/h2t-dev/{latest}/
-    """
-    # Source: _PLUGIN_ROOT.parent is plugins/
-    candidate = _PLUGIN_ROOT.parent / "h2t-dev"
-    if (candidate / "skills").exists():
-        return candidate
-    # Cache: _PLUGIN_ROOT.parent is h2t-core/ (all versions), go up to lichtpfad/
-    cache_base = _PLUGIN_ROOT.parent.parent / "h2t-dev"
-    if cache_base.exists():
-        versions = sorted([p for p in cache_base.iterdir() if p.is_dir()], reverse=True)
-        for v in versions:
-            if (v / "skills").exists():
-                return v
-    return None
-
-
-_H2T_DEV_ROOT = _find_h2t_dev_root()
-
-
 def run_docs_init(repo_name: str, project_dir: Path, *, template: str = "code_repo") -> dict:
-    """Scaffold docs/ in a new project through h2t-dev's docs-init script.
+    """Scaffold docs/ in a new project through docs-init, which ships in this package.
 
-    The two absences are not the same and must not report the same way. h2t-dev not
-    installed is a legitimate skip: the plugin is optional. h2t-dev installed but missing
-    its script is a broken delivery, and a broken delivery reporting `skip` produces a
-    project with no docs/ and says nothing — the failure this call exists to prevent (#458).
+    The plugin original skipped when h2t-dev was not installed and failed when it was
+    installed without the script (#458). Neither absence exists here: the module is part of
+    the package, so the call always runs, and a failure is reported as an error.
     """
-    if _H2T_DEV_ROOT is None:
-        return {"status": "skip", "reason": "h2t-dev plugin not installed"}
-    init_script = _H2T_DEV_ROOT / "scripts" / "docs-init" / "init.py"
-    if not init_script.exists():
-        return {
-            "status": "error",
-            "error": (
-                f"h2t-dev is installed at {_H2T_DEV_ROOT} but {init_script} is missing. "
-                "The plugin is broken, not absent — reinstall it rather than proceeding "
-                "with a project that has no docs/ structure."
-            ),
-        }
     r = subprocess.run(
         [
             sys.executable,
-            str(init_script),
+            "-m",
+            "h2t_ops.tools.docs.docs_init",
             repo_name,
             "--repo-root",
             str(project_dir),

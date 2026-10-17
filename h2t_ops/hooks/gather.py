@@ -24,7 +24,6 @@ import hashlib
 import io
 import json
 import re
-import subprocess
 import sys
 import tempfile
 import time
@@ -90,29 +89,22 @@ def _tail(raw: bytes) -> str:
     return raw[-_STDERR_TAIL:].decode("utf-8", "replace").rstrip("\n")
 
 
-def _detect_project(cwd: str) -> str:
+def _detect_project(cwd: str, at: str) -> str:
     """INIT_DATA for init-project: its SKILL.md step 1 reads detection, not a briefing.
 
-    detect_project.py is still a plugin script; it moves into the package in Task 12
-    (author-literal ratchet, progress ruling on Task 8).
+    In-process since detect_project moved into the package (Task 12). The JSON carries
+    `cwd` and `at` as GATHER_META does, so the skill can apply the same freshness rule and
+    run `h2t-detect-project` itself when the data is stale or for another directory.
     """
-    from h2t_ops.plugin_entrypoints import plugin_script_path
+    from h2t_ops.lifecycle.detect_project import detect_project
 
     try:
-        script = plugin_script_path("skills/init-project/scripts/detect_project.py")
-    except FileNotFoundError:
-        return "INIT_ERROR: detect_project.py not found. Run /h2t-core:setup doctor."
-    try:
-        done = subprocess.run([sys.executable, str(script), "--cwd", cwd],
-                              capture_output=True, timeout=60, check=False)
-    except (OSError, subprocess.SubprocessError) as exc:
-        return f"INIT_ERROR: detect_project.py failed. {type(exc).__name__}"
-    if done.returncode != 0:
-        return f"INIT_ERROR: detect_project.py failed. {_tail(done.stderr) or 'no stderr'}"
-    out = done.stdout.decode("utf-8", "replace").rstrip("\n")
-    if not out:
-        return "INIT_ERROR: detect_project.py returned no output. Check Python resolution."
-    return f"INIT_DATA: {out}"
+        result = detect_project(cwd)
+    except Exception as exc:  # detection crashing is an INIT_ERROR, not a hook failure
+        return f"INIT_ERROR: h2t-detect-project failed. {type(exc).__name__}: {exc}"
+    result["cwd"] = cwd
+    result["at"] = at
+    return "INIT_DATA: " + json.dumps(result, ensure_ascii=False, indent=2)
 
 
 def _run_gather(cwd: str) -> tuple[int, str, bytes]:
@@ -179,7 +171,7 @@ def handle(event: dict) -> Reply:
         return Reply()
 
     if "init-project" in skill:
-        text = _detect_project(cwd)
+        text = _detect_project(cwd, datetime.now().astimezone().isoformat(timespec="seconds"))
         if text.startswith("INIT_DATA:"):
             _write_lock(lock, now)
         return Reply(text)

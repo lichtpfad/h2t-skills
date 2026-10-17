@@ -40,8 +40,12 @@ h2t-docs-lint = "h2t_ops.tools.docs.lint:main"
 h2t-docs-sync-labels = "h2t_ops.tools.docs.sync_labels:main"
 h2t-milestone-closure = "h2t_ops.tools.docs.closure:main"
 h2t-drawio = "h2t_ops.tools.drawio.cli:main"
-# h2t-creative = "h2t_ops.tools.creative.cli:main" — added in Task 12 with the plugin bin removal (it would shadow it on PATH)
+h2t-creative = "h2t_ops.tools.creative.cli:main"
 h2t-agent-profile = "h2t_ops.tools.agent_profile.apply_agent_profile:main"
+# Scripts that had no CLI home until the skills stopped calling plugin Python (Task 12).
+h2t-detect-project = "h2t_ops.lifecycle.detect_project:main"
+h2t-docs-init = "h2t_ops.tools.docs.docs_init:main"
+h2t-runbook = "h2t_ops.tools.runbook.cli:main"
 
 [project.optional-dependencies]
 # `h2t-drawio generate` builds diagrams with drawpyo; nothing else in the package needs it,

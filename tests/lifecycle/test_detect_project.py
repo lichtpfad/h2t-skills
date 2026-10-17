@@ -1,12 +1,5 @@
-"""Tests for detect_project.py detection logic."""
-import sys
-from pathlib import Path
-
-# Add lib to path for gather imports
-PLUGIN_ROOT = Path(__file__).resolve().parent.parent.parent.parent
-sys.path.insert(0, str(PLUGIN_ROOT / "lib"))
-
-from detect_project import (
+"""Tests for detect_project detection logic (moved with the module, Task 12)."""
+from h2t_ops.lifecycle.detect_project import (
     _check_already_registered,
     _detect_domain,
     _detect_tracker,

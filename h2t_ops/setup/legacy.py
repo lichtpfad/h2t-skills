@@ -1,0 +1,838 @@
+"""Deterministic h2t-core setup/update backend, run as `h2t-ops setup <verb>`.
+
+Copied from plugins/h2t-core/skills/setup/scripts/setup_h2t.py in Task 12 so the setup
+skill calls a command instead of a plugin script; parity with the original is held by
+tests/tools/test_tool_copy_parity.py until 12c deletes it. `h2t-setup sync` (Task 14)
+supersedes it. The note below is the original's and describes the plugin copy.
+
+This script is intentionally standalone: it must run from an installed plugin
+cache before POS/DOR is configured. POS/DOR paths are inspected only as optional
+state and never treated as setup prerequisites.
+"""
+from __future__ import annotations
+
+import argparse
+import ast
+import json
+import os
+import platform
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+from collections.abc import Callable
+from pathlib import Path
+from typing import Any
+
+KIND_DOCTOR = "h2t_setup_doctor/v1"
+KIND_CONNECTORS = "h2t_connectors_check/v1"
+KIND_INSTALL = "h2t_ops_install/v1"
+KIND_SECRETS_SKELETON = "h2t_secrets_skeleton/v1"
+KIND_SECRETS_PREFLIGHT = "h2t_secrets_preflight/v1"
+CANONICAL_H2T_OPS_SOURCE = "git+https://github.com/lichtpfad/h2t-skills.git"
+SECRET_KEYS = {
+    "notion": ["NOTION_API_TOKEN"],
+    "meetgeek": ["MEETGEEK_API_KEY"],
+    "granola": ["GRANOLA_API_KEY"],
+    "research": ["EXA_API_KEY"],
+}
+
+Runner = Callable[[list[str], int], dict[str, Any]]
+
+
+def _semver_key(name: str) -> tuple[int, int, int]:
+    parts = name.split(".")
+    try:
+        return tuple(int(p) for p in parts[:3]) + (0,) * (3 - len(parts[:3]))
+    except ValueError:
+        return (0, 0, 0)
+
+
+def detect_platform() -> dict[str, str]:
+    raw = sys.platform
+    if raw.startswith("win"):
+        name = "windows"
+    elif raw == "darwin":
+        name = "macos"
+    elif raw.startswith("linux"):
+        name = "linux"
+    else:
+        name = raw
+    return {
+        "name": name,
+        "sys_platform": raw,
+        "machine": platform.machine(),
+        "python": sys.executable,
+        "python_version": platform.python_version(),
+    }
+
+
+def _path_exists(path: Path) -> bool:
+    try:
+        return path.exists()
+    except OSError:
+        return False
+
+
+def _home() -> Path:
+    return Path.home()
+
+
+def _windows_uv_candidates(home: Path) -> list[Path]:
+    local = os.environ.get("LOCALAPPDATA")
+    candidates: list[Path] = []
+    if local:
+        candidates.append(Path(local) / "Microsoft" / "WinGet" / "Links" / "uv.exe")
+        winget = Path(local) / "Microsoft" / "WinGet" / "Packages"
+        if _path_exists(winget):
+            candidates.extend(sorted(winget.glob("astral-sh.uv_*/*/uv.exe")))
+            candidates.extend(sorted(winget.glob("astral-sh.uv_*/*/*/uv.exe")))
+            candidates.extend(sorted(winget.glob("astral-sh.uv_*/uv.exe")))
+    candidates.append(home / ".local" / "bin" / "uv.exe")
+    return candidates
+
+
+def _user_which(name: str) -> str | None:
+    """shutil.which over PATH minus the bin directory of the venv running this script (#523).
+
+    `uv run` started inside a checkout picks up the repo's .venv and puts its bin first on
+    PATH, so the doctor reported that venv's h2t-ops, not the one `uv tool install` replaces.
+    """
+    if sys.prefix == sys.base_prefix:
+        return shutil.which(name)
+    own = os.path.normcase(os.path.realpath(Path(sys.prefix) / ("Scripts" if sys.platform.startswith("win") else "bin")))
+    entries = [e for e in os.environ.get("PATH", "").split(os.pathsep) if e and os.path.normcase(os.path.realpath(e)) != own]
+    return shutil.which(name, path=os.pathsep.join(entries))
+
+
+def resolve_uv(which: Callable[[str], str | None] = shutil.which, home: Path | None = None) -> dict[str, Any]:
+    home = home or _home()
+    names = ["uv.exe", "uv"] if sys.platform.startswith("win") else ["uv", "uv.exe"]
+    for name in names:
+        found = which(name)
+        if found:
+            return {"status": "ready", "path": found, "source": "PATH"}
+    if sys.platform.startswith("win"):
+        for candidate in _windows_uv_candidates(home):
+            if candidate.is_file():
+                return {"status": "ready", "path": str(candidate), "source": "known-windows-path"}
+    return {
+        "status": "missing",
+        "path": "",
+        "source": "not-found",
+        "hint": "Install uv: https://docs.astral.sh/uv/getting-started/installation/",
+    }
+
+
+ENTRY_POINT_NAMES = ["h2t-ops", "h2t-gather", "h2t-activity-log", "h2t-handoff"]
+
+
+def _resolve_cli(name: str, which: Callable[[str], str | None] = _user_which, home: Path | None = None) -> dict[str, Any]:
+    home = home or _home()
+    is_win = sys.platform.startswith("win")
+    names = [f"{name}.exe", name] if is_win else [name, f"{name}.exe"]
+    for n in names:
+        found = which(n)
+        if found:
+            return {"status": "ready", "path": found, "source": "PATH"}
+    candidate = home / ".local" / "bin" / (f"{name}.exe" if is_win else name)
+    if candidate.is_file():
+        return {"status": "ready", "path": str(candidate), "source": "~/.local/bin"}
+    return {"status": "missing", "path": "", "source": "not-found"}
+
+
+def resolve_h2t_ops(which: Callable[[str], str | None] = _user_which, home: Path | None = None) -> dict[str, Any]:
+    result = _resolve_cli("h2t-ops", which, home)
+    if result["status"] == "missing":
+        result["hint"] = "Run setup_h2t.py install-h2t-ops --source main"
+    return result
+
+
+def resolve_entry_points(which: Callable[[str], str | None] = _user_which, home: Path | None = None) -> dict[str, Any]:
+    commands = {name: _resolve_cli(name, which, home) for name in ENTRY_POINT_NAMES}
+    statuses = [v["status"] for v in commands.values()]
+    if all(s == "ready" for s in statuses):
+        overall = "ready"
+    elif any(s == "ready" for s in statuses):
+        overall = "partial"
+    else:
+        overall = "missing"
+    result: dict[str, Any] = {"status": overall, "commands": commands}
+    if overall != "ready":
+        result["hint"] = "Run setup_h2t.py install-h2t-ops --source main (installs from GitHub through uv; no clone)"
+    return result
+
+
+def _run(args: list[str], timeout: int = 15) -> dict[str, Any]:
+    try:
+        proc = subprocess.run(
+            args,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            capture_output=True,
+            timeout=timeout,
+            check=False,
+        )
+    except FileNotFoundError as exc:
+        return {"status": "missing", "exit_code": 127, "stdout": "", "stderr": str(exc)}
+    except subprocess.TimeoutExpired as exc:
+        return {
+            "status": "timeout",
+            "exit_code": 124,
+            "stdout": (exc.stdout or "")[:2000],
+            "stderr": (exc.stderr or "")[:2000],
+        }
+    return {
+        "status": "ok" if proc.returncode == 0 else "error",
+        "exit_code": proc.returncode,
+        "stdout": proc.stdout[:4000],
+        "stderr": proc.stderr[:4000],
+    }
+
+
+def _version_for_h2t_ops(path: str, runner: Runner = _run) -> dict[str, Any]:
+    if not path:
+        return {"status": "missing", "version": ""}
+    result = runner([path, "--version"], 10)
+    version = result.get("stdout", "").strip().splitlines()
+    return {
+        "status": "ready" if result.get("exit_code") == 0 else "error",
+        "version": version[0] if version else "",
+        "exit_code": result.get("exit_code"),
+    }
+
+
+def _candidate_secret_files(home: Path) -> list[Path]:
+    """Same order as h2t_ops.core.secrets.candidate_secret_files (#448).
+
+    This script is standalone — it cannot import h2t_ops — so the list is duplicated on
+    purpose. It drifted once already: #432 added the documented path to the package and
+    not here, so `setup doctor` answered MISSING for a key the connectors could read.
+    tests/test_secrets_path_parity.py holds the two lists together.
+    """
+    files: list[Path] = []
+    override = os.environ.get("H2T_SECRETS_FILE")
+    if override:
+        files.append(Path(override))
+    documented = home / ".h2t" / "config" / "secrets" / "secrets.env"
+    # Every other *.env beside it, alphabetically: the directory is one file per provider (#483).
+    others = (
+        sorted((p for p in documented.parent.glob("*.env") if p.name != documented.name), key=lambda p: p.name)
+        if documented.parent.is_dir()
+        else []
+    )
+    files.extend([
+        documented,
+        *others,
+        home / ".dor" / "secrets" / "secrets.env",
+        home / ".dor" / "secrets.env",
+    ])
+    return files
+
+
+def _secret_present(key: str, home: Path) -> bool:
+    if os.environ.get(key):
+        return True
+    for path in _candidate_secret_files(home):
+        if not path.is_file():
+            continue
+        try:
+            for raw in path.read_text(encoding="utf-8").splitlines():
+                line = raw.strip()
+                if line.startswith(f"{key}="):
+                    return bool(line.partition("=")[2].strip().strip('"').strip("'"))
+        except OSError:
+            continue
+    return False
+
+
+def _file_status(path: Path) -> dict[str, str]:
+    return {"path": str(path), "status": "present" if path.is_file() else "missing"}
+
+
+def optional_pos_status(home: Path | None = None) -> dict[str, Any]:
+    home = home or _home()
+    candidates = [
+        home / ".dor",
+        home / ".h2t" / "config",
+    ]
+    configured = any(_path_exists(path) for path in candidates)
+    return {
+        "status": "configured" if configured else "not_configured",
+        "impact": (
+            "lifecycle and connector provider I/O still work; POS publishing disabled"
+            if not configured else "optional POS/DOR paths detected"
+        ),
+        "paths": [{"path": str(path), "exists": _path_exists(path)} for path in candidates],
+    }
+
+
+def plugin_cache_status(home: Path | None = None) -> dict[str, Any]:
+    """Installed h2t-core versions under any marketplace, for Claude Code and Codex (#451).
+
+    The same search as h2t_ops.plugin_entrypoints._cache_plugin_roots, duplicated because
+    this script cannot import h2t_ops. A hardcoded `cache/lichtpfad/h2t-core` reported a
+    working install under another marketplace name as missing.
+    """
+    home = home or _home()
+    root: Path | None = None
+    found: list[Path] = []
+    for var, default in (("CLAUDE_CONFIG_DIR", ".claude"), ("CODEX_HOME", ".codex")):
+        override = os.environ.get(var)
+        cache = (Path(override).expanduser() if override else home / default) / "plugins" / "cache"
+        # Name the directory actually searched, even when nothing is there (#522): a fixed
+        # ~/.claude here sat beside `missing` while CLAUDE_CONFIG_DIR pointed elsewhere.
+        root = root or cache / "lichtpfad" / "h2t-core"
+        if cache.is_dir():
+            found.extend(path for path in cache.glob("*/h2t-core/*") if path.is_dir())
+    # Oldest first, so the last is latest: non-semver dirs (Codex `local`, content hashes)
+    # by mtime, then semver ones by version, which win when both exist.
+    found.sort(key=lambda path: (_semver_key(path.name) != (0, 0, 0), _semver_key(path.name), path.stat().st_mtime))
+    versions = [str(path) for path in found]
+    if found:
+        root = found[-1].parent
+    return {
+        "h2t_core_cache": str(root),
+        "versions": versions,
+        "latest": versions[-1] if versions else "",
+        "status": "present" if versions else "missing",
+    }
+
+
+def legacy_shim_status(home: Path | None = None) -> dict[str, Any]:
+    """Report an `h2t` command left in the pre-#449 venv under ~/.h2t by a dead install (#476).
+
+    The 3.0.x line installed `h2t-core-cli` editable into that venv, pinned to a
+    version-numbered plugin cache directory that the next plugin update removes. Agents find
+    tools by listing bin/, so this broken `h2t` is the first thing they run. Report only: a
+    diagnostic must not delete anything.
+    """
+    home = home or _home()
+    venv = home / ".h2t" / "venv"
+    windows = sys.platform.startswith("win")
+    shim = venv / ("Scripts" if windows else "bin") / ("h2t.exe" if windows else "h2t")
+    if not shim.is_file():
+        return {"status": "ok"}
+    site_dirs = [venv / "Lib" / "site-packages"] if windows else sorted(venv.glob("lib/python*/site-packages"))
+    for site in site_dirs:
+        for entry_points in site.glob("*.dist-info/entry_points.txt"):
+            text = entry_points.read_text(encoding="utf-8", errors="replace")
+            if not re.search(r"^h2t\s*=", text, re.M):
+                continue
+            name, _, version = entry_points.parent.name.removesuffix(".dist-info").partition("-")
+            finder = site / f"__editable___{name.replace('-', '_')}_{version.replace('.', '_')}_finder.py"
+            targets: list[str] = []
+            if finder.is_file():
+                match = re.search(r"MAPPING[^=]*=\s*(\{.*?\})", finder.read_text(encoding="utf-8", errors="replace"), re.S)
+                if match:
+                    try:
+                        targets = list(ast.literal_eval(match.group(1)).values())
+                    except (ValueError, SyntaxError):
+                        targets = []
+            missing = [target for target in targets if not Path(target).exists()]
+            python = venv / ("Scripts/python.exe" if windows else "bin/python")
+            return {
+                "status": "stale" if missing else "ok",
+                "path": str(shim),
+                "package": f"{name} {version}",
+                "editable_targets": targets,
+                "missing_targets": missing,
+                # uv, not `python -m pip`: this venv is not guaranteed to have pip.
+                "remediation": f"uv pip uninstall --python {python} {name}" if missing else "",
+            }
+    return {"status": "ok", "path": str(shim), "package": "", "editable_targets": [], "missing_targets": []}
+
+
+def doctor(runner: Runner = _run) -> dict[str, Any]:
+    h2t_ops = resolve_h2t_ops()
+    h2t_ops.update(_version_for_h2t_ops(h2t_ops.get("path", ""), runner))
+    return {
+        "kind": KIND_DOCTOR,
+        "platform": detect_platform(),
+        "uv": resolve_uv(),
+        "h2t_ops": h2t_ops,
+        "entry_points": resolve_entry_points(),
+        "plugin_cache": plugin_cache_status(),
+        "optional_pos": optional_pos_status(),
+        "legacy_shims": legacy_shim_status(),
+        "boundaries": {
+            "root_h2t_touched": False,
+            "pos_required": False,
+        },
+    }
+
+
+def ensure_machine_name(home: Path | None = None, name: str = "") -> dict[str, Any]:
+    """Pin H2T_MACHINE_NAME in Claude Code's settings `env`, once (#491, ADR 0003).
+
+    On macOS the hostname follows the network, so session records of one machine split
+    across two directories. Claude Code passes `env` from settings.json to every process
+    it starts, hooks included, whatever the shell. An existing value is never changed.
+
+    Without `name`, today's name by the shared rule is written only if the session root
+    has a folder under it or no folders at all. Otherwise the hostname may already have
+    drifted from the history (#517), and the root may hold other machines' folders too,
+    so nothing is written and the folders come back as candidates for the user to pick.
+    """
+    home = home or _home()
+    override = os.environ.get("CLAUDE_CONFIG_DIR")
+    settings = (Path(override).expanduser() if override else home / ".claude") / "settings.json"
+    from h2t_ops.lifecycle.gather.sessions import get_machine_name
+
+    # Claude Code writes this file too. Replace it only if it is unchanged since it was
+    # read, so a preference saved meanwhile is not overwritten with the stale copy.
+    for _ in range(3):
+        stamp = settings.stat().st_mtime_ns if settings.is_file() else None
+        data: Any = {}
+        if stamp is not None:
+            try:
+                data = json.loads(settings.read_text(encoding="utf-8"))
+            except ValueError as exc:
+                return {"status": "error", "path": str(settings), "error": f"not valid JSON, left untouched: {exc}"}
+        if not isinstance(data, dict) or not isinstance(data.get("env", {}), dict):
+            return {"status": "error", "path": str(settings), "error": "unexpected shape, left untouched"}
+        current = data.get("env", {}).get("H2T_MACHINE_NAME")
+        if current:
+            return {"status": "unchanged", "path": str(settings), "value": current}
+        if not name:
+            today = get_machine_name()
+            # The handoff writer's root; the legacy ~/.dor/sessions is shared between machines.
+            root = Path(os.environ.get("H2T_SESSION_ROOT", str(home / ".h2t" / "sessions")))
+            folders = sorted(p.name for p in root.iterdir() if p.is_dir() and not p.name.startswith(".")) if root.is_dir() else []
+            if folders and today not in folders:
+                return {"status": "needs_choice", "path": str(settings), "today": today, "candidates": folders}
+            name = today
+        data.setdefault("env", {})["H2T_MACHINE_NAME"] = name
+        settings.parent.mkdir(parents=True, exist_ok=True)
+        fd, tmp = tempfile.mkstemp(dir=settings.parent, prefix=".settings.", suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                handle.write(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
+            if (settings.stat().st_mtime_ns if settings.is_file() else None) != stamp:
+                continue
+            os.replace(tmp, settings)
+            return {"status": "written", "path": str(settings), "value": name}
+        finally:
+            Path(tmp).unlink(missing_ok=True)
+    return {"status": "error", "path": str(settings), "error": "kept changing while being updated, left untouched"}
+
+
+def _google_oauth_status(home: Path) -> dict[str, Any]:
+    cfg = home / ".config" / "google-calendar-mcp"
+    return {
+        "credentials": _file_status(cfg / "credentials.json"),
+        "tokens": _file_status(cfg / "tokens.json"),
+    }
+
+
+def connector_matrix(home: Path | None = None, *, live: bool = False, include_paid: bool = False,
+                     runner: Runner = _run) -> dict[str, Any]:
+    home = home or _home()
+    h2t_ops = resolve_h2t_ops(home=home)
+    h2t_ops_path = h2t_ops.get("path", "")
+    google = _google_oauth_status(home)
+    checks: list[dict[str, Any]] = [
+        {"connector": "calendar", "status": _ready_if_files(google), "checks": google, "live": "skipped"},
+        {"connector": "gmail", "status": _ready_if_files(google), "checks": google, "live": "skipped"},
+        {"connector": "drive", "status": _ready_if_files(google), "checks": google, "live": "skipped"},
+        {
+            "connector": "notion",
+            "status": "ready" if _secret_present("NOTION_API_TOKEN", home) or (home / ".config" / "notion" / "token").is_file() else "missing",
+            "checks": {"token": "present" if _secret_present("NOTION_API_TOKEN", home) or (home / ".config" / "notion" / "token").is_file() else "missing"},
+            "live": "skipped",
+        },
+        {
+            "connector": "telegram",
+            "status": "ready" if (home / ".config" / "telegram" / "config.json").is_file() else "missing",
+            "checks": {
+                "config": _file_status(home / ".config" / "telegram" / "config.json"),
+                "session": _file_status(home / ".config" / "telegram" / "session.session"),
+            },
+            "live": "skipped",
+        },
+        {
+            "connector": "meetgeek",
+            "status": "ready" if _secret_present("MEETGEEK_API_KEY", home) else "missing",
+            "checks": {"MEETGEEK_API_KEY": "present" if _secret_present("MEETGEEK_API_KEY", home) else "missing"},
+            "live": "skipped",
+        },
+        {
+            "connector": "granola",
+            "status": "ready" if _secret_present("GRANOLA_API_KEY", home) else "missing",
+            "checks": {"GRANOLA_API_KEY": "present" if _secret_present("GRANOLA_API_KEY", home) else "missing"},
+            "live": "skipped",
+        },
+        {
+            "connector": "research",
+            "status": "ready" if _secret_present("EXA_API_KEY", home) else "missing",
+            "checks": {"EXA_API_KEY": "present" if _secret_present("EXA_API_KEY", home) else "missing"},
+            "live": "skipped_paid" if not include_paid else "skipped",
+        },
+    ]
+    if live and h2t_ops_path:
+        _attach_live_checks(checks, h2t_ops_path, include_paid, runner)
+    return {
+        "kind": KIND_CONNECTORS,
+        "h2t_ops": h2t_ops,
+        "mode": "live" if live else "credential-only",
+        "include_paid": include_paid,
+        "connectors": checks,
+    }
+
+
+def _ready_if_files(checks: dict[str, dict[str, str]]) -> str:
+    return "ready" if all(item["status"] == "present" for item in checks.values()) else "missing"
+
+
+def _attach_live_checks(checks: list[dict[str, Any]], h2t_ops_path: str, include_paid: bool, runner: Runner) -> None:
+    commands = {
+        "telegram": [h2t_ops_path, "telegram", "auth", "status", "--json"],
+        "meetgeek": [h2t_ops_path, "meetgeek", "auth-check", "--json"],
+        "granola": [h2t_ops_path, "granola", "auth-check", "--json"],
+    }
+    if include_paid:
+        commands["research"] = [h2t_ops_path, "research", "preflight", "--json"]
+    for check in checks:
+        cmd = commands.get(check["connector"])
+        if not cmd:
+            continue
+        result = runner(cmd, 30)
+        check["live"] = {
+            "command": cmd[1:],
+            "status": "ready" if result.get("exit_code") == 0 else "error",
+            "exit_code": result.get("exit_code"),
+            "stderr": result.get("stderr", "")[:800],
+        }
+
+
+def normalize_source(source: str) -> str:
+    source = source.strip()
+    if source == "main":
+        return CANONICAL_H2T_OPS_SOURCE
+    lower = source.lower()
+    if lower == "h2t" or lower.endswith("/h2t") or lower.endswith("\\h2t"):
+        raise ValueError("Refusing to install or repair root h2t; use h2t-ops / h2t-skills source.")
+    return source
+
+
+def install_h2t_ops(source: str, *, dry_run: bool = False, runner: Runner = _run) -> dict[str, Any]:
+    uv = resolve_uv()
+    if uv["status"] != "ready":
+        return {"kind": KIND_INSTALL, "status": "missing_uv", "uv": uv, "command": []}
+    normalized = normalize_source(source)
+    is_local = Path(normalized).is_dir()
+    if is_local:
+        command = [uv["path"], "tool", "install", "--editable", normalized]
+    else:
+        command = [uv["path"], "tool", "install", "--reinstall", normalized]
+    if dry_run:
+        return {
+            "kind": KIND_INSTALL,
+            "status": "dry_run",
+            "source": normalized,
+            "editable": is_local,
+            "command": command,
+            "root_h2t_touched": False,
+        }
+    result = runner(command, 300)
+    return {
+        "kind": KIND_INSTALL,
+        "status": "ok" if result.get("exit_code") == 0 else "error",
+        "source": normalized,
+        "editable": is_local,
+        "command": command,
+        "result": result,
+        "root_h2t_touched": False,
+    }
+
+
+def _machine_name_line(info: dict[str, Any] | None) -> str:
+    if not info:
+        return ""
+    detail = info.get("value") or info.get("error", "")
+    return f"- machine name: {info['status']} {detail} ({info['path']})\n"
+
+
+def _legacy_shim_line(info: dict[str, Any] | None) -> str:
+    if not info or info.get("status") != "stale":
+        return ""
+    return (
+        f"- legacy h2t command: stale {info['path']} ({info['package']}, its code is gone); "
+        f"use h2t-ops. Remove with: {info['remediation']}\n"
+    )
+
+
+def _human(obj: dict[str, Any]) -> str:
+    if obj.get("kind") == KIND_DOCTOR:
+        ep = obj.get("entry_points", {})
+        ep_status = ep.get("status", "unknown")
+        missing_eps = [name for name, info in ep.get("commands", {}).items() if info.get("status") != "ready"]
+        ep_detail = f" (missing: {', '.join(missing_eps)})" if missing_eps else ""
+        return (
+            f"h2t setup doctor\n"
+            f"- platform: {obj['platform']['name']}\n"
+            f"- uv: {obj['uv']['status']} {obj['uv'].get('path', '')}\n"
+            f"- h2t-ops: {obj['h2t_ops']['status']} {obj['h2t_ops'].get('version', '')}\n"
+            f"- entry points: {ep_status}{ep_detail}\n"
+            f"- optional POS/DOR: {obj['optional_pos']['status']}\n"
+            + _machine_name_line(obj.get("machine_name"))
+            + _legacy_shim_line(obj.get("legacy_shims"))
+        )
+    if obj.get("kind") == KIND_CONNECTORS:
+        rows = [f"- {c['connector']}: {c['status']} ({c['live']})" for c in obj["connectors"]]
+        return "h2t connectors-check\n" + "\n".join(rows) + "\n"
+    if obj.get("kind") == KIND_INSTALL:
+        return f"h2t-ops install: {obj['status']}\ncommand: {' '.join(obj.get('command', []))}\n"
+    return json.dumps(obj, ensure_ascii=False, indent=2)
+
+
+def _load_known_secrets(registry_path: Path) -> dict[str, dict[str, str]]:
+    """Parse known_secrets.yaml without PyYAML — handles only this file's flat structure."""
+    if not registry_path.is_file():
+        raise FileNotFoundError(f"known_secrets.yaml not found: {registry_path}")
+    result: dict[str, dict[str, str]] = {}
+    current: str | None = None
+    for raw in registry_path.read_text(encoding="utf-8").splitlines():
+        line = raw.rstrip()
+        if not line or line.lstrip().startswith("#"):
+            continue
+        if not line[0].isspace():
+            current = line.rstrip(":").strip()
+            result[current] = {}
+        elif current and ":" in line:
+            k, _, v = line.strip().partition(":")
+            result[current][k.strip()] = v.strip().strip('"').strip("'")
+    return result
+
+
+def secrets_skeleton(secrets_file: Path, registry: dict[str, dict[str, str]], home: Path | None = None) -> dict[str, Any]:
+    """Create or extend secrets.env with placeholder KEY= lines for missing keys.
+
+    A key the connectors already resolve — environment or any candidate file — is not
+    missing (#524): a placeholder for it told the user to paste a key that already worked.
+
+    Uses atomic write (temp file + rename) so a crash leaves no partial state.
+    """
+    home = home or _home()
+    secrets_file.parent.mkdir(parents=True, exist_ok=True)
+    existing_content = ""
+    existing_keys: set[str] = set()
+    if secrets_file.is_file():
+        existing_content = secrets_file.read_text(encoding="utf-8")
+        for raw in existing_content.splitlines():
+            line = raw.strip()
+            if line and not line.startswith("#") and "=" in line:
+                existing_keys.add(line.split("=", 1)[0].strip())
+    added: list[str] = []
+    skipped: list[str] = []
+    new_lines: list[str] = []
+    for key, meta in registry.items():
+        if key in existing_keys or _resolve_secret_value(key, home):
+            skipped.append(key)
+        else:
+            desc = meta.get("description", "")
+            url = meta.get("url", "")
+            new_lines.append(f"# {desc}")
+            if url:
+                new_lines.append(f"# Get at: {url}")
+            new_lines.append(f"{key}=")
+            new_lines.append("")
+            added.append(key)
+    if new_lines:
+        separator = "\n" if existing_content and not existing_content.endswith("\n") else ""
+        full_content = existing_content + separator + "\n".join(new_lines)
+        tmp = secrets_file.parent / (secrets_file.name + ".tmp")
+        tmp.write_text(full_content, encoding="utf-8")
+        tmp.replace(secrets_file)
+    return {
+        "kind": KIND_SECRETS_SKELETON,
+        "path": str(secrets_file),
+        "added": added,
+        "skipped": skipped,
+    }
+
+
+def _resolve_secret_value(key: str, home: Path) -> str:
+    """Return actual secret value following full resolution chain: env > canonical > legacy.
+
+    Used only for local format validation — never returned in output.
+    """
+    env_val = os.environ.get(key)
+    if env_val:
+        return env_val
+    for path in _candidate_secret_files(home):
+        if not path.is_file():
+            continue
+        try:
+            for raw in path.read_text(encoding="utf-8").splitlines():
+                line = raw.strip()
+                if line.startswith(f"{key}="):
+                    val = line.partition("=")[2].strip().strip('"').strip("'")
+                    if val:
+                        return val
+        except OSError:
+            continue
+    return ""
+
+
+def _validate_key(value: str, validator: str) -> bool:
+    """Apply format validator. Only called when value is non-empty."""
+    if validator == "uuid":
+        return bool(re.fullmatch(
+            r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
+            value,
+            re.IGNORECASE,
+        ))
+    if validator.startswith("starts_with:"):
+        prefix = validator[len("starts_with:"):]
+        return value.startswith(prefix)
+    if validator == "nonempty":
+        return bool(value)
+    return bool(value)  # unknown validator: treat as nonempty
+
+
+def secrets_preflight(
+    registry: dict[str, dict[str, str]],
+    *,
+    home: Path | None = None,
+    live: bool = False,
+    runner: Runner = _run,
+) -> dict[str, Any]:
+    """Check each key using full resolution chain. Never returns key values.
+
+    With live=True, also runs connector smoke tests.
+    """
+    home = home or _home()
+    h2t_ops = resolve_h2t_ops()
+    h2t_ops_path = h2t_ops.get("path", "") or "h2t-ops"
+    results: list[dict[str, Any]] = []
+    live_commands = {"research": "research preflight --json"}
+    for key, meta in registry.items():
+        value = _resolve_secret_value(key, home)
+        found = bool(value)
+        valid = found and _validate_key(value, meta.get("validator", "nonempty"))
+        entry: dict[str, Any] = {
+            "key": key,
+            "found": found,
+            "valid": valid,
+            "connector": meta.get("connector", ""),
+        }
+        if live and found:
+            connector = meta.get("connector", "")
+            live_cmd = live_commands.get(connector)
+            if live_cmd:
+                cmd = [h2t_ops_path] + live_cmd.split()
+                live_result = runner(cmd, 30)
+                entry["live"] = {
+                    "status": "ok" if live_result.get("exit_code") == 0 else "error",
+                    "exit_code": live_result.get("exit_code"),
+                }
+        results.append(entry)
+    return {
+        "kind": KIND_SECRETS_PREFLIGHT,
+        "results": results,
+    }
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="h2t-ops setup")
+    sub = parser.add_subparsers(dest="command", required=True)
+    for name in ("doctor", "setup", "repair", "update"):
+        p = sub.add_parser(name)
+        p.add_argument("--json", action="store_true")
+        if name == "setup":
+            p.add_argument("--machine-name", default="", help="Pin this name; the answer to needs_choice")
+    cc = sub.add_parser("connectors-check")
+    cc.add_argument("--json", action="store_true")
+    cc.add_argument("--live", action="store_true", help="Run explicit read-only provider checks where safe")
+    cc.add_argument("--include-paid", action="store_true", help="Allow paid provider preflights such as Exa")
+    ins = sub.add_parser("install-h2t-ops")
+    ins.add_argument("--source", default="main")
+    ins.add_argument("--dry-run", action="store_true")
+    ins.add_argument("--json", action="store_true")
+    sk = sub.add_parser("secrets")
+    sk_sub = sk.add_subparsers(dest="secrets_cmd", required=True)
+    sk_skel = sk_sub.add_parser("skeleton")
+    sk_skel.add_argument("--json", action="store_true")
+    sk_pre = sk_sub.add_parser("preflight")
+    sk_pre.add_argument("--json", action="store_true")
+    sk_pre.add_argument("--live", action="store_true", help="Run live connector smoke tests")
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    # Windows encodes a piped stdout with the ANSI codepage, whatever chcp says, so
+    # a non-ASCII payload reaches the caller as cp1252 — or kills the write outright
+    # where cp1252 has no byte for the character. Every caller decodes UTF-8 (#428).
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
+    args = build_parser().parse_args(argv)
+    try:
+        if args.command in {"doctor", "setup", "repair", "update"}:
+            result = doctor()
+            if args.command == "setup":
+                result["machine_name"] = ensure_machine_name(name=args.machine_name)
+                if result["machine_name"]["status"] == "error":
+                    result["status"] = "error"
+        elif args.command == "connectors-check":
+            result = connector_matrix(live=args.live, include_paid=args.include_paid)
+        elif args.command == "install-h2t-ops":
+            result = install_h2t_ops(args.source, dry_run=args.dry_run)
+            if result.get("status") == "ok":
+                plugin_cache = _home() / ".claude" / "plugins" / "cache" / "lichtpfad" / "h2t-core"
+                if plugin_cache.exists():
+                    versions = sorted(
+                        [d for d in plugin_cache.iterdir()
+                         if d.is_dir() and d.name != "latest" and _semver_key(d.name) != (0, 0, 0)],
+                        key=lambda p: _semver_key(p.name),
+                    )
+                    if versions:
+                        current = versions[-1]
+                        # No `latest` junction is created any more. It was refreshed only
+                        # here, never by `/plugin marketplace update`, so it drifted behind
+                        # the installed version and silently answered the wrong one.
+                        # Hooks resolve through `h2t-hook` at fire time instead.
+                        versions_file = _home() / ".h2t" / "config" / "plugin-versions.json"
+                        versions_file.parent.mkdir(parents=True, exist_ok=True)
+                        _data = {}
+                        if versions_file.exists():
+                            try:
+                                _data = json.loads(versions_file.read_text(encoding="utf-8"))
+                            except Exception:
+                                pass
+                        _data["h2t-core"] = str(current)
+                        versions_file.write_text(json.dumps(_data, indent=2), encoding="utf-8")
+        elif args.command == "secrets":
+            from h2t_ops.resources import known_secrets_path
+
+            registry_path = known_secrets_path()
+            try:
+                registry = _load_known_secrets(registry_path)
+            except FileNotFoundError as exc:
+                result = {"kind": "h2t_setup_error/v1", "status": "error", "error": str(exc)}
+                print(json.dumps(result, ensure_ascii=False, indent=2))
+                return 3
+            secrets_file = _home() / ".dor" / "secrets" / "secrets.env"
+            if args.secrets_cmd == "skeleton":
+                result = secrets_skeleton(secrets_file, registry)
+            elif args.secrets_cmd == "preflight":
+                result = secrets_preflight(registry, live=args.live)
+            else:
+                raise AssertionError(args.secrets_cmd)
+        else:
+            raise AssertionError(args.command)
+    except ValueError as exc:
+        result = {"kind": "h2t_setup_error/v1", "status": "error", "error": str(exc)}
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        return 2
+    if getattr(args, "json", False):
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+    else:
+        print(_human(result))
+    return 0 if result.get("status") not in {"error", "missing_uv"} else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

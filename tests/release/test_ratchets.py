@@ -7,7 +7,7 @@ exec_map = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(exec_map)
 
 # Measured on the commit that adds this test; may only decrease (spec §2.2).
-RUNTIME_PY_CEILING = 62
+RUNTIME_PY_CEILING = 61  # 62 at Task 4; detect_project.py moved into the package (Task 12b)
 AUTHOR_LITERALS = ["beabac7bf4314952a9327759c638d89f", "Asia/Jerusalem",
                    "Projects/DOR|Projects/newsengine"]
 AUTHOR_LITERAL_CEILING = 7  # measured 2026-10-17 over plugins/ and h2t_ops/, non-test files

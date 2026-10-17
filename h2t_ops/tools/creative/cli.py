@@ -1,19 +1,33 @@
-"""`h2t-creative`: the same surface as the plugin's `bin/h2t-creative`, from the package.
+"""`h2t-creative`: profiles and the assembler, from the package.
 
-The skills call `h2t-creative root` to find `profiles/` and `h2t-creative assemble ...` to
-build. The plugin's shell script answers with its own directory and runs `assembler.py`
-through `uv run`; this answers with the package resources and runs the package assembler.
-Not yet a console script: on PATH it would shadow the plugin bin and move where
-style-create writes user profiles. Task 12 exports it when the plugin bin is deleted; until
-then it runs as `python -m h2t_ops.tools.creative.cli`.
+`root` prints the shipped resources (`profiles/`, `base/`, `shared/`). `profiles-dir` prints
+where profiles the user creates live: `~/.h2t/creative/profiles/`, outside every install,
+so an update cannot wipe them — the plugin bin this replaces answered with its own
+directory, and style-create wrote new profiles into the plugin cache. `assemble` looks a
+profile up there first, then among the shipped ones.
 """
 from __future__ import annotations
 
 import sys
+from pathlib import Path
 
 from h2t_ops.resources import resource_dir
 
-USAGE = "usage: h2t-creative root | h2t-creative assemble [assembler args]"
+USAGE = "usage: h2t-creative {root,profiles-dir,assemble} [assembler args]"
+
+
+def user_profiles_dir() -> Path:
+    """`~/.h2t/creative/profiles` — one root, `~/.h2t` (#548 option A)."""
+    return Path.home() / ".h2t" / "creative" / "profiles"
+
+
+def _profile_name(args: list[str]) -> str | None:
+    for i, arg in enumerate(args):
+        if arg == "--profile" and i + 1 < len(args):
+            return args[i + 1]
+        if arg.startswith("--profile="):
+            return arg.split("=", 1)[1]
+    return None
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -22,9 +36,17 @@ def main(argv: list[str] | None = None) -> int:
     if command == "root":
         print(resource_dir("creative"))
         return 0
+    if command == "profiles-dir":
+        print(user_profiles_dir())
+        return 0
     if command == "assemble":
         from h2t_ops.tools.creative import assembler
 
+        name = _profile_name(args[1:])
+        if name and (user_profiles_dir() / name).is_dir():
+            # The assembler copy reads PROFILES_DIR once per run; base/ and shared/ stay
+            # the shipped ones. A user profile shadows a shipped one of the same name.
+            assembler.PROFILES_DIR = user_profiles_dir()
         # assembler.main parses sys.argv itself, exactly as the plugin script runs it.
         sys.argv = ["h2t-creative assemble", *args[1:]]
         assembler.main()

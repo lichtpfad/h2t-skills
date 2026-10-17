@@ -67,15 +67,28 @@ except ImportError:
     PROJECT_TYPES = {}
     SCAFFOLD_TYPE_TO_TEMPLATE = {}
 '''
-_SCAFFOLD_TYPES_FROM_PACKAGE = '''from h2t_ops.lifecycle import plugin_script_anchor
-from h2t_ops.tools.docs.project_types import PROJECT_TYPES, SCAFFOLD_TYPE_TO_TEMPLATE
+_SCAFFOLD_TYPES_FROM_PACKAGE = '''from h2t_ops.tools.docs.project_types import PROJECT_TYPES, SCAFFOLD_TYPE_TO_TEMPLATE
 
-# The project types ship in the package (h2t_ops.tools.docs). docs-init does not, and is
-# still looked up in the h2t-dev plugin tree, anchored where the 3.x entry point found it.
-_SCAFFOLD_SCRIPT = plugin_script_anchor(
-    "skills/scaffold-project/scripts/scaffold_project.py", Path(__file__).resolve())
+# The project types and docs-init ship in the package (h2t_ops.tools.docs): no h2t-dev
+# plugin tree to find them in.
 _PROJECT_TYPES_AVAILABLE = True
 '''
+# The h2t-dev lookup and the script path go with docs-init moving into the package (Task
+# 12); a span, because the copy keeps none of it. The rest of run_docs_init is compared.
+_DOCS_INIT_SPAN = ("_PLUGIN_ROOT = Path(__file__).resolve().parents[3]\n",
+                   "            str(init_script),\n", '''def run_docs_init(repo_name: str, project_dir: Path, *, template: str = "code_repo") -> dict:
+    """Scaffold docs/ in a new project through docs-init, which ships in this package.
+
+    The plugin original skipped when h2t-dev was not installed and failed when it was
+    installed without the script (#458). Neither absence exists here: the module is part of
+    the package, so the call always runs, and a failure is reported as an error.
+    """
+    r = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "h2t_ops.tools.docs.docs_init",
+''')
 _SYNC_LABELS_FROM_PLUGIN = '''    if _H2T_DEV_ROOT is None:
         return {"status": "skip", "reason": "h2t-dev plugin not found"}
     sync_script = _H2T_DEV_ROOT / "skills" / "docs-sync-labels" / "scripts" / "sync_labels.py"
@@ -113,25 +126,30 @@ PAIRS = {
              "--json"],
 '''),
     ]),
-    # The project types and the label sync come from the package (Task 10); docs-init is
-    # not in it, so the h2t-dev lookup stays — anchored where the 3.x entry point was.
+    # The project types, the label sync (Task 10) and docs-init (Task 12) come from the
+    # package. The dropped span also holds the original's #434 comment; in h2t_ops/ it
+    # would be a new C:/dev hit for tests/dev/test_no_author_paths_ship.py.
     "scaffold_project.py": ("scaffold-project/scripts/scaffold_project.py", False, [
         (_SCAFFOLD_TYPES, _SCAFFOLD_TYPES_FROM_PACKAGE),
         (_SYNC_LABELS_FROM_PLUGIN, _SYNC_LABELS_FROM_PACKAGE),
-        # The dropped comment records the original's own #434 history; in h2t_ops/ it
-        # would be a new C:/dev hit for tests/dev/test_no_author_paths_ship.py.
-        ('''_PLUGIN_ROOT = Path(__file__).resolve().parents[3]
-# There was a `_DEV_ROOT = Path(os.environ.get("H2T_DEV_ROOT", "C:/dev"))` here, defined and
-# never read — the sibling-plugin lookup below uses _H2T_DEV_ROOT, which is derived rather
-# than configured. Removed in the #434 sweep: a hardcoded path nothing uses still answers grep,
-# and it sized part of that issue against code that could not run.
-''', "_PLUGIN_ROOT = _SCAFFOLD_SCRIPT.parents[3]\n"),
+        _DOCS_INIT_SPAN,
     ]),
 }
 
+# Moved, not copied: the plugin original is gone, so there is nothing to compare against.
+MOVED = {"detect_project.py"}
+
 
 def expected_copy(original: str, rewrite_imports: bool, edits) -> str:
-    for old, new in edits:
+    for edit in edits:
+        if len(edit) == 3:  # (start, end, new): the span from start through end
+            start, end, new = edit
+            assert original.count(start) == 1, f"span start matches {original.count(start)} times"
+            head, _, rest = original.partition(start)
+            assert rest.count(end) >= 1, f"span end not found after {start.strip()!r}"
+            original = head + new + rest.split(end, 1)[1]
+            continue
+        old, new = edit
         assert original.count(old) == 1, (
             f"an enumerated edit no longer matches the original exactly once "
             f"({original.count(old)} matches): {old.splitlines()[0]!r}")
@@ -165,7 +183,7 @@ def test_copy_matches_original_up_to_enumerated_edits(copy):
 
 def test_every_lifecycle_script_copy_is_paired():
     """A new copy added to h2t_ops/lifecycle/ must be paired here, or it escapes the check."""
-    copies = {p.name for p in LIFECYCLE.glob("*.py") if p.name != "__init__.py"}
+    copies = {p.name for p in LIFECYCLE.glob("*.py") if p.name not in {"__init__.py", *MOVED}}
     assert copies == set(PAIRS)
 
 

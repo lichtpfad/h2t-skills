@@ -173,15 +173,12 @@ def test_generate_does_not_need_drawpyo_to_import(installed):
 
 
 def test_creative_root_names_the_installed_resources(installed):
-    """The skills read `$(h2t-creative root)/profiles/` — the same contract as the plugin bin.
+    """The skills read `$(h2t-creative root)/profiles/` for the shipped profiles.
 
-    No `h2t-creative` console script ships yet: on PATH it would shadow the plugin's
-    `bin/h2t-creative` and move where style-create writes user profiles into site-packages.
-    Task 12 adds it when the plugin bin goes; until then the module is checked directly.
+    The console script ships since the plugin's `bin/h2t-creative` went (Task 12); user
+    profiles live in `h2t-creative profiles-dir`, outside the install.
     """
-    assert not (installed.site / "bin" / "h2t-creative").exists()
-    assert not (installed.site / "bin" / "h2t-creative.exe").exists()
-    r = _run([sys.executable, "-m", "h2t_ops.tools.creative.cli", "root"], cwd=installed.cwd,
+    r = _run([_command(installed, "h2t-creative"), "root"], cwd=installed.cwd,
              env=installed.env)
     assert r.returncode == 0, r.stderr
     root = Path(r.stdout.strip())
