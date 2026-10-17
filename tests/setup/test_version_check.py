@@ -103,6 +103,8 @@ def test_cli_version_expect_json_exit_3(tmp_path):
     assert out["error"]["message"]
     assert "h2t-setup" in out["error"]["hint"]
     assert out["error"]["hint"] == out["result"]["hint"]
+    # One path for every h2t command: h2t-setup's errors carry the reason there too.
+    assert out["error"]["details"] == {"reason": "not_installed"}
 
 
 def test_cli_dash_dash_version_still_works(tmp_path):
