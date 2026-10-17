@@ -121,6 +121,13 @@ def _run_connector(argv: list[str]) -> int:
         return emit(provider, exc=exc, fmt=fmt)
 
 
+_VERSION_MESSAGES = {
+    "not_installed": "h2t-ops is not installed as a tool",
+    "version": "installed version does not match the expected one",
+    "path": "PATH does not lead to the installed entry points",
+}
+
+
 def _version(argv: list[str]) -> int:
     import json
 
@@ -135,8 +142,13 @@ def _version(argv: list[str]) -> int:
         sys.stdout.reconfigure(encoding="utf-8")
     result = version_check.check(args.expect if args.expect is not None else h2t_ops.__version__)
     if args.json:
-        envelope = success_envelope("version", result)
-        envelope["ok"] = result["ok"]
+        if result["ok"]:
+            envelope = success_envelope("version", result)
+        else:
+            envelope = {"ok": False, "provider": "version",
+                        "error": {"type": "config", "message": _VERSION_MESSAGES[result["reason"]],
+                                  "hint": result["hint"]},
+                        "result": result}
         print(json.dumps(envelope, ensure_ascii=False))
     else:
         print(result["version"] if result["ok"] else f"{result['reason']}: {result['hint']}")

@@ -1,5 +1,8 @@
 import json
+import os
+import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -70,10 +73,25 @@ def test_all_match_is_ok(tmp_path):
     assert r == {"ok": True, "version": h2t_ops.__version__, "reason": None, "hint": None}
 
 
+def _console_script():
+    exe = Path(sys.executable).parent
+    for d in (exe, exe / "Scripts"):
+        for name in ("h2t-ops", "h2t-ops.exe"):
+            if (d / name).is_file():
+                return str(d / name)
+    found = shutil.which("h2t-ops")
+    if not found:
+        pytest.skip("h2t-ops console script not found next to the interpreter or on PATH")
+    return found
+
+
 def _cli(tmp_path, *args):
-    root = Path(__file__).resolve().parents[2]
-    return subprocess.run([str(root / ".venv/bin/h2t-ops"), *args], capture_output=True, text=True,
-                          env={"HOME": str(tmp_path), "USERPROFILE": str(tmp_path), "PATH": "/usr/bin:/bin"})
+    env = {"HOME": str(tmp_path), "USERPROFILE": str(tmp_path), "PATH": str(tmp_path)}
+    for key in ("SYSTEMROOT", "SystemRoot"):
+        if key in os.environ:
+            env[key] = os.environ[key]
+    return subprocess.run([_console_script(), *args], capture_output=True, text=True,
+                          encoding="utf-8", env=env)
 
 
 def test_cli_version_expect_json_exit_3(tmp_path):
@@ -81,6 +99,10 @@ def test_cli_version_expect_json_exit_3(tmp_path):
     assert p.returncode == 3, p.stderr
     out = json.loads(p.stdout)
     assert out["ok"] is False and out["result"]["reason"] == "not_installed"
+    assert out["error"]["type"] == "config"
+    assert out["error"]["message"]
+    assert "h2t-setup" in out["error"]["hint"]
+    assert out["error"]["hint"] == out["result"]["hint"]
 
 
 def test_cli_dash_dash_version_still_works(tmp_path):
