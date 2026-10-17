@@ -197,7 +197,13 @@ def test_broken_notice_and_log_row_are_valid_json_when_the_name_holds_a_quote(ri
     rig.bootstrap(BOOT)
     fake = rig.fake(rc=1)
     rig.install(["STATE=ready", "VERSION=4.0.0", f"H2T_HOOK={_p(fake)}"])
-    assert 'хук we"ird\\name' in _message(rig("SessionStart", name='we"ird\\name'))
+    # The name travels in a file, not in argv: Windows hands argv to Git Bash through one
+    # command line, and MSYS re-parses it — `we"ird` arrived as `we\ird` (CI on #551).
+    # A bash driver passes the name to the wrapper as $1 byte for byte on every platform.
+    driver = rig.tmp / "driver"
+    driver.write_bytes(f"exec \"$BASH\" '{_p(rig.script)}' 'we\"ird\\name'\n".encode())
+    rig.script = driver
+    assert 'хук we"ird\\name' in _message(rig("SessionStart"))
     assert _log_rows(rig)[-1] == {"hook": 'we"ird\\name', "rc": 1}
 
 
