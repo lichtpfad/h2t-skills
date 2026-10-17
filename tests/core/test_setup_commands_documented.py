@@ -11,12 +11,10 @@ command the parser knows. That is the whole class of defect it exists for.
 """
 
 import argparse
-import importlib.util
 import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-SETUP = ROOT / "plugins" / "h2t-core" / "skills" / "setup" / "scripts" / "setup_h2t.py"
 
 # Historical documents record what was true when they were written; a command that has
 # since been renamed is not a defect there.
@@ -27,15 +25,16 @@ SKIP_DIRS = {"archive", "reports"}
 # slash rules out the second; the anchor rules out the first.
 INVOCATION = re.compile(
     r"^\s*[`$]?\s*(?:/h2t-core:setup|[\w./\\-]*python[\w.]*\s+[\w/\\.-]*setup_h2t\.py"
-    r"|setup_h2t\.py)\s+([a-z][a-z0-9-]*)(?![\w-]*/)",
+    r"|setup_h2t\.py|h2t-ops\s+setup)\s+([a-z][a-z0-9-]*)(?![\w-]*/)",
 )
 
 
 def _known_commands() -> set[str]:
-    spec = importlib.util.spec_from_file_location("_setup_h2t", SETUP)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    parser = module.build_parser()
+    # The skill runs the package copy as `h2t-ops setup` (Task 12); the parity test holds
+    # it equal to the plugin script, which 3.x documents still name.
+    from h2t_ops.setup.legacy import build_parser
+
+    parser = build_parser()
     for action in parser._actions:
         if isinstance(action, argparse._SubParsersAction):
             return set(action.choices)

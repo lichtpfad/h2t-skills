@@ -13,6 +13,29 @@ metadata:
 
 Register the current directory as a project in the h2t ecosystem. The PreToolUse hook has already detected the project type, domain, and task tracker.
 
+<!-- version-check:begin -->
+## Version check
+
+Run this before any other command of this skill:
+
+```bash
+h2t-ops version --expect @VERSION@ --json
+```
+
+Act on the result, in this order:
+
+1. JSON with `"ok": true` — continue.
+2. JSON with `"ok": false` — show the user `error.hint` and follow it before going on.
+   `result.reason` names the case: `not_installed`, `version` or `path`.
+3. `command not found` — read `~/.h2t/run/install.env`
+   (`grep -E '^(STATE|H2T_HOOK)=' ~/.h2t/run/install.env`). With `STATE=ready` the install
+   is fine and PATH does not reach it: show the directory of the `H2T_HOOK=` path, ask the
+   user to restart the harness, and offer `uv tool update-shell` for them to run. Without
+   it there is no install: give the user `@BOOTSTRAP@ sync`.
+4. Anything else (a non-zero exit without JSON, the usage text of an older CLI) — give the
+   user `@BOOTSTRAP@ sync`.
+<!-- version-check:end -->
+
 ## Variables
 
 ```bash
@@ -26,7 +49,21 @@ command -v h2t-project-register >/dev/null 2>&1 || {
 
 ### Step 1: Show Detection Result
 
-Look for `INIT_DATA:` in hook output or system messages.
+Look for `INIT_DATA:` in hook output or system messages. **Use it only if** its JSON has
+`cwd` equal to the current working directory and `at` (ISO-8601 with offset) no more than
+120 s before now:
+
+```bash
+pwd; date +%Y-%m-%dT%H:%M:%S%z
+```
+
+Otherwise — no `INIT_DATA`, a stale one, one for another directory, one without
+`cwd`/`at` (a 3.x hook), or Codex, which runs no hooks — detect it yourself. The command
+prints the same JSON the hook injects, without the `INIT_DATA:` prefix:
+
+```bash
+h2t-detect-project --cwd "$(pwd)"
+```
 
 If it contains `"error":` — show the error and stop.
 If it contains `"already_registered": true` — show confirm_message, ask if user wants to update. If no → stop.
@@ -77,9 +114,9 @@ update statuses; do not skip because "already answered".
 
 | Mistake | Fix |
 |---------|-----|
-| Running detection manually | Hook already ran detect_project.py. Use INIT_DATA |
-| Treating a missing INIT_DATA as normal | The hook is the executor by design (#12). No INIT_DATA means the hook failed — report it, do not silently work around it |
-| Writing YAML manually | Call apply_registration.py. It handles backups and comment preservation |
+| Running detection when fresh INIT_DATA is there | The hook already ran it. Use INIT_DATA; run `h2t-detect-project` only when the freshness rule in Step 1 fails |
+| Treating a missing INIT_DATA as normal | In Claude Code the hook is the executor by design (#12): a missing INIT_DATA means the hook failed — say so, then detect with `h2t-detect-project`. Only Codex has no hook |
+| Writing YAML manually | Call `h2t-project-register`. It handles backups and comment preservation |
 | Skipping domain question when needs_input | User MUST confirm domain before apply |
 | Resolving tracker before domain is known | Tracker depends on domain. Wait for domain first |
 | Ending after registration | Step 4 (truth gate) is part of this skill. Registration without the gate is the audit's root finding: flag says done, content missing |

@@ -180,6 +180,6 @@ def test_the_setup_skill_reaches_the_pin():
     # #518: the pin lived only in the `setup` subcommand, which SKILL.md never ran.
     skill = (SETUP_DIR.parent / "SKILL.md").read_text(encoding="utf-8")
 
-    assert "setup_h2t.py setup --json" in skill
+    assert "h2t-ops setup setup --json" in skill
     assert "needs_choice" in skill
     assert "--machine-name" in skill

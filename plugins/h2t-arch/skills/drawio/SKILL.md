@@ -1,8 +1,8 @@
 ---
 name: drawio
 description: "Generates, exports, and validates draw.io architecture diagrams. Creates styled .drawio files from graph descriptions using project-specific shape libraries (TOML). Supports PNG/SVG/PDF export via draw.io Desktop CLI. Triggers on: /drawio, 'create diagram', 'architecture diagram', 'draw.io diagram', 'export diagram', 'generate drawio'., 'h2t-arch:drawio'"
-compatibility: "Requires the draw.io desktop app for export and Node for the validators.
-  The plugin root is reached through `$(h2t-arch root)`, so no interpreter path is needed."
+compatibility: "Requires the h2t-ops CLI with its drawio extra (h2t-drawio generate needs
+  drawpyo), the draw.io desktop app for export, and Node for the validators."
 metadata:
   author: lichtpfad
   version: 1.0.1
@@ -12,20 +12,35 @@ metadata:
 
 Generate production-quality `.drawio` architecture diagrams from structured graph descriptions with project-specific styling.
 
-## Setup
+<!-- version-check:begin -->
+## Version check
 
-`generate.py` imports `drawpyo` unconditionally. Run it through `uv`, which fetches the
-dependency for that run — there is nothing to install and nothing to check first:
+Run this before any other command of this skill:
 
 ```bash
-SKILL_DIR="$(h2t-arch skill-dir drawio)"
-RUN="uv run --no-project --with drawpyo python"
-$RUN "${SKILL_DIR}/scripts/generate.py" ...
+h2t-ops version --expect @VERSION@ --json
 ```
 
-The probe this replaced (`python -c "import drawpyo"`) answered a question nobody asked:
-bare `python` is absent from PATH on macOS, so it failed with `command not found` and
-printed `pip install drawpyo` — a remedy for a problem that was not the one at hand.
+Act on the result, in this order:
+
+1. JSON with `"ok": true` — continue.
+2. JSON with `"ok": false` — show the user `error.hint` and follow it before going on.
+   `result.reason` names the case: `not_installed`, `version` or `path`.
+3. `command not found` — read `~/.h2t/run/install.env`
+   (`grep -E '^(STATE|H2T_HOOK)=' ~/.h2t/run/install.env`). With `STATE=ready` the install
+   is fine and PATH does not reach it: show the directory of the `H2T_HOOK=` path, ask the
+   user to restart the harness, and offer `uv tool update-shell` for them to run. Without
+   it there is no install: give the user `@BOOTSTRAP@ sync`.
+4. Anything else (a non-zero exit without JSON, the usage text of an older CLI) — give the
+   user `@BOOTSTRAP@ sync`.
+<!-- version-check:end -->
+
+## Setup
+
+Everything runs through one command, `h2t-drawio`, with three subcommands: `generate`,
+`export` and `shapes`. Only `generate` needs `drawpyo`, which is the CLI's `drawio` extra
+(`uv tool install 'h2t-ops[drawio]'`). Without it, `generate` exits 3 and prints that remedy
+rather than an ImportError; `export` and `shapes` work on a base install.
 
 Export additionally needs the draw.io Desktop CLI at
 `/Applications/draw.io.app/Contents/MacOS/draw.io`, overridable through
@@ -45,8 +60,8 @@ Export additionally needs the draw.io Desktop CLI at
 
 ### Creating a diagram
 
-1. Describe the graph as a Python dict
-2. Run generate.py to create the .drawio file
+1. Describe the graph in a YAML or JSON file
+2. Run `h2t-drawio generate` to create the .drawio file
 3. Optionally export to PNG/SVG/PDF
 4. Open in draw.io Desktop for review/adjustments
 
@@ -61,7 +76,10 @@ Without these, the skill uses built-in defaults (light theme, generic shapes).
 
 ## Creating a Diagram (`/drawio create`)
 
-### Step 1: Define the graph as a Python dict
+### Step 1: Write the graph to a YAML or JSON file
+
+The keys, shown as a Python dict for the comments. In YAML `None` is `null` and `False` is
+`false`; in JSON drop the comments.
 
 ```python
 graph = {
@@ -105,24 +123,16 @@ graph = {
 ### Step 2: Generate the .drawio file
 
 ```bash
-$RUN -c "
-import sys, os
-sys.path.insert(0, '${SKILL_DIR}/scripts')
-from generate import generate_diagram
-
-graph = {
-    # ... your graph dict here
-}
-
 # Without project config (uses defaults):
-generate_diagram(graph, 'output.drawio')
+h2t-drawio generate graph.yaml output.drawio
 
 # With project config:
-generate_diagram(graph, 'docs/diagrams/my_diagram.drawio',
-    shapes_path='.drawio-shapes.toml',
-    config_path='.drawio-skill.yaml')
-"
+h2t-drawio generate graph.yaml docs/diagrams/my_diagram.drawio \
+  --shapes .drawio-shapes.toml --config .drawio-skill.yaml
 ```
+
+Regenerating keeps the positions and nodes a user moved or added in draw.io; `--reset`
+overwrites them instead. The command prints the path it wrote.
 
 ### Step 3: Open in draw.io Desktop
 
@@ -135,24 +145,17 @@ open <path_to_drawio_file>
 Export `.drawio` to PNG, SVG, or PDF via draw.io Desktop CLI:
 
 ```bash
-$RUN -c "
-import sys, os
-sys.path.insert(0, '${SKILL_DIR}/scripts')
-from export import export_diagram
-
 # Basic export:
-export_diagram('diagram.drawio', fmt='png')
+h2t-drawio export diagram.drawio --format png
 
 # With project config:
-export_diagram('docs/diagrams/arch.drawio', fmt='png',
-    config_path='.drawio-skill.yaml')
+h2t-drawio export docs/diagrams/arch.drawio --format png --config .drawio-skill.yaml
 
 # Export specific page:
-export_diagram('diagram.drawio', fmt='svg', page_index=0)
+h2t-drawio export diagram.drawio --format svg --page 0
 
 # Export all pages:
-export_diagram('diagram.drawio', fmt='pdf', all_pages=True)
-"
+h2t-drawio export diagram.drawio --format pdf --all-pages
 ```
 
 Output is saved as `<name>.drawio.<fmt>` next to the source file.
@@ -162,19 +165,10 @@ With `embed_diagram: true` in config, PNG/SVG contain editable XML inside.
 
 ### Node Types
 
-Check available shape types in the project:
+Check available shape types — the shipped library, with the project's file merged on top
+the way `generate` merges it:
 ```bash
-$RUN -c "
-import os, tomllib
-for p in ['.drawio-shapes.toml', '${SKILL_DIR}/config/shapes/general.toml']:
-    if os.path.exists(p):
-        with open(p, 'rb') as f:
-            shapes = tomllib.load(f)
-        for k in sorted(shapes):
-            if not k.startswith('_') and k not in ('title', 'version'):
-                print(f'  {k}: {shapes[k].get(\"baseStyle\", \"\")}')
-        break
-"
+h2t-drawio shapes --shapes .drawio-shapes.toml
 ```
 
 ### Edge Color Convention

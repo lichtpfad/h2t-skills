@@ -19,6 +19,32 @@ Do not patch the pack's files in the plugin cache (`~/.claude/plugins/cache/…`
 them, the fix reaches nobody else, and the defect stays unreported. A local workaround for
 the user's current task is fine; say that it is one, and report the defect anyway.
 
+<!-- version-check:begin -->
+## Version check
+
+Run this before any other command of this skill:
+
+```bash
+h2t-ops version --expect @VERSION@ --json
+```
+
+Act on the result, in this order:
+
+1. JSON with `"ok": true` — continue.
+2. JSON with `"ok": false` — show the user `error.hint` and follow it before going on.
+   `result.reason` names the case: `not_installed`, `version` or `path`.
+3. `command not found` — read `~/.h2t/run/install.env`
+   (`grep -E '^(STATE|H2T_HOOK)=' ~/.h2t/run/install.env`). With `STATE=ready` the install
+   is fine and PATH does not reach it: show the directory of the `H2T_HOOK=` path, ask the
+   user to restart the harness, and offer `uv tool update-shell` for them to run. Without
+   it there is no install: give the user `@BOOTSTRAP@ sync`.
+4. Anything else (a non-zero exit without JSON, the usage text of an older CLI) — give the
+   user `@BOOTSTRAP@ sync`.
+<!-- version-check:end -->
+
+Here a failed check does not stop the skill: the report may be about the install itself.
+Keep the JSON (or the error text) as evidence for Step 2, show the user its hint, and go on.
+
 ## Step 1 — Is it the pack?
 
 | what you see | what it is | action |

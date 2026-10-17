@@ -12,14 +12,30 @@ metadata:
 Close a GitHub milestone as a Lifecycle OS phase boundary.
 
 This skill is a thin orchestrator. Deterministic state is gathered by
-`skills/milestone-closure/scripts/closure.py`.
+`h2t-milestone-closure`.
 
-## Variables
+<!-- version-check:begin -->
+## Version check
+
+Run this before any other command of this skill:
 
 ```bash
-RUN="uv run --no-project --with pyyaml python"
-CLOSURE="$(h2t-dev root)/skills/milestone-closure/scripts/closure.py"
+h2t-ops version --expect @VERSION@ --json
 ```
+
+Act on the result, in this order:
+
+1. JSON with `"ok": true` — continue.
+2. JSON with `"ok": false` — show the user `error.hint` and follow it before going on.
+   `result.reason` names the case: `not_installed`, `version` or `path`.
+3. `command not found` — read `~/.h2t/run/install.env`
+   (`grep -E '^(STATE|H2T_HOOK)=' ~/.h2t/run/install.env`). With `STATE=ready` the install
+   is fine and PATH does not reach it: show the directory of the `H2T_HOOK=` path, ask the
+   user to restart the harness, and offer `uv tool update-shell` for them to run. Without
+   it there is no install: give the user `@BOOTSTRAP@ sync`.
+4. Anything else (a non-zero exit without JSON, the usage text of an older CLI) — give the
+   user `@BOOTSTRAP@ sync`.
+<!-- version-check:end -->
 
 ## Procedure
 
@@ -31,7 +47,7 @@ already explicit.
 ### Step 2: Dry-run closure report
 
 ```bash
-$RUN "$CLOSURE" --repo-root "$(pwd)" --milestone "{milestone}" --json
+h2t-milestone-closure --repo-root "$(pwd)" --milestone "{milestone}" --json
 ```
 
 Read the JSON:
@@ -45,8 +61,8 @@ Read the JSON:
 Run docs cleanup manually through unified docs-lint:
 
 ```bash
-$RUN "$(h2t-dev root)/skills/docs-lint/scripts/lint.py" plan --root "$(pwd)"
-$RUN "$(h2t-dev root)/skills/docs-lint/scripts/lint.py" fix-index --root "$(pwd)"
+h2t-docs-lint plan --root "$(pwd)"
+h2t-docs-lint fix-index --root "$(pwd)"
 ```
 
 `fix-index` without `--apply` is dry-run. Ask before using `--apply`.
@@ -59,7 +75,7 @@ Do not archive, move, delete, or rename files without explicit user approval.
 Ask the user to confirm the exact milestone title.
 
 ```bash
-$RUN "$CLOSURE" --repo-root "$(pwd)" --milestone "{milestone}" --close --confirm-title "{exact title}" --json
+h2t-milestone-closure --repo-root "$(pwd)" --milestone "{milestone}" --close --confirm-title "{exact title}" --json
 ```
 
 If `status == "partial"`: the GitHub API PATCH failed — show `close_result.stderr` from the report and stop. Do not treat partial as success.

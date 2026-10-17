@@ -9,6 +9,29 @@ metadata:
 
 # Handoff v3.1
 
+<!-- version-check:begin -->
+## Version check
+
+Run this before any other command of this skill:
+
+```bash
+h2t-ops version --expect @VERSION@ --json
+```
+
+Act on the result, in this order:
+
+1. JSON with `"ok": true` — continue.
+2. JSON with `"ok": false` — show the user `error.hint` and follow it before going on.
+   `result.reason` names the case: `not_installed`, `version` or `path`.
+3. `command not found` — read `~/.h2t/run/install.env`
+   (`grep -E '^(STATE|H2T_HOOK)=' ~/.h2t/run/install.env`). With `STATE=ready` the install
+   is fine and PATH does not reach it: show the directory of the `H2T_HOOK=` path, ask the
+   user to restart the harness, and offer `uv tool update-shell` for them to run. Without
+   it there is no install: give the user `@BOOTSTRAP@ sync`.
+4. Anything else (a non-zero exit without JSON, the usage text of an older CLI) — give the
+   user `@BOOTSTRAP@ sync`.
+<!-- version-check:end -->
+
 ## Setup
 
 ```bash
@@ -29,11 +52,21 @@ a wrong name costs one rename. Resolve every value yourself:
 - `SESSION_NAME` — the name confirmed in session-start, if it ran this session. Otherwise
   derive `{domain}-{project}-{topic}-YYYY-MM-DD` on your own, with `{topic}` a 1–2 word
   kebab-case summary of the dominant work. Do not offer it for approval; write with it.
-- `DOMAIN`, `PROJECT_ID` — from GATHER_RESULT.project (session-start output). If
-  session-start did not run this session, **omit both flags** in Step 6 rather than
-  substituting the repo name: the writer resolves them from the working directory through
-  the same `identify_project()` the reader uses. A guessed name lands the record in a
-  directory no session-start looks in.
+- `DOMAIN`, `PROJECT_ID` — `project.domain` and `project.id` of a gather result for this
+  directory. The PreToolUse hook injects a `BRIEFING:` / `GATHER_META:` block when this
+  skill starts; **use it only if** its `GATHER_META` JSON has `cwd` equal to the current
+  working directory and `at` no more than 120 s before now (`pwd; date +%Y-%m-%dT%H:%M:%S%z`).
+  Otherwise — no block, a stale one, one for another directory, or Codex, which runs no
+  hooks — run it yourself and read the same two fields from its `GATHER_META` line:
+
+  ```bash
+  h2t-gather --cwd "$(pwd)" --skill handoff --briefing-only
+  ```
+
+  If gather fails, **omit both flags** in Step 6 rather than substituting the repo name:
+  the writer resolves them from the working directory through the same
+  `identify_project()` the reader uses. A guessed name lands the record in a directory no
+  session-start looks in.
 
 ### Step 2: Auto-generate what was done
 

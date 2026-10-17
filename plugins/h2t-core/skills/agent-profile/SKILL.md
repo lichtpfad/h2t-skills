@@ -6,9 +6,9 @@ description: >
   Supports profile:name and overlay:name explicit refs plus bare-name legacy compat.
   Triggers: "agent-profile", "apply profile", "plugin profile", "set profile", "configure plugins",
   "профиль плагинов", "конфигуратор профиля".
-compatibility: "Claude Code. Operates on the h2t-skills checkout — it edits the source
-  profile catalog and refuses to write when that catalog is absent. The interpreter comes
-  from uv, so none has to be installed."
+compatibility: "Claude Code. Requires the h2t-ops CLI (h2t-agent-profile). The catalog
+  editor operates on the h2t-skills checkout — it edits the source profile catalog and
+  refuses to write when that catalog is absent."
 metadata:
   author: lichtpfad
   version: 0.2.0
@@ -20,17 +20,38 @@ Manage which plugins Claude loads for the current repository. Writes only `enabl
 and an `h2tAgentProfile` marker to `.claude/settings.json`. Never touches permissions,
 MCP config, hooks, or global `~/.claude/settings.json`.
 
-## Script location
+<!-- version-check:begin -->
+## Version check
 
-```
-plugins/h2t-core/skills/agent-profile/scripts/apply_agent_profile.py
-```
-
-The script is stdlib-only; `uv` supplies the interpreter so none has to be on PATH:
+Run this before any other command of this skill:
 
 ```bash
-uv run --no-project --python 3.11 python <script> <mode> [options] --cwd <repo>
+h2t-ops version --expect @VERSION@ --json
 ```
+
+Act on the result, in this order:
+
+1. JSON with `"ok": true` — continue.
+2. JSON with `"ok": false` — show the user `error.hint` and follow it before going on.
+   `result.reason` names the case: `not_installed`, `version` or `path`.
+3. `command not found` — read `~/.h2t/run/install.env`
+   (`grep -E '^(STATE|H2T_HOOK)=' ~/.h2t/run/install.env`). With `STATE=ready` the install
+   is fine and PATH does not reach it: show the directory of the `H2T_HOOK=` path, ask the
+   user to restart the harness, and offer `uv tool update-shell` for them to run. Without
+   it there is no install: give the user `@BOOTSTRAP@ sync`.
+4. Anything else (a non-zero exit without JSON, the usage text of an older CLI) — give the
+   user `@BOOTSTRAP@ sync`.
+<!-- version-check:end -->
+
+## Command
+
+Every mode below is a positional of one command:
+
+```bash
+h2t-agent-profile status --cwd "$(pwd)"
+```
+
+The general form is `h2t-agent-profile <mode> [options] --cwd <repo>`.
 
 ## Commands
 
@@ -115,7 +136,7 @@ For a new profile:
 
 ## Output interpretation
 
-All script modes return JSON. Render for the user:
+All modes return JSON. Render for the user:
 
 - `status --explain` → prose summary of base, work contexts, drift, suggestions
 - `doctor.checks` → list each failing check; suggest `sync` for drift
@@ -126,7 +147,13 @@ After any write: tell user to run `/reload-plugins`.
 
 ## Catalog location
 
+`h2t-agent-profile` reads the catalog shipped in the package; in the h2t-skills checkout
+that file is the source the catalog editor edits:
+
 ```
-plugins/h2t-core/skills/agent-profile/references/agent-profiles.json
+h2t_ops/resources/agent_profile/agent-profiles.json
 plugins/h2t-core/skills/agent-profile/references/profile-schema.md
 ```
+
+Until the plugin copy (`references/agent-profiles.json`) is retired, a catalog edit goes to
+both files; `tests/tools/test_tool_copy_parity.py` fails when they differ.
