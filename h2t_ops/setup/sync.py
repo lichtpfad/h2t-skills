@@ -19,8 +19,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import h2t_ops
-from h2t_ops.core.errors import ConfigError
-from h2t_ops.setup import harness_claude, state
+from h2t_ops.core.errors import ConfigError, H2TError
+from h2t_ops.setup import harness_claude, manifest, state
 from h2t_ops.setup.manifest import render
 from h2t_ops.setup.version_check import inside
 
@@ -109,7 +109,11 @@ def receipt_user_options(tool: dict) -> dict | None:
 
 def relaunch_command(target: dict, mode: str, argv: list[str]) -> list[str]:
     """The frozen word order (§7.3.2): the mode is the first word after the bootstrap, the
-    original arguments follow it."""
+    original arguments follow it.
+
+    No word of argv carries consent: the parser takes `--json` only, and `update` asks its
+    question inside `run`, after this hand-over. So nothing confirmed before the re-launch
+    reaches the target; the target executor asks about its own version."""
     return list(target["bootstrap"]) + [mode] + list(argv)
 
 
@@ -323,10 +327,10 @@ def _install_args(target: dict, options: dict) -> list[str]:
 
 
 def _commit(version: str, root: Path, entrypoints: dict[str, str], options: dict,
-            plugins: list[str]) -> None:
+            plugins: list[str], editable: str | None = None) -> None:
     # install.json, then install.env STATE=ready last (§6.4); a new generation every time.
     state.commit(state.Install(version=version, generation=str(uuid.uuid4()),
-                               tool_root=str(root), entrypoints=entrypoints, editable=None,
+                               tool_root=str(root), entrypoints=entrypoints, editable=editable,
                                user_options=options, plugins=plugins))
 
 
@@ -372,7 +376,7 @@ def _keep_previous(last: dict | None, root: Path, execute) -> None:
     if _verify(last["entrypoints"], root, last["version"], list(options.get("extras") or []),
                execute) is None:
         _commit(last["version"], root, last["entrypoints"], options,
-                list(last.get("plugins") or []))
+                list(last.get("plugins") or []), editable=last.get("editable") or None)
 
 
 def _plugin_set(last: dict | None, harness: dict) -> list[str]:
@@ -632,17 +636,195 @@ def _codex_note(names: list[str]) -> str:
     return "\n".join(lines)
 
 
+# --- update: the question before step 3 (§7.3, last paragraph) -----------------------------
+
+def ask(prompt: str) -> str:
+    """The default question: the prompt on stderr, so `--json` keeps stdout to the envelope;
+    one line from stdin, and "" at its end, which is not a yes."""
+    sys.stderr.write(prompt)
+    sys.stderr.flush()
+    return sys.stdin.readline()
+
+
+def changelog_url(version: str) -> str:
+    return f"{manifest.RAW}/v{version}/CHANGELOG.md"
+
+
+def changelog_sections(text: str, installed: str | None, target: str) -> str | None:
+    """The `## <ver>` sections (Task 13's contract) newer than `installed` up to `target`,
+    in file order; only the target's own when `installed` is not X.Y.Z. None when the file
+    has no section for the target."""
+    sections: list[tuple[str, list[str]]] = []
+    for line in text.splitlines():
+        m = re.match(r"## (\S+)", line)
+        if m:
+            sections.append((m[1], [line]))
+        elif sections:
+            sections[-1][1].append(line)
+    if target not in {v for v, _ in sections}:
+        return None
+    low, high = _semver(installed or ""), _semver(target)
+
+    def wanted(v: str) -> bool:
+        s = _semver(v)
+        return v == target or bool(low and high and s and low < s < high)
+    return "\n\n".join("\n".join(lines).strip() for v, lines in sections if wanted(v))
+
+
+def _changelog(version: str, installed: str | None, fetch) -> str:
+    url = changelog_url(version)
+    try:
+        shown = changelog_sections(fetch(url).decode("utf-8"), installed, version)
+    except (H2TError, OSError, ValueError):  # UnicodeDecodeError is a ValueError
+        shown = None
+    return shown if shown is not None else f"CHANGELOG недоступен: {url}"
+
+
+def _installed_version(root: Path, execute) -> str | None:
+    """What the installed CLI says it is, when run; None when it does not answer."""
+    current = state.read()
+    entrypoints = current.entrypoints if current is not None else receipt_entrypoints(
+        _receipt(root))
+    exe = entrypoints.get("h2t-ops")
+    if not exe or not Path(exe).is_file():
+        return None
+    try:
+        done = execute([exe, "--version"], capture_output=True, text=True, encoding="utf-8",
+                       timeout=60)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    words = (done.stdout or "").split()
+    return words[1] if done.returncode == 0 and words[:1] == ["h2t-ops"] and len(words) > 1 \
+        else None
+
+
+def _preview(target: dict, root: Path, claude, execute, fetch) -> str:
+    """«было → станет» for the CLI and each plugin of the set, then the target's CHANGELOG.
+    Reads only: nothing is written before the answer."""
+    version = target["version"]
+    was = _installed_version(root, execute)
+    lines = ["h2t-setup update: было → станет",
+             f"  CLI h2t-ops: {was or 'не установлен'} → {version}"]
+    try:
+        plugins = claude.plugins() if claude.found() else None
+    except harness_claude.HarnessError:
+        plugins = None
+    if plugins is None:
+        lines.append("  Claude Code: не найден или не читается; плагины не сравнить")
+    else:
+        for name in _plugin_set(_last_install_json(), {"plugins": plugins}):
+            have = [str(e.get("version")) for e in plugins if _name(e) == name]
+            lines.append(f"  {name}: {', '.join(have) or 'не установлен'} → {version}")
+    lines += ["", f"CHANGELOG {version}:", _changelog(version, was, fetch), ""]
+    return "\n".join(lines)
+
+
+# --- dev-sync (§7.4) ----------------------------------------------------------------------
+
+DEV_RETRY = "h2t-setup dev-sync"
+
+
+def find_checkout(start: Path) -> Path | None:
+    """The nearest directory at or above `start` whose pyproject.toml names h2t-ops."""
+    for d in [start, *start.parents]:
+        try:
+            data = tomllib.loads((d / "pyproject.toml").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        project = data.get("project")
+        if isinstance(project, dict) and project.get("name") == "h2t-ops":
+            return d
+    return None
+
+
+def _plugins_note(checkout: Path) -> str:
+    return ("Plugins: dev-sync does not touch the marketplace plugins. Load them from the "
+            f"checkout: claude --plugin-dir {checkout / 'plugins'}/<name> "
+            "(or pwsh scripts/claude-dev.ps1). The checkout itself is not updated: git is "
+            "yours to run.")
+
+
+def dev_sync(uv, execute, cwd: str | None = None) -> Report:
+    """The CLI from the checkout, editable, with the checkout's own constraints and the
+    user's options; verified by running it, then install.json and install.env with
+    EDITABLE_ROOT. Offline (the lock is exported `--frozen --offline`); no git."""
+    start = Path(cwd or os.getcwd()).resolve()
+    checkout = find_checkout(start)
+    if checkout is None:
+        raise ConfigError(f"no h2t-ops checkout at or above {start}",
+                          hint="run `h2t-setup dev-sync` from inside an h2t-skills checkout",
+                          details={"reason": "not_a_checkout"})
+    project = tomllib.loads((checkout / "pyproject.toml").read_text(encoding="utf-8"))["project"]
+    version = project.get("version")
+    if not isinstance(version, str) or not version:
+        raise ConfigError(f"{checkout / 'pyproject.toml'} has no static [project] version")
+    root = _tool_dir(uv) / "h2t-ops"
+    constraints = state.run_dir() / "dev-constraints.txt"
+    constraints.parent.mkdir(parents=True, exist_ok=True)
+    done = uv(["export", "--project", str(checkout), "--frozen", "--offline", "--no-dev",
+               "--all-extras", "--no-emit-project", "--no-hashes", "-o", str(constraints)])
+    if done.returncode != 0:
+        tail = (done.stderr or done.stdout or "").strip().splitlines()[-1:] or ["no output"]
+        raise ConfigError(f"cannot export constraints from {checkout / 'uv.lock'}: {tail[0]}",
+                          hint=f"bring the lock up to date in the checkout (`uv lock`), then "
+                               f"run `{DEV_RETRY}` again")
+    last = _last_install_json()
+    options = (last or {}).get("user_options") or receipt_user_options(_receipt(root)) or {}
+    options = {"extras": list(options.get("extras") or []), "with": list(options.get("with") or [])}
+    extras = ",".join(options["extras"])
+    args = ["tool", "install", "--editable", f"{checkout}[{extras}]" if extras else str(checkout),
+            "--reinstall", "-c", str(constraints)]
+    for w in options["with"]:
+        args += ["--with", w]
+    if OS_NAME == "nt" and inside(sys.prefix, str(root)):
+        # The same lock as the repair from inside the tool (ensure_executor): the reinstall
+        # deletes the environment this process runs from, and Windows holds it.
+        command = ["uv", *args]
+        raise ConfigError(
+            f"h2t-setup runs from the installed tool {root}, which dev-sync replaces and "
+            "Windows keeps locked while this process lives; run the command in the hint "
+            "from a terminal",
+            hint=render(command), details={"reason": "relaunch_required", "command": command})
+    report = Report()
+    state.begin_update(version)
+    done = uv(args)
+    if done.returncode != 0:
+        tail = (done.stderr or done.stdout or "").strip().splitlines()[-1:] or ["no output"]
+        report.failed.append((f"CLI h2t-ops {version} (editable {checkout}): uv tool install "
+                              f"failed: {tail[0]}", DEV_RETRY))
+        _keep_previous(last, root, execute)
+        return report
+    entrypoints = receipt_entrypoints(_receipt(root))
+    problem = _verify(entrypoints, root, version, options["extras"], execute)
+    if problem is not None:
+        report.failed.append((f"CLI h2t-ops {version} (editable {checkout}): installed but "
+                              f"does not answer: {problem}", DEV_RETRY))
+        return report
+    plugins = (last or {}).get("plugins")
+    plugins = [p for p in plugins if isinstance(p, str)] if isinstance(plugins, list) \
+        else list(DEFAULT_PLUGINS)
+    _commit(version, root, entrypoints, options, plugins, editable=str(checkout))
+    report.done.append(f"CLI h2t-ops {version}: installed editable from {checkout}; "
+                       "answers when run")
+    report.notes.append(_plugins_note(checkout))
+    return report
+
+
 def run(mode: str, target: dict | None, argv: list[str], *, uv=None, claude=None,
-        confirm=input, execute=subprocess.run, which=shutil.which) -> Report:
+        confirm=None, execute=None, which=shutil.which, fetch=None) -> Report:
     """Steps 3–8 of §7.3. Every step compares the fact with the target and skips what
     matches, so a run after any interruption continues from the first mismatch.
 
-    `uv` runs one uv command (default `run_uv`); `execute` runs the installed processes the check starts;
-    `claude` is a harness_claude.Claude (created here when None)."""
-    if mode == "dev-sync":
-        raise NotImplementedError("h2t-setup dev-sync is not implemented yet (Task 16)")
+    `uv` runs one uv command (default `run_uv`); `execute` runs the installed processes the
+    check starts (default subprocess.run); `claude` is a harness_claude.Claude (created here
+    when None); `confirm` asks `update`'s questions (default `ask`); `fetch` reads the
+    target's CHANGELOG (default manifest.urllib_fetch)."""
     # Resolved here, not at definition: the tests refuse the real ones by patching these.
     uv = uv or run_uv
+    execute = execute or subprocess.run
+    if mode == "dev-sync":
+        return dev_sync(uv, execute)
+    confirm = confirm or ask
     claude = claude if claude is not None else harness_claude.Claude()
     root = _tool_dir(uv) / "h2t-ops"
     # cli.main stops here first; this is the same stop for a caller that skips it.
@@ -654,6 +836,15 @@ def run(mode: str, target: dict | None, argv: list[str], *, uv=None, claude=None
                           hint="update the checkout yourself, then run `h2t-setup dev-sync`",
                           details={"reason": "editable", "checkout": checkout})
     report = Report()
+    if mode == "update":
+        # Asked by this executor, the target's own: a yes given to an older one before the
+        # re-launch never reaches here (§7.3.2). Before the snapshot, so a no writes nothing.
+        preview = _preview(target, root, claude, execute, fetch or manifest.urllib_fetch)
+        answer = confirm(preview + "да? ")
+        if (answer or "").strip().lower() not in YES:
+            report.notes.append(f"h2t-setup update to {target['version']} not confirmed; "
+                                "nothing was changed")
+            return report
     retry = render(relaunch_command(target, "sync", [])) or "h2t-setup sync"
     harness = _snapshot(root, claude)                                         # 3
     last = _last_install_json()

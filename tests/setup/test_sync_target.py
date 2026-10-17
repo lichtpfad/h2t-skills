@@ -253,6 +253,7 @@ def _wire(monkeypatch, *, version="4.1.0"):
 
 def test_update_stays_update_across_the_relaunch(monkeypatch):
     ex = _wire(monkeypatch, version="4.0.0")
+    monkeypatch.setattr(cli.sys.stdin, "isatty", lambda: True)  # --json alone needs a terminal
     with pytest.raises(SystemExit):
         cli.main(["update", "--json"])
     assert ex.calls == [("uvx", BOOT + ["update", "--json"])]
@@ -269,12 +270,6 @@ def test_the_target_executor_reaches_run(monkeypatch, capsys):
     assert cli.main(["sync", "--json"]) == 0
     assert seen == [("sync", "4.1.0", ["--json"])]
     assert json.loads(capsys.readouterr().out)["result"] == {"mode": "sync"}
-
-
-def test_dev_sync_is_not_implemented_yet_and_says_so(monkeypatch, capsys):
-    _wire(monkeypatch)
-    assert cli.main(["dev-sync"]) == 1
-    assert "Task 16" in capsys.readouterr().err
 
 
 def _editable(home):

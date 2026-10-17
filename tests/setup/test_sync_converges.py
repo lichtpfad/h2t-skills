@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from h2t_ops.core.errors import ConfigError
+from h2t_ops.core.errors import ConfigError, NetworkError
 from h2t_ops.setup import cli, harness_claude, manifest, state, sync
 from tests.setup.fake_claude import FakeClaude, Interrupted, Ticker
 
@@ -111,6 +111,11 @@ class FakeUv:
             "missing": [e for e in wanted if e not in env["extras"]]}), "")
 
 
+def _no_changelog(url):
+    # update's question shows the CHANGELOG; these tests do not, and never reach the network.
+    raise NetworkError(f"cannot read {url}: offline")
+
+
 class Machine:
     def __init__(self, root: Path, monkeypatch, *, at=None, head=V, pins=None,
                  fail_install=False, fail_on=None, update_enables=False) -> None:
@@ -139,7 +144,7 @@ class Machine:
             return "/usr/bin/codex" if (codex and name == "codex") else None
         return sync.run(mode, TARGET, [], uv=self.uv, execute=self.uv.run,
                         claude=harness_claude.Claude(exe="claude", run=self.claude),
-                        confirm=self.confirm, which=which)
+                        confirm=self.confirm, which=which, fetch=_no_changelog)
 
     def env_file(self) -> dict:
         text = (state.run_dir() / "install.env").read_text()
@@ -336,9 +341,9 @@ def test_a_pinned_marketplace_stops_sync_with_the_commands_and_changes_nothing(t
 def test_a_pinned_marketplace_in_update_is_repinned_after_yes(tmp_path, monkeypatch):
     m = Machine(tmp_path, monkeypatch)
     m.claude.seed(ref="v2.15.0", plugins=_pinned(m))
-    m.answers = ["да"]
+    m.answers = ["да", "да"]  # the update question, then the re-pin
     report = m.run("update")
-    assert report.failed == [] and len(m.prompts) == 1 and "v2.15.0" in m.prompts[0]
+    assert report.failed == [] and len(m.prompts) == 2 and "v2.15.0" in m.prompts[1]
     _converged(m)
     got = {n: (p["scope"], p["enabled"]) for n, p in m.claude.installed().items()}
     assert got == {"h2t-core": ("user", False), "h2t-ops": ("project", True)}
@@ -348,7 +353,7 @@ def test_a_pinned_marketplace_in_update_without_yes_changes_nothing(tmp_path, mo
     m = Machine(tmp_path, monkeypatch)
     m.claude.seed(ref="v2.15.0", plugins=_pinned(m))
     before = m.claude.path.read_bytes()
-    m.answers = ["нет"]
+    m.answers = ["да", "нет"]  # yes to the update, no to the re-pin
     report = m.run("update")
     assert m.claude.path.read_bytes() == before
     assert any("pinned" in f[0] for f in report.failed)
@@ -357,7 +362,7 @@ def test_a_pinned_marketplace_in_update_without_yes_changes_nothing(tmp_path, mo
 def test_a_failure_between_the_repin_commands_restores_the_snapshot(tmp_path, monkeypatch):
     m = Machine(tmp_path, monkeypatch, fail_on="install h2t-ops@lichtpfad")
     m.claude.seed(ref="v2.15.0", plugins=_pinned(m))
-    m.answers = ["да"]
+    m.answers = ["да", "да"]  # the update question, then the re-pin
     report = m.run("update")
     assert any("restored" in f[0] for f in report.failed), report.failed
     data = m.claude.load()
@@ -371,7 +376,7 @@ def test_an_interrupted_repin_is_finished_with_the_scopes_and_disabled_it_had(tm
     m = Machine(tmp_path, monkeypatch)
     m.claude.seed(ref="v2.15.0", plugins=_pinned(m))
     m.run("sync")  # the CLI reaches the target; the pinned harness stops untouched
-    m.answers = ["да"]
+    m.answers = ["да", "да"]  # the update question, then the re-pin
     m.tick.at = len(m.tick.log) + 1  # dies right after `marketplace remove`
     with pytest.raises(Interrupted) as exc:
         m.run("update")
@@ -501,12 +506,6 @@ def test_the_cli_renders_a_failed_report_as_an_error_with_the_retry(tmp_path, mo
     assert err["hint"] == "uvx … sync"
 
 
-def test_dev_sync_is_not_this_task_and_says_so(tmp_path, monkeypatch):
-    Machine(tmp_path, monkeypatch)
-    with pytest.raises(NotImplementedError, match="Task 16"):
-        sync.run("dev-sync", None, [])
-
-
 # --- the probe the real environment runs ---------------------------------------------------
 
 def test_the_probe_answers_in_a_real_environment():
@@ -567,7 +566,7 @@ def test_an_interrupted_repin_rerun_elsewhere_does_not_disable_globally(tmp_path
                   project_settings={m.project: {"h2t-ops": False}})
     monkeypatch.chdir(m.project)
     m.run("sync")
-    m.answers = ["да"]
+    m.answers = ["да", "да"]  # the update question, then the re-pin
     m.tick.at = len(m.tick.log) + 1  # dies right after `marketplace remove`
     with pytest.raises(Interrupted):
         m.run("update")
@@ -584,7 +583,7 @@ def test_a_repin_brings_back_every_scope_the_project_one_in_its_project(tmp_path
     m.claude.seed(ref="v2.15.0", plugins=[("h2t-core", "3.2.3", "user", True),
                                           ("h2t-core", "3.2.3", "project", False, m.project),
                                           ("h2t-ops", "3.2.3", "user", True)])
-    m.answers = ["да"]
+    m.answers = ["да", "да"]  # the update question, then the re-pin
     report = m.run("update")
     assert report.failed == [], report.failed
     proj = os.path.realpath(m.project)
@@ -621,7 +620,7 @@ def test_a_project_whose_directory_is_gone_is_left_to_a_person(tmp_path, monkeyp
     (_, commands), = [f for f in report.failed if "pinned" in f[0]]
     manual = [line for line in commands.splitlines() if line.startswith("manual")]
     assert manual and proj in manual[0] and "install h2t-ops@lichtpfad --scope project" in manual[0]
-    m.answers = ["да"]
+    m.answers = ["да", "да"]  # the update question, then the re-pin
     report = m.run("update")
     notes = "\n".join(report.notes)
     assert "manual" in notes and proj in notes and "--scope project" in notes
