@@ -221,6 +221,7 @@ def resolve_google_credentials(service_name: str,
             found_token_path.parent.mkdir(parents=True, exist_ok=True)
             tmp = found_token_path.with_suffix(found_token_path.suffix + ".tmp")
             tmp.write_text(creds.to_json())
+            tmp.chmod(0o600)
             os.replace(tmp, found_token_path)
         else:
             raise AuthError(
