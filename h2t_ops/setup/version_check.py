@@ -19,7 +19,7 @@ def _norm(path: str) -> str:
     return os.path.normcase(os.path.realpath(path))
 
 
-def _inside(path: str, root: str) -> bool:
+def inside(path: str, root: str) -> bool:
     p, r = _norm(path), _norm(root)
     return p == r or p.startswith(r.rstrip(os.sep) + os.sep)
 
@@ -39,7 +39,7 @@ def check(expect: str, which=shutil.which) -> dict:
     bad = []
     for name in install.entrypoints:
         found = which(name)
-        if not found or not _inside(found, install.tool_root):
+        if not found or not inside(found, install.tool_root):
             bad.append(name)
     if bad:
         bin_dir = str(Path(next(iter(install.entrypoints.values()))).parent)

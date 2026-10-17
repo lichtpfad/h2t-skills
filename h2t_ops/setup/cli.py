@@ -31,12 +31,17 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def _editable_stop(mode: str) -> None:
+    if mode == "dev-sync":
+        return
     install = state.read()
-    if mode != "dev-sync" and install is not None and install.editable:
+    # A 3.x install has no install.json; uv's receipt still says whether it is editable.
+    checkout = install.editable if install is not None else sync.receipt_editable()
+    if checkout:
         raise ConfigError(
-            f"the CLI is installed editable from the checkout {install.editable}; "
+            f"the CLI is installed editable from the checkout {checkout}; "
             f"`h2t-setup {mode}` does not touch it",
-            hint="update the checkout yourself, then run `h2t-setup dev-sync`")
+            hint="update the checkout yourself, then run `h2t-setup dev-sync`",
+            details={"reason": "editable", "checkout": checkout})
 
 
 def main(argv: list[str] | None = None) -> int:

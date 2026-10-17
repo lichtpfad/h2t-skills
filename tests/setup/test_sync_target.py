@@ -1,6 +1,7 @@
 """`h2t-setup`: the target release and the executor that serves it (spec §7.3.1–2, §7.4)."""
 from __future__ import annotations
 
+import http.client
 import json
 import os
 import urllib.error
@@ -31,6 +32,10 @@ def _pinned(ref=REF, url="https://github.com/lichtpfad/h2t-skills.git"):
             "ref": ref, "sha": "0" * 40}
 
 
+# The real one, before the autouse fixture below replaces it for every test.
+_REAL_UV_TOOL_ROOT = sync.uv_tool_root
+
+
 def _fetcher(pages: dict[str, bytes]):
     def fetch(url: str) -> bytes:
         if url not in pages:
@@ -52,6 +57,9 @@ def home(tmp_path, monkeypatch):
     # ensure_executor call sets would outlive the test.
     monkeypatch.setenv(sync.RELAUNCH_ENV, "")
     monkeypatch.delenv(sync.RELAUNCH_ENV)
+    # This machine's own `uv tool dir` holds a real h2t-ops (editable, here): no test may
+    # read it by accident. A test that wants a tool directory injects one.
+    monkeypatch.setattr(sync, "uv_tool_root", lambda **k: None)
     return tmp_path
 
 
@@ -199,9 +207,9 @@ def test_uv_tool_dir_detection_names_the_h2t_ops_directory(tmp_path):
 
     class Done:
         returncode, stdout = 0, f"{tmp_path}\n"
-    found = sync.uv_tool_root(which=lambda name: "/bin/uv", run=lambda *a, **k: Done())
+    found = _REAL_UV_TOOL_ROOT(which=lambda name: "/bin/uv", run=lambda *a, **k: Done())
     assert found == str(tmp_path / "h2t-ops")
-    assert sync.uv_tool_root(which=lambda name: None) is None
+    assert _REAL_UV_TOOL_ROOT(which=lambda name: None) is None
 
 
 def test_on_windows_the_bootstrap_is_spawned_and_its_code_propagated(tmp_path):
@@ -287,6 +295,7 @@ def test_an_editable_install_stops_sync_and_update_before_anything(home, monkeyp
     err = json.loads(capsys.readouterr().err)["error"]
     assert str(home / "checkout") in err["message"]
     assert "dev-sync" in err["hint"]
+    assert err["details"]["reason"] == "editable"
     assert {p: p.read_bytes() for p in (home / ".h2t" / "run").iterdir()} == before
 
 
@@ -306,3 +315,131 @@ def test_an_unknown_mode_is_a_usage_error(capsys):
     with pytest.raises(SystemExit) as exc:
         cli.main(["bogus"])
     assert exc.value.code == 2
+
+
+# --- fix round 1 --------------------------------------------------------------------------
+
+@pytest.mark.parametrize("mode", ["update", "sync"])
+def test_the_relaunched_words_parse_as_the_same_mode_and_options(mode):
+    command = sync.relaunch_command(_target(), mode, ["--json"])
+    assert command[:len(BOOT)] == BOOT
+    ns = cli.build_parser().parse_args(command[len(BOOT):])
+    assert ns.mode == mode
+    assert ns.json is True
+
+
+def test_the_marker_does_not_outlive_a_qualifying_executor(tmp_path, monkeypatch):
+    monkeypatch.setenv(sync.RELAUNCH_ENV, "4.1.0")  # set by the parent that re-launched us
+    assert sync.ensure_executor(_target(), "sync", [], prefix=str(tmp_path), version="4.1.0",
+                                tool_root=str(tmp_path / "elsewhere"), execvp=Exec(),
+                                os_name="posix") is None
+    assert sync.RELAUNCH_ENV not in os.environ
+
+
+def test_windows_repair_from_inside_the_tool_hands_the_command_back(tmp_path):
+    tool_root = tmp_path / "tools" / "h2t-ops"
+    tool_root.mkdir(parents=True)
+
+    def spawn(args):
+        raise AssertionError("spawned from inside the environment the reinstall deletes")
+    with pytest.raises(ConfigError) as exc:
+        sync.ensure_executor(_target(), "update", ["--json"], prefix=str(tool_root),
+                             version="4.0.0", tool_root=str(tool_root), os_name="nt",
+                             spawn=spawn, execvp=Exec())
+    command = BOOT + ["update", "--json"]
+    assert exit_code_for(exc.value) == 3
+    assert exc.value.details == {"reason": "relaunch_required", "command": command}
+    assert exc.value.hint == manifest.render(command)
+    assert sync.RELAUNCH_ENV not in os.environ
+
+
+def test_windows_repair_reaches_the_cli_as_exit_3_with_the_reason(home, monkeypatch, capsys):
+    tool_root = home / "tools" / "h2t-ops"
+    tool_root.mkdir(parents=True)
+    _wire(monkeypatch)
+    monkeypatch.setattr(sync, "OS_NAME", "nt")
+    monkeypatch.setattr(sync, "installed_tool_root", lambda **k: str(tool_root))
+    monkeypatch.setattr(sync.sys, "prefix", str(tool_root))
+    assert cli.main(["sync", "--json"]) == 3
+    err = json.loads(capsys.readouterr().err)["error"]
+    assert err["details"]["reason"] == "relaunch_required"
+    assert err["hint"].startswith("uvx --isolated ") and err["hint"].endswith(" sync --json")
+
+
+def _http_error(code):
+    return urllib.error.HTTPError(manifest.MARKETPLACE_URL, code, "x", hdrs=None, fp=None)
+
+
+@pytest.mark.parametrize("raised, kind, code", [
+    (_http_error(404), ConfigError, 3),
+    (_http_error(503), NetworkError, 6),
+    (http.client.IncompleteRead(b"par"), NetworkError, 6),
+    (http.client.RemoteDisconnected("closed"), NetworkError, 6),
+])
+def test_the_default_fetch_classifies_http_failures(monkeypatch, raised, kind, code):
+    def fail(url, timeout=None):
+        raise raised
+    monkeypatch.setattr("urllib.request.urlopen", fail)
+    with pytest.raises(kind) as exc:
+        manifest.urllib_fetch(manifest.MARKETPLACE_URL)
+    assert type(exc.value) is kind
+    assert exit_code_for(exc.value) == code
+    if code == 3:
+        assert manifest.MARKETPLACE_URL in exc.value.hint
+
+
+def test_a_missing_release_json_is_a_config_error_naming_it():
+    pages = {manifest.MARKETPLACE_URL: _marketplace(_pinned())}
+
+    def fetch(url):
+        if url in pages:
+            return pages[url]
+        raise urllib.error.HTTPError(url, 404, "Not Found", hdrs=None, fp=None)
+    with pytest.raises(ConfigError) as exc:
+        manifest.current(fetch=fetch)
+    assert manifest.release_url(REF) in exc.value.hint
+
+
+def _receipt(root, requirement: str):
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "uv-receipt.toml").write_text(
+        "[tool]\n"
+        f"requirements = [{requirement}]\n"
+        'entrypoints = [{ name = "h2t-ops", install-path = "/b/h2t-ops", from = "h2t-ops" }]\n',
+        encoding="utf-8")
+    return root
+
+
+def test_the_receipt_names_an_editable_checkout(tmp_path):
+    root = _receipt(tmp_path / "h2t-ops", '{ name = "h2t-ops", editable = "/src/h2t-skills" }')
+    assert sync.receipt_editable(str(root)) == "/src/h2t-skills"
+
+
+@pytest.mark.parametrize("content", [
+    '{ name = "h2t-ops", git = "https://github.com/lichtpfad/h2t-skills.git" }',
+    '{ name = "h2t-ops", directory = "/src/h2t-skills" }',
+    '{ name = "other", editable = "/src/other" }',
+])
+def test_a_non_editable_receipt_names_nothing(tmp_path, content):
+    assert sync.receipt_editable(str(_receipt(tmp_path / "h2t-ops", content))) is None
+
+
+def test_a_broken_or_absent_receipt_names_nothing(tmp_path):
+    assert sync.receipt_editable(str(tmp_path)) is None
+    (tmp_path / "uv-receipt.toml").write_text("[tool\n", encoding="utf-8")
+    assert sync.receipt_editable(str(tmp_path)) is None
+
+
+@pytest.mark.parametrize("mode", ["sync", "update"])
+def test_a_3x_editable_install_takes_the_editable_stop(home, monkeypatch, capsys, mode):
+    root = _receipt(home / "tools" / "h2t-ops", '{ name = "h2t-ops", editable = "/src/h2t-skills" }')
+    monkeypatch.setattr(sync, "uv_tool_root", lambda **k: str(root))
+
+    def no_network(url):
+        raise AssertionError("the editable stop must precede the target")
+    monkeypatch.setattr(manifest, "urllib_fetch", no_network)
+    assert cli.main([mode, "--json"]) == 3
+    err = json.loads(capsys.readouterr().err)["error"]
+    assert err["details"] == {"reason": "editable", "checkout": "/src/h2t-skills"}
+    assert "/src/h2t-skills" in err["message"] and "dev-sync" in err["hint"]
+    _assert_nothing_on_disk(home)
