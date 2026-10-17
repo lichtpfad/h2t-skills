@@ -79,6 +79,10 @@ jobs:
         # their Windows-only assumptions survived (#353 era: 9 red on macOS, 0 in CI).
         # plugins/ ships text only since Task 12 (#541): its test directories moved here,
         # and tests/core/test_ci_covers_plugin_tests.py keeps new ones out.
+        # GH_TOKEN: tests/release/test_release_pointer.py asks `gh release view` whether the
+        # tag main points at has a Release with the wheel (spec §9.9); without it, it skips.
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: python -m pytest tests/ -q
 
   eval-gate:

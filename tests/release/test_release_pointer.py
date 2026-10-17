@@ -1,5 +1,8 @@
 import importlib.util
 import json
+import os
+import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -51,6 +54,30 @@ def test_repository_marketplace_is_pinned():
     m = json.loads((ROOT / ".claude-plugin/marketplace.json").read_text(encoding="utf-8"))
     pins = rp.read_pointer(m)
     assert pins, "marketplace.json has no pinned plugins"
+
+
+def test_the_pointer_tag_has_a_release_with_the_wheel_and_constraints():
+    """From 4.0.0 on, the tag main points at carries a Release with both assets (§9.9).
+
+    Asked of GitHub with `gh release view`, so it runs in CI with GH_TOKEN only."""
+    m = json.loads((ROOT / ".claude-plugin/marketplace.json").read_text(encoding="utf-8"))
+    try:
+        ref = next(iter(rp.read_pointer(m).values()))[0]
+    except (ValueError, KeyError) as exc:
+        pytest.skip(f"the pointer is not pinned yet ({exc})")
+    ver = ref.removeprefix("v")
+    if tuple(int(part) for part in ver.split(".")) < (4, 0, 0):
+        pytest.skip(f"the pointer is at {ref}; releases before 4.0.0 carry no wheel")
+    if not (os.environ.get("CI") and os.environ.get("GH_TOKEN")):
+        pytest.skip("asks GitHub through gh; runs in CI with GH_TOKEN only")
+    gh = shutil.which("gh")
+    assert gh, "gh is not on PATH on this runner"
+    r = subprocess.run([gh, "release", "view", ref, "--repo", "lichtpfad/h2t-skills", "--json", "assets",
+                        "--jq", ".assets[].name"], capture_output=True, text=True, encoding="utf-8",
+                       timeout=60)
+    assert r.returncode == 0, f"no Release for {ref}: {r.stderr.strip()}"
+    missing = {f"h2t_ops-{ver}-py3-none-any.whl", "constraints.txt"} - set(r.stdout.split())
+    assert not missing, f"Release {ref} lacks {sorted(missing)}"
 
 
 def _tree(tmp_path: Path, source) -> None:
