@@ -87,7 +87,8 @@ class Rig:
         self.script = self.tmp / "run"
         self.script.write_text(text, encoding="utf-8")
 
-    def __call__(self, event, name="probe", payload=None, plugin_root=None, timeout=30, **env):
+    def __call__(self, event, name="probe", payload=None, plugin_root=None, timeout=30, limit=None,
+                 **env):
         payload = {"hook_event_name": event, "session_id": "sess-1"} if payload is None else payload
         environment = {
             "PATH": os.environ.get("PATH", ""),
@@ -99,7 +100,8 @@ class Rig:
             if key in os.environ:
                 environment.setdefault(key, os.environ[key])
         started = time.perf_counter()
-        result = subprocess.run([BASH, _p(self.script), name], input=json.dumps(payload).encode(),
+        args = [BASH, _p(self.script), name] + ([] if limit is None else [str(limit)])
+        result = subprocess.run(args, input=json.dumps(payload).encode(),
                                 capture_output=True, env=environment, timeout=timeout, check=False)
         result.elapsed = time.perf_counter() - started
         result.text = result.stdout.decode("utf-8")
@@ -284,7 +286,7 @@ def test_a_read_only_run_dir_notifies_on_every_session_start(rig, locked):
 def test_a_handler_that_overruns_is_treated_as_broken_before_the_harness_timeout(rig):
     fake = rig.fake(sleep="exec sleep 30")
     rig.install(["STATE=ready", "VERSION=4.0.0", f"H2T_HOOK={_p(fake)}"])
-    result = rig("SessionStart", H2T_HOOK_TIMEOUT=1)
+    result = rig("SessionStart", limit=1)
     assert result.elapsed < 3, result.elapsed
     assert "CLI неисправен (хук probe" in _message(result)
     assert "FAKE-OUT" not in result.text
@@ -297,7 +299,7 @@ def test_a_handler_that_overruns_is_treated_as_broken_before_the_harness_timeout
 def test_an_overrun_on_stop_is_silent(rig):
     fake = rig.fake(sleep="exec sleep 30")
     rig.install(["STATE=ready", "VERSION=4.0.0", f"H2T_HOOK={_p(fake)}"])
-    result = rig("Stop", H2T_HOOK_TIMEOUT=1)
+    result = rig("Stop", limit=1)
     assert result.elapsed < 3, result.elapsed
     assert (result.returncode, result.stdout, result.stderr) == (0, b"", b"")  # no "Terminated" line
     assert _log_rows(rig)[-1]["rc"] != 0
@@ -308,7 +310,7 @@ def test_a_fast_handler_does_not_wait_for_the_watchdog(rig):
     inherited the wrapper's stdout would hold it open for the whole timeout."""
     fake = rig.fake()
     rig.install(["STATE=ready", "VERSION=4.0.0", f"H2T_HOOK={_p(fake)}"])
-    result = rig("Stop", H2T_HOOK_TIMEOUT=5)
+    result = rig("Stop", limit=5)
     assert result.text == "FAKE-OUT:probe"
     assert result.elapsed < 1, f"took {result.elapsed:.2f}s"
 

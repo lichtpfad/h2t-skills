@@ -110,3 +110,31 @@ def test_cli_version_expect_json_exit_3(tmp_path):
 def test_cli_dash_dash_version_still_works(tmp_path):
     p = _cli(tmp_path, "--version")
     assert p.returncode == 0 and h2t_ops.__version__ in p.stdout
+
+
+def test_windows_layout_copies_in_separate_bin_dir_are_ok(tmp_path):
+    # uv on Windows copies each entry point into the bin dir (~/.local/bin) instead of
+    # symlinking it, so realpath never leads into the tool root. The receipt's install-path,
+    # recorded in install.json, is that copy; PATH reaching it is the healthy case.
+    tool_root, bin_dir = tmp_path / "tools" / "h2t-ops", tmp_path / "bin"
+    tool_root.mkdir(parents=True)
+    bin_dir.mkdir()
+    names = ["h2t-ops", "h2t-gather", "h2t-hook"]
+    for n in names:
+        (bin_dir / f"{n}.exe").write_bytes(b"MZ")
+    state.commit(state.Install(version=h2t_ops.__version__, generation="g",
+                               tool_root=str(tool_root),
+                               entrypoints={n: str(bin_dir / f"{n}.exe") for n in names}))
+    r = version_check.check(h2t_ops.__version__, which=lambda n: str(bin_dir / f"{n}.exe"))
+    assert r == {"ok": True, "version": h2t_ops.__version__, "reason": None, "hint": None}
+
+
+def test_windows_layout_a_different_copy_on_path_is_still_path(tmp_path):
+    tool_root, bin_dir, other = tmp_path / "tools" / "h2t-ops", tmp_path / "bin", tmp_path / "old"
+    names = ["h2t-ops", "h2t-hook"]
+    state.commit(state.Install(version=h2t_ops.__version__, generation="g",
+                               tool_root=str(tool_root),
+                               entrypoints={n: str(bin_dir / f"{n}.exe") for n in names}))
+    r = version_check.check(h2t_ops.__version__,
+                            which=lambda n: str((other if n == "h2t-hook" else bin_dir) / f"{n}.exe"))
+    assert r["reason"] == "path" and "h2t-hook" in r["hint"] and "h2t-ops," not in r["hint"]

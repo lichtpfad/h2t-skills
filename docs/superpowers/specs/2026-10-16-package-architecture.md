@@ -129,8 +129,9 @@ h2t_ops/                       пакет — единственное мест�
 
 plugins/<name>/
   skills/<skill>/SKILL.md, references/*.md
-  hooks/hooks.json             "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/run\" <hook>",
-                               "timeout": <секунды на хук>
+  hooks/hooks.json             "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/run\" <hook> <t-1>",
+                               "timeout": <t, секунды на хук>
+                               (второй аргумент — лимит сторожа §6.1.4; без него 9 с)
   hooks/run                    обёртка, §6.1
   release.env                  VERSION=4.1.0 — пишет скрипт выпуска
 

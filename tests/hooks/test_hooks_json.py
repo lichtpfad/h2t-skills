@@ -1,14 +1,14 @@
 """Every hooks.json entry goes through `hooks/run <name>` with a deliberate timeout (spec §5, §6.1.4).
 
-The command form is fixed: `H2T_HOOK_TIMEOUT=<t-1> bash "${CLAUDE_PLUGIN_ROOT}/hooks/run" <name>`
-with `"timeout": <t>`. The wrapper's own watchdog must fire a second before the harness's,
+The command form is fixed: `bash "${CLAUDE_PLUGIN_ROOT}/hooks/run" <name> <t-1>` with
+`"timeout": <t>`. The wrapper's own watchdog must fire a second before the harness's,
 because a harness timeout throws away everything the hook printed.
 
-The leading assignment needs a POSIX shell. Claude Code 2.1.301 runs a `command` hook
-"through a shell (bash on POSIX, PowerShell on Windows without Git Bash)", and its `bash`
-setting "uses your $SHELL (bash/zsh/sh)" — all three honour `VAR=value cmd`
-(test_the_command_runs_through_a_posix_shell). Without the assignment the wrapper falls back
-to 9 s.
+The timeout is the second positional argument, not a `VAR=value` prefix: a leading
+assignment needs a POSIX shell, and on Windows the shell that runs a `command` hook is not
+probed (Claude Code 2.1.301: "PowerShell on Windows without Git Bash"). `bash "<path>" a b`
+reads the same in sh, bash, zsh, PowerShell and cmd. Without the argument the wrapper falls
+back to 9 s.
 
 Every plugin with a hooks.json carries the same `hooks/run` and a `release.env` whose
 VERSION is its plugin.json version (until Task 13 writes one version for all).
@@ -18,6 +18,7 @@ import os
 import re
 import shutil
 import subprocess
+import time
 from pathlib import Path
 
 import pytest
@@ -26,7 +27,7 @@ ROOT = Path(__file__).resolve().parents[2]
 CORE = ROOT / "plugins" / "h2t-core"
 PLUGINS = sorted(p for p in (ROOT / "plugins").iterdir() if (p / ".claude-plugin").is_dir())
 WITH_HOOKS = [p for p in PLUGINS if (p / "hooks" / "hooks.json").is_file()]
-FORM = re.compile(r'^H2T_HOOK_TIMEOUT=(\d+) bash "\$\{CLAUDE_PLUGIN_ROOT\}/hooks/run" ([a-z0-9-]+)$')
+FORM = re.compile(r'^bash "\$\{CLAUDE_PLUGIN_ROOT\}/hooks/run" ([a-z0-9-]+) (\d+)$')
 
 # The harness timeout per hook, in seconds, and why. 3.x set none.
 TIMEOUTS = {
@@ -72,14 +73,14 @@ def test_there_are_entries_to_check():
 def test_every_entry_has_the_one_form_and_its_timeout(plugin, event, hook):
     match = FORM.match(hook["command"])
     assert match, hook["command"]
-    inner, name = int(match.group(1)), match.group(2)
+    name, inner = match.group(1), int(match.group(2))
     assert hook["type"] == "command"
     assert hook.get("timeout") == TIMEOUTS[name], (name, hook.get("timeout"))
     assert inner == hook["timeout"] - 1, hook
 
 
 def test_every_timeout_is_used():
-    assert {FORM.match(h["command"]).group(2) for _, _, h in entries()} == set(TIMEOUTS)
+    assert {FORM.match(h["command"]).group(1) for _, _, h in entries()} == set(TIMEOUTS)
 
 
 def test_hooks_run_is_byte_identical_in_every_plugin_with_hooks():
@@ -110,16 +111,17 @@ SHELLS = [s for s in ("/bin/sh", "/bin/bash", "/bin/zsh") if Path(s).is_file()]
                     reason="the POSIX shells the harness uses")
 @pytest.mark.parametrize("shell", SHELLS)
 def test_the_command_runs_through_a_posix_shell(shell, tmp_path):
-    """The hooks.json command, run the way the harness runs it, reaches the handler with
-    the timeout it names: the fake CLI prints what it got."""
+    """The hooks.json command, run the way the harness runs it, reaches the handler, and the
+    timeout it names reaches the wrapper's watchdog: with the number lowered to 1 a handler
+    that sleeps 30 s is cut off well before that."""
     plugin_name, _, hook = next((p, e, h) for p, e, h in entries() if "plan-closer" in h["command"])
     plugin = ROOT / "plugins" / plugin_name
     version = (plugin / "release.env").read_text(encoding="utf-8").split("=", 1)[1].strip()
     home = tmp_path / "home"
     (home / ".h2t" / "run").mkdir(parents=True)
     fake = tmp_path / "h2t-hook"
-    fake.write_text('#!/usr/bin/env bash\ncat >/dev/null\nprintf "%s %s" "$1" "$H2T_HOOK_TIMEOUT"\n',
-                    encoding="utf-8")
+    fake.write_text('#!/usr/bin/env bash\ncat >/dev/null\n[ -n "${SLOW:-}" ] && exec sleep 30\n'
+                    'printf "%s|%s" "$1" "${2:-}"\n', encoding="utf-8")
     fake.chmod(0o755)
     (home / ".h2t" / "run" / "install.env").write_text(
         f"STATE=ready\nVERSION={version}\nH2T_HOOK={fake}\n", encoding="utf-8")
@@ -128,4 +130,12 @@ def test_the_command_runs_through_a_posix_shell(shell, tmp_path):
     event = json.dumps({"hook_event_name": "PostToolUse", "tool_input": {"command": "gh pr merge 1"}})
     done = subprocess.run([shell, "-c", hook["command"]], input=event.encode(), env=env,
                           capture_output=True, timeout=30, check=False)
-    assert (done.returncode, done.stdout.decode()) == (0, "plan-closer 44"), done.stderr
+    # The handler gets its name only: the timeout is the wrapper's business.
+    assert (done.returncode, done.stdout.decode()) == (0, "plan-closer|"), done.stderr
+
+    assert hook["command"].endswith(" 44")
+    started = time.monotonic()
+    done = subprocess.run([shell, "-c", hook["command"][:-len("44")] + "1"], input=event.encode(),
+                          env={**env, "SLOW": "1"}, capture_output=True, timeout=30, check=False)
+    assert time.monotonic() - started < 5, done.stderr
+    assert done.returncode == 0 and done.stdout == b"", done

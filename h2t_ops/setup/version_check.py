@@ -37,9 +37,11 @@ def check(expect: str, which=shutil.which) -> dict:
             f"Ожидалась версия {expect}, запущена {h2t_ops.__version__}, "
             f"установлена {install.version}. Выполни: h2t-setup sync"))
     bad = []
-    for name in install.entrypoints:
+    for name, recorded in install.entrypoints.items():
         found = which(name)
-        if not found or not inside(found, install.tool_root):
+        # POSIX: the bin entry is a symlink into tool_root. Windows: uv copies it into the
+        # bin dir, so only the path recorded from the receipt at install time identifies it.
+        if not found or not (inside(found, install.tool_root) or _norm(found) == _norm(recorded)):
             bad.append(name)
     if bad:
         bin_dir = str(Path(next(iter(install.entrypoints.values()))).parent)

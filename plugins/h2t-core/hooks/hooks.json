@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "H2T_HOOK_TIMEOUT=9 bash \"${CLAUDE_PLUGIN_ROOT}/hooks/run\" inject-h2t-context",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/run\" inject-h2t-context 9",
             "timeout": 10
           }
         ]
@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "H2T_HOOK_TIMEOUT=29 bash \"${CLAUDE_PLUGIN_ROOT}/hooks/run\" gather-on-skill",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/run\" gather-on-skill 29",
             "timeout": 30
           }
         ]
@@ -27,7 +27,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "H2T_HOOK_TIMEOUT=9 bash \"${CLAUDE_PLUGIN_ROOT}/hooks/run\" structure-guard",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/run\" structure-guard 9",
             "timeout": 10
           }
         ]
@@ -37,7 +37,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "H2T_HOOK_TIMEOUT=9 bash \"${CLAUDE_PLUGIN_ROOT}/hooks/run\" structure-guard",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/run\" structure-guard 9",
             "timeout": 10
           }
         ]
@@ -47,7 +47,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "H2T_HOOK_TIMEOUT=9 bash \"${CLAUDE_PLUGIN_ROOT}/hooks/run\" structure-guard",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/run\" structure-guard 9",
             "timeout": 10
           }
         ]
@@ -58,7 +58,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "H2T_HOOK_TIMEOUT=29 bash \"${CLAUDE_PLUGIN_ROOT}/hooks/run\" gather-on-prompt",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/run\" gather-on-prompt 29",
             "timeout": 30
           }
         ]
@@ -69,12 +69,12 @@
         "hooks": [
           {
             "type": "command",
-            "command": "H2T_HOOK_TIMEOUT=9 bash \"${CLAUDE_PLUGIN_ROOT}/hooks/run\" grade-guard",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/run\" grade-guard 9",
             "timeout": 10
           },
           {
             "type": "command",
-            "command": "H2T_HOOK_TIMEOUT=9 bash \"${CLAUDE_PLUGIN_ROOT}/hooks/run\" plain-guard",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/run\" plain-guard 9",
             "timeout": 10
           }
         ]
@@ -86,12 +86,12 @@
         "hooks": [
           {
             "type": "command",
-            "command": "H2T_HOOK_TIMEOUT=44 bash \"${CLAUDE_PLUGIN_ROOT}/hooks/run\" plan-closer",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/run\" plan-closer 44",
             "timeout": 45
           },
           {
             "type": "command",
-            "command": "H2T_HOOK_TIMEOUT=9 bash \"${CLAUDE_PLUGIN_ROOT}/hooks/run\" new-repo-hint",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/run\" new-repo-hint 9",
             "timeout": 10
           }
         ]
@@ -102,7 +102,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "H2T_HOOK_TIMEOUT=14 bash \"${CLAUDE_PLUGIN_ROOT}/hooks/run\" session-end-reap-codex",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/run\" session-end-reap-codex 14",
             "timeout": 15
           }
         ]
