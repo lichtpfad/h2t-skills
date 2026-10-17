@@ -331,5 +331,6 @@ def test_hook_entry_resolves_the_handlers_scaffold_writes():
         for command in entry["hooks"]
     ]
     assert named, "no hook commands read — the probe is broken, not the code"
+    from h2t_ops.hooks import HANDLERS
     for handler in named:
-        assert plugin_entrypoints.plugin_script_path(f"hooks-handlers/{handler}").is_file()
+        assert handler in HANDLERS, handler

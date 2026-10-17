@@ -1,7 +1,7 @@
 """`h2t-hook <name>`: a name in HANDLERS runs in-process through the one emitter (spec §6.2).
 
-Names outside HANDLERS keep the 3.x path through plugin_script_path; that path is covered
-by tests/core/test_hook_entry.py.
+A name outside HANDLERS exits 5 (tests/core/test_hook_entry.py). The `Command` entries keep
+their own 3.x process contract (tests/hooks/test_command_hooks.py).
 """
 import io
 import json

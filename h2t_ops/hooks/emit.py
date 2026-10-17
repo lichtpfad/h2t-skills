@@ -48,6 +48,16 @@ def envelope(event_name: str, reply: Reply) -> dict | None:
     return {"systemMessage": message} if message else None
 
 
+def to_stderr(text: str) -> None:
+    """UTF-8 bytes on stderr, for the handlers that own their output (the git hooks).
+
+    Their stderr is a pipe, and on Windows a pipe gets the ANSI code page, which has no
+    `→`: `sys.stderr.write` would raise where the 3.x bash handler printed the bytes.
+    """
+    sys.stderr.buffer.write(_clean(text).encode("utf-8"))
+    sys.stderr.flush()
+
+
 def write(event_name: str, reply: Reply) -> int:
     """Print the reply on its channel and return the exit code: 0, or 2 for a block."""
     if reply.block:

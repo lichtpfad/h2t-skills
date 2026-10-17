@@ -70,8 +70,12 @@ def test_recorded_event_gets_recorded_reply(case, box, monkeypatch):
 
 
 def test_every_handler_has_a_recorded_case():
+    """The `Command` entries take no event; their scenarios are test_command_hooks.py."""
     recorded = {name for name, _, _ in CASES}
-    assert set(hooks.HANDLERS) <= recorded, set(hooks.HANDLERS) - recorded
+    events = {name for name, handle in hooks.HANDLERS.items()
+              if not isinstance(handle, hooks.Command)}
+    assert len(events) >= 9
+    assert events <= recorded, events - recorded
 
 
 def test_the_gather_lock_skips_a_second_run_in_the_same_directory(box):

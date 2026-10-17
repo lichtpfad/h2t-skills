@@ -26,6 +26,10 @@ PAIRS = {
     "plan_closer.py": ({"_load_payload", "main"}, {"handle"}),
     "new_repo_hint.py": ({"main"}, {"handle", "NOTICE"}),
     "reap_codex.py": ({"_load_payload", "main"}, {"handle", "summary"}),
+    # docs-lint is the package's now: the plugin-script finder went, the runner and main
+    # take a command line instead of a script path (tests/hooks/test_command_hooks.py).
+    "post_git_commit_docs_lint.py": ({"find_docs_lint_script", "run_docs_lint_doctor", "main"},
+                                     {"docs_lint_command"}),
 }
 
 
