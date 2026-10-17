@@ -18,8 +18,9 @@ issue: "548"
 владельца 2026-10-17: **4.0.0 не выпускается без этой подсистемы**. Код и данные переходят
 одним выпуском. Связи: #548 (решение по корням), #541 (трекер).
 
-Версия 4: правки после трёх раундов ревью (два Codex + дискриминатор, затем Codex по диффу
-дважды; журнал в §14) и результаты проб на маке (§11).
+Версия 5: правки после трёх раундов ревью (два Codex + дискриминатор, затем Codex по диффу
+дважды; журнал в §14), результаты проб на маке (§11) и поправки по коду при написании плана
+(§14, «v5»).
 
 ## 1. Проблема — что измерено
 
@@ -37,8 +38,12 @@ issue: "548"
   `chmod`: на маке автора файл переписан 2026-10-17 и имеет права `-rw-r--r--` (umask 0022),
   то есть читается любым локальным пользователем. `bootstrap_google_token` права ставит
   (`:258`), ветка обновления — нет. Telegram держит в
-  `~/.config/telegram/` сессию вместе с курсорами и кэшами, а `api_id`/`api_hash` хранит без
-  префикса в `config.json` (`telegram/client.py:240-260`). Evals читают `H2T_EVALS_*` только
+  `~/.config/telegram/` сессию (`session.session`, права `-rw-r--r--`), состояние входа
+  (`auth_state.json`) и отметку `dialogs_bootstrapped`, а `api_id`/`api_hash` хранит без
+  префикса в `config.json` (`telegram/client.py:225-262`). Там же лежат `mentions_cache.json`,
+  `chats.yaml` и `last_sync.json`: их писал `telegram_cli`, удалённый в #403 (0d745cdc), и
+  в коде пакета их сегодня не читает и не пишет никто — `mentions_cache.json` последний раз
+  изменён 2026-03-18. Evals читают `H2T_EVALS_*` только
   из `~/.dor/secrets.env` (`lifecycle/eval/session.py:28-53`). `google_auth.py:64` делает
   `load_dotenv` при импорте. `research/client.py:67-73` читает файлы секретов сам через
   `read_text`.
@@ -59,8 +64,9 @@ issue: "548"
   `meetgeek download` и `webhooks` — в зашитый `~/.dor/lake/…` (`meetgeek/recovery.py:121`,
   `commands.py:302`); курсор `granola sync` лежит в `~/.dor/lake/_cursors`; `granola sync`
   перезаписывает заметку при её правке (`granola/sync.py:61-65`) и дописывает
-  `manifest.jsonl` (`:144-147`); `telegram download-media` пишет в `~/Downloads`; `drive` и
-  `gmail` требуют путь. Незнакомый пользователь получит `~/.dor/` от первого
+  `manifest.jsonl` (`:144-147`); `telegram download-media` пишет в `~/Downloads`; `drive download/export` без пути пишет в
+  текущий каталог. Кроме того, `h2t-setup sync` пишет в каталог Claude Code (`~/.claude`:
+  снимок, кэш плагинов), а блокировка gather и `deploy` — во временный каталог системы. Незнакомый пользователь получит `~/.dor/` от первого
   `meetgeek download`. Про vault пакет не знает: в коде ноль упоминаний. На диске два vault:
   `~/.dor/vault` (66 МБ) и `vault/` в чекауте DOR (3,2 МБ).
 - **Пакет пишет в репо пользователя.** `scaffold_project.py:285-310,515` (`.gitignore`,
@@ -83,7 +89,8 @@ issue: "548"
   `services/calendar.py:53`, `services/gmail_service.py:12`, docker-compose, plist) **только
   на чтение**: `app/auth/tokens.py` строит `Credentials` из файла и не пишет его обратно,
   docker-compose монтирует каталог `:ro` (проверено 2026-10-17). Ещё POS читает
-  `~/.config/telegram/mentions_cache.json` (`services/telegram_service.py:3`). Репо rejuve и
+  `~/.config/telegram/mentions_cache.json` (`services/telegram_service.py:3`) — файл, который
+  с #403 никто не пишет. Репо rejuve и
   `POS/CLAUDE.md` берут ключи из `~/.h2t/config/secrets/`.
 
 ## 2. Требования
@@ -113,7 +120,6 @@ issue: "548"
 ├── config/            конфиг и онтология — правит пользователь (у автора это git-репо)
 │   ├── domains.yaml, repo-mapping.yaml      онтология
 │   ├── paths.yaml                           внешние места (§6) и выбор синхронизации
-│   ├── telegram/chats.yaml                  выбор пользователя, не состояние
 │   └── about-me/, personas/, rules/, …      личный контент
 ├── secrets/
 │   ├── shared/        можно на нескольких машинах сразу — синхронизирует пользователь
@@ -124,11 +130,11 @@ issue: "548"
 │   ├── evals/<машина>/<скилл>/<прогон>.json
 │   └── imports/dor-registry.jsonl          разовая копия ~/.dor/registry.jsonl, только чтение
 ├── data/              что пакет создал для пользователя или для других программ
-│   ├── research/, creative/profiles/
-│   └── telegram/mentions.json               публикуемый вывод, его читает POS (§9)
+│   └── research/, creative/profiles/
 ├── state/             машинное, пересобирается или терпит потерю
 │   ├── machine.json, index.sqlite, evals-spool.sqlite
 │   ├── cursors/<провайдер>.json, caches/<провайдер>/
+│   └── telegram/dialogs_bootstrapped
 ├── logs/              hooks.jsonl, writes.jsonl, …
 └── layout.json        версия раскладки
 ```
@@ -172,7 +178,12 @@ issue: "548"
 - {id: vault,           kind: place, class: external, sync: owner}
 - {id: kb,              kind: place, class: external, sync: owner}
 - {id: repo,            kind: place, class: external, sync: owner}
+- {id: harness,         kind: place, class: external, sync: owner}
+- {id: tmp,             kind: place, class: external, sync: never}
 ```
+
+`harness` — каталог Claude Code (`CLAUDE_CONFIG_DIR` или `~/.claude`), `tmp` — временный
+каталог системы (`tempfile.gettempdir()`).
 
 ## 4. Секреты: имена и правила
 
@@ -284,7 +295,9 @@ vault_rules: ~/.h2t/config/rules/data-architecture.md
    `realpath` и отклоняет файл, если одно место лежит внутри другого (например `inbox` внутри
    `vault`) или внутри `~/.h2t`.
 5. **Переменные окружения** сводятся к одной форме `H2T_PATH_<МЕСТО>`
-   (`H2T_PATH_LAKE`, `H2T_PATH_RECORDS`). Она перекрывает `paths.yaml`. Старые имена
+   (`H2T_PATH_LAKE`, `H2T_PATH_RECORDS`). Она перекрывает `paths.yaml`. `H2T_PATH_ROOT`
+   переносит весь `~/.h2t`, кроме `run/` (его место зафиксировано спекой 4.0); ею тесты
+   изолируют раскладку одной переменной. Старые имена
    (`H2T_LAKE_ROOT`, `H2T_SESSION_ROOT`, `H2T_ACTIVITY_SPOOL`, `H2T_EVALS_ROOT`,
    `H2T_CONFIG_ROOT`, `H2T_SECRETS_FILE`, `H2T_KB_ROOT`) читаются как псевдонимы весь 4.0.x,
    `doctor` о них предупреждает.
@@ -300,6 +313,8 @@ vault_rules: ~/.h2t/config/rules/data-architecture.md
 | `lake`, `inbox` | тот, кто зарегистрировал (POS или пользователь) | коннектор создаёт новые файлы; заменяет и дописывает только **свои** — те, что перечислены в его манифесте в этом месте (например `lake/granola/manifest.jsonl`), по протоколу ниже. Чужие файлы не трогает и ничего не удаляет |
 | `vault` | POS | только ингест, через единственную точку входа (§7.2) |
 | `repo` (репо, где пользователь вызвал команду: cwd или `--repo-root`) | пользователь | только команды, чья задача — эта запись, по списку ниже |
+| `harness` | Claude Code | только `h2t-setup` (снимок в `run/rollback`, кэш плагинов, настройки) |
+| `tmp` | система | любой код, но только через `store.scratch()`: каталог создаётся и удаляется операцией |
 
 Список записей в `repo`. Первая задача плана — полный инвентарь всех писателей; эта таблица
 его отправная точка.
@@ -383,9 +398,9 @@ vault_rules: ~/.h2t/config/rules/data-architecture.md
 каталоги старых мест присутствуют, но закрыты на запись. Запись вне объявленного или чтение
 секрета из старого места при наличии нового — красный тест.
 
-- **Исключения для совместимости узкие.** Запись в старое место разрешена только для точных
-  файлов §9 (зеркало токена Google, `mentions_cache.json`) через операцию с меткой `compat` и
-  только для `MOVED-TO.txt` во время миграции. Отдельные тесты: разрешённая запись `compat`
+- **Исключения для совместимости узкие.** Запись в старое место разрешена только для зеркала
+  токена Google (§9) через операцию с меткой `compat` и только для `MOVED-TO.txt` во время
+  миграции. Отдельные тесты: разрешённая запись `compat`
   проходит, любая другая запись в старое место красная.
 - **Кто трогал файл.** Тест ставит `sys.addaudithook` на события `open`, `os.rename`,
   `os.remove`, `os.rmdir`, `os.mkdir`, `shutil.*`, `sqlite3.connect` и `subprocess.Popen`.
@@ -484,7 +499,8 @@ vault_rules: ~/.h2t/config/rules/data-architecture.md
    | `~/.config/notion/token` | токен | `shared/notion.env` → `NOTION_API_TOKEN` | env-файл, если ключ есть и там |
    | `~/.config/google-calendar-mcp/`, `~/.config/gmail/`, `~/.dor/google-credentials.json` | клиент и токен Google | `shared/google.client.json`, `shared/google.token.json` | `google-calendar-mcp` — его читает код сегодня |
    | `~/.config/telegram/config.json` | `api_id`, `api_hash` | `shared/telegram.env` → `TELEGRAM_API_ID`, `TELEGRAM_API_HASH` | — |
-   | `~/.config/telegram/session.session`, `auth_state.json` | сессия, вход | `local/telegram.session`, `local/telegram.auth-state.json` | — |
+   | `~/.config/telegram/session.session`, `auth_state.json` | сессия, вход | `local/telegram.session`, `local/telegram.auth-state.json` (права 0600) | — |
+   | `~/.config/telegram/dialogs_bootstrapped` | отметка | `state/telegram/dialogs_bootstrapped` | — |
    | чужие `.env` (getcourse, stripe, …) | файл целиком | `shared/<то же имя>` | — |
 
    **Полный порядок старшинства** для ключей общей лестницы, от старшего к младшему:
@@ -501,7 +517,8 @@ vault_rules: ~/.h2t/config/rules/data-architecture.md
    переносятся в `records/sessions/<машина>/` с frontmatter: из `latest.json` и заголовка md.
    Сессии других машин сюда не копируются: они придут через синхронизацию `records/` с той
    машины, которая их писала. Иначе две машины создали бы одинаковые файлы независимо.
-4. Telegram делится на три части (§3, §4); evals переезжают в `records/evals/<машина>/` и
+4. Telegram делится на три части (§3, §4); `mentions_cache.json`, `chats.yaml`,
+   `last_sync.json` не переносятся (§1); evals переезжают в `records/evals/<машина>/` и
    `state/evals-spool.sqlite`; activity — в `records/activity/<машина>.jsonl`; курсоры — в
    `state/cursors/`; `~/.dor/registry.jsonl` копируется в `records/imports/dor-registry.jsonl`.
 5. Сборка индекса.
@@ -540,7 +557,7 @@ vault_rules: ~/.h2t/config/rules/data-architecture.md
 | Читатель | Что читает | В 4.0.x | Контракт |
 |---|---|---|---|
 | POS API (calendar, gmail, main, docker-compose, plist) — только чтение | `~/.config/google-calendar-mcp/tokens.json` | пакет пишет главную копию `shared/google.token.json` и после каждой записи зеркалит её в старый файл в одну сторону, пока тот существует. Если старый файл новее и отличается, пакет его не перезаписывает, а `doctor` предупреждает | `h2t-ops paths get secret:google.token` |
-| POS API (telegram_service) | `~/.config/telegram/mentions_cache.json` | пакет пишет оба файла, пока старый существует | `data/telegram/mentions.json`, `h2t-ops paths get data:telegram.mentions` |
+| POS API (telegram_service) | `~/.config/telegram/mentions_cache.json` | пакет файл не пишет с #403 и не трогает; миграция его не переносит | нет: в issue POS — что файл осиротел и откуда брать упоминания (`h2t-ops telegram mentions`) |
 | rejuve, `POS/CLAUDE.md` | `~/.h2t/config/secrets/*.env` | старые файлы остаются копиями | `h2t-ops paths get secret:<провайдер>` |
 
 Зеркалирование в 4.0.x идёт через `store.py` с меткой `compat` и удаляется в 4.1. До выпуска в
@@ -654,6 +671,12 @@ POS и rejuve заводятся issues с этой таблицей. Репо �
 | P2 у сверки секретов нет базы для уже существующих новых файлов | §8 п. 6: базовое множество снимается до записи, победитель проверяется отдельно |
 
 Без раунда: права токена Google (§1) и решение хранить access-токен в `state` (§4).
+
+**v5 (2026-10-17, при написании плана).** Поправки по коду, без раунда ревью:
+`mentions_cache.json`, `chats.yaml`, `last_sync.json` — сироты удалённого `telegram_cli`
+(#403): убраны из раскладки, зеркалирования и миграции (§1, §3, §7.3, §8, §9). Добавлены места
+`harness` и `tmp`, в которые код пишет сегодня (§3, §7.1). `H2T_PATH_ROOT` для изоляции
+раскладки (§6 п. 5). Права сессии Telegram — 0600 (§8).
 
 Отклонено: F13 (сессии необновлённой машины пропадают в 4.1) — это следствие решения «каждая
 машина переносит свои», а старые файлы пакет не удаляет; добавлено предупреждение `doctor` в
