@@ -39,7 +39,17 @@ def test_the_readme_gives_an_agent_a_plugin_command_it_can_run():
     assert "claude plugin install h2t-ops@lichtpfad" in section
 
 
-def test_setup_hints_never_point_at_a_checkout():
+def test_setup_hints_never_point_at_a_checkout(monkeypatch):
+    """Literal hints in the setup backend, and the missing-CLI hint a release gives.
+
+    The two literals that were here became legacy._install_hint() (Task 12c fix round):
+    in a release it names the bootstrap. Only a checkout, whose _release.py is empty, is
+    told about `--editable .`; that reader already has the clone, so nothing leads to one.
+    """
+    from h2t_ops.setup import _release, legacy
+
+    monkeypatch.setattr(_release, "BOOTSTRAP_COMMAND", "uvx --isolated --from X h2t-setup")
     hints = re.findall(r'"hint"\]\s*=\s*"([^"]*)"', SETUP.read_text(encoding="utf-8"))
-    assert hints, "found no hints — the regex, not the script"
+    hints.append(legacy._install_hint())
+    assert hints[-1] == "Run: uvx --isolated --from X h2t-setup sync"
     assert not [h for h in hints if CLONE.search(h)]

@@ -19,7 +19,9 @@ def _is_test(path: str) -> bool:
 
 
 def shipped_runtime_python(root: Path) -> list[str]:
-    return sorted(p for p in _tracked(root, "plugins/") if p.endswith(".py") and not _is_test(p))
+    """Every tracked .py under plugins/, tests included: tests no longer live there (#541),
+    and excusing them let a `plugins/x/tests/helper.py` ship unseen."""
+    return sorted(p for p in _tracked(root, "plugins/") if p.endswith(".py"))
 
 
 def _allowlisted(path: str) -> bool:
@@ -38,7 +40,7 @@ def shipped_executables(root: Path) -> list[str]:
     found = set()
     for line in staged:
         mode, _, _, path = line.split(maxsplit=3)
-        if _is_test(path) or _allowlisted(path):
+        if _allowlisted(path):
             continue
         if mode == "100755":
             found.add(path)

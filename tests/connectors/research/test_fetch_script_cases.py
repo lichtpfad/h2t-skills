@@ -24,13 +24,9 @@ import pytest
 from h2t_ops.connectors.research import fetch as fetch_url
 
 
-def _no_network(*args, **kwargs):
-    raise AssertionError("a test reached the real network")
-
-
 @pytest.fixture(autouse=True)
 def _live_module(monkeypatch):
-    """Bind the module the connector will import, and keep the suite off the network.
+    """Bind the module the connector will import (the network refusal is in conftest.py).
 
     test_commands.py pops the research modules from sys.modules to prove they load lazily,
     so the module imported at the top of this file can be a stale copy that the client no
@@ -40,7 +36,6 @@ def _live_module(monkeypatch):
     import importlib
 
     monkeypatch.setitem(globals(), "fetch_url", importlib.import_module("h2t_ops.connectors.research.fetch"))
-    monkeypatch.setattr("urllib.request.urlopen", _no_network)
 
 
 def test_fetch_url_module_imports():

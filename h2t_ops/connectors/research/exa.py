@@ -1131,6 +1131,40 @@ def agent_run(
         )
 
 
+def _emit_eval(envelope: dict[str, Any], exit_code: int, project: str, mode: str) -> None:
+    """Emit an L1 SkillEval session for one research sub-call. Never raises.
+
+    Ported from exa_search.py, which called it after every search and every successful
+    crawl; the connector lost it when the script was deleted (#541). Gating is the
+    script's: SkillEval resolves H2T_EVALS_MODE itself, and H2T_EVALS_ROOT names the root
+    `h2t-ops evals report` reads.
+    """
+    try:
+        import os
+
+        from h2t_ops.lifecycle.eval.session import SkillEval
+
+        root = os.environ.get("H2T_EVALS_ROOT")
+        tel = envelope.get("telemetry", {})
+        status_ok = envelope.get("status") in ("OK", "DEGRADED")
+        with SkillEval("research", domain="ops", project=project, evals_root=root) as ev:
+            ev.record_op_type(status_ok)
+            if envelope.get("status") == "DEGRADED":
+                ev.record_fallback()
+            ev.metric("skills.research_cost_usd",
+                      value_num=float(tel.get("total_cost_usd", 0.0)),
+                      level="business", unit="usd")
+            ev.metric("skills.api_latency_ms",
+                      value_num=float(tel.get("total_latency_ms", 0.0)),
+                      level="integration", unit="ms")
+            ev.metric("skills.records_returned",
+                      value_num=float(len(envelope.get("results", []))), level="unit")
+            if exit_code != 0:
+                raise RuntimeError("research failed")  # marks status=failure
+    except Exception:
+        pass
+
+
 __all__ = [
     "__version__",
     "SCRIPT_DIR",

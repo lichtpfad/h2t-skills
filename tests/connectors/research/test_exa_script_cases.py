@@ -27,8 +27,11 @@ the package already tests its replacement:
 - main_calls_h2t_secrets_bootstrap, main_handles_missing_secrets_file: the script's own
   secrets loader (h2t_secrets.py, deleted). test_client.py::test_resolve_key_h2t_secrets_file
   and the *_missing_exa_key_* cases cover the connector's.
-- emit_eval_records_research_cost: the connector does not emit a SkillEval session. That
-  is a capability the script had and the connector lacks; it is reported, not tested.
+
+emit_eval_records_research_cost was dropped at first, because the connector had no SkillEval
+emission. Fix round 1 ported `_emit_eval` into exa.py, called after search and crawl as the
+script did, and the case is back at the end of this file with a round trip through
+`h2t-ops evals report`.
 """
 import io
 import json
@@ -41,13 +44,9 @@ import pytest
 from h2t_ops.connectors.research import exa as exa_search
 
 
-def _no_network(*args, **kwargs):
-    raise AssertionError("a test reached the real network")
-
-
 @pytest.fixture(autouse=True)
 def _live_module(monkeypatch):
-    """Bind the module the connector will import, and keep the suite off the network.
+    """Bind the module the connector will import (the network refusal is in conftest.py).
 
     test_commands.py pops the research modules from sys.modules to prove they load lazily,
     so the module imported at the top of this file can be a stale copy that the client no
@@ -57,7 +56,6 @@ def _live_module(monkeypatch):
     import importlib
 
     monkeypatch.setitem(globals(), "exa_search", importlib.import_module("h2t_ops.connectors.research.exa"))
-    monkeypatch.setattr("urllib.request.urlopen", _no_network)
 
 
 def test_category_blocks_financial_report_blocks_exclude_text():
@@ -589,3 +587,86 @@ def test_crawl_empty_is_degraded(monkeypatch, tmp_path, capsys):
 # --- h2t_secrets bootstrap integration (Task 4 of secrets-loader) ---
 
 
+
+
+def test_emit_eval_records_research_cost(tmp_path, monkeypatch):
+    """_emit_eval writes a local SkillEval session carrying research cost + core.*."""
+    monkeypatch.setenv("H2T_EVALS_MODE", "local")
+    monkeypatch.setenv("H2T_EVALS_ROOT", str(tmp_path / "evals"))
+    envelope = {
+        "status": "OK",
+        "results": [1, 2, 3],
+        "telemetry": {"total_cost_usd": 0.037, "total_latency_ms": 1200,
+                      "attempts": [{"http": 200, "latency_ms": 1200, "error": None}]},
+        "meta": {"timestamp": "2026-07-12T00:00:00Z"},
+    }
+    exa_search._emit_eval(envelope, exit_code=0, project="h2t-skills", mode="generic")
+    files = list((tmp_path / "evals" / "research" / "sessions").glob("*.json"))
+    assert len(files) == 1
+    keys = {m["key"] for m in json.loads(files[0].read_text())["metrics"]}
+    assert "skills.research_cost_usd" in keys
+    assert "core.task_success" in keys
+
+
+def _sessions(root) -> list[dict]:
+    return [json.loads(p.read_text(encoding="utf-8"))
+            for p in sorted((root / "research" / "sessions").glob("*.json"))]
+
+
+def test_a_search_writes_a_session_that_evals_report_reads(monkeypatch, tmp_path, capsys):
+    """The round trip: `research search` writes the record, `evals report` counts it."""
+    evals = tmp_path / "evals"
+    monkeypatch.setenv("H2T_EVALS_MODE", "local")
+    monkeypatch.setenv("H2T_EVALS_ROOT", str(evals))
+    monkeypatch.setenv("EXA_API_KEY", "k")
+    with patch.object(exa_search, "call_exa", return_value=(200, {
+        "results": [{"url": "u", "title": "t", "highlights": ["s"]}],
+        "costDollars": {"total": 0.02},
+    }, 100)):
+        assert _cli(_search(tmp_path)) == 0
+    [session] = _sessions(evals)
+    assert session["skill"] == "research" and session["project"] == "p"
+    cost = {m["key"]: m.get("value_num") for m in session["metrics"]}
+    assert cost["skills.research_cost_usd"] == 0.02
+
+    from h2t_ops import cli
+
+    capsys.readouterr()
+    assert cli.dispatch(["evals", "report", "--json"]) == 0
+    report = json.dumps(json.loads(capsys.readouterr().out)["result"])
+    assert '"research"' in report
+
+
+def test_a_failed_search_records_a_failure(monkeypatch, tmp_path):
+    monkeypatch.setenv("H2T_EVALS_MODE", "local")
+    monkeypatch.setenv("H2T_EVALS_ROOT", str(tmp_path / "evals"))
+    monkeypatch.setenv("EXA_API_KEY", "k")
+    err = exa_search.ExaPermanentError("http 401", http_status=401, latency_ms=5, body={})
+    with patch.object(exa_search, "call_exa", side_effect=err):
+        assert _cli(_search(tmp_path)) == 4
+    [session] = _sessions(tmp_path / "evals")
+    assert session["status"] == "failure"
+
+
+def test_a_crawl_writes_a_session(monkeypatch, tmp_path):
+    monkeypatch.setenv("H2T_EVALS_MODE", "local")
+    monkeypatch.setenv("H2T_EVALS_ROOT", str(tmp_path / "evals"))
+    monkeypatch.setenv("EXA_API_KEY", "k")
+    with patch.object(exa_search, "call_exa", return_value=(200, {
+        "results": [{"url": "https://x.example", "text": "body"}],
+        "costDollars": {"total": 0.001},
+    }, 200)):
+        assert _cli(["crawl", "--url", "https://x.example", "--output-dir", str(tmp_path),
+                     "--project", "p", "--json"]) == 0
+    [session] = _sessions(tmp_path / "evals")
+    assert session["status"] == "success"
+
+
+def test_eval_mode_off_writes_nothing(monkeypatch, tmp_path):
+    monkeypatch.setenv("H2T_EVALS_MODE", "off")
+    monkeypatch.setenv("H2T_EVALS_ROOT", str(tmp_path / "evals"))
+    monkeypatch.setenv("EXA_API_KEY", "k")
+    with patch.object(exa_search, "call_exa", return_value=(200, {
+        "results": [{"url": "u", "title": "t"}], "costDollars": {"total": 0.0}}, 1)):
+        assert _cli(_search(tmp_path)) == 0
+    assert not (tmp_path / "evals").exists()
