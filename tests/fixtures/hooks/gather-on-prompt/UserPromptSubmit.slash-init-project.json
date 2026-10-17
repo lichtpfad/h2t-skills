@@ -1,0 +1,12 @@
+{
+  "event": {
+    "hook_event_name": "UserPromptSubmit",
+    "prompt": "/init-project",
+    "cwd": "{tmp}"
+  },
+  "expect": {
+    "text_startswith": "INIT_DATA: {",
+    "block": false,
+    "notice": ""
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "event": {
+    "hook_event_name": "UserPromptSubmit",
+    "prompt": "<task-notification>\n<output-file>/tmp/x/handoff.out</output-file>",
+    "cwd": "{tmp}"
+  },
+  "expect": {
+    "text": "",
+    "block": false,
+    "notice": ""
+  }
+}

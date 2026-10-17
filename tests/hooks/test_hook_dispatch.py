@@ -26,8 +26,14 @@ def run(monkeypatch, tmp_path):
     return _run
 
 
-def test_handlers_starts_empty_until_the_modules_are_ported():
-    assert isinstance(hooks.HANDLERS, dict)
+def test_handlers_are_keyed_by_the_3x_handler_names():
+    """Task 12 writes `hooks/run <name>` from these keys; each must be a 3.x handler name."""
+    from pathlib import Path
+    handlers = Path(__file__).resolve().parents[2] / "plugins" / "h2t-core" / "hooks-handlers"
+    assert hooks.HANDLERS
+    for name, handle in hooks.HANDLERS.items():
+        assert (handlers / name).is_file(), name
+        assert callable(handle), name
 
 
 def test_a_registered_handler_gets_the_parsed_event_and_its_reply_is_emitted(run, capsysbinary):
