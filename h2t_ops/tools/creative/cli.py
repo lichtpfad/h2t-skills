@@ -3,7 +3,9 @@
 The skills call `h2t-creative root` to find `profiles/` and `h2t-creative assemble ...` to
 build. The plugin's shell script answers with its own directory and runs `assembler.py`
 through `uv run`; this answers with the package resources and runs the package assembler.
-Whichever of the two is first on PATH, the skill gets the same answer to the same call.
+Not yet a console script: on PATH it would shadow the plugin bin and move where
+style-create writes user profiles. Task 12 exports it when the plugin bin is deleted; until
+then it runs as `python -m h2t_ops.tools.creative.cli`.
 """
 from __future__ import annotations
 

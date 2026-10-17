@@ -50,7 +50,7 @@ def build_report(
         "safe_next_action": safe_next_action,
         "evidence": {
             "git_head": git_head,
-            "checked_at": datetime.datetime.utcnow().isoformat() + "Z",
+            "checked_at": datetime.datetime.now(datetime.UTC).replace(tzinfo=None).isoformat() + "Z",
         },
     }
 

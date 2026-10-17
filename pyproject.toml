@@ -40,7 +40,7 @@ h2t-docs-lint = "h2t_ops.tools.docs.lint:main"
 h2t-docs-sync-labels = "h2t_ops.tools.docs.sync_labels:main"
 h2t-milestone-closure = "h2t_ops.tools.docs.closure:main"
 h2t-drawio = "h2t_ops.tools.drawio.cli:main"
-h2t-creative = "h2t_ops.tools.creative.cli:main"
+# h2t-creative = "h2t_ops.tools.creative.cli:main" — added in Task 12 with the plugin bin removal (it would shadow it on PATH)
 h2t-agent-profile = "h2t_ops.tools.agent_profile.apply_agent_profile:main"
 
 [project.optional-dependencies]

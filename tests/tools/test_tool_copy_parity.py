@@ -265,6 +265,11 @@ _AGENT_PROFILE = [
      '_DEFAULT_CATALOG = resource_dir("agent_profile") / "agent-profiles.json"\n'),
 ]
 
+# `utcnow()` is deprecated since 3.12 and warns on every report. Same string, aware clock.
+UTC_NOW = [(re.compile(re.escape('datetime.datetime.utcnow().isoformat() + "Z"')),
+            'datetime.datetime.now(datetime.UTC).replace(tzinfo=None).isoformat() + "Z"')]
+_UTC_NOW_MODULES = {"apply_report", "fix_plan", "reporter"}
+
 _DEV = "plugins/h2t-dev"
 _LIB = f"{_DEV}/lib/docs"
 _DOCS = "h2t_ops/tools/docs"
@@ -275,7 +280,9 @@ SOURCE_PAIRS = {
     f"{_DOCS}/__init__.py": (f"{_LIB}/__init__.py", [], [
         ("# plugins/h2t-dev/lib/docs/__init__.py\n",
          "# h2t_ops/tools/docs — docs-lint and its siblings, copied from plugins/h2t-dev\n")]),
-    **{f"{_DOCS}/{m}.py": (f"{_LIB}/{m}.py", DOCS_SOURCE, []) for m in _DOCS_LIB.split("|")},
+    **{f"{_DOCS}/{m}.py": (f"{_LIB}/{m}.py",
+                           DOCS_SOURCE + (UTC_NOW if m in _UTC_NOW_MODULES else []), [])
+       for m in _DOCS_LIB.split("|")},
     f"{_DOCS}/common.py": (f"{_LIB}/common.py", DOCS_SOURCE, _COMMON),
     f"{_DOCS}/index_builder.py": (f"{_LIB}/index_builder.py", DOCS_SOURCE, _INDEX_BUILDER),
     f"{_DOCS}/lint.py": (f"{_DEV}/skills/docs-lint/scripts/lint.py", DOCS_SOURCE, _LINT),
@@ -284,7 +291,8 @@ SOURCE_PAIRS = {
                                 DOCS_SOURCE, _SYNC_LABELS),
     f"{_DOCS}/migrate_legacy_labels.py": (
         f"{_DEV}/skills/docs-sync-labels/scripts/migrate_legacy_labels.py", DOCS_SOURCE, _MIGRATE),
-    f"{_DOCS}/closure.py": (f"{_DEV}/skills/milestone-closure/scripts/closure.py", [], _CLOSURE),
+    f"{_DOCS}/closure.py": (f"{_DEV}/skills/milestone-closure/scripts/closure.py", UTC_NOW,
+                                _CLOSURE),
     "h2t_ops/tools/drawio/generate.py": (f"{_DRAWIO_SRC}/generate.py", [], _GENERATE),
     "h2t_ops/tools/drawio/export.py": (f"{_DRAWIO_SRC}/export.py", [], _EXPORT),
     "h2t_ops/tools/creative/assembler.py": ("plugins/h2t-creative/assembler.py", [], _ASSEMBLER),
@@ -350,7 +358,14 @@ TEST_PAIRS = {
     f"{_T}/docs/test_closure.py": ("tests/milestone/test_closure.py", DOCS_TEST, [
         ('    assert "docs-lint" in " ".join(cmd)\n',
          '    assert "h2t_ops.tools.docs.lint" in cmd\n')]),
-    f"{_T}/drawio/test_generate.py": (f"{_DRAWIO_SRC}/test_generate.py", DRAWIO_TEST, []),
+    # An Element's truth value is its child count, and that use is deprecated (3.12).
+    f"{_T}/drawio/test_generate.py": (f"{_DRAWIO_SRC}/test_generate.py", DRAWIO_TEST, [
+        ('        geo_11 = cell_11.find(".//mxGeometry") or cell_11.find("mxGeometry")\n',
+         '        geo_11 = cell_11.find(".//mxGeometry")\n'
+         '        geo_11 = geo_11 if geo_11 is not None else cell_11.find("mxGeometry")\n'),
+        ('        geo = cell.find("mxGeometry") or cell.find(".//mxGeometry")\n',
+         '        geo = cell.find("mxGeometry")\n'
+         '        geo = geo if geo is not None else cell.find(".//mxGeometry")\n')]),
     f"{_T}/drawio/test_export.py": (f"{_DRAWIO_SRC}/test_export.py", DRAWIO_TEST, [
         ('    source = (Path(__file__).resolve().parent / "export.py").read_text(encoding="utf-8")\n',
          '    source = (Path(__file__).resolve().parents[3] / "h2t_ops" / "tools" / "drawio"\n'

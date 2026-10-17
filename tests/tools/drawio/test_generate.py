@@ -364,7 +364,8 @@ def test_11_post_process_xml_id_injection_position_restore_user_nodes():
         assert cell_11 is not None, "User ID 'ccxt' not injected"
 
         # Find mxGeometry — may be direct child or inside UserObject
-        geo_11 = cell_11.find(".//mxGeometry") or cell_11.find("mxGeometry")
+        geo_11 = cell_11.find(".//mxGeometry")
+        geo_11 = geo_11 if geo_11 is not None else cell_11.find("mxGeometry")
         if geo_11 is None and cell_11.tag == "mxCell":
             geo_11 = cell_11.find("mxGeometry")
         assert geo_11 is not None, "mxGeometry not found"
@@ -486,7 +487,8 @@ def test_14_preserve_user_edits_false_resets_to_graph_dict_positions():
         # Find node_a — could be mxCell or inside UserObject
         cell = tree2.find('.//*[@id="node_a"]')
         assert cell is not None, "node_a not found"
-        geo = cell.find("mxGeometry") or cell.find(".//mxGeometry")
+        geo = cell.find("mxGeometry")
+        geo = geo if geo is not None else cell.find(".//mxGeometry")
         assert geo is not None, "mxGeometry not found"
         assert int(float(geo.get("x"))) == 100, f"x should be reset to 100, got {geo.get('x')}"
         assert int(float(geo.get("y"))) == 100, f"y should be reset to 100, got {geo.get('y')}"

@@ -44,6 +44,6 @@ def build_apply_report(
         "schema_version": "0.1",
         "plan_id": plan_id,
         "run_id": run_id,
-        "applied_at": datetime.datetime.utcnow().isoformat() + "Z",
+        "applied_at": datetime.datetime.now(datetime.UTC).replace(tzinfo=None).isoformat() + "Z",
         "actions": actions,
     }

@@ -31,7 +31,6 @@ COMMANDS = [
     "h2t-docs-sync-labels",
     "h2t-milestone-closure",
     "h2t-drawio",
-    "h2t-creative",
     "h2t-agent-profile",
 ]
 
@@ -64,17 +63,46 @@ def installed(tmp_path_factory):
                         "CLAUDE_CONFIG_DIR", "PYTHONHOME"}}
     env.update(HOME=str(home), USERPROFILE=str(home), APPDATA=str(home / "AppData"),
                PYTHONPATH=str(site), PYTHONNOUSERSITE="1", PYTHONDONTWRITEBYTECODE="1")
-    bindir = site / ("Scripts" if sys.platform == "win32" else "bin")
-    return SimpleNamespace(wheel=wheel, site=site.resolve(), env=env, cwd=elsewhere,
-                           bindir=bindir)
+    return SimpleNamespace(wheel=wheel, site=site.resolve(), env=env, cwd=elsewhere)
+
+
+def find_console_script(site: Path, name: str) -> Path:
+    """The console script `name` under a `pip install --target` directory.
+
+    `--target` installs with the home scheme, which on Windows too is `posix_home`: the
+    launchers land in `<target>/bin` as `.exe`. `Scripts` is searched as well, in case a
+    pip changes that; whichever exists is listed when the script is not found.
+    """
+    dirs = [d for d in (site / "bin", site / "Scripts") if d.is_dir()]
+    for bindir in dirs:
+        for candidate in (bindir / name, bindir / f"{name}.exe"):
+            if candidate.is_file():
+                return candidate
+    found = {d.name: sorted(p.name for p in d.iterdir()) for d in dirs}
+    pytest.fail(f"{name} is not among the installed console scripts under {site}: "
+                f"{found or 'neither bin/ nor Scripts/ exists'}")
 
 
 def _command(installed, name: str) -> Path:
-    for candidate in (installed.bindir / name, installed.bindir / f"{name}.exe"):
-        if candidate.is_file():
-            return candidate
-    pytest.fail(f"{name} is not among the installed console scripts: "
-                f"{sorted(p.name for p in installed.bindir.iterdir())}")
+    return find_console_script(installed.site, name)
+
+
+def test_console_script_lookup_finds_a_windows_launcher_in_bin(tmp_path, monkeypatch):
+    """`pip install --target` uses the home scheme, which on Windows is posix_home: the
+    launchers land in <target>/bin as .exe, not in Scripts."""
+    (tmp_path / "bin").mkdir()
+    (tmp_path / "bin" / "h2t-x.exe").write_bytes(b"MZ")
+    monkeypatch.setattr(sys, "platform", "win32")
+    assert find_console_script(tmp_path, "h2t-x") == tmp_path / "bin" / "h2t-x.exe"
+
+
+def test_console_script_lookup_names_what_exists_when_it_misses(tmp_path):
+    (tmp_path / "bin").mkdir()
+    (tmp_path / "bin" / "h2t-y").write_text("")
+    with pytest.raises(pytest.fail.Exception, match=r"h2t-x is not among.*'bin': \['h2t-y'\]"):
+        find_console_script(tmp_path, "h2t-x")
+    with pytest.raises(pytest.fail.Exception, match="neither bin/ nor Scripts/ exists"):
+        find_console_script(tmp_path / "empty", "h2t-x")
 
 
 def _python(installed, code: str) -> subprocess.CompletedProcess:
@@ -145,8 +173,16 @@ def test_generate_does_not_need_drawpyo_to_import(installed):
 
 
 def test_creative_root_names_the_installed_resources(installed):
-    """The skills read `$(h2t-creative root)/profiles/` — the same contract as the plugin bin."""
-    r = _run([_command(installed, "h2t-creative"), "root"], cwd=installed.cwd, env=installed.env)
+    """The skills read `$(h2t-creative root)/profiles/` — the same contract as the plugin bin.
+
+    No `h2t-creative` console script ships yet: on PATH it would shadow the plugin's
+    `bin/h2t-creative` and move where style-create writes user profiles into site-packages.
+    Task 12 adds it when the plugin bin goes; until then the module is checked directly.
+    """
+    assert not (installed.site / "bin" / "h2t-creative").exists()
+    assert not (installed.site / "bin" / "h2t-creative.exe").exists()
+    r = _run([sys.executable, "-m", "h2t_ops.tools.creative.cli", "root"], cwd=installed.cwd,
+             env=installed.env)
     assert r.returncode == 0, r.stderr
     root = Path(r.stdout.strip())
     assert root.resolve() == installed.site / "h2t_ops" / "resources" / "creative"

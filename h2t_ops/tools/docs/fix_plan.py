@@ -114,7 +114,7 @@ def build_fix_plan(
         "schema_version": "0.1",
         "plan_id": plan_id,
         "repo_root": repo_root,
-        "generated_at": datetime.datetime.utcnow().isoformat() + "Z",
+        "generated_at": datetime.datetime.now(datetime.UTC).replace(tzinfo=None).isoformat() + "Z",
         "source_report_id": source_report_id,
         "actions": actions,
     }
