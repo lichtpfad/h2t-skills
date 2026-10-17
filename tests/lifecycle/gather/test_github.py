@@ -1,8 +1,9 @@
-import os
-import sys
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-from gather.github import _parse_json, _parse_jsonl_or_json, gather_github
+from h2t_ops.lifecycle.gather.github import (
+    _parse_json,
+    _parse_jsonl_or_json,
+    gather_github,
+)
 
 
 def test_gather_github_returns_expected_keys():
@@ -41,7 +42,7 @@ if __name__ == "__main__":
 
 def test_gather_github_reports_failed_sources():
     """Every gh call failing must be reported, not rendered as an empty repo."""
-    import gather.github as gh_mod
+    import h2t_ops.lifecycle.gather.github as gh_mod
     original = gh_mod.run_parallel
     gh_mod.run_parallel = lambda commands, **kw: {name: None for name in commands}
     try:
@@ -54,7 +55,7 @@ def test_gather_github_reports_failed_sources():
 
 def test_gather_github_no_failures_when_calls_succeed():
     """A repo that genuinely has no issues reports no failed sources."""
-    import gather.github as gh_mod
+    import h2t_ops.lifecycle.gather.github as gh_mod
     original = gh_mod.run_parallel
     gh_mod.run_parallel = lambda commands, **kw: {name: "[]" for name in commands}
     try:

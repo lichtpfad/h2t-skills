@@ -1,8 +1,6 @@
 import os
-import sys
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-from gather.user import gather_user_context
+from h2t_ops.lifecycle.gather.user import gather_user_context
 
 
 def test_gather_user_context_returns_expected_keys():

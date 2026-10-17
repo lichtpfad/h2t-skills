@@ -1,5 +1,5 @@
-from lib.eval import session as sess
-from lib.eval.status import get_status
+from h2t_ops.lifecycle.eval import session as sess
+from h2t_ops.lifecycle.eval.status import get_status
 
 
 def test_status_off_when_no_sdk_or_token(monkeypatch):

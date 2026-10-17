@@ -13,7 +13,7 @@ def _neutralize_eval_secrets(monkeypatch, tmp_path_factory):
     session._DEFAULT_SECRETS explicitly.
     """
     try:
-        from lib.eval import session as sess
+        from h2t_ops.lifecycle.eval import session as sess
     except Exception:
         return
     missing = tmp_path_factory.mktemp("no-secrets") / "secrets.env"

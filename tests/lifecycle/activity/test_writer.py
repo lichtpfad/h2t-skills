@@ -1,7 +1,7 @@
 import json
 import os
 
-from lib.activity.writer import log_session_end, log_session_start
+from h2t_ops.lifecycle.activity.writer import log_session_end, log_session_start
 
 
 def test_log_session_start_creates_spool(tmp_path):
@@ -59,7 +59,7 @@ def test_log_machine_uses_hostname_by_default(tmp_path):
 
 def test_writer_cli_start(tmp_path, monkeypatch):
     """CLI: `writer.py start` subcommand writes correct record to spool."""
-    from lib.activity.writer import main as writer_main
+    from h2t_ops.lifecycle.activity.writer import main as writer_main
 
     spool = tmp_path / "cli_spool.jsonl"
     monkeypatch.setenv("H2T_ACTIVITY_SPOOL", str(spool))

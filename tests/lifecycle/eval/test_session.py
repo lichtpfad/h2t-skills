@@ -3,8 +3,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from lib.eval import session as sess
-from lib.eval.session import SkillEval
+from h2t_ops.lifecycle.eval import session as sess
+from h2t_ops.lifecycle.eval.session import SkillEval
 
 
 def test_skill_eval_local_write_on_success(tmp_path, monkeypatch):
@@ -416,7 +416,7 @@ def test_auto_custom_error_class_on_failure(tmp_path, monkeypatch):
 
 
 def test_eval_set_resolved_per_class():
-    from lib.eval.skill_class import eval_set_for
+    from h2t_ops.lifecycle.eval.skill_class import eval_set_for
     ev = SkillEval("research", domain="d", project="p")
     assert ev._eval_set == eval_set_for("research") == "skills-integration-baseline-v1"
     ev2 = SkillEval("handoff", domain="d", project="p")
@@ -449,11 +449,11 @@ def test_record_eval_module_removed():
     """The vestigial gather.eval module and its exports are gone."""
     import importlib
 
-    import lib.gather as g
+    import h2t_ops.lifecycle.gather as g
     assert not hasattr(g, "record_eval")
     assert not hasattr(g, "estimate_tokens")
     with pytest.raises(ModuleNotFoundError):
-        importlib.import_module("lib.gather.eval")
+        importlib.import_module("h2t_ops.lifecycle.gather.eval")
 
 
 def test_eval_repo_decoupled_from_project():

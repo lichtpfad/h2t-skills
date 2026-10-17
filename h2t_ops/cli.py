@@ -248,10 +248,10 @@ def dispatch(argv: list[str]) -> int:
             "`h2t-ops ingest` is retired — use the connector directly, e.g. `h2t-ops gmail list`"
         ), fmt=_fmt_from(argv))
     if argv and argv[0] == "gather":
-        # One gather implementation: the plugin script, reached through the same ladder
-        # h2t-gather uses. lib/cli/main.py carried a second copy that never gained
-        # find_latest_session_index, so this path silently lost "### Previous Session".
-        from h2t_ops.plugin_entrypoints import run_plugin_main
+        # One gather implementation: the package module h2t-gather runs. lib/cli/main.py
+        # carried a second copy that never gained find_latest_session_index, so this path
+        # silently lost "### Previous Session".
+        from h2t_ops.lifecycle import run_main, session_start
         # Replicate the legacy parser rather than slicing argv: argparse accepts the
         # optional positional anywhere, so `gather --cwd /tmp session-start` is a valid
         # legacy shape that hand-rolled parsing would reject.
@@ -270,8 +270,7 @@ def dispatch(argv: list[str]) -> int:
             forwarded.append("--format-briefing")
         if gathered.briefing_only:
             forwarded.append("--briefing-only")
-        sys.argv = forwarded
-        return run_plugin_main("skills/session-start/scripts/gather.py")
+        return run_main(session_start.main, forwarded[0], forwarded[1:])
     if argv and argv[0] in _MIGRATED:
         return _run_connector(argv)
     if not argv:

@@ -1,8 +1,9 @@
-import os
-import sys
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-from gather.sessions import extract_session_id, find_session_files, get_machine_name
+from h2t_ops.lifecycle.gather.sessions import (
+    extract_session_id,
+    find_session_files,
+    get_machine_name,
+)
 
 
 def test_find_session_files_returns_list():

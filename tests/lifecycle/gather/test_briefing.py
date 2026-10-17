@@ -1,14 +1,13 @@
 """Tests for briefing formatter."""
 
-import os
-import sys
-
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-
 from datetime import datetime
 from unittest.mock import patch
 
-from gather.briefing import _build_hints, _build_slug_template, format_briefing
+from h2t_ops.lifecycle.gather.briefing import (
+    _build_hints,
+    _build_slug_template,
+    format_briefing,
+)
 
 
 def _minimal_data(**overrides):
@@ -92,7 +91,7 @@ def test_slug_template_with_milestone():
     project = {"id": "crypto"}
     github = {"current_milestone": {"title": "Phase 5"}}
 
-    with patch("gather.briefing.datetime") as mock_dt:
+    with patch("h2t_ops.lifecycle.gather.briefing.datetime") as mock_dt:
         mock_dt.now.return_value = datetime(2026, 3, 26, 14, 30)
         mock_dt.side_effect = lambda *a, **kw: datetime(*a, **kw)
         slug = _build_slug_template(project, github)
@@ -105,7 +104,7 @@ def test_slug_template_without_milestone():
     project = {"id": "art-project"}
     github = {}
 
-    with patch("gather.briefing.datetime") as mock_dt:
+    with patch("h2t_ops.lifecycle.gather.briefing.datetime") as mock_dt:
         mock_dt.now.return_value = datetime(2026, 3, 26, 10, 15)
         mock_dt.side_effect = lambda *a, **kw: datetime(*a, **kw)
         slug = _build_slug_template(project, github)

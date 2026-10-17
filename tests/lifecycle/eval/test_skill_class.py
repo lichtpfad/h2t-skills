@@ -1,4 +1,4 @@
-from lib.eval.skill_class import eval_set_for, skill_class
+from h2t_ops.lifecycle.eval.skill_class import eval_set_for, skill_class
 
 
 def test_gather_skills_map_to_gather_eval_set():

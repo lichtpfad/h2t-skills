@@ -13,8 +13,8 @@ from pathlib import Path
 
 import pytest
 
-from lib.activity import writer as activity_writer
-from lib.gather import sessions
+from h2t_ops.lifecycle.activity import writer as activity_writer
+from h2t_ops.lifecycle.gather import sessions
 
 REPO = Path(__file__).resolve().parents[2]
 HANDOFF_WRITER = REPO / "plugins" / "h2t-core" / "skills" / "handoff" / "scripts" / "writer.py"

@@ -1,10 +1,7 @@
 # test_runner.py
-import os
 import sys
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-
-from gather.runner import run_parallel
+from h2t_ops.lifecycle.gather.runner import run_parallel
 
 
 def test_run_parallel_basic():

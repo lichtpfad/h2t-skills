@@ -1,10 +1,10 @@
-# lib/eval/test_report.py
+# tests/lifecycle/eval/test_report.py
 import json
 from pathlib import Path
 
 import pytest
 
-from lib.eval import report as rep
+from h2t_ops.lifecycle.eval import report as rep
 
 
 def _write_session(root: Path, skill: str, name: str, payload) -> None:

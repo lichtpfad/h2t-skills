@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from h2t_ops import activity_log_entry, gather_entry, handoff_entry, plugin_entrypoints
+from h2t_ops import plugin_entrypoints
 
 
 @pytest.fixture(autouse=True)
@@ -30,40 +30,8 @@ def test_handoff_plugin_script_path_exists():
     assert handoff_path.is_file()
 
 
-def test_gather_entry_delegates_to_session_start_script(monkeypatch):
-    calls: list[str] = []
-
-    def fake_run(relative_path: str) -> int:
-        calls.append(relative_path)
-        return 0
-
-    monkeypatch.setattr(gather_entry, "run_plugin_main", fake_run)
-    assert gather_entry.main() == 0
-    assert calls == ["skills/session-start/scripts/gather.py"]
-
-
-def test_activity_log_entry_delegates_to_writer_script(monkeypatch):
-    calls: list[str] = []
-
-    def fake_run(relative_path: str) -> int:
-        calls.append(relative_path)
-        return 0
-
-    monkeypatch.setattr(activity_log_entry, "run_plugin_main", fake_run)
-    assert activity_log_entry.main() == 0
-    assert calls == ["lib/activity/writer.py"]
-
-
-def test_handoff_entry_delegates_to_writer_script(monkeypatch):
-    calls: list[str] = []
-
-    def fake_run(relative_path: str) -> int:
-        calls.append(relative_path)
-        return 0
-
-    monkeypatch.setattr(handoff_entry, "run_plugin_main", fake_run)
-    assert handoff_entry.main() == 0
-    assert calls == ["skills/handoff/scripts/writer.py"]
+# The console scripts no longer delegate to plugin scripts through run_plugin_main; they
+# call h2t_ops.lifecycle. That is checked in tests/lifecycle/test_entrypoints_use_package.py.
 
 
 def test_session_start_skill_uses_installable_entrypoints():
@@ -250,49 +218,6 @@ def test_gather_hook_uses_strict_python_probe():
     assert 'resolve_h2t_python "import yaml" pyyaml' in code
     assert "lib.cli" not in code
     assert 'resolve_h2t_python "import sys"' not in code
-
-
-def _console_scripts() -> dict[str, str]:
-    """`name -> module` for every console script pyproject declares."""
-    import tomllib
-
-    root = Path(__file__).resolve().parents[2]
-    with (root / "pyproject.toml").open("rb") as f:
-        scripts = tomllib.load(f)["project"]["scripts"]
-    return {name: target.split(":")[0] for name, target in scripts.items()}
-
-
-# h2t-hook takes the handler name as an argument and launches it as a process, so it has
-# no single script to name and never calls run_plugin_main. It is covered instead by
-# test_hook_entry_resolves_the_handlers_scaffold_writes below and by tests/core/test_hook_entry.py.
-_NOT_A_SINGLE_SCRIPT = {"h2t_ops.hook_entry"}
-
-PLUGIN_SCRIPT_ENTRIES = sorted(
-    (name, module)
-    for name, module in _console_scripts().items()
-    if module.endswith("_entry") and module not in _NOT_A_SINGLE_SCRIPT
-)
-
-
-@pytest.mark.parametrize("name,module_path", PLUGIN_SCRIPT_ENTRIES, ids=[n for n, _ in PLUGIN_SCRIPT_ENTRIES])
-def test_entrypoint_names_a_script_that_ships(name, module_path, monkeypatch):
-    """Every installed command must name a plugin script that actually exists.
-
-    The path lives inside `main()`, so it is captured by standing in for
-    `run_plugin_main` — that also proves the module wires the two together at all.
-    """
-    import importlib
-
-    module = importlib.import_module(module_path)
-    captured = {}
-    monkeypatch.setattr(module, "run_plugin_main", lambda rel: captured.setdefault("path", rel) or 0)
-    module.main()
-
-    relative = captured.get("path")
-    assert relative, f"{module_path}.main() never called run_plugin_main"
-    assert plugin_entrypoints.plugin_script_path(relative).is_file(), (
-        f"{name} points at {relative}, which is not in the plugin"
-    )
 
 
 def test_payload_script_dependencies_are_installed():
