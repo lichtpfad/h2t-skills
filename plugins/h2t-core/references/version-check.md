@@ -26,7 +26,7 @@ Act on the result, in this order:
 1. JSON with `"ok": true` — continue.
 2. JSON with `"ok": false` — show the user `error.hint` as it is and stop this skill until
    it is resolved. Do not run anything the hint names unless the user asks you to: on
-   `reason: path` it is a command for the user to decide on. `result.reason` names the
+   `reason: path` it is a command for the user to decide on. `error.details.reason` names the
    case: `not_installed`, `version` or `path`.
 3. `command not found` — read `~/.h2t/run/install.env`
    (`grep -E '^(STATE|H2T_HOOK)=' ~/.h2t/run/install.env`). With `STATE=ready` the install
@@ -40,7 +40,7 @@ Act on the result, in this order:
 ## Why each outcome reads the way it does
 
 **1 and 2 come from the command itself.** On `ok: false` the envelope carries a `hint`
-with the exact next command, at `error.hint`; `result.reason` is the machine-readable
+with the exact next command, at `error.hint`; `error.details.reason` is the machine-readable
 case. The skill shows the hint rather than composing its own advice, so the advice changes
 with the CLI, not with every copy of this text. It shows it and stops — it does not act on
 it: the `path` hint ends in `uv tool update-shell`, which edits the user's shell profile,
@@ -59,9 +59,10 @@ with a usage error, or with a version line and no JSON. Any of those means the C
 this skill, and the bootstrap brings the machine to the current release whatever state it
 is in (spec §7.2).
 
-`@VERSION@` and `@BOOTSTRAP@` are placeholders. The release script replaces both in every
-file of the release (plan Task 13); in a checkout they stay literal, so the check reports
-`reason: version` there until a release is cut.
+The version after `--expect` and the bootstrap command are slots. `scripts/release.py
+prepare` rewrites both in every file of the release, by pattern, so the next release
+rewrites them again; in a checkout they hold placeholders until a release is cut, and the
+check reports `reason: version` there.
 
 ## Why a copy in every skill, not a link to this file
 

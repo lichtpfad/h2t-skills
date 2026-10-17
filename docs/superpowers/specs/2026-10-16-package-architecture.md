@@ -134,8 +134,9 @@ h2t_ops/                       пакет — единственное мест�
 
 plugins/<name>/
   skills/<skill>/SKILL.md, references/*.md
-  hooks/hooks.json             "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/run\" <hook>",
-                               "timeout": <секунды на хук>
+  hooks/hooks.json             "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/run\" <hook> <t-1>",
+                               "timeout": <t, секунды на хук>
+                               (второй аргумент — лимит сторожа §6.1.4; без него 9 с)
   hooks/run                    обёртка, §6.1
   release.env                  VERSION=4.1.0 — пишет скрипт выпуска
 
@@ -326,7 +327,8 @@ uvx --isolated --python 3.12.11 --managed-python -c "<constraints>" --from "h2t-
    спрашивает о своей версии сам. Установленный `h2t-setup sync`, запущенный для
    ремонта, тоже уходит в изолированный `uvx`. Контракт, который должен знать
    исполнитель любой версии, заморожен: поля `format`, `version`, `bootstrap` манифеста,
-   правило «тег из `ref` h2t-core» и передача режима последним аргументом.
+   правило «тег из `ref` h2t-core» и порядок слов: режим — первое слово после
+   `bootstrap`, исходные аргументы — за ним.
 3. **Снимок** в `~/.h2t/run/rollback/<время>/`: `install.json`, `uv-receipt.toml`,
    версии, scope и enabled/disabled плагинов в каждом харнессе.
 4. **CLI — проверка по факту:** запустить каждую точку входа из `install.json` с

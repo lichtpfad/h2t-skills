@@ -4,7 +4,7 @@
 **Branch:** `docs-refactor-2026-06-02` (уже создана)
 **Python (h2t-skills):** `C:/dev/h2t-skills/.venv/Scripts/python.exe`
 **Python (system/h2t):** `~/.h2t/venv/Scripts/python.exe`
-**lint script:** `C:/dev/h2t-skills/plugins/h2t-dev/skills/docs-lint/scripts/lint.py`
+**lint command:** `h2t-docs-lint` (installed with h2t-ops; from a checkout, `uv run h2t-docs-lint`)
 
 **Правила (из CLAUDE.md):**
 - Одна команда на Bash call — без `&&` `||` `;`
@@ -75,7 +75,7 @@ template: client_project
 ### 0.4 Doctor — before state
 
 ```
-C:/dev/h2t-skills/.venv/Scripts/python.exe C:/dev/h2t-skills/plugins/h2t-dev/skills/docs-lint/scripts/lint.py doctor --root C:/work/rejuve --json --no-pymarkdown
+h2t-docs-lint doctor --root C:/work/rejuve --json --no-pymarkdown
 ```
 
 Добавь в лог:
@@ -122,7 +122,7 @@ docs/deliverables/ в плане НЕ предусмотрена.
 ### 0.5 Fix-safe — проскаффолдить недостающее
 
 ```
-C:/dev/h2t-skills/.venv/Scripts/python.exe C:/dev/h2t-skills/plugins/h2t-dev/skills/docs-lint/scripts/lint.py fix-safe --root C:/work/rejuve
+h2t-docs-lint fix-safe --root C:/work/rejuve
 ```
 
 Добавь в лог:
@@ -203,7 +203,7 @@ git -C C:/work/rejuve commit -m "docs: add docs-lint config + Phase 0 audit log"
 После выполнения всех 9 задач — запусти doctor ещё раз:
 
 ```
-C:/dev/h2t-skills/.venv/Scripts/python.exe C:/dev/h2t-skills/plugins/h2t-dev/skills/docs-lint/scripts/lint.py doctor --root C:/work/rejuve --json --no-pymarkdown
+h2t-docs-lint doctor --root C:/work/rejuve --json --no-pymarkdown
 ```
 
 Добавь в лог:

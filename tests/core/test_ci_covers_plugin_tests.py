@@ -17,12 +17,18 @@ WORKFLOWS = ROOT / ".github" / "workflows"
 
 
 def _plugin_test_files():
-    return sorted(
-        path.relative_to(ROOT).as_posix()
-        for pattern in ("test_*.py", "*_test.py", "conftest.py")
-        for path in (ROOT / "plugins").rglob(pattern)
-        if "__pycache__" not in path.parts
-    )
+    """Test modules by name, and anything at all under a `tests/` directory.
+
+    The second half is what the runtime-.py ratchet sees too (scripts/exec_map.py counts
+    every .py under plugins/, tests included), so the two guards agree on a helper.
+    """
+    plugins = ROOT / "plugins"
+    found = {
+        path for pattern in ("test_*.py", "*_test.py", "conftest.py")
+        for path in plugins.rglob(pattern)
+    }
+    found |= {path for path in plugins.rglob("*") if path.is_file() and "tests" in path.parts}
+    return sorted(p.relative_to(ROOT).as_posix() for p in found if "__pycache__" not in p.parts)
 
 
 def test_plugins_ship_no_tests():

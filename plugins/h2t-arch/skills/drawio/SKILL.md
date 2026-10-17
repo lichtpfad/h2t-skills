@@ -26,7 +26,7 @@ Act on the result, in this order:
 1. JSON with `"ok": true` — continue.
 2. JSON with `"ok": false` — show the user `error.hint` as it is and stop this skill until
    it is resolved. Do not run anything the hint names unless the user asks you to: on
-   `reason: path` it is a command for the user to decide on. `result.reason` names the
+   `reason: path` it is a command for the user to decide on. `error.details.reason` names the
    case: `not_installed`, `version` or `path`.
 3. `command not found` — read `~/.h2t/run/install.env`
    (`grep -E '^(STATE|H2T_HOOK)=' ~/.h2t/run/install.env`). With `STATE=ready` the install
@@ -40,9 +40,10 @@ Act on the result, in this order:
 ## Setup
 
 Everything runs through one command, `h2t-drawio`, with three subcommands: `generate`,
-`export` and `shapes`. Only `generate` needs `drawpyo`, which is the CLI's `drawio` extra
-(`uv tool install 'h2t-ops[drawio]'`). Without it, `generate` exits 3 and prints that remedy
-rather than an ImportError; `export` and `shapes` work on a base install.
+`export` and `shapes`. Only `generate` needs `drawpyo`, which is the CLI's `drawio` extra:
+`h2t-setup sync --extra drawio` adds it and keeps it on every later sync (from a developer
+checkout, `h2t-setup dev-sync --extra drawio`). Without it, `generate` exits 3 and prints
+the exact command rather than an ImportError; `export` and `shapes` work on a base install.
 
 Export additionally needs the draw.io Desktop CLI at
 `/Applications/draw.io.app/Contents/MacOS/draw.io`, overridable through

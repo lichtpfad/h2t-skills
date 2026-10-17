@@ -38,7 +38,7 @@ def subscriptions() -> dict[str, set[str]]:
 
 def test_the_reader_finds_the_name():
     """Control for the regex: a zero here would make every assertion below vacuous."""
-    assert _NAME.search('H2T_HOOK_TIMEOUT=9 bash "${CLAUDE_PLUGIN_ROOT}/hooks/run" gather-on-skill'
+    assert _NAME.search('bash "${CLAUDE_PLUGIN_ROOT}/hooks/run" gather-on-skill 29'
                         ).group(1) == "gather-on-skill"
     assert len(subscriptions()) >= 9
 

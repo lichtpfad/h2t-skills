@@ -711,6 +711,7 @@ class ResearchClient:
                 provider="exa",
             ),
         )
+        exa._emit_eval(provider_envelope, exit_code=0, project=project, mode="crawl")
         safe_provider_envelope = sanitize_details(provider_envelope)
         return {
             "kind": "research_provider_envelope",
@@ -1106,6 +1107,7 @@ class ResearchClient:
             created_at=artifact["created_at"],
         )
         artifact = self._attach_research_refs(artifact, research_refs)
+        exa._emit_eval(provider_envelope, exit_code=exit_code, project=project, mode=mode)
 
         if provider_envelope.get("status") == "FAILED":
             _raise_for_provider_failure(

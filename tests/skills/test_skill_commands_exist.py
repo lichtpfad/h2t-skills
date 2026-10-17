@@ -7,7 +7,7 @@ Four assertions over the shipped text:
    command's parser. The parser is asked through `--help` of the console script beside
    `sys.executable`, the installed interpreter — not reconstructed from the source.
 2. Every h2t skill starts with the version check: its first shell command is
-   `h2t-ops version --expect @VERSION@ --json`, and the outcomes block under it is the
+   `h2t-ops version --expect <slot> --json` (the slot pattern of scripts/release.py), and the outcomes block under it is the
    canonical one in plugins/h2t-core/references/version-check.md, byte for byte.
 3. No skill runs plugin Python: no `.py` script, no `h2t-python`, no path into a plugin's
    `scripts/`. Plugins carry text only (spec §5).
@@ -19,6 +19,7 @@ h2t command at all is named in NO_H2T_COMMAND with the reason.
 """
 from __future__ import annotations
 
+import importlib.util
 import os
 import re
 import shlex
@@ -36,7 +37,19 @@ ROOT = Path(__file__).resolve().parents[2]
 PLUGINS = ROOT / "plugins"
 SKILLS = sorted(PLUGINS.glob("h2t-*/skills/*/SKILL.md"))
 VERSION_CHECK_DOC = PLUGINS / "h2t-core" / "references" / "version-check.md"
-VERSION_CHECK = "h2t-ops version --expect @VERSION@ --json"
+
+
+def _release_slots():
+    """scripts/release.py: the one definition of the slots a release rewrites."""
+    spec = importlib.util.spec_from_file_location("release_slots", ROOT / "scripts" / "release.py")
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+# The placeholder in a checkout, X.Y.Z after `release.py prepare`.
+VERSION_CHECK = _release_slots().VERSION_CHECK
 BLOCK_BEGIN, BLOCK_END = "<!-- version-check:begin -->", "<!-- version-check:end -->"
 
 # Commands a skill may run that this package does not install.
@@ -392,7 +405,7 @@ def _outcomes_block(text: str) -> str | None:
 def test_the_canonical_outcomes_block_exists():
     block = _outcomes_block(VERSION_CHECK_DOC.read_text(encoding="utf-8"))
     assert block, f"{VERSION_CHECK_DOC} has no {BLOCK_BEGIN} block"
-    assert VERSION_CHECK in block
+    assert VERSION_CHECK.search(block), block
     # The four outcomes of spec §6.3, in that order.
     order = [block.find(marker) for marker in
              ('"ok": true', '"ok": false', "command not found", "Anything else")]
@@ -417,7 +430,7 @@ def test_every_h2t_skill_starts_with_the_version_check(skill):
     text = skill.read_text(encoding="utf-8")
     if _key(skill) in NO_H2T_COMMAND:
         return
-    assert _first_shell_command(text) == VERSION_CHECK, (
+    assert VERSION_CHECK.fullmatch(_first_shell_command(text) or ""), (
         f"{_key(skill)}: the first shell command is {_first_shell_command(text)!r}")
     canonical = _outcomes_block(VERSION_CHECK_DOC.read_text(encoding="utf-8"))
     assert _outcomes_block(text) == canonical, (

@@ -143,10 +143,24 @@ def _resolve_cli(name: str, which: Callable[[str], str | None] = _user_which, ho
     return {"status": "missing", "path": "", "source": "not-found"}
 
 
+def _install_hint() -> str:
+    """What to run when the CLI is missing: something that does not need the CLI.
+
+    The hint used to name `install-h2t-ops`, a subcommand of the very tool that is missing.
+    A release carries its bootstrap in _release.py (scripts/release.py writes it); a checkout
+    has none, and gets the two ways that work there.
+    """
+    from h2t_ops.setup import _release
+
+    if _release.BOOTSTRAP_COMMAND:
+        return f"Run: {_release.BOOTSTRAP_COMMAND} sync"
+    return "Run /h2t-core:setup, or from a developer checkout: `uv run h2t-setup dev-sync`"
+
+
 def resolve_h2t_ops(which: Callable[[str], str | None] = _user_which, home: Path | None = None) -> dict[str, Any]:
     result = _resolve_cli("h2t-ops", which, home)
     if result["status"] == "missing":
-        result["hint"] = "Run h2t-ops setup install-h2t-ops --source main --dry-run --json"
+        result["hint"] = _install_hint()
     return result
 
 
@@ -161,7 +175,7 @@ def resolve_entry_points(which: Callable[[str], str | None] = _user_which, home:
         overall = "missing"
     result: dict[str, Any] = {"status": overall, "commands": commands}
     if overall != "ready":
-        result["hint"] = "Run h2t-ops setup install-h2t-ops --source main --dry-run --json (installs from GitHub through uv; no clone)"
+        result["hint"] = _install_hint()
     return result
 
 

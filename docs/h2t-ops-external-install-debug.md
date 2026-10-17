@@ -67,8 +67,8 @@ Ask the user to run the commands below and send the resulting `h2t-debug-log.txt
   cat ~/.claude/plugins/installed_plugins.json 2>/dev/null || true
   echo
   echo "## h2t setup"
-  python3 ~/.claude/plugins/cache/lichtpfad/h2t-core/latest/skills/setup/scripts/setup_h2t.py doctor --json 2>&1 || true
-  python3 ~/.claude/plugins/cache/lichtpfad/h2t-core/latest/skills/setup/scripts/setup_h2t.py connectors-check --json 2>&1 || true
+  h2t-ops setup doctor --json 2>&1 || true
+  h2t-ops setup connectors-check --json 2>&1 || true
   echo
   echo "## h2t-ops"
   h2t-ops connectors 2>&1 || true

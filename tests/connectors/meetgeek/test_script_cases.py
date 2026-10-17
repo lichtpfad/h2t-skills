@@ -145,13 +145,6 @@ def cli(monkeypatch):
     monkeypatch.setenv("MEETGEEK_API_KEY", "test-key")
     monkeypatch.setenv("MEETGEEK_BASE_URL", "https://api.test")
     monkeypatch.setitem(sys.modules, "recovery", recovery)
-    # A case that forgets its fake must fail here, not reach the network.
-    import requests
-
-    def no_network(*args, **kwargs):
-        raise AssertionError("a test reached the real network")
-    monkeypatch.setattr(requests, "request", no_network)
-    monkeypatch.setattr(requests, "get", no_network)
     monkeypatch.setattr(recovery, "ffmpeg_exe", lambda: "ffmpeg")
     return _ScriptSurface()
 

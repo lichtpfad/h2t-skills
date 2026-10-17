@@ -1,0 +1,267 @@
+name: release
+
+# One workflow cuts a release (spec §7.1). The order is the contract and every job needs the
+# one before it: build the wheel → test it installed → publish the GitHub Release with the
+# wheel and constraints.txt → only then move the pointer on main.
+#
+# The release commit is prepared BEFORE the tag (`scripts/release.py prepare <ver>`, run by
+# the owner): it stamps the version slots and writes release.json and constraints.txt. This
+# workflow never prepares; it checks that the tag names the prepared commit and publishes it.
+#
+# The guards that can refuse a tag (scripts/release_guard.py: the tag is on main, the pointer
+# is at release.json's `previous`) run in `build`, before anything is published, and again in
+# `pointer`, because main can move between the jobs.
+#
+# Recovery, by the job that failed:
+#   build or test-installed  nothing is published. Fix on main, re-prepare, then delete the
+#                            tag (`git push --delete origin v<ver>`, `git tag -d v<ver>`)
+#                            and push it again on the fixed commit.
+#   release                  `gh release delete v<ver> --yes` (keeps the tag), then
+#                            "Re-run failed jobs".
+#   pointer                  "Re-run failed jobs". A re-run after the push already landed
+#                            finds the pointer at v<ver> on the tag's commit and exits 0.
+#
+# Pinned by tests/release/test_release_workflow.py and tests/release/test_release_guard.py.
+
+on:
+  push:
+    tags: ['v*']
+
+# Releases never run in parallel, and a running one is never cancelled halfway: a pointer
+# move cut off after the Release exists would leave the two out of step.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    # An explicit `shell: bash` is `bash -eo pipefail`; the implicit default lacks pipefail.
+    shell: bash
+
+env:
+  PYTHON: "3.12.11"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The guard reads origin/main and the tag's history.
+          fetch-depth: 0
+
+      - name: The tag may move the pointer
+        # Refused here, a bad tag publishes nothing. A finished release (pointer already at
+        # this tag) is refused too: without --allow-done, `done` is not an answer.
+        run: |
+          VER="${GITHUB_REF_NAME#v}"
+          python3 scripts/release_guard.py "v$VER"
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          # The uv that exported constraints.txt; --managed-python and -c behave as measured.
+          version: "0.9.13"
+
+      - name: The tag names a prepared release
+        # release.json and every version slot must carry the tag's version, and no
+        # @VERSION@ / @BOOTSTRAP@ placeholder may survive. The slots are read with the same
+        # public patterns scripts/release.py writes them with, so the two cannot disagree.
+        run: |
+          VER="${GITHUB_REF_NAME#v}"
+          python3 - "$VER" <<'PY'
+          import importlib.util, json, re, sys, tomllib
+          from pathlib import Path
+
+          ver = sys.argv[1]
+          spec = importlib.util.spec_from_file_location("release", "scripts/release.py")
+          release = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(release)
+          errors = []
+
+          if not Path("release.json").is_file():
+              sys.exit("::error::release.json is missing; prepare was not run on this commit")
+          manifest = json.loads(Path("release.json").read_text(encoding="utf-8"))
+          wheel, constraints = release.asset_urls(ver)
+          expected = {"version": ver, "python": release.PYTHON, "wheel": wheel,
+                      "constraints": constraints}
+          for key, value in expected.items():
+              if manifest.get(key) != value:
+                  errors.append(f"release.json {key} = {manifest.get(key)!r}, expected {value!r}")
+          if not Path("constraints.txt").is_file():
+              errors.append("constraints.txt is missing; prepare was not run on this commit")
+          if tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))["project"]["version"] != ver:
+              errors.append("pyproject.toml version differs from the tag")
+
+          checks = 0
+          for md in [*sorted(Path("plugins").glob("**/*.md")), Path("README.md")]:
+              text = md.read_text(encoding="utf-8")
+              for found in release.VERSION_CHECK.findall(text):
+                  checks += 1
+                  if found != f"h2t-ops version --expect {ver} --json":
+                      errors.append(f"{md}: {found}")
+              if "@BOOTSTRAP@" in release.BOOTSTRAP_SLOT.findall(text):
+                  errors.append(f"{md}: @BOOTSTRAP@ placeholder")
+          for run in sorted(Path("plugins").glob("*/hooks/run")):
+              found = release.RUN_BOOTSTRAP.findall(run.read_text(encoding="utf-8"))
+              if not found or any("@BOOTSTRAP@" in f for f in found):
+                  errors.append(f"{run}: bootstrap slot {found}")
+          for env in sorted(Path("plugins").glob("*/release.env")):
+              if f"VERSION={ver}" not in env.read_text(encoding="utf-8").splitlines():
+                  errors.append(f"{env}: VERSION is not {ver}")
+          if checks == 0:
+              errors.append("no `--expect` slot found in plugins/: the pattern reads nothing")
+          for e in errors:
+              print(f"::error::{e}")
+          sys.exit(1 if errors else 0)
+          PY
+
+      - name: Build the wheel
+        run: |
+          VER="${GITHUB_REF_NAME#v}"
+          uv build --wheel --python "$PYTHON" --managed-python --out-dir dist
+          test -f "dist/h2t_ops-$VER-py3-none-any.whl"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release
+          path: |
+            dist/*.whl
+            constraints.txt
+          if-no-files-found: error
+
+  test-installed:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.9.13"
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: release
+          path: ${{ runner.temp }}/release
+
+      - name: Install the wheel into a fresh environment
+        run: |
+          VER="${GITHUB_REF_NAME#v}"
+          REL="$RUNNER_TEMP/release"
+          # --seed: tests/tools/test_resources_from_wheel.py drives pip from this interpreter.
+          uv venv --seed --python "$PYTHON" --managed-python "$RUNNER_TEMP/venv"
+          uv pip install --python "$RUNNER_TEMP/venv/bin/python" -c "$REL/constraints.txt" \
+            "$REL/dist/h2t_ops-$VER-py3-none-any.whl" pytest
+
+      - name: Determinism (spec §2.6)
+        env:
+          H2T_RELEASE_WHEEL: ${{ runner.temp }}/release/dist
+          H2T_RELEASE_CONSTRAINTS: ${{ runner.temp }}/release/constraints.txt
+        run: |
+          "$RUNNER_TEMP/venv/bin/python" -m pytest -p no:cacheprovider -m slow \
+            tests/release/test_determinism.py -v
+
+      - name: The tools find their resources from a wheel
+        # Builds its own wheel from this tree and installs it with --target; its first test
+        # proves the package came from the install, not the checkout.
+        run: |
+          "$RUNNER_TEMP/venv/bin/python" -m pytest -p no:cacheprovider \
+            tests/tools/test_resources_from_wheel.py -q
+
+      - name: tests/setup against the installed wheel
+        # The source package leaves the checkout first, so nothing but the installed wheel
+        # can answer `import h2t_ops` (pytest's rootdir insertion and pythonpath = ["."]
+        # would otherwise put the checkout first). The probe proves it before the suite runs.
+        run: |
+          VER="${GITHUB_REF_NAME#v}"
+          PY="$RUNNER_TEMP/venv/bin/python"
+          mv h2t_ops "$RUNNER_TEMP/h2t_ops-source"
+          "$PY" -c 'import h2t_ops, sys; from pathlib import Path; f = Path(h2t_ops.__file__).resolve()
+          assert f.is_relative_to(Path(sys.prefix).resolve()), f
+          assert h2t_ops.__version__ == sys.argv[1], h2t_ops.__version__; print("h2t_ops from", f)' "$VER"
+          "$PY" -m pytest -p no:cacheprovider tests/setup -q
+
+  release:
+    needs: test-installed
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: release
+          path: ${{ runner.temp }}/release
+
+      - name: Publish the Release with the wheel and constraints
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VER="${GITHUB_REF_NAME#v}"
+          REL="$RUNNER_TEMP/release"
+          # The notes are the `## <ver>` section of the root CHANGELOG.md, up to the next `## `.
+          awk -v ver="$VER" '$1 == "##" && on { exit } $1 == "##" && $2 == ver { on = 1; next } on' \
+            CHANGELOG.md > "$RUNNER_TEMP/notes.md"
+          if ! grep -q '[^[:space:]]' "$RUNNER_TEMP/notes.md"; then
+            echo "::error::CHANGELOG.md has no notes under '## $VER'"
+            exit 1
+          fi
+          gh release create "v$VER" "$REL/dist/h2t_ops-$VER-py3-none-any.whl" "$REL/constraints.txt" \
+            --verify-tag --title "v$VER" --notes-file "$RUNNER_TEMP/notes.md"
+
+  pointer:
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      # main has no branch protection and no rulesets (checked 2026-10-17), so the default
+      # GITHUB_TOKEN may push the pointer commit. A push made with GITHUB_TOKEN triggers no
+      # other workflow, so evals.yml does not run on it; the commit changes marketplace.json
+      # only, and the next push to main runs the gate over it.
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Move the pointer from previous to this release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VER="${GITHUB_REF_NAME#v}"
+          SHA=$(git rev-parse "refs/tags/v$VER^{commit}")
+          # The same guard as in build, asked again: main may have moved since.
+          STATE=$(python3 scripts/release_guard.py "v$VER" --allow-done)
+          if [ "$STATE" = done ]; then
+            echo "already at v$VER ($SHA); nothing to move"
+            exit 0
+          fi
+          ASSETS=$(gh release view "v$VER" --json assets --jq '.assets[].name')
+          for name in "h2t_ops-$VER-py3-none-any.whl" constraints.txt; do
+            if ! grep -qxF "$name" <<<"$ASSETS"; then
+              echo "::error::Release v$VER has no $name"
+              exit 1
+            fi
+          done
+          python3 scripts/release_pointer.py set "v$VER" "$SHA"
+          # Every plugin must now name exactly this tag and commit.
+          PINS=$(python3 scripts/release_pointer.py check | python3 -c 'import json, sys; print(json.dumps(sorted({tuple(v) for v in json.load(sys.stdin).values()})))')
+          if [ "$PINS" != "[[\"v$VER\", \"$SHA\"]]" ]; then
+            echo "::error::after set the pointer reads $PINS, expected [[\"v$VER\", \"$SHA\"]]"
+            exit 1
+          fi
+          # `set` wrote each entry's version from plugin.json at $SHA, in this same commit:
+          # the labels move with the content they name. The check reads them back the same way.
+          if ! python3 scripts/check_marketplace_sync.py; then
+            echo "::error::after set the marketplace labels disagree with plugin.json at v$VER"
+            exit 1
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .claude-plugin/marketplace.json
+          git commit -m "chore(release): pointer → v$VER"
+          git push origin HEAD:main

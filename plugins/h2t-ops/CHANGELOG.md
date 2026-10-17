@@ -1,5 +1,7 @@
 # h2t-ops Changelog
 
+> From 4.0.0 the pack has one version and one changelog: [CHANGELOG.md](../../CHANGELOG.md). This file is the history up to 3.x.
+
 ## Unreleased
 
 - fix(config): a JSON config saved by Windows Notepad loads (D2, #541). Notepad writes a

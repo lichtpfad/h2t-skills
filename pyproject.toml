@@ -46,6 +46,8 @@ h2t-agent-profile = "h2t_ops.tools.agent_profile.apply_agent_profile:main"
 h2t-detect-project = "h2t_ops.lifecycle.detect_project:main"
 h2t-docs-init = "h2t_ops.tools.docs.docs_init:main"
 h2t-runbook = "h2t_ops.tools.runbook.cli:main"
+# The installer and repairer (spec §7.3); the bootstrap runs it from an isolated uvx.
+h2t-setup = "h2t_ops.setup.cli:main"
 
 [project.optional-dependencies]
 # `h2t-drawio generate` builds diagrams with drawpyo; nothing else in the package needs it,
@@ -97,6 +99,10 @@ unfixable = ["F401"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
+# Slow tests build and install the wheel with uv (spec §2.6); the release workflow runs them.
+# A later `-m slow` on the command line, or PYTEST_ADDOPTS="-m slow", selects them.
+markers = ["slow: builds and installs the release wheel with uv; deselected unless -m slow"]
+addopts = "-m 'not slow'"
 
 # PEP 735 — provisioned by `uv run`/`uv sync`; ignored by bare `pip install`.
 [dependency-groups]

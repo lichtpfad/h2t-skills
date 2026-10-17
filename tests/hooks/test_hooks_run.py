@@ -4,6 +4,7 @@ The CLI is a fake: a bash script that prints known text and exits with a known c
 fixture writes `~/.h2t/run/install.env` under a temporary HOME and a `release.env` in a
 temporary plugin root, so nothing here touches the real installation.
 """
+import importlib.util
 import json
 import os
 import re
@@ -18,6 +19,18 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 RUN = ROOT / "plugins" / "h2t-core" / "hooks" / "run"
+
+
+def _release_slots():
+    """scripts/release.py: the one definition of the slots a release rewrites."""
+    spec = importlib.util.spec_from_file_location("release_slots", ROOT / "scripts" / "release.py")
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+SLOTS = _release_slots()
 BASH = shutil.which("bash")
 WINDOWS = sys.platform == "win32"
 
@@ -74,7 +87,8 @@ class Rig:
         self.script = self.tmp / "run"
         self.script.write_text(text, encoding="utf-8")
 
-    def __call__(self, event, name="probe", payload=None, plugin_root=None, timeout=30, **env):
+    def __call__(self, event, name="probe", payload=None, plugin_root=None, timeout=30, limit=None,
+                 **env):
         payload = {"hook_event_name": event, "session_id": "sess-1"} if payload is None else payload
         environment = {
             "PATH": os.environ.get("PATH", ""),
@@ -86,7 +100,8 @@ class Rig:
             if key in os.environ:
                 environment.setdefault(key, os.environ[key])
         started = time.perf_counter()
-        result = subprocess.run([BASH, _p(self.script), name], input=json.dumps(payload).encode(),
+        args = [BASH, _p(self.script), name] + ([] if limit is None else [str(limit)])
+        result = subprocess.run(args, input=json.dumps(payload).encode(),
                                 capture_output=True, env=environment, timeout=timeout, check=False)
         result.elapsed = time.perf_counter() - started
         result.text = result.stdout.decode("utf-8")
@@ -147,7 +162,7 @@ def test_decision_table(rig, lines, inside, rc, event, expect):
     if expect.startswith("notice:"):
         message = _message(result)
         assert NOTICE_TEXT[expect] in message
-        assert "@BOOTSTRAP@ sync" in message
+        assert re.search(f"(?:{SLOTS.BOOTSTRAP_SLOT.pattern}) sync$", message), message
     elif expect == "silent":
         assert (result.returncode, result.stdout, result.stderr) == (0, b"", b"")
     elif expect == "ran":
@@ -207,11 +222,11 @@ def test_broken_notice_and_log_row_are_valid_json_when_the_name_holds_a_quote(ri
     assert _log_rows(rig)[-1] == {"hook": 'we"ird\\name', "rc": 1}
 
 
-def test_exactly_one_bootstrap_line_and_it_is_the_placeholder():
-    """Task 13 substitutes by the pattern BOOTSTRAP='...'; two lines would split it."""
-    lines = re.findall(r"^BOOTSTRAP='[^']*'.*$", RUN.read_text(encoding="utf-8"), re.M)
+def test_exactly_one_bootstrap_line_and_it_is_a_bootstrap_slot():
+    """release.py substitutes the one BOOTSTRAP='...' line; two lines would split it."""
+    lines = SLOTS.RUN_BOOTSTRAP.findall(RUN.read_text(encoding="utf-8"))
     assert len(lines) == 1
-    assert lines[0].startswith("BOOTSTRAP='@BOOTSTRAP@'")
+    assert SLOTS.BOOTSTRAP_SLOT.fullmatch(lines[0][len("BOOTSTRAP='"):-1]), lines[0]
 
 
 # ---- reading the two files ---------------------------------------------------------------
@@ -277,7 +292,7 @@ def test_a_read_only_run_dir_notifies_on_every_session_start(rig, locked):
 def test_a_handler_that_overruns_is_treated_as_broken_before_the_harness_timeout(rig):
     fake = rig.fake(sleep="exec sleep 30")
     rig.install(["STATE=ready", "VERSION=4.0.0", f"H2T_HOOK={_p(fake)}"])
-    result = rig("SessionStart", H2T_HOOK_TIMEOUT=1)
+    result = rig("SessionStart", limit=1)
     assert result.elapsed < 3, result.elapsed
     assert "CLI неисправен (хук probe" in _message(result)
     assert "FAKE-OUT" not in result.text
@@ -290,7 +305,7 @@ def test_a_handler_that_overruns_is_treated_as_broken_before_the_harness_timeout
 def test_an_overrun_on_stop_is_silent(rig):
     fake = rig.fake(sleep="exec sleep 30")
     rig.install(["STATE=ready", "VERSION=4.0.0", f"H2T_HOOK={_p(fake)}"])
-    result = rig("Stop", H2T_HOOK_TIMEOUT=1)
+    result = rig("Stop", limit=1)
     assert result.elapsed < 3, result.elapsed
     assert (result.returncode, result.stdout, result.stderr) == (0, b"", b"")  # no "Terminated" line
     assert _log_rows(rig)[-1]["rc"] != 0
@@ -301,7 +316,7 @@ def test_a_fast_handler_does_not_wait_for_the_watchdog(rig):
     inherited the wrapper's stdout would hold it open for the whole timeout."""
     fake = rig.fake()
     rig.install(["STATE=ready", "VERSION=4.0.0", f"H2T_HOOK={_p(fake)}"])
-    result = rig("Stop", H2T_HOOK_TIMEOUT=5)
+    result = rig("Stop", limit=5)
     assert result.text == "FAKE-OUT:probe"
     assert result.elapsed < 1, f"took {result.elapsed:.2f}s"
 

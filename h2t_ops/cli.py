@@ -147,7 +147,9 @@ def _version(argv: list[str]) -> int:
         else:
             envelope = {"ok": False, "provider": "version",
                         "error": {"type": "config", "message": _VERSION_MESSAGES[result["reason"]],
-                                  "hint": result["hint"]},
+                                  "hint": result["hint"],
+                                  # The path h2t-setup's errors use; `result.reason` stays.
+                                  "details": {"reason": result["reason"]}},
                         "result": result}
         print(json.dumps(envelope, ensure_ascii=False))
     else:

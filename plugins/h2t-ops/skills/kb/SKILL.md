@@ -25,7 +25,7 @@ Act on the result, in this order:
 1. JSON with `"ok": true` — continue.
 2. JSON with `"ok": false` — show the user `error.hint` as it is and stop this skill until
    it is resolved. Do not run anything the hint names unless the user asks you to: on
-   `reason: path` it is a command for the user to decide on. `result.reason` names the
+   `reason: path` it is a command for the user to decide on. `error.details.reason` names the
    case: `not_installed`, `version` or `path`.
 3. `command not found` — read `~/.h2t/run/install.env`
    (`grep -E '^(STATE|H2T_HOOK)=' ~/.h2t/run/install.env`). With `STATE=ready` the install

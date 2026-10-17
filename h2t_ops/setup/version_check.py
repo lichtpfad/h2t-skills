@@ -6,17 +6,20 @@ import shutil
 from pathlib import Path
 
 import h2t_ops
-from h2t_ops.setup import state
+from h2t_ops.setup import _release, state
 
-# Task 13 replaces this with the bootstrap literal stamped by the release script.
-BOOTSTRAP_HINT = "h2t-ops не установлен как инструмент uv. Выполни: h2t-setup sync"
+
+def _bootstrap_hint() -> str:
+    # _release.py is written by scripts/release.py; in a checkout it is empty.
+    command = _release.BOOTSTRAP_COMMAND or "h2t-setup"
+    return f"h2t-ops не установлен как инструмент uv. Выполни: {command} sync"
 
 
 def _norm(path: str) -> str:
     return os.path.normcase(os.path.realpath(path))
 
 
-def _inside(path: str, root: str) -> bool:
+def inside(path: str, root: str) -> bool:
     p, r = _norm(path), _norm(root)
     return p == r or p.startswith(r.rstrip(os.sep) + os.sep)
 
@@ -28,15 +31,17 @@ def _result(ok: bool, reason: str | None, hint: str | None) -> dict:
 def check(expect: str, which=shutil.which) -> dict:
     install = state.read()
     if install is None:
-        return _result(False, "not_installed", BOOTSTRAP_HINT)
+        return _result(False, "not_installed", _bootstrap_hint())
     if h2t_ops.__version__ != expect or h2t_ops.__version__ != install.version:
         return _result(False, "version", (
             f"Ожидалась версия {expect}, запущена {h2t_ops.__version__}, "
             f"установлена {install.version}. Выполни: h2t-setup sync"))
     bad = []
-    for name in install.entrypoints:
+    for name, recorded in install.entrypoints.items():
         found = which(name)
-        if not found or not _inside(found, install.tool_root):
+        # POSIX: the bin entry is a symlink into tool_root. Windows: uv copies it into the
+        # bin dir, so only the path recorded from the receipt at install time identifies it.
+        if not found or not (inside(found, install.tool_root) or _norm(found) == _norm(recorded)):
             bad.append(name)
     if bad:
         bin_dir = str(Path(next(iter(install.entrypoints.values()))).parent)

@@ -1,5 +1,7 @@
 # h2t-core Changelog
 
+> From 4.0.0 the pack has one version and one changelog: [CHANGELOG.md](../../CHANGELOG.md). This file is the history up to 3.x.
+
 ## Unreleased
 
 - fix(hooks): installing the CLI is all the hooks need (D9, #541). On a machine with no

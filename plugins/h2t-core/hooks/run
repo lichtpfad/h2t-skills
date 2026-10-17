@@ -6,6 +6,10 @@
 # The tests are tests/hooks/test_hooks_run.py.
 set -u
 name="${1:-}"
+# The second argument is the watchdog limit in seconds, one less than the hooks.json
+# timeout (spec §6.1.4). An argument, not a VAR=value prefix: that needs a POSIX shell.
+limit="${2:-9}"
+case "$limit" in ""|*[!0-9]*) limit=9 ;; esac
 # $(cat), not `read -d ''`: read takes one byte per syscall, and PreToolUse Write/Edit
 # carries a whole file — 1 MB took 0.48 s that way against 0.01 s with cat (macOS).
 input=$(cat)
@@ -98,7 +102,6 @@ if [ -z "$tmp" ]; then
   rc=70
 else
   printf '%s' "$input" > "$tmp/in"
-  limit="${H2T_HOOK_TIMEOUT:-9}"
   "$hook" "$name" <"$tmp/in" >"$tmp/out" 2>"$tmp/err" & pid=$!
   # The watchdog must not hold the harness's pipes: a sleeper that inherited stdout keeps
   # it open after the handler is done, and the harness waits for EOF. Its own stdio goes to

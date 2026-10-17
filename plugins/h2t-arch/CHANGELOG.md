@@ -1,5 +1,7 @@
 # h2t-arch Changelog
 
+> From 4.0.0 the pack has one version and one changelog: [CHANGELOG.md](../../CHANGELOG.md). This file is the history up to 3.x.
+
 ## Unreleased
 
 - chore(drawio): `compatibility` names the draw.io desktop app and Node instead of

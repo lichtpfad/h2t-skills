@@ -1,5 +1,7 @@
 # h2t-creative Changelog
 
+> From 4.0.0 the pack has one version and one changelog: [CHANGELOG.md](../../CHANGELOG.md). This file is the history up to 3.x.
+
 ## Unreleased
 
 - chore(landing, deck): `compatibility` separates the two halves — assembly needs only uv,
