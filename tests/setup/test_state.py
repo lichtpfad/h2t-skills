@@ -102,3 +102,29 @@ def test_read_ignores_unknown_install_json_keys(home):
     data.update(state="ready", future="x")
     path.write_text(json.dumps(data), encoding="utf-8")
     assert state.read().version == "4.0.0"
+
+
+def _env_line(home, key):
+    lines = (home / ".h2t/run/install.env").read_text(encoding="utf-8").splitlines()
+    return next(line for line in lines if line.startswith(key + "="))
+
+
+def test_editable_root_is_written_as_its_physical_path(home, tmp_path):
+    """hooks/run compares EDITABLE_ROOT with CLAUDE_PLUGIN_ROOT; one directory spelled two
+    ways (/var vs /private/var, a symlinked checkout) would read as "outside"."""
+    import os
+    checkout = tmp_path / "checkout"
+    checkout.mkdir()
+    link = tmp_path / "link"
+    try:
+        link.symlink_to(checkout, target_is_directory=True)
+    except OSError:
+        pytest.skip("symlinks unavailable")
+    state.commit(_install(editable=str(link)))
+    expected = os.path.realpath(checkout).replace("\\", "/")
+    assert _env_line(home, "EDITABLE_ROOT") == f"EDITABLE_ROOT={expected}"
+
+
+def test_no_editable_root_stays_empty(home):
+    state.commit(_install(editable=None))
+    assert _env_line(home, "EDITABLE_ROOT") == "EDITABLE_ROOT="

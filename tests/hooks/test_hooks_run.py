@@ -353,3 +353,72 @@ def test_a_plain_prompt_is_within_budget(rig):
         return
     budget = 0.200 if os.environ.get("CI") else 0.050
     assert p95 < budget, f"p95 {p95 * 1000:.1f} ms"
+
+
+# ---- fix round 1 ---------------------------------------------------------------------------
+
+def test_a_1mb_payload_is_read_in_bulk(rig):
+    """PreToolUse Write/Edit carries the whole file on stdin. `read -d ''` reads one byte per
+    syscall: 1 MB took 0.48 s on macOS against 0.01 s for `$(cat)`, and Git Bash emulates
+    every syscall."""
+    _ready(rig)
+    payload = {"hook_event_name": "PreToolUse", "session_id": "s", "tool_input": {"content": "x" * 2**20}}
+    rig("PreToolUse", payload=payload)  # warm
+    result = rig("PreToolUse", payload=payload)
+    assert result.text == "FAKE-OUT:probe", result.stderr
+    assert len((rig.tmp / "fake.stdin").read_bytes()) > 2**20
+    print(f"PreToolUse 1 MB: {result.elapsed * 1000:.0f} ms")
+    budget = 3.0 if os.environ.get("CI") else 0.25
+    assert result.elapsed < budget, f"{result.elapsed:.2f}s"
+
+
+def test_an_unwritable_log_leaks_nothing_to_stderr(rig):
+    """`>> file 2>/dev/null` fails at the `>>` before the `2>` applies (hooks.md: every
+    exit path honours the channel)."""
+    fake = rig.fake(rc=1)
+    rig.install(["STATE=ready", "VERSION=4.0.0", f"H2T_HOOK={_p(fake)}"])
+    (rig.home / ".h2t" / "logs").write_text("a file where the directory should be", encoding="utf-8")
+    result = rig("Stop")
+    assert (result.returncode, result.stdout, result.stderr) == (0, b"", b"")
+
+
+def _editable(rig, editable, plugin_root):
+    fake = rig.fake()
+    rig.install(["STATE=ready", "VERSION=4.0.0", f"EDITABLE_ROOT={editable}", f"H2T_HOOK={_p(fake)}"])
+    plugin_root.mkdir(parents=True, exist_ok=True)
+    return rig("Stop", plugin_root=plugin_root)
+
+
+def test_editable_root_equal_to_the_plugin_root_is_inside(rig):
+    checkout = rig.tmp / "checkout"
+    assert _editable(rig, _p(checkout), checkout).text == "FAKE-OUT:probe"
+
+
+def test_editable_root_with_a_trailing_slash_is_inside(rig):
+    checkout = rig.tmp / "checkout"
+    assert _editable(rig, _p(checkout) + "/", checkout / "plugins" / "h2t-core").text == "FAKE-OUT:probe"
+
+
+def test_a_sibling_with_the_same_prefix_is_outside(rig):
+    result = _editable(rig, _p(rig.tmp / "checkout"), rig.tmp / "checkout-2" / "plugins" / "h2t-core")
+    assert (result.returncode, result.stdout) == (0, b""), result.text  # Stop: silent, not run
+    assert not (rig.tmp / "fake.pid").exists()
+
+
+@pytest.mark.skipif(WINDOWS, reason="symlinks need privileges on Windows")
+def test_a_plugin_reached_through_a_symlink_is_inside(rig):
+    checkout = rig.tmp / "checkout"
+    (checkout / "plugins" / "h2t-core").mkdir(parents=True)
+    link = rig.tmp / "link"
+    link.symlink_to(checkout, target_is_directory=True)
+    assert _editable(rig, _p(checkout), link / "plugins" / "h2t-core").text == "FAKE-OUT:probe"
+
+
+@pytest.mark.skipif(WINDOWS, reason="symlinks need privileges on Windows")
+def test_editable_root_spelled_through_a_symlink_is_inside(rig):
+    """/var vs /private/var on macOS: the same directory, two spellings."""
+    checkout = rig.tmp / "checkout"
+    (checkout / "plugins" / "h2t-core").mkdir(parents=True)
+    link = rig.tmp / "link"
+    link.symlink_to(checkout, target_is_directory=True)
+    assert _editable(rig, _p(link), checkout / "plugins" / "h2t-core").text == "FAKE-OUT:probe"

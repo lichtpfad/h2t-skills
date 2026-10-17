@@ -1,0 +1,15 @@
+# Bash scripts must check out with LF: Git for Windows defaults to autocrlf=true, and bash
+# cannot run a script with CRLF line ends. tests/hooks/test_hooks_run_git_config.py checks it.
+plugins/*/hooks/run text eol=lf
+plugins/h2t-core/hooks-handlers/bulk-precommit text eol=lf
+plugins/h2t-core/hooks-handlers/gather-on-prompt text eol=lf
+plugins/h2t-core/hooks-handlers/gather-on-skill text eol=lf
+plugins/h2t-core/hooks-handlers/grade-guard text eol=lf
+plugins/h2t-core/hooks-handlers/inject-h2t-context text eol=lf
+plugins/h2t-core/hooks-handlers/layout-precommit text eol=lf
+plugins/h2t-core/hooks-handlers/new-repo-hint text eol=lf
+plugins/h2t-core/hooks-handlers/plain-guard text eol=lf
+plugins/h2t-core/hooks-handlers/plan-closer text eol=lf
+plugins/h2t-core/hooks-handlers/secrets-precommit text eol=lf
+plugins/h2t-core/hooks-handlers/session-end-reap-codex text eol=lf
+plugins/h2t-core/hooks-handlers/structure-guard text eol=lf

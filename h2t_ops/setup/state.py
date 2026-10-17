@@ -44,9 +44,15 @@ def _fwd(p: str | None) -> str:
     return (p or "").replace("\\", "/")
 
 
+def _physical(p: str | None) -> str:
+    # hooks/run compares this with CLAUDE_PLUGIN_ROOT; one directory spelled two ways
+    # (/var vs /private/var, a symlinked checkout) would read as "outside".
+    return _fwd(os.path.realpath(p)) if p else ""
+
+
 def _write_env(state: str, version: str, generation: str, hook: str, editable: str | None) -> None:
     lines = [f"STATE={state}", f"VERSION={version}", f"GENERATION={generation}",
-             f"H2T_HOOK={_fwd(hook)}", f"EDITABLE_ROOT={_fwd(editable)}"]
+             f"H2T_HOOK={_fwd(hook)}", f"EDITABLE_ROOT={_physical(editable)}"]
     _atomic_write(run_dir() / "install.env", ("\n".join(lines) + "\n").encode("utf-8"))
 
 

@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 # h2t hook wrapper — spec §6.1. Bash only; no interpreter until a handler has work.
 #
-# Builtins until the handler runs: no cat, grep or sed. A fork costs real time in Git Bash,
-# and UserPromptSubmit fires on every message with a 50 ms budget (spec §2.7). The tests
-# are tests/hooks/test_hooks_run.py.
+# Builtins until the handler runs, except one `cat` for stdin. A fork costs real time in
+# Git Bash, and UserPromptSubmit fires on every message with a 50 ms budget (spec §2.7).
+# The tests are tests/hooks/test_hooks_run.py.
 set -u
 name="${1:-}"
-IFS= read -r -d '' input || true
+# $(cat), not `read -d ''`: read takes one byte per syscall, and PreToolUse Write/Edit
+# carries a whole file — 1 MB took 0.48 s that way against 0.01 s with cat (macOS).
+input=$(cat)
 event=
 re='"hook_event_name"[[:space:]]*:[[:space:]]*"([A-Za-z]+)"'
 [[ $input =~ $re ]] && event=${BASH_REMATCH[1]}
@@ -69,9 +71,12 @@ notice() {
 BOOTSTRAP='@BOOTSTRAP@'   # literal written by the release script (spec §7.1)
 [ "$state" = "ready" ] && [ -n "$hook" ] || notice "h2t: CLI не установлен. Установить: $BOOTSTRAP sync"
 if [ -n "$editable" ]; then
-  # Compare with forward slashes: on Windows one side may arrive as C:\ and the other C:/.
-  editable_cmp=${editable//\\//}; editable_cmp=${editable_cmp%/}
-  plugin_cmp=${plugin_root//\\//}
+  # Physical paths: one directory has many spellings (/var and /private/var on macOS, a
+  # symlinked checkout). A spelling mismatch would read as "outside" and silence every
+  # hook but SessionStart. The two forks are paid only on this branch.
+  editable_cmp=$(cd "$editable" 2>/dev/null && pwd -P) || editable_cmp=${editable//\\//}
+  plugin_cmp=$(cd "$plugin_root" 2>/dev/null && pwd -P) || plugin_cmp=${plugin_root//\\//}
+  editable_cmp=${editable_cmp%/}
   case "$plugin_cmp/" in
     "$editable_cmp"/*) ;;
     *) notice "h2t: CLI в режиме разработки ($editable), плагины из marketplace. Плагины грузить из чекаута или выполнить: $BOOTSTRAP sync" ;;
@@ -107,5 +112,6 @@ esac
 [ -n "$tmp" ] && rm -rf "$tmp"
 mkdir -p "$HOME/.h2t/logs" 2>/dev/null
 json_escape "$name"
-printf '{"hook":"%s","rc":%s}\n' "$REPLY" "$rc" >> "$HOME/.h2t/logs/hooks.jsonl" 2>/dev/null
+# The braces: a failing `>>` is reported before a `2>/dev/null` on the same command applies.
+{ printf '{"hook":"%s","rc":%s}\n' "$REPLY" "$rc" >> "$HOME/.h2t/logs/hooks.jsonl"; } 2>/dev/null
 notice "h2t: CLI неисправен (хук $name, код $rc). Починить: $BOOTSTRAP sync"
