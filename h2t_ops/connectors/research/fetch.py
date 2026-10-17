@@ -1055,3 +1055,18 @@ def fetch_via_ladder(
 
 
 STUB_PROVIDERS = {"playwright", "crawl4ai", "firecrawl", "browserless"}
+
+
+def preflight_jina() -> None:
+    """Reach the Jina Reader endpoint root, as `fetch_url.py preflight` did (#541).
+
+    Raises NetworkError when it cannot be reached; returns nothing on success.
+    """
+    from h2t_ops.core.errors import NetworkError
+
+    req = urllib.request.Request(JINA_ENDPOINT_DEFAULT, headers={"User-Agent": DEFAULT_USER_AGENT})
+    try:
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            resp.read()
+    except Exception as exc:  # noqa: BLE001 — the script reported every failure as an env error
+        raise NetworkError(f"jina endpoint unreachable: {exc}") from exc

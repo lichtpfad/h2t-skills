@@ -245,6 +245,33 @@ class MeetGeekClient:
             raise ProviderError(f"No download URL in response for {meeting_id}: {info!r}")
         return {"meeting_id": meeting_id, "download_url": url}
 
+    def download_to(self, url: str, dest: Any) -> int:
+        """Stream a recording URL to dest; return bytes written (meetgeek_cli.py, #541).
+
+        A signed media URL carries its token, so the API key goes only to the API host.
+        """
+        from pathlib import Path
+
+        import requests as _r  # lazy — module-scope import forbidden
+
+        dest = Path(dest)
+        api_host = self._base_url.split("//", 1)[-1].split("/", 1)[0]
+        headers = self._headers() if api_host in url else {}
+        written = 0
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            with _r.get(url, headers=headers, stream=True, timeout=self._timeout) as resp:
+                if resp.status_code >= 400:
+                    raise ProviderError(f"download failed: {resp.status_code} {resp.text[:200]}")
+                with dest.open("wb") as f:
+                    for chunk in resp.iter_content(chunk_size=1 << 16):
+                        if chunk:
+                            f.write(chunk)
+                            written += len(chunk)
+        except _r.RequestException as exc:
+            raise NetworkError(f"MeetGeek recording download failed: {exc}") from exc
+        return written
+
     def action_items(self, meeting_id: str) -> dict[str, Any]:
         """Return action items extracted from a meeting summary."""
         summary = self.get_summary(meeting_id)

@@ -7,6 +7,12 @@ from typing import Any
 
 PROVIDER = "meetgeek"
 
+# Handled by pipeline.py; pipeline.VERBS must hold exactly these.
+PIPELINE_VERBS = frozenset({
+    "download", "convert", "drive-upload", "drive-audit", "staging-purge",
+    "upload", "sync", "webhook-server",
+})
+
 # ─── Display helpers ──────────────────────────────────────────────────────────
 
 _YAML_UNSAFE = (":", "#", "'", '"', ",", "[", "]", "{", "}", "\n", "&", "*", "!", "|", ">", "%", "@", "`")
@@ -72,6 +78,8 @@ def _normalize_meeting(m: dict) -> dict:
         "timestamp_end_utc": end_ts,
         "duration_seconds": m.get("duration") or m.get("duration_seconds"),
         "language": m.get("language") or m.get("language_code"),
+        # meetgeek_cli.py wrote this into every frontmatter and lake manifest line (#541).
+        "provider_url": f"https://app2.meetgeek.ai/meeting/{meeting_id}" if meeting_id else None,
     }
 
 
@@ -173,6 +181,8 @@ def register(subparsers: Any) -> None:
         vp = cmds.add_parser(verb, help=f"Get {verb} for a meeting")
         vp.add_argument("meeting_id")
         vp.add_argument("--format", dest="fmt", choices=["md", "json"], default="md")
+        vp.add_argument("-o", "--output", default=None, metavar="PATH",
+                        help="write the payload to PATH and print the path")
         vp.add_argument("--json", dest="as_json", action="store_true",
                         help="raw machine-readable envelope")
 
@@ -194,18 +204,143 @@ def register(subparsers: Any) -> None:
     aip.add_argument("meeting_id")
     add_fmt(aip)
 
+    _register_pipeline(cmds)
+
     p.set_defaults(_handler=run)
+
+
+def _register_pipeline(cmds: Any) -> None:
+    """Verbs ported from meetgeek_cli.py with its flags (#541); handlers in pipeline.py."""
+    import argparse
+    from pathlib import Path
+
+    # recovery.HOUSEKEEPING_MIN_AGE_HOURS; repeated here so the parser imports nothing.
+    housekeeping_hours = 24.0
+
+    def add_json(sp):
+        sp.add_argument("--json", dest="as_json", action="store_true",
+                        help="raw machine-readable envelope")
+
+    s = cmds.add_parser("download", help="Get recording download URL, or the file with -o")
+    s.add_argument("meeting_id")
+    s.add_argument("-o", "--output", default=None,
+                   help="If omitted, prints URL; otherwise downloads to PATH")
+    add_json(s)
+
+    s = cmds.add_parser("convert", help="Convert media file (webm→mp4 default)")
+    s.add_argument("input")
+    s.add_argument("-o", "--output", default=None,
+                   help="Output path; default: ~/.dor/lake/meetgeek/uploads-staging/{YYYY-MM-DD}/{name}.mp4")
+    s.add_argument("--audio-only", action="store_true", help="Strip video; output .m4a")
+    s.add_argument("--mix-mode", choices=["amix", "first", "keep"], default="amix",
+                   help="Multi-track audio strategy (default: amix — sums all tracks)")
+    s.add_argument("--probe", action="store_true", help="Print probe info as JSON and exit")
+    add_json(s)
+
+    s = cmds.add_parser("drive-upload", help="Upload a file to Drive (idempotent by name)")
+    s.add_argument("file")
+    s.add_argument("--folder", default=None,
+                   help="Path like 'MeetGeek Uploads/2026-05-06'; default: MeetGeek Uploads/{today UTC}")
+    s.add_argument("--make-public", action=argparse.BooleanOptionalAction, default=True,
+                   help="Set permissions to anyone-with-link reader (default on)")
+    add_json(s)
+
+    s = cmds.add_parser("drive-audit", help="Report anyone-with-link access on uploaded recordings")
+    s.add_argument("--revoke", action="store_true",
+                   help="Remove the anyone permission (off by default; only safe once "
+                        "MeetGeek has fetched the recording)")
+    s.add_argument("--min-age-hours", type=float, default=0.0,
+                   help="Leave uploads younger than this alone when revoking (default 0)")
+    add_json(s)
+
+    s = cmds.add_parser("staging-purge",
+                        help="Delete converted media whose recording is submitted, still "
+                             "on Drive, and still has its source")
+    s.add_argument("--min-age-hours", type=float, default=housekeeping_hours,
+                   help=f"Keep media submitted less than this long ago (default {housekeeping_hours:g})")
+    s.add_argument("--dry-run", action="store_true", help="Report what would be deleted; delete nothing")
+    s.add_argument("--verify-drive", action=argparse.BooleanOptionalAction, default=True,
+                   help="Check the Drive copy still exists before deleting (default on)")
+    add_json(s)
+
+    s = cmds.add_parser("upload", help="Submit URL or local file to MeetGeek /v1/upload")
+    grp = s.add_mutually_exclusive_group(required=True)
+    grp.add_argument("--download-url", default=None,
+                     help="Public URL MeetGeek will fetch (e.g. Drive uc?export=download)")
+    grp.add_argument("--from-file", default=None,
+                     help="Local file path or glob; orchestrates convert + drive-upload + upload")
+    s.add_argument("--title", default=None)
+    s.add_argument("--language", default=None, help="Language hint (ru, en, auto, etc.)")
+    s.add_argument("--audio-only", action="store_true")
+    s.add_argument("--mix-mode", choices=["amix", "first", "keep"], default="amix")
+    s.add_argument("--skip-existing", action=argparse.BooleanOptionalAction, default=True,
+                   help="Skip files already in manifest with status=submitted (default on)")
+    s.add_argument("--dry-run", action="store_true", help="Print plan; do not convert/upload")
+    s.add_argument("--housekeeping", action=argparse.BooleanOptionalAction, default=True,
+                   help=f"After the batch, revoke public ACLs and purge staged media "
+                        f"older than {housekeeping_hours:g}h (default on)")
+    add_json(s)
+
+    s = cmds.add_parser("sync", help="Bulk pull to a lake folder (manifest.jsonl + per-asset folders)")
+    s.add_argument("--to", required=True, help="Lake destination (e.g. ~/.dor/lake/meetgeek/historical/)")
+    s.add_argument("--include", default="transcripts",
+                   help="Comma-separated: transcripts,summaries,highlights,insights,recordings")
+    s.add_argument("--since", default=None, help="ISO date YYYY-MM-DD")
+    s.add_argument("--since-cursor", action="store_true",
+                   help="Resume from last_seen_ts in cursor file")
+    s.add_argument("--to-date", dest="to_date", default=None)
+    s.add_argument("--limit", type=int, default=None)
+    s.add_argument("--cursor-file", dest="cursor_file", default=None,
+                   help="Default: ~/.dor/lake/_cursors/meetgeek.json")
+    s.add_argument("--watch", type=int, default=None, metavar="SECONDS",
+                   help="Run sync in a loop every N seconds (min 30); Ctrl-C to stop")
+    add_json(s)
+
+    s = cmds.add_parser("webhook-server", help="Receive MeetGeek webhook events to disk")
+    s.add_argument("--port", type=int, default=8765)
+    s.add_argument("--bind", default="127.0.0.1")
+    s.add_argument("--out", default=str(Path.home() / ".dor" / "lake" / "meetgeek" / "webhooks"),
+                   help="Directory to dump received events as JSON")
+    # Default resolved at run time from MEETGEEK_WEBHOOK_SECRET, never into the parser.
+    s.add_argument("--secret", default=None,
+                   help="Optional shared secret; if set, requests without matching "
+                        "X-Webhook-Secret are 401'd (default: MEETGEEK_WEBHOOK_SECRET)")
+    add_json(s)
+
+
+def _write_output(payload: Any, path: str) -> str:
+    """meetgeek_cli.py's -o: write the payload, print the path instead of it."""
+    from pathlib import Path
+
+    text = payload if isinstance(payload, str) else json.dumps(payload, ensure_ascii=False, indent=2)
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    Path(path).write_text(text, encoding="utf-8")
+    return path
 
 
 # ─── Dispatch ──────────────────────────────────────────────────────────────────
 
 def run(args: Any) -> Any:
     """Dispatch a meetgeek subcommand. Returns result or raises core.errors."""
+    cmd = args.meetgeek_cmd
+    if cmd in PIPELINE_VERBS:
+        # lazy: ffmpeg, Drive, manifest
+        from h2t_ops.connectors.meetgeek import pipeline
+
+        # Before the client: convert, drive-* and staging-purge never needed an API key.
+        return pipeline.VERBS[cmd](args)
+
+    result = _run_api(args, cmd)
+    if cmd in ("transcript", "summary", "highlights", "insights") and getattr(args, "output", None):
+        return _write_output(result, args.output)
+    return result
+
+
+def _run_api(args: Any, cmd: str) -> Any:
     from h2t_ops.connectors.meetgeek.client import MeetGeekClient  # lazy
     from h2t_ops.core.errors import NotFoundError, UsageError
 
     client = MeetGeekClient()
-    cmd = args.meetgeek_cmd
 
     def meeting_for_markdown(meeting_id: str) -> dict:
         try:

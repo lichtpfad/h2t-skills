@@ -43,6 +43,9 @@ def register(subparsers: Any) -> None:
     cmds = p.add_subparsers(dest="research_cmd", required=True)
 
     preflight = cmds.add_parser("preflight", help="Validate Exa credentials and connectivity")
+    # exa_search.py and fetch_url.py both had a `preflight`; jina is fetch_url's (#541).
+    preflight.add_argument("--provider", choices=["exa", "jina"], default="exa",
+                           help="exa (default): key + connectivity; jina: reach the Jina Reader")
     add_fmt(preflight)
 
     providers = cmds.add_parser("providers", help="List research provider/key readiness")
@@ -99,6 +102,9 @@ def register(subparsers: Any) -> None:
     search.add_argument("--project", default="default")
     search.add_argument("--output-dir", dest="output_dir")
     search.add_argument("--no-retry", action="store_true", dest="no_retry")
+    # exa_search.py's spelling of "print the JSON envelope" (#541).
+    search.add_argument("--envelope", dest="as_json", action="store_true",
+                        help="same as --json")
     add_fmt(search)
 
     crawl = cmds.add_parser("crawl", help="Fetch URL contents with Exa")
@@ -121,7 +127,12 @@ def register(subparsers: Any) -> None:
     fetch.add_argument("--project", default="default")
     fetch.add_argument("--output-dir", dest="output_dir")
     fetch.add_argument("--config", dest="config_path")
-    add_fmt(fetch)
+    fetch.add_argument("--json", dest="as_json", action="store_true",
+                       help="raw machine-readable envelope")
+    # fetch_url.py accepted --format markdown|text|html and never read it (#541); those
+    # values are taken so its invocations still parse, and render as human output.
+    fetch.add_argument("--format", dest="fmt", default="human",
+                       choices=["human", "md", "markdown", "text", "html"])
 
     visual_ocr = cmds.add_parser(
         "visual-ocr",
@@ -280,6 +291,11 @@ def run(args: Any) -> Any:
     )
     cmd = args.research_cmd
     if cmd == "preflight":
+        if getattr(args, "provider", "exa") == "jina":
+            from h2t_ops.connectors.research.fetch import preflight_jina
+
+            preflight_jina()
+            return {"status": "OK", "provider": "jina"}
         return client.preflight()
     if cmd == "providers":
         return client.research_provider_status(capability=args.capability)
