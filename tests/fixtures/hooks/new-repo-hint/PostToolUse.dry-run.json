@@ -1,0 +1,14 @@
+{
+  "event": {
+    "hook_event_name": "PostToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+      "command": "h2t-scaffold-project create --id x --dry-run"
+    }
+  },
+  "expect": {
+    "text": "",
+    "block": false,
+    "notice": ""
+  }
+}

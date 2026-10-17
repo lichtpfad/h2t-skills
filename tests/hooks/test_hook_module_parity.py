@@ -23,6 +23,9 @@ PAIRS = {
     "structure_guard.py": ({"_load_payload", "main"}, {"handle"}),
     "grade_guard.py": ({"main"}, {"handle", "stop_warning"}),
     "plain_guard.py": ({"main"}, {"handle"}),
+    "plan_closer.py": ({"_load_payload", "main"}, {"handle"}),
+    "new_repo_hint.py": ({"main"}, {"handle", "NOTICE"}),
+    "reap_codex.py": ({"_load_payload", "main"}, {"handle", "summary"}),
 }
 
 

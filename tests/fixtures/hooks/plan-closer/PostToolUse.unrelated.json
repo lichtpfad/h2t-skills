@@ -1,0 +1,14 @@
+{
+  "event": {
+    "hook_event_name": "PostToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+      "command": "ls -la"
+    }
+  },
+  "expect": {
+    "text": "",
+    "block": false,
+    "notice": ""
+  }
+}

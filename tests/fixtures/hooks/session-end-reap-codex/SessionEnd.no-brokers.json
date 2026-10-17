@@ -1,0 +1,12 @@
+{
+  "event": {
+    "hook_event_name": "SessionEnd",
+    "reason": "exit",
+    "cwd": "{tmp}"
+  },
+  "expect": {
+    "text": "",
+    "block": false,
+    "notice": ""
+  }
+}
