@@ -11,11 +11,15 @@ metadata:
 
 Use this skill as the install/update/doctor surface for h2t-core and h2t-ops.
 
-The skill is a thin wrapper around the deterministic backend, a command of the CLI:
+Two backends, both commands of the CLI:
 
-```text
-h2t-ops setup <verb> --json
-```
+- `h2t-setup <sync|update|dev-sync> --json` — installs, repairs and updates the pack: the
+  CLI and, in Claude Code, the plugins, to the release `main` points at (spec §7.3).
+- `h2t-ops setup <verb> --json` — diagnoses and configures what is installed: `doctor`,
+  `setup` (the doctor report plus the machine-name pin), `connectors-check`, `secrets`.
+
+Its other verbs — `install-h2t-ops`, `repair`, `update` — are the 3.x install path: they
+install from `main`, not from a release. Do not use them; `h2t-setup` replaces them.
 
 Do not reimplement setup logic in prose. Run the backend, inspect structured
 output, and only then explain the next action.
@@ -45,27 +49,33 @@ Act on the result, in this order:
    user `@BOOTSTRAP@ sync`.
 <!-- version-check:end -->
 
+In this skill, a user who asked to install, repair or update has asked for the remedy:
+on outcomes 2–4 run the bootstrap the outcome names (with `sync`), or `h2t-setup sync`
+when that is the hint, yourself, then rerun the version check. `uv tool update-shell`
+stays the user's to run — it edits their shell profile. For a diagnosis only, show the
+remedy and stop, as the block says.
+
 ## Modes
 
 | User intent | Backend command |
 | --- | --- |
-| diagnose current install | `doctor --json` |
-| first setup / repair | `setup --json` (the doctor report plus the machine-name pin); Step 3 only if `entry_points.status` is `partial` or `missing`; then Step 4 `connectors-check --json` |
-| update | `setup --json`, then Step 3 whatever `entry_points` says — the user asked for a newer h2t-ops; no Step 4 unless asked |
-| check connector readiness | `connectors-check --json` |
-| run live connector status checks | `connectors-check --live --json` |
-| include paid Research/Exa preflight | `connectors-check --live --include-paid --json` only after explicit user confirmation |
+| diagnose current install | `h2t-ops setup doctor --json` |
+| first setup / repair | Step 3 `h2t-setup sync --json`; then Step 3b `h2t-ops setup setup --json`; then Step 4 `connectors-check --json` |
+| update | Step 3: give the user `h2t-setup update` for their terminal; or, if they choose, `h2t-setup sync --json`; no Step 4 unless asked |
+| the CLI runs editable from a checkout | Step 3: `h2t-setup dev-sync --json`, from inside that checkout |
+| check connector readiness | `h2t-ops setup connectors-check --json` |
+| run live connector status checks | `h2t-ops setup connectors-check --live --json` |
+| include paid Research/Exa preflight | `h2t-ops setup connectors-check --live --include-paid --json` only after explicit user confirmation |
 
 ## Procedure
 
 ### Step 1: Prerequisites
 
-The version check above is the first gate: `h2t-ops setup` is part of the CLI it checks, so
-a machine without the CLI is handled there — outcome 3 or 4 hands the user the bootstrap,
-which installs the current release in one command. Everything below assumes the check
-passed.
+The version check above is the first gate: a machine without the CLI is handled there —
+outcome 3 or 4 hands over the bootstrap, which installs the current release in one
+command. Everything below assumes the check passed.
 
-`install-h2t-ops` drives `uv tool`, so check for `uv` before Step 3:
+`h2t-setup` drives `uv tool`, so check for `uv` before Step 3:
 
 The snippet below is POSIX shell. On Windows run it from Git Bash, which the audit
 confirmed present as `/usr/bin/sh`; native PowerShell or CMD will not parse `if !
@@ -85,12 +95,11 @@ fi
 
 The message names the missing prerequisite and how to install it, and exits 3 — the config
 exit code the connector contract already uses. Without it, a machine with no uv would see
-`uv: command not found` from deep inside `install-h2t-ops` and nothing else.
+`uv: command not found` from deep inside `h2t-setup` and nothing else.
 
-### Step 2: Doctor first
+### Step 2: Doctor
 
-For a diagnosis, start with the line below. First setup, repair and update start with Step
-2b instead — `setup` returns this same report:
+For a diagnosis:
 
 ```bash
 h2t-ops setup doctor --json
@@ -108,16 +117,15 @@ Report:
 `plugin_cache.status: missing` means no installed h2t-core was found under Claude Code's or
 Codex's plugin cache (`CLAUDE_CONFIG_DIR` / `CODEX_HOME` when set). The skill still runs — it
 may be loaded from a checkout — but hooks and skills will not reach other sessions. Report it
-and name the remedy, which the user types:
+and name the remedy: Step 3 installs the plugins in Claude Code; by hand, the user types
 
 ```text
 /plugin marketplace add lichtpfad/h2t-skills
 /plugin install h2t-core@lichtpfad
 ```
 
-If `entry_points.status` is `partial` or `missing`, proceed to Step 3 to install or reinstall.
-If it is `ready`, skip Step 3 unless the user asked to update — the same rule as the Modes
-table.
+If `entry_points.status` is `partial` or `missing`, the install needs Step 3. If it is
+`ready`, skip Step 3 unless the user asked to repair or update.
 
 POS/DOR absence is not an error. Phrase it as:
 
@@ -126,10 +134,72 @@ optional_pos: not_configured
 impact: lifecycle and connector provider I/O still work; POS publishing disabled
 ```
 
-### Step 2b: Pin the machine name
+### Step 3: Install, repair or update — `h2t-setup`
 
-For first setup, repair and update — in place of Step 2's `doctor`, not after it; a plain
-diagnosis stays `doctor`:
+**Never clone the repository to install.** `h2t-setup` installs the release's wheel; a
+checkout is only ever one the user already develops in (`dev-sync` below).
+
+**Install and repair** — `sync` needs no confirmation, and the user's request is the ask:
+
+```bash
+h2t-setup sync --json
+```
+
+It brings the machine to the release `main` points at, skipping every step that already
+matches, so a second run is the repair. An installed `h2t-setup` hands over to that
+release's own isolated bootstrap by itself. Read the result:
+
+- exit 0 — report `result.done` and every line of `result.notes` as it is (they include the
+  `codex plugin add` lines when Codex is present). When `result.reload_needed` is true,
+  tell the user to run `/reload-plugins` or start a new session.
+- exit 1, `error.type: provider` — something did not reach the target.
+  `error.details.failed` lists `[subject, remedy]` pairs; show each, and `error.hint` (the
+  first remedy) as it is. A **pinned marketplace** lands here: `sync` changed nothing in
+  Claude Code, and the remedy lists `marketplace remove` / `add` / `install` lines.
+  `remove` uninstalls the user's lichtpfad plugins — do not run those lines. Offer
+  `h2t-setup update` (below), which asks and runs them with a restore on failure.
+- exit 3 — read `error.details.reason`:
+  - `editable` — the CLI is installed editable from the checkout in
+    `error.details.checkout`. `sync` and `update` do not touch it. Tell the user to update
+    the checkout with git; then `dev-sync` below.
+  - `relaunch_required` — Windows, run from the installed tool, which the update replaces
+    and Windows keeps locked. Show `error.hint`: it is the exact command for the user to run
+    in a terminal.
+  - no `reason` — e.g. `main` has no released pointer yet, or the release manifest is
+    unreadable. Report `error.message` and `error.hint`.
+- exit 6 — the network failed before anything was touched. Run the same command again
+  when it is back.
+
+**Update** — `h2t-setup update` is `sync` that first shows "installed → target" and the
+CHANGELOG and asks. It asks only at a terminal: run from here it refuses with exit 3,
+`reason: confirmation_required`, and changes nothing. So do not run it; give the user the
+line for their terminal:
+
+```text
+h2t-setup update
+```
+
+If the user would rather not review the changes, `h2t-setup sync --json` above brings the
+install to the same target without asking — run it on their word.
+
+**Editable install** — from inside the checkout the CLI is installed from:
+
+```bash
+cd "<checkout>"
+h2t-setup dev-sync --json
+```
+
+It installs the CLI editable with the checkout's constraints and the user's extras; it does
+not touch git or the marketplace plugins (its note says to load them with
+`claude --plugin-dir`). Exit 3 with `reason: not_a_checkout` means the directory is not an
+h2t-skills checkout.
+
+Verify by state, not by the output: rerun the version check at the top of this skill. It
+must answer `"ok": true`.
+
+### Step 3b: Pin the machine name
+
+For first setup and repair, after Step 3:
 
 ```bash
 h2t-ops setup setup --json
@@ -137,8 +207,7 @@ h2t-ops setup setup --json
 
 It is `doctor` plus one write: `env.H2T_MACHINE_NAME` in `~/.claude/settings.json`, so
 session records stop following a macOS hostname (ADR 0003). Report the doctor part as
-Step 2 says, including the `plugin_cache` remedy and the rule for Step 3. Then read
-`machine_name.status`:
+Step 2 says, including the `plugin_cache` remedy. Then read `machine_name.status`:
 
 - `unchanged` / `written` — report the value.
 - `needs_choice` — nothing was written: today's name (`today`) has no folder in the
@@ -154,41 +223,6 @@ Step 2 says, including the `plugin_cache` remedy and the rule for Step 3. Then r
   (`--machine-name <today>`). `today` is `H2T_MACHINE_NAME`, else `DOR_MACHINE_NAME`, else
   the hostname lowercased up to the first dot.
 - `error` — report it; the settings file was left untouched.
-
-### Step 3: Install or repair h2t-ops
-
-Pick the source from `h2t_ops.version` in the report — `doctor` or `setup`, the payload is
-the same:
-
-- it reads `(editable <path>)` — h2t-ops runs from a checkout. Keep it that way:
-  `--source <path>`, which installs editable again. `--source main` would replace the
-  checkout with the GitHub version, and edits in the checkout would stop taking effect.
-- anything else, or h2t-ops is missing — `--source main`.
-
-**Never clone the repository to install.** `--source main` is
-`git+https://github.com/lichtpfad/h2t-skills.git`: uv fetches it into its own cache, and
-that is the whole install. A `<path>` source is only ever a checkout that is *already* the
-editable install the report shows — never one you create. The same holds for plugins: a
-person types `/plugin …`, an agent runs `claude plugin marketplace add lichtpfad/h2t-skills`
-and `claude plugin install h2t-core@lichtpfad` (README, Channel 1). Neither needs a clone.
-
-Ask the backend for the install line:
-
-```bash
-h2t-ops setup install-h2t-ops --source <source> --dry-run --json
-```
-
-Show its `command` field to the user. It modifies the user's `uv tool` environment, so
-ask before running it. After an explicit yes, run that `uv tool install …` line yourself,
-exactly as printed — `uv` is a CLI, and the line is the whole install.
-
-Do not drop `--dry-run` to let the backend install: `h2t-ops setup` runs inside the
-h2t-ops tool that the line replaces, and on Windows its running `h2t-ops.exe` and
-`python.exe` are locked. Without `--dry-run` it refuses, exits 1, and its `hint` names the
-same line.
-
-Verify by state, not by the uv output: rerun `h2t-ops setup doctor --json` and read
-`entry_points.status`.
 
 ### Step 4: Connector readiness
 
@@ -218,7 +252,8 @@ h2t-ops setup connectors-check --live --include-paid --json
 
 - Never install, repair, shadow, or modify root `h2t`.
 - Never run `uv tool install h2t`.
-- h2t-ops is installed as `h2t-ops`, from `h2t-skills` source.
+- h2t-ops is installed as `h2t-ops` by `h2t-setup`, from the release wheel; never from a
+  clone.
 - h2t-core setup can work before POS/DOR exists.
 - Missing POS/DOR disables publishing only; it does not block lifecycle or
   provider I/O.
@@ -229,7 +264,8 @@ Doctor returns `h2t_setup_doctor/v1`.
 
 Connector readiness returns `h2t_connectors_check/v1`.
 
-Install returns `h2t_ops_install/v1`.
+`h2t-setup` returns the standard envelope with `provider: setup`; on success `result`
+carries `done`, `failed`, `reload_needed` and `notes`.
 
 If the backend returns `missing_uv`, do not guess shell paths manually. Report
 the hint and ask whether to install/fix `uv`.

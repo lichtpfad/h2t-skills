@@ -5,8 +5,8 @@
 
 Writes `<ver>` into pyproject.toml, h2t_ops/__init__.py, uv.lock (the project's own row),
 every plugin.json, every `version` of marketplace.json and every plugins/*/release.env;
-stamps the `--expect` and bootstrap literals into the SKILL.md / reference copies and
-plugins/*/hooks/run; regenerates h2t_ops/setup/_release.py; exports constraints.txt; writes
+stamps the `--expect` and bootstrap literals into the SKILL.md / reference copies, README.md
+and plugins/*/hooks/run; regenerates h2t_ops/setup/_release.py; exports constraints.txt; writes
 release.json at the repo root.
 
 Substitution is by slot pattern, not by placeholder, so the next release rewrites what this
@@ -49,6 +49,8 @@ _INIT_VERSION = re.compile(r'^__version__ = "[^"\n]*"$', re.M)
 _JSON_VERSION = re.compile(r'"version": "[^"\n]*"')
 # A file carrying the version-check block has one --expect and two bootstraps in it.
 _BLOCK = (1, 2)
+# README's install section gives the current release's bootstrap once (spec §7.2).
+README_BOOTSTRAPS = 1
 
 RELEASE_PY = '''"""The bootstrap of this release (spec §7.2). Written by scripts/release.py prepare; do not edit."""
 
@@ -124,6 +126,7 @@ def _plan(root: Path, ver: str) -> dict[Path, tuple[str, int]]:
             raise ReleaseError(f"{md.relative_to(root)}: {found[0]} --expect and {found[1]} bootstrap "
                                f"slots, expected {_BLOCK[0]} and {_BLOCK[1]} (the version-check block)")
         edit(md, (_MD_VERSION, ver, 1), (BOOTSTRAP_SLOT, command, 2))
+    edit(root / "README.md", (BOOTSTRAP_SLOT, command, README_BOOTSTRAPS))
     data = root / "h2t_ops" / "setup" / "_release.py"
     plan[data] = (RELEASE_PY.format(argv=json.dumps(argv), command=json.dumps(command)), 1)
     return plan

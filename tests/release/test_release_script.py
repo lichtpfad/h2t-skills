@@ -19,7 +19,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-SHIPPED = ("pyproject.toml", "uv.lock", ".claude-plugin/", "plugins/", "scripts/", "h2t_ops/")
+SHIPPED = ("pyproject.toml", "uv.lock", "README.md", ".claude-plugin/", "plugins/", "scripts/", "h2t_ops/")
 PY = "3.12.11"
 BASE = "https://github.com/lichtpfad/h2t-skills/releases/download"
 UV = shutil.which("uv")
@@ -95,6 +95,8 @@ def _bootstrap_copies(repo: Path) -> dict[str, list[str]]:
     for md in (repo / "plugins").rglob("*.md"):
         for i, cmd in enumerate(re.findall(r"`(uvx --isolated [^`]*) sync`", md.read_text(encoding="utf-8"))):
             copies[f"{md.relative_to(repo)}#{i}"] = shlex.split(cmd)
+    for i, cmd in enumerate(re.findall(r"^(uvx --isolated .*) sync$", (repo / "README.md").read_text(encoding="utf-8"), re.M)):
+        copies[f"README.md#{i}"] = shlex.split(cmd)
     return copies
 
 
@@ -118,8 +120,10 @@ def test_stamp_twice_sets_one_version_and_one_bootstrap_everywhere(repo, rel):
     assert expected[:6] == ["uvx", "--isolated", "--python", PY, "--managed-python", "-c"]
     assert expected[-1] == "h2t-setup"
     copies = _bootstrap_copies(repo)
-    md_copies = [k for k in copies if k.endswith(".md#0") or k.endswith(".md#1")]
+    md_copies = [k for k in copies if k.startswith("plugins/") and k.endswith((".md#0", ".md#1"))]
     assert len(md_copies) == 2 * 23  # 22 SKILL.md + the reference, two per block
+    assert [k for k in copies if k.startswith("README.md#")] == ["README.md#0"]
+    assert counts["README.md"] == 1
     assert {k: v for k, v in copies.items() if v != expected} == {}
     for path in [*(repo / "plugins").rglob("*"), *(repo / "h2t_ops").rglob("*.py")]:
         if path.is_file():
@@ -149,6 +153,23 @@ def test_a_slot_count_mismatch_fails_and_writes_nothing(repo, rel):
                      encoding="utf-8")
     before = (repo / "pyproject.toml").read_text()
     with pytest.raises(rel.ReleaseError, match="docs-lint/SKILL.md"):
+        rel.stamp(repo, "4.0.0")
+    assert (repo / "pyproject.toml").read_text() == before
+
+
+def test_the_readme_carries_exactly_one_bootstrap_slot():
+    """README's install section is the bootstrap of the current release, stamped like the
+    skills; in a checkout it holds the placeholder, after prepare the literal."""
+    rel = _load(ROOT / "scripts" / "release.py", "release_readme")
+    text = (ROOT / "README.md").read_text(encoding="utf-8")
+    assert len(rel.BOOTSTRAP_SLOT.findall(text)) == rel.README_BOOTSTRAPS == 1
+
+
+def test_a_second_readme_slot_fails_and_writes_nothing(repo, rel):
+    readme = repo / "README.md"
+    readme.write_text(readme.read_text(encoding="utf-8") + "\n@BOOTSTRAP@ update\n", encoding="utf-8")
+    before = (repo / "pyproject.toml").read_text()
+    with pytest.raises(rel.ReleaseError, match="README.md"):
         rel.stamp(repo, "4.0.0")
     assert (repo / "pyproject.toml").read_text() == before
 

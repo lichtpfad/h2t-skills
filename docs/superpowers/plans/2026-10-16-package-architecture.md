@@ -57,7 +57,7 @@ issue: "541"
 
 **Interfaces:** Produces — таблица результатов, на которую ссылаются Task 9 (порог таймаута), Task 14–16 (ветки `sync`).
 
-- [ ] **Step 1: Wheel по URL GitHub Release.** На форке нет Release; используем черновой Release в репозитории только с согласия **[владелец]**, иначе — локальный HTTP-сервер, отдающий wheel и `constraints.txt` по URL:
+- [x] **Step 1: Wheel по URL GitHub Release.** На форке нет Release; используем черновой Release в репозитории только с согласия **[владелец]**, иначе — локальный HTTP-сервер, отдающий wheel и `constraints.txt` по URL:
 
 ```bash
 uv build --wheel -o "$SP/whl"
@@ -68,21 +68,21 @@ uvx --isolated --python 3.12.11 --managed-python -c http://127.0.0.1:8765/constr
 ```
 Expected: печатает версию; записать время холодного и тёплого запуска.
 
-- [ ] **Step 2: Прерывание `uv tool install --reinstall`.** Установить во временный каталог, запустить переустановку и через 2 с `kill -9`; затем `h2t-ops --version` и повторная установка.
+- [x] **Step 2: Прерывание `uv tool install --reinstall`.** Установить во временный каталог, запустить переустановку и через 2 с `kill -9`; затем `h2t-ops --version` и повторная установка.
 Expected (записать факт): рабочая/нерабочая старая установка; повтор восстанавливает.
 
-- [ ] **Step 3: Закреплённый marketplace.** В изолированном `CLAUDE_CONFIG_DIR`: `add lichtpfad/h2t-skills#v2.15.0`, `install h2t-core --scope user`, `disable`, затем `remove` → `add` без ref → `install` → `disable`. Записать, сохранились ли scope и disabled без восстановления из снимка.
+- [x] **Step 3: Закреплённый marketplace.** В изолированном `CLAUDE_CONFIG_DIR`: `add lichtpfad/h2t-skills#v2.15.0`, `install h2t-core --scope user`, `disable`, затем `remove` → `add` без ref → `install` → `disable`. Записать, сохранились ли scope и disabled без восстановления из снимка.
 
-- [ ] **Step 4: Полные обработчики 3.x на окружении нового CLI.** Взять `~/.claude/plugins/cache/lichtpfad/h2t-core/3.2.61/hooks-handlers/` и выполнить каждый с `H2T_PYTHON=<python окружения CLI из Step 1>` и `echo '{}' |`. Expected: код 0, без traceback.
+- [x] **Step 4: Полные обработчики 3.x на окружении нового CLI.** Взять `~/.claude/plugins/cache/lichtpfad/h2t-core/3.2.61/hooks-handlers/` и выполнить каждый с `H2T_PYTHON=<python окружения CLI из Step 1>` и `echo '{}' |`. Expected: код 0, без traceback.
 
-- [ ] **Step 5: Записать отчёт и правки спеки §10; commit** (`git add docs/reports/... docs/superpowers/specs/2026-10-16-package-architecture.md`).
+- [x] **Step 5: Записать отчёт и правки спеки §10; commit** (`git add docs/reports/... docs/superpowers/specs/2026-10-16-package-architecture.md`).
 
 ### Task 2: Пробы на Windows **[владелец — ноутбук]**
 
 **Files:** тот же отчёт.
 
-- [ ] **Step 1:** подготовить для владельца текст (как 2026-10-16) с командами: в какой оболочке Claude Code запускает команды хуков (хук, печатающий `$0`, `$SHELL`, `$BASH_VERSION`, `ps -p $$`) — с Git Bash и с переименованным `bash.exe` на PATH; `time` для `bash hooks/run` с подделкой `h2t-hook` (порог Stop); запуск `h2t-hook` из окружения uv холодно/тепло; поведение PATH в уже открытом Claude Code после `uv tool install`.
-- [ ] **Step 2:** внести полученную таблицу в отчёт, пороги — в §2.7 спеки; commit.
+- [x] **Step 1:** подготовить для владельца текст (как 2026-10-16) с командами: в какой оболочке Claude Code запускает команды хуков (хук, печатающий `$0`, `$SHELL`, `$BASH_VERSION`, `ps -p $$`) — с Git Bash и с переименованным `bash.exe` на PATH; `time` для `bash hooks/run` с подделкой `h2t-hook` (порог Stop); запуск `h2t-hook` из окружения uv холодно/тепло; поведение PATH в уже открытом Claude Code после `uv tool install`.
+- [ ] **Step 2:** *(ожидает владельца: данные проб с ноутбука (R5))* внести полученную таблицу в отчёт, пороги — в §2.7 спеки; commit.
 
 ---
 
@@ -99,7 +99,7 @@ Expected (записать факт): рабочая/нерабочая стар
 **Interfaces:**
 - Produces: `release_pointer.read_pointer(marketplace: dict) -> dict[str, tuple[str, str]]` (плагин → (ref, sha)); `release_pointer.set_pointer(marketplace: dict, ref: str, sha: str) -> dict`; CLI `python scripts/release_pointer.py set <ref> <sha>` / `check`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 # tests/release/test_release_pointer.py
@@ -146,9 +146,9 @@ def test_repository_marketplace_is_pinned():
     assert pins, "marketplace.json has no pinned plugins"
 ```
 
-- [ ] **Step 2: Run** `.venv/bin/pytest tests/release/test_release_pointer.py -v` — Expected: FAIL `ModuleNotFoundError: scripts.release_pointer` (создать `tests/release/__init__.py`; `scripts/__init__.py` есть? проверить `ls scripts/__init__.py`, при отсутствии — импорт через `importlib.util.spec_from_file_location`, как в `tests/test_bump_plugin_encoding.py`).
+- [x] **Step 2: Run** `.venv/bin/pytest tests/release/test_release_pointer.py -v` — Expected: FAIL `ModuleNotFoundError: scripts.release_pointer` (создать `tests/release/__init__.py`; `scripts/__init__.py` есть? проверить `ls scripts/__init__.py`, при отсутствии — импорт через `importlib.util.spec_from_file_location`, как в `tests/test_bump_plugin_encoding.py`).
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```python
 # scripts/release_pointer.py
@@ -203,9 +203,9 @@ if __name__ == "__main__":
     raise SystemExit(main(sys.argv[1:]))
 ```
 
-- [ ] **Step 4:** pre-commit сверяет `version` в marketplace и `plugin.json`; убедиться, что он не требует строковый `source` (`grep -n source scripts/hooks/pre-commit`); при необходимости — читать `version` как прежде, источник не трогать. Run: тесты Task 3 — 3 PASS, `test_repository_marketplace_is_pinned` всё ещё FAIL (указатель ещё не сдвинут).
+- [x] **Step 4:** pre-commit сверяет `version` в marketplace и `plugin.json`; убедиться, что он не требует строковый `source` (`grep -n source scripts/hooks/pre-commit`); при необходимости — читать `version` как прежде, источник не трогать. Run: тесты Task 3 — 3 PASS, `test_repository_marketplace_is_pinned` всё ещё FAIL (указатель ещё не сдвинут).
 
-- [ ] **Step 5 [владелец]: заморозка.** Владелец подтверждает имя тега `v3.3.0`. Затем:
+- [ ] **Step 5 [владелец]: заморозка.** *(ожидает владельца)* Владелец подтверждает имя тега `v3.3.0`. Затем:
 
 ```bash
 git tag -a v3.3.0 -m "freeze before package architecture" origin/main
@@ -213,9 +213,9 @@ git push origin v3.3.0
 .venv/bin/python scripts/release_pointer.py set v3.3.0 "$(git rev-parse v3.3.0^{commit})"
 ```
 
-- [ ] **Step 6: Проверка вживую** в изолированном `CLAUDE_CONFIG_DIR`: `marketplace add <путь к чекауту>` → `install h2t-core@lichtpfad` → в кэше версия из `plugin.json` тега. Run все тесты Task 3 — PASS. Все 15 путей CI + ruff.
+- [ ] **Step 6: Проверка вживую** *(ожидает владельца: после заморозки, Step 5)* в изолированном `CLAUDE_CONFIG_DIR`: `marketplace add <путь к чекауту>` → `install h2t-core@lichtpfad` → в кэше версия из `plugin.json` тега. Run все тесты Task 3 — PASS. Все 15 путей CI + ruff.
 
-- [ ] **Step 7: Commit, PR** «chore(release): freeze — marketplace points at v3.3.0» с `Refs #541`. После мержа владелец делает `/plugin marketplace update lichtpfad` и проверяет `ls ~/.claude/plugins/cache/lichtpfad/h2t-core/`.
+- [ ] **Step 7: Commit, PR** *(коммит сделан; PR и мерж — владелец)* «chore(release): freeze — marketplace points at v3.3.0» с `Refs #541`. После мержа владелец делает `/plugin marketplace update lichtpfad` и проверяет `ls ~/.claude/plugins/cache/lichtpfad/h2t-core/`.
 
 ---
 
@@ -233,7 +233,7 @@ git push origin v3.3.0
 **Interfaces:**
 - Produces: `exec_map.shipped_runtime_python(root: Path) -> list[str]` — `.py` в `plugins/` вне тестов; `ALLOWLIST = {"hooks/run"}`; `legacy_call_forms.json` — список `{"argv": [...], "source": "<file:line>"}`.
 
-- [ ] **Step 1: Failing tests**
+- [x] **Step 1: Failing tests**
 
 ```python
 # tests/release/test_ratchets.py
@@ -274,8 +274,8 @@ def test_inventory_covers_scaffolded_project_hooks():
         assert ("h2t-hook", hook) in names
 ```
 
-- [ ] **Step 2:** Run — FAIL (`exec_map` нет, json нет).
-- [ ] **Step 3: Implement** `exec_map.py`:
+- [x] **Step 2:** Run — FAIL (`exec_map` нет, json нет).
+- [x] **Step 3: Implement** `exec_map.py`:
 
 ```python
 """Map every executable file the pack ships and count what must reach zero."""
@@ -314,7 +314,7 @@ def literal_hits(root: Path, literals: list[str]) -> list[str]:
 
 Run `python -c` из корня, чтобы получить фактические числа; вписать их в `RUNTIME_PY_CEILING` и `AUTHOR_LITERAL_CEILING` (сейчас 69 — из подсчёта `.py` вне тестов: 39+22+5+2+1; перепроверить).
 
-- [ ] **Step 4: Инвентарь форм вызова.** Собрать grep'ом и вписать в `legacy_call_forms.json` с `source`:
+- [x] **Step 4: Инвентарь форм вызова.** Собрать grep'ом и вписать в `legacy_call_forms.json` с `source`:
 
 ```bash
 git grep -nE 'h2t-(ops|gather|handoff|activity-log|hook|project-[a-z-]+|scaffold-project)\b' v3.3.0 -- plugins/ \
@@ -322,8 +322,8 @@ git grep -nE 'h2t-(ops|gather|handoff|activity-log|hook|project-[a-z-]+|scaffold
 ```
 Каждая уникальная форма (команда + подкоманда + флаги) — запись. Обязательно: `h2t-gather --cwd <dir> --briefing-only`, `h2t-handoff write …`, `h2t-activity-log …`, `h2t-hook layout-precommit|bulk-precommit|secrets-precommit`, `h2t-ops <connector> …` из references.
 
-- [ ] **Step 5:** `scripts/exec_map.py` получает `main()`, печатающий таблицу «файл → потребители (grep по имени) → назначение по спеке §5»; вывод — в `docs/reports/2026-10-XX-exec-map.md`. Run тесты — PASS. Красный контроль: временно поднять число `.py` (создать `plugins/h2t-core/x.py`) — ratchet FAIL; убрать.
-- [ ] **Step 6:** 15 путей CI + ruff; commit `test(release): ratchets and the 3.x call-form inventory (#541)`.
+- [x] **Step 5:** `scripts/exec_map.py` получает `main()`, печатающий таблицу «файл → потребители (grep по имени) → назначение по спеке §5»; вывод — в `docs/reports/2026-10-XX-exec-map.md`. Run тесты — PASS. Красный контроль: временно поднять число `.py` (создать `plugins/h2t-core/x.py`) — ratchet FAIL; убрать.
+- [x] **Step 6:** 15 путей CI + ruff; commit `test(release): ratchets and the 3.x call-form inventory (#541)`.
 
 ### Task 5: Фиксация порядка поиска секретов
 
@@ -331,9 +331,9 @@ git grep -nE 'h2t-(ops|gather|handoff|activity-log|hook|project-[a-z-]+|scaffold
 - Create: `tests/core/test_secrets_precedence.py`
 - Read: `h2t_ops/core/secrets.py:14-35`
 
-- [ ] **Step 1:** тест: в пустом HOME создать одинаковый ключ `EXA_API_KEY` с разными значениями во всех местах, которые читает `h2t_ops/core/secrets.py`, и в переменной окружения; утверждать, какое значение выигрывает, по одному кейсу на каждую пару соседних мест. Значения сравнивать по `hashlib.sha256(v.encode()).hexdigest()[:8]`, не печатать.
-- [ ] **Step 2:** Run — тест должен пройти на текущем коде (это фиксация, не изменение). Красный контроль: поменять в тесте ожидаемый порядок двух мест — FAIL; вернуть.
-- [ ] **Step 3:** commit `test(secrets): pin today's lookup order before the move (#541)`.
+- [x] **Step 1:** тест: в пустом HOME создать одинаковый ключ `EXA_API_KEY` с разными значениями во всех местах, которые читает `h2t_ops/core/secrets.py`, и в переменной окружения; утверждать, какое значение выигрывает, по одному кейсу на каждую пару соседних мест. Значения сравнивать по `hashlib.sha256(v.encode()).hexdigest()[:8]`, не печатать.
+- [x] **Step 2:** Run — тест должен пройти на текущем коде (это фиксация, не изменение). Красный контроль: поменять в тесте ожидаемый порядок двух мест — FAIL; вернуть.
+- [x] **Step 3:** commit `test(secrets): pin today's lookup order before the move (#541)`.
 
 ---
 
@@ -353,7 +353,7 @@ git grep -nE 'h2t-(ops|gather|handoff|activity-log|hook|project-[a-z-]+|scaffold
   - `commit(install: Install) -> None` — пишет `install.json`, затем `install.env` `STATE=ready` (LF, прямые слеши)
   - `read() -> Install | None` — `None`, если `install.env` не `ready` или `GENERATION` ≠ `generation`
 
-- [ ] **Step 1: Failing tests**
+- [x] **Step 1: Failing tests**
 
 ```python
 # tests/setup/test_state.py
@@ -418,8 +418,8 @@ def test_interrupt_between_json_and_env_reads_as_absent(home, monkeypatch):
     assert state.read() is None
 ```
 
-- [ ] **Step 2:** Run `.venv/bin/pytest tests/setup/test_state.py -v` — FAIL (`h2t_ops.setup` нет).
-- [ ] **Step 3: Implement**
+- [x] **Step 2:** Run `.venv/bin/pytest tests/setup/test_state.py -v` — FAIL (`h2t_ops.setup` нет).
+- [x] **Step 3: Implement**
 
 ```python
 # h2t_ops/setup/state.py
@@ -503,8 +503,8 @@ def read() -> Install | None:
     return install if install.generation == env.get("GENERATION") else None
 ```
 
-- [ ] **Step 4:** Run — PASS (5). Красный контроль: поменять порядок в `commit()` (env раньше json) — `test_interrupt_between_json_and_env_reads_as_absent` FAIL; вернуть.
-- [ ] **Step 5:** commit `feat(setup): install state with install.env as the commit point (#541)`.
+- [x] **Step 4:** Run — PASS (5). Красный контроль: поменять порядок в `commit()` (env раньше json) — `test_interrupt_between_json_and_env_reads_as_absent` FAIL; вернуть.
+- [x] **Step 5:** commit `feat(setup): install state with install.env as the commit point (#541)`.
 
 ### Task 7: `h2t-ops version --expect`
 
@@ -517,7 +517,7 @@ def read() -> Install | None:
 - Consumes: `state.read()`.
 - Produces: `check(expect: str, which=shutil.which) -> dict` с полями `ok: bool`, `version: str`, `reason: None | "version" | "path" | "not_installed"`, `hint: str | None`. CLI: `h2t-ops version [--expect V] [--json]`, код 0 при `ok`, иначе 3.
 
-- [ ] **Step 1: Failing tests**
+- [x] **Step 1: Failing tests**
 
 ```python
 # tests/setup/test_version_check.py
@@ -568,10 +568,10 @@ def test_all_match_is_ok(tmp_path):
     assert r == {"ok": True, "version": h2t_ops.__version__, "reason": None, "hint": None}
 ```
 
-- [ ] **Step 2:** Run `.venv/bin/pytest tests/setup/test_version_check.py -v` — FAIL `ImportError: version_check`.
-- [ ] **Step 3: Implement** `check()` (версия пакета — `h2t_ops.__version__`; сравнение `os.path.normcase(os.path.realpath(...))` начала пути с `tool_root`); в `cli.py` — подпарсер `version`, вывод через существующий `h2t_ops/core/envelope.py` (`--json`), человеческий текст иначе.
-- [ ] **Step 4:** Run — PASS; `h2t-ops version --json` в dev-окружении печатает конверт.
-- [ ] **Step 5:** commit `feat(cli): h2t-ops version --expect checks every entry point (#541)`.
+- [x] **Step 2:** Run `.venv/bin/pytest tests/setup/test_version_check.py -v` — FAIL `ImportError: version_check`.
+- [x] **Step 3: Implement** `check()` (версия пакета — `h2t_ops.__version__`; сравнение `os.path.normcase(os.path.realpath(...))` начала пути с `tool_root`); в `cli.py` — подпарсер `version`, вывод через существующий `h2t_ops/core/envelope.py` (`--json`), человеческий текст иначе.
+- [x] **Step 4:** Run — PASS; `h2t-ops version --json` в dev-окружении печатает конверт.
+- [x] **Step 5:** commit `feat(cli): h2t-ops version --expect checks every entry point (#541)`.
 
 ### Task 8: `lib/` → `h2t_ops/lifecycle/`, точки входа зовут пакет
 
@@ -582,11 +582,11 @@ def test_all_match_is_ok(tmp_path):
 - Modify: `pyproject.toml` — убрать force-include `plugins/h2t-core/lib` в `_plugin_payload` только в Task 12; здесь не трогать
 - Test: `tests/lifecycle/` (существующие тесты `lib/**/test_*.py` переезжают туда же)
 
-- [ ] **Step 1: Failing test** `tests/lifecycle/test_entrypoints_use_package.py`: для каждой из шести точек входа — модуль не импортирует `h2t_ops.plugin_entrypoints` (`ast`-проверка) и `main(["--help"])` завершается кодом 0 при `H2T_PLUGIN_ROOT`, указывающем в пустой каталог.
-- [ ] **Step 2:** Run — FAIL.
-- [ ] **Step 3:** `git mv` библиотек; копии скриптов; переписать импорты (`from lib.gather import …` → `from h2t_ops.lifecycle.gather import …`); точки входа вызывают `main()` модулей пакета.
-- [ ] **Step 4: Round trip:** `tests/lifecycle/test_handoff_gather_round_trip.py` — `h2t-handoff write` в пустой HOME, затем `h2t-gather --briefing-only` видит запись. Тест формы вызова 3.x: для каждой записи `legacy_call_forms.json` с командой из этих шести — `subprocess.run` с `--help`-безопасными аргументами завершается не кодом 2 «unknown argument».
-- [ ] **Step 5:** все 15 путей CI (пути `lib/` в `evals.yml` заменить на `tests/lifecycle`), ruff, parity-тест `test_vendored_lib_parity.py` перевести на сравнение `h2t_ops/lifecycle` ↔ `plugins/h2t-core/lib` (он удаляется в Task 12); commit.
+- [x] **Step 1: Failing test** `tests/lifecycle/test_entrypoints_use_package.py`: для каждой из шести точек входа — модуль не импортирует `h2t_ops.plugin_entrypoints` (`ast`-проверка) и `main(["--help"])` завершается кодом 0 при `H2T_PLUGIN_ROOT`, указывающем в пустой каталог.
+- [x] **Step 2:** Run — FAIL.
+- [x] **Step 3:** `git mv` библиотек; копии скриптов; переписать импорты (`from lib.gather import …` → `from h2t_ops.lifecycle.gather import …`); точки входа вызывают `main()` модулей пакета.
+- [x] **Step 4: Round trip:** `tests/lifecycle/test_handoff_gather_round_trip.py` — `h2t-handoff write` в пустой HOME, затем `h2t-gather --briefing-only` видит запись. Тест формы вызова 3.x: для каждой записи `legacy_call_forms.json` с командой из этих шести — `subprocess.run` с `--help`-безопасными аргументами завершается не кодом 2 «unknown argument».
+- [x] **Step 5:** все 15 путей CI (пути `lib/` в `evals.yml` заменить на `tests/lifecycle`), ruff, parity-тест `test_vendored_lib_parity.py` перевести на сравнение `h2t_ops/lifecycle` ↔ `plugins/h2t-core/lib` (он удаляется в Task 12); commit.
 
 ### Task 9: Хуки в пакете и обёртка `hooks/run`
 
@@ -600,8 +600,8 @@ def test_all_match_is_ok(tmp_path):
 **Interfaces:**
 - Produces: `h2t_ops.hooks.emit.Reply(text: str = "", block: bool = False)`; `emit.write(event_name: str, reply: Reply) -> int` (печатает конверт по каналу, возвращает код: 0 или 2); каждый модуль: `handle(event: dict) -> Reply`; `HANDLERS: dict[str, Callable]` в `h2t_ops/hooks/__init__.py`.
 
-- [ ] **Step 1: Failing tests модулей** — для каждого хука: событие из fixtures (`tests/fixtures/hooks/<name>/<event>.json`, собрать из текущих тестов `tests/hooks/`) → ожидаемый `Reply` (спека §2.8). `gather`: ответ содержит `BRIEFING:` и `GATHER_META: cwd=<cwd> at=`.
-- [ ] **Step 2: Failing tests обёртки** (`tests/hooks/test_hooks_run.py`, skip без bash): подделка `h2t-hook` — bash-скрипт, печатающий заданное и выходящий заданным кодом; фикстура пишет `install.env` и `release.env`. Кейсы — строки таблицы §6.1 сверху вниз:
+- [x] **Step 1: Failing tests модулей** — для каждого хука: событие из fixtures (`tests/fixtures/hooks/<name>/<event>.json`, собрать из текущих тестов `tests/hooks/`) → ожидаемый `Reply` (спека §2.8). `gather`: ответ содержит `BRIEFING:` и `GATHER_META: cwd=<cwd> at=`.
+- [x] **Step 2: Failing tests обёртки** (`tests/hooks/test_hooks_run.py`, skip без bash): подделка `h2t-hook` — bash-скрипт, печатающий заданное и выходящий заданным кодом; фикстура пишет `install.env` и `release.env`. Кейсы — строки таблицы §6.1 сверху вниз:
 
 ```python
 CASES = [
@@ -619,8 +619,8 @@ CASES = [
 ]
 ```
 Плюс: каждое уведомление — валидный JSON (`json.loads` вывода) при бутстрапе с двойными кавычками и обратным слешем; CRLF в `install.env` → совпадение версий; `H2T_HOOK` с пробелом и кириллицей; `SessionStart` без `session_id`; второй `SessionStart` того же `session_id` → без уведомления; `~/.h2t/run` только для чтения → уведомление на каждом; подделка, спящая дольше `timeout − 1` → обработано как «иное» до таймаута; `UserPromptSubmit` «привет» → тишина без чтения файлов (проверка: `install.env` отсутствует, вывода нет, < 50 мс).
-- [ ] **Step 3:** Run — FAIL.
-- [ ] **Step 4: Implement `hooks/run`**
+- [x] **Step 3:** Run — FAIL.
+- [x] **Step 4: Implement `hooks/run`**
 
 ```bash
 #!/usr/bin/env bash
@@ -680,9 +680,9 @@ rm -f "$out" "$err"
 exit 0
 ```
 `H2T_HOOK_TIMEOUT` — `timeout` записи `hooks.json` минус 1; скрипт выпуска подставляет его в `hooks.json` как переменную окружения команды (`"command": "H2T_HOOK_TIMEOUT=9 bash …/hooks/run gather"`).
-- [ ] **Step 5: Implement модули** из текущих `hooks-handlers/*.py` и bash-обработчиков (`gather-on-skill`, `gather-on-prompt`, `inject-h2t-context`, `structure-guard`, `grade-guard`, `plain-guard`, `plan-closer`, `new-repo-hint`, `session-end-reap-codex`): логика переносится, поиск интерпретатора, `jq` и ручная сборка JSON удаляются; вывод — только `emit.write`.
-- [ ] **Step 6:** Run — PASS; бюджеты §2.7 измерить `tests/hooks/test_budgets.py` (20 прогонов, p95; на CI — только macOS/Linux, порог Windows — из Task 2).
-- [ ] **Step 7:** commit `feat(hooks): handlers in the package, hooks/run compares two version strings (#541)`.
+- [x] **Step 5: Implement модули** из текущих `hooks-handlers/*.py` и bash-обработчиков (`gather-on-skill`, `gather-on-prompt`, `inject-h2t-context`, `structure-guard`, `grade-guard`, `plain-guard`, `plan-closer`, `new-repo-hint`, `session-end-reap-codex`): логика переносится, поиск интерпретатора, `jq` и ручная сборка JSON удаляются; вывод — только `emit.write`.
+- [x] **Step 6:** Run — PASS; бюджеты §2.7 измерить `tests/hooks/test_budgets.py` (20 прогонов, p95; на CI — только macOS/Linux, порог Windows — из Task 2).
+- [x] **Step 7:** commit `feat(hooks): handlers in the package, hooks/run compares two version strings (#541)`.
 
 ### Task 10: Инструменты и ресурсы
 
@@ -691,9 +691,9 @@ exit 0
 - Modify: `pyproject.toml` — новые точки входа: `h2t-docs-lint`, `h2t-drawio`, `h2t-creative`, `h2t-agent-profile`; `[tool.hatch.build]` включает `h2t_ops/resources/**`
 - Test: `tests/tools/test_resources_from_wheel.py`
 
-- [ ] **Step 1: Failing test** — собрать wheel (`uv build --wheel -o tmp`), установить в изолированный каталог, из чужого cwd вызвать `h2t-creative --help`, `h2t-drawio --help`, `h2t-docs-lint doctor` на пустом репо; каждый находит свои ресурсы (`importlib.resources.files("h2t_ops.resources.creative") / "base"` существует).
-- [ ] **Step 2:** FAIL. **Step 3:** перенос, `Path(__file__).parent / "base"` → `importlib.resources`. Исходные скрипты в плагинах **остаются** до Task 12 (их зовут скиллы 3.x и CI-пути `evals.yml`).
-- [ ] **Step 4:** перенести тесты в `tests/tools/`, обновить пути в `evals.yml`; все пути CI, ruff; commit.
+- [x] **Step 1: Failing test** — собрать wheel (`uv build --wheel -o tmp`), установить в изолированный каталог, из чужого cwd вызвать `h2t-creative --help`, `h2t-drawio --help`, `h2t-docs-lint doctor` на пустом репо; каждый находит свои ресурсы (`importlib.resources.files("h2t_ops.resources.creative") / "base"` существует).
+- [x] **Step 2:** FAIL. **Step 3:** перенос, `Path(__file__).parent / "base"` → `importlib.resources`. Исходные скрипты в плагинах **остаются** до Task 12 (их зовут скиллы 3.x и CI-пути `evals.yml`).
+- [x] **Step 4:** перенести тесты в `tests/tools/`, обновить пути в `evals.yml`; все пути CI, ruff; commit.
 
 ### Task 11: Коннекторы — одна реализация
 
@@ -701,8 +701,8 @@ exit 0
 - Test: `tests/connectors/test_script_verbs_in_cli.py`
 - Delete (в Task 12): `plugins/h2t-ops/skills/{drive,meetgeek,research}/scripts/*`
 
-- [ ] **Step 1: Failing test** — для каждого глагола из `drive_cli.py`, `meetgeek_cli.py`, `exa_search.py`, `fetch_url.py` (список — парсер `argparse` каждого скрипта, загруженного через `importlib`) есть команда `h2t-ops <connector> <verb>` с теми же флагами; контрактный сценарий на подделке API (существующие фикстуры `tests/connectors/`) даёт тот же результат, что скрипт.
-- [ ] **Step 2:** FAIL на недостающих. **Step 3:** дописать недостающие глаголы в `h2t_ops/connectors/*` (только недостающие, по списку из FAIL). **Step 4:** PASS; commit.
+- [x] **Step 1: Failing test** — для каждого глагола из `drive_cli.py`, `meetgeek_cli.py`, `exa_search.py`, `fetch_url.py` (список — парсер `argparse` каждого скрипта, загруженного через `importlib`) есть команда `h2t-ops <connector> <verb>` с теми же флагами; контрактный сценарий на подделке API (существующие фикстуры `tests/connectors/`) даёт тот же результат, что скрипт.
+- [x] **Step 2:** FAIL на недостающих. **Step 3:** дописать недостающие глаголы в `h2t_ops/connectors/*` (только недостающие, по списку из FAIL). **Step 4:** PASS; commit.
 
 ---
 
@@ -718,8 +718,8 @@ exit 0
 - Modify: `h2t_ops/hook_entry.py` — имена `layout-precommit`, `bulk-precommit`, `secrets-precommit` → модули пакета (перенести их обработчики в `h2t_ops/hooks/`), без `plugin_script_path`
 - Test: `tests/release/test_ratchets.py` — `RUNTIME_PY_CEILING = 0`; `tests/skills/test_skill_commands_exist.py`
 
-- [ ] **Step 1: Failing tests** — ratchet = 0; каждый вызов CLI в `SKILL.md` (regex по `h2t-[a-z-]+`) существует в парсере (`h2t_ops.cli` + точки входа `pyproject.toml`); каждый `SKILL.md` h2t начинается проверкой версии; `hooks/run` во всех плагинах идентичен; формы `legacy_call_forms.json` с `h2t-hook` работают против нового `hook_entry`.
-- [ ] **Step 2:** FAIL. **Step 3:** правки и удаления. **Step 4:** PASS; все пути CI (пути удалённых тестов убрать из `evals.yml`), ruff; `lint.py doctor`. **Step 5:** commit, PR `refactor: plugins carry text only; all code in the package (#541)`.
+- [x] **Step 1: Failing tests** — ratchet = 0; каждый вызов CLI в `SKILL.md` (regex по `h2t-[a-z-]+`) существует в парсере (`h2t_ops.cli` + точки входа `pyproject.toml`); каждый `SKILL.md` h2t начинается проверкой версии; `hooks/run` во всех плагинах идентичен; формы `legacy_call_forms.json` с `h2t-hook` работают против нового `hook_entry`.
+- [ ] **Step 2:** *(Steps 2–4 и коммиты сделаны (12a–12c); PR — владелец)* FAIL. **Step 3:** правки и удаления. **Step 4:** PASS; все пути CI (пути удалённых тестов убрать из `evals.yml`), ruff; `lint.py doctor`. **Step 5:** commit, PR `refactor: plugins carry text only; all code in the package (#541)`.
 
 ---
 
@@ -734,8 +734,8 @@ exit 0
 **Interfaces:**
 - Produces: `release.py prepare <ver>` — пишет версию в `pyproject.toml`, `h2t_ops/__init__.py`, все `plugin.json`, `marketplace.json` (`version`), все `release.env`; подставляет `@VERSION@` и `@BOOTSTRAP@`; экспортирует `constraints.txt`; пишет `release.json` (формат §7.1, `format: 1`, `previous` — текущий `ref` указателя). Функция `bootstrap_argv(ver: str, wheel_url: str, constraints_url: str, python: str) -> list[str]` — единственный источник литерала.
 
-- [ ] **Step 1: Failing tests** — после `prepare 4.0.0` в копии репо (`tmp_path` + `git worktree add`): все версии равны; `bootstrap_argv` начинается с `["uvx", "--isolated", "--python", "3.12.11", "--managed-python", "-c"]` и заканчивается `"h2t-setup"`; `@BOOTSTRAP@` не осталось нигде; `constraints.txt` не содержит строки `h2t-ops`; `previous` = текущий ref указателя.
-- [ ] **Step 2–4:** FAIL → implement → PASS. **Step 5:** commit.
+- [x] **Step 1: Failing tests** — после `prepare 4.0.0` в копии репо (`tmp_path` + `git worktree add`): все версии равны; `bootstrap_argv` начинается с `["uvx", "--isolated", "--python", "3.12.11", "--managed-python", "-c"]` и заканчивается `"h2t-setup"`; `@BOOTSTRAP@` не осталось нигде; `constraints.txt` не содержит строки `h2t-ops`; `previous` = текущий ref указателя.
+- [x] **Step 2–4:** FAIL → implement → PASS. **Step 5:** commit.
 
 ### Task 14: `h2t-setup sync` — цель и исполнитель
 
@@ -747,8 +747,8 @@ exit 0
 - Produces: `manifest.current(fetch=urllib_fetch) -> dict` (читает `marketplace.json` с `https://raw.githubusercontent.com/lichtpfad/h2t-skills/main/.claude-plugin/marketplace.json`, ref h2t-core, затем `release.json` тега); `sync.ensure_executor(target: dict, mode: str, argv: list[str], *, prefix=sys.prefix, version=h2t_ops.__version__, tool_root: str | None) -> None` — возвращает, если исполнитель годен, иначе `os.execvp` по `target["bootstrap"] + [mode] + argv`.
 - Ошибка сети → `H2TError(code=6)` с текстом причины; ничего не тронуто.
 
-- [ ] **Step 1: Failing tests** — `fetch` подменяется словарём URL → bytes: цель читается; сеть падает → код 6, `state.read()` не изменился, `install.env` не создан; версия исполнителя ≠ цели → `execvp` вызван с bootstrap цели + `update` + исходные аргументы (подмена `os.execvp`); версия совпадает, но `prefix` внутри `tool_root` → тоже перезапуск; совпадает и вне — возврат.
-- [ ] **Step 2–4:** FAIL → implement → PASS. **Step 5:** commit.
+- [x] **Step 1: Failing tests** — `fetch` подменяется словарём URL → bytes: цель читается; сеть падает → код 6, `state.read()` не изменился, `install.env` не создан; версия исполнителя ≠ цели → `execvp` вызван с bootstrap цели + `update` + исходные аргументы (подмена `os.execvp`); версия совпадает, но `prefix` внутри `tool_root` → тоже перезапуск; совпадает и вне — возврат.
+- [x] **Step 2–4:** FAIL → implement → PASS. **Step 5:** commit.
 
 ### Task 15: `sync` — CLI, плагины, кэш, отчёт
 
@@ -760,7 +760,7 @@ exit 0
 - Consumes: `state.begin_update/commit/read`, `manifest.current`, `ensure_executor`.
 - Produces: `sync.run(mode: str, *, uv=run_uv, claude=harness_claude.Claude(), confirm=input) -> Report`; `Report(done: list[str], failed: list[tuple[str, str]], reload_needed: bool)`.
 
-- [ ] **Step 1: Failing tests — сходимость** (§2.5, тест 5 спеки), каждый кейс — начальное состояние подделок → `run("sync")` → конечное состояние:
+- [x] **Step 1: Failing tests — сходимость** (§2.5, тест 5 спеки), каждый кейс — начальное состояние подделок → `run("sync")` → конечное состояние:
   - чистая машина: marketplace отсутствует → добавлен; `h2t-core`, `h2t-ops` установлены версии цели; `install.env` `ready`;
   - CLI 0.2.1 (receipt без `install.json`) → `user_options` из receipt, CLI цели;
   - повреждённое окружение при `ready` (подделка `--version` падает) → переустановка;
@@ -771,15 +771,15 @@ exit 0
   - пустой набор плагинов → `failed`, не успех;
   - кэш: 4 версии плагина → остаются 2 последние;
   - `EDITABLE_ROOT` задан → остановка с сообщением о чекауте, ничего не тронуто.
-- [ ] **Step 2–4:** FAIL → implement шаги §7.3.3–8 → PASS. Каждый шаг: сравнить факт с целью, пропустить совпавшее.
-- [ ] **Step 5:** commit `feat(setup): sync converges a machine to the current release (#541)`.
+- [x] **Step 2–4:** FAIL → implement шаги §7.3.3–8 → PASS. Каждый шаг: сравнить факт с целью, пропустить совпавшее.
+- [x] **Step 5:** commit `feat(setup): sync converges a machine to the current release (#541)`.
 
 ### Task 16: `update`, `dev-sync`
 
 **Files:** `h2t_ops/setup/cli.py`, `tests/setup/test_update_devsync.py`
 
-- [ ] **Step 1: Failing tests** — `update` показывает «было → станет» и CHANGELOG цели, без «да» ничего не меняет; `update` старого исполнителя → перезапуск в цель с `update` (Task 14) → вопрос задаёт исполнитель цели о своей версии; `dev-sync` пишет `EDITABLE_ROOT`, не вызывает `git`, берёт `user_options` из `install.json`.
-- [ ] **Step 2–4:** FAIL → implement → PASS. **Step 5:** commit.
+- [x] **Step 1: Failing tests** — `update` показывает «было → станет» и CHANGELOG цели, без «да» ничего не меняет; `update` старого исполнителя → перезапуск в цель с `update` (Task 14) → вопрос задаёт исполнитель цели о своей версии; `dev-sync` пишет `EDITABLE_ROOT`, не вызывает `git`, берёт `user_options` из `install.json`.
+- [x] **Step 2–4:** FAIL → implement → PASS. **Step 5:** commit.
 
 ### Task 17: Workflow выпуска
 
@@ -787,10 +787,10 @@ exit 0
 - Create: `.github/workflows/release.yml`
 - Create: `tests/release/test_release_workflow.py` — статическая проверка YAML
 
-- [ ] **Step 1: Failing test** — workflow существует; `on: push: tags: ['v*']`; `concurrency: {group: release, cancel-in-progress: false}`; шаги в порядке: сборка wheel → прогон тестов на установленном wheel (`tests/tools/test_resources_from_wheel.py`, `tests/setup`) → `gh release create` с wheel и `constraints.txt` → сдвиг указателя: `release_pointer.py check` равен `previous` из `release.json`, иначе `exit 1` → `release_pointer.py set <tag> <sha>` → коммит на main.
-- [ ] **Step 1b: Детерминированность (§2.6)** — `tests/release/test_determinism.py`, маркер `slow`, запускается в workflow выпуска и вручную: собрать wheel, экспортировать constraints, установить дважды в разные `UV_TOOL_DIR` с `--python 3.12.11 --managed-python -c constraints.txt`; утверждать равенство `uv pip freeze --python <python окружения>` и `sys.version` обоих окружений. Красный контроль: во второй установке убрать `-c` — набор должен разойтись (если не расходится — тест не ловит дрейф, искать пакет с незакреплённой зависимостью).
-- [ ] **Step 2–4:** FAIL → workflow → PASS. `test_release_pointer.py` дополнить: с 4.0.0 у тега указателя есть Release с wheel (проверка через `gh release view` — только в CI с `GH_TOKEN`, локально skip).
-- [ ] **Step 5:** commit, PR `feat(release): one workflow publishes the wheel, then moves the pointer (#541)`.
+- [x] **Step 1: Failing test** — workflow существует; `on: push: tags: ['v*']`; `concurrency: {group: release, cancel-in-progress: false}`; шаги в порядке: сборка wheel → прогон тестов на установленном wheel (`tests/tools/test_resources_from_wheel.py`, `tests/setup`) → `gh release create` с wheel и `constraints.txt` → сдвиг указателя: `release_pointer.py check` равен `previous` из `release.json`, иначе `exit 1` → `release_pointer.py set <tag> <sha>` → коммит на main.
+- [x] **Step 1b: Детерминированность (§2.6)** — `tests/release/test_determinism.py`, маркер `slow`, запускается в workflow выпуска и вручную: собрать wheel, экспортировать constraints, установить дважды в разные `UV_TOOL_DIR` с `--python 3.12.11 --managed-python -c constraints.txt`; утверждать равенство `uv pip freeze --python <python окружения>` и `sys.version` обоих окружений. Красный контроль: во второй установке убрать `-c` — набор должен разойтись (если не расходится — тест не ловит дрейф, искать пакет с незакреплённой зависимостью).
+- [x] **Step 2–4:** FAIL → workflow → PASS. `test_release_pointer.py` дополнить: с 4.0.0 у тега указателя есть Release с wheel (проверка через `gh release view` — только в CI с `GH_TOKEN`, локально skip).
+- [ ] **Step 5:** *(коммит сделан; PR — владелец)* commit, PR `feat(release): one workflow publishes the wheel, then moves the pointer (#541)`.
 
 ---
 
@@ -798,13 +798,13 @@ exit 0
 
 ### Task 18: Выпуск **[владелец]**
 
-- [ ] **Step 1:** README: раздел установки — одна команда бутстрапа (§7.2), раздел Codex — что не работает без хуков (§4) и ручная команда плагинов; `CLAUDE.md` — граница `h2t-ops` = весь пак; трекер #541 — D5, D6, D9 закрываются ссылкой на этот выпуск.
-- [ ] **Step 1b: подсистема 2 не теряется.** 4.0.0 переносит код, но не данные: корни хранения, файл путей, порядок секретов, литералы автора остаются как были (Global Constraints). В README — раздел «Известные ограничения» со ссылкой на #548; в CHANGELOG 4.0.0 — та же строка; трекер #541 не закрывается, пока #548 не решён и его спека не написана. Выпуск без этих трёх строк не делается.
-- [ ] **Step 2:** `release.py prepare 4.0.0`; все 15 путей CI + ruff; PR, мерж владельцем.
-- [ ] **Step 3 [владелец]:** `git tag -a v4.0.0` на коммите мержа, `git push origin v4.0.0`. Workflow публикует Release и сдвигает указатель.
-- [ ] **Step 4: Проверка состояния, не отчёта:** `release_pointer.py check` на main = `v4.0.0`; Release содержит wheel и `constraints.txt`; в пустом HOME бутстрап `… h2t-setup sync` ставит CLI 4.0.0 и плагины 4.0.0 в изолированный `CLAUDE_CONFIG_DIR`; `h2t-ops version --expect 4.0.0 --json` → `ok: true`.
-- [ ] **Step 5:** машины автора: `/plugin marketplace update lichtpfad` → уведомление → бутстрап `sync`; на Mac с чекаутом — `dev-sync` вместо `sync`.
+- [ ] **Step 1:** *(README и CLAUDE.md сделаны; трекер #541 — владелец, после выпуска)* README: раздел установки — одна команда бутстрапа (§7.2), раздел Codex — что не работает без хуков (§4) и ручная команда плагинов; `CLAUDE.md` — граница `h2t-ops` = весь пак; трекер #541 — D5, D6, D9 закрываются ссылкой на этот выпуск.
+- [x] **Step 1b: подсистема 2 не теряется.** 4.0.0 переносит код, но не данные: корни хранения, файл путей, порядок секретов, литералы автора остаются как были (Global Constraints). В README — раздел «Известные ограничения» со ссылкой на #548; в CHANGELOG 4.0.0 — та же строка; трекер #541 не закрывается, пока #548 не решён и его спека не написана. Выпуск без этих трёх строк не делается.
+- [ ] **Step 2:** *(ожидает владельца)* `release.py prepare 4.0.0`; все 15 путей CI + ruff; PR, мерж владельцем.
+- [ ] **Step 3 [владелец]:** *(ожидает владельца)* `git tag -a v4.0.0` на коммите мержа, `git push origin v4.0.0`. Workflow публикует Release и сдвигает указатель.
+- [ ] **Step 4: Проверка состояния, не отчёта:** *(ожидает владельца)* `release_pointer.py check` на main = `v4.0.0`; Release содержит wheel и `constraints.txt`; в пустом HOME бутстрап `… h2t-setup sync` ставит CLI 4.0.0 и плагины 4.0.0 в изолированный `CLAUDE_CONFIG_DIR`; `h2t-ops version --expect 4.0.0 --json` → `ok: true`.
+- [ ] **Step 5:** *(ожидает владельца)* машины автора: `/plugin marketplace update lichtpfad` → уведомление → бутстрап `sync`; на Mac с чекаутом — `dev-sync` вместо `sync`.
 
 ### Task 19: Живая приёмка **[владелец]**
 
-- [ ] Матрица §4: macOS × Claude Code (Mac автора, чистый пользователь), Windows × Claude Code (ноутбук, чистый пользователь), Codex — скиллы и CLI. Для каждой ячейки: бутстрап, `/h2t-core:session-start` даёт брифинг, `handoff` пишет запись, обычное сообщение без вывода хуков, бюджеты §2.7. Результаты — в отчёт фазы P и в трекер #541.
+- [ ] *(ожидает владельца)* Матрица §4: macOS × Claude Code (Mac автора, чистый пользователь), Windows × Claude Code (ноутбук, чистый пользователь), Codex — скиллы и CLI. Для каждой ячейки: бутстрап, `/h2t-core:session-start` даёт брифинг, `handoff` пишет запись, обычное сообщение без вывода хуков, бюджеты §2.7. Результаты — в отчёт фазы P и в трекер #541.

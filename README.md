@@ -14,17 +14,48 @@ Claude Code plugin suite for H2T workflows: lifecycle context, provider connecto
 
 ## Install For A User
 
-The repository is public. Nothing has to be granted before installing.
+The repository is public. Nothing has to be granted before installing, and nothing has to
+be cloned: a checkout is only for developing the pack. This applies to an agent installing
+for a person too.
 
-Installation has **two channels, and the first does not move the second.** The marketplace
-delivers skills, hooks and agents into the plugin cache; `uv tool install` puts nine CLI
-commands on PATH. Skills call those commands. Stop after the first channel and the skills
-load, then die on their first command.
+The one prerequisite is [uv](https://docs.astral.sh/uv/getting-started/installation/); it
+brings its own Python. Then one command, the same for a person and for an agent:
 
-**Neither channel needs a checkout.** Do not `git clone` this repository to install it — a
-clone is only for developing the pack. This applies to an agent installing for a person.
+```bash
+@BOOTSTRAP@ sync
+```
 
-**Channel 1 — plugins.** Typed by a person in Claude Code:
+The command is the bootstrap of the current release. `scripts/release.py prepare` writes it
+here on every release, so the line above is always the release `main` points at; in a
+checkout before a release it holds a placeholder; take the command from `main` or from
+the latest Release notes then.
+
+What `sync` does, and each step is skipped when it already matches:
+
+- installs the CLI — one package, `h2t-ops`, with every `h2t-*` command — as a `uv tool`,
+  pinned to the release's wheel and constraints, and verifies it by running it;
+- when `claude` is on PATH, adds the `lichtpfad` marketplace and installs or updates
+  `h2t-core` and `h2t-ops` (`--scope user`) to the same release; keeps the last two versions
+  of each plugin in the cache;
+- in Codex it installs no plugins and prints the commands for them (see [Codex](#codex));
+- reports what it changed, and the command to repeat when something failed — the same
+  `sync`. Open Claude Code sessions need `/reload-plugins` or a new session.
+
+Run it again to repair: it compares the machine with the release and redoes only what
+differs. Replace `sync` with `update` to see "installed → target" and the CHANGELOG first
+and answer yes; `update` asks in a terminal and refuses without one
+(`reason: confirmation_required`). Once installed, `h2t-setup sync` and `h2t-setup update`
+do the same — they hand over to the bootstrap of the current release themselves (on
+Windows they print that command for you to run, since the running tool is locked).
+
+Plugins and the CLI are one version. Plugins carry text only (skills, references, the hook
+wrapper `hooks/run`); every hook runs as `h2t-hook <name>` from the CLI. When the CLI is
+missing or at another version, the first `SessionStart` of a session says so once and names
+the bootstrap; every skill starts with `h2t-ops version --expect <its release> --json` and
+stops on a mismatch with the same remedy.
+
+**Plugins by hand.** `sync` runs these for you; they are here for a machine where `claude`
+was not on PATH when it ran. Typed by a person in Claude Code:
 
 ```text
 /plugin marketplace add lichtpfad/h2t-skills
@@ -41,55 +72,26 @@ claude plugin install h2t-core@lichtpfad --scope user --json
 claude plugin install h2t-ops@lichtpfad --scope user --json
 ```
 
-Each prints one JSON line with `"outcome":"ok"`. `marketplace add` reports "cloning via
-HTTPS": that is Claude Code filling its own plugin cache, not a checkout you need. Start a
-new session (or `/reload-plugins`) to load the skills. Codex: see [Codex](#codex) below.
+`marketplace add` reports "cloning via HTTPS": that is Claude Code filling its own plugin
+cache, not a checkout you need.
 
-**Channel 2 — the CLI.** One line, no checkout:
-
-```bash
-uv tool install "git+https://github.com/lichtpfad/h2t-skills.git"
-```
-
-uv fetches the source into its own cache and builds the nine commands from there; nothing
-lands in your working directory. Append `@<commit>` to the URL to pin a version.
-`/h2t-core:setup install-h2t-ops` runs the same install for you, after a dry run:
-
-```text
-/h2t-core:setup doctor
-/h2t-core:setup install-h2t-ops
-/h2t-core:setup connectors-check
-```
-
-Verify **channel 2 by its own state**, not by what the marketplace printed — a plugin
-update never touches the entry points:
+Verify by state, not by what an installer printed:
 
 ```bash
-uv tool list          # expect one package `h2t-ops` listing nine commands
-h2t-ops --version
+uv tool list          # one package `h2t-ops` listing every h2t-* command
+h2t-ops version --json
 h2t-ops connectors
 ```
 
-```text
-h2t-ops v0.2.1
-- h2t-activity-log      - h2t-hook                   - h2t-project-register
-- h2t-gather            - h2t-ops                    - h2t-scaffold-project
-- h2t-handoff           - h2t-project-audit-report   - h2t-project-audit-scan
-```
-
-Fewer than nine, or no `h2t-ops` package at all, means channel 2 did not land. Rerun it —
-`--reinstall` also fetches dependencies a newer version added:
-
-```bash
-uv tool install --reinstall "git+https://github.com/lichtpfad/h2t-skills.git"
-```
-
-For external install troubleshooting, use [H2T Ops External Install + Debug Log](docs/h2t-ops-external-install-debug.md).
+On Windows, hooks need Git Bash; without it skills and the CLI still work and hooks do not
+run. For install troubleshooting, use
+[H2T Ops External Install + Debug Log](docs/h2t-ops-external-install-debug.md).
 
 ### Codex
 
-Codex reads the same marketplace file, so channel 1 is one command per plugin. Channel 2
-is unchanged — the CLI is shared by both harnesses.
+Skills and the CLI work in Codex; hooks do not, and `sync` does not install Codex plugins.
+Install the CLI with the bootstrap above, then the plugins by hand — `sync` prints the same
+lines when it finds `codex`:
 
 ```bash
 codex plugin marketplace add lichtpfad/h2t-skills
@@ -98,17 +100,24 @@ codex plugin add h2t-ops@lichtpfad
 codex plugin list | grep lichtpfad      # installed, enabled
 ```
 
-Measured on Codex 0.159.2, 2026-10-14. What carries over and what does not:
+What a hook does in Claude Code, and what happens in Codex without it (spec §4):
 
-| | Codex |
+| hook | in Codex |
 |---|---|
-| skills, with their `h2t-core:` / `h2t-ops:` namespaces | yes |
-| CLI commands from channel 2 | yes |
-| hooks (`<h2t-context>`, gather-on-skill, the guards) | **no** — Codex reports `plugin_hooks: removed`; see #452 |
-| `h2t-creative` | listed twice, as `deck` and `source-command-deck` (#533) |
+| gather on the session skills (`<h2t-context>`, the briefing) | the skill runs `h2t-gather` itself when there is no fresh briefing |
+| version check on `SessionStart` | the first command of every h2t skill, `h2t-ops version --expect` |
+| structure-guard, grade-guard, plain-guard, plan-closer, new-repo-hint | **none** — no fallback |
 
-Without hooks nothing injects the briefing; `session-start` falls back to running
-`h2t-gather` itself, so it still works. The guards have no fallback.
+Measured on Codex 0.159.2, 2026-10-14: Codex reports `plugin_hooks: removed` (#452), and
+`h2t-creative` is listed twice, as `deck` and `source-command-deck` (#533).
+
+## Known Limitations (Известные ограничения)
+
+4.0.0 moves code, not data. Where things are stored stays as it was in 3.x: the storage
+roots (`~/.h2t`, `~/.dor`, `~/.config`), the order in which secrets are looked up, and the
+author's literal paths and names in defaults are unchanged in 4.0.0, and there is no single
+paths file yet. That is the next subsystem, tracked in
+[#548](https://github.com/lichtpfad/h2t-skills/issues/548).
 
 ## h2t-ops Connectors
 
@@ -253,9 +262,20 @@ git clone https://github.com/lichtpfad/h2t-skills.git
 cd h2t-skills
 uv sync
 uv run pytest
-uv run h2t-ops --help
-uv tool install --editable .   # the nine commands from this checkout, edits take effect
+uv run h2t-setup dev-sync      # the CLI from this checkout, editable: edits take effect
 ```
+
+`dev-sync` installs the CLI editable with the checkout's own constraints and your extras,
+and records the checkout in `~/.h2t/run/install.env` (`EDITABLE_ROOT`). It does not touch
+git or the marketplace plugins. Load the plugins from the checkout instead:
+
+```bash
+claude --plugin-dir plugins/h2t-core --plugin-dir plugins/h2t-ops
+pwsh scripts/claude-dev.ps1    # every plugin of the pack, the same way
+```
+
+On an editable install `h2t-setup sync` and `update` stop with `reason: editable` and
+change nothing: update the checkout with git, then run `dev-sync` again.
 
 Useful checks:
 
@@ -304,7 +324,6 @@ docs/
 - Claude Code
 - GitHub access to `lichtpfad/h2t-skills`
 - `git`
-- `uv`
-- Python 3.11+
+- `uv` (the bootstrap brings Python 3.12; development needs Python 3.11+)
 - `gh` CLI for GitHub-backed dev workflows
 

@@ -96,7 +96,7 @@ jobs:
               errors.append("pyproject.toml version differs from the tag")
 
           checks = 0
-          for md in sorted(Path("plugins").glob("**/*.md")):
+          for md in [*sorted(Path("plugins").glob("**/*.md")), Path("README.md")]:
               text = md.read_text(encoding="utf-8")
               for found in release.VERSION_CHECK.findall(text):
                   checks += 1

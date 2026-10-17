@@ -1,5 +1,7 @@
 # h2t-dev Changelog
 
+> From 4.0.0 the pack has one version and one changelog: [CHANGELOG.md](../../CHANGELOG.md). This file is the history up to 3.x.
+
 ## Unreleased
 
 - fix(docs-init): the sys.path bootstrap resolved to `plugins/`, which has no `lib/`, so
