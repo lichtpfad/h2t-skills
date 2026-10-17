@@ -65,6 +65,7 @@ def test_installed_wheel_runs_the_wheel_and_setup_tests(wf):
     assert wf["env"]["PYTHON"] == "3.12.11"
     assert re.search(r'--python "\$PYTHON" --managed-python', script), "not the release Python"
     assert re.search(r"-c\s+\S*constraints\.txt", script), "the install is not constrained"
+    assert "'$VER'" not in script, "the version is spliced into Python source; pass it as argv"
 
 
 def test_release_publishes_the_wheel_and_the_constraints(wf):
@@ -74,17 +75,34 @@ def test_release_publishes_the_wheel_and_the_constraints(wf):
     assert "--notes-file" in create[0]
 
 
-def test_pointer_checks_previous_before_it_moves(wf):
+def _order(script: str, *needles: str) -> list[int]:
+    found = [script.find(n) for n in needles]
+    assert -1 not in found, dict(zip(needles, found))
+    return found
+
+
+def test_the_guard_runs_before_anything_is_published(wf):
+    """A bad tag must fail in build, not leave an orphan public Release behind it.
+
+    scripts/release_guard.py holds the reachability and `previous` checks for both jobs,
+    so the preflight and the re-check cannot drift apart."""
+    build = _script(wf["jobs"]["build"])
+    guard, upload = _order(build, 'release_guard.py "v$VER"', "uv build")
+    assert guard < upload
+    assert "--allow-done" not in build, "a build of a finished release must not publish again"
+    checkout = wf["jobs"]["build"]["steps"][0]
+    assert checkout.get("with", {}).get("fetch-depth") == 0, "the guard needs origin/main"
+
+
+def test_pointer_rechecks_moves_and_verifies_before_it_pushes(wf):
     script = _script(wf["jobs"]["pointer"])
-    check = script.find("release_pointer.py check")
-    previous = script.find("previous")
-    move = script.find("release_pointer.py set")
-    push = script.find("git push")
-    assert -1 not in (check, previous, move, push), (check, previous, move, push)
-    assert check < move and previous < move < push
-    assert "merge-base --is-ancestor" in script[:move], "a tag off main could move the pointer"
-    assert re.search(r"exit 1", script[:move])
-    assert -1 < script.find("gh release view") < move, "the pointer could name a tag with no Release"
+    guard, done, view, move, verify, commit, push = _order(
+        script, 'release_guard.py "v$VER" --allow-done', "already at v$VER", "gh release view",
+        "release_pointer.py set", "release_pointer.py check", "git commit", "git push")
+    assert guard < done < view < move < verify < commit < push
+    assert "exit 0" in script[done:view], "a re-run after the push must be a no-op"
+    assert "exit 1" in script[view:move], "the pointer could name a tag with no Release"
+    assert "exit 1" in script[verify:commit], "the moved pointer is committed unchecked"
 
 
 def test_every_action_is_pinned(wf):

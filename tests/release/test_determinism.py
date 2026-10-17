@@ -54,29 +54,31 @@ def release(tmp_path_factory) -> tuple[Path, Path]:
     return next((base / "dist").glob("h2t_ops-*.whl")), constraints
 
 
-def _install(base: Path, name: str, wheel: Path, constraints: Path | None,
-             pythons: Path) -> tuple[list[str], str]:
-    """Install the wheel as a uv tool under base/name; return (freeze, sys.version)."""
+def _install(base: Path, name: str, wheel: Path, constraints: Path | None) -> tuple[list[str], str]:
+    """Install the wheel as a uv tool under base/name; return (freeze, sys.version).
+
+    Each install has its own managed-Python store, so each downloads and resolves its own
+    interpreter, and equal sys.version is a measurement rather than one shared binary."""
     root = base / name
     env = {**os.environ, "UV_TOOL_DIR": str(root / "tools"), "UV_TOOL_BIN_DIR": str(root / "bin"),
-           "UV_PYTHON_INSTALL_DIR": str(pythons), "UV_PYTHON_BIN_DIR": str(root / "python-bin")}
+           "UV_PYTHON_INSTALL_DIR": str(root / "pythons"), "UV_PYTHON_BIN_DIR": str(root / "python-bin")}
     pin = ["-c", constraints] if constraints else []
     _run([UV, "tool", "install", "--python", PYTHON, "--managed-python", *pin, wheel], env=env)
     tool = root / "tools" / "h2t-ops"
     python = tool / "Scripts" / "python.exe" if sys.platform == "win32" else tool / "bin" / "python"
     freeze = _run([UV, "pip", "freeze", "--python", python], env=env).stdout.splitlines()
-    version = _run([python, "-c", "import sys; print(sys.version)"], env=env).stdout.strip()
+    out = _run([python, "-c", "import sys; print(sys.base_prefix); print(sys.version)"], env=env).stdout
+    base_prefix, version = out.strip().split("\n", 1)
+    # The interpreter came from this install's own store, not from the other one's or the machine's.
+    assert Path(base_prefix).resolve().is_relative_to((root / "pythons").resolve()), base_prefix
     return sorted(freeze), version
 
 
 def test_two_installs_of_one_release_are_identical(release, tmp_path):
     wheel, constraints = release
-    # One managed-Python store for both: the download is the same either way, and
-    # sys.version still says which interpreter each environment actually resolved.
-    pythons = tmp_path / "pythons"
-    first = _install(tmp_path, "first", wheel, constraints, pythons)
+    first = _install(tmp_path, "first", wheel, constraints)
     red = os.environ.get("H2T_DETERMINISM_RED_CONTROL") == "1"
-    second = _install(tmp_path, "second", wheel, None if red else constraints, pythons)
+    second = _install(tmp_path, "second", wheel, None if red else constraints)
 
     assert first[1] == second[1], (first[1], second[1])
     assert first[1].startswith(PYTHON + " "), first[1]

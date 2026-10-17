@@ -8,7 +8,20 @@ name: release
 # the owner): it stamps the version slots and writes release.json and constraints.txt. This
 # workflow never prepares; it checks that the tag names the prepared commit and publishes it.
 #
-# Pinned by tests/release/test_release_workflow.py.
+# The guards that can refuse a tag (scripts/release_guard.py: the tag is on main, the pointer
+# is at release.json's `previous`) run in `build`, before anything is published, and again in
+# `pointer`, because main can move between the jobs.
+#
+# Recovery, by the job that failed:
+#   build or test-installed  nothing is published. Fix on main, re-prepare, then delete the
+#                            tag (`git push --delete origin v<ver>`, `git tag -d v<ver>`)
+#                            and push it again on the fixed commit.
+#   release                  `gh release delete v<ver> --yes` (keeps the tag), then
+#                            "Re-run failed jobs".
+#   pointer                  "Re-run failed jobs". A re-run after the push already landed
+#                            finds the pointer at v<ver> on the tag's commit and exits 0.
+#
+# Pinned by tests/release/test_release_workflow.py and tests/release/test_release_guard.py.
 
 on:
   push:
@@ -36,6 +49,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # The guard reads origin/main and the tag's history.
+          fetch-depth: 0
+
+      - name: The tag may move the pointer
+        # Refused here, a bad tag publishes nothing. A finished release (pointer already at
+        # this tag) is refused too: without --allow-done, `done` is not an answer.
+        run: |
+          VER="${GITHUB_REF_NAME#v}"
+          python3 scripts/release_guard.py "v$VER"
 
       - uses: astral-sh/setup-uv@v6
         with:
@@ -156,9 +179,9 @@ jobs:
           VER="${GITHUB_REF_NAME#v}"
           PY="$RUNNER_TEMP/venv/bin/python"
           mv h2t_ops "$RUNNER_TEMP/h2t_ops-source"
-          "$PY" -c "import h2t_ops, sys; from pathlib import Path; f = Path(h2t_ops.__file__).resolve(); \
-          assert f.is_relative_to(Path(sys.prefix).resolve()), f; \
-          assert h2t_ops.__version__ == '$VER', h2t_ops.__version__; print('h2t_ops from', f)"
+          "$PY" -c 'import h2t_ops, sys; from pathlib import Path; f = Path(h2t_ops.__file__).resolve()
+          assert f.is_relative_to(Path(sys.prefix).resolve()), f
+          assert h2t_ops.__version__ == sys.argv[1], h2t_ops.__version__; print("h2t_ops from", f)' "$VER"
           "$PY" -m pytest -p no:cacheprovider tests/setup -q
 
   release:
@@ -211,18 +234,11 @@ jobs:
         run: |
           VER="${GITHUB_REF_NAME#v}"
           SHA=$(git rev-parse "refs/tags/v$VER^{commit}")
-          # A release comes from main only: a tag on an unmerged branch never moves the pointer.
-          if ! git merge-base --is-ancestor "$SHA" origin/main; then
-            echo "::error::v$VER ($SHA) is not reachable from origin/main"
-            exit 1
-          fi
-          # The pointer moves only from `previous` (release.json at the tag, no leading v), so
-          # it never goes back. The first release, 4.0.0, follows the freeze at v3.3.0.
-          PREVIOUS=$(git show "$SHA:release.json" | python3 -c 'import json, sys; print(json.load(sys.stdin)["previous"])')
-          CURRENT=$(python3 scripts/release_pointer.py check | python3 -c 'import json, sys; print(sorted({ref for ref, _sha in json.load(sys.stdin).values()})[0])')
-          if [ "${CURRENT#v}" != "$PREVIOUS" ]; then
-            echo "::error::the pointer is at $CURRENT; release.json says previous = $PREVIOUS. Not moving."
-            exit 1
+          # The same guard as in build, asked again: main may have moved since.
+          STATE=$(python3 scripts/release_guard.py "v$VER" --allow-done)
+          if [ "$STATE" = done ]; then
+            echo "already at v$VER ($SHA); nothing to move"
+            exit 0
           fi
           ASSETS=$(gh release view "v$VER" --json assets --jq '.assets[].name')
           for name in "h2t_ops-$VER-py3-none-any.whl" constraints.txt; do
@@ -232,6 +248,12 @@ jobs:
             fi
           done
           python3 scripts/release_pointer.py set "v$VER" "$SHA"
+          # Every plugin must now name exactly this tag and commit.
+          PINS=$(python3 scripts/release_pointer.py check | python3 -c 'import json, sys; print(json.dumps(sorted({tuple(v) for v in json.load(sys.stdin).values()})))')
+          if [ "$PINS" != "[[\"v$VER\", \"$SHA\"]]" ]; then
+            echo "::error::after set the pointer reads $PINS, expected [[\"v$VER\", \"$SHA\"]]"
+            exit 1
+          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add .claude-plugin/marketplace.json
