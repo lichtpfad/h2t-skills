@@ -22,6 +22,36 @@ def shipped_runtime_python(root: Path) -> list[str]:
     return sorted(p for p in _tracked(root, "plugins/") if p.endswith(".py") and not _is_test(p))
 
 
+def _allowlisted(path: str) -> bool:
+    """`plugins/<name>/hooks/run` matches `hooks/run`: the allowlist names the in-plugin path."""
+    return "/".join(path.split("/")[2:]) in ALLOWLIST
+
+
+def shipped_executables(root: Path) -> list[str]:
+    """Shipped files that can run as programs: the exec bit in git, or a `#!` first line.
+
+    Python is one way to ship code; a shell script is another. The runtime-.py ratchet sees
+    only the first, so this one counts the rest, the allowlist excepted.
+    """
+    staged = subprocess.run(["git", "ls-files", "-s", "plugins/"], cwd=root, check=True,
+                            capture_output=True, text=True).stdout.splitlines()
+    found = set()
+    for line in staged:
+        mode, _, _, path = line.split(maxsplit=3)
+        if _is_test(path) or _allowlisted(path):
+            continue
+        if mode == "100755":
+            found.add(path)
+            continue
+        try:
+            with open(root / path, "rb") as fh:
+                if fh.read(2) == b"#!":
+                    found.add(path)
+        except FileNotFoundError:
+            continue
+    return sorted(found)
+
+
 def literal_hits(root: Path, literals: list[str]) -> list[str]:
     hits = []
     for path in _tracked(root, "plugins/") + _tracked(root, "h2t_ops/"):

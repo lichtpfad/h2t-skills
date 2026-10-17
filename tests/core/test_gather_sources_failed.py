@@ -7,11 +7,10 @@ every gh call (gather_ms 15110 == the 15s cap in runner._run_one) and printed
 
 There used to be two orchestrations to keep in step; the lib/cli/main.py twin was deleted
 in #392 after it was measured producing a briefing without its `### Previous Session`
-block. One implementation remains — the plugin script, which is what both `h2t-gather`
-and `h2t-ops gather` now execute — so this file no longer parametrises over a second one.
+block. One implementation remains — h2t_ops/lifecycle/session_start.py, which is what both
+`h2t-gather` and `h2t-ops gather` execute — so this file does not parametrise over a second.
 """
 
-import importlib.util
 import json
 import sys
 from pathlib import Path
@@ -19,7 +18,6 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-PLUGIN_SCRIPT = ROOT / "plugins" / "h2t-core" / "skills" / "session-start" / "scripts" / "gather.py"
 
 FAILED_GITHUB = {
     "milestones": [], "current_milestone": None, "milestone_issues": [],
@@ -28,18 +26,11 @@ FAILED_GITHUB = {
 HEALTHY_GITHUB = {**FAILED_GITHUB, "failed": []}
 
 
-def _load_plugin_gather():
-    """Import the plugin script the same way run_plugin_main does."""
-    sys.path.insert(0, str(ROOT / "plugins" / "h2t-core" / "lib"))
-    spec = importlib.util.spec_from_file_location("_plugin_gather", PLUGIN_SCRIPT)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+@pytest.fixture
+def gather_module():
+    from h2t_ops.lifecycle import session_start
 
-
-@pytest.fixture(params=["plugin"])
-def gather_module(request):
-    return _load_plugin_gather()
+    return session_start
 
 
 def _run(gather_module, monkeypatch, capfd, tmp_path, github_result):

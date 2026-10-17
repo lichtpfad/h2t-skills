@@ -11,7 +11,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 README = ROOT / "README.md"
-SETUP = ROOT / "plugins" / "h2t-core" / "skills" / "setup" / "scripts" / "setup_h2t.py"
+SETUP = ROOT / "h2t_ops" / "setup" / "legacy.py"  # setup_h2t.py until Task 12
 
 # Command-shaped: a line that runs a clone, an editable install, or names a checkout as a
 # source. The sentence forbidding a clone mentions `git clone` mid-line and must not match.

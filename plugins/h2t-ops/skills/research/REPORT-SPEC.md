@@ -17,7 +17,7 @@
 | **Query** | {exact user query} |
 | **Mode** | {fast / generic / news / academic / competitor / people / deep} |
 | **Depth** | {shallow / standard / deep} |
-| **Engine** | Exa (via scripts/exa_search.py) |
+| **Engine** | Exa (via `h2t-ops research`) |
 | **Status** | ✅ completed / ⚠ partial / ❌ degraded |
 | **Cache hit** | {false / path-to-cached-file} |
 
@@ -25,8 +25,8 @@
 
 | # | Tool | Args | HTTP | Latency | Cost | Results |
 |---|---|---|---|---|---|---|
-| 1 | `exa_search.py search` | `type=auto,category=company,numResults=10` | 200 | 2100ms | $0.012 | 10 |
-| 2 | `exa_search.py crawl` | `url=rejuve.bio/about` | 200 | 1300ms | $0.002 | 1 |
+| 1 | `h2t-ops research search` | `type=auto,category=company,numResults=10` | 200 | 2100ms | $0.012 | 10 |
+| 2 | `h2t-ops research crawl` | `url=rejuve.bio/about` | 200 | 1300ms | $0.002 | 1 |
 | **Totals** | | | **0 errors** | **3400ms** | **$0.014** | **11 items** |
 
 > **Integrity check:** 2/2 calls used Exa API. 0 fallbacks to WebSearch.

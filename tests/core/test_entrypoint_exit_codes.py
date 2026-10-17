@@ -10,7 +10,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-WRITER = ROOT / "plugins" / "h2t-core" / "skills" / "handoff" / "scripts" / "writer.py"
+WRITER = "h2t_ops.lifecycle.handoff"  # the plugin script, deleted in Task 12, ran as this module
 
 
 def _env(tmp_path, **extra):
@@ -26,7 +26,7 @@ def _env(tmp_path, **extra):
 
 
 def _run(tmp_path, *argv, **extra):
-    return subprocess.run([sys.executable, str(WRITER), *argv],
+    return subprocess.run([sys.executable, "-m", WRITER, *argv],
                           capture_output=True, text=True, encoding="utf-8", check=False, env=_env(tmp_path, **extra))
 
 

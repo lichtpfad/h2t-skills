@@ -1,14 +1,8 @@
 """Tests for secrets skeleton and preflight in setup_h2t.py."""
-import sys
-from pathlib import Path
 
 import pytest
 
-# setup_h2t.py is standalone — add its directory to sys.path
-SCRIPTS_DIR = Path(__file__).parent.parent / "plugins" / "h2t-core" / "skills" / "setup" / "scripts"
-sys.path.insert(0, str(SCRIPTS_DIR))
-
-import setup_h2t  # noqa: E402
+from h2t_ops.setup import legacy as setup_h2t
 
 REGISTRY = {
     "EXA_API_KEY": {

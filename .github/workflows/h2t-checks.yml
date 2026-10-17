@@ -223,7 +223,9 @@ jobs:
         if: steps.tok.outputs.present == 'true'
         run: |
           pip install pyyaml
-          python _skills/plugins/h2t-dev/skills/docs-lint/scripts/lint.py audit --root . --no-pymarkdown
+          # docs-lint is package code since Task 12 (#541); it needs only PyYAML, so the
+          # checkout is put on the path instead of installing h2t-ops and its connectors.
+          PYTHONPATH=_skills python -m h2t_ops.tools.docs.lint audit --root . --no-pymarkdown
       - name: stale plans (report only — docs-lint retire always exits 0 by design)
         if: steps.tok.outputs.present == 'true'
-        run: python _skills/plugins/h2t-dev/skills/docs-lint/scripts/lint.py retire --root . --older-than 60
+        run: PYTHONPATH=_skills python -m h2t_ops.tools.docs.lint retire --root . --older-than 60

@@ -1,4 +1,4 @@
-"""h2t-ops CLI: dev wrapper + registry dispatch + doctor + legacy delegation + ingest shim."""
+"""h2t-ops CLI: registry dispatch + doctor + legacy delegation + ingest shim."""
 from __future__ import annotations
 
 import argparse
@@ -13,7 +13,6 @@ from h2t_ops.core.errors import UsageError
 # intentionally) so they don't UnicodeEncodeError on Windows consoles (#141 class).
 from h2t_ops.core.output import _finalize, _utf8_writer, emit
 from h2t_ops.core.registry import discover
-from h2t_ops.dev import main as _dev_main
 
 _MIGRATED = {"notion", "gmail", "calendar", "drive", "meetgeek", "granola", "telegram", "research", "evals", "dropbox", "google"}
 
@@ -163,8 +162,6 @@ def _deploy_dispatch(argv: list[str]) -> int:
 
 
 def dispatch(argv: list[str]) -> int:
-    if argv and argv[0] == "dev":
-        return _dev_main(argv[1:])
     if argv and argv[0] == "deploy":
         return _deploy_dispatch(argv[1:])
     if argv and argv[0] in ("--help", "-h"):
@@ -288,6 +285,12 @@ def dispatch(argv: list[str]) -> int:
 
 
 def main() -> None:
+    # argparse prints --help and usage errors itself, past emit()'s UTF-8 writer, so a
+    # cp1252 pipe on Windows died on the first `→` in a help string. meetgeek_cli.py had
+    # this guard (#428); it did not come along when the CLI took over its verbs (#541).
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8")
     sys.exit(dispatch(sys.argv[1:]))
 
 

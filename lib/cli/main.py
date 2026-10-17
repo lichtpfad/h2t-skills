@@ -2,9 +2,8 @@
 
 `gather` used to live here as a second implementation and drifted from the plugin script
 for months — it never gained `find_latest_session_index`, so a briefing produced through
-`h2t-ops gather` silently lacked its `### Previous Session` block. It now routes through
-`h2t_ops.plugin_entrypoints`, which runs the plugin's own
-`skills/session-start/scripts/gather.py`.
+`h2t-ops gather` silently lacked its `### Previous Session` block. It now routes to
+h2t_ops/lifecycle/session_start.py, the one implementation `h2t-gather` runs too.
 
 Nothing is implemented here any more. The module survives because `h2t_ops/cli.py:_legacy`
 falls through to it for unrecognised commands, and that fallthrough must keep exiting 2.

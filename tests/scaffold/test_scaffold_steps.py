@@ -1,46 +1,16 @@
 """Tests for scaffold-project step helpers."""
 import sys
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-_SCAFFOLD_DIR = Path(__file__).parents[2] / "plugins/h2t-core/skills/scaffold-project/scripts"
-sys.path.insert(0, str(_SCAFFOLD_DIR))
-
-from scaffold_project import run_docs_init
-
-
-def _make_fake_init(tmp_path: Path) -> Path:
-    """Create a fake docs-init init.py under tmp_path and return plugin_root."""
-    # init_script = _H2T_DEV_ROOT / "scripts" / "docs-init" / "init.py"
-    # So we need: tmp_path / "h2t-dev" / "scripts" / "docs-init" / "init.py"
-    # _PLUGIN_ROOT.parent == tmp_path  →  _PLUGIN_ROOT = tmp_path / "any-child"
-    fake_init_dir = tmp_path / "h2t-dev" / "scripts" / "docs-init"
-    fake_init_dir.mkdir(parents=True)
-    (fake_init_dir / "init.py").write_text("# stub")
-    plugin_root = tmp_path / "h2t-skills"  # .parent == tmp_path
-    plugin_root.mkdir(exist_ok=True)
-    return plugin_root
-
-
-# These tests used to patch `scaffold_project._DEV_ROOT` as well. It was never read: the
-# module defined it and used `_H2T_DEV_ROOT` — derived at import by `_find_h2t_dev_root()` —
-# everywhere it mattered. The patch therefore did nothing, and its only effect was to make
-# removing the dead constant (#434) look like a breakage. The `_PLUGIN_ROOT` patch below is
-# equally inert for the same reason and is left alone: it is not what this change is about.
-#
-# The file already knew this — see the comment above the `_H2T_DEV_ROOT` patch further down,
-# which states plainly that run_docs_init reads that name and not these two. One test acted
-# on the knowledge; three kept the dead patch beside it.
+from h2t_ops.lifecycle import scaffold_project
+from h2t_ops.lifecycle.scaffold_project import run_docs_init
 
 
 def test_run_docs_init_passes_repo_name_not_path(tmp_path, monkeypatch):
     """run_docs_init passes repo name (positional), not --cwd."""
-    import scaffold_project
-    plugin_root = _make_fake_init(tmp_path)
-    monkeypatch.setattr(scaffold_project, "_PLUGIN_ROOT", plugin_root)
     project_dir = tmp_path / "my-repo"
     project_dir.mkdir()
-    with patch("scaffold_project.subprocess.run") as mock_run:
+    with patch("h2t_ops.lifecycle.scaffold_project.subprocess.run") as mock_run:
         mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
         run_docs_init("my-repo", project_dir)
     cmd = mock_run.call_args[0][0]
@@ -50,12 +20,9 @@ def test_run_docs_init_passes_repo_name_not_path(tmp_path, monkeypatch):
 
 def test_run_docs_init_passes_apply_flag(tmp_path, monkeypatch):
     """run_docs_init always passes --apply so files are actually created."""
-    import scaffold_project
-    plugin_root = _make_fake_init(tmp_path)
-    monkeypatch.setattr(scaffold_project, "_PLUGIN_ROOT", plugin_root)
     project_dir = tmp_path / "my-repo"
     project_dir.mkdir()
-    with patch("scaffold_project.subprocess.run") as mock_run:
+    with patch("h2t_ops.lifecycle.scaffold_project.subprocess.run") as mock_run:
         mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
         run_docs_init("my-repo", project_dir)
     cmd = mock_run.call_args[0][0]
@@ -64,14 +31,11 @@ def test_run_docs_init_passes_apply_flag(tmp_path, monkeypatch):
 
 def test_run_docs_init_passes_repo_root_for_non_dev_project(tmp_path, monkeypatch):
     """run_docs_init supports repos outside DEV_ROOT via --repo-root."""
-    import scaffold_project
 
-    plugin_root = _make_fake_init(tmp_path)
-    monkeypatch.setattr(scaffold_project, "_PLUGIN_ROOT", plugin_root)
     project_dir = tmp_path / "work" / "my-repo"
     project_dir.mkdir(parents=True)
 
-    with patch("scaffold_project.subprocess.run") as mock_run:
+    with patch("h2t_ops.lifecycle.scaffold_project.subprocess.run") as mock_run:
         mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
         result = run_docs_init("my-repo", project_dir, template="client_project")
 
@@ -84,76 +48,57 @@ def test_run_docs_init_passes_repo_root_for_non_dev_project(tmp_path, monkeypatc
 
 
 def test_run_docs_init_returns_error_on_failure(tmp_path, monkeypatch):
-    import scaffold_project
-    plugin_root = _make_fake_init(tmp_path)
-    monkeypatch.setattr(scaffold_project, "_PLUGIN_ROOT", plugin_root)
     project_dir = tmp_path / "my-repo"
     project_dir.mkdir()
-    with patch("scaffold_project.subprocess.run") as mock_run:
+    with patch("h2t_ops.lifecycle.scaffold_project.subprocess.run") as mock_run:
         mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="error msg")
         result = run_docs_init("my-repo", project_dir)
     assert result["status"] == "error"
 
 
-def test_run_docs_init_errors_when_the_plugin_is_present_but_its_script_is_not(
-    tmp_path, monkeypatch
-):
-    """A broken h2t-dev must not read as an optional one.
+def test_run_docs_init_runs_the_package_module(tmp_path):
+    """docs-init ships in the package, so the call always runs (Task 12).
 
-    This asserted `skip` until #458. The two absences differ: the plugin not installed is
-    a choice, the plugin installed without its script is a broken delivery. Reporting both
-    as `skip` produced projects with no docs/ and said nothing about it — the very failure
-    this call exists to prevent.
+    The plugin original looked for the h2t-dev plugin and its script: absent plugin read as
+    a skip, a plugin without the script as an error (#458). The package copy has neither
+    absence, so both cases became this one.
     """
-    import scaffold_project
-    # run_docs_init reads the module-level _H2T_DEV_ROOT (resolved once at import),
-    # not _DEV_ROOT/_PLUGIN_ROOT — point it at a dir with no docs-init script.
-    monkeypatch.setattr(scaffold_project, "_H2T_DEV_ROOT", tmp_path / "nonexistent")
     project_dir = tmp_path / "my-repo"
     project_dir.mkdir()
-    result = run_docs_init("my-repo", project_dir)
-    assert result["status"] == "error"
-    assert "reinstall" in result["error"], "the message must say what to do, not just what failed"
-
-
-def test_run_docs_init_skips_when_the_plugin_is_not_installed(tmp_path, monkeypatch):
-    """h2t-dev is optional; its absence is a choice and stays a skip."""
-    import scaffold_project
-    monkeypatch.setattr(scaffold_project, "_H2T_DEV_ROOT", None)
-    project_dir = tmp_path / "my-repo"
-    project_dir.mkdir()
-    result = run_docs_init("my-repo", project_dir)
-    assert result["status"] == "skip"
-    assert "not installed" in result["reason"]
+    with patch("h2t_ops.lifecycle.scaffold_project.subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+        assert run_docs_init("my-repo", project_dir)["status"] == "ok"
+    cmd = mock_run.call_args[0][0]
+    assert cmd[:3] == [sys.executable, "-m", "h2t_ops.tools.docs.docs_init"]
 
 
 def test_gitignore_python_includes_lint_temp_files():
     """scaffold .gitignore must exclude docs-lint temp files from day 0."""
-    from scaffold_project import GITIGNORE_TEMPLATES
+    from h2t_ops.lifecycle.scaffold_project import GITIGNORE_TEMPLATES
     gi = GITIGNORE_TEMPLATES["python"]
     assert ".h2t/lint-before.json" in gi
     assert ".h2t/lint-after.json" in gi
 
 
 def test_gitignore_none_includes_lint_temp_files():
-    from scaffold_project import GITIGNORE_TEMPLATES
+    from h2t_ops.lifecycle.scaffold_project import GITIGNORE_TEMPLATES
     gi = GITIGNORE_TEMPLATES["none"]
     assert ".h2t/lint-before.json" in gi
     assert ".h2t/lint-after.json" in gi
 
 
 def test_gitignore_dcc_includes_lint_temp_files():
-    from scaffold_project import DCC_GITIGNORE
+    from h2t_ops.lifecycle.scaffold_project import DCC_GITIGNORE
     assert ".h2t/lint-before.json" in DCC_GITIGNORE
     assert ".h2t/lint-after.json" in DCC_GITIGNORE
 
 
-from scaffold_project import run_sync_labels
+from h2t_ops.lifecycle.scaffold_project import run_sync_labels
 
 
 def test_run_sync_labels_passes_apply_flag(tmp_path):
     """--apply is required to actually sync labels; must be present."""
-    with patch("scaffold_project.subprocess.run") as mock_run:
+    with patch("h2t_ops.lifecycle.scaffold_project.subprocess.run") as mock_run:
         mock_run.return_value = MagicMock(returncode=0, stdout="synced", stderr="")
         run_sync_labels("h2t-skills")
     cmd = mock_run.call_args[0][0]
@@ -162,7 +107,7 @@ def test_run_sync_labels_passes_apply_flag(tmp_path):
 
 def test_run_sync_labels_passes_repo_name(tmp_path):
     """repo name is passed as a positional argument."""
-    with patch("scaffold_project.subprocess.run") as mock_run:
+    with patch("h2t_ops.lifecycle.scaffold_project.subprocess.run") as mock_run:
         mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
         run_sync_labels("h2t-skills")
     cmd = mock_run.call_args[0][0]
@@ -176,7 +121,7 @@ def test_run_sync_labels_skip_if_no_repo_name():
 
 
 def test_run_sync_labels_error_on_failure():
-    with patch("scaffold_project.subprocess.run") as mock_run:
+    with patch("h2t_ops.lifecycle.scaffold_project.subprocess.run") as mock_run:
         mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="gh not found")
         result = run_sync_labels("h2t-skills")
     assert result["status"] == "error"
@@ -184,7 +129,7 @@ def test_run_sync_labels_error_on_failure():
 
 import json
 
-from scaffold_project import install_hooks
+from h2t_ops.lifecycle.scaffold_project import install_hooks
 
 
 def _hook_commands(entries):
@@ -246,12 +191,9 @@ def test_install_hooks_idempotent(tmp_path):
 
 def test_run_docs_init_passes_repo_root_for_docs_type(tmp_path, monkeypatch):
     """docs-type project (not is_git) also gets docs-init via --repo-root."""
-    import scaffold_project
-    plugin_root = _make_fake_init(tmp_path)
-    monkeypatch.setattr(scaffold_project, "_PLUGIN_ROOT", plugin_root)
     project_dir = tmp_path / "my-docs"
     project_dir.mkdir()
-    with patch("scaffold_project.subprocess.run") as mock_run:
+    with patch("h2t_ops.lifecycle.scaffold_project.subprocess.run") as mock_run:
         mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
         result = run_docs_init("my-docs", project_dir, template="research_project")
     assert result["status"] == "ok"
@@ -303,7 +245,7 @@ def test_install_hooks_ignores_lifecycle_report_cache(tmp_path):
     assert ".h2t/lifecycle/*.json" in exclude.read_text(encoding="utf-8")
 
 
-from scaffold_project import template_for_type, write_setup_report
+from h2t_ops.lifecycle.scaffold_project import template_for_type, write_setup_report
 
 
 def test_template_for_type_maps_client_docs():
@@ -328,15 +270,14 @@ def test_write_setup_report_creates_machine_readable_file(tmp_path):
 
 def test_cmd_create_code_repo_root_dirs(tmp_path, monkeypatch):
     """code-github creates src, tests, docs, scripts at root."""
-    import scaffold_project
     monkeypatch.setattr(scaffold_project, "_PROJECT_TYPES_AVAILABLE", True)
     monkeypatch.setattr(scaffold_project, "PROJECT_TYPES", {
         "code_repo": {"root_dirs": ["src", "tests", "docs", "scripts"], "docs_dirs": [], "root_files_required": []},
     })
     monkeypatch.setattr(scaffold_project, "SCAFFOLD_TYPE_TO_TEMPLATE", {"code-github": "code_repo"})
-    with patch("scaffold_project.run_docs_init", return_value={"status": "skip"}):
-        with patch("scaffold_project.install_hooks", return_value={"status": "ok"}):
-            with patch("scaffold_project.subprocess.run") as mock_run:
+    with patch("h2t_ops.lifecycle.scaffold_project.run_docs_init", return_value={"status": "skip"}):
+        with patch("h2t_ops.lifecycle.scaffold_project.install_hooks", return_value={"status": "ok"}):
+            with patch("h2t_ops.lifecycle.scaffold_project.subprocess.run") as mock_run:
                 mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
                 import argparse
                 args = argparse.Namespace(
@@ -353,13 +294,12 @@ def test_cmd_create_code_repo_root_dirs(tmp_path, monkeypatch):
 
 def test_cmd_create_dcc_uses_dcc_gitignore(tmp_path, monkeypatch):
     """dcc type uses DCC_GITIGNORE (*.cache, *.bak), not python gitignore."""
-    import scaffold_project
     monkeypatch.setattr(scaffold_project, "_PROJECT_TYPES_AVAILABLE", True)
     monkeypatch.setattr(scaffold_project, "PROJECT_TYPES", {
         "creative_project": {"root_dirs": ["assets", "scripts", "exports", "docs"], "docs_dirs": [], "root_files_required": []},
     })
     monkeypatch.setattr(scaffold_project, "SCAFFOLD_TYPE_TO_TEMPLATE", {"dcc": "creative_project"})
-    with patch("scaffold_project.run_docs_init", return_value={"status": "skip"}):
+    with patch("h2t_ops.lifecycle.scaffold_project.run_docs_init", return_value={"status": "skip"}):
         import argparse
         args = argparse.Namespace(
             id="my-dcc", type="dcc", stack="none",
@@ -376,7 +316,6 @@ def test_cmd_create_dry_run_lists_would_create(tmp_path):
     """dry-run returns would_create list without touching disk."""
     import argparse
 
-    import scaffold_project
     args = argparse.Namespace(
         id="dry-proj", type="code-local", stack="python",
         dir=str(tmp_path), description="", dry_run=True,
@@ -395,15 +334,14 @@ def test_cmd_create_fails_when_docs_init_ok_but_paths_missing(tmp_path, monkeypa
     """
     import argparse
 
-    import scaffold_project
     monkeypatch.setattr(scaffold_project, "_PROJECT_TYPES_AVAILABLE", True)
     monkeypatch.setattr(scaffold_project, "PROJECT_TYPES", {
         "code_repo": {"root_dirs": ["src", "tests", "docs", "scripts"], "docs_dirs": [], "root_files_required": []},
     })
     monkeypatch.setattr(scaffold_project, "SCAFFOLD_TYPE_TO_TEMPLATE", {"code-github": "code_repo"})
-    with patch("scaffold_project.run_docs_init", return_value={"status": "ok", "output": ""}):
-        with patch("scaffold_project.install_hooks", return_value={"status": "ok"}):
-            with patch("scaffold_project.subprocess.run") as mock_run:
+    with patch("h2t_ops.lifecycle.scaffold_project.run_docs_init", return_value={"status": "ok", "output": ""}):
+        with patch("h2t_ops.lifecycle.scaffold_project.install_hooks", return_value={"status": "ok"}):
+            with patch("h2t_ops.lifecycle.scaffold_project.subprocess.run") as mock_run:
                 mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
                 args = argparse.Namespace(
                     id="test-proj", type="code-github", stack="python",
@@ -420,7 +358,6 @@ def test_cmd_create_succeeds_when_docs_init_ok_and_paths_present(tmp_path, monke
     """scaffold succeeds when docs-init ok AND critical paths exist."""
     import argparse
 
-    import scaffold_project
     monkeypatch.setattr(scaffold_project, "_PROJECT_TYPES_AVAILABLE", True)
     monkeypatch.setattr(scaffold_project, "PROJECT_TYPES", {
         "code_repo": {"root_dirs": ["src", "tests", "docs", "scripts"], "docs_dirs": [], "root_files_required": []},
@@ -437,9 +374,9 @@ def test_cmd_create_succeeds_when_docs_init_ok_and_paths_present(tmp_path, monke
         (project_dir / "docs" / "superpowers" / "plans").mkdir(parents=True, exist_ok=True)
         return {"status": "ok", "output": ""}
 
-    with patch("scaffold_project.run_docs_init", side_effect=fake_docs_init):
-        with patch("scaffold_project.install_hooks", return_value={"status": "ok"}):
-            with patch("scaffold_project.subprocess.run") as mock_run:
+    with patch("h2t_ops.lifecycle.scaffold_project.run_docs_init", side_effect=fake_docs_init):
+        with patch("h2t_ops.lifecycle.scaffold_project.install_hooks", return_value={"status": "ok"}):
+            with patch("h2t_ops.lifecycle.scaffold_project.subprocess.run") as mock_run:
                 mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
                 args = argparse.Namespace(
                     id="test-proj2", type="code-github", stack="python",

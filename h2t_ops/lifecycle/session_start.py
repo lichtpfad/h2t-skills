@@ -1,18 +1,9 @@
 #!/usr/bin/env python3
 """Context gatherer for session-start v3.
 
-Usage: $H2T_PYTHON gather.py --cwd <path> [--format-briefing]
-Outputs JSON to stdout. Imports from lib/ (co-located in cache by update-plugin.sh).
-
-In cache layout:
-  <plugin_root>/
-    skills/session-start/scripts/gather.py   <- this file
-    lib/                                     <- copied by update-plugin.sh
-      activity/
-      eval/
-      gather/
-
-PLUGIN_ROOT = parent.parent.parent.parent of this file
+Usage: h2t-gather --cwd <path> [--format-briefing]
+Outputs JSON to stdout. Began as plugins/h2t-core/skills/session-start/scripts/gather.py,
+which Task 12 deleted; its lib is h2t_ops/lifecycle.
 """
 
 import argparse

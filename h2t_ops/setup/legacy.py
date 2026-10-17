@@ -146,7 +146,7 @@ def _resolve_cli(name: str, which: Callable[[str], str | None] = _user_which, ho
 def resolve_h2t_ops(which: Callable[[str], str | None] = _user_which, home: Path | None = None) -> dict[str, Any]:
     result = _resolve_cli("h2t-ops", which, home)
     if result["status"] == "missing":
-        result["hint"] = "Run setup_h2t.py install-h2t-ops --source main"
+        result["hint"] = "Run h2t-ops setup install-h2t-ops --source main --dry-run --json"
     return result
 
 
@@ -161,7 +161,7 @@ def resolve_entry_points(which: Callable[[str], str | None] = _user_which, home:
         overall = "missing"
     result: dict[str, Any] = {"status": overall, "commands": commands}
     if overall != "ready":
-        result["hint"] = "Run setup_h2t.py install-h2t-ops --source main (installs from GitHub through uv; no clone)"
+        result["hint"] = "Run h2t-ops setup install-h2t-ops --source main --dry-run --json (installs from GitHub through uv; no clone)"
     return result
 
 
@@ -273,9 +273,10 @@ def optional_pos_status(home: Path | None = None) -> dict[str, Any]:
 def plugin_cache_status(home: Path | None = None) -> dict[str, Any]:
     """Installed h2t-core versions under any marketplace, for Claude Code and Codex (#451).
 
-    The same search as h2t_ops.plugin_entrypoints._cache_plugin_roots, duplicated because
-    this script cannot import h2t_ops. A hardcoded `cache/lichtpfad/h2t-core` reported a
-    working install under another marketplace name as missing.
+    The same search the plugin-script ladder (h2t_ops.plugin_entrypoints, deleted in Task 12)
+    made, written out here because setup_h2t.py could not import h2t_ops. A hardcoded
+    `cache/lichtpfad/h2t-core` reported a working install under another marketplace name
+    as missing.
     """
     home = home or _home()
     root: Path | None = None

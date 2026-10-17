@@ -10,8 +10,6 @@ from pathlib import Path
 
 import pytest
 
-from h2t_ops import plugin_entrypoints
-
 ROOT = Path(__file__).resolve().parents[2]
 
 # Every console script that went through `run_plugin_main`. `h2t-hook` is not here: it
@@ -62,17 +60,15 @@ def test_entry_does_not_import_the_plugin_ladder(module):
 
 @pytest.mark.parametrize("module", sorted(LIFECYCLE_ENTRIES.values()))
 def test_help_needs_no_plugin_tree(module, tmp_path, monkeypatch):
-    """`--help` exits 0 when every place the ladder looks is empty.
+    """`--help` exits 0 with the plugin-root variables pointing nowhere.
 
-    H2T_PLUGIN_ROOT alone is not enough to prove it: the ladder falls through to the
-    checkout's own plugins/ after it, so the old one-liners passed that half too. The
-    ladder itself is emptied as well.
+    The ladder that read them (`plugin_entrypoints`) was deleted in Task 12; the variables
+    are still set, so a module that grew a new lookup would meet an empty tree here.
     """
     empty = tmp_path / "empty-plugin-root"
     empty.mkdir()
     monkeypatch.setenv("H2T_PLUGIN_ROOT", str(empty))
     monkeypatch.delenv("CLAUDE_PLUGIN_ROOT", raising=False)
-    monkeypatch.setattr(plugin_entrypoints, "candidate_roots", lambda: [empty])
 
     entry = importlib.import_module(module)
     try:

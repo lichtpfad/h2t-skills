@@ -60,10 +60,6 @@ SCANNED_SUFFIXES = {".py", ".md", ".yaml", ".yml", ".json", ".sh", ""}
 EXPECTED = {
     "h2t_ops/lifecycle/detect_project.py":
         "comment recording the C:/dev anchor these patterns replaced",
-    "plugins/h2t-dev/lib/docs/common.py":
-        "comment recording the removed C:/dev default",
-    "plugins/h2t-core/skills/scaffold-project/scripts/scaffold_project.py":
-        "comment recording the removed _DEV_ROOT default",
     "plugins/h2t-core/skills/scaffold-project/SKILL.md":
         "prose recording the removed C:/dev/{id} default",
 }

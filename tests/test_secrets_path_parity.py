@@ -8,18 +8,13 @@ by `setup doctor` — while `h2t-ops notion` found it.
 Each side's own tests stayed green throughout: the defect lived in the seam. This is the
 round trip — one key, written only to the documented location, read by all three.
 """
-import sys
 from pathlib import Path
 
 import pytest
 
 from h2t_ops.connectors.research import client
 from h2t_ops.core import secrets as core_secrets
-
-SCRIPTS_DIR = Path(__file__).parent.parent / "plugins" / "h2t-core" / "skills" / "setup" / "scripts"
-sys.path.insert(0, str(SCRIPTS_DIR))
-
-import setup_h2t  # noqa: E402
+from h2t_ops.setup import legacy as setup_h2t
 
 KEY = "EXA_API_KEY"
 VALUE = "documented-path-value"

@@ -12,21 +12,17 @@ walk survives as a second answer, for a plain directory tree that is one of them
 being a checkout.
 """
 
-import importlib.util
 import subprocess
 from pathlib import Path
 
 import pytest
 
-ROOT = Path(__file__).resolve().parents[2]
-COMMON = ROOT / "plugins" / "h2t-dev" / "lib" / "docs" / "common.py"
-
 
 def _common():
-    spec = importlib.util.spec_from_file_location("_docs_common", COMMON)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+    # plugins/h2t-dev/lib/docs/common.py until Task 12 deleted the plugin copy.
+    from h2t_ops.tools.docs import common
+
+    return common
 
 
 @pytest.fixture
