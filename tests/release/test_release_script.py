@@ -89,10 +89,10 @@ def _bootstrap_copies(repo: Path) -> dict[str, list[str]]:
     copies["_release.BOOTSTRAP_COMMAND"] = shlex.split(module.BOOTSTRAP_COMMAND)
     for run in (repo / "plugins").glob("*/hooks/run"):
         line = re.search(r"^BOOTSTRAP='([^']*)'", run.read_text(encoding="utf-8"), re.M)[1]
-        copies[str(run.relative_to(repo))] = shlex.split(line)
+        copies[run.relative_to(repo).as_posix()] = shlex.split(line)
     for md in (repo / "plugins").rglob("*.md"):
         for i, cmd in enumerate(re.findall(r"`(uvx --isolated [^`]*) sync`", md.read_text(encoding="utf-8"))):
-            copies[f"{md.relative_to(repo)}#{i}"] = shlex.split(cmd)
+            copies[f"{md.relative_to(repo).as_posix()}#{i}"] = shlex.split(cmd)
     for i, cmd in enumerate(re.findall(r"^(uvx --isolated .*) sync$", (repo / "README.md").read_text(encoding="utf-8"), re.M)):
         copies[f"README.md#{i}"] = shlex.split(cmd)
     return copies
@@ -174,6 +174,35 @@ def test_a_slot_count_mismatch_fails_and_writes_nothing(repo, rel):
     with pytest.raises(rel.ReleaseError, match="docs-lint/SKILL.md"):
         rel.stamp(repo, "4.0.0")
     assert (repo / "pyproject.toml").read_text() == before
+
+
+def test_stamp_keeps_each_files_line_endings(tmp_path):
+    """A Windows checkout (autocrlf=true) has CRLF files; an owner there may run prepare.
+    Stamping changes the slots and no other byte: CRLF stays CRLF, a bare LF stays LF."""
+    lf_repo, crlf_repo = _copy(tmp_path / "lf", SHIPPED), _copy(tmp_path / "crlf", SHIPPED)
+    lf_rel = _load(lf_repo / "scripts" / "release.py", "release_lf")
+    generated = Path("h2t_ops/setup/_release.py")
+    edited = [p.relative_to(lf_repo) for p in lf_rel._plan(lf_repo, "4.0.0") if p.relative_to(lf_repo) != generated]
+    mixed = Path("pyproject.toml")  # one file with both endings: the first line keeps LF
+    for rel_path in edited:  # LF in one copy, CRLF in the other, whatever the checkout has
+        lf = (lf_repo / rel_path).read_bytes().replace(b"\r\n", b"\n")
+        (lf_repo / rel_path).write_bytes(lf)
+        data = lf.replace(b"\n", b"\r\n")
+        if rel_path == mixed:
+            data = data.replace(b"\r\n", b"\n", 1)
+        (crlf_repo / rel_path).write_bytes(data)
+    before = {p: (crlf_repo / p).read_bytes() for p in edited}
+
+    lf_counts = lf_rel.stamp(lf_repo, "4.0.0")
+    assert _load(crlf_repo / "scripts" / "release.py", "release_crlf").stamp(crlf_repo, "4.0.0") == lf_counts
+    for rel_path in edited:
+        got = (crlf_repo / rel_path).read_bytes()
+        assert got.count(b"\r\n") == before[rel_path].count(b"\r\n"), rel_path
+        assert got.count(b"\n") == before[rel_path].count(b"\n"), rel_path
+        expected = (lf_repo / rel_path).read_bytes().replace(b"\n", b"\r\n")
+        if rel_path == mixed:
+            expected = expected.replace(b"\r\n", b"\n", 1)
+        assert got == expected, rel_path
 
 
 def test_the_readme_carries_exactly_one_bootstrap_slot():

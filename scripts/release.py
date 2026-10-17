@@ -47,9 +47,9 @@ BOOTSTRAP_SLOT = re.compile(
     r'@BOOTSTRAP@|uvx --isolated --python [0-9.]+ --managed-python -c "[^"\n]*" '
     r'--from "[^"\n]*" h2t-setup')
 RUN_BOOTSTRAP = re.compile(r"^BOOTSTRAP='[^'\n]*'", re.M)
-_ENV_VERSION = re.compile(r"^VERSION=.*$", re.M)
-_TOML_VERSION = re.compile(r'^version = "[^"\n]*"$', re.M)
-_INIT_VERSION = re.compile(r'^__version__ = "[^"\n]*"$', re.M)
+_ENV_VERSION = re.compile(r"^VERSION=[^\r\n]*", re.M)
+_TOML_VERSION = re.compile(r'^version = "[^"\r\n]*"(?=\r?$)', re.M)
+_INIT_VERSION = re.compile(r'^__version__ = "[^"\r\n]*"(?=\r?$)', re.M)
 _JSON_VERSION = re.compile(r'"version": "[^"\n]*"')
 # A file carrying the version-check block has one --expect and two bootstraps in it.
 _BLOCK = (1, 2)
@@ -89,7 +89,11 @@ def render(argv: list[str]) -> str:
     return " ".join(w if _PLAIN.match(w) else f'"{w}"' for w in argv)
 
 
-def _sub(path: Path, text: str, pattern: re.Pattern, value: str, expected: int) -> tuple[str, int]:
+def _read(path: Path) -> str:
+    return path.read_bytes().decode("utf-8")
+
+
+def _sub(path: str, text: str, pattern: re.Pattern, value: str, expected: int) -> tuple[str, int]:
     text, n = pattern.subn(lambda _m: value, text)
     if n != expected:
         raise ReleaseError(f"{path}: slot {pattern.pattern!r} matched {n} times, expected {expected}")
@@ -104,9 +108,11 @@ def _plan(root: Path, ver: str) -> dict[Path, tuple[str, int]]:
     plan: dict[Path, tuple[str, int]] = {}
 
     def edit(path: Path, *slots: tuple[re.Pattern, str, int]) -> None:
-        text, total = path.read_text(encoding="utf-8"), 0
+        # Read without newline translation and write back the same way, so a CRLF checkout
+        # (Git for Windows, autocrlf=true) keeps every byte outside the slots.
+        text, total = _read(path), 0
         for pattern, value, expected in slots:
-            text, n = _sub(path.relative_to(root), text, pattern, value, expected)
+            text, n = _sub(path.relative_to(root).as_posix(), text, pattern, value, expected)
             total += n
         plan[path] = (text, total)
 
@@ -119,12 +125,12 @@ def _plan(root: Path, ver: str) -> dict[Path, tuple[str, int]]:
     for run in sorted(root.glob("plugins/*/hooks/run")):
         edit(run, (RUN_BOOTSTRAP, f"BOOTSTRAP='{command}'", 1))
     for md in sorted(root.glob("plugins/**/*.md")):
-        text = md.read_text(encoding="utf-8")
+        text = _read(md)
         found = (len(_MD_VERSION.findall(text)), len(BOOTSTRAP_SLOT.findall(text)))
         if found == (0, 0):
             continue
         if found != _BLOCK:
-            raise ReleaseError(f"{md.relative_to(root)}: {found[0]} --expect and {found[1]} bootstrap "
+            raise ReleaseError(f"{md.relative_to(root).as_posix()}: {found[0]} --expect and {found[1]} bootstrap "
                                f"slots, expected {_BLOCK[0]} and {_BLOCK[1]} (the version-check block)")
         edit(md, (_MD_VERSION, ver, 1), (BOOTSTRAP_SLOT, command, 2))
     edit(root / "README.md", (BOOTSTRAP_SLOT, command, README_BOOTSTRAPS))
