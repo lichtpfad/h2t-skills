@@ -9,11 +9,20 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from h2t_ops.hooks import gather, inject_context
+from h2t_ops.hooks import (
+    gather,
+    grade_guard,
+    inject_context,
+    plain_guard,
+    structure_guard,
+)
 from h2t_ops.hooks.emit import Reply
 
 HANDLERS: dict[str, Callable[[dict], Reply]] = {
     "gather-on-skill": gather.handle,
     "gather-on-prompt": gather.handle_prompt,
     "inject-h2t-context": inject_context.handle,
+    "structure-guard": structure_guard.handle,
+    "grade-guard": grade_guard.handle,
+    "plain-guard": plain_guard.handle,
 }

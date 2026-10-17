@@ -11,6 +11,7 @@ One file is one event for one hook and the reply it must get. Keys:
   fields the GATHER_META JSON must carry.
 - `after` — {relative path: [substrings]} the tree must hold after the hook ran.
 - `log` — plain-guard: fields of the row it logs, or null for no row.
+- `plain_stdout_3x` — plain-guard: what the 3.x handler printed and the port no longer does.
 
 Shared by test_hook_modules.py (the module, in-process) and test_hook_equivalence.py (the
 3.x handler against `h2t-hook`, as subprocesses).

@@ -135,9 +135,11 @@ def test_old_handler_and_package_module_decide_the_same(case, tmp_path):
         assert (n_model, n_human) == ("", o_plain)
     elif DECLARED.get(name) == "plain stdout -> log only":
         assert (n_model, n_human) == ("", "")
-        strip = [{k: v for k, v in row.items() if k != "ts"} for row in hc.log_rows(old_home)]
-        assert [{k: v for k, v in row.items() if k != "ts"}
-                for row in hc.log_rows(new_home)] == strip
+        def rows(home, root):
+            return [_normal(json.dumps({k: v for k, v in row.items() if k != "ts"}), root)
+                    for row in hc.log_rows(home)]
+        assert rows(new_home, new_root) == rows(old_home, old_root)
+        assert o_plain == hc.load(path).get("plain_stdout_3x", ""), "3.x printed this"
     elif name.startswith("gather-") and hc.META_SEP in o_model + o_human:
         o_brief, o_meta = _gather_parts(o_model or o_human)
         n_brief, n_meta = _gather_parts(n_model or n_human)

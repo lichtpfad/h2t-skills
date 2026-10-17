@@ -1,0 +1,14 @@
+{
+  "transcript": [
+    "Закрыто [B: прочитано, не прогнано]"
+  ],
+  "event": {
+    "hook_event_name": "Stop",
+    "transcript_path": "{transcript}"
+  },
+  "expect": {
+    "text": "",
+    "block": false,
+    "notice": ""
+  }
+}

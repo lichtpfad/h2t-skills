@@ -1,0 +1,15 @@
+{
+  "event": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Write",
+    "tool_input": {
+      "file_path": "{tmp}/docs/superpowers/plans/2026-10-17-x.md",
+      "content": "x"
+    }
+  },
+  "expect": {
+    "text": "",
+    "block": false,
+    "notice": ""
+  }
+}

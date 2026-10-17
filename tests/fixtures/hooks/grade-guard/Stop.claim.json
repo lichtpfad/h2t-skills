@@ -1,0 +1,16 @@
+{
+  "transcript": [
+    "смотрю",
+    "Готово."
+  ],
+  "event": {
+    "hook_event_name": "Stop",
+    "session_id": "s1",
+    "transcript_path": "{transcript}"
+  },
+  "expect": {
+    "text": "[h2t] «Готово» без вывода команды и без грейда [B]/[C]/[D] — утверждение о состоянии не проверено (Approach §1).",
+    "block": false,
+    "notice": ""
+  }
+}

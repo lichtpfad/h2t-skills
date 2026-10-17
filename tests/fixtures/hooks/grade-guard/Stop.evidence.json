@@ -1,0 +1,14 @@
+{
+  "transcript": [
+    "Done:\n```\n6 passed\n```"
+  ],
+  "event": {
+    "hook_event_name": "Stop",
+    "transcript_path": "{transcript}"
+  },
+  "expect": {
+    "text": "",
+    "block": false,
+    "notice": ""
+  }
+}

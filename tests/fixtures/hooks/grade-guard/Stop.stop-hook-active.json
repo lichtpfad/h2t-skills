@@ -1,0 +1,15 @@
+{
+  "transcript": [
+    "Готово."
+  ],
+  "event": {
+    "hook_event_name": "Stop",
+    "transcript_path": "{transcript}",
+    "stop_hook_active": true
+  },
+  "expect": {
+    "text": "",
+    "block": false,
+    "notice": ""
+  }
+}

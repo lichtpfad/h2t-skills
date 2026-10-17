@@ -1,0 +1,18 @@
+{
+  "files": {
+    ".h2t/structure.yaml": "allowed_root_dirs:\n  - docs/\n  - lib/\nfrontmatter_dirs:\n  - docs/superpowers/plans/\n"
+  },
+  "event": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Write",
+    "tool_input": {
+      "file_path": "{tmp}/docs/superpowers/plans/2026-10-17-x.md",
+      "content": "# no frontmatter\n"
+    }
+  },
+  "expect": {
+    "text_startswith": "BLOCKED: 'docs/superpowers/plans/2026-10-17-x.md' без frontmatter.",
+    "block": true,
+    "notice": ""
+  }
+}
