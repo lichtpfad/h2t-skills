@@ -46,7 +46,6 @@ def test_read_pointer_requires_one_ref_for_all_plugins():
         rp.read_pointer(m)
 
 
-@pytest.mark.xfail(strict=True, reason="pointer moves at the freeze (owner step, Task 3 Step 5)")
 def test_repository_marketplace_is_pinned():
     m = json.loads((ROOT / ".claude-plugin/marketplace.json").read_text(encoding="utf-8"))
     pins = rp.read_pointer(m)
