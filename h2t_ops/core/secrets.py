@@ -230,6 +230,16 @@ def resolve_notion_token() -> str:
 
 # --- readers for the migration (plan R38): it reads secrets only through these -------------
 
+def _read_env_named(path: Path) -> dict[str, str]:
+    """_read_env for the migration: an undecodable file stops it with the file's name — a
+    source silently dropped would be a value lost without a word."""
+    try:
+        return _read_env(path)
+    except UnicodeDecodeError as exc:
+        raise ConfigError(f"{path} is not UTF-8 text ({exc.reason} at byte {exc.start})",
+                          hint="re-save it as UTF-8 and run `h2t-setup layout migrate` again") from exc
+
+
 _SECRET_LEGACY = ("secrets.h2t", "secrets.dor", "secrets.dor_old", "notion.token",
                   "google.store", "google.gmail", "google.dor", "telegram")
 
@@ -245,7 +255,7 @@ def migration_sources() -> list[tuple[str, Path, dict[str, str]]]:
         real = os.path.realpath(p)
         if p.is_file() and real not in seen:
             seen.add(real)
-            result.append((name, p, _read_env(p)))
+            result.append((name, p, _read_env_named(p)))
     return result
 
 
@@ -253,7 +263,7 @@ def shared_env_values() -> dict[str, dict[str, str]]:
     shared = paths.secrets_shared()
     if not shared.is_dir():
         return {}
-    return {p.name: _read_env(p) for p in sorted(shared.iterdir())
+    return {p.name: _read_env_named(p) for p in sorted(shared.iterdir())
             if p.name.endswith(".env") or ".env.from-" in p.name}
 
 

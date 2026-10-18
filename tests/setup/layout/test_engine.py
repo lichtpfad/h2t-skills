@@ -34,7 +34,9 @@ def _noop(ctx):
 
 def _funcs(**over):
     table = {p: _noop for p in engine.PHASES}
-    table.update(engine._phase_funcs())
+    # the engine's own phases are real; secrets and verify (Task 22) are stand-ins here too
+    table.update((p, f) for p, f in engine._phase_funcs().items()
+                 if p in ("snapshot", "config_backups", "markers"))
     table.update(over)
     return table
 

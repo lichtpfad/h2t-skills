@@ -291,10 +291,14 @@ def phase_markers(ctx: PhaseContext) -> None:
 
 
 def _phase_funcs() -> dict[str, Callable[[PhaseContext], None]]:
-    """The explicit table (R24); Tasks 22-23 add their phases here."""
+    """The explicit table (R24); Task 23 adds its phases here. Imported here, not at the
+    top: the phase modules write through this one."""
+    from h2t_ops.setup.layout import secrets_phase, verify
     return {
         "snapshot": phase_snapshot,
+        "secrets": secrets_phase.phase_secrets,
         "config_backups": phase_config_backups,
+        "verify": verify.phase_verify,
         "markers": phase_markers,
     }
 
