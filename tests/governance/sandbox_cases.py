@@ -1010,14 +1010,12 @@ def _plugin_cache_dir(sb, mp):
 
 
 def _install_versions_file(sb, mp):
-    import json
-
     from h2t_ops.core import paths
     from h2t_ops.setup import legacy
     mp.setattr(legacy, "install_h2t_ops", lambda source, dry_run=False: {"status": "ok"})
     legacy.main(["install-h2t-ops", "--json"])
-    written = json.loads((paths.config_dir() / "plugin-versions.json").read_text(encoding="utf-8"))
-    assert written["h2t-core"].endswith("4.0.0")
+    # config/ holds only the §7.1 schemas: install writes no plugin-versions.json there
+    assert not (paths.config_dir() / "plugin-versions.json").exists(), "install wrote config/plugin-versions.json"
 
 
 def _hook_log_failure(sb, mp):

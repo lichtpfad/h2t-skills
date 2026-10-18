@@ -797,29 +797,8 @@ def main(argv: list[str] | None = None) -> int:
             result = connector_matrix(live=args.live, include_paid=args.include_paid)
         elif args.command == "install-h2t-ops":
             result = install_h2t_ops(args.source, dry_run=args.dry_run)
-            if result.get("status") == "ok":
-                plugin_cache = paths.dir_of("harness") / "plugins" / "cache" / "lichtpfad" / "h2t-core"
-                if plugin_cache.exists():
-                    versions = sorted(
-                        [d for d in plugin_cache.iterdir()
-                         if d.is_dir() and d.name != "latest" and _semver_key(d.name) != (0, 0, 0)],
-                        key=lambda p: _semver_key(p.name),
-                    )
-                    if versions:
-                        current = versions[-1]
-                        # No `latest` junction is created any more. It was refreshed only
-                        # here, never by `/plugin marketplace update`, so it drifted behind
-                        # the installed version and silently answered the wrong one.
-                        # Hooks resolve through `h2t-hook` at fire time instead.
-                        versions_file = paths.config_dir() / "plugin-versions.json"
-                        _data = {}
-                        if versions_file.exists():
-                            try:
-                                _data = json.loads(versions_file.read_text(encoding="utf-8"))
-                            except Exception:
-                                pass
-                        _data["h2t-core"] = str(current)
-                        store.replace(versions_file, json.dumps(_data, indent=2), place="config")
+            # No config/plugin-versions.json any more: nothing reads it (hooks resolve
+            # through `h2t-hook` at fire time), and config/ holds only the §7.1 schemas.
         elif args.command == "secrets":
             from h2t_ops.resources import known_secrets_path
 
