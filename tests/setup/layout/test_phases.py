@@ -8,6 +8,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -203,6 +204,21 @@ def test_activity_merges_with_live_rows_and_never_rewrites_them():
     assert len([r for r in ctx.journal.entries() if r["op"] == "replaced"]) == 1
 
 
+def test_activity_rows_compare_without_their_line_endings():
+    """A 3.x spool written on Windows has CRLF rows; store.append writes LF. One row in both
+    is one row: the merge keeps it once, and a test row appended in LF is still caught."""
+    test_row = _row("some-session-2026-08-23")
+    _write(_spool(), ("\r\n".join([_row("old-1"), _row("both"), test_row]) + "\r\n").encode())
+    live = (_row("both") + "\n").encode()
+    copy = _write(paths.activity_file(M), live)
+    ctx = _ctx()
+    phases.phase_activity(ctx)
+    assert copy.read_bytes() == (_row("old-1") + "\r\n").encode() + live   # bytes kept as they were
+    assert verify.verify_transformed(ctx.journal) == []
+    store.append(copy, test_row, place="records.activity")
+    assert verify.verify_transformed(ctx.journal) == [f"{copy}: is not the filtered {_spool()}"]
+
+
 def test_activity_merge_retries_when_a_session_appends_meanwhile(monkeypatch):
     _write(_spool(), _row("old-1") + "\n")
     copy = _write(paths.activity_file(M), _row("live-1") + "\n")
@@ -377,6 +393,34 @@ def test_index_phase_stops_when_the_index_misses_a_session(monkeypatch):
     assert "the index holds 0 sessions" in str(ei.value)
 
 
+@pytest.mark.skipif(sys.platform == "win32" or getattr(os, "geteuid", lambda: 1)() == 0,
+                    reason="POSIX mode bits; root reads anything")
+def test_an_unreadable_session_md_is_a_problem_not_a_stop():
+    _record(M, "p", "s1")
+    locked = _record(M, "p", "s2")
+    locked.chmod(0)
+    try:
+        ctx = _ctx()
+        phases.phase_index(ctx)
+    finally:
+        locked.chmod(0o644)
+    assert "layout 1: index: 1 session md unreadable, see h2t-ops index query" in ctx.report.notes
+
+
+def test_a_source_changed_after_its_phase_names_the_file_and_the_way_out():
+    _write(_spool(), _row("real-1") + "\n")
+    ctx = _ctx()
+    phases.phase_activity(ctx)
+    with open(_spool(), "a") as fh:
+        fh.write(_row("real-2") + "\n")            # a 3.x writer still running
+    with pytest.raises(engine.PhaseFailed) as ei:
+        verify.phase_verify(ctx)
+    assert str(_spool()) in str(ei.value)
+    assert "close the program that writes it" in ei.value.hint
+    assert "h2t-setup layout migrate" in ei.value.hint
+    assert "h2t-setup layout rollback --sync-paused" in ei.value.hint
+
+
 # --- the whole run -------------------------------------------------------------------------
 
 def test_every_phase_has_a_function():
@@ -392,7 +436,8 @@ def test_empty_home_migrates_to_layout_1():
     assert not (home / ".dor").exists()
     assert not [n for n in ("google-calendar-mcp", "gmail", "notion", "telegram")
                 if (home / ".config" / n).exists()]
-    assert yaml.safe_load(paths.paths_yaml().read_text()) == {"version": 1, "places": {}}
+    # no place to declare: no file, so a lake that appears later is still written (R2)
+    assert not paths.paths_yaml().exists()
 
 
 _GOOGLE = {"normal": {"token": "fake-access", "refresh_token": "fake-refresh",

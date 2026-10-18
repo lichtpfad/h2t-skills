@@ -213,6 +213,12 @@ def _lines(raw: bytes) -> list[bytes]:
     return [ln if ln.endswith(b"\n") else ln + b"\n" for ln in raw.splitlines(keepends=True)]
 
 
+def _row_key(line: bytes) -> bytes:
+    """A row without its line ending: a CRLF row from a 3.x spool written on Windows and the
+    LF one store.append writes are the same row. Only comparisons use this; bytes are kept."""
+    return line.rstrip(b"\r\n")
+
+
 def _is_test_row(line: bytes) -> bool:
     try:
         row = json.loads(line)
@@ -233,8 +239,8 @@ def filter_activity(raw: bytes) -> tuple[bytes, int]:
 def merge_activity(live: bytes, filtered: bytes) -> bytes:
     """The legacy rows the live file lacks (by exact line), then the live file unchanged: rows
     a 4.0 session appended are never rewritten, only preceded by the older ones."""
-    have = set(_lines(live))
-    add = [ln for ln in _lines(filtered) if ln not in have]
+    have = {_row_key(ln) for ln in _lines(live)}
+    add = [ln for ln in _lines(filtered) if _row_key(ln) not in have]
     if live and not live.endswith(b"\n"):
         live += b"\n"
     return b"".join(add) + live
@@ -245,9 +251,9 @@ def activity_holds(src_raw: bytes, target_raw: bytes) -> bool:
     keeps is in the target, and no row it drops is. Rows a session appends later neither
     add nor remove a legacy row, so they do not read as a mismatch."""
     kept, _ = filter_activity(src_raw)
-    keep = set(_lines(kept))
-    dropped = set(_lines(src_raw)) - keep
-    have = set(_lines(target_raw))
+    keep = {_row_key(ln) for ln in _lines(kept)}
+    dropped = {_row_key(ln) for ln in _lines(src_raw)} - keep
+    have = {_row_key(ln) for ln in _lines(target_raw)}
     return keep <= have and not (dropped & have)
 
 
@@ -286,8 +292,8 @@ def phase_activity(ctx) -> None:
 # --- paths.yaml, index ---------------------------------------------------------------------
 
 def phase_paths_yaml(ctx) -> None:
-    """Only what exists (R2); vault is never written here (R12). A file already there, the
-    user's own, is left alone."""
+    """Only what exists (R2), and no file when nothing does; vault is never written here
+    (R12). A file already there, the user's own, is left alone."""
     f = paths.paths_yaml()
     if f.exists():
         return
@@ -299,6 +305,8 @@ def phase_paths_yaml(ctx) -> None:
         places["lake"] = str(lake)
     if paths.legacy("downloads").exists():
         places["inbox"] = str(paths.legacy("downloads"))
+    if not places:
+        return          # nothing to declare: an empty file would block the write once a lake appears
     doc = {"version": 1, "places": places}
     paths.validate_config(doc, source=f)
     try:
@@ -319,9 +327,9 @@ def _eligible_sessions() -> tuple[int, int]:
         for f in sorted(leaf.iterdir()):
             if f.suffix != ".md" or ".from-" in f.name or not f.is_file():
                 continue
-            try:
+            try:                    # as the index: unreadable is a problem, not a stop
                 meta, _ = session_record.parse(f.read_bytes())
-            except ValueError:
+            except (ValueError, OSError):
                 bad += 1
                 continue
             if all(meta.get(k) for k in build.REQUIRED):

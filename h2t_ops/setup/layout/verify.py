@@ -134,5 +134,8 @@ def verify_transformed(journal) -> list[str]:
 def phase_verify(ctx) -> None:
     problems = verify_secrets(ctx.journal) + verify_copies(ctx.journal) + verify_transformed(ctx.journal)
     if problems:
-        raise PhaseFailed("; ".join(problems[:5]),
-                          hint=f"nothing was removed; see {ctx.journal.file}")
+        raise PhaseFailed("; ".join(problems[:5]), hint=(
+            "nothing was removed. If an old file named here changed after it was copied, close "
+            "the program that writes it, then start over: `h2t-setup layout rollback "
+            "--sync-paused` and `h2t-setup layout migrate` (a resume would only re-check the "
+            f"same copy). Journal: {ctx.journal.file}"))
