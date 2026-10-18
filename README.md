@@ -228,8 +228,10 @@ Two files are involved and they are not alike:
   consent shows an "unverified app" warning you click through. (Policy as documented by
   Google, not measured here.)
 - The token (`h2t-ops paths get secret:google.token`) is the **user's** access to their own
-  account. It holds the refresh token only; the access token is fetched per command and never
-  written. Each machine logs in itself and keeps its own token: do not sync it, and never copy
+  account. It holds the refresh token and scopes, no access token: each command gets one in
+  memory. (Through 4.0.x the 3.x `tokens.json`, while it exists, also receives a copy with the
+  access token and expiry of that moment — at login and when Google issues a new refresh
+  token.) Each machine logs in itself and keeps its own token: do not sync it, and never copy
   it between people — whoever holds it reads that mailbox.
 
 Then one consent covers all three connectors:

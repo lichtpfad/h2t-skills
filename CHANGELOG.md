@@ -90,8 +90,15 @@ The pack is rebuilt around one package (#541), and its data moves to one root, `
   `H2T_PATH_VAULT`. Skills ask `h2t-ops paths get <id>` instead of spelling a path, and
   `h2t-ops paths list` shows every place and why it is where it is.
 - **Migration: `h2t-setup layout migrate`**, run by `h2t-setup sync` after the CLI is
-  installed. It copies the 3.x secrets, sessions, activity, evals, cursors, the registry,
-  research and creative profiles into the new layout and checks every copy by hash. The
+  installed. It copies into the new layout: the 3.x `.env` keys and the Notion token
+  (`secrets/shared/<provider>.env`); the Google OAuth client (`secrets/shared`) and this
+  machine's Google token (`secrets/local`); Telegram's `api_id`/`api_hash`
+  (`secrets/shared/telegram.env`), its session and login state (`secrets/local`) and the
+  dialogs marker (`state/telegram`); this machine's sessions, activity and evals
+  (`records/`, the evals spool to `state/`); the Granola and MeetGeek cursors; the DOR
+  registry (`records/imports`); research and creative profiles (`data/`); and the
+  `config/*.yaml.bak*` copies (`state/backups`). Byte copies are checked by hash, converted
+  files by rule, secrets by the set of key/value hashes. The
   old files stay, are read as a fallback through 4.0.x and get a `MOVED-TO.txt`. Where
   sources disagree on a key, the senior value wins — a file already at the new address
   first; for `H2T_EVALS_*` too, ahead of `~/.dor/secrets.env` — and the other is kept as
@@ -108,13 +115,14 @@ The pack is rebuilt around one package (#541), and its data moves to one root, `
 - **`latest.json` is no longer written.** A session record is
   `records/sessions/<machine>/<project>/<session_id>.md` with frontmatter, and "the last
   session of this project" is a query to `state/index.sqlite`, across every machine.
-- **Google:** the access token is no longer written to disk; each command gets one from the
+- **Google:** the package's token file holds no access token; each command gets one from the
   refresh token in memory. The token is per machine, in `secrets/local/google.token.json`
   (`h2t-ops paths get secret:google.token`): each machine logs in itself, and the file is
   not synced. A token without a `refresh_token` never wins a migration. The file is written
-  only at login and when Google issues a new refresh token; through 4.0.x each such write is
-  mirrored into this machine's 3.x `tokens.json` while that file exists, for readers such as
-  POS, whose `token` and `expiry` there go stale after an hour.
+  only at login and when Google issues a new refresh token. At those two moments, through
+  4.0.x, the full credentials — `token` and `expiry` of that moment included — are also
+  written into this machine's 3.x `tokens.json` while that file exists, for readers such as
+  POS; the access token there goes stale after an hour and is not refreshed on disk.
 - **`config/user.yaml`** is yours; the package only reads it: `timezone`,
   `notion.tasks_database_id`, `domain_patterns`. The calendar zone is `--tz`, then
   `H2T_CALENDAR_TZ`, then `timezone`, then the system zone (UTC on Windows). `notion search`
@@ -128,7 +136,7 @@ The pack is rebuilt around one package (#541), and its data moves to one root, `
 
 | variable | what to do |
 |---|---|
-| `H2T_LAKE_ROOT` | nothing: the migration writes its value into `paths.yaml` as `lake`; then remove it |
+| `H2T_LAKE_ROOT` | when there is no `paths.yaml` yet, the migration creates it with this value as `lake`; when the file already exists it is left alone, so declare the lake yourself: `h2t-ops paths set lake <path>`. Then remove the variable |
 | `H2T_SECRETS_FILE` | nothing: the migration reads its file once as one more secrets source; then remove it |
 | `H2T_EVALS_SPOOL` | nothing: the migration copies that spool into `state/evals-spool.sqlite`; then remove it |
 | `H2T_CONFIG_ROOT`, `H2T_SESSION_ROOT`, `H2T_ACTIVITY_SPOOL`, `H2T_EVALS_ROOT` | remove it; to move the whole root, use `H2T_PATH_ROOT` |

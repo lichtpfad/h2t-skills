@@ -19,7 +19,7 @@ h2t-skills 4.0 переносит свои данные в один корень
 
 | Читатель | Что читает | В 4.0.x | Контракт |
 |---|---|---|---|
-| POS API (calendar, gmail, main, docker-compose, plist) — только чтение | `~/.config/google-calendar-mcp/tokens.json` (путь из `GOOGLE_TOKEN_FILE`) | POS продолжает читать этот файл. Пакет пишет токен машины `local/google.token.json` только при входе и новом refresh-токене и после каждой такой записи зеркалит его в старый файл той же машины, пока тот существует, в формате 3.x. Access-токен в старом файле через час протухает и больше не обновляется. | `h2t-ops paths get secret:google.token` |
+| POS API (calendar, gmail, main, docker-compose, plist) — только чтение | `~/.config/google-calendar-mcp/tokens.json` (путь из `GOOGLE_TOKEN_FILE`) | POS продолжает читать этот файл. Пакет пишет токен машины `local/google.token.json` только при входе и новом refresh-токене и после каждой такой записи зеркалит в старый файл той же машины, пока тот существует, полные учётные данные в формате 3.x (с `token` и `expiry` того момента). Access-токен в старом файле через час протухает и больше не обновляется. | `h2t-ops paths get secret:google.token` |
 | POS (`pos_ingest`, `pos_meetings`) | vault, зашитый `~/.dor/vault` | пакет берёт vault из `H2T_PATH_VAULT` с тем же умолчанием | `H2T_PATH_VAULT` — отдельный issue |
 | POS API (telegram_service) | `~/.config/telegram/mentions_cache.json` | пакет файл не пишет с #403 и не трогает; миграция его не переносит | нет |
 | rejuve, `POS/CLAUDE.md` | `~/.h2t/config/secrets/*.env` | старые файлы остаются копиями до 4.1 | `h2t-ops paths get secret:<провайдер>` |
@@ -30,10 +30,11 @@ h2t-skills 4.0 переносит свои данные в один корень
    содержимое застыло на дате последней записи. Упоминания брать из
    `h2t-ops telegram mentions --json`.
 
-2. **Access-токен Google больше нигде не хранится.** С 4.0 пакет получает его по
-   refresh-токену в памяти на каждую команду и на диск не пишет. `tokens.json` (путь из
-   `GOOGLE_TOKEN_FILE` в plist) пишется только при входе и при новом refresh-токене, поэтому
-   `token` и `expiry` в нём протухают через час и дальше не обновляются. POS должен получать
+2. **Access-токен Google больше не обновляется на диске.** С 4.0 пакет получает его по
+   refresh-токену в памяти на каждую команду. В свой файл токена пакет access-токен не пишет
+   вовсе. В `tokens.json` (путь из `GOOGLE_TOKEN_FILE` в plist) он пишет полные учётные данные
+   — с `token` и `expiry` того момента — только при входе и при новом refresh-токене, поэтому
+   `token` и `expiry` там протухают через час и дальше не обновляются. POS должен получать
    новый access-токен по `refresh_token` сам. По коду google-auth делает это, увидев истёкший
    `expiry`; вживую это не проверено.
 

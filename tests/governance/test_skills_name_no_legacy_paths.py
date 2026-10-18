@@ -15,10 +15,12 @@ from h2t_ops.core import paths
 
 ROOT = Path(__file__).resolve().parents[2]
 _HOME = r"(?:~|\$HOME|\$\{HOME\})/"
-# ~/.dor/ as a whole: the vault's default lives there too, and a skill asks for it by id.
-_OLD_PLACES = sorted({re.escape("/".join(parts)) for name, parts in paths.LEGACY.items()
-                      if name != "downloads" and parts[0] != ".dor"} | {re.escape(".dor") + "/"})
-LEGACY = re.compile(_HOME + "(?:" + "|".join(_OLD_PLACES) + ")"
+# A file entry counts by its directory (~/.config/notion, not only …/token), and ~/.dor as a
+# whole, slash or not: the vault's default lives there too, and a skill asks for it by id.
+_OLD_PLACES = sorted({re.escape("/".join(parts[:-1] if name in paths.LEGACY_FILES else parts))
+                      for name, parts in paths.LEGACY.items()
+                      if name != "downloads" and parts[0] != ".dor"} | {re.escape(".dor")})
+LEGACY = re.compile(_HOME + "(?:" + "|".join(_OLD_PLACES) + r")\b"
                     + "|\\b(?:" + "|".join(sorted(paths.OLD_ENV)) + ")\\b")
 ALLOWED = re.compile(r"legacy|3\.x")
 
@@ -32,22 +34,23 @@ def _hits(files) -> list[str]:
     for f in files:
         for n, line in enumerate(f.read_text(encoding="utf-8").splitlines(), 1):
             if LEGACY.search(line) and not ALLOWED.search(line):
-                out.append(f"{f.relative_to(ROOT)}:{n}: {line.strip()}")
+                out.append(f"{f.relative_to(ROOT).as_posix()}:{n}: {line.strip()}")
     return out
 
 
 def test_pattern_covers_the_known_spellings():
     for text in ("~/.dor/secrets.env", "$HOME/.config/google-calendar-mcp/tokens.json",
                  "~/.config/telegram/config.json", "~/.h2t/sessions/mac/", "~/.h2t/config/secrets/x.env",
-                 "~/.h2t/creative/profiles", "H2T_SESSION_ROOT", "H2T_SECRETS_FILE"):
+                 "~/.h2t/creative/profiles", "H2T_SESSION_ROOT", "H2T_SECRETS_FILE",
+                 "~/.config/notion/config.json", "no `~/.dor` write"):
         assert LEGACY.search(text), text
-    for text in ("~/.h2t/config/user.yaml", "~/.h2t/run/install.env", "~/Downloads",
+    for text in ("~/.h2t/config/user.yaml", "~/.h2t/run/install.env", "~/Downloads", "~/.dorx",
                  "h2t-ops paths get secret:google.token"):
         assert not LEGACY.search(text), text
 
 
 def test_scope_reads_skills_and_references():
-    files = {str(p.relative_to(ROOT)) for p in _shipped_docs()}
+    files = {p.relative_to(ROOT).as_posix() for p in _shipped_docs()}
     assert "plugins/h2t-ops/skills/connectors/references/notion.md" in files
     assert "plugins/h2t-core/skills/handoff/SKILL.md" in files
     assert not any(f.endswith("CHANGELOG.md") for f in files)

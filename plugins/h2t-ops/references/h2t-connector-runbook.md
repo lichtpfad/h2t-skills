@@ -33,7 +33,7 @@ edited (routine code is path-only because line anchors drift).
 | Exit-code table | `h2t_ops/core/errors.py:39` |
 | `emit()` call site | `h2t_ops/core/output.py:61` |
 | Envelope builders | `h2t_ops/core/envelope.py:9` |
-| POS "no `~/.dor` write" rule | `plugins/h2t-ops/references/pos-operational-boundary.md:28` |
+| POS "no write to POS's files" rule | `plugins/h2t-ops/references/pos-operational-boundary.md:29` |
 | Proposed-capture contract | `plugins/h2t-ops/references/pos-operational-boundary.md:39` |
 
 Path-only reference implementations:
@@ -166,7 +166,7 @@ Authority: `plugins/h2t-ops/references/pos-operational-boundary.md`.
 
 - A connector imports no `pos`/`dor.db`/`vault`/`lake` and must run with POS
   absent. It must not write POS's files or the vault — see the rule at
-  `plugins/h2t-ops/references/pos-operational-boundary.md:28`.
+  `plugins/h2t-ops/references/pos-operational-boundary.md:29`.
 - Default any output path to stdout, or to the place `h2t-ops paths get <id>` names
   (`lake`, `inbox`, `data`) — never to a POS path.
 
