@@ -156,8 +156,13 @@ def _structured_keys(rel: str, body: bytes) -> list[str]:
         return []
     found: list[str] = []
     stack = [doc]
+    seen: set[int] = set()      # a YAML alias can make a container hold itself
     while stack:
         node = stack.pop()
+        if isinstance(node, (dict, list)):
+            if id(node) in seen:
+                continue
+            seen.add(id(node))
         if isinstance(node, dict):
             for k, v in node.items():
                 if isinstance(v, (dict, list)):

@@ -404,6 +404,21 @@ def test_git_failure_is_reported_not_skipped(monkeypatch, failure, why):
     assert found[0].text.startswith(f"UNREADABLE ~/.h2t/config: {why}")
 
 
+def test_a_cyclic_yaml_alias_does_not_hang_the_key_walk():
+    """`loop: &a [*a]` is a list containing itself; the walk must end and still report a
+    secret key placed elsewhere in the document. A subprocess, because a spinning thread
+    cannot be killed and would hang the suite instead of failing it."""
+    code = ("from h2t_ops.setup.storage_doctor import _structured_keys as k;"
+            "print(k('x.yaml', b'loop: &a [*a]\\nnested:\\n  client_secret: s3cret\\n'))")
+    try:
+        done = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True,
+                              timeout=10)
+    except subprocess.TimeoutExpired:
+        pytest.fail("_structured_keys did not return on a cyclic alias within 10s")
+    assert done.returncode == 0, done.stderr
+    assert done.stdout.strip() == "['client_secret']"
+
+
 def test_git_show_failure_names_the_file(monkeypatch):
     real = subprocess.run
 
