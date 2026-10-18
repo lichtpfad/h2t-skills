@@ -29,11 +29,6 @@ from h2t_ops.lifecycle.activity.writer import log_session_end
 from h2t_ops.lifecycle.eval.session import SkillEval
 from h2t_ops.lifecycle.gather.runner import _run_one
 
-SUMMARY_LIMIT = 1200
-ITEM_LIMIT = 240
-MAX_ITEMS = 5
-MAX_ARTIFACTS = 10
-
 
 def resolve_identity(project: str = "", domain: str = "", cwd: str = "") -> tuple[str, str]:
     """Which project a handoff belongs to is a property of the directory it was written in.
@@ -68,52 +63,6 @@ def default_markdown_dir(project: str, machine: str | None = None) -> Path:
     return paths.records("sessions", machine or _machine()) / project
 
 
-def _truncate(text: str, limit: int) -> tuple[str, bool]:
-    text = " ".join(text.split())
-    if len(text) <= limit:
-        return text, False
-    marker = " ... [truncated]"
-    return text[: max(0, limit - len(marker))].rstrip() + marker, True
-
-
-def _clean_action(line: str) -> str:
-    line = line.strip()
-    prefixes = ("- [ ]", "- [x]", "- [X]", "- ", "* ", "1. ", "2. ", "3. ", "4. ", "5. ")
-    for prefix in prefixes:
-        if line.startswith(prefix):
-            return line[len(prefix):].strip()
-    return line
-
-
-def _extract_items(text: str, *, max_items: int = MAX_ITEMS) -> tuple[list[str], bool]:
-    items: list[str] = []
-    truncated = False
-    for raw in text.splitlines():
-        line = raw.strip()
-        if not line:
-            continue
-        cleaned = _clean_action(line)
-        item, was_truncated = _truncate(cleaned, ITEM_LIMIT)
-        truncated = truncated or was_truncated
-        items.append(item)
-        if len(items) >= max_items:
-            remaining = [ln for ln in text.splitlines()[len(items):] if ln.strip()]
-            truncated = truncated or bool(remaining)
-            break
-    return items, truncated
-
-
-def _dedupe_preserving_order(values: list[str]) -> list[str]:
-    seen: set[str] = set()
-    result: list[str] = []
-    for value in values:
-        if value in seen:
-            continue
-        seen.add(value)
-        result.append(value)
-    return result
-
-
 def _dedupe_artifacts(values: list[dict]) -> list[dict]:
     seen: set[tuple[str, str]] = set()
     result: list[dict] = []
@@ -126,39 +75,6 @@ def _dedupe_artifacts(values: list[dict]) -> list[dict]:
         seen.add(key)
         result.append({"type": artifact_type, "ref": artifact_ref})
     return result
-
-
-def _build_latest_index(
-    *,
-    session_id: str,
-    domain: str,
-    project: str,
-    what_done: str,
-    what_remains: str,
-    artifacts: list[dict],
-    markdown_path: Path | None,
-    updated_at: datetime,
-) -> dict:
-    summary_short, summary_truncated = _truncate(what_done, SUMMARY_LIMIT)
-    next_actions, actions_truncated = _extract_items(what_remains)
-    next_actions = _dedupe_preserving_order(next_actions)
-    truncated = summary_truncated or actions_truncated
-    deduped_artifacts = _dedupe_artifacts(artifacts)
-    artifact_rows = deduped_artifacts[:MAX_ARTIFACTS]
-    truncated = truncated or len(artifacts) > MAX_ARTIFACTS
-    return {
-        "version": 1,
-        "session_id": session_id,
-        "project": project,
-        "domain": domain,
-        "updated_at": updated_at.isoformat(),
-        "summary_short": summary_short,
-        "next_actions": next_actions,
-        "blockers": [],
-        "artifacts": artifact_rows,
-        "markdown_path": str(markdown_path) if markdown_path else "",
-        "truncated": truncated,
-    }
 
 
 def _git_context() -> tuple[str, list[str]]:
@@ -194,11 +110,6 @@ def _write_record(md_path: Path, meta: dict, body: bytes, *, dest: bool) -> tupl
                      f"the record is {written}" for f in foreign]
 
 
-def _write_latest(path: Path, data: dict, *, dest: bool) -> None:
-    store.replace(path, json.dumps(data, ensure_ascii=False, indent=2),
-                  place="records.sessions", dest=dest)
-
-
 def _degraded(session_id: str, spool_path, distinct_artifacts: list, exc: Exception) -> dict:
     """The record is written; the configured mirror is not usable.
 
@@ -212,9 +123,6 @@ def _degraded(session_id: str, spool_path, distinct_artifacts: list, exc: Except
         "markdown": "",
         "latest": "",
         "artifacts": len(distinct_artifacts),
-        # No index was written, so nothing was dropped from one. Present anyway: this
-        # function exists so every failure returns the same shape as the success path.
-        "index_truncated": False,
         "mirror_write_failed": True,
         "mirror_error": f"{type(exc).__name__}: {exc}",
     }
@@ -288,16 +196,6 @@ def write_handoff(
 ## Artifacts
 {artifacts_md}
 """
-    latest = _build_latest_index(
-        session_id=session_id,
-        domain=domain,
-        project=project,
-        what_done=what_done,
-        what_remains=what_remains,
-        artifacts=parsed_artifacts,
-        markdown_path=None,
-        updated_at=now,
-    )
     meta = {
         "session_id": session_id,
         "machine": machine,
@@ -311,31 +209,11 @@ def write_handoff(
         "remains": what_remains,
         "artifacts": distinct_artifacts,
     }
-    # Until Task 16 moves gather onto the index, latest.json is written beside the md (R10).
-    latest_path = md_dir / "latest.json"
-    markdown_failed = False
-    persisted_md_path: Path | None = None
-    notes: list[str] = []
-    try:
-        _write_latest(latest_path, latest, dest=dest)
-    except (OSError, H2TError) as exc:
-        # latest.json is part of the same mirror. It used to sit outside every guard, so a
-        # directory named latest.json.tmp raised IsADirectoryError out of main() — exit 1
-        # and a traceback, with the spool already on disk. Same invariant, same answer.
-        return _degraded(session_id, spool_path, distinct_artifacts, exc)
-
+    # No latest.json (R10): the index answers "the last session of this project".
     try:
         persisted_md_path, notes = _write_record(md_path, meta, md_content.encode("utf-8"), dest=dest)
-    except (OSError, H2TError):
-        markdown_failed = True
-
-    if persisted_md_path is not None:
-        latest["markdown_path"] = str(persisted_md_path)
-        try:
-            _write_latest(latest_path, latest, dest=dest)
-        except (OSError, H2TError):
-            # The first write landed; only the markdown_path backfill is lost.
-            markdown_failed = True
+    except (OSError, H2TError) as exc:
+        return _degraded(session_id, spool_path, distinct_artifacts, exc)
 
     try:
         with SkillEval("handoff", domain=domain, project=project):
@@ -344,19 +222,15 @@ def write_handoff(
         pass
 
     result = {
-        "status": "degraded" if markdown_failed else "ok",
+        "status": "ok",
         "session_id": session_id,
         "spool": spool_path,
-        "markdown": str(persisted_md_path) if persisted_md_path else "",
-        "latest": str(latest_path),
-        # The distinct artifacts recorded, not the count that fit in the index. These are
-        # two numbers and the response printed the second under the first one's name:
-        # eleven in, `"artifacts": 10` and `"status": "ok"` out, with nothing saying
-        # which of the two had happened (#438). The markdown and the spool carry every
-        # one; latest.json is the bounded view, and index_truncated is where that is said.
+        "markdown": str(persisted_md_path),
+        # R10: the record is the latest; session-start finds it through the index.
+        "latest": str(persisted_md_path),
+        # The distinct artifacts recorded (#438); the markdown and the spool carry every one.
         "artifacts": len(distinct_artifacts),
-        "index_truncated": latest["truncated"],
-        "mirror_write_failed": markdown_failed,
+        "mirror_write_failed": False,
     }
     if notes:
         result["notes"] = notes

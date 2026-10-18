@@ -20,8 +20,9 @@ CEILINGS = {  # measured 2026-10-18 on ab078f4f; lowered after Task 6, Task 8 (G
     # Task 12 (downloads, research, evals, creative profiles; round 1: the NTFS-stream branch),
     # Task 13 (session records and activity under records/); Task 14 (the index) held them
     # and opens its base only through store.connect_sqlite, so sqlite stays 0; Task 15 (the
-    # ontology through the index, registration through store, H2T_CONFIG_ROOT not read)
-    "home": 34, "legacy_roots": 4, "path_env": 1, "dotenv": 0,
+    # ontology through the index, registration through store, H2T_CONFIG_ROOT not read),
+    # Task 16 (the 3.x session roots through paths.legacy)
+    "home": 33, "legacy_roots": 3, "path_env": 1, "dotenv": 0,
     "secret_readers": 0, "writes": 109, "sqlite": 0,
 }
 

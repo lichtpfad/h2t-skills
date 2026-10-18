@@ -588,6 +588,51 @@ def _detect_project(sb, mp):
     assert detect_project(str(sb.home.parent / "repo"))["already_registered"] is False
 
 
+def _session_start_briefing(*, legacy=False):
+    """find_latest_session_index + format_briefing as session-start calls them; the only
+    write is the index in state, through store.connect_sqlite (R18)."""
+    def run(sb, mp):
+        from h2t_ops.lifecycle.gather import briefing, sessions
+        mp.setenv("H2T_MACHINE_NAME", "sandbox")
+        latest = sessions.find_latest_session_index("p")
+        files = sessions.find_session_files("p")
+        md, meta = briefing.format_briefing({"project": {"id": "p"}, "sessions": files,
+                                             "latest_session": latest, "machine": "sandbox"})
+        assert "### Previous Session  (laptop" in md, md
+        assert ("старом месте" in md) is legacy
+        assert meta["latest_session"] == latest
+    return run
+
+
+def _laptop_session(sb, mp):
+    """One session of p, written on another machine and synced here."""
+    from h2t_ops.lifecycle import session_record
+    f = session_record.session_path("laptop", "p", "laptop-1")
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_bytes(session_record.render({"session_id": "laptop-1", "machine": "laptop", "project": "p",
+                                         "updated_at": "2026-10-18T00:00:00Z", "done": "- synced"}, b""))
+
+
+def _legacy_sessions(sb, mp):
+    """3.x before migration: latest.json and md under ~/.h2t/sessions, nothing in records."""
+    import json
+
+    from h2t_ops.core import paths
+    leaf = paths.legacy("sessions.h2t") / "laptop" / "p"
+    leaf.mkdir(parents=True, exist_ok=True)
+    (leaf / "old.md").write_text("# 3.x handoff\n", encoding="utf-8")
+    (leaf / "latest.json").write_text(json.dumps({"version": 1, "session_id": "old",
+                                                  "summary_short": "from 3.x"}), encoding="utf-8")
+
+
+def _handoff_no_latest_json(sb, mp):
+    from pathlib import Path
+    _handoff("- first")(sb, mp)
+    from h2t_ops.core import paths
+    leaf = paths.records("sessions", "sandbox") / "p"
+    assert [f.name for f in Path(leaf).iterdir()] == ["dev-p-sandbox.md"]   # R10
+
+
 CASES: list[Case] = [
     Case("store.replace.state", _store_replace_state),
     # Task 8: a refresh writes nothing; a rotated refresh token writes local and the mirror.
@@ -631,7 +676,7 @@ CASES: list[Case] = [
     Case("evals.write-local", _evals_write_local),
     Case("evals.spool", _evals_spool),
     Case("creative.profiles-dir", _creative_profiles_dir),
-    # Task 13: the session md and latest.json under records/sessions, activity per machine.
+    # Task 13: the session md under records/sessions, activity per machine.
     Case("handoff.write", _handoff("- first")),
     Case("handoff.write.again", _handoff("- second"), setup=_handoff("- first")),
     Case("activity.start", _activity_start),
@@ -641,4 +686,10 @@ CASES: list[Case] = [
     # Task 15: the ontology through the index; registration writes config through store.
     Case("register.apply", _register_apply, setup=_ontology_config),
     Case("detect.project", _detect_project, setup=_ontology_config),
+    # Task 16: session-start asks the index for the project's last session from any machine;
+    # before migration it reads the 3.x roots and writes nothing there; handoff writes no
+    # latest.json (R10).
+    Case("gather.session-start", _session_start_briefing(), setup=_laptop_session),
+    Case("gather.session-start.legacy", _session_start_briefing(legacy=True), setup=_legacy_sessions),
+    Case("handoff.write.no-latest-json", _handoff_no_latest_json),
 ]

@@ -10,6 +10,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from h2t_ops.lifecycle import session_record
+
 ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -46,7 +48,7 @@ def test_the_gather_entry_probe_is_not_silently_empty():
 def _session_store(tmp_path, work, env):
     """A session store of the test's own, holding one previous session.
 
-    The block under test only renders when a `latest.json` exists for the resolved project,
+    The block under test only renders when the index holds a session of the resolved project,
     so asserting on this machine's real session records made the test a statement about the
     developer's history: green here, red on a CI runner that has none. The store is built
     from the project id gather itself reports, so it lands where the reader will look.
@@ -65,18 +67,11 @@ def _session_store(tmp_path, work, env):
 
     directory = root / "test-machine" / project
     directory.mkdir(parents=True)
-    (directory / "latest.json").write_text(json.dumps({
-        "version": 1,
-        "session_id": "prior-session-2026-08-22",
-        "project": project,
-        "domain": meta["project"].get("domain", "dev"),
-        "updated_at": "2026-08-22T10:00:00+00:00",
-        "summary_short": "the session before this one",
-        "next_actions": ["carry on"],
-        "blockers": [],
-        "artifacts": [],
-        "markdown_path": str(directory / "prior-session-2026-08-22.md"),
-    }), encoding="utf-8")
+    meta_doc = {"session_id": "prior-session-2026-08-22", "machine": "test-machine",
+                "project": project, "domain": meta["project"].get("domain", "dev"),
+                "updated_at": "2026-08-22T10:00:00Z", "done": "the session before this one",
+                "remains": "- [ ] carry on", "artifacts": []}
+    (directory / "prior-session-2026-08-22.md").write_bytes(session_record.render(meta_doc, b"# body\n"))
     return env
 
 

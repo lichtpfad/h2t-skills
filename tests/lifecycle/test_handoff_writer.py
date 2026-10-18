@@ -22,32 +22,26 @@ def test_default_markdown_dir_is_under_records(monkeypatch):
     assert ".dor" not in str(path)
 
 
-def test_write_handoff_writes_bounded_latest_index(tmp_path, monkeypatch):
+def test_write_handoff_writes_no_latest_json_and_latest_is_the_md(tmp_path, monkeypatch):
+    """R10: the index answers "the last session", so the response's `latest` is the md."""
     writer = _load_writer()
     monkeypatch.setenv("H2T_MACHINE_NAME", "test-machine")
 
-    long_done = "done " * 1000
-    long_remains = "\n".join(f"- [ ] item {i} " + ("x" * 500) for i in range(10))
     result = writer.write_handoff(
         session_id="dev-repo-test-2026-05-22",
         domain="dev",
         project="repo",
-        what_done=long_done,
-        what_remains=long_remains,
+        what_done="done " * 1000,
+        what_remains="\n".join(f"- [ ] item {i} " + ("x" * 500) for i in range(10)),
         artifacts=[f"commit:{i}" for i in range(20)],
     )
 
-    latest_path = Path(result["latest"])
-    latest = json.loads(latest_path.read_text(encoding="utf-8"))
-
-    assert latest_path == paths.records("sessions", "test-machine") / "repo" / "latest.json"
-    assert Path(result["markdown"]).is_file()
-    assert latest["version"] == 1
-    assert len(latest["summary_short"]) <= writer.SUMMARY_LIMIT
-    assert len(latest["next_actions"]) == writer.MAX_ITEMS
-    assert all(len(item) <= writer.ITEM_LIMIT for item in latest["next_actions"])
-    assert len(latest["artifacts"]) == writer.MAX_ARTIFACTS
-    assert latest["truncated"] is True
+    md = Path(result["markdown"])
+    assert result["status"] == "ok"
+    assert Path(result["latest"]) == md and md.is_file()
+    assert md.parent == paths.records("sessions", "test-machine") / "repo"
+    assert not (md.parent / "latest.json").exists()
+    assert "index_truncated" not in result
 
 
 def test_write_handoff_deduplicates_artifacts_and_carry_forward_items(tmp_path, monkeypatch):
@@ -63,12 +57,11 @@ def test_write_handoff_deduplicates_artifacts_and_carry_forward_items(tmp_path, 
         artifacts=["commit:abc123", "commit:abc123", "issue:185"],
     )
 
-    latest = json.loads(Path(result["latest"]).read_text(encoding="utf-8"))
-    refs = [(item["type"], item["ref"]) for item in latest["artifacts"]]
+    meta, _ = session_record.parse(Path(result["markdown"]).read_bytes())
+    refs = [(item["type"], item["ref"]) for item in meta["artifacts"]]
 
     assert result["artifacts"] == 2
     assert refs == [("commit", "abc123"), ("issue", "185")]
-    assert latest["next_actions"] == ["ship release", "verify deploy"]
 
 
 def test_write_handoff_returns_degraded_when_markdown_write_fails(tmp_path, monkeypatch):
@@ -90,17 +83,15 @@ def test_write_handoff_returns_degraded_when_markdown_write_fails(tmp_path, monk
         artifacts=["commit:abc123"],
     )
 
-    latest = json.loads(Path(result["latest"]).read_text(encoding="utf-8"))
-
     assert result["status"] == "degraded"
     assert result["mirror_write_failed"] is True
-    assert result["markdown"] == ""
-    assert Path(result["latest"]).is_file()
-    assert latest["markdown_path"] == ""
+    assert result["mirror_error"] == "OSError: mirror write failed"
+    assert result["markdown"] == "" and result["latest"] == ""
+    assert "dev-repo-degraded-2026-05-26" in _spool_rows()[-1]
 
 
 def test_response_counts_what_was_recorded_not_the_capped_index(tmp_path, monkeypatch):
-    """`artifacts` in the response must describe the durable record, not latest.json.
+    """`artifacts` in the response must describe the durable record, not a bounded view.
 
     Reproduced in a real handoff on 2026-09-03: eleven artifacts in, `"artifacts": 10`
     and `"status": "ok"` out. Nothing was lost — the markdown carries all eleven and the
@@ -112,7 +103,7 @@ def test_response_counts_what_was_recorded_not_the_capped_index(tmp_path, monkey
     writer = _load_writer()
     monkeypatch.setenv("H2T_MACHINE_NAME", "test-machine")
 
-    given = [f"commit:{i:02d}" for i in range(writer.MAX_ARTIFACTS + 1)]
+    given = [f"commit:{i:02d}" for i in range(11)]   # one more than the briefing shows
     result = writer.write_handoff(
         session_id="dev-repo-count-2026-09-03",
         domain="dev",
@@ -123,30 +114,7 @@ def test_response_counts_what_was_recorded_not_the_capped_index(tmp_path, monkey
     )
 
     assert result["artifacts"] == len(given)
-    assert result["index_truncated"] is True
-
-    # the last one is the one that fell out of the index, and it must still be recorded
-    latest = json.loads(Path(result["latest"]).read_text(encoding="utf-8"))
-    assert len(latest["artifacts"]) == writer.MAX_ARTIFACTS
     assert Path(result["markdown"]).read_text(encoding="utf-8").count("commit: ") == len(given)
-
-
-def test_response_says_not_truncated_when_everything_fits(tmp_path, monkeypatch):
-    """The flag has to distinguish, or it carries no information."""
-    writer = _load_writer()
-    monkeypatch.setenv("H2T_MACHINE_NAME", "test-machine")
-
-    result = writer.write_handoff(
-        session_id="dev-repo-fits-2026-09-03",
-        domain="dev",
-        project="repo",
-        what_done="- one line",
-        what_remains="- [ ] one item",
-        artifacts=["commit:abc1234", "pr:470"],
-    )
-
-    assert result["artifacts"] == 2
-    assert result["index_truncated"] is False
 
 
 def _git_checkout(path: Path) -> Path:
@@ -163,7 +131,7 @@ def _handoff(writer, session_id="dev-repo-record-2026-10-18", done="- did it", *
                                 artifacts=["commit:abc123"], **kw)
 
 
-def test_handoff_writes_a_self_describing_md_and_latest_beside_it(tmp_path, monkeypatch):
+def test_handoff_writes_a_self_describing_md(tmp_path, monkeypatch):
     writer = _load_writer()
     monkeypatch.setenv("H2T_MACHINE_NAME", "test-machine")
     monkeypatch.chdir(_git_checkout(tmp_path / "checkout"))
@@ -177,10 +145,8 @@ def test_handoff_writes_a_self_describing_md_and_latest_beside_it(tmp_path, monk
     assert meta["updated_at"].endswith("Z") and meta["branch"] == "topic"
     assert len(meta["commits"]) == 1 and meta["done"] == "- did it"
     assert body.startswith(b"# Session: dev-repo-record-2026-10-18\n")
-    # R10: until Task 16, latest.json sits beside the md and points at it.
-    latest = json.loads((md.parent / "latest.json").read_text(encoding="utf-8"))
-    assert Path(result["latest"]) == md.parent / "latest.json"
-    assert latest["markdown_path"] == str(md)
+    assert Path(result["latest"]) == md                     # R10
+    assert sorted(p.name for p in md.parent.iterdir()) == [md.name]
 
 
 def test_a_second_handoff_of_the_same_session_updates_its_record(monkeypatch):
@@ -245,26 +211,7 @@ def test_a_refused_markdown_dir_degrades_after_the_spool_row(monkeypatch):
     assert not paths.secrets_shared().exists()
 
 
-def test_refused_latest_json_degrades_after_the_spool_row(monkeypatch):
-    writer = _load_writer()
-    monkeypatch.setenv("H2T_MACHINE_NAME", "test-machine")
-    real_replace = store.replace
-
-    def refuse_latest(path, *a, **kw):
-        if Path(path).name == "latest.json":
-            raise store.WriteRefused(f"{path}: refused for the test")
-        return real_replace(path, *a, **kw)
-
-    monkeypatch.setattr(store, "replace", refuse_latest)
-
-    result = _handoff(writer)
-
-    assert result["status"] == "degraded" and result["mirror_write_failed"] is True
-    assert result["mirror_error"].startswith("WriteRefused")
-    assert "dev-repo-record-2026-10-18" in _spool_rows()[-1]
-
-
-def test_refused_md_degrades_and_keeps_latest(monkeypatch):
+def test_refused_md_degrades_after_the_spool_row(monkeypatch):
     """The md branch: a WriteRefused from create is a mirror failure like an OSError."""
     writer = _load_writer()
     monkeypatch.setenv("H2T_MACHINE_NAME", "test-machine")
@@ -277,31 +224,9 @@ def test_refused_md_degrades_and_keeps_latest(monkeypatch):
     result = _handoff(writer)
 
     assert result["status"] == "degraded" and result["mirror_write_failed"] is True
-    assert result["markdown"] == ""
-    assert json.loads(Path(result["latest"]).read_text(encoding="utf-8"))["markdown_path"] == ""
+    assert result["mirror_error"].startswith("WriteRefused")
+    assert result["markdown"] == "" and result["latest"] == ""
     assert "dev-repo-record-2026-10-18" in _spool_rows()[-1]
-
-
-def test_refused_backfill_keeps_the_md(monkeypatch):
-    """The markdown_path backfill: the second latest.json write refused, the md stays."""
-    writer = _load_writer()
-    monkeypatch.setenv("H2T_MACHINE_NAME", "test-machine")
-    real_replace = store.replace
-    seen = []
-
-    def refuse_second_latest(path, *a, **kw):
-        if Path(path).name == "latest.json":
-            seen.append(path)
-            if len(seen) == 2:
-                raise store.WriteRefused(f"{path}: refused for the test")
-        return real_replace(path, *a, **kw)
-
-    monkeypatch.setattr(store, "replace", refuse_second_latest)
-
-    result = _handoff(writer)
-
-    assert result["status"] == "degraded" and result["mirror_write_failed"] is True
-    assert Path(result["markdown"]).is_file()
 
 
 def test_an_unreadable_path_at_the_md_name_is_foreign(monkeypatch):

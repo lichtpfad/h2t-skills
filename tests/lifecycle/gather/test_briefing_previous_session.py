@@ -30,6 +30,15 @@ def test_briefing_formats_bounded_previous_session_hint():
     assert "full-handoff.md" not in briefing
 
 
+def test_gather_meta_carries_the_latest_session():
+    """R10: in hook mode the skill reads GATHER_META only; latest_session must be there."""
+    latest = {"summary_short": "Summary", "machine": "automata"}
+    _, meta = format_briefing({"project": {"id": "repo"}, "sessions": ["a.md"],
+                               "latest_session": latest})
+
+    assert meta["latest_session"] == latest
+
+
 # --- docs debt line -------------------------------------------------------
 
 

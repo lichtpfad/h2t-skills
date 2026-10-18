@@ -44,7 +44,9 @@ def test_a_good_write_exits_0(tmp_path):
     """The control. Without it, an exit code of 3 everywhere would satisfy the test below."""
     result = _run(tmp_path, "write", "--session-id", "probe", "--project", "p", "--domain", "d")
     assert result.returncode == 0, result.stderr[-400:]
-    assert json.loads(result.stdout)["status"] == "ok"
+    payload = json.loads(result.stdout)
+    assert payload["status"] == "ok"
+    assert Path(payload["latest"]).is_file() and payload["latest"] == payload["markdown"]   # R10
 
 
 def test_an_unusable_markdown_dir_exits_3_and_still_keeps_the_record(tmp_path):
@@ -91,24 +93,27 @@ def test_a_failed_markdown_file_also_exits_3(tmp_path):
     payload = json.loads(result.stdout)
     assert payload["status"] == "degraded"
     assert payload["mirror_write_failed"] is True
-    assert Path(payload["latest"]).is_file(), "latest.json is writable here and must be written"
+    assert payload["markdown"] == payload["latest"] == ""   # R10: no latest.json to fall back on
 
 
-def test_an_unwritable_latest_json_also_exits_3(tmp_path):
-    """latest.json is part of the same mirror and used to sit outside every guard.
-
-    Reproduced before this test existed: a directory named latest.json.tmp raised
-    IsADirectoryError out of main() — exit 1, a traceback, and the spool already on disk.
-    store.replace takes a temp name of its own, so the blocker is now latest.json itself.
-    """
+def test_an_os_error_on_the_md_also_exits_3(tmp_path):
+    """The md is the whole mirror now (R10). An OSError from its write — the shape the old
+    latest.json.tmp directory produced, IsADirectoryError out of main() with the spool on
+    disk — must come back as _degraded, exit 3, no traceback."""
     mirror = tmp_path / "mirror"
     mirror.mkdir()
-    (mirror / "latest.json").mkdir()
-    result = _run(tmp_path, "write", "--session-id", "probe", "--project", "p",
-                  "--domain", "d", "--markdown-dir", str(mirror))
+    refuse_md = ("import sys; from h2t_ops.core import store\n"
+                 "def refuse(path, *a, **k): raise IsADirectoryError(21, 'Is a directory', str(path))\n"
+                 "store.create = refuse\n"
+                 "from h2t_ops.lifecycle.handoff import main; sys.argv[0] = 'h2t-handoff'; main()\n")
+    result = subprocess.run(
+        [sys.executable, "-c", refuse_md, "write", "--session-id", "probe", "--project", "p",
+         "--domain", "d", "--markdown-dir", str(mirror)],
+        capture_output=True, text=True, encoding="utf-8", check=False, env=_env(tmp_path))
     assert result.returncode == 3, (result.returncode, result.stderr[-300:])
     assert "Traceback" not in result.stderr
     payload = json.loads(result.stdout)
     assert payload["status"] == "degraded"
+    assert payload["mirror_error"].startswith("IsADirectoryError")
     spool = Path(payload["spool"])
     assert spool.is_file() and "probe" in spool.read_text(encoding="utf-8")

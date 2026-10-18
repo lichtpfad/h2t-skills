@@ -22,6 +22,7 @@ from pathlib import Path
 import pytest
 
 from h2t_ops.core import paths
+from h2t_ops.lifecycle import session_record
 
 ROOT = Path(__file__).resolve().parents[2]
 WRITER = "h2t_ops.lifecycle.handoff"
@@ -89,7 +90,10 @@ def test_markdown_listing_spans_both_keys(tmp_path, monkeypatch, sessions):
     _write_handoff("agent-skills", "personal-os-h2t-skills-new-2026-08-22")
     legacy = root / "test-machine" / "h2t-skills"
     legacy.mkdir(parents=True, exist_ok=True)
-    (legacy / "personal-os-h2t-skills-old-2026-08-20.md").write_text("older", encoding="utf-8")
+    # Recorded under the repo name before the project was mapped; the index reads frontmatter.
+    (legacy / "personal-os-h2t-skills-old-2026-08-20.md").write_bytes(session_record.render(
+        {"session_id": "personal-os-h2t-skills-old-2026-08-20", "machine": "test-machine",
+         "project": "h2t-skills", "updated_at": "2026-08-20T10:00:00Z"}, b"older\n"))
 
     files = sessions.find_session_files("h2t-skills", "agent-skills")
 

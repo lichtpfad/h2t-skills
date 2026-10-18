@@ -102,8 +102,15 @@ def main() -> None:
     # (DocGraph and SpecDesigner onto docgraph), and the handoff writer keys the directory
     # by project.id — so reading by repo name alone missed every handoff for the 20 of 38
     # mapped repos whose name differs from their project (#377).
-    sessions = find_session_files(proj_id, repo_name)
-    latest_session = find_latest_session_index(proj_id, repo_name)
+    # Both ask state/index.sqlite, which spans every machine (#548 §5). An index that cannot
+    # be opened is a failed source, named as one, never a briefing that silently lacks history.
+    try:
+        sessions = find_session_files(proj_id, repo_name)
+        latest_session = find_latest_session_index(proj_id, repo_name)
+        sources_used.append("sessions")
+    except Exception:  # noqa: BLE001 - gather must still print a briefing
+        sessions, latest_session = [], None
+        sources_failed.append("sessions")
 
     elapsed_ms = int((time.monotonic() - start) * 1000)
 
