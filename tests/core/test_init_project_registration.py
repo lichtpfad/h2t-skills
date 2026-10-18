@@ -79,12 +79,16 @@ def test_updating_a_project_keeps_its_existing_description(config_root):
     assert _project(config_root, "existing-repo")["description"] == "already written by hand"
 
 
-def test_config_root_env_is_honoured_without_the_flag(config_root, monkeypatch):
-    """detect_project.py reads H2T_CONFIG_ROOT; apply must resolve the same root.
-
-    Otherwise detection runs against one config and the documented apply command writes
-    another — silently, whenever the config is relocated.
-    """
+def test_without_the_flag_the_config_place_is_written_and_the_old_env_ignored(config_root):
+    """No --config-root: config/ under HOME, the same config detection reads through the
+    index. H2T_CONFIG_ROOT is a 3.x name and is not read (#548 R5) — set here to a decoy
+    that must stay untouched."""
+    from h2t_ops.core import paths
+    home_cfg = paths.config_dir()
+    home_cfg.mkdir(parents=True)
+    for name in ("repo-mapping.yaml", "domains.yaml"):
+        (home_cfg / name).write_bytes((config_root / name).read_bytes())
+    decoy = (config_root / "domains.yaml").read_bytes()
     env = dict(os.environ, H2T_CONFIG_ROOT=str(config_root))
     result = subprocess.run(
         [
@@ -96,4 +100,5 @@ def test_config_root_env_is_honoured_without_the_flag(config_root, monkeypatch):
     )
 
     assert result.returncode == 0, result.stderr
-    assert _project(config_root, "env-repo")["label"] == "Env Repo"
+    assert _project(home_cfg, "env-repo")["label"] == "Env Repo"
+    assert (config_root / "domains.yaml").read_bytes() == decoy

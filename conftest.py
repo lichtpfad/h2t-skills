@@ -25,6 +25,37 @@ def _uv_cache_dir() -> str | None:
 # A test that runs uv offline needs its cache, not the whole real home (#548 R5).
 REAL_UV_CACHE = _uv_cache_dir()
 
+_COLLECT_ENV: dict[str, str | None] = {}
+
+
+def pytest_configure(config):
+    """Move HOME before collection (#548 Task 15). Test modules are imported at collection,
+    before any fixture runs: a path resolved at import — a module constant, an index built
+    on first use — would land in the real home. REAL_HOME and REAL_UV_CACHE are taken above,
+    at conftest import, before this runs; the per-test fixture below still gives each test
+    its own HOME."""
+    import tempfile
+    home = tempfile.mkdtemp(prefix="h2t-collect-home-")
+    names = ["HOME", "USERPROFILE", *(k for k in os.environ if k.startswith("H2T_PATH_"))]
+    for k in names:
+        _COLLECT_ENV[k] = os.environ.get(k)
+    os.environ["HOME"] = os.environ["USERPROFILE"] = home
+    for k in names[2:]:
+        del os.environ[k]
+    config.stash_h2t_collect_home = home
+
+
+def pytest_unconfigure(config):
+    home = getattr(config, "stash_h2t_collect_home", None)
+    for k, v in _COLLECT_ENV.items():
+        if v is None:
+            os.environ.pop(k, None)
+        else:
+            os.environ[k] = v
+    _COLLECT_ENV.clear()
+    if home:
+        shutil.rmtree(home, ignore_errors=True)
+
 
 @pytest.fixture(autouse=True)
 def _isolate_home_writes(monkeypatch, tmp_path_factory):
@@ -66,13 +97,13 @@ def _real_home_artifacts(home: Path | None = None) -> dict[str, tuple[int, ...]]
     Nanoseconds and sizes, not whole seconds: a rewrite within the same second at equal size
     would otherwise read as no change. `home` is injectable so the tripwire can be tested
     against a temporary tree (tests/governance/test_suite_isolation.py)."""
-    # Built here, not from h2t_ops.core.paths: pytest_sessionstart runs before any fixture,
-    # so Path.home() is still the real one.
+    # Built here, not from h2t_ops.core.paths, and from REAL_HOME, not Path.home():
+    # pytest_configure has already moved HOME by the time pytest_sessionstart runs.
     # Every entry of ~/.h2t and ~/.dor, each its own key, so the report names the area.
     # Not ~/.h2t/logs, run and venv: the live session's own hooks write there while the
     # suite runs (venv: the hooks' interpreter leaves __pycache__). Task 12 wrote into
     # ~/.h2t/research, which the old short list did not watch.
-    home = Path.home() if home is None else home
+    home = REAL_HOME if home is None else home
     watched: list[Path] = []
     for top, skip in ((home / ".h2t", {"logs", "run", "venv"}), (home / ".dor", set())):
         try:

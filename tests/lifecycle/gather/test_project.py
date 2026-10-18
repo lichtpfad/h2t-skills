@@ -1,3 +1,4 @@
+from pathlib import Path
 
 from h2t_ops.lifecycle.gather.project import (
     _find_label,
@@ -45,9 +46,10 @@ if __name__ == "__main__":
 
 
 def _config_root(tmp_path, domains_yaml: str = "") -> str:
-    """An isolated config root. Without it these tests read the developer's own
-    ~/.h2t/config and pass or fail for reasons that have nothing to do with the code."""
-    root = tmp_path / "config"
+    """config/ under the suite's temporary HOME (conftest), which identify_project reads
+    through the index. H2T_CONFIG_ROOT is no longer read (#548 R5)."""
+    from h2t_ops.core import paths
+    root = paths.config_dir()
     root.mkdir(parents=True, exist_ok=True)
     (root / "repo-mapping.yaml").write_text("mappings: {}\ndefault: dev/unknown\n", encoding="utf-8")
     (root / "domains.yaml").write_text(domains_yaml or "domains: {}\n", encoding="utf-8")
@@ -62,7 +64,7 @@ def _git_repo(path, remote="git@github.com:someone/mapped-name.git"):
     return path
 
 
-def test_project_id_file_wins_over_the_remote(tmp_path, monkeypatch):
+def test_project_id_file_wins_over_the_remote(tmp_path):
     """Identity travels with the checkout, so a clone needs no central mapping.
 
     The remote here IS mapped, and mapped to something else. Without a real remote and a
@@ -71,14 +73,11 @@ def test_project_id_file_wins_over_the_remote(tmp_path, monkeypatch):
     repo = _git_repo(tmp_path / "repo")
     (repo / ".claude").mkdir(parents=True)
     (repo / ".claude" / "project-id").write_text("personal-os/agent-skills\n", encoding="utf-8")
-    root = tmp_path / "config"
-    root.mkdir(parents=True, exist_ok=True)
+    root = Path(_config_root(tmp_path))
     (root / "repo-mapping.yaml").write_text(
         "mappings:\n  mapped-name: elsewhere/wrong-answer\ndefault: dev/unknown\n",
         encoding="utf-8",
     )
-    (root / "domains.yaml").write_text("domains: {}\n", encoding="utf-8")
-    monkeypatch.setenv("H2T_CONFIG_ROOT", str(root))
 
     # control: without the file, the remote mapping is what answers
     assert identify_project(str(repo / "..")) is not None
@@ -91,18 +90,18 @@ def test_project_id_file_wins_over_the_remote(tmp_path, monkeypatch):
     assert result["domain"] == "personal-os"
 
 
-def test_the_file_is_found_from_a_subdirectory(tmp_path, monkeypatch):
+def test_the_file_is_found_from_a_subdirectory(tmp_path):
     """The hook passes $PWD, which is usually below the checkout root."""
     repo = _git_repo(tmp_path / "repo")
     (repo / ".claude").mkdir(parents=True)
     (repo / ".claude" / "project-id").write_text("personal-os/agent-skills\n", encoding="utf-8")
     deep = repo / "a" / "b" / "c"
     deep.mkdir(parents=True)
-    monkeypatch.setenv("H2T_CONFIG_ROOT", _config_root(tmp_path))
+    _config_root(tmp_path)
     assert identify_project(str(deep))["id"] == "agent-skills"
 
 
-def test_the_walk_stops_at_the_repository_root(tmp_path, monkeypatch):
+def test_the_walk_stops_at_the_repository_root(tmp_path):
     """A project-id above a repository describes a different project.
 
     Inheriting it would name the wrong one — worse than resolving to unknown, because a
@@ -112,11 +111,11 @@ def test_the_walk_stops_at_the_repository_root(tmp_path, monkeypatch):
     (workspace / ".claude").mkdir(parents=True)
     (workspace / ".claude" / "project-id").write_text("outer/not-this-one\n", encoding="utf-8")
     inner = _git_repo(workspace / "inner")
-    monkeypatch.setenv("H2T_CONFIG_ROOT", _config_root(tmp_path))
+    _config_root(tmp_path)
     assert identify_project(str(inner))["id"] != "not-this-one"
 
 
-def test_a_bare_id_takes_its_domain_from_domains_yaml(tmp_path, monkeypatch):
+def test_a_bare_id_takes_its_domain_from_domains_yaml(tmp_path):
     """Every file this feature has actually written holds a bare id, no domain.
 
     Measured 2026-08-23: h2t-business, rejuve, lynxcap-leads and POS all carry one line
@@ -125,47 +124,47 @@ def test_a_bare_id_takes_its_domain_from_domains_yaml(tmp_path, monkeypatch):
     repo = tmp_path / "repo"
     (repo / ".claude").mkdir(parents=True)
     (repo / ".claude" / "project-id").write_text("rejuve\n", encoding="utf-8")
-    monkeypatch.setenv("H2T_CONFIG_ROOT", _config_root(
+    _config_root(
         tmp_path,
         "domains:\n  business:\n    projects:\n      - id: rejuve\n        label: Rejuve\n",
-    ))
+    )
     result = identify_project(str(repo))
     assert result["id"] == "rejuve"
     assert result["domain"] == "business"
     assert result["label"] == "Rejuve"
 
 
-def test_an_unknown_bare_id_falls_back_to_dev(tmp_path, monkeypatch):
+def test_an_unknown_bare_id_falls_back_to_dev(tmp_path):
     repo = tmp_path / "repo"
     (repo / ".claude").mkdir(parents=True)
     (repo / ".claude" / "project-id").write_text("nowhere-in-yaml\n", encoding="utf-8")
-    monkeypatch.setenv("H2T_CONFIG_ROOT", _config_root(tmp_path))
+    _config_root(tmp_path)
     result = identify_project(str(repo))
     assert result["id"] == "nowhere-in-yaml"
     assert result["domain"] == "dev"
 
 
-def test_an_empty_project_id_file_is_ignored(tmp_path, monkeypatch):
+def test_an_empty_project_id_file_is_ignored(tmp_path):
     """A truncated write must not name the project the empty string."""
     repo = tmp_path / "repo"
     (repo / ".claude").mkdir(parents=True)
     (repo / ".claude" / "project-id").write_text("   \n", encoding="utf-8")
-    monkeypatch.setenv("H2T_CONFIG_ROOT", _config_root(tmp_path))
+    _config_root(tmp_path)
     result = identify_project(str(repo))
     assert result["id"] == "unknown"
 
 
-def test_without_the_file_nothing_changes(tmp_path, monkeypatch):
+def test_without_the_file_nothing_changes(tmp_path):
     """The control. If this returned an id too, the tests above would prove nothing."""
     repo = tmp_path / "repo"
     repo.mkdir()
-    monkeypatch.setenv("H2T_CONFIG_ROOT", _config_root(tmp_path))
+    _config_root(tmp_path)
     result = identify_project(str(repo))
     assert result["id"] == "unknown"
     assert result["domain"] == "dev"
 
 
-def test_the_file_does_not_cost_the_github_slug(tmp_path, monkeypatch):
+def test_the_file_does_not_cost_the_github_slug(tmp_path):
     """gather.py skips gather_github entirely when project["github"] is falsy.
 
     Returning None here empties issues, milestones and PRs for exactly the repos this
@@ -175,7 +174,7 @@ def test_the_file_does_not_cost_the_github_slug(tmp_path, monkeypatch):
     repo = _git_repo(tmp_path / "repo", remote="git@github.com:lichtpfad/rejuve.git")
     (repo / ".claude").mkdir(parents=True)
     (repo / ".claude" / "project-id").write_text("business/rejuve\n", encoding="utf-8")
-    monkeypatch.setenv("H2T_CONFIG_ROOT", _config_root(tmp_path))
+    _config_root(tmp_path)
     result = identify_project(str(repo))
     assert result["id"] == "rejuve"
     assert result["github"] == "lichtpfad/rejuve"

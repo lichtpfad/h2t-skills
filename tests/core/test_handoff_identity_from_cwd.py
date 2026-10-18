@@ -20,8 +20,11 @@ WRITER = "h2t_ops.lifecycle.handoff"  # the plugin script, deleted in Task 12, r
 
 
 def _config_root(tmp_path, mapping_yaml):
-    config = tmp_path / "config"
-    config.mkdir()
+    """config/ under the suite's HOME, which the subprocess inherits; H2T_CONFIG_ROOT is
+    no longer read (#548 R5)."""
+    from h2t_ops.core import paths
+    config = paths.config_dir()
+    config.mkdir(parents=True)
     (config / "repo-mapping.yaml").write_text(mapping_yaml, encoding="utf-8")
     (config / "domains.yaml").write_text("domains: {}\n", encoding="utf-8")
     return config
@@ -31,7 +34,6 @@ def _write(cwd, config_root, *extra):
     env = dict(os.environ)
     env["H2T_MACHINE_NAME"] = "test-machine"
     env["H2T_EVALS_MODE"] = "off"
-    env["H2T_CONFIG_ROOT"] = str(config_root)
     result = subprocess.run(
         [sys.executable, "-m", WRITER, "write",
          "--session-id", "some-session-2026-08-23",

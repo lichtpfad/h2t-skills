@@ -6,11 +6,32 @@ from pathlib import Path
 
 from h2t_ops.core import secrets
 
+# Read at import, during collection, before any fixture: what a module-level path in the
+# package would see (#548 Task 15 — an index built at import landed in the real ~/.h2t).
+_HOME_AT_COLLECTION = Path.home()
+
 
 def _root_conftest():
     mod = sys.modules["conftest"]
     assert Path(mod.__file__).resolve() == Path(__file__).resolve().parents[2] / "conftest.py"
     return mod
+
+
+def test_home_at_collection_is_not_the_real_one():
+    """conftest.pytest_configure moves HOME before modules are imported."""
+    assert _HOME_AT_COLLECTION != _root_conftest().REAL_HOME
+    assert _HOME_AT_COLLECTION.name.startswith("h2t-collect-home-")
+
+
+def test_the_tripwire_snapshots_the_real_home_not_the_moved_one():
+    """HOME is moved from pytest_configure on, so the tripwire must not ask Path.home().
+    A file planted under the test HOME must not appear among its keys."""
+    planted = Path.home() / ".h2t" / "x"
+    planted.parent.mkdir(parents=True)
+    planted.write_text("x")
+    keys = _root_conftest()._real_home_artifacts()
+    assert str(planted) not in keys
+    assert all(k.startswith(str(_root_conftest().REAL_HOME)) for k in keys)
 
 
 def test_home_is_not_the_real_one():

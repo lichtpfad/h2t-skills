@@ -25,12 +25,12 @@ from unittest.mock import patch
 
 import pytest
 
+# The production path the suite must never touch. From the root conftest: by the time this
+# module is imported, pytest_configure has already moved HOME for collection.
+from conftest import REAL_HOME as _REAL_HOME
 from h2t_ops.connectors.meetgeek import commands as mg_commands
 from h2t_ops.connectors.meetgeek import pipeline, recovery
 from h2t_ops.core.errors import ProviderError
-
-# Captured before any fixture redirects HOME — the production path the suite must never touch.
-_REAL_HOME = Path.home()
 
 # The script's names for what it imported from recovery.py.
 _RECOVERY_ALIASES = {

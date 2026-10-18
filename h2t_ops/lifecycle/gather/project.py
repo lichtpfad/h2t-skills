@@ -1,32 +1,15 @@
 """Project identity — resolve project from any directory.
 
-Uses ~/.h2t/config/repo-mapping.yaml for git repos and cwd pattern matching.
-Uses ~/.h2t/config/domains.yaml for domain metadata.
+Uses repo-mapping.yaml for git repos and cwd pattern matching and domains.yaml for domain
+metadata, both from config/ as the index parsed them (index.ontology(), #548 Task 15).
 """
 
 from pathlib import Path
 
+from h2t_ops.core import paths
+from h2t_ops.lifecycle import index
+
 from .runner import run_parallel
-
-try:
-    import yaml
-except ImportError:
-    yaml = None
-
-
-def _get_config_root() -> Path:
-    import os
-    env = os.environ.get("H2T_CONFIG_ROOT")
-    if env:
-        return Path(env)
-    return Path.home() / ".h2t" / "config"
-
-
-def _load_yaml(path: Path) -> dict:
-    if yaml is None or not path.exists():
-        return {}
-    with open(path, encoding="utf-8") as f:
-        return yaml.safe_load(f) or {}
 
 
 def identify_project(cwd: str = ".") -> dict:
@@ -43,9 +26,8 @@ def identify_project(cwd: str = ".") -> dict:
     import re
 
     cwd_abs = str(Path(cwd).resolve())
-    config_root = _get_config_root()
-    mapping = _load_yaml(config_root / "repo-mapping.yaml")
-    domains = _load_yaml(config_root / "domains.yaml")
+    config_root = paths.config_dir()
+    mapping, domains = index.ontology()
 
     mappings = mapping.get("mappings", {})
     cwd_patterns = mapping.get("cwd_patterns", {})

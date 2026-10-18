@@ -7,7 +7,6 @@ hooks/plain_guard.py
 hooks/plan_closer.py
 hooks/post_git_commit_docs_lint.py
 lifecycle/activity/writer.py
-lifecycle/apply_registration.py
 lifecycle/handoff.py
 lifecycle/project_audit_report.py
 lifecycle/scaffold_project.py

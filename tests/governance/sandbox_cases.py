@@ -562,6 +562,32 @@ def _index_refresh(sb, mp):
     assert {s["machine"] for s in index.latest_sessions(["p"])} == {"laptop", "sandbox"}
 
 
+def _ontology_config(sb, mp):
+    from h2t_ops.core import paths
+    (paths.config_dir() / "repo-mapping.yaml").write_text("# kept\nmappings: {}\n", encoding="utf-8")
+    (paths.config_dir() / "domains.yaml").write_text("domains: {}\n", encoding="utf-8")
+    (sb.home.parent / "repo").mkdir()
+
+
+def _register_apply(sb, mp):
+    """config/*.yaml replaced through store, copies in state/backups, project-id created in
+    a temporary repository through store.repo."""
+    from h2t_ops.core import paths
+    from h2t_ops.lifecycle.apply_registration import apply_registration
+    repo = sb.home.parent / "repo"
+    out = apply_registration(project_id="p", domain="dev", project_type="git", label="P",
+                             cwd=str(repo))
+    assert out["status"] == "ok"
+    assert (repo / ".claude" / "project-id").read_text(encoding="utf-8") == "dev/p\n"
+    assert "# kept" in (paths.config_dir() / "repo-mapping.yaml").read_text(encoding="utf-8")
+    assert len(list(paths.backups_dir().glob("*.yaml.*"))) == 2
+
+
+def _detect_project(sb, mp):
+    from h2t_ops.lifecycle.detect_project import detect_project
+    assert detect_project(str(sb.home.parent / "repo"))["already_registered"] is False
+
+
 CASES: list[Case] = [
     Case("store.replace.state", _store_replace_state),
     # Task 8: a refresh writes nothing; a rotated refresh token writes local and the mirror.
@@ -612,4 +638,7 @@ CASES: list[Case] = [
     # Task 14: the index lives in state and is opened only through store.connect_sqlite (R18).
     Case("index.rebuild", _index_rebuild, setup=_index_records("sandbox")),
     Case("index.connect.refresh", _index_refresh, setup=_index_built),
+    # Task 15: the ontology through the index; registration writes config through store.
+    Case("register.apply", _register_apply, setup=_ontology_config),
+    Case("detect.project", _detect_project, setup=_ontology_config),
 ]

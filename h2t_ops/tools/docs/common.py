@@ -4,6 +4,7 @@ import os
 import re
 import shutil
 import subprocess
+from collections.abc import Sequence
 from pathlib import Path
 
 from h2t_ops.resources import resource_dir
@@ -76,31 +77,50 @@ _BUNDLED_MANIFEST = [
 def _manifest() -> list[str]:
     """Repository names, from the operator's registry when there is one.
 
-    `~/.h2t/config/repo-mapping.yaml` already lists every repository this user has —
-    31 entries here against the bundled 16 — and it is keyed by repository name, which
-    is exactly what the manifest is. Reading it means a stranger's repositories are
-    known to the tooling and the author's are not assumed.
+    The repo mapping in config/ already lists every repository this user has — 31 entries
+    here against the bundled 16 — and it is keyed by repository name, which is exactly what
+    the manifest is. It is asked of the index, the one parser of the ontology (#548 Task 15).
+    Reading it means a stranger's repositories are known to the tooling and the author's are
+    not assumed.
 
     The bundled list remains the fallback rather than an empty one: dropping to nothing
     would silently turn off cross-repo behaviour for the machine that has the file
-    missing for an unrelated reason.
+    missing, or an index it cannot open, for an unrelated reason.
     """
-    path = Path.home() / ".h2t" / "config" / "repo-mapping.yaml"
+    import sqlite3
+
+    from h2t_ops.core.errors import H2TError
+    from h2t_ops.lifecycle import index
     try:
-        import yaml
-    except ImportError:
+        mappings = index.ontology()[0].get("mappings")
+    except (H2TError, OSError, sqlite3.Error):
         return list(_BUNDLED_MANIFEST)
-    try:
-        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-    except (OSError, UnicodeDecodeError, yaml.YAMLError):
-        return list(_BUNDLED_MANIFEST)
-    mappings = data.get("mappings")
     if not isinstance(mappings, dict) or not mappings:
         return list(_BUNDLED_MANIFEST)
     return sorted(str(k) for k in mappings)
 
 
-REPO_MANIFEST = _manifest()
+class _Manifest(Sequence):
+    """REPO_MANIFEST, read on first use rather than at import. The index it comes from is
+    built in state/ on first open, and this module is imported by the tests' collection
+    before any fixture has moved HOME — at import it would build the developer's own."""
+
+    def __init__(self) -> None:
+        self._names: list[str] | None = None
+
+    def _get(self) -> list[str]:
+        if self._names is None:
+            self._names = _manifest()
+        return self._names
+
+    def __getitem__(self, i):
+        return self._get()[i]
+
+    def __len__(self) -> int:
+        return len(self._get())
+
+
+REPO_MANIFEST = _Manifest()
 
 REQUIRED_CORE_DIRS = [
     "docs/superpowers/specs",
