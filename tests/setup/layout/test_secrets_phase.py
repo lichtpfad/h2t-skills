@@ -7,6 +7,7 @@ nothing here prints or asserts on a value outside the sandbox.
 from __future__ import annotations
 
 import hashlib
+import itertools
 import json
 import os
 import sys
@@ -14,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from h2t_ops.core import paths, secrets
+from h2t_ops.core import paths, secrets, store
 from h2t_ops.setup.layout import engine, secrets_phase, verify
 from h2t_ops.setup.layout import journal as journal_mod
 from h2t_ops.setup.layout.journal import Journal
@@ -120,6 +121,23 @@ def test_evals_prefers_dor_secrets_env():
     assert _env(_shared() / "h2t-evals.env") == {"H2T_EVALS_TOKEN": "fake-evals-dor"}
     assert sorted(p.name for p in _shared().iterdir() if ".from-" in p.name) == [
         "h2t-evals.env.from-dor-secrets", "h2t-evals.env.from-h2t-config"]
+
+
+def test_a_second_clash_keeps_all_three_and_verifies():
+    """A synced .from-dor with another value already there: put names the third
+    <stem>-2<suffix> (store.unique_name), and the reader must see that copy too."""
+    _write(_shared() / "meetgeek.env", "MEETGEEK_API_KEY=fake-meetgeek-new\n")
+    _write(_shared() / "meetgeek.env.from-dor", "MEETGEEK_API_KEY=fake-meetgeek-synced\n")
+    _write(paths.legacy("secrets.dor_old"), "MEETGEEK_API_KEY=fake-meetgeek-dor\n")
+    report = _migrate()
+    assert report.failed == []
+    third = list(itertools.islice(store.unique_name(_shared() / "meetgeek.env.from-dor"), 2))[1]
+    assert third.name == "meetgeek.env-2.from-dor"
+    assert {p.name: _env(p)["MEETGEEK_API_KEY"] for p in _shared().iterdir()} == {
+        "meetgeek.env": "fake-meetgeek-new", "meetgeek.env.from-dor": "fake-meetgeek-synced",
+        "meetgeek.env-2.from-dor": "fake-meetgeek-dor"}
+    assert set(secrets.shared_env_values()) == {"meetgeek.env", "meetgeek.env.from-dor",
+                                                "meetgeek.env-2.from-dor"}
 
 
 def test_existing_new_file_wins_on_rerun():
@@ -313,6 +331,39 @@ def test_google_token_keeps_durable_fields_only():
     target.write_text(json.dumps({**got, "refresh_token": "fake-other"}), encoding="utf-8")
     assert verify.verify_transformed(ctx.journal) == [
         f"{target}: a durable field differs from {paths.legacy('google.store') / 'tokens.json'}"]
+
+
+def test_google_token_without_refresh_token_never_wins():
+    """A senior token with no refresh_token is skipped: the usable junior one is the file."""
+    _write(paths.legacy("google.store") / "tokens.json", json.dumps({"normal": {"token": "fake-access"}}))
+    gmail = {k: v for k, v in _google_token()["normal"].items()}
+    _write(paths.legacy("google.gmail") / "token.json", json.dumps(gmail))
+    report = _migrate()
+    assert report.failed == []
+    got = json.loads((_local() / "google.token.json").read_text(encoding="utf-8"))
+    assert got["refresh_token"] == "fake-refresh"
+    assert sorted(p.name for p in _local().iterdir()) == ["google.token.json"]
+
+
+def test_no_usable_google_token_writes_nothing_and_says_so():
+    src = _write(paths.legacy("google.store") / "tokens.json", json.dumps({"normal": {"token": "fake-access"}}))
+    report = _migrate()
+    assert report.failed == []
+    assert not (_local() / "google.token.json").exists()
+    assert any(str(src) in n and "refresh_token" in n for n in report.notes), report.notes
+
+
+@pytest.mark.parametrize("raw, want", [(b"{not json", "not valid JSON"), (b"\xff\xfe{}", "not UTF-8")])
+def test_unreadable_google_token_has_its_own_hint(raw, want):
+    src = _write(paths.legacy("google.store") / "tokens.json", raw)
+    report = _migrate()
+    assert [s for s, _ in report.failed] == ["layout 1: secrets"]
+    text = report.failed[0][1]
+    assert str(src) in text and want in text
+    if want == "not valid JSON":
+        assert "UTF-8" not in text and "line 1" in text
+    else:
+        assert "UTF-8" in text
 
 
 def test_google_client_byte_copy_verified_by_hash():

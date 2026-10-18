@@ -177,9 +177,17 @@ def _snapshot_taken(journal) -> bool:
 
 def _json_doc(raw: bytes, path: Path) -> dict:
     try:
-        doc = json.loads(raw.decode("utf-8-sig"))
-    except (ValueError, UnicodeDecodeError) as exc:
-        raise ConfigError(f"{path} is not valid JSON: {exc}", hint=_HINT) from exc
+        text = raw.decode("utf-8-sig")
+    except UnicodeDecodeError as exc:
+        raise ConfigError(f"{path} is not UTF-8 text (at byte {exc.start})", hint=_HINT) from exc
+    try:
+        doc = json.loads(text)
+    except ValueError as exc:
+        # position only: the message of a JSON error can quote the text around it
+        where = f"line {exc.lineno} column {exc.colno}" if isinstance(exc, json.JSONDecodeError) else ""
+        raise ConfigError(f"{path} is not valid JSON ({where})",
+                          hint="fix the JSON or move the file away, then run "
+                               "`h2t-setup layout migrate` again") from exc
     if not isinstance(doc, dict):
         raise ConfigError(f"{path} is not a JSON object", hint="fix it or move it away, then run "
                           "`h2t-setup layout migrate` again")
@@ -213,11 +221,16 @@ def phase_secrets(ctx) -> None:
     _, _, _, _, origin = _inputs()
     names = {p: name for name, p in origin.items()}
     contributors = _contributors()
-    tokens = []
+    tokens, unusable = [], []
     for label, src in _google_token_sources():
         if src.is_file():
             durable = google_auth.durable_token(_json_doc(secrets.read_secret_bytes(src), src))
-            tokens.append((label, src, durable))
+            # without a refresh token it cannot sign in: it must not outrank one that can
+            (tokens if durable.get("refresh_token") else unusable).append((label, src, durable))
+    if unusable and not tokens:
+        ctx.report.notes.append(
+            "layout 1: secrets: no refresh_token in " + ", ".join(str(s) for _, s, _ in unusable)
+            + "; no Google token copied, sign in with `h2t-ops google auth`")
 
     if not _snapshot_taken(j):
         j.baseline(verify.baseline())
