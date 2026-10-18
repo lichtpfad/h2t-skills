@@ -75,8 +75,11 @@ def test_write_handoff_returns_degraded_when_markdown_write_fails(tmp_path, monk
     writer = _load_writer()
     monkeypatch.setenv("H2T_MACHINE_NAME", "test-machine")
 
-    # The md path is a directory: it cannot be created, read or replaced (OSError).
-    (writer.default_markdown_dir("repo") / "dev-repo-degraded-2026-05-26.md").mkdir(parents=True)
+    # A create that fails for every name: no -2, -3 can rescue the md.
+    def fail(path, *a, **kw):
+        raise OSError("mirror write failed")
+
+    monkeypatch.setattr(store, "create", fail)
 
     result = writer.write_handoff(
         session_id="dev-repo-degraded-2026-05-26",
@@ -299,3 +302,35 @@ def test_refused_backfill_keeps_the_md(monkeypatch):
 
     assert result["status"] == "degraded" and result["mirror_write_failed"] is True
     assert Path(result["markdown"]).is_file()
+
+
+def test_an_unreadable_path_at_the_md_name_is_foreign(monkeypatch):
+    """A directory at <id>.md cannot be read, so it is not this session's record: it is
+    left alone and the record lands in <id>-2.md."""
+    writer = _load_writer()
+    monkeypatch.setenv("H2T_MACHINE_NAME", "test-machine")
+    blocker = session_record.session_path("test-machine", "repo", "dev-repo-record-2026-10-18")
+    blocker.mkdir(parents=True)
+
+    result = _handoff(writer)
+
+    assert result["status"] == "ok", result
+    assert Path(result["markdown"]) == blocker.with_name("dev-repo-record-2026-10-18-2.md")
+    assert blocker.is_dir() and list(blocker.iterdir()) == []
+    assert "dev-repo-record-2026-10-18" in _spool_rows()[-1]
+
+
+def test_spool_frontmatter_and_directory_name_one_machine(monkeypatch):
+    """The machine is resolved once; a name that changes between calls (hostname drift,
+    #491) must not split one handoff across machines."""
+    writer = _load_writer()
+    names = iter(f"m{i}" for i in range(1, 10))
+    monkeypatch.setattr(paths, "machine_name", lambda: next(names))
+
+    result = _handoff(writer)
+
+    md = Path(result["markdown"])
+    row = json.loads(Path(result["spool"]).read_text(encoding="utf-8").splitlines()[-1])
+    meta, _ = session_record.parse(md.read_bytes())
+    assert row["machine"] == meta["machine"] == md.parent.parent.name == "m1"
+    assert Path(result["spool"]).name == "m1.jsonl"

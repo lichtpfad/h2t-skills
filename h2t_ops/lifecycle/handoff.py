@@ -64,8 +64,8 @@ def _machine() -> str:
     return get_machine_name()
 
 
-def default_markdown_dir(project: str) -> Path:
-    return paths.records("sessions", _machine()) / project
+def default_markdown_dir(project: str, machine: str | None = None) -> Path:
+    return paths.records("sessions", machine or _machine()) / project
 
 
 def _truncate(text: str, limit: int) -> tuple[str, bool]:
@@ -184,7 +184,7 @@ def _write_record(md_path: Path, meta: dict, body: bytes, *, dest: bool) -> tupl
             pass
         try:
             theirs, _ = session_record.parse(candidate.read_bytes())
-        except ValueError:
+        except (OSError, ValueError):   # unreadable (a directory, no permission) is foreign too
             theirs = {}
         if all(theirs.get(k) == meta[k] for k in ("session_id", "machine", "project")):
             written = store.replace(candidate, data, place="records.sessions", dest=dest)
@@ -247,16 +247,18 @@ def write_handoff(
     # the index and every _degraded exit must agree on that one number.
     distinct_artifacts = _dedupe_artifacts(parsed_artifacts)
 
+    # Resolved once: the spool row, the frontmatter and the directory must name one machine.
+    machine = _machine()
     spool_path = log_session_end(
         session_id=session_id,
         domain=domain,
         project=project,
         artifacts=parsed_artifacts,
+        machine=machine,
     )
 
-    machine = _machine()
     dest = markdown_dir is not None
-    md_dir = Path(markdown_dir) if markdown_dir else default_markdown_dir(project)
+    md_dir = Path(markdown_dir) if markdown_dir else default_markdown_dir(project, machine)
     try:
         # The first operation on this path: a --markdown-dir into a package place (secrets,
         # say) is refused here, after the spool, so it degrades like any other mirror failure.

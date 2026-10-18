@@ -78,9 +78,15 @@ def test_a_failed_markdown_file_also_exits_3(tmp_path):
     """
     mirror = tmp_path / "mirror"
     mirror.mkdir()
-    (mirror / "probe.md").mkdir()  # the file path is a directory: write_text raises OSError
-    result = _run(tmp_path, "write", "--session-id", "probe", "--project", "p",
-                  "--domain", "d", "--markdown-dir", str(mirror))
+    # A create refused for every name, so no -2 rescues the md; main() is the real one.
+    refuse_md = ("import sys; from h2t_ops.core import store\n"
+                 "def refuse(path, *a, **k): raise store.WriteRefused(f'{path}: refused')\n"
+                 "store.create = refuse\n"
+                 "from h2t_ops.lifecycle.handoff import main; sys.argv[0] = 'h2t-handoff'; main()\n")
+    result = subprocess.run(
+        [sys.executable, "-c", refuse_md, "write", "--session-id", "probe", "--project", "p",
+         "--domain", "d", "--markdown-dir", str(mirror)],
+        capture_output=True, text=True, encoding="utf-8", check=False, env=_env(tmp_path))
     assert result.returncode == 3, (result.returncode, result.stderr[-300:])
     payload = json.loads(result.stdout)
     assert payload["status"] == "degraded"
