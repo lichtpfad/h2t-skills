@@ -24,7 +24,9 @@ CEILINGS = {  # measured 2026-10-18 on ab078f4f; lowered after Task 6, Task 8 (G
     # Task 16 (the 3.x session roots through paths.legacy), Task 17 (writes into a repository
     # through store.repo, user-named paths with dest=True; 6 of the 36 are store.mkdir and
     # RepoWriter.mkdir calls the .mkdir( pattern counts), Task 18 (install state, snapshots,
-    # hook logs, the gather lock, the deploy input, setup's paths; 2 of the 8 are store.mkdir)
+    # hook logs, the gather lock, the deploy input, setup's paths; 2 of the 8 are store.mkdir);
+    # Task 19 (paths and index commands) held them: the variable names `paths list` reports
+    # are spelled in paths.source, the index lock is opened by store.locked
     "home": 19, "legacy_roots": 0, "path_env": 0, "dotenv": 0,
     "secret_readers": 0, "writes": 8, "sqlite": 0,
 }

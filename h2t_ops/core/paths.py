@@ -111,6 +111,20 @@ def vault() -> Path:
     return _env("H2T_PATH_VAULT") or home() / ".dor" / "vault"
 
 
+VAULT_HINT = "vault is shared with POS: set H2T_PATH_VAULT (default ~/.dor/vault)"
+
+
+def source(place_id: str) -> str:
+    """What decides a place's path, for `h2t-ops paths list`: the variable that moved it,
+    or default. Places paths.yaml declares are answered by the caller, which has the file."""
+    p = _BY_ID[place_id]
+    if p.kind == "fixed":
+        return "default (the install contract; H2T_PATH_ROOT does not move it)"
+    name = "H2T_PATH_ROOT" if p.kind in ("class", "file") else \
+        {"vault": "H2T_PATH_VAULT", "harness": "CLAUDE_CONFIG_DIR"}.get(place_id)
+    return name if name and os.environ.get(name) else "default"
+
+
 def dir_of(place_id: str) -> Path:
     p = _BY_ID[place_id]
     if p.kind == "fixed":
@@ -248,7 +262,7 @@ def validate_config(doc: dict, *, source: Path) -> PathsConfig:
     for name, raw in _mapping(doc, "places", f).items():
         if name == "vault":
             raise ConfigError(f"{f}: vault is not set here; it comes from H2T_PATH_VAULT",
-                              hint="vault is shared with POS: set H2T_PATH_VAULT (default ~/.dor/vault)")
+                              hint=VAULT_HINT)
         if name not in YAML_PLACES:
             raise ConfigError(f"{f}: unknown place {name!r}", hint=f"places are {', '.join(YAML_PLACES)}")
         value = Path(str(raw)).expanduser()

@@ -274,6 +274,22 @@ def _lock(fd: int) -> Iterator[None]:
             fcntl.flock(fd, fcntl.LOCK_UN)
 
 
+@contextlib.contextmanager
+def locked(path, *, place: str) -> Iterator[None]:
+    """Hold an exclusive lock on a lock file for the block: two processes that both write
+    one file through a library (the index) take turns. The file stays, empty and unlogged —
+    removing it would race a peer that has just opened it, and nothing is written into it."""
+    path = Path(path)
+    got = _check(path, place)
+    _ensure_dir(path.parent, place)
+    fd = os.open(path, os.O_RDWR | os.O_CREAT | getattr(os, "O_BINARY", 0), _mode(place, got, None))
+    try:
+        with _lock(fd):
+            yield
+    finally:
+        os.close(fd)
+
+
 def _bytes(data: str | bytes) -> bytes:
     return data.encode("utf-8") if isinstance(data, str) else data
 

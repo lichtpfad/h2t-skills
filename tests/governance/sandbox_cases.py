@@ -562,6 +562,34 @@ def _index_refresh(sb, mp):
     assert {s["machine"] for s in index.latest_sessions(["p"])} == {"laptop", "sandbox"}
 
 
+def _cli(*argv):
+    """Run `h2t-ops <argv>` in-process; exit 0 required."""
+    def run(sb, mp):
+        from h2t_ops.cli import dispatch
+        assert dispatch(list(argv)) == 0
+    return run
+
+
+def _paths_set(sb, mp):
+    from h2t_ops.core import paths
+    _cli("paths", "set", "kb", str(sb.home.parent / "kb"))(sb, mp)
+    assert paths.paths_config().places["kb"] == sb.home.parent / "kb"
+
+
+def _broken_paths_yaml(sb, mp):
+    from h2t_ops.core import paths
+    paths.paths_yaml().write_text("places:\n  lake: [unclosed\n", encoding="utf-8")
+
+
+def _paths_set_repair(sb, mp):
+    """paths.yaml does not parse: the config write still goes through (R17), the old bytes
+    into state/backups."""
+    from h2t_ops.core import paths
+    _cli("paths", "set", "lake", str(sb.lake))(sb, mp)
+    assert paths.paths_config().places == {"lake": sb.lake}
+    assert list(paths.backups_dir().glob("paths.yaml.*"))
+
+
 def _ontology_config(sb, mp):
     from h2t_ops.core import paths
     (paths.config_dir() / "repo-mapping.yaml").write_text("# kept\nmappings: {}\n", encoding="utf-8")
@@ -1102,4 +1130,9 @@ CASES: list[Case] = [
     Case("hook.plain-guard.log", _guard_log("plain_guard"), setup=_guard_transcript),
     Case("hook.gather.lock", _gather_lock),
     Case("deploy.executor.input", _deploy_input, setup=_deploy_script),
+    # Task 19: paths.yaml through store.replace(place="config") with a copy in state/backups;
+    # the index rebuilt from the command line, under state/index.lock.
+    Case("paths.set", _paths_set),
+    Case("paths.set.repair", _paths_set_repair, setup=_broken_paths_yaml),
+    Case("index.rebuild.cli", _cli("index", "rebuild", "--json"), setup=_index_records("sandbox")),
 ]

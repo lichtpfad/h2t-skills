@@ -26,6 +26,8 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("version", help="Check the installed version and entry points (--expect V, --json); exit 3 if not ok")
     sub.add_parser("doctor", help="Report installed CLI state (version, path, connectors, secrets); always exits 0, connectors-check is the gate")
     sub.add_parser("setup", help="The h2t-core setup skill's backend: doctor, setup, install-h2t-ops, connectors-check, secrets")
+    sub.add_parser("paths", help="Where each place lives: list, get <id>, set <place> <path>")
+    sub.add_parser("index", help="The session index state/index.sqlite: rebuild, query --project <id>")
     for spec in discover():
         spec.register(sub)
     return p
@@ -281,6 +283,9 @@ def dispatch(argv: list[str]) -> int:
         if gathered.briefing_only:
             forwarded.append("--briefing-only")
         return run_main(session_start.main, forwarded[0], forwarded[1:])
+    if argv and argv[0] in ("paths", "index"):
+        from h2t_ops.core import paths_cli
+        return paths_cli.main(argv[0], argv[1:])
     if argv and argv[0] in _MIGRATED:
         return _run_connector(argv)
     if not argv:

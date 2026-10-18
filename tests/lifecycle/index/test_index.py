@@ -256,6 +256,88 @@ def test_locked_base_is_served_not_removed(monkeypatch):
     assert [s["session_id"] for s in index.latest_sessions(["p"])] == ["s2", "s1"]   # lock gone
 
 
+def test_rebuild_waits_for_a_refresh_in_progress(monkeypatch):
+    """Publishing a rebuilt base while a peer is inside its refresh of the old one would
+    remove the peer's live journal, and a hot journal can be played into the new file. The
+    rebuild takes the index lock, so it publishes only after the refresh has returned."""
+    import threading
+
+    from h2t_ops.core import store
+    from h2t_ops.lifecycle.index import build
+    _md("mac", "p", "s1", "2026-10-17T00:00:00Z")
+    index.rebuild()
+    _md("laptop", "p", "s2", "2026-10-18T00:00:00Z")    # work for the refresh
+    events, started = [], threading.Event()
+    real_refresh, real_replace = build.refresh, store.replace
+
+    def refresh(conn):
+        main = conn.execute("PRAGMA database_list").fetchone()[2] == str(query.index_path())
+        if main:
+            events.append("refresh-start")
+            started.set()
+            time.sleep(0.4)
+        real_refresh(conn)
+        if main:
+            events.append("refresh-end")
+
+    def replace(path, *a, **kw):
+        if path == query.index_path():
+            events.append("publish")
+        return real_replace(path, *a, **kw)
+
+    monkeypatch.setattr(build, "refresh", refresh)
+    monkeypatch.setattr(store, "replace", replace)
+    peer = threading.Thread(target=lambda: index.latest_sessions(["p"]))
+    peer.start()
+    assert started.wait(5)
+    index.rebuild()
+    peer.join(5)
+    assert events[:3] == ["refresh-start", "refresh-end", "publish"], events
+    assert _rows("PRAGMA integrity_check") == [{"integrity_check": "ok"}]
+    assert {s["session_id"] for s in index.latest_sessions(["p"])} == {"s1", "s2"}
+
+
+def test_unbuilt_base_under_a_peer_lock_is_served_empty(monkeypatch):
+    """A brand-new base whose creator holds the write lock past the busy timeout has no
+    tables yet: the queries answer empty and problems says why, not "no such table"."""
+    _md("mac", "p", "s1")
+    monkeypatch.setattr(query, "BUSY_MS", 50)
+    path = query.index_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    peer = sqlite3.connect(path, timeout=0)
+    peer.execute("BEGIN IMMEDIATE")
+    try:
+        assert index.latest_sessions(["p"]) == []
+        assert index.ontology() == ({}, {})
+        assert [p["path"] for p in index.problems()] == [str(path)]
+        assert "not built yet" in index.problems()[0]["error"]
+    finally:
+        peer.rollback()
+        peer.close()
+    assert [s["session_id"] for s in index.latest_sessions(["p"])] == ["s1"]   # lock gone
+    assert index.problems() == []
+
+
+def test_rebuild_leaves_only_names_doctor_reports(monkeypatch):
+    """The base built aside must have no sidecar without the .h2t-tmp suffix: a kill during
+    the build would leave a -journal that doctor's stale-temp check (R48) cannot see."""
+    from h2t_ops.lifecycle.index import build
+    _md("mac", "p", "s1")
+    seen = []
+    real_refresh = build.refresh
+
+    def refresh(conn):
+        real_refresh(conn)
+        conn.execute("BEGIN IMMEDIATE")                 # a write transaction in flight
+        conn.execute("DELETE FROM stamps")
+        seen.extend(p.name for p in paths.state_dir().iterdir() if p.name.startswith(".index"))
+        conn.rollback()
+
+    monkeypatch.setattr(build, "refresh", refresh)
+    index.rebuild()
+    assert seen and all(n.endswith(".h2t-tmp") for n in seen), seen
+
+
 @pytest.mark.slow
 def test_build_and_stat_pass_fit_the_budget():
     """§11.2: a full build over ~318 md measured 15-66 ms and a stat pass 0.3-0.7 ms; the
