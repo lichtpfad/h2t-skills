@@ -8,10 +8,13 @@ which Task 12 deleted; its lib is h2t_ops/lifecycle.
 
 import argparse
 import json
+import sqlite3
 import sys
 import time
 from pathlib import Path
 
+from h2t_ops.core import paths
+from h2t_ops.core.errors import H2TError
 from h2t_ops.lifecycle.eval.session import SkillEval
 from h2t_ops.lifecycle.gather import output_json
 from h2t_ops.lifecycle.gather.briefing import format_briefing
@@ -35,6 +38,12 @@ def _print_text(text: str) -> None:
     out.write(text if text.endswith("\n") else text + "\n")
     out.flush()
     out.detach()  # don't close underlying buffer
+
+
+def _sanitized(exc: BaseException) -> str:
+    """Type and message, home shown as ~, bounded: enough to act on, no full paths."""
+    text = f"{type(exc).__name__}: {exc}".replace(str(paths.home()), "~")
+    return text[:200]
 
 
 def main() -> None:
@@ -104,13 +113,22 @@ def main() -> None:
     # mapped repos whose name differs from their project (#377).
     # Both ask state/index.sqlite, which spans every machine (#548 §5). An index that cannot
     # be opened is a failed source, named as one, never a briefing that silently lacks history.
-    try:
-        sessions = find_session_files(proj_id, repo_name)
-        latest_session = find_latest_session_index(proj_id, repo_name)
-        sources_used.append("sessions")
-    except Exception:  # noqa: BLE001 - gather must still print a briefing
-        sessions, latest_session = [], None
-        sources_failed.append("sessions")
+    # Only storage errors are caught; a programming error surfaces.
+    sources_used.append("sessions")
+    diagnostics: list[dict] = []
+
+    def _ask(name, lookup, default):
+        try:
+            return lookup()
+        except (OSError, sqlite3.Error, H2TError) as exc:
+            if "sessions" not in sources_failed:
+                sources_failed.append("sessions")
+            diagnostics.append({"source": f"sessions.{name}", "error": _sanitized(exc)})
+            return default
+
+    # Each kept on its own: the paths already found survive a failed latest lookup.
+    sessions = _ask("files", lambda: find_session_files(proj_id, repo_name), [])
+    latest_session = _ask("latest", lambda: find_latest_session_index(proj_id, repo_name), None)
 
     elapsed_ms = int((time.monotonic() - start) * 1000)
 
@@ -129,6 +147,7 @@ def main() -> None:
             "sources_used": sources_used,
             "sources_failed": sources_failed,
             "gather_ms": elapsed_ms,
+            **({"diagnostics": diagnostics} if diagnostics else {}),
         },
     }
 

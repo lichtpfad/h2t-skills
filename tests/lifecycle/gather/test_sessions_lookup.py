@@ -52,7 +52,7 @@ def test_previous_session_names_machine_and_age(monkeypatch):
     assert latest["summary_short"] == "done in s1" and latest["next_actions"] == ["carry on"]
     assert latest["here"] is None
     md = _briefing(latest, machine="automata")
-    assert "### Previous Session  (automata, 2 дн. назад)" in md
+    assert "### Previous Session  (automata, 2 дня назад)" in md
     assert "ветка feat/x, последний коммит a1b2c3d" in md
     assert "⚠" not in md
 
@@ -68,7 +68,7 @@ def test_warning_only_when_other_machine_is_newer(monkeypatch):
     _md("macbook-pro-3", "p", "here", _ago(5))
     behind = find_latest_session_index("p")
     assert behind["session_id"] == "there" and behind["here"]["machine"] == "macbook-pro-3"
-    assert ("⚠ на automata работали позже, чем здесь (macbook-pro-3, 5 дн. назад) — git fetch"
+    assert ("⚠ на automata работали позже, чем здесь (macbook-pro-3, 5 дней назад) — git fetch"
             in _briefing(behind))
 
     _md("macbook-pro-3", "p", "newest", _ago(0))
@@ -187,22 +187,104 @@ def test_legacy_latest_json_is_newest_by_mtime():
     assert find_latest_session_index("repo")["session_id"] == "newer"
 
 
-def test_an_index_that_cannot_open_is_a_failed_source(monkeypatch, capfd, tmp_path):
-    """gather still prints, and names the dead source instead of a silent empty history."""
-    import sqlite3
+def _gather(monkeypatch, capfd, tmp_path, *, files, latest):
     import sys
 
     from h2t_ops.lifecycle import session_start
-
-    def dead(*a, **kw):
-        raise sqlite3.OperationalError("database is locked")
-
     monkeypatch.setenv("H2T_EVALS_MODE", "off")
     monkeypatch.setattr(session_start, "identify_project", lambda cwd: {"id": "p", "domain": "dev"})
-    monkeypatch.setattr(session_start, "find_session_files", dead)
+    monkeypatch.setattr(session_start, "find_session_files", files)
+    monkeypatch.setattr(session_start, "find_latest_session_index", latest)
     monkeypatch.setattr(sys, "argv", ["h2t-gather", "--cwd", str(tmp_path)])
     session_start.main()
+    return json.loads(capfd.readouterr().out)
 
-    data = json.loads(capfd.readouterr().out)
+
+def test_an_index_that_cannot_open_is_a_failed_source(monkeypatch, capfd, tmp_path):
+    """gather still prints, names the dead source with a diagnostic, and keeps what the
+    lookup that did answer found."""
+    import sqlite3
+
+    def locked(*a, **kw):
+        raise sqlite3.OperationalError(f"database is locked: {paths.home()}/.h2t/state/index.sqlite")
+
+    data = _gather(monkeypatch, capfd, tmp_path, files=lambda *a: ["/r/a.md"], latest=locked)
+
+    assert "sessions" in data["_meta"]["sources_used"]
     assert data["_meta"]["sources_failed"] == ["sessions"]
-    assert data["sessions"] == [] and data["latest_session"] is None
+    assert data["sessions"] == ["/r/a.md"] and data["latest_session"] is None
+    (diag,) = data["_meta"]["diagnostics"]
+    assert diag == {"source": "sessions.latest",
+                    "error": "OperationalError: database is locked: ~/.h2t/state/index.sqlite"}
+
+
+def test_a_programming_error_in_the_lookup_surfaces(monkeypatch, capfd, tmp_path):
+    import pytest
+
+    def broken(*a, **kw):
+        raise KeyError("a bug, not storage")
+
+    with pytest.raises(KeyError):
+        _gather(monkeypatch, capfd, tmp_path, files=broken, latest=lambda *a: None)
+
+
+def test_age_uses_russian_plural_forms():
+    from h2t_ops.lifecycle.gather.briefing import _days
+    got = {n: _days(n) for n in (1, 2, 4, 5, 11, 12, 14, 20, 21, 22, 25, 101, 111, 112)}
+    assert got == {1: "1 день", 2: "2 дня", 4: "4 дня", 5: "5 дней", 11: "11 дней", 12: "12 дней",
+                   14: "14 дней", 20: "20 дней", 21: "21 день", 22: "22 дня", 25: "25 дней",
+                   101: "101 день", 111: "111 дней", 112: "112 дней"}
+
+
+def test_equal_timestamps_are_no_warning(monkeypatch):
+    """The path tiebreak may put the other machine first; an equal stamp is not "later"."""
+    monkeypatch.setenv("H2T_MACHINE_NAME", "zz-here")
+    stamp = _ago(1)
+    _md("aa-there", "p", "there", stamp)
+    _md("zz-here", "p", "here", stamp)
+
+    latest = find_latest_session_index("p")
+
+    assert latest["machine"] == "aa-there", "control: the tiebreak picks the other machine"
+    assert latest["here"] is None
+    assert "⚠" not in _briefing(latest, machine="zz-here")
+
+
+def test_dor_only_legacy_history_still_says_it_has_not_moved():
+    """No 3.x latest.json at all — DOR wrote only markdown."""
+    dor = paths.legacy("sessions.dor") / "laptop" / "p" / "dor-1.md"
+    dor.parent.mkdir(parents=True)
+    dor.write_text("# dor handoff\n", encoding="utf-8")
+
+    latest = find_latest_session_index("p")
+
+    assert latest["legacy"] is True and latest["machine"] == "laptop"
+    assert latest["markdown_path"] == str(dor)
+    md = _briefing(latest)
+    assert "### Previous Session  (laptop, сегодня)" in md
+    assert "ℹ сессии ещё в старом месте — h2t-setup sync перенесёт их" in md
+
+
+def test_corrupt_legacy_latest_json_still_says_it_has_not_moved():
+    leaf = paths.legacy("sessions.h2t") / "m" / "p"
+    leaf.mkdir(parents=True)
+    (leaf / "latest.json").write_text("{not json", encoding="utf-8")
+    (leaf / "s.md").write_text("# 3.x\n", encoding="utf-8")
+
+    latest = find_latest_session_index("p")
+
+    assert latest["legacy"] is True and latest["markdown_path"] == str(leaf / "s.md")
+    assert "старом месте" in _briefing(latest)
+
+
+def test_long_machine_names_cannot_push_the_section_past_the_limit():
+    huge = "m" * 5000
+    latest = {"machine": huge, "updated_at": _ago(1), "summary_short": "s" * 1200,
+              "next_actions": ["n" * 240] * 5, "legacy": True,
+              "here": {"machine": huge + "x", "updated_at": _ago(4)}}
+    md = _briefing(latest)
+    start = md.find("### Previous Session")
+    section = md[start:md.index("\n\n### Hints")]
+
+    assert start >= 0 and len(section) <= 1800, (start, len(section))
+    assert "— git fetch" in section and section.endswith("перенесёт их")

@@ -148,8 +148,17 @@ def _build_docs_debt_line(docs_debt: dict | None) -> str:
     return line
 
 
+def _days(n: int) -> str:
+    """Russian plural of день: 1, 21 день; 2-4, 22 дня; 5-20, 11-14, 25 дней (spec §5)."""
+    if n % 10 == 1 and n % 100 != 11:
+        return f"{n} день"
+    if 2 <= n % 10 <= 4 and not 12 <= n % 100 <= 14:
+        return f"{n} дня"
+    return f"{n} дней"
+
+
 def _age(updated_at: str) -> str:
-    """'сегодня', 'вчера', 'N дн. назад' by local date; '' when the stamp does not parse."""
+    """'сегодня', 'вчера', '2 дня назад' by local date; '' when the stamp does not parse."""
     try:
         ts = datetime.fromisoformat(str(updated_at).replace("Z", "+00:00"))
     except ValueError:
@@ -161,10 +170,11 @@ def _age(updated_at: str) -> str:
         return "сегодня"
     if days == 1:
         return "вчера"
-    return f"{days} дн. назад"
+    return f"{_days(days)} назад"
 
 
 PREVIOUS_LIMIT = 1800
+NAME_LIMIT = 64          # a machine name is a hostname; bounded so the tail cannot eat the limit
 LEGACY_LINE = "ℹ сессии ещё в старом месте — h2t-setup sync перенесёт их"
 
 
@@ -172,7 +182,7 @@ def _build_previous_session_section(latest_session: dict | None) -> str:
     if not isinstance(latest_session, dict):
         return ""
 
-    machine = str(latest_session.get("machine", "")).strip()
+    machine = str(latest_session.get("machine", "")).strip()[:NAME_LIMIT]
     where = ", ".join(x for x in (machine, _age(latest_session.get("updated_at", ""))) if x)
     lines = [f"### Previous Session  ({where})" if where else "### Previous Session"]
     git = []
@@ -215,22 +225,23 @@ def _build_previous_session_section(latest_session: dict | None) -> str:
         if refs:
             lines.append(f"- Artifacts: {', '.join(refs)}")
 
-    if len(lines) == 1:
-        return ""
-
     # The warnings close the section and survive the cut: the limit bounds the body.
     tail = []
     here = latest_session.get("here")
     if isinstance(here, dict) and machine and here.get("machine") != machine:
-        then = ", ".join(x for x in (str(here.get("machine", "")), _age(here.get("updated_at", ""))) if x)
+        here_name = str(here.get("machine", "")).strip()[:NAME_LIMIT]
+        then = ", ".join(x for x in (here_name, _age(here.get("updated_at", ""))) if x)
         tail.append(f"⚠ на {machine} работали позже, чем здесь ({then}) — git fetch")
     if latest_session.get("legacy"):
         tail.append(LEGACY_LINE)
-    room = PREVIOUS_LIMIT - sum(len(t) + 1 for t in tail)
+    if len(lines) == 1 and not tail:
+        return ""
 
+    marker = "\n- [previous session truncated]"
+    # Names are bounded, so the tail is a few hundred characters and the body always has room.
+    room = PREVIOUS_LIMIT - sum(len(t) + 1 for t in tail)
     text = "\n".join(lines)
     if len(text) > room:
-        marker = "\n- [previous session truncated]"
         text = text[: room - len(marker)].rstrip() + marker
     return "\n".join([text, *tail])
 

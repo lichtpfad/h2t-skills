@@ -6,6 +6,7 @@ know yet is read from them the 3.x way (sessions_legacy).
 """
 import json
 import os
+from datetime import UTC, datetime
 from pathlib import Path
 
 from h2t_ops.core import paths
@@ -148,7 +149,18 @@ def _from_legacy(keys: list[str]) -> dict | None:
     """3.x latest.json, bounded as 3.x bounded it; `legacy` tells the briefing to say so."""
     found = sessions_legacy.find_latest(keys)
     if found is None:
-        return None
+        # DOR wrote only markdown, and a 3.x latest.json may be missing or unreadable: the
+        # newest md still says where the history is, and the briefing that it has not moved.
+        files = sessions_legacy.find_session_files(keys)
+        if not files:
+            return None
+        newest = Path(files[0])
+        stamp = datetime.fromtimestamp(newest.stat().st_mtime, UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+        return {"session_id": newest.stem, "project": newest.parent.name, "domain": "",
+                "machine": newest.parent.parent.name, "updated_at": stamp, "branch": "",
+                "last_commit": "", "summary_short": "", "next_actions": [], "blockers": [],
+                "artifacts": [], "markdown_path": str(newest), "truncated": False,
+                "here": None, "legacy": True}
     data, path = found
     return {
         "session_id": str(data.get("session_id", "")),
@@ -169,6 +181,15 @@ def _from_legacy(keys: list[str]) -> dict | None:
     }
 
 
+def _when(stamp) -> datetime:
+    """updated_at as an aware datetime; an unreadable stamp is the oldest possible."""
+    try:
+        ts = datetime.fromisoformat(str(stamp or "").replace("Z", "+00:00"))
+    except ValueError:
+        return datetime.min.replace(tzinfo=UTC)
+    return ts if ts.tzinfo else ts.replace(tzinfo=UTC)
+
+
 def find_latest_session_index(*repo_names: str) -> dict | None:
     """The newest session of this project from any machine, bounded for the briefing.
 
@@ -185,7 +206,8 @@ def find_latest_session_index(*repo_names: str) -> dict | None:
     me = paths.machine_name()
     if latest["machine"] != me:
         mine = _rows(keys, machine=me, limit=1)
-        if mine:
+        # Strictly newer: an equal stamp is a path tiebreak, not work done elsewhere later.
+        if mine and _when(mine[0].get("updated_at")) < _when(latest["updated_at"]):
             latest["here"] = {"machine": me, "updated_at": str(mine[0].get("updated_at") or ""),
                               "markdown_path": str(mine[0].get("path") or "")}
     return latest
