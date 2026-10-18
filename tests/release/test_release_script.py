@@ -18,6 +18,8 @@ from pathlib import Path
 
 import pytest
 
+from conftest import REAL_HOME
+
 ROOT = Path(__file__).resolve().parents[2]
 SHIPPED = ("pyproject.toml", "uv.lock", "README.md", ".claude-plugin/", "plugins/", "scripts/", "h2t_ops/")
 PY = "3.12.11"
@@ -264,7 +266,9 @@ def test_stamped_hooks_run_notice_is_valid_json(repo, rel, tmp_path):
 
 
 @pytest.mark.skipif(UV is None, reason="uv is not on PATH (CI installs with pip); prepare exports through uv")
-def test_prepare_cli_twice_exports_constraints_and_locks_the_version(repo):
+def test_prepare_cli_twice_exports_constraints_and_locks_the_version(repo, monkeypatch):
+    # uv lock --offline resolves from the real uv cache under the real HOME (#548 R5)
+    monkeypatch.setenv("HOME", str(REAL_HOME))
     for ver in ("4.0.0", "4.0.1"):
         result = subprocess.run([sys.executable, str(repo / "scripts/release.py"), "prepare", ver],
                                 capture_output=True, text=True, encoding="utf-8")

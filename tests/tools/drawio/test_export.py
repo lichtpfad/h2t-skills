@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 
+from conftest import REAL_HOME
 from h2t_ops.tools.drawio.export import export_diagram
 from h2t_ops.tools.drawio.generate import generate_diagram
 
@@ -32,7 +33,8 @@ def test_the_cli_path_this_test_probes_is_the_one_export_uses():
 
 
 @pytest.mark.skipif(not DRAWIO_CLI.exists(), reason=f"draw.io CLI absent at {DRAWIO_CLI}")
-def test_export_produces_a_png():
+def test_export_produces_a_png(monkeypatch):
+    monkeypatch.setenv("HOME", str(REAL_HOME))   # Electron hangs without its real profile (#548 R5)
     graph = {
         "nodes": [
             {"id": "a", "label": "Test Node", "type": "rounded_rect"},

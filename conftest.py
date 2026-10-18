@@ -1,5 +1,11 @@
 """Repo-wide pytest fixtures."""
+import os
+from pathlib import Path
+
 import pytest
+
+# The developer's home, taken at import, before any fixture moves HOME (#548 R5).
+REAL_HOME = Path.home()
 
 
 @pytest.fixture(autouse=True)
@@ -35,17 +41,37 @@ def _isolate_home_writes(monkeypatch, tmp_path_factory):
     home, which is what _real_home_artifacts below is for.
     """
     root = tmp_path_factory.mktemp("isolated-home")
-    monkeypatch.setenv("H2T_ACTIVITY_SPOOL", str(root / "activity" / "spool.jsonl"))
-    monkeypatch.setenv("H2T_SESSION_ROOT", str(root / "sessions"))
+    # Through HOME, not H2T_PATH_ROOT: the legacy places are home-relative by design, and a
+    # test reaching secrets.get without its own HOME would read the real ~/.dor/secrets.env
+    # (#321 again — real pushes to prod from unit tests). R5 retired the old variables.
+    home = root / "home"
+    home.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("USERPROFILE", str(home))
+    # Tests that commit in temp repos need an author once the real ~/.gitconfig is gone.
+    gitconfig = root / "gitconfig"
+    gitconfig.write_text("[user]\n name = test\n email = test@example.invalid\n", encoding="utf-8")
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(gitconfig))
+    from h2t_ops.core import paths
+    for k in list(os.environ):
+        if k.startswith("H2T_PATH_") or k in paths.OLD_ENV:
+            monkeypatch.delenv(k, raising=False)
 
 
 def _real_home_artifacts() -> dict[str, tuple[int, int]]:
     """size+mtime of the home files the suite must never touch."""
-    from pathlib import Path
-
+    # Built here, not from h2t_ops.core.paths: pytest_sessionstart runs before any fixture,
+    # so Path.home() is still the real one.
+    h2t = Path.home() / ".h2t"
     watched = [
-        Path.home() / ".h2t" / "activity" / "spool.jsonl",
-        Path.home() / ".h2t" / "sessions",
+        h2t / "activity" / "spool.jsonl",
+        h2t / "sessions",
+        h2t / "records",
+        h2t / "secrets",
+        h2t / "state",
+        h2t / "data",
+        h2t / "layout.json",
+        Path.home() / ".config" / "google-calendar-mcp" / "tokens.json",
     ]
     state: dict[str, tuple[int, int]] = {}
     for path in watched:
