@@ -26,9 +26,10 @@ CEILINGS = {  # measured 2026-10-18 on ab078f4f; lowered after Task 6, Task 8 (G
     # RepoWriter.mkdir calls the .mkdir( pattern counts), Task 18 (install state, snapshots,
     # hook logs, the gather lock, the deploy input, setup's paths; 2 of the 8 are store.mkdir);
     # Task 19 (paths and index commands) held them: the variable names `paths list` reports
-    # are spelled in paths.source, the index lock is opened by store.locked
+    # are spelled in paths.source, the index lock is opened by store.locked; Task 21 (the
+    # migration journal) adds one: its store.mkdir of run/rollback/<id> with mode 0700 (R36)
     "home": 19, "legacy_roots": 0, "path_env": 0, "dotenv": 0,
-    "secret_readers": 0, "writes": 8, "sqlite": 0,
+    "secret_readers": 0, "writes": 9, "sqlite": 0,
 }
 
 

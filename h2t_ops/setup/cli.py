@@ -1,10 +1,12 @@
-"""`h2t-setup <sync|update|dev-sync>` (spec §7.3, §7.4).
+"""`h2t-setup <sync|update|dev-sync>` (spec §7.3, §7.4) and `h2t-setup layout` (#548 §7.5).
 
 The order is the contract: an editable install stops `sync`/`update` before anything else;
 then the target is resolved, and a network failure ends the run with nothing touched; then
 the process makes sure it is the target's own isolated executor; only then do the steps run.
 `dev-sync` installs from the checkout, so it reads no target and needs no re-launch.
 `update` without a terminal is refused first: its question has nobody to answer it.
+`layout` is none of these: it runs in the interpreter that launched it, before every stop
+above, so a migration can run from an editable checkout (plan R13).
 """
 from __future__ import annotations
 
@@ -33,6 +35,16 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("sync", parents=[common], help="bring the install to the current release")
     sub.add_parser("update", parents=[common], help="sync, after showing what changes")
     sub.add_parser("dev-sync", parents=[common], help="install the CLI from this checkout")
+    as_json = argparse.ArgumentParser(add_help=False)
+    as_json.add_argument("--json", action="store_true", help="the standard envelope")
+    layout = sub.add_parser("layout", help="the storage layout: migrate to it, or roll it back")
+    actions = layout.add_subparsers(dest="action", required=True)
+    migrate = actions.add_parser("migrate", parents=[as_json], help="migrate to layout 1")
+    migrate.add_argument("--machine", metavar="NAME",
+                         help="this machine's name; pinned in Claude settings if none is")
+    back = actions.add_parser("rollback", parents=[as_json], help="undo the last migration")
+    back.add_argument("--sync-paused", action="store_true",
+                      help="confirm the sync of records/ and secrets/shared/ is paused")
     return parser
 
 
@@ -74,12 +86,36 @@ def _extras_stop(extras: list[str]) -> None:
                           details={"reason": "unknown_extra", "extras": unknown})
 
 
+def _report(mode: str, result, as_json: bool):
+    if isinstance(result, sync.Report):
+        if result.failed:
+            # Not a success with a list attached: a run that left something off target
+            # exits non-zero, and the hint is the command that continues it.
+            raise ProviderError(
+                "h2t-setup {}: not everything reached the target: {}".format(
+                    mode, "; ".join(subject for subject, _ in result.failed)),
+                hint=result.failed[0][1], details=result.as_dict())
+        result = result.as_dict() if as_json else result.text()
+    return result
+
+
+def _layout(ns) -> object:
+    from h2t_ops.setup.layout import engine, rollback
+    if ns.action == "rollback":
+        return rollback.rollback(sync_paused=ns.sync_paused)
+    report = sync.Report()
+    engine.migrate(report, machine=ns.machine)
+    return _report("layout migrate", report, ns.json)
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else list(argv)
     ns = build_parser().parse_args(argv)
     rest = argv[1:]  # everything after the mode; options live on the mode only
     fmt = "json" if ns.json else "human"
     try:
+        if ns.mode == "layout":
+            return emit("setup", result=_layout(ns), fmt=fmt)
         _editable_stop(ns.mode)
         _consent_stop(ns.mode)
         target = None
@@ -87,16 +123,7 @@ def main(argv: list[str] | None = None) -> int:
             target = manifest.current()
             sync.ensure_executor(target, ns.mode, rest)
         _extras_stop(ns.extra)
-        result = sync.run(ns.mode, target, rest)
-        if isinstance(result, sync.Report):
-            if result.failed:
-                # Not a success with a list attached: a run that left something off target
-                # exits non-zero, and the hint is the command that continues it.
-                raise ProviderError(
-                    "h2t-setup {}: not everything reached the target: {}".format(
-                        ns.mode, "; ".join(subject for subject, _ in result.failed)),
-                    hint=result.failed[0][1], details=result.as_dict())
-            result = result.as_dict() if ns.json else result.text()
+        result = _report(ns.mode, sync.run(ns.mode, target, rest), ns.json)
     except H2TError as exc:
         return emit("setup", exc=exc, fmt=fmt)
     return emit("setup", result=result, fmt=fmt)

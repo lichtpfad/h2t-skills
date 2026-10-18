@@ -21,7 +21,7 @@ def test_ingest_write_only_in_the_ingest_module():
 
 
 def test_journal_remove_only_in_rollback():
-    assert set(_sites(r"journal\s*=\s*True")) <= {"h2t_ops/setup/layout/rollback.py"}
+    assert set(_sites(r"journal\s*=\s*True")) == {"h2t_ops/setup/layout/rollback.py"}
 
 
 def test_in_place_only_in_the_research_store():

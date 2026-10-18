@@ -5,6 +5,7 @@ lifecycle/activity/writer.py
 lifecycle/handoff.py
 lifecycle/project_audit_report.py
 lifecycle/scaffold_project.py
+setup/layout/journal.py
 setup/sync.py
 tools/agent_profile/apply_agent_profile.py
 tools/creative/assembler.py
