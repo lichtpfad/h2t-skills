@@ -114,12 +114,32 @@ def test_place_follows_the_origin_of_the_root(lk, tmp_path):
 
 
 def test_undeclared_3x_lake_is_refused_with_the_paths_set_hint(lk):
-    """GC: the old place is not written until paths.yaml declares it (R2)."""
+    """GC: after layout 1 the old place is not written until paths.yaml declares it (R2)."""
     (paths.paths_yaml()).unlink()
     old = paths.legacy("lake.dor") / "granola"
+    old.mkdir(parents=True)
+    paths.layout_file().write_text('{"layout": 1}', encoding="utf-8")
+    assert lake.ConnectorDir("granola").root == paths.data_dir() / "lake" / "granola"
     with pytest.raises(store.WriteRefused) as exc:
         lake.ConnectorDir("granola", root=old)
     assert exc.value.hint == f"h2t-ops paths set lake {paths.legacy('lake.dor')}"
+
+
+def test_before_layout_1_the_3x_lake_is_the_lake(lk):
+    """§8: an unmigrated machine keeps syncing into the lake POS reads. A data/lake default
+    there would take the notes away while the cursor advances past them."""
+    (paths.paths_yaml()).unlink()
+    old = paths.legacy("lake.dor")
+    (old / "granola").mkdir(parents=True)
+    d = lake.ConnectorDir("granola")
+    assert d.root == old / "granola" and (d.place, d.dest) == ("lake", False)
+    assert d.publish({"n1.md": b"v1"}, op_id="a") == []
+    assert (old / "granola" / "n1.md").read_bytes() == b"v1"
+    assert not (paths.data_dir() / "lake").exists()
+    assert store.classify(old / "granola" / "n1.md") == "lake"
+    paths.layout_file().write_text('{"layout": 1}', encoding="utf-8")
+    assert lake.ConnectorDir("granola").root == paths.data_dir() / "lake" / "granola"
+    assert store.classify(old / "granola" / "n1.md") == "legacy"
 
 
 def test_cursor_lives_in_state_and_falls_back_to_the_3x_one(lk):

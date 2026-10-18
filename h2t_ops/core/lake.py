@@ -42,7 +42,8 @@ def _inside(a: Path, b: Path) -> bool:
 def origin(path) -> tuple[str, bool]:
     """(place, dest) for a write at path (R28): inside the lake set in paths.yaml → "lake";
     inside the default data/lake → "data"; anywhere else → dest=True, a path the user named.
-    The 3.x lake (~/.dor/lake) is written only once paths.yaml declares it (R2)."""
+    The 3.x lake (~/.dor/lake) is the lake until layout 1 (paths.place); after it, only
+    once paths.yaml declares it (R2)."""
     real = _real(path)
     configured = paths.place("lake")
     if configured is not None and _inside(real, _real(configured)):

@@ -7,6 +7,7 @@ hold the count from rising until it reaches zero (Task 24).
 """
 from __future__ import annotations
 
+import json
 import os
 import platform
 import tempfile
@@ -313,10 +314,30 @@ def validate_config(doc: dict, *, source: Path) -> PathsConfig:
                        sync={str(k): str(v) for k, v in _mapping(doc, "sync", f).items()})
 
 
+def _layout() -> object:
+    try:
+        doc = json.loads(layout_file().read_bytes())
+    except (OSError, ValueError):
+        return None
+    return doc.get("layout") if isinstance(doc, dict) else None
+
+
+def _fallback(name: str) -> Path | None:
+    """Before layout 1 the 3.x lake is the lake (§8: 4.0.x works on the old places until the
+    machine migrates). A default of data/lake there would take granola and meetgeek sync
+    away from the lake POS reads while their cursors advance, and the notes synced in that
+    window would never be fetched again. After layout 1 only paths.yaml declares it (R2)."""
+    if name != "lake" or _layout() == 1:
+        return None
+    old = legacy("lake.dor")
+    return old if old.is_dir() else None
+
+
 def place(name: str) -> Path | None:
     if name == "vault":
         return vault()
-    return paths_config().places.get(name)
+    found = paths_config().places.get(name)
+    return found if found is not None else _fallback(name)
 
 
 def place_or_default(name: str) -> tuple[Path, bool]:
@@ -340,10 +361,13 @@ def legacy_dir(name: str) -> Path:
 def _declared() -> set[Path]:
     """Real paths of the external places, tolerant of a broken paths.yaml (plan R17)."""
     try:
-        found = list(paths_config().places.values())
+        places = paths_config().places
     except ConfigError:
-        found = []
-    return {Path(os.path.realpath(p)) for p in (*found, vault())}
+        places = {}
+    found = [*places.values(), vault()]
+    if "lake" not in places and (old := _fallback("lake")) is not None:
+        found.append(old)
+    return {Path(os.path.realpath(p)) for p in found}
 
 
 def legacy_roots() -> list[Path]:

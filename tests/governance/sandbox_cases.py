@@ -217,8 +217,11 @@ def _granola_sync_refuses(sb, mp):
 
 
 def _no_lake_declared(sb, mp):
+    """A migrated machine with no lake in paths.yaml: data/lake. Before layout 1 the 3.x
+    lake would be the lake (paths._fallback), and the sandbox holds ~/.dor/lake closed."""
     from h2t_ops.core import paths
     paths.paths_yaml().write_text(f"version: 1\nplaces:\n  inbox: {sb.inbox}\n", encoding="utf-8")
+    paths.layout_file().write_text('{"layout": 1}\n', encoding="utf-8")
 
 
 def _granola_sync_default_lake(sb, mp):
