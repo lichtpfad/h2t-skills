@@ -5,6 +5,7 @@ removed a bypass — write the new number here so it cannot come back. Target: 0
 """
 import importlib.util
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -68,3 +69,29 @@ def test_no_new_module_writes_outside_store():
     """A count can stay equal while one module stops writing and another starts (R27)."""
     baseline = set(BASELINE.read_text(encoding="utf-8").split())
     assert set(storage_map.files(ROOT, "writes")) <= baseline
+
+
+def test_bom_and_crlf_do_not_turn_docstrings_into_bypasses(tmp_path):
+    """A file saved on Windows: UTF-8 BOM and CRLF. A BOM breaks ast.parse, and with no
+    docstring set every docstring line would count as a real bypass."""
+    (tmp_path / "h2t_ops").mkdir()
+    (tmp_path / "h2t_ops" / "w.py").write_bytes(
+        b'\xef\xbb\xbf"""Reads ~/.dor/x via Path.home()."""\r\n'
+        b'p = Path.home()\r\n')
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    assert storage_map.hits(tmp_path, "home") == ["h2t_ops/w.py:2"]
+    assert storage_map.hits(tmp_path, "legacy_roots") == []
+
+
+def test_check_round_trip_with_ceilings(tmp_path):
+    """--check and CEILINGS are two halves of one contract (verification.md)."""
+    script = str(ROOT / "scripts" / "storage_map.py")
+    ok = subprocess.run([sys.executable, script, "--check"], capture_output=True, text=True)
+    assert ok.returncode == 0, ok.stdout
+    (tmp_path / "h2t_ops").mkdir()
+    (tmp_path / "h2t_ops" / "p.py").write_text("p = Path.home()\n" * (CEILINGS["home"] + 1))
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    bad = subprocess.run([sys.executable, script, "--check", "--root", str(tmp_path)],
+                         capture_output=True, text=True)
+    assert bad.returncode != 0
+    assert f"ceiling home: {CEILINGS['home']} -> {CEILINGS['home'] + 1}" in bad.stdout

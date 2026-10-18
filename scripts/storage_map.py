@@ -79,7 +79,7 @@ def hits(root: Path, name: str) -> list[str]:
         if rel in ALLOWED[name]:
             continue
         try:
-            text = (root / rel).read_text(encoding="utf-8")
+            text = (root / rel).read_text(encoding="utf-8-sig")
         except (UnicodeDecodeError, FileNotFoundError):
             continue
         skip = docstring_lines(text)
@@ -96,10 +96,11 @@ def files(root: Path, name: str) -> list[str]:
 
 
 def main(argv: list[str]) -> int:
+    root = Path(argv[argv.index("--root") + 1]) if "--root" in argv else ROOT
     if "--files" in argv:
-        print("\n".join(files(ROOT, argv[argv.index("--files") + 1])))
+        print("\n".join(files(root, argv[argv.index("--files") + 1])))
         return 0
-    counts = {name: len(hits(ROOT, name)) for name in PATTERNS}
+    counts = {name: len(hits(root, name)) for name in PATTERNS}
     for name, count in counts.items():
         print(f"{name} {count}")
     if "--check" in argv:
