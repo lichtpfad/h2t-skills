@@ -30,6 +30,80 @@ def test_managed_registers_delegation_only_while_open(home):
     assert store.delegated(db) is None
 
 
+def test_delegation_covers_only_the_sqlite_sidecars(home):
+    db = paths.state_dir() / "index.sqlite"
+    with store.managed(db, place="state", library="sqlite3"):
+        for side in ("-journal", "-wal", "-shm"):
+            assert store.delegated(str(db) + side) == "sqlite3"
+        assert store.delegated(str(db) + "-evil") is None
+        assert store.delegated(str(db) + "-journal-x") is None
+
+
+def test_nested_managed_keeps_the_delegation_until_the_outer_exit(home):
+    """Task 9: a helper opens the same session file inside an already open client."""
+    db = paths.state_dir() / "telegram.session"
+    with store.managed(db, place="state", library="telethon"):
+        with store.managed(db, place="state", library="telethon"):
+            pass
+        assert store.delegated(db) == "telethon"
+    assert store.delegated(db) is None
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX permission bits")
+def test_managed_chmod_failure_is_raised(home, monkeypatch):
+    db = paths.state_dir() / "index.sqlite"
+
+    def boom(*a, **k):
+        raise PermissionError("fake-chmod-denied")
+
+    with pytest.raises(PermissionError, match="fake-chmod-denied"):
+        with store.managed(db, place="state", library="sqlite3") as p:
+            p.write_bytes(b"x")
+            monkeypatch.setattr(os, "chmod", boom)
+    monkeypatch.undo()
+    assert store.delegated(db) is None
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX permission bits")
+def test_managed_chmod_failure_does_not_mask_the_body_error(home, monkeypatch):
+    db = paths.state_dir() / "index.sqlite"
+
+    def boom(*a, **k):
+        raise PermissionError("fake-chmod-denied")
+
+    with pytest.raises(RuntimeError, match="fake-library-error") as info:
+        with store.managed(db, place="state", library="sqlite3") as p:
+            p.write_bytes(b"x")
+            monkeypatch.setattr(os, "chmod", boom)
+            raise RuntimeError("fake-library-error")
+    monkeypatch.undo()
+    assert any("fake-chmod-denied" in n for n in getattr(info.value, "__notes__", []))
+
+
+def test_repo_rename_logs_the_file_hash(home, tmp_path, monkeypatch):
+    import hashlib
+    import subprocess
+
+    from h2t_ops.core import repo_writers
+    monkeypatch.setitem(repo_writers.REPO_WRITERS, "fake-renamer", {"rename": ("docs/*",)})
+    repo = tmp_path / "r"
+    (repo / "docs").mkdir(parents=True)
+    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    (repo / "docs" / "a.md").write_text("fake-doc-a")
+    (repo / "docs" / "b.md").write_text("fake-doc-b")
+    subprocess.run(["git", "add", "docs"], cwd=repo, check=True)
+    w = store.repo(repo, "fake-renamer")
+    log = paths.logs_dir() / "writes.jsonl"
+    for src, dst, git, body in (("docs/a.md", "docs/a2.md", True, "fake-doc-a"),
+                                ("docs/b.md", "docs/b2.md", False, "fake-doc-b")):
+        w.rename(src, dst, git=git)
+        row = json.loads(log.read_text().splitlines()[-1])
+        assert (row["op"], row["path"]) == ("rename", str(repo.resolve() / dst))
+        assert row["sha256"] == hashlib.sha256(body.encode()).hexdigest()
+    tracked = subprocess.run(["git", "ls-files"], cwd=repo, capture_output=True, text=True).stdout
+    assert "docs/a2.md" in tracked.split()
+
+
 def test_connect_sqlite_opens_inside_the_delegation(home):
     db = paths.state_dir() / "index.sqlite"
     with store.connect_sqlite(db, place="state") as conn:
@@ -54,10 +128,10 @@ def test_sqlite_copy_is_whole_and_0600_in_secrets(home, tmp_path):
     src = tmp_path / "old.session"
     with sqlite3.connect(src) as c:
         c.execute("CREATE TABLE s(k)")
-        c.execute("INSERT INTO s VALUES ('fake')")
+        c.execute("INSERT INTO s VALUES ('fake-session-row')")
     dest = paths.secrets_local() / "telegram.session"
     store.sqlite_copy(src, dest, place="secrets.local")
-    assert sqlite3.connect(dest).execute("SELECT k FROM s").fetchall() == [("fake",)]
+    assert sqlite3.connect(dest).execute("SELECT k FROM s").fetchall() == [("fake-session-row",)]
     assert stat.S_IMODE(dest.stat().st_mode) == 0o600
 
 
@@ -131,7 +205,7 @@ def test_writer_and_managed_log_the_file_hash(home):
     rows = [json.loads(x) for x in (paths.logs_dir() / "writes.jsonl").read_text().splitlines()]
     assert rows[-1]["sha256"] == hashlib.sha256(db.read_bytes()).hexdigest()
     with store.writer(paths.secrets_local() / "s.bin", place="secrets.local") as fh:
-        fh.write(b"fake")
+        fh.write(b"fake-secret-bytes")
     rows = [json.loads(x) for x in (paths.logs_dir() / "writes.jsonl").read_text().splitlines()]
     assert rows[-1]["sha256"] is None
 

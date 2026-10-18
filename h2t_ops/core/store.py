@@ -16,6 +16,7 @@ import shutil
 import sqlite3
 import sys
 import tempfile
+import threading
 import time
 from collections.abc import Iterator
 from pathlib import Path
@@ -45,7 +46,9 @@ _LOG_LOCK = ".writes.jsonl.lock"
 
 _INGEST: contextvars.ContextVar[bool] = contextvars.ContextVar("h2t_ingest", default=False)
 _MIGRATING: contextvars.ContextVar[bool] = contextvars.ContextVar("h2t_migrating", default=False)
-_DELEGATED: dict[str, str] = {}
+_DELEGATED: dict[str, tuple[str, int]] = {}   # realpath -> (library, open scopes)
+_DELEGATED_LOCK = threading.Lock()
+_SIDECARS = ("-journal", "-wal", "-shm")
 
 
 def _real(p) -> Path:
@@ -385,10 +388,41 @@ def remove_tree(path, *, place: str) -> None:
 
 def delegated(path) -> str | None:
     real = str(_real(path))
-    for key, lib in _DELEGATED.items():
-        if real == key or real.startswith(key + "-"):
-            return lib
+    with _DELEGATED_LOCK:
+        for key, (lib, _count) in _DELEGATED.items():
+            if real == key or real in {key + s for s in _SIDECARS}:
+                return lib
     return None
+
+
+def _delegate(key: str, library: str) -> None:
+    with _DELEGATED_LOCK:
+        lib, count = _DELEGATED.get(key, (library, 0))
+        _DELEGATED[key] = (lib, count + 1)
+
+
+def _undelegate(key: str) -> None:
+    """Nested managed() on one path (Task 9: a helper inside an open client) is counted:
+    only the outermost exit ends the delegation."""
+    with _DELEGATED_LOCK:
+        lib, count = _DELEGATED[key]
+        if count > 1:
+            _DELEGATED[key] = (lib, count - 1)
+        else:
+            del _DELEGATED[key]
+
+
+def _set_place_mode(path: Path, mode: int) -> OSError | None:
+    """chmod the file and its sidecars; the first failure is returned, not swallowed."""
+    first: OSError | None = None
+    for side in (path, *(path.with_name(path.name + s) for s in _SIDECARS)):
+        try:
+            os.chmod(side, mode)
+        except FileNotFoundError:
+            continue
+        except OSError as exc:
+            first = first or exc
+    return first
 
 
 @contextlib.contextmanager
@@ -398,19 +432,26 @@ def managed(path, *, place: str, library: str, dest: bool = False) -> Iterator[P
     got = _check(path, place, dest=dest)
     _ensure_dir(path.parent, place)
     key = str(_real(path))
-    _DELEGATED[key] = library
-    try:
-        yield path
-    finally:
-        _DELEGATED.pop(key, None)
-        if os.name != "nt":             # Windows: the profile ACL protects (§11.3)
-            mode = _mode(place, got, None)
-            for side in (path, *(path.with_name(path.name + s) for s in ("-journal", "-wal", "-shm"))):
-                if side.exists():
-                    with contextlib.suppress(OSError):
-                        os.chmod(side, mode)
+    _delegate(key, library)
+
+    def finish() -> OSError | None:
+        _undelegate(key)
+        # Windows: the profile ACL protects (§11.3)
+        err = _set_place_mode(path, _mode(place, got, None)) if os.name != "nt" else None
         _log("managed", got, path, None, key=library,
              digest=None if place in _SECRET else _file_sha(path))
+        return err
+
+    try:
+        yield path
+    except BaseException as exc:
+        err = finish()
+        if err is not None:             # said on the library's error, never in its place
+            exc.add_note(f"h2t: also could not set the mode of {path}: {err}")
+        raise
+    err = finish()
+    if err is not None:
+        raise err                       # a secret left wider than 0600 is not a success
 
 
 @contextlib.contextmanager
@@ -537,7 +578,7 @@ class RepoWriter:
                            capture_output=True)
         else:
             os.replace(src, dst)
-        _log("rename", "repo", dst, None, key=str(src))
+        _log("rename", "repo", dst, None, key=str(src), digest=_file_sha(dst))
         return dst
 
 
