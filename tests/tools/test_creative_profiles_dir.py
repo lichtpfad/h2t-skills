@@ -40,6 +40,7 @@ def _recipe(tmp_path: Path) -> Path:
 def test_profiles_dir_is_under_the_user_home(home, capsys):
     assert cli.main(["profiles-dir"]) == 0
     assert Path(capsys.readouterr().out.strip()) == home / ".h2t" / "data" / "creative" / "profiles"
+    assert not (home / ".h2t").exists(), "naming the directory must create nothing"
 
 
 def test_root_still_names_the_shipped_resources(home, capsys):
@@ -66,9 +67,9 @@ def test_a_shipped_profile_still_assembles_with_no_user_dir(home, tmp_path):
                      "--recipe", str(_recipe(tmp_path)), "--out", str(out)]) == 0
     assert (out / "index.html").is_file()
     # The --out files go through store (R7), which logs them under ~/.h2t/logs (§7.2);
-    # what must not appear is the profile directory.
-    assert not (home / ".h2t" / "data" / "creative").exists(), "assembling must not create the user directory"
-    assert not (home / ".h2t" / "creative").exists()
+    # nothing else may appear under ~/.h2t, the profile directory least of all.
+    made = sorted(p.name for p in (home / ".h2t").iterdir()) if (home / ".h2t").exists() else []
+    assert made == ["logs"], f"assembling must not create the user directory: {made}"
 
 
 def test_an_unknown_profile_fails(home, tmp_path, capsys):

@@ -942,6 +942,17 @@ def _run_plan(
         print("  Run 'docs-lint fix-index' for README/index rebuild.")
 
 
+def _deliverables_writer(rp: Path, cfg: dict):
+    """fix-safe's repo writer with the configured deliverables_dir as a rename target, or
+    None when the value is not a plain relative directory inside the repository."""
+    from pathlib import PurePosixPath
+    raw = str(cfg.get("deliverables_dir", "deliverables")).strip().replace("\\", "/").rstrip("/")
+    rel = PurePosixPath(raw)
+    if not rel.parts or ":" in raw or rel.is_absolute() or ".." in rel.parts or rel.parts[0] == ".git":
+        return None
+    return store.repo(rp, _FIX_SAFE, extra={"rename": (f"{rel.as_posix()}/*",)})
+
+
 def _apply_misplaced_moves(rp: Path, cfg: dict) -> list[str]:
     """Detect misplaced deliverable files and git mv tracked ones."""
     if not _MISPLACED_FILES_AVAILABLE:
@@ -953,6 +964,9 @@ def _apply_misplaced_moves(rp: Path, cfg: dict) -> list[str]:
         rp, deliverables_dir, exclude_dirs=cfg.get("exclude_dirs") or [],
     )
     fixes: list[str] = []
+    rw = _deliverables_writer(rp, cfg)
+    if findings and rw is None:
+        return [f"SKIP: deliverables_dir {deliverables_dir!r} is not a directory inside the repository"]
     for f in findings:
         if not f.get("is_tracked"):
             fixes.append(f"SKIP: {f['path']} is untracked — move manually with: git mv")
@@ -966,7 +980,7 @@ def _apply_misplaced_moves(rp: Path, cfg: dict) -> list[str]:
             fixes.append(f"SKIP: {f['path']} — destination already exists: {tgt_path}")
             continue
         try:
-            store.repo(rp, _FIX_SAFE).rename(f["path"], tgt_path, git=True)
+            rw.rename(f["path"], tgt_path, git=True)
         except subprocess.CalledProcessError as exc:
             err = (exc.stderr or b"").decode("utf-8", "replace")
             fixes.append(f"FAILED: git mv {f['path']}: {err.strip()[:80]}")
@@ -1047,7 +1061,11 @@ def _apply_safe_action(rp: Path, act: dict) -> None:
         src = rp / path
         dst = rp / (act.get("target_path") or "")
         if src.exists() and dst.parent.exists() and not dst.exists():
-            store.repo(rp, _FIX_SAFE).rename(path, act["target_path"], git=True)
+            rw = _deliverables_writer(rp, load_config(rp))
+            if rw is None:
+                raise store.WriteRefused("deliverables_dir is not a directory inside the repository",
+                                         hint="set a relative path in .claude/rules/docs-lint.yaml")
+            rw.rename(path, act["target_path"], git=True)
 
 
 def fix_frontmatter_action_single(rp: Path, md_file: Path) -> None:

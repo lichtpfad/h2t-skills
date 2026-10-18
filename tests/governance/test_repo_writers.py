@@ -126,3 +126,40 @@ def test_hook_report_ignore_lands_in_the_main_repository_of_a_worktree(tmp_path)
         ensure_hook_report_cache_ignored(main)      # the same file: no second line
     assert exclude.read_text(encoding="utf-8").splitlines().count(".h2t/lifecycle/*.json") == 1
     assert rec.violations == []
+
+
+@pytest.mark.parametrize("configured, moved", [("outputs", True), ("../outside", False),
+                                               ("/abs", False), (".git/x", False)])
+def test_fix_safe_moves_into_the_configured_deliverables_dir(configured, moved, tmp_path):
+    """docs-lint.yaml deliverables_dir (config.py) is the rename target fix-safe may use;
+    a value that does not stay inside the repository moves nothing."""
+    from h2t_ops.tools.docs import lint
+    from tests.governance.sandbox_cases import _git_repo
+    repo = tmp_path / "repo"
+    _git_repo(repo, {".claude/rules/docs-lint.yaml": f"project_checks: true\ndeliverables_dir: {configured}\n",
+                     "docs/a.pdf": "pdf", "outputs/.gitkeep": ""})
+    rec = audit.Recorder([repo], [], [], {})
+    with rec.active():
+        fixes = lint._apply_misplaced_moves(repo, lint.load_config(repo))
+    assert rec.violations == []
+    assert (repo / "outputs" / "a.pdf").exists() is moved, fixes
+    assert (repo / "docs" / "a.pdf").exists() is not moved
+    if not moved:
+        assert fixes == [f"SKIP: deliverables_dir {configured!r} is not a directory inside the repository"]
+
+
+def test_a_new_repo_directory_is_journaled_once(tmp_path):
+    """RepoWriter.mkdir writes a writes.jsonl row for a directory it created, none for one
+    that was there."""
+    import json
+
+    from h2t_ops.core import paths, store
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    rw = store.repo(repo, "h2t-scaffold-project")
+    rw.mkdir("src")
+    rw.mkdir("src")
+    log = paths.logs_dir() / "writes.jsonl"
+    rows = [json.loads(line) for line in log.read_text(encoding="utf-8").splitlines()]
+    mk = [r for r in rows if r["op"] == "mkdir"]
+    assert [r["path"] for r in mk] == [str(Path(os.path.realpath(repo)) / "src")]

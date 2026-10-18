@@ -591,9 +591,14 @@ class RepoWriter:
         append(t, line, place="repo", dest=True)
 
     def mkdir(self, rel: str) -> Path:
-        """An empty directory a project layout asks for (src/, tests/): exist_ok."""
+        """An empty directory a project layout asks for (src/, tests/): exist_ok. A new one
+        is journaled; an existing one is not a write."""
         t = self._target("mkdir", rel)
-        return mkdir(t, place="repo", dest=True)
+        existed = t.is_dir()
+        mkdir(t, place="repo", dest=True)
+        if not existed:
+            _log("mkdir", classify(t), t, None)
+        return t
 
     def rename(self, src_rel: str, dst_rel: str, *, git: bool) -> Path:
         src, dst = self._target("rename", src_rel), self._target("rename", dst_rel)
@@ -608,12 +613,17 @@ class RepoWriter:
         return dst
 
 
-def repo(root, command: str) -> RepoWriter:
+def repo(root, command: str, *, extra: dict[str, tuple[str, ...]] | None = None) -> RepoWriter:
+    """extra: patterns the repository's own config declares (docs-lint deliverables_dir),
+    added to the command's rules; the caller validates them as repository-relative."""
     from h2t_ops.core.repo_writers import REPO_WRITERS
     if command not in REPO_WRITERS:
         raise WriteRefused(f"{command!r} is not in the repo allow-list",
                            hint="add it to h2t_ops/core/repo_writers.py with what it writes")
-    return RepoWriter(Path(root), command, REPO_WRITERS[command])
+    rules = dict(REPO_WRITERS[command])
+    for op, globs in (extra or {}).items():
+        rules[op] = (*rules.get(op, ()), *globs)
+    return RepoWriter(Path(root), command, rules)
 
 
 @contextlib.contextmanager

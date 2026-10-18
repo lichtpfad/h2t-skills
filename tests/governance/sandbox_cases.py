@@ -782,13 +782,14 @@ def _post_commit(repo, mp):
 
 
 def _project_audit_setup(repo, mp):
-    _git_repo(repo, {"projects.yaml": "projects:\n  - id: foo\n    docs:\n      readme: false\n"})
+    _git_repo(repo, {"my-landings.yml": "projects:\n  - id: foo\n    docs:\n      readme: false\n"})
 
 
 def _project_audit(repo, mp):
+    """--projects-yaml names the file (R7): any name, written with dest=True."""
     from h2t_ops.lifecycle.project_audit_report import update_project_docs
-    assert update_project_docs(repo / "projects.yaml", "foo", {"readme": True})
-    assert "readme: true" in (repo / "projects.yaml").read_text(encoding="utf-8")
+    assert update_project_docs(repo / "my-landings.yml", "foo", {"readme": True})
+    assert "readme: true" in (repo / "my-landings.yml").read_text(encoding="utf-8")
 
 
 def _plain_repo(repo, mp):
@@ -808,7 +809,6 @@ REPO_SCENARIOS: dict[str, tuple] = {
     "h2t-agent-profile": (_plain_repo, _agent_profile, ()),
     "plan-closer": (_plan_closer_setup, _plan_closer, ()),
     "post-git-commit-docs-lint": (_post_commit_setup, _post_commit, ()),
-    "h2t-project-audit-report": (_project_audit_setup, _project_audit, ()),
 }
 
 
@@ -971,9 +971,9 @@ CASES: list[Case] = [
     _repo_case("repo.agent-profile", "h2t-agent-profile"),
     _repo_case("repo.plan-closer", "plan-closer"),
     _repo_case("repo.post-commit-docs-lint", "post-git-commit-docs-lint"),
-    _repo_case("repo.project-audit", "h2t-project-audit-report"),
     Case("repo.docs-lint.save", _in_repo(_docs_lint_save), setup=_in_repo(_plain_repo)),
     Case("repo.runbook", _in_repo(_runbook), setup=_in_repo(_plain_repo)),
+    Case("repo.project-audit", _in_repo(_project_audit), setup=_in_repo(_project_audit_setup)),
     Case("agent-profile.catalog.dest", _in_repo(_agent_catalog), setup=_in_repo(_agent_catalog_setup)),
     Case("drawio.generate.dest", _in_repo(_drawio_generate)),
     Case("drawio.export.dest", _in_repo(_drawio_export), setup=_in_repo(_drawio_export_setup)),

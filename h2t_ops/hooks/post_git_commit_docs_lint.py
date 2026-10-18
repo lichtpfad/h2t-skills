@@ -3,7 +3,8 @@
 Not a hooks.json entry: scaffold-project writes `h2t-hook post-git-commit-docs-lint` into a
 project's `.claude/settings.json` (h2t_ops/lifecycle/scaffold_project.py). Those files are
 committed and outlive any plugin version, so the 3.x contract is kept: an empty or
-unparseable stdin still runs the check, nothing is printed, the report goes to
+unparseable stdin still runs the check, nothing is printed on stdout (a failed write
+leaves one line on stderr), the report goes to
 `.h2t/lifecycle/post-git-commit-docs-lint.json`, and the exit code is always 0.
 
 Port of the 3.x handler of the same name. One change: docs-lint is the package's
@@ -21,6 +22,7 @@ from pathlib import Path
 from typing import Any
 
 from h2t_ops.core import store
+from h2t_ops.core.errors import H2TError
 
 SCHEMA = "h2t_lifecycle_report/v0.1"
 SCHEMA_VERSION = "0.1"
@@ -221,5 +223,8 @@ def main(argv: list[str]) -> int:
             ),
         )
         return 0
-    except Exception:
+    except (OSError, subprocess.SubprocessError, H2TError) as exc:
+        # Non-blocking (exit 0, the 3.x contract) but not silent: one line on stderr, the
+        # stdout channel stays empty. Anything else is a defect and surfaces as one.
+        print(f"h2t-hook {COMMAND}: report not written: {type(exc).__name__}: {exc}", file=sys.stderr)
         return 0

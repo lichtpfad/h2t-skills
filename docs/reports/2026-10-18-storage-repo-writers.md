@@ -46,7 +46,7 @@ date: "2026-10-18"
 | | каталоги шаблона из `docs-lint.yaml` и `create_dir` из плана | `mkdir` |
 | | `docs/**/*.md` (недостающие поля frontmatter) | `replace` |
 | | `.gitignore` (шаблоны временных файлов) | `replace` |
-| | `docs/**` → `deliverables/**` (отслеживаемые html/pdf/…) | `rename` через `git mv` |
+| | `docs/**` → `deliverables/**` или `deliverables_dir` из `.claude/rules/docs-lint.yaml` (отслеживаемые html/pdf/…) | `rename` через `git mv`; значение конфига должно быть относительным каталогом внутри репо |
 | | `.h2t/lint-apply-<ts>.json` (режим `--plan`) | `replace` |
 | `h2t-docs-lint fix-index` | `docs/README.md` | `replace` между маркерами или дописать раздел |
 | | `.h2t/lint-apply-<ts>.json` (режим `--plan`) | `replace` |
@@ -57,7 +57,6 @@ date: "2026-10-18"
 | `h2t-agent-profile` | `.claude/agent-profile.json`, `.claude/settings.json` | `replace`, `settings.json` — слияние |
 | хук `plan-closer` | `docs/superpowers/{plans,specs}/*` (`status: "done"`, `pr: N`) | `replace` |
 | хук `post-git-commit-docs-lint` | `.h2t/lifecycle/post-git-commit-docs-lint.json` | `replace` |
-| `h2t-project-audit-report` | `projects.yaml` (по умолчанию `$H2T_DEV_ROOT/h2t-landings`) | `replace` |
 | `init-project`, `h2t-project-register` | `.claude/project-id` | `create` (Task 15, R32) |
 
 ### Путь, названный пользователем (R7)
@@ -73,6 +72,7 @@ date: "2026-10-18"
 | `h2t-runbook new` | `dest` | `store.replace` |
 | `h2t-docs-lint plan --save` | `FILE` | `store.replace` |
 | `h2t-agent-profile catalog …` | файл каталога | `store.replace` |
+| `h2t-project-audit-report` | `--projects-yaml` (по умолчанию `$H2T_DEV_ROOT/h2t-landings/projects.yaml`), любое имя | `store.replace`; отказ store — JSON-ошибка команды, выход 1 |
 
 ## Расхождения с §7.1
 
@@ -82,7 +82,8 @@ date: "2026-10-18"
 | `h2t-agent-profile`: `.claude/settings*.json` | `.claude/settings.json` и `.claude/agent-profile.json` | строка в спеке уточнена |
 | `h2t-docs-lint fix-safe/fix-index/retire`: `docs/**` | ещё `.gitignore`, `deliverables/**`, корневые каталоги шаблона и `.h2t/lint-apply-*.json`; `new` тоже пишет в `docs/**` | строка в спеке дополнена |
 | `h2t-docs-init`: `docs/**` каркас, конфиг docs-lint | ещё `.claude/rules/documentation.md`, `.pymarkdown.yaml`, `.vale.ini`, `.h2t/lint-state.jsonl`, дописывание `.gitignore` | строка в спеке дополнена |
-| — | хуки `plan-closer` и `post-git-commit-docs-lint`, `h2t-milestone-closure`, `docs-index`, `h2t-project-audit-report` | в таблице спеки их не было, добавлены строки |
+| — | хуки `plan-closer` и `post-git-commit-docs-lint`, `h2t-milestone-closure`, `docs-index` | в таблице спеки их не было, добавлены строки |
+| — | `h2t-project-audit-report` пишет файл из `--projects-yaml` | добавлен в строку «файл, названный пользователем» |
 
 Правило для `.claude/project-id` («создать, если нет», R32) замер не менял.
 
@@ -91,6 +92,9 @@ date: "2026-10-18"
 - Дочерние процессы. `git mv` внутри `RepoWriter.rename`, draw.io при экспорте и docs-init,
   который scaffold запускает отдельным процессом, `Recorder` не видит. Пути, которые они
   изменили, второе утверждение теста всё равно сверяет со списком.
-- Настраиваемый `deliverables_dir` в `.claude/rules/docs-lint.yaml`. Список разрешает
-  перенос только в `deliverables/**`. При другом значении `fix-safe` отказывает в переносе
-  и печатает `FAILED: git mv …` с причиной, а не переносит молча.
+- `deliverables_dir` в `.claude/rules/docs-lint.yaml` — часть списка, которую задаёт сам
+  репозиторий: `store.repo(..., extra={"rename": ("<dir>/*",)})`. Значение с `..`,
+  абсолютное или под `.git` не переносит ничего: `SKIP: deliverables_dir … is not a
+  directory inside the repository`.
+- `RepoWriter.mkdir` пишет строку `mkdir` в `logs/writes.jsonl` только для каталога,
+  которого не было.

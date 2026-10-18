@@ -360,10 +360,10 @@ Vault в `paths.yaml` не задаётся: его адрес — общий д
 | `h2t-scaffold-project` | `.gitignore`, `README.md`, `CLAUDE.md`, `docs/.artifacts/.gitkeep`, `.h2t/structure.yaml`, `.claude/settings.json`, `.h2t/project-setup-report.json`, `.git/info/exclude`, корневые каталоги типа проекта | шаблоны — создать, если нет; `settings.json` — слияние; отчёт — замена; `exclude` — дописать строку |
 | `h2t-docs-init` | `docs/**` каркас, конфиг docs-lint, `.claude/rules/documentation.md`, `.pymarkdown.yaml`, `.vale.ini`, `.h2t/lint-state.jsonl`; `.gitignore` | создать, если нет; `.gitignore` — дописать строки |
 | `h2t-agent-profile` | `.claude/settings.json`, `.claude/agent-profile.json` | слияние |
-| `h2t-docs-lint fix-safe/fix-index/retire/new` | `docs/**`; у `fix-safe` ещё `.gitignore`, `deliverables/**`, каталоги шаблона; `.h2t/lint-apply-*.json` | замена, перенос, создание — только по явной команде пользователя |
-| `docs-index`, `h2t-milestone-closure`, `h2t-project-audit-report` | `docs/README.md`; `.h2t/lifecycle/milestone-closure-*.json`; `projects.yaml` | замена |
+| `h2t-docs-lint fix-safe/fix-index/retire/new` | `docs/**`; у `fix-safe` ещё `.gitignore`, `deliverables/**` (или `deliverables_dir` из конфига репо), каталоги шаблона; `.h2t/lint-apply-*.json` | замена, перенос, создание — только по явной команде пользователя |
+| `docs-index`, `h2t-milestone-closure` | `docs/README.md`; `.h2t/lifecycle/milestone-closure-*.json` | замена |
 | хуки `plan-closer`, `post-git-commit-docs-lint` | `docs/superpowers/{plans,specs}/*`; `.h2t/lifecycle/post-git-commit-docs-lint.json` | замена |
-| `h2t-drawio`, `h2t-creative assemble`, `h2t-runbook new`, `h2t-docs-lint plan --save` | файл, названный пользователем | замена |
+| `h2t-drawio`, `h2t-creative assemble`, `h2t-runbook new`, `h2t-docs-lint plan --save`, `h2t-project-audit-report` | файл, названный пользователем | замена |
 
 **Протокол манифеста коннектора.** Прерванная запись не должна оставлять файл, который
 коннектор потом не признаёт своим.

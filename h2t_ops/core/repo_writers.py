@@ -6,8 +6,10 @@ paths it changed (docs/reports/2026-10-18-storage-repo-writers.md). The test
 tests/governance/test_repo_writers.py runs them again and fails on a path not listed here.
 
 A path the user named (`h2t-drawio`, `h2t-creative assemble`, `h2t-runbook new`,
-`h2t-docs-lint plan --save`, the agent-profile catalog) is not a repository write: it goes
-through store with dest=True (plan R7).
+`h2t-docs-lint plan --save`, the agent-profile catalog, `h2t-project-audit-report`'s
+projects.yaml) is not a repository write: it goes through store with dest=True (plan R7).
+fix-safe's rename target also takes the repository's own `deliverables_dir`
+(tools/docs/lint.py _deliverables_writer, store.repo(extra=...)).
 """
 # Directories a project type lays out at the root (tools/docs/project_types.py root_dirs);
 # tests/governance/test_repo_writers.py keeps the two lists equal.
@@ -53,5 +55,4 @@ REPO_WRITERS: dict[str, dict[str, tuple[str, ...]]] = {
     # post-commit hook leaves its report.
     "plan-closer": {"replace": _LIFECYCLE_DOCS},
     "post-git-commit-docs-lint": {"replace": (".h2t/lifecycle/post-git-commit-docs-lint.json",)},
-    "h2t-project-audit-report": {"replace": ("projects.yaml",)},
 }

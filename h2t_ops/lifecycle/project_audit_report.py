@@ -17,6 +17,7 @@ import sys
 from pathlib import Path
 
 from h2t_ops.core import store
+from h2t_ops.core.errors import H2TError
 
 
 def update_project_docs(yaml_path: Path, project_id: str, fields: dict[str, bool]) -> bool:
@@ -44,8 +45,7 @@ def update_project_docs(yaml_path: Path, project_id: str, fields: dict[str, bool
 
     if updated_block != block:
         text = text.replace(block, updated_block)
-        # projects.yaml of the landings repository; its allow-list: core/repo_writers.py
-        store.repo(yaml_path.parent, "h2t-project-audit-report").replace(yaml_path.name, text)
+        store.replace(yaml_path, text, place="repo", dest=True)   # the file you named (R7)
 
     # Build report
     {
@@ -92,7 +92,11 @@ def main():
         print(json.dumps({"error": f"File not found: {yaml_path}"}))
         sys.exit(1)
 
-    ok = update_project_docs(yaml_path, args.project_id, fields)
+    try:
+        ok = update_project_docs(yaml_path, args.project_id, fields)
+    except H2TError as exc:     # store refused the path: said in the command's own shape
+        print(json.dumps({"error": f"{exc}", "yaml_path": str(yaml_path)}))
+        sys.exit(1)
     result = {
         "success": ok,
         "project_id": args.project_id,
