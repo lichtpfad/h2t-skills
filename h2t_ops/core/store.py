@@ -290,11 +290,24 @@ def _tmp_beside(path: Path, payload: bytes, mode: int) -> str:
 
 
 def replace(path, data: str | bytes, *, place: str, mode: int | None = None,
-            compat: bool = False, dest: bool = False, keys: tuple[str, ...] = ()) -> Path:
+            compat: bool = False, dest: bool = False, keys: tuple[str, ...] = (),
+            in_place: bool = False) -> Path:
+    """in_place: truncate and write the target itself, no temp file. Only for a target
+    os.replace cannot take — an NTFS alternate data stream, "name:stream" (research
+    objects on Windows); a reader may then see a partial file."""
     path = Path(path)
     got = _check(path, place, dest=dest, compat=compat)
     payload = _bytes(data)
     _ensure_dir(path.parent, place)
+    if in_place:
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_BINARY", 0),
+                     _mode(place, got, mode))
+        try:
+            _write_all(fd, payload)
+        finally:
+            os.close(fd)
+        _log("replace", got, path, payload, keys=keys)
+        return path
     tmp = _tmp_beside(path, payload, _mode(place, got, mode))
     try:
         os.replace(tmp, path)

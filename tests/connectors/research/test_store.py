@@ -210,3 +210,23 @@ def test_upsert_with_corrupt_index_of_non_objects_keeps_file_and_warns(tmp_path,
 
     assert path.read_text(encoding="utf-8") == "[null]\n"
     assert "rebuild-indexes" in capsys.readouterr().err
+
+
+def test_a_windows_stream_object_is_written_through_store(tmp_path, monkeypatch):
+    """On Windows an object name "research-doc:x.json" is an NTFS stream, which os.replace
+    cannot take: it is written in place — through store, under the 3.x name, logged, and
+    seen by the sandbox as a door write (#548 §7.2)."""
+    from h2t_ops.core import paths
+    from tests.governance.test_sandbox import build_sandbox
+
+    with build_sandbox(tmp_path, monkeypatch) as sb:
+        monkeypatch.setattr(store, "OS_NAME", "nt")
+        target = store.object_path(store.default_root(), "documents", "research-doc:abc")
+        with sb.recorder.active():
+            store.write_json(target, {"id": 1})
+        assert sb.recorder.violations == []
+        assert json.loads(target.read_text(encoding="utf-8")) == {"id": 1}
+        assert [p.name for p in target.parent.iterdir()] == ["research-doc:abc.json"]  # no temp
+        rows = [json.loads(line) for line in
+                (paths.logs_dir() / "writes.jsonl").read_text(encoding="utf-8").splitlines()]
+        assert any(r["path"] == str(target) and r["op"] == "replace" for r in rows)

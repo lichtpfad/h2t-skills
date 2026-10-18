@@ -10,6 +10,10 @@ from typing import Any
 from h2t_ops.core import paths
 from h2t_ops.core import store as core_store
 
+# Read at call time, so a test can take the Windows branch without changing os.name for
+# everyone (setup/sync.py does the same).
+OS_NAME = os.name
+
 
 def _sha(prefix: str, *parts: str) -> str:
     payload = "||".join(part.strip() for part in parts if str(part).strip())
@@ -105,13 +109,10 @@ def copy_file(src: Path, dst: Path, *, exclusive: bool = False) -> None:
 def write_json(path: Path, payload: Any) -> None:
     path = Path(path)
     text = json.dumps(payload, indent=2, ensure_ascii=False) + "\n"
-    if os.name == "nt" and ":" in path.name:
-        # On NTFS "id:x.json" is an alternate data stream (see maintenance), and a
-        # stream cannot be the target of os.replace; write it in place.
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(text, encoding="utf-8")
-        return
-    save_text(path, text)
+    # On NTFS "id:x.json" is an alternate data stream (see maintenance), and a stream
+    # cannot be the target of os.replace: store writes it in place, under the same name 3.x
+    # used, still checked and logged.
+    core_store.replace(path, text, in_place=OS_NAME == "nt" and ":" in path.name, **_where(path))
 
 
 class IndexUnreadable(Exception):

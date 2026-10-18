@@ -67,26 +67,31 @@ def _real_home_artifacts(home: Path | None = None) -> dict[str, tuple[int, ...]]
     against a temporary tree (tests/governance/test_suite_isolation.py)."""
     # Built here, not from h2t_ops.core.paths: pytest_sessionstart runs before any fixture,
     # so Path.home() is still the real one.
+    # Every entry of ~/.h2t and ~/.dor, each its own key, so the report names the area.
+    # Not ~/.h2t/logs and ~/.h2t/run: the live session's own hooks write there while the
+    # suite runs. Task 12 wrote into ~/.h2t/research, which the old short list did not watch.
     home = Path.home() if home is None else home
-    h2t = home / ".h2t"
-    watched = [
-        h2t / "activity" / "spool.jsonl",
-        h2t / "sessions",
-        h2t / "records",
-        h2t / "secrets",
-        h2t / "state",
-        h2t / "data",
-        h2t / "layout.json",
-        home / ".config" / "google-calendar-mcp" / "tokens.json",
-    ]
+    watched: list[Path] = []
+    for top, skip in ((home / ".h2t", {"logs", "run"}), (home / ".dor", set())):
+        try:
+            watched += [p for p in top.iterdir() if p.name not in skip]
+        except OSError:
+            continue
+    watched += [home / ".config" / n for n in ("google-calendar-mcp", "gmail", "notion", "telegram")]
     state: dict[str, tuple[int, ...]] = {}
     for path in watched:
         try:
             if path.is_dir():
-                stats = [p.stat() for p in path.rglob("*") if p.is_file()]
+                stats = []
+                for d, _dirs, names in os.walk(path):
+                    for n in names:
+                        try:
+                            stats.append(os.lstat(os.path.join(d, n)))
+                        except OSError:
+                            continue
                 state[str(path)] = (len(stats), sum(st.st_size for st in stats),
                                     max((st.st_mtime_ns for st in stats), default=0))
-            elif path.is_file():
+            elif path.exists():
                 st = path.stat()
                 state[str(path)] = (st.st_size, st.st_mtime_ns)
         except OSError:

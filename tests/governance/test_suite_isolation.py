@@ -50,3 +50,24 @@ def test_the_real_home_tripwire_sees_a_same_second_same_size_rewrite(tmp_path):
     assert after[str(record.parents[1])] != before[str(record.parents[1])]
     (record.parent / "b.json").write_text("")
     assert snapshot(tmp_path)[str(record.parents[1])] != after[str(record.parents[1])]
+
+
+def test_the_real_home_tripwire_watches_every_area_but_the_live_logs(tmp_path):
+    """Task 12 wrote into ~/.h2t/research, which the tripwire did not watch. Every entry of
+    ~/.h2t (logs/ and run/ aside: live hooks write there), ~/.dor and the 3.x ~/.config
+    dirs are watched now — on a temporary tree, never the real home."""
+    snapshot = _root_conftest()._real_home_artifacts
+    areas = [tmp_path / ".h2t" / "research", tmp_path / ".h2t" / "creative" / "profiles",
+             tmp_path / ".h2t" / "evals", tmp_path / ".h2t" / "config",
+             tmp_path / ".dor" / "lake", tmp_path / ".config" / "telegram",
+             tmp_path / ".h2t" / "logs", tmp_path / ".h2t" / "run"]
+    for d in areas:
+        d.mkdir(parents=True)
+    before = snapshot(tmp_path)
+    for d in areas:
+        (d / "x.json").write_text("{}")
+    after = snapshot(tmp_path)
+    changed = {k for k in set(before) | set(after) if before.get(k) != after.get(k)}
+    assert changed == {str(tmp_path / ".h2t" / "research"), str(tmp_path / ".h2t" / "creative"),
+                       str(tmp_path / ".h2t" / "evals"), str(tmp_path / ".h2t" / "config"),
+                       str(tmp_path / ".dor" / "lake"), str(tmp_path / ".config" / "telegram")}

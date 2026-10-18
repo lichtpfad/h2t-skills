@@ -17,9 +17,9 @@ _spec.loader.exec_module(storage_map)
 
 CEILINGS = {  # measured 2026-10-18 on ab078f4f; lowered after Task 6, Task 8 (Google), Task 9
     # (Telegram), Task 10 (every connector and setup through core.secrets), Task 11 (lake, round 1),
-    # Task 12 (downloads, research, evals, creative profiles)
+    # Task 12 (downloads, research, evals, creative profiles; round 1: the NTFS-stream branch)
     "home": 43, "legacy_roots": 4, "path_env": 7, "dotenv": 0,
-    "secret_readers": 0, "writes": 121, "sqlite": 0,
+    "secret_readers": 0, "writes": 119, "sqlite": 0,
 }
 
 

@@ -15,12 +15,20 @@ from typing import BinaryIO
 
 from h2t_ops.core import paths, store
 
+_RESERVED = frozenset({"CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(1, 10)),
+                       *(f"LPT{i}" for i in range(1, 10))})
+
 
 def plain_name(raw: str) -> str:
-    """One path segment on every platform: no / or \\, no drive colon, no leading dot."""
+    """One path segment on every platform: no / or \\, no drive colon, no leading dot, no
+    trailing dot or space (Windows drops them), and not a Windows device name (CON, NUL.txt,
+    com1.log open the device, not a file) — those get a leading underscore."""
     for ch in ("/", "\\", ":"):
         raw = raw.replace(ch, "_")
-    return raw.strip().lstrip(".")
+    name = raw.strip().lstrip(".").rstrip(". ")
+    if name.split(".", 1)[0].rstrip(" ").upper() in _RESERVED:
+        name = "_" + name
+    return name
 
 
 def last_segment(raw: str | None) -> str:
