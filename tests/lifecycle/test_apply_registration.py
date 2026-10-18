@@ -137,6 +137,21 @@ def test_backup_goes_to_state_and_keeps_ten(tmp_path, monkeypatch):
     assert len(list(paths.backups_dir().glob("repo-mapping.yaml.*"))) == 10
 
 
+def test_backups_of_another_config_root_never_prune_configs(tmp_path, monkeypatch):
+    """Retention is per source path: twelve edits of domains.yaml in another root keep
+    their own ten and leave config/'s copy alone."""
+    _make_config(paths.config_dir(), MINIMAL_MAPPING, MINIMAL_DOMAINS)
+    other = tmp_path / "other-root"
+    _make_config(other, MINIMAL_MAPPING, MINIMAL_DOMAINS)
+    _clock(monkeypatch, (2026, 10, 18, 11, 0, 0), *[(2026, 10, 18, 12, 0, n // 2) for n in range(24)])
+    backups.save_backup(paths.config_dir() / "domains.yaml")
+    for n in range(12):
+        _register(n, config_root=str(other))
+    assert [p.name for p in paths.backups_dir().glob("domains.yaml.*")] == ["domains.yaml.20261018-110000"]
+    (sub,) = [d for d in paths.backups_dir().iterdir() if d.is_dir()]
+    assert len(list(sub.glob("domains.yaml.*"))) == 10
+
+
 def test_two_backups_in_one_second_get_distinct_names(tmp_path, monkeypatch):
     """R46: a second edit in the same second gets -2; neither copy is overwritten."""
     cfg = paths.config_dir()
