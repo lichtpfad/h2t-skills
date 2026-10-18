@@ -122,6 +122,34 @@ def test_setup_does_not_overwrite_a_preference_saved_meanwhile(renamed_host, mon
     assert sorted(p.name for p in settings.parent.iterdir()) == ["settings.json"]
 
 
+def test_setup_does_not_overwrite_a_save_landing_while_it_publishes(renamed_host, monkeypatch):
+    """The save lands after the temp file is written, before publication: the stamp is
+    compared there (store.replace expect=), not before the temp file exists."""
+    from h2t_ops.core import store
+    monkeypatch.delenv("CLAUDE_CONFIG_DIR", raising=False)
+    settings = _settings(renamed_host)
+    settings.parent.mkdir(parents=True)
+    settings.write_text(json.dumps({"model": "x"}), encoding="utf-8")
+    real, calls = store._tmp_beside, []
+
+    def claude_code_saves_after_the_temp(path, payload, mode):
+        tmp = real(path, payload, mode)
+        if not calls:
+            settings.write_text(json.dumps({"model": "x", "theme": "dark"}), encoding="utf-8")
+            os.utime(settings, ns=(1, 10**18))
+        calls.append(1)
+        return tmp
+
+    monkeypatch.setattr(store, "_tmp_beside", claude_code_saves_after_the_temp)
+
+    result = setup_h2t.ensure_machine_name()
+
+    assert result["status"] == "written" and len(calls) == 2
+    assert json.loads(settings.read_text(encoding="utf-8")) == {
+        "model": "x", "theme": "dark", "env": {"H2T_MACHINE_NAME": "mac"}}
+    assert sorted(p.name for p in settings.parent.iterdir()) == ["settings.json"]
+
+
 def _history(renamed_host, *machines):
     # The 3.x session root, which ensure_machine_name still lists (setup/legacy.py).
     for machine in machines:

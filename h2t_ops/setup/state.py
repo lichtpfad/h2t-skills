@@ -26,7 +26,8 @@ class Install:
 
 
 def _atomic_write(path: Path, data: bytes) -> None:
-    store.replace(path, data, place="run")
+    # 0600 as in 3.x, where mkstemp made both files: they name the user's tool paths.
+    store.replace(path, data, place="run", mode=0o600)
 
 
 def _fwd(p: str | None) -> str:

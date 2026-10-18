@@ -1,4 +1,5 @@
 """Repo-wide pytest fixtures."""
+import json
 import os
 import shutil
 import subprocess
@@ -162,9 +163,58 @@ def _changed_files(area: str, since_ns: int, limit: int = 5) -> list[str]:
     return [f for _, f in sorted(found, reverse=True)[:limit]]
 
 
+def _writes_log_size(home: Path | None = None) -> int:
+    """Size of the real logs/writes.jsonl now: where the rows of this run will start."""
+    try:
+        return ((REAL_HOME if home is None else home) / ".h2t" / "logs" / "writes.jsonl").stat().st_size
+    except OSError:
+        return 0
+
+
+def _stray_write_rows(since: int, roots: list[str], home: Path | None = None) -> list[str]:
+    """Paths of rows store appended to the real logs/writes.jsonl after byte `since` that
+    point under one of `roots` (pytest's basetemp, the temp dir, the collect-home).
+
+    _LIVE_LOGS keeps writes.jsonl out of the snapshot, because live sessions append to it;
+    a store write from a test that forgot its isolation leaves its row there too (Task 18:
+    21 rows of test.drawio temp paths). The log holds paths and hashes, never values, and
+    only the path is read. A rotation during the run moves the old tail to writes.1.jsonl."""
+    logs = (REAL_HOME if home is None else home) / ".h2t" / "logs"
+    current = logs / "writes.jsonl"
+    chunks: list[bytes] = []
+    try:
+        size = current.stat().st_size
+    except OSError:
+        size = 0
+    try:
+        if size < since:                    # rotated: the old tail, then the new file whole
+            with open(logs / "writes.1.jsonl", "rb") as fh:
+                fh.seek(since)
+                chunks.append(fh.read())
+            since = 0
+        if size:
+            with open(current, "rb") as fh:
+                fh.seek(since)
+                chunks.append(fh.read())
+    except OSError:
+        return []
+    real_roots = {os.path.realpath(r) for r in roots} | set(roots)
+    out = []
+    for line in b"".join(chunks).decode("utf-8", "replace").splitlines():
+        try:
+            path = json.loads(line).get("path") or ""
+        except (ValueError, AttributeError):
+            continue
+        real = os.path.realpath(path) if path else ""
+        if any(p == r or p.startswith(r.rstrip(os.sep) + os.sep) for r in real_roots for p in (path, real) if p):
+            out.append(path)
+    return out
+
+
 def pytest_sessionstart(session):
     session.stash_h2t_home_started_ns = time.time_ns()
     session.stash_h2t_home_before = _real_home_artifacts()
+    session.stash_h2t_writes_size = _writes_log_size()
 
 
 def pytest_sessionfinish(session, exitstatus):
@@ -178,6 +228,19 @@ def pytest_sessionfinish(session, exitstatus):
         return
     after = _real_home_artifacts()
     changed = [k for k in set(before) | set(after) if before.get(k) != after.get(k)]
+    import tempfile
+    roots = [str(session.config._tmp_path_factory.getbasetemp()), tempfile.gettempdir()]
+    collect_home = getattr(session.config, "stash_h2t_collect_home", None)
+    if collect_home:
+        roots.append(collect_home)
+    stray = _stray_write_rows(getattr(session, "stash_h2t_writes_size", 0), roots)
+    if stray:
+        print(f"\nERROR: the suite journalled {len(stray)} store writes into the real "
+              f"{REAL_HOME / '.h2t' / 'logs' / 'writes.jsonl'} (package code ran with the real "
+              "HOME or H2T_PATH_ROOT; Task 18):")
+        for path in stray[:10]:
+            print(f"    {path}")
+        session.exitstatus = 1
     if changed:
         print("\nERROR: the suite wrote into the real home (#441):")
         since = getattr(session, "stash_h2t_home_started_ns", 0)

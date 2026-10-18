@@ -30,6 +30,44 @@ def test_replace_writes_atomically_and_logs(home):
     assert row["caller"].startswith("tests.core.test_store") or "test_store" in row["caller"]
 
 
+def _save_after_the_temp_file(monkeypatch, target, text):
+    """Another program saves the target after store wrote its temp file, before publication."""
+    real = store._tmp_beside
+
+    def tmp_then_save(path, payload, mode):
+        tmp = real(path, payload, mode)
+        target.write_text(text)
+        os.utime(target, ns=(1, 10**18))
+        return tmp
+    monkeypatch.setattr(store, "_tmp_beside", tmp_then_save)
+
+
+def test_replace_with_expect_does_not_publish_over_a_concurrent_save(home, monkeypatch):
+    target = paths.state_dir() / "s.json"
+    store.replace(target, "mine", place="state")
+    seen = store.stamp(target)
+    _save_after_the_temp_file(monkeypatch, target, "theirs")
+    with pytest.raises(store.Changed):
+        store.replace(target, "stale copy", place="state", expect=seen)
+    assert target.read_text() == "theirs"
+    assert sorted(p.name for p in target.parent.iterdir()) == ["s.json"]   # no temp left
+
+
+def test_replace_with_expect_none_needs_the_target_still_absent(home, monkeypatch):
+    target = paths.state_dir() / "new.json"
+    _save_after_the_temp_file(monkeypatch, target, "theirs")
+    with pytest.raises(store.Changed):
+        store.replace(target, "mine", place="state", expect=None)
+    assert target.read_text() == "theirs"
+
+
+def test_replace_with_a_matching_expect_publishes(home):
+    target = paths.state_dir() / "s.json"
+    store.replace(target, "one", place="state", expect=None)
+    store.replace(target, "two", place="state", expect=store.stamp(target))
+    assert target.read_text() == "two"
+
+
 def test_write_is_classified_by_real_path_not_by_name(home):
     with pytest.raises(store.WriteRefused, match="secrets.shared"):
         store.replace(paths.secrets_shared() / "x.env", "K=fake-k", place="state")

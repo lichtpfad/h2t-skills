@@ -1005,7 +1005,9 @@ def _deploy_script(sb, mp):
 def _deploy_input(sb, mp):
     from h2t_ops.deploy import executor
     out = executor._run_script(sb.deploy_script, repo_root=sb.home.parent, payload={"service": "svc"},
-                               action="deploy", dry_run=True, environ={"PATH": "/usr/bin:/bin"})
+                               action="deploy", dry_run=True,
+                               environ={"PATH": "/usr/bin:/bin", "HOME": str(sb.home),
+                                        "USERPROFILE": str(sb.home)})
     assert out["status"] == "deployed", out
 
 

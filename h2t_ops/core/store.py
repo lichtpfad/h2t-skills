@@ -35,6 +35,23 @@ class AlreadyExists(FileExistsError):
     """create() found a file at the target; nothing was written."""
 
 
+class Changed(Exception):
+    """replace(expect=...) found the target changed since the caller read it; nothing was
+    written. The caller reads again and retries (a file another program also writes)."""
+
+
+_ANY = object()
+
+
+def stamp(path) -> tuple[int, int] | None:
+    """(size, mtime_ns) of a file, None if there is none: what replace(expect=) compares."""
+    try:
+        st = os.stat(path)
+    except FileNotFoundError:
+        return None
+    return (st.st_size, st.st_mtime_ns)
+
+
 _PACKAGE = ("run", "config", "secrets.shared", "secrets.local", "records.sessions",
             "records.activity", "records.evals", "records.imports", "data", "state", "logs",
             "layout")   # layout.json: a file place, classified by its exact path
@@ -292,13 +309,21 @@ def _tmp_beside(path: Path, payload: bytes, mode: int) -> str:
 
 def replace(path, data: str | bytes, *, place: str, mode: int | None = None,
             compat: bool = False, dest: bool = False, keys: tuple[str, ...] = (),
-            in_place: bool = False) -> Path:
+            in_place: bool = False, expect=_ANY) -> Path:
     """in_place: truncate and write the target itself, no temp file. Only for a target
     os.replace cannot take — an NTFS alternate data stream, "name:stream" (research
-    objects on Windows); a reader may then see a partial file."""
+    objects on Windows); a reader may then see a partial file.
+
+    expect: the target's stamp() when the caller read it (None: it did not exist). Compared
+    after the temp file is written, immediately before publication; on a mismatch the temp
+    file is removed and Changed is raised, so a concurrent writer's save is not overwritten
+    with the caller's stale copy. What is left is the gap between that stat and os.replace."""
     path = Path(path)
     got = _check(path, place, dest=dest, compat=compat)
     # Not a general escape from the atomic write: a stream name only, never a secret.
+    if in_place and expect is not _ANY:
+        raise WriteRefused(f"{path}: an in-place write has no publication to make conditional",
+                           hint="write it with replace() without in_place")
     if in_place and (":" not in path.name or place in _SECRET or got in _SECRET):
         raise WriteRefused(f"{path}: an in-place write is only for an NTFS stream "
                            "(name:stream) outside secrets",
@@ -319,6 +344,8 @@ def replace(path, data: str | bytes, *, place: str, mode: int | None = None,
         return path
     tmp = _tmp_beside(path, payload, _mode(place, got, mode))
     try:
+        if expect is not _ANY and stamp(path) != expect:
+            raise Changed(f"{path} changed since it was read; not replaced")
         os.replace(tmp, path)
     except BaseException:
         with contextlib.suppress(FileNotFoundError):

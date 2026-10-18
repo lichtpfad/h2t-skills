@@ -102,3 +102,30 @@ def test_the_real_home_tripwire_watches_every_area_but_the_live_logs(tmp_path):
     # a red names the files, not only the area tuple
     files = _root_conftest()._changed_files(str(tmp_path / ".h2t" / "research"), since)
     assert files == [str(tmp_path / ".h2t" / "research" / "x.json")]
+
+
+def test_the_writes_journal_tripwire_names_rows_appended_under_the_test_roots(tmp_path):
+    """Positive control on an injected home: writes.jsonl is not in the snapshot (live
+    sessions append to it), so the rows this run appended are read by path (Task 18)."""
+    import json
+    mod = _root_conftest()
+    log = tmp_path / "home" / ".h2t" / "logs" / "writes.jsonl"
+    log.parent.mkdir(parents=True)
+    test_root = tmp_path / "basetemp"
+    def row(p):
+        return json.dumps({"op": "replace", "place": "tmp", "path": str(p)}) + "\n"
+    log.write_text(row(test_root / "before-the-run.drawio"))
+    since = mod._writes_log_size(tmp_path / "home")
+    assert since > 0
+    with log.open("a") as fh:
+        fh.write(row(test_root / "x" / "test.drawio"))
+        fh.write(row(tmp_path / "elsewhere" / "live-session.json"))
+        fh.write("not json\n")
+    assert mod._stray_write_rows(since, [str(test_root)], tmp_path / "home") == [
+        str(test_root / "x" / "test.drawio")]
+    # rotation mid-run: the tail moved to writes.1.jsonl, a fresh writes.jsonl began
+    log.rename(log.with_name("writes.1.jsonl"))
+    log.write_text(row(test_root / "after-rotation.md"))
+    assert mod._stray_write_rows(since, [str(test_root)], tmp_path / "home") == [
+        str(test_root / "x" / "test.drawio"), str(test_root / "after-rotation.md")]
+

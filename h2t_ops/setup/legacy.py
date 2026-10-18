@@ -363,7 +363,7 @@ def ensure_machine_name(*, name: str = "") -> dict[str, Any]:
     # Claude Code writes this file too. Replace it only if it is unchanged since it was
     # read, so a preference saved meanwhile is not overwritten with the stale copy.
     for _ in range(3):
-        stamp = settings.stat().st_mtime_ns if settings.is_file() else None
+        stamp = store.stamp(settings)
         data: Any = {}
         if stamp is not None:
             try:
@@ -386,9 +386,11 @@ def ensure_machine_name(*, name: str = "") -> dict[str, Any]:
                 return {"status": "needs_choice", "path": str(settings), "today": today, "candidates": folders}
             name = today
         data.setdefault("env", {})["H2T_MACHINE_NAME"] = name
-        if (settings.stat().st_mtime_ns if settings.is_file() else None) != stamp:
+        try:
+            store.replace(settings, json.dumps(data, indent=2, ensure_ascii=False) + "\n",
+                          place="harness", expect=stamp)
+        except store.Changed:
             continue
-        store.replace(settings, json.dumps(data, indent=2, ensure_ascii=False) + "\n", place="harness")
         return {"status": "written", "path": str(settings), "value": name}
     return {"status": "error", "path": str(settings), "error": "kept changing while being updated, left untouched"}
 
