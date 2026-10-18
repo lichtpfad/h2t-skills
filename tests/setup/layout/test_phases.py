@@ -384,6 +384,7 @@ def test_paths_yaml_reads_the_same_on_another_home(monkeypatch, tmp_path):
     other = tmp_path / "other-home"
     other.mkdir()
     monkeypatch.setenv("HOME", str(other))
+    monkeypatch.setenv("USERPROFILE", str(other))      # Windows resolves ~ from USERPROFILE
     got = paths.validate_config(doc, source=paths.paths_yaml()).places
     assert got == {"lake": other / ".dor" / "lake", "inbox": other / "Downloads"}
 
