@@ -324,7 +324,9 @@ def test_short_os_write_is_completed(home, monkeypatch):
         store.replace(paths.state_dir() / "a.json", "{}", place="state")
     assert p.read_text() == '{"line": "' + "y" * 50 + '"}\n'
     rows = [json.loads(x) for x in (paths.logs_dir() / "writes.jsonl").read_text().splitlines()]
-    assert [r["op"] for r in rows] == ["append", "replace"]
+    # the first append to an activity file creates its merge lock in run/locks (once)
+    assert [(r["op"], r["place"]) for r in rows] == [("create", "run"), ("append", "records.activity"),
+                                                     ("replace", "state")]
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="POSIX permission bits")

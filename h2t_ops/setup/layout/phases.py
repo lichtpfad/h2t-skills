@@ -264,27 +264,25 @@ def phase_activity(ctx) -> None:
     raw = src.read_bytes()
     filtered, skipped = filter_activity(raw)
     target, place = paths.activity_file(ctx.machine), "records.activity"
-    for _ in range(3):
+    # A live session appends to this file: its append waits on the lock held here from the
+    # read to the publication, then lands in the merged file (store.merging).
+    with store.merging(target, place=place):
         stamp = store.stamp(target)
         live = journal_mod.current_bytes(target, place)
         if live is None:
             engine.put(ctx.journal, target, filtered, place=place, source="activity",
                        source_path=src, rule="activity-filter")
-            break
-        data = merge_activity(live, filtered)
-        ctx.journal.source(src, target, place=place, sha256=store.sha256(data))
-        if data == live:
-            break
-        ctx.journal.replaced(target, place, live, store.sha256(data), source_path=src,
-                             rule="activity-filter")
-        try:
-            store.replace(target, data, place=place, expect=stamp)
-        except store.Changed:
-            continue                    # a session appended meanwhile: read it again
-        break
-    else:
-        raise ConfigError(f"{target} kept changing while the migration merged into it",
-                          hint=f"wait for the running sessions to settle and {_RETRY}")
+        else:
+            data = merge_activity(live, filtered)
+            ctx.journal.source(src, target, place=place, sha256=store.sha256(data))
+            if data != live:
+                ctx.journal.replaced(target, place, live, store.sha256(data), source_path=src,
+                                     rule="activity-filter")
+                try:
+                    store.replace(target, data, place=place, expect=stamp)
+                except store.Changed as exc:   # a writer that bypassed store
+                    raise ConfigError(f"{target} changed while the migration merged into it",
+                                      hint=f"wait for the running sessions to settle and {_RETRY}") from exc
     if skipped:
         ctx.report.notes.append(f"layout 1: activity: {skipped} test rows skipped")
 

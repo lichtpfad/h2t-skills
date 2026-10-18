@@ -219,19 +219,27 @@ def test_activity_rows_compare_without_their_line_endings():
     assert verify.verify_transformed(ctx.journal) == [f"{copy}: is not the filtered {_spool()}"]
 
 
-def test_activity_merge_retries_when_a_session_appends_meanwhile(monkeypatch):
+def test_an_append_during_the_merge_lands_in_the_merged_file(monkeypatch):
+    """A live session appends between the merge's last check and its publication (the gap
+    replace(expect=) leaves). The append waits on the merge lock and lands in the published
+    file; without the lock it lands in the inode os.replace discards."""
+    import threading
     _write(_spool(), _row("old-1") + "\n")
     copy = _write(paths.activity_file(M), _row("live-1") + "\n")
-    real, state = store.replace, {"once": True}
+    real, threads = os.replace, []
 
-    def replace(path, data, **kw):
-        if state["once"] and Path(path) == copy:
-            state["once"] = False
-            store.append(copy, _row("live-2"), place="records.activity")
-        return real(path, data, **kw)
+    def replace(src, dst, *a, **kw):
+        if Path(dst) == copy and not threads:
+            t = threading.Thread(target=store.append, args=(copy, _row("live-2")),
+                                 kwargs={"place": "records.activity"})
+            threads.append(t)
+            t.start()
+            t.join(0.5)                 # blocked on the lock, or already written to the old inode
+        return real(src, dst, *a, **kw)
 
-    monkeypatch.setattr(store, "replace", replace)
+    monkeypatch.setattr(store.os, "replace", replace)
     phases.phase_activity(_ctx())
+    threads[0].join(5)
     assert copy.read_text().splitlines() == [_row("old-1"), _row("live-1"), _row("live-2")]
 
 

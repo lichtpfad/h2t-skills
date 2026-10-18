@@ -421,22 +421,50 @@ def create(path, data: str | bytes, *, place: str, mode: int | None = None,
     return path
 
 
+# Places whose files the migration merges into (activity, §8 п. 4): an append there also
+# holds a lock that outlives the file's inode, so a merge that replaces the file cannot
+# publish over a row appended to the inode it read.
+_MERGED = {"records.activity"}
+
+
+def _merge_lock_path(path: Path) -> Path:
+    """Beside nothing synced: run/ is local, and a lock file in records/ would travel."""
+    key = hashlib.sha256(str(_real(path)).encode("utf-8")).hexdigest()[:16]
+    return paths.run_dir() / "locks" / f"{key}.lock"
+
+
+@contextlib.contextmanager
+def merging(path, *, place: str) -> Iterator[None]:
+    """Hold the lock append() takes for a file in a merged place, for a read-merge-replace:
+    appends wait until the merged file is published, then land in it."""
+    path = Path(path)
+    got = _check(path, place)
+    if got not in _MERGED:
+        raise WriteRefused(f"{path}: merging() is only for {', '.join(sorted(_MERGED))}",
+                           hint="other places are written by one writer at a time")
+    with locked(_merge_lock_path(path), place="run"):
+        yield
+
+
 def append(path, line: str, *, place: str, dest: bool = False, durable: bool = False) -> None:
     path = Path(path)
     got = _check(path, place, dest=dest)
     payload = (line if line.endswith("\n") else line + "\n").encode("utf-8")
     _ensure_dir(path.parent, place)
-    fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT | getattr(os, "O_BINARY", 0),
-                 _mode(place, got, None))
-    try:
-        if os.name != "nt" and (place in _SECRET or got in _SECRET):
-            os.fchmod(fd, 0o600)        # an existing secret file is repaired, not trusted
-        with _lock(fd):
-            _write_all(fd, payload)     # the whole line under the lock, short writes included
-            if durable:
-                os.fsync(fd)            # migration journal: the row survives a kill (R49)
-    finally:
-        os.close(fd)
+    # Taken before the file is opened: the descriptor then names the file a merge published.
+    merge = locked(_merge_lock_path(path), place="run") if got in _MERGED else contextlib.nullcontext()
+    with merge:
+        fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT | getattr(os, "O_BINARY", 0),
+                     _mode(place, got, None))
+        try:
+            if os.name != "nt" and (place in _SECRET or got in _SECRET):
+                os.fchmod(fd, 0o600)    # an existing secret file is repaired, not trusted
+            with _lock(fd):
+                _write_all(fd, payload)  # the whole line under the lock, short writes included
+                if durable:
+                    os.fsync(fd)        # migration journal: the row survives a kill (R49)
+        finally:
+            os.close(fd)
     _log("append", got, path, payload)
 
 
