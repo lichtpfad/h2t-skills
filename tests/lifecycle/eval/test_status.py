@@ -41,7 +41,7 @@ def test_status_default_env_merges_secrets_file(monkeypatch):
 
 def test_status_counts_local_sessions(tmp_path, monkeypatch):
     monkeypatch.setattr(sess, "_sdk_available", lambda: False)
-    d = tmp_path / "session-start" / "sessions"
+    d = tmp_path / "mac" / "session-start"
     d.mkdir(parents=True)
     (d / "se-2026-07-11-001.json").write_text("{}", encoding="utf-8")
     st = get_status(env={}, evals_root=str(tmp_path))

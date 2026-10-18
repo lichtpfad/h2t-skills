@@ -261,6 +261,46 @@ def test_download_leaves_a_non_gzip_file_alone_under_gunzip(client_obj, monkeypa
     assert (tmp_path / "notes.txt").read_bytes() == b"plain bytes"
 
 
+def test_download_without_dest_goes_to_the_inbox(client_obj, monkeypatch, inbox, capsys):
+    fake, _ = _fake_requests(lambda *a, **k: _Resp(200, chunks=[b"abc"]))
+    monkeypatch.setitem(sys.modules, "requests", fake)
+    out = client_obj.download("/HOU2TOUCH/takes/clip.wav")
+    assert out["saved_to"] == str(inbox / "clip.wav") and out["defaulted"] is False
+    assert (inbox / "clip.wav").read_bytes() == b"abc"
+    assert f"saved to {inbox / 'clip.wav'}" in capsys.readouterr().err
+
+
+def test_default_download_never_overwrites(client_obj, monkeypatch, inbox):
+    (inbox / "clip.wav").write_bytes(b"theirs")
+    fake, _ = _fake_requests(lambda *a, **k: _Resp(200, chunks=[b"abc"]))
+    monkeypatch.setitem(sys.modules, "requests", fake)
+    out = client_obj.download("/x/clip.wav")
+    assert out["saved_to"] == str(inbox / "clip-2.wav")
+    assert (inbox / "clip.wav").read_bytes() == b"theirs"
+    assert (inbox / "clip-2.wav").read_bytes() == b"abc"
+
+
+def test_download_without_dest_or_paths_yaml_goes_to_data_inbox(client_obj, monkeypatch):
+    from h2t_ops.core import paths
+    blob = gzip.compress(b"<PremiereData/>")
+    fake, _ = _fake_requests(lambda *a, **k: _Resp(200, chunks=[blob]))
+    monkeypatch.setitem(sys.modules, "requests", fake)
+    out = client_obj.download("/x/seq.prproj", gunzip=True)
+    target = paths.data_dir() / "inbox" / "seq.prproj"
+    assert out["saved_to"] == str(target) and out["defaulted"] is True
+    assert target.read_bytes() == b"<PremiereData/>"
+
+
+def test_download_dest_into_secrets_is_refused(client_obj, monkeypatch):
+    from h2t_ops.core import paths, store
+    fake, _ = _fake_requests(lambda *a, **k: _Resp(200, chunks=[b"abc"]))
+    monkeypatch.setitem(sys.modules, "requests", fake)
+    target = paths.secrets_shared() / "x.env"
+    with pytest.raises(store.WriteRefused):
+        client_obj.download("/x/clip.wav", str(target))
+    assert not target.exists()
+
+
 def test_download_rejects_the_root_path(client_obj):
     with pytest.raises(UsageError):
         client_obj.download("/", "/tmp/whatever")

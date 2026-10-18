@@ -14,7 +14,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from h2t_ops.core import paths, secrets, store
+from h2t_ops.core import downloads, paths, secrets, store
 from h2t_ops.core.errors import AuthError, ConfigError, NotFoundError, ProviderError
 
 
@@ -202,19 +202,12 @@ def _media_info(msg: Any) -> dict[str, Any] | None:
     }
 
 
-def _plain_name(raw: str) -> str:
-    """One path segment on every platform: no / or \\, no drive colon, no leading dot."""
-    for ch in ("/", "\\", ":"):
-        raw = raw.replace(ch, "_")
-    return raw.strip().lstrip(".")
-
-
 def _media_filename(msg: Any, entity: str, message_id: int) -> str:
     """The attachment's own name, last segment only ("../../x.pdf" is x.pdf), else
     <entity>-<id><ext> — the adapter names the file, not Telethon (R47)."""
     f = _get_attr(msg, "file", None)
-    name = _plain_name(str(_get_attr(f, "name", None) or "").replace("\\", "/").rsplit("/", 1)[-1])
-    return name or _plain_name(f"{entity}-{message_id}{_get_attr(f, 'ext', None) or ''}")
+    name = downloads.last_segment(_get_attr(f, "name", None))
+    return name or downloads.plain_name(f"{entity}-{message_id}{_get_attr(f, 'ext', None) or ''}")
 
 
 def _extract_urls(msg: Any) -> list[str]:
@@ -821,27 +814,18 @@ class TelegramClientAdapter:
                     raise ProviderError(
                         f"message {message_id} in {entity} has no downloadable media"
                     )
-                first = dest / _media_filename(msg, entity, message_id)
-                if Path(os.path.realpath(first)).parent != Path(os.path.realpath(dest)):
-                    raise store.WriteRefused(f"attachment name {first.name!r} leaves {dest}",
-                                             hint="the file is written only directly into that directory")
-                for target in store.unique_name(first):
-                    if target.exists():
-                        continue
-                    try:
-                        with store.writer(target, place=place, dest=named, exclusive=True) as fh:
-                            if client.download_media(msg, file=fh) is None:
-                                raise ProviderError(
-                                    f"failed to download media from message {message_id} in {entity}"
-                                )
-                    except store.AlreadyExists:
-                        continue            # taken between the check and the link: next name
-                    path = target
-                    break
+                def write(fh) -> None:
+                    if client.download_media(msg, file=fh) is None:
+                        raise ProviderError(
+                            f"failed to download media from message {message_id} in {entity}"
+                        )
+
+                path = downloads.save_new(dest, _media_filename(msg, entity, message_id), write,
+                                          place=place, dest=named)
         except (ValueError, sqlite3.OperationalError) as exc:
             raise _session_incompatible_error(exc) from exc
-        if not out_dir and defaulted:
-            print(f"saved to {path} (inbox not set: h2t-ops paths set inbox <path>)", file=sys.stderr)
+        if not out_dir:
+            downloads.say_saved(path, defaulted)
         return {
             "entity": entity,
             "message_id": message_id,

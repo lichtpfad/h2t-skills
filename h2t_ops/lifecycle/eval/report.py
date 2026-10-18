@@ -1,6 +1,6 @@
 """Local SkillEval telemetry consumer — phase 1 operational-health report.
 
-Reads ~/.h2t/evals/<skill>/sessions/*.json (written by lib/eval/session.py) and
+Reads records/evals/<machine>/<skill>/*.json (written by eval/session.py) and
 aggregates per-skill health. Pure core (build_report / renderers); only
 load_sessions and catalog_skills touch the filesystem. See
 docs/superpowers/specs/2026-07-14-evals-telemetry-consumer-phase1.md.
@@ -37,6 +37,11 @@ def _parse_dt(raw) -> datetime | None:
     return dt.astimezone(UTC)
 
 
+def session_files(root) -> list[Path]:
+    """Every session record under records/evals: <machine>/<skill>/<run>.json (#548 §3)."""
+    return sorted(Path(root).glob("*/*/*.json"))
+
+
 def load_sessions(root, *, load_since=None):
     """Return (sessions, LoadStats). Never raises for bad data.
 
@@ -50,7 +55,7 @@ def load_sessions(root, *, load_since=None):
         stats.root_readable = False
         return [], stats
     sessions: list[dict] = []
-    for path in sorted(root.glob("*/sessions/*.json")):
+    for path in session_files(root):
         stats.files_seen += 1
         try:
             record = json.loads(path.read_text(encoding="utf-8"))

@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urljoin, urlparse
 
+from h2t_ops.connectors.research import store as research_store
 from h2t_ops.core import secrets
 
 try:
@@ -1038,8 +1039,7 @@ def fetch_via_ladder(
     raw_html_path = None
     if keep_raw and chosen is not None and chosen.raw_html and output_paths:
         raw_path = output_paths["raw_html"]
-        raw_path.parent.mkdir(parents=True, exist_ok=True)
-        raw_path.write_text(chosen.raw_html, encoding="utf-8")
+        research_store.save_text(raw_path, chosen.raw_html)
         raw_html_path = str(raw_path)
 
     return build_fetch_envelope(

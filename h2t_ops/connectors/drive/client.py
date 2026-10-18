@@ -6,7 +6,6 @@ scope for #133 and remains legacy debt tracked in #147.
 """
 from __future__ import annotations
 
-import io
 import mimetypes
 import re
 import socket
@@ -14,6 +13,7 @@ from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
 
+from h2t_ops.core import downloads, paths, store
 from h2t_ops.core.errors import (
     AuthError,
     ConfigError,
@@ -171,6 +171,22 @@ EXTRA_MIME_TYPES = {
 }
 
 PRINT_ALLOWED_FORMATS = frozenset({"text", "csv", "md"})
+
+
+def _drive_file_name(name: str) -> str:
+    """A Drive name is a title, and "/" or ":" are characters in it, not separators."""
+    return downloads.plain_name(name.replace("/", "-").replace(":", "-")) or "drive-file"
+
+
+def _save(dest: str | Path | None, name: str, write) -> tuple[Path, bool]:
+    """--dest: the path the user named, replaced (dest=True). None: created in the inbox
+    under a free name, never over a file already there (§6 п. 1, R47)."""
+    if not dest:
+        return downloads.save_default(name, write)
+    target = paths.expand_user_dest(str(dest))
+    with store.writer(target, place="inbox", dest=True) as fh:
+        write(fh)
+    return target, False
 
 
 def _media_io_base_download():
@@ -1354,17 +1370,21 @@ class DriveClient:
                 fileId=file_id, fields="name, mimeType, size",
             ).execute()
             name = meta["name"]
-            target = Path(dest) if dest else Path.cwd() / name
-            request = self.service.files().get_media(fileId=file_id)
-            buf = io.BytesIO()
-            downloader = _media_io_base_download()(buf, request)
-            done = False
-            while not done:
-                _, done = downloader.next_chunk()
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_bytes(buf.getvalue())
+
+            def write(fh) -> None:
+                # MediaIoBaseDownload writes each chunk into the store handle; a failure
+                # mid-stream leaves no file (R29). Repeatable: a new request per call.
+                downloader = _media_io_base_download()(
+                    fh, self.service.files().get_media(fileId=file_id))
+                done = False
+                while not done:
+                    _, done = downloader.next_chunk()
+
+            target, defaulted = _save(dest, _drive_file_name(name), write)
             result: dict[str, Any] = {
                 "saved_path": str(target),
+                "path": str(target),
+                "defaulted": defaulted,
                 "file_id": file_id,
                 "name": name,
                 "mimeType": meta.get("mimeType", ""),
@@ -1426,17 +1446,10 @@ class DriveClient:
                 )
                 return result
 
-            if dest:
-                target = Path(dest)
-            else:
-                safe_name = name.replace("/", "-").replace(":", "-")
-                target = Path.cwd() / f"{safe_name}{ext}"
-            target.parent.mkdir(parents=True, exist_ok=True)
-            if isinstance(content, bytes):
-                target.write_bytes(content)
-            else:
-                target.write_text(content, encoding="utf-8")
-            result["saved_path"] = str(target)
+            payload = content if isinstance(content, bytes) else content.encode("utf-8")
+            target, defaulted = _save(dest, f"{_drive_file_name(name)}{ext}",
+                                      lambda fh: fh.write(payload))
+            result.update(saved_path=str(target), path=str(target), defaulted=defaulted)
             if target.exists():
                 result["size"] = target.stat().st_size
             return result

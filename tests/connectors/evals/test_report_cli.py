@@ -6,7 +6,7 @@ from h2t_ops.core import paths
 
 
 def _seed(root: Path):
-    d = root / "session-start" / "sessions"
+    d = root / "mac" / "session-start"
     d.mkdir(parents=True)
     (d / "a.json").write_text(
         '{"skill":"session-start","domain":"dev","project":"p","status":"success",'

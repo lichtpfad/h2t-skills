@@ -18,3 +18,16 @@ def _no_real_credentials(monkeypatch, tmp_path_factory):
     monkeypatch.setenv("USERPROFILE", home)
     # HOME is enough for the secrets files too: h2t_ops.core.secrets resolves every path at
     # call time through core.paths (#548) and no longer reads H2T_SECRETS_FILE (R5).
+
+
+@pytest.fixture
+def inbox(tmp_path):
+    """paths.yaml declares an inbox outside ~/.h2t; downloads with no path land there."""
+    from h2t_ops.core import paths
+
+    box = tmp_path / "inbox"
+    box.mkdir()
+    cfg = paths.paths_yaml()
+    cfg.parent.mkdir(parents=True, exist_ok=True)
+    cfg.write_text(f"version: 1\nplaces:\n  inbox: {box}\n", encoding="utf-8")
+    return box

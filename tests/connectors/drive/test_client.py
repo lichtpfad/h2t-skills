@@ -538,31 +538,109 @@ def test_add_document_tab_maps_sdk_exc(client_obj):
         client_obj.add_document_tab("doc1", "New Tab")
 
 
-def test_download_default_dest_is_cwd_with_original_name(client_obj, tmp_path, monkeypatch):
+def _fake_download(client_obj, monkeypatch, name="report.txt", payload=b"data"):
     from h2t_ops.connectors.drive import client as dmod
 
-    monkeypatch.chdir(tmp_path)
     files = client_obj.service.files.return_value
-    files.get.return_value.execute.return_value = {
-        "name": "report.txt",
-        "mimeType": "text/plain",
-        "size": "4",
-    }
+    files.get.return_value.execute.return_value = {"name": name, "mimeType": "text/plain", "size": "4"}
     files.get_media.return_value = object()
 
     class FakeDownload:
-        def __init__(self, buf, request):
-            self.buf = buf
-            self.done = False
+        def __init__(self, fd, request):
+            self.fd = fd
 
         def next_chunk(self):
-            self.buf.write(b"data")
+            self.fd.write(payload)
             return None, True
 
     monkeypatch.setattr(dmod, "_media_io_base_download", lambda: FakeDownload)
+
+
+def test_download_without_dest_goes_to_the_inbox(client_obj, inbox, tmp_path, monkeypatch, capsys):
+    """3.x wrote into the current directory; 4.0 writes into the inbox place (§6 п. 1)."""
+    monkeypatch.chdir(tmp_path)
+    _fake_download(client_obj, monkeypatch)
     result = client_obj.download_file("file1")
-    assert result["saved_path"] == str(tmp_path / "report.txt")
-    assert Path(result["saved_path"]).read_bytes() == b"data"
+    assert result["path"] == result["saved_path"] == str(inbox / "report.txt")
+    assert result["defaulted"] is False
+    assert (inbox / "report.txt").read_bytes() == b"data"
+    assert not (tmp_path / "report.txt").exists()
+    assert f"saved to {inbox / 'report.txt'}" in capsys.readouterr().err
+
+
+def test_download_without_paths_yaml_goes_to_data_inbox(client_obj, monkeypatch, capsys):
+    from h2t_ops.core import paths
+
+    _fake_download(client_obj, monkeypatch)
+    result = client_obj.download_file("file1")
+    default = paths.data_dir() / "inbox" / "report.txt"
+    assert result["path"] == str(default) and result["defaulted"] is True
+    assert default.read_bytes() == b"data"
+    assert "inbox not set: h2t-ops paths set inbox <path>" in capsys.readouterr().err
+
+
+def test_default_download_never_overwrites(client_obj, inbox, monkeypatch):
+    """A file already in the inbox is not ours: it keeps its bytes, the new one is -2 (R47).
+    Also when it appears while the download runs — the name was free at the check, so only
+    the create-or-fail publish (exclusive) keeps it."""
+    (inbox / "report.txt").write_bytes(b"theirs")
+    _fake_download(client_obj, monkeypatch)
+    result = client_obj.download_file("file1")
+    assert result["path"] == str(inbox / "report-2.txt")
+    assert (inbox / "report-2.txt").read_bytes() == b"data"
+    assert (inbox / "report.txt").read_bytes() == b"theirs"
+
+    from h2t_ops.connectors.drive import client as dmod
+
+    class Racing:
+        def __init__(self, fd, request):
+            self.fd = fd
+
+        def next_chunk(self):
+            self.fd.write(b"data")
+            late = inbox / "late.txt"
+            if not late.exists():
+                late.write_bytes(b"theirs too")   # another program, mid-download
+            return None, True
+
+    client_obj.service.files.return_value.get.return_value.execute.return_value = {
+        "name": "late.txt", "mimeType": "text/plain"}
+    monkeypatch.setattr(dmod, "_media_io_base_download", lambda: Racing)
+    result = client_obj.download_file("file1")
+    assert result["path"] == str(inbox / "late-2.txt")
+    assert (inbox / "late.txt").read_bytes() == b"theirs too"
+    assert (inbox / "late-2.txt").read_bytes() == b"data"
+
+
+def test_download_dest_replaces_what_the_user_named(client_obj, tmp_path, monkeypatch):
+    target = tmp_path / "mine.txt"
+    target.write_bytes(b"old")
+    _fake_download(client_obj, monkeypatch)
+    result = client_obj.download_file("file1", dest=str(target))
+    assert target.read_bytes() == b"data"
+    assert result["path"] == str(target) and result["defaulted"] is False
+
+
+def test_download_dest_into_secrets_is_refused(client_obj, monkeypatch):
+    from h2t_ops.core import paths, store
+    from h2t_ops.core.errors import exit_code_for
+
+    _fake_download(client_obj, monkeypatch)
+    target = paths.secrets_shared() / "x.env"
+    with pytest.raises(store.WriteRefused) as exc:
+        client_obj.download_file("file1", dest=str(target))
+    assert exit_code_for(exc.value) == 3
+    assert not target.exists()
+
+
+def test_export_without_dest_goes_to_the_inbox(client_obj, inbox):
+    files = client_obj.service.files.return_value
+    files.get.return_value.execute.return_value = {
+        "name": "Q3: plan", "mimeType": "application/vnd.google-apps.document"}
+    files.export.return_value.execute.return_value = b"%PDF"
+    result = client_obj.export_file("doc1", fmt="pdf")
+    assert result["path"] == result["saved_path"] == str(inbox / "Q3- plan.pdf")
+    assert result["defaulted"] is False and (inbox / "Q3- plan.pdf").read_bytes() == b"%PDF"
 
 
 def test_download_envelope_size_is_optional(client_obj, tmp_path, monkeypatch):
@@ -604,7 +682,7 @@ def test_download_never_writes_to_stdout(client_obj, tmp_path, monkeypatch, caps
             return None, True
 
     monkeypatch.setattr(dmod, "_media_io_base_download", lambda: FakeDownload)
-    client_obj.download_file("file1")
+    client_obj.download_file("file1", dest=str(tmp_path / "a.bin"))
     captured = capsys.readouterr()
     assert captured.out == ""
     assert captured.err == ""

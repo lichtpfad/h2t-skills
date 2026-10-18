@@ -494,7 +494,8 @@ def test_the_cache_keeps_a_creative_version_that_holds_user_profiles(tmp_path, m
     assert (creative / "3.0.0" / "profiles" / "my-brand" / "DESIGN.md").read_text() == "mine"
     note = next(n for n in report.notes if "my-brand" in n)
     assert str(creative / "3.0.0") in note
-    assert str(Path("~/.h2t/creative/profiles")) in note or "~/.h2t/creative/profiles" in note
+    from h2t_ops.core import paths
+    assert str(paths.data_dir() / "creative" / "profiles") in note
     assert any("h2t-creative 3.1.0" in d for d in report.done)
 
 

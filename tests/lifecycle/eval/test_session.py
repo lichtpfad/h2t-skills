@@ -3,6 +3,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from h2t_ops.core import paths
 from h2t_ops.lifecycle.eval import session as sess
 from h2t_ops.lifecycle.eval.session import SkillEval
 
@@ -10,11 +11,11 @@ from h2t_ops.lifecycle.eval.session import SkillEval
 def test_skill_eval_local_write_on_success(tmp_path, monkeypatch):
     """SkillEval writes local JSON file with success status."""
     monkeypatch.setenv("H2T_EVALS_MODE", "local")
-    evals_root = tmp_path / "evals"
-    with SkillEval("session-start", domain="dev", project="h2t-ai", evals_root=str(evals_root)):
+    evals_root = paths.records("evals", paths.machine_name())
+    with SkillEval("session-start", domain="dev", project="h2t-ai"):
         pass  # success (no exception)
 
-    files = list((evals_root / "session-start" / "sessions").glob("*.json"))
+    files = list((evals_root / "session-start").glob("*.json"))
     assert len(files) == 1
     record = json.loads(files[0].read_text())
     assert record["skill"] == "session-start"
@@ -26,12 +27,12 @@ def test_skill_eval_local_write_on_success(tmp_path, monkeypatch):
 def test_skill_eval_local_write_on_failure(tmp_path, monkeypatch):
     """SkillEval writes failure status when exception raised."""
     monkeypatch.setenv("H2T_EVALS_MODE", "local")
-    evals_root = tmp_path / "evals"
+    evals_root = paths.records("evals", paths.machine_name())
     with pytest.raises(ValueError):
-        with SkillEval("handoff", domain="dev", project="p", evals_root=str(evals_root)):
+        with SkillEval("handoff", domain="dev", project="p"):
             raise ValueError("simulated failure")
 
-    files = list((evals_root / "handoff" / "sessions").glob("*.json"))
+    files = list((evals_root / "handoff").glob("*.json"))
     assert len(files) == 1
     record = json.loads(files[0].read_text())
     assert record["status"] == "failure"
@@ -40,12 +41,12 @@ def test_skill_eval_local_write_on_failure(tmp_path, monkeypatch):
 def test_skill_eval_metrics_recorded(tmp_path, monkeypatch):
     """Metrics passed via .metric() appear in local JSON."""
     monkeypatch.setenv("H2T_EVALS_MODE", "local")
-    evals_root = tmp_path / "evals"
-    with SkillEval("session-start", domain="dev", project="p", evals_root=str(evals_root)) as ev:
+    evals_root = paths.records("evals", paths.machine_name())
+    with SkillEval("session-start", domain="dev", project="p") as ev:
         ev.metric("skills.gather_source_success_rate", value_num=0.85)
         ev.metric("skills.token_consumption", value_num=512.0)
 
-    files = list((evals_root / "session-start" / "sessions").glob("*.json"))
+    files = list((evals_root / "session-start").glob("*.json"))
     record = json.loads(files[0].read_text())
     keys = [m["key"] for m in record["metrics"]]
     assert "skills.gather_source_success_rate" in keys
@@ -54,9 +55,8 @@ def test_skill_eval_metrics_recorded(tmp_path, monkeypatch):
 
 def test_skill_eval_does_not_suppress_exceptions(tmp_path):
     """__exit__ returns False — exceptions propagate."""
-    evals_root = tmp_path / "evals"
     with pytest.raises(RuntimeError, match="boom"):
-        with SkillEval("session-start", domain="dev", project="p", evals_root=str(evals_root)):
+        with SkillEval("session-start", domain="dev", project="p"):
             raise RuntimeError("boom")
 
 
@@ -203,9 +203,8 @@ def test_off_mode_writes_nothing(tmp_path, monkeypatch):
     monkeypatch.setattr(sess, "_sdk_available", lambda: False)
     for var in ("H2T_EVALS_MODE", "H2T_EVALS_TOKEN", "H2T_EVALS_ENABLED"):
         monkeypatch.delenv(var, raising=False)
-    evals_root = tmp_path / "evals"
-    with sess.SkillEval("session-start", domain="d", project="p",
-                        evals_root=str(evals_root)) as ev:
+    evals_root = paths.records("evals", paths.machine_name())
+    with sess.SkillEval("session-start", domain="d", project="p") as ev:
         ev.metric("skills.token_consumption", value_num=1.0)
     assert not evals_root.exists()
 
@@ -217,11 +216,10 @@ def test_push_with_absent_sdk_degrades_to_local(tmp_path, monkeypatch):
         raise ImportError("no sdk")
 
     monkeypatch.setattr(sess.SkillEval, "_send_central", _boom)
-    evals_root = tmp_path / "evals"
-    with sess.SkillEval("handoff", domain="d", project="p",
-                        evals_root=str(evals_root)):
+    evals_root = paths.records("evals", paths.machine_name())
+    with sess.SkillEval("handoff", domain="d", project="p"):
         pass
-    files = list((evals_root / "handoff" / "sessions").glob("*.json"))
+    files = list((evals_root / "handoff").glob("*.json"))
     assert len(files) == 1
 
 
@@ -244,10 +242,10 @@ def test_session_imports_only_stdlib():
 def test_metric_records_level_and_unit_in_local(tmp_path, monkeypatch):
     """metric(level=..., unit=...) is preserved in the local JSON entry."""
     monkeypatch.setenv("H2T_EVALS_MODE", "local")
-    evals_root = tmp_path / "evals"
-    with SkillEval("research", domain="dev", project="p", evals_root=str(evals_root)) as ev:
+    evals_root = paths.records("evals", paths.machine_name())
+    with SkillEval("research", domain="dev", project="p") as ev:
         ev.metric("skills.research_cost_usd", value_num=0.42, level="business", unit="usd")
-    files = list((evals_root / "research" / "sessions").glob("*.json"))
+    files = list((evals_root / "research").glob("*.json"))
     entry = next(m for m in json.loads(files[0].read_text())["metrics"]
                  if m["key"] == "skills.research_cost_usd")
     assert entry["level"] == "business"
@@ -258,10 +256,10 @@ def test_metric_records_level_and_unit_in_local(tmp_path, monkeypatch):
 def test_metric_level_defaults_to_none_when_omitted(tmp_path, monkeypatch):
     """Omitting level leaves it absent (no forced 'unit') in the stored entry."""
     monkeypatch.setenv("H2T_EVALS_MODE", "local")
-    evals_root = tmp_path / "evals"
-    with SkillEval("session-start", domain="dev", project="p", evals_root=str(evals_root)) as ev:
+    evals_root = paths.records("evals", paths.machine_name())
+    with SkillEval("session-start", domain="dev", project="p") as ev:
         ev.metric("skills.token_consumption", value_num=1.0)
-    files = list((evals_root / "session-start" / "sessions").glob("*.json"))
+    files = list((evals_root / "session-start").glob("*.json"))
     entry = next(m for m in json.loads(files[0].read_text())["metrics"]
                  if m["key"] == "skills.token_consumption")
     assert "level" not in entry
@@ -299,8 +297,7 @@ def test_metric_level_unit_propagate_to_central(tmp_path, monkeypatch):
     monkeypatch.setitem(sys.modules, "h2t_evals", types.ModuleType("h2t_evals"))
     monkeypatch.setitem(sys.modules, "h2t_evals.sdk", fake)
     monkeypatch.setenv("H2T_EVALS_MODE", "push")
-    with SkillEval("research", domain="d", project="p",
-                   evals_root=str(tmp_path / "evals")) as ev:
+    with SkillEval("research", domain="d", project="p") as ev:
         ev.metric("skills.research_cost_usd", value_num=0.4, level="business", unit="usd")
     biz = [kw for key, kw in captured if key == "skills.research_cost_usd"]
     assert biz and biz[0]["level"] == "business" and biz[0]["unit"] == "usd"
@@ -313,15 +310,15 @@ CORE_KEYS = {
 
 
 def _local_metrics(evals_root, skill):
-    files = list((evals_root / skill / "sessions").glob("*.json"))
+    files = list((evals_root / skill).glob("*.json"))
     return {m["key"]: m for m in json.loads(files[0].read_text())["metrics"]}
 
 
 def test_local_write_contains_all_five_core(tmp_path, monkeypatch):
     """_write_local carries all 5 core.* (not only caller metrics)."""
     monkeypatch.setenv("H2T_EVALS_MODE", "local")
-    evals_root = tmp_path / "evals"
-    with SkillEval("session-start", domain="d", project="p", evals_root=str(evals_root)) as ev:
+    evals_root = paths.records("evals", paths.machine_name())
+    with SkillEval("session-start", domain="d", project="p") as ev:
         ev.metric("skills.token_consumption", value_num=1.0)
     m = _local_metrics(evals_root, "session-start")
     assert CORE_KEYS <= set(m)
@@ -329,9 +326,9 @@ def test_local_write_contains_all_five_core(tmp_path, monkeypatch):
 
 def test_core_task_success_reflects_status(tmp_path, monkeypatch):
     monkeypatch.setenv("H2T_EVALS_MODE", "local")
-    evals_root = tmp_path / "evals"
+    evals_root = paths.records("evals", paths.machine_name())
     with pytest.raises(ValueError):
-        with SkillEval("handoff", domain="d", project="p", evals_root=str(evals_root)):
+        with SkillEval("handoff", domain="d", project="p"):
             raise ValueError("boom")
     m = _local_metrics(evals_root, "handoff")
     assert m["core.task_success"]["value_bool"] is False
@@ -340,8 +337,8 @@ def test_core_task_success_reflects_status(tmp_path, monkeypatch):
 
 def test_op_type_correct_rate_from_record_op_type(tmp_path, monkeypatch):
     monkeypatch.setenv("H2T_EVALS_MODE", "local")
-    evals_root = tmp_path / "evals"
-    with SkillEval("research", domain="d", project="p", evals_root=str(evals_root)) as ev:
+    evals_root = paths.records("evals", paths.machine_name())
+    with SkillEval("research", domain="d", project="p") as ev:
         ev.record_op_type(False)  # schema-invalid output
     m = _local_metrics(evals_root, "research")
     assert m["core.op_type_correct_rate"]["value_num"] == 0.0
@@ -349,8 +346,8 @@ def test_op_type_correct_rate_from_record_op_type(tmp_path, monkeypatch):
 
 def test_deflection_rate_from_fallback(tmp_path, monkeypatch):
     monkeypatch.setenv("H2T_EVALS_MODE", "local")
-    evals_root = tmp_path / "evals"
-    with SkillEval("research", domain="d", project="p", evals_root=str(evals_root)) as ev:
+    evals_root = paths.records("evals", paths.machine_name())
+    with SkillEval("research", domain="d", project="p") as ev:
         ev.record_fallback()  # degraded path taken
     m = _local_metrics(evals_root, "research")
     assert m["core.deflection_rate"]["value_num"] == 0.0
@@ -360,10 +357,10 @@ def test_deflection_rate_from_fallback(tmp_path, monkeypatch):
 def test_caller_core_override_wins_no_duplicate(tmp_path, monkeypatch):
     """A caller-emitted core.* overrides the proxy; exactly one entry survives."""
     monkeypatch.setenv("H2T_EVALS_MODE", "local")
-    evals_root = tmp_path / "evals"
-    with SkillEval("research", domain="d", project="p", evals_root=str(evals_root)) as ev:
+    evals_root = paths.records("evals", paths.machine_name())
+    with SkillEval("research", domain="d", project="p") as ev:
         ev.metric("core.op_type_correct_rate", value_num=0.5, level="unit")
-    files = list((evals_root / "research" / "sessions").glob("*.json"))
+    files = list((evals_root / "research").glob("*.json"))
     entries = [m for m in json.loads(files[0].read_text())["metrics"]
                if m["key"] == "core.op_type_correct_rate"]
     assert len(entries) == 1
@@ -372,8 +369,8 @@ def test_caller_core_override_wins_no_duplicate(tmp_path, monkeypatch):
 
 def test_time_to_first_valid_is_nonneg_proxy(tmp_path, monkeypatch):
     monkeypatch.setenv("H2T_EVALS_MODE", "local")
-    evals_root = tmp_path / "evals"
-    with SkillEval("session-start", domain="d", project="p", evals_root=str(evals_root)):
+    evals_root = paths.records("evals", paths.machine_name())
+    with SkillEval("session-start", domain="d", project="p"):
         pass
     m = _local_metrics(evals_root, "session-start")
     assert m["core.time_to_first_valid_ms"]["value_num"] >= 0.0
@@ -382,8 +379,8 @@ def test_time_to_first_valid_is_nonneg_proxy(tmp_path, monkeypatch):
 def test_auto_custom_duration_always_emitted(tmp_path, monkeypatch):
     """skills.duration_ms is auto-emitted for every session (emit-ahead)."""
     monkeypatch.setenv("H2T_EVALS_MODE", "local")
-    evals_root = tmp_path / "evals"
-    with SkillEval("session-start", domain="d", project="p", evals_root=str(evals_root)):
+    evals_root = paths.records("evals", paths.machine_name())
+    with SkillEval("session-start", domain="d", project="p"):
         pass
     m = _local_metrics(evals_root, "session-start")
     assert m["skills.duration_ms"]["value_num"] >= 0.0
@@ -393,9 +390,9 @@ def test_auto_custom_duration_always_emitted(tmp_path, monkeypatch):
 def test_auto_custom_error_class_on_failure(tmp_path, monkeypatch):
     """skills.error_class carries the exception class name on failure; absent on success."""
     monkeypatch.setenv("H2T_EVALS_MODE", "local")
-    evals_root = tmp_path / "evals"
+    evals_root = paths.records("evals", paths.machine_name())
     with pytest.raises(ValueError):
-        with SkillEval("handoff", domain="d", project="p", evals_root=str(evals_root)):
+        with SkillEval("handoff", domain="d", project="p"):
             raise ValueError("boom")
     m = _local_metrics(evals_root, "handoff")
     assert m["skills.error_class"]["value_text"] == "ValueError"
@@ -405,9 +402,9 @@ def test_auto_custom_error_class_on_failure(tmp_path, monkeypatch):
     # about every 15.6 ms, these two writes are ~0.4 ms apart, so both names carry the
     # same microsecond and the random uuid suffix decides the order — a coin flip that
     # came up tails on windows-latest after coming up heads on the run before it.
-    sessions = evals_root / "handoff" / "sessions"
+    sessions = evals_root / "handoff"
     before = set(sessions.glob("*.json"))
-    with SkillEval("handoff", domain="d", project="p", evals_root=str(evals_root)):
+    with SkillEval("handoff", domain="d", project="p"):
         pass
     written = set(sessions.glob("*.json")) - before
     assert len(written) == 1, written
@@ -426,11 +423,11 @@ def test_eval_set_resolved_per_class():
 def test_write_local_no_collision_without_glob(tmp_path, monkeypatch):
     """Many same-skill/same-day sessions produce distinct files (no seq-glob)."""
     monkeypatch.setenv("H2T_EVALS_MODE", "local")
-    evals_root = tmp_path / "evals"
+    evals_root = paths.records("evals", paths.machine_name())
     for _ in range(5):
-        with SkillEval("session-start", domain="d", project="p", evals_root=str(evals_root)):
+        with SkillEval("session-start", domain="d", project="p"):
             pass
-    files = list((evals_root / "session-start" / "sessions").glob("*.json"))
+    files = list((evals_root / "session-start").glob("*.json"))
     assert len(files) == 5  # all distinct, none overwritten
 
 
@@ -438,10 +435,10 @@ def test_write_local_filename_has_no_seq_suffix(tmp_path, monkeypatch):
     """Filename no longer uses the 3-digit seq scheme (…-NNN.json)."""
     import re
     monkeypatch.setenv("H2T_EVALS_MODE", "local")
-    evals_root = tmp_path / "evals"
-    with SkillEval("handoff", domain="d", project="p", evals_root=str(evals_root)):
+    evals_root = paths.records("evals", paths.machine_name())
+    with SkillEval("handoff", domain="d", project="p"):
         pass
-    name = list((evals_root / "handoff" / "sessions").glob("*.json"))[0].name
+    name = list((evals_root / "handoff").glob("*.json"))[0].name
     assert not re.search(r"-\d{3}\.json$", name)
 
 
@@ -541,7 +538,7 @@ def test_send_central_reads_service_url_and_token_from_file(tmp_path, monkeypatc
                    H2T_EVALS_SERVICE_URL="https://evals.example.test",
                    H2T_EVALS_TOKEN="tok-from-file")
     with SkillEval("research", domain="d", project="p",
-                   evals_root=str(tmp_path / "evals"), secrets_path=str(f)):
+                   secrets_path=str(f)):
         pass
     assert captured.get("service_url") == "https://evals.example.test"
     assert captured.get("token") == "tok-from-file"

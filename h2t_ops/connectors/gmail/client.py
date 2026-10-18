@@ -18,6 +18,7 @@ from email.utils import formataddr, getaddresses, parseaddr
 from pathlib import Path
 from typing import Any
 
+from h2t_ops.core import downloads, paths, store
 from h2t_ops.core.errors import AuthError, ConfigError, UsageError, broken_install_hint
 from h2t_ops.core.google_auth import (
     build_google_service,
@@ -202,21 +203,29 @@ class GmailClient:
         self,
         message_id: str,
         attachment_id: str,
-        output_path: str | Path,
+        output_path: str | Path | None = None,
     ) -> dict[str, Any]:
+        """--output: that file, replaced. None: a new file in the inbox, named after the
+        message part that carries this attachment (§6 п. 1, R47)."""
         try:
             result = self.service.users().messages().attachments().get(
                 userId="me", messageId=message_id, id=attachment_id
             ).execute()
             data = result.get("data", "")
             payload = self._decode_base64_data(data)
-            target = Path(output_path)
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_bytes(payload)
+            if output_path:
+                target = store.replace(paths.expand_user_dest(str(output_path)), payload,
+                                       place="inbox", dest=True)
+                defaulted = False
+            else:
+                name = self._attachment_name(message_id, attachment_id)
+                target, defaulted = downloads.save_bytes_default(name, payload)
             return {
                 "message_id": message_id,
                 "attachment_id": attachment_id,
                 "saved_path": str(target),
+                "path": str(target),
+                "defaulted": defaulted,
                 "size": len(payload),
             }
         except HttpError as e:
@@ -521,6 +530,17 @@ class GmailClient:
             if part.get("parts"):
                 rows.extend(self._collect_attachments(part))
         return rows
+
+    def _attachment_name(self, message_id: str, attachment_id: str) -> str:
+        """The attachments API gives bytes only: the name is the filename of the part with
+        this attachmentId, last segment only; none found → <message>-<attachment[:12]>.bin."""
+        msg = self.service.users().messages().get(userId="me", id=message_id, format="full").execute()
+        for row in self._collect_attachments(msg.get("payload", {}) or {}):
+            if row["attachmentId"] == attachment_id:
+                name = downloads.last_segment(row["filename"])
+                if name:
+                    return name
+        return downloads.plain_name(f"{message_id}-{attachment_id[:12]}.bin")
 
     @staticmethod
     def _decode_base64_data(data: str) -> bytes:

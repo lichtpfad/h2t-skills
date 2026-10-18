@@ -674,7 +674,8 @@ def clean_cache(config: Path, installed: list[dict], keep: int = KEEP_VERSIONS,
 
 
 def _profiles_note(where: Path, names: list[str]) -> str:
-    target = Path("~") / ".h2t" / "creative" / "profiles"
+    from h2t_ops.tools.creative.cli import user_profiles_dir
+    target = user_profiles_dir()
     return (f"plugin cache: kept {where}: it holds your creative profiles {', '.join(names)} "
             f"(3.x wrote them into the cache). Move each to {target}/<name>, where 4.x looks "
             "for them; once they are out, the next sync removes this directory.")

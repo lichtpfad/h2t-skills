@@ -1987,3 +1987,45 @@ def test_client_research_get_not_found_raises(monkeypatch, tmp_path):
     client = client_mod.ResearchClient(output_dir=tmp_path)
     with pytest.raises(NotFoundError):
         client.research_get("r_x")
+
+
+# --- default place: data/research (#548 §6 п. 1) -----------------------------------------
+
+
+def test_research_without_output_dir_saves_into_data_research(monkeypatch):
+    _clear_sensitive_env(monkeypatch)
+    monkeypatch.setattr(client, "resolve_secret", lambda name: "exa-key")
+    _patch_exa_search(monkeypatch, provider_envelope=_provider_envelope("OK"), exit_code=0)
+    rc = client.ResearchClient()
+    result = rc.search(query="q", mode="generic", num_results=3, project="p", no_retry=True)
+    root = paths.data_dir() / "research"
+    assert rc.output_dir == root
+    assert (root / result["artifact"]["artifact_refs"]["artifact_json"]).is_file()
+    assert (root / "telemetry.jsonl").is_file()
+    assert Path(result["artifact"]["research_refs"]["thread_json"]).parent.parent.parent == root
+    assert not paths.legacy("research").exists()
+
+
+def test_research_list_reads_the_3x_store_until_it_moves():
+    """No data/research yet: index/show/doctor read ~/.h2t/research (4.0.x fallback)."""
+    old = paths.legacy("research")
+    row = {"document_id": "research-doc:1", "project_id": "p"}
+    index = store.index_path(old, "documents")
+    index.parent.mkdir(parents=True)
+    index.write_text(json.dumps([row]), encoding="utf-8")
+    listed = client.ResearchClient().list_research_index("documents")
+    assert listed["root"] == str(old) and listed["items"] == [row]
+    assert client.ResearchClient().research_doctor()["root"] == str(old)
+    (paths.data_dir() / "research").mkdir(parents=True)
+    assert client.ResearchClient().list_research_index("documents")["count"] == 0
+
+
+def test_research_output_dir_into_secrets_is_refused(monkeypatch):
+    from h2t_ops.core import store as core_store
+    _clear_sensitive_env(monkeypatch)
+    monkeypatch.setattr(client, "resolve_secret", lambda name: "exa-key")
+    _patch_exa_search(monkeypatch, provider_envelope=_provider_envelope("OK"), exit_code=0)
+    target = paths.secrets_shared() / "research"
+    with pytest.raises(core_store.WriteRefused):
+        client.ResearchClient(output_dir=target).search(query="q", project="p", no_retry=True)
+    assert not target.exists()

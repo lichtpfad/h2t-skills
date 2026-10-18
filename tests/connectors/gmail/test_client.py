@@ -345,6 +345,68 @@ def test_download_attachment_writes_bytes(tmp_path):
     assert out["size"] == 5
 
 
+class _MsgSvc(_FakeService):
+    """messages().get gives the message, messages().attachments().get the bytes."""
+    def __init__(self, parts):
+        super().__init__()
+        self.parts, self.calls = parts, []
+
+    def attachments(self):
+        svc = self
+
+        class _A:
+            def get(self, **kwargs):
+                svc.calls.append(("attachment", kwargs))
+                return _Exec({"data": "aGVsbG8"})
+        return _A()
+
+    def get(self, **kwargs):
+        self.calls.append(("message", kwargs))
+        return _Exec({"id": "m1", "payload": {"parts": self.parts}})
+
+
+def test_gmail_attachment_name_from_the_message_part(inbox):
+    parts = [{"mimeType": "text/plain", "filename": "", "body": {"data": "eA"}},
+             {"mimeType": "multipart/mixed", "filename": "", "body": {}, "parts": [
+                 {"mimeType": "application/pdf", "filename": "../a/report.pdf",
+                  "body": {"attachmentId": "att1", "size": 5}}]}]
+    svc = _MsgSvc(parts)
+    c, _ = _client_with(svc)
+    out = c.download_attachment("m1", "att1")
+    assert out["path"] == out["saved_path"] == str(inbox / "report.pdf")
+    assert out["defaulted"] is False
+    assert (inbox / "report.pdf").read_bytes() == b"hello"
+    assert ("message", {"userId": "me", "id": "m1", "format": "full"}) in svc.calls
+
+
+def test_gmail_attachment_without_a_name_gets_the_fallback(inbox):
+    svc = _MsgSvc([{"mimeType": "application/pdf", "filename": "",
+                    "body": {"attachmentId": "att1", "size": 5}}])
+    c, _ = _client_with(svc)
+    attachment_id = "ANGjdJ8abcdefghijklmnop"
+    out = c.download_attachment("m1", attachment_id)
+    name = f"m1-{attachment_id[:12]}.bin"
+    assert out["path"] == str(inbox / name) and (inbox / name).read_bytes() == b"hello"
+
+
+def test_gmail_attachment_without_paths_yaml_goes_to_data_inbox():
+    from h2t_ops.core import paths
+    svc = _MsgSvc([{"mimeType": "application/pdf", "filename": "r.pdf",
+                    "body": {"attachmentId": "att1", "size": 5}}])
+    c, _ = _client_with(svc)
+    out = c.download_attachment("m1", "att1")
+    assert out["path"] == str(paths.data_dir() / "inbox" / "r.pdf") and out["defaulted"] is True
+
+
+def test_gmail_attachment_output_into_secrets_is_refused():
+    from h2t_ops.core import paths, store
+    c, _ = _client_with(_MsgSvc([]))
+    target = paths.secrets_shared() / "x.env"
+    with pytest.raises(store.WriteRefused):
+        c.download_attachment("m1", "att1", str(target))
+    assert not target.exists()
+
+
 # --- Task 7: google deps declared in pyproject.toml ---
 
 

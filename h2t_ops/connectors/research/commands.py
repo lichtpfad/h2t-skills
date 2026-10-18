@@ -281,13 +281,12 @@ def _load_schema(raw: str | None) -> dict[str, Any] | None:
 
 
 def run(args: Any) -> Any:
-    from pathlib import Path
-
     from h2t_ops.connectors.research.client import ResearchClient
+    from h2t_ops.core import paths
     from h2t_ops.core.errors import UsageError
 
     client = ResearchClient(
-        output_dir=Path(args.output_dir) if getattr(args, "output_dir", None) else None
+        output_dir=paths.expand_user_dest(args.output_dir) if getattr(args, "output_dir", None) else None
     )
     cmd = args.research_cmd
     if cmd == "preflight":

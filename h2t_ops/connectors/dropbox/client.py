@@ -9,11 +9,10 @@ from __future__ import annotations
 
 import gzip
 import json
-import os
 from pathlib import Path
 from typing import Any
 
-from h2t_ops.core import secrets
+from h2t_ops.core import downloads, paths, secrets, store
 from h2t_ops.core.errors import (
     AuthError,
     ConfigError,
@@ -42,6 +41,15 @@ def normalize_path(path: str) -> str:
 
 
 _TOKEN_KEYS = ("DROPBOX_TOKEN", "DROPBOX_REFRESH_TOKEN", "DROPBOX_APP_KEY", "DROPBOX_APP_SECRET")
+
+
+def _copy_stream(chunks: Any, dst: Any) -> int:
+    written = 0
+    for chunk in chunks:
+        if chunk:
+            dst.write(chunk)
+            written += len(chunk)
+    return written
 
 
 def _token_config() -> dict[str, str]:
@@ -214,53 +222,71 @@ class DropboxClient:
             entries.extend(page.get("entries", []))
         return entries[:limit] if limit is not None else entries
 
+    def _download_response(self, api_path: str) -> Any:
+        import requests as _r  # lazy — module-scope import forbidden
+
+        for retried in (False, True):
+            try:
+                resp = _r.post(
+                    f"{CONTENT_BASE}/files/download",
+                    headers=self._headers({"Dropbox-API-Arg": json.dumps({"path": api_path})}),
+                    stream=True,
+                    timeout=self._timeout,
+                )
+            except _r.RequestException as exc:
+                raise NetworkError(f"Dropbox download of {api_path} failed: {exc}") from exc
+            if not self._should_refresh(resp, retried):
+                break
+            self._token = self._refresh_access_token()
+        _raise_for_status(resp, f"download {api_path}")
+        return resp
+
     def download(
-        self, path: str, dest: str, *, gunzip: bool = False, _retried: bool = False
+        self, path: str, dest: str | None = None, *, gunzip: bool = False
     ) -> dict[str, Any]:
+        """dest: a file or directory the user named, replaced. None: a new file in the
+        inbox under the Dropbox name, never over a file already there (§6 п. 1, R47).
+
+        The bytes stream into a store.writer handle (R29): a mid-stream failure leaves no
+        file, and whatever was at the destination stays as it was.
+        """
         import requests as _r  # lazy — module-scope import forbidden
 
         api_path = normalize_path(path)
         if not api_path:
             raise UsageError("dropbox download: a file path is required")
-        target = Path(dest)
-        if target.is_dir():
-            target = target / api_path.rsplit("/", 1)[-1]
-        target.parent.mkdir(parents=True, exist_ok=True)
-        try:
-            resp = _r.post(
-                f"{CONTENT_BASE}/files/download",
-                headers=self._headers({"Dropbox-API-Arg": json.dumps({"path": api_path})}),
-                stream=True,
-                timeout=self._timeout,
-            )
-        except _r.RequestException as exc:
-            raise NetworkError(f"Dropbox download of {api_path} failed: {exc}") from exc
-        if self._should_refresh(resp, _retried):
-            self._token = self._refresh_access_token()
-            return self.download(path, dest, gunzip=gunzip, _retried=True)
-        _raise_for_status(resp, f"download {api_path}")
-        # Stream into a sibling and rename at the end: a mid-stream failure used to
-        # leave a truncated file at the destination, on top of whatever was there.
-        part = target.with_name(target.name + ".part")
+        name = downloads.last_segment(api_path)
         written = 0
-        try:
-            with open(part, "wb") as fh:
-                for chunk in resp.iter_content(chunk_size=1 << 20):
-                    if chunk:
-                        fh.write(chunk)
-                        written += len(chunk)
-            if gunzip:
-                written = self._gunzip_in_place(part)
-            os.replace(part, target)
-        except _r.RequestException as exc:
-            part.unlink(missing_ok=True)
-            raise NetworkError(
-                f"Dropbox download of {api_path} failed mid-stream: {exc}"
-            ) from exc
-        except BaseException:
-            part.unlink(missing_ok=True)
-            raise
-        return {"path": api_path, "saved_to": str(target), "bytes": written}
+
+        def write(fh) -> None:
+            nonlocal written
+            resp = self._download_response(api_path)
+            try:
+                if not gunzip:
+                    written = _copy_stream(resp.iter_content(chunk_size=1 << 20), fh)
+                    return
+                # gzip needs the whole file to sniff and decompress: raw bytes in scratch,
+                # the plain ones into the handle.
+                with store.scratch("h2t-dropbox-") as d:
+                    raw = d / "raw"
+                    with store.writer(raw, place="tmp") as out:
+                        _copy_stream(resp.iter_content(chunk_size=1 << 20), out)
+                    written = self._gunzip_into(raw, fh, name)
+            except _r.RequestException as exc:
+                raise NetworkError(
+                    f"Dropbox download of {api_path} failed mid-stream: {exc}"
+                ) from exc
+
+        if dest is None:
+            target, defaulted = downloads.save_default(name, write)
+        else:
+            target, defaulted = paths.expand_user_dest(dest), False
+            if target.is_dir():
+                target = target / name
+            with store.writer(target, place="inbox", dest=True) as fh:
+                write(fh)
+        return {"path": api_path, "saved_to": str(target), "defaulted": defaulted,
+                "bytes": written}
 
     def upload(self, local: str, dest: str, *, _retried: bool = False) -> dict[str, Any]:
         """Send one local file to `dest`. Never overwrites: an existing path is reported
@@ -322,33 +348,29 @@ class DropboxClient:
         return {"path": api_path, "url": made["url"], "created": True, "visibility": "public"}
 
     @staticmethod
-    def _gunzip_in_place(target: Path) -> int:
-        """.prproj and friends are gzip under a non-gz name; leave a non-gzip file alone.
+    def _gunzip_into(raw: Path, dst: Any, name: str) -> int:
+        """.prproj and friends are gzip under a non-gz name; a non-gzip file goes as it is.
 
         Decompressed in chunks against a ceiling, because the compression ratio is
         the uploader's choice: a few MB of gzip expands to as much as it likes.
         """
-        with open(target, "rb") as probe:
-            if probe.read(2) != b"\x1f\x8b":
-                return target.stat().st_size
+        with open(raw, "rb") as probe:
+            gz = probe.read(2) == b"\x1f\x8b"
+        if not gz:
+            with open(raw, "rb") as src:
+                return _copy_stream(iter(lambda: src.read(1 << 20), b""), dst)
         cap = int(secrets.get("DROPBOX_MAX_GUNZIP_BYTES") or str(512 << 20))
-        plain = target.with_name(target.name + ".gunzip")
         written = 0
-        try:
-            with gzip.open(target, "rb") as src, open(plain, "wb") as dst:
-                while True:
-                    chunk = src.read(1 << 20)
-                    if not chunk:
-                        break
-                    written += len(chunk)
-                    if written > cap:
-                        raise ProviderError(
-                            f"{target.name}: gunzip exceeded the {cap} byte cap. "
-                            "Raise DROPBOX_MAX_GUNZIP_BYTES or download without --gunzip."
-                        )
-                    dst.write(chunk)
-            os.replace(plain, target)
-        except BaseException:
-            plain.unlink(missing_ok=True)
-            raise
+        with gzip.open(raw, "rb") as src:
+            while True:
+                chunk = src.read(1 << 20)
+                if not chunk:
+                    break
+                written += len(chunk)
+                if written > cap:
+                    raise ProviderError(
+                        f"{name}: gunzip exceeded the {cap} byte cap. "
+                        "Raise DROPBOX_MAX_GUNZIP_BYTES or download without --gunzip."
+                    )
+                dst.write(chunk)
         return written

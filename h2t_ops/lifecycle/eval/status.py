@@ -1,13 +1,14 @@
 """Read-only eval status — offline-safe, no writes, no network."""
 from pathlib import Path
 
-from h2t_ops.core import secrets
+from h2t_ops.core import paths, secrets
 
 # Module-qualified access (not `from .session import ...`) so tests that
 # monkeypatch `session._sdk_available` reach the call inside get_status.
 # Relative, so this module works under both import styles: as `lib.eval.status` from a
 # checkout, and as `eval.status` when a plugin root's `lib` is on sys.path — which is how
 # every other payload module is already reached.
+from . import report
 from . import session as sess
 
 
@@ -47,10 +48,10 @@ def get_status(env=None, evals_root=None) -> dict:
     mode = sess.resolve_mode(env)
     sdk = sess._sdk_available()
     token = bool(env.get("H2T_EVALS_TOKEN"))
-    root = Path(evals_root) if evals_root else Path.home() / ".h2t" / "evals"
+    root = Path(evals_root) if evals_root else paths.records("evals")
     try:
-        # Session records live only at <root>/<skill>/sessions/*.json.
-        count = sum(1 for _ in root.glob("*/sessions/*.json")) if root.exists() else 0
+        # Session records of every machine: <root>/<machine>/<skill>/<run>.json (#548 §3).
+        count = len(report.session_files(root)) if root.exists() else 0
     except OSError:
         count = 0
     return {

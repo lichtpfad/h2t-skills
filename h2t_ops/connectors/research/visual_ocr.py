@@ -4,11 +4,12 @@ from __future__ import annotations
 import json
 import shutil
 import subprocess
-import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from h2t_ops.connectors.research import store as research_store
+from h2t_ops.core import store as core_store
 from h2t_ops.core.errors import ConfigError, ProviderError, UsageError
 
 ALLOWED_DEGRADED_REASONS = {
@@ -244,12 +245,11 @@ def capture_and_ocr(
         project=project,
         slug_source=url,
     )
-    artifact_paths["sources_json"].parent.mkdir(parents=True, exist_ok=True)
     stable_image = artifact_paths["sources_json"].with_suffix(".capture.png")
 
-    with tempfile.TemporaryDirectory() as tmp_dir:
+    with core_store.scratch("h2t-visual-ocr-") as tmp_dir:
         result = subprocess.run(
-            ["h2t-screenshot", url, "--format", "desktop", "--out", tmp_dir],
+            ["h2t-screenshot", url, "--format", "desktop", "--out", str(tmp_dir)],
             capture_output=True,
             text=True,
             encoding="utf-8",
@@ -269,8 +269,9 @@ def capture_and_ocr(
                 details={"stdout": result.stdout[:300]},
             )
 
-        # Copy to stable location before TemporaryDirectory is deleted
-        shutil.copy2(image_path_str, stable_image)
+        # Copy to the stable location before the scratch directory is removed; a
+        # capture already there is replaced, as 3.x did (the artifact base has no stamp).
+        research_store.copy_file(Path(image_path_str), stable_image)
 
     # Temp dir deleted — use stable_image for OCR and provenance
     extracted_text, visible_headings, confidence = extract_text_from_image(stable_image)
@@ -297,10 +298,8 @@ def capture_and_ocr(
             "captured_at": captured_at,
         },
     }
-    artifact_paths["sources_json"].write_text(
-        json.dumps(sidecar, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
+    research_store.save_text(artifact_paths["sources_json"],
+                              json.dumps(sidecar, ensure_ascii=False, indent=2))
 
     exit_code = 0 if envelope["status"] in ("OK", "DEGRADED") else 1
     return envelope, exit_code

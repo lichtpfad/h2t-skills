@@ -299,6 +299,213 @@ def _meetgeek_journal(sb, mp):
     assert recovery.uploads_manifest_path().is_file()
 
 
+def _drive_client(mp, name="report.txt", payload=b"data"):
+    """DriveClient without __init__, the stand-in service of tests/connectors/drive."""
+    from unittest.mock import MagicMock
+
+    from h2t_ops.connectors.drive import client as dmod
+    c = object.__new__(dmod.DriveClient)
+    c.service = MagicMock()
+    files = c.service.files.return_value
+    files.get.return_value.execute.return_value = {"name": name, "mimeType": "text/plain"}
+
+    class Download:
+        def __init__(self, fd, request):
+            self.fd = fd
+
+        def next_chunk(self):
+            self.fd.write(payload)
+            return None, True
+
+    mp.setattr(dmod, "_media_io_base_download", lambda: Download)
+    return c
+
+
+def _drive_download_default(sb, mp):
+    _drive_client(mp).download_file("f1")
+    assert (sb.inbox / "report.txt").read_bytes() == b"data"
+
+
+def _drive_download_dest(sb, mp):
+    """--dest: the path the user named, replaced through store (dest=True)."""
+    target = sb.home.parent / "named" / "out.txt"
+    _drive_client(mp).download_file("f1", dest=str(target))
+    assert target.read_bytes() == b"data"
+
+
+def _gmail_attachment_default(sb, mp):
+    from tests.connectors.gmail.test_client import _client_with, _MsgSvc
+    svc = _MsgSvc([{"mimeType": "application/pdf", "filename": "../a/report.pdf",
+                    "body": {"attachmentId": "att1", "size": 5}}])
+    c, _ = _client_with(svc)
+    c.download_attachment("m1", "att1")
+    assert (sb.inbox / "report.pdf").read_bytes() == b"hello"
+
+
+def _notion_export_default(sb, mp):
+    import h2t_ops.connectors.notion.client as client_mod
+    from h2t_ops.connectors.notion import commands
+    from tests.connectors.notion.test_commands import _sync_args, _SyncStub
+    mp.setattr(client_mod, "NotionClient", lambda: _SyncStub())
+    commands.run(_sync_args())
+    assert (sb.inbox / "P-1.md").is_file()
+
+
+def _dropbox_download_default(sb, mp):
+    """`dropbox download <path>` with --gunzip: raw bytes in scratch, plain ones in the inbox."""
+    import gzip
+    import sys
+
+    from h2t_ops.connectors.dropbox.client import DropboxClient
+    from tests.connectors.dropbox.test_client import _fake_requests, _Resp
+    c = object.__new__(DropboxClient)
+    c._token, c._timeout, c._path_root = "fake-dropbox", 10, ""
+    fake, _ = _fake_requests(lambda *a, **k: _Resp(200, chunks=[gzip.compress(b"<P/>")]))
+    mp.setitem(sys.modules, "requests", fake)
+    c.download("/x/seq.prproj", gunzip=True)
+    assert (sb.inbox / "seq.prproj").read_bytes() == b"<P/>"
+
+
+def _research_off(mp):
+    mp.setenv("H2T_EVALS_MODE", "off")
+    mp.setenv("H2T_RESEARCH_TELEMETRY_DISABLE", "0")
+
+
+def _research_save(sb, mp):
+    """A search with no --output-dir: artifacts, objects, indexes, telemetry in data/research."""
+    from h2t_ops.connectors.research import client
+    from h2t_ops.core import paths
+    from tests.connectors.research.test_client import (
+        _patch_exa_search,
+        _provider_envelope,
+    )
+    _research_off(mp)
+    mp.setattr(client, "resolve_secret", lambda name: "fake-exa")
+    _patch_exa_search(mp, provider_envelope=_provider_envelope("OK"), exit_code=0)
+    client.ResearchClient().search(query="q", project="p", no_retry=True)
+    assert (paths.data_dir() / "research" / "telemetry.jsonl").is_file()
+
+
+def _research_fetch_save(sb, mp):
+    """`research fetch --keep-raw`, no --output-dir: the raw page through research.fetch."""
+    from unittest.mock import patch
+
+    from h2t_ops import cli
+    from h2t_ops.core import paths
+    from tests.connectors.research.test_fetch_script_cases import (
+        _load_fixture,
+        _make_http_response,
+    )
+    _research_off(mp)
+    for k in ("JINA_API_KEY", "EXA_API_KEY"):
+        mp.delenv(k, raising=False)
+    html = _load_fixture("public_article.html").encode("utf-8")
+    with patch("urllib.request.urlopen", return_value=_make_http_response(html)):
+        cli.dispatch(["research", "fetch", "--url", "https://example.com/x", "--keep-raw",
+                      "--project", "p"])
+    assert list((paths.data_dir() / "research").glob("*.raw.html"))
+
+
+def _research_corrupt_alias_index(sb, mp):
+    from h2t_ops.connectors.research import store
+    from tests.connectors.research.test_maintenance import _demo_document
+    root = store.default_root()
+    _demo_document(root)
+    index = store.index_path(root, "aliases")
+    index.parent.mkdir(parents=True, exist_ok=True)
+    index.write_text("[null]\n", encoding="utf-8")
+
+
+def _research_maintenance(sb, mp):
+    """rebuild-indexes over a corrupt alias index: the copy aside and four indexes, via store."""
+    from h2t_ops.connectors.research import client, store
+    assert client.ResearchClient().rebuild_research_indexes()["status"] == "ok"
+    assert store.index_path(store.default_root(), "aliases").with_suffix(".json.corrupt").is_file()
+
+
+def _visual_ocr_shot(sb, mp):
+    (sb.home.parent / "shot.png").write_bytes(b"fake-png")
+
+
+def _research_visual_ocr(sb, mp):
+    """visual-ocr --auto: h2t-screenshot into a store.scratch dir, the capture copied into
+    data/research through a store handle, the sidecar through store."""
+    import shutil
+    import subprocess
+    from types import SimpleNamespace
+
+    from h2t_ops.connectors.research import visual_ocr
+    from h2t_ops.core import paths
+    shot = sb.home.parent / "shot.png"
+    mp.setattr(shutil, "which", lambda name: "/bin/h2t-screenshot")
+    mp.setattr(subprocess, "run", lambda *a, **k: SimpleNamespace(
+        returncode=0, stdout=f"✓ desktop: {shot}\n", stderr=""))
+    mp.setattr(visual_ocr, "extract_text_from_image", lambda p: ("text", [], "high"))
+    visual_ocr.capture_and_ocr("https://example.com/x", output_dir=paths.data_dir() / "research",
+                               project="p")
+    assert list((paths.data_dir() / "research").glob("*.capture.png"))
+
+
+def _evals_write_local(sb, mp):
+    from h2t_ops.core import paths
+    from h2t_ops.lifecycle.eval.session import SkillEval
+    mp.setenv("H2T_EVALS_MODE", "local")
+    with SkillEval("handoff", domain="dev", project="p"):
+        pass
+    assert list((paths.records("evals", paths.machine_name()) / "handoff").glob("*.json"))
+
+
+def _evals_spool(sb, mp):
+    """push: the stand-in SDK opens the spool with sqlite3 itself, inside store.managed."""
+    import sqlite3
+    import sys
+    import types
+
+    from h2t_ops.core import paths
+    from h2t_ops.lifecycle.eval.session import SkillEval
+
+    class Client:
+        def __init__(self, *, service_url, token, spool_path):
+            sqlite3.connect(spool_path).close()
+
+        def flush(self, **kw):
+            pass
+
+    class Session:
+        def __init__(self, **kw):
+            pass
+
+        def start(self):
+            pass
+
+        def metric(self, key, **kw):
+            pass
+
+        def finish(self, **kw):
+            pass
+
+    sdk = types.ModuleType("h2t_evals.sdk")
+    sdk.EvalClient, sdk.EvalSession = Client, Session
+    mp.setitem(sys.modules, "h2t_evals", types.ModuleType("h2t_evals"))
+    mp.setitem(sys.modules, "h2t_evals.sdk", sdk)
+    mp.setenv("H2T_EVALS_MODE", "push")
+    with SkillEval("research", domain="ops", project="p"):
+        pass
+    assert paths.evals_spool().is_file()
+
+
+def _creative_profiles_dir(sb, mp):
+    import contextlib
+    import io
+
+    from h2t_ops.core import paths
+    from h2t_ops.tools.creative import cli
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out):
+        assert cli.main(["profiles-dir"]) == 0
+    assert out.getvalue().strip() == str(paths.data_dir() / "creative" / "profiles")
+
+
 CASES: list[Case] = [
     Case("store.replace.state", _store_replace_state),
     # Task 8: a refresh writes nothing; a rotated refresh token writes local and the mirror.
@@ -328,4 +535,18 @@ CASES: list[Case] = [
     Case("meetgeek.webhooks.write", _meetgeek_webhook),
     Case("meetgeek.output-flag", _meetgeek_output_flag),
     Case("meetgeek.upload-journal", _meetgeek_journal),
+    # Task 12: downloads with no path into the inbox, research into data/research, eval
+    # records into records/evals, the spool handed to the SDK, creative profiles under data.
+    Case("drive.download.default", _drive_download_default),
+    Case("drive.download.dest", _drive_download_dest),
+    Case("gmail.attachment.default", _gmail_attachment_default),
+    Case("notion.export.default", _notion_export_default),
+    Case("dropbox.download.default", _dropbox_download_default),
+    Case("research.save", _research_save),
+    Case("research.fetch.save", _research_fetch_save),
+    Case("research.maintenance", _research_maintenance, setup=_research_corrupt_alias_index),
+    Case("research.visual-ocr", _research_visual_ocr, setup=_visual_ocr_shot),
+    Case("evals.write-local", _evals_write_local),
+    Case("evals.spool", _evals_spool),
+    Case("creative.profiles-dir", _creative_profiles_dir),
 ]
