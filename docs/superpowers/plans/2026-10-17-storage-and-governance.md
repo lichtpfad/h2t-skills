@@ -18,7 +18,7 @@ issue: "548"
 2. Затем вызывающие переводятся на модули группами: по провайдерам, по сессиям, по записям в репо, по установке. Каждая группа опускает потолки ratchet и добавляет свои случаи в песочницу.
 3. Затем индекс сессий: производная SQLite из md с frontmatter.
 4. Затем `doctor` и миграция `layout 1`: команда `h2t-setup layout migrate|rollback`, которая работает и на editable-установке; `h2t-setup sync` вызывает `migrate`.
-5. Последними идут документация, живой перенос трёх машин (мак, десктоп и ноутбук Windows) и выпуск.
+5. Последними идут документация, живой перенос (по документу выкатки `docs/superpowers/plans/2026-10-18-storage-rollout.md`) и выпуск.
 
 **Tech Stack:** Python ≥ 3.11 (CI 3.11, выпуск 3.12.11), PyYAML и ruamel.yaml (уже в зависимостях), `sqlite3` из стандартной библиотеки, `fcntl`/`msvcrt`, pytest, GitHub Actions (ubuntu + windows).
 
@@ -88,32 +88,16 @@ issue: "548"
 
 ## Фаза P — пробы и сторожа
 
-### Task 1: Пробы ноутбука и вывод в спеку **[владелец — ноутбук]**
+### Task 1: Пробы на машинах автора — вынесено
 
-**Состояние на 2026-10-18: пробы пришли и разобраны, выводы уже в спеке v6.** Ответ ноутбука (Windows, hostname `Computer`) — сообщение 1582 в Telegram-чате `3dwalker`, 2026-10-17 23:35 UTC. Что пробы меряли и что вышло:
-
-| Проба (§11) | Факт | Вывод, куда вписан |
-|---|---|---|
-| 11.1 Syncthing — даёт ли одинаковый файл, созданный на двух машинах, `*.sync-conflict-*` | **не проведена**: Syncthing на ноутбуке не установлен | безопасный порядок §8: ноутбук мигрирует только после того, как `secrets/shared` с мака приехал; пробу повторить, когда Syncthing появится (Step 1 ниже) |
-| 11.3 права Windows — `os.chmod(f, 0o600)` и `icacls` до и после | режим читается `0o666`, chmod без эффекта; ACL наследуется от профиля: владелец, Administratoren, SYSTEM | §4: на Windows права не ставятся и не проверяются, проверки только на POSIX; Task 6 Step 5 — по этой ветке |
-| 11.4 Google — `sha256[:12]` поля `refresh_token` | ноутбук `4ac3fa1e3925`, мак `ffadbd08aa1f`: разные входы | решение владельца: токен у каждой машины свой в `local/google.token.json`, клиент в `shared` (§4, R19); Task 8, Task 22 |
-| 11.5 `msvcrt` — A держит блокировку 3 с, B пытается дописать | B ждал 2,48 с | Task 4 использует `msvcrt.locking` (смещение за конец файла) |
-| сессии ноутбука | `~/.h2t/sessions/computer`: 1 md; `H2T_SESSION_ROOT` не задан | имя машины ноутбука — `computer`; `automata` в `~/.dor/sessions` — десктоп Windows, не ноутбук (владелец, 2026-10-18); миграция десктопа — Task 26 Step 5a |
+Пробы спеки §11 проведены 2026-10-17, их выводы уже в спеке v6: на Windows права не ставятся и
+не проверяются (проверки только на POSIX), `append` на Windows использует `msvcrt.locking`,
+токен Google у каждой машины свой в `local`, индекс пересобирается по `stat`. Сами замеры,
+состав машин и оставшаяся Syncthing-проба — в документе выкатки `docs/superpowers/plans/2026-10-18-storage-rollout.md`.
 
 **Files:** —
 
-**Interfaces:** Produces — решения, которые читают Task 4 (блокировка на Windows: `msvcrt`), Task 6 (права на Windows: не ставятся), Task 8 и Task 22 (токен Google в `local`), Task 26 (порядок машин).
-
-- [ ] **Step 1: Syncthing-проба — когда на ноутбуке появится Syncthing.** Не блокирует задачи 2–25. Ноутбук и мак независимо создают одинаковый `~/.dor/_h2t-probe/same.txt` при выключенной синхронизации; на маке:
-
-```bash
-mkdir -p ~/.dor/_h2t-probe
-printf 'same content 2026-10-17\n' > ~/.dor/_h2t-probe/same.txt
-shasum -a 256 ~/.dor/_h2t-probe/same.txt
-```
-и ответ в чат «мак: файл создан» (`h2t-ops telegram send 3dwalker --message "мак: файл создан"`, `connectors/telegram/commands.py:75-80`; у `send` флага `--confirm-send` нет — он есть только у `send-file`, argparse на нём выходит с кодом 2). Ответ ноутбука читается `h2t-ops telegram messages 3dwalker --limit 20 --json`. После листинга ноутбука: `ls -la ~/.dor/_h2t-probe/` на маке, затем `rm -rf ~/.dor/_h2t-probe`. Если конфликт появился — порядок §8 остаётся обязательным; если нет — §11.1 закрыть строкой «порядок не важен».
-
-- [ ] **Step 2: Commit** (только если Step 1 выполнен) — `git add docs/superpowers/specs/2026-10-17-storage-and-governance.md`, сообщение `docs(storage): syncthing probe result (#548)`.
+**Interfaces:** Produces — решения, которые читают Task 4 (блокировка на Windows: `msvcrt`), Task 6 (права на Windows: не ставятся), Task 8 и Task 22 (токен Google в `local`).
 
 ### Task 2: Сканер обходов и ratchet-тесты
 
@@ -2423,7 +2407,7 @@ Run: `.venv/bin/pytest tests/ -q` → PASS, без строки `ERROR: the suit
 4. После каждой записи токена — зеркало `mirror_legacy(json.loads(creds.to_json()))` в `paths.legacy("google.store")/"tokens.json"` той же машины, в формате 3.x: `token` и `expiry` того момента плюс долгоживущие поля. Пишется, пока этот файл существует, через `store.replace(..., place="legacy", compat=True, mode=0o600)`; файла нет → `"absent"`. Старый файл не читается: писатель у обеих копий один — пакет этой машины.
 5. `_load_dotenv` удаляется. Ключей Google в env-файлах нет, а `H2T_*` загружает `secrets.load_secrets`.
 6. `gmail` больше не ищет `~/.config/gmail` сам. Это запасной путь `secrets.read_json`.
-7. Запасной вариант B (R11): если живая проверка POS в Task 26 покажет 401 на протухшем `expiry`, в ветку рефреша добавляется одна строка — `mirror_legacy(json.loads(creds.to_json()))` при каждом рефреше. Тест `test_refresh_writes_nothing` тогда меняется на «рефреш пишет только зеркало».
+7. Запасной вариант B (R11): если живая проверка POS (документ выкатки, Step 3) покажет 401 на протухшем `expiry`, в ветку рефреша добавляется одна строка — `mirror_legacy(json.loads(creds.to_json()))` при каждом рефреше. Тест `test_refresh_writes_nothing` тогда меняется на «рефреш пишет только зеркало».
 
 - [ ] **Step 1: Тесты (красные).**
 
@@ -3588,40 +3572,20 @@ def test_every_writer_has_a_case(module):
 
 - [ ] **Step 5: Commit** — `docs(storage): layout, migration and contracts in README, CHANGELOG and skills (#548)`.
 
-### Task 26: Живой перенос трёх машин и приёмка **[владелец]**
+### Task 26: Живой перенос и приёмка **[владелец]**
 
-Машины (владелец, 2026-10-18): MacBook `macbook-pro-3`, десктоп Windows `automata`, ноутбук Windows `computer`.
+Перенос на машинах автора ведётся по документу выкатки `docs/superpowers/plans/2026-10-18-storage-rollout.md`: порядок машин, проверка
+POS с протухшим access-токеном (спека §11.6, R11), приёмка на каждой машине. Миграция
+запускается командой `h2t-setup layout migrate` на editable-установке из ветки (R13), поэтому
+задача выполняется **до** выпуска 4.0.0 (Task 27).
 
-Порядок §8 «Порядок у автора». Миграция запускается командой `h2t-setup layout migrate` на editable-установке из ветки (R13), поэтому задача целиком выполняется **до** выпуска 4.0.0 (Task 27). Syncthing на ноутбуке не установлен (проба 11.1): пока его нет, ноутбук мигрирует только после того, как `secrets/shared` с мака туда приехал.
+Здесь остаются проверки приёмки §12, которые от машин не зависят:
 
-- [ ] **Step 1: Мак, перед переносом.** `h2t-ops doctor` → сохранить вывод. Хэш-манифест старых мест: `find ~/.dor ~/.config/{google-calendar-mcp,gmail,notion,telegram} ~/.h2t/{sessions,activity,evals,research,creative,config/secrets} -type f -exec shasum -a 256 {} +`, вывод только в scratchpad, значения файлов не печатаются.
-
-- [ ] **Step 2: Мак, перенос.** `h2t-setup dev-sync` (editable из ветки), затем `h2t-setup layout migrate`. Если фаза имени машины остановилась — `h2t-setup layout migrate --machine macbook-pro-3` (закреплённое в настройках Claude имя должно совпадать, ADR 0003). Проверка:
-  - `h2t-ops doctor` без `ERROR`;
-  - `h2t-ops paths list`;
-  - `h2t-ops index query --project h2t-skills`;
-  - `~/.h2t/secrets/local/google.token.json` есть, `~/.h2t/secrets/shared/google.token.json` нет (R19);
-  - хэш-манифест старых мест не изменился (сравнить `diff` двух файлов манифеста, без вывода значений).
-
-- [ ] **Step 3: POS с протухшим access-токеном (§11.6, R11) [владелец].** После Step 2 пакет больше не обновляет `token` в `~/.config/google-calendar-mcp/tokens.json`; через час после последнего входа он истёк сам, ничего копировать и править не нужно. Владелец вызывает у POS API одну команду календаря (тот endpoint, которым POS пользуется каждый день) и смотрит код ответа. 200 — R11 остаётся, результат вписать в `issue-pos.md` (Task 25). 401 — включить запасной вариант B (Task 8, правило 7: `mirror_legacy` на каждом рефреше), прогнать `tests/core/test_google_auth.py`, повторить проверку. Значения токена в выводе не печатаются.
-
-- [ ] **Step 4: Мак, Syncthing [владелец].** Владелец добавляет в Syncthing папки `~/.h2t/secrets/shared` и `~/.h2t/records`. `doctor` → синхронизация `records`, `secrets.shared` = `confirmed`.
-
-- [ ] **Step 5: Ноутбук [владелец].** Сначала Syncthing на ноутбуке и Task 1 Step 1 (проба 11.1); дождаться, пока `~/.h2t/secrets/shared` с мака приехал. Затем шаг 2 на ноутбуке (через Telegram-чат `3dwalker`, как Task 1). Имя машины — `computer` (hostname `Computer`, в `~/.h2t/sessions/computer` один md); `--machine computer`. `automata` в `~/.dor/sessions` — не ноутбук, а десктоп Windows (владелец, 2026-10-18), см. Step 5a. Сессии ноутбука приезжают на мак: `h2t-ops index query --project <id>` на маке показывает машину ноутбука.
-
-- [ ] **Step 5a: Десктоп `automata` [владелец].** То же, что Step 5, на десктопе Windows. Сначала проба: `hostname`, установлен ли Syncthing и синхронизирует ли `~/.dor` (если да — проба 11.1 проводится здесь), задан ли `H2T_MACHINE_NAME` в настройках Claude, сколько md в `~/.h2t/sessions/*` и `~/.dor/sessions/automata` (последняя запись в общем каталоге — 2026-05-22). Имя машины — `automata`, `--machine automata`, чтобы 148 сессий из `~/.dor/sessions/automata` остались под своим именем. Если hostname десктопа уже не `automata` и в `~/.h2t/sessions` есть папка под другим именем, её md миграция переносит в `records/sessions/automata/` (тот же случай, что #491 на маке).
-
-- [ ] **Step 6: Приёмка §12** — по пункту, с выводом:
-  - [ ] `session-start` в одном репо на всех трёх машинах показывает последнюю сессию проекта с именем машины, чужих проектов нет, предупреждение — при расхождении.
-  - [ ] `doctor` чистый, синхронизация «подтверждено» или «объявлено».
-  - [ ] каждый коннектор: `h2t-ops <коннектор> --help` и одна безопасная команда чтения (`notion search`, `calendar list --days 1`, `gmail search --limit 1`, `telegram dialogs --limit 1`, `granola list --limit 1`, `meetgeek list --limit 1`, `research` — `doctor`), ключи сверены по хэшу с манифестом шага 1. Имена подкоманд сверены по коду: `calendar list` (`connectors/calendar/commands.py:91`), `meetgeek list` (`connectors/meetgeek/commands.py:167`); `calendar events` и `meetgeek meetings` не существуют.
-  - [ ] контроль: старые каталоги переименованы (`mv ~/.config/telegram ~/.config/telegram.gone` и т.д.) — коннекторы работают; вернуть имена.
+- [ ] **Step 1: Выкатка** — все шаги `docs/superpowers/plans/2026-10-18-storage-rollout.md` отмечены, отчёт приёмки записан.
+- [ ] **Step 2: Общая приёмка §12** — по пункту, с выводом:
   - [ ] сторожа §7.3 зелёные на CI (ubuntu и windows).
   - [ ] откат на тестовом `HOME` (не на живом): `HOME=$SP/home h2t-setup layout migrate` на 3.x-раскладке из фикстуры Task 23, затем сессия после миграции, затем `HOME=$SP/home h2t-setup layout rollback --sync-paused` — сессия осталась. `layout` не ставит пакет через `uv`, поэтому поддельный `HOME` ничего не устанавливает.
   - [ ] новый пользователь: `HOME=$SP/empty h2t-setup layout migrate` → `layout.json` создан, нет `~/.dor`, нет `~/.config/<программа>`.
-  - [ ] POS отвечает с протухшим access-токеном (Step 3) или включён вариант B.
-
-- [ ] **Step 7: Отчёт** — `docs/reports/2026-MM-DD-storage-acceptance.md`; commit.
 
 ### Task 27: Выпуск 4.0.0 **[владелец]**
 
