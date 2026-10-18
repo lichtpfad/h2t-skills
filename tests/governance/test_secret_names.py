@@ -37,10 +37,11 @@ def test_every_secret_write_uses_a_package_name(tmp_path, monkeypatch):
 
     monkeypatch.setattr(store, "replace", recording)
     for provider in sorted(providers.PROVIDERS):
-        secrets.write_env(provider, {"X": "fake"})
-        secrets.write_env(provider, {"X": "fake"}, local=True)
+        key = f"{providers.key_prefix(provider)}NAME_CHECK"
+        secrets.write_env(provider, {key: f"fake-{provider}-shared"})
+        secrets.write_env(provider, {key: f"fake-{provider}-local"}, local=True)
     for name in sorted(secrets._JSON):
-        secrets.write_json(name, {"k": "fake"})
+        secrets.write_json(name, {"k": f"fake-{name}"})
     secret_writes = [n for place, n in seen if place in ("secrets.shared", "secrets.local")]
     assert len(secret_writes) == 2 * len(providers.PROVIDERS) + len(secrets._JSON)
     for name in secret_writes:

@@ -9,10 +9,11 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from pathlib import Path
 
 from h2t_ops.core import paths, providers, store
-from h2t_ops.core.errors import ConfigError
+from h2t_ops.core.errors import ConfigError, UsageError
 
 _JSON = {"google.client": ("secrets.shared", "google.client.json"),
          "google.token": ("secrets.local", "google.token.json"),   # per machine (R19)
@@ -168,7 +169,27 @@ def write_json(name: str, data: dict) -> Path:
                          keys=tuple(data))       # field names only (R41)
 
 
+_KEY = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+
+def _check_env(provider: str, values: dict[str, str]) -> None:
+    """The §4 contract, so a write never lands a file _new_values() would not read: a package
+    provider (or other.env), keys named <PROVIDER>_<WHAT>, one line per value."""
+    if provider != "other" and not providers.is_package_provider(provider):
+        raise UsageError(f"{provider!r} is not a provider of this package",
+                         hint=f"one of: {', '.join(sorted(providers.PROVIDERS))}, or other")
+    prefix = providers.key_prefix(provider)
+    for key, val in values.items():
+        if not _KEY.match(key) or (provider != "other" and not key.startswith(prefix)):
+            raise UsageError(f"key {key!r} does not belong in {provider}.env",
+                             hint=f"keys there are named {prefix}<WHAT>" if provider != "other"
+                             else "a key is letters, digits and _")
+        if "\n" in val or "\r" in val:
+            raise UsageError(f"the value of {key} spans lines", hint="one line per value")
+
+
 def write_env(provider: str, values: dict[str, str], *, local: bool = False) -> Path:
+    _check_env(provider, values)
     body = "".join(f"{k}={v}\n" for k, v in values.items())
     return store.replace(provider_file(provider, local=local), body,
                          place="secrets.local" if local else "secrets.shared", keys=tuple(values))

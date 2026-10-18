@@ -3,7 +3,7 @@ import os
 import pytest
 
 from h2t_ops.core import paths, secrets
-from h2t_ops.core.errors import ConfigError
+from h2t_ops.core.errors import ConfigError, UsageError
 
 
 @pytest.fixture
@@ -32,7 +32,7 @@ def test_new_provider_file_wins_and_legacy_is_not_read_for_that_provider(home):
 
 
 def test_migrated_provider_never_falls_back(home):
-    _w(paths.secrets_shared() / "exa.env", "EXA_OTHER=fake\n")
+    _w(paths.secrets_shared() / "exa.env", "EXA_OTHER=fake-exa-other\n")
     _w(paths.legacy("secrets.dor_old"), "EXA_API_KEY=fake-old\n")
     assert secrets.get("EXA_API_KEY") is None
 
@@ -61,8 +61,8 @@ def test_secrets_file_variable_is_not_read(home, monkeypatch, tmp_path):
 
 
 def test_foreign_env_files_are_not_candidates(home):
-    _w(paths.secrets_shared() / "exa.env", "EXA_API_KEY=fake\n")
-    _w(paths.secrets_shared() / "other.env", "ZZZ=fake\n")
+    _w(paths.secrets_shared() / "exa.env", "EXA_API_KEY=fake-exa\n")
+    _w(paths.secrets_shared() / "other.env", "ZZZ=fake-zzz\n")
     _w(paths.secrets_shared() / "getcourse.env", "EXA_API_KEY=fake-foreign\n")
     names = [p.name for p in secrets.candidate_secret_files()]
     assert "exa.env" in names and "other.env" in names and "getcourse.env" not in names
@@ -110,9 +110,9 @@ def test_migration_sources_name_a_ladder_file_once_at_the_senior_place(home, mon
 
 def test_shared_env_values_without_a_directory_is_empty(home):
     assert secrets.shared_env_values() == {}
-    _w(paths.secrets_shared() / "exa.env.from-dor", "EXA_API_KEY=fake\n")
+    _w(paths.secrets_shared() / "exa.env.from-dor", "EXA_API_KEY=fake-from-dor\n")
     _w(paths.secrets_shared() / "google.client.json", "{}")
-    assert secrets.shared_env_values() == {"exa.env.from-dor": {"EXA_API_KEY": "fake"}}
+    assert secrets.shared_env_values() == {"exa.env.from-dor": {"EXA_API_KEY": "fake-from-dor"}}
 
 
 def test_read_secret_bytes_refuses_a_path_outside_the_secret_places(home):
@@ -123,3 +123,24 @@ def test_read_secret_bytes_refuses_a_path_outside_the_secret_places(home):
     _w(paths.legacy("telegram") / "config.json", "{}")
     assert secrets.read_secret_bytes(paths.legacy("telegram") / "config.json") == b"{}"
     assert secrets.read_secret_bytes(notes, root=home) == b"fake-notes"
+
+
+# --- write_env keeps to the §4 naming contract -------------------------------------------------
+
+def test_write_env_round_trips_through_get(home):
+    secrets.write_env("exa", {"EXA_API_KEY": "fake-exa-written"})
+    secrets.write_env("other", {"ZZZ_TOKEN": "fake-other-written"})
+    assert secrets.get("EXA_API_KEY") == "fake-exa-written"
+    assert secrets.get("ZZZ_TOKEN") == "fake-other-written"
+
+
+@pytest.mark.parametrize("provider, values", [
+    ("getcourse", {"GETCOURSE_KEY": "fake-foreign"}),        # not a package provider
+    ("../exa", {"EXA_API_KEY": "fake-traversal"}),            # path separator
+    ("exa", {"JINA_API_KEY": "fake-wrong-prefix"}),           # key of another provider
+    ("exa", {"EXA_API_KEY": "fake-line\nNOTION_API_TOKEN=fake-injected"}),
+])
+def test_write_env_rejects_non_contract_writes(home, provider, values):
+    with pytest.raises(UsageError):
+        secrets.write_env(provider, values)
+    assert not paths.secrets_shared().exists() or not any(paths.secrets_shared().iterdir())

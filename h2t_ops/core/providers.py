@@ -29,5 +29,10 @@ def provider_of_key(key: str) -> str | None:
     return best
 
 
+def key_prefix(provider: str) -> str:
+    """`<PROVIDER>_` (§4): the table's entry, or the name upper-cased (google → GOOGLE_)."""
+    return KEY_PREFIX.get(provider) or provider.upper().replace("-", "_") + "_"
+
+
 def is_package_provider(stem: str) -> bool:
     return stem in PROVIDERS
