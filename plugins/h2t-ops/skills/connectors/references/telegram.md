@@ -45,8 +45,9 @@ h2t-ops telegram messages ENTITY_FROM_DIALOGS --limit 20 --json
 
 ## Auth
 
-Telegram expects `~/.config/telegram/config.json` with `api_id` and `api_hash` (from
-https://my.telegram.org/apps), plus a Telethon session file after login.
+Telegram expects `TELEGRAM_API_ID` and `TELEGRAM_API_HASH` (from https://my.telegram.org/apps)
+in the file `h2t-ops paths get secret:telegram` prints, plus a Telethon session after login,
+kept on this machine only (`h2t-ops paths get secrets.local`).
 
 **Log in by QR first.** `auth qr` draws a QR in the terminal; the person scans it on a
 phone already logged in (Settings → Devices → Link Desktop Device). No code is sent, so

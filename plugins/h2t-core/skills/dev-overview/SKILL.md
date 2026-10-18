@@ -12,12 +12,37 @@ metadata:
 Cross-project dashboard showing progress toward goals and movement across all active repos.
 **Not a session tool** — use `h2t-core:session-start` for that. This is a weekly/on-demand review.
 
+<!-- version-check:begin -->
+## Version check
+
+Run this before any other command of this skill:
+
+```bash
+h2t-ops version --expect @VERSION@ --json
+```
+
+Act on the result, in this order:
+
+1. JSON with `"ok": true` — continue.
+2. JSON with `"ok": false` — show the user `error.hint` as it is and stop this skill until
+   it is resolved. Do not run anything the hint names unless the user asks you to: on
+   `reason: path` it is a command for the user to decide on. `error.details.reason` names the
+   case: `not_installed`, `version` or `path`.
+3. `command not found` — read `~/.h2t/run/install.env`
+   (`grep -E '^(STATE|H2T_HOOK)=' ~/.h2t/run/install.env`). With `STATE=ready` the install
+   is fine and PATH does not reach it: show the directory of the `H2T_HOOK=` path, ask the
+   user to restart the harness, and offer `uv tool update-shell` for them to run. Without
+   it there is no install: give the user `@BOOTSTRAP@ sync`.
+4. Anything else (a non-zero exit without JSON, the usage text of an older CLI) — give the
+   user `@BOOTSTRAP@ sync`.
+<!-- version-check:end -->
+
 ## Data Sources
 
 | Source | Purpose |
 |--------|---------|
 | `context/domains.yaml` | **Primary** — authoritative repo list (`github:` / `github_repos:` fields) |
-| `~/.dor/sessions/*/` | **Secondary** — last focused date per repo (activity classification only) |
+| session records (`h2t-ops paths get records.sessions`, every machine) | **Secondary** — last focused date per repo (activity classification only) |
 
 Planning lives in GitHub. Sessions track when *you* last worked on something.
 
@@ -38,7 +63,7 @@ Result: deduplicated list of "owner/repo" strings
 
 **Tier 2 — sessions** (if domains.yaml unavailable):
 ```bash
-ls ~/.dor/sessions/*/*/ 2>/dev/null | xargs -I{} basename {} | sort -u
+ls -d "$(h2t-ops paths get records.sessions)"/*/*/ 2>/dev/null | xargs -I{} basename {} | sort -u
 ```
 Then map folder names to GitHub remotes:
 ```bash
@@ -77,10 +102,10 @@ gh api repos/{owner}/{repo}/commits \
 For each repo name, find the most recent session file **across all machines**:
 
 ```bash
-ls -t ~/.dor/sessions/*/{repo}/*.md 2>/dev/null | head -1
+h2t-ops index query --project {repo} --limit 1 --json
 ```
 
-Extract date from filename (format: `YYYY-MM-DD` in filename).
+Take `updated_at` of the first session; an empty `sessions` list means no sessions ever.
 If currently in an active session for this repo → treat as 0 days ago.
 
 ### Step 4: Classify Activity
@@ -147,7 +172,7 @@ After presenting dashboard, ask:
 | Mistake | Fix |
 |---------|-----|
 | Read only mac/ sessions for repo discovery | Use domains.yaml github: fields as primary source |
-| Read only mac/ sessions for activity | Use `~/.dor/sessions/*/` — all machines |
+| Read only mac/ sessions for activity | Use `h2t-ops index query` — all machines |
 | Show handoff "What Remains" as tasks | Use GitHub open issues only |
 | Fetch repos sequentially | Run all GitHub API calls in parallel |
 | Omit repos with no milestone | Show total open issues count instead |

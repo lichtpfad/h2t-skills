@@ -26,7 +26,7 @@ Allowed `cost_basis` values:
 Default local ledger:
 
 ```text
-~/.h2t/research/telemetry.jsonl
+$(h2t-ops paths get data:research)/telemetry.jsonl
 ```
 
 The ledger is best-effort. A failed ledger append must not make research fail.

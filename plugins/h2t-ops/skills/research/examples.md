@@ -90,7 +90,7 @@ $EXA_CLI crawl \
 
 ## Output Format
 
-Every run produces two files in `--output-dir` (default `~/.h2t/research/`):
+Every run produces two files in `--output-dir` (default: the directory `h2t-ops paths get data:research` prints):
 
 - `{project}-{topic-slug}-{YYYY-MM-DD}.partial.md` — script-written Meta + Telemetry
 - `{project}-{topic-slug}-{YYYY-MM-DD}.sources.json` — raw Exa response + metadata
@@ -109,8 +109,8 @@ The agent reads `.partial.md`, adds Sources / Key Findings / Grounding / Limitat
    Partner organization powering the Rejuve.bio protocol infrastructure...
 ...
 
-Saved: ~/.h2t/research/rejuve-rejuve-bio-longevity-research-dao-governance-2026-04-18.partial.md
-JSON:  ~/.h2t/research/rejuve-rejuve-bio-longevity-research-dao-governance-2026-04-18.sources.json
+Saved: .../research/rejuve-rejuve-bio-longevity-research-dao-governance-2026-04-18.partial.md
+JSON:  .../research/rejuve-rejuve-bio-longevity-research-dao-governance-2026-04-18.sources.json
 ```
 
 ## Cross-Engine Recipe (manual)

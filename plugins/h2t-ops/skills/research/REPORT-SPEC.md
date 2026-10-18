@@ -1,6 +1,6 @@
 # Research Report Template — h2t-ops:research
 
-> Canonical format for `~/.h2t/research/{project}-{topic-slug}-{YYYY-MM-DD}.md`. Script writes Meta + Telemetry sections; agent completes Sources / Key Findings / Grounding / Limitations / Follow-up per this spec.
+> Canonical format for `$(h2t-ops paths get data:research)/{project}-{topic-slug}-{YYYY-MM-DD}.md`. Script writes Meta + Telemetry sections; agent completes Sources / Key Findings / Grounding / Limitations / Follow-up per this spec.
 
 ## Template
 
@@ -82,7 +82,7 @@ Line `Integrity check: N/N calls used Exa API. M fallbacks to WebSearch.` is **m
 | Status | When |
 |---|---|
 | `✅ sent to h2t-evals` | HTTP 2xx from `$H2T_EVALS_URL` |
-| `⏳ buffered locally at ~/.h2t/research/.pending_telemetry.jsonl` | Network error or non-2xx |
+| `⏳ buffered locally at $(h2t-ops paths get data:research)/.pending_telemetry.jsonl` | Network error or non-2xx |
 | `⊘ disabled` | `$H2T_EVALS_DISABLE=1` explicitly set (user opt-out) |
 | `🚧 awaiting endpoint` | MVP default — `$H2T_EVALS_URL` not set |
 

@@ -293,7 +293,7 @@ From the result, show the user:
 - For each key in `added`: its description and URL from `known_secrets.yaml`
 
 `skipped` holds keys that are already set — in those files, in the environment, or in any
-other secrets file the connectors read, `~/.h2t/config/secrets/*.env` included. Do not ask
+other secrets file the connectors read, the 3.x files they still fall back to included. Do not ask
 for them.
 
 ### Step 2 — Fill API Keys

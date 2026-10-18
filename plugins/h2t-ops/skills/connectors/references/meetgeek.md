@@ -38,7 +38,8 @@ h2t-ops meetgeek transcript MEETING_ID_FROM_LIST --format md
 
 ## Auth
 
-MeetGeek expects `MEETGEEK_API_KEY` from environment, `H2T_SECRETS_FILE`, `~/.dor/secrets/secrets.env`, or legacy `~/.dor/secrets.env`.
+MeetGeek expects `MEETGEEK_API_KEY` from the environment or from the file
+`h2t-ops paths get secret:meetgeek` prints.
 
 In Claude Code, check readiness through:
 

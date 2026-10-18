@@ -14,7 +14,7 @@
 | summary only, provider markdown | `h2t-ops granola summary NOTE_ID_FROM_LIST --format md` |
 | verbatim transcript | `h2t-ops granola transcript NOTE_ID_FROM_LIST --format md` |
 | transcript without speaker merging | `h2t-ops granola transcript NOTE_ID_FROM_LIST --format md --raw` |
-| pull notes to disk | `h2t-ops granola sync --to ~/.dor/lake/granola --since-cursor --json` |
+| pull notes to disk (`<lake>/granola`: `h2t-ops paths get lake`) | `h2t-ops granola sync --since-cursor --json` |
 | list webhook endpoints | `h2t-ops granola webhooks --json` |
 
 `--folder` accepts a folder name or a `fol_...` ID. An ambiguous name fails with the
@@ -23,7 +23,7 @@ candidate IDs rather than guessing.
 ## Safety
 
 - Every command in this connector is a provider read; there are no provider writes.
-- `sync` writes to the local filesystem and needs an explicit `--to` destination and user intent.
+- `sync` writes to the local filesystem — `<lake>/granola`, or the `--to` directory — and needs user intent.
 - Webhook endpoints are **read-only** here. Creating one returns a signing secret that Granola
   shows exactly once; registering endpoints stays a deliberate manual action outside this connector.
 - Never put note summaries, transcript bodies, or attendee lists into GitHub issues.
@@ -36,13 +36,14 @@ h2t-ops granola auth-check --json
 h2t-ops granola list --limit 20 --json
 h2t-ops granola get NOTE_ID_FROM_LIST --format md
 h2t-ops granola transcript NOTE_ID_FROM_LIST --format md
-h2t-ops granola sync --to ~/.dor/lake/granola --include summaries,transcripts --since-cursor --json
+h2t-ops granola sync --include summaries,transcripts --since-cursor --json
+h2t-ops granola sync --to ./granola-export --since 2026-08-01 --json   # another directory, own manifest
 ```
 
 ## Auth
 
-Granola expects `GRANOLA_API_KEY` (a `grn_...` key from Granola Settings -> API) from
-environment, `H2T_SECRETS_FILE`, `~/.dor/secrets/secrets.env`, or legacy `~/.dor/secrets.env`.
+Granola expects `GRANOLA_API_KEY` (a `grn_...` key from Granola Settings -> API) from the
+environment or from the file `h2t-ops paths get secret:granola` prints.
 
 In Claude Code, check readiness through:
 
@@ -61,7 +62,7 @@ In Claude Code, check readiness through:
 - `--include` coverage is tracked per note version. Widening it on a later run (summaries
   first, transcripts overnight) backfills only the missing half; narrowing it is a no-op.
   Manifest rows written before coverage tracking count as complete and are never refetched.
-- Default cursor file: `~/.dor/lake/_cursors/granola.json`. Override with `--cursor-file`.
+- Default cursor file: `granola.json` under `cursors/` in `h2t-ops paths get state`. Override with `--cursor-file`.
 - Granola auto-deletes transcripts under its retention policy — a regular `sync` is the only way
   to keep verbatim text beyond that window.
 

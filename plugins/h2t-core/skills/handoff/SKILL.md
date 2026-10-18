@@ -185,10 +185,11 @@ Proceed immediately to Step 6 — do NOT ask for confirmation.
 ### Step 6: Write handoff
 
 Writer stores:
-- full archival markdown under `H2T_SESSION_ROOT` or `~/.h2t/sessions/<machine>/<project>/`;
+- full archival markdown as `<machine>/<project>/<session_id>.md` under
+  `h2t-ops paths get records.sessions`;
 - that markdown is the latest record too: `session-start` finds it through the index,
   so no separate summary file is written;
-- activity stream spool.
+- one line in this machine's activity record (`h2t-ops paths get records.activity`).
 
 ```bash
 h2t-handoff write \

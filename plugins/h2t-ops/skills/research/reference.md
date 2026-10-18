@@ -95,7 +95,7 @@ For deep-family modes (`deep-lite` / `deep` / `deep-reasoning`) `build_body` aut
 | `agent` web-only (no `--data-source`) | ~$0.01–0.02 (agentCompute + search) |
 | `agent` + premium provider | additive per provider (see Agent providers below) |
 
-See `~/.h2t/research/.pending_telemetry.jsonl` for accumulated observations.
+See `.pending_telemetry.jsonl` in `h2t-ops paths get data:research` for accumulated observations.
 
 ## Agent providers (premium data sources)
 

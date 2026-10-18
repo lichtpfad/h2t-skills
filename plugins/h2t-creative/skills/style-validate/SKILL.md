@@ -41,7 +41,7 @@ Act on the result, in this order:
 A profile is looked up first among the user's profiles, then among the shipped ones:
 
 ```bash
-h2t-creative profiles-dir          # profiles you created: ~/.h2t/creative/profiles
+h2t-creative profiles-dir          # profiles you created (= h2t-ops paths get data:creative/profiles)
 echo "$(h2t-creative root)/profiles" # profiles shipped with the CLI
 ```
 

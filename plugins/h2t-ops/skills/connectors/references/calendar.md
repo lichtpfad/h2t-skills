@@ -39,7 +39,9 @@ h2t-ops calendar create "Planning" 2026-05-23 14:00 --duration-min 60 --meet --j
 
 ## Auth
 
-Google OAuth credentials and tokens are expected under `~/.config/google-calendar-mcp/`.
+Calendar shares one Google login with Gmail and Drive: the OAuth client is
+`h2t-ops paths get secret:google.client`, this machine's token is
+`h2t-ops paths get secret:google.token`. `h2t-ops google auth` creates the token.
 
 In Claude Code, check readiness through:
 

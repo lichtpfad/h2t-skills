@@ -42,7 +42,7 @@ New profiles go to the user's profile directory, outside every install, so an up
 the CLI or the plugins never touches them:
 
 ```bash
-h2t-creative profiles-dir          # $PROFILES_DIR: ~/.h2t/creative/profiles
+h2t-creative profiles-dir          # $PROFILES_DIR (= h2t-ops paths get data:creative/profiles)
 echo "$(h2t-creative root)/profiles" # $SHIPPED_PROFILES: the profiles shipped with the CLI
 ```
 
@@ -56,7 +56,7 @@ there, and nothing moves it. To keep using it, copy that directory once into the
 path in their plugin cache:
 
 ```text
-~/.claude/plugins/cache/lichtpfad/h2t-creative/<version>/profiles/<name>/  →  ~/.h2t/creative/profiles/<name>/
+~/.claude/plugins/cache/lichtpfad/h2t-creative/<version>/profiles/<name>/  →  $(h2t-creative profiles-dir)/<name>/
 ```
 
 ## Wizard Steps

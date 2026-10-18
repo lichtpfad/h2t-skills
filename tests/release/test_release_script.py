@@ -121,7 +121,7 @@ def test_stamp_twice_sets_one_version_and_one_bootstrap_everywhere(repo, rel):
     assert expected[-1] == "h2t-setup"
     copies = _bootstrap_copies(repo)
     md_copies = [k for k in copies if k.startswith("plugins/") and k.endswith((".md#0", ".md#1"))]
-    assert len(md_copies) == 2 * 23  # 22 SKILL.md + the reference, two per block
+    assert len(md_copies) == 2 * 24  # 23 SKILL.md (dev-overview since #548) + the reference, two per block
     assert [k for k in copies if k.startswith("README.md#")] == ["README.md#0"]
     assert counts["README.md"] == 1
     assert {k: v for k, v in copies.items() if v != expected} == {}
