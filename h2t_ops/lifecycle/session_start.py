@@ -15,6 +15,7 @@ from pathlib import Path
 
 from h2t_ops.core import paths
 from h2t_ops.core.errors import H2TError
+from h2t_ops.lifecycle import index
 from h2t_ops.lifecycle.eval.session import SkillEval
 from h2t_ops.lifecycle.gather import output_json
 from h2t_ops.lifecycle.gather.briefing import format_briefing
@@ -46,7 +47,17 @@ def _sanitized(exc: BaseException) -> str:
     return text[:200]
 
 
+GATHER_LOCK_S = 1.0   # per index lookup; the slash-skill gather has 3 s in all (#541 spec, budgets)
+
+
 def main() -> None:
+    # Several lookups ask the index (ontology, files, latest); a hung lock holder costs this
+    # gather one GATHER_LOCK_S, not one per lookup.
+    with index.lock_budget(GATHER_LOCK_S):
+        _main()
+
+
+def _main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--cwd", default=".")
     # The skill name is eval attribution only; h2t-ops gather forwards its positional here.

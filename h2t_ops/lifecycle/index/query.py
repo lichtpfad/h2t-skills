@@ -10,6 +10,7 @@ unlinked under a peer that has it open.
 from __future__ import annotations
 
 import contextlib
+import contextvars
 import json
 import os
 import sqlite3
@@ -26,6 +27,27 @@ LOCK_S = 5.0     # state/index.lock: past this a holder is taken as hung, the ba
 
 def index_path() -> Path:
     return paths.state_dir() / "index.sqlite"
+
+
+_BUDGET: contextvars.ContextVar[list[float] | None] = contextvars.ContextVar("index_lock_budget",
+                                                                             default=None)
+
+
+@contextlib.contextmanager
+def lock_budget(seconds: float) -> Iterator[None]:
+    """Within the block each lookup waits for the index lock at most `seconds`, and once one
+    has found it busy the rest do not wait at all: a gather makes several lookups and has
+    3 s in all (package-architecture spec, event budgets)."""
+    token = _BUDGET.set([seconds])
+    try:
+        yield
+    finally:
+        _BUDGET.reset(token)
+
+
+def _wait() -> float:
+    budget = _BUDGET.get()
+    return LOCK_S if budget is None else min(LOCK_S, budget[0])
 
 
 def _lock_path() -> Path:
@@ -97,7 +119,7 @@ def connect(*, refresh: bool = True) -> Iterator[sqlite3.Connection]:
     the queries after it do not."""
     path = index_path()
     try:
-        with store.locked(_lock_path(), place="state", timeout=LOCK_S):
+        with store.locked(_lock_path(), place="state", timeout=_wait()):
             try:
                 stack, conn = _open(path, ensure=True, refresh=refresh)
             except sqlite3.OperationalError:         # busy or locked by a peer: not damage
@@ -109,6 +131,8 @@ def connect(*, refresh: bool = True) -> Iterator[sqlite3.Connection]:
                 _rebuild_file(path)
                 stack, conn = _open(path, ensure=True, refresh=False)
     except store.LockBusy:          # a hung holder must not hang session-start with it
+        if (budget := _BUDGET.get()) is not None:
+            budget[0] = 0.0             # the next lookup of this gather does not wait
         stack, conn = _as_it_stands(path)
     with stack:
         conn.row_factory = sqlite3.Row

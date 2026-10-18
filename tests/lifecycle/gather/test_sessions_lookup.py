@@ -218,6 +218,28 @@ def test_an_index_that_cannot_open_is_a_failed_source(monkeypatch, capfd, tmp_pa
                     "error": "OperationalError: database is locked: ~/.h2t/state/index.sqlite"}
 
 
+def test_a_hung_index_lock_costs_the_whole_gather_under_three_seconds(monkeypatch, capfd, tmp_path):
+    """The slash-skill gather has 3 s (package-architecture spec, budgets) and asks the index
+    several times — ontology, files, latest. With the lock held throughout, the first lookup
+    waits GATHER_LOCK_S and the others do not wait at all."""
+    import sys
+    import time
+
+    from h2t_ops.core import store
+    from h2t_ops.lifecycle import session_start
+    from h2t_ops.lifecycle.index import query
+    _md("mac", "p", "s1", _ago(1))
+    monkeypatch.setenv("H2T_EVALS_MODE", "off")
+    monkeypatch.setattr(sys, "argv", ["h2t-gather", "--cwd", str(tmp_path)])
+    with store.locked(query._lock_path(), place="state"):
+        t0 = time.monotonic()
+        session_start.main()
+        took = time.monotonic() - t0
+    assert took < 2, took      # one wait of 1 s; a second wait would already be 2
+    out = json.loads(capfd.readouterr().out)
+    assert "sessions" in out["_meta"]["sources_used"]
+
+
 def test_a_programming_error_in_the_lookup_surfaces(monkeypatch, capfd, tmp_path):
     import pytest
 

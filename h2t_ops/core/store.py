@@ -302,11 +302,12 @@ def locked(path, *, place: str, timeout: float | None = None) -> Iterator[None]:
     _ensure_dir(path.parent, place)
     flags = os.O_RDWR | getattr(os, "O_BINARY", 0)
     try:
-        fd = os.open(path, flags | os.O_CREAT | os.O_EXCL, _mode(place, got, None))
-        _log("create", got, path, b"")
+        fd, created = os.open(path, flags | os.O_CREAT | os.O_EXCL, _mode(place, got, None)), True
     except FileExistsError:
-        fd = os.open(path, flags)
+        fd, created = os.open(path, flags), False
     try:
+        if created:
+            _log("create", got, path, b"")
         with _lock(fd, timeout):
             yield
     finally:

@@ -146,6 +146,19 @@ def test_lock_file_creation_is_logged_once_and_acquisition_never(home):
     assert lock.read_bytes() == b""
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="/dev/fd")
+def test_a_failed_creation_log_does_not_leak_the_lock_fd(home, monkeypatch):
+    def boom(*a, **kw):
+        raise RuntimeError("log failed")
+
+    monkeypatch.setattr(store, "_log", boom)
+    before = len(os.listdir("/dev/fd"))
+    for n in range(5):
+        with pytest.raises(RuntimeError), store.locked(paths.state_dir() / f"{n}.lock", place="state"):
+            pass
+    assert len(os.listdir("/dev/fd")) == before
+
+
 def test_lock_with_a_timeout_says_busy_instead_of_waiting(home):
     import time
     lock = paths.state_dir() / "x.lock"

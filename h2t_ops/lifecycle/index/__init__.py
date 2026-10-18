@@ -2,10 +2,11 @@
 from h2t_ops.lifecycle.index.query import (
     connect,
     latest_sessions,
+    lock_budget,
     ontology,
     problems,
     rebuild,
 )
 from h2t_ops.lifecycle.index.schema import SCHEMA_VERSION
 
-__all__ = ["SCHEMA_VERSION", "connect", "latest_sessions", "ontology", "problems", "rebuild"]
+__all__ = ["SCHEMA_VERSION", "connect", "latest_sessions", "lock_budget", "ontology", "problems", "rebuild"]
