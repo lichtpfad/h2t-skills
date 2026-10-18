@@ -18,7 +18,8 @@ _spec.loader.exec_module(storage_map)
 CEILINGS = {  # measured 2026-10-18 on ab078f4f; lowered after Task 6, Task 8 (Google), Task 9
     # (Telegram), Task 10 (every connector and setup through core.secrets), Task 11 (lake, round 1),
     # Task 12 (downloads, research, evals, creative profiles; round 1: the NTFS-stream branch),
-    # Task 13 (session records and activity under records/)
+    # Task 13 (session records and activity under records/); Task 14 (the index) held them
+    # and opens its base only through store.connect_sqlite, so sqlite stays 0
     "home": 40, "legacy_roots": 4, "path_env": 4, "dotenv": 0,
     "secret_readers": 0, "writes": 114, "sqlite": 0,
 }

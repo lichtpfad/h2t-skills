@@ -528,6 +528,40 @@ def _activity_start(sb, mp):
     assert paths.activity_file("sandbox").is_file()
 
 
+def _index_records(machine):
+    def setup(sb, mp):
+        from h2t_ops.core import paths
+        from h2t_ops.lifecycle import session_record
+        f = paths.records("sessions", machine) / "p" / f"{machine}-1.md"
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_bytes(session_record.render({"session_id": f"{machine}-1", "machine": machine,
+                                             "project": "p", "updated_at": "2026-10-18T00:00:00Z"}, b""))
+        (paths.config_dir() / "domains.yaml").write_text(
+            "domains:\n  dev:\n    projects:\n      - id: p\n", encoding="utf-8")
+    return setup
+
+
+def _index_rebuild(sb, mp):
+    from h2t_ops.core import paths
+    from h2t_ops.lifecycle import index
+    assert index.rebuild() == {"sessions": 1, "projects": 1, "problems": 0}
+    assert (paths.state_dir() / "index.sqlite").is_file()
+
+
+def _index_built(sb, mp):
+    from h2t_ops.lifecycle import index
+    _index_records("sandbox")(sb, mp)
+    index.rebuild()
+    _index_records("laptop")(sb, mp)      # arrives from another machine after the build
+
+
+def _index_refresh(sb, mp):
+    from h2t_ops.lifecycle import index
+    with index.connect(refresh=True):
+        pass
+    assert {s["machine"] for s in index.latest_sessions(["p"])} == {"laptop", "sandbox"}
+
+
 CASES: list[Case] = [
     Case("store.replace.state", _store_replace_state),
     # Task 8: a refresh writes nothing; a rotated refresh token writes local and the mirror.
@@ -575,4 +609,7 @@ CASES: list[Case] = [
     Case("handoff.write", _handoff("- first")),
     Case("handoff.write.again", _handoff("- second"), setup=_handoff("- first")),
     Case("activity.start", _activity_start),
+    # Task 14: the index lives in state and is opened only through store.connect_sqlite (R18).
+    Case("index.rebuild", _index_rebuild, setup=_index_records("sandbox")),
+    Case("index.connect.refresh", _index_refresh, setup=_index_built),
 ]
