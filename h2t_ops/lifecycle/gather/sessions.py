@@ -1,8 +1,9 @@
 """Session file discovery and bounded lifecycle index helpers."""
 import json
 import os
-import platform
 from pathlib import Path
+
+from h2t_ops.core import paths
 
 SUMMARY_LIMIT = 1200
 ITEM_LIMIT = 240
@@ -153,7 +154,4 @@ def get_machine_name() -> str:
     one MacBook wrote `Mac` to the spool and `mac/` to the path. On macOS the hostname
     follows the network; `h2t-core:setup` pins H2T_MACHINE_NAME so it stops mattering.
     """
-    name = os.environ.get("H2T_MACHINE_NAME") or os.environ.get("DOR_MACHINE_NAME", "")
-    if not name:
-        name = platform.node().lower().split(".")[0]
-    return name
+    return paths.machine_name()

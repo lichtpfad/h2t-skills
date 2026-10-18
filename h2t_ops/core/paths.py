@@ -1,0 +1,319 @@
+"""Where every class of data lives — the only module that knows (#548 §3, §6, §7.2).
+
+Nothing else in h2t_ops calls Path.home() or expanduser, reads H2T_PATH_ROOT, H2T_PATH_VAULT
+or the 3.x variable names, or spells ~/.dor or ~/.config/<program>. tests/governance holds
+the ratchet.
+"""
+from __future__ import annotations
+
+import os
+import platform
+import tempfile
+from dataclasses import dataclass, field
+from pathlib import Path
+
+import yaml
+
+from h2t_ops.core.errors import ConfigError
+
+
+@dataclass(frozen=True)
+class Place:
+    id: str
+    kind: str   # fixed | class | place | file
+    cls: str    # run | config | secrets | records | data | state | logs | external | root
+    sync: str   # never | user | owner
+
+
+PLACES: tuple[Place, ...] = (
+    Place("run", "fixed", "run", "never"),
+    Place("config", "class", "config", "user"),
+    Place("secrets.shared", "class", "secrets", "user"),
+    Place("secrets.local", "class", "secrets", "never"),
+    Place("records.sessions", "class", "records", "user"),
+    Place("records.activity", "class", "records", "user"),
+    Place("records.evals", "class", "records", "user"),
+    Place("records.imports", "class", "records", "user"),
+    Place("data", "class", "data", "user"),
+    Place("state", "class", "state", "never"),
+    Place("logs", "class", "logs", "never"),
+    Place("lake", "place", "external", "owner"),
+    Place("inbox", "place", "external", "owner"),
+    Place("vault", "place", "external", "owner"),
+    Place("kb", "place", "external", "owner"),
+    Place("repo", "place", "external", "owner"),
+    Place("harness", "place", "external", "owner"),
+    Place("tmp", "place", "external", "never"),
+    Place("layout", "file", "root", "never"),
+)
+_BY_ID = {p.id: p for p in PLACES}
+EXTERNAL = ("lake", "inbox", "vault", "kb")
+YAML_PLACES = ("lake", "inbox", "kb")   # vault comes from H2T_PATH_VAULT (§6 п. 5)
+
+# 3.x variable names. 4.0 does not read them for paths (§6 п. 5); migration and doctor do,
+# to say what became of each: an external place the migration writes into paths.yaml, one
+# more secrets source for the migration, or a variable to remove.
+OLD_ENV: dict[str, str] = {
+    "H2T_LAKE_ROOT": "lake",
+    "H2T_SECRETS_FILE": "secrets-source",
+    "H2T_CONFIG_ROOT": "remove",
+    "H2T_SESSION_ROOT": "remove",
+    "H2T_ACTIVITY_SPOOL": "remove",
+    "H2T_EVALS_ROOT": "remove",
+    "H2T_EVALS_SPOOL": "evals-spool-source",   # the migration copies that spool (plan R22)
+}
+
+# Where 3.x kept things. Read for migration and fallback in 4.0.x; never written except
+# the Google mirror and MOVED-TO.txt (§7.3). ~/.dor/vault is not here: it is the vault's
+# default address, shared with POS (plan R12).
+LEGACY: dict[str, tuple[str, ...]] = {
+    "secrets.h2t": (".h2t", "config", "secrets"),
+    "secrets.dor": (".dor", "secrets", "secrets.env"),
+    "secrets.dor_old": (".dor", "secrets.env"),
+    "notion.token": (".config", "notion", "token"),
+    "google.store": (".config", "google-calendar-mcp"),
+    "google.gmail": (".config", "gmail"),
+    "google.dor": (".dor", "google-credentials.json"),
+    "telegram": (".config", "telegram"),
+    "sessions.h2t": (".h2t", "sessions"),
+    "sessions.dor": (".dor", "sessions"),
+    "activity": (".h2t", "activity"),
+    "evals": (".h2t", "evals"),
+    "research": (".h2t", "research"),
+    "creative": (".h2t", "creative", "profiles"),
+    "registry.dor": (".dor", "registry.jsonl"),
+    "lake.dor": (".dor", "lake"),
+    "downloads": ("Downloads",),
+}
+
+
+def home() -> Path:
+    return Path.home()
+
+
+def _env(name: str) -> Path | None:
+    value = os.environ.get(name)
+    return Path(value).expanduser() if value else None
+
+
+def root() -> Path:
+    return _env("H2T_PATH_ROOT") or home() / ".h2t"
+
+
+def run_dir() -> Path:
+    """Fixed by the 4.0 install contract: hooks/run reads $HOME/.h2t/run in bash."""
+    return home() / ".h2t" / "run"
+
+
+def vault() -> Path:
+    """The vault POS owns; its address is a contract between the two programs (plan R12)."""
+    return _env("H2T_PATH_VAULT") or home() / ".dor" / "vault"
+
+
+def dir_of(place_id: str) -> Path:
+    p = _BY_ID[place_id]
+    if p.kind == "fixed":
+        return run_dir()
+    if p.kind == "file":
+        return layout_file()
+    if p.kind == "class":
+        cls, _, sub = place_id.partition(".")
+        return root() / cls / sub if sub else root() / cls
+    if place_id == "vault":
+        return vault()
+    if place_id == "harness":
+        return _env("CLAUDE_CONFIG_DIR") or home() / ".claude"
+    if place_id == "tmp":
+        return Path(tempfile.gettempdir())
+    if place_id == "repo":
+        raise ValueError("repo has no fixed directory; pass the repository root to store.repo()")
+    found = place(place_id)
+    if found is None:
+        raise ConfigError(f"place {place_id!r} is not set",
+                          hint=f"h2t-ops paths set {place_id} <path>")
+    return found
+
+
+def config_dir() -> Path:
+    return dir_of("config")
+
+
+def secrets_shared() -> Path:
+    return dir_of("secrets.shared")
+
+
+def secrets_local() -> Path:
+    return dir_of("secrets.local")
+
+
+def state_dir() -> Path:
+    return dir_of("state")
+
+
+def logs_dir() -> Path:
+    return dir_of("logs")
+
+
+def data_dir() -> Path:
+    return dir_of("data")
+
+
+def layout_file() -> Path:
+    return root() / "layout.json"
+
+
+def paths_yaml() -> Path:
+    return config_dir() / "paths.yaml"
+
+
+def backups_dir() -> Path:
+    return state_dir() / "backups"
+
+
+def records(kind: str, machine: str | None = None) -> Path:
+    base = dir_of(f"records.{kind}")
+    return base / machine if machine else base
+
+
+def activity_file(machine: str) -> Path:
+    return records("activity") / f"{machine}.jsonl"
+
+
+def evals_spool() -> Path:
+    return state_dir() / "evals-spool.sqlite"
+
+
+def old_env(name: str) -> Path | None:
+    """A 3.x variable's value, for the migration and doctor only — never a path to use."""
+    if name not in OLD_ENV:
+        raise KeyError(name)
+    return _env(name)
+
+
+def old_env_in_use() -> list[str]:
+    return sorted(n for n in OLD_ENV if os.environ.get(n))
+
+
+def old_env_by_use(use: str) -> dict[str, Path]:
+    """Set 3.x variables with this OLD_ENV use: callers never spell the old names (plan R22)."""
+    return {n: _env(n) for n in old_env_in_use() if OLD_ENV[n] == use}
+
+
+@dataclass
+class PathsConfig:
+    places: dict[str, Path] = field(default_factory=dict)
+    vault_rules: Path | None = None
+    sync: dict[str, str] = field(default_factory=dict)
+
+
+def _inside(a: Path, b: Path) -> bool:
+    return a == b or b in a.parents
+
+
+def paths_config() -> PathsConfig:
+    f = paths_yaml()
+    if not f.is_file():
+        return PathsConfig()
+    try:
+        doc = yaml.safe_load(f.read_bytes().decode("utf-8-sig")) or {}
+    except yaml.YAMLError as exc:
+        raise ConfigError(f"{f} is not valid YAML: {exc}", hint="fix the file or remove it") from exc
+    return validate_config(doc, source=f)
+
+
+def validate_config(doc: dict, *, source: Path) -> PathsConfig:
+    """Every paths.yaml check, on a document in memory: `paths set` validates the new
+    document while the file on disk may still be broken (plan R34)."""
+    f = source
+    if not isinstance(doc, dict):
+        raise ConfigError(f"{f}: expected a mapping at the top", hint="version: 1 and a places: mapping")
+    if doc.get("version", 1) != 1:
+        raise ConfigError(f"{f}: version {doc.get('version')!r} is not supported", hint="version: 1")
+    places: dict[str, Path] = {}
+    for name, raw in (doc.get("places") or {}).items():
+        if name == "vault":
+            raise ConfigError(f"{f}: vault is not set here; it comes from H2T_PATH_VAULT",
+                              hint="vault is shared with POS: set H2T_PATH_VAULT (default ~/.dor/vault)")
+        if name not in YAML_PLACES:
+            raise ConfigError(f"{f}: unknown place {name!r}", hint=f"places are {', '.join(YAML_PLACES)}")
+        value = Path(str(raw)).expanduser()
+        if not value.is_absolute():
+            raise ConfigError(f"{f}: place {name!r} must be an absolute path, got {raw!r}",
+                              hint="use ~/… or a full path")
+        places[name] = value
+    real = {k: Path(os.path.realpath(v)) for k, v in {**places, "vault": vault()}.items()}
+    h2t = Path(os.path.realpath(root()))
+    for name, p in real.items():
+        if _inside(p, h2t) or _inside(h2t, p):
+            raise ConfigError(f"{f}: place {name!r} ({p}) overlaps the h2t root {h2t}",
+                              hint="external places live outside ~/.h2t")
+    names = list(real)
+    for i, a in enumerate(names):
+        for b in names[i + 1:]:
+            if _inside(real[a], real[b]) or _inside(real[b], real[a]):
+                raise ConfigError(f"{f}: places {a!r} and {b!r} overlap ({real[a]}, {real[b]})",
+                                  hint="no place may lie inside another")
+    rules = doc.get("vault_rules")
+    return PathsConfig(places=places,
+                       vault_rules=Path(str(rules)).expanduser() if rules else None,
+                       sync={str(k): str(v) for k, v in (doc.get("sync") or {}).items()})
+
+
+def place(name: str) -> Path | None:
+    if name == "vault":
+        return vault()
+    return paths_config().places.get(name)
+
+
+def place_or_default(name: str) -> tuple[Path, bool]:
+    found = place(name)
+    return (found, False) if found is not None else (data_dir() / name, True)
+
+
+def legacy(name: str) -> Path:
+    return home().joinpath(*LEGACY[name])
+
+
+LEGACY_FILES = frozenset({"secrets.dor", "secrets.dor_old", "notion.token", "google.dor", "registry.dor"})
+
+
+def legacy_dir(name: str) -> Path:
+    """The directory a legacy entry lives in: itself, or its parent for a file entry."""
+    p = legacy(name)
+    return p.parent if name in LEGACY_FILES else p
+
+
+def _declared() -> set[Path]:
+    """Real paths of the external places, tolerant of a broken paths.yaml (plan R17)."""
+    try:
+        found = list(paths_config().places.values())
+    except ConfigError:
+        found = []
+    return {Path(os.path.realpath(p)) for p in (*found, vault())}
+
+
+def legacy_roots() -> list[Path]:
+    """Roots that classify a write as legacy. For a file entry the root is its directory, so
+    MOVED-TO.txt next to ~/.dor/secrets.env classifies as legacy too. A legacy root that is
+    also a declared place (lake: ~/.dor/lake by R2) is that place, not legacy — decided here,
+    not by the sort order in store._roots."""
+    declared = _declared()
+    out: list[Path] = []
+    for n in LEGACY:
+        if n == "downloads":
+            continue
+        d = legacy_dir(n)
+        if Path(os.path.realpath(d)) not in declared and d not in out:
+            out.append(d)
+    return out
+
+
+def expand_user_dest(value: str) -> Path:
+    return Path(value).expanduser().absolute()
+
+
+def machine_name() -> str:
+    """H2T_MACHINE_NAME (pinned in Claude settings by setup, ADR 0003) → DOR_MACHINE_NAME →
+    hostname. No file pins it (plan R4)."""
+    name = os.environ.get("H2T_MACHINE_NAME") or os.environ.get("DOR_MACHINE_NAME", "")
+    return name or platform.node().lower().split(".")[0]
