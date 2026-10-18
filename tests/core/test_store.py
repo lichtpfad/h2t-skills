@@ -7,6 +7,7 @@ import tempfile
 import pytest
 
 from h2t_ops.core import paths, store
+from h2t_ops.core.errors import ConfigError
 
 
 @pytest.fixture
@@ -90,6 +91,25 @@ def test_vault_write_refused_outside_ingest(home, tmp_path, monkeypatch):
         store.replace(vault / "n.md", "x", place="vault")
     with pytest.raises(store.WriteRefused):
         store.replace(vault / "n.md", "x", place="elsewhere", dest=True)
+
+
+@pytest.mark.parametrize("layout", ["root-inside-vault", "vault-encloses-root"])
+def test_vault_is_vault_by_the_filesystem_whatever_root_is_deeper(home, tmp_path, monkeypatch, layout):
+    """A package root inside the vault, or a vault enclosing ~/.h2t: the deepest root says
+    data, the filesystem says vault. Only ingest writes there, and paths says the two overlap."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    if layout == "root-inside-vault":
+        monkeypatch.setenv("H2T_PATH_VAULT", str(vault))
+        monkeypatch.setenv("H2T_PATH_ROOT", str(vault / "h2t"))
+    else:
+        monkeypatch.setenv("H2T_PATH_VAULT", str(home))
+    target = paths.data_dir() / "research" / "n.md"
+    with pytest.raises(store.WriteRefused, match="inside vault"):
+        store.replace(target, "x", place="data")
+    assert not target.exists()
+    with pytest.raises(ConfigError, match="overlaps the h2t root"):
+        paths.paths_config()
 
 
 def test_default_vault_under_dor_is_vault_not_legacy(home):

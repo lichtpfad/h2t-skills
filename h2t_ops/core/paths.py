@@ -254,7 +254,9 @@ def _inside(a: Path, b: Path) -> bool:
 def paths_config() -> PathsConfig:
     f = paths_yaml()
     if not f.is_file():
-        return PathsConfig()
+        # No file declares a place, but the vault still comes from H2T_PATH_VAULT and may
+        # overlap the root: the same check as with the file (§6 п. 4).
+        return validate_config({}, source=f)
     try:
         doc = yaml.safe_load(f.read_bytes().decode("utf-8-sig")) or {}
     except UnicodeDecodeError as exc:
