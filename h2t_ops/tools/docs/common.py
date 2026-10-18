@@ -102,8 +102,8 @@ def _manifest() -> list[str]:
 
 class _Manifest(Sequence):
     """REPO_MANIFEST, read on first use rather than at import. The index it comes from is
-    built in state/ on first open, and this module is imported by the tests' collection
-    before any fixture has moved HOME — at import it would build the developer's own."""
+    built in state/ on first open; at import every process that loads the docs tools would
+    build it, whether or not it ever asks for the manifest."""
 
     def __init__(self) -> None:
         self._names: list[str] | None = None

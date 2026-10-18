@@ -38,3 +38,35 @@ def test_the_scan_sees_a_pairing_split_across_lines(tmp_path):
                                    "data = yaml.safe_load(p.read_text())\n", encoding="utf-8")
     (tmp_path / "y.py").write_text("data = yaml.safe_load(other)\n", encoding="utf-8")
     assert parsers(tmp_path) == ["x.py"]
+
+
+_SKILL_ROOT = re.compile(r"--config-root|H2T_CONFIG_ROOT")
+
+
+def skill_root_overrides(plugins: Path) -> list[str]:
+    """Shipped skill text that names a config root itself. Registration with --config-root
+    writes with dest=True into a directory the index never reads, and H2T_CONFIG_ROOT is
+    retired (R5); without the flag the CLI uses paths.config_dir(). CHANGELOG.md records
+    history and is skipped."""
+    out = []
+    for f in sorted(plugins.rglob("*.md")):
+        if f.name == "CHANGELOG.md":
+            continue
+        for n, line in enumerate(f.read_text(encoding="utf-8").splitlines(), 1):
+            if _SKILL_ROOT.search(line):
+                out.append(f"{f.relative_to(plugins).as_posix()}:{n}")
+    return out
+
+
+def test_no_shipped_skill_names_a_config_root():
+    assert skill_root_overrides(ROOT / "plugins") == []
+
+
+def test_the_skill_scan_sees_both_spellings(tmp_path):
+    """Control: the two forms init-project and scaffold-project shipped until Task 15."""
+    d = tmp_path / "p" / "skills" / "s"
+    d.mkdir(parents=True)
+    (d / "SKILL.md").write_text('a\n  --cwd x --config-root "$CONFIG_ROOT"\n'
+                                'b "${H2T_CONFIG_ROOT:-x}"\n', encoding="utf-8")
+    (tmp_path / "p" / "CHANGELOG.md").write_text("--config-root\n", encoding="utf-8")
+    assert skill_root_overrides(tmp_path) == ["p/skills/s/SKILL.md:2", "p/skills/s/SKILL.md:3"]

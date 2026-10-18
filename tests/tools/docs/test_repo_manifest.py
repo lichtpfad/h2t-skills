@@ -27,7 +27,9 @@ def test_an_index_that_cannot_open_gives_the_bundled_list(monkeypatch):
 
 
 def test_the_manifest_is_read_on_first_use_not_at_import(monkeypatch):
-    """At import the tests' HOME is still the developer's; the index must not be built then."""
+    """Importing common must not build the index. The suite collects under a temporary HOME
+    (conftest.pytest_configure); outside it, lazy loading keeps a plain import of the docs tools
+    from creating state/index.sqlite in any process that never asks for the manifest."""
     calls = []
     monkeypatch.setattr(common, "_manifest", lambda: calls.append(1) or ["one"])
     m = common._Manifest()
