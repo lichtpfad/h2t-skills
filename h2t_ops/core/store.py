@@ -39,6 +39,7 @@ _SECRET = {"secrets.shared", "secrets.local"}
 _DEST_FORBIDDEN = {*_PACKAGE, "vault", "legacy", "harness", "h2t-root"}
 _LOG_LIMIT = 10 * 1024 * 1024
 _LOG_KEEP = 5
+_LOG_LOCK = ".writes.jsonl.lock"
 
 _INGEST: contextvars.ContextVar[bool] = contextvars.ContextVar("h2t_ingest", default=False)
 _MIGRATING: contextvars.ContextVar[bool] = contextvars.ContextVar("h2t_migrating", default=False)
@@ -92,7 +93,9 @@ def _compat_allowed(path: Path) -> bool:
 
 def _check(path: Path, place: str, *, dest: bool = False, compat: bool = False) -> str:
     got, broken = _classify(path)
-    if broken is not None and got == "elsewhere":
+    # A place paths.yaml would declare may sit inside a legacy root or tmp (lake: ~/.dor/lake,
+    # R2): while the file is broken it classifies as that, and the refusal must name the file.
+    if broken is not None and (got == "elsewhere" or place in paths.YAML_PLACES):
         raise WriteRefused(f"{path}: cannot tell whose place this is while paths.yaml is broken ({broken})",
                            hint="fix it: h2t-ops paths set <place> <path>, or edit the file")
     if got == "vault" and not _INGEST.get():
@@ -123,6 +126,13 @@ def _default_mode(place: str) -> int:
     um = os.umask(0)
     os.umask(um)
     return 0o666 & ~um
+
+
+def _mode(place: str, got: str, mode: int | None) -> int:
+    """A file under secrets/** is 0600 whatever mode the caller passed (Global Constraints)."""
+    if place in _SECRET or got in _SECRET:
+        return 0o600
+    return _default_mode(place) if mode is None else mode
 
 
 def _ensure_dir(directory: Path, place: str) -> None:
@@ -186,15 +196,30 @@ def _log(op: str, place: str, path: Path, data: bytes | None, *, key: str | None
     log = paths.logs_dir() / "writes.jsonl"
     try:
         log.parent.mkdir(parents=True, exist_ok=True)
-        _rotate(log)
-        fd = os.open(log, os.O_WRONLY | os.O_APPEND | os.O_CREAT | getattr(os, "O_BINARY", 0), 0o644)
+        # Rotation renames writes.jsonl, so the lock lives on a file that is never renamed:
+        # rotate and append are one critical section across processes.
+        lock = os.open(log.with_name(_LOG_LOCK), os.O_RDWR | os.O_CREAT | getattr(os, "O_BINARY", 0), 0o644)
         try:
-            with _lock(fd):
-                os.write(fd, (json.dumps(row, ensure_ascii=False) + "\n").encode("utf-8"))
+            with _lock(lock):
+                _rotate(log)
+                fd = os.open(log, os.O_WRONLY | os.O_APPEND | os.O_CREAT | getattr(os, "O_BINARY", 0), 0o644)
+                try:
+                    _write_all(fd, (json.dumps(row, ensure_ascii=False) + "\n").encode("utf-8"))
+                finally:
+                    os.close(fd)
         finally:
-            os.close(fd)
-    except OSError:
-        pass  # the journal is for people; a write must not fail because its log row did
+            os.close(lock)
+    except OSError as exc:
+        # The journal is for people; a write must not fail because its log row did (gates.md),
+        # but a lost row is said, not swallowed.
+        print(f"h2t: write not logged to {log}: {exc}", file=sys.stderr)
+
+
+def _write_all(fd: int, data: bytes) -> None:
+    """os.write may write less than asked; loop until every byte is out."""
+    view = memoryview(data)
+    while view:
+        view = view[os.write(fd, view):]
 
 
 _LOCK_OFFSET = 2 ** 40   # far past any real EOF: msvcrt locks are mandatory, and a lock on
@@ -265,7 +290,7 @@ def replace(path, data: str | bytes, *, place: str, mode: int | None = None,
     got = _check(path, place, dest=dest, compat=compat)
     payload = _bytes(data)
     _ensure_dir(path.parent, place)
-    tmp = _tmp_beside(path, payload, _default_mode(place) if mode is None else mode)
+    tmp = _tmp_beside(path, payload, _mode(place, got, mode))
     try:
         os.replace(tmp, path)
     except BaseException:
@@ -282,8 +307,7 @@ def create(path, data: str | bytes, *, place: str, mode: int | None = None,
     got = _check(path, place, dest=dest, compat=compat)   # compat: MOVED-TO.txt while migrating
     payload = _bytes(data)
     _ensure_dir(path.parent, place)
-    mode = _default_mode(place) if mode is None else mode
-    tmp = _tmp_beside(path, payload, mode)
+    tmp = _tmp_beside(path, payload, _mode(place, got, mode))
     try:
         try:
             os.link(tmp, path)          # atomic and never overwrites
@@ -308,10 +332,12 @@ def append(path, line: str, *, place: str, dest: bool = False, durable: bool = F
     payload = (line if line.endswith("\n") else line + "\n").encode("utf-8")
     _ensure_dir(path.parent, place)
     fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT | getattr(os, "O_BINARY", 0),
-                 _default_mode(place))
+                 _mode(place, got, None))
     try:
+        if os.name != "nt" and (place in _SECRET or got in _SECRET):
+            os.fchmod(fd, 0o600)        # an existing secret file is repaired, not trusted
         with _lock(fd):
-            os.write(fd, payload)       # one write() under the lock: one whole line
+            _write_all(fd, payload)     # the whole line under the lock, short writes included
             if durable:
                 os.fsync(fd)            # migration journal: the row survives a kill (R49)
     finally:
@@ -348,7 +374,10 @@ def remove_tree(path, *, place: str) -> None:
     got = _check(path, place)
     if place not in _REMOVABLE:
         raise WriteRefused(f"remove_tree is not allowed in {place}", hint="only run, state, logs, tmp, harness")
-    shutil.rmtree(path, ignore_errors=True)
+    try:
+        shutil.rmtree(path)
+    except FileNotFoundError:
+        return                          # nothing was there; nothing removed, nothing logged
     _log("remove_tree", got, path, None)
 
 

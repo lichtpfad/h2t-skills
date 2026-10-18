@@ -32,7 +32,7 @@ def test_replace_writes_atomically_and_logs(home):
 
 def test_write_is_classified_by_real_path_not_by_name(home):
     with pytest.raises(store.WriteRefused, match="secrets.shared"):
-        store.replace(paths.secrets_shared() / "x.env", "K=v", place="state")
+        store.replace(paths.secrets_shared() / "x.env", "K=fake-k", place="state")
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="symlink needs privilege on Windows")
@@ -42,7 +42,7 @@ def test_symlink_does_not_launder_a_write(home, tmp_path):
     link.parent.mkdir(parents=True)
     link.symlink_to(paths.secrets_shared())
     with pytest.raises(store.WriteRefused):
-        store.replace(link / "exa.env", "EXA_API_KEY=fake", place="state")
+        store.replace(link / "exa.env", "EXA_API_KEY=fake-exa", place="state")
 
 
 def test_vault_write_refused_outside_ingest(home, tmp_path, monkeypatch):
@@ -106,7 +106,7 @@ def test_secret_write_logs_key_names_never_values(home):
 
 def test_secret_written_to_a_user_path_is_logged_as_a_secret(home, tmp_path):
     """dest=True classifies elsewhere/tmp; keys still mark the write secret (no file hash)."""
-    store.replace(tmp_path / "mine" / "auth.json", '{"k": "fake"}', place="secrets.local",
+    store.replace(tmp_path / "mine" / "auth.json", '{"k": "fake-k"}', place="secrets.local",
                   dest=True, keys=("k",))
     row = json.loads((paths.logs_dir() / "writes.jsonl").read_text().splitlines()[-1])
     assert row["sha256"] is None and row["keys"] == ["k"]
@@ -190,3 +190,107 @@ def test_dest_allows_explicit_user_path_but_not_package_places(home, tmp_path):
     with pytest.raises(store.WriteRefused, match="h2t-root"):     # unclassified, directly in ~/.h2t
         store.replace(paths.root() / "stray.txt", "x", place="elsewhere", dest=True)
     assert not (paths.root() / "stray.txt").exists()
+
+
+def _broken_yaml(home):
+    (home / ".h2t" / "config").mkdir(parents=True, exist_ok=True)
+    (home / ".h2t" / "config" / "paths.yaml").write_text("version: 1\nplaces:\n  lake: [broken\n")
+
+
+def test_declared_place_under_a_broken_paths_yaml_names_the_file(home, tmp_path):
+    """lake: ~/.dor/lake (R2) classifies legacy, a lake in the temp dir classifies tmp, while
+    the file is broken; either way the refusal must point at paths.yaml."""
+    _broken_yaml(home)
+    with pytest.raises(store.WriteRefused, match="paths.yaml"):
+        store.replace(home / ".dor" / "lake" / "granola" / "n.md", "x", place="lake")
+    with pytest.raises(store.WriteRefused, match="paths.yaml"):
+        store.replace(tmp_path / "lake" / "n.md", "x", place="lake")
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="fcntl probe of the lock")
+def test_log_rotation_happens_under_the_log_lock(home, monkeypatch):
+    import fcntl
+    held = []
+    real_rotate = store._rotate
+
+    def probe(log):
+        fd = os.open(log.with_name(store._LOG_LOCK), os.O_RDWR | os.O_CREAT)
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            fcntl.flock(fd, fcntl.LOCK_UN)
+            held.append(False)
+        except BlockingIOError:
+            held.append(True)
+        finally:
+            os.close(fd)
+        real_rotate(log)
+
+    monkeypatch.setattr(store, "_rotate", probe)
+    store.replace(paths.state_dir() / "a", "x", place="state")
+    assert held == [True]
+
+
+def test_a_lost_log_row_is_said_on_stderr_and_the_write_stands(home, capsys):
+    logs = paths.logs_dir()
+    logs.parent.mkdir(parents=True)
+    logs.write_text("not a directory")          # the journal cannot be written
+    p = store.replace(paths.state_dir() / "a.json", "{}", place="state")
+    assert p.read_text() == "{}"
+    err = capsys.readouterr().err.strip().splitlines()
+    assert len(err) == 1 and str(logs / "writes.jsonl") in err[0] and "Errno" in err[0]
+
+
+def test_short_os_write_is_completed(home, monkeypatch):
+    real_write = os.write
+    p = paths.activity_file("m")
+    with monkeypatch.context() as m:       # scoped: undo() would also restore the real HOME
+        m.setattr(os, "write", lambda fd, data: real_write(fd, bytes(data[:3])))
+        store.append(p, '{"line": "' + "y" * 50 + '"}', place="records.activity")
+        store.replace(paths.state_dir() / "a.json", "{}", place="state")
+    assert p.read_text() == '{"line": "' + "y" * 50 + '"}\n'
+    rows = [json.loads(x) for x in (paths.logs_dir() / "writes.jsonl").read_text().splitlines()]
+    assert [r["op"] for r in rows] == ["append", "replace"]
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX permission bits")
+def test_secret_files_are_0600_whatever_mode_is_passed(home):
+    p = store.replace(paths.secrets_shared() / "exa.env", "EXA_API_KEY=fake-exa\n",
+                      place="secrets.shared", mode=0o644)
+    assert stat.S_IMODE(p.stat().st_mode) == 0o600
+    q = store.create(paths.secrets_local() / "x.env", "X_KEY=fake-x\n", place="secrets.local",
+                     mode=0o644)
+    assert stat.S_IMODE(q.stat().st_mode) == 0o600
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX permission bits")
+def test_append_repairs_an_existing_secret_file_mode(home):
+    p = paths.secrets_local() / "telegram.log"
+    p.parent.mkdir(parents=True)
+    p.write_text("")
+    os.chmod(p, 0o644)
+    store.append(p, "fake-line", place="secrets.local")
+    assert stat.S_IMODE(p.stat().st_mode) == 0o600
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX permission bits make rmtree fail")
+def test_remove_tree_failure_propagates_and_is_not_logged(home):
+    d = paths.state_dir() / "tree"
+    (d / "locked").mkdir(parents=True)
+    (d / "locked" / "f").write_text("x")
+    os.chmod(d / "locked", 0o500)
+    try:
+        with pytest.raises(PermissionError):
+            store.remove_tree(d, place="state")
+    finally:
+        os.chmod(d / "locked", 0o700)
+    log = paths.logs_dir() / "writes.jsonl"
+    assert not log.exists() or '"remove_tree"' not in log.read_text()
+
+
+def test_remove_tree_of_nothing_is_quiet_and_not_logged(home):
+    store.remove_tree(paths.state_dir() / "absent", place="state")
+    assert not (paths.logs_dir() / "writes.jsonl").exists()
+    d = store.mkdir(paths.state_dir() / "t", place="state")
+    store.remove_tree(d, place="state")
+    assert not d.exists()
+    assert '"remove_tree"' in (paths.logs_dir() / "writes.jsonl").read_text()
