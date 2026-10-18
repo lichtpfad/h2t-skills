@@ -42,6 +42,15 @@ def test_layout_flags_live_on_layout_only():
         cli.build_parser().parse_args(["dev-sync", "--sync-paused"])
 
 
+def test_a_busy_layout_exits_3(capsys, monkeypatch):
+    from h2t_ops.core import paths, store
+    # Tasks 22-23 complete the real table; until then a full stand-in reaches the lock.
+    monkeypatch.setattr(engine, "_phase_funcs", lambda: {p: (lambda ctx: None) for p in engine.PHASES})
+    with store.locked(paths.run_dir() / "layout.lock", place="run"):
+        assert cli.main(["layout", "migrate", "--json"]) == 3
+    assert json.loads(capsys.readouterr().err)["error"]["details"]["reason"] == "busy"
+
+
 def test_rollback_without_sync_paused_is_a_usage_error(capsys):
     assert cli.main(["layout", "rollback", "--json"]) == 2
     assert "pause the sync" in json.loads(capsys.readouterr().err)["error"]["message"]

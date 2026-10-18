@@ -55,36 +55,52 @@ def journaled_create(journal: Journal, target: Path, data: bytes, *, place: str,
     return Path(target)
 
 
-def put(journal: Journal, target: Path, data: bytes, *, place: str, source: str,
-        from_name: str | None = None, source_path: Path | None = None,
-        rule: str | None = None, keys: tuple[str, ...] = ()) -> Path:
-    """The same hash is the same file; a different one keeps both: the copy is
-    <name>.from-<source> beside the target (§8). Returns the file that holds `data`.
-    from_name: the source label in the copy's name, when it differs from `source`."""
-    target = Path(target)
-    sha = store.sha256(data)
+def _record_sources(journal: Journal, olds, new: Path) -> None:
+    for old in olds:
+        if old is not None:
+            journal.source(Path(old), new)
+
+
+def _destination(target: Path, sha: str, place: str, label: str) -> tuple[Path, bool]:
+    """Where `data` belongs, and whether it is already there."""
     have = journal_mod.current_sha(target, place)
-    if have is None:
-        return journaled_create(journal, target, data, place=place, source=source,
-                                source_path=source_path, rule=rule, keys=keys)
-    if have == sha:
-        return target
-    alt = target.with_name(f"{target.name}.from-{from_name or source}")
-    for candidate in store.unique_name(alt):
+    if have is None or have == sha:
+        return target, have is not None
+    for candidate in store.unique_name(target.with_name(f"{target.name}.from-{label}")):
         have = journal_mod.current_sha(candidate, place)
-        if have == sha:
-            return candidate
-        if have is None:
-            return journaled_create(journal, candidate, data, place=place, source=source,
-                                    source_path=source_path, rule=rule, keys=keys)
+        if have is None or have == sha:
+            return candidate, have is not None
     raise AssertionError("unreachable")
 
 
-def put_union(journal: Journal, target: Path, data: bytes, *, place: str,
-              keys: tuple[str, ...] = ()) -> Path:
-    """Replace a file the migration extends (keys added to an existing provider file): its
-    previous bytes go to the rollback directory and the journal before the write."""
+def put(journal: Journal, target: Path, data: bytes, *, place: str, source: str,
+        from_name: str | None = None, source_path: Path | None = None,
+        rule: str | None = None, keys: tuple[str, ...] = (),
+        sources: tuple[Path, ...] = ()) -> Path:
+    """The same hash is the same file; a different one keeps both: the copy is
+    <name>.from-<source> beside the target (§8), and on a second clash with yet another
+    hash <stem>-2.from-<source> (store.unique_name). Returns the file that holds `data`.
+    from_name: the source label in the copy's name, when it differs from `source`.
+    source_path: the one old file of a byte copy or a transform (verified, R25); sources:
+    every other old file the data was read from (a merge). Each gets a `source` row, also
+    when the file is already there, so MOVED-TO.txt reaches its directory."""
     target = Path(target)
+    sha = store.sha256(data)
+    dest, there = _destination(target, sha, place, from_name or source)
+    _record_sources(journal, (source_path, *sources), dest)
+    if not there:
+        journaled_create(journal, dest, data, place=place, source=source,
+                         source_path=source_path, rule=rule, keys=keys)
+    return dest
+
+
+def put_union(journal: Journal, target: Path, data: bytes, *, place: str,
+              keys: tuple[str, ...] = (), sources: tuple[Path, ...] = ()) -> Path:
+    """Replace a file the migration extends (keys added to an existing provider file): its
+    previous bytes go to the rollback directory and the journal before the write.
+    sources: the old files the added keys came from (`source` rows, as in put)."""
+    target = Path(target)
+    _record_sources(journal, sources, target)
     stamp = store.stamp(target)
     prev = journal_mod.current_bytes(target, place)
     if prev is None:
@@ -148,7 +164,15 @@ def phase_snapshot(ctx: PhaseContext) -> None:
         raise PhaseFailed(f"{free} bytes free next to {paths.root()}, the copy needs {need}",
                           hint="free some space and run `h2t-setup layout migrate` again")
     name = ctx.machine
+    from h2t_ops.setup import legacy
     if not ctx.machine_explicit:
+        # Outside Claude Code the pinned name is not in the environment (R4): a hostname
+        # that happens to match another machine's folder would migrate that folder.
+        pinned = legacy.pinned_machine_name()
+        if pinned and pinned != name:
+            raise PhaseFailed(
+                f"Claude settings pin H2T_MACHINE_NAME={pinned}, this process sees {name!r}",
+                hint=f"run it inside Claude Code, or: h2t-setup layout migrate --machine {pinned}")
         folders = sorted({p.name for key in ("sessions.h2t", "sessions.dor")
                           for root in [paths.legacy(key)] if root.is_dir()
                           for p in root.iterdir() if p.is_dir() and not p.name.startswith(".")})
@@ -158,7 +182,6 @@ def phase_snapshot(ctx: PhaseContext) -> None:
                 hint="name the machine: h2t-setup layout migrate --machine <name>; "
                      f"the folders: {', '.join(folders)}")
     else:
-        from h2t_ops.setup import legacy
         got = legacy.ensure_machine_name(name=name)
         if got["status"] == "unchanged" and got.get("value") != name:
             raise PhaseFailed(
@@ -184,7 +207,7 @@ def phase_config_backups(ctx: PhaseContext) -> None:
         # No source_path: the source leaves config/ below, so a hash check against it would
         # fail; the removed row holds its bytes.
         put(ctx.journal, paths.backups_dir() / f"{f.name}.{when}", data, place="state",
-            source="config")
+            source="config", sources=(f,))
         with store.migrating():
             ctx.journal.removed(f, "config", prev=data)
             store.remove(f, place="config")
@@ -201,15 +224,15 @@ def _moved_from(journal: Journal) -> dict[Path, set[str]]:
                    key=lambda kv: len(kv[1].parts), reverse=True)
     out: dict[Path, set[str]] = {}
     for row in journal.entries():
-        if row["op"] != "created" or not row.get("source_path"):
+        if row["op"] != "source":
             continue
-        src = Path(row["source_path"])
+        src = Path(row["old"])
         if store.classify(src) != "legacy":
             continue
         real = Path(os.path.realpath(src))
         for root, real_root in roots:
             if _inside(real, real_root):
-                out.setdefault(root, set()).add(str(Path(row["path"]).parent))
+                out.setdefault(root, set()).add(str(Path(row["new"]).parent))
                 break
     return out
 
@@ -280,7 +303,19 @@ def migrate(report, *, machine: str | None = None,
             report.failed.append((f"layout 1: {p} is not implemented",
                                   "this build has no function for the phase; nothing was written"))
         return
+    with journal_mod.exclusive():       # ConfigError (exit 3) if another one holds it
+        _run(report, machine, table)
+
+
+def _run(report, machine: str | None, table: dict[str, Callable]) -> None:
     explicit = machine is not None
+    pending = [j for j in Journal.all() if j.rollback_pending()]
+    if pending:
+        # Its files are half restored; a new run would build on them and leave the rest of
+        # that journal unreachable by rollback.
+        raise ConfigError(f"the rollback of {pending[-1].run_id} did not finish",
+                          hint="finish it first: h2t-setup layout rollback --sync-paused",
+                          details={"reason": "rollback_pending", "journal": str(pending[-1].dir)})
     journal_mod.prune()
     latest = Journal.latest()
     if latest is not None and latest.resumable():

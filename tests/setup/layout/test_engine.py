@@ -560,3 +560,119 @@ def test_markers_go_into_old_directories_only(monkeypatch):
     rollback.rollback(sync_paused=True)
     assert not marker.exists()
     assert (old / "s.md").read_bytes() == b"S"
+
+
+def test_markers_for_same_hash_and_merged_sources():
+    """A target already there with the same bytes writes no file row, and a merged file has
+    no single source_path; both still mark the old directories they were read from."""
+    same = paths.legacy("sessions.dor") / "m"
+    same.mkdir(parents=True)
+    (same / "s.md").write_bytes(b"S")
+    _session("s.md").parent.mkdir(parents=True)
+    _session("s.md").write_bytes(b"S")              # e.g. delivered by sync from a peer
+    a = paths.legacy("secrets.h2t") / "secrets.env"
+    b = paths.legacy("secrets.dor")
+    c = paths.legacy("secrets.dor_old")             # ~/.dor/secrets.env: only put_union reads it
+    for p in (a, b, c):
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_bytes(b"EXA_API_KEY=fake-exa\n")
+    exa = paths.secrets_shared() / "exa.env"
+    exa.parent.mkdir(parents=True)
+    exa.write_bytes(b"EXA_API_KEY=fake-exa\n")
+
+    def secrets(ctx):
+        engine.put(ctx.journal, paths.secrets_shared() / "other.env", b"X=fake-x\n",
+                   place="secrets.shared", source="ladder", sources=(a, b))
+        engine.put_union(ctx.journal, exa, b"EXA_API_KEY=fake-exa\nEXA_X=fake-x\n",
+                         place="secrets.shared", keys=("EXA_API_KEY", "EXA_X"), sources=(c,))
+
+    def sessions(ctx):
+        engine.put(ctx.journal, _session("s.md"), b"S", place="records.sessions", source="dor",
+                   source_path=same / "s.md")
+
+    assert _migrate(secrets=secrets, sessions=sessions).failed == []
+    assert not [r for r in Journal.latest().entries()
+                if r.get("path") == str(_session("s.md"))]   # no file row: it was there
+    for d in (paths.legacy("sessions.dor"), a.parent, b.parent, c.parent):
+        assert (d / "MOVED-TO.txt").is_file(), d
+    assert str(paths.secrets_shared()) in (b.parent / "MOVED-TO.txt").read_text()
+
+
+def test_a_held_lock_stops_migrate_and_rollback():
+    with store.locked(paths.run_dir() / "layout.lock", place="run"):
+        with pytest.raises(ConfigError) as exc:
+            _migrate()
+        assert "another layout migration or rollback is running" in str(exc.value)
+        with pytest.raises(ConfigError):
+            rollback.rollback(sync_paused=True)
+    assert not (paths.run_dir() / "rollback").exists()
+    assert not paths.layout_file().exists()
+    assert _migrate().failed == []                  # free again
+
+
+def test_interrupted_rollback_blocks_migrate_until_finished(monkeypatch):
+    exa = paths.secrets_shared() / "exa.env"
+    exa.parent.mkdir(parents=True)
+    exa.write_bytes(b"EXA_API_KEY=fake-exa\n")
+
+    def sessions(ctx):
+        for n in ("a.md", "b.md", "c.md"):
+            engine.put(ctx.journal, _session(n), n.encode(), place="records.sessions", source="h2t")
+        engine.put_union(ctx.journal, exa, b"EXA_API_KEY=fake-exa\nEXA_X=fake-x\n",
+                         place="secrets.shared", keys=("EXA_API_KEY", "EXA_X"))
+
+    assert _migrate(sessions=sessions).failed == []
+    a = Journal.latest().run_id
+    real, count = store.remove, {"n": 0}
+
+    def remove(path, **kw):
+        count["n"] += 1
+        if count["n"] == 2:                         # layout.json is gone, the sessions not
+            raise KeyboardInterrupt
+        return real(path, **kw)
+
+    monkeypatch.setattr(store, "remove", remove)
+    with pytest.raises(KeyboardInterrupt):
+        rollback.rollback(sync_paused=True)
+    monkeypatch.setattr(store, "remove", real)
+    assert not paths.layout_file().exists()
+
+    with pytest.raises(ConfigError) as exc:
+        _migrate(sessions=sessions)
+    assert "rollback --sync-paused" in exc.value.hint
+    assert [j.run_id for j in Journal.all()] == [a]  # nothing new was started
+
+    # Even with a newer finished journal beside it (another machine's, a manual copy),
+    # rollback takes up the half-done one.
+    newer = Journal("layout1-29991231T000000000000Z")
+    newer.phase_done("markers")
+    out = rollback.rollback(sync_paused=True)
+    assert out["journal"].endswith(a) and out["kept"] == []
+    assert list(paths.records("sessions", "m").iterdir()) == []
+    assert exa.read_bytes() == b"EXA_API_KEY=fake-exa\n"
+    assert not Journal.latest().rollback_pending()
+
+
+def test_a_torn_row_does_not_block_the_journal():
+    j = Journal(journal_mod.new_run_id())
+    j.phase_done("snapshot")
+    with open(j.file, "ab") as fh:                  # a kill mid-row, cut inside a character
+        fh.write('{"op": "phase_done", "phase": "sé'.encode()[:-1])
+    assert j.done_phases() == {"snapshot"}
+    j.phase_done("secrets")                         # the next append after the resume
+    j.phase_done("sessions")
+    assert j.done_phases() == {"snapshot", "secrets", "sessions"}
+    assert [r["op"] for r in j.entries()] == ["phase_done"] * 3
+
+
+def test_pinned_name_without_flag_stops(monkeypatch):
+    """R4: outside Claude the pin is not in the env; it is read from the settings."""
+    settings = paths.dir_of("harness") / "settings.json"
+    settings.parent.mkdir(parents=True)
+    settings.write_text(json.dumps({"env": {"H2T_MACHINE_NAME": "automata"}}), encoding="utf-8")
+    report = _migrate()                             # this process sees H2T_MACHINE_NAME=m
+    assert [s for s, _ in report.failed] == ["layout 1: snapshot"]
+    assert "--machine automata" in report.failed[0][1]
+    assert not paths.layout_file().exists()
+    monkeypatch.setenv("H2T_MACHINE_NAME", "automata")
+    assert _migrate().failed == []

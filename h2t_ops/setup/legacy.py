@@ -345,6 +345,19 @@ def doctor(runner: Runner = _run) -> dict[str, Any]:
     }
 
 
+def pinned_machine_name() -> str | None:
+    """H2T_MACHINE_NAME as Claude Code's settings pin it, None if they do not (or the file
+    cannot be read): what a process started outside Claude does not see in its env."""
+    settings = paths.dir_of("harness") / "settings.json"
+    try:
+        data = json.loads(settings.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    env = data.get("env") if isinstance(data, dict) else None
+    value = env.get("H2T_MACHINE_NAME") if isinstance(env, dict) else None
+    return value if isinstance(value, str) and value else None
+
+
 def ensure_machine_name(*, name: str = "") -> dict[str, Any]:
     """Pin H2T_MACHINE_NAME in Claude Code's settings `env`, once (#491, ADR 0003).
 

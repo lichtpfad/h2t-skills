@@ -7,9 +7,11 @@ in the same run/rollback/, and neither is ever taken for one.
 """
 from __future__ import annotations
 
+import contextlib
 import datetime
 import json
 import time
+from collections.abc import Iterator
 from pathlib import Path
 
 from h2t_ops.core import paths, secrets, store
@@ -54,8 +56,21 @@ class Journal:
         if not self.dir.is_dir():       # made on the first row, so a run that stops before
             store.mkdir(self.dir, place="run", mode=0o700)     # writing leaves none (R36)
 
+    def _torn(self) -> bool:
+        """The last row was cut by a kill: the file does not end in a newline."""
+        try:
+            with open(self.file, "rb") as fh:
+                fh.seek(-1, 2)
+                return fh.read(1) != b"\n"
+        except (FileNotFoundError, OSError):
+            return False
+
     def _row(self, row: dict) -> None:
         self._ensure_dir()
+        if self._torn():
+            # Close the cut line, and say so on the next one: entries() skips the fragment
+            # only where a torn_row follows it, so damage anywhere else is still an error.
+            store.append(self.file, "\n" + json.dumps({"op": "torn_row"}), place="run", durable=True)
         store.append(self.file, json.dumps(row, ensure_ascii=False), place="run", durable=True)
 
     @staticmethod
@@ -120,9 +135,18 @@ class Journal:
     def phase_done(self, phase: str) -> None:
         self._row({"op": "phase_done", "phase": phase})
 
+    def source(self, old: Path, new: Path) -> None:
+        """An old file this run read for `new` — copied, merged, transformed, or found already
+        there with the same hash. MOVED-TO.txt goes where these point, whatever verification
+        the file gets (source_path is only for byte copies, R25)."""
+        self._row({"op": "source", "old": str(old), "new": str(new)})
+
     def rolling_back(self) -> None:
         """Rollback has begun: this journal is never resumed by migrate again."""
         self._row({"op": "rollback"})
+
+    def rollback_done(self) -> None:
+        self._row({"op": "rollback_done"})
 
     def reconcile(self) -> list[str]:
         """A kill between store.create and its created row left an intent: the file is the
@@ -149,18 +173,24 @@ class Journal:
 
     def entries(self) -> list[dict]:
         try:
-            lines = self.file.read_text(encoding="utf-8").splitlines()
+            # Bytes, line by line: a row cut mid-character must not fail the whole decode.
+            lines = self.file.read_bytes().splitlines()
         except FileNotFoundError:
             return []
+        torn = json.dumps({"op": "torn_row"}).encode()
         out = []
         for i, line in enumerate(lines):
             try:
-                out.append(json.loads(line))
+                row = json.loads(line.decode("utf-8"))
             except ValueError:
-                if i == len(lines) - 1:     # a kill mid-row: the change it named never began
+                # A kill mid-row: the change it named never began. Last line, or closed by
+                # the torn_row the next append wrote.
+                if i == len(lines) - 1 or lines[i + 1] == torn:
                     continue
                 raise ConfigError(f"{self.file}: line {i + 1} is not JSON",
                                   hint="the journal is damaged; restore it or remove the directory") from None
+            if row.get("op") != "torn_row":
+                out.append(row)
         return out
 
     def done_phases(self) -> set[str]:
@@ -175,6 +205,14 @@ class Journal:
     def recorded_machine(self) -> str | None:
         names = [r["name"] for r in self.entries() if r["op"] == "machine"]
         return names[0] if names else None
+
+    def rollback_pending(self) -> bool:
+        """A rollback began and did not reach its end: only rollback may touch it next."""
+        pending = False                 # a re-run rollback writes rollback again: last wins
+        for r in self.entries():
+            if r["op"] in ("rollback", "rollback_done"):
+                pending = r["op"] == "rollback"
+        return pending
 
     def resumable(self) -> bool:
         return not self.finished() and not self.rolled_back()
@@ -195,6 +233,21 @@ class Journal:
         journals = Journal.all()
         open_ = [j for j in journals if j.resumable()]
         return (open_ or journals or [None])[-1]
+
+
+BUSY = "another layout migration or rollback is running"
+
+
+@contextlib.contextmanager
+def exclusive() -> Iterator[None]:
+    """One migrate or rollback at a time on this machine: run/layout.lock, not waited for."""
+    with contextlib.ExitStack() as stack:
+        try:                            # only the acquisition: a LockBusy from a phase is its own
+            stack.enter_context(store.locked(paths.run_dir() / "layout.lock", place="run", timeout=0))
+        except store.LockBusy:
+            raise ConfigError(BUSY, hint="wait for it to finish, then run the command again",
+                              details={"reason": "busy"}) from None
+        yield
 
 
 def prune(now: float | None = None) -> list[str]:
