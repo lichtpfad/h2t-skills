@@ -16,9 +16,9 @@ storage_map = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(storage_map)
 
 CEILINGS = {  # measured 2026-10-18 on ab078f4f; lowered after Task 6, Task 8 (Google), Task 9
-    # (Telegram), Task 10 (every connector and setup through core.secrets)
-    "home": 57, "legacy_roots": 11, "path_env": 9, "dotenv": 0,
-    "secret_readers": 0, "writes": 188, "sqlite": 0,
+    # (Telegram), Task 10 (every connector and setup through core.secrets), Task 11 (lake)
+    "home": 48, "legacy_roots": 4, "path_env": 8, "dotenv": 0,
+    "secret_readers": 0, "writes": 166, "sqlite": 0,
 }
 
 

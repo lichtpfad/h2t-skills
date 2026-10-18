@@ -431,7 +431,11 @@ def fake_meetgeek(monkeypatch):
 
 @pytest.fixture
 def meetgeek_env(fake_meetgeek, monkeypatch, tmp_path):
-    monkeypatch.setenv("H2T_LAKE_ROOT", str(tmp_path / "lake"))
+    # The lake is a paths.yaml place under the test's HOME; H2T_LAKE_ROOT is not read (#548).
+    from h2t_ops.core import paths
+    paths.paths_yaml().parent.mkdir(parents=True, exist_ok=True)
+    paths.paths_yaml().write_text(f"version: 1\nplaces:\n  lake: {tmp_path / 'lake'}\n",
+                                  encoding="utf-8")
     return fake_meetgeek
 
 
@@ -480,7 +484,15 @@ def test_meetgeek_sync_writes_the_same_lake(meetgeek_env, capsys, tmp_path):
     assert len(files) == 2 * 9 + 1  # 4 pairs + recording per meeting, + manifest
     for rel, path in files.items():
         want = golden["files"][rel]
-        if "md" in want:
+        if rel == "manifest.jsonl":
+            # 4.0 rows are the manifest protocol's (core.lake): the script's row is the meta
+            # of each committed row, and a pending row precedes it.
+            rows = [json.loads(x) for x in path.read_text(encoding="utf-8").splitlines()]
+            protocol = {"op", "state", "files", "refused"}
+            committed = [{k: v for k, v in r.items() if k not in protocol}
+                         for r in rows if r["state"] == "committed"]
+            assert committed == [json.loads(x) for x in want["text"].splitlines()], rel
+        elif "md" in want:
             assert _without_fetched_at(path.read_text(encoding="utf-8")) == want["md"], rel
         else:
             assert path.read_text(encoding="utf-8") == want["text"], rel

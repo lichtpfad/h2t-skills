@@ -196,6 +196,94 @@ def _evals_load(sb, mp):
     assert get_status()["token_present"] is True
 
 
+def _granola_sync(sb, mp):
+    """`granola sync` with no --to, the stand-in client of tests/connectors/granola."""
+    from h2t_ops.connectors.granola import sync
+    from tests.connectors.granola.test_sync import _client
+    sync.sync_notes(_client(), include={"summaries", "transcripts"})
+
+
+def _granola_foreign_file(sb, mp):
+    f = sb.lake / "granola" / "summaries" / "not_1.md"
+    f.parent.mkdir(parents=True)
+    f.write_text("hand-made")
+
+
+def _granola_sync_refuses(sb, mp):
+    from h2t_ops.connectors.granola import sync
+    from tests.connectors.granola.test_sync import _client
+    assert sync.sync_notes(_client(), include={"summaries"})["refused"] == 1
+    assert (sb.lake / "granola" / "summaries" / "not_1.md").read_text() == "hand-made"
+
+
+def _no_lake_declared(sb, mp):
+    from h2t_ops.core import paths
+    paths.paths_yaml().write_text(f"version: 1\nplaces:\n  inbox: {sb.inbox}\n", encoding="utf-8")
+
+
+def _granola_sync_default_lake(sb, mp):
+    from h2t_ops.core import paths
+    _granola_sync(sb, mp)
+    assert (paths.data_dir() / "lake" / "granola" / "summaries" / "not_1.md").is_file()
+
+
+def _meetgeek_key(sb, mp):
+    mp.setenv("MEETGEEK_API_KEY", "fake-meetgeek")
+
+
+def _meetgeek_download(sb, mp):
+    """The recording stream goes through store.writer into <lake>/meetgeek (R29)."""
+    import requests
+
+    from h2t_ops.connectors.meetgeek.client import MeetGeekClient
+
+    class Resp:
+        status_code = 200
+
+        def iter_content(self, chunk_size):
+            yield b"RECORDING"
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+    mp.setattr(requests, "get", lambda url, **kw: Resp())
+    dest = sb.lake / "meetgeek" / "recordings" / "m1.mp4"
+    MeetGeekClient().download_to("https://media.test/m1", dest, exclusive=True)
+    assert dest.read_bytes() == b"RECORDING"
+
+
+def _meetgeek_webhook(sb, mp):
+    """One POST through the webhook handler, default --out (<lake>/meetgeek/webhooks)."""
+    import argparse
+    import http.server
+    import io
+    from types import SimpleNamespace
+
+    from h2t_ops.connectors.meetgeek import commands, pipeline
+
+    class Server:
+        def __init__(self, addr, handler):
+            self.handler = handler
+
+        def serve_forever(self):
+            body = b'{"event": "x"}'
+            self.handler.do_POST(SimpleNamespace(headers={"Content-Length": str(len(body))},
+                                                 path="/e", rfile=io.BytesIO(body),
+                                                 _reply=lambda code, text="": None))
+
+        def server_close(self):
+            pass
+
+    mp.setattr(http.server, "ThreadingHTTPServer", Server)
+    p = argparse.ArgumentParser()
+    commands.register(p.add_subparsers(dest="connector"))
+    pipeline.webhook_server(p.parse_args(["meetgeek", "webhook-server", "--secret", ""]))
+    assert len(list((sb.lake / "meetgeek" / "webhooks").glob("*.json"))) == 1
+
+
 CASES: list[Case] = [
     Case("store.replace.state", _store_replace_state),
     # Task 8: a refresh writes nothing; a rotated refresh token writes local and the mirror.
@@ -217,4 +305,10 @@ CASES: list[Case] = [
     Case("dropbox.init", _dropbox_init, setup=_provider_key("dropbox", "DROPBOX_TOKEN=fake-dropbox\n")),
     Case("evals.load", _evals_load, setup=_provider_key("h2t-evals", "H2T_EVALS_TOKEN=fake-evals\n")),
     Case("notion.resolve.empty-new-key", _notion_resolve, setup=_notion_empty_new_key),
+    # Task 11: the lake through core.lake (manifest protocol), cursors in state.
+    Case("granola.sync", _granola_sync),
+    Case("granola.sync.foreign-file", _granola_sync_refuses, setup=_granola_foreign_file),
+    Case("granola.sync.default-lake", _granola_sync_default_lake, setup=_no_lake_declared),
+    Case("meetgeek.download", _meetgeek_download, setup=_meetgeek_key),
+    Case("meetgeek.webhooks.write", _meetgeek_webhook),
 ]

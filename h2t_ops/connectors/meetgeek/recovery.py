@@ -10,9 +10,9 @@ Drive upload is embedded — h2t-ops drive upload lacks recovery-compatible sema
 (no folder hierarchy, no public sharing, no usercontent URL).
 
 Package copy of plugins/h2t-ops/skills/meetgeek/scripts/recovery.py, so the `h2t-ops
-meetgeek` recovery verbs survive that script's deletion (#541). Behaviour and data paths
-are the script's, unchanged: the lake under ~/.dor/lake (H2T_LAKE_ROOT overrides) is
-subsystem 2's to move (#548), not this copy's.
+meetgeek` recovery verbs survive that script's deletion (#541). Behaviour is the script's;
+the data lives in <lake>/meetgeek, the lake place of paths.yaml or its default data/lake, and
+every write goes through core.store (#548).
 """
 from __future__ import annotations
 
@@ -22,10 +22,12 @@ import platform
 import re
 import subprocess
 import sys
+import uuid
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from h2t_ops.core import google_auth
+from h2t_ops.core import google_auth, lake, store
+from h2t_ops.core import paths as _paths
 from h2t_ops.core.errors import H2TError
 
 try:
@@ -95,14 +97,12 @@ def age_cutoff_iso(min_age_hours: float) -> str:
 
 
 def lake_root() -> Path:
-    """Root of the local data lake, overridable by H2T_LAKE_ROOT.
+    """<lake>/meetgeek: the lake place of paths.yaml, or its default data/lake (#548).
 
-    Every lake path goes through here so a test run cannot reach the user's real
-    ~/.dor: four upload tests wrote mp4 stubs and submission artifacts into it,
-    and Syncthing carried them to the other machine (#386).
+    Every lake path goes through here. H2T_LAKE_ROOT is no longer read: four upload tests
+    once wrote mp4 stubs into the real lake (#386); tests now isolate HOME instead.
     """
-    override = os.environ.get("H2T_LAKE_ROOT")
-    return Path(override).expanduser() if override else Path.home() / ".dor" / "lake"
+    return _paths.place_or_default("lake")[0] / "meetgeek"
 
 
 def machine_id() -> str:
@@ -118,7 +118,7 @@ def machine_id() -> str:
 
 
 def uploads_staging_root() -> Path:
-    return lake_root() / "meetgeek" / "uploads-staging"
+    return lake_root() / "uploads-staging"
 
 
 def staging_dir() -> Path:
@@ -240,23 +240,25 @@ def convert_media(src: Path, *, audio_only: bool, mix_mode: str,
     if output_path is None:
         suffix = ".m4a" if audio_only else ".mp4"
         output_path = staging_dir() / (src.stem + suffix)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
     if output_path.exists() and output_path.stat().st_size > 1024:
         print(f"INFO: cached {output_path} (skip)", file=sys.stderr)
         return output_path
+    place, user = lake.origin(output_path)
     cmd = build_convert_cmd(str(src), str(output_path), probe=probe,
                             audio_only=audio_only, mix_mode=mix_mode)
     print(f"INFO: ffmpeg {len(cmd)} args (audio_streams={probe['audio_streams']})",
           file=sys.stderr)
-    r = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
-    if r.returncode != 0:
-        if output_path.exists():
-            output_path.unlink()
-        raise RecoveryError(f"ffmpeg encode failed: {r.stderr[:500]}", exit_code=1)
-    if not output_path.exists() or output_path.stat().st_size <= 1024:
-        if output_path.exists():
-            output_path.unlink()
-        raise RecoveryError(f"ffmpeg produced empty output: {output_path}", exit_code=1)
+    # ffmpeg opens the output itself: the path is checked and handed over (§7.2).
+    with store.managed(output_path, place=place, library="ffmpeg", dest=user):
+        r = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
+        if r.returncode != 0:
+            if output_path.exists():
+                output_path.unlink()
+            raise RecoveryError(f"ffmpeg encode failed: {r.stderr[:500]}", exit_code=1)
+        if not output_path.exists() or output_path.stat().st_size <= 1024:
+            if output_path.exists():
+                output_path.unlink()
+            raise RecoveryError(f"ffmpeg produced empty output: {output_path}", exit_code=1)
     return output_path
 
 
@@ -565,10 +567,9 @@ def read_uploads_manifest(path: Path | None = None) -> dict[str, dict]:
 def append_uploads_manifest(record: dict, path: Path | None = None) -> None:
     if path is None:
         path = uploads_manifest_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
     stamped = {**record, "ts": record.get("ts") or now_iso()}
-    with path.open("a", encoding="utf-8") as f:
-        f.write(json.dumps(stamped, ensure_ascii=False) + "\n")
+    place, user = lake.origin(path)
+    store.append(path, lake.manifest_line(stamped), place=place, dest=user)
 
 
 def submitted_record(state: dict[str, dict], source: str) -> dict | None:
@@ -736,9 +737,6 @@ def emit_submission_artifact(result: dict, *, artifact_dir: Path | None = None) 
     has not yet processed the recording. meeting_transcript_artifact is emitted
     separately after transcript fetch/sync.
     """
-    if artifact_dir is None:
-        artifact_dir = staging_dir()
-    artifact_dir.mkdir(parents=True, exist_ok=True)
     stem = Path(result.get("source_webm", "unknown")).stem
     artifact = {
         "schema_version": "0.1",
@@ -757,9 +755,16 @@ def emit_submission_artifact(result: dict, *, artifact_dir: Path | None = None) 
         "meetgeek_meeting_id": None,
         "notes": None,
     }
-    path = artifact_dir / f"{stem}.submission.json"
-    path.write_text(json.dumps(artifact, ensure_ascii=False, indent=2), encoding="utf-8")
-    return path
+    name = f"{stem}.submission.json"
+    if artifact_dir is None:
+        d = lake.ConnectorDir("meetgeek")
+        rel = (staging_dir() / name).relative_to(d.root).as_posix()
+    else:
+        d, rel = lake.ConnectorDir("meetgeek", root=artifact_dir), name
+    data = json.dumps(artifact, ensure_ascii=False, indent=2).encode("utf-8")
+    if d.publish({rel: data}, op_id=uuid.uuid4().hex):
+        raise RecoveryError(f"{d.root / rel} exists and is not the package's; left as is", exit_code=1)
+    return d.root / rel
 
 
 # ─── Retention ────────────────────────────────────────────────────────────────

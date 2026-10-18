@@ -249,25 +249,30 @@ class MeetGeekClient:
             raise ProviderError(f"No download URL in response for {meeting_id}: {info!r}")
         return {"meeting_id": meeting_id, "download_url": url}
 
-    def download_to(self, url: str, dest: Any) -> int:
+    def download_to(self, url: str, dest: Any, *, exclusive: bool = False) -> int:
         """Stream a recording URL to dest; return bytes written (meetgeek_cli.py, #541).
 
         A signed media URL carries its token, so the API key goes only to the API host.
+        The file is published through store.writer in the place its path belongs to (R28):
+        with exclusive=True a file already at dest is refused (store.AlreadyExists), never
+        replaced (R47); a failed download leaves dest as it was (R29).
         """
         from pathlib import Path
 
         import requests as _r  # lazy — module-scope import forbidden
 
+        from h2t_ops.core import lake, store
+
         dest = Path(dest)
+        place, user = lake.origin(dest)
         api_host = self._base_url.split("//", 1)[-1].split("/", 1)[0]
         headers = self._headers() if api_host in url else {}
         written = 0
-        dest.parent.mkdir(parents=True, exist_ok=True)
         try:
             with _r.get(url, headers=headers, stream=True, timeout=self._timeout) as resp:
                 if resp.status_code >= 400:
                     raise ProviderError(f"download failed: {resp.status_code} {resp.text[:200]}")
-                with dest.open("wb") as f:
+                with store.writer(dest, place=place, dest=user, exclusive=exclusive) as f:
                     for chunk in resp.iter_content(chunk_size=1 << 16):
                         if chunk:
                             f.write(chunk)

@@ -136,7 +136,15 @@ def _isolated_lake(tmp_path, monkeypatch):
     home.mkdir(parents=True, exist_ok=True)
     monkeypatch.setenv("HOME", str(home))
     monkeypatch.setenv("USERPROFILE", str(home))
-    monkeypatch.setenv("H2T_LAKE_ROOT", str(home / ".dor" / "lake"))
+    # 4.0 reads the lake from paths.yaml, not H2T_LAKE_ROOT; declared where 3.x kept it (R2).
+    _declare_lake(home / ".dor" / "lake")
+
+
+def _declare_lake(lake):
+    from h2t_ops.core import paths
+    f = paths.paths_yaml()
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_text(f"version: 1\nplaces:\n  lake: {lake}\n", encoding="utf-8")
 
 
 @pytest.fixture()
@@ -308,6 +316,11 @@ def test_transcript_pagination_assembled(cli, tmp_path):
 
 # ─── sync ──────────────────────────────────────────────────────────────────────
 
+def _committed(lake):
+    rows = [json.loads(x) for x in (lake / "manifest.jsonl").read_text(encoding="utf-8").splitlines() if x]
+    return [r for r in rows if r.get("state") == "committed"]
+
+
 def test_sync_to_temp_dir(cli, tmp_path):
     meetings = {"data": [
         {"meeting_id": "m1", "title": "T1", "start_time": "2026-04-10T10:00:00Z"},
@@ -328,8 +341,7 @@ def test_sync_to_temp_dir(cli, tmp_path):
         ])
     assert rc == 0
     lake = tmp_path / "lake"
-    manifest = (lake / "manifest.jsonl").read_text(encoding="utf-8").strip().splitlines()
-    assert len(manifest) == 2
+    assert len(_committed(lake)) == 2       # each publish: a pending row, then committed
     assert (lake / "transcripts" / "m1.md").exists()
     assert (lake / "transcripts" / "m2.json").exists()
     cur = json.loads(cursor_file.read_text())
@@ -356,8 +368,7 @@ def test_sync_idempotent_dedup(cli, tmp_path):
                        "--limit", "1", "--cursor-file", str(cursor_file)])
     assert rc == 0
     assert len(calls2) == 1  # no transcript fetch
-    manifest = (lake / "manifest.jsonl").read_text(encoding="utf-8").strip().splitlines()
-    assert len(manifest) == 1
+    assert len(_committed(lake)) == 1
 
 
 def test_sync_cursor_resume_filters_seen_ts(cli, tmp_path):
@@ -480,6 +491,69 @@ def test_webhook_server_writes_event(cli, tmp_path):
     rec = json.loads(files[0].read_text(encoding="utf-8"))
     assert rec["payload"]["event"] == "meeting.completed"
     assert rec["path"] == "/event"
+
+
+def _post_one_event(monkeypatch, argv):
+    """Run webhook_server with a stand-in server that delivers one POST to the handler."""
+    import http.server
+    import io
+    from types import SimpleNamespace
+
+    from h2t_ops.connectors.meetgeek import commands as mg
+
+    replies: list[int] = []
+
+    class Server:
+        def __init__(self, addr, handler):
+            self.handler = handler
+
+        def serve_forever(self):
+            body = b'{"event": "meeting.completed"}'
+            req = SimpleNamespace(headers={"Content-Length": str(len(body))}, path="/event",
+                                  rfile=io.BytesIO(body),
+                                  _reply=lambda code, text="": replies.append(code))
+            self.handler.do_POST(req)
+
+        def server_close(self):
+            pass
+
+    monkeypatch.setattr(http.server, "ThreadingHTTPServer", Server)
+    import argparse
+    p = argparse.ArgumentParser()
+    mg.register(p.add_subparsers(dest="connector"))
+    pipeline.webhook_server(p.parse_args(["meetgeek", "webhook-server", *argv]))
+    return replies
+
+
+def test_webhook_server_defaults_into_the_lake(cli, monkeypatch, tmp_path):
+    """No --out: <lake>/meetgeek/webhooks, the event written by store.create."""
+    from h2t_ops.core import paths
+    _declare_lake(tmp_path / "declared-lake")      # not where 3.x kept it
+    assert _post_one_event(monkeypatch, ["--secret", ""]) == [200]
+    out = paths.place("lake") / "meetgeek" / "webhooks"
+    [event] = list(out.glob("*.json"))
+    assert json.loads(event.read_text(encoding="utf-8"))["payload"]["event"] == "meeting.completed"
+
+
+def test_download_to_never_replaces_a_file_it_does_not_own(cli, tmp_path, monkeypatch):
+    """exclusive=True: a file already there is refused; a failed download leaves it (R29, R47)."""
+    import requests
+
+    from h2t_ops.connectors.meetgeek.client import MeetGeekClient
+    from h2t_ops.core import store
+    dest = tmp_path / "recordings" / "m1.mp4"
+    dest.parent.mkdir()
+    dest.write_bytes(b"HAND-MADE")
+    client = MeetGeekClient()
+    monkeypatch.setattr(requests, "get", lambda url, **kw: FakeResponse(200, raw_bytes=b"NEW"))
+    with pytest.raises(store.AlreadyExists):
+        client.download_to("https://media.test/x", dest, exclusive=True)
+    assert dest.read_bytes() == b"HAND-MADE"
+    monkeypatch.setattr(requests, "get", lambda url, **kw: FakeResponse(500, {"e": 1}))
+    with pytest.raises(Exception, match="download failed"):
+        client.download_to("https://media.test/x", dest)
+    assert dest.read_bytes() == b"HAND-MADE"
+    assert [p.name for p in dest.parent.iterdir()] == ["m1.mp4"]     # no temp file left
 
 
 def test_meeting_pick_reads_timestamp_start_utc(cli):
@@ -1031,7 +1105,7 @@ def test_upload_from_file_chains_convert_drive_submit(cli, tmp_path, monkeypatch
     assert posted[0]["url"] == "https://example.com/dl/FAKE"
     assert "2026-01-20" in (posted[0]["title"] or "")
     lines = manifest.read_text(encoding="utf-8").strip().splitlines()
-    assert any('"status": "submitted"' in ln for ln in lines)
+    assert any(json.loads(ln)["status"] == "submitted" for ln in lines)
 
 
 def test_upload_from_file_glob_processes_all(cli, tmp_path, monkeypatch):
@@ -1263,33 +1337,42 @@ def _recovery(cli):
     return mod
 
 
-def test_staging_dir_honours_h2t_lake_root(cli, tmp_path, monkeypatch):
+def test_staging_dir_follows_the_lake_place(cli, tmp_path):
     rec = _recovery(cli)
     lake = tmp_path / "lake"
-    monkeypatch.setenv("H2T_LAKE_ROOT", str(lake))
-    assert lake in rec.staging_dir().parents
+    _declare_lake(lake)
+    assert lake / "meetgeek" in rec.staging_dir().parents
 
 
-def test_uploads_manifest_path_honours_h2t_lake_root(cli, tmp_path, monkeypatch):
+def test_uploads_manifest_path_follows_the_lake_place(cli, tmp_path):
     rec = _recovery(cli)
     lake = tmp_path / "lake"
-    monkeypatch.setenv("H2T_LAKE_ROOT", str(lake))
-    assert lake in rec.uploads_manifest_path().parents
+    _declare_lake(lake)
+    assert lake / "meetgeek" in rec.uploads_manifest_path().parents
 
 
-def test_emit_submission_artifact_defaults_into_lake_root(cli, tmp_path, monkeypatch):
+def test_emit_submission_artifact_defaults_into_lake_root(cli, tmp_path):
     rec = _recovery(cli)
     lake = tmp_path / "lake"
-    monkeypatch.setenv("H2T_LAKE_ROOT", str(lake))
+    _declare_lake(lake)
     path = rec.emit_submission_artifact({"source_webm": "/x/meetgeek-recording-a.webm"})
-    assert lake in path.parents
+    assert lake / "meetgeek" in path.parents
 
 
-def test_lake_root_defaults_to_dor_lake_when_unset(cli, monkeypatch):
-    """Without the env var the historical location is preserved."""
+def test_h2t_lake_root_is_no_longer_read(cli, tmp_path, monkeypatch):
+    """4.0 reads no 3.x path variable (§6 п. 5); paths.yaml is the one source."""
     rec = _recovery(cli)
-    monkeypatch.delenv("H2T_LAKE_ROOT", raising=False)
-    assert rec.lake_root() == Path.home() / ".dor" / "lake"
+    monkeypatch.setenv("H2T_LAKE_ROOT", str(tmp_path / "old"))
+    root = rec.lake_root()
+    assert tmp_path / "old" not in (root, *root.parents)
+
+
+def test_lake_root_defaults_to_data_lake_when_undeclared(cli):
+    """No lake in paths.yaml: <root>/data/lake, never the undeclared 3.x ~/.dor/lake."""
+    from h2t_ops.core import paths
+    rec = _recovery(cli)
+    paths.paths_yaml().unlink()
+    assert rec.lake_root() == paths.data_dir() / "lake" / "meetgeek"
 
 
 def test_suite_never_points_at_the_real_lake(cli):
@@ -1709,7 +1792,6 @@ def test_a_copy_of_a_submitted_recording_is_submitted_whatever_its_size(cli, tmp
 
 def test_uploads_manifest_path_is_per_machine(cli, tmp_path, monkeypatch):
     rec = _recovery(cli)
-    monkeypatch.setenv("H2T_LAKE_ROOT", str(tmp_path / "lake"))
     monkeypatch.setenv("H2T_MACHINE_ID", "macbook-pro-3")
     assert rec.uploads_manifest_path().name == "manifest.macbook-pro-3.jsonl"
 

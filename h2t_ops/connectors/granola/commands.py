@@ -245,7 +245,7 @@ def register(subparsers: Any) -> None:
     wp.add_argument("--format", dest="fmt", choices=["human", "md"], default="human")
 
     sp = cmds.add_parser("sync", help="Pull notes into a directory as markdown + raw JSON")
-    sp.add_argument("--to", required=True, metavar="DIR")
+    sp.add_argument("--to", default=None, metavar="DIR", help="default: <lake>/granola")
     sp.add_argument("--include", default="summaries,transcripts",
                     metavar="summaries,transcripts")
     sp.add_argument("--since", default=None, metavar="YYYY-MM-DD",
@@ -306,7 +306,7 @@ def run(args: Any) -> Any:
 
         return _sync.sync_notes(
             client,
-            to=_Path(args.to),
+            to=_Path(args.to) if args.to else None,
             include={p.strip() for p in (args.include or "").split(",") if p.strip()},
             cursor_file=_Path(args.cursor_file) if args.cursor_file else None,
             since=args.since,
