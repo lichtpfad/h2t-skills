@@ -36,9 +36,12 @@ def test_install_h2t_ops_refuses_root_h2t(monkeypatch):
 def test_connector_matrix_is_credential_only_by_default(tmp_path, monkeypatch):
     setup = _load_setup()
     monkeypatch.setattr(setup, "resolve_h2t_ops", lambda **_: {"status": "ready", "path": "h2t-ops"})
+    monkeypatch.setenv("HOME", str(tmp_path))       # core.paths resolves the 3.x file from HOME
+    for k in ("TELEGRAM_API_ID", "TELEGRAM_API_HASH"):
+        monkeypatch.delenv(k, raising=False)
     cfg = tmp_path / ".config" / "telegram"
     cfg.mkdir(parents=True)
-    (cfg / "config.json").write_text("{}", encoding="utf-8")
+    (cfg / "config.json").write_text('{"api_id": 1, "api_hash": "fake-hash"}', encoding="utf-8")
 
     result = setup.connector_matrix(home=tmp_path)
 

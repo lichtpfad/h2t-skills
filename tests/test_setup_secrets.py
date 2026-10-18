@@ -137,12 +137,12 @@ def test_skeleton_values_are_empty(tmp_path):
 def test_skeleton_keeps_existing_lines_and_comments(tmp_path):
     out = tmp_path / "sk"
     out.mkdir()
-    (out / "notion.env").write_text("# mine\nNOTION_OTHER=keep", encoding="utf-8")   # no final newline
+    (out / "notion.env").write_text("# mine\nNOTION_OTHER=fake-keep", encoding="utf-8")   # no final newline
     result = setup_h2t.secrets_skeleton(REGISTRY, secrets_dir=out)
     assert "NOTION_API_TOKEN" in result["added"]
     text = (out / "notion.env").read_text(encoding="utf-8")
-    assert text.startswith("# mine\nNOTION_OTHER=keep\n")
-    assert _env_keys(out / "notion.env") == {"NOTION_OTHER": "keep", "NOTION_API_TOKEN": ""}
+    assert text.startswith("# mine\nNOTION_OTHER=fake-keep\n")
+    assert _env_keys(out / "notion.env") == {"NOTION_OTHER": "fake-keep", "NOTION_API_TOKEN": ""}
 
 
 def test_skeleton_does_not_repeat_an_empty_line_already_there(tmp_path):

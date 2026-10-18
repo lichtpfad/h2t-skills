@@ -61,7 +61,9 @@ def build_sandbox(tmp_path, monkeypatch):
              paths.legacy("google.store") / "credentials.json": shared / "google.client.json",
              paths.legacy("google.gmail") / "credentials.json": shared / "google.client.json",
              paths.legacy("google.dor"): shared / "google.client.json",
-             paths.legacy("notion.token"): shared / "notion.env",
+             paths.legacy("notion.token"): (shared / "notion.env", ("NOTION_API_TOKEN",)),
+             paths.legacy("telegram") / "config.json": (shared / "telegram.env",
+                                                        ("TELEGRAM_API_ID", "TELEGRAM_API_HASH")),
              paths.legacy("telegram") / "auth_state.json": local / "telegram.auth-state.json",
              paths.legacy("telegram") / "session.session": local / "telegram.session"}
     try:
@@ -129,6 +131,25 @@ def test_legacy_read_while_the_new_twin_exists_is_caught_even_from_secrets(sandb
     with sandbox.recorder.active():
         legacy.read_text()
     # " while ", not "while": tmp_path carries the test name, and that has "_while_" in it
+    assert any(" while " in v for v in sandbox.recorder.violations)
+
+
+def test_legacy_env_twin_is_per_key(sandbox):
+    """The fallback is per key: an empty NOTION_API_TOKEN= in notion.env does not hold the
+    token, so reading the 3.x token file is fine; a non-empty one holds it, and the read is red."""
+    from h2t_ops.core import secrets
+    old = paths.legacy("notion.token")
+    os.chmod(old.parent, stat.S_IRWXU)       # the sandbox closes legacy dirs; open it to plant
+    old.write_text("fake-old-notion\n")
+    new = paths.secrets_shared() / "notion.env"
+    new.parent.mkdir(parents=True)
+    new.write_text("NOTION_API_TOKEN=\n")
+    with sandbox.recorder.active():
+        assert secrets.resolve_notion_token() == "fake-old-notion"
+    assert sandbox.recorder.violations == []
+    new.write_text("NOTION_API_TOKEN=fake-new-notion\n")
+    with sandbox.recorder.active():
+        old.read_text()
     assert any(" while " in v for v in sandbox.recorder.violations)
 
 

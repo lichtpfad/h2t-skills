@@ -95,13 +95,16 @@ def _paths(event: str, args: tuple) -> list[tuple[str, bool]]:
 
 class Recorder:
     def __init__(self, guarded: list[Path], secret_dirs: list[Path], legacy: list[Path],
-                 twins: dict[Path, Path]):
+                 twins: dict[Path, Path | tuple[Path, tuple[str, ...]]]):
         """twins: legacy secret file → its one new counterpart (§7.3: reading the old one
-        while the new one exists is red, whoever reads — secrets.py included)."""
+        while the new one holds it is red, whoever reads — secrets.py included). A JSON or
+        session twin holds it by existing; an env twin, given as (file, keys), only when it
+        has a non-empty value for every key the old file supplies — the fallback is per key."""
         self.guarded = [Path(os.path.realpath(p)) for p in guarded]
         self.secret_dirs = [Path(os.path.realpath(p)) for p in secret_dirs]
         self.legacy = [Path(os.path.realpath(p)) for p in legacy]
-        self.twins = {Path(os.path.realpath(k)): Path(v) for k, v in twins.items()}
+        self.twins = {Path(os.path.realpath(k)): (v if isinstance(v, tuple) else (Path(v), None))
+                      for k, v in twins.items()}
         self.violations: list[str] = []
         self.legacy_writes: list[Path] = []
         self.writers: set[str] = set()
@@ -109,6 +112,16 @@ class Recorder:
 
     def _under(self, real: Path, roots: list[Path]) -> bool:
         return any(real == r or r in real.parents for r in roots)
+
+    @staticmethod
+    def _twin_holds(twin: Path, keys: tuple[str, ...] | None) -> bool:
+        if not twin.exists():
+            return False
+        if keys is None:
+            return True
+        from h2t_ops.core.secrets import parse_env
+        values = parse_env(twin.read_text(encoding="utf-8"))   # the hook is off while it runs
+        return all(values.get(k) for k in keys)
 
     def check(self, event: str, args: tuple) -> None:
         if event == "subprocess.Popen":
@@ -124,9 +137,9 @@ class Recorder:
                 self.writers |= _writer_modules()
             if write and self._under(real, self.legacy):
                 self.legacy_writes.append(real)
-            twin = self.twins.get(real)
-            if not write and twin is not None and twin.exists():
-                self.violations.append(f"{event} read {real} while {twin} exists")
+            twin, keys = self.twins.get(real, (None, None))
+            if not write and twin is not None and self._twin_holds(twin, keys):
+                self.violations.append(f"{event} read {real} while {twin} holds it")
                 continue
             secret = self._under(real, self.secret_dirs)
             if not (write or secret) or not self._under(real, self.guarded):

@@ -259,3 +259,41 @@ def test_connectors_check_sees_a_key_only_in_secrets_shared(tmp_path, monkeypatc
     monkeypatch.delenv("MEETGEEK_API_KEY", raising=False)
     _put(paths.secrets_shared() / "meetgeek.env", "MEETGEEK_API_KEY=fake-mg\n")
     assert _matrix_row(tmp_path, monkeypatch, "meetgeek")["status"] == "ready"
+
+
+def _no_telegram_env(monkeypatch):
+    for k in ("TELEGRAM_API_ID", "TELEGRAM_API_HASH"):
+        monkeypatch.delenv(k, raising=False)
+
+
+def test_connectors_check_sees_telegram_in_the_4_0_places(tmp_path, monkeypatch):
+    """A new user: keys in shared/telegram.env, session in local (§12 acceptance)."""
+    _home(tmp_path, monkeypatch)
+    _no_telegram_env(monkeypatch)
+    _put(paths.secrets_shared() / "telegram.env", "TELEGRAM_API_ID=1\nTELEGRAM_API_HASH=fake-hash\n")
+    _put(paths.secrets_local() / "telegram.session", "fake-session")
+    row = _matrix_row(tmp_path, monkeypatch, "telegram")
+    assert row["status"] == "ready"
+    assert row["checks"]["session"] == {"path": str(paths.secrets_local() / "telegram.session"),
+                                        "status": "present"}
+
+
+def test_connectors_check_telegram_falls_back_per_key_to_the_3x_files(tmp_path, monkeypatch):
+    _home(tmp_path, monkeypatch)
+    _no_telegram_env(monkeypatch)
+    _put(paths.secrets_shared() / "telegram.env", "TELEGRAM_API_ID=\nTELEGRAM_API_HASH=fake-new\n")
+    _put(paths.legacy("telegram") / "config.json", '{"api_id": 7, "api_hash": "fake-old"}')
+    _put(paths.legacy("telegram") / "session.session", "fake-old-session")
+    row = _matrix_row(tmp_path, monkeypatch, "telegram")
+    assert row["status"] == "ready"
+    assert row["checks"]["session"]["path"] == str(paths.legacy("telegram") / "session.session")
+
+
+def test_connectors_check_telegram_missing_and_unreadable(tmp_path, monkeypatch):
+    _home(tmp_path, monkeypatch)
+    _no_telegram_env(monkeypatch)
+    _put(paths.secrets_shared() / "telegram.env", "TELEGRAM_API_ID=1\n")
+    assert _matrix_row(tmp_path, monkeypatch, "telegram")["status"] == "missing"
+    _put(paths.legacy("telegram") / "config.json", "{not json")
+    row = _matrix_row(tmp_path, monkeypatch, "telegram")
+    assert row["status"] == "missing" and row["checks"]["config"]["status"] == "unreadable"

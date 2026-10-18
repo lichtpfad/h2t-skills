@@ -22,7 +22,7 @@ def test_report_json_returns_envelope(capsys):
     assert code == 0
     assert '"ok": true' in out
     assert '"provider": "evals"' in out
-    assert "session-start" in out
+    assert '"loaded": 1' in out      # session-start alone also appears in coverage_gap
 
 
 def test_report_human_renders_table(capsys):
@@ -31,7 +31,7 @@ def test_report_human_renders_table(capsys):
     out = capsys.readouterr().out
     assert code == 0
     assert "Instrumented-session health" in out
-    assert "session-start" in out
+    assert "loaded: 1/1" in out
 
 
 def test_report_json_and_md_mutually_exclusive():

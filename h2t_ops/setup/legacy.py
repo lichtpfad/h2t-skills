@@ -411,6 +411,32 @@ def _google_json_status(name: str) -> dict[str, str]:
     return {"path": str(where or secrets.json_path(name)), "status": "present" if where else "missing"}
 
 
+def _telegram_status() -> dict[str, dict[str, str]]:
+    """Keys in telegram.env (per key, the 3.x config.json as the 4.0.x fallback) and the
+    session in secrets/local (the 3.x session.session as the fallback), through core."""
+    from h2t_ops.core import paths, secrets
+    from h2t_ops.core.errors import ConfigError
+
+    keys = {k: secrets.get(k) for k in ("TELEGRAM_API_ID", "TELEGRAM_API_HASH")}
+    config = {"path": str(secrets.provider_file("telegram")), "status": "present"}
+    if not all(keys.values()):
+        legacy_cfg = paths.legacy("telegram") / "config.json"
+        try:
+            legacy = secrets.telegram_legacy_config() or {}
+        except (ConfigError, UnicodeDecodeError, OSError):
+            legacy = None
+        if legacy is None:
+            config = {"path": str(legacy_cfg), "status": "unreadable"}
+        elif (keys["TELEGRAM_API_ID"] or legacy.get("api_id")) and (keys["TELEGRAM_API_HASH"] or legacy.get("api_hash")):
+            config = {"path": str(legacy_cfg), "status": "present"}
+        else:
+            config["status"] = "missing"
+    session = paths.secrets_local() / "telegram.session"
+    if not session.is_file() and (paths.legacy("telegram") / "session.session").is_file():
+        session = paths.legacy("telegram") / "session.session"
+    return {"config": config, "session": _file_status(session)}
+
+
 def _google_oauth_status(home: Path) -> dict[str, Any]:
     """The client and this machine's token through core.secrets: secrets/shared and
     secrets/local first, the 3.x files as a fallback (§4, R19)."""
@@ -426,6 +452,7 @@ def connector_matrix(home: Path | None = None, *, live: bool = False, include_pa
     h2t_ops = resolve_h2t_ops(home=home)
     h2t_ops_path = h2t_ops.get("path", "")
     google = _google_oauth_status(home)
+    telegram = _telegram_status()
     checks: list[dict[str, Any]] = [
         {"connector": "calendar", "status": _ready_if_files(google), "checks": google, "live": "skipped"},
         {"connector": "gmail", "status": _ready_if_files(google), "checks": google, "live": "skipped"},
@@ -438,11 +465,8 @@ def connector_matrix(home: Path | None = None, *, live: bool = False, include_pa
         },
         {
             "connector": "telegram",
-            "status": "ready" if (home / ".config" / "telegram" / "config.json").is_file() else "missing",
-            "checks": {
-                "config": _file_status(home / ".config" / "telegram" / "config.json"),
-                "session": _file_status(home / ".config" / "telegram" / "session.session"),
-            },
+            "status": "ready" if telegram["config"]["status"] == "present" else "missing",
+            "checks": telegram,
             "live": "skipped",
         },
         {

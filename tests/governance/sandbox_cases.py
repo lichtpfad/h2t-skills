@@ -155,6 +155,30 @@ def _provider_key(provider, text):
     return setup
 
 
+def _notion_empty_new_key(sb, mp):
+    """notion.env carries an empty NOTION_API_TOKEN= (what the skeleton writes) and the token
+    lives only in the 3.x file: the per-key fallback reads it, legitimately."""
+    import os
+    import stat
+
+    from h2t_ops.core import paths
+    mp.delenv("NOTION_API_TOKEN", raising=False)
+    shared = paths.secrets_shared()
+    shared.mkdir(parents=True, exist_ok=True)
+    (shared / "notion.env").write_text("NOTION_API_TOKEN=\n")
+    old = paths.legacy("notion.token")
+    os.chmod(old.parent, stat.S_IRWXU)        # the sandbox closes legacy dirs; open it to plant
+    try:
+        old.write_text("fake-old-notion\n")
+    finally:
+        os.chmod(old.parent, stat.S_IRUSR | stat.S_IXUSR)
+
+
+def _notion_resolve(sb, mp):
+    from h2t_ops.core import secrets
+    assert secrets.resolve_notion_token() == "fake-old-notion"
+
+
 def _research_resolve(sb, mp):
     from h2t_ops.connectors.research import client
     assert client.resolve_secret("EXA_API_KEY") == "fake-exa"
@@ -192,4 +216,5 @@ CASES: list[Case] = [
     Case("research.resolve", _research_resolve, setup=_provider_key("exa", "EXA_API_KEY=fake-exa\n")),
     Case("dropbox.init", _dropbox_init, setup=_provider_key("dropbox", "DROPBOX_TOKEN=fake-dropbox\n")),
     Case("evals.load", _evals_load, setup=_provider_key("h2t-evals", "H2T_EVALS_TOKEN=fake-evals\n")),
+    Case("notion.resolve.empty-new-key", _notion_resolve, setup=_notion_empty_new_key),
 ]
