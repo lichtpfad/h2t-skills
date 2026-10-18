@@ -344,7 +344,7 @@ def test_paths_yaml_takes_lake_from_old_variable_and_never_writes_vault(monkeypa
     monkeypatch.setenv("H2T_PATH_VAULT", str(tmp_path / "vault"))
     phases.phase_paths_yaml(_ctx())
     doc = yaml.safe_load(paths.paths_yaml().read_text())
-    assert doc == {"version": 1, "places": {"lake": str(lake), "inbox": str(paths.legacy("downloads"))}}
+    assert doc == {"version": 1, "places": {"lake": str(lake), "inbox": "~/Downloads"}}
     assert paths.paths_config().places == {"lake": lake, "inbox": paths.legacy("downloads")}
 
 
@@ -352,11 +352,32 @@ def test_paths_yaml_falls_back_to_dor_lake_and_keeps_a_users_file():
     paths.legacy("lake.dor").mkdir(parents=True)
     phases.phase_paths_yaml(_ctx())
     assert yaml.safe_load(paths.paths_yaml().read_text()) == {
-        "version": 1, "places": {"lake": str(paths.legacy("lake.dor"))}}
+        "version": 1, "places": {"lake": "~/.dor/lake"}}
     mine = "version: 1\nplaces: {}\n"
     paths.paths_yaml().write_text(mine)
     phases.phase_paths_yaml(_ctx())
     assert paths.paths_yaml().read_text() == mine
+
+
+def test_paths_yaml_reads_the_same_on_another_home(monkeypatch, tmp_path):
+    """config/ syncs: the file one machine writes must validate on the next — another user
+    name, a Windows home — and name that machine's own lake and inbox."""
+    import ntpath
+    from pathlib import PureWindowsPath
+    paths.legacy("lake.dor").mkdir(parents=True)
+    paths.legacy("downloads").mkdir(parents=True)
+    phases.phase_paths_yaml(_ctx())
+    text = paths.paths_yaml().read_text()
+    assert str(paths.home()) not in text
+    doc = yaml.safe_load(text)
+    monkeypatch.setenv("USERPROFILE", r"C:\Users\other")
+    for value in doc["places"].values():
+        assert PureWindowsPath(ntpath.expanduser(value)).is_absolute(), value
+    other = tmp_path / "other-home"
+    other.mkdir()
+    monkeypatch.setenv("HOME", str(other))
+    got = paths.validate_config(doc, source=paths.paths_yaml()).places
+    assert got == {"lake": other / ".dor" / "lake", "inbox": other / "Downloads"}
 
 
 # --- index ---------------------------------------------------------------------------------

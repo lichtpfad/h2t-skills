@@ -293,7 +293,9 @@ def phase_activity(ctx) -> None:
 
 def phase_paths_yaml(ctx) -> None:
     """Only what exists (R2), and no file when nothing does; vault is never written here
-    (R12). A file already there, the user's own, is left alone."""
+    (R12). A file already there, the user's own, is left alone. Places under home are
+    written as ~/… (§6): config/ syncs, and an expanded /Users/<name>/… is not even an
+    absolute path on the Windows machines it reaches."""
     f = paths.paths_yaml()
     if f.exists():
         return
@@ -302,9 +304,9 @@ def phase_paths_yaml(ctx) -> None:
     if lake is None and paths.legacy("lake.dor").exists():
         lake = paths.legacy("lake.dor")
     if lake is not None:
-        places["lake"] = str(lake)
+        places["lake"] = paths.home_form(lake)
     if paths.legacy("downloads").exists():
-        places["inbox"] = str(paths.legacy("downloads"))
+        places["inbox"] = paths.home_form(paths.legacy("downloads"))
     if not places:
         return          # nothing to declare: an empty file would block the write once a lake appears
     doc = {"version": 1, "places": places}

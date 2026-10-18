@@ -342,6 +342,16 @@ def legacy_roots() -> list[Path]:
     return out
 
 
+def home_form(p: Path) -> str:
+    """A path as paths.yaml stores it: ~/… under home, so the file reads the same on every
+    machine config/ syncs to (another user name, a Windows home); a full path otherwise.
+    validate_config expands the ~ on each machine."""
+    p, h = Path(p), home()
+    if _inside(p, h) and p != h:
+        return "~/" + p.relative_to(h).as_posix()
+    return str(p)
+
+
 def expand_user_dest(value: str) -> Path:
     return Path(value).expanduser().absolute()
 
