@@ -948,9 +948,12 @@ def _deliverables_writer(rp: Path, cfg: dict):
     from pathlib import PurePosixPath
     raw = str(cfg.get("deliverables_dir", "deliverables")).strip().replace("\\", "/").rstrip("/")
     rel = PurePosixPath(raw)
-    if not rel.parts or ":" in raw or rel.is_absolute() or ".." in rel.parts or rel.parts[0] == ".git":
+    # Data, not a pattern: a glob character would widen the rename rule ("*" is the whole
+    # repository); .git in any case is git's directory.
+    if (not rel.parts or ":" in raw or rel.is_absolute() or ".." in rel.parts
+            or set(raw) & set("*?[]") or any(p.casefold() == ".git" for p in rel.parts)):
         return None
-    return store.repo(rp, _FIX_SAFE, extra={"rename": (f"{rel.as_posix()}/*",)})
+    return store.repo(rp, _FIX_SAFE, extra_dirs={"rename": (rel.as_posix(),)})
 
 
 def _apply_misplaced_moves(rp: Path, cfg: dict) -> list[str]:

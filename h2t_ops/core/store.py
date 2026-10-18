@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import contextlib
 import contextvars
+import glob
 import hashlib
 import json
 import os
@@ -571,6 +572,13 @@ class RepoWriter:
         if target != self.root and self.root not in target.parents:
             raise WriteRefused(f"{rel} is outside the repository {self.root}", hint="")
         posix = target.relative_to(self.root).as_posix()
+        # git's own directory is never a repository write, whatever a rule's glob says: any
+        # depth, any case (a case-insensitive disk opens .GIT as .git). The one exception is
+        # the exact path a command lists literally — scaffold appends to .git/info/exclude.
+        if any(part.casefold() == ".git" for part in posix.split("/")) \
+                and posix not in self.rules.get(op, ()):
+            raise WriteRefused(f"{self.command} may not {op} {posix}: .git is git's, not a repository file",
+                               hint="")
         if not any(fnmatch.fnmatchcase(posix, g) for g in self.rules.get(op, ())):
             raise WriteRefused(f"{self.command} may not {op} {posix}",
                                hint="h2t_ops/core/repo_writers.py lists what each command writes")
@@ -613,16 +621,28 @@ class RepoWriter:
         return dst
 
 
-def repo(root, command: str, *, extra: dict[str, tuple[str, ...]] | None = None) -> RepoWriter:
-    """extra: patterns the repository's own config declares (docs-lint deliverables_dir),
-    added to the command's rules; the caller validates them as repository-relative."""
+_GLOB_CHARS = frozenset("*?[]")
+
+
+def repo(root, command: str, *, extra_dirs: dict[str, tuple[str, ...]] | None = None) -> RepoWriter:
+    """extra_dirs: directories the repository's own config names (docs-lint deliverables_dir),
+    literal and relative; each becomes the rule "<dir>/*" for its operation. A glob
+    character, an absolute path or .. is refused: config is data, never a pattern."""
+    from pathlib import PurePosixPath
+
     from h2t_ops.core.repo_writers import REPO_WRITERS
     if command not in REPO_WRITERS:
         raise WriteRefused(f"{command!r} is not in the repo allow-list",
                            hint="add it to h2t_ops/core/repo_writers.py with what it writes")
     rules = dict(REPO_WRITERS[command])
-    for op, globs in (extra or {}).items():
-        rules[op] = (*rules.get(op, ()), *globs)
+    for op, dirs in (extra_dirs or {}).items():
+        for d in dirs:
+            rel = PurePosixPath(d)
+            if (_GLOB_CHARS & set(d)) or ":" in d or rel.is_absolute() or ".." in rel.parts or not rel.parts:
+                raise WriteRefused(f"{d!r} is not a literal directory inside the repository",
+                                   hint="name a relative directory without * ? [ ]")
+            # Refused above already; escaped anyway, so the rule stays literal.
+            rules[op] = (*rules.get(op, ()), f"{glob.escape(rel.as_posix())}/*")
     return RepoWriter(Path(root), command, rules)
 
 

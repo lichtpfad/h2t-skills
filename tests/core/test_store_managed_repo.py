@@ -169,6 +169,35 @@ def test_repo_writer_honours_allow_list(home, tmp_path):
         w.create("../escape", "x")
 
 
+@pytest.mark.parametrize("rel", [".git/config", ".git/hooks/pre-commit", ".GIT/config",
+                                 "sub/.git/config", ".git"])
+def test_no_command_writes_under_git(home, tmp_path, monkeypatch, rel):
+    """Whatever the allow-list says (here "*"), git's own directory is not a repository
+    write: any depth, any case (#548 Task 17 round 2)."""
+    from h2t_ops.core import repo_writers
+    monkeypatch.setitem(repo_writers.REPO_WRITERS, "fake-wide", {"replace": ("*",), "append": ("*",)})
+    repo = tmp_path / "r"
+    (repo / ".git").mkdir(parents=True)
+    w = store.repo(repo, "fake-wide")
+    with pytest.raises(store.WriteRefused, match=r"\.git"):
+        w.replace(rel, "x")
+    with pytest.raises(store.WriteRefused, match=r"\.git"):
+        w.append(".git/info/exclude", "x")     # "*" is not the exact rule
+
+
+def test_scaffold_keeps_its_one_git_path(home, tmp_path):
+    repo = tmp_path / "r"
+    (repo / ".git" / "info").mkdir(parents=True)
+    store.repo(repo, "h2t-scaffold-project").append(".git/info/exclude", "x")
+    assert (repo / ".git" / "info" / "exclude").read_text() == "x\n"
+
+
+@pytest.mark.parametrize("d", ["*", ".g?t", "[.]git", "docs/[ab]"])
+def test_extra_dirs_are_literal_directories(home, tmp_path, d):
+    with pytest.raises(store.WriteRefused):
+        store.repo(tmp_path, "h2t-docs-lint fix-safe", extra_dirs={"rename": (d,)})
+
+
 def test_unknown_command_is_refused(home, tmp_path):
     with pytest.raises(store.WriteRefused, match="not in the repo allow-list"):
         store.repo(tmp_path, "h2t-something-new")

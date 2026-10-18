@@ -9,7 +9,9 @@ A path the user named (`h2t-drawio`, `h2t-creative assemble`, `h2t-runbook new`,
 `h2t-docs-lint plan --save`, the agent-profile catalog, `h2t-project-audit-report`'s
 projects.yaml) is not a repository write: it goes through store with dest=True (plan R7).
 fix-safe's rename target also takes the repository's own `deliverables_dir`
-(tools/docs/lint.py _deliverables_writer, store.repo(extra=...)).
+(tools/docs/lint.py _deliverables_writer, store.repo(extra_dirs=...): a literal directory,
+never a pattern). No rule reaches into .git/ except a path listed exactly
+(scaffold's .git/info/exclude): RepoWriter refuses it at any depth and in any case.
 """
 # Directories a project type lays out at the root (tools/docs/project_types.py root_dirs);
 # tests/governance/test_repo_writers.py keeps the two lists equal.

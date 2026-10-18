@@ -3,9 +3,10 @@
 Not a hooks.json entry: scaffold-project writes `h2t-hook post-git-commit-docs-lint` into a
 project's `.claude/settings.json` (h2t_ops/lifecycle/scaffold_project.py). Those files are
 committed and outlive any plugin version, so the 3.x contract is kept: an empty or
-unparseable stdin still runs the check, nothing is printed on stdout (a failed write
-leaves one line on stderr), the report goes to
-`.h2t/lifecycle/post-git-commit-docs-lint.json`, and the exit code is always 0.
+unparseable stdin still runs the check, nothing is printed on stdout, and the report goes
+to `.h2t/lifecycle/post-git-commit-docs-lint.json`. An expected failure (git, the disk,
+a store refusal) is one stderr line and exit 0; an unexpected one is hook_entry's stderr
+line and log row with exit 1 — non-blocking for PostToolUse, where only 2 blocks.
 
 Port of the 3.x handler of the same name. One change: docs-lint is the package's
 (`docs_lint_command`), not a plugin script looked up on disk.

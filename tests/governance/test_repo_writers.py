@@ -163,3 +163,27 @@ def test_a_new_repo_directory_is_journaled_once(tmp_path):
     rows = [json.loads(line) for line in log.read_text(encoding="utf-8").splitlines()]
     mk = [r for r in rows if r["op"] == "mkdir"]
     assert [r["path"] for r in mk] == [str(Path(os.path.realpath(repo)) / "src")]
+
+
+@pytest.mark.parametrize("configured", ["*", ".g?t", "[.]git", ".GIT"])
+def test_a_glob_or_git_deliverables_dir_cannot_reach_git(configured, tmp_path):
+    """deliverables_dir is data, not a pattern: a value that would widen fix-safe's rename
+    rule, or name .git in another case, moves nothing — not by misplaced-moves and not by a
+    --plan move_file into .git/hooks."""
+    import json
+
+    from h2t_ops.tools.docs import lint
+    from tests.governance.sandbox_cases import _git_repo
+    repo = tmp_path / "repo"
+    _git_repo(repo, {".claude/rules/docs-lint.yaml": f'project_checks: true\ndeliverables_dir: "{configured}"\n',
+                     "docs/a.pdf": "pdf", "docs/x.pdf": "pdf"})
+    plan = tmp_path / "plan.json"
+    plan.write_text(json.dumps({"plan_id": "p", "actions": [
+        {"action_id": "m", "type": "move_file", "path": "docs/x.pdf",
+         "target_path": ".git/hooks/pre-commit", "risk": "safe"}]}), encoding="utf-8")
+    fixes = lint._apply_misplaced_moves(repo, lint.load_config(repo))
+    lint._run_fix_safe(repo, plan_file=str(plan))
+    assert not (repo / ".git" / "hooks" / "pre-commit").exists()
+    assert (repo / "docs" / "x.pdf").exists() and (repo / "docs" / "a.pdf").exists()
+    assert not (repo / ".git" / "a.pdf").exists()
+    assert fixes == [f"SKIP: deliverables_dir {configured!r} is not a directory inside the repository"]
