@@ -220,8 +220,8 @@ def _inside(a: Path, b: Path) -> bool:
     return a == b or b in a.parents
 
 
-def _moved_from(journal: Journal) -> tuple[dict[Path, set[str]], set[Path]]:
-    """Old directory -> the new directories its files were copied to, and the old
+def _moved_from(journal: Journal) -> tuple[dict[Path, set[tuple[Path, Path]]], set[Path]]:
+    """Old directory -> the (old file, new file) pairs copied out of it, and the old
     directories left unmarked. A source row is written before the write it announces, so it
     counts only while its new file holds a hash this journal recorded for that path (source,
     created, replaced); one row that does not hold leaves its whole directory unmarked — a
@@ -238,7 +238,7 @@ def _moved_from(journal: Journal) -> tuple[dict[Path, set[str]], set[Path]]:
             known.setdefault(row["path"], set()).add(row["sha256"])
         elif row["op"] == "replaced":
             known.setdefault(row["path"], set()).add(row["new_sha"])
-    out: dict[Path, set[str]] = {}
+    out: dict[Path, set[tuple[Path, Path]]] = {}
     unproven: set[Path] = set()
     for row in rows:
         if row["op"] != "source":
@@ -250,11 +250,35 @@ def _moved_from(journal: Journal) -> tuple[dict[Path, set[str]], set[Path]]:
         held = journal_mod.current_sha(Path(row["new"]), row["place"]) in known[row["new"]]
         for root, real_root in roots:
             if _inside(real, real_root):
-                out.setdefault(root, set()).add(str(Path(row["new"]).parent))
+                out.setdefault(root, set()).add((src, Path(row["new"])))
                 if not held:
                     unproven.add(root)
                 break
     return {r: t for r, t in out.items() if r not in unproven}, unproven
+
+
+def marker_text(root: Path, pairs: set[tuple[Path, Path]], today: str) -> str:
+    """What MOVED-TO.txt says: only the entries that were copied. An old directory may hold
+    much more that the migration never read and something still uses — ~/.dor holds the
+    vault, the lake and other machines' sessions — so the marker never claims the directory.
+    A file directly in it is named; a subdirectory is named with the count of files taken
+    from it (a machine's session folder), not as a whole."""
+    files: set[str] = set()
+    dirs: dict[str, int] = {}
+    for src, _new in pairs:
+        rel = src.relative_to(root).parts if _inside(src, root) else (src.name,)
+        if len(rel) == 1:
+            files.add(rel[0])
+        else:
+            dirs[rel[0]] = dirs.get(rel[0], 0) + 1
+    entries = sorted(files) + [f"{d}/  ({n} files from it)" for d, n in sorted(dirs.items())]
+    news = sorted({str(new.parent) for _src, new in pairs})
+    return (f"h2t 4.0 copied these entries of this directory on {today} (layout 1):\n"
+            + "".join(f"  {e}\n" for e in entries)
+            + "Their new places:\n" + "".join(f"  {t}\n" for t in news)
+            + "Nothing here was changed or removed. Only the entries above were copied; "
+              "everything else in this directory was not, and may still be in use — "
+              "do not delete it because of this file.\n")
 
 
 def phase_markers(ctx: PhaseContext) -> None:
@@ -269,9 +293,7 @@ def phase_markers(ctx: PhaseContext) -> None:
             marker = root / "MOVED-TO.txt"
             if marker.exists() or store.classify(root) != "legacy":
                 continue
-            text = (f"h2t 4.0 copied this directory's files on {today} (layout 1).\n"
-                    "Nothing here was changed or removed; the package no longer reads it after 4.0.x.\n"
-                    "The new places:\n" + "".join(f"  {t}\n" for t in sorted(targets)))
+            text = marker_text(root, targets, today)
             try:
                 journaled_create(ctx.journal, marker, text.encode("utf-8"), place="legacy",
                                  source="migration", compat=True)

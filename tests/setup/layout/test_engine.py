@@ -600,6 +600,42 @@ def test_markers_for_same_hash_and_merged_sources():
     assert str(paths.secrets_shared()) in (b.parent / "MOVED-TO.txt").read_text()
 
 
+def test_a_marker_names_only_what_was_copied():
+    """~/.dor holds the vault, the lake and other machines' sessions beside the files the
+    migration copies: its marker lists the copied entries and never claims the directory."""
+    dor = paths.home() / ".dor"
+    old = paths.legacy("secrets.dor_old")               # ~/.dor/secrets.env
+    old.parent.mkdir(parents=True)
+    old.write_bytes(b"EXA_API_KEY=fake-exa\n")
+    (dor / "vault").mkdir()
+    (dor / "vault" / "note.md").write_bytes(b"N")      # not copied, still in use
+    (dor / "manifest.jsonl").write_bytes(b"{}\n")
+    mine = paths.legacy("sessions.dor") / "m"
+    mine.mkdir(parents=True)
+    (mine / "a.md").write_bytes(b"A")
+    (mine / "b.md").write_bytes(b"B")
+    (paths.legacy("sessions.dor") / "other").mkdir()    # another machine's folder
+
+    def secrets(ctx):
+        engine.put(ctx.journal, paths.secrets_shared() / "exa.env", b"EXA_API_KEY=fake-exa\n",
+                   place="secrets.shared", source="dor", source_path=old)
+
+    def sessions(ctx):
+        for n in ("a.md", "b.md"):
+            engine.put(ctx.journal, _session(n), n.encode(), place="records.sessions",
+                       source="dor", source_path=mine / n)
+
+    assert _migrate(secrets=secrets, sessions=sessions).failed == []
+    text = (dor / "MOVED-TO.txt").read_text()
+    assert "  secrets.env\n" in text and str(paths.secrets_shared()) in text
+    assert "vault" not in text and "manifest" not in text
+    assert "this directory's files" not in text and "no longer reads" not in text
+    assert "everything else in this directory was not" in text
+    text = (paths.legacy("sessions.dor") / "MOVED-TO.txt").read_text()
+    assert "  m/  (2 files from it)\n" in text and "other" not in text
+    assert str(paths.records("sessions", "m")) in text
+
+
 def test_a_failed_create_leaves_its_old_dir_unmarked(monkeypatch):
     """The source row precedes the create; a create that failed and was not redone on resume
     must not put MOVED-TO.txt next to an original that was never copied."""
