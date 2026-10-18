@@ -150,15 +150,22 @@ def test_legacy_places_are_home_relative_and_ignore_root(home, monkeypatch, tmp_
     b"version: 1\nplaces: [lake]\n",
     b"version: 1\nsync: [x]\n",
     b"version: 1\nplaces:\n  lake: /tmp/\xff\xfe\n",
-], ids=["places-list", "sync-list", "not-utf8"])
+    b"version: 1\nplaces:\n  lake: ~no-such-user-h2t-test/lake\n",
+    b'version: 1\nplaces:\n  lake: "/tmp/a\\0b"\n',
+    b"version: 1\nvault_rules: ~no-such-user-h2t-test/rules.md\n",
+], ids=["places-list", "sync-list", "not-utf8", "unknown-user", "nul", "rules-unknown-user"])
 def test_broken_paths_yaml_is_a_config_error_and_legacy_roots_survive(home, body):
-    """R17: a broken paths.yaml must not stop legacy classification (spec §7.2)."""
+    """R17: a broken paths.yaml must not stop legacy classification (spec §7.2), nor an
+    internal write such as the activity row handoff appends."""
+    from h2t_ops.core import store
     p = home / ".h2t" / "config" / "paths.yaml"
     p.parent.mkdir(parents=True)
     p.write_bytes(body)
     with pytest.raises(ConfigError, match="paths.yaml"):
         paths.paths_config()
     assert home / ".dor" in paths.legacy_roots()
+    store.append(paths.activity_file("m"), "{}", place="records.activity")
+    assert paths.activity_file("m").read_text() == "{}\n"
 
 
 def test_null_places_and_sync_are_empty(home):

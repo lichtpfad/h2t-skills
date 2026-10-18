@@ -278,6 +278,18 @@ def _mapping(doc: dict, key: str, f: Path) -> dict:
     return value
 
 
+def _expand(raw: object, f: Path, what: str) -> Path:
+    """~user of no such user (RuntimeError) and a NUL byte (ValueError, at realpath) are
+    a broken file like any other: ConfigError, which the writers' fallback tolerates (R17)."""
+    try:
+        value = Path(str(raw)).expanduser()
+        os.path.realpath(value)
+    except (RuntimeError, ValueError) as exc:
+        raise ConfigError(f"{f}: {what} {raw!r} cannot be resolved ({exc})",
+                          hint="use ~/… or a full path") from exc
+    return value
+
+
 def validate_config(doc: dict, *, source: Path) -> PathsConfig:
     """Every paths.yaml check, on a document in memory: `paths set` validates the new
     document while the file on disk may still be broken (plan R34)."""
@@ -293,7 +305,7 @@ def validate_config(doc: dict, *, source: Path) -> PathsConfig:
                               hint=VAULT_HINT)
         if name not in YAML_PLACES:
             raise ConfigError(f"{f}: unknown place {name!r}", hint=f"places are {', '.join(YAML_PLACES)}")
-        value = Path(str(raw)).expanduser()
+        value = _expand(raw, f, f"place {name!r}")
         if not value.is_absolute():
             raise ConfigError(f"{f}: place {name!r} must be an absolute path, got {raw!r}",
                               hint="use ~/… or a full path")
@@ -312,7 +324,7 @@ def validate_config(doc: dict, *, source: Path) -> PathsConfig:
                                   hint="no place may lie inside another")
     rules = doc.get("vault_rules")
     return PathsConfig(places=places,
-                       vault_rules=Path(str(rules)).expanduser() if rules else None,
+                       vault_rules=_expand(rules, f, "vault_rules") if rules else None,
                        sync={str(k): str(v) for k, v in _mapping(doc, "sync", f).items()})
 
 
