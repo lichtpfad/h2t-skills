@@ -1,5 +1,6 @@
 """doctor's storage checks (#548 §7.4): one test per code, each on a minimal state built in
 the test's own HOME — a config git repo with secrets/x.env tracked in it, as at the author's."""
+import json
 import os
 import sqlite3
 import subprocess
@@ -56,9 +57,8 @@ def test_secret_tracked_sees_yaml_and_json_by_key_not_value(config_repo):
     """A credential committed in a YAML or JSON config file: the file and the key, never
     the value; an empty value and an unknown key are not findings."""
     _write(config_repo / "notion.yaml", f"notion:\n  NOTION_API_TOKEN: {SECRET}\n  EXA_API_KEY: ''\n")
-    _write(config_repo / "google.json",
-           '{"installed": {"client_id": "fake-id", "client_secret": "%s"}, "x": [{"refresh_token": "%s"}]}'
-           % (SECRET, SECRET))
+    _write(config_repo / "google.json", json.dumps(
+        {"installed": {"client_id": "fake-id", "client_secret": SECRET}, "x": [{"refresh_token": SECRET}]}))
     _write(config_repo / "plain.yaml", "name: fake-name\nlake: ~/.dor/lake\n")
     subprocess.run(["git", "-C", str(config_repo), "add", "notion.yaml", "google.json", "plain.yaml"],
                    check=True)
