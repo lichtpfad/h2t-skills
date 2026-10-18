@@ -1,0 +1,361 @@
+"""The only writer (#548 §7.2): create, append, replace, managed, remove.
+
+Every write is classified by the realpath of its target against every place's root,
+whatever place the caller named and wherever the path came from (--dest, a symlink).
+A write into vault that does not come through ingest_write is refused. Each write is
+logged to logs/writes.jsonl — for doctor and for a person; correctness never rests on it.
+"""
+from __future__ import annotations
+
+import contextlib
+import contextvars
+import hashlib
+import json
+import os
+import shutil
+import sys
+import tempfile
+import time
+from collections.abc import Iterator
+from pathlib import Path
+
+from h2t_ops.core import paths
+from h2t_ops.core.errors import ConfigError
+
+
+class WriteRefused(ConfigError):
+    """A write the ownership table (§7.1) does not allow."""
+
+
+class AlreadyExists(FileExistsError):
+    """create() found a file at the target; nothing was written."""
+
+
+_PACKAGE = ("run", "config", "secrets.shared", "secrets.local", "records.sessions",
+            "records.activity", "records.evals", "records.imports", "data", "state", "logs",
+            "layout")   # layout.json: a file place, classified by its exact path
+_REMOVABLE = {"run", "state", "logs", "tmp", "harness"}
+_SECRET = {"secrets.shared", "secrets.local"}
+_DEST_FORBIDDEN = {*_PACKAGE, "vault", "legacy", "harness", "h2t-root"}
+_LOG_LIMIT = 10 * 1024 * 1024
+_LOG_KEEP = 5
+
+_INGEST: contextvars.ContextVar[bool] = contextvars.ContextVar("h2t_ingest", default=False)
+_MIGRATING: contextvars.ContextVar[bool] = contextvars.ContextVar("h2t_migrating", default=False)
+_DELEGATED: dict[str, str] = {}
+
+
+def _real(p) -> Path:
+    return Path(os.path.realpath(p))
+
+
+def _roots() -> tuple[list[tuple[str, Path]], ConfigError | None]:
+    """Every place's real root, deepest first, and the paths.yaml error if there is one.
+
+    A broken paths.yaml must not stop writes inside ~/.h2t (plan R17, gates.md): the package
+    places are still classified; only the places it would have declared are unknown.
+    """
+    out = [(pid, _real(paths.dir_of(pid))) for pid in (*_PACKAGE, "harness", "tmp")]
+    broken: ConfigError | None = None
+    try:
+        declared = {pid: paths.place(pid) for pid in paths.YAML_PLACES}
+    except ConfigError as exc:
+        declared, broken = {}, exc
+    declared["vault"] = paths.vault()
+    out += [(pid, _real(p)) for pid, p in declared.items() if p is not None]
+    out += [("legacy", _real(p)) for p in paths.legacy_roots()]
+    # Catch-all for anything else under ~/.h2t: no write goes there, --dest included; the
+    # child places above are deeper and win the sort (round 5).
+    out.append(("h2t-root", _real(paths.root())))
+    return sorted(out, key=lambda kv: len(kv[1].parts), reverse=True), broken
+
+
+def _classify(path) -> tuple[str, ConfigError | None]:
+    real = _real(path)
+    roots, broken = _roots()
+    for pid, r in roots:
+        if real == r or r in real.parents:
+            return pid, broken
+    return "elsewhere", broken
+
+
+def classify(path) -> str:
+    return _classify(path)[0]
+
+
+def _compat_allowed(path: Path) -> bool:
+    real = _real(path)
+    if real == _real(paths.legacy("google.store") / "tokens.json"):
+        return True
+    return _MIGRATING.get() and path.name == "MOVED-TO.txt"
+
+
+def _check(path: Path, place: str, *, dest: bool = False, compat: bool = False) -> str:
+    got, broken = _classify(path)
+    if broken is not None and got == "elsewhere":
+        raise WriteRefused(f"{path}: cannot tell whose place this is while paths.yaml is broken ({broken})",
+                           hint="fix it: h2t-ops paths set <place> <path>, or edit the file")
+    if got == "vault" and not _INGEST.get():
+        raise WriteRefused(f"{path} is inside vault; only ingest writes there",
+                           hint="vault is POS's; the package writes raw material to lake (§6)")
+    if got == "legacy":
+        if compat and _compat_allowed(path):
+            return got
+        raise WriteRefused(f"{path} is a legacy 3.x location; 4.0 does not write there",
+                           hint="write the new place from core.paths; legacy files stay as copies")
+    if dest:
+        if got in _DEST_FORBIDDEN:
+            raise WriteRefused(f"--dest {path} points into {got}", hint="choose a path outside ~/.h2t")
+        return got
+    if got != place:
+        raise WriteRefused(f"{path} is in {got}, not {place}",
+                           hint="name the place the path really belongs to")
+    return got
+
+
+def sha256(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+def _default_mode(place: str) -> int:
+    if place in _SECRET:
+        return 0o600
+    um = os.umask(0)
+    os.umask(um)
+    return 0o666 & ~um
+
+
+def _ensure_dir(directory: Path, place: str) -> None:
+    directory.mkdir(parents=True, exist_ok=True)
+    if place in _SECRET and os.name != "nt":
+        top = paths.dir_of(place)
+        for d in (paths.root() / "secrets", top, directory):
+            if d.exists() and (d == top or top in d.parents or d == paths.root() / "secrets"):
+                os.chmod(d, 0o700)
+
+
+def _caller() -> str:
+    f = sys._getframe(1)
+    here = __file__
+    while f is not None and f.f_code.co_filename == here:
+        f = f.f_back
+    return f"{f.f_globals.get('__name__', '?')}:{f.f_lineno}" if f else "?"
+
+
+def _rotate(log: Path) -> None:
+    try:
+        if log.stat().st_size < _LOG_LIMIT:
+            return
+    except FileNotFoundError:
+        return
+    for i in range(_LOG_KEEP - 1, 0, -1):
+        older = log.with_name(f"writes.{i}.jsonl")
+        if older.exists():
+            os.replace(older, log.with_name(f"writes.{i + 1}.jsonl"))
+    os.replace(log, log.with_name("writes.1.jsonl"))
+
+
+def _file_sha(path: Path) -> str | None:
+    """Streamed hash of a published file (writer, managed): no whole-file read into memory."""
+    try:
+        h = hashlib.sha256()
+        with open(path, "rb") as fh:
+            for chunk in iter(lambda: fh.read(1 << 20), b""):
+                h.update(chunk)
+        return h.hexdigest()
+    except OSError:
+        return None
+
+
+def _log(op: str, place: str, path: Path, data: bytes | None, *, key: str | None = None,
+         keys: tuple[str, ...] = (), digest: str | None = None) -> None:
+    """key: a library or source label; keys: secret key NAMES from core.secrets (§7.2, R41);
+    digest: the hash of a file published without passing its bytes here (§7.2: every write
+    has a hash, secrets excepted)."""
+    row = {"ts": time.strftime("%Y-%m-%dT%H:%M:%S"), "op": op, "place": place, "path": str(path),
+           "sha256": None if place in _SECRET else (digest if data is None else sha256(data)),
+           "caller": _caller()}
+    if key:
+        row["key"] = key
+    # A write is a secret write if it lands in secrets/* or if core.secrets named its keys:
+    # dest=True into a user directory and the Google compat mirror classify elsewhere, yet
+    # carry a secret (self-check, round 3).
+    if keys:
+        row["keys"] = sorted(keys)
+        row["sha256"] = None
+    log = paths.logs_dir() / "writes.jsonl"
+    try:
+        log.parent.mkdir(parents=True, exist_ok=True)
+        _rotate(log)
+        fd = os.open(log, os.O_WRONLY | os.O_APPEND | os.O_CREAT | getattr(os, "O_BINARY", 0), 0o644)
+        try:
+            with _lock(fd):
+                os.write(fd, (json.dumps(row, ensure_ascii=False) + "\n").encode("utf-8"))
+        finally:
+            os.close(fd)
+    except OSError:
+        pass  # the journal is for people; a write must not fail because its log row did
+
+
+_LOCK_OFFSET = 2 ** 40   # far past any real EOF: msvcrt locks are mandatory, and a lock on
+                         # byte 0 would make a reader of the file (gather, doctor) fail
+
+
+@contextlib.contextmanager
+def _lock(fd: int) -> Iterator[None]:
+    if os.name == "nt":
+        import msvcrt
+        os.lseek(fd, _LOCK_OFFSET, os.SEEK_SET)
+        while True:
+            try:
+                msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+                break
+            except OSError:
+                time.sleep(0.02)
+        try:
+            yield               # O_APPEND writes land at EOF whatever the file position
+        finally:
+            os.lseek(fd, _LOCK_OFFSET, os.SEEK_SET)
+            msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
+    else:
+        import fcntl
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(fd, fcntl.LOCK_UN)
+
+
+def _bytes(data: str | bytes) -> bytes:
+    return data.encode("utf-8") if isinstance(data, str) else data
+
+
+_TMP_SUFFIX = ".h2t-tmp"   # a killed write leaves .<name>.XXXX.h2t-tmp; doctor reports them (R48)
+
+
+def unique_name(path: Path) -> Iterator[Path]:
+    """path, then <stem>-2<suffix>, -3, ... (plan R47)."""
+    path = Path(path)
+    yield path
+    n = 2
+    while True:
+        yield path.with_name(f"{path.stem}-{n}{path.suffix}")
+        n += 1
+
+
+def _tmp_beside(path: Path, payload: bytes, mode: int) -> str:
+    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix="." + path.name + ".", suffix=_TMP_SUFFIX)
+    try:
+        with os.fdopen(fd, "wb") as fh:
+            fh.write(payload)
+            fh.flush()
+            os.fsync(fh.fileno())
+        if os.name != "nt":             # no effect on Windows; the profile ACL protects (§11.3)
+            os.chmod(tmp, mode)
+    except BaseException:
+        with contextlib.suppress(FileNotFoundError):
+            os.unlink(tmp)
+        raise
+    return tmp
+
+
+def replace(path, data: str | bytes, *, place: str, mode: int | None = None,
+            compat: bool = False, dest: bool = False, keys: tuple[str, ...] = ()) -> Path:
+    path = Path(path)
+    got = _check(path, place, dest=dest, compat=compat)
+    payload = _bytes(data)
+    _ensure_dir(path.parent, place)
+    tmp = _tmp_beside(path, payload, _default_mode(place) if mode is None else mode)
+    try:
+        os.replace(tmp, path)
+    except BaseException:
+        with contextlib.suppress(FileNotFoundError):
+            os.unlink(tmp)
+        raise
+    _log("replace", got, path, payload, keys=keys)
+    return path
+
+
+def create(path, data: str | bytes, *, place: str, mode: int | None = None,
+           dest: bool = False, keys: tuple[str, ...] = (), compat: bool = False) -> Path:
+    path = Path(path)
+    got = _check(path, place, dest=dest, compat=compat)   # compat: MOVED-TO.txt while migrating
+    payload = _bytes(data)
+    _ensure_dir(path.parent, place)
+    mode = _default_mode(place) if mode is None else mode
+    tmp = _tmp_beside(path, payload, mode)
+    try:
+        try:
+            os.link(tmp, path)          # atomic and never overwrites
+        except FileExistsError:
+            raise AlreadyExists(str(path)) from None
+        except OSError as exc:          # no hard links here (FAT, exFAT, some network shares)
+            # No fallback into the final path: an interrupted direct write would leave half a
+            # file that no manifest owns (§7.2, plan R20).
+            raise ConfigError(f"{path.parent}: this filesystem has no hard links, so create "
+                              f"cannot publish {path.name} atomically ({exc})",
+                              hint="move this place to a local disk: h2t-ops paths set <place> <path>") from exc
+    finally:
+        with contextlib.suppress(FileNotFoundError):
+            os.unlink(tmp)
+    _log("create", got, path, payload, keys=keys)
+    return path
+
+
+def append(path, line: str, *, place: str, dest: bool = False, durable: bool = False) -> None:
+    path = Path(path)
+    got = _check(path, place, dest=dest)
+    payload = (line if line.endswith("\n") else line + "\n").encode("utf-8")
+    _ensure_dir(path.parent, place)
+    fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT | getattr(os, "O_BINARY", 0),
+                 _default_mode(place))
+    try:
+        with _lock(fd):
+            os.write(fd, payload)       # one write() under the lock: one whole line
+            if durable:
+                os.fsync(fd)            # migration journal: the row survives a kill (R49)
+    finally:
+        os.close(fd)
+    _log("append", got, path, payload)
+
+
+def mkdir(path, *, place: str, mode: int | None = None, dest: bool = False) -> Path:
+    path = Path(path)
+    _check(path, place, dest=dest)
+    _ensure_dir(path, place)
+    if mode is not None and os.name != "nt":
+        os.chmod(path, mode)            # run/rollback/<id> is 0700 (plan R36)
+    return path
+
+
+def _old_config_backup(path: Path, place: str) -> bool:
+    """3.x left *.yaml.bak copies in config/; the migration moves them to state/backups (R14)."""
+    return place == "config" and _MIGRATING.get() and ".yaml.bak" in path.name
+
+
+def remove(path, *, place: str, journal: bool = False) -> None:
+    path = Path(path)
+    got = _check(path, place, compat=journal)
+    if place not in _REMOVABLE and not journal and not _old_config_backup(path, place):
+        raise WriteRefused(f"remove is not allowed in {place}", hint="only run, state, logs, tmp, harness")
+    with contextlib.suppress(FileNotFoundError):
+        path.unlink()
+    _log("remove", got, path, None)
+
+
+def remove_tree(path, *, place: str) -> None:
+    path = Path(path)
+    got = _check(path, place)
+    if place not in _REMOVABLE:
+        raise WriteRefused(f"remove_tree is not allowed in {place}", hint="only run, state, logs, tmp, harness")
+    shutil.rmtree(path, ignore_errors=True)
+    _log("remove_tree", got, path, None)
+
+
+@contextlib.contextmanager
+def scratch(prefix: str = "h2t-") -> Iterator[Path]:
+    d = Path(tempfile.mkdtemp(prefix=prefix))
+    try:
+        yield d
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
