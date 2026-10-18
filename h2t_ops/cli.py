@@ -65,6 +65,12 @@ def _doctor() -> int:
     except (ConfigError, OSError) as exc:   # doctor always exits 0
         gmail_token = f"UNREADABLE ({exc})"
     print(f"secrets: gmail token={gmail_token}")
+    from h2t_ops.setup import storage_doctor
+    try:
+        storage = storage_doctor.report()
+    except (ConfigError, OSError, UnicodeDecodeError) as exc:   # doctor always exits 0
+        storage = [f"storage: UNREADABLE ({exc})"]
+    print("\n".join(storage))
     unchecked = [name for name in names if name not in ("notion", "gmail")]
     print(f"not checked here: {', '.join(unchecked)}; run the h2t-core setup skill's connectors-check")
     return 0
