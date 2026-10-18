@@ -318,6 +318,27 @@ def test_unbuilt_base_under_a_peer_lock_is_served_empty(monkeypatch):
     assert index.problems() == []
 
 
+def test_a_hung_lock_holder_does_not_hang_session_start(monkeypatch):
+    """session-start asks the index under state/index.lock; a holder that never lets go is
+    waited on for LOCK_S, then the base is served as it stands (empty + a problem if unbuilt)."""
+    from h2t_ops.core import store
+    from h2t_ops.lifecycle.gather import sessions
+    monkeypatch.setattr(query, "LOCK_S", 0.3)
+    _md("mac", "p", "s1", "2026-10-17T00:00:00Z")
+    with store.locked(query._lock_path(), place="state"):     # unbuilt, and held
+        t0 = time.monotonic()
+        assert sessions.find_session_files("p") == []
+        assert "not built yet" in index.problems()[0]["error"]
+        assert time.monotonic() - t0 < 3
+    index.rebuild()
+    _md("laptop", "p", "s2", "2026-10-18T00:00:00Z")       # needs a refresh to be seen
+    with store.locked(query._lock_path(), place="state"):     # built, and held
+        t0 = time.monotonic()
+        assert [s["session_id"] for s in index.latest_sessions(["p"])] == ["s1"]
+        assert time.monotonic() - t0 < 2
+    assert [s["session_id"] for s in index.latest_sessions(["p"])] == ["s2", "s1"]
+
+
 def test_rebuild_leaves_only_names_doctor_reports(monkeypatch):
     """The base built aside must have no sidecar without the .h2t-tmp suffix: a kill during
     the build would leave a -journal that doctor's stale-temp check (R48) cannot see."""

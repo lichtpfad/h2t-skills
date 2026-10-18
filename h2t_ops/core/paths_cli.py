@@ -107,35 +107,87 @@ def _set(args) -> dict | str:
     f = paths.paths_yaml()
     yaml = YAML()
     yaml.preserve_quotes = True
-    old = f.read_bytes() if f.is_file() else None
-    doc, unreadable = None, False
-    if old is not None:
+
+    def once() -> dict:
+        seen = store.stamp(f)                   # before the read: what replace(expect=) holds
+        old = f.read_bytes() if seen is not None else None
+        doc, unreadable = None, False
+        if old is not None:
+            try:
+                doc = yaml.load(old.decode("utf-8-sig"))
+            except (UnicodeDecodeError, YAMLError):
+                unreadable = True
+            unreadable = unreadable or doc is not None and not isinstance(doc, dict)
+        if not isinstance(doc, dict):
+            doc = CommentedMap()
+        dropped = _repair(doc, name, f)
+        doc["places"][name] = value
+        # The new document is what is checked (R34): the old one may be the broken file this
+        # command is repairing, and an overlap with a valid place leaves the file as it was.
+        paths.validate_config(doc, source=f)
+        backup = backups.save_backup(f) if old is not None else None
+        buf = io.StringIO()
+        yaml.dump(doc, buf)
+        store.replace(f, buf.getvalue(), place="config", expect=seen)
+        return {"place": name, "path": value, "file": str(f),
+                "backup": str(backup) if backup else None,
+                "repaired": unreadable or bool(dropped), "unreadable": unreadable, "dropped": dropped}
+
+    for _ in range(_SET_TRIES):
         try:
-            doc = yaml.load(old.decode("utf-8-sig"))
-        except (UnicodeDecodeError, YAMLError):
-            unreadable = True
-        unreadable = unreadable or doc is not None and not isinstance(doc, dict)
-    if not isinstance(doc, dict):
-        doc = CommentedMap()
-    if not isinstance(doc.get("places"), dict):
-        doc["places"] = CommentedMap()
-    doc["places"][name] = value
-    # The new document is what is checked (R34): the old one may be the broken file this
-    # command is repairing, and an overlap leaves the file as it was.
-    paths.validate_config(doc, source=f)
-    backup = backups.save_backup(f) if old is not None else None
-    buf = io.StringIO()
-    yaml.dump(doc, buf)
-    store.replace(f, buf.getvalue(), place="config")
-    result = {"place": name, "path": value, "file": str(f),
-              "backup": str(backup) if backup else None, "repaired": unreadable}
+            result = once()
+            break
+        except store.Changed:
+            continue                            # another writer saved in between: read again
+    else:
+        raise ConfigError(f"{f} kept changing while it was being set ({_SET_TRIES} tries)",
+                          hint="another program is writing it; retry, or edit it once it stops")
     if args.as_json:
         return result
     lines = [f"{name}: {value} (in {f})"]
-    if unreadable:
-        lines.append(f"the old file did not parse; it was rewritten with {name} only, "
-                     f"and its content is saved in {backup}")
+    if result["unreadable"]:
+        lines.append(f"the old file did not parse; it was rewritten with {name} only")
+    lines += [f"dropped {d}" for d in result["dropped"]]
+    if result["repaired"]:
+        lines.append(f"the old content is saved in {result['backup']}")
     return "\n".join(lines)
+
+
+_SET_TRIES = 3
+
+
+def _repair(doc, name: str, f) -> list[str]:
+    """Make `doc` a document `set` can write, in place, keeping comments: what is invalid on
+    its own goes, with the reason — a places that is not a mapping, vault, an unknown name, a
+    path that fails the checks — and so does a sync that is not a mapping. A version other
+    than 1 is not repaired: that may be a newer file, and the final check refuses it."""
+    from ruamel.yaml.comments import CommentedMap
+
+    dropped: list[str] = []
+    sync = doc.get("sync")
+    if sync is not None and not isinstance(sync, dict):
+        del doc["sync"]
+        dropped.append(f"sync: not a mapping ({type(sync).__name__})")
+    places = doc.get("places")
+    if places is not None and not isinstance(places, dict):
+        dropped.append(f"places: not a mapping ({type(places).__name__})")
+        places = None
+    if places is None:
+        doc["places"] = places = CommentedMap()
+    kept: dict = {}
+    for key in list(places):
+        if key == name:
+            continue                            # replaced by the value being set
+        try:
+            if key == "vault":
+                raise ConfigError("vault", hint=paths.VAULT_HINT)
+            paths.validate_config({"places": {**kept, key: places[key]}}, source=f)
+            kept[key] = places[key]
+        except ConfigError as exc:
+            del places[key]
+            dropped.append(f"places.vault: {paths.VAULT_HINT}" if key == "vault"
+                           else f"places.{key}: {str(exc).removeprefix(f'{f}: ')}")
+    return dropped
 
 
 def _rebuild(args) -> dict | str:

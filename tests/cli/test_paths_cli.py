@@ -188,6 +188,81 @@ def test_paths_set_repairs_a_broken_file(capsys, tmp_path):
     assert [c.read_bytes() for c in copies] == [broken]
     assert "did not parse" in out and str(copies[0]) in out
 
+def test_set_repairs_places_that_is_not_a_mapping_and_says_so(capsys, tmp_path):
+    _write_paths("# keep me\nplaces: just a string\n")
+    rc, out, err = _run(capsys, "paths", "set", "lake", str(tmp_path / "lake"))
+    assert rc == 0, err
+    assert paths.paths_config().places == {"lake": tmp_path / "lake"}
+    assert "dropped places: not a mapping (str)" in out
+    assert "# keep me" in paths.paths_yaml().read_text(encoding="utf-8")
+    assert "saved in" in out and list(paths.backups_dir().glob("paths.yaml.*"))
+
+
+def test_set_keeps_valid_entries_and_drops_the_invalid_ones(capsys, tmp_path):
+    """A vault key, an unknown name, a relative path, a path inside ~/.h2t: each one went
+    in by hand and makes paths_config() fail; set repairs it (R17) and names each."""
+    inbox = tmp_path / "inbox"
+    _write_paths("places:\n"
+                 f"  inbox: {inbox}  # my downloads\n"
+                 f"  vault: {tmp_path / 'v'}\n"
+                 f"  photos: {tmp_path / 'p'}\n"
+                 "  kb: relative/kb\n"
+                 "sync: syncthing\n")
+    got = _json(capsys, "paths", "set", "lake", str(tmp_path / "lake"))
+    assert paths.paths_config().places == {"inbox": inbox, "lake": tmp_path / "lake"}
+    dropped = got["dropped"]
+    assert dropped[0] == "sync: not a mapping (str)"
+    assert dropped[1] == f"places.vault: {paths.VAULT_HINT}" and "H2T_PATH_VAULT" in dropped[1]
+    assert dropped[2].startswith("places.photos: unknown place 'photos'")
+    assert dropped[3].startswith("places.kb: place 'kb' must be an absolute path")
+    assert len(dropped) == 4 and got["repaired"] is True and got["backup"]
+    assert "# my downloads" in paths.paths_yaml().read_text(encoding="utf-8")
+
+
+def test_set_does_not_repair_another_version(capsys, tmp_path):
+    f = _write_paths("version: 2\nplaces: {}\n")
+    rc, _, err = _run(capsys, "paths", "set", "lake", str(tmp_path / "lake"))
+    assert rc == 3 and "version 2" in err
+    assert f.read_text(encoding="utf-8") == "version: 2\nplaces: {}\n"
+
+
+def test_set_reads_again_when_the_file_changes_before_it_is_published(capsys, tmp_path, monkeypatch):
+    """Read-modify-write: a save landing between the read and the publication is not
+    overwritten with the stale copy; set reads again and keeps both."""
+    from h2t_ops.core import backups
+    f = _write_paths(f"places:\n  inbox: {tmp_path / 'inbox'}\n")
+    real, calls = backups.save_backup, []
+
+    def save_backup(path):
+        calls.append(path)
+        if len(calls) == 1:                       # another writer, after set has read
+            f.write_text(f"places:\n  inbox: {tmp_path / 'inbox'}\n  kb: {tmp_path / 'kb'}\n",
+                         encoding="utf-8")
+        return real(path)
+
+    monkeypatch.setattr(backups, "save_backup", save_backup)
+    rc, _, err = _run(capsys, "paths", "set", "lake", str(tmp_path / "lake"))
+    assert rc == 0, err
+    assert paths.paths_config().places == {"inbox": tmp_path / "inbox", "kb": tmp_path / "kb",
+                                           "lake": tmp_path / "lake"}
+    assert len(calls) == 2
+
+
+def test_set_gives_up_with_exit_3_when_the_file_keeps_changing(capsys, tmp_path, monkeypatch):
+    from h2t_ops.core import backups
+    f = _write_paths("places: {}\n")
+    real, n = backups.save_backup, []
+
+    def save_backup(path):
+        n.append(1)
+        f.write_text("places: {}\n" + "#" * len(n) + "\n", encoding="utf-8")
+        return real(path)
+
+    monkeypatch.setattr(backups, "save_backup", save_backup)
+    rc, _, err = _run(capsys, "paths", "set", "lake", str(tmp_path / "lake"))
+    assert rc == 3 and "kept changing" in err
+    assert "lake" not in f.read_text(encoding="utf-8")
+
 
 # --- index --------------------------------------------------------------------------------
 
@@ -216,3 +291,13 @@ def test_index_query_lists_sessions_of_the_project_from_every_machine(capsys):
     assert got["problems"] == []
     rc, out, _ = _run(capsys, "index", "query", "--project", "nobody")
     assert rc == 0 and "no sessions of nobody" in out
+
+
+def test_index_rebuild_exits_3_while_another_process_holds_the_lock(capsys, monkeypatch):
+    from h2t_ops.core import store
+    from h2t_ops.lifecycle.index import query
+    monkeypatch.setattr(query, "LOCK_S", 0.2)
+    with store.locked(query._lock_path(), place="state"):
+        rc, out, err = _run(capsys, "index", "rebuild")
+    assert rc == 3 and out == ""
+    assert "index is locked by another process" in err

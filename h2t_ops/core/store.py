@@ -249,8 +249,13 @@ _LOCK_OFFSET = 2 ** 40   # far past any real EOF: msvcrt locks are mandatory, an
                          # byte 0 would make a reader of the file (gather, doctor) fail
 
 
+class LockBusy(TimeoutError):
+    """locked(timeout=) found the lock held for the whole timeout; nothing was done."""
+
+
 @contextlib.contextmanager
-def _lock(fd: int) -> Iterator[None]:
+def _lock(fd: int, timeout: float | None = None) -> Iterator[None]:
+    deadline = None if timeout is None else time.monotonic() + timeout
     if os.name == "nt":
         import msvcrt
         os.lseek(fd, _LOCK_OFFSET, os.SEEK_SET)
@@ -259,6 +264,8 @@ def _lock(fd: int) -> Iterator[None]:
                 msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
                 break
             except OSError:
+                if deadline is not None and time.monotonic() >= deadline:
+                    raise LockBusy(f"lock held past {timeout} s") from None
                 time.sleep(0.02)
         try:
             yield               # O_APPEND writes land at EOF whatever the file position
@@ -267,7 +274,17 @@ def _lock(fd: int) -> Iterator[None]:
             msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
     else:
         import fcntl
-        fcntl.flock(fd, fcntl.LOCK_EX)
+        if deadline is None:
+            fcntl.flock(fd, fcntl.LOCK_EX)
+        else:
+            while True:
+                try:
+                    fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    break
+                except BlockingIOError:
+                    if time.monotonic() >= deadline:
+                        raise LockBusy(f"lock held past {timeout} s") from None
+                    time.sleep(0.02)
         try:
             yield
         finally:
@@ -275,16 +292,22 @@ def _lock(fd: int) -> Iterator[None]:
 
 
 @contextlib.contextmanager
-def locked(path, *, place: str) -> Iterator[None]:
+def locked(path, *, place: str, timeout: float | None = None) -> Iterator[None]:
     """Hold an exclusive lock on a lock file for the block: two processes that both write
-    one file through a library (the index) take turns. The file stays, empty and unlogged —
-    removing it would race a peer that has just opened it, and nothing is written into it."""
+    one file through a library (the index) take turns. With timeout, LockBusy once it has
+    been held that long by someone else. The file stays and stays empty — removing it would
+    race a peer that has just opened it; its creation is logged once, an acquisition never."""
     path = Path(path)
     got = _check(path, place)
     _ensure_dir(path.parent, place)
-    fd = os.open(path, os.O_RDWR | os.O_CREAT | getattr(os, "O_BINARY", 0), _mode(place, got, None))
+    flags = os.O_RDWR | getattr(os, "O_BINARY", 0)
     try:
-        with _lock(fd):
+        fd = os.open(path, flags | os.O_CREAT | os.O_EXCL, _mode(place, got, None))
+        _log("create", got, path, b"")
+    except FileExistsError:
+        fd = os.open(path, flags)
+    try:
+        with _lock(fd, timeout):
             yield
     finally:
         os.close(fd)

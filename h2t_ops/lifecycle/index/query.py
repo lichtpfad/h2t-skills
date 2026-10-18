@@ -17,9 +17,11 @@ from collections.abc import Iterator
 from pathlib import Path
 
 from h2t_ops.core import paths, store
+from h2t_ops.core.errors import ConfigError
 from h2t_ops.lifecycle.index import build, schema
 
 BUSY_MS = 10_000
+LOCK_S = 5.0     # state/index.lock: past this a holder is taken as hung, the base served as is
 
 
 def index_path() -> Path:
@@ -94,30 +96,44 @@ def connect(*, refresh: bool = True) -> Iterator[sqlite3.Connection]:
     Every write to the base — schema, refresh, rebuild — runs under state/index.lock;
     the queries after it do not."""
     path = index_path()
-    with store.locked(_lock_path(), place="state"):
-        try:
-            stack, conn = _open(path, ensure=True, refresh=refresh)
-        except sqlite3.OperationalError:             # busy or locked by a peer: not damage
+    try:
+        with store.locked(_lock_path(), place="state", timeout=LOCK_S):
             try:
                 stack, conn = _open(path, ensure=True, refresh=refresh)
-            except sqlite3.OperationalError:
-                stack, conn = _open(path, ensure=False, refresh=False)   # serve it as it stands
+            except sqlite3.OperationalError:         # busy or locked by a peer: not damage
                 try:
-                    _serve_empty_if_unbuilt(conn, path)
-                except BaseException as exc:
-                    stack.__exit__(type(exc), exc, exc.__traceback__)
-                    raise
-        except (sqlite3.DatabaseError, schema.Mismatch):
-            _rebuild_file(path)
-            stack, conn = _open(path, ensure=True, refresh=False)
+                    stack, conn = _open(path, ensure=True, refresh=refresh)
+                except sqlite3.OperationalError:
+                    stack, conn = _as_it_stands(path)
+            except (sqlite3.DatabaseError, schema.Mismatch):
+                _rebuild_file(path)
+                stack, conn = _open(path, ensure=True, refresh=False)
+    except store.LockBusy:          # a hung holder must not hang session-start with it
+        stack, conn = _as_it_stands(path)
     with stack:
         conn.row_factory = sqlite3.Row
         yield conn
 
 
+def _as_it_stands(path: Path) -> tuple[contextlib.ExitStack, sqlite3.Connection]:
+    """The base without a refresh or any write to it; empty with a problem row if unbuilt."""
+    stack, conn = _open(path, ensure=False, refresh=False)
+    try:
+        _serve_empty_if_unbuilt(conn, path)
+    except BaseException as exc:
+        stack.__exit__(type(exc), exc, exc.__traceback__)
+        raise
+    return stack, conn
+
+
 def rebuild() -> dict:
-    with store.locked(_lock_path(), place="state"):
-        _rebuild_file(index_path())
+    try:
+        with store.locked(_lock_path(), place="state", timeout=LOCK_S):
+            _rebuild_file(index_path())
+    except store.LockBusy:
+        raise ConfigError("index is locked by another process", hint=(
+            f"another h2t command holds {_lock_path()} for over {LOCK_S} s; "
+            "retry when it has finished")) from None
     with connect(refresh=False) as conn:
         return {name: conn.execute(f"SELECT count(*) FROM {name}").fetchone()[0]
                 for name in ("sessions", "projects", "problems")}

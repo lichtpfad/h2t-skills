@@ -134,6 +134,30 @@ def test_secret_files_are_0600_and_dirs_0700(home):
     assert "fake-exa" not in log and '"sha256": null' in log
 
 
+def test_lock_file_creation_is_logged_once_and_acquisition_never(home):
+    lock = paths.state_dir() / "x.lock"
+    for _ in range(3):
+        with store.locked(lock, place="state"):
+            pass
+    log = paths.logs_dir() / "writes.jsonl"
+    rows = [json.loads(line) for line in log.read_text().splitlines()] if log.exists() else []
+    mine = [r for r in rows if r["path"] == str(lock)]
+    assert [(r["op"], r["place"]) for r in mine] == [("create", "state")]
+    assert lock.read_bytes() == b""
+
+
+def test_lock_with_a_timeout_says_busy_instead_of_waiting(home):
+    import time
+    lock = paths.state_dir() / "x.lock"
+    with store.locked(lock, place="state"):
+        t0 = time.monotonic()
+        with pytest.raises(store.LockBusy), store.locked(lock, place="state", timeout=0.1):
+            pass
+        assert time.monotonic() - t0 < 2
+    with store.locked(lock, place="state", timeout=0.1):   # free again
+        pass
+
+
 def test_secret_write_logs_key_names_never_values(home):
     store.replace(paths.secrets_shared() / "exa.env", "EXA_API_KEY=fake-exa\nEXA_X=fake-x\n",
                   place="secrets.shared", keys=("EXA_X", "EXA_API_KEY"))
