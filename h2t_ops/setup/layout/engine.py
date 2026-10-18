@@ -160,7 +160,14 @@ def _existing(p: Path) -> Path:
 
 
 def phase_snapshot(ctx: PhaseContext) -> None:
-    """Free space and the machine name (§5, §8 step 1, R4)."""
+    """3.x variables that moved data, free space and the machine name (§5, §8 step 1, R4)."""
+    for var, (value, default) in sorted(paths.old_env_moved().items()):
+        # The migration reads only the 3.x defaults: a layout 1 stamped over data it never
+        # looked at would hide that data for good (§6 п. 5).
+        raise ConfigError(
+            f"{var}={value} moved 3.x data to a place the migration does not copy from",
+            hint=f"move its contents to {default} and unset {var}, then run "
+                 "`h2t-setup layout migrate` again; or copy them into ~/.h2t by hand and unset it")
     need = 2 * sum(_size(paths.legacy(n)) for n in paths.LEGACY if n not in _NOT_COPIED)
     free = shutil.disk_usage(_existing(paths.root().parent)).free
     if need and free <= need:

@@ -64,6 +64,15 @@ OLD_ENV: dict[str, str] = {
     "H2T_EVALS_SPOOL": "evals-spool-source",   # the migration copies that spool (plan R22)
 }
 
+# Where 3.x looked when a "remove" variable was not set. The migration copies only from
+# these; a variable that moved its data elsewhere stops it (§6 п. 5, §8).
+OLD_ENV_DEFAULT: dict[str, tuple[str, ...]] = {
+    "H2T_CONFIG_ROOT": (".h2t", "config"),
+    "H2T_SESSION_ROOT": (".h2t", "sessions"),
+    "H2T_ACTIVITY_SPOOL": (".h2t", "activity", "spool.jsonl"),
+    "H2T_EVALS_ROOT": (".h2t", "evals"),
+}
+
 # Where 3.x kept things. Read for migration and fallback in 4.0.x; never written except
 # the Google mirror and MOVED-TO.txt (§7.3). ~/.dor/vault is not here: it is the vault's
 # default address, shared with POS (plan R12).
@@ -218,6 +227,17 @@ def old_env_by_use(use: str) -> dict[str, Path]:
     """Set 3.x variables with this OLD_ENV use: callers never spell the old names (plan R22)."""
     return {n: _env(n) for n in old_env_in_use() if OLD_ENV[n] == use}
 
+
+
+def old_env_moved() -> dict[str, tuple[Path, Path]]:
+    """Set "remove" variables that name an existing place other than their 3.x default:
+    name -> (value, default). Their data is where the migration does not look."""
+    out: dict[str, tuple[Path, Path]] = {}
+    for name, value in old_env_by_use("remove").items():
+        default = home().joinpath(*OLD_ENV_DEFAULT[name])
+        if value.exists() and os.path.realpath(value) != os.path.realpath(default):
+            out[name] = (value, default)
+    return out
 
 @dataclass
 class PathsConfig:

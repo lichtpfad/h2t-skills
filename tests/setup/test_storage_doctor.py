@@ -140,7 +140,7 @@ def test_old_env_name_says_what_became_of_each(monkeypatch):
         "H2T_LAKE_ROOT": "the migration moves the value into paths.yaml (lake)",
         "H2T_SECRETS_FILE": "the migration reads that file as a secrets source",
         "H2T_EVALS_SPOOL": "the migration copies that spool into state/evals-spool.sqlite",
-        **{n: "the package does not read it — remove it" for n in
+        **{n: "the migration does not copy from it — move what it names to the 3.x default, then remove it" for n in
            ("H2T_CONFIG_ROOT", "H2T_SESSION_ROOT", "H2T_ACTIVITY_SPOOL", "H2T_EVALS_ROOT")}}
 
 

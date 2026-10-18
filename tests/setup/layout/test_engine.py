@@ -405,6 +405,34 @@ def test_machine_explicit_is_carried(monkeypatch, machine):
     assert calls == (["m"] if machine else [])
 
 
+@pytest.mark.parametrize("var", sorted(n for n, u in paths.OLD_ENV.items() if u == "remove"))
+def test_a_3x_variable_that_moved_data_stops_the_snapshot(monkeypatch, tmp_path, var):
+    """§6 п. 5: the migration copies only from the 3.x defaults. A variable that put the
+    data elsewhere stops it, named with its value, before anything is written."""
+    moved = tmp_path / "custom"
+    (moved / "m").mkdir(parents=True)
+    (moved / "m" / "s.md").write_bytes(b"S")
+    monkeypatch.setenv(var, str(moved))
+    report = _migrate()
+    assert [s for s, _ in report.failed] == ["layout 1: snapshot"]
+    assert f"{var}={moved}" in report.failed[0][1] and f"unset {var}" in report.failed[0][1]
+    assert not paths.layout_file().exists()
+    j = Journal.latest()
+    assert j is None or j.entries() == []
+    monkeypatch.delenv(var)
+    assert _migrate().failed == []
+
+
+@pytest.mark.parametrize("where", ["default", "absent"])
+def test_a_3x_variable_at_its_default_or_nowhere_does_not_stop(monkeypatch, tmp_path, where):
+    var = "H2T_SESSION_ROOT"
+    value = paths.legacy("sessions.h2t") if where == "default" else tmp_path / "nothing"
+    if where == "default":
+        value.mkdir(parents=True)
+    monkeypatch.setenv(var, str(value))
+    assert _migrate().failed == []
+
+
 # --- the journal directory ----------------------------------------------------------------
 
 @pytest.mark.skipif(sys.platform == "win32", reason="POSIX mode bits")

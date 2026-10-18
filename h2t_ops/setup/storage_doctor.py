@@ -47,7 +47,7 @@ _OLD_ENV_HINT = {
     "lake": "the migration moves the value into paths.yaml (lake)",
     "secrets-source": "the migration reads that file as a secrets source",
     "evals-spool-source": "the migration copies that spool into state/evals-spool.sqlite",
-    "remove": "the package does not read it — remove it",
+    "remove": "the migration does not copy from it — move what it names to the 3.x default, then remove it",
 }
 
 

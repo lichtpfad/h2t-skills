@@ -139,7 +139,7 @@ The pack is rebuilt around one package (#541), and its data moves to one root, `
 | `H2T_LAKE_ROOT` | when there is no `paths.yaml` yet, the migration creates it with this value as `lake`; when the file already exists it is left alone, so declare the lake yourself: `h2t-ops paths set lake <path>`. Then remove the variable |
 | `H2T_SECRETS_FILE` | nothing: the migration reads its file once as one more secrets source; then remove it |
 | `H2T_EVALS_SPOOL` | nothing: the migration copies that spool into `state/evals-spool.sqlite`; then remove it |
-| `H2T_CONFIG_ROOT`, `H2T_SESSION_ROOT`, `H2T_ACTIVITY_SPOOL`, `H2T_EVALS_ROOT` | remove it; to move the whole root, use `H2T_PATH_ROOT` |
+| `H2T_CONFIG_ROOT`, `H2T_SESSION_ROOT`, `H2T_ACTIVITY_SPOOL`, `H2T_EVALS_ROOT` | the migration copies only from the 3.x default; set to another existing place, it stops and names the variable. Move what it names to the default (`~/.h2t/config`, `~/.h2t/sessions`, `~/.h2t/activity/spool.jsonl`, `~/.h2t/evals`), remove the variable, migrate. To move the whole root, use `H2T_PATH_ROOT` |
 
 Two path variables replace them: `H2T_PATH_ROOT` moves the whole `~/.h2t` except `run/`;
 `H2T_PATH_VAULT` (default `~/.dor/vault`) is the vault's address, shared with POS — set it
