@@ -111,7 +111,9 @@ class Recorder:
         has a non-empty value for every key the old file supplies — the fallback is per key.
         confine: a write outside every guarded root is a violation too, door or not — the
         sandbox's places are the whole world a command may write (§7.3); allow names the
-        few exceptions (os.devnull)."""
+        few exceptions (os.devnull). The interpreter's own bytecode cache (__pycache__) is
+        not a write of the command: a module imported for the first time inside a case
+        compiles there, which made the check depend on test order."""
         self.guarded = [Path(os.path.realpath(p)) for p in guarded]
         self.secret_dirs = [Path(os.path.realpath(p)) for p in secret_dirs]
         self.legacy = [Path(os.path.realpath(p)) for p in legacy]
@@ -157,7 +159,7 @@ class Recorder:
                 continue
             secret = self._under(real, self.secret_dirs)
             if write and self.confine and not self._under(real, self.guarded) \
-                    and not self._under(real, self.allow):
+                    and not self._under(real, self.allow) and "__pycache__" not in real.parts:
                 self.violations.append(f"{event} write {real} outside every place")
                 continue
             if not (write or secret) or not self._under(real, self.guarded):

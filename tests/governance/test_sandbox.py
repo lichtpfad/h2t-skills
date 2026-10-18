@@ -107,6 +107,7 @@ def test_a_write_outside_every_place_is_caught(sandbox):
         sys.audit("open", outside, "w", os.O_WRONLY | os.O_CREAT)
         sys.audit("open", os.devnull, "w", os.O_WRONLY)
         sys.audit("open", outside, "r", os.O_RDONLY)          # a read outside is not a write
+        sys.audit("os.mkdir", os.path.join(os.path.dirname(outside), "__pycache__"), 0o777, None)
     assert sandbox.recorder.violations == [f"open write {os.path.realpath(outside)} outside every place"]
 
 
