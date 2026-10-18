@@ -10,6 +10,7 @@ import contextlib
 import os
 import sys
 import threading
+import urllib.parse
 from pathlib import Path
 
 _DOORS = ("h2t_ops/core/store.py", "h2t_ops/core/secrets.py")
@@ -89,22 +90,35 @@ def _paths(event: str, args: tuple) -> list[tuple[str, bool]]:
     if event in ("shutil.copyfile", "shutil.copytree", "shutil.move"):
         return [(os.fsdecode(args[0]), False), (os.fsdecode(args[1]), True)]
     if event == "sqlite3.connect":
-        return [(os.fsdecode(args[0]), True)] if args and args[0] not in (":memory:", "") else []
+        if not args or args[0] in (":memory:", ""):
+            return []
+        p = os.fsdecode(args[0])
+        if p.startswith("file:"):                  # uri=True: the path, and mode=ro is a read
+            u = urllib.parse.urlsplit(p)
+            mode = urllib.parse.parse_qs(u.query).get("mode", ["rwc"])[0]
+            return [(urllib.parse.unquote(u.path), mode != "ro")]
+        return [(p, True)]
     return []
 
 
 class Recorder:
     def __init__(self, guarded: list[Path], secret_dirs: list[Path], legacy: list[Path],
-                 twins: dict[Path, Path | tuple[Path, tuple[str, ...]]]):
+                 twins: dict[Path, Path | tuple[Path, tuple[str, ...]]], *,
+                 confine: bool = False, allow: tuple[Path, ...] = ()):
         """twins: legacy secret file → its one new counterpart (§7.3: reading the old one
         while the new one holds it is red, whoever reads — secrets.py included). A JSON or
         session twin holds it by existing; an env twin, given as (file, keys), only when it
-        has a non-empty value for every key the old file supplies — the fallback is per key."""
+        has a non-empty value for every key the old file supplies — the fallback is per key.
+        confine: a write outside every guarded root is a violation too, door or not — the
+        sandbox's places are the whole world a command may write (§7.3); allow names the
+        few exceptions (os.devnull)."""
         self.guarded = [Path(os.path.realpath(p)) for p in guarded]
         self.secret_dirs = [Path(os.path.realpath(p)) for p in secret_dirs]
         self.legacy = [Path(os.path.realpath(p)) for p in legacy]
         self.twins = {Path(os.path.realpath(k)): (v if isinstance(v, tuple) else (Path(v), None))
                       for k, v in twins.items()}
+        self.confine = confine
+        self.allow = [Path(os.path.realpath(p)) for p in allow]
         self.violations: list[str] = []
         self.legacy_writes: list[Path] = []
         self.writers: set[str] = set()
@@ -142,6 +156,10 @@ class Recorder:
                 self.violations.append(f"{event} read {real} while {twin} holds it")
                 continue
             secret = self._under(real, self.secret_dirs)
+            if write and self.confine and not self._under(real, self.guarded) \
+                    and not self._under(real, self.allow):
+                self.violations.append(f"{event} write {real} outside every place")
+                continue
             if not (write or secret) or not self._under(real, self.guarded):
                 continue
             if _stack_has_door() or store.delegated(real):

@@ -68,7 +68,8 @@ def build_sandbox(tmp_path, monkeypatch):
              paths.legacy("telegram") / "session.session": local / "telegram.session"}
     try:
         yield SimpleNamespace(home=home, lake=lake, inbox=inbox, vault=vault,
-                              recorder=audit.Recorder(guarded, secret_dirs, paths.legacy_roots(), twins))
+                              recorder=audit.Recorder(guarded, secret_dirs, paths.legacy_roots(), twins,
+                                                      confine=True, allow=(Path(os.devnull),)))
     finally:
         if sys.platform != "win32":
             for d in closed:
@@ -96,6 +97,17 @@ def test_command_touches_only_through_the_doors(case, sandbox, monkeypatch):
     assert rec.violations == [], "\n".join(rec.violations) + unseen
     stray = {p for p in rec.legacy_writes if not compat_allowed(p, sandbox.home, case.compat)}
     assert stray == set(), f"legacy writes outside compat: {sorted(map(str, stray))}{unseen}"
+
+
+def test_a_write_outside_every_place_is_caught(sandbox):
+    """The sandbox's places are all a command may write: a write anywhere else is red, not
+    ignored (the event alone, raised by hand: nothing is written). os.devnull is allowed."""
+    outside = os.path.join(os.path.abspath(os.sep), "h2t-sandbox-outside", "x.md")
+    with sandbox.recorder.active():
+        sys.audit("open", outside, "w", os.O_WRONLY | os.O_CREAT)
+        sys.audit("open", os.devnull, "w", os.O_WRONLY)
+        sys.audit("open", outside, "r", os.O_RDONLY)          # a read outside is not a write
+    assert sandbox.recorder.violations == [f"open write {os.path.realpath(outside)} outside every place"]
 
 
 def test_worker_thread_events_reach_the_recorder(sandbox):
@@ -181,6 +193,16 @@ def test_symlink_into_lake_is_caught(sandbox, tmp_path):
     with sandbox.recorder.active():
         os.symlink(tmp_path / "elsewhere.md", sandbox.lake / "link.md")
     assert any("link.md" in v for v in sandbox.recorder.violations)
+
+
+def test_sqlite_uri_connections_resolve_to_their_file(sandbox):
+    """sqlite3.connect("file:<path>?mode=…", uri=True): the path is the file, mode=ro a read.
+    Read as a relative name, it fell outside every place and was ignored."""
+    db = sandbox.lake / "x.db"
+    with sandbox.recorder.active():
+        sys.audit("sqlite3.connect", f"file:{db}?mode=rwc")
+        sys.audit("sqlite3.connect", f"file:{db}?mode=ro")
+    assert sandbox.recorder.violations == [f"sqlite3.connect write {os.path.realpath(db)}"]
 
 
 def test_sqlite_without_delegation_is_caught(sandbox):
