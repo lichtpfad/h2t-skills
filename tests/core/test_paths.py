@@ -144,3 +144,23 @@ def test_legacy_places_are_home_relative_and_ignore_root(home, monkeypatch, tmp_
     monkeypatch.setenv("H2T_PATH_ROOT", str(tmp_path / "r"))
     assert paths.legacy("google.store") == home / ".config" / "google-calendar-mcp"
     assert paths.legacy("sessions.dor") == home / ".dor" / "sessions"
+
+
+@pytest.mark.parametrize("body", [
+    b"version: 1\nplaces: [lake]\n",
+    b"version: 1\nsync: [x]\n",
+    b"version: 1\nplaces:\n  lake: /tmp/\xff\xfe\n",
+], ids=["places-list", "sync-list", "not-utf8"])
+def test_broken_paths_yaml_is_a_config_error_and_legacy_roots_survive(home, body):
+    """R17: a broken paths.yaml must not stop legacy classification (spec §7.2)."""
+    p = home / ".h2t" / "config" / "paths.yaml"
+    p.parent.mkdir(parents=True)
+    p.write_bytes(body)
+    with pytest.raises(ConfigError, match="paths.yaml"):
+        paths.paths_config()
+    assert home / ".dor" in paths.legacy_roots()
+
+
+def test_null_places_and_sync_are_empty(home):
+    _yaml(home, "version: 1\nplaces:\nsync:\n")
+    assert paths.paths_config() == paths.PathsConfig()

@@ -1,8 +1,9 @@
 """Where every class of data lives — the only module that knows (#548 §3, §6, §7.2).
 
-Nothing else in h2t_ops calls Path.home() or expanduser, reads H2T_PATH_ROOT, H2T_PATH_VAULT
-or the 3.x variable names, or spells ~/.dor or ~/.config/<program>. tests/governance holds
-the ratchet.
+The target boundary: nothing else in h2t_ops calls Path.home() or expanduser, reads
+H2T_PATH_ROOT, H2T_PATH_VAULT or the 3.x variable names, or spells ~/.dor or
+~/.config/<program>. Code outside still does; the ratchets in tests/governance count it and
+hold the count from rising until it reaches zero (Task 24).
 """
 from __future__ import annotations
 
@@ -216,9 +217,23 @@ def paths_config() -> PathsConfig:
         return PathsConfig()
     try:
         doc = yaml.safe_load(f.read_bytes().decode("utf-8-sig")) or {}
+    except UnicodeDecodeError as exc:
+        raise ConfigError(f"{f} is not UTF-8: {exc}", hint="save the file as UTF-8") from exc
     except yaml.YAMLError as exc:
         raise ConfigError(f"{f} is not valid YAML: {exc}", hint="fix the file or remove it") from exc
     return validate_config(doc, source=f)
+
+
+def _mapping(doc: dict, key: str, f: Path) -> dict:
+    """An absent or empty (null) key is an empty mapping; any other non-mapping is an error,
+    so a broken file surfaces as ConfigError, which _declared() tolerates (plan R17)."""
+    value = doc.get(key)
+    if value is None:
+        return {}
+    if not isinstance(value, dict):
+        raise ConfigError(f"{f}: {key} must be a mapping, got {type(value).__name__}",
+                          hint=f"{key}:\n  <name>: <value>")
+    return value
 
 
 def validate_config(doc: dict, *, source: Path) -> PathsConfig:
@@ -230,7 +245,7 @@ def validate_config(doc: dict, *, source: Path) -> PathsConfig:
     if doc.get("version", 1) != 1:
         raise ConfigError(f"{f}: version {doc.get('version')!r} is not supported", hint="version: 1")
     places: dict[str, Path] = {}
-    for name, raw in (doc.get("places") or {}).items():
+    for name, raw in _mapping(doc, "places", f).items():
         if name == "vault":
             raise ConfigError(f"{f}: vault is not set here; it comes from H2T_PATH_VAULT",
                               hint="vault is shared with POS: set H2T_PATH_VAULT (default ~/.dor/vault)")
@@ -256,7 +271,7 @@ def validate_config(doc: dict, *, source: Path) -> PathsConfig:
     rules = doc.get("vault_rules")
     return PathsConfig(places=places,
                        vault_rules=Path(str(rules)).expanduser() if rules else None,
-                       sync={str(k): str(v) for k, v in (doc.get("sync") or {}).items()})
+                       sync={str(k): str(v) for k, v in _mapping(doc, "sync", f).items()})
 
 
 def place(name: str) -> Path | None:

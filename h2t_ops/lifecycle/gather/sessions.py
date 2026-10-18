@@ -149,8 +149,9 @@ def extract_session_id(memory_dir: str | None = None) -> str:
 def get_machine_name() -> str:
     """The machine segment of session paths: H2T_MACHINE_NAME, DOR_MACHINE_NAME, hostname.
 
-    The one place this rule lives (#491). The handoff writer, this reader and the
-    activity spool each carried a copy, and the spool's kept the hostname's case, so
+    The rule lives in core/paths.machine_name; this name stays for its importers (#491).
+    The handoff writer, this reader and the activity spool each carried a copy, and the
+    spool's kept the hostname's case, so
     one MacBook wrote `Mac` to the spool and `mac/` to the path. On macOS the hostname
     follows the network; `h2t-core:setup` pins H2T_MACHINE_NAME so it stops mattering.
     """
