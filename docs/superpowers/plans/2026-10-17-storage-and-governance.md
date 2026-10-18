@@ -889,7 +889,7 @@ def machine_name() -> str:
   - `WriteRefused(ConfigError)`, `AlreadyExists(FileExistsError)`. Оба — подклассы `H2TError` или `OSError` соответственно: вызывающие, которые раньше ловили только `OSError`, после перехода на `store` ловят ещё `H2TError` (Task 13, Task 18);
   - `classify(path) -> str` (id места, `"legacy"` или `"elsewhere"`);
   - `replace(path, data: str | bytes, *, place: str, mode: int | None = None, compat: bool = False, dest: bool = False, keys: tuple[str, ...] = ()) -> Path`;
-  - `create(path, data, *, place, mode=None, dest=False, keys=()) -> Path` (бросает `AlreadyExists`; без жёстких ссылок — `ConfigError`, R20);
+  - `create(path, data, *, place, mode=None, dest=False, keys=(), compat=False) -> Path` (`compat` — только `MOVED-TO.txt` под `migrating()`, Task 21) (бросает `AlreadyExists`; без жёстких ссылок — `ConfigError`, R20);
   - `keys` — имена ключей секрета, которые передаёт `core.secrets` (§7.2: «для секретов только имя ключа»); запись с непустым `keys` — запись секрета, куда бы она ни легла (`secrets.*`, `dest=True` в каталог пользователя, зеркало `compat`): строка `logs/writes.jsonl` несёт `"keys": [отсортированные имена]` и `"sha256": null`; для мест `secrets.*` `sha256` — `null` всегда; значений нет никогда (R41);
   - `append(path, line: str, *, place, dest=False) -> None`;
   - `remove(path, *, place, journal=False) -> None`, `remove_tree(path, *, place) -> None`;
@@ -1090,6 +1090,9 @@ def test_dest_allows_explicit_user_path_but_not_package_places(home, tmp_path):
     assert out.read_text() == "x"
     with pytest.raises(store.WriteRefused):
         store.replace(paths.secrets_shared() / "a.env", "x", place="elsewhere", dest=True)
+    with pytest.raises(store.WriteRefused, match="h2t-root"):     # unclassified, directly in ~/.h2t
+        store.replace(paths.root() / "stray.txt", "x", place="elsewhere", dest=True)
+    assert not (paths.root() / "stray.txt").exists()
 ```
 
 ```python
@@ -1189,7 +1192,7 @@ _PACKAGE = ("run", "config", "secrets.shared", "secrets.local", "records.session
             "layout")   # layout.json: a file place, classified by its exact path
 _REMOVABLE = {"run", "state", "logs", "tmp", "harness"}
 _SECRET = {"secrets.shared", "secrets.local"}
-_DEST_FORBIDDEN = {*_PACKAGE, "vault", "legacy", "harness"}
+_DEST_FORBIDDEN = {*_PACKAGE, "vault", "legacy", "harness", "h2t-root"}
 _LOG_LIMIT = 10 * 1024 * 1024
 _LOG_KEEP = 5
 
@@ -1217,6 +1220,9 @@ def _roots() -> tuple[list[tuple[str, Path]], ConfigError | None]:
     declared["vault"] = paths.vault()
     out += [(pid, _real(p)) for pid, p in declared.items() if p is not None]
     out += [("legacy", _real(p)) for p in paths.legacy_roots()]
+    # Catch-all for anything else under ~/.h2t: no write goes there, --dest included; the
+    # child places above are deeper and win the sort (round 5).
+    out.append(("h2t-root", _real(paths.root())))
     return sorted(out, key=lambda kv: len(kv[1].parts), reverse=True), broken
 
 
@@ -1305,11 +1311,25 @@ def _rotate(log: Path) -> None:
     os.replace(log, log.with_name("writes.1.jsonl"))
 
 
+def _file_sha(path: Path) -> str | None:
+    """Streamed hash of a published file (writer, managed): no whole-file read into memory."""
+    try:
+        h = hashlib.sha256()
+        with open(path, "rb") as fh:
+            for chunk in iter(lambda: fh.read(1 << 20), b""):
+                h.update(chunk)
+        return h.hexdigest()
+    except OSError:
+        return None
+
+
 def _log(op: str, place: str, path: Path, data: bytes | None, *, key: str | None = None,
-         keys: tuple[str, ...] = ()) -> None:
-    """key: a library or source label; keys: secret key NAMES from core.secrets (§7.2, R41)."""
+         keys: tuple[str, ...] = (), digest: str | None = None) -> None:
+    """key: a library or source label; keys: secret key NAMES from core.secrets (§7.2, R41);
+    digest: the hash of a file published without passing its bytes here (§7.2: every write
+    has a hash, secrets excepted)."""
     row = {"ts": time.strftime("%Y-%m-%dT%H:%M:%S"), "op": op, "place": place, "path": str(path),
-           "sha256": None if (data is None or place in _SECRET) else sha256(data),
+           "sha256": None if place in _SECRET else (digest if data is None else sha256(data)),
            "caller": _caller()}
     if key:
         row["key"] = key
@@ -1413,9 +1433,9 @@ def replace(path, data: str | bytes, *, place: str, mode: int | None = None,
 
 
 def create(path, data: str | bytes, *, place: str, mode: int | None = None,
-           dest: bool = False, keys: tuple[str, ...] = ()) -> Path:
+           dest: bool = False, keys: tuple[str, ...] = (), compat: bool = False) -> Path:
     path = Path(path)
-    got = _check(path, place, dest=dest)
+    got = _check(path, place, dest=dest, compat=compat)   # compat: MOVED-TO.txt while migrating
     payload = _bytes(data)
     _ensure_dir(path.parent, place)
     mode = _default_mode(place) if mode is None else mode
@@ -1648,6 +1668,25 @@ def test_moved_marker_only_while_migrating(home):
     assert (legacy / "MOVED-TO.txt").exists()
 
 
+def test_writer_and_managed_log_the_file_hash(home):
+    """§7.2: every write has its hash in writes.jsonl; only secrets have null."""
+    import hashlib
+    p = paths.state_dir() / "w.bin"
+    with store.writer(p, place="state") as fh:
+        fh.write(b"abc")
+    rows = [json.loads(x) for x in (paths.logs_dir() / "writes.jsonl").read_text().splitlines()]
+    assert rows[-1]["sha256"] == hashlib.sha256(b"abc").hexdigest()
+    db = paths.state_dir() / "m.sqlite"
+    with store.connect_sqlite(db, place="state") as conn:
+        conn.execute("CREATE TABLE t(x)")
+    rows = [json.loads(x) for x in (paths.logs_dir() / "writes.jsonl").read_text().splitlines()]
+    assert rows[-1]["sha256"] == hashlib.sha256(db.read_bytes()).hexdigest()
+    with store.writer(paths.secrets_local() / "s.bin", place="secrets.local") as fh:
+        fh.write(b"fake")
+    rows = [json.loads(x) for x in (paths.logs_dir() / "writes.jsonl").read_text().splitlines()]
+    assert rows[-1]["sha256"] is None
+
+
 def test_writer_streams_and_replaces_atomically(home):
     p = paths.state_dir() / "big.bin"
     with store.writer(p, place="state") as fh:
@@ -1734,7 +1773,8 @@ def managed(path, *, place: str, library: str, dest: bool = False) -> Iterator[P
                 if side.exists():
                     with contextlib.suppress(OSError):
                         os.chmod(side, mode)
-        _log("managed", got, path, None, key=library)
+        _log("managed", got, path, None, key=library,
+             digest=None if place in _SECRET else _file_sha(path))
 
 
 @contextlib.contextmanager
@@ -1769,7 +1809,8 @@ def writer(path, *, place: str, mode: int | None = None, dest: bool = False,
         with contextlib.suppress(FileNotFoundError):
             os.unlink(tmp)
         raise
-    _log("create" if exclusive else "replace", got, path, None)
+    _log("create" if exclusive else "replace", got, path, None,
+         digest=None if place in _SECRET else _file_sha(path))
 
 
 @contextlib.contextmanager
@@ -2908,6 +2949,18 @@ def _files(root):
     return sorted(str(p.relative_to(root)) for p in root.rglob("*") if p.is_file())
 
 
+def test_refresh_of_a_wrapped_legacy_token_writes_nothing(tmp_path, monkeypatch):
+    _home(tmp_path, monkeypatch)
+    legacy = paths.legacy("google.store") / "tokens.json"
+    legacy.parent.mkdir(parents=True)
+    legacy.write_text('{"normal": {"refresh_token": "fake-r1", "scope": "x"}}')
+    before = (_files(tmp_path), legacy.stat().st_mtime_ns)
+    monkeypatch.setattr(mod, "_load_credentials", lambda data, client: _fake("fake-r1"))
+    monkeypatch.setattr(mod, "_request", lambda: None)
+    mod.resolve_google_credentials("calendar", ["https://www.googleapis.com/auth/calendar"])
+    assert (_files(tmp_path), legacy.stat().st_mtime_ns) == before   # same token, no write
+
+
 def test_refresh_writes_nothing(tmp_path, monkeypatch):
     _home(tmp_path, monkeypatch)
     token = paths.secrets_local() / "google.token.json"
@@ -2977,7 +3030,9 @@ def durable_token(data: dict) -> dict:
 
 
 def _refresh_sha(data: dict | None) -> str:
-    return store.sha256(((data or {}).get("refresh_token") or "").encode())
+    # through durable_token: a 3.x token wrapped in {"normal": …} is the same refresh token,
+    # and treating it as rotated would write on every refresh (R11, round 5)
+    return store.sha256((durable_token(data or {}).get("refresh_token") or "").encode())
 
 
 def mirror_legacy(creds_json: dict) -> str:
@@ -3275,6 +3330,8 @@ def test_place_follows_the_origin_of_the_root(lk, tmp_path):
 
 **Files:**
 - Modify: `h2t_ops/connectors/drive/client.py:1357,1433` (`Path.cwd()/name` → `place_or_default("inbox")`), `drive/commands.py:229-232`
+- Modify: `h2t_ops/connectors/gmail/commands.py:39-42` (`attachment --output` перестаёт быть обязательным: `--output` не задан → `None`, клиент берёт место по умолчанию) и `h2t_ops/connectors/dropbox/commands.py:41-44` (`download <path> [dest]`: `dest` — `nargs="?"`, не задан → `inbox`, имя — последний сегмент пути Dropbox); тесты команд обоих коннекторов (`tests/connectors/gmail/test_commands.py`, `tests/connectors/dropbox/test_commands.py`) получают случай «без пути»
+- Gmail, имя вложения без `--output` (`client.py:201`, API даёт только id сообщения и вложения): `messages().get(id=message_id, format="full")` и тот же обход частей, что `client.py:505-517`, — часть с этим `attachmentId` даёт `filename` (только последний сегмент); не нашлась или имя пустое → `f"{message_id}-{attachment_id[:12]}.bin"`. Запись — `store.create`/`unique_name` в `inbox` (R47)
 - Modify: `h2t_ops/connectors/gmail/client.py` (2 записи по инвентарю), `notion/commands.py` (4), `dropbox/client.py` (8; потоковые `:259` и `:350` → `store.writer`, R29). Загрузка Drive через `MediaIoBaseDownload` пишет в дескриптор из `store.writer`
 - Modify: `h2t_ops/connectors/research/client.py:31,177-192` (`DEFAULT_OUTPUT_DIR` → `data_dir()/"research"`; запасное чтение `paths.legacy("research")` для `research list/maintenance`), `research/store.py` (6), `research/visual_ocr.py` (4, `shutil.copy2` `:273`), `research/fetch.py` (2), `research/maintenance.py` (1), `research/exa.py:1147`
 - Modify: `h2t_ops/lifecycle/eval/session.py:266-288` (`_write_local` → `records("evals", machine)/<skill>/<run>.json` через `store.create`), `:299-315` (спул → `store.managed(paths.evals_spool(), place="state", library="h2t_evals")`: путь всегда `state/evals-spool.sqlite`), `lifecycle/eval/status.py:48` (читатель обходит `records/evals/<машина>/<скилл>/*.json` по всем машинам, а не `<root>/<skill>/sessions/*.json`)
@@ -3296,13 +3353,13 @@ def test_place_follows_the_origin_of_the_root(lk, tmp_path):
 
 `drive download` в 3.x без пути писал в текущий каталог. Это меняется на `inbox`. В CHANGELOG (Task 25) вписать строку «без пути — в inbox, а не в текущий каталог; `--dest .` возвращает прежнее».
 
-- [ ] **Step 1: Тесты (красные)** — по одному на команду. Без пути файл оказывается в `inbox` из `paths.yaml`, а в выводе есть `"defaulted": false`. Без `paths.yaml` файл оказывается в `~/.h2t/data/inbox` и `"defaulted": true`. `--dest` внутрь `~/.h2t/secrets` даёт `WriteRefused`, код выхода 3. Для evals: запись сессии создаёт `records/evals/<машина>/<скилл>/<прогон>.json`, где `<прогон>` — имя файла 3.x без расширения, `<prefix>-<stamp>-<uuid8>` (`eval/session.py:273-275`). Если файл с таким именем уже есть (`AlreadyExists`), пишется `<прогон>-2.json`, затем `-3` и т.д. Повтор не перезаписывает: `records` пишется через `create`. Для загрузок без пути: `test_default_download_never_overwrites` — в `inbox` уже лежит чужой файл с тем же именем → новый получает `-2`, чужой побайтно цел (R47); красный контроль — `exclusive=False` → FAIL.
+- [ ] **Step 1: Тесты (красные)** — по одному на команду. Без пути файл оказывается в `inbox` из `paths.yaml`, а в выводе есть `"defaulted": false`. Без `paths.yaml` файл оказывается в `~/.h2t/data/inbox` и `"defaulted": true`. `--dest` внутрь `~/.h2t/secrets` даёт `WriteRefused`, код выхода 3. Для evals: запись сессии создаёт `records/evals/<машина>/<скилл>/<прогон>.json`, где `<прогон>` — имя файла 3.x без расширения, `<prefix>-<stamp>-<uuid8>` (`eval/session.py:273-275`). Если файл с таким именем уже есть (`AlreadyExists`), пишется `<прогон>-2.json`, затем `-3` и т.д. Повтор не перезаписывает: `records` пишется через `create`. Для загрузок без пути: `test_default_download_never_overwrites` — в `inbox` уже лежит чужой файл с тем же именем → новый получает `-2`, чужой побайтно цел (R47); красный контроль — `exclusive=False` → FAIL. Gmail без `--output`: `test_gmail_attachment_name_from_the_message_part` (подставной `messages().get` с частью `filename: "../a/report.pdf"` → `inbox/report.pdf`) и `test_gmail_attachment_without_a_name_gets_the_fallback` (`<message_id>-<attachment_id[:12]>.bin`); Dropbox `download <path>` без `dest` → `inbox/<последний сегмент>`.
 
 - [ ] **Step 2: Реализация.**
 
 - [ ] **Step 3: Случаи песочницы** — `drive.download.default`, `drive.download.dest`, `gmail.attachment.default`, `notion.export.default`, `dropbox.download.default`, `research.save`, `research.fetch.save`, `research.maintenance`, `research.visual-ocr`, `evals.write-local`, `evals.spool` (подставной `EvalClient`, который открывает SQLite по переданному пути), `creative.profiles-dir`. Подставные провайдеры — как в тестах этих коннекторов; модули `research/store.py`, `fetch.py`, `maintenance.py`, `visual_ocr.py` должен исполнить хотя бы один случай (Task 24 проверяет это по `Recorder.writers`, R27).
 
-- [ ] **Step 4: Ratchet, прогон** (`tests/connectors tests/lifecycle/eval tests/tools/creative tests/governance`), **commit** — `git add h2t_ops/connectors/drive/client.py h2t_ops/connectors/drive/commands.py h2t_ops/connectors/gmail/client.py h2t_ops/connectors/notion/commands.py h2t_ops/connectors/dropbox/client.py h2t_ops/connectors/research/client.py h2t_ops/connectors/research/store.py h2t_ops/connectors/research/visual_ocr.py h2t_ops/connectors/research/fetch.py h2t_ops/connectors/research/maintenance.py h2t_ops/connectors/research/exa.py h2t_ops/lifecycle/eval/session.py h2t_ops/lifecycle/eval/status.py h2t_ops/tools/creative/cli.py h2t_ops/setup/sync.py tests/connectors/research/test_exa_script_cases.py`, каждый другой правленый тест по имени, `tests/governance/sandbox_cases.py`, `tests/governance/test_storage_ratchets.py`; `feat(storage): default places for downloads, research, evals, creative profiles (#548)`.
+- [ ] **Step 4: Ratchet, прогон** (`tests/connectors tests/lifecycle/eval tests/tools/creative tests/governance`), **commit** — `git add h2t_ops/connectors/drive/client.py h2t_ops/connectors/drive/commands.py h2t_ops/connectors/gmail/commands.py h2t_ops/connectors/dropbox/commands.py tests/connectors/gmail/test_commands.py tests/connectors/dropbox/test_commands.py h2t_ops/connectors/gmail/client.py h2t_ops/connectors/notion/commands.py h2t_ops/connectors/dropbox/client.py h2t_ops/connectors/research/client.py h2t_ops/connectors/research/store.py h2t_ops/connectors/research/visual_ocr.py h2t_ops/connectors/research/fetch.py h2t_ops/connectors/research/maintenance.py h2t_ops/connectors/research/exa.py h2t_ops/lifecycle/eval/session.py h2t_ops/lifecycle/eval/status.py h2t_ops/tools/creative/cli.py h2t_ops/setup/sync.py tests/connectors/research/test_exa_script_cases.py`, каждый другой правленый тест по имени, `tests/governance/sandbox_cases.py`, `tests/governance/test_storage_ratchets.py`; `feat(storage): default places for downloads, research, evals, creative profiles (#548)`.
 
 ### Task 13: Сессии и activity
 
@@ -3334,7 +3391,7 @@ def parse(raw: bytes) -> tuple[dict, bytes]          # raises ValueError on a br
 def session_path(machine: str, project: str, session_id: str) -> Path
 ```
 
-- `write_handoff(...)` → прежний словарь. md пишется через `store.replace(place="records.sessions")`: повторный handoff той же сессии обновляет её запись (§5). При `--markdown-dir` md пишется по этому пути с `dest=True`.
+- `write_handoff(...)` → прежний словарь. md пишется сначала `store.create(place="records.sessions")` (§7.2: новые md сессий — `create`). `AlreadyExists` → `session_record.parse` существующего файла: тот же `session_id`, `machine` и `project` — это запись этой сессии, повторный handoff обновляет её `store.replace` (§5); frontmatter другой или не разбирается — файл не трогается, md пишется `create` под следующим именем `store.unique_name` (`<id>-2.md`), в ответе `notes` называют оба пути. При `--markdown-dir` — то же правило с `dest=True`. Тест `test_existing_foreign_md_is_never_overwritten`: в каталоге лежит `<id>.md` без frontmatter → после handoff он побайтно цел, запись — в `<id>-2.md`; с тем же `session_id` — тот же файл обновлён. Красный контроль: вернуть сразу `replace` → FAIL.
 - **`latest.json` пока пишется** (R10): рядом с md, в `records/sessions/<машина>/<проект>/latest.json`, через `store.replace(place="records.sessions")` вместо `_write_json_atomic` (`:157-160` удалить); при `--markdown-dir` — по тому же каталогу с `dest=True`, как md. gather в этой же задаче читает `paths.records("sessions")` вместо `~/.h2t/sessions`, поэтому полный круг handoff → gather (`tests/lifecycle/test_handoff_gather_round_trip.py`) остаётся зелёным между Task 13 и Task 16. Task 16 переводит gather на индекс и перестаёт писать `latest.json`.
 - `writer.log_session_start/end` → `store.append(paths.activity_file(machine), …, place="records.activity")`. `H2T_ACTIVITY_SPOOL` не читается (R5).
 - Защитные ветки handoff ловят `OSError` (`handoff.py:221,260,269,276`); `store` бросает и `WriteRefused` (подкласс `ConfigError`): при `--markdown-dir` внутрь места пакета или при отказе записи вне `~/.h2t`, пока испорчен `paths.yaml` (R17). Ловить во всех четырёх `(OSError, H2TError)`: исключение после записи спула нарушало бы инвариант #391 (`gates.md`). Каталог md создаётся `store.mkdir(md_dir, place="records.sessions", dest=markdown_dir is not None)` — первая операция над этим путём, поэтому отказ `--markdown-dir` внутрь места пакета приходит в ветку `:221`.
@@ -3800,7 +3857,9 @@ def put(journal: Journal, target: Path, data: bytes, *, place: str, source: str,
                                                  # source_path/rule go into the created row (R25, R37)
 def journaled_create(journal: Journal, target: Path, data: bytes, *, place: str, source: str,
                      source_path: Path | None = None, rule: str | None = None,
-                     keys: tuple[str, ...] = ()) -> Path
+                     keys: tuple[str, ...] = (), compat: bool = False) -> Path
+                                                 # compat passed to store.create; True only for
+                                                 # MOVED-TO.txt markers (place="legacy")
                                                  # intent -> store.create(..., keys) -> created (R49);
                                                  # put, markers, layout.json, paths.yaml all create through it
 def put_union(journal: Journal, target: Path, data: bytes, *, place: str,
@@ -3830,7 +3889,7 @@ def rollback(*, sync_paused: bool) -> dict        # {"removed": [...], "restored
   - `layout.json` здесь не трогается: его запись журналирует фаза `markers` обычными строками `created`/`replaced`, и откат возвращает его тем же общим правилом (R44).
 - Фаза `config_backups` (R14): каждый `config/*.yaml.bak*` копируется `put` в `paths.backups_dir() / f"{name}.{YYYYmmdd-HHMMSS mtime}"`, затем под `store.migrating()` удаляется из `config/` (`store.remove(place="config")` разрешает это только для `*.yaml.bak*` во время миграции) с записью `journal.removed(path, place="config", prev=<байты копии>)` до удаления. У автора это `domains.yaml.bak`, `repo-mapping.yaml.bak` и созданный руками `domains.yaml.bak-desc`.
 - Фаза `verify` — `verify.phase_verify`, Task 22 (R25).
-- Фаза `markers` пишет `MOVED-TO.txt` под `store.migrating()` в каждый старый каталог, из которого что-то перенесено и который `store.classify` по-прежнему считает `legacy` (каталог, который стал объявленным местом — `~/.dor/lake/_cursors` при `lake: ~/.dor/lake`, R2, — классифицируется как `lake`, и маркер туда не пишется: это место пользователя) (текст: новое место и дата), через `journaled_create` (`AlreadyExists` — маркер уже есть с прошлого прогона: не трогать). Для файловых записей (`~/.dor/secrets.env` и т.п.) маркер ложится в их каталог: `paths.legacy_roots()` считает этот каталог старым корнем (Task 3). Затем `layout.json = {"layout": 1, "machine": …, "migrated_at": …, "journal": run_id}` (R44): файла нет → `journaled_create(journal, paths.layout_file(), …, place="layout", source="migration")`; файл есть (прежняя раскладка) → `journal.replaced(path, "layout", prev=<его байты>, new_sha=…)` до записи, затем `store.replace(..., place="layout")`. Отдельного снимка `layout.json` нет. Место `layout` вида `file` уже есть с Task 3 (`dir_of("layout")` → `layout_file()`, `store._PACKAGE` его содержит), строка `- {id: layout, kind: file, class: root, sync: never}` — в спеке v6.
+- Фаза `markers` пишет `MOVED-TO.txt` под `store.migrating()` в каждый старый каталог, из которого что-то перенесено и который `store.classify` по-прежнему считает `legacy` (каталог, который стал объявленным местом — `~/.dor/lake/_cursors` при `lake: ~/.dor/lake`, R2, — классифицируется как `lake`, и маркер туда не пишется: это место пользователя) (текст: новое место и дата), через `journaled_create(..., place="legacy", compat=True)` (`AlreadyExists` — маркер уже есть с прошлого прогона: не трогать). Для файловых записей (`~/.dor/secrets.env` и т.п.) маркер ложится в их каталог: `paths.legacy_roots()` считает этот каталог старым корнем (Task 3). Затем `layout.json = {"layout": 1, "machine": …, "migrated_at": …, "journal": run_id}` (R44): файла нет → `journaled_create(journal, paths.layout_file(), …, place="layout", source="migration")`; файл есть (прежняя раскладка) → `journal.replaced(path, "layout", prev=<его байты>, new_sha=…)` до записи, затем `store.replace(..., place="layout")`. Отдельного снимка `layout.json` нет. Место `layout` вида `file` уже есть с Task 3 (`dir_of("layout")` → `layout_file()`, `store._PACKAGE` его содержит), строка `- {id: layout, kind: file, class: root, sync: never}` — в спеке v6.
 - Каталоги `run/rollback/layout1-*` с `journal.jsonl` завершённых миграций (`finished()`) старше 30 дней `migrate` удаляет при следующем запуске: `store.remove_tree(place="run")`. Незавершённые не трогаются никогда (§7.5). Каталоги без `journal.jsonl` (снимки `sync`, `setup/sync.py:263-266`) и `claude-pending.json` чистка не трогает (R31).
 - `rollback` выполняется внутри `store.migrating()`: только так `remove(..., journal=True)` проходит для `MOVED-TO.txt` в старых каталогах.
 - `rollback(sync_paused=False)` → `UsageError` с текстом §7.5 про паузу синхронизации. При `True`, по журналу в обратном порядке:
@@ -3885,7 +3944,7 @@ def rollback(*, sync_paused: bool) -> dict        # {"removed": [...], "restored
 - Consumes: `secrets.migration_sources`, `secrets.shared_env_values`, `secrets.read_secret_bytes`, `secrets.notion_legacy_token`, `secrets.telegram_legacy_config`, `secrets.parse_env` (Task 6, R38 — других чтений секретов у миграции нет), `google_auth.durable_token` (Task 8, R37), `providers.*`, `engine.put`, `engine.put_union`, `engine.PhaseContext`, `engine.PhaseFailed`, `engine.quiet_sqlite_bytes` (R25), `Journal.winner/baseline/created/entries`, `paths.legacy`.
 - Produces:
   - `secrets_phase.phase_secrets(ctx)`, `secrets_phase.ladder() -> list[tuple[str, Path]]`, `secrets_phase.evals_ladder(lad)`, `secrets_phase.translated_extras() -> list[tuple[str, dict[str, str]]]` (источники `notion-token` и `telegram-config` с ключами в новых именах), `secrets_phase.plan_env()`;
-  - `verify.pairs(env)`, `verify.baseline() -> set[tuple[str, str]]`, `verify.verify_secrets(journal) -> list[str]`, `verify.verify_copies(journal) -> list[str]` (строки `created` с `source_path`: хэш источника и цели равны записанному), `verify.verify_transformed(journal) -> list[str]` (строки `created` с `rule: "google-durable"`, R37), `verify.phase_verify(ctx)` — все три сверки; непустой список → `PhaseFailed` с первыми пятью строками, фаза не отмечается сделанной (R25). Пустой список — сверка прошла.
+  - `verify.pairs(env)`, `verify.baseline() -> set[tuple[str, str]]`, `verify.verify_secrets(journal) -> list[str]`, `verify.verify_copies(journal) -> list[str]` (строки `created` с `source_path`: хэш источника и цели равны записанному), `verify.verify_transformed(journal) -> list[str]` (строки `created` с `rule: "google-durable"`, R37, и `rule: "activity-filter"` — его строки пишет Task 23), `verify.phase_verify(ctx)` — все три сверки; непустой список → `PhaseFailed` с первыми пятью строками, фаза не отмечается сделанной (R25). Пустой список — сверка прошла.
 
 Источники и старшинство (§8 п. 2, R6):
 
@@ -4041,8 +4100,15 @@ def _field_hashes(d: dict) -> dict[str, str]:
 
 def verify_transformed(journal) -> list[str]:
     """Transformed copies by rule (§8 п. 6, R37): the Google token keeps every durable field
-    of its source, by hash, and none of the dropped ones."""
+    of its source, by hash, and none of the dropped ones. Task 23 adds the rule
+    "activity-filter": the target equals the filtered source, by hash."""
     problems = []
+    for r in (r for r in journal.entries() if r["op"] == "created" and r.get("rule") == "activity-filter"):
+        from h2t_ops.setup.layout import phases          # Task 23
+        want = phases.filter_activity(Path(r["source_path"]).read_bytes())[0]
+        got = Path(r["path"]).read_bytes() if Path(r["path"]).is_file() else None
+        if got is None or hashlib.sha256(got).hexdigest() != hashlib.sha256(want).hexdigest():
+            problems.append(f"{r['path']}: is not the filtered {r['source_path']}")
     for r in (r for r in journal.entries() if r["op"] == "created" and r.get("rule") == "google-durable"):
         src = google_auth.durable_token(json.loads(secrets.read_secret_bytes(Path(r["source_path"]))))
         dst = json.loads(secrets.read_secret_bytes(Path(r["path"])))
@@ -4109,17 +4175,18 @@ def phase_verify(ctx) -> None:
 - Modify: `h2t_ops/setup/sync.py:879-951` (`run`: после шага 7, если `cli_ok`, вызов `layout.engine.migrate(report, machine=None)`; `dev_sync` миграцию **не** вызывает — на машинах автора её запускают явно `h2t-setup layout migrate`). Перенесено из Task 21 (R24)
 - Create: `tests/setup/layout/test_phases.py`
 - Modify: `tests/setup/test_sync_converges.py` (тест подключения, Step 4)
+- Modify: `h2t_ops/setup/layout/verify.py` (ветка правила `activity-filter` в `verify_transformed` написана в Task 22 и импортирует `phases` лениво — до этой задачи строк с этим правилом нет; здесь — её тест, а правка `verify.py`, только если подпись `filter_activity` разошлась)
 
 **Interfaces:**
 - Consumes: `engine.put`, `engine.PhaseContext`, `engine.PhaseFailed`, `session_record.render/parse`, `index.rebuild`, `engine.quiet_sqlite_bytes` (R25), `secrets.migration_sources` (R38), `secrets_phase.evals_ladder`, `paths.old_env_by_use("lake")`, `paths.old_env_by_use("evals-spool-source")` (R22), `paths.*`.
-- Produces: `phase_sessions`, `phase_telegram` (только `dialogs_bootstrapped` → `state/telegram/`; сессия и auth-state ушли в фазу секретов), `phase_evals`, `phase_activity`, `phase_cursors`, `phase_registry`, `phase_data`, `phase_paths_yaml`, `phase_index`, `PYTEST_SESSION_IDS`, `PYTEST_PROJECTS`. `phase_config_backups` — в `engine.py` (Task 21, R24). Байтовые копии фаз пишутся `put(..., source_path=<источник>)`: их сверяет `verify.phase_verify` (Task 22).
+- Produces: `phase_sessions`, `phase_telegram` (только `dialogs_bootstrapped` → `state/telegram/`; сессия и auth-state ушли в фазу секретов), `phase_evals`, `phase_activity`, `phase_cursors`, `phase_registry`, `phase_data`, `phase_paths_yaml`, `phase_index`, `PYTEST_SESSION_IDS`, `PYTEST_PROJECTS`, `filter_activity(raw: bytes) -> tuple[bytes, int]` (строки без строк тестов и число пропущенных; одна функция для фазы и для `verify_transformed`, правило `activity-filter`). `phase_config_backups` — в `engine.py` (Task 21, R24). Байтовые копии фаз пишутся `put(..., source_path=<источник>)`: их сверяет `verify.phase_verify` (Task 22).
 
 | Фаза | Источник | Куда | Проверка |
 |---|---|---|---|
 | `sessions` | `legacy("sessions.h2t")/<машина>/**/*.md`, `legacy("sessions.dor")/<машина>/**/*.md`; других машин — **нет** | `records/sessions/<машина>/<проект>/<stem>.md` | тело после frontmatter побайтно равно источнику; `migrated_from: <путь>@<sha256>` |
 | `telegram` | `legacy("telegram")/dialogs_bootstrapped` | `state/telegram/dialogs_bootstrapped` | хэш |
 | `evals` | `legacy("evals")/<скилл>/sessions/*.json`; спул — порядок 3.x (`eval/session.py:299-303`, где `self._env` = окружение поверх файла секретов): `paths.old_env_by_use("evals-spool-source")` (окружение) → тот же ключ в значениях `secrets.migration_sources()` в порядке `secrets_phase.evals_ladder` (`~/.dor/secrets.env` первым; файлы читает только `secrets.py`, R38; имя ключа берётся как `[n for n, u in paths.OLD_ENV.items() if u == "evals-spool-source"]`, литерал не пишется, R22) → `legacy("evals")/.h2t_evals_spool.db`; **байтовая** копия (§8 п. 6, R25): `data = engine.quiet_sqlite_bytes(src)` — рядом `-wal`/`-journal`/`-shm` или `stat` изменился за чтение → `ConfigError` «закройте процесс evals (сессию Claude с включёнными evals) и запустите `h2t-setup layout migrate` снова»; затем `put(..., place="state", source_path=src)` | `records/evals/<машина>/<скилл>/<файл>`; `state/evals-spool.sqlite` | хэш для json и для спула (`verify_copies`) |
-| `activity` | `legacy("activity")/spool.jsonl` **без строк тестов** (R15): строка пропускается, если её `session_id` в `PYTEST_SESSION_IDS` или `project` в `PYTEST_PROJECTS` | `records/activity/<машина>.jsonl` | копия равна источнику без пропущенных строк (сверка по строкам); число пропущенных — в отчёт (`notes`) |
+| `activity` | `legacy("activity")/spool.jsonl` **без строк тестов** (R15): строка пропускается, если её `session_id` в `PYTEST_SESSION_IDS` или `project` в `PYTEST_PROJECTS` | `records/activity/<машина>.jsonl` | по правилу `activity-filter`: `put(..., source_path=src, rule="activity-filter")`; `verify.verify_transformed` пересчитывает `phases.filter_activity(<строки источника>)` и сравнивает `sha256` с файлом цели; число пропущенных — в отчёт (`notes`) |
 | `cursors` | `legacy("lake.dor")/_cursors/{granola,meetgeek}.json` | `state/cursors/<провайдер>.json` | хэш |
 | `registry` | `legacy("registry.dor")` | `records/imports/dor-registry.jsonl` | хэш |
 | `data` | `legacy("research")/**`, `legacy("creative")/**` (R9) | `data/research/**`, `data/creative/profiles/**` | хэш |
@@ -4160,7 +4227,7 @@ PYTEST_PROJECTS = frozenset({"explicit-id", "derived-id", "unmapped-checkout"})
   - старые файлы побайтно целы: хэши до и после совпадают;
   - откат удаляет всё созданное, и хэши старых файлов снова совпадают.
 
-  По фазам дополнительно: `test_activity_drops_pytest_rows_and_counts_them` (5 настоящих строк и 3 строки с id из `PYTEST_SESSION_IDS` → в копии 5, в `notes` «3 test rows skipped»); `test_same_body_in_both_session_dirs_is_one_file` (тела равны, пути разные → один md, без `.from-dor`); `test_paths_yaml_takes_lake_from_old_variable_and_never_writes_vault`.
+  По фазам дополнительно: `test_activity_copy_verified_by_rule` (после фазы дописать строку в `records/activity/<машина>.jsonl` → `verify_transformed` возвращает `is not the filtered`; красный контроль — убрать ветку `activity-filter` → FAIL), `test_activity_drops_pytest_rows_and_counts_them` (5 настоящих строк и 3 строки с id из `PYTEST_SESSION_IDS` → в копии 5, в `notes` «3 test rows skipped»); `test_same_body_in_both_session_dirs_is_one_file` (тела равны, пути разные → один md, без `.from-dor`); `test_paths_yaml_takes_lake_from_old_variable_and_never_writes_vault`.
 
   Контрольный тест (§12) — `test_old_dirs_renamed_connectors_still_work`. После миграции старые каталоги переименовываются в `*.gone`. Затем `secrets.get` для каждого провайдера, `google_auth.resolve_google_credentials` (на подставном рефреше) и `TelegramClientAdapter()._load_config()` по-прежнему находят значения.
 
@@ -4172,7 +4239,7 @@ PYTEST_PROJECTS = frozenset({"explicit-id", "derived-id", "unmapped-checkout"})
 
 - [ ] **Step 4: Подключение к `sync`** (перенесено из Task 21, R24). В `sync.run` после шага 7: если `cli_ok`, вызвать `layout.engine.migrate(report, machine=None)`; если фаза имени машины остановилась, подсказка в отчёте — `h2t-setup layout migrate --machine <имя>`. Тест в `tests/setup/test_sync_converges.py`: прогон `sync.run` на подставных `uv`/`claude` создаёт `layout.json`, а повторный прогон оставляет `notes` с `layout 1: already`. Красный контроль: убрать вызов → тест FAIL (`layout.json` нет). Вернуть.
 
-- [ ] **Step 5: Прогон** (`tests/setup tests/governance tests/lifecycle`), `--check`, **commit** — `git add h2t_ops/setup/layout/phases.py h2t_ops/setup/layout/engine.py h2t_ops/setup/sync.py tests/setup/layout/test_phases.py tests/setup/test_sync_converges.py` (+ `tests/governance/test_storage_ratchets.py`, если потолки сдвинулись); `feat(setup): layout 1 phases — sessions, telegram, evals, activity, cursors, registry, data; sync runs the migration (#548)`.
+- [ ] **Step 5: Прогон** (`tests/setup tests/governance tests/lifecycle`), `--check`, **commit** — `git add h2t_ops/setup/layout/phases.py h2t_ops/setup/layout/engine.py h2t_ops/setup/layout/verify.py h2t_ops/setup/sync.py tests/setup/layout/test_phases.py tests/setup/test_sync_converges.py` (+ `tests/governance/test_storage_ratchets.py`, если потолки сдвинулись); `feat(setup): layout 1 phases — sessions, telegram, evals, activity, cursors, registry, data; sync runs the migration (#548)`.
 
 ### Task 24: Сторожа на ноль
 
@@ -4273,7 +4340,7 @@ def test_every_writer_is_exercised(module, observed):
 
 - [ ] **Step 1: Тексты.** Каждое упоминание старого места в скилле заменяется командой `h2t-ops paths get <id>`, а не новым путём. Так текст не устареет при следующем переносе.
 
-- [ ] **Step 2: Тест ссылок на старые места в скиллах.** `tests/governance/test_skills_name_no_legacy_paths.py`: `grep` по `plugins/**/*.md` для `~/.dor/`, `~/.config/(google-calendar-mcp|gmail|notion|telegram)`, `~/.h2t/sessions`, `~/.h2t/config/secrets` даёт 0. Исключение — строки, которые описывают миграцию: они содержат слово `legacy` или `3.x`.
+- [ ] **Step 2: Тест ссылок на старые места в скиллах.** `tests/governance/test_skills_name_no_legacy_paths.py`: `grep` по `plugins/**/SKILL.md` и `plugins/**/references/*.md` (не по `CHANGELOG.md`: это история, `plugins/h2t-core/CHANGELOG.md:45`, `plugins/h2t-ops/CHANGELOG.md:83` описывают старые выпуски и не правятся) для `~/.dor/`, `~/.config/(google-calendar-mcp|gmail|notion|telegram)`, `~/.h2t/sessions`, `~/.h2t/config/secrets` даёт 0. Исключение — строки, которые описывают миграцию: они содержат слово `legacy` или `3.x`.
 
 - [ ] **Step 3: Issues — тексты** (только файлы, без отправки). Для POS, `…-storage-issue-pos-google.md`: таблица §9, ещё три пункта.
   - `mentions_cache.json` с #403 никто не пишет; упоминания брать из `h2t-ops telegram mentions --json`.
