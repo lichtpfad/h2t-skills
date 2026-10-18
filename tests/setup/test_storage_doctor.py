@@ -209,6 +209,21 @@ def test_from_copies_are_found_in_every_destination():
     assert all(SECRET not in t for t in texts)
 
 
+def test_numbered_from_copies_are_listed_by_key_and_session_copies_by_hash():
+    """A second clash gives <stem>-2.from-<source> (store.unique_name): an env copy shows its
+    keys, as the first one does; a session md's copies show their hash (Task 23)."""
+    _write(paths.secrets_shared() / "meetgeek.env-2.from-dor", f"MEETGEEK_API_KEY={SECRET}\n")
+    leaf = paths.records("sessions") / "m" / "p"
+    _write(leaf / "s.md.from-dor", "fake-md-dor")
+    _write(leaf / "s.md-2.from-dor", "fake-md-dor-2")
+    texts = _texts("from-copies")
+    assert f"~/.h2t/secrets/shared/meetgeek.env-2.from-dor: MEETGEEK_API_KEY (len {len(SECRET)}, " \
+           f"sha256 {storage_doctor._sha12(SECRET.encode())})" in texts
+    for name, body in (("s.md.from-dor", "fake-md-dor"), ("s.md-2.from-dor", "fake-md-dor-2")):
+        assert f"~/.h2t/records/sessions/m/p/{name}: sha256 {storage_doctor._sha12(body.encode())}" in texts
+    assert all(SECRET not in t for t in texts)
+
+
 def test_from_copy_that_is_not_utf8_is_unreadable_and_doctor_exits_0(capsys):
     p = paths.secrets_shared() / "exa.env.from-dor"
     p.parent.mkdir(parents=True)

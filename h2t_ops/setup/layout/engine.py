@@ -112,15 +112,18 @@ def put_union(journal: Journal, target: Path, data: bytes, *, place: str,
     return target
 
 
-def quiet_sqlite_bytes(src: Path, *, read: Callable[[Path], bytes] = Path.read_bytes) -> bytes:
+def quiet_sqlite_bytes(src: Path, *, read: Callable[[Path], bytes] = Path.read_bytes,
+                       who: str | None = None) -> bytes:
     """A database copied as bytes must be at rest (R25): no journal beside it, and the same
-    size and mtime before and after the read. Otherwise the copy could be torn."""
+    size and mtime before and after the read. Otherwise the copy could be torn.
+    who: the program to close, when the file's name does not tell (a spool path from
+    H2T_EVALS_SPOOL may be named anything)."""
     src = Path(src)
-    if src.suffix == ".session":
+    if who is None and src.suffix == ".session":
         who = "Telegram"
-    elif "evals" in src.name:
+    elif who is None and "evals" in src.name:
         who = "the evals process (a Claude session with evals on)"
-    else:
+    elif who is None:
         who = f"the program that has {src.name} open"
     hint = f"close {who} and run `h2t-setup layout migrate` again"
     for side in ("-wal", "-journal", "-shm"):
@@ -291,13 +294,22 @@ def phase_markers(ctx: PhaseContext) -> None:
 
 
 def _phase_funcs() -> dict[str, Callable[[PhaseContext], None]]:
-    """The explicit table (R24); Task 23 adds its phases here. Imported here, not at the
-    top: the phase modules write through this one."""
-    from h2t_ops.setup.layout import secrets_phase, verify
+    """The explicit table (R24): every phase in PHASES. Imported here, not at the top: the
+    phase modules write through this one."""
+    from h2t_ops.setup.layout import phases, secrets_phase, verify
     return {
         "snapshot": phase_snapshot,
         "secrets": secrets_phase.phase_secrets,
+        "sessions": phases.phase_sessions,
+        "telegram": phases.phase_telegram,
+        "evals": phases.phase_evals,
+        "activity": phases.phase_activity,
+        "cursors": phases.phase_cursors,
+        "registry": phases.phase_registry,
+        "data": phases.phase_data,
         "config_backups": phase_config_backups,
+        "paths_yaml": phases.phase_paths_yaml,
+        "index": phases.phase_index,
         "verify": verify.phase_verify,
         "markers": phase_markers,
     }

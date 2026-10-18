@@ -261,7 +261,7 @@ def migration_sources() -> list[tuple[str, Path, dict[str, str]]]:
 
 # A .from- copy, and the numbered one store.unique_name gives on a second clash:
 # meetgeek.env.from-dor, then meetgeek.env-2.from-dor (stem + -N + suffix).
-_ENV_COPY = re.compile(r"\.env(-\d+)?\.from-")
+ENV_COPY = re.compile(r"\.env(-\d+)?\.from-")
 
 
 def shared_env_values() -> dict[str, dict[str, str]]:
@@ -269,7 +269,7 @@ def shared_env_values() -> dict[str, dict[str, str]]:
     if not shared.is_dir():
         return {}
     return {p.name: _read_env_named(p) for p in sorted(shared.iterdir())
-            if p.name.endswith(".env") or _ENV_COPY.search(p.name)}
+            if p.name.endswith(".env") or ENV_COPY.search(p.name)}
 
 
 def read_secret_bytes(path: Path, *, root: Path | None = None) -> bytes:

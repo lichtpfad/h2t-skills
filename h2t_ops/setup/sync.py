@@ -877,6 +877,17 @@ def dev_sync(uv, execute, claude, cwd: str | None = None, add_extras=()) -> Repo
     return report
 
 
+def _layout_step(report: Report) -> None:
+    """Layout 1 after the CLI is in place (#548 §8, R13). A held lock or an unfinished
+    rollback is this step's outcome, not the end of sync; a phase that stops (the machine
+    name among them) is already in report.failed with its own command."""
+    from h2t_ops.setup.layout import engine
+    try:
+        engine.migrate(report, machine=None)
+    except ConfigError as exc:
+        report.failed.append(("layout 1: migrate", "\n".join(s for s in (str(exc), exc.hint) if s)))
+
+
 def run(mode: str, target: dict | None, argv: list[str], *, uv=None, claude=None,
         confirm=None, execute=None, which=shutil.which, fetch=None) -> Report:
     """Steps 3–8 of §7.3. Every step compares the fact with the target and skips what
@@ -942,6 +953,8 @@ def run(mode: str, target: dict | None, argv: list[str], *, uv=None, claude=None
                 report.done.append("plugin cache: removed " + ", ".join(
                     f"{d.parent.name} {d.name}" for d in removed))
             report.notes += [_profiles_note(d, names) for d, names in held_back]
+    if cli_ok:
+        _layout_step(report)
     report.reload_needed = changed                                            # 8
     if changed:
         report.notes.append("Open Claude Code sessions: run /reload-plugins or start a new "

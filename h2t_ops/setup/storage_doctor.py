@@ -264,7 +264,7 @@ def _from_copy(p: Path) -> str:
                      for s in (paths.root() / "secrets", paths.secrets_shared(), paths.secrets_local()))
     try:
         raw = secrets.read_secret_bytes(p) if in_secrets else p.read_bytes()
-        if ".env.from-" not in p.name:
+        if not secrets.ENV_COPY.search(p.name):      # numbered too: exa.env-2.from-dor
             return f"{_show(p)}: sha256 {_sha12(raw)}"
         values = secrets.parse_env(raw.decode("utf-8"))
     except (ConfigError, OSError, UnicodeDecodeError) as exc:

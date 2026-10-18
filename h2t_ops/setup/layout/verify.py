@@ -98,16 +98,24 @@ def _secret_json(path: Path) -> dict | None:
 
 def verify_transformed(journal) -> list[str]:
     """Transformed copies by rule (§8 п. 6, R37): the Google token keeps every durable field
-    of its source, by hash, and none of the dropped ones. Task 23 adds the rule
-    "activity-filter": the target equals the filtered source, by hash."""
+    of its source, by hash, and none of the dropped ones. "activity-filter": the legacy part
+    of the target is the filtered source — every kept row in it, no dropped row (the file
+    may hold live rows too, merged or appended). "session-body": the body after the
+    frontmatter is the source, byte for byte, and migrated_from carries its hash."""
     problems = []
     rows = journal.entries()
-    for r in (r for r in rows if r["op"] == "created" and r.get("rule") == "activity-filter"):
-        from h2t_ops.setup.layout import phases  # Task 23
-        want = phases.filter_activity(Path(r["source_path"]).read_bytes())[0]
-        got = Path(r["path"]).read_bytes() if Path(r["path"]).is_file() else None
-        if got is None or hashlib.sha256(got).hexdigest() != hashlib.sha256(want).hexdigest():
-            problems.append(f"{r['path']}: is not the filtered {r['source_path']}")
+    # lazy: phases imports secrets_phase, which imports this module
+    from h2t_ops.setup.layout import phases
+    for r in (r for r in rows if r["op"] in ("created", "replaced")
+              and r.get("rule") in ("activity-filter", "session-body")):
+        src, dst = Path(r["source_path"]), Path(r["path"])
+        got = dst.read_bytes() if dst.is_file() else None
+        raw = src.read_bytes() if src.is_file() else None
+        if r["rule"] == "activity-filter":
+            if got is None or raw is None or not phases.activity_holds(raw, got):
+                problems.append(f"{r['path']}: is not the filtered {r['source_path']}")
+        elif got is None or raw is None or not phases.session_body_holds(raw, got, r["source_path"]):
+            problems.append(f"{r['path']}: its body is not {r['source_path']}")
     for r in (r for r in rows if r["op"] == "created" and r.get("rule") == "google-durable"):
         raw = _secret_json(Path(r["source_path"]))
         dst = _secret_json(Path(r["path"]))

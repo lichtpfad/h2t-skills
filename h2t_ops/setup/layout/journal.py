@@ -121,10 +121,18 @@ class Journal:
             n += 1
 
     def replaced(self, path: Path, place: str, prev: bytes, new_sha: str, *,
-                 keys: tuple[str, ...] = ()) -> str:
+                 keys: tuple[str, ...] = (), source_path: Path | None = None,
+                 rule: str | None = None) -> str:
+        """source_path and rule: a transform merged into a file already there (activity),
+        checked by verify_transformed as a created one would be."""
         ref = self.save_prev(prev, keys=keys)
-        self._row({"op": "replaced", "path": str(path), "place": place,
-                   "prev_sha": store.sha256(prev), "new_sha": new_sha, "prev": ref})
+        row = {"op": "replaced", "path": str(path), "place": place,
+               "prev_sha": store.sha256(prev), "new_sha": new_sha, "prev": ref}
+        if source_path is not None:
+            row["source_path"] = str(source_path)
+        if rule is not None:
+            row["rule"] = rule
+        self._row(row)
         return ref
 
     def removed(self, path: Path, place: str, prev: bytes, *, keys: tuple[str, ...] = ()) -> str:
