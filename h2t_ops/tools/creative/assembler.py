@@ -3,12 +3,12 @@
 import argparse
 import html
 import re
-import shutil
 import sys
 from pathlib import Path
 
 import yaml
 
+from h2t_ops.core import store
 from h2t_ops.resources import resource_dir
 
 PLUGIN_ROOT = resource_dir("creative")
@@ -162,6 +162,11 @@ def _build_profile_css(profile_dir: Path, sections: list, palette: str = "defaul
     return "\n".join(parts)
 
 
+def _write(out_dir: Path, name: str, data: str | bytes) -> None:
+    """--out is a directory the user named (plan R7): each file is replaced through store."""
+    store.replace(out_dir / name, data, place="repo", dest=True)
+
+
 def _build_base_css(base_dir: Path) -> str:
     return "\n".join(
         (base_dir / f).read_text(encoding="utf-8")
@@ -179,7 +184,6 @@ def assemble_landing(
 ) -> None:
     if base_dir is None:
         base_dir = BASE_DIR
-    out_dir.mkdir(parents=True, exist_ok=True)
     sections = recipe.get("sections", [])
     body = "\n".join(_build_section_html(s, profile_dir) for s in sections)
     has_fx = _has_fx(profile_dir)
@@ -191,13 +195,11 @@ def assemble_landing(
         fx_canvas=fx_canvas,
         fx_script=fx_script,
     )
-    (out_dir / "index.html").write_text(index_html, encoding="utf-8")
-    (out_dir / "base.css").write_text(_build_base_css(base_dir), encoding="utf-8")
-    (out_dir / "profile.css").write_text(
-        _build_profile_css(profile_dir, sections, palette=palette), encoding="utf-8"
-    )
+    _write(out_dir, "index.html", index_html)
+    _write(out_dir, "base.css", _build_base_css(base_dir))
+    _write(out_dir, "profile.css", _build_profile_css(profile_dir, sections, palette=palette))
     if has_fx:
-        shutil.copy(profile_dir / "fx" / "background.js", out_dir / "fx.js")
+        _write(out_dir, "fx.js", (profile_dir / "fx" / "background.js").read_bytes())
 
 
 # --- Deck ---
@@ -286,7 +288,6 @@ def assemble_deck(
 ) -> None:
     if base_dir is None:
         base_dir = BASE_DIR
-    out_dir.mkdir(parents=True, exist_ok=True)
     slides_data = recipe.get("slides", [])
     slides_html = "\n".join(_build_deck_slide_html(s) for s in slides_data)
     menu_links = "\n".join(
@@ -308,13 +309,11 @@ def assemble_deck(
         nav_js=_DECK_NAV_JS,
         fx_script=fx_script,
     )
-    (out_dir / "index.html").write_text(index_html, encoding="utf-8")
-    (out_dir / "base.css").write_text(_build_base_css(base_dir), encoding="utf-8")
-    (out_dir / "profile.css").write_text(
-        _build_profile_css(profile_dir, [], palette=palette), encoding="utf-8"
-    )
+    _write(out_dir, "index.html", index_html)
+    _write(out_dir, "base.css", _build_base_css(base_dir))
+    _write(out_dir, "profile.css", _build_profile_css(profile_dir, [], palette=palette))
     if has_fx:
-        shutil.copy(profile_dir / "fx" / "background.js", out_dir / "fx.js")
+        _write(out_dir, "fx.js", (profile_dir / "fx" / "background.js").read_bytes())
 
 
 # --- Shared entry points ---

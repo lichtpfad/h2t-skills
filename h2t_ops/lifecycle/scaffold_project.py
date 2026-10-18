@@ -12,11 +12,14 @@ import subprocess
 import sys
 from pathlib import Path
 
+from h2t_ops.core import store
 from h2t_ops.tools.docs.project_types import PROJECT_TYPES, SCAFFOLD_TYPE_TO_TEMPLATE
 
 # The project types and docs-init ship in the package (h2t_ops.tools.docs): no h2t-dev
 # plugin tree to find them in.
 _PROJECT_TYPES_AVAILABLE = True
+
+_COMMAND = "h2t-scaffold-project"   # its allow-list: h2t_ops/core/repo_writers.py
 
 
 _H2T_LINT_ENTRIES = """\
@@ -153,11 +156,8 @@ def write_setup_report(
             "project_dir_exists": project_dir.exists(),
         },
     }
-    out = project_dir / ".h2t" / "project-setup-report.json"
-    out.parent.mkdir(parents=True, exist_ok=True)
-    tmp = out.with_suffix(out.suffix + ".tmp")
-    tmp.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
-    tmp.replace(out)
+    store.repo(project_dir, _COMMAND).replace(".h2t/project-setup-report.json",
+                                              json.dumps(report, ensure_ascii=False, indent=2))
     return report
 
 
@@ -215,11 +215,9 @@ frontmatter_dirs:
 
 def write_structure_yaml(project_dir: Path) -> bool:
     """Write .h2t/structure.yaml if it doesn't exist. Returns True if written."""
-    yaml_path = project_dir / ".h2t" / "structure.yaml"
-    if yaml_path.exists():
+    if (project_dir / ".h2t" / "structure.yaml").exists():
         return False
-    yaml_path.parent.mkdir(parents=True, exist_ok=True)
-    yaml_path.write_text(_STRUCTURE_YAML_TEMPLATE, encoding="utf-8")
+    store.repo(project_dir, _COMMAND).create(".h2t/structure.yaml", _STRUCTURE_YAML_TEMPLATE)
     return True
 
 
@@ -258,12 +256,13 @@ def cmd_create(args: argparse.Namespace) -> dict:
 
     is_merge = project_dir.exists() and args.merge
     if not is_merge:
-        project_dir.mkdir(parents=True)
+        store.mkdir(project_dir, place="repo", dest=True)   # the directory you named
         actions = [f"Created {project_dir}"]
         status_key = "ok"
     else:
         actions = [f"Merging into existing {project_dir}"]
         status_key = "merged"
+    rw = store.repo(project_dir, _COMMAND)
 
     created_files: list[str] = []
 
@@ -274,7 +273,7 @@ def cmd_create(args: argparse.Namespace) -> dict:
         if dp.exists():
             actions.append(f"Skipped {d}/ — path exists as file, not dir")
             continue
-        dp.mkdir(exist_ok=True)
+        rw.mkdir(d)
         actions.append(f"Created {project_dir / d}")
 
     gi_path = project_dir / ".gitignore"
@@ -282,24 +281,22 @@ def cmd_create(args: argparse.Namespace) -> dict:
         gi_content = DCC_GITIGNORE if type_base == "dcc" else GITIGNORE_TEMPLATES.get(
             args.stack or "none", GITIGNORE_TEMPLATES["none"]
         )
-        gi_path.write_text(gi_content, encoding="utf-8")
+        rw.create(".gitignore", gi_content)
         actions.append("Created .gitignore")
         created_files.append(".gitignore")
 
     desc = args.description or "TODO"
     readme_path = project_dir / "README.md"
     if not readme_path.exists():
-        readme_path.write_text(README_TEMPLATE.format(id=args.id, description=desc), encoding="utf-8")
+        rw.create("README.md", README_TEMPLATE.format(id=args.id, description=desc))
         actions.append("Created README.md")
         created_files.append("README.md")
 
     claude_path = project_dir / "CLAUDE.md"
     if not claude_path.exists():
         stack_display = args.stack if (args.stack and args.stack != "none") else "N/A"
-        claude_path.write_text(
-            CLAUDE_MD_TEMPLATE.format(id=args.id, description=desc, stack_display=stack_display),
-            encoding="utf-8",
-        )
+        rw.create("CLAUDE.md",
+                  CLAUDE_MD_TEMPLATE.format(id=args.id, description=desc, stack_display=stack_display))
         actions.append("Created CLAUDE.md")
         created_files.append("CLAUDE.md")
 
@@ -307,8 +304,7 @@ def cmd_create(args: argparse.Namespace) -> dict:
     # .gitkeep so the directory exists from day one and CI's truth-gate can point a command at it.
     artifacts_dir = project_dir / "docs" / ".artifacts"
     if (project_dir / "docs").is_dir() and not artifacts_dir.exists():
-        artifacts_dir.mkdir(parents=True)
-        (artifacts_dir / ".gitkeep").write_text("", encoding="utf-8")
+        rw.create("docs/.artifacts/.gitkeep", "")
         actions.append("Created docs/.artifacts/ (run evidence store)")
         created_files.append("docs/.artifacts/.gitkeep")
 
@@ -480,20 +476,33 @@ def _entry_commands(entry: dict) -> list[str]:
 
 
 def ensure_hook_report_cache_ignored(project_dir: Path) -> None:
-    exclude = project_dir / ".git" / "info" / "exclude"
+    dot_git = project_dir / ".git"
+    if dot_git.is_dir():
+        exclude = (dot_git / "info" / "exclude").resolve()
+    elif dot_git.is_file():
+        # A worktree: git names the file, and info/exclude is the main repository's,
+        # outside project_dir.
+        r = _run(["git", "rev-parse", "--git-path", "info/exclude"], cwd=str(project_dir))
+        if r.returncode != 0 or not r.stdout.strip():
+            return
+        exclude = (project_dir / r.stdout.strip()).resolve()
+    else:
+        return
     if not exclude.parent.exists():
         return
     existing = exclude.read_text(encoding="utf-8") if exclude.exists() else ""
     line = ".h2t/lifecycle/*.json"
     if line not in existing.splitlines():
         suffix = "" if existing.endswith("\n") or not existing else "\n"
-        exclude.write_text(existing + suffix + line + "\n", encoding="utf-8")
+        root = project_dir.resolve()
+        if root in exclude.parents:
+            store.repo(root, _COMMAND).append(exclude.relative_to(root).as_posix(), suffix + line)
+        else:   # the path came from this repository's git, not from the user
+            store.append(exclude, suffix + line, place="repo", dest=True)
 
 
 def install_hooks(project_dir: Path) -> dict:
-    claude_dir = project_dir / ".claude"
-    claude_dir.mkdir(exist_ok=True)
-    settings_path = claude_dir / "settings.json"
+    settings_path = project_dir / ".claude" / "settings.json"
     if settings_path.exists():
         try:
             data = json.loads(settings_path.read_text(encoding="utf-8"))
@@ -512,7 +521,7 @@ def install_hooks(project_dir: Path) -> dict:
             )
             if not already_present:
                 existing.append(entry)
-    settings_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    store.repo(project_dir, _COMMAND).replace(".claude/settings.json", json.dumps(data, indent=2))
     ensure_hook_report_cache_ignored(project_dir)
     return {"status": "ok", "path": str(settings_path)}
 

@@ -65,7 +65,10 @@ def test_a_shipped_profile_still_assembles_with_no_user_dir(home, tmp_path):
     assert cli.main(["assemble", "--profile", "h2t-default", "--type", "landing",
                      "--recipe", str(_recipe(tmp_path)), "--out", str(out)]) == 0
     assert (out / "index.html").is_file()
-    assert not (home / ".h2t").exists(), "assembling must not create the user directory"
+    # The --out files go through store (R7), which logs them under ~/.h2t/logs (§7.2);
+    # what must not appear is the profile directory.
+    assert not (home / ".h2t" / "data" / "creative").exists(), "assembling must not create the user directory"
+    assert not (home / ".h2t" / "creative").exists()
 
 
 def test_an_unknown_profile_fails(home, tmp_path, capsys):

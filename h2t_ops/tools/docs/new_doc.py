@@ -11,6 +11,8 @@ import re
 import subprocess
 from pathlib import Path
 
+from h2t_ops.core import store
+
 from .common import FRONTMATTER_RULES
 
 # kind -> directory (relative to repo root)
@@ -116,6 +118,5 @@ def create_doc(
         lines.append(f'reason: "{reason}"')
     lines += ["---", "", f"# {doc_title}", ""]
 
-    target_dir.mkdir(parents=True, exist_ok=True)
-    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    store.repo(rp, "h2t-docs-lint new").create(path.relative_to(rp).as_posix(), "\n".join(lines) + "\n")
     return path

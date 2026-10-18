@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from h2t_ops.core import store
 from h2t_ops.resources import resource_dir
 from h2t_ops.tools.runbook import runbook_schema as S
 from h2t_ops.tools.runbook.validate_runbook import validate_or_raise
@@ -55,6 +56,5 @@ def render(*, title: str, today: str, runbook_path: str, branch: str, spec_path:
 
 def create_runbook(dest: str, **fields: str) -> Path:
     p = Path(dest)
-    p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(render(**fields), encoding="utf-8")
+    store.replace(p, render(**fields), place="repo", dest=True)   # the path you named
     return p

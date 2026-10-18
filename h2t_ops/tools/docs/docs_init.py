@@ -5,6 +5,8 @@ import argparse
 import sys
 from pathlib import Path
 
+from h2t_ops.core import store
+
 from .common import (
     DEV_ROOT,
     REQUIRED_CORE_DIRS,
@@ -124,6 +126,7 @@ def init_repo(
         return None
 
     project_data = _load_project(name)
+    rw = store.repo(rp, "h2t-docs-init")
     changes = []
     action = "would create" if dry_run else "created"
 
@@ -132,7 +135,7 @@ def init_repo(
         d = rp / rel_dir
         if not d.exists():
             if not dry_run:
-                ensure_dir(d)
+                ensure_dir(rw, rel_dir)
             print(f"  {action}: {rel_dir}/")
             changes.append(rel_dir)
 
@@ -141,7 +144,7 @@ def init_repo(
         d = rp / rel_dir
         if not d.exists():
             if not dry_run:
-                ensure_dir(d)
+                ensure_dir(rw, rel_dir)
             print(f"  {action}: {rel_dir}/ (from template {template})")
             changes.append(rel_dir)
 
@@ -155,7 +158,7 @@ def init_repo(
             d = rp / rel_dir
             if not d.exists():
                 if not dry_run:
-                    ensure_dir(d)
+                    ensure_dir(rw, rel_dir)
                 print(f"  {action}: {rel_dir}/ (from projects.yaml {flag}=true)")
                 changes.append(rel_dir)
 
@@ -163,8 +166,7 @@ def init_repo(
     readme = rp / "docs" / "README.md"
     if not readme.exists():
         if not dry_run:
-            readme.parent.mkdir(parents=True, exist_ok=True)
-            readme.write_text(MINIMAL_README.format(name=name), encoding="utf-8")
+            rw.create("docs/README.md", MINIMAL_README.format(name=name))
         print(f"  {action}: docs/README.md")
         changes.append("docs/README.md")
 
@@ -172,8 +174,7 @@ def init_repo(
     rules_file = rp / ".claude" / "rules" / "documentation.md"
     if not rules_file.exists():
         if not dry_run:
-            rules_file.parent.mkdir(parents=True, exist_ok=True)
-            rules_file.write_text(RULES_TEMPLATE, encoding="utf-8")
+            rw.create(".claude/rules/documentation.md", RULES_TEMPLATE)
         print(f"  {action}: .claude/rules/documentation.md")
         changes.append(".claude/rules/documentation.md")
 
@@ -181,11 +182,7 @@ def init_repo(
     docs_lint_cfg = rp / ".claude" / "rules" / "docs-lint.yaml"
     if not docs_lint_cfg.exists():
         if not dry_run:
-            docs_lint_cfg.parent.mkdir(parents=True, exist_ok=True)
-            docs_lint_cfg.write_text(
-                DOCS_LINT_CONFIG.format(template=template),
-                encoding="utf-8",
-            )
+            rw.create(".claude/rules/docs-lint.yaml", DOCS_LINT_CONFIG.format(template=template))
         print(f"  {action}: .claude/rules/docs-lint.yaml")
         changes.append(".claude/rules/docs-lint.yaml")
 
@@ -193,7 +190,7 @@ def init_repo(
     pm = rp / ".pymarkdown.yaml"
     if not pm.exists():
         if not dry_run:
-            pm.write_text(PYMARKDOWN_YAML, encoding="utf-8")
+            rw.create(".pymarkdown.yaml", PYMARKDOWN_YAML)
         print(f"  {action}: .pymarkdown.yaml")
         changes.append(".pymarkdown.yaml")
 
@@ -201,7 +198,7 @@ def init_repo(
     vale = rp / ".vale.ini"
     if not vale.exists():
         if not dry_run:
-            vale.write_text(VALE_INI, encoding="utf-8")
+            rw.create(".vale.ini", VALE_INI)
         print(f"  {action}: .vale.ini")
         changes.append(".vale.ini")
 
@@ -209,8 +206,7 @@ def init_repo(
     lint_state = rp / ".h2t" / "lint-state.jsonl"
     if not lint_state.exists():
         if not dry_run:
-            lint_state.parent.mkdir(parents=True, exist_ok=True)
-            lint_state.write_text("", encoding="utf-8")
+            rw.create(".h2t/lint-state.jsonl", "")
         print(f"  {action}: .h2t/lint-state.jsonl")
         changes.append(".h2t/lint-state.jsonl")
 
@@ -225,10 +221,7 @@ def init_repo(
     for gi_entry, gi_comment in _gi_entries:
         if gi_entry not in gi_content:
             if not dry_run:
-                with open(gi, "a", encoding="utf-8") as f:
-                    if gi_comment:
-                        f.write(f"\n{gi_comment}\n")
-                    f.write(f"{gi_entry}\n")
+                rw.append(".gitignore", f"\n{gi_comment}\n{gi_entry}" if gi_comment else gi_entry)
                 gi_content += f"\n{gi_entry}\n"
             print(f"  {action}: .gitignore entry for {gi_entry}")
             if ".gitignore" not in changes:

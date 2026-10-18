@@ -21,9 +21,11 @@ CEILINGS = {  # measured 2026-10-18 on ab078f4f; lowered after Task 6, Task 8 (G
     # Task 13 (session records and activity under records/); Task 14 (the index) held them
     # and opens its base only through store.connect_sqlite, so sqlite stays 0; Task 15 (the
     # ontology through the index, registration through store, H2T_CONFIG_ROOT not read),
-    # Task 16 (the 3.x session roots through paths.legacy)
+    # Task 16 (the 3.x session roots through paths.legacy), Task 17 (writes into a repository
+    # through store.repo, user-named paths with dest=True; 6 of the 36 are store.mkdir and
+    # RepoWriter.mkdir calls the .mkdir( pattern counts)
     "home": 33, "legacy_roots": 3, "path_env": 1, "dotenv": 0,
-    "secret_readers": 0, "writes": 109, "sqlite": 0,
+    "secret_readers": 0, "writes": 36, "sqlite": 0,
 }
 
 

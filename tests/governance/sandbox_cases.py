@@ -633,6 +633,272 @@ def _handoff_no_latest_json(sb, mp):
     assert [f.name for f in Path(leaf).iterdir()] == ["dev-p-sandbox.md"]   # R10
 
 
+# Task 17: every write into a user's repository (§7.1, table «repo»). A scenario is
+# (setup, run) over a repository path; setup runs before the recorder is on. The same
+# table drives tests/governance/test_repo_writers.py, which checks every path a command
+# changed against REPO_WRITERS[command].
+
+def _git(repo, *args):
+    import subprocess
+    subprocess.run(["git", "-C", str(repo), *args], check=True, capture_output=True)
+
+
+def _git_repo(repo, files=None, untracked=None):
+    """A repository with files committed, then files left untracked."""
+    repo.mkdir(parents=True, exist_ok=True)
+    _git(repo, "init", "-q")
+    _git(repo, "config", "user.email", "t@t")
+    _git(repo, "config", "user.name", "t")
+    for group in (files or {}, untracked or {}):
+        for rel, text in group.items():
+            p = repo / rel
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text(text, encoding="utf-8")
+        if group is files and files:
+            _git(repo, "add", "-A")
+            _git(repo, "commit", "-q", "-m", "seed")
+
+
+_OPEN_PLAN = '---\ntitle: "x"\nstatus: draft\n---\nbody\n'
+
+
+def _scaffold(repo, mp):
+    import argparse
+
+    from h2t_ops.lifecycle import scaffold_project
+    out = scaffold_project.cmd_create(argparse.Namespace(
+        id=repo.name, type="code-local", stack="python", dir=str(repo.parent),
+        description="", dry_run=False, merge=False))
+    assert out["status"] == "ok", out
+
+
+def _docs_init(repo, mp):
+    from h2t_ops.tools.docs import docs_init
+    assert docs_init.init_repo(repo.name, repo_root=repo, dry_run=False)
+
+
+def _fix_safe_setup(repo, mp):
+    import json
+    _git_repo(repo, {
+        ".claude/rules/docs-lint.yaml": "template: code_repo\nproject_checks: true\n",
+        "docs/superpowers/plans/2026-01-01-x.md": "# X\n",
+        "docs/superpowers/specs/2026-01-01-y.md": "# Y\n",
+        "docs/a.pdf": "pdf", "docs/b.pdf": "pdf", "deliverables/.gitkeep": "",
+        "debug.log": "log\n",
+    })
+    (repo.parent / "fix-plan.json").write_text(json.dumps({"plan_id": "p", "actions": [
+        {"action_id": "d", "type": "create_dir", "path": "docs/extra", "risk": "safe"},
+        {"action_id": "f", "type": "add_frontmatter", "path": "docs/superpowers/specs/2026-01-01-y.md",
+         "risk": "safe"},
+        {"action_id": "m", "type": "move_file", "path": "docs/b.pdf", "target_path": "deliverables/b.pdf",
+         "risk": "safe"},
+    ]}), encoding="utf-8")
+
+
+def _fix_safe(repo, mp):
+    from h2t_ops.tools.docs import lint
+    lint._run_fix_safe(repo, plan_file=str(repo.parent / "fix-plan.json"))
+    lint._run_fix_safe(repo)
+    assert (repo / "deliverables" / "a.pdf").exists() and (repo / "deliverables" / "b.pdf").exists()
+
+
+def _fix_index_setup(repo, mp):
+    import json
+    _git_repo(repo, {"docs/README.md": "# Docs\n", "docs/adr/0001-x.md": "# X\n"})
+    (repo.parent / "index-plan.json").write_text(json.dumps({"plan_id": "p", "actions": [
+        {"action_id": "i", "type": "add_to_index"}]}), encoding="utf-8")
+
+
+def _fix_index(repo, mp):
+    from h2t_ops.tools.docs import lint
+    lint._run_fix_index(repo, apply=True)
+    lint._run_fix_index(repo, apply=True, plan_file=str(repo.parent / "index-plan.json"))
+
+
+def _retire_setup(repo, mp):
+    _git_repo(repo, {"docs/superpowers/plans/2020-01-05-old.md": _OPEN_PLAN},
+              untracked={"docs/superpowers/specs/2020-01-05-loose.md": _OPEN_PLAN})
+
+
+def _retire(repo, mp):
+    from h2t_ops.tools.docs import lint
+    lint._run_retire(repo, apply=True)
+    assert (repo / "docs/archive/plans/2020-01-05-old.md").exists()     # git mv
+    assert (repo / "docs/archive/specs/2020-01-05-loose.md").exists()   # untracked: rename
+
+
+def _docs_new(repo, mp):
+    from h2t_ops.tools.docs import new_doc
+    new_doc.create_doc(repo, "plan", "x", today="2026-10-18", author="t", issue="none", reason="r")
+    new_doc.create_doc(repo, "adr", "y", today="2026-10-18", author="t")
+
+
+def _docs_index(repo, mp):
+    import sys
+
+    from h2t_ops.tools.docs import index
+    mp.setattr(index, "repo_path", lambda name: repo)
+    mp.setattr(sys, "argv", ["docs-index", repo.name, "--apply"])
+    index.main()
+
+
+def _closure(repo, mp):
+    from h2t_ops.tools.docs import closure
+    closure.write_report(repo, {"milestone": {"title": "M1 done"}})
+
+
+def _agent_profile(repo, mp):
+    from h2t_ops.tools.agent_profile import apply_agent_profile as ap
+    assert ap.run_cli(["apply", "--cwd", str(repo), "--base", "dev"]).get("ok"), "apply failed"
+
+
+def _plan_closer_setup(repo, mp):
+    _git_repo(repo, {"docs/superpowers/plans/2026-01-01-x.md": _OPEN_PLAN})
+
+
+def _plan_closer(repo, mp):
+    from h2t_ops.hooks import plan_closer
+    mp.chdir(repo)
+    mp.setattr(plan_closer, "_pr_view", lambda root, n: {"state": "MERGED", "files": [
+        {"path": "src/a.py"}, {"path": "docs/superpowers/plans/2026-01-01-x.md"}]})
+    plan_closer.handle({"tool_name": "Bash", "tool_input": {"command": "gh pr merge 7 --squash"}})
+    assert 'status: "done"' in (repo / "docs/superpowers/plans/2026-01-01-x.md").read_text(encoding="utf-8")
+
+
+def _post_commit_setup(repo, mp):
+    _git_repo(repo, {"docs/a.md": "# A\n"})
+
+
+def _post_commit(repo, mp):
+    import io
+    import sys
+
+    from h2t_ops.hooks import post_git_commit_docs_lint as hook
+    mp.chdir(repo)
+    mp.setattr(sys, "stdin", io.StringIO(""))
+    mp.setattr(hook, "run_docs_lint_doctor", lambda *a, **k: {"status": "ok"})
+    assert hook.main([]) == 0
+    assert (repo / ".h2t/lifecycle/post-git-commit-docs-lint.json").exists()
+
+
+def _project_audit_setup(repo, mp):
+    _git_repo(repo, {"projects.yaml": "projects:\n  - id: foo\n    docs:\n      readme: false\n"})
+
+
+def _project_audit(repo, mp):
+    from h2t_ops.lifecycle.project_audit_report import update_project_docs
+    assert update_project_docs(repo / "projects.yaml", "foo", {"readme": True})
+    assert "readme: true" in (repo / "projects.yaml").read_text(encoding="utf-8")
+
+
+def _plain_repo(repo, mp):
+    _git_repo(repo)
+
+
+# command -> (setup, run, commands it runs in a child process whose writes it carries)
+REPO_SCENARIOS: dict[str, tuple] = {
+    "h2t-scaffold-project": (None, _scaffold, ("h2t-docs-init",)),
+    "h2t-docs-init": (_plain_repo, _docs_init, ()),
+    "h2t-docs-lint fix-safe": (_fix_safe_setup, _fix_safe, ()),
+    "h2t-docs-lint fix-index": (_fix_index_setup, _fix_index, ()),
+    "h2t-docs-lint retire": (_retire_setup, _retire, ()),
+    "h2t-docs-lint new": (_plain_repo, _docs_new, ()),
+    "docs-index": (_fix_index_setup, _docs_index, ()),
+    "h2t-milestone-closure": (_plain_repo, _closure, ()),
+    "h2t-agent-profile": (_plain_repo, _agent_profile, ()),
+    "plan-closer": (_plan_closer_setup, _plan_closer, ()),
+    "post-git-commit-docs-lint": (_post_commit_setup, _post_commit, ()),
+    "h2t-project-audit-report": (_project_audit_setup, _project_audit, ()),
+}
+
+
+def _in_repo(fn):
+    """A scenario step as a sandbox step: the repository is <tmp_path>/repo."""
+    def step(sb, mp):
+        return fn(sb.home.parent / "repo", mp)
+    return step
+
+
+def _repo_case(case_id, command):
+    setup, run, _also = REPO_SCENARIOS[command]
+    return Case(case_id, _in_repo(run), setup=_in_repo(setup) if setup else None)
+
+
+# Paths the user named (R7, and the same reading for --save and the runbook destination):
+# written with dest=True, not through the allow-list.
+
+def _docs_lint_save(repo, mp):
+    from h2t_ops.tools.docs import lint
+    lint._run_plan(repo, save_file=str(repo.parent / "plan.json"))
+    assert (repo.parent / "plan.json").exists()
+
+
+def _runbook(repo, mp):
+    from h2t_ops.tools.runbook import cli
+    dest = repo / "docs/superpowers/plans/2026-10-18-x-runbook.md"
+    assert cli.main(["new", str(dest), "--title", "T", "--branch", "b", "--spec-path", "s.md",
+                     "--issue", "1", "--venv-test", "pytest", "--e2e-state", "N/A"]) == 0
+    assert dest.exists()
+
+
+def _agent_catalog_setup(repo, mp):
+    from h2t_ops.tools.agent_profile import apply_agent_profile as ap
+    (repo.parent / "catalog").mkdir()
+    (repo.parent / "catalog" / "agent-profiles.json").write_bytes(ap._DEFAULT_CATALOG.read_bytes())
+
+
+def _agent_catalog(repo, mp):
+    from h2t_ops.tools.agent_profile import apply_agent_profile as ap
+    out = ap.catalog_add_profile("x", "d", [], [], catalog_path=repo.parent / "catalog" / "agent-profiles.json")
+    assert out.get("ok"), out
+
+
+_GRAPH = {"nodes": [{"id": "a", "label": "A", "type": "rounded_rect"}], "edges": []}
+
+
+def _drawio_generate(repo, mp):
+    from h2t_ops.tools.drawio.generate import generate_diagram
+    out = repo.parent / "named" / "d.drawio"
+    generate_diagram(_GRAPH, out)
+    generate_diagram(_GRAPH, out)          # the second run reads and keeps user edits
+    assert 'id="a"' in out.read_text(encoding="utf-8")
+
+
+def _drawio_export_setup(repo, mp):
+    src = repo.parent / "named" / "d.drawio"
+    src.parent.mkdir(parents=True)
+    src.write_text("<mxfile/>", encoding="utf-8")
+    (repo.parent / "drawio.yaml").write_text(f"export:\n  drawio_path: {src}\n", encoding="utf-8")
+
+
+def _drawio_export(repo, mp):
+    """The draw.io CLI writes the output itself; the stand-in does it in-process, so the
+    recorder sees whether the path was handed over (store.managed)."""
+    from pathlib import Path
+    from types import SimpleNamespace
+
+    from h2t_ops.tools.drawio import export
+
+    def fake_run(cmd, **kw):
+        Path(cmd[cmd.index("--output") + 1]).write_bytes(b"fake-png")
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+    mp.setattr(export.subprocess, "run", fake_run)
+    out = export.export_diagram(repo.parent / "named" / "d.drawio", fmt="png",
+                                output_path=repo.parent / "named" / "out" / "d.png",
+                                config_path=repo.parent / "drawio.yaml")
+    assert Path(out).read_bytes() == b"fake-png"
+
+
+def _creative_assemble(repo, mp):
+    from h2t_ops.tools.creative import assembler
+    recipe = {"title": "T", "sections": [{"component": "hero", "content": {"headline": "H", "subline": "S"}}]}
+    out = repo.parent / "named" / "site"
+    assembler.main_assemble("landing", recipe, assembler.PROFILES_DIR / "h2t-pfad", out)
+    deck = {"title": "D", "slides": [{"layout": "title-only", "content": {"headline": "S1"}}]}
+    assembler.main_assemble("deck", deck, assembler.PROFILES_DIR / "h2t-pfad", repo.parent / "named" / "deck")
+    assert (out / "fx.js").exists()
+
+
 CASES: list[Case] = [
     Case("store.replace.state", _store_replace_state),
     # Task 8: a refresh writes nothing; a rotated refresh token writes local and the mirror.
@@ -692,4 +958,24 @@ CASES: list[Case] = [
     Case("gather.session-start", _session_start_briefing(), setup=_laptop_session),
     Case("gather.session-start.legacy", _session_start_briefing(legacy=True), setup=_legacy_sessions),
     Case("handoff.write.no-latest-json", _handoff_no_latest_json),
+    # Task 17: writes into a user's repository through store.repo and its allow-list; a
+    # path the user named through dest=True (R7).
+    _repo_case("repo.scaffold", "h2t-scaffold-project"),
+    _repo_case("repo.docs-init", "h2t-docs-init"),
+    _repo_case("repo.docs-lint.fix-safe", "h2t-docs-lint fix-safe"),
+    _repo_case("repo.docs-lint.fix-index", "h2t-docs-lint fix-index"),
+    _repo_case("repo.docs-lint.retire", "h2t-docs-lint retire"),
+    _repo_case("repo.docs-lint.new", "h2t-docs-lint new"),
+    _repo_case("repo.docs-index", "docs-index"),
+    _repo_case("repo.milestone-closure", "h2t-milestone-closure"),
+    _repo_case("repo.agent-profile", "h2t-agent-profile"),
+    _repo_case("repo.plan-closer", "plan-closer"),
+    _repo_case("repo.post-commit-docs-lint", "post-git-commit-docs-lint"),
+    _repo_case("repo.project-audit", "h2t-project-audit-report"),
+    Case("repo.docs-lint.save", _in_repo(_docs_lint_save), setup=_in_repo(_plain_repo)),
+    Case("repo.runbook", _in_repo(_runbook), setup=_in_repo(_plain_repo)),
+    Case("agent-profile.catalog.dest", _in_repo(_agent_catalog), setup=_in_repo(_agent_catalog_setup)),
+    Case("drawio.generate.dest", _in_repo(_drawio_generate)),
+    Case("drawio.export.dest", _in_repo(_drawio_export), setup=_in_repo(_drawio_export_setup)),
+    Case("creative.assemble.dest", _in_repo(_creative_assemble)),
 ]

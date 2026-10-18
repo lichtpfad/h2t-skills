@@ -31,6 +31,8 @@ import re
 import subprocess
 from pathlib import Path
 
+from h2t_ops.core import store
+from h2t_ops.core.errors import H2TError
 from h2t_ops.hooks.emit import Reply
 
 # Only these carry a lifecycle. A report records a moment and is done when
@@ -145,8 +147,8 @@ def close_plans_for_pr(repo_root: Path, pr_number: int, view: dict) -> list[dict
         fm = _PR_LINE.sub("", fm)
         fm = fm.replace('status: "done"', f'status: "done"\npr: {pr_number}', 1)
         try:
-            path.write_text(fm + body, encoding="utf-8")
-        except OSError:
+            store.repo(repo_root, "plan-closer").replace(rel, fm + body)
+        except (OSError, H2TError):
             continue
         changed.append({"path": rel, "was": current})
     return changed

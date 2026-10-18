@@ -16,6 +16,8 @@ import re
 import sys
 from pathlib import Path
 
+from h2t_ops.core import store
+
 
 def update_project_docs(yaml_path: Path, project_id: str, fields: dict[str, bool]) -> bool:
     """Update docs fields for a project in projects.yaml using regex (no PyYAML needed)."""
@@ -42,7 +44,8 @@ def update_project_docs(yaml_path: Path, project_id: str, fields: dict[str, bool
 
     if updated_block != block:
         text = text.replace(block, updated_block)
-        yaml_path.write_text(text, encoding="utf-8")
+        # projects.yaml of the landings repository; its allow-list: core/repo_writers.py
+        store.repo(yaml_path.parent, "h2t-project-audit-report").replace(yaml_path.name, text)
 
     # Build report
     {

@@ -590,6 +590,11 @@ class RepoWriter:
         t = self._target("append", rel)
         append(t, line, place="repo", dest=True)
 
+    def mkdir(self, rel: str) -> Path:
+        """An empty directory a project layout asks for (src/, tests/): exist_ok."""
+        t = self._target("mkdir", rel)
+        return mkdir(t, place="repo", dest=True)
+
     def rename(self, src_rel: str, dst_rel: str, *, git: bool) -> Path:
         src, dst = self._target("rename", src_rel), self._target("rename", dst_rel)
         dst.parent.mkdir(parents=True, exist_ok=True)

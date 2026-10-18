@@ -20,6 +20,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from h2t_ops.core import store
+
 SCHEMA = "h2t_lifecycle_report/v0.1"
 SCHEMA_VERSION = "0.1"
 HOOK_NAME = "PostToolUse:git-commit:docs-lint"
@@ -147,12 +149,10 @@ def build_hook_report(
 
 
 def write_report(repo_root: Path, report: dict[str, Any]) -> Path:
-    out = repo_root / ".h2t" / "lifecycle" / "post-git-commit-docs-lint.json"
-    out.parent.mkdir(parents=True, exist_ok=True)
-    tmp = out.with_suffix(out.suffix + ".tmp")
-    tmp.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
-    tmp.replace(out)
-    return out
+    rel = ".h2t/lifecycle/post-git-commit-docs-lint.json"
+    store.repo(repo_root, "post-git-commit-docs-lint").replace(
+        rel, json.dumps(report, ensure_ascii=False, indent=2))
+    return repo_root / rel
 
 
 def hook_timeout_seconds() -> int:
@@ -177,9 +177,18 @@ def _load_payload() -> dict[str, Any]:
         return {}
 
 
+def _repo_root() -> Path:
+    """The repository the commit landed in, from git; the cwd outside a repository."""
+    top = subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True,
+                         text=True, encoding="utf-8", errors="replace")
+    if top.returncode == 0 and top.stdout.strip():
+        return Path(top.stdout.strip()).resolve()
+    return Path.cwd().resolve()
+
+
 def main(argv: list[str]) -> int:
     try:
-        repo_root = Path.cwd().resolve()
+        repo_root = _repo_root()
         payload = _load_payload()
         if payload and not is_git_commit_payload(payload):
             return 0

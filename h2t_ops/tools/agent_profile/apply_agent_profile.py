@@ -12,6 +12,7 @@ import sys
 from datetime import date
 from pathlib import Path
 
+from h2t_ops.core import store
 from h2t_ops.resources import resource_dir
 
 # Default catalog ships as package data: h2t_ops/resources/agent_profile/
@@ -147,11 +148,14 @@ def load_json(path: Path, default=None):
         return default if default is not None else {}
 
 
+def _json_text(data: dict) -> str:
+    return json.dumps(data, indent=2, ensure_ascii=False) + "\n"
+
+
 def write_json_atomic(path: Path, data: dict) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(".tmp")
-    tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    tmp.replace(path)
+    """The catalog: a file the caller names (or the shipped one in a checkout), not a
+    repository write of this command (R7)."""
+    store.replace(path, _json_text(data), place="repo", dest=True)
 
 
 # ── Project binding ──────────────────────────────────────────────────────────
@@ -169,7 +173,7 @@ def load_project_binding(cwd: Path) -> dict:
 
 
 def write_project_binding(cwd: Path, binding: dict) -> None:
-    write_json_atomic(_binding_path(cwd), binding)
+    store.repo(cwd, "h2t-agent-profile").replace(".claude/agent-profile.json", _json_text(binding))
 
 
 def load_project_settings(cwd: Path) -> dict:
@@ -177,7 +181,7 @@ def load_project_settings(cwd: Path) -> dict:
 
 
 def write_project_settings(cwd: Path, settings: dict) -> None:
-    write_json_atomic(_settings_path(cwd), settings)
+    store.repo(cwd, "h2t-agent-profile").replace(".claude/settings.json", _json_text(settings))
 
 
 # ── Core apply logic ─────────────────────────────────────────────────────────

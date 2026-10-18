@@ -231,12 +231,11 @@ def git_add_commit(repo: Path, paths: list[str], message: str) -> bool:
     return True
 
 
-def ensure_dir(path: Path, gitkeep: bool = True) -> bool:
-    if path.exists():
+def ensure_dir(writer, rel_dir: str) -> bool:
+    """rel_dir with a .gitkeep, through the command's store.repo writer; False if it exists."""
+    if (writer.root / rel_dir).exists():
         return False
-    path.mkdir(parents=True, exist_ok=True)
-    if gitkeep:
-        (path / ".gitkeep").touch()
+    writer.create(f"{rel_dir}/.gitkeep", "")
     return True
 
 

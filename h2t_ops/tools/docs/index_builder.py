@@ -3,9 +3,10 @@ from __future__ import annotations
 
 import os
 import re
-import tempfile
 from collections.abc import Callable
 from pathlib import Path
+
+from h2t_ops.core import store
 
 INDEX_START = "<!-- h2t-index-start -->"
 INDEX_END = "<!-- h2t-index-end -->"
@@ -67,7 +68,7 @@ def write_index(
 ) -> dict:
     """
     Dry-run or apply index update. Returns operation report.
-    On apply, uses atomic tmp-file + os.replace() (Windows-safe).
+    On apply, replaces the file atomically through store.repo (`h2t-docs-lint fix-index`).
     """
     if readme_path is None:
         readme_path = repo_root / "docs" / "README.md"
@@ -87,25 +88,7 @@ def write_index(
     if not apply:
         return report
 
-    readme_path.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.NamedTemporaryFile(
-        mode="w",
-        encoding="utf-8",
-        dir=readme_path.parent,
-        delete=False,
-        suffix=".tmp",
-    ) as tf:
-        tf.write(new_content)
-        tmp_path = tf.name
-
-    try:
-        os.replace(tmp_path, readme_path)
-    except Exception:
-        try:
-            Path(tmp_path).unlink(missing_ok=True)
-        except OSError:
-            pass
-        raise
+    store.repo(repo_root, "h2t-docs-lint fix-index").replace(os.path.abspath(readme_path), new_content)
     report["applied"] = True
     report["status"] = "applied"
     return report

@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING, Any
 
 import yaml
 
+from h2t_ops.core import store
 from h2t_ops.resources import resource_dir
 
 # drawpyo is the `drawio` extra: imported where a diagram is built, so that the rest of the
@@ -357,7 +358,9 @@ def _post_process_xml(
         for user_node in existing["user_nodes"]:
             root_elem.append(user_node)
 
-    tree.write(xml_path, xml_declaration=True, encoding="UTF-8")
+    # The path the user named (plan R7): replaced through store, as the first write was.
+    store.replace(xml_path, ET.tostring(root, encoding="UTF-8", xml_declaration=True),
+                  place="repo", dest=True)
 
 
 # ---------------------------------------------------------------------------
@@ -391,7 +394,6 @@ def generate_diagram(
     from drawpyo.diagram.objects import Object
 
     output_path = Path(output_path).resolve()
-    output_path.parent.mkdir(parents=True, exist_ok=True)
 
     # Read existing user state before drawpyo overwrites the file
     existing = _read_existing(output_path) if preserve_user_edits else {"managed": {}, "user_nodes": []}
@@ -570,7 +572,8 @@ def generate_diagram(
             edge_obj.tooltip = edge_tooltip
 
     # -- Write file ----------------------------------------------------------
-    file.write()
+    # drawpyo's own file.write() would open the path itself; its text goes through store.
+    store.replace(output_path, file.xml, place="repo", dest=True)
 
     # -- Post-process: inject IDs, restore user edits, append user-only nodes --
     drawpyo_to_user: dict[str, str] = {str(obj.id): nid for nid, obj in obj_map.items()}

@@ -10,6 +10,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from h2t_ops.core import store
+
 SCHEMA = "h2t_milestone_closure_report/v0.1"
 
 
@@ -138,14 +140,11 @@ def build_report(
 
 
 def write_report(repo_root: Path, report: dict) -> Path:
-    out_dir = repo_root / ".h2t" / "lifecycle"
-    out_dir.mkdir(parents=True, exist_ok=True)
     safe_title = re.sub(r"[^\w\-]", "-", str(report["milestone"]["title"]).lower())
-    out = out_dir / f"milestone-closure-{safe_title}.json"
-    tmp = out.with_suffix(out.suffix + ".tmp")
-    tmp.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
-    tmp.replace(out)
-    return out
+    rel = f".h2t/lifecycle/milestone-closure-{safe_title}.json"
+    store.repo(repo_root, "h2t-milestone-closure").replace(
+        rel, json.dumps(report, ensure_ascii=False, indent=2))
+    return repo_root / rel
 
 
 def main(argv: list[str] | None = None) -> int:
