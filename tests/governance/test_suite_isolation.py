@@ -75,8 +75,9 @@ def test_the_real_home_tripwire_sees_a_same_second_same_size_rewrite(tmp_path):
 
 def test_the_real_home_tripwire_watches_every_area_but_the_live_logs(tmp_path):
     """Task 12 wrote into ~/.h2t/research, which the tripwire did not watch. Every entry of
-    ~/.h2t (logs/, run/ and venv/ aside: live hooks write there), ~/.dor and the 3.x ~/.config
-    dirs are watched now — on a temporary tree, never the real home."""
+    ~/.h2t (run/ and venv/ aside), of ~/.h2t/logs (the logs live hooks append to aside, Task
+    18), of ~/.dor and the 3.x ~/.config dirs is watched now — on a temporary tree, never the
+    real home."""
     snapshot = _root_conftest()._real_home_artifacts
     areas = [tmp_path / ".h2t" / "research", tmp_path / ".h2t" / "creative" / "profiles",
              tmp_path / ".h2t" / "evals", tmp_path / ".h2t" / "config",
@@ -90,11 +91,14 @@ def test_the_real_home_tripwire_watches_every_area_but_the_live_logs(tmp_path):
     before = snapshot(tmp_path)
     for d in areas:
         (d / "x.json").write_text("{}")
+    for live in ("hooks.jsonl", "plain-guard.jsonl", "writes.jsonl"):   # the live session's
+        (tmp_path / ".h2t" / "logs" / live).write_text("{}")
     after = snapshot(tmp_path)
     changed = {k for k in set(before) | set(after) if before.get(k) != after.get(k)}
     assert changed == {str(tmp_path / ".h2t" / "research"), str(tmp_path / ".h2t" / "creative"),
                        str(tmp_path / ".h2t" / "evals"), str(tmp_path / ".h2t" / "config"),
-                       str(tmp_path / ".dor" / "lake"), str(tmp_path / ".config" / "telegram")}
+                       str(tmp_path / ".dor" / "lake"), str(tmp_path / ".config" / "telegram"),
+                       str(tmp_path / ".h2t" / "logs" / "x.json")}
     # a red names the files, not only the area tuple
     files = _root_conftest()._changed_files(str(tmp_path / ".h2t" / "research"), since)
     assert files == [str(tmp_path / ".h2t" / "research" / "x.json")]

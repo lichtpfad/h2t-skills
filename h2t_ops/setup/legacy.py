@@ -21,10 +21,11 @@ import shlex
 import shutil
 import subprocess
 import sys
-import tempfile
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
+
+from h2t_ops.core import paths, store
 
 KIND_DOCTOR = "h2t_setup_doctor/v1"
 KIND_CONNECTORS = "h2t_connectors_check/v1"
@@ -77,7 +78,7 @@ def _path_exists(path: Path) -> bool:
 
 
 def _home() -> Path:
-    return Path.home()
+    return paths.home()
 
 
 def _windows_uv_candidates(home: Path) -> list[Path]:
@@ -139,7 +140,7 @@ def _resolve_cli(name: str, which: Callable[[str], str | None] = _user_which, ho
             return {"status": "ready", "path": found, "source": "PATH"}
     candidate = home / ".local" / "bin" / (f"{name}.exe" if is_win else name)
     if candidate.is_file():
-        return {"status": "ready", "path": str(candidate), "source": "~/.local/bin"}
+        return {"status": "ready", "path": str(candidate), "source": "local-bin"}
     return {"status": "missing", "path": "", "source": "not-found"}
 
 
@@ -232,11 +233,10 @@ def _file_status(path: Path) -> dict[str, str]:
     return {"path": str(path), "status": "present" if path.is_file() else "missing"}
 
 
-def optional_pos_status(home: Path | None = None) -> dict[str, Any]:
-    home = home or _home()
+def optional_pos_status() -> dict[str, Any]:
     candidates = [
-        home / ".dor",
-        home / ".h2t" / "config",
+        paths.legacy_dir("secrets.dor_old"),   # the 3.x DOR directory itself
+        paths.config_dir(),
     ]
     configured = any(_path_exists(path) for path in candidates)
     return {
@@ -262,7 +262,7 @@ def plugin_cache_status(home: Path | None = None) -> dict[str, Any]:
     found: list[Path] = []
     for var, default in (("CLAUDE_CONFIG_DIR", ".claude"), ("CODEX_HOME", ".codex")):
         override = os.environ.get(var)
-        cache = (Path(override).expanduser() if override else home / default) / "plugins" / "cache"
+        cache = (paths.expand_user_dest(override) if override else home / default) / "plugins" / "cache"
         # Name the directory actually searched, even when nothing is there (#522): a fixed
         # ~/.claude here sat beside `missing` while CLAUDE_CONFIG_DIR pointed elsewhere.
         root = root or cache / "lichtpfad" / "h2t-core"
@@ -345,21 +345,19 @@ def doctor(runner: Runner = _run) -> dict[str, Any]:
     }
 
 
-def ensure_machine_name(home: Path | None = None, name: str = "") -> dict[str, Any]:
+def ensure_machine_name(*, name: str = "") -> dict[str, Any]:
     """Pin H2T_MACHINE_NAME in Claude Code's settings `env`, once (#491, ADR 0003).
 
     On macOS the hostname follows the network, so session records of one machine split
     across two directories. Claude Code passes `env` from settings.json to every process
     it starts, hooks included, whatever the shell. An existing value is never changed.
 
-    Without `name`, today's name by the shared rule is written only if the session root
-    has a folder under it or no folders at all. Otherwise the hostname may already have
-    drifted from the history (#517), and the root may hold other machines' folders too,
+    Without `name`, today's name by the shared rule is written only if the session roots
+    have a folder for it or no folders at all. Otherwise the hostname may already have
+    drifted from the history (#517), and the roots may hold other machines' folders too,
     so nothing is written and the folders come back as candidates for the user to pick.
     """
-    home = home or _home()
-    override = os.environ.get("CLAUDE_CONFIG_DIR")
-    settings = (Path(override).expanduser() if override else home / ".claude") / "settings.json"
+    settings = paths.dir_of("harness") / "settings.json"
     from h2t_ops.lifecycle.gather.sessions import get_machine_name
 
     # Claude Code writes this file too. Replace it only if it is unchanged since it was
@@ -379,24 +377,19 @@ def ensure_machine_name(home: Path | None = None, name: str = "") -> dict[str, A
             return {"status": "unchanged", "path": str(settings), "value": current}
         if not name:
             today = get_machine_name()
-            # The handoff writer's root; the legacy ~/.dor/sessions is shared between machines.
-            root = Path(os.environ.get("H2T_SESSION_ROOT", str(home / ".h2t" / "sessions")))
-            folders = sorted(p.name for p in root.iterdir() if p.is_dir() and not p.name.startswith(".")) if root.is_dir() else []
+            # The handoff writer's root and its 3.x one; the legacy ~/.dor/sessions is
+            # shared between machines, so its folders say nothing about this one.
+            roots = (paths.records("sessions"), paths.legacy("sessions.h2t"))
+            folders = sorted({p.name for root in roots if root.is_dir() for p in root.iterdir()
+                              if p.is_dir() and not p.name.startswith(".")})
             if folders and today not in folders:
                 return {"status": "needs_choice", "path": str(settings), "today": today, "candidates": folders}
             name = today
         data.setdefault("env", {})["H2T_MACHINE_NAME"] = name
-        settings.parent.mkdir(parents=True, exist_ok=True)
-        fd, tmp = tempfile.mkstemp(dir=settings.parent, prefix=".settings.", suffix=".tmp")
-        try:
-            with os.fdopen(fd, "w", encoding="utf-8") as handle:
-                handle.write(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
-            if (settings.stat().st_mtime_ns if settings.is_file() else None) != stamp:
-                continue
-            os.replace(tmp, settings)
-            return {"status": "written", "path": str(settings), "value": name}
-        finally:
-            Path(tmp).unlink(missing_ok=True)
+        if (settings.stat().st_mtime_ns if settings.is_file() else None) != stamp:
+            continue
+        store.replace(settings, json.dumps(data, indent=2, ensure_ascii=False) + "\n", place="harness")
+        return {"status": "written", "path": str(settings), "value": name}
     return {"status": "error", "path": str(settings), "error": "kept changing while being updated, left untouched"}
 
 
@@ -459,8 +452,8 @@ def connector_matrix(home: Path | None = None, *, live: bool = False, include_pa
         {"connector": "drive", "status": _ready_if_files(google), "checks": google, "live": "skipped"},
         {
             "connector": "notion",
-            "status": "ready" if _secret_present("NOTION_API_TOKEN", home) or (home / ".config" / "notion" / "token").is_file() else "missing",
-            "checks": {"token": "present" if _secret_present("NOTION_API_TOKEN", home) or (home / ".config" / "notion" / "token").is_file() else "missing"},
+            "status": "ready" if _secret_present("NOTION_API_TOKEN", home) or paths.legacy("notion.token").is_file() else "missing",
+            "checks": {"token": "present" if _secret_present("NOTION_API_TOKEN", home) or paths.legacy("notion.token").is_file() else "missing"},
             "live": "skipped",
         },
         {
@@ -790,7 +783,7 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "install-h2t-ops":
             result = install_h2t_ops(args.source, dry_run=args.dry_run)
             if result.get("status") == "ok":
-                plugin_cache = _home() / ".claude" / "plugins" / "cache" / "lichtpfad" / "h2t-core"
+                plugin_cache = paths.dir_of("harness") / "plugins" / "cache" / "lichtpfad" / "h2t-core"
                 if plugin_cache.exists():
                     versions = sorted(
                         [d for d in plugin_cache.iterdir()
@@ -803,8 +796,7 @@ def main(argv: list[str] | None = None) -> int:
                         # here, never by `/plugin marketplace update`, so it drifted behind
                         # the installed version and silently answered the wrong one.
                         # Hooks resolve through `h2t-hook` at fire time instead.
-                        versions_file = _home() / ".h2t" / "config" / "plugin-versions.json"
-                        versions_file.parent.mkdir(parents=True, exist_ok=True)
+                        versions_file = paths.config_dir() / "plugin-versions.json"
                         _data = {}
                         if versions_file.exists():
                             try:
@@ -812,7 +804,7 @@ def main(argv: list[str] | None = None) -> int:
                             except Exception:
                                 pass
                         _data["h2t-core"] = str(current)
-                        versions_file.write_text(json.dumps(_data, indent=2), encoding="utf-8")
+                        store.replace(versions_file, json.dumps(_data, indent=2), place="config")
         elif args.command == "secrets":
             from h2t_ops.resources import known_secrets_path
 

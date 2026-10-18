@@ -7,17 +7,16 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any
 
+from h2t_ops.core import paths
 from h2t_ops.core.errors import ConfigError
 
 from ._yaml import load_yaml_mapping
 from .models import DeployProfileSpec, ScriptStep
 
-_PROFILES_RELATIVE_PATH = Path(".h2t/config/deploy/profiles.yaml")
-
 
 def load_profile_registry(path: Path | None = None) -> Mapping[str, DeployProfileSpec]:
     """Load deploy profiles from YAML."""
-    config_path = path or (Path.home() / _PROFILES_RELATIVE_PATH)
+    config_path = path or (paths.config_dir() / "deploy" / "profiles.yaml")
     raw = load_yaml_mapping(config_path, top_level_key="profiles")
 
     profiles: dict[str, DeployProfileSpec] = {}

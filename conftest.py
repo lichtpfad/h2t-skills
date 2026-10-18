@@ -91,6 +91,12 @@ def _isolate_home_writes(monkeypatch, tmp_path_factory):
             monkeypatch.delenv(k, raising=False)
 
 
+# What a live Claude session writes into ~/.h2t/logs while the suite runs: the hook logs
+# (hook_entry, grade-guard, plain-guard) and store's own journal with its lock and rotations.
+_LIVE_LOGS = {"hooks.jsonl", "grade-guard.jsonl", "plain-guard.jsonl", "writes.jsonl",
+              ".writes.jsonl.lock", *(f"writes.{n}.jsonl" for n in range(1, 6))}
+
+
 def _real_home_artifacts(home: Path | None = None) -> dict[str, tuple[int, ...]]:
     """size+mtime_ns of the home files the suite must never touch.
 
@@ -99,13 +105,15 @@ def _real_home_artifacts(home: Path | None = None) -> dict[str, tuple[int, ...]]
     against a temporary tree (tests/governance/test_suite_isolation.py)."""
     # Built here, not from h2t_ops.core.paths, and from REAL_HOME, not Path.home():
     # pytest_configure has already moved HOME by the time pytest_sessionstart runs.
-    # Every entry of ~/.h2t and ~/.dor, each its own key, so the report names the area.
-    # Not ~/.h2t/logs, run and venv: the live session's own hooks write there while the
-    # suite runs (venv: the hooks' interpreter leaves __pycache__). Task 12 wrote into
-    # ~/.h2t/research, which the old short list did not watch.
+    # Every entry of ~/.h2t, ~/.h2t/logs and ~/.dor, each its own key, so the report names
+    # the area. Not run and venv, and not the logs the live session's own hooks and package
+    # commands append to while the suite runs (venv: the hooks' interpreter leaves
+    # __pycache__). Task 12 wrote into ~/.h2t/research, which the old short list did not
+    # watch; Task 18 moved the hook logs onto the logs place and added it here.
     home = REAL_HOME if home is None else home
     watched: list[Path] = []
-    for top, skip in ((home / ".h2t", {"logs", "run", "venv"}), (home / ".dor", set())):
+    for top, skip in ((home / ".h2t", {"logs", "run", "venv"}), (home / ".h2t" / "logs", _LIVE_LOGS),
+                      (home / ".dor", set())):
         try:
             watched += [p for p in top.iterdir() if p.name not in skip]
         except OSError:

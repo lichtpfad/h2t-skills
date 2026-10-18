@@ -9,10 +9,11 @@ settings hold together: a marketplace's `ref`, and each plugin's `version`, `sco
 from __future__ import annotations
 
 import json
-import os
 import shutil
 import subprocess
 from pathlib import Path
+
+from h2t_ops.core import paths
 
 MARKETPLACE = "lichtpfad"
 SOURCE = "lichtpfad/h2t-skills"
@@ -39,12 +40,11 @@ PROJECT_SCOPES = ("project", "local")
 def neutral_dir() -> str:
     """Where `claude` runs unless a project is meant: HOME, whose settings are the user's
     own, so no project's `.claude/settings.json` colours what the CLI reports or writes."""
-    return str(Path.home())
+    return str(paths.home())
 
 
 def config_dir() -> Path:
-    configured = os.environ.get("CLAUDE_CONFIG_DIR")
-    return Path(configured) if configured else Path.home() / ".claude"
+    return paths.dir_of("harness")
 
 
 class Claude:

@@ -2,6 +2,8 @@
 
 from pathlib import Path
 
+from h2t_ops.core import paths
+
 DOMAIN_CONTEXT_MAP = {
     "personal": ["psychology.md"],
     "personal-os": ["psychology.md"],
@@ -22,7 +24,7 @@ def gather_user_context(
 
     Returns paths only — caller reads content if needed (progressive disclosure).
     """
-    root = Path(config_root) if config_root else Path.home() / ".h2t" / "config"
+    root = Path(config_root) if config_root else paths.config_dir()
     about_me = root / "about-me"
 
     core_path = about_me / "core.md"

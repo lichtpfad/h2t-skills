@@ -18,7 +18,7 @@ def test_init_data_names_its_directory_and_time(tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(home))
     monkeypatch.setenv("USERPROFILE", str(home))
     monkeypatch.delenv("H2T_CONFIG_ROOT", raising=False)
-    monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))  # the gather lock
+    monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))  # temp files stay in the test tree
     work = tmp_path / "work"
     work.mkdir()
 

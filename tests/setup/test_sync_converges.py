@@ -472,6 +472,7 @@ def test_the_cache_keeps_the_two_latest_versions_by_semver(tmp_path, monkeypatch
 
 def test_the_cache_never_deletes_the_installed_version(tmp_path, monkeypatch):
     config = tmp_path / "cfg"
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(config))   # deletion goes to the harness place
     core = _cache(config, "h2t-core", "3.2.3", "4.0.0", "4.1.0", "4.2.0", "notes")
     removed = sync.clean_cache(config, [{"id": "h2t-core@lichtpfad", "version": "3.2.3"}])
     assert sorted(p.name for p in core.iterdir()) == ["3.2.3", "4.1.0", "4.2.0", "notes"]

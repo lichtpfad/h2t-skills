@@ -59,7 +59,7 @@ def test_setup_writes_machine_name_and_keeps_the_rest(renamed_host, monkeypatch)
     settings.parent.mkdir(parents=True)
     settings.write_text(json.dumps({"model": "x", "env": {"OTHER": "1"}}), encoding="utf-8")
 
-    result = setup_h2t.ensure_machine_name(renamed_host)
+    result = setup_h2t.ensure_machine_name()
 
     assert result["status"] == "written"
     assert json.loads(settings.read_text(encoding="utf-8")) == {
@@ -75,7 +75,7 @@ def test_setup_keeps_an_existing_machine_name(renamed_host, monkeypatch):
     settings.write_text(json.dumps({"env": {"H2T_MACHINE_NAME": "macbook-pro-3"}}), encoding="utf-8")
     before = settings.read_text(encoding="utf-8")
 
-    result = setup_h2t.ensure_machine_name(renamed_host)
+    result = setup_h2t.ensure_machine_name()
 
     assert result == {"status": "unchanged", "path": str(settings), "value": "macbook-pro-3"}
     assert settings.read_text(encoding="utf-8") == before
@@ -87,7 +87,7 @@ def test_setup_leaves_an_invalid_settings_file_alone(renamed_host, monkeypatch):
     settings.parent.mkdir(parents=True)
     settings.write_text("{ not json", encoding="utf-8")
 
-    result = setup_h2t.ensure_machine_name(renamed_host)
+    result = setup_h2t.ensure_machine_name()
 
     assert result["status"] == "error"
     assert settings.read_text(encoding="utf-8") == "{ not json"
@@ -98,19 +98,20 @@ def test_setup_does_not_overwrite_a_preference_saved_meanwhile(renamed_host, mon
     settings = _settings(renamed_host)
     settings.parent.mkdir(parents=True)
     settings.write_text(json.dumps({"model": "x"}), encoding="utf-8")
-    real_mkstemp = setup_h2t.tempfile.mkstemp
+    real_name = sessions.get_machine_name
     calls = []
 
-    def claude_code_saves_meanwhile(*args, **kwargs):
+    def claude_code_saves_meanwhile():
+        # After the read, before the write: the window the stamp check closes.
         if not calls:
             settings.write_text(json.dumps({"model": "x", "theme": "dark"}), encoding="utf-8")
             os.utime(settings, ns=(1, 10**18))
         calls.append(1)
-        return real_mkstemp(*args, **kwargs)
+        return real_name()
 
-    monkeypatch.setattr(setup_h2t.tempfile, "mkstemp", claude_code_saves_meanwhile)
+    monkeypatch.setattr(sessions, "get_machine_name", claude_code_saves_meanwhile)
 
-    result = setup_h2t.ensure_machine_name(renamed_host)
+    result = setup_h2t.ensure_machine_name()
 
     assert result["status"] == "written"
     assert json.loads(settings.read_text(encoding="utf-8")) == {
@@ -132,7 +133,7 @@ def test_setup_does_not_pin_a_hostname_that_drifted_from_the_history(renamed_hos
     monkeypatch.delenv("CLAUDE_CONFIG_DIR", raising=False)
     _history(renamed_host, "macbook-pro-3")
 
-    result = setup_h2t.ensure_machine_name(renamed_host)
+    result = setup_h2t.ensure_machine_name()
 
     assert result["status"] == "needs_choice"
     assert result["today"] == "mac"
@@ -140,11 +141,25 @@ def test_setup_does_not_pin_a_hostname_that_drifted_from_the_history(renamed_hos
     assert not _settings(renamed_host).exists()
 
 
+def test_setup_reads_the_records_root_and_not_the_3x_variable(renamed_host, monkeypatch, tmp_path):
+    """The 4.0 writer's root is records/sessions; H2T_SESSION_ROOT is not read (R5)."""
+    monkeypatch.delenv("CLAUDE_CONFIG_DIR", raising=False)
+    (paths.records("sessions", "macbook-pro-3") / "proj").mkdir(parents=True)
+    old = tmp_path / "old-root"
+    (old / "mac").mkdir(parents=True)
+    monkeypatch.setenv("H2T_SESSION_ROOT", str(old))
+
+    result = setup_h2t.ensure_machine_name()
+
+    assert result["status"] == "needs_choice"
+    assert result["candidates"] == ["macbook-pro-3"]
+
+
 def test_setup_pins_today_s_name_when_its_folder_exists(renamed_host, monkeypatch):
     monkeypatch.delenv("CLAUDE_CONFIG_DIR", raising=False)
     _history(renamed_host, "automata", "mac")
 
-    result = setup_h2t.ensure_machine_name(renamed_host)
+    result = setup_h2t.ensure_machine_name()
 
     assert result["status"] == "written"
     assert result["value"] == "mac"
@@ -154,7 +169,7 @@ def test_setup_pins_the_name_it_is_given(renamed_host, monkeypatch):
     monkeypatch.delenv("CLAUDE_CONFIG_DIR", raising=False)
     _history(renamed_host, "macbook-pro-3")
 
-    result = setup_h2t.ensure_machine_name(renamed_host, name="macbook-pro-3")
+    result = setup_h2t.ensure_machine_name(name="macbook-pro-3")
 
     assert result["status"] == "written"
     assert json.loads(_settings(renamed_host).read_text(encoding="utf-8")) == {

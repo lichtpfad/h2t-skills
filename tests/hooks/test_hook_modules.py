@@ -27,7 +27,7 @@ def box(tmp_path, monkeypatch):
         monkeypatch.delenv(name, raising=False)
     tmpdir = tmp_path / "tmpdir"
     tmpdir.mkdir()
-    monkeypatch.setattr(tempfile, "tempdir", str(tmpdir))  # the gather lock
+    monkeypatch.setattr(tempfile, "tempdir", str(tmpdir))  # temp files stay in the test tree
     root = tmp_path / "work"
     root.mkdir()
     monkeypatch.chdir(root)
@@ -45,11 +45,6 @@ def _patch_providers(monkeypatch, name: str, body: dict, home):
         # Never enumerate, let alone kill, the real processes of the machine running tests.
         monkeypatch.setattr(reap_codex, "_list_brokers", lambda: [])
         monkeypatch.setattr(reap_codex, "_kill", lambda pid: pytest.fail(f"kill {pid}"))
-    if name in ("grade-guard", "plain-guard"):
-        import importlib
-        module = importlib.import_module(f"h2t_ops.hooks.{name.replace('-', '_')}")
-        # A module constant, resolved at import from the real HOME.
-        monkeypatch.setattr(module, "LOG_PATH", home / ".h2t" / "logs" / f"{name}.jsonl")
 
 
 @pytest.mark.parametrize("case", CASES, ids=[hc.case_id(c) for c in CASES])
@@ -88,6 +83,30 @@ def test_the_gather_lock_skips_a_second_run_in_the_same_directory(box):
     other.mkdir()
     again = hooks.HANDLERS["gather-on-skill"]({**event, "cwd": str(other)})
     assert again.text.startswith("BRIEFING:"), "a run in one directory silenced another"
+
+
+def test_the_gather_lock_lives_in_state_not_tmp(box):
+    """R23: tmp is only store.scratch(), removed on exit; the lock must outlive the process."""
+    from pathlib import Path
+
+    from h2t_ops.core import paths
+    _, root = box
+    event = {"hook_event_name": "PreToolUse", "tool_input": {"skill": "h2t-core:handoff"},
+             "cwd": str(root)}
+    assert hooks.HANDLERS["gather-on-skill"](event).text.startswith("BRIEFING:")
+    assert len(list((paths.state_dir() / "locks").glob("gather-*.lock"))) == 1
+    assert list(Path(tempfile.gettempdir()).glob("h2t_gather_*")) == []
+
+
+def test_a_lock_that_cannot_be_written_is_said_and_the_briefing_stays(box, capsys):
+    from h2t_ops.core import paths
+    _, root = box
+    paths.state_dir().mkdir(parents=True)
+    (paths.state_dir() / "locks").write_text("a file where locks/ should be")
+    event = {"hook_event_name": "PreToolUse", "tool_input": {"skill": "h2t-core:handoff"},
+             "cwd": str(root)}
+    assert hooks.HANDLERS["gather-on-skill"](event).text.startswith("BRIEFING:")
+    assert "h2t gather: lock not written" in capsys.readouterr().err
 
 
 def test_a_failed_gather_does_not_lock_the_retry(box):

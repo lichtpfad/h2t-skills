@@ -1,17 +1,10 @@
 connectors/meetgeek/pipeline.py
-deploy/executor.py
-hook_entry.py
-hooks/gather.py
-hooks/grade_guard.py
-hooks/plain_guard.py
 hooks/plan_closer.py
 hooks/post_git_commit_docs_lint.py
 lifecycle/activity/writer.py
 lifecycle/handoff.py
 lifecycle/project_audit_report.py
 lifecycle/scaffold_project.py
-setup/legacy.py
-setup/state.py
 setup/sync.py
 tools/agent_profile/apply_agent_profile.py
 tools/creative/assembler.py

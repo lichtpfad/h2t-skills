@@ -7,13 +7,12 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any
 
+from h2t_ops.core import paths
 from h2t_ops.core.errors import ConfigError
 
 from ._yaml import load_yaml_mapping
 from .models import DeployProfileSpec, DeployServiceSpec, DeployTargetBinding
 from .profiles import load_profile_registry
-
-_SERVICES_RELATIVE_PATH = Path(".h2t/config/deploy/services.yaml")
 
 
 def load_service_registry(
@@ -22,7 +21,7 @@ def load_service_registry(
     profiles: Mapping[str, DeployProfileSpec] | None = None,
 ) -> Mapping[str, DeployServiceSpec]:
     """Load deploy services from YAML and validate referenced profiles."""
-    config_path = path or (Path.home() / _SERVICES_RELATIVE_PATH)
+    config_path = path or (paths.config_dir() / "deploy" / "services.yaml")
     raw = load_yaml_mapping(config_path, top_level_key="services")
     profile_registry = profiles if profiles is not None else load_profile_registry()
 

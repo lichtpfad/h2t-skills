@@ -899,6 +899,116 @@ def _creative_assemble(repo, mp):
     assert (out / "fx.js").exists()
 
 
+# Task 18: install state and sync snapshots in run, hook logs in logs, the gather lock in
+# state (R23), the deploy input in a store.scratch() directory.
+def _state_commit(sb, mp):
+    from h2t_ops.setup import state
+    state.commit(state.Install(version="4.0.0", generation="g1", tool_root=str(sb.home),
+                               entrypoints={"h2t-hook": str(sb.home / "bin" / "h2t-hook")}))
+
+
+def _sync_tools(sb, mp):
+    """A uv tool dir with a receipt, install.json, and the fake claude of
+    tests/setup/test_sync_converges.py: its state file is written here, recorder off."""
+    from h2t_ops.core import paths
+    from tests.setup.fake_claude import FakeClaude
+    root = sb.home.parent / "uv-tools" / "h2t-ops"
+    root.mkdir(parents=True)
+    (root / "uv-receipt.toml").write_text('[tool]\nrequirements = [{ name = "h2t-ops" }]\n')
+    _state_commit(sb, mp)
+    sb.claude = FakeClaude(sb.home.parent / "claude-state.json", paths.dir_of("harness"), head="4.0.0")
+    sb.claude.seed(plugins=[("h2t-core", "3.9.0", "user", True), ("h2t-core", "4.0.0", "user", True)])
+    for v in ("3.8.0", "3.9.0"):
+        (paths.dir_of("harness") / "plugins" / "cache" / "lichtpfad" / "h2t-core" / v).mkdir(parents=True, exist_ok=True)
+    sb.uv_root = root
+
+
+def _sync_snapshot(sb, mp):
+    from h2t_ops.setup import harness_claude, sync
+    harness = sync._snapshot(sb.uv_root, harness_claude.Claude(exe="claude", run=sb.claude))
+    from pathlib import Path
+    assert {p.name for p in Path(harness["path"]).iterdir()} == {
+        "install.json", "uv-receipt.toml", "claude.json"}
+
+
+def _sync_clean_cache(sb, mp):
+    from h2t_ops.core import paths
+    from h2t_ops.setup import sync
+    removed = sync.clean_cache(paths.dir_of("harness"), [{"id": "h2t-core@lichtpfad", "version": "3.9.0"}],
+                               keep=1)
+    assert [p.name for p in removed] == ["3.8.0"]
+
+
+def _machine_name(sb, mp):
+    from h2t_ops.setup import legacy
+    assert legacy.ensure_machine_name(name="sandbox")["status"] == "written"
+
+
+def _plugin_cache_dir(sb, mp):
+    from h2t_ops.core import paths
+    (paths.dir_of("harness") / "plugins" / "cache" / "lichtpfad" / "h2t-core" / "4.0.0").mkdir(parents=True)
+
+
+def _install_versions_file(sb, mp):
+    import json
+
+    from h2t_ops.core import paths
+    from h2t_ops.setup import legacy
+    mp.setattr(legacy, "install_h2t_ops", lambda source, dry_run=False: {"status": "ok"})
+    legacy.main(["install-h2t-ops", "--json"])
+    written = json.loads((paths.config_dir() / "plugin-versions.json").read_text(encoding="utf-8"))
+    assert written["h2t-core"].endswith("4.0.0")
+
+
+def _hook_log_failure(sb, mp):
+    from h2t_ops import hook_entry
+    from h2t_ops.core import paths
+    assert hook_entry._failed("probe", RuntimeError("boom")) == 1
+    assert (paths.logs_dir() / "hooks.jsonl").is_file()
+
+
+def _guard_log(module):
+    def run(sb, mp):
+        import importlib
+        m = importlib.import_module(f"h2t_ops.hooks.{module}")
+        transcript = sb.home.parent / "t.jsonl"
+        m.handle({"transcript_path": str(transcript), "session_id": "s1"})
+        assert m.log_path().is_file()
+    return run
+
+
+def _guard_transcript(sb, mp):
+    import json
+    (sb.home.parent / "t.jsonl").write_text(json.dumps({"type": "assistant", "message": {
+        "content": [{"type": "text", "text": "Готово. " + "слово " * 30}]}}, ensure_ascii=False))
+
+
+def _gather_lock(sb, mp):
+    import time
+
+    from h2t_ops.hooks import gather
+    lock = gather._lock_file("h2t-core:handoff", str(sb.home))
+    gather._write_lock(lock, int(time.time()))
+    assert gather._locked(lock, int(time.time()))
+
+
+def _deploy_script(sb, mp):
+    script = sb.home.parent / "deploy.py"
+    script.write_text(
+        "import json, os, pathlib\n"
+        "p = json.loads(pathlib.Path(os.environ['H2T_DEPLOY_INPUT_JSON']).read_text())\n"
+        "print(json.dumps({'ok': True, 'result': {'service': p['service'], 'target': 'prod', "
+        "'status': 'deployed'}}))\n")
+    sb.deploy_script = script
+
+
+def _deploy_input(sb, mp):
+    from h2t_ops.deploy import executor
+    out = executor._run_script(sb.deploy_script, repo_root=sb.home.parent, payload={"service": "svc"},
+                               action="deploy", dry_run=True, environ={"PATH": "/usr/bin:/bin"})
+    assert out["status"] == "deployed", out
+
+
 CASES: list[Case] = [
     Case("store.replace.state", _store_replace_state),
     # Task 8: a refresh writes nothing; a rotated refresh token writes local and the mirror.
@@ -978,4 +1088,16 @@ CASES: list[Case] = [
     Case("drawio.generate.dest", _in_repo(_drawio_generate)),
     Case("drawio.export.dest", _in_repo(_drawio_export), setup=_in_repo(_drawio_export_setup)),
     Case("creative.assemble.dest", _in_repo(_creative_assemble)),
+    # Task 18: install state, snapshots and the plugin cache through store; hook logs in
+    # logs; the gather lock in state/locks (R23); the deploy input through store.scratch().
+    Case("setup.state.commit", _state_commit),
+    Case("setup.sync.snapshot", _sync_snapshot, setup=_sync_tools),
+    Case("setup.sync.clean-cache", _sync_clean_cache, setup=_sync_tools),
+    Case("setup.machine-name", _machine_name),
+    Case("setup.install-h2t-ops.versions", _install_versions_file, setup=_plugin_cache_dir),
+    Case("hook.log-failure", _hook_log_failure),
+    Case("hook.grade-guard.log", _guard_log("grade_guard"), setup=_guard_transcript),
+    Case("hook.plain-guard.log", _guard_log("plain_guard"), setup=_guard_transcript),
+    Case("hook.gather.lock", _gather_lock),
+    Case("deploy.executor.input", _deploy_input, setup=_deploy_script),
 ]

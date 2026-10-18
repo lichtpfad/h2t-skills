@@ -25,7 +25,6 @@ import io
 import json
 import re
 import sys
-import tempfile
 import time
 from datetime import datetime
 from pathlib import Path
@@ -63,9 +62,14 @@ def _skill(event: dict) -> str:
 
 
 def _lock_file(skill: str, cwd: str) -> Path:
+    # Imported here: a Skill call for any other skill returns before this (spec §2.7).
+    from h2t_ops.core import paths
+
     # Keyed by cwd as well as skill, so a run in one repo cannot silence another.
     key = re.sub(r"[/:]", "_", skill) + "_" + hashlib.sha1(cwd.encode("utf-8", "replace")).hexdigest()[:12]
-    return Path(tempfile.gettempdir()) / f"h2t_gather_{key}.lock"
+    # In state, not tmp: tmp is only store.scratch(), removed on exit, so it cannot hold a
+    # lock from one hook process to the next (plan R23).
+    return paths.state_dir() / "locks" / f"gather-{key}.lock"
 
 
 def _locked(lock: Path, now: int) -> bool:
@@ -77,10 +81,15 @@ def _locked(lock: Path, now: int) -> bool:
 
 
 def _write_lock(lock: Path, now: int) -> None:
+    from h2t_ops.core import store
+    from h2t_ops.core.errors import H2TError
+
     try:
-        lock.write_text(f"{now}\n", encoding="utf-8")
-    except OSError:
-        pass  # a missing lock costs one duplicate gather, never the briefing
+        store.replace(lock, f"{now}\n", place="state")
+    except (OSError, H2TError) as exc:
+        # A missing lock costs one duplicate gather, never the briefing; it is said, not
+        # swallowed (hooks.md).
+        print(f"h2t gather: lock not written: {exc}", file=sys.stderr)
 
 
 def _tail(raw: bytes) -> str:

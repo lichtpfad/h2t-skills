@@ -55,26 +55,44 @@ def test_reads_last_assistant_message_only(tmp_path):
     assert m.last_assistant_text(path) == "смотрю дальше"
 
 
-def test_a_claim_is_logged_and_never_blocks(tmp_path, monkeypatch):
+def test_a_claim_is_logged_and_never_blocks(tmp_path):
     """Silent with a log row since Task 9b; the TUI line is a one-line switch in handle()."""
     m = _load()
-    monkeypatch.setattr(m, "LOG_PATH", tmp_path / "log.jsonl")
     path = _transcript(tmp_path, "Готово.")
     assert m.handle({"transcript_path": path, "session_id": "s1"}) == Reply()
-    row = json.loads((tmp_path / "log.jsonl").read_text(encoding="utf-8"))
+    row = json.loads(m.log_path().read_text(encoding="utf-8"))
     assert row["flagged"] is True and row["word"] == "Готово" and row["session_id"] == "s1"
 
 
-def test_stop_hook_active_is_silent(tmp_path, monkeypatch):
+def test_stop_hook_active_is_silent(tmp_path):
     m = _load()
-    monkeypatch.setattr(m, "LOG_PATH", tmp_path / "log.jsonl")
     path = _transcript(tmp_path, "Готово.")
     assert m.handle({"transcript_path": path, "stop_hook_active": True}) == Reply()
-    assert not (tmp_path / "log.jsonl").exists()
+    assert not m.log_path().exists()
 
 
-def test_missing_transcript_is_silent(tmp_path, monkeypatch):
+def test_missing_transcript_is_silent(tmp_path):
     m = _load()
-    monkeypatch.setattr(m, "LOG_PATH", tmp_path / "log.jsonl")
     assert m.handle({"transcript_path": "Z:/nope.jsonl"}) == Reply()
-    assert not (tmp_path / "log.jsonl").exists()
+    assert not m.log_path().exists()
+
+
+def test_the_log_follows_home_at_call_time(tmp_path, monkeypatch):
+    """Resolved per call, not at import: the HOME of the run is the one written (Task 18)."""
+    m = _load()
+    later = tmp_path / "later"
+    monkeypatch.setenv("HOME", str(later))
+    monkeypatch.setenv("USERPROFILE", str(later))
+    path = _transcript(tmp_path, "Готово.")
+    assert m.handle({"transcript_path": path, "session_id": "s1"}) == Reply()
+    assert (later / ".h2t" / "logs" / "grade-guard.jsonl").is_file()
+
+
+def test_a_log_row_that_cannot_be_written_is_said_not_raised(tmp_path, capsys):
+    """A silent hook is a failure (hooks.md): the Stop still passes, stderr says why."""
+    m = _load()
+    m.log_path().parent.parent.mkdir(parents=True, exist_ok=True)
+    m.log_path().parent.write_text("a file where logs/ should be")
+    path = _transcript(tmp_path, "Готово.")
+    assert m.handle({"transcript_path": path, "session_id": "s1"}) == Reply()
+    assert "grade-guard: log row not written" in capsys.readouterr().err

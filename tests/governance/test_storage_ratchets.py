@@ -23,9 +23,10 @@ CEILINGS = {  # measured 2026-10-18 on ab078f4f; lowered after Task 6, Task 8 (G
     # ontology through the index, registration through store, H2T_CONFIG_ROOT not read),
     # Task 16 (the 3.x session roots through paths.legacy), Task 17 (writes into a repository
     # through store.repo, user-named paths with dest=True; 6 of the 36 are store.mkdir and
-    # RepoWriter.mkdir calls the .mkdir( pattern counts)
-    "home": 33, "legacy_roots": 3, "path_env": 1, "dotenv": 0,
-    "secret_readers": 0, "writes": 36, "sqlite": 0,
+    # RepoWriter.mkdir calls the .mkdir( pattern counts), Task 18 (install state, snapshots,
+    # hook logs, the gather lock, the deploy input, setup's paths; 2 of the 8 are store.mkdir)
+    "home": 19, "legacy_roots": 0, "path_env": 0, "dotenv": 0,
+    "secret_readers": 0, "writes": 8, "sqlite": 0,
 }
 
 
