@@ -111,6 +111,21 @@ def test_a_write_outside_every_place_is_caught(sandbox):
     assert sandbox.recorder.violations == [f"open write {os.path.realpath(outside)} outside every place"]
 
 
+def test_only_bytecode_under_pycache_is_exempt_from_the_confinement(sandbox):
+    """The exemption is the interpreter's cache, not any file under a directory named
+    __pycache__: a .md there is a write like any other (negative control)."""
+    base = os.path.join(os.path.abspath(os.sep), "h2t-sandbox-outside", "__pycache__")
+    pyc = os.path.join(base, "x.cpython-312.pyc")
+    tmp = pyc + ".4301920880"                 # the import system's temp name before the rename
+    arbitrary = os.path.join(base, "arbitrary.md")
+    with sandbox.recorder.active():
+        sys.audit("open", pyc, "w", os.O_WRONLY | os.O_CREAT)
+        sys.audit("open", tmp, "w", os.O_WRONLY | os.O_CREAT)
+        sys.audit("open", arbitrary, "w", os.O_WRONLY | os.O_CREAT)
+    assert sandbox.recorder.violations == [
+        f"open write {os.path.realpath(arbitrary)} outside every place"]
+
+
 def test_worker_thread_events_reach_the_recorder(sandbox):
     import threading
     f = sandbox.lake / "t.md"

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import contextlib
 import os
+import re
 import sys
 import threading
 import urllib.parse
@@ -101,6 +102,14 @@ def _paths(event: str, args: tuple) -> list[tuple[str, bool]]:
     return []
 
 
+def _is_bytecode(p: Path) -> bool:
+    """The interpreter's own cache entry: the __pycache__ directory itself, or a .pyc (or the
+    .pyc.<id> temp the import system writes before the atomic rename) directly inside one."""
+    if p.name == "__pycache__":
+        return True
+    return p.parent.name == "__pycache__" and re.fullmatch(r".+\.pyc(\.\d+)?", p.name) is not None
+
+
 class Recorder:
     def __init__(self, guarded: list[Path], secret_dirs: list[Path], legacy: list[Path],
                  twins: dict[Path, Path | tuple[Path, tuple[str, ...]]], *,
@@ -159,7 +168,7 @@ class Recorder:
                 continue
             secret = self._under(real, self.secret_dirs)
             if write and self.confine and not self._under(real, self.guarded) \
-                    and not self._under(real, self.allow) and "__pycache__" not in real.parts:
+                    and not self._under(real, self.allow) and not _is_bytecode(real):
                 self.violations.append(f"{event} write {real} outside every place")
                 continue
             if not (write or secret) or not self._under(real, self.guarded):
