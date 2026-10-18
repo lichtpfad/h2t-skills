@@ -15,9 +15,9 @@ _spec = importlib.util.spec_from_file_location("storage_map", ROOT / "scripts" /
 storage_map = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(storage_map)
 
-CEILINGS = {  # measured 2026-10-18 on ab078f4f; lowered after Task 6 and Task 8 (Google)
-    "home": 65, "legacy_roots": 30, "path_env": 14, "dotenv": 0,
-    "secret_readers": 14, "writes": 197, "sqlite": 1,
+CEILINGS = {  # measured 2026-10-18 on ab078f4f; lowered after Task 6, Task 8 (Google), Task 9 (Telegram)
+    "home": 63, "legacy_roots": 27, "path_env": 14, "dotenv": 0,
+    "secret_readers": 14, "writes": 191, "sqlite": 0,
 }
 
 

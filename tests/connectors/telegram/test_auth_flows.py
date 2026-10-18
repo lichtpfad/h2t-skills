@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import asyncio
 import json
+import stat
+import sys
 from types import SimpleNamespace
 
 import pytest
@@ -62,6 +64,37 @@ def test_request_code_reports_the_delivery_channel(tmp_path, monkeypatch, code_t
     if channel == "email":
         assert result["email_pattern"] == "l***@g***.com"
     assert json.loads((tmp_path / "auth_state.json").read_text())["phone_code_hash"] == "hash1"
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX mode bits")
+def test_auth_state_without_config_dir_is_a_secret_in_local(monkeypatch):
+    """4.0 layout: the pending code hash is secrets/local/telegram.auth-state.json, 0600,
+    and resend reads it back from there (#548 Task 9)."""
+    from h2t_ops.connectors.telegram import client as tmod
+    from h2t_ops.core import paths
+
+    monkeypatch.setenv("TELEGRAM_API_ID", "1")
+    monkeypatch.setenv("TELEGRAM_API_HASH", "fake-hash")
+
+    class Fake(_Base):
+        def send_code_request(self, phone):
+            return _sent(tl_auth.SentCodeTypeSms(length=5))
+
+        def __call__(self, request):
+            assert request.phone_code_hash == "hash1"
+            return SimpleNamespace(phone_code_hash="hash2", type=tl_auth.SentCodeTypeSms(length=5),
+                                   next_type=None, timeout=None)
+
+    monkeypatch.setattr(tmod.TelegramClientAdapter, "_telegram_client_class", lambda self: Fake)
+    adapter = tmod.TelegramClientAdapter()
+    adapter.request_code("+100")
+
+    state = paths.secrets_local() / "telegram.auth-state.json"
+    assert json.loads(state.read_text())["phone_code_hash"] == "hash1"
+    assert stat.S_IMODE(state.stat().st_mode) == 0o600
+    adapter.resend_code()
+    assert json.loads(state.read_text())["phone_code_hash"] == "hash2"
+    assert not paths.legacy("telegram").exists()
 
 
 def test_request_code_that_sent_nothing_is_an_error_pointing_at_qr(tmp_path, monkeypatch):

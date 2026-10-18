@@ -119,7 +119,7 @@ def register(subparsers: Any) -> None:
         "--out",
         dest="out",
         default=None,
-        help="output directory (default: ~/Downloads)",
+        help="output directory (default: the inbox place)",
     )
     add_json(download_media)
 

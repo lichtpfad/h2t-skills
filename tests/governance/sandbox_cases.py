@@ -48,10 +48,113 @@ def _google_refresh(refresh_token):
     return run
 
 
+def _telegram_cli(argv, client_cls):
+    """Run `h2t-ops telegram <argv>` in-process with a stand-in for Telethon's client."""
+    def run(sb, mp):
+        import argparse
+
+        from h2t_ops.connectors.telegram import client, commands
+        mp.setattr(client.TelegramClientAdapter, "_telegram_client_class", lambda self: client_cls())
+        p = argparse.ArgumentParser()
+        commands.register(p.add_subparsers(dest="connector"))
+        commands.run(p.parse_args(["telegram", *argv]))
+    return run
+
+
+def _telegram_fake():
+    """Telethon's TelegramClient as far as the commands use it: it opens <session>.session
+    itself, as SQLiteSession does, so the write must be one store.managed handed over."""
+    from pathlib import Path
+    from types import SimpleNamespace
+
+    from telethon.tl.types import auth as tl_auth
+
+    class Fake:
+        def __init__(self, session, api_id, api_hash):
+            p = Path(session + ".session")
+            if not p.exists():
+                p.write_bytes(b"fake-session")
+
+        def connect(self):
+            pass
+
+        def disconnect(self):
+            pass
+
+        def send_code_request(self, phone):
+            return SimpleNamespace(phone_code_hash="fake-hash", type=tl_auth.SentCodeTypeSms(length=5),
+                                   next_type=None, timeout=None)
+
+        def iter_dialogs(self, limit=None):
+            return []
+
+        def iter_messages(self, entity, limit=None):
+            return []
+
+        def get_messages(self, entity, ids=None):
+            f = SimpleNamespace(name="report.pdf", size=8, mime_type="application/pdf", ext=".pdf")
+            return SimpleNamespace(media=SimpleNamespace(), file=f)
+
+        def download_media(self, message, file=None):
+            if isinstance(file, str):           # a directory, as 3.x passed it: Telethon names
+                target = Path(file) / message.file.name   # the file and writes it itself
+                target.write_bytes(b"fake-pdf")
+                return str(target)
+            file.write(b"fake-pdf")
+            return file
+    return Fake
+
+
+def _telegram_keys(sb, mp):
+    from h2t_ops.core import paths
+    shared = paths.secrets_shared()
+    shared.mkdir(parents=True, exist_ok=True)
+    (shared / "telegram.env").write_text("TELEGRAM_API_ID=1\nTELEGRAM_API_HASH=fake-hash\n")
+
+
+def _sqlite_session(path, rows=()):
+    import sqlite3
+    path.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(path)
+    conn.execute("CREATE TABLE entities (id INTEGER PRIMARY KEY, hash INTEGER)")
+    conn.executemany("INSERT INTO entities VALUES (?, ?)", rows)
+    conn.commit()
+    conn.close()
+
+
+def _telegram_legacy_session(sb, mp):
+    import os
+    import stat
+
+    from h2t_ops.core import paths
+    _telegram_keys(sb, mp)
+    d = paths.legacy("telegram")
+    os.chmod(d, stat.S_IRWXU)        # the sandbox closes legacy dirs; open it to plant the file
+    try:
+        _sqlite_session(d / "session.session", [(-1000000000010, 42)])
+    finally:
+        os.chmod(d, stat.S_IRUSR | stat.S_IXUSR)
+
+
+def _telegram_new_session(sb, mp):
+    from h2t_ops.core import paths
+    _telegram_keys(sb, mp)
+    _sqlite_session(paths.secrets_local() / "telegram.session", [(-1000000000010, 42)])
+
+
 CASES: list[Case] = [
     Case("store.replace.state", _store_replace_state),
     # Task 8: a refresh writes nothing; a rotated refresh token writes local and the mirror.
     Case("google.refresh", _google_refresh("fake-r1"), setup=_google_tokens),
     Case("google.refresh.new-token", _google_refresh("fake-r2"), setup=_google_tokens,
          compat=(".config/google-calendar-mcp/tokens.json",)),
+    # Task 9: session and auth state in secrets/local, attachments through a store handle.
+    Case("telegram.auth-request-code", _telegram_cli(["auth", "request-code", "--phone", "+100"],
+                                                     _telegram_fake), setup=_telegram_keys),
+    Case("telegram.download-media.inbox", _telegram_cli(["download-media", "chat", "55"], _telegram_fake),
+         setup=_telegram_keys),
+    Case("telegram.session.copy-from-legacy", _telegram_cli(["dialogs"], _telegram_fake),
+         setup=_telegram_legacy_session),
+    Case("telegram.messages", _telegram_cli(["messages", "10", "--limit", "5"], _telegram_fake),
+         setup=_telegram_new_session),
 ]
