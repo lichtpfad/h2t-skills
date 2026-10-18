@@ -450,6 +450,28 @@ def test_a_source_changed_after_its_phase_names_the_file_and_the_way_out():
     assert "h2t-setup layout rollback --sync-paused" in ei.value.hint
 
 
+def test_a_session_written_after_its_phase_stops_verify_and_the_rerun_copies_it(monkeypatch):
+    """A 3.x session saved after the sessions phase has no source row: verify names it and
+    the migration does not complete; rollback and a new migration copy it."""
+    _old_session("sessions.h2t", M, "p", "s1", _md("s1"))
+    real = phases.phase_sessions
+    late = paths.legacy("sessions.dor") / M / "p" / "s2.md"
+
+    def sessions(ctx):
+        real(ctx)
+        _write(late, _md("s2"))                     # a 3.x handoff still running
+
+    monkeypatch.setattr(phases, "phase_sessions", sessions)
+    report = _migrate()
+    assert [s for s, _ in report.failed] == ["layout 1: verify"]
+    assert f"{late}: written after the sessions phase, not copied" in report.failed[0][1]
+    assert not paths.layout_file().exists()
+    monkeypatch.setattr(phases, "phase_sessions", real)
+    rollback.rollback(sync_paused=True)
+    assert _migrate().failed == []
+    assert session_record.session_path(M, "p", "s2").is_file()
+
+
 # --- the whole run -------------------------------------------------------------------------
 
 def test_every_phase_has_a_function():

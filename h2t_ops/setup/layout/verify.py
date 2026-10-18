@@ -1,7 +1,8 @@
 """Layout 1, phase `verify` (#548 §8 п. 6, plan R25, R37, R38).
 
-Three checks, all against what the journal recorded before the writes: the set of secret
-values, the byte copies by hash, the transformed copies by their rule. Problems name keys,
+Four checks, against what the journal recorded before the writes: the set of secret
+values, the byte copies by hash, the transformed copies by their rule; and this machine's
+old sessions, enumerated again, each with its source row. Problems name keys,
 paths and sha256[:12], never a value. Secret files are read through core.secrets only.
 """
 from __future__ import annotations
@@ -131,8 +132,20 @@ def verify_transformed(journal) -> list[str]:
     return problems
 
 
+def verify_sessions(journal, machine: str) -> list[str]:
+    """Every session md this machine has in the old roots now, not only the ones the
+    sessions phase saw: a 3.x session written after that phase has no source row, and a
+    migration that completed without it would leave it behind for good (the next run says
+    "already")."""
+    from h2t_ops.setup.layout import phases
+    seen = {r["old"] for r in journal.entries() if r["op"] == "source"}
+    return [f"{src}: written after the sessions phase, not copied"
+            for _, src, _ in phases._session_sources(machine) if str(src) not in seen]
+
+
 def phase_verify(ctx) -> None:
     problems = verify_secrets(ctx.journal) + verify_copies(ctx.journal) + verify_transformed(ctx.journal)
+    problems += verify_sessions(ctx.journal, ctx.machine)
     if problems:
         raise PhaseFailed("; ".join(problems[:5]), hint=(
             "nothing was removed. If an old file named here changed after it was copied, close "
