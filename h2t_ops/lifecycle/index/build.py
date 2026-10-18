@@ -141,6 +141,8 @@ def _read_leaf(conn: sqlite3.Connection, leaf: Path) -> None:
 
 
 def _read_registry(conn: sqlite3.Connection, f: Path) -> None:
+    """DOR's rows carry id, status, ts, host, cwd, repo, branch, domain, project, resume;
+    the machine is `host`. The whole line stays in `raw`."""
     conn.execute("DELETE FROM registry_history")
     conn.execute("DELETE FROM problems WHERE path=?", (str(f),))
     try:
@@ -159,7 +161,7 @@ def _read_registry(conn: sqlite3.Connection, f: Path) -> None:
             obj = None
         obj = obj if isinstance(obj, dict) else {}     # the raw line keeps what did not parse
         conn.execute("INSERT INTO registry_history VALUES (?, ?, ?, ?, ?, ?)",
-                     (n, _text(obj.get("ts", obj.get("timestamp"))), _text(obj.get("machine")),
+                     (n, _text(obj.get("ts")), _text(obj.get("host", obj.get("machine"))),
                       _text(obj.get("project")), _text(obj.get("status")), line))
 
 
@@ -173,7 +175,10 @@ def _leaves(base: Path) -> list[Path]:
 
 def refresh(conn: sqlite3.Connection) -> None:
     """Read again whatever changed by stat since the last refresh. Each stat is taken before
-    its read: a file landing in between leaves the old stamp, and the next refresh reads it."""
+    its read: a file landing in between leaves the old stamp, and the next refresh reads it.
+    One IMMEDIATE transaction: a peer refreshing at the same time waits, then finds the
+    stamps this one wrote and has nothing left to do."""
+    conn.execute("BEGIN IMMEDIATE")
     stored = {p: (m, s) for p, m, s in conn.execute("SELECT path, mtime_ns, size FROM stamps")}
     now: dict[str, tuple[int, int] | None] = {}
 

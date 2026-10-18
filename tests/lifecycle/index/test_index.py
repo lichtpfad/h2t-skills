@@ -1,14 +1,17 @@
 """state/index.sqlite, derived from session md frontmatter and the ontology (#548 §5)."""
+import json
+import multiprocessing
 import os
 import shutil
 import sqlite3
+import sys
 import time
 
 import pytest
 
 from h2t_ops.core import paths
 from h2t_ops.lifecycle import index, session_record
-from h2t_ops.lifecycle.index import query
+from h2t_ops.lifecycle.index import query, schema
 
 
 def _md(machine, project, sid, updated_at="2026-10-18T10:00:00Z", name=None, **extra):
@@ -44,7 +47,9 @@ def test_rebuild_reads_frontmatter_of_every_machine():
     imports = paths.records("imports")
     imports.mkdir(parents=True)
     (imports / "dor-registry.jsonl").write_text(
-        '{"ts": "2026-03-17", "machine": "mac", "project": "p", "status": "done"}\nnot json\n',
+        '{"id": "r1", "status": "done", "ts": "2026-03-17T10:00:00Z", "host": "mac", "cwd": "/w/p", '
+        '"repo": "h2t-skills", "branch": "main", "domain": "dev", "project": "p", "resume": "x"}\n'
+        'not json\n',
         encoding="utf-8")
 
     assert index.rebuild() == {"sessions": 2, "projects": 1, "problems": 0}
@@ -55,8 +60,9 @@ def test_rebuild_reads_frontmatter_of_every_machine():
     assert _rows("SELECT id, domain, label FROM projects") == [{"id": "p", "domain": "dev", "label": "Proj"}]
     assert {(r["pattern"], r["kind"], r["project"]) for r in _rows("SELECT * FROM repos")} == {
         ("h2t-skills", "mapping", "p"), ("/w/x", "cwd", "q")}
-    hist = _rows("SELECT line, machine, raw FROM registry_history ORDER BY line")
-    assert [(h["line"], h["machine"]) for h in hist] == [(1, "mac"), (2, None)]
+    hist = _rows("SELECT line, ts, machine, project, status, raw FROM registry_history ORDER BY line")
+    assert [(h["line"], h["ts"], h["machine"], h["project"], h["status"]) for h in hist] == [
+        (1, "2026-03-17T10:00:00Z", "mac", "p", "done"), (2, None, None, None, None)]
     assert hist[1]["raw"] == "not json"
     mapping, domains = index.ontology()
     assert mapping["mappings"] == {"h2t-skills": "dev/p"}
@@ -155,6 +161,99 @@ def test_vanished_directory_drops_its_rows():
     shutil.rmtree(gone)
     assert [s["session_id"] for s in index.latest_sessions(["p"])] == ["s1"]
     assert index.problems() == []
+
+
+def _first_open(barrier, q):
+    try:
+        barrier.wait()
+        q.put(("ok", len(index.latest_sessions(["p"], limit=100))))
+    except BaseException as exc:                     # noqa: BLE001 — reported to the parent
+        q.put(("err", repr(exc)))
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="fork start method")
+def test_concurrent_first_open_neither_raises_nor_removes(tmp_path, monkeypatch):
+    """Four session-starts on a machine with no index yet, released together: a peer's lock
+    or half-made schema is not damage, so nobody raises and nobody removes the base."""
+    ctx = multiprocessing.get_context("fork")
+    bad = []
+    for trial in range(6):
+        home = tmp_path / f"h{trial}"
+        home.mkdir()
+        monkeypatch.setenv("HOME", str(home))
+        monkeypatch.setenv("USERPROFILE", str(home))
+        for s in range(40):
+            _md(f"m{s % 2}", "p", f"s{s}")
+        barrier, q = ctx.Barrier(4), ctx.Queue()
+        procs = [ctx.Process(target=_first_open, args=(barrier, q)) for _ in range(4)]
+        for p in procs:
+            p.start()
+        got = [q.get(timeout=60) for _ in procs]
+        for p in procs:
+            p.join(timeout=60)
+        bad += [f"trial {trial}: {g}" for g in got if g != ("ok", 40)]
+        log = paths.logs_dir() / "writes.jsonl"
+        ops = [json.loads(line)["op"] for line in log.read_text(encoding="utf-8").splitlines()]
+        bad += [f"trial {trial}: a remove row" for op in ops if op == "remove"]
+    assert bad == []
+
+
+def test_schema_creation_is_atomic_for_peers(tmp_path):
+    """A peer opening the new file right after the first CREATE must wait for the lock, never
+    see tables without the version row (that reads as Mismatch and triggers a rebuild)."""
+    db = tmp_path / "new.sqlite"
+    seen = []
+
+    class Creator:            # the connection creating the schema, with a peer at the seam
+        def __init__(self):
+            self.conn = sqlite3.connect(db)
+
+        def execute(self, sql, *args):
+            cur = self.conn.execute(sql, *args)
+            if sql.lstrip().startswith("CREATE TABLE") and not seen:
+                peer = sqlite3.connect(db, timeout=0)
+                try:
+                    schema.ensure(peer)
+                    seen.append("created again")
+                except Exception as exc:  # noqa: BLE001 — the outcome is the assertion
+                    seen.append(repr(exc))
+                finally:
+                    peer.close()
+            return cur
+
+        def commit(self):
+            self.conn.commit()
+
+        def rollback(self):
+            self.conn.rollback()
+
+    creator = Creator()
+    assert schema.ensure(creator) is True
+    creator.conn.close()
+    assert seen == ["OperationalError('database is locked')"]
+
+
+def test_locked_base_is_served_not_removed(monkeypatch):
+    """A peer holding the write lock past the busy timeout: the base is served as it stands
+    (without the refresh), never removed or replaced."""
+    _md("mac", "p", "s1", "2026-10-17T00:00:00Z")
+    index.rebuild()
+    _md("laptop", "p", "s2", "2026-10-18T00:00:00Z")    # would need a refresh to be seen
+    monkeypatch.setattr(query, "BUSY_MS", 50)
+    inode = query.index_path().stat().st_ino
+    log = paths.logs_dir() / "writes.jsonl"
+    rows_before = len(log.read_text(encoding="utf-8").splitlines())
+    peer = sqlite3.connect(query.index_path(), timeout=0)
+    peer.execute("BEGIN IMMEDIATE")
+    try:
+        assert [s["session_id"] for s in index.latest_sessions(["p"])] == ["s1"]
+    finally:
+        peer.rollback()
+        peer.close()
+    assert query.index_path().stat().st_ino == inode
+    new = [json.loads(line)["op"] for line in log.read_text(encoding="utf-8").splitlines()[rows_before:]]
+    assert "remove" not in new and "replace" not in new, new
+    assert [s["session_id"] for s in index.latest_sessions(["p"])] == ["s2", "s1"]   # lock gone
 
 
 @pytest.mark.slow
