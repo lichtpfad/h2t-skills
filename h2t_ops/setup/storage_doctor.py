@@ -240,7 +240,9 @@ def _places(cfg: paths.PathsConfig) -> list[Finding]:
     out = [Finding("warn", "place-missing", f"{pid} {_show(p)} does not exist")
            for pid, p in sorted(cfg.places.items()) if not p.exists()]
     if not paths.vault().exists():
-        out.append(Finding("warn", "place-missing", f"vault {_show(paths.vault())} does not exist ({paths.VAULT_HINT})"))
+        # Only a vault someone set is a problem; the default absent is a new user without POS (§12).
+        level = "info" if paths.source("vault") == "default" else "warn"
+        out.append(Finding(level, "place-missing", f"vault {_show(paths.vault())} does not exist ({paths.VAULT_HINT})"))
     out += [Finding("info", "place-unset", f"{pid} is not set; the package uses {_show(paths.data_dir() / pid)}"
                                            f" — h2t-ops paths set {pid} <path>")
             for pid in ("lake", "inbox") if pid not in cfg.places]

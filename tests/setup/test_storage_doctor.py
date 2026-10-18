@@ -154,6 +154,26 @@ def test_place_missing_for_paths_yaml_and_vault(tmp_path):
     assert _texts("place-missing") == []
 
 
+def test_vault_missing_is_info_by_default_and_warn_when_set(monkeypatch, tmp_path):
+    vault = [f for f in check() if f.code == "place-missing" and f.text.startswith("vault ")]
+    assert [(f.level, f.text.split(" (")[0]) for f in vault] == [("info", "vault ~/.dor/vault does not exist")]
+    monkeypatch.setenv("H2T_PATH_VAULT", str(tmp_path / "no-vault"))
+    vault = [f for f in check() if f.code == "place-missing" and f.text.startswith("vault ")]
+    assert [(f.level, f.text.split(" (")[0]) for f in vault] == [("warn", f"vault {tmp_path / 'no-vault'} does not exist")]
+
+
+def test_doctor_is_clean_for_a_new_user_in_an_empty_home(capsys):
+    """§12: a new user's doctor has nothing to warn about — info lines only."""
+    import shutil
+    shutil.rmtree(paths.root())               # drop the autouse config repo: an empty HOME
+    assert list(paths.home().iterdir()) == []
+    assert cli._doctor() == 0
+    storage = [line for line in capsys.readouterr().out.splitlines() if line.startswith("storage: ")]
+    findings = storage[2:]
+    assert findings and all(line.startswith("storage: info ") for line in findings), findings
+    assert list(paths.home().iterdir()) == []
+
+
 def test_place_unset_is_info(tmp_path):
     assert _texts("place-unset") == [
         "lake is not set; the package uses ~/.h2t/data/lake — h2t-ops paths set lake <path>",
