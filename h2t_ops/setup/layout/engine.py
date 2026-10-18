@@ -55,10 +55,10 @@ def journaled_create(journal: Journal, target: Path, data: bytes, *, place: str,
     return Path(target)
 
 
-def _record_sources(journal: Journal, olds, new: Path) -> None:
+def _record_sources(journal: Journal, olds, new: Path, place: str, sha: str) -> None:
     for old in olds:
         if old is not None:
-            journal.source(Path(old), new)
+            journal.source(Path(old), new, place=place, sha256=sha)
 
 
 def _destination(target: Path, sha: str, place: str, label: str) -> tuple[Path, bool]:
@@ -87,7 +87,7 @@ def put(journal: Journal, target: Path, data: bytes, *, place: str, source: str,
     target = Path(target)
     sha = store.sha256(data)
     dest, there = _destination(target, sha, place, from_name or source)
-    _record_sources(journal, (source_path, *sources), dest)
+    _record_sources(journal, (source_path, *sources), dest, place, sha)
     if not there:
         journaled_create(journal, dest, data, place=place, source=source,
                          source_path=source_path, rule=rule, keys=keys)
@@ -100,7 +100,7 @@ def put_union(journal: Journal, target: Path, data: bytes, *, place: str,
     previous bytes go to the rollback directory and the journal before the write.
     sources: the old files the added keys came from (`source` rows, as in put)."""
     target = Path(target)
-    _record_sources(journal, sources, target)
+    _record_sources(journal, sources, target, place, store.sha256(data))
     stamp = store.stamp(target)
     prev = journal_mod.current_bytes(target, place)
     if prev is None:
@@ -217,31 +217,52 @@ def _inside(a: Path, b: Path) -> bool:
     return a == b or b in a.parents
 
 
-def _moved_from(journal: Journal) -> dict[Path, set[str]]:
-    """Old directory -> the new directories its files were copied to. A source inside a
+def _moved_from(journal: Journal) -> tuple[dict[Path, set[str]], set[Path]]:
+    """Old directory -> the new directories its files were copied to, and the old
+    directories left unmarked. A source row is written before the write it announces, so it
+    counts only while its new file holds a hash this journal recorded for that path (source,
+    created, replaced); one row that does not hold leaves its whole directory unmarked — a
+    marker there could get an original deleted that was never copied. A source inside a
     place the user declared (lake: ~/.dor/lake, R2) is that place, not an old one."""
     roots = sorted(((r, Path(os.path.realpath(r))) for r in paths.legacy_roots()),
                    key=lambda kv: len(kv[1].parts), reverse=True)
+    rows = journal.entries()
+    known: dict[str, set[str]] = {}
+    for row in rows:
+        if row["op"] == "source":
+            known.setdefault(row["new"], set()).add(row["sha256"])
+        elif row["op"] == "created":
+            known.setdefault(row["path"], set()).add(row["sha256"])
+        elif row["op"] == "replaced":
+            known.setdefault(row["path"], set()).add(row["new_sha"])
     out: dict[Path, set[str]] = {}
-    for row in journal.entries():
+    unproven: set[Path] = set()
+    for row in rows:
         if row["op"] != "source":
             continue
         src = Path(row["old"])
         if store.classify(src) != "legacy":
             continue
         real = Path(os.path.realpath(src))
+        held = journal_mod.current_sha(Path(row["new"]), row["place"]) in known[row["new"]]
         for root, real_root in roots:
             if _inside(real, real_root):
                 out.setdefault(root, set()).add(str(Path(row["new"]).parent))
+                if not held:
+                    unproven.add(root)
                 break
-    return out
+    return {r: t for r, t in out.items() if r not in unproven}, unproven
 
 
 def phase_markers(ctx: PhaseContext) -> None:
     """MOVED-TO.txt in every old directory something was copied from, then layout.json (R44)."""
     today = datetime.date.today().isoformat()
     with store.migrating():
-        for root, targets in sorted(_moved_from(ctx.journal).items()):
+        moved, unproven = _moved_from(ctx.journal)
+        for root in sorted(unproven):
+            ctx.report.notes.append(f"layout 1: no MOVED-TO.txt in {root}: not every file read "
+                                    "from it is in its new place")
+        for root, targets in sorted(moved.items()):
             marker = root / "MOVED-TO.txt"
             if marker.exists() or store.classify(root) != "legacy":
                 continue

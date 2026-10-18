@@ -19,6 +19,15 @@ from h2t_ops.core.errors import ConfigError
 
 PREFIX = "layout1-"
 KEEP_DAYS = 30
+TORN = json.dumps({"op": "torn_row"})
+
+
+def _parses(line: bytes) -> bool:
+    try:
+        json.loads(line.decode("utf-8"))
+    except ValueError:
+        return False
+    return True
 
 
 def rollback_root() -> Path:
@@ -56,22 +65,28 @@ class Journal:
         if not self.dir.is_dir():       # made on the first row, so a run that stops before
             store.mkdir(self.dir, place="run", mode=0o700)     # writing leaves none (R36)
 
-    def _torn(self) -> bool:
-        """The last row was cut by a kill: the file does not end in a newline."""
+    def _repair(self) -> str:
+        """What must precede the next row so a cut one is closed: "" for a sound file, else
+        an optional newline and a torn_row line. A kill can cut a row, and a repair too —
+        leaving only its newline, or half the marker — so the test is whether the last line
+        parses, not whether the file ends in a newline."""
         try:
-            with open(self.file, "rb") as fh:
-                fh.seek(-1, 2)
-                return fh.read(1) != b"\n"
-        except (FileNotFoundError, OSError):
-            return False
+            data = self.file.read_bytes()
+        except FileNotFoundError:
+            return ""
+        if not data:
+            return ""
+        last = data.rstrip(b"\n").rsplit(b"\n", 1)[-1]
+        if data.endswith(b"\n") and _parses(last):
+            return ""
+        return ("" if data.endswith(b"\n") else "\n") + TORN + "\n"
 
     def _row(self, row: dict) -> None:
         self._ensure_dir()
-        if self._torn():
-            # Close the cut line, and say so on the next one: entries() skips the fragment
-            # only where a torn_row follows it, so damage anywhere else is still an error.
-            store.append(self.file, "\n" + json.dumps({"op": "torn_row"}), place="run", durable=True)
-        store.append(self.file, json.dumps(row, ensure_ascii=False), place="run", durable=True)
+        # One append for the repair and the row: entries() skips any run of unparseable lines
+        # that ends at a torn_row or at the end of the file, so a kill anywhere in it is read.
+        store.append(self.file, self._repair() + json.dumps(row, ensure_ascii=False),
+                     place="run", durable=True)
 
     @staticmethod
     def _file_row(op: str, path, place: str, source: str, sha256: str,
@@ -135,11 +150,13 @@ class Journal:
     def phase_done(self, phase: str) -> None:
         self._row({"op": "phase_done", "phase": phase})
 
-    def source(self, old: Path, new: Path) -> None:
+    def source(self, old: Path, new: Path, *, place: str, sha256: str) -> None:
         """An old file this run read for `new` — copied, merged, transformed, or found already
         there with the same hash. MOVED-TO.txt goes where these point, whatever verification
-        the file gets (source_path is only for byte copies, R25)."""
-        self._row({"op": "source", "old": str(old), "new": str(new)})
+        the file gets (source_path is only for byte copies, R25) — but only while `new` holds
+        sha256: the row is written before the write it announces, which may never happen."""
+        self._row({"op": "source", "old": str(old), "new": str(new), "place": place,
+                   "sha256": sha256})
 
     def rolling_back(self) -> None:
         """Rollback has begun: this journal is never resumed by migrate again."""
@@ -177,21 +194,25 @@ class Journal:
             lines = self.file.read_bytes().splitlines()
         except FileNotFoundError:
             return []
-        torn = json.dumps({"op": "torn_row"}).encode()
-        out = []
+        out: list[dict] = []
+        cut: int | None = None          # first line of the current run of unparseable lines
         for i, line in enumerate(lines):
             try:
                 row = json.loads(line.decode("utf-8"))
             except ValueError:
-                # A kill mid-row: the change it named never began. Last line, or closed by
-                # the torn_row the next append wrote.
-                if i == len(lines) - 1 or lines[i + 1] == torn:
-                    continue
-                raise ConfigError(f"{self.file}: line {i + 1} is not JSON",
-                                  hint="the journal is damaged; restore it or remove the directory") from None
-            if row.get("op") != "torn_row":
-                out.append(row)
-        return out
+                cut = i if cut is None else cut
+                continue
+            if row.get("op") == "torn_row":
+                cut = None              # rows a kill cut, closed by the next append
+                continue
+            if cut is not None:
+                # Damage a kill cannot leave: a cut row is always followed by a torn_row.
+                raise ConfigError(
+                    f"{self.file}: line {cut + 1} is not JSON and is not a row a kill cut",
+                    hint="keep this directory: it is what rollback restores from; "
+                         "report the file, or restore it from a backup")
+            out.append(row)
+        return out                      # a run at the end of the file: the last row was cut
 
     def done_phases(self) -> set[str]:
         return {r["phase"] for r in self.entries() if r["op"] == "phase_done"}

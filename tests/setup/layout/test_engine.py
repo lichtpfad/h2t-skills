@@ -598,6 +598,40 @@ def test_markers_for_same_hash_and_merged_sources():
     assert str(paths.secrets_shared()) in (b.parent / "MOVED-TO.txt").read_text()
 
 
+def test_a_failed_create_leaves_its_old_dir_unmarked(monkeypatch):
+    """The source row precedes the create; a create that failed and was not redone on resume
+    must not put MOVED-TO.txt next to an original that was never copied."""
+    lost = paths.legacy("sessions.dor") / "m"
+    lost.mkdir(parents=True)
+    (lost / "s.md").write_bytes(b"S")
+    fine = paths.legacy("sessions.h2t") / "m"
+    fine.mkdir(parents=True)
+    (fine / "t.md").write_bytes(b"T")
+    real_create = store.create
+
+    def create(path, data, **kw):
+        if Path(path).name == "s.md":
+            raise OSError("disk went away")
+        return real_create(path, data, **kw)
+
+    def secrets(ctx):
+        engine.put(ctx.journal, _session("t.md"), b"T", place="records.sessions", source="h2t",
+                   source_path=fine / "t.md")
+
+    def sessions(ctx):
+        engine.put(ctx.journal, _session("s.md"), b"S", place="records.sessions", source="dor",
+                   source_path=lost / "s.md")
+
+    monkeypatch.setattr(store, "create", create)
+    assert [s for s, _ in _migrate(secrets=secrets, sessions=sessions).failed] == ["layout 1: sessions"]
+    monkeypatch.setattr(store, "create", real_create)
+    report = _migrate(secrets=secrets, sessions=_noop)      # the resume does not re-put it
+    assert report.failed == []
+    assert not (paths.legacy("sessions.dor") / "MOVED-TO.txt").exists()
+    assert (paths.legacy("sessions.h2t") / "MOVED-TO.txt").is_file()
+    assert any(str(paths.legacy("sessions.dor")) in n for n in report.notes)
+
+
 def test_a_held_lock_stops_migrate_and_rollback():
     with store.locked(paths.run_dir() / "layout.lock", place="run"):
         with pytest.raises(ConfigError) as exc:
@@ -663,6 +697,33 @@ def test_a_torn_row_does_not_block_the_journal():
     j.phase_done("sessions")
     assert j.done_phases() == {"snapshot", "secrets", "sessions"}
     assert [r["op"] for r in j.entries()] == ["phase_done"] * 3
+
+
+@pytest.mark.parametrize("tail", [
+    b'{"op": "phase_done", "pha\n',                          # the repair kept only its newline
+    b'{"op": "phase_done", "pha\n{"op": "tor',               # the repair cut mid-marker
+])
+def test_a_torn_repair_does_not_block_the_journal(tail):
+    j = Journal(journal_mod.new_run_id())
+    j.phase_done("snapshot")
+    with open(j.file, "ab") as fh:
+        fh.write(tail)
+    assert j.done_phases() == {"snapshot"}
+    j.phase_done("secrets")
+    j.phase_done("sessions")
+    assert j.done_phases() == {"snapshot", "secrets", "sessions"}
+
+
+def test_damage_a_kill_cannot_leave_is_an_error_that_keeps_the_journal():
+    j = Journal(journal_mod.new_run_id())
+    j.phase_done("snapshot")
+    with open(j.file, "ab") as fh:
+        fh.write(b"garbage\n")
+        fh.write(json.dumps({"op": "phase_done", "phase": "secrets"}).encode() + b"\n")
+    with pytest.raises(ConfigError) as exc:
+        j.entries()
+    assert "line 2" in str(exc.value)
+    assert "remove" not in exc.value.hint and "keep this directory" in exc.value.hint
 
 
 def test_pinned_name_without_flag_stops(monkeypatch):
