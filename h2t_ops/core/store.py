@@ -13,11 +13,13 @@ import hashlib
 import json
 import os
 import shutil
+import sqlite3
 import sys
 import tempfile
 import time
 from collections.abc import Iterator
 from pathlib import Path
+from typing import BinaryIO
 
 from h2t_ops.core import paths
 from h2t_ops.core.errors import ConfigError
@@ -379,6 +381,172 @@ def remove_tree(path, *, place: str) -> None:
     except FileNotFoundError:
         return                          # nothing was there; nothing removed, nothing logged
     _log("remove_tree", got, path, None)
+
+
+def delegated(path) -> str | None:
+    real = str(_real(path))
+    for key, lib in _DELEGATED.items():
+        if real == key or real.startswith(key + "-"):
+            return lib
+    return None
+
+
+@contextlib.contextmanager
+def managed(path, *, place: str, library: str, dest: bool = False) -> Iterator[Path]:
+    """Resolve and check the path, then hand the file to a library that opens it itself."""
+    path = Path(path)
+    got = _check(path, place, dest=dest)
+    _ensure_dir(path.parent, place)
+    key = str(_real(path))
+    _DELEGATED[key] = library
+    try:
+        yield path
+    finally:
+        _DELEGATED.pop(key, None)
+        if os.name != "nt":             # Windows: the profile ACL protects (§11.3)
+            mode = _mode(place, got, None)
+            for side in (path, *(path.with_name(path.name + s) for s in ("-journal", "-wal", "-shm"))):
+                if side.exists():
+                    with contextlib.suppress(OSError):
+                        os.chmod(side, mode)
+        _log("managed", got, path, None, key=library,
+             digest=None if place in _SECRET else _file_sha(path))
+
+
+@contextlib.contextmanager
+def writer(path, *, place: str, mode: int | None = None, dest: bool = False,
+           exclusive: bool = False) -> Iterator[BinaryIO]:
+    """A stream into a temp file beside the target (plan R29). Clean exit publishes it:
+    os.replace, or with exclusive=True os.link — create-or-fail, never over a file the
+    caller does not own (§7.1, R47). An exception leaves the old file, if any, untouched."""
+    path = Path(path)
+    got = _check(path, place, dest=dest)
+    _ensure_dir(path.parent, place)
+    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix="." + path.name + ".", suffix=_TMP_SUFFIX)
+    try:
+        with os.fdopen(fd, "wb") as fh:
+            yield fh
+            fh.flush()
+            os.fsync(fh.fileno())
+        if os.name != "nt":
+            os.chmod(tmp, _mode(place, got, mode))
+        if exclusive:
+            try:
+                os.link(tmp, path)
+            except FileExistsError:
+                raise AlreadyExists(str(path)) from None
+            except OSError as exc:
+                raise ConfigError(f"{path.parent}: no hard links, cannot create {path.name} "
+                                  f"atomically ({exc})", hint="move this place to a local disk") from exc
+            os.unlink(tmp)
+        else:
+            os.replace(tmp, path)
+    except BaseException:
+        with contextlib.suppress(FileNotFoundError):
+            os.unlink(tmp)
+        raise
+    _log("create" if exclusive else "replace", got, path, None,
+         digest=None if place in _SECRET else _file_sha(path))
+
+
+@contextlib.contextmanager
+def connect_sqlite(path, *, place: str, library: str = "sqlite3",
+                   dest: bool = False) -> Iterator[sqlite3.Connection]:
+    """The one sqlite3.connect in the package (plan R18)."""
+    with managed(path, place=place, library=library, dest=dest) as p:
+        conn = sqlite3.connect(p)
+        try:
+            yield conn
+            conn.commit()
+        finally:
+            conn.close()
+
+
+def sqlite_copy(src, dest, *, place: str) -> Path:
+    """Copy a live SQLite file whole: backup() reads a consistent snapshot even if another
+    process has the source open, where a byte copy can tear it (plan R18, Task 9). The copy
+    is built beside the target and published by os.replace, so a kill mid-backup never
+    leaves a half database at dest that the next run would take as done (R49)."""
+    src, dest = Path(src), Path(dest)
+    tmp = dest.with_name(f".{dest.name}.backup{_TMP_SUFFIX}")
+    source = sqlite3.connect(f"file:{src.as_posix()}?mode=ro", uri=True)
+    try:
+        with connect_sqlite(tmp, place=place, library="sqlite-backup") as target:
+            source.backup(target)
+    finally:
+        source.close()
+    got = _check(dest, place)
+    os.replace(tmp, dest)
+    _log("replace", got, dest, None, digest=None if place in _SECRET else _file_sha(dest))
+    return dest
+
+
+def ingest_write(path, data: str | bytes) -> Path:
+    """The vault's single door (§7.2). One import site: the ingest module (subsystem 4)."""
+    token = _INGEST.set(True)
+    try:
+        return replace(path, data, place="vault")
+    finally:
+        _INGEST.reset(token)
+
+
+@contextlib.contextmanager
+def migrating() -> Iterator[None]:
+    token = _MIGRATING.set(True)
+    try:
+        yield
+    finally:
+        _MIGRATING.reset(token)
+
+
+class RepoWriter:
+    def __init__(self, root: Path, command: str, rules: dict[str, tuple[str, ...]]):
+        self.root, self.command, self.rules = _real(root), command, rules
+
+    def _target(self, op: str, rel: str) -> Path:
+        import fnmatch
+        target = _real(self.root / rel)
+        if target != self.root and self.root not in target.parents:
+            raise WriteRefused(f"{rel} is outside the repository {self.root}", hint="")
+        posix = target.relative_to(self.root).as_posix()
+        if not any(fnmatch.fnmatchcase(posix, g) for g in self.rules.get(op, ())):
+            raise WriteRefused(f"{self.command} may not {op} {posix}",
+                               hint="h2t_ops/core/repo_writers.py lists what each command writes")
+        if classify(target) not in ("elsewhere", "tmp", "repo"):
+            raise WriteRefused(f"{target} is a package or external place, not a repository", hint="")
+        return target
+
+    def create(self, rel: str, data) -> Path:
+        t = self._target("create", rel)
+        return create(t, data, place="repo", dest=True)
+
+    def replace(self, rel: str, data) -> Path:
+        t = self._target("replace", rel)
+        return replace(t, data, place="repo", dest=True)
+
+    def append(self, rel: str, line: str) -> None:
+        t = self._target("append", rel)
+        append(t, line, place="repo", dest=True)
+
+    def rename(self, src_rel: str, dst_rel: str, *, git: bool) -> Path:
+        src, dst = self._target("rename", src_rel), self._target("rename", dst_rel)
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        if git:
+            import subprocess
+            subprocess.run(["git", "mv", str(src), str(dst)], cwd=self.root, check=True,
+                           capture_output=True)
+        else:
+            os.replace(src, dst)
+        _log("rename", "repo", dst, None, key=str(src))
+        return dst
+
+
+def repo(root, command: str) -> RepoWriter:
+    from h2t_ops.core.repo_writers import REPO_WRITERS
+    if command not in REPO_WRITERS:
+        raise WriteRefused(f"{command!r} is not in the repo allow-list",
+                           hint="add it to h2t_ops/core/repo_writers.py with what it writes")
+    return RepoWriter(Path(root), command, REPO_WRITERS[command])
 
 
 @contextlib.contextmanager
