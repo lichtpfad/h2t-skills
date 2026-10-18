@@ -1,4 +1,5 @@
 """Doctors report what they checked, the way the code they vouch for does (#451)."""
+import os
 import sys
 from pathlib import Path
 
@@ -111,6 +112,39 @@ def test_doctor_does_not_take_client_credentials_for_a_gmail_token(tmp_path, mon
 
     assert "gmail token=MISSING" in out
     assert "not checked here:" in out and "telegram" in out
+
+
+def _google_token(tmp_path, monkeypatch, body: str):
+    _home(tmp_path, monkeypatch)
+    token = paths.secrets_local() / "google.token.json"
+    token.parent.mkdir(parents=True)
+    token.write_text(body, encoding="utf-8")
+    return token
+
+
+def test_doctor_sees_a_google_token_in_secrets_local(tmp_path, monkeypatch, capsys):
+    _google_token(tmp_path, monkeypatch, '{"refresh_token": "fake-r"}')
+    assert cli._doctor() == 0
+    assert "gmail token=present" in capsys.readouterr().out
+
+
+def test_doctor_reports_a_malformed_google_token_and_exits_0(tmp_path, monkeypatch, capsys):
+    _google_token(tmp_path, monkeypatch, "{not json")
+    assert cli._doctor() == 0
+    assert "gmail token=UNREADABLE" in capsys.readouterr().out
+
+
+@pytest.mark.skipif(sys.platform.startswith("win"), reason="POSIX permission bits")
+def test_doctor_reports_an_unreadable_google_token_and_exits_0(tmp_path, monkeypatch, capsys):
+    token = _google_token(tmp_path, monkeypatch, '{"refresh_token": "fake-r"}')
+    token.chmod(0)
+    try:
+        if os.access(token, os.R_OK):
+            pytest.skip("running as a user that reads 0000 files (root)")
+        assert cli._doctor() == 0
+    finally:
+        token.chmod(0o600)
+    assert "gmail token=UNREADABLE" in capsys.readouterr().out
 
 
 def test_plugin_cache_orders_non_semver_dirs_by_mtime(tmp_path, monkeypatch):

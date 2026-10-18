@@ -272,3 +272,34 @@ def test_mirror_without_the_legacy_file_creates_nothing(tmp_path, monkeypatch):
     _home(tmp_path, monkeypatch)
     assert mod.mirror_legacy({"refresh_token": "fake-r2"}) == "absent"
     assert not (paths.legacy("google.store") / "tokens.json").exists()
+
+
+@pytest.mark.parametrize("body", [
+    '{"refresh_token": "fake-r1", "client_id": "fake-id"}',   # no client_secret
+    '{"normal": "fake-not-an-object"}',
+    '["fake-r1"]',
+])
+def test_a_malformed_token_is_an_error_naming_the_file_not_a_missing_token(tmp_path, monkeypatch, body):
+    _home(tmp_path, monkeypatch)
+    token = paths.secrets_local() / "google.token.json"
+    token.parent.mkdir(parents=True)
+    token.write_text(body)
+    with pytest.raises(ConfigError) as ei:
+        mod.resolve_google_credentials("calendar", [CAL_SCOPE])
+    assert str(token) in str(ei.value) and "malformed" in str(ei.value)
+    assert "fake-" not in str(ei.value) + (ei.value.hint or "")   # no values in the message
+
+
+def test_bootstrap_over_a_malformed_token_raises_and_opens_no_browser(tmp_path, monkeypatch):
+    _home(tmp_path, monkeypatch)
+    client = paths.secrets_shared() / "google.client.json"
+    client.parent.mkdir(parents=True)
+    client.write_text('{"installed": {"client_id": "fake-id", "client_secret": "fake-cs"}}')
+    token = paths.secrets_local() / "google.token.json"
+    token.parent.mkdir(parents=True)
+    token.write_text('{"normal": "fake-not-an-object"}')
+    monkeypatch.setattr(mod, "_install_app_flow", lambda: pytest.fail("no consent over a corrupt token"))
+    with pytest.raises(ConfigError) as ei:
+        mod.bootstrap_google_token()
+    assert str(token) in str(ei.value)
+    assert "--force" in ei.value.hint

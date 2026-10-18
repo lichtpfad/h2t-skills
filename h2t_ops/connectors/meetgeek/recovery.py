@@ -263,13 +263,11 @@ def convert_media(src: Path, *, audio_only: bool, mix_mode: str,
 # ─── Drive ────────────────────────────────────────────────────────────────────
 
 def drive_service():
-    """Build Drive v3 service from this machine's Google token, through core.google_auth (#548)."""
-    try:
-        creds = google_auth.resolve_google_credentials("drive", DRIVE_SCOPES)
-        return google_auth.build_google_service("drive", "v3", creds)
-    except H2TError as e:
-        hint = f" {e.hint}" if e.hint else ""
-        raise RecoveryError(f"Drive auth missing — {e}.{hint}", exit_code=1) from e
+    """Build Drive v3 service from this machine's Google token, through core.google_auth (#548).
+
+    ConfigError / AuthError propagate typed, so the CLI exits 3 / 4 (Connector Standard)."""
+    creds = google_auth.resolve_google_credentials("drive", DRIVE_SCOPES)
+    return google_auth.build_google_service("drive", "v3", creds)
 
 
 def drive_download_url(file_id: str) -> str:
@@ -688,7 +686,7 @@ def process_one(src_path: Path, *, language: str | None, title_override: str | N
                 "drive_web_url": drive_info.get("web_url"),
                 "status": "in-drive",
             }, manifest_path)
-        except RecoveryError as e:
+        except (RecoveryError, H2TError) as e:   # H2TError: Google auth/config, kept typed
             append_uploads_manifest({
                 **base_meta,
                 "mp4_path": str(mp4_path), "mp4_size_bytes": mp4_size,

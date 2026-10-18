@@ -827,6 +827,23 @@ def test_drive_service_raises_when_token_missing(cli, tmp_path, monkeypatch):
     assert "google" in str(e.value).lower()
 
 
+@pytest.mark.parametrize("kind,code", [("config", 3), ("auth", 4)])
+def test_drive_upload_keeps_google_errors_typed(cli, tmp_path, monkeypatch, kind, code):
+    """Connector Standard: a missing token is config (3), a dead refresh token auth (4) —
+    not the provider exit 1 a RecoveryError wrapper would give (#548 Task 8 review)."""
+    from h2t_ops.core.errors import AuthError, ConfigError
+
+    err = {"config": ConfigError, "auth": AuthError}[kind]
+
+    def fail(*a, **k):
+        raise err("Google token unusable", hint="run `h2t-ops google auth`")
+
+    monkeypatch.setattr(recovery.google_auth, "resolve_google_credentials", fail)
+    f = tmp_path / "a.mp4"
+    f.write_bytes(b"M" * 2048)
+    assert cli.main(["drive-upload", str(f)]) == code
+
+
 def test_drive_upload_idempotent_returns_existing(cli, tmp_path, monkeypatch):
     file_path = tmp_path / "test.mp4"
     file_path.write_bytes(b"M" * 1024)

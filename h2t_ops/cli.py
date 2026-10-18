@@ -60,7 +60,7 @@ def _doctor() -> int:
     print(f"secrets: NOTION_API_TOKEN={notion}")
     try:
         gmail_token = "present" if secrets.read_json("google.token")[1] is not None else "MISSING"
-    except ConfigError as exc:
+    except (ConfigError, OSError) as exc:   # doctor always exits 0
         gmail_token = f"UNREADABLE ({exc})"
     print(f"secrets: gmail token={gmail_token}")
     unchecked = [name for name in names if name not in ("notion", "gmail")]

@@ -117,37 +117,34 @@ def _save_login(creds) -> None:
 def _load_credentials(token_data: dict, client_data: dict | None):
     """'normal' wrap normalize + scope→scopes split + client merge, on data core.secrets read.
 
-    Returns a google.oauth2.credentials.Credentials instance, or None when the token does
-    not parse. The catch list `(KeyError, ValueError)` is deliberately narrow: unexpected
-    runtime bugs (AttributeError) surface instead of reading as "no token".
+    Returns a google.oauth2.credentials.Credentials instance. Data of the wrong shape raises
+    (KeyError, ValueError, TypeError, AttributeError); _parse turns that into a ConfigError
+    naming the file, so a corrupt token never reads as a missing one.
     """
     Credentials, _ = _import_google()
-    try:
-        token_data = dict(token_data)
-        if "normal" in token_data:
-            token_data = dict(token_data["normal"])
-            if "expiry_date" in token_data:
-                expiry_ms = token_data.pop("expiry_date")
-                expiry_dt = datetime.fromtimestamp(expiry_ms / 1000)
-                token_data["expiry"] = expiry_dt.isoformat() + "Z"
-            if "scope" in token_data:
-                token_data.setdefault("scopes", token_data.pop("scope").split())
-        if "scope" in token_data and "scopes" not in token_data:
-            token_data["scopes"] = token_data.pop("scope").split()
-        if isinstance(token_data.get("scopes"), str):
-            token_data["scopes"] = token_data["scopes"].split()
-        if "client_id" not in token_data and client_data is not None:
-            installed = client_data.get("installed", client_data)
-            token_data["client_id"] = installed.get("client_id")
-            token_data["client_secret"] = installed.get("client_secret")
-            token_data.setdefault(
-                "token_uri",
-                installed.get("token_uri", "https://oauth2.googleapis.com/token"),
-            )
-        scopes = token_data.get("scopes") or []
-        return Credentials.from_authorized_user_info(token_data, scopes)
-    except (KeyError, ValueError):
-        return None
+    token_data = dict(token_data)
+    if "normal" in token_data:
+        token_data = dict(token_data["normal"])
+        if "expiry_date" in token_data:
+            expiry_ms = token_data.pop("expiry_date")
+            expiry_dt = datetime.fromtimestamp(expiry_ms / 1000)
+            token_data["expiry"] = expiry_dt.isoformat() + "Z"
+        if "scope" in token_data:
+            token_data.setdefault("scopes", token_data.pop("scope").split())
+    if "scope" in token_data and "scopes" not in token_data:
+        token_data["scopes"] = token_data.pop("scope").split()
+    if isinstance(token_data.get("scopes"), str):
+        token_data["scopes"] = token_data["scopes"].split()
+    if "client_id" not in token_data and client_data is not None:
+        installed = client_data.get("installed", client_data)
+        token_data["client_id"] = installed.get("client_id")
+        token_data["client_secret"] = installed.get("client_secret")
+        token_data.setdefault(
+            "token_uri",
+            installed.get("token_uri", "https://oauth2.googleapis.com/token"),
+        )
+    scopes = token_data.get("scopes") or []
+    return Credentials.from_authorized_user_info(token_data, scopes)
 
 
 def _client_for(token_data: dict) -> dict | None:
@@ -155,6 +152,20 @@ def _client_for(token_data: dict) -> dict | None:
     if "client_id" in durable_token(token_data):
         return None
     return secrets.read_json("google.client")[0]
+
+
+def _parse(token_data: dict, source, client_data: dict | None = None, *, lookup_client: bool = True):
+    """_load_credentials, with a corrupt token raised as a ConfigError naming the file.
+
+    Only the exception type is named: google-auth's messages are not checked for values."""
+    try:
+        client = _client_for(token_data) if lookup_client else client_data
+        return _load_credentials(token_data, client)
+    except (KeyError, ValueError, TypeError, AttributeError) as e:
+        raise ConfigError(
+            f"Google OAuth token at {source} is malformed ({type(e).__name__})",
+            hint=f"fix or delete {source}, then run `h2t-ops google auth --force`",
+        ) from e
 
 
 def _validate_scopes(token_scopes: Iterable[str], required: Iterable[str]) -> None:
@@ -184,8 +195,8 @@ def resolve_google_credentials(service_name: str,
             f"google_auth: unknown service_name {service_name!r}",
             hint="expected 'gmail', 'calendar', or 'drive'",
         )
-    token_data, _ = secrets.read_json("google.token")
-    creds = None if token_data is None else _load_credentials(token_data, _client_for(token_data))
+    token_data, found = secrets.read_json("google.token")
+    creds = None if token_data is None else _parse(token_data, found)
     if creds is None:
         raise ConfigError(
             f"Google OAuth token not found for service {service_name!r}.",
@@ -193,9 +204,9 @@ def resolve_google_credentials(service_name: str,
         )
     _validate_scopes(getattr(creds, "scopes", None) or [], required_scopes)
     if not creds.valid:
-        # Not only `expired`: a durable token has no access token and no expiry, which
-        # google-auth reports as invalid yet not expired.
-        if creds.refresh_token:
+        # A durable token has no access token; from_authorized_user_info then sets expiry
+        # to "now", so it reads as expired and takes this branch (google-auth 2.62).
+        if creds.expired and creds.refresh_token:
             try:
                 creds.refresh(_request())          # in memory; nothing is cached on disk (R11)
             except Exception as e:
@@ -227,7 +238,7 @@ def bootstrap_google_token(*, force: bool = False, open_browser: bool = True) ->
 
     if not force:
         data, found = secrets.read_json("google.token")
-        current = None if data is None else _load_credentials(data, client)
+        current = None if data is None else _parse(data, found, client, lookup_client=False)
         have = set(getattr(current, "scopes", None) or [])
         if current is not None and set(GOOGLE_SCOPES) <= have and (current.valid or current.refresh_token):
             return {"status": "already_authorized", "token_path": str(found),
