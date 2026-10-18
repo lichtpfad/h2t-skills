@@ -563,10 +563,16 @@ def _sync_recording(cli, lake, cursor_file):
         FakeResponse(200, {"download_link": "https://media.meetgeek.ai/api/download?token=xyz"}),
         FakeResponse(200, raw_bytes=b"FAKE_MP4_BYTES"),
     ])
-    with patch.object(cli.requests, "request", fake), \
-         patch.object(cli.requests, "get", lambda url, **kw: fake("GET", url, **kw)):
+    media: list[str] = []
+
+    def get(url, **kw):
+        media.append(url)
+        return fake("GET", url, **kw)
+
+    with patch.object(cli.requests, "request", fake), patch.object(cli.requests, "get", get):
         assert cli.main(["sync", "--to", str(lake), "--include", "recordings",
                          "--cursor-file", str(cursor_file)]) == 0
+    return media
 
 
 def test_sync_recording_enters_the_manifest_and_a_foreign_one_is_refused(cli, tmp_path):
@@ -577,13 +583,13 @@ def test_sync_recording_enters_the_manifest_and_a_foreign_one_is_refused(cli, tm
     rec_path = lake / "recordings" / "m1.mp4"
     rec_path.parent.mkdir(parents=True)
     rec_path.write_bytes(b"HAND-MADE")
-    _sync_recording(cli, lake, cursor_file)
+    assert _sync_recording(cli, lake, cursor_file) == []   # refusal is certain: nothing fetched
     d = core_lake.ConnectorDir("meetgeek", root=lake)
     assert rec_path.read_bytes() == b"HAND-MADE" and "recordings/m1.mp4" not in d.owned()
     assert pipeline._read_manifest_ids(d) == set()
     assert json.loads(cursor_file.read_text())["last_seen_id"] is None
     rec_path.unlink()                                    # the owner moves their file away
-    _sync_recording(cli, lake, cursor_file)
+    assert len(_sync_recording(cli, lake, cursor_file)) == 1
     assert rec_path.read_bytes() == b"FAKE_MP4_BYTES"
     assert d.owned()["recordings/m1.mp4"] == store_sha(b"FAKE_MP4_BYTES")
     assert pipeline._read_manifest_ids(d) == {"m1"}
@@ -611,7 +617,8 @@ def test_webhook_event_carries_no_credentials(cli, monkeypatch, tmp_path):
             self.handler = handler
 
         def serve_forever(self):
-            self.handler.do_POST(SimpleNamespace(headers=headers, path="/e", rfile=io.BytesIO(b"{}"),
+            self.handler.do_POST(SimpleNamespace(headers=headers, path="/hook?token=fake-webhook-token",
+                                                 rfile=io.BytesIO(b"{}"),
                                                  _reply=lambda code, text="": None))
 
         def server_close(self):
@@ -628,6 +635,7 @@ def test_webhook_event_carries_no_credentials(cli, monkeypatch, tmp_path):
     text = event.read_text(encoding="utf-8")
     assert "fake-" not in text
     assert json.loads(text)["headers"] == {"Content-Length": "2", "User-Agent": "MeetGeek"}
+    assert json.loads(text)["path"] == "/hook"
 
 
 def test_failed_convert_in_staging_is_removed_and_ffmpeg_never_overwrites(cli, tmp_path, monkeypatch):

@@ -349,6 +349,7 @@ def _safe_headers(items) -> dict[str, str]:
 def webhook_server(args: Any) -> dict:
     """Minimal HTTP server that dumps incoming POSTs as JSON files."""
     from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+    from urllib.parse import urlsplit
     from uuid import uuid4
 
     from h2t_ops.core import secrets
@@ -383,7 +384,8 @@ def webhook_server(args: Any) -> dict:
                 payload = {"_raw_base64": raw.hex()}
             event = {
                 "received_at": recovery.now_iso(),
-                "path": self.path,
+                # No query string: a secret in the hook URL (?token=…) must not reach the lake.
+                "path": urlsplit(self.path).path,
                 "headers": _safe_headers(self.headers.items()),
                 "payload": payload,
             }

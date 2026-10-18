@@ -131,17 +131,23 @@ class ConnectorDir:
 
         An own file is replaced; a new path is created, and if a file is already there it is
         foreign — left untouched and refused. A chunked value (a recording) is spooled to
-        scratch first, hashing as it goes, so the pending row has its hash and nothing is
+        scratch first (not even read when its path is already foreign), hashing as it goes, so the pending row has its hash and nothing is
         held in memory (R29). meta goes into the committed row as is. The caller moves its
         cursor only after this returns."""
         own = self.owned()
-        with _spooled(files) as (hashes, spools):
+        # A chunked value for a foreign path is refused before a byte is fetched: the
+        # refusal is certain, and a recording is large.
+        foreign = [rel for rel, data in files.items()
+                   if not isinstance(data, (bytes, bytearray)) and rel not in own
+                   and self._target(rel).exists()]
+        todo = {rel: data for rel, data in files.items() if rel not in foreign}
+        with _spooled(todo) as (hashes, spools):
             self._append({"op": op_id, "state": "pending",
                           "files": {rel: {"sha256": h, "owned_before": rel in own}
                                     for rel, h in hashes.items()}})
             written: dict[str, str] = {}
-            refused: list[str] = []
-            for rel, data in files.items():
+            refused: list[str] = list(foreign)
+            for rel, data in todo.items():
                 target = self._target(rel)
                 try:
                     if rel in spools:
