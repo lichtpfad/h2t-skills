@@ -142,6 +142,22 @@ def test_before_layout_1_the_3x_lake_is_the_lake(lk):
     assert store.classify(old / "granola" / "n1.md") == "legacy"
 
 
+def test_before_layout_1_a_3x_lake_variable_names_the_lake(lk, tmp_path, monkeypatch):
+    """3.x meetgeek wrote into H2T_LAKE_ROOT and the migration declares that path as the lake.
+    Syncing into ~/.dor/lake in between would advance the cursor past notes the lake never gets."""
+    (paths.paths_yaml()).unlink()
+    (paths.legacy("lake.dor") / "granola").mkdir(parents=True)
+    moved = tmp_path / "moved-lake"
+    monkeypatch.setenv("H2T_LAKE_ROOT", str(moved))
+    d = lake.ConnectorDir("granola")
+    assert d.root == moved / "granola" and (d.place, d.dest) == ("lake", False)
+    assert d.publish({"n1.md": b"v1"}, op_id="a") == []
+    assert (moved / "granola" / "n1.md").read_bytes() == b"v1"
+    assert not (paths.legacy("lake.dor") / "granola" / "n1.md").exists()
+    paths.layout_file().write_text('{"layout": 1}', encoding="utf-8")
+    assert lake.ConnectorDir("granola").root == paths.data_dir() / "lake" / "granola"
+
+
 def test_cursor_lives_in_state_and_falls_back_to_the_3x_one(lk):
     old = paths.legacy("lake.dor") / "_cursors" / "granola.json"
     old.parent.mkdir(parents=True)

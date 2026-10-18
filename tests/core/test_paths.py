@@ -48,6 +48,9 @@ def test_old_env_names_are_reported_not_read(home, monkeypatch, tmp_path):
     assert paths.dir_of("records.sessions") == home / ".h2t" / "records" / "sessions"
     assert paths.activity_file("mac") == home / ".h2t" / "records" / "activity" / "mac.jsonl"
     assert paths.records("evals") == home / ".h2t" / "records" / "evals"
+    assert paths.place("lake") == tmp_path / "old-lake"      # before layout 1 only (O4)
+    paths.layout_file().parent.mkdir(parents=True, exist_ok=True)
+    paths.layout_file().write_text('{"layout": 1}', encoding="utf-8")
     assert paths.place("lake") is None
     assert paths.old_env_in_use() == ["H2T_ACTIVITY_SPOOL", "H2T_LAKE_ROOT", "H2T_SESSION_ROOT"]
     assert paths.old_env("H2T_LAKE_ROOT") == tmp_path / "old-lake"

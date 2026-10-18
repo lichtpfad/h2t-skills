@@ -52,7 +52,8 @@ _BY_ID = {p.id: p for p in PLACES}
 EXTERNAL = ("lake", "inbox", "vault", "kb")
 YAML_PLACES = ("lake", "inbox", "kb")   # vault comes from H2T_PATH_VAULT (§6 п. 5)
 
-# 3.x variable names. 4.0 does not read them for paths (§6 п. 5); migration and doctor do,
+# 3.x variable names. 4.0 does not read them for paths (§6 п. 5) — except the lake one before
+# layout 1, see _fallback; migration and doctor do,
 # to say what became of each: an external place the migration writes into paths.yaml, one
 # more secrets source for the migration, or a variable to remove.
 OLD_ENV: dict[str, str] = {
@@ -340,9 +341,13 @@ def _fallback(name: str) -> Path | None:
     """Before layout 1 the 3.x lake is the lake (§8: 4.0.x works on the old places until the
     machine migrates). A default of data/lake there would take granola and meetgeek sync
     away from the lake POS reads while their cursors advance, and the notes synced in that
-    window would never be fetched again. After layout 1 only paths.yaml declares it (R2)."""
+    window would never be fetched again. A 3.x lake variable wins over ~/.dor/lake: that is
+    where 3.x wrote and what the migration declares. After layout 1 only paths.yaml declares
+    it (R2)."""
     if name != "lake" or _layout() == 1:
         return None
+    if moved := old_env_by_use("lake"):
+        return next(iter(moved.values()))
     old = legacy("lake.dor")
     return old if old.is_dir() else None
 
