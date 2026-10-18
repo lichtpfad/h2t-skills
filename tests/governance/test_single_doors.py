@@ -22,3 +22,8 @@ def test_ingest_write_only_in_the_ingest_module():
 
 def test_journal_remove_only_in_rollback():
     assert set(_sites(r"journal\s*=\s*True")) <= {"h2t_ops/setup/layout/rollback.py"}
+
+
+def test_in_place_only_in_the_research_store():
+    """store.replace(in_place=True) skips the atomic write; one caller has a reason (§7.2)."""
+    assert set(_sites(r"\bin_place\s*=")) == {"h2t_ops/connectors/research/store.py"}

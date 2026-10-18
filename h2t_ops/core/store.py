@@ -297,13 +297,21 @@ def replace(path, data: str | bytes, *, place: str, mode: int | None = None,
     objects on Windows); a reader may then see a partial file."""
     path = Path(path)
     got = _check(path, place, dest=dest, compat=compat)
+    # Not a general escape from the atomic write: a stream name only, never a secret.
+    if in_place and (":" not in path.name or place in _SECRET or got in _SECRET):
+        raise WriteRefused(f"{path}: an in-place write is only for an NTFS stream "
+                           "(name:stream) outside secrets",
+                           hint="write it with replace() without in_place")
     payload = _bytes(data)
     _ensure_dir(path.parent, place)
     if in_place:
         fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_BINARY", 0),
                      _mode(place, got, mode))
         try:
+            if os.name != "nt":         # an existing file keeps no mode wider than the place's
+                os.fchmod(fd, _mode(place, got, mode))
             _write_all(fd, payload)
+            os.fsync(fd)
         finally:
             os.close(fd)
         _log("replace", got, path, payload, keys=keys)

@@ -2,6 +2,7 @@
 import os
 import shutil
 import subprocess
+import time
 from pathlib import Path
 
 import pytest
@@ -68,11 +69,12 @@ def _real_home_artifacts(home: Path | None = None) -> dict[str, tuple[int, ...]]
     # Built here, not from h2t_ops.core.paths: pytest_sessionstart runs before any fixture,
     # so Path.home() is still the real one.
     # Every entry of ~/.h2t and ~/.dor, each its own key, so the report names the area.
-    # Not ~/.h2t/logs and ~/.h2t/run: the live session's own hooks write there while the
-    # suite runs. Task 12 wrote into ~/.h2t/research, which the old short list did not watch.
+    # Not ~/.h2t/logs, run and venv: the live session's own hooks write there while the
+    # suite runs (venv: the hooks' interpreter leaves __pycache__). Task 12 wrote into
+    # ~/.h2t/research, which the old short list did not watch.
     home = Path.home() if home is None else home
     watched: list[Path] = []
-    for top, skip in ((home / ".h2t", {"logs", "run"}), (home / ".dor", set())):
+    for top, skip in ((home / ".h2t", {"logs", "run", "venv"}), (home / ".dor", set())):
         try:
             watched += [p for p in top.iterdir() if p.name not in skip]
         except OSError:
@@ -99,7 +101,30 @@ def _real_home_artifacts(home: Path | None = None) -> dict[str, tuple[int, ...]]
     return state
 
 
+def _changed_files(area: str, since_ns: int, limit: int = 5) -> list[str]:
+    """Files under one watched area modified since the session began, newest first: the
+    area tuple says that something changed, these say what."""
+    found: list[tuple[int, str]] = []
+    for d, _dirs, names in os.walk(area):
+        for n in names:
+            f = os.path.join(d, n)
+            try:
+                mtime = os.lstat(f).st_mtime_ns
+            except OSError:
+                continue
+            if mtime >= since_ns:
+                found.append((mtime, f))
+    if os.path.isfile(area):
+        try:
+            if os.lstat(area).st_mtime_ns >= since_ns:
+                found.append((0, area))
+        except OSError:
+            pass
+    return [f for _, f in sorted(found, reverse=True)[:limit]]
+
+
 def pytest_sessionstart(session):
+    session.stash_h2t_home_started_ns = time.time_ns()
     session.stash_h2t_home_before = _real_home_artifacts()
 
 
@@ -116,7 +141,12 @@ def pytest_sessionfinish(session, exitstatus):
     changed = [k for k in set(before) | set(after) if before.get(k) != after.get(k)]
     if changed:
         print("\nERROR: the suite wrote into the real home (#441):")
+        since = getattr(session, "stash_h2t_home_started_ns", 0)
         for key in sorted(changed):
             print(f"  {key}: {before.get(key)} -> {after.get(key)}")
-        print("  Redirect the writer's env var in conftest._isolate_home_writes.")
+            for f in _changed_files(key, since):
+                print(f"    {f}")
+        print("  If a test wrote it, redirect the writer in conftest._isolate_home_writes. "
+              "The writer may also be outside the suite — Syncthing, another session, the "
+              "calendar MCP: check the files above before blaming a test.")
         session.exitstatus = 1

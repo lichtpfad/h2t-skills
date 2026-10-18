@@ -294,3 +294,41 @@ def test_remove_tree_of_nothing_is_quiet_and_not_logged(home):
     store.remove_tree(d, place="state")
     assert not d.exists()
     assert '"remove_tree"' in (paths.logs_dir() / "writes.jsonl").read_text()
+
+
+# --- replace(in_place=True): only an NTFS stream name, never a secret (#548 §7.2) ---------
+
+
+def test_in_place_refuses_a_plain_name(home):
+    target = paths.data_dir() / "research" / "plain.json"
+    with pytest.raises(store.WriteRefused, match="NTFS stream"):
+        store.replace(target, "{}", place="data", in_place=True)
+    assert not target.exists() and not target.parent.exists()
+
+
+@pytest.mark.parametrize("place", ["secrets.shared", "secrets.local"])
+def test_in_place_refuses_secrets(home, place):
+    target = paths.dir_of(place) / "x:y.env"
+    with pytest.raises(store.WriteRefused, match="NTFS stream"):
+        store.replace(target, "fake-x", place=place, in_place=True)
+    assert not target.exists()
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX modes")
+def test_in_place_writes_a_stream_name_with_the_place_mode(home, monkeypatch):
+    target = paths.data_dir() / "research" / "objects" / "research-doc:1.json"
+    target.parent.mkdir(parents=True)
+    target.write_text("old")
+    os.chmod(target, 0o666)
+    synced = []
+    real_fsync = os.fsync
+    monkeypatch.setattr(os, "fsync", lambda fd: (synced.append(fd), real_fsync(fd)))
+    um = os.umask(0o022)
+    try:
+        store.replace(target, "{}", place="data", in_place=True)
+    finally:
+        os.umask(um)
+    assert synced, "the in-place write must reach the disk before it is logged"
+    assert target.read_text() == "{}"
+    assert stat.S_IMODE(target.stat().st_mode) == 0o644
+    assert sorted(p.name for p in target.parent.iterdir()) == ["research-doc:1.json"]
