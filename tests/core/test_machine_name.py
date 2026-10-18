@@ -12,6 +12,7 @@ from pathlib import Path
 
 import pytest
 
+from h2t_ops.core import paths
 from h2t_ops.lifecycle.activity import writer as activity_writer
 from h2t_ops.lifecycle.gather import sessions
 from h2t_ops.setup import legacy as setup_h2t
@@ -33,8 +34,8 @@ def renamed_host(monkeypatch, tmp_path):
     for var in ("H2T_MACHINE_NAME", "DOR_MACHINE_NAME"):
         monkeypatch.delenv(var, raising=False)
     monkeypatch.setattr(platform, "node", lambda: "Mac.local")
-    monkeypatch.setenv("H2T_SESSION_ROOT", str(tmp_path / "sessions"))
-    monkeypatch.setenv("H2T_ACTIVITY_SPOOL", str(tmp_path / "spool.jsonl"))
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
     return tmp_path
 
 
@@ -43,7 +44,7 @@ def test_machine_name_is_the_same_for_writer_reader_and_spool(renamed_host):
 
     written_under = handoff.default_markdown_dir("proj").parent.name
     activity_writer.log_session_start(session_id="s", domain="dev", project="proj")
-    spooled = json.loads((renamed_host / "spool.jsonl").read_text(encoding="utf-8"))["machine"]
+    spooled = json.loads(paths.activity_file("mac").read_text(encoding="utf-8"))["machine"]
 
     assert written_under == sessions.get_machine_name() == spooled == "mac"
 
@@ -121,8 +122,9 @@ def test_setup_does_not_overwrite_a_preference_saved_meanwhile(renamed_host, mon
 
 
 def _history(renamed_host, *machines):
+    # The 3.x session root, which ensure_machine_name still lists (setup/legacy.py).
     for machine in machines:
-        (renamed_host / "sessions" / machine / "proj").mkdir(parents=True)
+        (renamed_host / ".h2t" / "sessions" / machine / "proj").mkdir(parents=True)
 
 
 def test_setup_does_not_pin_a_hostname_that_drifted_from_the_history(renamed_host, monkeypatch):

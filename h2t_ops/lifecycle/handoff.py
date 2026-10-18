@@ -22,8 +22,12 @@ import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
+from h2t_ops.core import paths, store
+from h2t_ops.core.errors import H2TError
+from h2t_ops.lifecycle import session_record
 from h2t_ops.lifecycle.activity.writer import log_session_end
 from h2t_ops.lifecycle.eval.session import SkillEval
+from h2t_ops.lifecycle.gather.runner import _run_one
 
 SUMMARY_LIMIT = 1200
 ITEM_LIMIT = 240
@@ -54,11 +58,14 @@ def resolve_identity(project: str = "", domain: str = "", cwd: str = "") -> tupl
     return project or found, domain or str(resolved.get("domain") or "dev")
 
 
-def default_markdown_dir(project: str) -> Path:
-    root = Path(os.environ.get("H2T_SESSION_ROOT", str(Path.home() / ".h2t" / "sessions")))
+def _machine() -> str:
     # The reader's own rule, so writer and gather cannot disagree on the directory (#491).
     from h2t_ops.lifecycle.gather.sessions import get_machine_name
-    return root / get_machine_name() / project
+    return get_machine_name()
+
+
+def default_markdown_dir(project: str) -> Path:
+    return paths.records("sessions", _machine()) / project
 
 
 def _truncate(text: str, limit: int) -> tuple[str, bool]:
@@ -154,10 +161,42 @@ def _build_latest_index(
     }
 
 
-def _write_json_atomic(path: Path, data: dict) -> None:
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-    tmp.replace(path)
+def _git_context() -> tuple[str, list[str]]:
+    """Branch and the last five commits of cwd; a git that fails gives empty fields, never
+    an exception — nothing may stand between the session and its record (gates.md)."""
+    branch = _run_one(["git", "rev-parse", "--abbrev-ref", "HEAD"], timeout=5)
+    log = _run_one(["git", "log", "-5", "--format=%h"], timeout=5)
+    return (branch or "").strip(), (log or "").split()
+
+
+def _write_record(md_path: Path, meta: dict, body: bytes, *, dest: bool) -> tuple[Path, list[str]]:
+    """New records are created, never overwritten (§7.2). A file already at the name is
+    replaced only when its frontmatter says it is this session's record; any other file —
+    a hand-written note, a sync conflict, no frontmatter — is left as it is, and the record
+    takes the next free name. Returns the path written and notes for the response."""
+    data = session_record.render(meta, body)
+    foreign: list[Path] = []
+    for candidate in store.unique_name(md_path):
+        try:
+            written = store.create(candidate, data, place="records.sessions", dest=dest)
+            break
+        except store.AlreadyExists:
+            pass
+        try:
+            theirs, _ = session_record.parse(candidate.read_bytes())
+        except ValueError:
+            theirs = {}
+        if all(theirs.get(k) == meta[k] for k in ("session_id", "machine", "project")):
+            written = store.replace(candidate, data, place="records.sessions", dest=dest)
+            break
+        foreign.append(candidate)
+    return written, [f"{f} is not this session's record and was left untouched; "
+                     f"the record is {written}" for f in foreign]
+
+
+def _write_latest(path: Path, data: dict, *, dest: bool) -> None:
+    store.replace(path, json.dumps(data, ensure_ascii=False, indent=2),
+                  place="records.sessions", dest=dest)
 
 
 def _degraded(session_id: str, spool_path, distinct_artifacts: list, exc: Exception) -> dict:
@@ -215,14 +254,19 @@ def write_handoff(
         artifacts=parsed_artifacts,
     )
 
+    machine = _machine()
+    dest = markdown_dir is not None
     md_dir = Path(markdown_dir) if markdown_dir else default_markdown_dir(project)
     try:
-        md_dir.mkdir(parents=True, exist_ok=True)
-    except OSError as exc:
+        # The first operation on this path: a --markdown-dir into a package place (secrets,
+        # say) is refused here, after the spool, so it degrades like any other mirror failure.
+        store.mkdir(md_dir, place="records.sessions", dest=dest)
+    except (OSError, H2TError) as exc:
         return _degraded(session_id, spool_path, distinct_artifacts, exc)
     md_path = md_dir / f"{session_id}.md"
 
     now = datetime.now(UTC)
+    branch, commits = _git_context()
     artifacts_md = "\n".join(
         f"- {a['type']}: {a['ref']}" for a in parsed_artifacts
     ) or "None"
@@ -252,28 +296,42 @@ def write_handoff(
         markdown_path=None,
         updated_at=now,
     )
+    meta = {
+        "session_id": session_id,
+        "machine": machine,
+        "project": project,
+        "domain": domain,
+        "date": now.strftime("%Y-%m-%d"),
+        "updated_at": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "branch": branch,
+        "commits": commits,
+        "done": what_done,
+        "remains": what_remains,
+        "artifacts": distinct_artifacts,
+    }
+    # Until Task 16 moves gather onto the index, latest.json is written beside the md (R10).
     latest_path = md_dir / "latest.json"
     markdown_failed = False
     persisted_md_path: Path | None = None
+    notes: list[str] = []
     try:
-        _write_json_atomic(latest_path, latest)
-    except OSError as exc:
+        _write_latest(latest_path, latest, dest=dest)
+    except (OSError, H2TError) as exc:
         # latest.json is part of the same mirror. It used to sit outside every guard, so a
         # directory named latest.json.tmp raised IsADirectoryError out of main() — exit 1
         # and a traceback, with the spool already on disk. Same invariant, same answer.
         return _degraded(session_id, spool_path, distinct_artifacts, exc)
 
     try:
-        md_path.write_text(md_content, encoding="utf-8")
-        persisted_md_path = md_path
-    except OSError:
+        persisted_md_path, notes = _write_record(md_path, meta, md_content.encode("utf-8"), dest=dest)
+    except (OSError, H2TError):
         markdown_failed = True
 
     if persisted_md_path is not None:
         latest["markdown_path"] = str(persisted_md_path)
         try:
-            _write_json_atomic(latest_path, latest)
-        except OSError:
+            _write_latest(latest_path, latest, dest=dest)
+        except (OSError, H2TError):
             # The first write landed; only the markdown_path backfill is lost.
             markdown_failed = True
 
@@ -283,11 +341,11 @@ def write_handoff(
     except Exception:
         pass
 
-    return {
+    result = {
         "status": "degraded" if markdown_failed else "ok",
         "session_id": session_id,
         "spool": spool_path,
-        "markdown": str(md_path) if persisted_md_path else "",
+        "markdown": str(persisted_md_path) if persisted_md_path else "",
         "latest": str(latest_path),
         # The distinct artifacts recorded, not the count that fit in the index. These are
         # two numbers and the response printed the second under the first one's name:
@@ -298,6 +356,9 @@ def write_handoff(
         "index_truncated": latest["truncated"],
         "mirror_write_failed": markdown_failed,
     }
+    if notes:
+        result["notes"] = notes
+    return result
 
 
 def main() -> None:

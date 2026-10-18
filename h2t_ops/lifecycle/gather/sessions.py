@@ -12,7 +12,7 @@ MAX_ARTIFACTS = 10
 
 
 def _session_root() -> Path:
-    return Path(os.environ.get("H2T_SESSION_ROOT", str(Path.home() / ".h2t" / "sessions")))
+    return paths.records("sessions")
 
 
 def _legacy_session_root() -> Path:

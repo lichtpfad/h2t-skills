@@ -15,9 +15,10 @@ WRITER = "h2t_ops.lifecycle.handoff"  # the plugin script, deleted in Task 12, r
 
 def _env(tmp_path, **extra):
     env = dict(os.environ)
+    home = tmp_path / "home"
     env.update({
-        "H2T_ACTIVITY_SPOOL": str(tmp_path / "spool.jsonl"),
-        "H2T_SESSION_ROOT": str(tmp_path / "sessions"),
+        "HOME": str(home),
+        "USERPROFILE": str(home),
         "H2T_MACHINE_NAME": "testbox",
         "H2T_EVALS_MODE": "off",
     })
@@ -92,10 +93,11 @@ def test_an_unwritable_latest_json_also_exits_3(tmp_path):
 
     Reproduced before this test existed: a directory named latest.json.tmp raised
     IsADirectoryError out of main() — exit 1, a traceback, and the spool already on disk.
+    store.replace takes a temp name of its own, so the blocker is now latest.json itself.
     """
     mirror = tmp_path / "mirror"
     mirror.mkdir()
-    (mirror / "latest.json.tmp").mkdir()
+    (mirror / "latest.json").mkdir()
     result = _run(tmp_path, "write", "--session-id", "probe", "--project", "p",
                   "--domain", "d", "--markdown-dir", str(mirror))
     assert result.returncode == 3, (result.returncode, result.stderr[-300:])

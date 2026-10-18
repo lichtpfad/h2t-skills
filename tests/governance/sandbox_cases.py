@@ -506,6 +506,28 @@ def _creative_profiles_dir(sb, mp):
     assert out.getvalue().strip() == str(paths.data_dir() / "creative" / "profiles")
 
 
+def _handoff(done):
+    def run(sb, mp):
+        from pathlib import Path
+
+        from h2t_ops.core import paths
+        from h2t_ops.lifecycle import handoff
+        mp.setenv("H2T_MACHINE_NAME", "sandbox")
+        mp.setenv("H2T_EVALS_MODE", "off")
+        out = handoff.write_handoff(session_id="dev-p-sandbox", domain="dev", project="p",
+                                    what_done=done, what_remains="- [ ] next", artifacts=["pr:1"])
+        assert out["status"] == "ok", out
+        assert paths.records("sessions", "sandbox") in Path(out["markdown"]).parents
+    return run
+
+
+def _activity_start(sb, mp):
+    from h2t_ops.core import paths
+    from h2t_ops.lifecycle.activity import writer
+    writer.log_session_start("s", "dev", "p", machine="sandbox")
+    assert paths.activity_file("sandbox").is_file()
+
+
 CASES: list[Case] = [
     Case("store.replace.state", _store_replace_state),
     # Task 8: a refresh writes nothing; a rotated refresh token writes local and the mirror.
@@ -549,4 +571,8 @@ CASES: list[Case] = [
     Case("evals.write-local", _evals_write_local),
     Case("evals.spool", _evals_spool),
     Case("creative.profiles-dir", _creative_profiles_dir),
+    # Task 13: the session md and latest.json under records/sessions, activity per machine.
+    Case("handoff.write", _handoff("- first")),
+    Case("handoff.write.again", _handoff("- second"), setup=_handoff("- first")),
+    Case("activity.start", _activity_start),
 ]

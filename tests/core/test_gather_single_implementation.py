@@ -47,12 +47,13 @@ def _session_store(tmp_path, work, env):
     """A session store of the test's own, holding one previous session.
 
     The block under test only renders when a `latest.json` exists for the resolved project,
-    so asserting on this machine's real ~/.h2t/sessions made the test a statement about the
+    so asserting on this machine's real session records made the test a statement about the
     developer's history: green here, red on a CI runner that has none. The store is built
     from the project id gather itself reports, so it lands where the reader will look.
     """
-    root = tmp_path / "sessions"
-    env = dict(env, H2T_SESSION_ROOT=str(root), H2T_MACHINE_NAME="test-machine")
+    home = tmp_path / "home"
+    root = home / ".h2t" / "records" / "sessions"
+    env = dict(env, HOME=str(home), USERPROFILE=str(home), H2T_MACHINE_NAME="test-machine")
 
     probe = subprocess.run(
         [sys.executable, "-c", _ENTRY, "--cwd", str(work), "--briefing-only"],

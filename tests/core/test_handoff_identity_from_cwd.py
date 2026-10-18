@@ -27,9 +27,8 @@ def _config_root(tmp_path, mapping_yaml):
     return config
 
 
-def _write(cwd, sessions_root, config_root, *extra):
+def _write(cwd, config_root, *extra):
     env = dict(os.environ)
-    env["H2T_SESSION_ROOT"] = str(sessions_root)
     env["H2T_MACHINE_NAME"] = "test-machine"
     env["H2T_EVALS_MODE"] = "off"
     env["H2T_CONFIG_ROOT"] = str(config_root)
@@ -52,7 +51,7 @@ def test_project_comes_from_the_working_directory(tmp_path):
         f"cwd_patterns:\n  {Path(work).resolve()}: personal-os/derived-id\n"
         "default: dev/unknown\n"
     ))
-    out = _write(work, tmp_path / "sessions", config)
+    out = _write(work, config)
     assert Path(out["markdown"]).parent.name == "derived-id", out["markdown"]
     assert "**Domain:** personal-os" in Path(out["markdown"]).read_text(encoding="utf-8")
 
@@ -62,7 +61,7 @@ def test_unresolved_project_keeps_the_directory_name(tmp_path):
     work = tmp_path / "unmapped-checkout"
     work.mkdir()
     config = _config_root(tmp_path, "mappings: {}\ncwd_patterns: {}\ndefault: dev/unknown\n")
-    out = _write(work, tmp_path / "sessions", config)
+    out = _write(work, config)
     assert Path(out["markdown"]).parent.name == "unmapped-checkout", out["markdown"]
 
 
@@ -74,6 +73,6 @@ def test_explicit_project_still_wins(tmp_path):
         f"cwd_patterns:\n  {Path(work).resolve()}: personal-os/derived-id\n"
         "default: dev/unknown\n"
     ))
-    out = _write(work, tmp_path / "sessions", config,
+    out = _write(work, config,
                  "--project", "explicit-id", "--domain", "personal-os")
     assert Path(out["markdown"]).parent.name == "explicit-id", out["markdown"]
