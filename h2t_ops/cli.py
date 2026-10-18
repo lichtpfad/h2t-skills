@@ -47,7 +47,7 @@ def _doctor() -> int:
         print(f"  - {spec.name}: {spec.help}")
     # Ask the same code the connectors use (#451): the literals here missed a token kept in
     # a secrets file, and took gmail's client credentials for a signed-in token.
-    from h2t_ops.core import google_auth
+    from h2t_ops.core import secrets
     from h2t_ops.core.errors import ConfigError
     from h2t_ops.core.secrets import resolve_notion_token
     try:
@@ -58,8 +58,11 @@ def _doctor() -> int:
     except (OSError, UnicodeDecodeError) as exc:
         notion = f"UNREADABLE ({exc})"
     print(f"secrets: NOTION_API_TOKEN={notion}")
-    gmail_token = any(token.is_file() for token, _ in google_auth._candidate_paths("gmail"))
-    print(f"secrets: gmail token={'present' if gmail_token else 'MISSING'}")
+    try:
+        gmail_token = "present" if secrets.read_json("google.token")[1] is not None else "MISSING"
+    except ConfigError as exc:
+        gmail_token = f"UNREADABLE ({exc})"
+    print(f"secrets: gmail token={gmail_token}")
     unchecked = [name for name in names if name not in ("notion", "gmail")]
     print(f"not checked here: {', '.join(unchecked)}; run the h2t-core setup skill's connectors-check")
     return 0

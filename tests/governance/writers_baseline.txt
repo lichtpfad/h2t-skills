@@ -13,7 +13,6 @@ connectors/research/maintenance.py
 connectors/research/store.py
 connectors/research/visual_ocr.py
 connectors/telegram/client.py
-core/google_auth.py
 deploy/executor.py
 hook_entry.py
 hooks/gather.py

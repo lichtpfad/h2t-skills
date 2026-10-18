@@ -25,6 +25,9 @@ import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+from h2t_ops.core import google_auth
+from h2t_ops.core.errors import H2TError
+
 try:
     import imageio_ffmpeg
 except ImportError:
@@ -33,9 +36,6 @@ except ImportError:
 
 # ─── Constants ────────────────────────────────────────────────────────────────
 
-DRIVE_CONFIG_DIR = Path.home() / ".config" / "google-calendar-mcp"
-DRIVE_TOKEN_FILE = DRIVE_CONFIG_DIR / "tokens.json"
-DRIVE_CREDENTIALS_FILE = DRIVE_CONFIG_DIR / "credentials.json"
 DRIVE_SCOPES = ["https://www.googleapis.com/auth/drive"]
 DRIVE_ROOT_FOLDER_NAME = "MeetGeek Uploads"
 
@@ -263,46 +263,13 @@ def convert_media(src: Path, *, audio_only: bool, mix_mode: str,
 # ─── Drive ────────────────────────────────────────────────────────────────────
 
 def drive_service():
-    """Build Drive v3 service from shared OAuth token (~/.config/google-calendar-mcp/tokens.json)."""
-    if not DRIVE_TOKEN_FILE.exists():
-        raise RecoveryError(
-            f"Drive auth missing — token not at {DRIVE_TOKEN_FILE}. "
-            "Run `h2t-ops drive list` to trigger OAuth. "
-            "Use `/h2t-core:setup connectors-check` to verify connector readiness.",
-            exit_code=1,
-        )
+    """Build Drive v3 service from this machine's Google token, through core.google_auth (#548)."""
     try:
-        from google.auth.transport.requests import Request as _GReq
-        from google.oauth2.credentials import Credentials
-        from googleapiclient.discovery import build
-    except ImportError as e:
-        raise RecoveryError(
-            f"google-api-python-client not installed: {e}",
-            exit_code=2,
-        ) from e
-    with DRIVE_TOKEN_FILE.open(encoding="utf-8") as f:
-        token_data = json.load(f)
-    if "normal" in token_data:
-        token_data = token_data["normal"]
-    if "client_id" not in token_data:
-        if not DRIVE_CREDENTIALS_FILE.exists():
-            raise RecoveryError(f"Drive credentials missing: {DRIVE_CREDENTIALS_FILE}", exit_code=1)
-        with DRIVE_CREDENTIALS_FILE.open(encoding="utf-8") as f:
-            creds_data = json.load(f)
-        installed = creds_data.get("installed", creds_data)
-        token_data["client_id"] = installed.get("client_id")
-        token_data["client_secret"] = installed.get("client_secret")
-        token_data["token_uri"] = installed.get("token_uri", "https://oauth2.googleapis.com/token")
-    existing_scopes = token_data.get("scopes") or []
-    if isinstance(existing_scopes, str):
-        existing_scopes = existing_scopes.split()
-    creds = Credentials.from_authorized_user_info(
-        token_data, scopes=existing_scopes or DRIVE_SCOPES
-    )
-    if creds.expired and creds.refresh_token:
-        creds.refresh(_GReq())
-        DRIVE_TOKEN_FILE.write_text(creds.to_json())
-    return build("drive", "v3", credentials=creds)
+        creds = google_auth.resolve_google_credentials("drive", DRIVE_SCOPES)
+        return google_auth.build_google_service("drive", "v3", creds)
+    except H2TError as e:
+        hint = f" {e.hint}" if e.hint else ""
+        raise RecoveryError(f"Drive auth missing — {e}.{hint}", exit_code=1) from e
 
 
 def drive_download_url(file_id: str) -> str:

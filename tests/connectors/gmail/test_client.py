@@ -58,7 +58,9 @@ def test_no_creds_no_refresh_raises_configerror_not_browser(monkeypatch, tmp_pat
     cfg = tmp_path / ".config" / "gmail"
     cfg.mkdir(parents=True)
     (cfg / "credentials.json").write_text("{}")
-    monkeypatch.setattr(ga.Path, "home", staticmethod(lambda: tmp_path))
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
+    monkeypatch.delenv("H2T_PATH_ROOT", raising=False)
     monkeypatch.setattr(ga, "_load_credentials", lambda *a, **k: None)
 
     launched = {"browser": False}
@@ -82,11 +84,17 @@ def test_refresh_failure_raises_autherror(monkeypatch, tmp_path):
     """
     from h2t_ops.connectors.gmail import client as gmod
     from h2t_ops.core import google_auth as ga
+    from h2t_ops.core import paths
     from h2t_ops.core.errors import AuthError
 
-    # Safety: keep Path.home isolated so nothing accidentally reads real
-    # ~/.config or ~/.dor during this test.
-    monkeypatch.setattr(ga.Path, "home", staticmethod(lambda: tmp_path))
+    # The token is read through core.secrets before _load_credentials sees it: without a
+    # file under this HOME the flow stops at ConfigError and never reaches the refresh.
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
+    monkeypatch.delenv("H2T_PATH_ROOT", raising=False)
+    token = paths.secrets_local() / "google.token.json"
+    token.parent.mkdir(parents=True)
+    token.write_text('{"refresh_token": "fake-r"}')
 
     class _Creds:
         valid = False

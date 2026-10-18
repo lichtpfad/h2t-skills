@@ -815,11 +815,16 @@ def test_drive_service_raises_when_token_missing(cli, tmp_path, monkeypatch):
     import sys as _sys
     _rec_mod = _sys.modules.get("recovery")
     assert _rec_mod is not None, "recovery module not found in sys.modules"
-    monkeypatch.setattr(_rec_mod, "DRIVE_TOKEN_FILE", tmp_path / "missing.json")
+    from h2t_ops.core.errors import ConfigError
+
+    def missing(*a, **k):
+        raise ConfigError("Google token not found", hint="run `h2t-ops google auth`")
+
+    monkeypatch.setattr(_rec_mod.google_auth, "resolve_google_credentials", missing)
     import pytest as _p
-    with _p.raises((cli.ApiError, cli.RecoveryError)) as e:
+    with _p.raises((ConfigError, cli.RecoveryError)) as e:
         cli._drive_service()
-    assert "tokens.json" in str(e.value).lower() or "drive auth" in str(e.value).lower()
+    assert "google" in str(e.value).lower()
 
 
 def test_drive_upload_idempotent_returns_existing(cli, tmp_path, monkeypatch):
