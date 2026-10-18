@@ -11,8 +11,31 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 PROVIDER = "calendar"
 
 
-def _resolve_query_tz(tz: str | None) -> str:
-    return tz or os.environ.get("H2T_CALENDAR_TZ") or "Asia/Jerusalem"
+def _system_tz() -> str:
+    """The system zone as an IANA key; UTC when the system does not name one."""
+    key = getattr(datetime.now().astimezone().tzinfo, "key", None)
+    if not key:
+        link = os.path.realpath("/etc/localtime")
+        key = link.split("zoneinfo/", 1)[1] if "zoneinfo/" in link else None
+    try:
+        return ZoneInfo(key).key if key else "UTC"
+    except (ZoneInfoNotFoundError, ValueError):
+        return "UTC"
+
+
+def _resolve_query_tz(tz: str | None) -> tuple[str, str]:
+    """(zone, where it came from): --tz → H2T_CALENDAR_TZ → user.yaml `timezone` → the
+    system zone (#548 R45). No value anywhere is not an error."""
+    from h2t_ops.core import user_config
+
+    if tz:
+        return tz, "flag"
+    if os.environ.get("H2T_CALENDAR_TZ"):
+        return os.environ["H2T_CALENDAR_TZ"], "env"
+    configured = user_config.get("timezone")
+    if configured:
+        return str(configured), "user.yaml"
+    return _system_tz(), "system"
 
 
 _RELATIVE_DAY = re.compile(r"^([+-])(\d+)d$")
@@ -125,7 +148,7 @@ def register(subparsers: Any) -> None:
     cp.add_argument("--meet", action="store_true")
     cp.add_argument("--rrule")
     cp.add_argument("--reminder-minutes")
-    cp.add_argument("--tz", default="Asia/Jerusalem")
+    cp.add_argument("--tz", default=None)
     add_calendar_id(cp)
     add_fmt(cp)
 
@@ -217,7 +240,7 @@ def run(args) -> Any:
         time_max = None
         # Resolved even without --from/--to: the client anchors `--days` to
         # midnight in this zone, and it cannot guess where midnight is (#351).
-        tz = _resolve_query_tz(getattr(args, "tz", None))
+        tz, tz_source = _resolve_query_tz(getattr(args, "tz", None))
         if bool(getattr(args, "from_date", None)) != bool(getattr(args, "to_date", None)):
             raise UsageError("calendar list: --from and --to must be used together")
         if getattr(args, "from_date", None):
@@ -232,7 +255,7 @@ def run(args) -> Any:
             busy_only=getattr(args, "busy_only", False),
         )
         return Paged(page["items"], truncated=page["truncated"], limit=args.max,
-                     extra={"window": page["window"]})
+                     extra={"window": page["window"], "tz_source": tz_source})
     if cmd == "search":
         page = client.search_events_page(
             args.query,
@@ -251,7 +274,7 @@ def run(args) -> Any:
                 duration_min=args.duration_min,
                 description=args.description,
                 attendees=args.attendees,
-                tz=args.tz,
+                tz=_resolve_query_tz(args.tz)[0],
                 calendar_id=args.calendar_id,
                 all_day=args.all_day,
                 location=args.location,
@@ -278,7 +301,7 @@ def run(args) -> Any:
                 replace_rrule=args.replace_rrule,
                 replace_reminder_minutes=_parse_minutes(args.replace_reminders),
                 clear_reminders=args.clear_reminders,
-                tz=args.tz,
+                tz=_resolve_query_tz(args.tz)[0],
             )
         except ValueError as exc:
             raise UsageError(f"calendar update: {exc}") from exc
@@ -301,14 +324,15 @@ def run(args) -> Any:
         client.delete_event(args.event_id, calendar_id=args.calendar_id)
         return {"deleted": args.event_id, "calendar_id": args.calendar_id}
     if cmd == "freebusy":
-        tz = _resolve_query_tz(args.tz)
+        tz, tz_source = _resolve_query_tz(args.tz)
         time_min, time_max = _date_window_bounds(args.from_date, args.to_date, tz)
-        return client.freebusy(
+        result = client.freebusy(
             time_min,
             time_max,
             calendar_ids=args.calendar_id or ["primary"],
             tz=tz,
         )
+        return {**result, "tz_source": tz_source}
     if cmd == "create-calendar":
         return client.create_calendar(
             args.summary,
@@ -320,7 +344,7 @@ def run(args) -> Any:
         time_min = None
         time_max = None
         if getattr(args, "from_date", None):
-            tz = _resolve_query_tz(None)
+            tz, _ = _resolve_query_tz(None)
             time_min, time_max = _date_window_bounds(args.from_date, args.to_date, tz)
         return client.list_instances(
             args.event_id,

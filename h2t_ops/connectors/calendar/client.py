@@ -48,6 +48,12 @@ def _zone(tz: str | None):
     return datetime.now().astimezone().tzinfo
 
 
+def _default_tz() -> str:
+    """The zone a command uses without --tz — the one rule calendar.commands keeps."""
+    from h2t_ops.connectors.calendar.commands import _resolve_query_tz
+    return _resolve_query_tz(None)[0]
+
+
 def _now_in(tz: str | None) -> datetime:
     """Current instant in the requested timezone; local time when it is unusable."""
     return datetime.now(_zone(tz))
@@ -223,7 +229,7 @@ class CalendarClient:
         duration_min: int = 60,
         description: str | None = None,
         attendees: str | None = None,
-        tz: str = "Asia/Jerusalem",
+        tz: str | None = None,
         *,
         calendar_id: str = "primary",
         all_day: bool = False,
@@ -232,6 +238,7 @@ class CalendarClient:
         rrule: str | None = None,
         reminder_minutes: list[int] | None = None,
     ) -> dict[str, Any]:
+        tz = tz or _default_tz()
         event = self._event_time_body(
             summary=summary,
             date=date,
@@ -313,7 +320,7 @@ class CalendarClient:
                     date,
                     time,
                     duration_min or 60,
-                    tz or "Asia/Jerusalem",
+                    tz or _default_tz(),
                 ))
 
         if replace_attendees is not None:

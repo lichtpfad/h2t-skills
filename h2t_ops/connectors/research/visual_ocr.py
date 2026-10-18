@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from h2t_ops.connectors.research import store as research_store
+from h2t_ops.core import paths as _paths
 from h2t_ops.core import store as core_store
 from h2t_ops.core.errors import ConfigError, ProviderError, UsageError
 
@@ -20,7 +21,7 @@ ALLOWED_DEGRADED_REASONS = {
 
 
 def load_fetch_sidecar(path: str | Path) -> dict[str, Any]:
-    sidecar_path = Path(path).expanduser()
+    sidecar_path = _paths.expand_user_dest(str(path))
     try:
         raw = sidecar_path.read_text(encoding="utf-8")
     except FileNotFoundError as exc:
@@ -76,7 +77,7 @@ def validate_visual_ocr_trigger(envelope: dict[str, Any]) -> None:
 
 
 def extract_text_from_image(image_path: str | Path) -> tuple[str, list[str], str]:
-    image = Path(image_path).expanduser()
+    image = _paths.expand_user_dest(str(image_path))
     if not image.is_file():
         raise UsageError(
             f"visual-ocr image not found: {image}",
@@ -202,7 +203,7 @@ def build_visual_ocr_artifact_paths(
         return value or "research"
 
     base = f"{_slugify(project)}-{_slugify(slug_source)}-{_slugify('visual-ocr')}"
-    output_dir = Path(output_dir).expanduser()
+    output_dir = _paths.expand_user_dest(str(output_dir))
     return {
         "partial_md": output_dir / f"{base}.partial.md",
         "sources_json": output_dir / f"{base}.sources.json",

@@ -24,7 +24,8 @@ def register(subparsers: Any) -> None:
     b.add_argument("--limit", type=int)
     add_fmt(b)
     s = cmds.add_parser("search", help="Query a database")
-    s.add_argument("database_id")
+    s.add_argument("database_id", nargs="?", default=None,
+                   help="database id (default: notion.tasks_database_id in user.yaml)")
     s.add_argument("--filter")
     s.add_argument("--filter-json")
     s.add_argument("--limit", type=int)
@@ -60,9 +61,8 @@ def register(subparsers: Any) -> None:
     ft = cmds.add_parser("find-project-tasks",
                          help="List tasks whose Project relation points at <page_id>")
     ft.add_argument("project_page_id")
-    ft.add_argument("--database-id", dest="database_id",
-                    default="beabac7bf4314952a9327759c638d89f",
-                    help="tasks database id (default: legacy workspace tasks db)")
+    ft.add_argument("--database-id", dest="database_id", default=None,
+                    help="tasks database id (default: notion.tasks_database_id in user.yaml)")
     ft.add_argument("--limit", type=int)
     add_fmt(ft)
     c = cmds.add_parser("create", help="Create a page")
@@ -200,6 +200,16 @@ def run(args) -> Any:
             return _P(path).read_text(encoding="utf-8")
         except FileNotFoundError as e:
             raise UsageError(f"file not found: {path}") from e
+
+    # The tasks database is the user's, not the code's: user.yaml (#548 R45).
+    if args.notion_cmd in ("find-project-tasks", "search") and not args.database_id:
+        from h2t_ops.core import user_config
+        args.database_id = user_config.get("notion.tasks_database_id")
+        if not args.database_id:
+            flag = "--database-id" if args.notion_cmd == "find-project-tasks" else "a DATABASE_ID"
+            raise UsageError(
+                f"notion {args.notion_cmd}: no tasks database",
+                hint=f"pass {flag} or set notion.tasks_database_id in {user_config.path()}")
 
     client = NotionClient()
     cmd = args.notion_cmd

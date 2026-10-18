@@ -12,7 +12,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from h2t_ops.core import store
+from h2t_ops.core import paths, store
 from h2t_ops.tools.docs.project_types import PROJECT_TYPES, SCAFFOLD_TYPE_TO_TEMPLATE
 
 # The project types and docs-init ship in the package (h2t_ops.tools.docs): no h2t-dev
@@ -222,7 +222,7 @@ def write_structure_yaml(project_dir: Path) -> bool:
 
 
 def cmd_create(args: argparse.Namespace) -> dict:
-    base = Path(args.dir).expanduser().resolve()
+    base = paths.expand_user_dest(args.dir).resolve()
     project_dir = base / args.id
     type_base = args.type.split("-")[0]
     template = template_for_type(args.type)

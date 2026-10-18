@@ -32,7 +32,7 @@ def _resolve_config_root(config_root: str | None = None) -> tuple[Path, bool]:
     default = paths.config_dir()
     if not config_root:
         return default, False
-    root = Path(config_root).expanduser()
+    root = paths.expand_user_dest(config_root)
     if os.path.realpath(root) == os.path.realpath(default):
         return default, False
     return root, True

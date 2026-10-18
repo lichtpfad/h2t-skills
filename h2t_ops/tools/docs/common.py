@@ -7,6 +7,7 @@ import subprocess
 from collections.abc import Sequence
 from pathlib import Path
 
+from h2t_ops.core import paths as _paths
 from h2t_ops.resources import resource_dir
 
 
@@ -33,7 +34,7 @@ def _dev_root() -> Path:
     checkout = Path(__file__).resolve().parents[3]
     if (checkout / "pyproject.toml").is_file():
         return checkout.parent
-    return Path.home() / "dev"
+    return _paths.home() / "dev"
 
 
 DEV_ROOT = _dev_root()

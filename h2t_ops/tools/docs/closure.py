@@ -10,7 +10,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from h2t_ops.core import store
+from h2t_ops.core import paths, store
 
 SCHEMA = "h2t_milestone_closure_report/v0.1"
 
@@ -165,7 +165,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.close and not args.confirm_title:
         parser.error("--confirm-title is required with --close")
 
-    repo_root = Path(args.repo_root).expanduser().resolve()
+    repo_root = paths.expand_user_dest(args.repo_root).resolve()
     try:
         repo = resolve_repo(args.repo)
         milestone = find_milestone(fetch_milestones(repo), args.milestone)

@@ -287,8 +287,8 @@ def _artifact_ref_for_path(
     if not path:
         return None
     try:
-        target = Path(path).expanduser().resolve()
-        base = Path(output_dir).expanduser().resolve()
+        target = _paths.expand_user_dest(str(path)).resolve()
+        base = _paths.expand_user_dest(str(output_dir)).resolve()
         return target.relative_to(base).as_posix()
     except (OSError, ValueError):
         return None

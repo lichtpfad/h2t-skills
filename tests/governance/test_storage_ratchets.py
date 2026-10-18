@@ -27,9 +27,11 @@ CEILINGS = {  # measured 2026-10-18 on ab078f4f; lowered after Task 6, Task 8 (G
     # hook logs, the gather lock, the deploy input, setup's paths; 2 of the 8 are store.mkdir);
     # Task 19 (paths and index commands) held them: the variable names `paths list` reports
     # are spelled in paths.source, the index lock is opened by store.locked; Task 21 (the
-    # migration journal) adds one: its store.mkdir of run/rollback/<id> with mode 0700 (R36)
-    "home": 19, "legacy_roots": 0, "path_env": 0, "dotenv": 0,
-    "secret_readers": 0, "writes": 9, "sqlite": 0,
+    # migration journal) adds one: its store.mkdir of run/rollback/<id> with mode 0700 (R36);
+    # Task 24: zero. The scanner stopped counting calls on core.store and the RepoWriter it
+    # returns (the 9 writes), and user-named paths go through paths.expand_user_dest (the 19)
+    "home": 0, "legacy_roots": 0, "path_env": 0, "dotenv": 0,
+    "secret_readers": 0, "writes": 0, "sqlite": 0,
 }
 
 
@@ -72,6 +74,31 @@ def test_scanner_skips_docstrings_and_dotted_names_but_not_paths(tmp_path):
     assert storage_map.hits(tmp_path, "legacy_roots") == [f"h2t_ops/y.py:{n}" for n in (5, 6, 7, 8)]
     assert storage_map.hits(tmp_path, "path_env") == []
     assert storage_map.hits(tmp_path, "home") == ["h2t_ops/y.py:6"]
+
+
+def test_scanner_skips_calls_through_store_but_not_raw_writes(tmp_path):
+    """A call on core.store, or on the RepoWriter store.repo() returns, is the door, not a
+    bypass. A raw write still counts — beside a door call too, and on a name that is not
+    core.store (research has a module of its own called store)."""
+    (tmp_path / "h2t_ops").mkdir()
+    (tmp_path / "h2t_ops" / "z.py").write_text(
+        'from h2t_ops.core import paths, store\n'                 # 1
+        'from h2t_ops.connectors.research import store as rs\n'   # 2
+        'store.mkdir(d, place="run", mode=0o700)\n'               # 3 door
+        'store.repo(r, "x").mkdir(p)\n'                           # 4 door
+        'rw = store.repo(r, "x")\n'                               # 5
+        'rw.mkdir(d)\n'                                           # 6 door
+        'Path(d).mkdir(parents=True)\n'                           # 7 raw
+        'p.write_text("x")\n'                                     # 8 raw
+        'open(p, "w")\n'                                          # 9 raw
+        'store.mkdir(d, place="run"); d.mkdir()\n'                # 10 raw beside a door
+        'rs.mkdir(d)\n')                                          # 11 not core.store
+    (tmp_path / "h2t_ops" / "zz.py").write_text(
+        'from h2t_ops.connectors.research import store\n'
+        'store.mkdir(d)\n')
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    assert storage_map.hits(tmp_path, "writes") == (
+        [f"h2t_ops/z.py:{n}" for n in (7, 8, 9, 10, 11)] + ["h2t_ops/zz.py:2"])
 
 
 BASELINE = Path(__file__).with_name("writers_baseline.txt")

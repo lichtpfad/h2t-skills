@@ -138,7 +138,7 @@ def _find_project_id_file(start: Path):
     inheriting it would name the wrong one. Outside a repository the home directory is
     the ceiling, for the same reason.
     """
-    home = Path.home().resolve()
+    home = paths.home().resolve()
     current = start
     while True:
         candidate = current / ".claude" / "project-id"

@@ -5,7 +5,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from h2t_ops.core import store
+from h2t_ops.core import paths, store
 
 from .common import (
     DEV_ROOT,
@@ -109,12 +109,12 @@ def init_repo(
     commit: bool = False,
     template: str = "code_repo",
 ) -> list[str] | None:
-    rp = repo_root.expanduser().resolve() if repo_root else repo_path(name)
+    rp = paths.expand_user_dest(str(repo_root)).resolve() if repo_root else repo_path(name)
     if not rp.exists():
         print(f"  ERROR: {rp} not found")
         return None
     # Guard against accidental writes to system paths
-    _HOME = Path.home().resolve()
+    _HOME = paths.home().resolve()
     _DANGER = (
         rp == _HOME
         or rp == _HOME.parent

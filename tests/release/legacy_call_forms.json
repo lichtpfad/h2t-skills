@@ -325,7 +325,7 @@
    "--to",
    "2026-05-23",
    "--tz",
-   "Asia/Jerusalem",
+   "Europe/Paris",
    "--max",
    "250",
    "--busy-only",
@@ -343,7 +343,7 @@
    "--to",
    "2026-05-23",
    "--tz",
-   "Asia/Jerusalem",
+   "Europe/Paris",
    "--json"
   ],
   "source": "plugins/h2t-ops/skills/connectors/references/calendar.md:34"

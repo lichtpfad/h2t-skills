@@ -36,10 +36,10 @@ def _typed(exc: recovery.RecoveryError) -> H2TError:
 # ─── Recovery verbs ───────────────────────────────────────────────────────────
 
 def convert(args: Any) -> Any:
-    src = Path(args.input).expanduser().resolve()
+    src = paths.expand_user_dest(args.input).resolve()
     if not src.exists():
         raise ProviderError(f"input not found: {src}")
-    out_path = Path(args.output).expanduser() if args.output else None
+    out_path = paths.expand_user_dest(args.output) if args.output else None
     try:
         probe = recovery.ffmpeg_probe(str(src))
         if args.probe:
@@ -85,7 +85,7 @@ def upload(args: Any) -> dict:
     if not args.from_file:
         raise UsageError("either --download-url or --from-file required")
 
-    raw_path = Path(args.from_file).expanduser()
+    raw_path = paths.expand_user_dest(args.from_file)
     if raw_path.is_dir():
         expanded = sorted(raw_path.rglob("*.webm"))
     elif raw_path.is_file():

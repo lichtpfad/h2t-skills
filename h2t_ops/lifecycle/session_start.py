@@ -72,7 +72,7 @@ def _main() -> None:
 
     # A cwd that is not a directory resolves to project "unknown", whose session
     # directory holds unrelated handoffs — a briefing that looks complete and is not.
-    if not Path(args.cwd).expanduser().is_dir():
+    if not paths.expand_user_dest(args.cwd).is_dir():
         print(f"gather: --cwd is not a directory: {args.cwd}", file=sys.stderr)
         sys.exit(3)
 

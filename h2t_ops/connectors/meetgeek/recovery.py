@@ -437,7 +437,7 @@ def drive_audit_public(*, svc=None, manifest_path: Path | None = None,
 def drive_upload_file(path: Path, *, folder: str | None = None,
                       make_public: bool = True) -> dict:
     """Upload to Drive. Idempotent by filename within folder. Returns {drive_id, web_url, download_url, created}."""
-    src = Path(path).expanduser().resolve()
+    src = _paths.expand_user_dest(str(path)).resolve()
     if not src.exists():
         raise RecoveryError(f"file not found: {src}", exit_code=1)
     svc = drive_service()

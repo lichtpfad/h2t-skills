@@ -56,11 +56,17 @@ def _tracked(root: Path) -> list[str]:
     return sorted({p for p in out.splitlines() if p.endswith(".py")})
 
 
-def docstring_lines(text: str) -> set[int]:
-    """Line numbers of module, class and function docstrings; none if the file does not parse."""
+def _parse(text: str) -> ast.Module | None:
     try:
-        tree = ast.parse(text)
+        return ast.parse(text)
     except SyntaxError:
+        return None
+
+
+def docstring_lines(text: str, tree: ast.Module | None = None) -> set[int]:
+    """Line numbers of module, class and function docstrings; none if the file does not parse."""
+    tree = tree or _parse(text)
+    if tree is None:
         return set()
     out: set[int] = set()
     for node in ast.walk(tree):
@@ -69,6 +75,28 @@ def docstring_lines(text: str) -> set[int]:
             if body and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant) \
                     and isinstance(body[0].value.value, str):
                 out.update(range(body[0].lineno, body[0].end_lineno + 1))
+    return out
+
+
+def door_names(tree: ast.Module | None) -> set[str]:
+    """Names in a file that stand for core.store, and the RepoWriters bound from
+    `<store>.repo(...)`. A call on them is the door, not a bypass. By binding, not by
+    spelling: research has a module of its own imported as `store`."""
+    if tree is None:
+        return set()
+    out: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and (
+                node.module == "h2t_ops.core" or (node.level and node.module == "core")):
+            out |= {a.asname or a.name for a in node.names if a.name == "store"}
+        elif isinstance(node, ast.Import):
+            out |= {a.asname for a in node.names if a.name == "h2t_ops.core.store" and a.asname}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign) and isinstance(node.value, ast.Call):
+            f = node.value.func
+            if isinstance(f, ast.Attribute) and f.attr == "repo" \
+                    and isinstance(f.value, ast.Name) and f.value.id in out:
+                out |= {t.id for t in node.targets if isinstance(t, ast.Name)}
     return out
 
 
@@ -82,10 +110,17 @@ def hits(root: Path, name: str) -> list[str]:
             text = (root / rel).read_text(encoding="utf-8-sig")
         except (UnicodeDecodeError, FileNotFoundError):
             continue
-        skip = docstring_lines(text)
+        tree = _parse(text)
+        skip = docstring_lines(text, tree)
+        # `writes`: blank the calls through the door, so a raw write beside one still counts.
+        doors = door_names(tree) if name == "writes" else set()
+        door = re.compile(r"\b(?:" + "|".join(sorted(doors)) + r")\.(?:repo\([^()]*\)\.)?\w+\(") \
+            if doors else None
         for n, line in enumerate(text.splitlines(), 1):
             if line.lstrip().startswith("#") or n in skip:
                 continue
+            if door is not None:
+                line = door.sub("", line)
             if rx.search(line):
                 found.append(f"{rel}:{n}")
     return found

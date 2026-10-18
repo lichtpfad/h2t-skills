@@ -47,6 +47,38 @@ def test_detect_domain_unknown():
     assert confidence == "low"
 
 
+def _user_yaml(text):
+    from h2t_ops.core import paths
+    f = paths.config_dir() / "user.yaml"
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_text(text, encoding="utf-8")
+
+
+def test_personal_paths_get_no_domain_without_user_yaml():
+    """The author's own repositories are no longer named in the code (#548 R45): without
+    domain_patterns they are new repositories like any other, and registration asks."""
+    domain, confidence, _ = _detect_domain("/Users/x/Projects/DOR")
+    assert (domain, confidence) == (None, "low")
+
+
+def test_domain_patterns_from_user_yaml():
+    _user_yaml("domain_patterns:\n  - pattern: Projects/DOR|Projects/newsengine\n"
+               "    domain: personal-os\n")
+    assert _detect_domain("/Users/x/Projects/DOR") == ("personal-os", "high", "user.yaml")
+    assert _detect_domain("/Users/x/Projects/elsewhere")[0] is None
+
+
+def test_a_broken_domain_pattern_names_the_file():
+    import pytest
+
+    from h2t_ops.core import user_config
+    from h2t_ops.core.errors import ConfigError
+    _user_yaml("domain_patterns:\n  - pattern: \"(unclosed\"\n    domain: x\n")
+    with pytest.raises(ConfigError) as exc:
+        _detect_domain("/Users/x/Projects/DOR")
+    assert str(user_config.path()) in str(exc.value)
+
+
 def test_humanize_id():
     assert _humanize_id("h2t-vision") == "H2T Vision"
     assert _humanize_id("crypto-etl") == "Crypto ETL"
