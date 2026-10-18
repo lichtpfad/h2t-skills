@@ -34,7 +34,9 @@ def test_the_cli_path_this_test_probes_is_the_one_export_uses():
 
 @pytest.mark.skipif(not DRAWIO_CLI.exists(), reason=f"draw.io CLI absent at {DRAWIO_CLI}")
 def test_export_produces_a_png(monkeypatch):
-    monkeypatch.setenv("HOME", str(REAL_HOME))   # Electron hangs without its real profile (#548 R5)
+    # Electron hangs without its real profile under ~/Library, and no variable narrower
+    # than HOME moves that profile, so this test alone gets the real HOME back (#548 R5).
+    monkeypatch.setenv("HOME", str(REAL_HOME))
     graph = {
         "nodes": [
             {"id": "a", "label": "Test Node", "type": "rounded_rect"},

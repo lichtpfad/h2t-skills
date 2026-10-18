@@ -135,7 +135,7 @@ def test_legacy_read_while_the_new_twin_exists_is_caught_even_from_secrets(sandb
 def test_direct_secret_read_is_caught(sandbox):
     target = paths.secrets_shared() / "exa.env"
     target.parent.mkdir(parents=True)
-    target.write_text("EXA_API_KEY=fake")
+    target.write_text("EXA_API_KEY=fake-exa")
     with sandbox.recorder.active():
         target.read_text()
     assert sandbox.recorder.violations and " read " in sandbox.recorder.violations[0]  # not tmp_path's name
@@ -153,6 +153,13 @@ def test_direct_mutation_inside_lake_is_caught(sandbox, op):
         else:
             os.remove(f)
     assert sandbox.recorder.violations
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="symlinks need a privilege on Windows")
+def test_symlink_into_lake_is_caught(sandbox, tmp_path):
+    with sandbox.recorder.active():
+        os.symlink(tmp_path / "elsewhere.md", sandbox.lake / "link.md")
+    assert any("link.md" in v for v in sandbox.recorder.violations)
 
 
 def test_sqlite_without_delegation_is_caught(sandbox):

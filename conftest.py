@@ -1,11 +1,28 @@
 """Repo-wide pytest fixtures."""
 import os
+import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
 
 # The developer's home, taken at import, before any fixture moves HOME (#548 R5).
 REAL_HOME = Path.home()
+
+
+def _uv_cache_dir() -> str | None:
+    """The real uv cache, asked of uv while HOME is still the real one (None without uv)."""
+    if os.environ.get("UV_CACHE_DIR"):
+        return os.environ["UV_CACHE_DIR"]
+    uv = shutil.which("uv")
+    if uv is None:
+        return None
+    out = subprocess.run([uv, "cache", "dir"], capture_output=True, text=True, check=False)
+    return out.stdout.strip() or None
+
+
+# A test that runs uv offline needs its cache, not the whole real home (#548 R5).
+REAL_UV_CACHE = _uv_cache_dir()
 
 
 @pytest.fixture(autouse=True)
@@ -53,16 +70,23 @@ def _isolate_home_writes(monkeypatch, tmp_path_factory):
     gitconfig.write_text("[user]\n name = test\n email = test@example.invalid\n", encoding="utf-8")
     monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(gitconfig))
     from h2t_ops.core import paths
+    # CLAUDE_CONFIG_DIR moves the harness place; set by the developer's shell it would point
+    # the suite at the real ~/.claude.
     for k in list(os.environ):
-        if k.startswith("H2T_PATH_") or k in paths.OLD_ENV:
+        if k.startswith("H2T_PATH_") or k in paths.OLD_ENV or k == "CLAUDE_CONFIG_DIR":
             monkeypatch.delenv(k, raising=False)
 
 
-def _real_home_artifacts() -> dict[str, tuple[int, int]]:
-    """size+mtime of the home files the suite must never touch."""
+def _real_home_artifacts(home: Path | None = None) -> dict[str, tuple[int, ...]]:
+    """size+mtime_ns of the home files the suite must never touch.
+
+    Nanoseconds and sizes, not whole seconds: a rewrite within the same second at equal size
+    would otherwise read as no change. `home` is injectable so the tripwire can be tested
+    against a temporary tree (tests/governance/test_suite_isolation.py)."""
     # Built here, not from h2t_ops.core.paths: pytest_sessionstart runs before any fixture,
     # so Path.home() is still the real one.
-    h2t = Path.home() / ".h2t"
+    home = Path.home() if home is None else home
+    h2t = home / ".h2t"
     watched = [
         h2t / "activity" / "spool.jsonl",
         h2t / "sessions",
@@ -71,17 +95,18 @@ def _real_home_artifacts() -> dict[str, tuple[int, int]]:
         h2t / "state",
         h2t / "data",
         h2t / "layout.json",
-        Path.home() / ".config" / "google-calendar-mcp" / "tokens.json",
+        home / ".config" / "google-calendar-mcp" / "tokens.json",
     ]
-    state: dict[str, tuple[int, int]] = {}
+    state: dict[str, tuple[int, ...]] = {}
     for path in watched:
         try:
             if path.is_dir():
-                files = sorted(str(p) for p in path.rglob("*") if p.is_file())
-                state[str(path)] = (len(files), int(max((p.stat().st_mtime for p in path.rglob("*") if p.is_file()), default=0)))
+                stats = [p.stat() for p in path.rglob("*") if p.is_file()]
+                state[str(path)] = (len(stats), sum(st.st_size for st in stats),
+                                    max((st.st_mtime_ns for st in stats), default=0))
             elif path.is_file():
                 st = path.stat()
-                state[str(path)] = (st.st_size, int(st.st_mtime))
+                state[str(path)] = (st.st_size, st.st_mtime_ns)
         except OSError:
             continue
     return state

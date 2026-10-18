@@ -78,6 +78,8 @@ def _paths(event: str, args: tuple) -> list[tuple[str, bool]]:
         return [(_join(args[0], args[2]), True), (_join(args[1], args[3]), True)]
     if event == "os.link":                         # (src, dst, src_dir_fd, dst_dir_fd)
         return [(_join(args[0], args[2]), True), (_join(args[1], args[3]), True)]
+    if event == "os.symlink":                      # (src, dst, dir_fd): the link is the write
+        return [(_join(args[1], args[2]), True)]
     if event in ("os.remove", "os.rmdir"):         # (path, dir_fd)
         return [(_join(args[0], args[1]), True)] if isinstance(args[0], (str, bytes, os.PathLike)) else []
     if event in ("os.mkdir", "os.chmod"):          # (path, mode, dir_fd)
