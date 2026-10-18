@@ -184,8 +184,10 @@ def _iter_meetings(client: Any, *, limit: int | None, from_date: str | None,
 
 
 def _read_manifest_ids(lake: _lake.ConnectorDir) -> set[str]:
-    """Meetings a committed row (or a 3.x row, which has no state) already carries."""
-    return {r["meeting_id"] for r in lake.committed_rows() if r.get("meeting_id")}
+    """Meetings a committed row (or a 3.x row, which has no state) already carries. A row
+    with refused files is not a synced meeting: the next run fetches it again."""
+    return {r["meeting_id"] for r in lake.committed_rows()
+            if r.get("meeting_id") and not r.get("refused")}
 
 
 def _pair(part: str, mid: str, md: str, raw: dict) -> dict[str, bytes]:
@@ -219,7 +221,7 @@ def _sync_once(client: Any, args: Any) -> dict:
         from_date = cursor_ts[:10]
 
     seen_ids = _read_manifest_ids(lake)
-    count = skipped = errors = 0
+    count = skipped = errors = refused_n = 0
     last_seen_ts: str | None = cursor.get("last_seen_ts")
     last_seen_id: str | None = cursor.get("last_seen_id")
 
@@ -235,7 +237,7 @@ def _sync_once(client: Any, args: Any) -> dict:
         if cursor_ts and ts and ts <= cursor_ts:
             skipped += 1
             continue
-        files: dict[str, bytes] = {}
+        files: dict[str, Any] = {}
         try:
             if "transcripts" in include:
                 t = client.get_transcript(mid)
@@ -253,30 +255,29 @@ def _sync_once(client: Any, args: Any) -> dict:
                 files.update(_pair("insights", mid, _fmt_insights_md(m, i), i))
             if "recordings" in include:
                 url = client.get_download_url(mid)["download_url"]
-                rel = f"recordings/{mid}.mp4"
-                if not (lake.root / rel).exists():
-                    # Streamed, not through publish: an own path is replaced, a new one is
-                    # created or refused (R47).
-                    try:
-                        client.download_to(url, lake.root / rel, exclusive=rel not in lake.owned())
-                    except store.AlreadyExists:
-                        print(f"WARN: {mid}: {rel} appeared meanwhile and is not ours; left as is",
-                              file=sys.stderr)
+                # Chunks, spooled and hashed by publish: an own recording is replaced, a new
+                # one created, a foreign one refused (R29, R47).
+                files[f"recordings/{mid}.mp4"] = client.iter_download(url)
+            refused = lake.publish(files, op_id=uuid.uuid4().hex, meta=meta)
         except H2TError as e:
             errors += 1
             print(f"WARN: skip {mid}: {e}", file=sys.stderr)
             continue
 
-        refused = lake.publish(files, op_id=uuid.uuid4().hex, meta=meta)
         if refused:
+            refused_n += 1
             print(f"WARN: {mid}: not replacing files the package did not write: {', '.join(refused)}",
                   file=sys.stderr)
+            continue
         seen_ids.add(mid)
         count += 1
         if ts and (last_seen_ts is None or ts > last_seen_ts):
             last_seen_ts = ts
             last_seen_id = mid
 
+    if refused_n:
+        # A meeting with a refused file is not synced; --since-cursor must list it again.
+        last_seen_ts, last_seen_id = cursor.get("last_seen_ts"), cursor.get("last_seen_id")
     cursor.update({
         "source": "meetgeek",
         "cursor_type": "timestamp",
@@ -288,7 +289,8 @@ def _sync_once(client: Any, args: Any) -> dict:
         "version": 1,
     })
     written = _lake.write_cursor("meetgeek", cursor, cursor_path)
-    return {"synced": count, "skipped": skipped, "errors": errors, "cursor": str(written)}
+    return {"synced": count, "skipped": skipped, "errors": errors, "refused": refused_n,
+            "cursor": str(written)}
 
 
 def _speakers(transcript: dict) -> list[str]:
@@ -329,6 +331,21 @@ def sync(args: Any) -> dict:
 
 # ─── Webhook receiver ─────────────────────────────────────────────────────────
 
+_SECRET_HEADERS = {"authorization", "proxy-authorization", "cookie", "set-cookie"}
+_SECRET_WORDS = ("secret", "token", "key", "auth", "signature", "password")
+
+
+def _safe_headers(items) -> dict[str, str]:
+    """Request headers without credentials: the event file lands in the synced lake."""
+    out = {}
+    for k, v in items:
+        name = k.lower()
+        if name in _SECRET_HEADERS or any(w in name for w in _SECRET_WORDS):
+            continue
+        out[k] = v
+    return out
+
+
 def webhook_server(args: Any) -> dict:
     """Minimal HTTP server that dumps incoming POSTs as JSON files."""
     from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -367,7 +384,7 @@ def webhook_server(args: Any) -> dict:
             event = {
                 "received_at": recovery.now_iso(),
                 "path": self.path,
-                "headers": {k: v for k, v in self.headers.items()},
+                "headers": _safe_headers(self.headers.items()),
                 "payload": payload,
             }
             try:

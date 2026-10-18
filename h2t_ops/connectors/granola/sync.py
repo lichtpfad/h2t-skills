@@ -132,6 +132,9 @@ def sync_notes(
         if ts and (last_seen_ts is None or ts > last_seen_ts):
             last_seen_ts, last_seen_id = ts, note_id
 
+    if refused:
+        # A refused note is not synced; --since-cursor must list it again next run.
+        last_seen_ts, last_seen_id = cursor.get("last_seen_ts"), cursor.get("last_seen_id")
     cursor.update({
         "source": "granola",
         "cursor_type": "updated_at",

@@ -11,11 +11,15 @@ Cursors are not lake data: they live in state/cursors/<provider>.json (§3).
 """
 from __future__ import annotations
 
+import contextlib
+import hashlib
 import json
 import os
+from collections.abc import Iterable, Iterator
 from pathlib import Path
 
 from h2t_ops.core import paths, store
+from h2t_ops.core.errors import ConfigError
 
 # 3.x Granola rows carry no file list; sync wrote <part>/<note_id>.{md,json} for each part
 # of "include", both parts when the field is absent (granola/sync.py VALID_INCLUDE).
@@ -63,19 +67,25 @@ class ConnectorDir:
         self.place, self.dest = origin(self.root)
 
     def _rows(self) -> list[dict]:
+        """Every row. A row that is not a JSON object is an error naming its line, never
+        skipped: a skipped row is a file whose ownership is silently forgotten."""
         if not self.manifest.is_file():
             return []
         out = []
-        for line in self.manifest.read_text(encoding="utf-8").splitlines():
+        text = self.manifest.read_text(encoding="utf-8")
+        for n, line in enumerate(text.splitlines(), 1):
             line = line.strip()
             if not line:
                 continue
             try:
                 row = json.loads(line)
-            except ValueError:
-                continue
-            if isinstance(row, dict):
-                out.append(row)
+            except ValueError as exc:
+                raise ConfigError(f"{self.manifest}:{n} is not a JSON row ({exc})",
+                                  hint="fix or remove that line; the files it named are then foreign") from exc
+            if not isinstance(row, dict):
+                raise ConfigError(f"{self.manifest}:{n} is not a JSON object",
+                                  hint="fix or remove that line; the files it named are then foreign")
+            out.append(row)
         return out
 
     def committed_rows(self) -> list[dict]:
@@ -114,32 +124,45 @@ class ConnectorDir:
     def _append(self, row: dict) -> None:
         store.append(self.manifest, manifest_line(row), place=self.place, dest=self.dest)
 
-    def publish(self, files: dict[str, bytes], *, op_id: str, meta: dict | None = None) -> list[str]:
-        """Write files (rel path → bytes) by the §7.1 protocol; return the refused paths.
+    def publish(self, files: dict[str, bytes | Iterable[bytes]], *, op_id: str,
+                meta: dict | None = None) -> list[str]:
+        """Write files (rel path → bytes, or an iterable of byte chunks) by the §7.1
+        protocol; return the refused paths.
 
         An own file is replaced; a new path is created, and if a file is already there it is
-        foreign — left untouched and refused. meta goes into the committed row as is. The
-        caller moves its cursor only after this returns."""
+        foreign — left untouched and refused. A chunked value (a recording) is spooled to
+        scratch first, hashing as it goes, so the pending row has its hash and nothing is
+        held in memory (R29). meta goes into the committed row as is. The caller moves its
+        cursor only after this returns."""
         own = self.owned()
-        hashes = {rel: store.sha256(data) for rel, data in files.items()}
-        self._append({"op": op_id, "state": "pending",
-                      "files": {rel: {"sha256": h, "owned_before": rel in own} for rel, h in hashes.items()}})
-        written: dict[str, str] = {}
-        refused: list[str] = []
-        for rel, data in files.items():
-            target = self._target(rel)
-            if rel in own:
-                store.replace(target, data, place=self.place, dest=self.dest)
-            else:
+        with _spooled(files) as (hashes, spools):
+            self._append({"op": op_id, "state": "pending",
+                          "files": {rel: {"sha256": h, "owned_before": rel in own}
+                                    for rel, h in hashes.items()}})
+            written: dict[str, str] = {}
+            refused: list[str] = []
+            for rel, data in files.items():
+                target = self._target(rel)
                 try:
-                    store.create(target, data, place=self.place, dest=self.dest)
+                    if rel in spools:
+                        self._copy(spools[rel], target, exclusive=rel not in own)
+                    elif rel in own:
+                        store.replace(target, data, place=self.place, dest=self.dest)
+                    else:
+                        store.create(target, data, place=self.place, dest=self.dest)
                 except store.AlreadyExists:
                     refused.append(rel)
                     continue
-            written[rel] = hashes[rel]
+                written[rel] = hashes[rel]
         self._append({**(meta or {}), "op": op_id, "state": "committed",
                       "files": written, "refused": refused})
         return refused
+
+    def _copy(self, spool: Path, target: Path, *, exclusive: bool) -> None:
+        with store.writer(target, place=self.place, dest=self.dest, exclusive=exclusive) as out, \
+                open(spool, "rb") as src:
+            for chunk in iter(lambda: src.read(1 << 20), b""):
+                out.write(chunk)
 
     def recover(self) -> list[str]:
         """Close every pending row that has no committed row: own only the files whose bytes
@@ -154,7 +177,7 @@ class ConnectorDir:
             matched: dict[str, str] = {}
             for rel, info in (row.get("files") or {}).items():
                 target = self._target(rel)
-                if target.is_file() and store.sha256(target.read_bytes()) == (info or {}).get("sha256"):
+                if target.is_file() and _file_sha(target) == (info or {}).get("sha256"):
                     matched[rel] = info["sha256"]
             self._append({"op": op, "state": "committed", "files": matched, "refused": [],
                           "recovered": True})
@@ -163,18 +186,50 @@ class ConnectorDir:
         return recovered
 
 
+def _file_sha(path: Path) -> str:
+    h = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+@contextlib.contextmanager
+def _spooled(files: dict) -> Iterator[tuple[dict[str, str], dict[str, Path]]]:
+    """Hash every value; chunked values are written to a scratch spool on the way."""
+    hashes: dict[str, str] = {}
+    spools: dict[str, Path] = {}
+    with store.scratch("h2t-lake-") as d:
+        for i, (rel, data) in enumerate(files.items()):
+            if isinstance(data, (bytes, bytearray)):
+                hashes[rel] = store.sha256(bytes(data))
+                continue
+            h = hashlib.sha256()
+            spool = d / str(i)
+            with store.writer(spool, place="tmp") as out:
+                for chunk in data:
+                    h.update(chunk)
+                    out.write(chunk)
+            hashes[rel], spools[rel] = h.hexdigest(), spool
+        yield hashes, spools
+
+
 def cursor_path(provider: str) -> Path:
     return paths.state_dir() / "cursors" / f"{provider}.json"
 
 
 def _load(path: Path) -> dict:
-    if path.is_file():
-        try:
-            data = json.loads(path.read_text(encoding="utf-8"))
-            return data if isinstance(data, dict) else {}
-        except (ValueError, OSError):
-            pass
-    return {}
+    """A missing cursor is a fresh start; a broken one is an error, never a silent resync."""
+    if not path.exists():
+        return {}
+    hint = "fix it, or remove it to sync again from the beginning"
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (ValueError, OSError) as exc:
+        raise ConfigError(f"cursor {path} cannot be read ({exc})", hint=hint) from exc
+    if not isinstance(data, dict):
+        raise ConfigError(f"cursor {path} is not a JSON object", hint=hint)
+    return data
 
 
 def read_cursor(provider: str, path: Path | None = None) -> dict:

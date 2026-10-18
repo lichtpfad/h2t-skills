@@ -284,6 +284,21 @@ def _meetgeek_webhook(sb, mp):
     assert len(list((sb.lake / "meetgeek" / "webhooks").glob("*.json"))) == 1
 
 
+def _meetgeek_output_flag(sb, mp):
+    """`-o PATH` of any meetgeek verb: a path the user named, through store (dest)."""
+    from h2t_ops.connectors.meetgeek import commands
+    out = sb.lake.parent / "named" / "t.json"
+    commands._write_output({"a": 1}, str(out))
+    assert out.is_file()
+
+
+def _meetgeek_journal(sb, mp):
+    """An upload journal row: the shard registered in the lake manifest, then appended."""
+    from h2t_ops.connectors.meetgeek import recovery
+    recovery.append_uploads_manifest({"source_webm": "/x/a.webm", "status": "converted"})
+    assert recovery.uploads_manifest_path().is_file()
+
+
 CASES: list[Case] = [
     Case("store.replace.state", _store_replace_state),
     # Task 8: a refresh writes nothing; a rotated refresh token writes local and the mirror.
@@ -311,4 +326,6 @@ CASES: list[Case] = [
     Case("granola.sync.default-lake", _granola_sync_default_lake, setup=_no_lake_declared),
     Case("meetgeek.download", _meetgeek_download, setup=_meetgeek_key),
     Case("meetgeek.webhooks.write", _meetgeek_webhook),
+    Case("meetgeek.output-flag", _meetgeek_output_flag),
+    Case("meetgeek.upload-journal", _meetgeek_journal),
 ]

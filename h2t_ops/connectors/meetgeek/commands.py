@@ -309,11 +309,10 @@ def _register_pipeline(cmds: Any) -> None:
 
 def _write_output(payload: Any, path: str) -> str:
     """meetgeek_cli.py's -o: write the payload, print the path instead of it."""
-    from pathlib import Path
+    from h2t_ops.core import paths, store
 
     text = payload if isinstance(payload, str) else json.dumps(payload, ensure_ascii=False, indent=2)
-    Path(path).parent.mkdir(parents=True, exist_ok=True)
-    Path(path).write_text(text, encoding="utf-8")
+    store.replace(paths.expand_user_dest(path), text, place="lake", dest=True)   # a path you named
     return path
 
 

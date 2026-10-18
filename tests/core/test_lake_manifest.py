@@ -4,6 +4,7 @@ import os
 import pytest
 
 from h2t_ops.core import lake, paths, store
+from h2t_ops.core.errors import ConfigError
 
 
 @pytest.fixture
@@ -65,6 +66,7 @@ def test_pending_does_not_own_a_file_with_another_hash(lk, monkeypatch):
     monkeypatch.setattr(store, "create", lambda *a, **kw: (_ for _ in ()).throw(KeyboardInterrupt))
     with pytest.raises(KeyboardInterrupt):
         lk.publish({"n1.md": b"v1"}, op_id="a")
+    lk.root.mkdir(parents=True, exist_ok=True)
     (lk.root / "n1.md").write_bytes(b"someone else")   # appears during the outage
     assert lk.recover() == []
     assert "n1.md" not in lk.owned()
@@ -128,3 +130,33 @@ def test_cursor_lives_in_state_and_falls_back_to_the_3x_one(lk):
     assert lake.write_cursor("granola", {"last_seen_ts": "new"}) == paths.state_dir() / "cursors" / "granola.json"
     assert lake.read_cursor("granola") == {"last_seen_ts": "new"}
     assert json.loads(old.read_text()) == {"last_seen_ts": "old"}      # the 3.x file is not written
+
+
+@pytest.mark.parametrize("line", ['{"op": "a", "state": "comm', '[1, 2]'])
+def test_a_broken_manifest_row_is_an_error_naming_its_line(lk, line):
+    """Never skipped: a skipped row would silently turn its files foreign."""
+    lk.publish({"n1.md": b"v1"}, op_id="a")
+    with lk.manifest.open("a") as fh:
+        fh.write(line + "\n")
+    with pytest.raises(ConfigError, match=r"manifest.jsonl:3 "):
+        lk.owned()
+
+
+@pytest.mark.parametrize("text", ['{"last_seen_ts": ', '[]'])
+def test_a_broken_cursor_is_an_error_not_a_resync(lk, text):
+    f = lake.cursor_path("granola")
+    f.parent.mkdir(parents=True)
+    f.write_text(text)
+    with pytest.raises(ConfigError, match="granola.json"):
+        lake.read_cursor("granola")
+
+
+def test_a_chunked_value_is_streamed_hashed_and_owned(lk):
+    """A recording: chunks are spooled and hashed, then published like bytes (R29)."""
+    assert lk.publish({"rec/m1.mp4": iter([b"ab", b"cd"])}, op_id="a") == []
+    assert (lk.root / "rec" / "m1.mp4").read_bytes() == b"abcd"
+    assert lk.owned()["rec/m1.mp4"] == store.sha256(b"abcd")
+    assert _rows(lk)[0]["files"]["rec/m1.mp4"]["sha256"] == store.sha256(b"abcd")
+    (lk.root / "rec" / "m2.mp4").write_bytes(b"theirs")
+    assert lk.publish({"rec/m2.mp4": iter([b"x"])}, op_id="b") == ["rec/m2.mp4"]
+    assert (lk.root / "rec" / "m2.mp4").read_bytes() == b"theirs"

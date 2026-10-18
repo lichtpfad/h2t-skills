@@ -11,8 +11,9 @@ Drive upload is embedded — h2t-ops drive upload lacks recovery-compatible sema
 
 Package copy of plugins/h2t-ops/skills/meetgeek/scripts/recovery.py, so the `h2t-ops
 meetgeek` recovery verbs survive that script's deletion (#541). Behaviour is the script's;
-the data lives in <lake>/meetgeek, the lake place of paths.yaml or its default data/lake, and
-every write goes through core.store (#548).
+the upload journal lives in <lake>/meetgeek (the lake place of paths.yaml or its default
+data/lake), staged media in state/meetgeek/uploads-staging, and every write goes through
+core.store (#548).
 """
 from __future__ import annotations
 
@@ -118,7 +119,19 @@ def machine_id() -> str:
 
 
 def uploads_staging_root() -> Path:
-    return lake_root() / "uploads-staging"
+    """Converted media and submission artifacts: machine-local and rebuildable, so state —
+    not the synced lake. The convert cache and the purge grace period live here."""
+    return _paths.state_dir() / "meetgeek" / "uploads-staging"
+
+
+def legacy_journal_dirs() -> list[Path]:
+    """Where 3.x kept the upload journal (<lake>/meetgeek/uploads-staging): read so the
+    double-submit guard survives the upgrade, never written."""
+    out: list[Path] = []
+    for d in (lake_root() / "uploads-staging", _paths.legacy("lake.dor") / "meetgeek" / "uploads-staging"):
+        if d not in out:
+            out.append(d)
+    return out
 
 
 def staging_dir() -> Path:
@@ -191,7 +204,7 @@ def build_convert_cmd(input_path: str, output_path: str, *,
     """Construct ffmpeg argv. Explicit -map required when any -map is given."""
     exe = ffmpeg_exe()
     if probe["audio_streams"] <= 1 or mix_mode == "first":
-        argv = [exe, "-y", "-hide_banner", "-i", input_path]
+        argv = [exe, "-n", "-hide_banner", "-i", input_path]
         if audio_only:
             argv += ["-vn", "-map", "0:a:0?"]
         else:
@@ -205,7 +218,7 @@ def build_convert_cmd(input_path: str, output_path: str, *,
                     argv.remove(k)
         return argv
     if mix_mode == "keep":
-        argv = [exe, "-y", "-hide_banner", "-i", input_path,
+        argv = [exe, "-n", "-hide_banner", "-i", input_path,
                 "-map", "0", "-c:v", "libx264", "-preset", "medium", "-crf", "23",
                 "-c:a", "aac", "-b:a", "192k", output_path]
         if audio_only:
@@ -218,7 +231,7 @@ def build_convert_cmd(input_path: str, output_path: str, *,
         f"{inputs}amix=inputs={n}:duration=longest:dropout_transition=0,"
         f"aresample=48000[a]"
     )
-    argv = [exe, "-y", "-hide_banner", "-i", input_path, "-filter_complex", filtergraph]
+    argv = [exe, "-n", "-hide_banner", "-i", input_path, "-filter_complex", filtergraph]
     if audio_only:
         argv += ["-map", "[a]", "-c:a", "aac", "-b:a", "192k", "-ac", "2", output_path]
     else:
@@ -243,23 +256,35 @@ def convert_media(src: Path, *, audio_only: bool, mix_mode: str,
     if output_path.exists() and output_path.stat().st_size > 1024:
         print(f"INFO: cached {output_path} (skip)", file=sys.stderr)
         return output_path
-    place, user = lake.origin(output_path)
+    staged = store.classify(output_path) == "state"
+    place, user = ("state", False) if staged else lake.origin(output_path)
+    if staged and output_path.exists():
+        store.remove(output_path, place="state")    # a stub from an interrupted run
     cmd = build_convert_cmd(str(src), str(output_path), probe=probe,
                             audio_only=audio_only, mix_mode=mix_mode)
     print(f"INFO: ffmpeg {len(cmd)} args (audio_streams={probe['audio_streams']})",
           file=sys.stderr)
-    # ffmpeg opens the output itself: the path is checked and handed over (§7.2).
+    # ffmpeg opens the output itself: the path is checked and handed over (§7.2). It runs
+    # with -n, so a file already at a user-named output is never overwritten.
     with store.managed(output_path, place=place, library="ffmpeg", dest=user):
         r = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
         if r.returncode != 0:
-            if output_path.exists():
-                output_path.unlink()
+            _drop_failed(output_path, staged)
             raise RecoveryError(f"ffmpeg encode failed: {r.stderr[:500]}", exit_code=1)
         if not output_path.exists() or output_path.stat().st_size <= 1024:
-            if output_path.exists():
-                output_path.unlink()
+            _drop_failed(output_path, staged)
             raise RecoveryError(f"ffmpeg produced empty output: {output_path}", exit_code=1)
     return output_path
+
+
+def _drop_failed(output_path: Path, staged: bool) -> None:
+    """A failed encode is removed from staging; at a user-named path it is left and said."""
+    if not output_path.exists():
+        return
+    if staged:
+        store.remove(output_path, place="state")
+    else:
+        print(f"WARN: ffmpeg left {output_path}; not removed (a path you named)", file=sys.stderr)
 
 
 # ─── Drive ────────────────────────────────────────────────────────────────────
@@ -491,8 +516,9 @@ def submit_url_via_h2t_ops(download_url: str, title: str | None,
 # ─── Manifest ─────────────────────────────────────────────────────────────────
 
 def uploads_manifest_path() -> Path:
-    """The shard this machine appends to. Never the one it reads alone."""
-    return uploads_staging_root() / f"manifest.{machine_id()}.jsonl"
+    """The shard this machine appends to. Never the one it reads alone. It is in the lake,
+    not state: the other machine must see this one's submissions (#386)."""
+    return lake_root() / f"manifest.{machine_id()}.jsonl"
 
 
 def iter_manifest_shards(path: Path | None = None) -> list[Path]:
@@ -504,7 +530,10 @@ def iter_manifest_shards(path: Path | None = None) -> list[Path]:
     """
     if path is None:
         path = uploads_manifest_path()
-    shards = {p for p in path.parent.glob("manifest*.jsonl") if p.is_file()}
+    dirs = [path.parent]
+    if path.parent == lake_root():
+        dirs += legacy_journal_dirs()
+    shards = {p for d in dirs for p in d.glob("manifest*.jsonl") if p.is_file()}
     if path.is_file():
         shards.add(path)
     return sorted(shards)
@@ -536,6 +565,8 @@ def iter_manifest_records(path: Path | None = None) -> list[tuple[str, dict]]:
                     rec = json.loads(line)
                 except ValueError:
                     continue
+                if not isinstance(rec, dict) or ("op" in rec and "state" in rec):
+                    continue        # core.lake's manifest.jsonl sits beside the shards
                 entries.append((rec.get("ts") or "", rank, line_no, rec))
     entries.sort(key=lambda e: e[:3])
     return [(e[0], e[3]) for e in entries]
@@ -568,8 +599,20 @@ def append_uploads_manifest(record: dict, path: Path | None = None) -> None:
     if path is None:
         path = uploads_manifest_path()
     stamped = {**record, "ts": record.get("ts") or now_iso()}
+    if path.parent == lake_root():
+        _own_journal(path)
     place, user = lake.origin(path)
     store.append(path, lake.manifest_line(stamped), place=place, dest=user)
+
+
+def _own_journal(path: Path) -> None:
+    """The journal shard is the connector's file in the lake: registered in its manifest
+    before the first append, and never appended to if someone else's file is there."""
+    d = lake.ConnectorDir("meetgeek")
+    if path.name in d.owned():
+        return
+    if d.publish({path.name: b""}, op_id=uuid.uuid4().hex):
+        raise RecoveryError(f"{path} exists and is not the package's; not appending to it", exit_code=1)
 
 
 def submitted_record(state: dict[str, dict], source: str) -> dict | None:
@@ -756,12 +799,10 @@ def emit_submission_artifact(result: dict, *, artifact_dir: Path | None = None) 
         "notes": None,
     }
     name = f"{stem}.submission.json"
-    if artifact_dir is None:
-        d = lake.ConnectorDir("meetgeek")
-        rel = (staging_dir() / name).relative_to(d.root).as_posix()
-    else:
-        d, rel = lake.ConnectorDir("meetgeek", root=artifact_dir), name
     data = json.dumps(artifact, ensure_ascii=False, indent=2).encode("utf-8")
+    if artifact_dir is None:
+        return store.replace(staging_dir() / name, data, place="state")
+    d, rel = lake.ConnectorDir("meetgeek", root=artifact_dir), name
     if d.publish({rel: data}, op_id=uuid.uuid4().hex):
         raise RecoveryError(f"{d.root / rel} exists and is not the package's; left as is", exit_code=1)
     return d.root / rel
@@ -863,10 +904,14 @@ def purge_staging(*, manifest_path: Path | None = None, svc=None,
         if reason:
             kept.append({"mp4_path": str(path), "reason": reason})
             continue
+        if store.classify(path) != "state":
+            # 3.x staged into the lake; 4.0 removes only in state (R1).
+            kept.append({"mp4_path": str(path), "reason": "staged by 3.x in the lake; remove it by hand"})
+            continue
         size = path.stat().st_size
         if not dry_run:
             try:
-                path.unlink()
+                store.remove(path, place="state")
             except OSError as e:
                 errors.append({"mp4_path": str(path), "error": str(e)})
                 continue

@@ -212,6 +212,7 @@ def test_sync_leaves_a_foreign_file_and_retries_that_part(tmp_path):
     args = dict(to=tmp_path, include={"summaries"}, cursor_file=tmp_path / "c.json")
     assert S.sync_notes(_client(), **args)["refused"] == 1
     assert (tmp_path / "summaries" / "not_1.md").read_text(encoding="utf-8") == "mine, by hand"
+    assert json.loads((tmp_path / "c.json").read_text())["last_seen_ts"] is None   # cursor held
     again = S.sync_notes(_client(), **args)
     assert again["skipped"] == 0 and again["refused"] == 1   # not recorded as synced
 

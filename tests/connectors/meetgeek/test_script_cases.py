@@ -556,6 +556,144 @@ def test_download_to_never_replaces_a_file_it_does_not_own(cli, tmp_path, monkey
     assert [p.name for p in dest.parent.iterdir()] == ["m1.mp4"]     # no temp file left
 
 
+def _sync_recording(cli, lake, cursor_file):
+    meetings = {"meetings": [{"meeting_id": "m1", "title": "T", "start_time": "2026-04-10T10:00:00Z"}]}
+    fake, _ = _scripted_request([
+        FakeResponse(200, meetings),
+        FakeResponse(200, {"download_link": "https://media.meetgeek.ai/api/download?token=xyz"}),
+        FakeResponse(200, raw_bytes=b"FAKE_MP4_BYTES"),
+    ])
+    with patch.object(cli.requests, "request", fake), \
+         patch.object(cli.requests, "get", lambda url, **kw: fake("GET", url, **kw)):
+        assert cli.main(["sync", "--to", str(lake), "--include", "recordings",
+                         "--cursor-file", str(cursor_file)]) == 0
+
+
+def test_sync_recording_enters_the_manifest_and_a_foreign_one_is_refused(cli, tmp_path):
+    """A recording is a lake file like the others: own after sync, a foreign one untouched,
+    and a refused meeting is neither committed as synced nor moves the cursor."""
+    from h2t_ops.core import lake as core_lake
+    lake, cursor_file = tmp_path / "lake", tmp_path / "cursor.json"
+    rec_path = lake / "recordings" / "m1.mp4"
+    rec_path.parent.mkdir(parents=True)
+    rec_path.write_bytes(b"HAND-MADE")
+    _sync_recording(cli, lake, cursor_file)
+    d = core_lake.ConnectorDir("meetgeek", root=lake)
+    assert rec_path.read_bytes() == b"HAND-MADE" and "recordings/m1.mp4" not in d.owned()
+    assert pipeline._read_manifest_ids(d) == set()
+    assert json.loads(cursor_file.read_text())["last_seen_id"] is None
+    rec_path.unlink()                                    # the owner moves their file away
+    _sync_recording(cli, lake, cursor_file)
+    assert rec_path.read_bytes() == b"FAKE_MP4_BYTES"
+    assert d.owned()["recordings/m1.mp4"] == store_sha(b"FAKE_MP4_BYTES")
+    assert pipeline._read_manifest_ids(d) == {"m1"}
+
+
+def store_sha(data):
+    from h2t_ops.core import store
+    return store.sha256(data)
+
+
+def test_webhook_event_carries_no_credentials(cli, monkeypatch, tmp_path):
+    """The event file lands in the synced lake: secret-bearing headers are dropped."""
+    import http.server
+    import io
+    from types import SimpleNamespace
+
+    from h2t_ops.connectors.meetgeek import commands as mg
+
+    headers = {"Content-Length": "2", "X-Webhook-Secret": "fake-webhook-secret",
+               "Authorization": "Bearer fake-bearer", "Cookie": "s=fake-cookie",
+               "X-Api-Token": "fake-api-token", "User-Agent": "MeetGeek"}
+
+    class Server:
+        def __init__(self, addr, handler):
+            self.handler = handler
+
+        def serve_forever(self):
+            self.handler.do_POST(SimpleNamespace(headers=headers, path="/e", rfile=io.BytesIO(b"{}"),
+                                                 _reply=lambda code, text="": None))
+
+        def server_close(self):
+            pass
+
+    monkeypatch.setattr(http.server, "ThreadingHTTPServer", Server)
+    import argparse
+    p = argparse.ArgumentParser()
+    mg.register(p.add_subparsers(dest="connector"))
+    out = tmp_path / "hooks"
+    pipeline.webhook_server(p.parse_args(["meetgeek", "webhook-server", "--out", str(out),
+                                          "--secret", "fake-webhook-secret"]))
+    [event] = list(out.glob("*.json"))
+    text = event.read_text(encoding="utf-8")
+    assert "fake-" not in text
+    assert json.loads(text)["headers"] == {"Content-Length": "2", "User-Agent": "MeetGeek"}
+
+
+def test_failed_convert_in_staging_is_removed_and_ffmpeg_never_overwrites(cli, tmp_path, monkeypatch):
+    import subprocess as sp
+    rec = _recovery(cli)
+    src = tmp_path / "meetgeek-recording-a.webm"
+    src.write_bytes(b"x" * 10)
+    out = rec.staging_dir() / "a.mp4"
+    seen = []
+
+    def fake_run(cmd, **kw):
+        seen.append(cmd)
+        out.write_bytes(b"half")
+        return sp.CompletedProcess(cmd, 1, "", "boom")
+
+    monkeypatch.setattr(rec.subprocess, "run", fake_run)
+    with pytest.raises(rec.RecoveryError):
+        rec.convert_media(src, audio_only=False, mix_mode="amix", output_path=out,
+                          probe={"audio_streams": 1})
+    assert not out.exists()
+    assert "-n" in seen[0] and "-y" not in seen[0]
+
+
+def test_purge_leaves_media_3x_staged_in_the_lake(cli, tmp_path):
+    from h2t_ops.core import paths
+    rec = _recovery(cli)
+    old = paths.place("lake") / "meetgeek" / "uploads-staging" / "2026-08-01" / "a.mp4"
+    old.parent.mkdir(parents=True)
+    old.write_bytes(b"x" * 2000)
+    src = tmp_path / "a.webm"
+    src.write_bytes(b"x")
+    m = tmp_path / "j" / "manifest.jsonl"
+    m.parent.mkdir()
+    m.write_text(json.dumps({"source_webm": str(src), "status": "submitted", "mp4_path": str(old),
+                             "drive_id": "d", "ts": "2026-08-01T00:00:00Z"}) + "\n")
+    out = rec.purge_staging(manifest_path=m, verify_drive=False)
+    assert old.exists() and out["purged"] == []
+    assert "3.x" in out["kept"][0]["reason"]
+
+
+def test_upload_journal_is_owned_in_the_lake_and_the_3x_one_is_read(cli):
+    """R-b: the shard is the connector's file in <lake>/meetgeek; a submission recorded
+    in the 3.x journal (uploads-staging/) still blocks a second submit."""
+    from h2t_ops.core import lake as core_lake
+    rec = _recovery(cli)
+    old = rec.lake_root() / "uploads-staging" / "manifest.jsonl"
+    old.parent.mkdir(parents=True)
+    old.write_text(json.dumps({"source_webm": "/x/meetgeek-recording-a.webm",
+                               "status": "submitted", "source_size_bytes": 1}) + "\n")
+    assert rec.is_already_submitted(rec.read_uploads_manifest(), "/x/meetgeek-recording-a.webm")
+    rec.append_uploads_manifest({"source_webm": "/x/b.webm", "status": "converted"})
+    shard = rec.uploads_manifest_path()
+    assert shard.parent == rec.lake_root()
+    assert shard.name in core_lake.ConnectorDir("meetgeek").owned()
+
+
+def test_upload_journal_refuses_a_foreign_shard(cli):
+    rec = _recovery(cli)
+    shard = rec.uploads_manifest_path()
+    shard.parent.mkdir(parents=True)
+    shard.write_text("not ours\n")
+    with pytest.raises(rec.RecoveryError, match="not the package's"):
+        rec.append_uploads_manifest({"source_webm": "/x/b.webm", "status": "converted"})
+    assert shard.read_text() == "not ours\n"
+
+
 def test_meeting_pick_reads_timestamp_start_utc(cli):
     """Regression: list endpoint returns timestamp_start_utc / timestamp_end_utc;
     earlier picker only checked start_time/created_at and lost dates for the
@@ -1337,11 +1475,12 @@ def _recovery(cli):
     return mod
 
 
-def test_staging_dir_follows_the_lake_place(cli, tmp_path):
+def test_staging_dir_is_machine_local_state(cli, tmp_path):
+    """Staged media is rebuildable and per machine: state, never the synced lake."""
+    from h2t_ops.core import paths
     rec = _recovery(cli)
-    lake = tmp_path / "lake"
-    _declare_lake(lake)
-    assert lake / "meetgeek" in rec.staging_dir().parents
+    _declare_lake(tmp_path / "lake")
+    assert paths.state_dir() / "meetgeek" / "uploads-staging" in rec.staging_dir().parents
 
 
 def test_uploads_manifest_path_follows_the_lake_place(cli, tmp_path):
@@ -1351,12 +1490,10 @@ def test_uploads_manifest_path_follows_the_lake_place(cli, tmp_path):
     assert lake / "meetgeek" in rec.uploads_manifest_path().parents
 
 
-def test_emit_submission_artifact_defaults_into_lake_root(cli, tmp_path):
+def test_emit_submission_artifact_defaults_into_staging(cli, tmp_path):
     rec = _recovery(cli)
-    lake = tmp_path / "lake"
-    _declare_lake(lake)
     path = rec.emit_submission_artifact({"source_webm": "/x/meetgeek-recording-a.webm"})
-    assert lake / "meetgeek" in path.parents
+    assert rec.staging_dir() in path.parents and path.is_file()
 
 
 def test_h2t_lake_root_is_no_longer_read(cli, tmp_path, monkeypatch):
