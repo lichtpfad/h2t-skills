@@ -52,6 +52,24 @@ def test_secret_tracked_names_the_file_and_the_key_not_the_value():
     assert _levels("secret-tracked") == {"error"}
 
 
+def test_secret_tracked_sees_yaml_and_json_by_key_not_value(config_repo):
+    """A credential committed in a YAML or JSON config file: the file and the key, never
+    the value; an empty value and an unknown key are not findings."""
+    _write(config_repo / "notion.yaml", f"notion:\n  NOTION_API_TOKEN: {SECRET}\n  EXA_API_KEY: ''\n")
+    _write(config_repo / "google.json",
+           '{"installed": {"client_id": "fake-id", "client_secret": "%s"}, "x": [{"refresh_token": "%s"}]}'
+           % (SECRET, SECRET))
+    _write(config_repo / "plain.yaml", "name: fake-name\nlake: ~/.dor/lake\n")
+    subprocess.run(["git", "-C", str(config_repo), "add", "notion.yaml", "google.json", "plain.yaml"],
+                   check=True)
+    texts = _texts("secret-tracked")
+    assert "~/.h2t/config/notion.yaml holds a value for NOTION_API_TOKEN and is tracked by git" in texts
+    assert "~/.h2t/config/google.json holds a value for client_secret and is tracked by git" in texts
+    assert "~/.h2t/config/google.json holds a value for refresh_token and is tracked by git" in texts
+    assert not [t for t in texts if "plain.yaml" in t or "EXA_API_KEY" in t and "notion" in t]
+    assert not [t for t in texts if SECRET in t]
+
+
 def test_local_in_sync_by_a_marker_up_the_tree():
     (paths.root() / ".stfolder").mkdir(parents=True)
     texts = _texts("local-in-sync")

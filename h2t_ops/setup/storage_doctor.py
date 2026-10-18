@@ -15,6 +15,8 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
+import yaml
+
 from h2t_ops.core import paths, providers, secrets, store
 from h2t_ops.core.errors import ConfigError
 
@@ -133,6 +135,41 @@ def _unreadable(where: str, why: str) -> Finding:
     return Finding("warn", "secret-tracked", f"UNREADABLE {where}: {why}")
 
 
+# Fields that hold a credential in the JSON and YAML the providers ship (a Google client or
+# token, Telegram's config.json), beside the provider env keys (EXA_API_KEY, …).
+_SECRET_FIELDS = frozenset({"refresh_token", "access_token", "client_secret", "api_hash"})
+
+
+def _is_secret_key(key: str) -> bool:
+    return key.lower() in _SECRET_FIELDS or providers.provider_of_key(key.upper()) is not None
+
+
+def _structured_keys(rel: str, body: bytes) -> list[str]:
+    """Secret keys with a non-empty value anywhere in a tracked YAML or JSON file. Names
+    only; a file that does not parse is not reported here (it is not a credential store)."""
+    if not rel.endswith((".yaml", ".yml", ".json")):
+        return []
+    try:
+        text = body.decode("utf-8-sig")
+        doc = json.loads(text) if rel.endswith(".json") else yaml.safe_load(text)
+    except (ValueError, yaml.YAMLError):
+        return []
+    found: list[str] = []
+    stack = [doc]
+    while stack:
+        node = stack.pop()
+        if isinstance(node, dict):
+            for k, v in node.items():
+                if isinstance(v, (dict, list)):
+                    stack.append(v)
+                elif isinstance(k, str) and v not in (None, "") and _is_secret_key(k) \
+                        and k not in found:
+                    found.append(k)
+        elif isinstance(node, list):
+            stack.extend(node)
+    return sorted(found)
+
+
 def _secret_tracked() -> list[Finding]:
     cfg = paths.config_dir()
     if not (cfg / ".git").exists():
@@ -154,6 +191,7 @@ def _secret_tracked() -> list[Finding]:
             for key, val in secrets.parse_env(line).items():
                 if val and providers.provider_of_key(key) and key not in keys:
                     keys.append(key)
+        keys += [k for k in _structured_keys(rel, body) if k not in keys]
         out += [Finding("error", "secret-tracked", f"{shown} holds a value for {k} and is tracked by git")
                 for k in keys]
     return out
