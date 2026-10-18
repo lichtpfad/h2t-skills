@@ -558,6 +558,12 @@ def managed(path, *, place: str, library: str, dest: bool = False) -> Iterator[P
     path = Path(path)
     got = _check(path, place, dest=dest)
     _ensure_dir(path.parent, place)
+    if os.name != "nt" and (place in _SECRET or got in _SECRET):
+        # 0600 before the library opens it, not only on exit: a process killed inside the
+        # block (a first Telegram login) must not leave a secret at the umask's mode. An
+        # empty file is a valid empty database to sqlite, and its journals copy its mode.
+        os.close(os.open(path, os.O_WRONLY | os.O_CREAT, 0o600))
+        os.chmod(path, 0o600)
     key = str(_real(path))
     _delegate(key, library)
 

@@ -39,6 +39,21 @@ def test_delegation_covers_only_the_sqlite_sidecars(home):
         assert store.delegated(str(db) + "-journal-x") is None
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX permission bits")
+@pytest.mark.parametrize("existing", [False, True])
+def test_managed_secret_is_0600_before_the_library_opens_it(home, existing):
+    """A kill inside the block (no exit, no repair) must still leave the secret 0600."""
+    p = paths.secrets_local() / "telegram.session"
+    if existing:
+        p.parent.mkdir(parents=True)
+        p.write_bytes(b"fake-session")
+        p.chmod(0o644)
+    with store.managed(p, place="secrets.local", library="telethon"):
+        assert stat.S_IMODE(p.stat().st_mode) == 0o600
+    assert stat.S_IMODE(p.stat().st_mode) == 0o600
+    assert p.read_bytes() == (b"fake-session" if existing else b"")
+
+
 def test_nested_managed_keeps_the_delegation_until_the_outer_exit(home):
     """Task 9: a helper opens the same session file inside an already open client."""
     db = paths.state_dir() / "telegram.session"
