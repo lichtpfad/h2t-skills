@@ -101,6 +101,45 @@ def test_scanner_skips_calls_through_store_but_not_raw_writes(tmp_path):
         [f"h2t_ops/z.py:{n}" for n in (7, 8, 9, 10, 11)] + ["h2t_ops/zz.py:2"])
 
 
+def test_the_door_is_the_bound_name_in_its_scope_not_the_spelling(tmp_path):
+    """A call is the door only on the name the core.store import binds, where nothing in the
+    enclosing scope rebinds it, or on a name assigned from `<store>.repo(...)` in the same
+    scope. Every other `store.` / `rw.` spelling is a raw write (codex review, Task 24)."""
+    (tmp_path / "h2t_ops").mkdir()
+    (tmp_path / "h2t_ops" / "s.py").write_text(
+        'from h2t_ops.core import store\n'                         # 1
+        'obj.store.mkdir(d)\n'                                     # 2 attribute named store
+        'def a(store):\n'                                          # 3
+        '    store.mkdir(d)\n'                                     # 4 parameter shadows
+        'def b():\n'                                               # 5
+        '    store = Path("x")\n'                                  # 6
+        '    store.mkdir()\n'                                      # 7 local shadows
+        'def c():\n'                                               # 8
+        '    rw = store.repo(r, "x")\n'                            # 9
+        '    rw.mkdir(d)\n'                                        # 10 door: same scope
+        'def e(rw):\n'                                             # 11
+        '    rw.mkdir(d)\n'                                        # 12 another scope's rw
+        'def f():\n'                                               # 13
+        '    rw = Path("x")\n'                                     # 14
+        '    rw.mkdir()\n'                                         # 15 rw rebound to a Path
+        'def g():\n'                                               # 16
+        '    store.mkdir(d, place="run")\n'                        # 17 door: module import
+        'def h():\n'                                               # 18
+        '    from h2t_ops.core import store as s\n'               # 19
+        '    s.replace(p, "x", place="state"); s.mkdir(d, place="run")\n'  # 20 door: local import
+        'def i():\n'                                               # 21
+        '    def inner():\n'                                       # 22
+        '        store.mkdir(d, place="run")\n'                    # 23 door: inherited
+        '    return inner\n'                                       # 24
+        'def j(store):\n'                                          # 25
+        '    def inner():\n'                                       # 26
+        '        store.mkdir(d)\n'                                 # 27 enclosing param shadows
+        '    return inner\n')                                      # 28
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    assert storage_map.hits(tmp_path, "writes") == [
+        f"h2t_ops/s.py:{n}" for n in (2, 4, 7, 12, 15, 27)]
+
+
 BASELINE = Path(__file__).with_name("writers_baseline.txt")
 
 

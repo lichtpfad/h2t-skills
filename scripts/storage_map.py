@@ -78,26 +78,103 @@ def docstring_lines(text: str, tree: ast.Module | None = None) -> set[int]:
     return out
 
 
-def door_names(tree: ast.Module | None) -> set[str]:
-    """Names in a file that stand for core.store, and the RepoWriters bound from
-    `<store>.repo(...)`. A call on them is the door, not a bypass. By binding, not by
-    spelling: research has a module of its own imported as `store`."""
-    if tree is None:
-        return set()
-    out: set[str] = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.ImportFrom) and (
-                node.module == "h2t_ops.core" or (node.level and node.module == "core")):
-            out |= {a.asname or a.name for a in node.names if a.name == "store"}
-        elif isinstance(node, ast.Import):
-            out |= {a.asname for a in node.names if a.name == "h2t_ops.core.store" and a.asname}
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Assign) and isinstance(node.value, ast.Call):
-            f = node.value.func
-            if isinstance(f, ast.Attribute) and f.attr == "repo" \
-                    and isinstance(f.value, ast.Name) and f.value.id in out:
-                out |= {t.id for t in node.targets if isinstance(t, ast.Name)}
+_SCOPES = (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef)
+
+
+def _own(scope: ast.AST):
+    """The nodes of one scope: nested functions, lambdas and classes are not entered."""
+    todo = list(ast.iter_child_nodes(scope))
+    while todo:
+        node = todo.pop()
+        yield node
+        if not isinstance(node, _SCOPES):
+            todo.extend(ast.iter_child_nodes(node))
+
+
+def _is_door_import(node: ast.AST, alias: ast.alias) -> bool:
+    if isinstance(node, ast.ImportFrom):
+        return alias.name == "store" and (
+            node.module == "h2t_ops.core" or bool(node.level and node.module == "core"))
+    return alias.name == "h2t_ops.core.store" and alias.asname is not None
+
+
+def _repo_call(value: ast.AST, doors: set[str]) -> bool:
+    """`<door>.repo(...)`: the call that hands out a RepoWriter."""
+    return isinstance(value, ast.Call) and isinstance(value.func, ast.Attribute) \
+        and value.func.attr == "repo" and isinstance(value.func.value, ast.Name) \
+        and value.func.value.id in doors
+
+
+def _bindings(scope: ast.AST) -> dict[str, list[ast.AST]]:
+    """Every name the scope binds, with what binds it (Python: a name bound anywhere in a
+    function is local to all of it)."""
+    out: dict[str, list[ast.AST]] = {}
+    if isinstance(scope, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+        a = scope.args
+        for arg in [*a.posonlyargs, *a.args, *a.kwonlyargs, a.vararg, a.kwarg]:
+            if arg is not None:
+                out.setdefault(arg.arg, []).append(arg)
+    for node in _own(scope):
+        if isinstance(node, (ast.Import, ast.ImportFrom)):
+            for alias in node.names:
+                out.setdefault(alias.asname or alias.name.split(".")[0], []).append(node)
+        elif isinstance(node, ast.Name) and isinstance(node.ctx, (ast.Store, ast.Del)):
+            out.setdefault(node.id, []).append(node)
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            out.setdefault(node.name, []).append(node)
+        elif isinstance(node, ast.ExceptHandler) and node.name:
+            out.setdefault(node.name, []).append(node)
+        elif isinstance(node, (ast.MatchAs, ast.MatchStar)) and node.name:
+            out.setdefault(node.name, []).append(node)
     return out
+
+
+def door_spans(tree: ast.Module | None) -> dict[int, list[tuple[int, int]]]:
+    """Per line, the byte spans of call targets that are the store door: a method on the
+    name the core.store import binds, where nothing in the enclosing scopes rebinds it, or
+    on a RepoWriter assigned from `<store>.repo(...)` in the same scope. By binding, not by
+    spelling: research has a module of its own imported as `store`, and a parameter or an
+    attribute called `store` is not the door."""
+    spans: dict[int, list[tuple[int, int]]] = {}
+    if tree is None:
+        return spans
+
+    def visit(scope: ast.AST, doors: set[str], writers: set[str]) -> None:
+        if not isinstance(scope, ast.ClassDef):     # a class body does not enclose methods
+            binds = _bindings(scope)
+            doors = {n for n in doors if n not in binds}
+            writers = {n for n in writers if n not in binds}
+            for n, how in binds.items():
+                if all(isinstance(b, (ast.Import, ast.ImportFrom))
+                       and any(_is_door_import(b, a) and (a.asname or a.name) == n for a in b.names)
+                       for b in how):
+                    doors.add(n)
+            assigned = {id(t): node.value for node in _own(scope) if isinstance(node, ast.Assign)
+                        for t in node.targets if isinstance(t, ast.Name)}
+            for n, how in binds.items():
+                if all(isinstance(b, ast.Name) and _repo_call(assigned.get(id(b)), doors)
+                       for b in how):
+                    writers.add(n)
+        for node in _own(scope):
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+                f, recv = node.func, node.func.value
+                if (isinstance(recv, ast.Name) and recv.id in doors | writers) \
+                        or _repo_call(recv, doors):
+                    if f.lineno == f.end_lineno:
+                        spans.setdefault(f.lineno, []).append((f.col_offset, f.end_col_offset))
+            if isinstance(node, _SCOPES):
+                visit(node, doors, writers)
+
+    visit(tree, set(), set())
+    return spans
+
+
+def _blank(line: str, cols: list[tuple[int, int]]) -> str:
+    """ast columns are UTF-8 byte offsets."""
+    raw = bytearray(line.encode("utf-8"))
+    for a, b in cols:
+        raw[a:b] = b" " * (b - a)
+    return raw.decode("utf-8", "replace")
 
 
 def hits(root: Path, name: str) -> list[str]:
@@ -113,14 +190,12 @@ def hits(root: Path, name: str) -> list[str]:
         tree = _parse(text)
         skip = docstring_lines(text, tree)
         # `writes`: blank the calls through the door, so a raw write beside one still counts.
-        doors = door_names(tree) if name == "writes" else set()
-        door = re.compile(r"\b(?:" + "|".join(sorted(doors)) + r")\.(?:repo\([^()]*\)\.)?\w+\(") \
-            if doors else None
+        doors = door_spans(tree) if name == "writes" else {}
         for n, line in enumerate(text.splitlines(), 1):
             if line.lstrip().startswith("#") or n in skip:
                 continue
-            if door is not None:
-                line = door.sub("", line)
+            if n in doors:
+                line = _blank(line, doors[n])
             if rx.search(line):
                 found.append(f"{rel}:{n}")
     return found

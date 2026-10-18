@@ -661,6 +661,35 @@ def _handoff_no_latest_json(sb, mp):
     assert [f.name for f in Path(leaf).iterdir()] == ["dev-p-sandbox.md"]   # R10
 
 
+def _layout_legacy_home(sb, mp):
+    """A 3.x home for `h2t-setup layout migrate`: one session record under ~/.dor/sessions
+    and one key in ~/.dor/secrets/secrets.env, fake values only. The sandbox closes the
+    3.x directories; these two are opened again, as a user's would be, so the migration
+    can leave its MOVED-TO markers there (§8)."""
+    import os
+    import stat
+
+    from h2t_ops.core import paths
+    mp.setenv("H2T_MACHINE_NAME", "sandbox")
+    leaf = paths.legacy("sessions.dor") / "sandbox" / "p"
+    env = paths.legacy("secrets.dor")
+    for d in (paths.legacy("sessions.dor"), env.parent):
+        os.chmod(d, stat.S_IRWXU)
+    leaf.mkdir(parents=True, exist_ok=True)
+    (leaf / "s1.md").write_text("# Session: s1\n\n- **Date:** 2026-08-22\n- **Domain:** dev\n"
+                                "- **Project:** p\n\n## What was done\nfake\n", encoding="utf-8")
+    env.write_text("EXA_API_KEY=fake-exa\n", encoding="utf-8")
+
+
+def _layout_migrate(sb, mp):
+    from h2t_ops.core import paths
+    from h2t_ops.setup import cli
+    assert cli.main(["layout", "migrate", "--machine", "sandbox", "--json"]) == 0
+    # it did migrate, so the audit saw the real writes (existence only: no secret is read)
+    assert (paths.records("sessions", "sandbox") / "p" / "s1.md").is_file()
+    assert any(paths.secrets_shared().iterdir()) and paths.layout_file().is_file()
+
+
 # Task 17: every write into a user's repository (§7.1, table «repo»). A scenario is
 # (setup, run) over a repository path; setup runs before the recorder is on. The same
 # table drives tests/governance/test_repo_writers.py, which checks every path a command
@@ -1135,4 +1164,9 @@ CASES: list[Case] = [
     Case("paths.set", _paths_set),
     Case("paths.set.repair", _paths_set_repair, setup=_broken_paths_yaml),
     Case("index.rebuild.cli", _cli("index", "rebuild", "--json"), setup=_index_records("sandbox")),
+    # Task 24 (review K3): the layout 1 migration under the audit hook — outside the 46-module
+    # baseline (it did not exist at Task 2), so test_sandbox_covers_every_writer cannot ask for it.
+    # Its only 3.x writes are the MOVED-TO.txt markers, through store (§8).
+    Case("setup.layout.migrate", _layout_migrate, setup=_layout_legacy_home,
+         compat=(".dor/sessions/MOVED-TO.txt", ".dor/secrets/MOVED-TO.txt")),
 ]
