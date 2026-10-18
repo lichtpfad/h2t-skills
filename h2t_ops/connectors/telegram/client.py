@@ -202,14 +202,19 @@ def _media_info(msg: Any) -> dict[str, Any] | None:
     }
 
 
+def _plain_name(raw: str) -> str:
+    """One path segment on every platform: no / or \\, no drive colon, no leading dot."""
+    for ch in ("/", "\\", ":"):
+        raw = raw.replace(ch, "_")
+    return raw.strip().lstrip(".")
+
+
 def _media_filename(msg: Any, entity: str, message_id: int) -> str:
     """The attachment's own name, last segment only ("../../x.pdf" is x.pdf), else
     <entity>-<id><ext> — the adapter names the file, not Telethon (R47)."""
     f = _get_attr(msg, "file", None)
-    name = Path(str(_get_attr(f, "name", None) or "").replace("\\", "/")).name
-    if name in ("", ".", ".."):
-        name = f"{entity}-{message_id}{_get_attr(f, 'ext', None) or ''}".replace("/", "_")
-    return name
+    name = _plain_name(str(_get_attr(f, "name", None) or "").replace("\\", "/").rsplit("/", 1)[-1])
+    return name or _plain_name(f"{entity}-{message_id}{_get_attr(f, 'ext', None) or ''}")
 
 
 def _extract_urls(msg: Any) -> list[str]:
@@ -238,6 +243,7 @@ class TelegramClientAdapter:
         keys in telegram.env, session and auth state in secrets/local, marker in state."""
         self.config_dir = Path(config_dir) if config_dir is not None else None
         self._dest = self.config_dir is not None
+        self._config: dict[str, Any] | None = None
         if self.config_dir is not None:
             self.config_file = self.config_dir / "config.json"
             self.session_base = self.config_dir / "session"
@@ -374,7 +380,7 @@ class TelegramClientAdapter:
         return FloodWaitError
 
     def _client(self):
-        cfg = self._load_config()
+        cfg = self._config if self._config is not None else self._load_config()
         client_cls = self._telegram_client_class()
         return client_cls(self.session_file, cfg["api_id"], cfg["api_hash"])
 
@@ -389,6 +395,7 @@ class TelegramClientAdapter:
         Telethon opens and writes the session itself: store.managed hands it the file for
         the life of the client, and leaves it 0600.
         """
+        self._config = self._load_config()   # before managed: a missing config touches nothing
         self._adopt_legacy_session()
         with store.managed(self.session_sqlite_file, place="secrets.local", library="telethon",
                            dest=self._dest):
@@ -810,7 +817,11 @@ class TelegramClientAdapter:
                     raise ProviderError(
                         f"message {message_id} in {entity} has no downloadable media"
                     )
-                for target in store.unique_name(dest / _media_filename(msg, entity, message_id)):
+                first = dest / _media_filename(msg, entity, message_id)
+                if Path(os.path.realpath(first)).parent != Path(os.path.realpath(dest)):
+                    raise store.WriteRefused(f"attachment name {first.name!r} leaves {dest}",
+                                             hint="the file is written only directly into that directory")
+                for target in store.unique_name(first):
                     if target.exists():
                         continue
                     try:
@@ -889,11 +900,16 @@ class TelegramClientAdapter:
         }
 
     def bootstrap_dialogs(self, *, force: bool = False) -> dict[str, Any]:
-        if self.dialogs_bootstrap_file.exists() and not force:
+        # The 3.x marker counts too (checked, never written), so an upgrade does not rerun it.
+        markers = [self.dialogs_bootstrap_file]
+        if not self._dest:
+            markers.append(paths.legacy("telegram") / "dialogs_bootstrapped")
+        found = next((m for m in markers if m.exists()), None)
+        if found is not None and not force:
             return {
                 "refreshed": False,
                 "count": 0,
-                "timestamp_path": str(self.dialogs_bootstrap_file),
+                "timestamp_path": str(found),
             }
         try:
             with self._connected_client() as client:

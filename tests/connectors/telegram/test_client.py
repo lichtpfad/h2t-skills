@@ -1110,6 +1110,7 @@ def test_download_media_defaults_to_inbox(tmp_path, monkeypatch, capsys):
     from h2t_ops.connectors.telegram import client as tmod
     from h2t_ops.core import paths
 
+    _keys(monkeypatch)
     monkeypatch.setattr(tmod.TelegramClientAdapter, "_client", lambda self: _CtxClient(_media_client()))
 
     # inbox not set: data/inbox, a package place, written as data (R28), and said so
@@ -1131,6 +1132,7 @@ def test_download_media_writes_through_a_store_handle(tmp_path, monkeypatch):
     from tests.governance.test_sandbox import build_sandbox
 
     with build_sandbox(tmp_path, monkeypatch) as sb:
+        _keys(monkeypatch)
         monkeypatch.setattr(tmod.TelegramClientAdapter, "_client", lambda self: _CtxClient(_media_client()))
         with sb.recorder.active():
             out = tmod.TelegramClientAdapter().download_media("chat", 55)
@@ -1142,6 +1144,7 @@ def test_download_media_writes_through_a_store_handle(tmp_path, monkeypatch):
 def test_download_media_never_overwrites(tmp_path, monkeypatch):
     from h2t_ops.connectors.telegram import client as tmod
 
+    _keys(monkeypatch)
     inbox = tmp_path / "inbox"
     _set_inbox(inbox)
     (inbox / "report.pdf").write_bytes(b"theirs")
@@ -1156,6 +1159,7 @@ def test_download_media_never_overwrites(tmp_path, monkeypatch):
 def test_download_media_name_has_no_directories(tmp_path, monkeypatch):
     from h2t_ops.connectors.telegram import client as tmod
 
+    _keys(monkeypatch)
     inbox = tmp_path / "box" / "inbox"
     _set_inbox(inbox)
     monkeypatch.setattr(tmod.TelegramClientAdapter, "_client",
@@ -1164,3 +1168,76 @@ def test_download_media_name_has_no_directories(tmp_path, monkeypatch):
     out = tmod.TelegramClientAdapter().download_media("chat", 55)
     assert out["path"] == str(inbox / "x.pdf") and (inbox / "x.pdf").is_file()
     assert not (tmp_path / "x.pdf").exists()
+
+
+def test_unnamed_media_is_named_entity_id_ext(tmp_path, monkeypatch):
+    from h2t_ops.connectors.telegram import client as tmod
+
+    _keys(monkeypatch)
+    out_dir = tmp_path / "out"
+    monkeypatch.setattr(tmod.TelegramClientAdapter, "_client",
+                        lambda self: _CtxClient(_media_client(name=None)))
+
+    out = tmod.TelegramClientAdapter().download_media("chat", 55, out_dir=str(out_dir))
+    assert out["path"] == str(out_dir / "chat-55.pdf")
+    assert (out_dir / "chat-55.pdf").read_bytes() == b"fake-pdf"
+
+
+def test_unnamed_media_with_a_windows_style_entity_stays_in_the_target(tmp_path, monkeypatch):
+    """`..\\..\\outside` is a path on Windows: the fallback name must carry no separator,
+    drive colon or leading dot, wherever the test runs."""
+    from h2t_ops.connectors.telegram import client as tmod
+
+    _keys(monkeypatch)
+    out_dir = tmp_path / "a" / "out"
+    monkeypatch.setattr(tmod.TelegramClientAdapter, "_client",
+                        lambda self: _CtxClient(_media_client(name=None)))
+
+    out = tmod.TelegramClientAdapter().download_media("..\\..\\C:outside", 55, out_dir=str(out_dir))
+    name = out["filename"]
+    assert not any(c in name for c in "/\\:") and not name.startswith(".")
+    assert Path(out["path"]).parent == out_dir and (out_dir / name).is_file()
+    assert sorted(p.name for p in tmp_path.rglob("*") if p.is_file()) == [name]
+
+
+def test_a_name_that_leaves_the_target_is_refused(tmp_path, monkeypatch):
+    from h2t_ops.connectors.telegram import client as tmod
+    from h2t_ops.core import store
+
+    _keys(monkeypatch)
+    out_dir = tmp_path / "out"
+    monkeypatch.setattr(tmod, "_media_filename", lambda *a: "../evil.pdf")
+    monkeypatch.setattr(tmod.TelegramClientAdapter, "_client", lambda self: _CtxClient(_media_client()))
+
+    with pytest.raises(store.WriteRefused):
+        tmod.TelegramClientAdapter().download_media("chat", 55, out_dir=str(out_dir))
+    assert not (tmp_path / "evil.pdf").exists()
+
+
+def test_bootstrap_honours_the_3x_marker(monkeypatch):
+    from h2t_ops.connectors.telegram import client as tmod
+    from h2t_ops.core import paths
+
+    _keys(monkeypatch)
+    old = paths.legacy("telegram") / "dialogs_bootstrapped"
+    old.parent.mkdir(parents=True)
+    old.write_text("1700000000.0")
+    monkeypatch.setattr(tmod.TelegramClientAdapter, "_client",
+                        lambda self: (_ for _ in ()).throw(AssertionError("must not connect")))
+
+    result = tmod.TelegramClientAdapter().bootstrap_dialogs()
+    assert result == {"refreshed": False, "count": 0, "timestamp_path": str(old)}
+    assert not (paths.state_dir() / "telegram" / "dialogs_bootstrapped").exists()
+    assert old.read_text() == "1700000000.0"
+
+
+def test_missing_config_touches_nothing(monkeypatch):
+    from h2t_ops.connectors.telegram import client as tmod
+    from h2t_ops.core import paths
+
+    for k in ("TELEGRAM_API_ID", "TELEGRAM_API_HASH"):
+        monkeypatch.delenv(k, raising=False)
+    with pytest.raises(ConfigError):
+        tmod.TelegramClientAdapter().list_dialogs()
+    assert not paths.secrets_local().exists()
+    assert not (paths.logs_dir() / "writes.jsonl").exists()
