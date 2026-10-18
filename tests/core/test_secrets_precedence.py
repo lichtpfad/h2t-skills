@@ -1,8 +1,8 @@
 """Pin the order in which h2t_ops.core.secrets looks for a key (#541).
 
-The three default paths are module constants computed at import with Path.home(), so
-patching HOME inside this process would be inert. Each case runs the loader in a child
-interpreter whose HOME and USERPROFILE point at an empty tmp dir. Values are fake and
+Each case runs the loader in a child interpreter whose HOME and USERPROFILE point at an
+empty tmp dir, so nothing of the developer's home can answer. In 4.0 the 3.x ladder is the
+fallback behind secrets/shared (#548); H2T_SECRETS_FILE is not read (R5). Values are fake and
 compared by sha256[:8]; they are never printed.
 """
 from __future__ import annotations
@@ -51,6 +51,7 @@ def run(home: Path, *, env: dict[str, str] | None = None, mode: str = "load") ->
         k: v
         for k, v in os.environ.items()
         if k not in {KEY, NOTION, "H2T_SECRETS_FILE", "PIN_EXPLICIT", "PYTHONPATH"}
+        and not k.startswith("H2T_PATH_")
     }
     clean.update(HOME=str(home), USERPROFILE=str(home), PYTHONPATH=str(REPO))
     clean.update(env or {})
@@ -69,6 +70,7 @@ def home(tmp_path: Path) -> Path:
 def places(home: Path) -> dict[str, Path]:
     cfg = home / ".h2t" / "config" / "secrets"
     return {
+        "new": home / ".h2t" / "secrets" / "shared" / "other.env",
         "documented": cfg / "secrets.env",
         "dir_a": cfg / "a-provider.env",
         "dir_z": cfg / "z-provider.env",
@@ -128,27 +130,42 @@ def test_legacy_is_the_last_resort(home: Path) -> None:
     assert run(home) == h(v["legacy"])
 
 
-def test_override_file_replaces_every_default(home: Path, tmp_path: Path) -> None:
-    populate(home, ["documented", "dir_a", "shared", "legacy"])
+def test_new_file_beats_every_old_one(home: Path) -> None:
+    v = populate(home, ["new", "documented", "dir_a", "shared", "legacy"])
+    assert run(home) == h(v["new"])
+
+
+def test_new_provider_file_beats_every_old_one_for_its_key(home: Path) -> None:
+    exa = "EXA_API_KEY"
+    for name in ("documented", "shared", "legacy"):
+        put(places(home)[name], name, key=exa)
+    new = put(home / ".h2t" / "secrets" / "shared" / "exa.env", "new", key=exa)
+    got = subprocess.run(
+        [sys.executable, "-I", "-c",
+         "import hashlib; from h2t_ops.core import secrets; "
+         "print(hashlib.sha256((secrets.get('EXA_API_KEY') or '').encode()).hexdigest()[:8])"],
+        env={**{k: v for k, v in os.environ.items() if k != exa and not k.startswith("H2T_PATH_")},
+             "HOME": str(home), "USERPROFILE": str(home)},
+        cwd=home, capture_output=True, text=True, check=True,
+    ).stdout.strip()
+    assert got == h(new)
+
+
+def test_secrets_file_variable_is_not_read(home: Path, tmp_path: Path) -> None:
+    v = populate(home, ["documented", "dir_a", "shared", "legacy"])
     override = tmp_path / "elsewhere" / "o.env"
-    v = put(override, "override")
-    assert run(home, env={"H2T_SECRETS_FILE": str(override)}) == h(v)
+    put(override, "override")
+    assert run(home, env={"H2T_SECRETS_FILE": str(override)}) == h(v["documented"])
 
 
-def test_override_file_missing_does_not_fall_back(home: Path, tmp_path: Path) -> None:
-    populate(home, ["documented", "shared", "legacy"])
+def test_secrets_file_variable_missing_changes_nothing(home: Path, tmp_path: Path) -> None:
+    v = populate(home, ["documented", "shared", "legacy"])
     gone = tmp_path / "nope.env"
-    assert run(home, env={"H2T_SECRETS_FILE": str(gone)}) == h("")
+    assert run(home, env={"H2T_SECRETS_FILE": str(gone)}) == h(v["documented"])
 
 
-def test_override_expands_tilde_through_home(home: Path) -> None:
-    populate(home, ["documented"])
-    v = put(home / "mine.env", "tilde")
-    assert run(home, env={"H2T_SECRETS_FILE": "~/mine.env"}) == h(v)
-
-
-def test_explicit_path_beats_override(home: Path, tmp_path: Path) -> None:
-    populate(home, ["documented"])
+def test_explicit_path_beats_everything(home: Path, tmp_path: Path) -> None:
+    populate(home, ["new", "documented"])
     override = tmp_path / "o.env"
     put(override, "override")
     explicit = tmp_path / "e.env"

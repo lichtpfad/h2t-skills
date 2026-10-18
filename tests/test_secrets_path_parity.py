@@ -7,32 +7,38 @@ by `setup doctor` — while `h2t-ops notion` found it.
 
 Each side's own tests stayed green throughout: the defect lived in the seam. This is the
 round trip — one key, written only to the documented location, read by all three.
-"""
-from pathlib import Path
 
+In 4.0 the documented location is a 3.x fallback read through core.secrets, whose paths
+resolve at call time: a tmp HOME is the whole isolation (#548).
+"""
 import pytest
 
 from h2t_ops.connectors.research import client
+from h2t_ops.core import paths
 from h2t_ops.core import secrets as core_secrets
 from h2t_ops.setup import legacy as setup_h2t
 
 KEY = "EXA_API_KEY"
-VALUE = "documented-path-value"
+VALUE = "fake-documented-path-value"
+
+
+def _home(tmp_path, monkeypatch):
+    for name in (KEY, "H2T_SECRETS_FILE", "H2T_PATH_ROOT"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
 
 
 @pytest.fixture
 def documented_only(tmp_path, monkeypatch):
     """A home whose ONLY secrets file is the documented one."""
-    for name in (KEY, "H2T_SECRETS_FILE"):
-        monkeypatch.delenv(name, raising=False)
-    documented = tmp_path / ".h2t" / "config" / "secrets" / "secrets.env"
+    _home(tmp_path, monkeypatch)
+    documented = paths.legacy("secrets.h2t") / "secrets.env"
     documented.parent.mkdir(parents=True)
     documented.write_text(f"{KEY}={VALUE}\n", encoding="utf-8")
-    monkeypatch.setattr(core_secrets, "H2T_CONFIG_SECRETS", documented)
-    monkeypatch.setattr(core_secrets, "DEFAULT_SECRETS", tmp_path / ".dor" / "absent.env")
-    monkeypatch.setattr(core_secrets, "LEGACY_SECRETS", tmp_path / ".dor" / "absent-legacy.env")
-    monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    return tmp_path
+    yield tmp_path
+    import os
+    os.environ.pop(KEY, None)
 
 
 def test_core_reads_documented_path(documented_only, monkeypatch):
@@ -51,12 +57,7 @@ def test_setup_sees_documented_path(documented_only):
 
 def test_research_hint_names_documented_path(tmp_path, monkeypatch):
     """A miss must point at the location every other message names."""
-    for name in (KEY, "H2T_SECRETS_FILE"):
-        monkeypatch.delenv(name, raising=False)
-    monkeypatch.setattr(core_secrets, "H2T_CONFIG_SECRETS", tmp_path / "absent-documented.env")
-    monkeypatch.setattr(core_secrets, "DEFAULT_SECRETS", tmp_path / "absent-dor.env")
-    monkeypatch.setattr(core_secrets, "LEGACY_SECRETS", tmp_path / "absent-legacy.env")
-    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    _home(tmp_path, monkeypatch)
 
     with pytest.raises(client.ConfigError) as ei:
         client.resolve_secret(KEY)
@@ -64,39 +65,24 @@ def test_research_hint_names_documented_path(tmp_path, monkeypatch):
     assert "~/.h2t/config/secrets/secrets.env" in (ei.value.hint or "")
 
 
-def test_research_expands_tilde_in_override(tmp_path, monkeypatch):
-    """H2T_SECRETS_FILE=~/secrets.env must resolve (#448 review).
-
-    resolve_secret used to expanduser() its own override; moving to the shared list
-    dropped that, so a literal ~ from a quoted shell assignment missed every lookup.
-    """
-    monkeypatch.delenv(KEY, raising=False)
-    secrets = tmp_path / "tilde-secrets.env"
-    secrets.write_text(f"{KEY}=tilde-value\n", encoding="utf-8")
-    # setenv, not setattr(Path, "home"): Path.expanduser() resolves ~ through the
-    # environment, so patching the classmethod leaves the tilde pointing at the real home.
-    # Both names, because the environment variable differs by platform: ntpath.expanduser
-    # reads USERPROFILE and never HOME, so the HOME-only patch was inert on the Windows leg
-    # and the tilde resolved to the real profile, where no secrets file sits (#471).
-    monkeypatch.setenv("HOME", str(tmp_path))
-    monkeypatch.setenv("USERPROFILE", str(tmp_path))
+def test_research_does_not_read_the_secrets_file_variable(tmp_path, monkeypatch):
+    """3.x read H2T_SECRETS_FILE (expanding ~, #448 review); 4.0 does not read it (R5)."""
+    _home(tmp_path, monkeypatch)
+    (tmp_path / "tilde-secrets.env").write_text(f"{KEY}=fake-tilde\n", encoding="utf-8")
     monkeypatch.setenv("H2T_SECRETS_FILE", "~/tilde-secrets.env")
 
-    assert client.resolve_secret(KEY) == "tilde-value"
+    with pytest.raises(client.ConfigError):
+        client.resolve_secret(KEY)
+    assert all(p.name != "tilde-secrets.env" for p in core_secrets.candidate_secret_files())
 
 
 @pytest.fixture
 def provider_file_only(tmp_path, monkeypatch):
     """A home whose ONLY secret sits in a per-provider file of the documented directory (#483)."""
-    for name in (KEY, "H2T_SECRETS_FILE"):
-        monkeypatch.delenv(name, raising=False)
-    directory = tmp_path / ".h2t" / "config" / "secrets"
+    _home(tmp_path, monkeypatch)
+    directory = paths.legacy("secrets.h2t")
     directory.mkdir(parents=True)
     (directory / "exa.env").write_text(f"{KEY}={VALUE}\n", encoding="utf-8")
-    monkeypatch.setattr(core_secrets, "H2T_CONFIG_SECRETS", directory / "secrets.env")
-    monkeypatch.setattr(core_secrets, "DEFAULT_SECRETS", tmp_path / ".dor" / "absent.env")
-    monkeypatch.setattr(core_secrets, "LEGACY_SECRETS", tmp_path / ".dor" / "absent-legacy.env")
-    monkeypatch.setattr(Path, "home", lambda: tmp_path)
     yield tmp_path
     import os
     os.environ.pop(KEY, None)

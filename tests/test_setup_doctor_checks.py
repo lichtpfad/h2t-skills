@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from h2t_ops import cli
-from h2t_ops.core import secrets as core_secrets
+from h2t_ops.core import paths
 from h2t_ops.lifecycle.activity import writer as activity_writer
 from h2t_ops.setup import legacy as setup_h2t
 
@@ -79,11 +79,12 @@ def _home(tmp_path, monkeypatch):
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     monkeypatch.delenv("NOTION_API_TOKEN", raising=False)
     monkeypatch.delenv("H2T_SECRETS_FILE", raising=False)
-    secrets_dir = tmp_path / ".h2t" / "config" / "secrets"
+    # core.secrets resolves its paths at call time: a tmp HOME is the whole isolation.
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
+    monkeypatch.delenv("H2T_PATH_ROOT", raising=False)
+    secrets_dir = paths.legacy("secrets.h2t")
     secrets_dir.mkdir(parents=True)
-    monkeypatch.setattr(core_secrets, "H2T_CONFIG_SECRETS", secrets_dir / "secrets.env")
-    monkeypatch.setattr(core_secrets, "DEFAULT_SECRETS", tmp_path / "absent-dor.env")
-    monkeypatch.setattr(core_secrets, "LEGACY_SECRETS", tmp_path / "absent-legacy.env")
     return secrets_dir
 
 

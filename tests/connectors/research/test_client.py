@@ -11,7 +11,7 @@ from unittest.mock import patch
 import pytest
 
 from h2t_ops.connectors.research import client, store
-from h2t_ops.core import secrets as core_secrets
+from h2t_ops.core import paths
 from h2t_ops.core.errors import (
     AuthError,
     ConfigError,
@@ -28,8 +28,15 @@ def _clear_sensitive_env(monkeypatch: pytest.MonkeyPatch) -> None:
         "JINA_API_KEY",
         "H2T_RESEARCH_TELEMETRY_DISABLE",
         "H2T_SECRETS_FILE",
+        "H2T_PATH_ROOT",
     ):
         monkeypatch.delenv(name, raising=False)
+
+
+def _tmp_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """core.secrets resolves its paths at call time, so a tmp HOME is the whole isolation."""
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
 
 
 def test_resolve_key_env_wins(tmp_path, monkeypatch):
@@ -42,9 +49,11 @@ def test_resolve_key_env_wins(tmp_path, monkeypatch):
     assert client.resolve_secret("EXA_API_KEY") == "env-value"
 
 
-def test_resolve_key_h2t_secrets_file(tmp_path, monkeypatch):
+def test_resolve_key_parses_a_ladder_file(tmp_path, monkeypatch):
     _clear_sensitive_env(monkeypatch)
-    secrets = tmp_path / "secrets.env"
+    _tmp_home(tmp_path, monkeypatch)
+    secrets = paths.legacy("secrets.dor")
+    secrets.parent.mkdir(parents=True)
     secrets.write_text(
         "\n"
         "        # comment\n"
@@ -52,26 +61,21 @@ def test_resolve_key_h2t_secrets_file(tmp_path, monkeypatch):
         "        JINA_API_KEY" + "='jina-value'\n",
         encoding="utf-8",
     )
-    monkeypatch.setenv("H2T_SECRETS_FILE", str(secrets))
-    monkeypatch.setattr(Path, "home", lambda: tmp_path)
 
     assert client.resolve_secret("EXA_API_KEY") == "file-value"
     assert client.resolve_secret("JINA_API_KEY") == "jina-value"
 
 
 def test_resolve_key_canonical_and_legacy_paths(tmp_path, monkeypatch):
-    # Redirect the shared candidate list, not Path.home (#448): resolve_secret now reads
-    # h2t_ops.core.secrets, whose paths resolve at import. Patching home left these tests
-    # reading the real ~/.dor and asserting against the author's live key.
+    # resolve_secret reads h2t_ops.core.secrets, whose paths resolve at call time through
+    # core.paths (#548): a tmp HOME is what keeps this off the author's real ~/.dor.
     _clear_sensitive_env(monkeypatch)
-    canonical = tmp_path / ".dor" / "secrets" / "secrets.env"
-    legacy = tmp_path / ".dor" / "secrets.env"
+    _tmp_home(tmp_path, monkeypatch)
+    canonical = paths.legacy("secrets.dor")
+    legacy = paths.legacy("secrets.dor_old")
     canonical.parent.mkdir(parents=True)
     canonical.write_text("EXA_API_KEY" + "=canonical-value\n", encoding="utf-8")
     legacy.write_text("EXA_API_KEY" + "=legacy-value\n", encoding="utf-8")
-    monkeypatch.setattr(core_secrets, "H2T_CONFIG_SECRETS", tmp_path / ".h2t" / "absent.env")
-    monkeypatch.setattr(core_secrets, "DEFAULT_SECRETS", canonical)
-    monkeypatch.setattr(core_secrets, "LEGACY_SECRETS", legacy)
 
     assert client.resolve_secret("EXA_API_KEY") == "canonical-value"
     canonical.unlink()
@@ -80,9 +84,7 @@ def test_resolve_key_canonical_and_legacy_paths(tmp_path, monkeypatch):
 
 def test_resolve_key_missing_raises_configerror(tmp_path, monkeypatch):
     _clear_sensitive_env(monkeypatch)
-    monkeypatch.setattr(core_secrets, "H2T_CONFIG_SECRETS", tmp_path / "absent-documented.env")
-    monkeypatch.setattr(core_secrets, "DEFAULT_SECRETS", tmp_path / "absent-dor.env")
-    monkeypatch.setattr(core_secrets, "LEGACY_SECRETS", tmp_path / "absent-legacy.env")
+    _tmp_home(tmp_path, monkeypatch)
 
     with pytest.raises(ConfigError) as ei:
         client.resolve_secret("EXA_API_KEY")

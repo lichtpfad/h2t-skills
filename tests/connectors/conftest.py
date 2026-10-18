@@ -16,8 +16,5 @@ def _no_real_credentials(monkeypatch, tmp_path_factory):
     monkeypatch.setenv("HOME", home)
     # Windows resolves ~ from USERPROFILE and ignores HOME (ntpath.expanduser, Python 3.8+).
     monkeypatch.setenv("USERPROFILE", home)
-    # HOME is not enough for the secrets files: h2t_ops.core.secrets fixes their paths at
-    # import, from whatever home the process started with. Measured 2026-10-15: a Notion key
-    # synced into the real ~/.dor/secrets/secrets.env, and a test patching Path.home still
-    # found it. The override makes the loader read this one empty path and nothing else.
-    monkeypatch.setenv("H2T_SECRETS_FILE", str(tmp_path_factory.mktemp("no-secrets") / "secrets.env"))
+    # HOME is enough for the secrets files too: h2t_ops.core.secrets resolves every path at
+    # call time through core.paths (#548) and no longer reads H2T_SECRETS_FILE (R5).
