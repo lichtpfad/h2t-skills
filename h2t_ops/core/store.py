@@ -19,6 +19,7 @@ import sys
 import tempfile
 import threading
 import time
+import urllib.parse
 from collections.abc import Iterator
 from pathlib import Path
 from typing import BinaryIO
@@ -590,6 +591,18 @@ def connect_sqlite(path, *, place: str, library: str = "sqlite3",
             conn.commit()
         finally:
             conn.close()
+
+
+@contextlib.contextmanager
+def read_sqlite(path) -> Iterator[sqlite3.Connection]:
+    """A read-only connection for a report (doctor): mode=ro, so no file or directory is
+    created, nothing is chmodded, committed or logged. A missing file is an OperationalError."""
+    uri = "file:" + urllib.parse.quote(Path(path).as_posix(), safe="/:") + "?mode=ro"
+    conn = sqlite3.connect(uri, uri=True)
+    try:
+        yield conn
+    finally:
+        conn.close()
 
 
 def sqlite_copy(src, dest, *, place: str) -> Path:

@@ -17,7 +17,7 @@ from h2t_ops.setup.storage_doctor import check, sync_status
 SECRET = "fake-SECRET-VALUE-123"
 
 
-def _write(p: Path, text: str = "x") -> Path:
+def _write(p: Path, text: str = "fake-content") -> Path:
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(text, encoding="utf-8")
     return p
@@ -26,7 +26,7 @@ def _write(p: Path, text: str = "x") -> Path:
 @pytest.fixture(autouse=True)
 def config_repo():
     cfg = paths.config_dir()
-    _write(cfg / "secrets" / "x.env", "EXA_API_KEY=fake\n")
+    _write(cfg / "secrets" / "x.env", "EXA_API_KEY=fake-exa-tracked\n")
     _write(cfg / "notes.md", "FOO=bar\nEXA_API_KEY=\n")       # no provider key / empty value
     subprocess.run(["git", "init", "-q", str(cfg)], check=True)
     subprocess.run(["git", "-C", str(cfg), "add", "secrets/x.env", "notes.md"], check=True)
@@ -102,7 +102,7 @@ def test_sync_conflict_in_records_secrets_config():
 
 def test_unknown_root_entry_skips_places_layout_and_3x_dirs():
     root = paths.root()
-    for name in ("state", "records", "sessions", "activity", "evals", "research", "creative"):
+    for name in ("state", "records", "sessions", "activity", "evals", "research", "creative", "venv"):
         (root / name).mkdir(parents=True, exist_ok=True)
     _write(root / "layout.json", '{"layout": 1}')
     (root / ".git-backup").mkdir()
@@ -137,9 +137,9 @@ def test_old_env_name_says_what_became_of_each(monkeypatch):
         monkeypatch.setenv(name, str(paths.home() / "x"))
     texts = dict(t.split(" is set; the package no longer reads it: ") for t in _texts("old-env-name"))
     assert texts == {
-        "H2T_LAKE_ROOT": "the value moved to paths.yaml (lake)",
-        "H2T_SECRETS_FILE": "the migration read that file as a secrets source",
-        "H2T_EVALS_SPOOL": "the migration copied that spool into state/evals-spool.sqlite",
+        "H2T_LAKE_ROOT": "the migration moves the value into paths.yaml (lake)",
+        "H2T_SECRETS_FILE": "the migration reads that file as a secrets source",
+        "H2T_EVALS_SPOOL": "the migration copies that spool into state/evals-spool.sqlite",
         **{n: "the package does not read it — remove it" for n in
            ("H2T_CONFIG_ROOT", "H2T_SESSION_ROOT", "H2T_ACTIVITY_SPOOL", "H2T_EVALS_ROOT")}}
 
@@ -199,25 +199,25 @@ def test_from_copy_that_is_not_utf8_is_unreadable_and_doctor_exits_0(capsys):
 
 
 def test_stale_temp_older_than_a_day(tmp_path):
-    old = _write(paths.state_dir() / ".index.sqlite.ab12.h2t-tmp", "12345")
+    old = _write(paths.state_dir() / ".index.sqlite.ab12.h2t-tmp")
     lake = tmp_path / "lake"
-    stale_in_lake = _write(lake / ".rec.mp4.cd34.h2t-tmp", "1")
+    stale_in_lake = _write(lake / ".rec.mp4.cd34.h2t-tmp")
     _write(paths.records("activity") / ".m.jsonl.ef56.h2t-tmp")             # fresh
     day_ago = time.time() - 2 * 24 * 3600
     for p in (old, stale_in_lake):
         os.utime(p, (day_ago, day_ago))
     _paths_yaml(f"version: 1\nplaces:\n  lake: {lake}\n")
     assert sorted(_texts("stale-temp")) == sorted([
-        "~/.h2t/state/.index.sqlite.ab12.h2t-tmp (5 bytes) is left from a killed write; remove it by hand",
-        f"{stale_in_lake} (1 bytes) is left from a killed write; remove it by hand"])
+        "~/.h2t/state/.index.sqlite.ab12.h2t-tmp (12 bytes) is left from a killed write; remove it by hand",
+        f"{stale_in_lake} (12 bytes) is left from a killed write; remove it by hand"])
     assert old.exists()
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="Windows: the profile ACL protects (§11.3)")
 def test_perms_on_posix():
     base = paths.root() / "secrets"
-    good = _write(paths.secrets_shared() / "exa.env")
-    bad = _write(paths.secrets_local() / "google.token.json")
+    good = _write(paths.secrets_shared() / "exa.env", "EXA_API_KEY=fake-exa-perms\n")
+    bad = _write(paths.secrets_local() / "google.token.json", '{"refresh_token": "fake-google-refresh"}')
     for d in (base, paths.secrets_shared(), paths.secrets_local()):
         d.chmod(0o700)
     good.chmod(0o600)
@@ -246,3 +246,131 @@ def test_doctor_prints_storage_after_secrets_and_exits_0(capsys):
     first = next(i for i, line in enumerate(lines) if line.startswith("storage: "))
     assert lines[first - 1].startswith("secrets: gmail token=")
     assert lines[first] == "storage: layout none, root ~/.h2t"
+
+
+def test_index_missing_is_info_not_a_write():
+    assert _texts("index-schema") == ["~/.h2t/state/index.sqlite is not built yet; the first "
+                                      "session-start or h2t-ops index rebuild builds it"]
+    assert _levels("index-schema") == {"info"}
+    assert not paths.state_dir().exists()
+
+
+def _granola_with_a_foreign_file() -> Path:
+    from h2t_ops.core.lake import ConnectorDir, manifest_line
+    cdir = ConnectorDir("granola")
+    _write(cdir.root / "summaries" / "n2.md", "fake-users-own-note")        # there before publish
+    assert cdir.publish({"summaries/n1.md": b"fake-n1", "summaries/n2.md": b"fake-n2"}, op_id="o1") \
+        == ["summaries/n2.md"]
+    with cdir.manifest.open("a", encoding="utf-8") as fh:                   # a kill after pending
+        fh.write(manifest_line({"op": "o2", "state": "pending",
+                                "files": {"transcripts/n3.md": {"sha256": "0" * 64, "owned_before": False}}}) + "\n")
+        fh.write(manifest_line({"note_id": "n4", "include": ["summaries"]}) + "\n")   # a 3.x row
+    _write(cdir.root / "transcripts" / "n3.md", "fake-other-bytes")
+    _write(cdir.root / "summaries" / "n4.md", "fake-3x-note")
+    return cdir.root
+
+
+def test_foreign_file_on_a_connector_create_path():
+    root = _granola_with_a_foreign_file()
+    assert root == paths.data_dir() / "lake" / "granola"
+    tail = "is not granola's own (its manifest does not list it); the connector leaves it untouched"
+    assert _texts("foreign-file") == [f"~/.h2t/data/lake/granola/summaries/n2.md {tail}",
+                                      f"~/.h2t/data/lake/granola/transcripts/n3.md {tail}"]
+    assert (root / "summaries" / "n2.md").read_text() == "fake-users-own-note"
+
+
+def test_broken_paths_yaml_is_one_line_and_other_checks_still_run(capsys):
+    _paths_yaml("version: 1\nplaces: [unclosed\n")
+    _write(paths.config_dir() / "domains.yaml.bak")
+    found = check()
+    broken = [f for f in found if f.code == "paths-yaml"]
+    assert len(broken) == 1 and broken[0].level == "error"
+    text = broken[0].text
+    assert text.startswith("~/.h2t/config/paths.yaml: is not valid YAML: ") and "\n" not in text
+    assert str(paths.home()) not in text
+    assert "— fix the file or remove it" in text
+    assert {"place-unset", "config-backup", "secret-tracked"} <= {f.code for f in found}
+    assert cli._doctor() == 0
+    out = capsys.readouterr().out.splitlines()
+    i = next(n for n, line in enumerate(out) if "paths-yaml" in line)
+    assert out[i].startswith("storage: ERROR paths-yaml: ~/.h2t/config/paths.yaml: ")
+    assert out[i + 1].startswith("storage: ")
+
+
+def _tree(home: Path) -> dict:
+    out = {}
+    for d, dirs, files in os.walk(home):
+        for name in dirs + files:
+            p = Path(d) / name
+            st = os.lstat(p)
+            out[str(p.relative_to(home))] = (st.st_mode, st.st_mtime_ns,
+                                             p.read_bytes() if p.is_file() and not p.is_symlink() else None)
+    return out
+
+
+def test_doctor_leaves_the_tree_byte_identical():
+    """doctor is a report: no log row, no lock, no directory, no chmod, no commit (#451)."""
+    _index("1")
+    _granola_with_a_foreign_file()
+    _write(paths.secrets_shared() / "exa.env.from-dor", f"EXA_API_KEY={SECRET}\n")
+    _write(paths.records("sessions") / "m" / "p" / "s.md.from-dor", "fake-md")
+    (paths.root() / "state" / "index.sqlite").chmod(0o644)
+    logs = paths.logs_dir()
+    if logs.exists():                                    # publish above logged its writes
+        import shutil
+        shutil.rmtree(logs)
+    before = _tree(paths.home())
+    time.sleep(0.01)
+    assert cli._doctor() == 0
+    after = _tree(paths.home())
+    assert after == before, sorted(set(after) ^ set(before)) or \
+        [k for k in after if after[k] != before[k]]
+    assert not logs.exists()
+
+
+@pytest.mark.parametrize("failure, why", [
+    ("missing", "git ls-files could not run (FileNotFoundError"),
+    ("timeout", "git ls-files timed out after 30 s"),
+    ("exit", "git ls-files exited 128: fatal: fake-broken-index"),
+])
+def test_git_failure_is_reported_not_skipped(monkeypatch, failure, why):
+    real = subprocess.run
+
+    def fake(cmd, *a, **k):
+        if cmd[:1] == ["git"] and "ls-files" in cmd:
+            if failure == "missing":
+                raise FileNotFoundError(2, "No such file or directory", "git")
+            if failure == "timeout":
+                raise subprocess.TimeoutExpired(cmd, 30)
+            return subprocess.CompletedProcess(cmd, 128, b"", b"fatal: fake-broken-index\n")
+        return real(cmd, *a, **k)
+
+    monkeypatch.setattr(storage_doctor.subprocess, "run", fake)
+    found = [f for f in check() if f.code == "secret-tracked"]
+    assert len(found) == 1 and found[0].level == "warn"
+    assert found[0].text.startswith(f"UNREADABLE ~/.h2t/config: {why}")
+
+
+def test_git_show_failure_names_the_file(monkeypatch):
+    real = subprocess.run
+
+    def fake(cmd, *a, **k):
+        if cmd[:1] == ["git"] and "show" in cmd and cmd[-1] == ":notes.md":
+            return subprocess.CompletedProcess(cmd, 1, b"", b"fatal: fake-bad-object\n")
+        return real(cmd, *a, **k)
+
+    monkeypatch.setattr(storage_doctor.subprocess, "run", fake)
+    texts = _texts("secret-tracked")
+    assert "UNREADABLE ~/.h2t/config/notes.md: git show exited 1: fatal: fake-bad-object" in texts
+    assert "~/.h2t/config/secrets/x.env holds a value for EXA_API_KEY and is tracked by git" in texts
+
+
+def test_one_check_failing_does_not_blank_the_others(monkeypatch):
+    def boom():
+        raise PermissionError(13, "Permission denied", "fake-path")
+
+    monkeypatch.setattr(storage_doctor, "_perms", boom)
+    found = check()
+    assert [f.text for f in found if f.code == "perms"] == [
+        "UNREADABLE: the check stopped (PermissionError: [Errno 13] Permission denied: 'fake-path')"]
+    assert {"secret-tracked", "place-unset"} <= {f.code for f in found}

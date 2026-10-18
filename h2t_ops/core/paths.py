@@ -88,6 +88,11 @@ LEGACY: dict[str, tuple[str, ...]] = {
 }
 
 
+# 3.x entries in the ~/.h2t root that are not data and have no new place: the pre-#449
+# venv of the bare `h2t` shim (setup.legacy.legacy_shim_status). doctor knows them.
+ROOT_3X = ("venv",)
+
+
 def home() -> Path:
     return Path.home()
 

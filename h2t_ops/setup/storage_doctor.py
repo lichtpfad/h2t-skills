@@ -44,9 +44,9 @@ _LEGACY_CLASSES = (
      lambda: paths.root() / "secrets"),
 )
 _OLD_ENV_HINT = {
-    "lake": "the value moved to paths.yaml (lake)",
-    "secrets-source": "the migration read that file as a secrets source",
-    "evals-spool-source": "the migration copied that spool into state/evals-spool.sqlite",
+    "lake": "the migration moves the value into paths.yaml (lake)",
+    "secrets-source": "the migration reads that file as a secrets source",
+    "evals-spool-source": "the migration copies that spool into state/evals-spool.sqlite",
     "remove": "the package does not read it — remove it",
 }
 
@@ -111,28 +111,43 @@ def _has_data(p: Path) -> bool:
     return p.is_dir() and any(c.name != "MOVED-TO.txt" for c in p.rglob("*") if c.is_file())
 
 
-def _git(cfg: Path, *args: str) -> bytes | None:
+_GIT_TIMEOUT_S = 30
+
+
+def _git(cfg: Path, *args: str) -> tuple[bytes | None, str]:
+    """(stdout, "") or (None, why it failed): a failed git is said, never a silent skip."""
     try:
-        out = subprocess.run(["git", "-C", str(cfg), *args], capture_output=True, timeout=30, check=False)
-    except (OSError, subprocess.SubprocessError):
-        return None
-    return out.stdout if out.returncode == 0 else None
+        out = subprocess.run(["git", "-C", str(cfg), *args], capture_output=True,
+                             timeout=_GIT_TIMEOUT_S, check=False)
+    except subprocess.TimeoutExpired:
+        return None, f"git {args[0]} timed out after {_GIT_TIMEOUT_S} s"
+    except (OSError, subprocess.SubprocessError) as exc:
+        return None, f"git {args[0]} could not run ({type(exc).__name__}: {exc})"
+    if out.returncode != 0:
+        err = out.stderr.decode("utf-8", "replace").strip().splitlines()
+        return None, f"git {args[0]} exited {out.returncode}" + (f": {err[0]}" if err else "")
+    return out.stdout, ""
+
+
+def _unreadable(where: str, why: str) -> Finding:
+    return Finding("warn", "secret-tracked", f"UNREADABLE {where}: {why}")
 
 
 def _secret_tracked() -> list[Finding]:
     cfg = paths.config_dir()
     if not (cfg / ".git").exists():
         return []
-    listed = _git(cfg, "ls-files", "-z")
+    listed, why = _git(cfg, "ls-files", "-z")
     if listed is None:
-        return []
+        return [_unreadable(_show(cfg), why)]
     out: list[Finding] = []
     for rel in filter(None, listed.decode("utf-8", "replace").split("\0")):
         shown = _show(cfg / rel)
         if rel.startswith("secrets/"):
             out.append(Finding("error", "secret-tracked", f"{shown} is tracked by git in {_show(cfg)}"))
-        body = _git(cfg, "show", f":{rel}")
+        body, why = _git(cfg, "show", f":{rel}")
         if body is None:
+            out.append(_unreadable(shown, why))
             continue
         keys: list[str] = []
         for line in body.decode("utf-8", "replace").splitlines():
@@ -180,7 +195,7 @@ def _sync_conflicts() -> list[Finding]:
 
 
 def _known_root_names() -> set[str]:
-    names = {"run", paths.layout_file().name, ".stignore", *_MARKERS}
+    names = {"run", paths.layout_file().name, ".stignore", *_MARKERS, *paths.ROOT_3X}
     names |= {p.id.split(".")[0] for p in paths.PLACES if p.kind == "class"}
     # 3.x directories inside ~/.h2t: legacy-only names them, not this check
     names |= {parts[1] for parts in paths.LEGACY.values() if parts[0] == ".h2t" and len(parts) > 1}
@@ -201,9 +216,10 @@ def _index_schema() -> list[Finding]:
     from h2t_ops.lifecycle.index.schema import SCHEMA_VERSION
     path = index_path()
     if not path.is_file():
-        return []
+        return [Finding("info", "index-schema", f"{_show(path)} is not built yet; the first session-start"
+                                                f" or h2t-ops index rebuild builds it")]
     try:
-        with store.connect_sqlite(path, place="state", library="doctor") as conn:
+        with store.read_sqlite(path) as conn:      # read-only: doctor writes nothing
             row = conn.execute("SELECT value FROM meta WHERE key='schema_version'").fetchone()
     except sqlite3.DatabaseError as exc:
         return [Finding("warn", "index-schema", f"{_show(path)} cannot be read ({exc}) — h2t-ops index rebuild")]
@@ -237,11 +253,13 @@ def _config_backups() -> list[Finding]:
         return []
     return [Finding("warn", "config-backup", f"{_show(p)} is a 3.x copy; copies now live in "
                                              f"{_show(paths.backups_dir())}")
-            for p in sorted(d.glob("*.yaml.bak*")) if p.is_file()]
+            for p in sorted(d.glob("*.bak*")) if p.is_file()]
 
 
 def _from_copy(p: Path) -> str:
-    in_secrets = (paths.root() / "secrets") in Path(os.path.realpath(p)).parents
+    real = Path(os.path.realpath(p))
+    in_secrets = any(Path(os.path.realpath(s)) in real.parents
+                     for s in (paths.root() / "secrets", paths.secrets_shared(), paths.secrets_local()))
     try:
         raw = secrets.read_secret_bytes(p) if in_secrets else p.read_bytes()
         if ".env.from-" not in p.name:
@@ -304,7 +322,49 @@ def _perms() -> list[Finding]:
     return out
 
 
+def _foreign_files(cfg: paths.PathsConfig) -> list[Finding]:
+    """§7.1 manifest protocol, step 3: a file on a path a connector tried to create but does
+    not own (refused by a committed row, or named by a pending row and never committed) is
+    left untouched by the connector — and shown here."""
+    from h2t_ops.core.lake import ConnectorDir
+    lakes = [cfg.places["lake"]] if "lake" in cfg.places else []
+    lakes.append(paths.data_dir() / "lake")
+    out: list[Finding] = []
+    for lake in lakes:
+        if not lake.is_dir():
+            continue
+        for d in sorted(p for p in lake.iterdir() if (p / "manifest.jsonl").is_file()):
+            cdir = ConnectorDir(d.name, root=d)
+            rows = cdir._rows()
+            committed = {r.get("op") for r in rows if r.get("state") == "committed"}
+            named = {rel for r in rows if r.get("state") == "committed" for rel in r.get("refused") or ()}
+            named |= {rel for r in rows if r.get("state") == "pending" and r.get("op") not in committed
+                      for rel in r.get("files") or {}}
+            own = cdir.owned()
+            out += [Finding("warn", "foreign-file", f"{_show(d / rel)} is not {d.name}'s own (its manifest "
+                                                    f"does not list it); the connector leaves it untouched")
+                    for rel in sorted(named - set(own)) if (d / rel).is_file()]
+    return out
+
+
 _RANK = {"error": 0, "warn": 1, "info": 2}
+
+
+def _paths_yaml_finding(exc: ConfigError) -> Finding:
+    """One line, like every other finding: the file under ~, the parser's first line, the hint."""
+    msg = str(exc).replace(str(paths.paths_yaml()), "").lstrip(": ").splitlines()
+    hint = f" — {exc.hint}" if exc.hint else ""
+    return Finding("error", "paths-yaml", f"{_show(paths.paths_yaml())}: {msg[0] if msg else 'broken'}{hint}"
+                                          "; checks below run without its places and sync:")
+
+
+def _guarded(code: str, fn, *args) -> list[Finding]:
+    """One check's failure is that check's finding; the others still run."""
+    try:
+        return fn(*args)
+    except (ConfigError, OSError, UnicodeDecodeError, sqlite3.Error) as exc:
+        return [Finding("warn", code, f"UNREADABLE: the check stopped ({type(exc).__name__}: "
+                                    f"{(str(exc).splitlines() or [''])[0]})")]
 
 
 def check() -> list[Finding]:
@@ -312,10 +372,15 @@ def check() -> list[Finding]:
         cfg = paths.paths_config()
         broken: list[Finding] = []
     except ConfigError as exc:
-        cfg, broken = paths.PathsConfig(), [Finding("error", "paths-yaml", str(exc))]
-    found = [*broken, *_secret_tracked(), *_local_in_sync(cfg), *_perms(), *_legacy_only(),
-             *_sync_conflicts(), *_unknown_root(), *_index_schema(), *_old_env(), *_places(cfg),
-             *_config_backups(), *_stale_temps(cfg), *_from_copies()]
+        cfg, broken = paths.PathsConfig(), [_paths_yaml_finding(exc)]
+    found = [*broken,
+             *_guarded("secret-tracked", _secret_tracked), *_guarded("local-in-sync", _local_in_sync, cfg),
+             *_guarded("perms", _perms), *_guarded("legacy-only", _legacy_only),
+             *_guarded("sync-conflict", _sync_conflicts), *_guarded("unknown-root-entry", _unknown_root),
+             *_guarded("index-schema", _index_schema), *_guarded("old-env-name", _old_env),
+             *_guarded("place-missing", _places, cfg), *_guarded("config-backup", _config_backups),
+             *_guarded("stale-temp", _stale_temps, cfg), *_guarded("foreign-file", _foreign_files, cfg),
+             *_guarded("from-copies", _from_copies)]
     return sorted(found, key=lambda f: _RANK[f.level])
 
 
