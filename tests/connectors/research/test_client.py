@@ -11,7 +11,7 @@ from unittest.mock import patch
 import pytest
 
 from h2t_ops.connectors.research import client, store
-from h2t_ops.core import paths
+from h2t_ops.core import paths, secrets
 from h2t_ops.core.errors import (
     AuthError,
     ConfigError,
@@ -90,7 +90,8 @@ def test_resolve_key_missing_raises_configerror(tmp_path, monkeypatch):
         client.resolve_secret("EXA_API_KEY")
 
     assert "EXA_API_KEY" in str(ei.value)
-    assert "H2T_SECRETS_FILE" in (ei.value.hint or "")
+    assert str(secrets.provider_file("exa")) in (ei.value.hint or "")
+    assert "H2T_SECRETS_FILE" not in (ei.value.hint or "")   # 4.0 does not read it (R5)
 
 
 def test_artifact_paths_are_under_output_dir(tmp_path):

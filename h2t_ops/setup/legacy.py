@@ -219,48 +219,13 @@ def _version_for_h2t_ops(path: str, runner: Runner = _run) -> dict[str, Any]:
     }
 
 
-def _candidate_secret_files(home: Path) -> list[Path]:
-    """Same order as h2t_ops.core.secrets.candidate_secret_files (#448).
-
-    This script is standalone — it cannot import h2t_ops — so the list is duplicated on
-    purpose. It drifted once already: #432 added the documented path to the package and
-    not here, so `setup doctor` answered MISSING for a key the connectors could read.
-    tests/test_secrets_path_parity.py holds the two lists together.
-    """
-    files: list[Path] = []
-    override = os.environ.get("H2T_SECRETS_FILE")
-    if override:
-        files.append(Path(override))
-    documented = home / ".h2t" / "config" / "secrets" / "secrets.env"
-    # Every other *.env beside it, alphabetically: the directory is one file per provider (#483).
-    others = (
-        sorted((p for p in documented.parent.glob("*.env") if p.name != documented.name), key=lambda p: p.name)
-        if documented.parent.is_dir()
-        else []
-    )
-    files.extend([
-        documented,
-        *others,
-        home / ".dor" / "secrets" / "secrets.env",
-        home / ".dor" / "secrets.env",
-    ])
-    return files
-
-
 def _secret_present(key: str, home: Path) -> bool:
-    if os.environ.get(key):
-        return True
-    for path in _candidate_secret_files(home):
-        if not path.is_file():
-            continue
-        try:
-            for raw in path.read_text(encoding="utf-8").splitlines():
-                line = raw.strip()
-                if line.startswith(f"{key}="):
-                    return bool(line.partition("=")[2].strip().strip('"').strip("'"))
-        except OSError:
-            continue
-    return False
+    """Through core.secrets, the reader every connector uses (#448, #548 §7.2): environment,
+    secrets/shared/<provider>.env, then the 3.x ladder. `home` is kept for the callers; the
+    places come from core.paths."""
+    from h2t_ops.core import secrets
+
+    return secrets.get(key) is not None
 
 
 def _file_status(path: Path) -> dict[str, str]:
@@ -435,11 +400,23 @@ def ensure_machine_name(home: Path | None = None, name: str = "") -> dict[str, A
     return {"status": "error", "path": str(settings), "error": "kept changing while being updated, left untouched"}
 
 
+def _google_json_status(name: str) -> dict[str, str]:
+    from h2t_ops.core import secrets
+    from h2t_ops.core.errors import ConfigError
+
+    try:
+        _, where = secrets.read_json(name)
+    except ConfigError:
+        return {"path": str(secrets.json_path(name)), "status": "unreadable"}
+    return {"path": str(where or secrets.json_path(name)), "status": "present" if where else "missing"}
+
+
 def _google_oauth_status(home: Path) -> dict[str, Any]:
-    cfg = home / ".config" / "google-calendar-mcp"
+    """The client and this machine's token through core.secrets: secrets/shared and
+    secrets/local first, the 3.x files as a fallback (§4, R19)."""
     return {
-        "credentials": _file_status(cfg / "credentials.json"),
-        "tokens": _file_status(cfg / "tokens.json"),
+        "credentials": _google_json_status("google.client"),
+        "tokens": _google_json_status("google.token"),
     }
 
 
@@ -627,74 +604,60 @@ def _load_known_secrets(registry_path: Path) -> dict[str, dict[str, str]]:
     return result
 
 
-def secrets_skeleton(secrets_file: Path, registry: dict[str, dict[str, str]], home: Path | None = None) -> dict[str, Any]:
-    """Create or extend secrets.env with placeholder KEY= lines for missing keys.
+def secrets_skeleton(registry: dict[str, dict[str, str]], *, secrets_dir: Path | None = None,
+                     home: Path | None = None) -> dict[str, Any]:
+    """Placeholder KEY= lines for missing keys, one file per provider (§4, R40).
 
-    A key the connectors already resolve — environment or any candidate file — is not
-    missing (#524): a placeholder for it told the user to paste a key that already worked.
+    A key the connectors already resolve — environment, the new files or the 3.x ladder — is
+    not missing (#524): a placeholder for it told the user to paste a key that already worked.
+    Missing keys are grouped by provider (no provider: other.env) and appended to
+    <secrets_dir>/<provider>.env; lines already there, comments included, stay as they are.
 
-    Uses atomic write (temp file + rename) so a crash leaves no partial state.
+    secrets_dir: a directory the caller names (dest=True, R42); default secrets/shared.
     """
-    home = home or _home()
-    secrets_file.parent.mkdir(parents=True, exist_ok=True)
-    existing_content = ""
-    existing_keys: set[str] = set()
-    if secrets_file.is_file():
-        existing_content = secrets_file.read_text(encoding="utf-8")
-        for raw in existing_content.splitlines():
-            line = raw.strip()
-            if line and not line.startswith("#") and "=" in line:
-                existing_keys.add(line.split("=", 1)[0].strip())
-    added: list[str] = []
+    from h2t_ops.core import paths, providers, secrets, store
+
+    explicit = secrets_dir is not None
+    secrets_dir = Path(secrets_dir) if explicit else paths.secrets_shared()
+    groups: dict[str, list[str]] = {}
     skipped: list[str] = []
-    new_lines: list[str] = []
-    for key, meta in registry.items():
-        if key in existing_keys or _resolve_secret_value(key, home):
+    for key in registry:
+        if secrets.get(key) is not None:
             skipped.append(key)
         else:
-            desc = meta.get("description", "")
-            url = meta.get("url", "")
-            new_lines.append(f"# {desc}")
-            if url:
-                new_lines.append(f"# Get at: {url}")
-            new_lines.append(f"{key}=")
-            new_lines.append("")
-            added.append(key)
-    if new_lines:
-        separator = "\n" if existing_content and not existing_content.endswith("\n") else ""
-        full_content = existing_content + separator + "\n".join(new_lines)
-        tmp = secrets_file.parent / (secrets_file.name + ".tmp")
-        tmp.write_text(full_content, encoding="utf-8")
-        tmp.replace(secrets_file)
+            groups.setdefault(providers.provider_of_key(key) or "other", []).append(key)
+    files: dict[str, dict[str, Any]] = {}
+    added: list[str] = []
+    for provider, keys in groups.items():
+        path = secrets_dir / f"{provider}.env"
+        existing = ""
+        if path.is_file():
+            raw = secrets.read_secret_bytes(path, root=secrets_dir) if explicit else secrets.read_secret_bytes(path)
+            existing = raw.decode("utf-8")
+        present = set(secrets.parse_env(existing))
+        new_keys = [k for k in keys if k not in present]   # an empty KEY= already there stays one
+        skipped += [k for k in keys if k in present]
+        if not new_keys:
+            continue
+        lines: list[str] = []
+        for key in new_keys:
+            meta = registry[key]
+            lines.append(f"# {meta.get('description', '')}")
+            if meta.get("url"):
+                lines.append(f"# Get at: {meta['url']}")
+            lines += [f"{key}=", ""]
+        separator = "\n" if existing and not existing.endswith("\n") else ""
+        store.replace(path, existing + separator + "\n".join(lines), place="secrets.shared",
+                      keys=tuple(new_keys), dest=explicit)
+        files[path.name] = {"path": str(path), "added": new_keys}
+        added += new_keys
     return {
         "kind": KIND_SECRETS_SKELETON,
-        "path": str(secrets_file),
+        "path": str(secrets_dir),
+        "files": files,
         "added": added,
         "skipped": skipped,
     }
-
-
-def _resolve_secret_value(key: str, home: Path) -> str:
-    """Return actual secret value following full resolution chain: env > canonical > legacy.
-
-    Used only for local format validation — never returned in output.
-    """
-    env_val = os.environ.get(key)
-    if env_val:
-        return env_val
-    for path in _candidate_secret_files(home):
-        if not path.is_file():
-            continue
-        try:
-            for raw in path.read_text(encoding="utf-8").splitlines():
-                line = raw.strip()
-                if line.startswith(f"{key}="):
-                    val = line.partition("=")[2].strip().strip('"').strip("'")
-                    if val:
-                        return val
-        except OSError:
-            continue
-    return ""
 
 
 def _validate_key(value: str, validator: str) -> bool:
@@ -729,8 +692,10 @@ def secrets_preflight(
     h2t_ops_path = h2t_ops.get("path", "") or "h2t-ops"
     results: list[dict[str, Any]] = []
     live_commands = {"research": "research preflight --json"}
+    from h2t_ops.core import secrets
+
     for key, meta in registry.items():
-        value = _resolve_secret_value(key, home)
+        value = secrets.get(key) or ""   # local format validation only, never in the output
         found = bool(value)
         valid = found and _validate_key(value, meta.get("validator", "nonempty"))
         entry: dict[str, Any] = {
@@ -834,9 +799,8 @@ def main(argv: list[str] | None = None) -> int:
                 result = {"kind": "h2t_setup_error/v1", "status": "error", "error": str(exc)}
                 print(json.dumps(result, ensure_ascii=False, indent=2))
                 return 3
-            secrets_file = _home() / ".dor" / "secrets" / "secrets.env"
             if args.secrets_cmd == "skeleton":
-                result = secrets_skeleton(secrets_file, registry)
+                result = secrets_skeleton(registry)
             elif args.secrets_cmd == "preflight":
                 result = secrets_preflight(registry, live=args.live)
             else:

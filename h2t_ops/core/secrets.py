@@ -2,8 +2,9 @@
 
 New places: ~/.h2t/secrets/shared/<provider>.env and provider-format files, and
 secrets/local for what must not leave the machine. Through 4.0.x the 3.x ladder is read as
-a fallback — but only for a provider that has no new file yet, so a stale legacy value can
-never shadow a migrated one. 4.1 deletes the fallback.
+a fallback, per key: a key with a value in the new file is migrated and the legacy places are
+not read for it, so a stale legacy value can never shadow it; a key absent or empty there
+(the skeleton writes empty KEY= lines) still falls back. 4.1 deletes the fallback.
 """
 from __future__ import annotations
 
@@ -73,17 +74,24 @@ def candidate_secret_files(env_file: Path | None = None) -> list[Path]:
 
 
 def _new_values() -> dict[str, str]:
+    """Keys with a value in the new files; an empty KEY= is not a value (not migrated)."""
     out: dict[str, str] = {}
     shared = paths.secrets_shared()
     for provider in sorted(providers.PROVIDERS) + ["other"]:
         for key, val in _read_env(shared / f"{provider}.env").items():
-            out.setdefault(key, val)
+            if val:
+                out.setdefault(key, val)
     return out
 
 
-def _migrated(provider: str | None) -> bool:
-    name = f"{provider}.env" if provider else "other.env"
-    return (paths.secrets_shared() / name).is_file()
+def _merged(layers) -> dict[str, str]:
+    """First non-empty value of each key across the layers, in their order."""
+    out: dict[str, str] = {}
+    for layer in layers:
+        for key, val in layer.items():
+            if val and key not in out:
+                out[key] = val
+    return out
 
 
 def get(key: str) -> str | None:
@@ -92,11 +100,9 @@ def get(key: str) -> str | None:
     new = _new_values()
     if key in new:
         return new[key]
-    if _migrated(providers.provider_of_key(key)):
-        return None
     for _, path in legacy_sources():
         val = _read_env(path).get(key)
-        if val is not None:
+        if val:
             return val
     return None
 
@@ -106,11 +112,7 @@ def load_secrets(env_file: Path | None = None) -> None:
     if env_file is not None:
         merged = _read_env(env_file)
     else:
-        merged = dict(_new_values())
-        for _, path in legacy_sources():
-            for key, val in _read_env(path).items():
-                if key not in merged and not _migrated(providers.provider_of_key(key)):
-                    merged[key] = val
+        merged = _merged([_new_values(), *(_read_env(p) for _, p in legacy_sources())])
     for key, val in merged.items():
         if key and key not in os.environ:
             os.environ[key] = val
@@ -195,6 +197,22 @@ def write_env(provider: str, values: dict[str, str], *, local: bool = False) -> 
                          place="secrets.local" if local else "secrets.shared", keys=tuple(values))
 
 
+def evals_env(env_file: Path | None = None) -> dict[str, str]:
+    """Every H2T_EVALS_* key, by prefix as in 3.x — no list of keys to drop one silently —
+    except the 3.x path variables, which the package does not read (Q8).
+
+    Per key: environment, then h2t-evals.env, then ~/.dor/secrets.env (where 3.x read them),
+    then the rest of the ladder. env_file: only that file and the environment."""
+    prefix = providers.key_prefix("h2t-evals")
+    if env_file is not None:
+        layers = [_read_env(Path(env_file))]
+    else:
+        layers = [_read_env(provider_file("h2t-evals")), _read_env(paths.legacy("secrets.dor_old")),
+                  *(_read_env(p) for name, p in legacy_sources() if name != "dor")]
+    merged = _merged([dict(os.environ), *layers])
+    return {k: v for k, v in merged.items() if k.startswith(prefix) and k not in paths.OLD_ENV}
+
+
 def notion_legacy_token() -> str | None:
     cfg = paths.legacy("notion.token")
     if not cfg.is_file():
@@ -203,13 +221,9 @@ def notion_legacy_token() -> str | None:
 
 
 def resolve_notion_token() -> str:
-    tok = get("NOTION_API_TOKEN")
+    tok = get("NOTION_API_TOKEN") or notion_legacy_token()
     if tok:
         return tok
-    if not _migrated("notion"):
-        text = notion_legacy_token()
-        if text:
-            return text
     raise ConfigError("Notion API token not found.",
                       hint=f"Set NOTION_API_TOKEN in {provider_file('notion')}")
 

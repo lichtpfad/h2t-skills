@@ -1,6 +1,8 @@
 """Read-only eval status — offline-safe, no writes, no network."""
 from pathlib import Path
 
+from h2t_ops.core import secrets
+
 # Module-qualified access (not `from .session import ...`) so tests that
 # monkeypatch `session._sdk_available` reach the call inside get_status.
 # Relative, so this module works under both import styles: as `lib.eval.status` from a
@@ -38,10 +40,10 @@ def _hint(mode: str, sdk: bool, token: bool) -> str:
 
 
 def get_status(env=None, evals_root=None) -> dict:
-    # Default view merges ~/.dor/secrets.env (env-wins) so the operator sees the
-    # same creds the runtime push path resolves — else status reads 'off' while
-    # real runs push (#321). Explicit env (tests, callers) is used verbatim.
-    env = env if env is not None else sess._load_secrets()
+    # Default view is the runtime push path's own source, core.secrets (env wins), so the
+    # operator sees the same creds — else status reads 'off' while real runs push (#321,
+    # R33). Explicit env (tests, callers) is used verbatim.
+    env = env if env is not None else secrets.evals_env()
     mode = sess.resolve_mode(env)
     sdk = sess._sdk_available()
     token = bool(env.get("H2T_EVALS_TOKEN"))

@@ -24,17 +24,83 @@ def _w(p, text):
     p.write_text(text, encoding="utf-8")
 
 
-def test_new_provider_file_wins_and_legacy_is_not_read_for_that_provider(home):
+def test_new_provider_file_wins_and_legacy_fills_what_it_lacks(home):
     _w(paths.secrets_shared() / "exa.env", "EXA_API_KEY=fake-new\n")
     _w(paths.legacy("secrets.dor_old"), "EXA_API_KEY=fake-old\nNOTION_API_TOKEN=fake-notion\n")
     assert secrets.get("EXA_API_KEY") == "fake-new"
     assert secrets.get("NOTION_API_TOKEN") == "fake-notion"  # no notion.env yet: fallback
 
 
-def test_migrated_provider_never_falls_back(home):
-    _w(paths.secrets_shared() / "exa.env", "EXA_OTHER=fake-exa-other\n")
-    _w(paths.legacy("secrets.dor_old"), "EXA_API_KEY=fake-old\n")
+def test_fallback_is_per_key_not_per_file(home):
+    """A key absent or empty in <provider>.env is not migrated: the skeleton writes empty
+    KEY= lines, and a file-level rule would break a working 3.x key (Task 10 ruling)."""
+    _w(paths.secrets_shared() / "exa.env", "EXA_OTHER=fake-exa-other\nJINA_X=\n")
+    _w(paths.secrets_shared() / "jina.env", "JINA_API_KEY=\n")
+    _w(paths.legacy("secrets.dor_old"), "EXA_API_KEY=fake-old\nJINA_API_KEY=fake-old-jina\n")
+    assert secrets.get("EXA_API_KEY") == "fake-old"
+    assert secrets.get("JINA_API_KEY") == "fake-old-jina"
+    assert secrets.get("EXA_OTHER") == "fake-exa-other"
+
+
+def test_empty_everywhere_is_absent(home):
+    _w(paths.secrets_shared() / "exa.env", "EXA_API_KEY=\n")
+    _w(paths.legacy("secrets.dor_old"), "EXA_API_KEY=\n")
     assert secrets.get("EXA_API_KEY") is None
+
+
+def test_load_secrets_falls_back_per_key(home, monkeypatch):
+    monkeypatch.delenv("EXA_API_KEY", raising=False)
+    _w(paths.secrets_shared() / "exa.env", "EXA_API_KEY=\n")
+    _w(paths.legacy("secrets.dor_old"), "EXA_API_KEY=fake-old\n")
+    secrets.load_secrets()
+    assert os.environ["EXA_API_KEY"] == "fake-old"
+
+
+def test_empty_notion_key_in_new_file_falls_back_to_the_token_file(home):
+    _w(paths.secrets_shared() / "notion.env", "NOTION_API_TOKEN=\n")
+    _w(paths.legacy("notion.token"), "fake-old-notion\n")
+    assert secrets.resolve_notion_token() == "fake-old-notion"
+
+
+def test_new_notion_value_beats_the_token_file(home):
+    _w(paths.secrets_shared() / "notion.env", "NOTION_API_TOKEN=fake-new-notion\n")
+    _w(paths.legacy("notion.token"), "fake-old-notion\n")
+    assert secrets.resolve_notion_token() == "fake-new-notion"
+
+
+def test_new_value_beats_the_legacy_ladder(home):
+    _w(paths.secrets_shared() / "meetgeek.env", "MEETGEEK_API_KEY=fake-new\n")
+    _w(paths.legacy("secrets.h2t") / "secrets.env", "MEETGEEK_API_KEY=fake-old\n")
+    assert secrets.get("MEETGEEK_API_KEY") == "fake-new"
+
+
+# --- evals_env (R33): H2T_EVALS_* by prefix ---------------------------------------------------
+
+def test_evals_env_order_is_env_new_dor_then_ladder(home, monkeypatch):
+    _w(paths.secrets_shared() / "h2t-evals.env", "H2T_EVALS_TOKEN=fake-new\nH2T_EVALS_RUN_ENV=\n")
+    _w(paths.legacy("secrets.dor_old"), "H2T_EVALS_TOKEN=fake-dor\nH2T_EVALS_RUN_ENV=fake-dor-run\n"
+                                        "H2T_EVALS_SERVICE_URL=fake-dor-url\n")
+    _w(paths.legacy("secrets.h2t") / "secrets.env", "H2T_EVALS_SERVICE_URL=fake-h2t-url\n"
+                                                    "H2T_EVALS_MODE=fake-ladder-mode\n")
+    monkeypatch.setenv("H2T_EVALS_MODE", "local")
+    assert secrets.evals_env() == {"H2T_EVALS_TOKEN": "fake-new", "H2T_EVALS_RUN_ENV": "fake-dor-run",
+                                   "H2T_EVALS_SERVICE_URL": "fake-dor-url", "H2T_EVALS_MODE": "local"}
+
+
+def test_evals_env_drops_path_variables_and_foreign_keys(home, monkeypatch):
+    _w(paths.secrets_shared() / "h2t-evals.env", "H2T_EVALS_TOKEN=fake-t\n")
+    _w(paths.legacy("secrets.dor_old"), "H2T_EVALS_SPOOL=/x/spool.db\nEXA_API_KEY=fake-exa\n")
+    monkeypatch.setenv("H2T_EVALS_ROOT", "/x/evals")
+    assert secrets.evals_env() == {"H2T_EVALS_TOKEN": "fake-t"}
+
+
+def test_evals_env_with_a_file_reads_only_it_and_the_environment(home, monkeypatch, tmp_path):
+    _w(paths.secrets_shared() / "h2t-evals.env", "H2T_EVALS_TOKEN=fake-new\n")
+    only = tmp_path / "only.env"
+    _w(only, "H2T_EVALS_SERVICE_URL=fake-only-url\n")
+    monkeypatch.setenv("H2T_EVALS_RUN_ENV", "fake-env-run")
+    assert secrets.evals_env(env_file=only) == {"H2T_EVALS_SERVICE_URL": "fake-only-url",
+                                                "H2T_EVALS_RUN_ENV": "fake-env-run"}
 
 
 def test_environment_beats_files(home, monkeypatch):

@@ -13,6 +13,7 @@ import os
 from pathlib import Path
 from typing import Any
 
+from h2t_ops.core import secrets
 from h2t_ops.core.errors import (
     AuthError,
     ConfigError,
@@ -21,14 +22,10 @@ from h2t_ops.core.errors import (
     ProviderError,
     UsageError,
 )
-from h2t_ops.core.secrets import load_secrets
 
 RPC_BASE = "https://api.dropboxapi.com/2"
 CONTENT_BASE = "https://content.dropboxapi.com/2"
 UPLOAD_LIMIT = 150 * 1024 * 1024  # files/upload takes at most 150 MB in one request
-# The path the issue named. load_secrets only reads secrets.env, so a token written
-# here would otherwise be read by nothing at all.
-PROVIDER_ENV_FILE = Path.home() / ".h2t" / "config" / "secrets" / "dropbox.env"
 
 
 def normalize_path(path: str) -> str:
@@ -44,17 +41,12 @@ def normalize_path(path: str) -> str:
     return p if p.startswith("/") else f"/{p}"
 
 
-def _load_provider_env() -> None:
-    if not PROVIDER_ENV_FILE.is_file():
-        return
-    for raw in PROVIDER_ENV_FILE.read_text(encoding="utf-8").splitlines():
-        line = raw.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, _, val = line.partition("=")
-        key = key.strip()
-        if key and key not in os.environ:
-            os.environ[key] = val.strip().strip('"').strip("'")
+_TOKEN_KEYS = ("DROPBOX_TOKEN", "DROPBOX_REFRESH_TOKEN", "DROPBOX_APP_KEY", "DROPBOX_APP_SECRET")
+
+
+def _token_config() -> dict[str, str]:
+    """The access token and the refresh triple, each "" when unset (#548 §7.2: one reader)."""
+    return {key: (secrets.get(key) or "").strip() for key in _TOKEN_KEYS}
 
 
 def _raise_for_status(resp: Any, context: str) -> None:
@@ -96,20 +88,18 @@ class DropboxClient:
     """Dropbox adapter: account, meta, list, download; writes: upload, link."""
 
     def __init__(self) -> None:
-        load_secrets()
-        _load_provider_env()
-        self._timeout = int(os.environ.get("DROPBOX_TIMEOUT", "60"))
+        self._timeout = int(secrets.get("DROPBOX_TIMEOUT") or "60")
         self._path_root: str | None = None
         self._resolving_root = False
-        token = os.environ.get("DROPBOX_TOKEN", "").strip()
+        token = _token_config()["DROPBOX_TOKEN"]
         if not token:
             token = self._refresh_access_token()
         if not token:
             raise ConfigError(
                 "DROPBOX_TOKEN not set.",
                 hint=(
-                    "Add DROPBOX_TOKEN to ~/.h2t/config/secrets/secrets.env (or to "
-                    f"{PROVIDER_ENV_FILE}). A dashboard token expires in ~4 hours; for "
+                    f"Add DROPBOX_TOKEN to {secrets.provider_file('dropbox')}. A dashboard "
+                    "token expires in ~4 hours; for "
                     "durable access set DROPBOX_APP_KEY, DROPBOX_APP_SECRET and "
                     "DROPBOX_REFRESH_TOKEN instead."
                 ),
@@ -120,9 +110,9 @@ class DropboxClient:
 
     def _refresh_access_token(self) -> str:
         """Exchange a refresh token for a short-lived access token, if configured."""
-        refresh = os.environ.get("DROPBOX_REFRESH_TOKEN", "").strip()
-        app_key = os.environ.get("DROPBOX_APP_KEY", "").strip()
-        app_secret = os.environ.get("DROPBOX_APP_SECRET", "").strip()
+        cfg = _token_config()
+        refresh = cfg["DROPBOX_REFRESH_TOKEN"]
+        app_key, app_secret = cfg["DROPBOX_APP_KEY"], cfg["DROPBOX_APP_SECRET"]
         if not (refresh and app_key and app_secret):
             return ""
         import requests as _r  # lazy — module-scope import forbidden
@@ -170,10 +160,8 @@ class DropboxClient:
         return root if root and root != home else ""
 
     def _can_refresh(self) -> bool:
-        return all(
-            os.environ.get(key, "").strip()
-            for key in ("DROPBOX_REFRESH_TOKEN", "DROPBOX_APP_KEY", "DROPBOX_APP_SECRET")
-        )
+        cfg = _token_config()
+        return all(cfg[key] for key in ("DROPBOX_REFRESH_TOKEN", "DROPBOX_APP_KEY", "DROPBOX_APP_SECRET"))
 
     def _should_refresh(self, resp: Any, retried: bool) -> bool:
         """A 401 on a refreshable account means the ~4h access token aged out.
@@ -343,7 +331,7 @@ class DropboxClient:
         with open(target, "rb") as probe:
             if probe.read(2) != b"\x1f\x8b":
                 return target.stat().st_size
-        cap = int(os.environ.get("DROPBOX_MAX_GUNZIP_BYTES", str(512 << 20)))
+        cap = int(secrets.get("DROPBOX_MAX_GUNZIP_BYTES") or str(512 << 20))
         plain = target.with_name(target.name + ".gunzip")
         written = 0
         try:

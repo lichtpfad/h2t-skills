@@ -55,14 +55,14 @@ def test_setup_sees_documented_path(documented_only):
     assert setup_h2t._secret_present(KEY, documented_only) is True
 
 
-def test_research_hint_names_documented_path(tmp_path, monkeypatch):
+def test_research_hint_names_the_provider_file(tmp_path, monkeypatch):
     """A miss must point at the location every other message names."""
     _home(tmp_path, monkeypatch)
 
     with pytest.raises(client.ConfigError) as ei:
         client.resolve_secret(KEY)
 
-    assert "~/.h2t/config/secrets/secrets.env" in (ei.value.hint or "")
+    assert str(core_secrets.provider_file("exa")) in (ei.value.hint or "")   # the 4.0 place (§4)
 
 
 def test_research_does_not_read_the_secrets_file_variable(tmp_path, monkeypatch):
@@ -100,3 +100,35 @@ def test_research_reads_a_per_provider_file(provider_file_only):
 
 def test_setup_sees_a_per_provider_file(provider_file_only):
     assert setup_h2t._secret_present(KEY, provider_file_only) is True
+
+
+# --- 4.0: setup and the connectors read through one core.secrets (#548 §7.2) ---------------
+
+PLACES = {
+    "shared": lambda: paths.secrets_shared() / "exa.env",
+    "documented": lambda: paths.legacy("secrets.h2t") / "secrets.env",
+    "documented-provider": lambda: paths.legacy("secrets.h2t") / "exa.env",
+    "dor-secrets": lambda: paths.legacy("secrets.dor"),
+    "dor": lambda: paths.legacy("secrets.dor_old"),
+}
+
+
+@pytest.mark.parametrize("place", sorted(PLACES))
+def test_setup_and_research_agree_on_every_place(place, tmp_path, monkeypatch):
+    _home(tmp_path, monkeypatch)
+    f = PLACES[place]()
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_text(f"{KEY}={VALUE}\n", encoding="utf-8")
+    assert client.resolve_secret(KEY) == VALUE
+    assert setup_h2t._secret_present(KEY, tmp_path) is True
+
+
+def test_setup_and_research_agree_on_a_miss(tmp_path, monkeypatch):
+    """An empty KEY= in the new file is not a key (the skeleton writes those): both miss."""
+    _home(tmp_path, monkeypatch)
+    f = paths.secrets_shared() / "exa.env"
+    f.parent.mkdir(parents=True)
+    f.write_text(f"{KEY}=\n", encoding="utf-8")
+    with pytest.raises(client.ConfigError):
+        client.resolve_secret(KEY)
+    assert setup_h2t._secret_present(KEY, tmp_path) is False

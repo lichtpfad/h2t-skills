@@ -142,6 +142,36 @@ def _telegram_new_session(sb, mp):
     _sqlite_session(paths.secrets_local() / "telegram.session", [(-1000000000010, 42)])
 
 
+def _provider_key(provider, text):
+    def setup(sb, mp):
+        import os
+
+        from h2t_ops.core import paths, providers
+        for k in [k for k in os.environ if k.startswith(providers.key_prefix(provider))]:
+            mp.delenv(k)
+        shared = paths.secrets_shared()
+        shared.mkdir(parents=True, exist_ok=True)
+        (shared / f"{provider}.env").write_text(text)
+    return setup
+
+
+def _research_resolve(sb, mp):
+    from h2t_ops.connectors.research import client
+    assert client.resolve_secret("EXA_API_KEY") == "fake-exa"
+
+
+def _dropbox_init(sb, mp):
+    from h2t_ops.connectors.dropbox.client import DropboxClient
+    assert DropboxClient()._token == "fake-dropbox"
+
+
+def _evals_load(sb, mp):
+    from h2t_ops.lifecycle.eval.session import SkillEval
+    from h2t_ops.lifecycle.eval.status import get_status
+    assert SkillEval("session-start", domain="dev", project="p")._env["H2T_EVALS_TOKEN"] == "fake-evals"
+    assert get_status()["token_present"] is True
+
+
 CASES: list[Case] = [
     Case("store.replace.state", _store_replace_state),
     # Task 8: a refresh writes nothing; a rotated refresh token writes local and the mirror.
@@ -157,4 +187,9 @@ CASES: list[Case] = [
          setup=_telegram_legacy_session),
     Case("telegram.messages", _telegram_cli(["messages", "10", "--limit", "5"], _telegram_fake),
          setup=_telegram_new_session),
+    # Task 10: keys only through core.secrets — a read of a secrets file from any other
+    # module is a violation.
+    Case("research.resolve", _research_resolve, setup=_provider_key("exa", "EXA_API_KEY=fake-exa\n")),
+    Case("dropbox.init", _dropbox_init, setup=_provider_key("dropbox", "DROPBOX_TOKEN=fake-dropbox\n")),
+    Case("evals.load", _evals_load, setup=_provider_key("h2t-evals", "H2T_EVALS_TOKEN=fake-evals\n")),
 ]

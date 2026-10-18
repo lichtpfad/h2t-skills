@@ -35,7 +35,7 @@ def test_secrets_skeleton_reads_the_packaged_registry(home, monkeypatch, capsys)
     assert out.get("kind") != "h2t_setup_error/v1", out  # the registry was found
     assert "added" in out
     # Not whether the file was written: a key another test put in os.environ is skipped.
-    assert out["path"] == str(home / ".dor" / "secrets" / "secrets.env")
+    assert out["path"] == str(home / ".h2t" / "secrets" / "shared")   # one file per provider (R40)
 
 
 def test_an_unknown_verb_is_a_usage_error(capsys):

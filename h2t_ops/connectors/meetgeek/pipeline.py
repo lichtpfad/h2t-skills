@@ -363,13 +363,12 @@ def webhook_server(args: Any) -> dict:
     from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
     from uuid import uuid4
 
-    from h2t_ops.core.secrets import load_secrets
+    from h2t_ops.core import secrets
 
     out_dir = Path(args.out).expanduser()
     out_dir.mkdir(parents=True, exist_ok=True)
     if args.secret is None:
-        load_secrets()
-        args.secret = os.environ.get("MEETGEEK_WEBHOOK_SECRET", "")
+        args.secret = secrets.get("MEETGEEK_WEBHOOK_SECRET") or ""
     secret = (args.secret or "").strip()
 
     class Handler(BaseHTTPRequestHandler):

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 import re
 from datetime import timedelta
 from pathlib import Path
@@ -14,8 +13,9 @@ def _cmd_status(ns: Any) -> dict:
 
 
 def _evals_root() -> Path:
-    override = os.environ.get("H2T_EVALS_ROOT")
-    return Path(override) if override else Path.home() / ".h2t" / "evals"
+    from h2t_ops.core import paths
+
+    return paths.records("evals")
 
 
 def known_skills(here: Path | None = None) -> set:

@@ -223,3 +223,39 @@ def test_doctor_is_quiet_when_the_legacy_h2t_still_resolves(tmp_path):
 
 def test_doctor_is_quiet_without_a_legacy_venv(tmp_path):
     assert setup_h2t.legacy_shim_status(tmp_path) == {"status": "ok"}
+
+
+def _matrix_row(tmp_path, monkeypatch, connector):
+    monkeypatch.setattr(setup_h2t, "resolve_h2t_ops", lambda home=None: {"status": "missing", "path": ""})
+    rows = setup_h2t.connector_matrix(tmp_path)["connectors"]
+    return next(r for r in rows if r["connector"] == connector)
+
+
+def _put(path, body):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(body, encoding="utf-8")
+
+
+def test_connectors_check_sees_google_files_in_the_4_0_places(tmp_path, monkeypatch):
+    """client in secrets/shared, this machine's token in secrets/local (§4, R19)."""
+    _home(tmp_path, monkeypatch)
+    _put(paths.secrets_shared() / "google.client.json", '{"installed": {}}')
+    _put(paths.secrets_local() / "google.token.json", '{"refresh_token": "fake-r"}')
+    row = _matrix_row(tmp_path, monkeypatch, "calendar")
+    assert row["status"] == "ready"
+    assert row["checks"]["tokens"] == {"path": str(paths.secrets_local() / "google.token.json"),
+                                       "status": "present"}
+
+
+def test_connectors_check_reports_a_corrupt_google_token_without_crashing(tmp_path, monkeypatch):
+    _home(tmp_path, monkeypatch)
+    _put(paths.secrets_local() / "google.token.json", "{not json")
+    row = _matrix_row(tmp_path, monkeypatch, "gmail")
+    assert row["status"] == "missing" and row["checks"]["tokens"]["status"] == "unreadable"
+
+
+def test_connectors_check_sees_a_key_only_in_secrets_shared(tmp_path, monkeypatch):
+    _home(tmp_path, monkeypatch)
+    monkeypatch.delenv("MEETGEEK_API_KEY", raising=False)
+    _put(paths.secrets_shared() / "meetgeek.env", "MEETGEEK_API_KEY=fake-mg\n")
+    assert _matrix_row(tmp_path, monkeypatch, "meetgeek")["status"] == "ready"

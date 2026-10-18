@@ -25,12 +25,13 @@ def test_status_source_legacy(monkeypatch):
     assert st["mode"] == "push"
 
 
-def test_status_default_env_merges_secrets_file(tmp_path, monkeypatch):
-    """get_status() default env reflects ~/.dor/secrets.env so operators see push (#321)."""
+def test_status_default_env_merges_secrets_file(monkeypatch):
+    """get_status() default env reads core.secrets so operators see push (#321, R33)."""
+    from h2t_ops.core import secrets
     monkeypatch.setattr(sess, "_sdk_available", lambda: True)
-    f = tmp_path / "secrets.env"
-    f.write_text("H2T_EVALS_TOKEN=tok\n", encoding="utf-8")
-    monkeypatch.setattr(sess, "_DEFAULT_SECRETS", f)
+    f = secrets.provider_file("h2t-evals")      # under the suite's temporary HOME
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_text("H2T_EVALS_TOKEN=fake-tok\n", encoding="utf-8")
     for var in ("H2T_EVALS_MODE", "H2T_EVALS_ENABLED", "H2T_EVALS_TOKEN"):
         monkeypatch.delenv(var, raising=False)
     st = get_status(evals_root="/nonexistent")

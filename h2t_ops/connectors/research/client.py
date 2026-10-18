@@ -18,6 +18,8 @@ from typing import Any
 from urllib.parse import parse_qsl, quote, urlencode, urlsplit, urlunsplit
 
 from h2t_ops.connectors.research import maintenance, navigation, provider_routing, store
+from h2t_ops.core import providers
+from h2t_ops.core import secrets as core_secrets
 from h2t_ops.core.errors import (
     AuthError,
     ConfigError,
@@ -26,7 +28,6 @@ from h2t_ops.core.errors import (
     ProviderError,
     UsageError,
 )
-from h2t_ops.core.secrets import candidate_secret_files
 
 DEFAULT_OUTPUT_DIR = Path.home() / ".h2t" / "research"
 REDACTED = "[REDACTED]"
@@ -64,49 +65,19 @@ _URL_RE = re.compile(r"https?://[^\s<>'\")]+", re.IGNORECASE)
 _SLUG_RE = re.compile(r"[^a-z0-9]+")
 
 
-def _read_env_file(path: Path) -> dict[str, str]:
-    """Parse simple KEY=VALUE env files without mutating os.environ."""
-    if not path.is_file():
-        return {}
-
-    values: dict[str, str] = {}
-    for raw in path.read_text(encoding="utf-8").splitlines():
-        line = raw.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, _, value = line.partition("=")
-        key = key.strip()
-        value = value.strip()
-        if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
-            value = value[1:-1]
-        if key:
-            values[key] = value
-    return values
-
-
 def resolve_secret(name: str) -> str:
-    """Resolve a secret from env, then the shared candidate files (#448).
+    """Resolve a secret through h2t_ops.core.secrets, the one reader (#448, #548 §7.2).
 
-    The list comes from h2t_ops.core.secrets so every connector answers for the same
-    locations. Keeping a second list here is what made ~/.h2t/config/secrets/secrets.env
-    invisible to research after #432 added it everywhere else.
+    A second list of files here is what made ~/.h2t/config/secrets/secrets.env invisible
+    to research after #432 added it everywhere else.
     """
-    env_value = os.getenv(name)
-    if env_value:
-        return env_value
-
-    for path in candidate_secret_files():
-        value = _read_env_file(path).get(name)
-        if value:
-            return value
-
+    value = core_secrets.get(name)
+    if value:
+        return value
+    where = core_secrets.provider_file(providers.provider_of_key(name) or "other")
     raise ConfigError(
         f"Research secret not found: {name}",
-        hint=(
-            f"Set {name} in the environment, H2T_SECRETS_FILE, "
-            "~/.h2t/config/secrets/secrets.env, ~/.dor/secrets/secrets.env, "
-            "or ~/.dor/secrets.env."
-        ),
+        hint=f"Set {name} in the environment or in {where}.",
     )
 
 

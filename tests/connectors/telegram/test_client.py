@@ -1013,6 +1013,27 @@ def test_api_keys_from_secrets_env(monkeypatch):
     assert "telegram.env" in str(ei.value)
 
 
+def test_empty_keys_in_telegram_env_fall_back_to_the_3x_config_per_key(monkeypatch):
+    """The skeleton writes empty KEY= lines; a key empty in telegram.env is not migrated."""
+    import json
+
+    from h2t_ops.connectors.telegram.client import TelegramClientAdapter
+    from h2t_ops.core import paths, secrets
+
+    for k in ("TELEGRAM_API_ID", "TELEGRAM_API_HASH"):
+        monkeypatch.delenv(k, raising=False)
+    env = secrets.provider_file("telegram")
+    env.parent.mkdir(parents=True, exist_ok=True)
+    env.write_text("TELEGRAM_API_ID=\nTELEGRAM_API_HASH=\n", encoding="utf-8")
+    cfg = paths.legacy("telegram") / "config.json"
+    cfg.parent.mkdir(parents=True)
+    cfg.write_text(json.dumps({"api_id": 7, "api_hash": "fake-old-hash"}), encoding="utf-8")
+    assert TelegramClientAdapter()._load_config() == {"api_id": 7, "api_hash": "fake-old-hash"}
+
+    env.write_text("TELEGRAM_API_ID=\nTELEGRAM_API_HASH=fake-new-hash\n", encoding="utf-8")
+    assert TelegramClientAdapter()._load_config() == {"api_id": 7, "api_hash": "fake-new-hash"}
+
+
 def test_legacy_config_with_bom_reports_line(monkeypatch):
     from h2t_ops.connectors.telegram.client import TelegramClientAdapter
     from h2t_ops.core import paths

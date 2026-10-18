@@ -2,6 +2,7 @@
 from pathlib import Path
 
 from h2t_ops.cli import dispatch
+from h2t_ops.core import paths
 
 
 def _seed(root: Path):
@@ -14,9 +15,8 @@ def _seed(root: Path):
         encoding="utf-8")
 
 
-def test_report_json_returns_envelope(tmp_path, capsys, monkeypatch):
-    _seed(tmp_path)
-    monkeypatch.setenv("H2T_EVALS_ROOT", str(tmp_path))
+def test_report_json_returns_envelope(capsys):
+    _seed(paths.records("evals"))   # under the suite temporary HOME (root conftest.py)
     code = dispatch(["evals", "report", "--json", "--min-n", "1"])
     out = capsys.readouterr().out
     assert code == 0
@@ -25,9 +25,8 @@ def test_report_json_returns_envelope(tmp_path, capsys, monkeypatch):
     assert "session-start" in out
 
 
-def test_report_human_renders_table(tmp_path, capsys, monkeypatch):
-    _seed(tmp_path)
-    monkeypatch.setenv("H2T_EVALS_ROOT", str(tmp_path))
+def test_report_human_renders_table(capsys):
+    _seed(paths.records("evals"))   # under the suite temporary HOME (root conftest.py)
     code = dispatch(["evals", "report", "--min-n", "1"])
     out = capsys.readouterr().out
     assert code == 0
@@ -35,8 +34,7 @@ def test_report_human_renders_table(tmp_path, capsys, monkeypatch):
     assert "session-start" in out
 
 
-def test_report_json_and_md_mutually_exclusive(tmp_path, monkeypatch):
-    monkeypatch.setenv("H2T_EVALS_ROOT", str(tmp_path))
+def test_report_json_and_md_mutually_exclusive():
     code = dispatch(["evals", "report", "--json", "--md"])
     assert code == 2
 

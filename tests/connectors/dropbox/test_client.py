@@ -62,27 +62,27 @@ def test_module_has_no_module_level_requests_import():
             assert line[0] == " ", f"line {i}: module-scope 'requests' import forbidden: {line!r}"
 
 
-def test_init_without_token_raises_configerror(monkeypatch, tmp_path):
+def test_init_without_token_raises_configerror(monkeypatch):
     from h2t_ops.connectors.dropbox import client as dmod
+    from h2t_ops.core import secrets
 
     for key in ("DROPBOX_TOKEN", "DROPBOX_REFRESH_TOKEN", "DROPBOX_APP_KEY", "DROPBOX_APP_SECRET"):
         monkeypatch.delenv(key, raising=False)
-    monkeypatch.setattr(dmod, "load_secrets", lambda *a, **k: None)
-    monkeypatch.setattr(dmod, "PROVIDER_ENV_FILE", tmp_path / "absent.env")
     with pytest.raises(ConfigError) as exc:
         dmod.DropboxClient()
     assert "DROPBOX_TOKEN" in str(exc.value)
+    assert str(secrets.provider_file("dropbox")) in exc.value.hint
 
 
-def test_init_reads_the_provider_env_file_the_issue_names(monkeypatch, tmp_path):
+def test_init_reads_the_provider_env_file(monkeypatch):
     from h2t_ops.connectors.dropbox import client as dmod
+    from h2t_ops.core import secrets
 
     monkeypatch.delenv("DROPBOX_TOKEN", raising=False)
-    monkeypatch.setattr(dmod, "load_secrets", lambda *a, **k: None)
-    env = tmp_path / "dropbox.env"
-    env.write_text("DROPBOX_TOKEN=from-file\n", encoding="utf-8")
-    monkeypatch.setattr(dmod, "PROVIDER_ENV_FILE", env)
-    assert dmod.DropboxClient()._token == "from-file"
+    env = secrets.provider_file("dropbox")
+    env.parent.mkdir(parents=True, exist_ok=True)
+    env.write_text("DROPBOX_TOKEN=fake-from-file\n", encoding="utf-8")
+    assert dmod.DropboxClient()._token == "fake-from-file"
 
 
 # --- paths -------------------------------------------------------------------

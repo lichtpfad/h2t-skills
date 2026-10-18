@@ -20,6 +20,8 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urljoin, urlparse
 
+from h2t_ops.core import secrets
+
 try:
     import trafilatura as _trafilatura_module  # type: ignore
     _TRAFILATURA_AVAILABLE = True
@@ -611,6 +613,11 @@ def _classify_content(
 JINA_ENDPOINT_DEFAULT = "https://r.jina.ai/"
 
 
+def _jina_key() -> str | None:
+    """Optional: Jina Reader runs without a key, with a lower rate limit."""
+    return secrets.get("JINA_API_KEY")
+
+
 class JinaProvider:
     """Fetch via Jina Reader URL-to-markdown relay."""
 
@@ -631,7 +638,7 @@ class JinaProvider:
             "Accept": "text/markdown",
             "X-Return-Format": "markdown",
         }
-        api_key = os.environ.get("JINA_API_KEY")
+        api_key = _jina_key()
         if api_key:
             headers["Authorization"] = f"Bearer {api_key}"
         req = urllib.request.Request(target, headers=headers)

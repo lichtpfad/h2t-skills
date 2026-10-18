@@ -267,10 +267,14 @@ class TelegramClientAdapter:
             return self._load_config_dir()
         api_id, api_hash = secrets.get("TELEGRAM_API_ID"), secrets.get("TELEGRAM_API_HASH")
         env_file = secrets.provider_file("telegram")
-        if not (api_id and api_hash) and not env_file.is_file():
-            legacy = secrets.telegram_legacy_config()   # 4.0.x fallback: the 3.x config.json
+        source = env_file
+        if not (api_id and api_hash):
+            legacy = secrets.telegram_legacy_config()   # 4.0.x fallback, per key: the 3.x config.json
             if legacy is not None:
-                return self._checked(legacy, "the 3.x config.json")
+                legacy = self._checked(legacy, "the 3.x config.json")
+                if not api_id:
+                    api_id, source = str(legacy["api_id"]), "the 3.x config.json"
+                api_hash = api_hash or legacy["api_hash"]
         missing = [k for k, v in (("TELEGRAM_API_ID", api_id), ("TELEGRAM_API_HASH", api_hash)) if not v]
         if missing:
             raise ConfigError(
@@ -284,7 +288,7 @@ class TelegramClientAdapter:
         try:
             return {"api_id": int(api_id), "api_hash": api_hash}   # Telethon wants an int
         except ValueError:
-            raise ConfigError(f"TELEGRAM_API_ID in {env_file} is not a number",
+            raise ConfigError(f"TELEGRAM_API_ID in {source} is not a number",
                               hint="Get api_id from https://my.telegram.org/apps") from None
 
     def _load_config_dir(self) -> dict[str, Any]:

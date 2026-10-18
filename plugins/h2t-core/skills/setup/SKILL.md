@@ -288,22 +288,23 @@ h2t-ops setup secrets skeleton --json
 ```
 
 From the result, show the user:
-- `path` — the file the placeholders went into
+- `files` — one file per provider the placeholders went into (`<provider>.env` under `path`, the
+  secrets directory), each with its own `added` keys
 - For each key in `added`: its description and URL from `known_secrets.yaml`
 
-`skipped` holds keys that are already set — in that file, in the environment, or in any
+`skipped` holds keys that are already set — in those files, in the environment, or in any
 other secrets file the connectors read, `~/.h2t/config/secrets/*.env` included. Do not ask
 for them.
 
 ### Step 2 — Fill API Keys
 
-If `added` is empty, skip to Step 3. Otherwise tell the user to open `path` and paste a
-value after each `KEY=` from `added` — one message together with Step 1, the list shown
+If `added` is empty, skip to Step 3. Otherwise tell the user to open each `files[...].path` and
+paste a value after each `KEY=` from its `added` — one message together with Step 1, the list shown
 once. Do not list keys from memory: the registry is the list, and a list copied here falls
 behind it.
 
 Open the file in an editor — the same line on macOS, Linux and Git Bash on Windows, with
-`path` from Step 1 quoted as is. If `code` is not on PATH, give the user `path` to open in
+each file's `path` from Step 1 quoted as is. If `code` is not on PATH, give the user those paths to open in
 any editor instead:
 
 ```bash

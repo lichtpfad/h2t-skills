@@ -9,6 +9,7 @@ import os
 import time
 from typing import Any
 
+from h2t_ops.core import secrets
 from h2t_ops.core.errors import (
     AuthError,
     ConfigError,
@@ -35,19 +36,22 @@ def _raise_for_status(resp: Any, context: str) -> None:
         raise ProviderError(f"MeetGeek server error {status} ({context}): {resp.text[:200]}")
 
 
+def _api_key() -> str:
+    return (secrets.get("MEETGEEK_API_KEY") or "").strip()
+
+
 class MeetGeekClient:
     """MeetGeek API client — 10 pure-API verbs, no local state."""
 
     def __init__(self) -> None:
-        load_secrets()
-        api_key = os.environ.get("MEETGEEK_API_KEY", "").strip()
+        load_secrets()   # the tunables below (MEETGEEK_BASE_URL, …) may sit in the files too
+        api_key = _api_key()
         if not api_key:
             raise ConfigError(
                 "MEETGEEK_API_KEY not set.",
                 hint=(
-                    "Add MEETGEEK_API_KEY to ~/.dor/secrets/secrets.env "
-                    "(legacy fallback: ~/.dor/secrets.env) or set in environment. "
-                    "Registry: ~/.h2t/config/secrets/meetgeek.md"
+                    f"Add MEETGEEK_API_KEY to {secrets.provider_file('meetgeek')} or set it in the "
+                    "environment."
                 ),
             )
         self._api_key = api_key
