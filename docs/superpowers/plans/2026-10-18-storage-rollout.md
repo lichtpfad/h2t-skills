@@ -39,15 +39,40 @@ issue: "548"
 
 ## Порядок
 
-Миграция запускается командой `h2t-setup layout migrate` на editable-установке из ветки
-(план, R13). Поэтому весь перенос выполняется **до** выпуска 4.0.0 (план, Task 27). До своего
-шага каждая Windows-машина работает на старых запасных местах.
+Решение владельца 2026-10-19 (план, Task 27): **до** выпуска 4.0.0 переносится только Mac, и
+это приёмка выпуска. Windows-машины до выпуска остаются целиком на 3.x и переносятся **после**
+него командой `h2t-setup sync`: она ставит CLI и плагины одной версии и сама запускает миграцию.
 
-1. Мак: `h2t-setup dev-sync`, затем `h2t-setup layout migrate`, затем в Syncthing папки
-   `~/.h2t/secrets/shared` и `~/.h2t/records`.
-2. Десктоп: то же самое. Его сессии после 2026-05-22 приезжают на мак.
-3. Ноутбук: сначала установить Syncthing, затем то же самое.
-4. Все три машины: `doctor` и `session-start` в одном репо.
+Почему Mac идёт на локальном кандидате, а не на `main`: каждый скилл 4.0 начинается с
+`h2t-ops version --expect <версия>`, а в `main` там стоит `@VERSION@`, который пишет только
+`scripts/release.py prepare`. Плагины из `main` поэтому останавливаются на проверке версии.
+
+1. **Мак, до выпуска** (Steps 1–4): кандидат 4.0.0 — отдельная рабочая копия от `origin/main`
+   с прогнанным `release.py prepare 4.0.0`, без коммита:
+
+   ```bash
+   git worktree add --detach .worktrees/rc-4.0.0 origin/main
+   cd .worktrees/rc-4.0.0
+   ../../.venv/bin/python scripts/release.py prepare 4.0.0   # 35 файлов, @VERSION@ → 4.0.0
+   uv run --project . h2t-setup dev-sync                     # CLI 4.0.0 editable отсюда
+   h2t-ops version --expect 4.0.0 --json                     # "ok": true
+   ```
+
+   Сессии Claude до выпуска — только с плагинами кандидата:
+   `claude --plugin-dir <rc>/plugins/h2t-core --plugin-dir <rc>/plugins/h2t-ops …` (все пять).
+   Обычный `claude` возьмёт плагины 3.x из кэша при CLI 4.0. Открытые сессии не обязательно
+   закрывать: миграция держит дозапись activity под той же блокировкой и останавливает
+   проверку, если сессия записалась после копирования. Перед переносом не должен работать
+   Telegram (база сессии с `-wal`/`-journal` останавливает фазу).
+2. **Выпуск 4.0.0** (план, Task 27).
+3. **Десктоп `automata`, после выпуска** (Step 5): bootstrap `sync` из README; до этого
+   найти владельца `~/.h2t/chrome-getcourse` (не каталог пакета, `doctor` его покажет).
+4. **Ноутбук `computer`, после выпуска** (Step 6): сначала Syncthing, затем то же.
+5. Все три машины: `doctor` и `session-start` в одном репо (Step 7).
+
+На каждой машине в `~/.h2t/config/user.yaml` вписать прежние значения (план, Task 26 Step 2a):
+`timezone`, `notion.tasks_database_id`, `domain_patterns`. Отчёт: `h2t-ops calendar list --json`
+даёт `tz_source: user.yaml`.
 
 Команды на Windows-машины уходят через Telegram-чат `3dwalker`:
 `h2t-ops telegram send 3dwalker --message "…"`, ответ читается
@@ -76,7 +101,7 @@ issue: "548"
   мест: `find ~/.dor ~/.config/{google-calendar-mcp,gmail,notion,telegram} ~/.h2t/{sessions,activity,evals,research,creative,config/secrets} -type f -exec shasum -a 256 {} +`,
   вывод только в scratchpad, значения файлов не печатаются.
 
-- [ ] **Step 2: Мак, перенос.** `h2t-setup dev-sync` (editable из ветки), затем
+- [ ] **Step 2: Мак, перенос.** `h2t-setup dev-sync` из кандидата 4.0.0 (раздел «Порядок»), затем
   `h2t-setup layout migrate`. Если фаза имени машины остановилась —
   `h2t-setup layout migrate --machine macbook-pro-3` (имя в настройках Claude должно
   совпадать, ADR 0003). Проверка:
@@ -103,7 +128,8 @@ issue: "548"
   Syncthing и синхронизирует ли `~/.dor` (если да — Step 0 проводится здесь), задан ли
   `H2T_MACHINE_NAME` в настройках Claude, сколько md в `~/.h2t/sessions/*` и
   `~/.dor/sessions/automata`. Дождаться, пока `~/.h2t/secrets/shared` с мака приехал. Затем
-  Step 1 и Step 2 на десктопе с `--machine automata`, чтобы 148 сессий из
+  после выпуска bootstrap `sync` из README (он ставит CLI и плагины 4.0.0 и сам запускает
+  миграцию); если она остановилась на имени машины, `h2t-setup layout migrate --machine automata`, чтобы 148 сессий из
   `~/.dor/sessions/automata` остались под своим именем. Если hostname десктопа уже не
   `automata` и в `~/.h2t/sessions` есть папка под другим именем, её md миграция переносит в
   `records/sessions/automata/` (тот же случай, что #491 на маке). Сессии десктопа приезжают
@@ -111,7 +137,8 @@ issue: "548"
 
 - [ ] **Step 6: Ноутбук `computer` [владелец].** Сначала установить Syncthing и, если Step 0 ещё
   не сделан, провести его здесь. Дождаться, пока `~/.h2t/secrets/shared` с мака приехал. Затем
-  Step 1 и Step 2 на ноутбуке с `--machine computer`. Сессии ноутбука приезжают на мак.
+  Step 1, затем после выпуска bootstrap `sync` из README; если миграция остановилась на имени
+  машины, `h2t-setup layout migrate --machine computer`. Сессии ноутбука приезжают на мак.
 
 - [ ] **Step 7: Приёмка (спека §12)** — по пункту, с выводом:
   - [ ] `session-start` в одном репо на всех трёх машинах показывает последнюю сессию проекта с
