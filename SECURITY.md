@@ -50,8 +50,9 @@ one place, `~/.h2t/secrets` (the root moves with `H2T_PATH_ROOT`):
 - `secrets/local/` — what must not leave the machine: `google.token.json`,
   `telegram.auth-state.json`. Never sync it.
 
-On macOS and Linux, `h2t-ops doctor` reports a secrets directory that is not 0700
-and a secrets file that is not 0600.
+On macOS and Linux, `h2t-ops doctor` reports a directory under `secrets/` that is not
+0700 and a file that is not 0600. It skips `secrets/shared/`: a sync tool sets the modes
+there, and a Windows peer sends 0644 with every edit.
 
 Through 4.0.x the loader still falls back, key by key, to the 3.x places:
 `~/.h2t/config/secrets/*.env`, `~/.dor/secrets/secrets.env`, `~/.dor/secrets.env`.
