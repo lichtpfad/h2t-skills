@@ -139,11 +139,17 @@ def door_spans(tree: ast.Module | None) -> dict[int, list[tuple[int, int]]]:
     if tree is None:
         return spans
 
+    # `global store` in any function rebinds the module's name for every reader (#563).
+    rebound = {n for node in ast.walk(tree) if isinstance(node, ast.Global) for n in node.names}
+
     def visit(scope: ast.AST, doors: set[str], writers: set[str]) -> None:
-        if not isinstance(scope, ast.ClassDef):     # a class body does not enclose methods
-            binds = _bindings(scope)
-            doors = {n for n in doors if n not in binds}
-            writers = {n for n in writers if n not in binds}
+        # A class body binds names of its own but does not enclose its methods: they
+        # inherit the enclosing scope's doors, not the body's (#563).
+        inherited = doors, writers
+        binds = _bindings(scope)
+        doors = {n for n in doors if n not in binds}
+        writers = {n for n in writers if n not in binds}
+        if not isinstance(scope, ast.ClassDef):
             for n, how in binds.items():
                 if all(isinstance(b, (ast.Import, ast.ImportFrom))
                        and any(_is_door_import(b, a) and (a.asname or a.name) == n for a in b.names)
@@ -155,6 +161,9 @@ def door_spans(tree: ast.Module | None) -> dict[int, list[tuple[int, int]]]:
                 if all(isinstance(b, ast.Name) and _repo_call(assigned.get(id(b)), doors)
                        for b in how):
                     writers.add(n)
+            if isinstance(scope, ast.Module):
+                doors -= rebound
+            inherited = doors, writers
         for node in _own(scope):
             if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
                 f, recv = node.func, node.func.value
@@ -163,7 +172,7 @@ def door_spans(tree: ast.Module | None) -> dict[int, list[tuple[int, int]]]:
                     if f.lineno == f.end_lineno:
                         spans.setdefault(f.lineno, []).append((f.col_offset, f.end_col_offset))
             if isinstance(node, _SCOPES):
-                visit(node, doors, writers)
+                visit(node, *inherited)
 
     visit(tree, set(), set())
     return spans

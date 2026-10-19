@@ -411,6 +411,7 @@ def _run(report, machine: str | None, table: dict[str, Callable]) -> None:
             table[phase](ctx)
         except Exception as exc:        # a kill (KeyboardInterrupt) is not caught: resume
             report.failed.append((f"layout 1: {phase}", _remedy(exc)))
+            report.failed_config = isinstance(exc, ConfigError)
             return
         journal.phase_done(phase)
     report.done.append("layout 1")

@@ -54,3 +54,17 @@ def test_a_busy_layout_exits_3(capsys, monkeypatch):
 def test_rollback_without_sync_paused_is_a_usage_error(capsys):
     assert cli.main(["layout", "rollback", "--json"]) == 2
     assert "pause the sync" in json.loads(capsys.readouterr().err)["error"]["message"]
+
+
+def test_a_3x_variable_that_moved_data_exits_3(capsys, monkeypatch, tmp_path):
+    """The stop is a configuration the user must fix: exit 3 (config), not 1 (provider),
+    with the same message and remedy (#562)."""
+    moved = tmp_path / "custom"
+    (moved / "m").mkdir(parents=True)
+    (moved / "m" / "s.md").write_bytes(b"S")
+    monkeypatch.setenv("H2T_SESSION_ROOT", str(moved))
+    assert cli.main(["layout", "migrate", "--machine", "m", "--json"]) == 3
+    error = json.loads(capsys.readouterr().err)["error"]
+    assert error["type"] == "config"
+    assert error["message"].endswith("not everything reached the target: layout 1: snapshot")
+    assert f"H2T_SESSION_ROOT={moved}" in error["hint"] and "unset H2T_SESSION_ROOT" in error["hint"]

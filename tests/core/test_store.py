@@ -144,6 +144,22 @@ def test_broken_paths_yaml_still_allows_package_writes(home, tmp_path, monkeypat
         store.replace(home / "Documents" / "f.txt", "x", place="elsewhere", dest=True)
 
 
+def test_an_unresolvable_vault_variable_still_allows_package_writes(home, tmp_path, monkeypatch):
+    """#561: H2T_PATH_VAULT of a user that does not exist raised RuntimeError from _roots on
+    every write. It is a ConfigError naming the variable, with the paths.yaml fallback: the
+    package writes inside ~/.h2t, a write elsewhere is refused. (A NUL cannot reach the
+    variable: os.environ refuses it.)"""
+    monkeypatch.setattr(tempfile, "tempdir", str(tmp_path / "systmp"))
+    monkeypatch.setenv("H2T_PATH_VAULT", "~no-such-user-h2t-test/v")
+    with pytest.raises(ConfigError, match="H2T_PATH_VAULT"):
+        paths.vault()
+    store.append(paths.activity_file("m"), "x", place="records.activity")
+    assert paths.activity_file("m").read_text() == "x\n"
+    with pytest.raises(store.WriteRefused, match="H2T_PATH_VAULT") as exc:
+        store.replace(home / "Documents" / "f.txt", "x", place="elsewhere", dest=True)
+    assert "H2T_PATH_VAULT" in exc.value.hint
+
+
 @pytest.mark.skipif(sys.platform == "win32", reason="POSIX permission bits")
 def test_secret_files_are_0600_and_dirs_0700(home):
     p = store.replace(paths.secrets_shared() / "exa.env", "EXA_API_KEY=fake-exa\n",

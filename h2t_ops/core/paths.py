@@ -122,9 +122,24 @@ def run_dir() -> Path:
     return home() / ".h2t" / "run"
 
 
+class VaultUnresolvable(ConfigError):
+    """H2T_PATH_VAULT names a place that cannot be resolved (#561)."""
+
+
 def vault() -> Path:
-    """The vault POS owns; its address is a contract between the two programs (plan R12)."""
-    return _env("H2T_PATH_VAULT") or home() / ".dor" / "vault"
+    """The vault POS owns; its address is a contract between the two programs (plan R12).
+    A value of a user that does not exist is a ConfigError, as in paths.yaml (#561)."""
+    raw = os.environ.get("H2T_PATH_VAULT")
+    if not raw:
+        return home() / ".dor" / "vault"
+    try:
+        value = Path(raw).expanduser()
+        os.path.realpath(value)
+    except (RuntimeError, ValueError) as exc:
+        raise VaultUnresolvable(f"H2T_PATH_VAULT {raw!r} cannot be resolved ({exc})",
+                          hint="set H2T_PATH_VAULT to ~/… or a full path, or unset it "
+                               "(default ~/.dor/vault)") from exc
+    return value
 
 
 VAULT_HINT = "vault is shared with POS: set H2T_PATH_VAULT (default ~/.dor/vault)"
@@ -383,7 +398,11 @@ def _declared() -> set[Path]:
         places = paths_config().places
     except ConfigError:
         places = {}
-    found = [*places.values(), vault()]
+    found = [*places.values()]
+    try:
+        found.append(vault())
+    except VaultUnresolvable:   # store reports it (#561)
+        pass
     if "lake" not in places and (old := _fallback("lake")) is not None:
         found.append(old)
     return {Path(os.path.realpath(p)) for p in found}

@@ -140,6 +140,32 @@ def test_the_door_is_the_bound_name_in_its_scope_not_the_spelling(tmp_path):
         f"h2t_ops/s.py:{n}" for n in (2, 4, 7, 12, 15, 27)]
 
 
+
+def test_a_class_body_or_a_global_rebinding_store_is_not_the_door(tmp_path):
+    """A class body binds its own names, and `global store` in a function rebinds the
+    module's: after either, `store.write_text` is a raw write (#563). A method still sees
+    the module's import, since a class body does not enclose it."""
+    (tmp_path / "h2t_ops").mkdir()
+    (tmp_path / "h2t_ops" / "c.py").write_text(
+        'from h2t_ops.core import store\n'                         # 1
+        'class X:\n'                                               # 2
+        '    store = open\n'                                       # 3
+        '    store.write_text("x")\n'                              # 4 class body rebinds
+        '    def m(self):\n'                                       # 5
+        '        store.mkdir(d, place="run")\n')                   # 6 door: module import
+    (tmp_path / "h2t_ops" / "g.py").write_text(
+        'from h2t_ops.core import store\n'                         # 1
+        'def k():\n'                                               # 2
+        '    global store\n'                                       # 3
+        '    store = Path("x")\n'                                  # 4
+        '    store.write_text("x")\n'                              # 5 local view of the global
+        'def m():\n'                                               # 6
+        '    store.write_text("x")\n'                              # 7 the rebound global
+        'store.write_text("x")\n')                                 # 8 module level, rebound
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    assert storage_map.hits(tmp_path, "writes") == [
+        "h2t_ops/c.py:4", *(f"h2t_ops/g.py:{n}" for n in (5, 7, 8))]
+
 BASELINE = Path(__file__).with_name("writers_baseline.txt")
 
 

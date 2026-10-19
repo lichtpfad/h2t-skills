@@ -91,7 +91,7 @@ def _report(mode: str, result, as_json: bool):
         if result.failed:
             # Not a success with a list attached: a run that left something off target
             # exits non-zero, and the hint is the command that continues it.
-            raise ProviderError(
+            raise (ConfigError if result.failed_config else ProviderError)(
                 "h2t-setup {}: not everything reached the target: {}".format(
                     mode, "; ".join(subject for subject, _ in result.failed)),
                 hint=result.failed[0][1], details=result.as_dict())
