@@ -42,9 +42,9 @@ command and a static HTML page. Files stay the truth; the index is rebuilt from 
   `~/.h2t/logs/hooks.jsonl` by the existing `h2t-hook` runner; the handler returns an empty `Reply`.
 - No author paths in package code (`tests/release/test_ratchets.py`): `audit_map.py` is reached
   through `user_config.get("sessions.audit_map")` (an argv list), never a literal path.
-- One command per Bash call; explicit `git add <paths>`; tests:
-  `C:/dev/h2t-skills/.venv/Scripts/pytest` (Windows) / `.venv/bin/pytest` (macOS); lint:
-  `ruff check plugins/ lib/ h2t_ops/ tests/ scripts/`.
+- One command per Bash call; explicit `git add <paths>`; tests and lint as in `CLAUDE.md`
+  "Key Commands", run from this checkout's own `.venv`; lint paths
+  `plugins/ lib/ h2t_ops/ tests/ scripts/`.
 
 ## Review Focus
 
@@ -120,11 +120,12 @@ git commit -m "docs: session pulse — probe results for the plan (#566)"
 Rulings that depend on the probes (carry them into the ledger):
 - Step 1 says `codex exec` does not fire hooks → the origin filter in Task 3 stays, as a guard.
 - Step 1 says `originator` is not yet written at `SessionStart` → Task 3 writes `origin: unknown`
-  for Codex at start; Task 8's `settle_unknown()` re-derives it from the transcript before every
+  for Codex at start; Task 8's `settle_open()` re-derives it from the transcript before every
   list, so a live Codex session is visible within a minute (spec §8), not only after it ends.
 - Step 2 says the hook does not inherit `CLAUDE_CODE_ENTRYPOINT` → Claude origin at start falls
-  back to the transcript and `settle_unknown()`, as for Codex.
-- Step 2 finds no variable → Task 4 handles Claude only; Codex handoff keeps the slug record.
+  back to the transcript and `settle_open()`, as for Codex.
+- Step 2 finds no variable → Task 4 finds the Codex record by `record.find_open("codex", cwd)`;
+  only when that returns `None` does handoff fall back to the slug record.
 - Step 3 value replaces `HEADLESS_ENTRYPOINTS` in Task 2.
 
 ---
@@ -199,9 +200,15 @@ def test_no_timestamps_is_none(tmp_path): ...        # read(...) is None
     — under `store.locked(paths.state_dir() / "locks" / f"session-{session_id}.lock", place="state")`:
     existing file → merge (new non-empty values win, except `keep_earliest` keys keep the smaller
     value), write with `store.replace`; none → `store.create` at
-    `session_record.session_path(machine, project, session_id)`. When the merged `project` differs
-    from the found file's directory, write at the new project path and `store.remove` the old file,
-    so the path keeps the storage layout `<machine>/<project>/<id>.md` (#548 §5). Body: given body, else the existing
+    `session_record.session_path(machine, project, session_id)`. A record is never moved or
+    removed: `store.remove` refuses `records.sessions` (`h2t_ops/core/store.py:497`). When the
+    merged `project` differs from the file's directory, the file stays and its frontmatter
+    `project` changes; the index reads the project from frontmatter (`build._session_row`), so
+    queries follow it. Ruling to ledger — cost if wrong: a record under `unregistered/` whose
+    frontmatter names a project; a later migration can move it.
+  - `def find_open(tool: str, cwd: str) -> str | None` — the session id of the single record on
+    this machine with this `tool` and `cwd`, no `ended_at`, newest `started_at`; `None` when there
+    are none or several. Body: given body, else the existing
     body, else `b""`. `machine` defaults to `get_machine_name()`; `updated_at` and `date` set on every
     write.
 - `session_pulse.handle(event: dict) -> Reply` — always `Reply()`.
@@ -231,7 +238,7 @@ def test_upsert_creates_then_merges_one_file(tmp_path, monkeypatch):
     meta, _ = session_record.parse(p2.read_bytes())
     assert meta["started_at"] == "2026-10-19T10:00:00Z" and meta["ended_at"] == "2026-10-19T12:00:00Z" and meta["cwd"] == "C:/x"
 def test_upsert_finds_record_in_another_project_dir(...):
-    # created under unregistered/, upsert with project "x" → one file, now under x/, meta["project"] == "x"
+    # created under unregistered/, upsert with project "x" → same file, meta["project"] == "x"
 def test_project_of_unknown_is_unregistered(...)
 def test_git_facts_of_a_worktree(tmp_path):
     # git init repo, git worktree add wt -b feat → git_facts(wt) == {"branch": "feat", "repo": str(repo), "worktree": str(wt)} (paths compared resolved)
@@ -245,7 +252,8 @@ def test_skip_env_writes_nothing(...)              # H2T_PULSE_SKIP=1
 def test_handler_never_raises_on_missing_transcript(...)  # Codex transcript_path to a missing file → record with origin "unknown"
 def test_claude_origin_from_entrypoint_without_transcript(...)  # CLAUDE_CODE_ENTRYPOINT=cli, no file → origin "live"
 def test_end_records_user_msgs(...)                # SessionEnd on a transcript with 2 user msgs → meta["user_msgs"] == 2
-def test_project_change_moves_the_file(...)         # in test_record.py: unregistered/u1.md → x/u1.md, old file gone
+def test_project_change_keeps_the_file(...)         # in test_record.py: unregistered/u1.md stays, meta["project"] == "x", index row project == "x"
+def test_find_open(...)                             # one open codex record in C:/r → its id; two → None; ended → None
 def test_registered_in_handlers_and_hooks_json():
     # "session-pulse" in HANDLERS; hooks.json SessionStart and SessionEnd both name it
 ```
@@ -270,7 +278,8 @@ def test_registered_in_handlers_and_hooks_json():
 - Consumes: `record.find`, `record.upsert`
 - Produces: `def program_session() -> tuple[str, str] | None` in `record.py` —
   `CLAUDE_CODE_SESSION_ID` → `("claude", id)`; the Codex variable from Task 1 Step 2 →
-  `("codex", id)`; neither → `None`.
+  `("codex", id)`; no variable but `CODEX_*`-style marker of a Codex shell (from Task 1 Step 2) →
+  `("codex", record.find_open("codex", os.getcwd()))` when that is not `None`; else `None`.
 
 When `program_session()` returns an id: the record is `upsert(id, {...}, body=<the markdown body>)`
 with `session_id=id`, `name=<the slug passed as --session-id>`, `tool`, plus the existing meta
@@ -328,7 +337,7 @@ only its reader is filtered (above). Cost if wrong: one more field write later.
 - Produces:
   - `SCHEMA_VERSION = 2`
   - `sessions` gains columns, appended after `conflict`: `name, tool, origin, cwd, repo, worktree,
-    started_at, ended_at, user_msgs, transcript, summary, summary_source`
+    started_at, ended_at, user_msgs, transcript, summary, summary_source, summary_stamp`
   - new table `branch_status(repo TEXT, branch TEXT, worktree TEXT, files TEXT, branch_state TEXT,
     pr TEXT, pr_url TEXT, issues TEXT, verdict TEXT, checked_at TEXT, PRIMARY KEY(repo, branch))`
   - `build._COLUMNS` extended in the same order; `_session_row` reads the new keys.
@@ -447,12 +456,21 @@ def test_issue_numbers_from_branch_and_commits(tmp_path): ...  # "fix/123-x" + "
 - Produces:
   - `@dataclass class Filters: domain=None, project=None, repo=None, status=None, pr=None, tool=None, since=None, all=False`
   - `def rows(f: Filters) -> list[dict]` — sessions joined with `branch_status` on (repo, branch);
-    hidden unless `all`: `origin='unknown'`, and ended sessions with `user_msgs = 0` (a session
-    still running is shown whatever its count); summary = `summary`, else first 3 lines of `done`
-    with `summary_source='handoff'`.
-  - `def settle_unknown() -> int` in `record.py` — for every record with `origin: unknown` whose
-    transcript exists, `origin_of` again and `upsert` the result; `machine` → `store.remove` the
-    record. `cli list` calls it before querying. Returns records changed.
+    hidden unless `all`: `origin` other than `live`, and `user_msgs` 0 or empty (spec anti-goal:
+    no empty sessions); summary = `summary`, else first 3 lines of `done` with
+    `summary_source='handoff'`.
+  - `def settle_open() -> int` in `record.py` — for every record on this machine with no
+    `ended_at` or with `origin: unknown`, whose transcript exists: `transcript.read` again and
+    `upsert` `origin` and `user_msgs` when they changed (a `machine` result is written as
+    `origin: machine` and stays hidden; records are never removed). `cli list` calls it before
+    querying. So a running session appears once its first user message is in the transcript —
+    within a minute (spec §8). Returns records changed.
+  - `def local_status(conn, max_age_s: int = 600) -> int` added to `status.py` in this task —
+    the git-only part of `status.refresh` (files, branch_state, verdict) for `(repo, branch)`
+    pairs of live sessions with no `branch_status` row or `checked_at` older than `max_age_s`;
+    keeps the stored `pr`, `issues`. No `gh`, no network. `cli list` calls it after
+    `settle_open()`, so a new session has a status before the daily pass; PR data shows the
+    time of its last `status`/daily run.
   - `def resume_command(tool: str, session_id: str, cwd: str) -> str`
   - `def render(rows: list[dict], footer: str) -> str` — grouping domain → project → repo → branch →
     sessions, newest first; branch line `<branch>  [<verdict>]  PR: <pr>  <files>`; session line
@@ -467,11 +485,15 @@ def test_issue_numbers_from_branch_and_commits(tmp_path): ...  # "fix/123-x" + "
 def test_resume_commands():
     assert view.resume_command("codex", "u1", "C:/r") == 'codex resume u1 -C "C:/r"'
     assert view.resume_command("claude", "u1", "C:/r") == 'cd "C:/r"; claude --resume u1'
-def test_filters_status_pr_domain(...)       # 3 sessions, 2 branches → each filter narrows as expected
+@pytest.mark.parametrize("flt", ["domain", "project", "repo", "status", "pr", "tool", "since"])
+def test_each_filter_narrows(flt, ...)       # 3 sessions across 2 domains/repos/branches/tools → only the matching ones
 def test_unknown_hidden_unless_all(...)
-def test_ended_empty_session_hidden_running_one_shown(...)  # ended + user_msgs 0 → hidden; no ended_at → shown
-def test_settle_unknown_reveals_a_live_codex_session(...)   # record origin unknown, transcript now has codex-tui → default list shows it
-def test_settle_unknown_drops_a_machine_session(...)        # transcript says codex_exec → record removed
+def test_empty_session_hidden(...)           # user_msgs 0 → hidden (running or ended); --all shows it
+def test_settle_open_reveals_a_running_session(...)   # hook record user_msgs 0, transcript now has 1 user msg → default list shows it
+def test_settle_open_hides_a_machine_session(...)     # transcript says codex_exec → origin "machine", file still there, hidden
+def test_list_is_offline_and_does_not_rebuild(monkeypatch, ...)
+    # gh stub raises, socket.socket raises, query.rebuild raises → `cli.main(["list"])` exits 0
+def test_new_session_gets_local_status_before_daily(...)  # no branch_status row → after list, row exists with files/verdict, pr ""
 def test_handoff_done_is_the_summary(...)    # summary_source == "handoff"
 def test_cli_list_exits_0_and_prints_resume(capsys, ...)
 def test_empty_index_says_so(capsys, ...)     # "нет сессий" and exit 0 — an empty pulse is a state, not an error
