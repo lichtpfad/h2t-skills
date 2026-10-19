@@ -71,6 +71,35 @@ def test_secret_tracked_sees_yaml_and_json_by_key_not_value(config_repo):
     assert not [t for t in texts if SECRET in t]
 
 
+def test_secret_tracked_skips_ids_and_placeholders(config_repo):
+    """Measured on the author's config repo 2026-10-19: `notion_db_id` in domains.yaml and
+    a `NOTION_API_TOKEN=...` example in a markdown rule were both reported. A provider prefix
+    alone does not make a credential, and an example value is not a value."""
+    _write(config_repo / "domains.yaml", "domains:\n  hou2touch:\n    notion_db_id: "
+                                         "fake0000-1111-2222-3333-444455556666\n")
+    _write(config_repo / "rules" / "skills.md", "Set it:\n\n    NOTION_API_TOKEN=...\n"
+                                                 "    EXA_API_KEY=<your key>\n    MEETGEEK_API_KEY=$KEY\n")
+    _write(config_repo / "leak.md", f"NOTION_API_TOKEN={SECRET}\n")             # control
+    _write(config_repo / "leak.yaml", f"notion:\n  notion_api_token: {SECRET}\n")  # control
+    subprocess.run(["git", "-C", str(config_repo), "add", "domains.yaml", "rules/skills.md",
+                    "leak.md", "leak.yaml"], check=True)
+    texts = _texts("secret-tracked")
+    assert not [t for t in texts if "domains.yaml" in t or "skills.md" in t], texts
+    assert "~/.h2t/config/leak.md holds a value for NOTION_API_TOKEN and is tracked by git" in texts
+    assert "~/.h2t/config/leak.yaml holds a value for notion_api_token and is tracked by git" in texts
+
+
+def test_dropbox_app_directory_in_home_is_not_a_synced_folder():
+    """~/.dropbox is the Dropbox client's own state directory, in every home that has the
+    client; the marker of a synced Dropbox folder is a `.dropbox` file inside it. Measured
+    on the author's Mac 2026-10-19: four false local-in-sync errors."""
+    (paths.home() / ".dropbox").mkdir(parents=True)
+    assert _texts("local-in-sync") == []
+    _write(paths.root() / ".dropbox", "")                                       # control
+    texts = _texts("local-in-sync")
+    assert "~/.h2t/state lies inside a Dropbox folder (~/.h2t/.dropbox)" in texts
+
+
 def test_local_in_sync_by_a_marker_up_the_tree():
     (paths.root() / ".stfolder").mkdir(parents=True)
     texts = _texts("local-in-sync")

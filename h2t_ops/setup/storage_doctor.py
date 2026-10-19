@@ -8,6 +8,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import sqlite3
 import stat
 import subprocess
@@ -81,8 +82,11 @@ def _marker(directory: Path) -> Path | None:
     real = Path(os.path.realpath(directory))
     for d in (real, *real.parents):
         for name in _MARKERS:
-            if (d / name).exists():
-                return d / name
+            m = d / name
+            # Dropbox marks a synced folder with a `.dropbox` file; ~/.dropbox, a directory,
+            # is the client's own state and sits in every home that has the client.
+            if m.is_file() if name == ".dropbox" else m.exists():
+                return m
     return None
 
 
@@ -138,8 +142,22 @@ def _unreadable(where: str, why: str) -> Finding:
 _SECRET_FIELDS = frozenset({"refresh_token", "access_token", "client_secret", "api_hash"})
 
 
+# A provider prefix alone does not make a credential: NOTION_DB_ID is a database id. The
+# key must also end in a credential word (EXA_API_KEY, NOTION_API_TOKEN, TELEGRAM_API_HASH).
+_CREDENTIAL_END = re.compile(r"_(KEY|TOKEN|SECRET|HASH|PASSWORD)$")
+# An example in a rule or README, not a value: `...`, `<your key>`, `$KEY`, `${KEY}`, `xxx`.
+_PLACEHOLDER = re.compile(r"^(\.{2,}|<[^>]*>|\$\{?\w+\}?|x{3,}|your[\w-]*|changeme)$", re.I)
+
+
 def _is_secret_key(key: str) -> bool:
-    return key.lower() in _SECRET_FIELDS or providers.provider_of_key(key.upper()) is not None
+    up = key.upper()
+    return key.lower() in _SECRET_FIELDS or (
+        providers.provider_of_key(up) is not None and _CREDENTIAL_END.search(up) is not None)
+
+
+def _is_value(val: object) -> bool:
+    s = str(val).strip()
+    return bool(s) and _PLACEHOLDER.match(s) is None
 
 
 def _structured_keys(rel: str, body: bytes) -> list[str]:
@@ -165,7 +183,7 @@ def _structured_keys(rel: str, body: bytes) -> list[str]:
             for k, v in node.items():
                 if isinstance(v, (dict, list)):
                     stack.append(v)
-                elif isinstance(k, str) and v not in (None, "") and _is_secret_key(k) \
+                elif isinstance(k, str) and v is not None and _is_value(v) and _is_secret_key(k) \
                         and k not in found:
                     found.append(k)
         elif isinstance(node, list):
@@ -192,7 +210,7 @@ def _secret_tracked() -> list[Finding]:
         keys: list[str] = []
         for line in body.decode("utf-8", "replace").splitlines():
             for key, val in secrets.parse_env(line).items():
-                if val and providers.provider_of_key(key) and key not in keys:
+                if _is_value(val) and _is_secret_key(key) and key not in keys:
                     keys.append(key)
         keys += [k for k in _structured_keys(rel, body) if k not in keys]
         out += [Finding("error", "secret-tracked", f"{shown} holds a value for {k} and is tracked by git")
