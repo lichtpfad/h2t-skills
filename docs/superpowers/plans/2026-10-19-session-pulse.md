@@ -281,6 +281,14 @@ def test_registered_in_handlers_and_hooks_json():
   `("codex", id)`; no variable but `CODEX_*`-style marker of a Codex shell (from Task 1 Step 2) →
   `("codex", record.find_open("codex", os.getcwd()))` when that is not `None`; else `None`.
 
+Ambiguous Codex case (a Codex shell, no UUID variable, `find_open` finds two or more open records
+in this cwd): handoff still writes — `.claude/rules/gates.md` forbids any gate between a session's
+work and its persistence, and dropping the summary costs the session. It writes the slug record
+with `tool: codex`, `cwd`, `origin: live`, `user_msgs: 1` and `candidates: [<open ids>]`. The view
+shows it under the same branch, so nothing is lost and the duplicate is visible. Ruling to ledger —
+cost if wrong: one extra line in the pulse, only when two Codex sessions share one working tree,
+which the worktree rule already forbids.
+
 When `program_session()` returns an id: the record is `upsert(id, {...}, body=<the markdown body>)`
 with `session_id=id`, `name=<the slug passed as --session-id>`, `tool`, plus the existing meta
 (`domain`, `project`, `branch`, `commits`, `done`, `remains`, `artifacts`). The spool row keeps the
@@ -299,6 +307,10 @@ def test_handoff_with_claude_id_enriches_the_hook_record(tmp_path, monkeypatch):
     assert meta["name"] == "dev-x-topic-2026-10-19" and meta["started_at"] == "2026-10-19T10:00:00Z"
     assert meta["done"] == "- did" and b"## What Was Done" in body
     assert len(list(paths.records("sessions").rglob("*.md"))) == 1
+def test_codex_handoff_finds_the_single_open_record(...):
+    # Codex marker set, no UUID var, one open codex record in cwd → handoff writes into it
+def test_codex_handoff_ambiguous_writes_marked_slug_record(...):
+    # two open codex records in cwd → slug record exists with candidates == both ids, tool "codex"; both UUID records unchanged
 def test_handoff_without_program_id_keeps_the_slug_file(...):
     # no env var → file named <slug>.md, session_id == slug (today's behaviour)
 ```
