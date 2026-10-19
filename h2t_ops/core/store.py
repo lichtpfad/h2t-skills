@@ -86,13 +86,25 @@ def _roots() -> tuple[list[tuple[str, Path]], ConfigError | None]:
         declared = {pid: paths.place(pid) for pid in paths.YAML_PLACES}
     except ConfigError as exc:
         declared, broken = {}, exc
-    declared["vault"] = paths.vault()
+    try:
+        declared["vault"] = paths.vault()
+    except paths.VaultUnresolvable as exc:   # the same fallback as paths.yaml (#561)
+        broken = broken or exc
     out += [(pid, _real(p)) for pid, p in declared.items() if p is not None]
     out += [("legacy", _real(p)) for p in paths.legacy_roots()]
     # Catch-all for anything else under ~/.h2t: no write goes there, --dest included; the
     # child places above are deeper and win the sort (round 5).
     out.append(("h2t-root", _real(paths.root())))
     return sorted(out, key=lambda kv: len(kv[1].parts), reverse=True), broken
+
+
+def _vault_or_none() -> Path | None:
+    """The vault's real root, or None while its variable cannot be resolved: then no path
+    is inside it, and _roots has already reported the variable as broken (#561)."""
+    try:
+        return _real(paths.vault())
+    except paths.VaultUnresolvable:
+        return None
 
 
 def _classify(path) -> tuple[str, ConfigError | None]:
@@ -120,15 +132,19 @@ def _check(path: Path, place: str, *, dest: bool = False, compat: bool = False) 
     # Vault by the filesystem, before the deepest root decides: a package root inside the
     # vault, or a vault that encloses ~/.h2t, would otherwise classify its files as data or
     # state and let any writer into POS's vault.
-    vault = _real(paths.vault())
+    vault = _vault_or_none()
     real = _real(path)
-    if got != "vault" and (real == vault or vault in real.parents) and not _INGEST.get():
+    if vault is not None and got != "vault" and (real == vault or vault in real.parents) \
+            and not _INGEST.get():
         raise WriteRefused(f"{path} is inside vault {vault}, though it classifies as {got}",
                            hint="vault and the package places must not overlap: move the "
                                 "vault or the h2t root apart (h2t-ops paths list)")
     # A place paths.yaml would declare may sit inside a legacy root or tmp (lake: ~/.dor/lake,
     # R2): while the file is broken it classifies as that, and the refusal must name the file.
     if broken is not None and (got == "elsewhere" or place in paths.YAML_PLACES):
+        if isinstance(broken, paths.VaultUnresolvable):
+            raise WriteRefused(f"{path}: cannot tell whose place this is while {broken}",
+                               hint=broken.hint)
         raise WriteRefused(f"{path}: cannot tell whose place this is while paths.yaml is broken ({broken})",
                            hint="fix it: h2t-ops paths set <place> <path>, or edit the file")
     if got == "vault" and not _INGEST.get():
