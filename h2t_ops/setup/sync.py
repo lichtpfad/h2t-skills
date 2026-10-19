@@ -213,6 +213,8 @@ class Report:
     done: list[str] = field(default_factory=list)
     failed: list[tuple[str, str]] = field(default_factory=list)
     reload_needed: bool = False
+    # A failure the user fixes in their configuration: exit 3, not 1 (#562).
+    failed_config: bool = False
     notes: list[str] = field(default_factory=list)
 
     def as_dict(self) -> dict:
