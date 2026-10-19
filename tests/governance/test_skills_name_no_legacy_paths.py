@@ -102,5 +102,6 @@ def test_a_planted_3x_path_is_reported_with_file_and_line(tmp_path, monkeypatch)
         "\n"                                                     # 7
         "The vault defaults to `~/.dor/vault`.\n",                # 8 the 4.0 default
         encoding="utf-8")
-    assert [h.split(": ", 1)[0] for h in _hits(_shipped_docs())] == [
+    # sorted: Windows orders paths case-insensitively, so plugins/ may come before README.md
+    assert sorted(h.split(": ", 1)[0] for h in _hits(_shipped_docs())) == [
         "README.md:3", "plugins/p/skills/s/SKILL.md:3"]
