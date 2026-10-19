@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import stat
 import sys
 import tempfile
@@ -332,7 +333,8 @@ def test_a_lost_log_row_is_said_on_stderr_and_the_write_stands(home, capsys):
     p = store.replace(paths.state_dir() / "a.json", "{}", place="state")
     assert p.read_text() == "{}"
     err = capsys.readouterr().err.strip().splitlines()
-    assert len(err) == 1 and str(logs / "writes.jsonl") in err[0] and "Errno" in err[0]
+    assert len(err) == 1 and str(logs / "writes.jsonl") in err[0]
+    assert re.search(r"\[(Errno|WinError) \d+\]", err[0]), err[0]   # the OS error is named
 
 
 def test_short_os_write_is_completed(home, monkeypatch):
@@ -405,7 +407,7 @@ def test_in_place_refuses_a_plain_name(home):
 
 @pytest.mark.parametrize("place", ["secrets.shared", "secrets.local"])
 def test_in_place_refuses_secrets(home, place):
-    target = paths.dir_of(place) / "x:y.env"
+    target = paths.dir_of(place) / "xy:z.env"   # "x:" alone is a drive to Windows pathlib
     with pytest.raises(store.WriteRefused, match="NTFS stream"):
         store.replace(target, "fake-x", place=place, in_place=True)
     assert not target.exists()

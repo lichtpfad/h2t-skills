@@ -37,6 +37,7 @@ def test_connector_matrix_is_credential_only_by_default(tmp_path, monkeypatch):
     setup = _load_setup()
     monkeypatch.setattr(setup, "resolve_h2t_ops", lambda **_: {"status": "ready", "path": "h2t-ops"})
     monkeypatch.setenv("HOME", str(tmp_path))       # core.paths resolves the 3.x file from HOME
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))   # ... which Path.home() reads on Windows
     for k in ("TELEGRAM_API_ID", "TELEGRAM_API_HASH"):
         monkeypatch.delenv(k, raising=False)
     cfg = tmp_path / ".config" / "telegram"

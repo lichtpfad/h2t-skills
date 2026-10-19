@@ -42,7 +42,7 @@ def _write(p: Path, data: str | bytes) -> Path:
     if isinstance(data, bytes):
         p.write_bytes(data)
     else:
-        p.write_text(data, encoding="utf-8")
+        p.write_bytes(data.encode("utf-8"))      # LF as written: text mode is CRLF on Windows
     return p
 
 
@@ -556,7 +556,7 @@ def test_layout1_end_to_end_on_a_3x_home():
     assert report.failed == [], report.failed
     assert json.loads(paths.layout_file().read_text())["layout"] == 1
     sessions = paths.records("sessions")
-    assert sorted(str(p.relative_to(sessions)) for p in sessions.rglob("*") if p.is_file()) == \
+    assert sorted(p.relative_to(sessions).as_posix() for p in sessions.rglob("*") if p.is_file()) == \
         [f"{M}/h2t-skills/s1.md", f"{M}/h2t-skills/s2.md"]           # automata's not copied
     assert [f for f in storage_doctor.check() if f.level == "error"] == []
     want = {paths.legacy_dir(k) for k in ("sessions.h2t", "sessions.dor", "activity", "evals",

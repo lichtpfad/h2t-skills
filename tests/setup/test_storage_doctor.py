@@ -3,6 +3,7 @@ the test's own HOME — a config git repo with secrets/x.env tracked in it, as a
 import json
 import os
 import sqlite3
+import stat
 import subprocess
 import sys
 import time
@@ -183,6 +184,9 @@ def test_vault_missing_is_info_by_default_and_warn_when_set(monkeypatch, tmp_pat
 def test_doctor_is_clean_for_a_new_user_in_an_empty_home(capsys):
     """§12: a new user's doctor has nothing to warn about — info lines only."""
     import shutil
+    for f in paths.root().rglob("*"):          # git objects are read-only; Windows refuses to unlink them
+        if f.is_file():
+            f.chmod(stat.S_IREAD | stat.S_IWRITE)
     shutil.rmtree(paths.root())               # drop the autouse config repo: an empty HOME
     assert list(paths.home().iterdir()) == []
     assert cli._doctor() == 0

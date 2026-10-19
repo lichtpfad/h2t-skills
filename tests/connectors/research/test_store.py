@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sys
 
 from h2t_ops.connectors.research import store
 
@@ -226,7 +227,9 @@ def test_a_windows_stream_object_is_written_through_store(tmp_path, monkeypatch)
             store.write_json(target, {"id": 1})
         assert sb.recorder.violations == []
         assert json.loads(target.read_text(encoding="utf-8")) == {"id": 1}
-        assert [p.name for p in target.parent.iterdir()] == ["research-doc:abc.json"]  # no temp
+        # no temp file; on NTFS the stream is not a directory entry, its host file is
+        listed = "research-doc" if sys.platform == "win32" else "research-doc:abc.json"
+        assert [p.name for p in target.parent.iterdir()] == [listed]
         rows = [json.loads(line) for line in
                 (paths.logs_dir() / "writes.jsonl").read_text(encoding="utf-8").splitlines()]
         assert any(r["path"] == str(target) and r["op"] == "replace" for r in rows)
