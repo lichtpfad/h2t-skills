@@ -302,16 +302,35 @@ def test_stale_temp_older_than_a_day(tmp_path):
 @pytest.mark.skipif(sys.platform == "win32", reason="Windows: the profile ACL protects (§11.3)")
 def test_perms_on_posix():
     base = paths.root() / "secrets"
-    good = _write(paths.secrets_shared() / "exa.env", "EXA_API_KEY=fake-exa-perms\n")
+    good = _write(paths.secrets_local() / "notion.token.json", '{"access_token": "fake-notion"}')
     bad = _write(paths.secrets_local() / "google.token.json", '{"refresh_token": "fake-google-refresh"}')
-    for d in (base, paths.secrets_shared(), paths.secrets_local()):
+    for d in (base, paths.secrets_local()):
         d.chmod(0o700)
     good.chmod(0o600)
     bad.chmod(0o644)
-    paths.secrets_shared().chmod(0o755)
-    assert sorted(_texts("perms")) == ["~/.h2t/secrets/local/google.token.json is 0644, expected 0600",
-                                       "~/.h2t/secrets/shared is 0755, expected 0700"]
+    paths.secrets_local().chmod(0o755)
+    assert sorted(_texts("perms")) == ["~/.h2t/secrets/local is 0755, expected 0700",
+                                       "~/.h2t/secrets/local/google.token.json is 0644, expected 0600"]
     assert _levels("perms") == {"error"}
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="Windows: the profile ACL protects (§11.3)")
+def test_perms_does_not_check_shared():
+    # A Windows peer sends 0644 over secrets/shared with every edit; the owner does not want
+    # its modes checked (#573). That covers Syncthing's own files in it too (#570).
+    shared = paths.secrets_shared()
+    files = [_write(shared / "exa.env", "EXA_API_KEY=fake-exa-perms\n"),
+             _write(shared / ".stfolder" / "syncthing-folder-8b54d0.txt", "folder id"),
+             _write(shared / ".stignore", "*.tmp\n"),
+             _write(shared / ".stversions" / "exa~20261019-180000.env", "EXA_API_KEY=fake-old\n")]
+    local = _write(paths.secrets_local() / "google.token.json", '{"refresh_token": "fake-google-refresh"}')
+    for d in (paths.root() / "secrets", paths.secrets_local()):
+        d.chmod(0o700)
+    for d in (shared, shared / ".stfolder", shared / ".stversions"):
+        d.chmod(0o755)
+    for f in (*files, local):
+        f.chmod(0o644)
+    assert _texts("perms") == ["~/.h2t/secrets/local/google.token.json is 0644, expected 0600"]
 
 
 def test_report_never_prints_a_value(config_repo, capsys):

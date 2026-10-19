@@ -371,8 +371,12 @@ def _perms() -> list[Finding]:
     base = paths.root() / "secrets"
     if not base.is_dir():
         return []
+    shared = paths.secrets_shared()
     out: list[Finding] = []
-    for d, _dirs, files in os.walk(base):
+    for d, dirs, files in os.walk(base):
+        # secrets/shared is synced: a Windows peer sends 0644 with every edit, and the owner
+        # does not want its modes checked (#573). Only the machine's own secrets are.
+        dirs[:] = [x for x in dirs if Path(d) / x != shared]
         for p, want in ((Path(d), 0o700), *((Path(d) / f, 0o600) for f in files)):
             st = os.lstat(p)
             if stat.S_ISLNK(st.st_mode):
