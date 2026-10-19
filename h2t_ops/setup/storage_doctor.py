@@ -54,10 +54,8 @@ _OLD_ENV_HINT = {
 
 
 def _show(p: Path) -> str:
-    try:
-        return str(Path("~") / Path(p).relative_to(paths.home()))
-    except ValueError:
-        return str(p)
+    """~/… with forward slashes on every platform, as the spec and paths.yaml write it."""
+    return paths.home_form(Path(p))
 
 
 def _sha12(data: bytes) -> str:
