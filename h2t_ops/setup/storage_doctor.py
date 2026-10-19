@@ -30,6 +30,7 @@ class Finding:
 
 
 _MARKERS = {".stfolder": "Syncthing", ".dropbox": "Dropbox"}
+_SYNC_META = {*_MARKERS, ".stignore"}
 _NEVER_SYNCED = ("secrets.local", "state", "logs", "run/rollback")
 _SYNC_SHOWN = ("config", "secrets.shared", "secrets.local", "records", "data", "state", "logs")
 _TMP = store._TMP_SUFFIX          # store's temp files are .<name>.XXXX.h2t-tmp (R48)
@@ -372,7 +373,11 @@ def _perms() -> list[Finding]:
     if not base.is_dir():
         return []
     out: list[Finding] = []
-    for d, _dirs, files in os.walk(base):
+    for d, dirs, files in os.walk(base):
+        # the synchronizer's marker and ignore file hold no secret and keep its modes (#570);
+        # .stversions and temp files are copies of secrets and stay checked
+        dirs[:] = [x for x in dirs if x not in _SYNC_META]
+        files = [f for f in files if f not in _SYNC_META]
         for p, want in ((Path(d), 0o700), *((Path(d) / f, 0o600) for f in files)):
             st = os.lstat(p)
             if stat.S_ISLNK(st.st_mode):

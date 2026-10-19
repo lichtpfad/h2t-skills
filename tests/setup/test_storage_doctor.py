@@ -314,6 +314,26 @@ def test_perms_on_posix():
     assert _levels("perms") == {"error"}
 
 
+
+@pytest.mark.skipif(sys.platform == "win32", reason="Windows: the profile ACL protects (§11.3)")
+def test_perms_skips_syncthing_metadata_but_not_its_copies_of_secrets():
+    # Syncthing writes its folder marker and ignore file with its own modes; they hold no
+    # secret (#570). Versions and temp files are copies of the secrets, so they stay checked.
+    shared = paths.secrets_shared()
+    secret = _write(shared / "exa.env", "EXA_API_KEY=fake-exa-perms\n")
+    marker = _write(shared / ".stfolder" / "syncthing-folder-8b54d0.txt", "folder id")
+    ignore = _write(shared / ".stignore", "*.tmp\n")
+    version = _write(shared / ".stversions" / "exa~20261019-180000.env", "EXA_API_KEY=fake-old\n")
+    for d in (paths.root() / "secrets", shared, shared / ".stversions"):
+        d.chmod(0o700)
+    (shared / ".stfolder").chmod(0o755)
+    for f, mode in ((secret, 0o644), (marker, 0o644), (ignore, 0o644), (version, 0o644)):
+        f.chmod(mode)
+    assert sorted(_texts("perms")) == [
+        "~/.h2t/secrets/shared/.stversions/exa~20261019-180000.env is 0644, expected 0600",
+        "~/.h2t/secrets/shared/exa.env is 0644, expected 0600"]
+
+
 def test_report_never_prints_a_value(config_repo, capsys):
     _write(config_repo / "secrets" / "x.env", f"EXA_API_KEY={SECRET}\n")
     subprocess.run(["git", "-C", str(config_repo), "add", "secrets/x.env"], check=True)
