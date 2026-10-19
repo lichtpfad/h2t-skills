@@ -98,9 +98,11 @@ No code. Results go into spec §7 as a new "Результаты проб (пл�
   Record: does `codex exec` fire the hook; does the transcript at `transcript_path` already hold the
   `session_meta` line with `originator` when `SessionStart` fires; the exact `cwd`/`session_id` shape.
 - [ ] **Step 2: Codex session id inside its shell.** In the TUI session, run `env` filtered to names
-  only: `env | cut -d= -f1 | grep -i -E "codex|thread|session"`. **Never print values** (this
-  session leaked two tokens through a bare `env`). Record the variable name that carries the
+  only: `env | cut -d= -f1 | grep -i -E "codex|thread|session"`. **Never print values.** Record
+  the variable name that carries the
   session UUID, if any.
+  Also in a Claude hook: confirm the hook process inherits `CLAUDE_CODE_ENTRYPOINT` (log the name
+  and value of that one variable only).
 - [ ] **Step 3: Claude entrypoint of a headless run.** `claude -p --no-session-persistence "say ok"`
   then `claude -p "say ok"`; for the second, read `entrypoint` from its transcript. Record the value
   (expected `sdk-cli`, unverified).
@@ -117,8 +119,11 @@ git commit -m "docs: session pulse — probe results for the plan (#566)"
 
 Rulings that depend on the probes (carry them into the ledger):
 - Step 1 says `codex exec` does not fire hooks → the origin filter in Task 3 stays, as a guard.
-- Step 1 says `originator` is not yet written at `SessionStart` → Task 3 writes the record with
-  `origin: unknown` at start and `SessionEnd` fixes it (already the designed behaviour).
+- Step 1 says `originator` is not yet written at `SessionStart` → Task 3 writes `origin: unknown`
+  for Codex at start; Task 8's `settle_unknown()` re-derives it from the transcript before every
+  list, so a live Codex session is visible within a minute (spec §8), not only after it ends.
+- Step 2 says the hook does not inherit `CLAUDE_CODE_ENTRYPOINT` → Claude origin at start falls
+  back to the transcript and `settle_unknown()`, as for Codex.
 - Step 2 finds no variable → Task 4 handles Claude only; Codex handoff keeps the slug record.
 - Step 3 value replaces `HEADLESS_ENTRYPOINTS` in Task 2.
 
@@ -182,8 +187,8 @@ def test_no_timestamps_is_none(tmp_path): ...        # read(...) is None
 - Consumes: `transcript.origin_of`, `transcript.is_subagent`
 - Produces:
   - `session_record.FIELDS` gains, after `"session_id"`: `"name", "tool", "origin", "cwd", "repo",
-    "worktree", "started_at", "ended_at", "transcript"`; after `"artifacts"`: `"summary",
-    "summary_source", "summary_stamp"`. Existing order otherwise unchanged.
+    "worktree", "started_at", "ended_at", "user_msgs", "transcript"`; after `"artifacts"`:
+    `"summary", "summary_source", "summary_stamp"`. Existing order otherwise unchanged.
   - `def git_facts(cwd: str) -> dict` → `{"branch", "repo", "worktree"}`; `repo` = parent of
     `git rev-parse --path-format=absolute --git-common-dir`, `worktree` = `--show-toplevel`; all `""`
     outside git or when git fails (5 s timeout each).
@@ -194,16 +199,20 @@ def test_no_timestamps_is_none(tmp_path): ...        # read(...) is None
     — under `store.locked(paths.state_dir() / "locks" / f"session-{session_id}.lock", place="state")`:
     existing file → merge (new non-empty values win, except `keep_earliest` keys keep the smaller
     value), write with `store.replace`; none → `store.create` at
-    `session_record.session_path(machine, project, session_id)`. Body: given body, else the existing
+    `session_record.session_path(machine, project, session_id)`. When the merged `project` differs
+    from the found file's directory, write at the new project path and `store.remove` the old file,
+    so the path keeps the storage layout `<machine>/<project>/<id>.md` (#548 §5). Body: given body, else the existing
     body, else `b""`. `machine` defaults to `get_machine_name()`; `updated_at` and `date` set on every
     write.
 - `session_pulse.handle(event: dict) -> Reply` — always `Reply()`.
 
 Hook logic: skip when `os.environ.get("H2T_PULSE_SKIP")`, when `session_id` is empty, or
 `transcript.is_subagent(Path(transcript_path))`. Tool = `"codex"` when `transcript_path` contains
-`/.codex/` or `\.codex\`, else `"claude"`. Origin = `origin_of(tool, path)` if the file exists, else
-`"unknown"`; `machine` origin → return without writing. `SessionStart` sets `started_at`;
-`SessionEnd` sets `ended_at`. Both set `tool, origin, cwd, transcript, branch, repo, worktree,
+`/.codex/` or `\.codex\`, else `"claude"`. Origin for Claude: `CLAUDE_CODE_ENTRYPOINT` in
+`HEADLESS_ENTRYPOINTS` → `machine`, any other non-empty value → `live`; for Codex, or when the
+variable is absent: `origin_of(tool, path)` if the file exists, else `"unknown"`. `machine` origin →
+return without writing. `SessionStart` sets `started_at`; `SessionEnd` sets `ended_at` and
+`user_msgs` (from `transcript.read`). Both set `tool, origin, cwd, transcript, branch, repo, worktree,
 project, domain`. On `SessionStart` also call `daily.maybe_spawn()` — added in Task 8; until then
 the call is absent.
 
@@ -222,7 +231,7 @@ def test_upsert_creates_then_merges_one_file(tmp_path, monkeypatch):
     meta, _ = session_record.parse(p2.read_bytes())
     assert meta["started_at"] == "2026-10-19T10:00:00Z" and meta["ended_at"] == "2026-10-19T12:00:00Z" and meta["cwd"] == "C:/x"
 def test_upsert_finds_record_in_another_project_dir(...):
-    # created under unregistered/, upsert with project "x" → same path, meta["project"] == "x"
+    # created under unregistered/, upsert with project "x" → one file, now under x/, meta["project"] == "x"
 def test_project_of_unknown_is_unregistered(...)
 def test_git_facts_of_a_worktree(tmp_path):
     # git init repo, git worktree add wt -b feat → git_facts(wt) == {"branch": "feat", "repo": str(repo), "worktree": str(wt)} (paths compared resolved)
@@ -233,7 +242,10 @@ def test_start_then_end_writes_one_record(...):   # codex transcript with origin
 def test_codex_exec_writes_nothing(...)            # originator codex_exec → no file under records/sessions
 def test_subagent_writes_nothing(...)
 def test_skip_env_writes_nothing(...)              # H2T_PULSE_SKIP=1
-def test_handler_never_raises_on_missing_transcript(...)  # transcript_path to a missing file → record with origin "unknown"
+def test_handler_never_raises_on_missing_transcript(...)  # Codex transcript_path to a missing file → record with origin "unknown"
+def test_claude_origin_from_entrypoint_without_transcript(...)  # CLAUDE_CODE_ENTRYPOINT=cli, no file → origin "live"
+def test_end_records_user_msgs(...)                # SessionEnd on a transcript with 2 user msgs → meta["user_msgs"] == 2
+def test_project_change_moves_the_file(...)         # in test_record.py: unregistered/u1.md → x/u1.md, old file gone
 def test_registered_in_handlers_and_hooks_json():
     # "session-pulse" in HANDLERS; hooks.json SessionStart and SessionEnd both name it
 ```
@@ -250,7 +262,8 @@ def test_registered_in_handlers_and_hooks_json():
 ### Task 4: handoff writes into the UUID record
 
 **Files:**
-- Modify: `h2t_ops/lifecycle/handoff.py:131-237` (`write_handoff`)
+- Modify: `h2t_ops/lifecycle/handoff.py:131-237` (`write_handoff`),
+  `h2t_ops/lifecycle/gather/sessions.py:40-53` (`_rows`)
 - Test: `tests/lifecycle/pulse/test_handoff_uuid.py`
 
 **Interfaces:**
@@ -283,12 +296,25 @@ def test_handoff_without_program_id_keeps_the_slug_file(...):
 
 - [ ] **Step 2: Run** `pytest tests/lifecycle/pulse/test_handoff_uuid.py -v` — Expected: FAIL (`KeyError: 'session_uuid'`)
 - [ ] **Step 3: Implement** `program_session` and the branch in `write_handoff`.
-- [ ] **Step 4: Run** it, then `pytest tests/lifecycle tests/core/test_handoff_identity_from_cwd.py tests/core/test_session_identity_roundtrip.py -q` — Expected: pass
+- [ ] **Step 4: Run** it, then `pytest tests/lifecycle tests/core/test_handoff_identity_from_cwd.py tests/core/test_session_identity_roundtrip.py -q` — Expected: pass (gather tests that seed records without `done` and expect them as "latest" need `done` added — a ruling each)
 - [ ] **Step 5: Commit** `feat(handoff): write into the session's UUID record when the program id is known (#566)`
 
+**Also in this task — keep session-start's "Previous Session" on the last handoff.** After Task 3
+every session writes a record at start, and `_rows` in `h2t_ops/lifecycle/gather/sessions.py:40-53`
+takes the newest record of the project with no filter: the briefing would show the current,
+empty session. Add `AND COALESCE(done, '') <> ''` to that query. The current session's hook record
+has no `done`, so it drops out with every other hook-only record. Test in
+`tests/lifecycle/pulse/test_handoff_uuid.py`:
+
+```python
+def test_briefing_skips_hook_only_records(...):
+    # handoff record (done set, updated 10:00) + hook record of the same project (no done, updated 11:00)
+    # → find_latest_session_index(project)["session_id"] is the handoff's
+```
+
 Ruling to ledger: spec §5.1 says session-start also enriches the record; the hook now writes the
-start, and session-start has nothing the record lacks, so session-start is not changed. Cost if
-wrong: one more field write later.
+start, and session-start has nothing the record lacks, so session-start's writer is not changed;
+only its reader is filtered (above). Cost if wrong: one more field write later.
 
 ---
 
@@ -302,7 +328,7 @@ wrong: one more field write later.
 - Produces:
   - `SCHEMA_VERSION = 2`
   - `sessions` gains columns, appended after `conflict`: `name, tool, origin, cwd, repo, worktree,
-    started_at, ended_at, transcript, summary, summary_source`
+    started_at, ended_at, user_msgs, transcript, summary, summary_source`
   - new table `branch_status(repo TEXT, branch TEXT, worktree TEXT, files TEXT, branch_state TEXT,
     pr TEXT, pr_url TEXT, issues TEXT, verdict TEXT, checked_at TEXT, PRIMARY KEY(repo, branch))`
   - `build._COLUMNS` extended in the same order; `_session_row` reads the new keys.
@@ -421,8 +447,12 @@ def test_issue_numbers_from_branch_and_commits(tmp_path): ...  # "fix/123-x" + "
 - Produces:
   - `@dataclass class Filters: domain=None, project=None, repo=None, status=None, pr=None, tool=None, since=None, all=False`
   - `def rows(f: Filters) -> list[dict]` — sessions joined with `branch_status` on (repo, branch);
-    `origin='unknown'` only with `all`; summary = `summary`, else first 3 lines of `done` with
-    `summary_source='handoff'`.
+    hidden unless `all`: `origin='unknown'`, and ended sessions with `user_msgs = 0` (a session
+    still running is shown whatever its count); summary = `summary`, else first 3 lines of `done`
+    with `summary_source='handoff'`.
+  - `def settle_unknown() -> int` in `record.py` — for every record with `origin: unknown` whose
+    transcript exists, `origin_of` again and `upsert` the result; `machine` → `store.remove` the
+    record. `cli list` calls it before querying. Returns records changed.
   - `def resume_command(tool: str, session_id: str, cwd: str) -> str`
   - `def render(rows: list[dict], footer: str) -> str` — grouping domain → project → repo → branch →
     sessions, newest first; branch line `<branch>  [<verdict>]  PR: <pr>  <files>`; session line
@@ -439,6 +469,9 @@ def test_resume_commands():
     assert view.resume_command("claude", "u1", "C:/r") == 'cd "C:/r"; claude --resume u1'
 def test_filters_status_pr_domain(...)       # 3 sessions, 2 branches → each filter narrows as expected
 def test_unknown_hidden_unless_all(...)
+def test_ended_empty_session_hidden_running_one_shown(...)  # ended + user_msgs 0 → hidden; no ended_at → shown
+def test_settle_unknown_reveals_a_live_codex_session(...)   # record origin unknown, transcript now has codex-tui → default list shows it
+def test_settle_unknown_drops_a_machine_session(...)        # transcript says codex_exec → record removed
 def test_handoff_done_is_the_summary(...)    # summary_source == "handoff"
 def test_cli_list_exits_0_and_prints_resume(capsys, ...)
 def test_empty_index_says_so(capsys, ...)     # "нет сессий" and exit 0 — an empty pulse is a state, not an error
