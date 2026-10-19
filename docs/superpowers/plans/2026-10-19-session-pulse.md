@@ -172,9 +172,11 @@ Rulings that depend on the probes (carry them into the ledger):
     `MACHINE_ORIGINATORS = ("codex_exec", "Claude Code", "codex_sdk_ts")`,
     `HEADLESS_ENTRYPOINTS = ("sdk-cli",)` (value from Task 1 Step 3)
 
-Port the parsing of `C:/dev/docs/standards/scripts/repo_audit/session_catalog.py`
-(`iter_json`, `is_user_voice`, `claude_text`, `claude_session`, `codex_session`) — copy, do not import
-across repos. Claude origin: `entrypoint` in `HEADLESS_ENTRYPOINTS` → `machine`; any `isSidechain:
+Port the parsing of `standards/scripts/repo_audit/session_catalog.py` in `lichtpfad/h2t-infra` at
+commit `104fb24` (`iter_json`, `is_user_voice`, `claude_text`, `claude_session`, `codex_session`) —
+copy, do not import across repos. Fetch it on any machine with
+`gh api repos/lichtpfad/h2t-infra/contents/standards/scripts/repo_audit/session_catalog.py?ref=104fb24 -H "Accept: application/vnd.github.raw"`;
+never by a local checkout path. Claude origin: `entrypoint` in `HEADLESS_ENTRYPOINTS` → `machine`; any `isSidechain:
 true` record → `machine`; missing entrypoint → `unknown`; else `live`.
 
 - [ ] **Step 1: Write the failing tests** (fixtures written into `tmp_path` by the test)

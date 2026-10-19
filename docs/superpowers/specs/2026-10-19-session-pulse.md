@@ -126,7 +126,7 @@ UUID), обогащая её `done` / `remains` / `artifacts`. Slug остаёт
 
 Раз в день сборщик проходит по `~/.claude/projects/**/*.jsonl` и `~/.codex/sessions/**/*.jsonl`
 и создаёт записи для сессий, которые хук пропустил (хук упал, сессия до выпуска, другая
-программа). Основа — `session_catalog.py` из разбора (`C:/dev/docs/standards/scripts/repo_audit/`):
+программа). Основа — `session_catalog.py` из разбора (`standards/scripts/repo_audit/` в `lichtpfad/h2t-infra`):
 он уже читает обе программы и даёт `tool, session_id, cwd, originator, start, end, user_msgs`.
 
 Фильтр «живая сессия автора»:
