@@ -25,6 +25,29 @@ command and a static HTML page. Files stay the truth; the index is rebuilt from 
 **Spec:** `docs/superpowers/specs/2026-10-19-session-pulse.md` (#566). Storage rules it builds on:
 `docs/superpowers/specs/2026-10-17-storage-and-governance.md` (#548).
 
+## Place in the 4.0 rollout
+
+Checked 2026-10-19 against `origin/main` c1c6753, tracker #556, rollout
+`docs/superpowers/plans/2026-10-18-storage-rollout.md`, open PR #567.
+
+- 4.0 (subsystem 2, #548) is merged (#558). Mac is migrated on the local 4.0.0 candidate; the
+  release (Task 27 of the storage plan) waits on owner items in #556. Windows machines stay on 3.x
+  until the release, then migrate through `h2t-setup sync`.
+- **Session pulse ships in 4.1.0, not in 4.0.0.** It changes surfaces that are under 4.0
+  acceptance right now (handoff, `gather/sessions.py`, the index schema, `hooks.json`); landing it
+  first would reopen that acceptance. No 4.0 module is restructured: the plan only adds a package
+  (`lifecycle/pulse/`), columns (schema v2 rebuilds by design, #548 §5) and one hook entry.
+- Order: 4.0.0 tagged → this branch rebased on post-release `main` (after PR #567, which touches
+  `core/store.py` and `core/paths.py`, read-only for this plan) → Tasks 2–11 → release 4.1.0 →
+  Task 12 acceptance.
+- On a machine still on 3.x (Windows until its post-release `sync`): run the suite from the
+  worktree's own `.venv` only. **Never `h2t-setup dev-sync` or `uv tool install --editable` from
+  this branch there** — that puts a 4.x CLI under 3.x data before its migration. Task 1 probes use
+  scratch hooks only and are safe now.
+- Related issues: #442 (activity spool has no reader) — the pulse answers "open sessions" from
+  records, so #442 can close as superseded or retire the spool; the owner decides, not this plan.
+  #452 (cross-harness hooks) — Task 12 documents the Codex hook; link it there.
+
 ## Global Constraints
 
 - Truth is the record file `records/sessions/<machine>/<project>/<session_id>.md`; every write goes
