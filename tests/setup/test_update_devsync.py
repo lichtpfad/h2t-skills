@@ -264,6 +264,22 @@ def test_the_default_question_goes_to_stderr_and_reads_one_line(monkeypatch, cap
     assert out.out == "" and out.err == "да? "
 
 
+def test_the_question_survives_a_cp1252_stderr(monkeypatch):
+    """Windows encodes a redirected stderr with the code page; cp1252 has no Cyrillic, and
+    the question died with UnicodeEncodeError before it was shown (#560)."""
+    import io
+
+    raw = io.BytesIO()
+    monkeypatch.setattr(sys, "stderr", io.TextIOWrapper(raw, encoding="cp1252"))
+
+    class In:
+        def readline(self):
+            return "да\n"
+    monkeypatch.setattr(sys, "stdin", In())
+    assert sync.ask("да? ") == "да\n"
+    assert raw.getvalue().decode("utf-8") == "да? "
+
+
 # --- dev-sync ------------------------------------------------------------------------------
 
 class DevUv(FakeUv):

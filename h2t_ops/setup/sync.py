@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import h2t_ops
-from h2t_ops.core import paths, store
+from h2t_ops.core import output, paths, store
 from h2t_ops.core.errors import ConfigError, H2TError
 from h2t_ops.setup import harness_claude, manifest, state
 from h2t_ops.setup.manifest import render
@@ -692,9 +692,11 @@ def _codex_note(names: list[str]) -> str:
 
 def ask(prompt: str) -> str:
     """The default question: the prompt on stderr, so `--json` keeps stdout to the envelope;
-    one line from stdin, and "" at its end, which is not a yes."""
-    sys.stderr.write(prompt)
-    sys.stderr.flush()
+    one line from stdin, and "" at its end, which is not a yes. UTF-8 whatever the stream's
+    code page: a redirected stderr on Windows is cp1252, which has no `да` (#560, as #428)."""
+    writer, created = output._utf8_writer(sys.stderr)
+    writer.write(prompt)
+    output._finalize(writer, created)
     return sys.stdin.readline()
 
 
