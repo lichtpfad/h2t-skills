@@ -3,8 +3,10 @@
 Not a hooks.json entry: scaffold-project writes `h2t-hook post-git-commit-docs-lint` into a
 project's `.claude/settings.json` (h2t_ops/lifecycle/scaffold_project.py). Those files are
 committed and outlive any plugin version, so the 3.x contract is kept: an empty or
-unparseable stdin still runs the check, nothing is printed, the report goes to
-`.h2t/lifecycle/post-git-commit-docs-lint.json`, and the exit code is always 0.
+unparseable stdin still runs the check, nothing is printed on stdout, and the report goes
+to `.h2t/lifecycle/post-git-commit-docs-lint.json`. An expected failure (git, the disk,
+a store refusal) is one stderr line and exit 0; an unexpected one is hook_entry's stderr
+line and log row with exit 1 — non-blocking for PostToolUse, where only 2 blocks.
 
 Port of the 3.x handler of the same name. One change: docs-lint is the package's
 (`docs_lint_command`), not a plugin script looked up on disk.
@@ -19,6 +21,9 @@ import subprocess
 import sys
 from pathlib import Path
 from typing import Any
+
+from h2t_ops.core import store
+from h2t_ops.core.errors import H2TError
 
 SCHEMA = "h2t_lifecycle_report/v0.1"
 SCHEMA_VERSION = "0.1"
@@ -147,12 +152,10 @@ def build_hook_report(
 
 
 def write_report(repo_root: Path, report: dict[str, Any]) -> Path:
-    out = repo_root / ".h2t" / "lifecycle" / "post-git-commit-docs-lint.json"
-    out.parent.mkdir(parents=True, exist_ok=True)
-    tmp = out.with_suffix(out.suffix + ".tmp")
-    tmp.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
-    tmp.replace(out)
-    return out
+    rel = ".h2t/lifecycle/post-git-commit-docs-lint.json"
+    store.repo(repo_root, "post-git-commit-docs-lint").replace(
+        rel, json.dumps(report, ensure_ascii=False, indent=2))
+    return repo_root / rel
 
 
 def hook_timeout_seconds() -> int:
@@ -177,9 +180,18 @@ def _load_payload() -> dict[str, Any]:
         return {}
 
 
+def _repo_root() -> Path:
+    """The repository the commit landed in, from git; the cwd outside a repository."""
+    top = subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True,
+                         text=True, encoding="utf-8", errors="replace")
+    if top.returncode == 0 and top.stdout.strip():
+        return Path(top.stdout.strip()).resolve()
+    return Path.cwd().resolve()
+
+
 def main(argv: list[str]) -> int:
     try:
-        repo_root = Path.cwd().resolve()
+        repo_root = _repo_root()
         payload = _load_payload()
         if payload and not is_git_commit_payload(payload):
             return 0
@@ -212,5 +224,8 @@ def main(argv: list[str]) -> int:
             ),
         )
         return 0
-    except Exception:
+    except (OSError, subprocess.SubprocessError, H2TError) as exc:
+        # Non-blocking (exit 0, the 3.x contract) but not silent: one line on stderr, the
+        # stdout channel stays empty. Anything else is a defect and surfaces as one.
+        print(f"h2t-hook {COMMAND}: report not written: {type(exc).__name__}: {exc}", file=sys.stderr)
         return 0

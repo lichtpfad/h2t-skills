@@ -43,7 +43,7 @@ Act on the result, in this order:
 Profiles live in two places, and a profile is looked up in that order:
 
 ```bash
-h2t-creative profiles-dir          # profiles you created: ~/.h2t/creative/profiles
+h2t-creative profiles-dir          # profiles you created (= h2t-ops paths get data:creative/profiles)
 echo "$(h2t-creative root)/profiles" # profiles shipped with the CLI
 ```
 

@@ -1136,18 +1136,15 @@ def _emit_eval(envelope: dict[str, Any], exit_code: int, project: str, mode: str
 
     Ported from exa_search.py, which called it after every search and every successful
     crawl; the connector lost it when the script was deleted (#541). Gating is the
-    script's: SkillEval resolves H2T_EVALS_MODE itself, and H2T_EVALS_ROOT names the root
-    `h2t-ops evals report` reads.
+    script's: SkillEval resolves H2T_EVALS_MODE itself and writes the record under
+    records/evals, where `h2t-ops evals report` reads it.
     """
     try:
-        import os
-
         from h2t_ops.lifecycle.eval.session import SkillEval
 
-        root = os.environ.get("H2T_EVALS_ROOT")
         tel = envelope.get("telemetry", {})
         status_ok = envelope.get("status") in ("OK", "DEGRADED")
-        with SkillEval("research", domain="ops", project=project, evals_root=root) as ev:
+        with SkillEval("research", domain="ops", project=project) as ev:
             ev.record_op_type(status_ok)
             if envelope.get("status") == "DEGRADED":
                 ev.record_fallback()

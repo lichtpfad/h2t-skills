@@ -20,6 +20,9 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urljoin, urlparse
 
+from h2t_ops.connectors.research import store as research_store
+from h2t_ops.core import secrets
+
 try:
     import trafilatura as _trafilatura_module  # type: ignore
     _TRAFILATURA_AVAILABLE = True
@@ -611,6 +614,11 @@ def _classify_content(
 JINA_ENDPOINT_DEFAULT = "https://r.jina.ai/"
 
 
+def _jina_key() -> str | None:
+    """Optional: Jina Reader runs without a key, with a lower rate limit."""
+    return secrets.get("JINA_API_KEY")
+
+
 class JinaProvider:
     """Fetch via Jina Reader URL-to-markdown relay."""
 
@@ -631,7 +639,7 @@ class JinaProvider:
             "Accept": "text/markdown",
             "X-Return-Format": "markdown",
         }
-        api_key = os.environ.get("JINA_API_KEY")
+        api_key = _jina_key()
         if api_key:
             headers["Authorization"] = f"Bearer {api_key}"
         req = urllib.request.Request(target, headers=headers)
@@ -1031,8 +1039,7 @@ def fetch_via_ladder(
     raw_html_path = None
     if keep_raw and chosen is not None and chosen.raw_html and output_paths:
         raw_path = output_paths["raw_html"]
-        raw_path.parent.mkdir(parents=True, exist_ok=True)
-        raw_path.write_text(chosen.raw_html, encoding="utf-8")
+        research_store.save_text(raw_path, chosen.raw_html)
         raw_html_path = str(raw_path)
 
     return build_fetch_envelope(

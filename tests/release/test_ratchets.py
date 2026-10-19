@@ -14,7 +14,7 @@ RUNTIME_PY_CEILING = 0  # 62 at Task 4; Task 12 moved the last of it into the pa
 EXECUTABLE_CEILING = 2
 AUTHOR_LITERALS = ["beabac7bf4314952a9327759c638d89f", "Asia/Jerusalem",
                    "Projects/DOR|Projects/newsengine"]
-AUTHOR_LITERAL_CEILING = 7  # measured 2026-10-17 over plugins/ and h2t_ops/, non-test files
+AUTHOR_LITERAL_CEILING = 0  # 7 on 2026-10-17 over plugins/ and h2t_ops/, non-test files; Task 24 (#548 R45): user.yaml
 
 
 def test_runtime_python_in_plugins_does_not_grow():

@@ -134,13 +134,13 @@ def register(subparsers: Any) -> None:
     dp.add_argument("file_id")
     # drive_cli.py took the destination as a second positional (#541); both spellings work.
     dp.add_argument("dest_pos", nargs="?", default=None, metavar="DEST")
-    dp.add_argument("--dest")
+    dp.add_argument("--dest", help="file to write (default: a new file in the inbox place)")
     add_fmt(dp)
 
     ep = cmds.add_parser("export", help="Export a Google Docs editor file")
     ep.add_argument("file_id")
     ep.add_argument("dest_pos", nargs="?", default=None, metavar="DEST")
-    ep.add_argument("--dest")
+    ep.add_argument("--dest", help="file to write (default: a new file in the inbox place)")
     ep.add_argument("--format", dest="export_format", choices=EXPORT_FORMATS)
     ep.add_argument("--print", dest="print_stdout", action="store_true")
     ep.add_argument("--json", dest="as_json", action="store_true",

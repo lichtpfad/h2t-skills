@@ -8,10 +8,14 @@ which Task 12 deleted; its lib is h2t_ops/lifecycle.
 
 import argparse
 import json
+import sqlite3
 import sys
 import time
 from pathlib import Path
 
+from h2t_ops.core import paths
+from h2t_ops.core.errors import H2TError
+from h2t_ops.lifecycle import index
 from h2t_ops.lifecycle.eval.session import SkillEval
 from h2t_ops.lifecycle.gather import output_json
 from h2t_ops.lifecycle.gather.briefing import format_briefing
@@ -37,7 +41,23 @@ def _print_text(text: str) -> None:
     out.detach()  # don't close underlying buffer
 
 
+def _sanitized(exc: BaseException) -> str:
+    """Type and message, home shown as ~, bounded: enough to act on, no full paths."""
+    text = f"{type(exc).__name__}: {exc}".replace(str(paths.home()), "~")
+    return text[:200]
+
+
+GATHER_LOCK_S = 1.0   # per index lookup; the slash-skill gather has 3 s in all (#541 spec, budgets)
+
+
 def main() -> None:
+    # Several lookups ask the index (ontology, files, latest); a hung lock holder costs this
+    # gather one GATHER_LOCK_S, not one per lookup.
+    with index.lock_budget(GATHER_LOCK_S):
+        _main()
+
+
+def _main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--cwd", default=".")
     # The skill name is eval attribution only; h2t-ops gather forwards its positional here.
@@ -52,7 +72,7 @@ def main() -> None:
 
     # A cwd that is not a directory resolves to project "unknown", whose session
     # directory holds unrelated handoffs — a briefing that looks complete and is not.
-    if not Path(args.cwd).expanduser().is_dir():
+    if not paths.expand_user_dest(args.cwd).is_dir():
         print(f"gather: --cwd is not a directory: {args.cwd}", file=sys.stderr)
         sys.exit(3)
 
@@ -102,8 +122,24 @@ def main() -> None:
     # (DocGraph and SpecDesigner onto docgraph), and the handoff writer keys the directory
     # by project.id — so reading by repo name alone missed every handoff for the 20 of 38
     # mapped repos whose name differs from their project (#377).
-    sessions = find_session_files(proj_id, repo_name)
-    latest_session = find_latest_session_index(proj_id, repo_name)
+    # Both ask state/index.sqlite, which spans every machine (#548 §5). An index that cannot
+    # be opened is a failed source, named as one, never a briefing that silently lacks history.
+    # Only storage errors are caught; a programming error surfaces.
+    sources_used.append("sessions")
+    diagnostics: list[dict] = []
+
+    def _ask(name, lookup, default):
+        try:
+            return lookup()
+        except (OSError, sqlite3.Error, H2TError) as exc:
+            if "sessions" not in sources_failed:
+                sources_failed.append("sessions")
+            diagnostics.append({"source": f"sessions.{name}", "error": _sanitized(exc)})
+            return default
+
+    # Each kept on its own: the paths already found survive a failed latest lookup.
+    sessions = _ask("files", lambda: find_session_files(proj_id, repo_name), [])
+    latest_session = _ask("latest", lambda: find_latest_session_index(proj_id, repo_name), None)
 
     elapsed_ms = int((time.monotonic() - start) * 1000)
 
@@ -122,6 +158,7 @@ def main() -> None:
             "sources_used": sources_used,
             "sources_failed": sources_failed,
             "gather_ms": elapsed_ms,
+            **({"diagnostics": diagnostics} if diagnostics else {}),
         },
     }
 

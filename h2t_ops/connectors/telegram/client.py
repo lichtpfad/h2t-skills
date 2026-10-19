@@ -5,16 +5,17 @@ Telethon imports are lazy so registry/help paths stay lightweight.
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
+import sys
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from h2t_ops.core import downloads, paths, secrets, store
 from h2t_ops.core.errors import AuthError, ConfigError, NotFoundError, ProviderError
-
-DEFAULT_CONFIG_DIR = Path.home() / ".config" / "telegram"
 
 
 def _session_incompatible_error(exc: BaseException) -> AuthError:
@@ -22,7 +23,7 @@ def _session_incompatible_error(exc: BaseException) -> AuthError:
         "SESSION_INCOMPATIBLE: Telethon session file is incompatible with this "
         f"Telethon version: {exc}",
         hint=(
-            "Move ~/.config/telegram/session aside, then run "
+            f"Move {paths.secrets_local() / 'telegram.session'} aside, then run "
             "h2t-ops telegram auth request-code --phone +..."
         ),
     )
@@ -118,12 +119,13 @@ def _peer_candidates(entity: str) -> list[Any]:
     return [-n, n, int(f"-100{n}")]
 
 
-def _input_peer_from_sqlite(session_file: Path, peer_id: int) -> Any | None:
+def _input_peer_from_sqlite(session_file: Path, peer_id: int, dest: bool = False) -> Any | None:
     """Build InputPeer directly from Telethon's SQLite session, no API call.
 
     Telethon stores channels as -(10^12 + peer_id) and legacy groups as -peer_id.
     Reading the session DB lets us build InputPeerChannel / InputPeerChat without
-    triggering get_entity() → GetContactsRequest → FloodWait.
+    triggering get_entity() → GetContactsRequest → FloodWait. dest: the session lives in
+    a directory the caller named (config_dir=), not in secrets/local.
     """
     if not session_file.exists():
         return None
@@ -137,8 +139,8 @@ def _input_peer_from_sqlite(session_file: Path, peer_id: int) -> Any | None:
         -n,                       # legacy group: stored as -peer_id
     ]
     try:
-        conn = sqlite3.connect(str(session_file))
-        try:
+        with store.connect_sqlite(session_file, place="secrets.local", library="telethon",
+                                  dest=dest) as conn:
             for stored_id in candidates:
                 row = conn.execute(
                     "SELECT id, hash FROM entities WHERE id=?", (stored_id,)
@@ -149,8 +151,6 @@ def _input_peer_from_sqlite(session_file: Path, peer_id: int) -> Any | None:
                         channel_id = abs(entity_id) - _CHANNEL_OFFSET
                         return InputPeerChannel(channel_id=channel_id, access_hash=access_hash)
                     return InputPeerChat(chat_id=abs(entity_id))
-        finally:
-            conn.close()
     except sqlite3.Error:
         return None
     return None
@@ -202,6 +202,14 @@ def _media_info(msg: Any) -> dict[str, Any] | None:
     }
 
 
+def _media_filename(msg: Any, entity: str, message_id: int) -> str:
+    """The attachment's own name, last segment only ("../../x.pdf" is x.pdf), else
+    <entity>-<id><ext> — the adapter names the file, not Telethon (R47)."""
+    f = _get_attr(msg, "file", None)
+    name = downloads.last_segment(_get_attr(f, "name", None))
+    return name or downloads.plain_name(f"{entity}-{message_id}{_get_attr(f, 'ext', None) or ''}")
+
+
 def _extract_urls(msg: Any) -> list[str]:
     text = _get_attr(msg, "text", "") or ""
     urls: list[str] = []
@@ -223,11 +231,21 @@ class TelegramClientAdapter:
     """Pure Telegram/Telethon adapter."""
 
     def __init__(self, *, config_dir: Path | None = None) -> None:
-        self.config_dir = Path(config_dir) if config_dir is not None else DEFAULT_CONFIG_DIR
-        self.config_file = self.config_dir / "config.json"
-        self.session_base = self.config_dir / "session"
-        self.auth_state_file = self.config_dir / "auth_state.json"
-        self.dialogs_bootstrap_file = self.config_dir / "dialogs_bootstrapped"
+        """config_dir: the 3.x layout under a directory the caller names (tests); every file
+        there is written with dest=True and read through core.secrets (R42). Without it:
+        keys in telegram.env, session and auth state in secrets/local, marker in state."""
+        self.config_dir = Path(config_dir) if config_dir is not None else None
+        self._dest = self.config_dir is not None
+        self._config: dict[str, Any] | None = None
+        if self.config_dir is not None:
+            self.config_file = self.config_dir / "config.json"
+            self.session_base = self.config_dir / "session"
+            self.auth_state_file = self.config_dir / "auth_state.json"
+            self.dialogs_bootstrap_file = self.config_dir / "dialogs_bootstrapped"
+        else:
+            self.session_base = paths.secrets_local() / "telegram"   # Telethon adds .session
+            self.auth_state_file = secrets.json_path("telegram.auth-state")
+            self.dialogs_bootstrap_file = paths.state_dir() / "telegram" / "dialogs_bootstrapped"
 
     @property
     def session_file(self) -> str:
@@ -235,30 +253,78 @@ class TelegramClientAdapter:
 
     @property
     def session_sqlite_file(self) -> Path:
-        return self.config_dir / "session.session"
+        return self.session_base.with_name(self.session_base.name + ".session")
 
     def _load_config(self) -> dict[str, Any]:
-        if not self.config_file.exists():
+        if self.config_dir is not None:
+            return self._load_config_dir()
+        api_id, api_hash = secrets.get("TELEGRAM_API_ID"), secrets.get("TELEGRAM_API_HASH")
+        env_file = secrets.provider_file("telegram")
+        source = env_file
+        if not (api_id and api_hash):
+            legacy = secrets.telegram_legacy_config()   # 4.0.x fallback, per key: the 3.x config.json
+            if legacy is not None:
+                legacy = self._checked(legacy, "the 3.x config.json")
+                if not api_id:
+                    api_id, source = str(legacy["api_id"]), "the 3.x config.json"
+                api_hash = api_hash or legacy["api_hash"]
+        missing = [k for k, v in (("TELEGRAM_API_ID", api_id), ("TELEGRAM_API_HASH", api_hash)) if not v]
+        if missing:
+            raise ConfigError(
+                f"Telegram API keys not found in {env_file} (missing: {', '.join(missing)})",
+                hint=(
+                    f"Put TELEGRAM_API_ID and TELEGRAM_API_HASH (from https://my.telegram.org/apps) "
+                    f"in {env_file}, then run h2t-ops telegram auth qr — or, without a second "
+                    "device, h2t-ops telegram auth request-code --phone +..."
+                ),
+            )
+        try:
+            return {"api_id": int(api_id), "api_hash": api_hash}   # Telethon wants an int
+        except ValueError:
+            raise ConfigError(f"TELEGRAM_API_ID in {source} is not a number",
+                              hint="Get api_id from https://my.telegram.org/apps") from None
+
+    def _load_config_dir(self) -> dict[str, Any]:
+        data = secrets.telegram_legacy_config(self.config_dir)
+        if data is None:
             raise ConfigError(
                 f"Telegram config not found: {self.config_file}",
                 hint=(
-                    'Create ~/.config/telegram/config.json with {"api_id": ..., '
+                    f'Create {self.config_file} with {{"api_id": ..., '
                     '"api_hash": "..."} (from https://my.telegram.org/apps), then run '
                     "h2t-ops telegram auth qr — or, without a second device, "
                     "h2t-ops telegram auth request-code --phone +..."
                 ),
             )
-        from h2t_ops.core.jsonfile import read_json_config
+        return self._checked(data, "config.json")
 
-        data = read_json_config(self.config_file)
+    @staticmethod
+    def _checked(data: dict[str, Any], source: str) -> dict[str, Any]:
         missing = [key for key in ("api_id", "api_hash") if not data.get(key)]
         if missing:
             raise ConfigError(
-                "Telegram config.json must contain api_id and api_hash "
+                f"Telegram {source} must contain api_id and api_hash "
                 f"(missing: {', '.join(missing)})",
                 hint="Get api_id/api_hash from https://my.telegram.org/apps",
             )
         return data
+
+    def _adopt_legacy_session(self) -> None:
+        """Until the migration, Telethon works on a copy: it writes the file it opens, and the
+        3.x path is not the package's to write (§7.3). backup() reads a consistent snapshot
+        even if a 3.x process holds the old session open."""
+        if self._dest:
+            return
+        new, old = self.session_sqlite_file, paths.legacy("telegram") / "session.session"
+        if new.exists() or not old.is_file():
+            return
+        store.sqlite_copy(old, new, place="secrets.local")
+        print(f"telegram: session copied to {new}; the old one is left as is", file=sys.stderr)
+
+    def _read_auth_state(self) -> dict[str, Any] | None:
+        if self.config_dir is not None:
+            return secrets.read_json_at(self.auth_state_file, root=self.config_dir)
+        return secrets.read_json("telegram.auth-state")[0]
 
     def _telegram_client_class(self):
         try:
@@ -311,7 +377,7 @@ class TelegramClientAdapter:
         return FloodWaitError
 
     def _client(self):
-        cfg = self._load_config()
+        cfg = self._config if self._config is not None else self._load_config()
         client_cls = self._telegram_client_class()
         return client_cls(self.session_file, cfg["api_id"], cfg["api_hash"])
 
@@ -322,21 +388,29 @@ class TelegramClientAdapter:
         Telethon's ``with TelegramClient(...)`` calls ``start()``, which may
         prompt for a phone on unauthenticated sessions. The CLI owns phone/code
         explicitly, so use connect/disconnect instead.
+
+        Telethon opens and writes the session itself: store.managed hands it the file for
+        the life of the client, and leaves it 0600.
         """
-        client = self._client()
-        if hasattr(client, "connect"):
-            client.connect()
-            try:
-                yield client
-            finally:
-                if hasattr(client, "disconnect"):
-                    client.disconnect()
-            return
-        with client as connected:
-            yield connected
+        self._config = self._load_config()   # before managed: a missing config touches nothing
+        self._adopt_legacy_session()
+        with store.managed(self.session_sqlite_file, place="secrets.local", library="telethon",
+                           dest=self._dest):
+            client = self._client()
+            if hasattr(client, "connect"):
+                client.connect()
+                try:
+                    yield client
+                finally:
+                    if hasattr(client, "disconnect"):
+                        client.disconnect()
+                return
+            with client as connected:
+                yield connected
 
     def auth_status(self) -> dict[str, Any]:
         self._load_config()
+        self._adopt_legacy_session()
         session_exists = self.session_sqlite_file.exists()
         if not session_exists:
             return {
@@ -359,7 +433,6 @@ class TelegramClientAdapter:
         }
 
     def request_code(self, phone: str) -> dict[str, Any]:
-        self.config_dir.mkdir(parents=True, exist_ok=True)
         try:
             with self._connected_client() as client:
                 sent = client.send_code_request(phone)
@@ -370,19 +443,21 @@ class TelegramClientAdapter:
         return {"phone": phone, **view}
 
     def _save_auth_state(self, phone: str, phone_code_hash: str | None) -> None:
-        self.auth_state_file.write_text(
-            json.dumps({"phone": phone, "phone_code_hash": phone_code_hash}, indent=2),
-            encoding="utf-8",
-        )
+        state = {"phone": phone, "phone_code_hash": phone_code_hash}
+        if self.config_dir is None:
+            secrets.write_json("telegram.auth-state", state)
+            return
+        store.replace(self.auth_state_file, json.dumps(state, indent=2), place="secrets.local",
+                      dest=True, keys=tuple(state))
 
     def resend_code(self) -> dict[str, Any]:
         """Ask Telegram to deliver the pending code by its next channel (auth.resendCode)."""
         from h2t_ops.core.errors import UsageError
 
-        if not self.auth_state_file.exists():
+        state = self._read_auth_state()
+        if state is None:
             raise UsageError("No pending code request.",
                              hint="Run h2t-ops telegram auth request-code --phone +... first.")
-        state = json.loads(self.auth_state_file.read_text(encoding="utf-8"))
         try:
             from telethon.errors import SendCodeUnavailableError
             from telethon.tl.functions.auth import ResendCodeRequest
@@ -415,7 +490,6 @@ class TelegramClientAdapter:
         timeout. `password_prompt()` returns the 2FA password when the account has one.
         """
         password_needed = self._session_password_error_class()
-        self.config_dir.mkdir(parents=True, exist_ok=True)
         try:
             with self._connected_client() as client:
                 if client.is_user_authorized():
@@ -450,9 +524,7 @@ class TelegramClientAdapter:
         password: str | None = None,
         password_prompt: Any = None,
     ) -> dict[str, Any]:
-        state: dict[str, Any] = {}
-        if self.auth_state_file.exists():
-            state = json.loads(self.auth_state_file.read_text(encoding="utf-8"))
+        state: dict[str, Any] = self._read_auth_state() or {}
         phone_code_hash = state.get("phone_code_hash")
         password_needed = self._session_password_error_class()
         try:
@@ -540,7 +612,8 @@ class TelegramClientAdapter:
         uncached numeric peer triggers GetContactsRequest and a FloodWait.
         """
         if isinstance(entity, str) and entity.lstrip("-").isdigit():
-            input_peer = _input_peer_from_sqlite(self.session_sqlite_file, int(entity))
+            self._adopt_legacy_session()
+            input_peer = _input_peer_from_sqlite(self.session_sqlite_file, int(entity), self._dest)
             if input_peer is not None:
                 return [input_peer]
         return _peer_candidates(entity) if isinstance(entity, str) else [entity]
@@ -710,11 +783,20 @@ class TelegramClientAdapter:
         Mirrors list_messages' peer resolution (SQLite InputPeer first) to avoid
         get_entity() → FloodWait on uncached numeric peers. Fails loud via
         ProviderError when the message carries no downloadable media.
+
+        The directory is --out or the inbox place (R28); the adapter picks the file name and
+        Telethon writes into a store.writer handle, created and never over a file already
+        there — that one keeps its bytes and the new file takes -2, -3 (R47).
         """
-        dest = Path(out_dir) if out_dir else Path.home() / "Downloads"
-        dest.mkdir(parents=True, exist_ok=True)
+        inbox, defaulted = paths.place_or_default("inbox")
+        if out_dir:
+            dest = paths.expand_user_dest(out_dir)
+            named = os.path.realpath(dest) != os.path.realpath(inbox)
+        else:
+            dest, named = inbox, False
+        place = "inbox" if named or not defaulted else "data"
         candidates: list[Any] = self._entity_candidates(entity)
-        saved_path: Any = None
+        path: Path | None = None
         msg: Any = None
         try:
             with self._connected_client() as client:
@@ -732,20 +814,24 @@ class TelegramClientAdapter:
                     raise ProviderError(
                         f"message {message_id} in {entity} has no downloadable media"
                     )
-                saved_path = client.download_media(msg, file=str(dest))
+                def write(fh) -> None:
+                    if client.download_media(msg, file=fh) is None:
+                        raise ProviderError(
+                            f"failed to download media from message {message_id} in {entity}"
+                        )
+
+                path = downloads.save_new(dest, _media_filename(msg, entity, message_id), write,
+                                          place=place, dest=named)
         except (ValueError, sqlite3.OperationalError) as exc:
             raise _session_incompatible_error(exc) from exc
-        if saved_path is None:
-            raise ProviderError(
-                f"failed to download media from message {message_id} in {entity}"
-            )
-        path = Path(saved_path)
+        if not out_dir:
+            downloads.say_saved(path, defaulted)
         return {
             "entity": entity,
             "message_id": message_id,
             "path": str(path),
             "filename": path.name,
-            "size": path.stat().st_size if path.exists() else None,
+            "size": path.stat().st_size,
             "media": _media_info(msg),
         }
 
@@ -802,22 +888,24 @@ class TelegramClientAdapter:
         }
 
     def bootstrap_dialogs(self, *, force: bool = False) -> dict[str, Any]:
-        if self.dialogs_bootstrap_file.exists() and not force:
+        # The 3.x marker counts too (checked, never written), so an upgrade does not rerun it.
+        markers = [self.dialogs_bootstrap_file]
+        if not self._dest:
+            markers.append(paths.legacy("telegram") / "dialogs_bootstrapped")
+        found = next((m for m in markers if m.exists()), None)
+        if found is not None and not force:
             return {
                 "refreshed": False,
                 "count": 0,
-                "timestamp_path": str(self.dialogs_bootstrap_file),
+                "timestamp_path": str(found),
             }
         try:
             with self._connected_client() as client:
                 count = sum(1 for _ in client.iter_dialogs(limit=None))
         except (ValueError, sqlite3.OperationalError) as exc:
             raise _session_incompatible_error(exc) from exc
-        self.config_dir.mkdir(parents=True, exist_ok=True)
-        self.dialogs_bootstrap_file.write_text(
-            str(datetime.now(UTC).timestamp()),
-            encoding="utf-8",
-        )
+        store.replace(self.dialogs_bootstrap_file, str(datetime.now(UTC).timestamp()),
+                      place="state", dest=self._dest)
         return {
             "refreshed": True,
             "count": count,

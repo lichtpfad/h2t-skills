@@ -127,6 +127,23 @@ def test_attachment_json_returns_saved_path(monkeypatch):
     assert out["saved_path"] == "file.bin"
 
 
+def test_attachment_without_output_leaves_the_place_to_the_client(monkeypatch):
+    """No --output: the parser accepts it and the client gets None, which means the inbox."""
+    ns = _parser().parse_args(["gmail", "attachment", "M1", "A1", "--json"])
+    assert ns.output is None
+    seen = {}
+
+    class _Spy(_FakeClient):
+        def download_attachment(self, message_id, attachment_id, output):
+            seen["output"] = output
+            return {"saved_path": "/inbox/r.pdf", "path": "/inbox/r.pdf", "defaulted": False}
+
+    import h2t_ops.connectors.gmail.client as m
+    monkeypatch.setattr(m, "GmailClient", lambda *a, **k: _Spy())
+    out = gc.run(ns)
+    assert seen == {"output": None} and out["defaulted"] is False
+
+
 def test_send_no_body_raises_usageerror(monkeypatch):
     _patch(monkeypatch)
     with pytest.raises(UsageError):

@@ -2,8 +2,8 @@
 
 Ported from plugins/h2t-ops/skills/meetgeek/scripts/meetgeek_cli.py so that script can be
 deleted (#541). API calls go through MeetGeekClient; the local pipeline (ffmpeg, Drive,
-uploads manifest) is the package copy of recovery.py. Data paths are the script's, unchanged
-— the lake under ~/.dor/lake is subsystem 2's to move (#548).
+uploads manifest) is the package copy of recovery.py. Lake files go through core.lake (own
+files only, manifest protocol), cursors live in state/cursors (#548).
 
 Imported only from commands.run, so nothing here is loaded to build the parser.
 """
@@ -14,19 +14,16 @@ import json
 import os
 import sys
 import time
+import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from h2t_ops.core import lake as _lake
+from h2t_ops.core import paths, store
 from h2t_ops.core.errors import H2TError, ProviderError, UsageError
 
 from . import recovery
-
-
-def _cursor_path_default() -> Path:
-    # meetgeek_cli.py's CURSOR_PATH_DEFAULT, resolved per call rather than at import.
-    return Path.home() / ".dor" / "lake" / "_cursors" / "meetgeek.json"
-
 
 SYNC_INCLUDE = {"transcripts", "summaries", "highlights", "insights", "recordings"}
 
@@ -39,10 +36,10 @@ def _typed(exc: recovery.RecoveryError) -> H2TError:
 # ─── Recovery verbs ───────────────────────────────────────────────────────────
 
 def convert(args: Any) -> Any:
-    src = Path(args.input).expanduser().resolve()
+    src = paths.expand_user_dest(args.input).resolve()
     if not src.exists():
         raise ProviderError(f"input not found: {src}")
-    out_path = Path(args.output).expanduser() if args.output else None
+    out_path = paths.expand_user_dest(args.output) if args.output else None
     try:
         probe = recovery.ffmpeg_probe(str(src))
         if args.probe:
@@ -88,7 +85,7 @@ def upload(args: Any) -> dict:
     if not args.from_file:
         raise UsageError("either --download-url or --from-file required")
 
-    raw_path = Path(args.from_file).expanduser()
+    raw_path = paths.expand_user_dest(args.from_file)
     if raw_path.is_dir():
         expanded = sorted(raw_path.rglob("*.webm"))
     elif raw_path.is_file():
@@ -186,43 +183,16 @@ def _iter_meetings(client: Any, *, limit: int | None, from_date: str | None,
         pages += 1
 
 
-def _load_cursor(path: Path) -> dict:
-    if path.exists():
-        try:
-            return json.loads(path.read_text(encoding="utf-8"))
-        except (ValueError, OSError):
-            pass
-    return {}
+def _read_manifest_ids(lake: _lake.ConnectorDir) -> set[str]:
+    """Meetings a committed row (or a 3.x row, which has no state) already carries. A row
+    with refused files is not a synced meeting: the next run fetches it again."""
+    return {r["meeting_id"] for r in lake.committed_rows()
+            if r.get("meeting_id") and not r.get("refused")}
 
 
-def _save_cursor(path: Path, data: dict) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-
-
-def _read_manifest_ids(path: Path) -> set[str]:
-    if not path.exists():
-        return set()
-    seen: set[str] = set()
-    with path.open(encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                rec = json.loads(line)
-            except ValueError:
-                continue
-            if rec.get("meeting_id"):
-                seen.add(rec["meeting_id"])
-    return seen
-
-
-def _write_pair(folder: Path, mid: str, md: str, raw: dict) -> None:
-    folder.mkdir(parents=True, exist_ok=True)
-    (folder / f"{mid}.md").write_text(md, encoding="utf-8")
-    (folder / f"{mid}.json").write_text(json.dumps(raw, ensure_ascii=False, indent=2),
-                                        encoding="utf-8")
+def _pair(part: str, mid: str, md: str, raw: dict) -> dict[str, bytes]:
+    return {f"{part}/{mid}.md": md.encode("utf-8"),
+            f"{part}/{mid}.json": json.dumps(raw, ensure_ascii=False, indent=2).encode("utf-8")}
 
 
 def _sync_once(client: Any, args: Any) -> dict:
@@ -234,15 +204,15 @@ def _sync_once(client: Any, args: Any) -> dict:
         _normalize_meeting,
     )
 
-    lake = Path(args.to).expanduser()
-    lake.mkdir(parents=True, exist_ok=True)
+    lake = _lake.ConnectorDir("meetgeek", root=paths.expand_user_dest(args.to))
+    lake.recover()
     include = {p.strip() for p in (args.include or "transcripts").split(",") if p.strip()}
     unknown = include - SYNC_INCLUDE
     if unknown:
         raise UsageError(f"unknown --include values: {unknown} (valid: {sorted(SYNC_INCLUDE)})")
 
-    cursor_path = Path(args.cursor_file).expanduser() if args.cursor_file else _cursor_path_default()
-    cursor = _load_cursor(cursor_path)
+    cursor_path = paths.expand_user_dest(args.cursor_file) if args.cursor_file else None
+    cursor = _lake.read_cursor("meetgeek", cursor_path)
     cursor_ts: str | None = None
     from_date = args.since
     cached_ts = cursor.get("last_seen_ts")
@@ -250,10 +220,8 @@ def _sync_once(client: Any, args: Any) -> dict:
         cursor_ts = cached_ts
         from_date = cursor_ts[:10]
 
-    manifest_path = lake / "manifest.jsonl"
-    seen_ids = _read_manifest_ids(manifest_path)
-    manifest_lines: list[str] = []
-    count = skipped = errors = 0
+    seen_ids = _read_manifest_ids(lake)
+    count = skipped = errors = refused_n = 0
     last_seen_ts: str | None = cursor.get("last_seen_ts")
     last_seen_id: str | None = cursor.get("last_seen_id")
 
@@ -269,43 +237,47 @@ def _sync_once(client: Any, args: Any) -> dict:
         if cursor_ts and ts and ts <= cursor_ts:
             skipped += 1
             continue
+        files: dict[str, Any] = {}
         try:
             if "transcripts" in include:
                 t = client.get_transcript(mid)
                 if not meta["attendees"]:
                     meta["attendees"] = _speakers(t)
-                _write_pair(lake / "transcripts", mid, _fmt_transcript_md(m, t), t)
+                files.update(_pair("transcripts", mid, _fmt_transcript_md(m, t), t))
             if "summaries" in include:
                 s = client.get_summary(mid)
-                _write_pair(lake / "summaries", mid, _fmt_summary_md(m, s), s)
+                files.update(_pair("summaries", mid, _fmt_summary_md(m, s), s))
             if "highlights" in include:
                 h = client.get_highlights(mid)
-                _write_pair(lake / "highlights", mid, _fmt_highlights_md(m, h), h)
+                files.update(_pair("highlights", mid, _fmt_highlights_md(m, h), h))
             if "insights" in include:
                 i = client.get_insights(mid)
-                _write_pair(lake / "insights", mid, _fmt_insights_md(m, i), i)
+                files.update(_pair("insights", mid, _fmt_insights_md(m, i), i))
             if "recordings" in include:
                 url = client.get_download_url(mid)["download_url"]
-                rec_path = lake / "recordings" / f"{mid}.mp4"
-                if not rec_path.exists():
-                    client.download_to(url, rec_path)
+                # Chunks, spooled and hashed by publish: an own recording is replaced, a new
+                # one created, a foreign one refused (R29, R47).
+                files[f"recordings/{mid}.mp4"] = client.iter_download(url)
+            refused = lake.publish(files, op_id=uuid.uuid4().hex, meta=meta)
         except H2TError as e:
             errors += 1
             print(f"WARN: skip {mid}: {e}", file=sys.stderr)
             continue
 
-        manifest_lines.append(json.dumps(meta, ensure_ascii=False))
+        if refused:
+            refused_n += 1
+            print(f"WARN: {mid}: not replacing files the package did not write: {', '.join(refused)}",
+                  file=sys.stderr)
+            continue
         seen_ids.add(mid)
         count += 1
         if ts and (last_seen_ts is None or ts > last_seen_ts):
             last_seen_ts = ts
             last_seen_id = mid
 
-    if manifest_lines:
-        with manifest_path.open("a", encoding="utf-8") as f:
-            for line in manifest_lines:
-                f.write(line + "\n")
-
+    if refused_n:
+        # A meeting with a refused file is not synced; --since-cursor must list it again.
+        last_seen_ts, last_seen_id = cursor.get("last_seen_ts"), cursor.get("last_seen_id")
     cursor.update({
         "source": "meetgeek",
         "cursor_type": "timestamp",
@@ -316,8 +288,9 @@ def _sync_once(client: Any, args: Any) -> dict:
         "items_ingested": cursor.get("items_ingested", 0) + count,
         "version": 1,
     })
-    _save_cursor(cursor_path, cursor)
-    return {"synced": count, "skipped": skipped, "errors": errors, "cursor": str(cursor_path)}
+    written = _lake.write_cursor("meetgeek", cursor, cursor_path)
+    return {"synced": count, "skipped": skipped, "errors": errors, "refused": refused_n,
+            "cursor": str(written)}
 
 
 def _speakers(transcript: dict) -> list[str]:
@@ -358,18 +331,35 @@ def sync(args: Any) -> dict:
 
 # ─── Webhook receiver ─────────────────────────────────────────────────────────
 
+_SECRET_HEADERS = {"authorization", "proxy-authorization", "cookie", "set-cookie"}
+_SECRET_WORDS = ("secret", "token", "key", "auth", "signature", "password")
+
+
+def _safe_headers(items) -> dict[str, str]:
+    """Request headers without credentials: the event file lands in the synced lake."""
+    out = {}
+    for k, v in items:
+        name = k.lower()
+        if name in _SECRET_HEADERS or any(w in name for w in _SECRET_WORDS):
+            continue
+        out[k] = v
+    return out
+
+
 def webhook_server(args: Any) -> dict:
     """Minimal HTTP server that dumps incoming POSTs as JSON files."""
     from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+    from urllib.parse import urlsplit
     from uuid import uuid4
 
-    from h2t_ops.core.secrets import load_secrets
+    from h2t_ops.core import secrets
 
-    out_dir = Path(args.out).expanduser()
-    out_dir.mkdir(parents=True, exist_ok=True)
+    out_dir = (paths.expand_user_dest(args.out) if args.out
+               else _lake.ConnectorDir("meetgeek").root / "webhooks")
+    place, user = _lake.origin(out_dir)
+    store.mkdir(out_dir, place=place, dest=user)
     if args.secret is None:
-        load_secrets()
-        args.secret = os.environ.get("MEETGEEK_WEBHOOK_SECRET", "")
+        args.secret = secrets.get("MEETGEEK_WEBHOOK_SECRET") or ""
     secret = (args.secret or "").strip()
 
     class Handler(BaseHTTPRequestHandler):
@@ -394,13 +384,16 @@ def webhook_server(args: Any) -> dict:
                 payload = {"_raw_base64": raw.hex()}
             event = {
                 "received_at": recovery.now_iso(),
-                "path": self.path,
-                "headers": {k: v for k, v in self.headers.items()},
+                # No query string: a secret in the hook URL (?token=…) must not reach the lake.
+                "path": urlsplit(self.path).path,
+                "headers": _safe_headers(self.headers.items()),
                 "payload": payload,
             }
-            (out_dir / f"{uuid4()}.json").write_text(
-                json.dumps(event, ensure_ascii=False, indent=2), encoding="utf-8"
-            )
+            try:
+                store.create(out_dir / f"{uuid4()}.json",
+                             json.dumps(event, ensure_ascii=False, indent=2), place=place, dest=user)
+            except store.AlreadyExists:
+                pass                    # that event is already on disk
             self._reply(200, "ok\n")
 
         def do_GET(self):  # health probe

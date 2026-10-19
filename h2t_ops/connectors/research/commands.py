@@ -262,12 +262,12 @@ def _load_schema(raw: str | None) -> dict[str, Any] | None:
     if not raw:
         return None
     import json
-    from pathlib import Path
 
+    from h2t_ops.core import paths
     from h2t_ops.core.errors import UsageError
 
     try:
-        candidate = Path(raw).expanduser()
+        candidate = paths.expand_user_dest(raw)
         text = candidate.read_text(encoding="utf-8") if candidate.is_file() else raw
     except OSError:
         text = raw
@@ -281,13 +281,12 @@ def _load_schema(raw: str | None) -> dict[str, Any] | None:
 
 
 def run(args: Any) -> Any:
-    from pathlib import Path
-
     from h2t_ops.connectors.research.client import ResearchClient
+    from h2t_ops.core import paths
     from h2t_ops.core.errors import UsageError
 
     client = ResearchClient(
-        output_dir=Path(args.output_dir) if getattr(args, "output_dir", None) else None
+        output_dir=paths.expand_user_dest(args.output_dir) if getattr(args, "output_dir", None) else None
     )
     cmd = args.research_cmd
     if cmd == "preflight":

@@ -7,11 +7,11 @@ import os
 import re
 import subprocess
 import sys
-import tempfile
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
+from h2t_ops.core import store
 from h2t_ops.core.envelope import error_envelope, success_envelope
 from h2t_ops.core.errors import (
     AuthError,
@@ -226,9 +226,9 @@ def _run_script(
     command = _build_command(script_path)
     script_environ = dict(environ)
 
-    with tempfile.TemporaryDirectory(prefix="h2t-deploy-") as temp_dir:
-        input_path = Path(temp_dir) / "payload.json"
-        input_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    with store.scratch(prefix="h2t-deploy-") as temp_dir:
+        input_path = temp_dir / "payload.json"
+        store.replace(input_path, json.dumps(payload, indent=2), place="tmp")
         script_environ["H2T_DEPLOY_INPUT_JSON"] = str(input_path)
         script_environ["H2T_DEPLOY_ACTION"] = action
         script_environ["H2T_DEPLOY_DRY_RUN"] = "true" if dry_run else "false"

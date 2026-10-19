@@ -21,10 +21,11 @@ import shlex
 import shutil
 import subprocess
 import sys
-import tempfile
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
+
+from h2t_ops.core import paths, store
 
 KIND_DOCTOR = "h2t_setup_doctor/v1"
 KIND_CONNECTORS = "h2t_connectors_check/v1"
@@ -77,7 +78,7 @@ def _path_exists(path: Path) -> bool:
 
 
 def _home() -> Path:
-    return Path.home()
+    return paths.home()
 
 
 def _windows_uv_candidates(home: Path) -> list[Path]:
@@ -139,7 +140,7 @@ def _resolve_cli(name: str, which: Callable[[str], str | None] = _user_which, ho
             return {"status": "ready", "path": found, "source": "PATH"}
     candidate = home / ".local" / "bin" / (f"{name}.exe" if is_win else name)
     if candidate.is_file():
-        return {"status": "ready", "path": str(candidate), "source": "~/.local/bin"}
+        return {"status": "ready", "path": str(candidate), "source": "local-bin"}
     return {"status": "missing", "path": "", "source": "not-found"}
 
 
@@ -219,59 +220,23 @@ def _version_for_h2t_ops(path: str, runner: Runner = _run) -> dict[str, Any]:
     }
 
 
-def _candidate_secret_files(home: Path) -> list[Path]:
-    """Same order as h2t_ops.core.secrets.candidate_secret_files (#448).
-
-    This script is standalone — it cannot import h2t_ops — so the list is duplicated on
-    purpose. It drifted once already: #432 added the documented path to the package and
-    not here, so `setup doctor` answered MISSING for a key the connectors could read.
-    tests/test_secrets_path_parity.py holds the two lists together.
-    """
-    files: list[Path] = []
-    override = os.environ.get("H2T_SECRETS_FILE")
-    if override:
-        files.append(Path(override))
-    documented = home / ".h2t" / "config" / "secrets" / "secrets.env"
-    # Every other *.env beside it, alphabetically: the directory is one file per provider (#483).
-    others = (
-        sorted((p for p in documented.parent.glob("*.env") if p.name != documented.name), key=lambda p: p.name)
-        if documented.parent.is_dir()
-        else []
-    )
-    files.extend([
-        documented,
-        *others,
-        home / ".dor" / "secrets" / "secrets.env",
-        home / ".dor" / "secrets.env",
-    ])
-    return files
-
-
 def _secret_present(key: str, home: Path) -> bool:
-    if os.environ.get(key):
-        return True
-    for path in _candidate_secret_files(home):
-        if not path.is_file():
-            continue
-        try:
-            for raw in path.read_text(encoding="utf-8").splitlines():
-                line = raw.strip()
-                if line.startswith(f"{key}="):
-                    return bool(line.partition("=")[2].strip().strip('"').strip("'"))
-        except OSError:
-            continue
-    return False
+    """Through core.secrets, the reader every connector uses (#448, #548 §7.2): environment,
+    secrets/shared/<provider>.env, then the 3.x ladder. `home` is kept for the callers; the
+    places come from core.paths."""
+    from h2t_ops.core import secrets
+
+    return secrets.get(key) is not None
 
 
 def _file_status(path: Path) -> dict[str, str]:
     return {"path": str(path), "status": "present" if path.is_file() else "missing"}
 
 
-def optional_pos_status(home: Path | None = None) -> dict[str, Any]:
-    home = home or _home()
+def optional_pos_status() -> dict[str, Any]:
     candidates = [
-        home / ".dor",
-        home / ".h2t" / "config",
+        paths.legacy_dir("secrets.dor_old"),   # the 3.x DOR directory itself
+        paths.config_dir(),
     ]
     configured = any(_path_exists(path) for path in candidates)
     return {
@@ -297,7 +262,7 @@ def plugin_cache_status(home: Path | None = None) -> dict[str, Any]:
     found: list[Path] = []
     for var, default in (("CLAUDE_CONFIG_DIR", ".claude"), ("CODEX_HOME", ".codex")):
         override = os.environ.get(var)
-        cache = (Path(override).expanduser() if override else home / default) / "plugins" / "cache"
+        cache = (paths.expand_user_dest(override) if override else home / default) / "plugins" / "cache"
         # Name the directory actually searched, even when nothing is there (#522): a fixed
         # ~/.claude here sat beside `missing` while CLAUDE_CONFIG_DIR pointed elsewhere.
         root = root or cache / "lichtpfad" / "h2t-core"
@@ -380,27 +345,38 @@ def doctor(runner: Runner = _run) -> dict[str, Any]:
     }
 
 
-def ensure_machine_name(home: Path | None = None, name: str = "") -> dict[str, Any]:
+def pinned_machine_name() -> str | None:
+    """H2T_MACHINE_NAME as Claude Code's settings pin it, None if they do not (or the file
+    cannot be read): what a process started outside Claude does not see in its env."""
+    settings = paths.dir_of("harness") / "settings.json"
+    try:
+        data = json.loads(settings.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    env = data.get("env") if isinstance(data, dict) else None
+    value = env.get("H2T_MACHINE_NAME") if isinstance(env, dict) else None
+    return value if isinstance(value, str) and value else None
+
+
+def ensure_machine_name(*, name: str = "") -> dict[str, Any]:
     """Pin H2T_MACHINE_NAME in Claude Code's settings `env`, once (#491, ADR 0003).
 
     On macOS the hostname follows the network, so session records of one machine split
     across two directories. Claude Code passes `env` from settings.json to every process
     it starts, hooks included, whatever the shell. An existing value is never changed.
 
-    Without `name`, today's name by the shared rule is written only if the session root
-    has a folder under it or no folders at all. Otherwise the hostname may already have
-    drifted from the history (#517), and the root may hold other machines' folders too,
+    Without `name`, today's name by the shared rule is written only if the session roots
+    have a folder for it or no folders at all. Otherwise the hostname may already have
+    drifted from the history (#517), and the roots may hold other machines' folders too,
     so nothing is written and the folders come back as candidates for the user to pick.
     """
-    home = home or _home()
-    override = os.environ.get("CLAUDE_CONFIG_DIR")
-    settings = (Path(override).expanduser() if override else home / ".claude") / "settings.json"
+    settings = paths.dir_of("harness") / "settings.json"
     from h2t_ops.lifecycle.gather.sessions import get_machine_name
 
     # Claude Code writes this file too. Replace it only if it is unchanged since it was
     # read, so a preference saved meanwhile is not overwritten with the stale copy.
     for _ in range(3):
-        stamp = settings.stat().st_mtime_ns if settings.is_file() else None
+        stamp = store.stamp(settings)
         data: Any = {}
         if stamp is not None:
             try:
@@ -414,32 +390,67 @@ def ensure_machine_name(home: Path | None = None, name: str = "") -> dict[str, A
             return {"status": "unchanged", "path": str(settings), "value": current}
         if not name:
             today = get_machine_name()
-            # The handoff writer's root; the legacy ~/.dor/sessions is shared between machines.
-            root = Path(os.environ.get("H2T_SESSION_ROOT", str(home / ".h2t" / "sessions")))
-            folders = sorted(p.name for p in root.iterdir() if p.is_dir() and not p.name.startswith(".")) if root.is_dir() else []
+            # The handoff writer's root and its 3.x one; the legacy ~/.dor/sessions is
+            # shared between machines, so its folders say nothing about this one.
+            roots = (paths.records("sessions"), paths.legacy("sessions.h2t"))
+            folders = sorted({p.name for root in roots if root.is_dir() for p in root.iterdir()
+                              if p.is_dir() and not p.name.startswith(".")})
             if folders and today not in folders:
                 return {"status": "needs_choice", "path": str(settings), "today": today, "candidates": folders}
             name = today
         data.setdefault("env", {})["H2T_MACHINE_NAME"] = name
-        settings.parent.mkdir(parents=True, exist_ok=True)
-        fd, tmp = tempfile.mkstemp(dir=settings.parent, prefix=".settings.", suffix=".tmp")
         try:
-            with os.fdopen(fd, "w", encoding="utf-8") as handle:
-                handle.write(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
-            if (settings.stat().st_mtime_ns if settings.is_file() else None) != stamp:
-                continue
-            os.replace(tmp, settings)
-            return {"status": "written", "path": str(settings), "value": name}
-        finally:
-            Path(tmp).unlink(missing_ok=True)
+            store.replace(settings, json.dumps(data, indent=2, ensure_ascii=False) + "\n",
+                          place="harness", expect=stamp)
+        except store.Changed:
+            continue
+        return {"status": "written", "path": str(settings), "value": name}
     return {"status": "error", "path": str(settings), "error": "kept changing while being updated, left untouched"}
 
 
+def _google_json_status(name: str) -> dict[str, str]:
+    from h2t_ops.core import secrets
+    from h2t_ops.core.errors import ConfigError
+
+    try:
+        _, where = secrets.read_json(name)
+    except ConfigError:
+        return {"path": str(secrets.json_path(name)), "status": "unreadable"}
+    return {"path": str(where or secrets.json_path(name)), "status": "present" if where else "missing"}
+
+
+def _telegram_status() -> dict[str, dict[str, str]]:
+    """Keys in telegram.env (per key, the 3.x config.json as the 4.0.x fallback) and the
+    session in secrets/local (the 3.x session.session as the fallback), through core."""
+    from h2t_ops.core import paths, secrets
+    from h2t_ops.core.errors import ConfigError
+
+    keys = {k: secrets.get(k) for k in ("TELEGRAM_API_ID", "TELEGRAM_API_HASH")}
+    config = {"path": str(secrets.provider_file("telegram")), "status": "present"}
+    if not all(keys.values()):
+        legacy_cfg = paths.legacy("telegram") / "config.json"
+        try:
+            legacy = secrets.telegram_legacy_config() or {}
+        except (ConfigError, UnicodeDecodeError, OSError):
+            legacy = None
+        if legacy is None:
+            config = {"path": str(legacy_cfg), "status": "unreadable"}
+        elif (keys["TELEGRAM_API_ID"] or legacy.get("api_id")) and (keys["TELEGRAM_API_HASH"] or legacy.get("api_hash")):
+            config = {"path": str(legacy_cfg), "status": "present"}
+        else:
+            config["status"] = "missing"
+    session = paths.secrets_local() / "telegram.session"
+    if not session.is_file() and (paths.legacy("telegram") / "session.session").is_file():
+        session = paths.legacy("telegram") / "session.session"
+    return {"config": config, "session": _file_status(session)}
+
+
 def _google_oauth_status(home: Path) -> dict[str, Any]:
-    cfg = home / ".config" / "google-calendar-mcp"
+    """The client and this machine's token through core.secrets: secrets/shared and
+    secrets/local first, the 3.x files as a fallback (§4, R19)."""
     return {
-        "credentials": _file_status(cfg / "credentials.json"),
-        "tokens": _file_status(cfg / "tokens.json"),
+        "credentials": _google_json_status("google.client"),
+        "tokens": _google_json_status("google.token"),
     }
 
 
@@ -449,23 +460,21 @@ def connector_matrix(home: Path | None = None, *, live: bool = False, include_pa
     h2t_ops = resolve_h2t_ops(home=home)
     h2t_ops_path = h2t_ops.get("path", "")
     google = _google_oauth_status(home)
+    telegram = _telegram_status()
     checks: list[dict[str, Any]] = [
         {"connector": "calendar", "status": _ready_if_files(google), "checks": google, "live": "skipped"},
         {"connector": "gmail", "status": _ready_if_files(google), "checks": google, "live": "skipped"},
         {"connector": "drive", "status": _ready_if_files(google), "checks": google, "live": "skipped"},
         {
             "connector": "notion",
-            "status": "ready" if _secret_present("NOTION_API_TOKEN", home) or (home / ".config" / "notion" / "token").is_file() else "missing",
-            "checks": {"token": "present" if _secret_present("NOTION_API_TOKEN", home) or (home / ".config" / "notion" / "token").is_file() else "missing"},
+            "status": "ready" if _secret_present("NOTION_API_TOKEN", home) or paths.legacy("notion.token").is_file() else "missing",
+            "checks": {"token": "present" if _secret_present("NOTION_API_TOKEN", home) or paths.legacy("notion.token").is_file() else "missing"},
             "live": "skipped",
         },
         {
             "connector": "telegram",
-            "status": "ready" if (home / ".config" / "telegram" / "config.json").is_file() else "missing",
-            "checks": {
-                "config": _file_status(home / ".config" / "telegram" / "config.json"),
-                "session": _file_status(home / ".config" / "telegram" / "session.session"),
-            },
+            "status": "ready" if telegram["config"]["status"] == "present" else "missing",
+            "checks": telegram,
             "live": "skipped",
         },
         {
@@ -627,74 +636,60 @@ def _load_known_secrets(registry_path: Path) -> dict[str, dict[str, str]]:
     return result
 
 
-def secrets_skeleton(secrets_file: Path, registry: dict[str, dict[str, str]], home: Path | None = None) -> dict[str, Any]:
-    """Create or extend secrets.env with placeholder KEY= lines for missing keys.
+def secrets_skeleton(registry: dict[str, dict[str, str]], *, secrets_dir: Path | None = None,
+                     home: Path | None = None) -> dict[str, Any]:
+    """Placeholder KEY= lines for missing keys, one file per provider (§4, R40).
 
-    A key the connectors already resolve — environment or any candidate file — is not
-    missing (#524): a placeholder for it told the user to paste a key that already worked.
+    A key the connectors already resolve — environment, the new files or the 3.x ladder — is
+    not missing (#524): a placeholder for it told the user to paste a key that already worked.
+    Missing keys are grouped by provider (no provider: other.env) and appended to
+    <secrets_dir>/<provider>.env; lines already there, comments included, stay as they are.
 
-    Uses atomic write (temp file + rename) so a crash leaves no partial state.
+    secrets_dir: a directory the caller names (dest=True, R42); default secrets/shared.
     """
-    home = home or _home()
-    secrets_file.parent.mkdir(parents=True, exist_ok=True)
-    existing_content = ""
-    existing_keys: set[str] = set()
-    if secrets_file.is_file():
-        existing_content = secrets_file.read_text(encoding="utf-8")
-        for raw in existing_content.splitlines():
-            line = raw.strip()
-            if line and not line.startswith("#") and "=" in line:
-                existing_keys.add(line.split("=", 1)[0].strip())
-    added: list[str] = []
+    from h2t_ops.core import paths, providers, secrets, store
+
+    explicit = secrets_dir is not None
+    secrets_dir = Path(secrets_dir) if explicit else paths.secrets_shared()
+    groups: dict[str, list[str]] = {}
     skipped: list[str] = []
-    new_lines: list[str] = []
-    for key, meta in registry.items():
-        if key in existing_keys or _resolve_secret_value(key, home):
+    for key in registry:
+        if secrets.get(key) is not None:
             skipped.append(key)
         else:
-            desc = meta.get("description", "")
-            url = meta.get("url", "")
-            new_lines.append(f"# {desc}")
-            if url:
-                new_lines.append(f"# Get at: {url}")
-            new_lines.append(f"{key}=")
-            new_lines.append("")
-            added.append(key)
-    if new_lines:
-        separator = "\n" if existing_content and not existing_content.endswith("\n") else ""
-        full_content = existing_content + separator + "\n".join(new_lines)
-        tmp = secrets_file.parent / (secrets_file.name + ".tmp")
-        tmp.write_text(full_content, encoding="utf-8")
-        tmp.replace(secrets_file)
+            groups.setdefault(providers.provider_of_key(key) or "other", []).append(key)
+    files: dict[str, dict[str, Any]] = {}
+    added: list[str] = []
+    for provider, keys in groups.items():
+        path = secrets_dir / f"{provider}.env"
+        existing = ""
+        if path.is_file():
+            raw = secrets.read_secret_bytes(path, root=secrets_dir) if explicit else secrets.read_secret_bytes(path)
+            existing = raw.decode("utf-8")
+        present = set(secrets.parse_env(existing))
+        new_keys = [k for k in keys if k not in present]   # an empty KEY= already there stays one
+        skipped += [k for k in keys if k in present]
+        if not new_keys:
+            continue
+        lines: list[str] = []
+        for key in new_keys:
+            meta = registry[key]
+            lines.append(f"# {meta.get('description', '')}")
+            if meta.get("url"):
+                lines.append(f"# Get at: {meta['url']}")
+            lines += [f"{key}=", ""]
+        separator = "\n" if existing and not existing.endswith("\n") else ""
+        store.replace(path, existing + separator + "\n".join(lines), place="secrets.shared",
+                      keys=tuple(new_keys), dest=explicit)
+        files[path.name] = {"path": str(path), "added": new_keys}
+        added += new_keys
     return {
         "kind": KIND_SECRETS_SKELETON,
-        "path": str(secrets_file),
+        "path": str(secrets_dir),
+        "files": files,
         "added": added,
         "skipped": skipped,
     }
-
-
-def _resolve_secret_value(key: str, home: Path) -> str:
-    """Return actual secret value following full resolution chain: env > canonical > legacy.
-
-    Used only for local format validation — never returned in output.
-    """
-    env_val = os.environ.get(key)
-    if env_val:
-        return env_val
-    for path in _candidate_secret_files(home):
-        if not path.is_file():
-            continue
-        try:
-            for raw in path.read_text(encoding="utf-8").splitlines():
-                line = raw.strip()
-                if line.startswith(f"{key}="):
-                    val = line.partition("=")[2].strip().strip('"').strip("'")
-                    if val:
-                        return val
-        except OSError:
-            continue
-    return ""
 
 
 def _validate_key(value: str, validator: str) -> bool:
@@ -729,8 +724,10 @@ def secrets_preflight(
     h2t_ops_path = h2t_ops.get("path", "") or "h2t-ops"
     results: list[dict[str, Any]] = []
     live_commands = {"research": "research preflight --json"}
+    from h2t_ops.core import secrets
+
     for key, meta in registry.items():
-        value = _resolve_secret_value(key, home)
+        value = secrets.get(key) or ""   # local format validation only, never in the output
         found = bool(value)
         valid = found and _validate_key(value, meta.get("validator", "nonempty"))
         entry: dict[str, Any] = {
@@ -800,30 +797,8 @@ def main(argv: list[str] | None = None) -> int:
             result = connector_matrix(live=args.live, include_paid=args.include_paid)
         elif args.command == "install-h2t-ops":
             result = install_h2t_ops(args.source, dry_run=args.dry_run)
-            if result.get("status") == "ok":
-                plugin_cache = _home() / ".claude" / "plugins" / "cache" / "lichtpfad" / "h2t-core"
-                if plugin_cache.exists():
-                    versions = sorted(
-                        [d for d in plugin_cache.iterdir()
-                         if d.is_dir() and d.name != "latest" and _semver_key(d.name) != (0, 0, 0)],
-                        key=lambda p: _semver_key(p.name),
-                    )
-                    if versions:
-                        current = versions[-1]
-                        # No `latest` junction is created any more. It was refreshed only
-                        # here, never by `/plugin marketplace update`, so it drifted behind
-                        # the installed version and silently answered the wrong one.
-                        # Hooks resolve through `h2t-hook` at fire time instead.
-                        versions_file = _home() / ".h2t" / "config" / "plugin-versions.json"
-                        versions_file.parent.mkdir(parents=True, exist_ok=True)
-                        _data = {}
-                        if versions_file.exists():
-                            try:
-                                _data = json.loads(versions_file.read_text(encoding="utf-8"))
-                            except Exception:
-                                pass
-                        _data["h2t-core"] = str(current)
-                        versions_file.write_text(json.dumps(_data, indent=2), encoding="utf-8")
+            # No config/plugin-versions.json any more: nothing reads it (hooks resolve
+            # through `h2t-hook` at fire time), and config/ holds only the §7.1 schemas.
         elif args.command == "secrets":
             from h2t_ops.resources import known_secrets_path
 
@@ -834,9 +809,8 @@ def main(argv: list[str] | None = None) -> int:
                 result = {"kind": "h2t_setup_error/v1", "status": "error", "error": str(exc)}
                 print(json.dumps(result, ensure_ascii=False, indent=2))
                 return 3
-            secrets_file = _home() / ".dor" / "secrets" / "secrets.env"
             if args.secrets_cmd == "skeleton":
-                result = secrets_skeleton(secrets_file, registry)
+                result = secrets_skeleton(registry)
             elif args.secrets_cmd == "preflight":
                 result = secrets_preflight(registry, live=args.live)
             else:

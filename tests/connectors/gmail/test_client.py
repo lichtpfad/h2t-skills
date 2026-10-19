@@ -58,7 +58,9 @@ def test_no_creds_no_refresh_raises_configerror_not_browser(monkeypatch, tmp_pat
     cfg = tmp_path / ".config" / "gmail"
     cfg.mkdir(parents=True)
     (cfg / "credentials.json").write_text("{}")
-    monkeypatch.setattr(ga.Path, "home", staticmethod(lambda: tmp_path))
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
+    monkeypatch.delenv("H2T_PATH_ROOT", raising=False)
     monkeypatch.setattr(ga, "_load_credentials", lambda *a, **k: None)
 
     launched = {"browser": False}
@@ -82,11 +84,17 @@ def test_refresh_failure_raises_autherror(monkeypatch, tmp_path):
     """
     from h2t_ops.connectors.gmail import client as gmod
     from h2t_ops.core import google_auth as ga
+    from h2t_ops.core import paths
     from h2t_ops.core.errors import AuthError
 
-    # Safety: keep Path.home isolated so nothing accidentally reads real
-    # ~/.config or ~/.dor during this test.
-    monkeypatch.setattr(ga.Path, "home", staticmethod(lambda: tmp_path))
+    # The token is read through core.secrets before _load_credentials sees it: without a
+    # file under this HOME the flow stops at ConfigError and never reaches the refresh.
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
+    monkeypatch.delenv("H2T_PATH_ROOT", raising=False)
+    token = paths.secrets_local() / "google.token.json"
+    token.parent.mkdir(parents=True)
+    token.write_text('{"refresh_token": "fake-r"}')
 
     class _Creds:
         valid = False
@@ -335,6 +343,68 @@ def test_download_attachment_writes_bytes(tmp_path):
     assert out["saved_path"] == str(target)
     assert target.read_bytes() == b"hello"
     assert out["size"] == 5
+
+
+class _MsgSvc(_FakeService):
+    """messages().get gives the message, messages().attachments().get the bytes."""
+    def __init__(self, parts):
+        super().__init__()
+        self.parts, self.calls = parts, []
+
+    def attachments(self):
+        svc = self
+
+        class _A:
+            def get(self, **kwargs):
+                svc.calls.append(("attachment", kwargs))
+                return _Exec({"data": "aGVsbG8"})
+        return _A()
+
+    def get(self, **kwargs):
+        self.calls.append(("message", kwargs))
+        return _Exec({"id": "m1", "payload": {"parts": self.parts}})
+
+
+def test_gmail_attachment_name_from_the_message_part(inbox):
+    parts = [{"mimeType": "text/plain", "filename": "", "body": {"data": "eA"}},
+             {"mimeType": "multipart/mixed", "filename": "", "body": {}, "parts": [
+                 {"mimeType": "application/pdf", "filename": "../a/report.pdf",
+                  "body": {"attachmentId": "att1", "size": 5}}]}]
+    svc = _MsgSvc(parts)
+    c, _ = _client_with(svc)
+    out = c.download_attachment("m1", "att1")
+    assert out["path"] == out["saved_path"] == str(inbox / "report.pdf")
+    assert out["defaulted"] is False
+    assert (inbox / "report.pdf").read_bytes() == b"hello"
+    assert ("message", {"userId": "me", "id": "m1", "format": "full"}) in svc.calls
+
+
+def test_gmail_attachment_without_a_name_gets_the_fallback(inbox):
+    svc = _MsgSvc([{"mimeType": "application/pdf", "filename": "",
+                    "body": {"attachmentId": "att1", "size": 5}}])
+    c, _ = _client_with(svc)
+    attachment_id = "ANGjdJ8abcdefghijklmnop"
+    out = c.download_attachment("m1", attachment_id)
+    name = f"m1-{attachment_id[:12]}.bin"
+    assert out["path"] == str(inbox / name) and (inbox / name).read_bytes() == b"hello"
+
+
+def test_gmail_attachment_without_paths_yaml_goes_to_data_inbox():
+    from h2t_ops.core import paths
+    svc = _MsgSvc([{"mimeType": "application/pdf", "filename": "r.pdf",
+                    "body": {"attachmentId": "att1", "size": 5}}])
+    c, _ = _client_with(svc)
+    out = c.download_attachment("m1", "att1")
+    assert out["path"] == str(paths.data_dir() / "inbox" / "r.pdf") and out["defaulted"] is True
+
+
+def test_gmail_attachment_output_into_secrets_is_refused():
+    from h2t_ops.core import paths, store
+    c, _ = _client_with(_MsgSvc([]))
+    target = paths.secrets_shared() / "x.env"
+    with pytest.raises(store.WriteRefused):
+        c.download_attachment("m1", "att1", str(target))
+    assert not target.exists()
 
 
 # --- Task 7: google deps declared in pyproject.toml ---

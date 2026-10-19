@@ -5,11 +5,13 @@ Usage: $H2T_PYTHON apply_registration.py --id X --domain Y --type Z --label L --
 Outputs JSON to stdout.
 """
 import argparse
+import io
 import json
 import os
-import shutil
 import sys
 from pathlib import Path
+
+from h2t_ops.core import backups, paths, store
 
 try:
     from ruamel.yaml import YAML
@@ -19,24 +21,33 @@ except ImportError:
     YAML = None
 
 
-def _backup(path: Path) -> None:
-    """Create .bak backup of a file."""
-    if path.exists():
-        shutil.copy2(path, path.with_suffix(path.suffix + ".bak"))
+def _resolve_config_root(config_root: str | None = None) -> tuple[Path, bool]:
+    """(root, named): the config place, or a directory the caller named (--config-root).
 
-
-def _resolve_config_root(config_root: str | None = None) -> Path:
-    """Explicit, then H2T_CONFIG_ROOT, then default — as detect_project.py resolves it.
-
-    Detection and registration must land on the same config or a relocated one silently
-    splits them.
+    A named directory is not the config place to store — it classifies as tmp or elsewhere —
+    so it is written with dest=True, which still refuses a path inside a package place (R43).
+    One that is config_dir() by realpath is the config place itself. H2T_CONFIG_ROOT is not
+    read (R5).
     """
-    if config_root:
-        return Path(config_root).expanduser()
-    env = os.environ.get("H2T_CONFIG_ROOT")
-    if env:
-        return Path(env).expanduser()
-    return Path.home() / ".h2t" / "config"
+    default = paths.config_dir()
+    if not config_root:
+        return default, False
+    root = paths.expand_user_dest(config_root)
+    if os.path.realpath(root) == os.path.realpath(default):
+        return default, False
+    return root, True
+
+
+def _backup(path: Path) -> None:
+    """Copy into state/backups before the edit (R14); config/ keeps no *.bak."""
+    if path.exists():
+        backups.save_backup(path)
+
+
+def _dump(path: Path, yaml, doc, *, named: bool) -> None:
+    buf = io.StringIO()
+    yaml.dump(doc, buf)
+    store.replace(path, buf.getvalue(), place="config", dest=named)
 
 
 def apply_registration(
@@ -55,7 +66,7 @@ def apply_registration(
 
     Returns result dict with status and actions list.
     """
-    root = _resolve_config_root(config_root)
+    root, named = _resolve_config_root(config_root)
     mapping_path = root / "repo-mapping.yaml"
     domains_path = root / "domains.yaml"
 
@@ -91,8 +102,7 @@ def apply_registration(
         else:
             actions.append("Skipped cwd_patterns — no --cwd provided for directory type")
 
-    with open(mapping_path, "w", encoding="utf-8") as f:
-        yaml.dump(mapping, f)
+    _dump(mapping_path, yaml, mapping, named=named)
 
     # 2. Update domains.yaml
     _backup(domains_path)
@@ -133,20 +143,19 @@ def apply_registration(
         domain_data["projects"].append(new_entry)
         actions.append(f"Added {project_id} to domains.yaml under {domain}")
 
-    with open(domains_path, "w", encoding="utf-8") as f:
-        yaml.dump(domains, f)
+    _dump(domains_path, yaml, domains, named=named)
 
-    # 3. Create .claude/project-id if cwd provided
+    # 3. Create .claude/project-id if cwd provided — create only: an existing file is kept
+    # (§7.1 "create if absent", R32).
     if cwd:
-        pid_dir = Path(cwd) / ".claude"
-        pid_file = pid_dir / "project-id"
-        if not pid_file.exists():
-            pid_dir.mkdir(parents=True, exist_ok=True)
+        try:
             # domain/project, not the bare id: gather.project reads this file first now,
             # and a bare id makes the domain a lookup in the very config a fresh clone
             # does not have. Existing bare-id files still resolve through domains.yaml.
-            pid_file.write_text(domain_project + "\n", encoding="utf-8")
+            store.repo(cwd, "h2t-project-register").create(".claude/project-id", domain_project + "\n")
             actions.append("Created .claude/project-id")
+        except store.AlreadyExists:
+            pass
 
     return {
         "status": "ok",

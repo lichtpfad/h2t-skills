@@ -14,6 +14,7 @@ from pathlib import Path
 
 import yaml
 
+from h2t_ops.core import store
 from h2t_ops.resources import resource_dir
 
 # ---------------------------------------------------------------------------
@@ -114,8 +115,6 @@ def export_diagram(
         stem = source.stem  # e.g. "test" from "test.drawio"
         out = source.parent / f"{stem}.drawio.{fmt}"
 
-    out.parent.mkdir(parents=True, exist_ok=True)
-
     # -- Build CLI command ---------------------------------------------------
     cmd: list[str] = [
         str(cli_path),
@@ -148,17 +147,19 @@ def export_diagram(
     cmd.append(str(source))
 
     # -- Run -----------------------------------------------------------------
-    try:
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-    except subprocess.TimeoutExpired:
-        raise RuntimeError(
-            f"draw.io export timed out after 30s. Command: {' '.join(cmd)}"
-        )
+    # draw.io writes the output itself: the path is checked and handed over (§7.2, R7).
+    with store.managed(out, place="repo", library="drawio", dest=True):
+        try:
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+        except subprocess.TimeoutExpired:
+            raise RuntimeError(
+                f"draw.io export timed out after 30s. Command: {' '.join(cmd)}"
+            )
 
     if result.returncode != 0:
         stderr = result.stderr.strip() if result.stderr else "(no stderr)"

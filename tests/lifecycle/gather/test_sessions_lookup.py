@@ -1,14 +1,38 @@
+"""The previous session of this project, from every machine, through the index (#548 §5)."""
 from __future__ import annotations
 
 import json
 import os
-from pathlib import Path
+from datetime import UTC, datetime, timedelta
 
+from h2t_ops.core import paths
+from h2t_ops.lifecycle import session_record
+from h2t_ops.lifecycle.gather.briefing import format_briefing
 from h2t_ops.lifecycle.gather.sessions import (
     find_latest_session_index,
     find_session_files,
     get_machine_name,
 )
+
+
+def _ago(days: int) -> str:
+    return (datetime.now(UTC) - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _md(machine, project, sid, updated_at, **extra):
+    meta = {"session_id": sid, "machine": machine, "project": project, "domain": "dev",
+            "updated_at": updated_at, "branch": "feat/x", "commits": ["a1b2c3d"],
+            "done": f"done in {sid}", "remains": "- [ ] carry on", "artifacts": [], **extra}
+    f = session_record.session_path(machine, project, sid)
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_bytes(session_record.render(meta, b"# body\n"))
+    return f
+
+
+def _briefing(latest, machine="macbook-pro-3"):
+    md, _ = format_briefing({"project": {"id": "p"}, "git": {}, "github": {}, "stack": {},
+                             "sessions": ["x"], "latest_session": latest, "machine": machine})
+    return md
 
 
 def test_get_machine_name_prefers_h2t_env(monkeypatch):
@@ -18,86 +42,271 @@ def test_get_machine_name_prefers_h2t_env(monkeypatch):
     assert get_machine_name() == "h2t-name"
 
 
-def test_find_sessions_prefers_h2t_root_and_reads_legacy(tmp_path, monkeypatch):
-    h2t_root = tmp_path / "h2t" / "sessions"
-    dor_home = tmp_path / "home"
-    h2t_file = h2t_root / "machine-a" / "repo" / "new.md"
-    legacy_file = dor_home / ".dor" / "sessions" / "machine-b" / "repo" / "old.md"
-    h2t_file.parent.mkdir(parents=True)
-    legacy_file.parent.mkdir(parents=True)
-    h2t_file.write_text("new", encoding="utf-8")
-    legacy_file.write_text("old", encoding="utf-8")
-    monkeypatch.setenv("H2T_SESSION_ROOT", str(h2t_root))
-    monkeypatch.setattr(Path, "home", lambda: dor_home)
+def test_previous_session_names_machine_and_age(monkeypatch):
+    monkeypatch.setenv("H2T_MACHINE_NAME", "automata")
+    _md("automata", "p", "s1", _ago(2))
 
-    files = find_session_files("repo")
+    latest = find_latest_session_index("p")
 
-    assert str(h2t_file) in files
-    assert str(legacy_file) in files
+    assert (latest["machine"], latest["branch"], latest["last_commit"]) == ("automata", "feat/x", "a1b2c3d")
+    assert latest["summary_short"] == "done in s1" and latest["next_actions"] == ["carry on"]
+    assert latest["here"] is None
+    md = _briefing(latest, machine="automata")
+    assert "### Previous Session  (automata, 2 дня назад)" in md
+    assert "ветка feat/x, последний коммит a1b2c3d" in md
+    assert "⚠" not in md
 
 
-def test_find_latest_session_index_returns_none_when_only_markdown_exists(tmp_path, monkeypatch):
-    root = tmp_path / "sessions"
-    md = root / "machine-a" / "repo" / "old.md"
-    md.parent.mkdir(parents=True)
-    md.write_text("legacy handoff", encoding="utf-8")
-    monkeypatch.setenv("H2T_SESSION_ROOT", str(root))
+def test_warning_only_when_other_machine_is_newer(monkeypatch):
+    monkeypatch.setenv("H2T_MACHINE_NAME", "macbook-pro-3")
+    _md("automata", "p", "there", _ago(2))
 
-    result = find_latest_session_index("repo")
+    alone = find_latest_session_index("p")
+    assert alone["here"] is None, "no session of this project here: nothing to be behind"
+    assert "⚠" not in _briefing(alone)
 
-    assert result is None
+    _md("macbook-pro-3", "p", "here", _ago(5))
+    behind = find_latest_session_index("p")
+    assert behind["session_id"] == "there" and behind["here"]["machine"] == "macbook-pro-3"
+    assert ("⚠ на automata работали позже, чем здесь (macbook-pro-3, 5 дней назад) — git fetch"
+            in _briefing(behind))
 
-
-def test_find_latest_session_index_uses_newest_latest_json_only(tmp_path, monkeypatch):
-    root = tmp_path / "sessions"
-    older = root / "machine-a" / "repo" / "latest.json"
-    newer = root / "machine-b" / "repo" / "latest.json"
-    older.parent.mkdir(parents=True)
-    newer.parent.mkdir(parents=True)
-    older.write_text(json.dumps({"version": 1, "session_id": "older"}), encoding="utf-8")
-    newer.write_text(json.dumps({"version": 1, "session_id": "newer"}), encoding="utf-8")
-    monkeypatch.setenv("H2T_SESSION_ROOT", str(root))
-
-    newer_stat = newer.stat()
-    os.utime(newer, (newer_stat.st_atime + 10, newer_stat.st_mtime + 10))
-
-    result = find_latest_session_index("repo")
-
-    assert result is not None
-    assert result["session_id"] == "newer"
+    _md("macbook-pro-3", "p", "newest", _ago(0))
+    ahead = find_latest_session_index("p")
+    assert ahead["session_id"] == "newest" and ahead["here"] is None
+    assert "⚠" not in _briefing(ahead)
+    assert "(macbook-pro-3, сегодня)" in _briefing(ahead)
 
 
-def test_find_latest_session_index_repo_lookup_is_v1_boundary(tmp_path, monkeypatch):
-    root = tmp_path / "sessions"
-    latest = root / "machine-a" / "project-only" / "latest.json"
-    latest.parent.mkdir(parents=True)
-    latest.write_text(json.dumps({"version": 1, "session_id": "s1"}), encoding="utf-8")
-    monkeypatch.setenv("H2T_SESSION_ROOT", str(root))
+def test_other_projects_never_appear(monkeypatch):
+    monkeypatch.setenv("H2T_MACHINE_NAME", "m")
+    mine = _md("m", "p", "mine", _ago(3))
+    _md("m", "q", "theirs", _ago(0))
+    _md("other", "q", "theirs-too", _ago(0))
 
-    result = find_latest_session_index("non-repo-context")
+    assert find_latest_session_index("p")["session_id"] == "mine"
+    assert find_session_files("p") == [str(mine)]
+    assert find_latest_session_index("nope") is None
+    assert find_session_files("nope") == []
 
-    assert result is None
+
+def test_project_id_and_repo_name_are_both_asked(monkeypatch):
+    """#377: project.id first, the repo name for records written before the mapping."""
+    old = _md("m", "h2t-skills", "old", _ago(3))
+    new = _md("m", "agent-skills", "new", _ago(1))
+
+    assert find_latest_session_index("agent-skills", "h2t-skills")["session_id"] == "new"
+    assert find_session_files("agent-skills", "h2t-skills") == [str(new), str(old)]
 
 
-def test_find_latest_session_index_is_bounded(tmp_path, monkeypatch):
-    root = tmp_path / "sessions"
-    latest = root / "machine-a" / "repo" / "latest.json"
-    latest.parent.mkdir(parents=True)
-    latest.write_text(json.dumps({
-        "version": 1,
-        "session_id": "s1",
-        "summary_short": "x" * 4000,
-        "next_actions": ["a" * 1000 for _ in range(20)],
-        "blockers": ["b" * 1000 for _ in range(20)],
-        "artifacts": [{"type": "commit", "ref": str(i)} for i in range(20)],
-    }), encoding="utf-8")
-    monkeypatch.setenv("H2T_SESSION_ROOT", str(root))
+def test_broken_frontmatter_is_skipped_and_the_rest_shown(monkeypatch):
+    """Review Focus 3, as gather sees it: the broken md is not a session, the good one is."""
+    good = _md("m", "p", "good", _ago(1))
+    broken = good.with_name("broken.md")
+    broken.write_bytes(b"---\nsession_id: [unclosed\n---\n")
 
-    result = find_latest_session_index("repo")
+    assert find_session_files("p") == [str(good)]
+    assert find_latest_session_index("p")["session_id"] == "good"
 
-    assert result is not None
-    assert len(result["summary_short"]) <= 1200
-    assert len(result["next_actions"]) == 5
-    assert all(len(item) <= 240 for item in result["next_actions"])
-    assert len(result["blockers"]) == 5
-    assert len(result["artifacts"]) == 10
+
+def test_the_latest_is_bounded():
+    _md("m", "p", "s1", _ago(0), done="x" * 4000,
+        remains="\n".join(f"- [ ] {i} {'a' * 1000}" for i in range(20)),
+        artifacts=[{"type": "commit", "ref": str(i)} for i in range(20)])
+
+    latest = find_latest_session_index("p")
+
+    assert len(latest["summary_short"]) <= 1200
+    assert len(latest["next_actions"]) == 5
+    assert all(len(item) <= 240 for item in latest["next_actions"])
+    assert len(latest["artifacts"]) == 10
+    assert latest["truncated"] is True
+
+
+def test_briefing_limit_keeps_the_warning():
+    latest = {"machine": "automata", "updated_at": _ago(1), "summary_short": "s" * 1200,
+              "next_actions": ["n" * 240] * 5, "artifacts": [{"type": "commit", "ref": "r" * 200}] * 10,
+              "here": {"machine": "mac", "updated_at": _ago(4)}}
+    section = _briefing(latest).split("### Previous Session", 1)[1]
+    section = "### Previous Session" + section.split("\n\n", 1)[0]
+
+    assert len(section) <= 1800
+    assert "- [previous session truncated]" in section
+    assert section.endswith("— git fetch")
+
+
+def _legacy_latest(machine, key, data):
+    leaf = paths.legacy("sessions.h2t") / machine / key
+    leaf.mkdir(parents=True, exist_ok=True)
+    (leaf / "latest.json").write_text(json.dumps(data), encoding="utf-8")
+    return leaf
+
+
+def _legacy_tree() -> dict:
+    roots = (paths.legacy("sessions.h2t"), paths.legacy("sessions.dor"))
+    return {str(f): f.stat().st_mtime_ns for r in roots for f in r.rglob("*")}
+
+
+def test_legacy_fallback_before_migration(monkeypatch):
+    """4.0.x before sync: the index has nothing for the project, the 3.x roots do."""
+    leaf = _legacy_latest("automata", "p", {"version": 1, "session_id": "old-3x",
+                                            "summary_short": "from 3.x", "next_actions": ["go"]})
+    (leaf / "old-3x.md").write_text("# 3.x handoff\n", encoding="utf-8")
+    dor = paths.legacy("sessions.dor") / "laptop" / "p" / "dor.md"
+    dor.parent.mkdir(parents=True)
+    dor.write_text("# dor handoff\n", encoding="utf-8")
+    before = _legacy_tree()
+
+    latest = find_latest_session_index("p")
+
+    assert latest["session_id"] == "old-3x" and latest["machine"] == "automata"
+    assert set(find_session_files("p")) == {str(leaf / "old-3x.md"), str(dor)}
+    md = _briefing(latest)
+    assert "from 3.x" in md
+    assert "ℹ сессии ещё в старом месте — h2t-setup sync перенесёт их" in md
+    assert _legacy_tree() == before, "the 3.x roots are read, never written"
+
+
+def test_legacy_is_not_read_once_the_index_knows_the_project(monkeypatch):
+    _legacy_latest("automata", "p", {"version": 1, "session_id": "old-3x"})
+    _md("m", "p", "new", _ago(0))
+
+    latest = find_latest_session_index("p")
+
+    assert latest["session_id"] == "new" and "legacy" not in latest
+    assert "старом месте" not in _briefing(latest)
+
+
+def test_legacy_latest_json_is_newest_by_mtime():
+    older = _legacy_latest("machine-a", "repo", {"version": 1, "session_id": "older"}) / "latest.json"
+    newer = _legacy_latest("machine-b", "repo", {"version": 1, "session_id": "newer"}) / "latest.json"
+    st = newer.stat()
+    os.utime(newer, (st.st_atime + 10, st.st_mtime + 10))
+    assert older.is_file()
+
+    assert find_latest_session_index("repo")["session_id"] == "newer"
+
+
+def _gather(monkeypatch, capfd, tmp_path, *, files, latest):
+    import sys
+
+    from h2t_ops.lifecycle import session_start
+    monkeypatch.setenv("H2T_EVALS_MODE", "off")
+    monkeypatch.setattr(session_start, "identify_project", lambda cwd: {"id": "p", "domain": "dev"})
+    monkeypatch.setattr(session_start, "find_session_files", files)
+    monkeypatch.setattr(session_start, "find_latest_session_index", latest)
+    monkeypatch.setattr(sys, "argv", ["h2t-gather", "--cwd", str(tmp_path)])
+    session_start.main()
+    return json.loads(capfd.readouterr().out)
+
+
+def test_an_index_that_cannot_open_is_a_failed_source(monkeypatch, capfd, tmp_path):
+    """gather still prints, names the dead source with a diagnostic, and keeps what the
+    lookup that did answer found."""
+    import sqlite3
+
+    def locked(*a, **kw):
+        raise sqlite3.OperationalError(f"database is locked: {paths.home()}/.h2t/state/index.sqlite")
+
+    data = _gather(monkeypatch, capfd, tmp_path, files=lambda *a: ["/r/a.md"], latest=locked)
+
+    assert "sessions" in data["_meta"]["sources_used"]
+    assert data["_meta"]["sources_failed"] == ["sessions"]
+    assert data["sessions"] == ["/r/a.md"] and data["latest_session"] is None
+    (diag,) = data["_meta"]["diagnostics"]
+    assert diag == {"source": "sessions.latest",
+                    "error": "OperationalError: database is locked: ~/.h2t/state/index.sqlite"}
+
+
+def test_a_hung_index_lock_costs_the_whole_gather_under_three_seconds(monkeypatch, capfd, tmp_path):
+    """The slash-skill gather has 3 s (package-architecture spec, budgets) and asks the index
+    several times — ontology, files, latest. With the lock held throughout, the first lookup
+    waits GATHER_LOCK_S and the others do not wait at all."""
+    import sys
+    import time
+
+    from h2t_ops.core import store
+    from h2t_ops.lifecycle import session_start
+    from h2t_ops.lifecycle.index import query
+    _md("mac", "p", "s1", _ago(1))
+    monkeypatch.setenv("H2T_EVALS_MODE", "off")
+    monkeypatch.setattr(sys, "argv", ["h2t-gather", "--cwd", str(tmp_path)])
+    with store.locked(query._lock_path(), place="state"):
+        t0 = time.monotonic()
+        session_start.main()
+        took = time.monotonic() - t0
+    assert took < 2, took      # one wait of 1 s; a second wait would already be 2
+    out = json.loads(capfd.readouterr().out)
+    assert "sessions" in out["_meta"]["sources_used"]
+
+
+def test_a_programming_error_in_the_lookup_surfaces(monkeypatch, capfd, tmp_path):
+    import pytest
+
+    def broken(*a, **kw):
+        raise KeyError("a bug, not storage")
+
+    with pytest.raises(KeyError):
+        _gather(monkeypatch, capfd, tmp_path, files=broken, latest=lambda *a: None)
+
+
+def test_age_uses_russian_plural_forms():
+    from h2t_ops.lifecycle.gather.briefing import _days
+    got = {n: _days(n) for n in (1, 2, 4, 5, 11, 12, 14, 20, 21, 22, 25, 101, 111, 112)}
+    assert got == {1: "1 день", 2: "2 дня", 4: "4 дня", 5: "5 дней", 11: "11 дней", 12: "12 дней",
+                   14: "14 дней", 20: "20 дней", 21: "21 день", 22: "22 дня", 25: "25 дней",
+                   101: "101 день", 111: "111 дней", 112: "112 дней"}
+
+
+def test_equal_timestamps_are_no_warning(monkeypatch):
+    """The path tiebreak may put the other machine first; an equal stamp is not "later"."""
+    monkeypatch.setenv("H2T_MACHINE_NAME", "zz-here")
+    stamp = _ago(1)
+    _md("aa-there", "p", "there", stamp)
+    _md("zz-here", "p", "here", stamp)
+
+    latest = find_latest_session_index("p")
+
+    assert latest["machine"] == "aa-there", "control: the tiebreak picks the other machine"
+    assert latest["here"] is None
+    assert "⚠" not in _briefing(latest, machine="zz-here")
+
+
+def test_dor_only_legacy_history_still_says_it_has_not_moved():
+    """No 3.x latest.json at all — DOR wrote only markdown."""
+    dor = paths.legacy("sessions.dor") / "laptop" / "p" / "dor-1.md"
+    dor.parent.mkdir(parents=True)
+    dor.write_text("# dor handoff\n", encoding="utf-8")
+
+    latest = find_latest_session_index("p")
+
+    assert latest["legacy"] is True and latest["machine"] == "laptop"
+    assert latest["markdown_path"] == str(dor)
+    md = _briefing(latest)
+    assert "### Previous Session  (laptop, сегодня)" in md
+    assert "ℹ сессии ещё в старом месте — h2t-setup sync перенесёт их" in md
+
+
+def test_corrupt_legacy_latest_json_still_says_it_has_not_moved():
+    leaf = paths.legacy("sessions.h2t") / "m" / "p"
+    leaf.mkdir(parents=True)
+    (leaf / "latest.json").write_text("{not json", encoding="utf-8")
+    (leaf / "s.md").write_text("# 3.x\n", encoding="utf-8")
+
+    latest = find_latest_session_index("p")
+
+    assert latest["legacy"] is True and latest["markdown_path"] == str(leaf / "s.md")
+    assert "старом месте" in _briefing(latest)
+
+
+def test_long_machine_names_cannot_push_the_section_past_the_limit():
+    huge = "m" * 5000
+    latest = {"machine": huge, "updated_at": _ago(1), "summary_short": "s" * 1200,
+              "next_actions": ["n" * 240] * 5, "legacy": True,
+              "here": {"machine": huge + "x", "updated_at": _ago(4)}}
+    md = _briefing(latest)
+    start = md.find("### Previous Session")
+    section = md[start:md.index("\n\n### Hints")]
+
+    assert start >= 0 and len(section) <= 1800, (start, len(section))
+    assert "— git fetch" in section and section.endswith("перенесёт их")

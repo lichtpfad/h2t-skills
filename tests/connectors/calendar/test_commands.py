@@ -92,15 +92,53 @@ def test_date_window_bounds_are_inclusive_user_dates():
     assert time_max == "2026-05-22T00:00:00+03:00"
 
 
-def test_calendar_timezone_resolution_prefers_arg_then_env(monkeypatch):
+def _user_yaml(text):
+    from h2t_ops.core import paths
+    f = paths.config_dir() / "user.yaml"
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_text(text, encoding="utf-8")
+
+
+def test_calendar_timezone_resolution_prefers_arg_then_env_then_user_yaml(monkeypatch):
+    """--tz → H2T_CALENDAR_TZ → user.yaml `timezone` → the system zone (#548 R45)."""
     from h2t_ops.connectors.calendar.commands import _resolve_query_tz
 
+    _user_yaml("timezone: America/Toronto\n")
     monkeypatch.setenv("H2T_CALENDAR_TZ", "UTC")
-
-    assert _resolve_query_tz("Asia/Jerusalem") == "Asia/Jerusalem"
-    assert _resolve_query_tz(None) == "UTC"
+    assert _resolve_query_tz("Europe/Paris") == ("Europe/Paris", "flag")
+    assert _resolve_query_tz(None) == ("UTC", "env")
     monkeypatch.delenv("H2T_CALENDAR_TZ")
-    assert _resolve_query_tz(None) == "Asia/Jerusalem"
+    assert _resolve_query_tz(None) == ("America/Toronto", "user.yaml")
+
+
+def test_calendar_timezone_without_any_value_is_the_system_zone(monkeypatch):
+    from zoneinfo import ZoneInfo
+
+    from h2t_ops.connectors.calendar import commands as cmds_mod
+
+    ZoneInfo(cmds_mod._system_tz())                    # an IANA key, UTC at worst
+    monkeypatch.delenv("H2T_CALENDAR_TZ", raising=False)
+    monkeypatch.setattr(cmds_mod, "_system_tz", lambda: "Pacific/Auckland")
+    assert cmds_mod._resolve_query_tz(None) == ("Pacific/Auckland", "system")
+
+
+def test_create_without_tz_takes_user_yaml_timezone(monkeypatch):
+    """The client's own default is the same rule, not a second literal."""
+    from h2t_ops.connectors.calendar.client import CalendarClient
+
+    monkeypatch.delenv("H2T_CALENDAR_TZ", raising=False)
+    _user_yaml("timezone: America/Toronto\n")
+    seen = {}
+
+    class _Events:
+        def insert(self, **kw):
+            seen.update(kw)
+            return SimpleNamespace(execute=lambda: {"id": "e1", "summary": "T"})
+
+    client = CalendarClient.__new__(CalendarClient)
+    client.service = SimpleNamespace(events=lambda: _Events())
+    client.create_event(summary="T", date="2026-05-01", time="10:00")
+    assert seen["body"]["start"]["timeZone"] == "America/Toronto"
 
 
 def test_importing_commands_does_not_import_client(monkeypatch):
@@ -136,6 +174,7 @@ def test_list_dispatch_json_returns_rows(monkeypatch):
             return {"items": [{"id": "evt1", "summary": "M"}], "truncated": False,
                     "window": {"from": "a", "to": "b"}}
     _patch_calendar_client(monkeypatch, lambda: _Stub())
+    monkeypatch.delenv("H2T_CALENDAR_TZ", raising=False)
     args = SimpleNamespace(
         calendar_cmd="list", days=1, max=20, calendar_id="primary",
         from_date=None, to_date=None, tz=None, busy_only=False,
@@ -143,8 +182,9 @@ def test_list_dispatch_json_returns_rows(monkeypatch):
     )
     out = cmds_mod.run(args)
     assert out.items == [{"id": "evt1", "summary": "M"}]
+    # no --tz, no variable, no user.yaml: the system zone, and the envelope says so (R45)
     assert out.meta() == {"count": 1, "truncated": False, "limit": 20,
-                          "window": {"from": "a", "to": "b"}}
+                          "window": {"from": "a", "to": "b"}, "tz_source": "system"}
 
 
 def test_list_dispatch_date_window_passes_explicit_bounds(monkeypatch):

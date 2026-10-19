@@ -158,3 +158,14 @@ def test_download_passes_gunzip_through(fake_client):
     fake_client.download.return_value = {"path": "/x", "saved_to": "/tmp/x", "bytes": 3}
     cmds.run(_args(dropbox_cmd="download", path="/x", dest="/tmp/x", gunzip=True))
     assert fake_client.download.call_args.kwargs["gunzip"] is True
+
+
+def test_download_without_dest_leaves_the_place_to_the_client(fake_client):
+    """`download <path>` alone: dest is None, which the client turns into the inbox."""
+    from h2t_ops.cli import build_parser
+
+    ns = build_parser().parse_args(["dropbox", "download", "/HOU2TOUCH/clip.wav", "--json"])
+    assert ns.dest is None
+    fake_client.download.return_value = {"path": "/x", "saved_to": "/i/clip.wav", "bytes": 3}
+    cmds.run(ns)
+    assert fake_client.download.call_args.args == ("/HOU2TOUCH/clip.wav", None)

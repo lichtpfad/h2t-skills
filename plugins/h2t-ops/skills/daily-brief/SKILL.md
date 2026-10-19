@@ -67,10 +67,13 @@ structured proposed captures instead of mutating stores.
 `today` и смещения вида `+2d` и резолвят их в таймзоне запроса. Это заодно
 убирает POSIX-специфичный путь к интерпретатору, который ломался на Windows.
 
+База задач и таймзона — значения пользователя, а не скилла: коннектор берёт их из
+`~/.h2t/config/user.yaml` (`notion.tasks_database_id`, `timezone`). Без `timezone`
+календарь считает в системной таймзоне; без id базы `notion search` завершается с
+кодом 2 и подсказкой, куда его вписать.
+
 ```bash
 command -v h2t-ops >/dev/null || { echo "ERROR: h2t-ops not on PATH. Run /h2t-core:setup"; exit 1; }
-TASKS_DB="beabac7bf4314952a9327759c638d89f"
-TZ_NAME="Asia/Jerusalem"
 ```
 
 ## Шаги
@@ -82,14 +85,14 @@ TZ_NAME="Asia/Jerusalem"
 ```bash
 # События: явное окно календарных суток. --days тоже считает сутками (#351),
 # но здесь окно задано явно — брифинг должен сам решать, докуда смотрит.
-h2t-ops calendar list --from today --to +2d --tz "$TZ_NAME" --max 50 --json
+h2t-ops calendar list --from today --to +2d --max 50 --json
 
 # Письма: --format human, а не --json. В json каждая строка тащит полное тело
 # письма (~5 KB), 40 писем это ~300 KB в контекст. human даёт ~13 KB с ID.
 h2t-ops gmail list --unread --query "is:important" --max 40 --format human
 
 # Задачи: --format md отдаёт свойства, Link и резолвленный проект
-h2t-ops notion search "$TASKS_DB" \
+h2t-ops notion search \
   --filter-json '{"property":"Status","status":{"does_not_equal":"Done"}}' \
   --limit 200 --format md --resolve-relations Project
 ```
@@ -184,7 +187,8 @@ h2t-ops notion search "$TASKS_DB" \
 
 - **`h2t-ops` не найден**: исход 3 проверки версии в начале скилла — он различает PATH и
   отсутствие установки и даёт команду бутстрапа
-- **Calendar/Gmail**: проверь токены — `~/.config/google-calendar-mcp/tokens.json`
-- **Notion**: проверь `NOTION_API_TOKEN` в `~/.dor/secrets.env`
+- **Calendar/Gmail**: проверь токен этой машины — файл `h2t-ops paths get secret:google.token`;
+  нет файла — `h2t-ops google auth`
+- **Notion**: проверь `NOTION_API_TOKEN` в файле `h2t-ops paths get secret:notion`
 - Диагностика разом: `h2t-ops doctor`
 - Если источник недоступен — пропусти его и укажи в брифинге `⚠️ <source> unavailable`

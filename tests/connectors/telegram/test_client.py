@@ -4,6 +4,8 @@ from __future__ import annotations
 import builtins
 import json
 import sqlite3
+import stat
+import sys
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
@@ -775,9 +777,8 @@ def test_download_media_saves_file_and_returns_row(tmp_path, monkeypatch):
 
         def download_media(self, message, file=None):
             calls["download_file"] = file
-            Path(file).mkdir(parents=True, exist_ok=True)
-            saved.write_bytes(b"pdf")
-            return str(saved)
+            file.write(b"pdf")          # Telethon writes into a file-like object it is given
+            return file
 
     adapter = _make_adapter_with_fake_connection(tmp_path, monkeypatch, FakeClient())
     out = adapter.download_media("chat", 55, out_dir=str(out_dir))
@@ -966,3 +967,298 @@ def test_list_messages_does_not_emit_rows_from_a_failed_candidate(tmp_path, monk
     monkeypatch.setattr(tmod.TelegramClientAdapter, "_client", lambda self: _CtxClient(FakeInner()))
     rows = tmod.TelegramClientAdapter(config_dir=tmp_path).list_messages("10", limit=5)
     assert [r["id"] for r in rows] == [1]
+
+
+# --- 4.0 layout (#548 Task 9): keys in telegram.env, session in secrets/local ------------
+
+
+def _keys(monkeypatch, api_id="1"):
+    from h2t_ops.core import secrets
+
+    for k in ("TELEGRAM_API_ID", "TELEGRAM_API_HASH"):
+        monkeypatch.delenv(k, raising=False)
+    path = secrets.provider_file("telegram")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(f"TELEGRAM_API_ID={api_id}\nTELEGRAM_API_HASH=fake-hash\n", encoding="utf-8")
+
+
+class _SessionWriter:
+    """Stands in for Telethon: opens <session>.session itself, as SQLiteSession does."""
+    seen: dict = {}
+
+    def __init__(self, session, api_id, api_hash):
+        _SessionWriter.seen = {"session": session, "api_id": api_id, "api_hash": api_hash}
+        Path(session + ".session").write_bytes(b"fake-session")
+
+    def connect(self):
+        pass
+
+    def disconnect(self):
+        pass
+
+    def iter_dialogs(self, limit=None):
+        return []
+
+
+def test_api_keys_from_secrets_env(monkeypatch):
+    from h2t_ops.connectors.telegram.client import TelegramClientAdapter
+
+    _keys(monkeypatch)
+    assert TelegramClientAdapter()._load_config() == {"api_id": 1, "api_hash": "fake-hash"}
+
+    _keys(monkeypatch, api_id="fake-id")
+    with pytest.raises(ConfigError) as ei:
+        TelegramClientAdapter()._load_config()
+    assert "TELEGRAM_API_ID" in str(ei.value) and "is not a number" in str(ei.value)
+    assert "telegram.env" in str(ei.value)
+
+
+def test_empty_keys_in_telegram_env_fall_back_to_the_3x_config_per_key(monkeypatch):
+    """The skeleton writes empty KEY= lines; a key empty in telegram.env is not migrated."""
+    import json
+
+    from h2t_ops.connectors.telegram.client import TelegramClientAdapter
+    from h2t_ops.core import paths, secrets
+
+    for k in ("TELEGRAM_API_ID", "TELEGRAM_API_HASH"):
+        monkeypatch.delenv(k, raising=False)
+    env = secrets.provider_file("telegram")
+    env.parent.mkdir(parents=True, exist_ok=True)
+    env.write_text("TELEGRAM_API_ID=\nTELEGRAM_API_HASH=\n", encoding="utf-8")
+    cfg = paths.legacy("telegram") / "config.json"
+    cfg.parent.mkdir(parents=True)
+    cfg.write_text(json.dumps({"api_id": 7, "api_hash": "fake-old-hash"}), encoding="utf-8")
+    assert TelegramClientAdapter()._load_config() == {"api_id": 7, "api_hash": "fake-old-hash"}
+
+    env.write_text("TELEGRAM_API_ID=\nTELEGRAM_API_HASH=fake-new-hash\n", encoding="utf-8")
+    assert TelegramClientAdapter()._load_config() == {"api_id": 7, "api_hash": "fake-new-hash"}
+
+
+def test_legacy_config_with_bom_reports_line(monkeypatch):
+    from h2t_ops.connectors.telegram.client import TelegramClientAdapter
+    from h2t_ops.core import paths
+
+    for k in ("TELEGRAM_API_ID", "TELEGRAM_API_HASH"):
+        monkeypatch.delenv(k, raising=False)
+    cfg = paths.legacy("telegram") / "config.json"
+    cfg.parent.mkdir(parents=True)
+    cfg.write_bytes(b"\xef\xbb\xbf" + '{"api_id": ТУТ_ЧИСЛО, "api_hash": "x"}'.encode())
+    with pytest.raises(ConfigError) as ei:
+        TelegramClientAdapter()._load_config()
+    assert "config.json" in str(ei.value)
+    assert "line 1" in str(ei.value)
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX mode bits")
+def test_session_lives_in_secrets_local_with_0600(monkeypatch):
+    from h2t_ops.connectors.telegram import client as tmod
+    from h2t_ops.core import paths
+
+    _keys(monkeypatch)
+    monkeypatch.setattr(tmod.TelegramClientAdapter, "_telegram_client_class", lambda self: _SessionWriter)
+    assert tmod.TelegramClientAdapter().list_dialogs() == []
+
+    session = paths.secrets_local() / "telegram.session"
+    assert _SessionWriter.seen["session"] == str(paths.secrets_local() / "telegram")
+    assert _SessionWriter.seen["api_id"] == 1
+    assert session.read_bytes() == b"fake-session"
+    assert stat.S_IMODE(session.stat().st_mode) == 0o600
+    assert not paths.legacy("telegram").exists()
+
+
+def test_legacy_session_is_copied_once(monkeypatch, capsys):
+    from h2t_ops.connectors.telegram import client as tmod
+    from h2t_ops.core import paths
+
+    _keys(monkeypatch)
+    old = paths.legacy("telegram") / "session.session"
+    old.parent.mkdir(parents=True)
+    conn = sqlite3.connect(old)
+    conn.execute("CREATE TABLE entities (id INTEGER PRIMARY KEY, hash INTEGER)")
+    conn.execute("INSERT INTO entities VALUES (-1000000000010, 42)")
+    conn.commit()
+    conn.close()
+    before = old.read_bytes()
+
+    class Quiet(_SessionWriter):
+        def __init__(self, session, api_id, api_hash):
+            pass
+
+    monkeypatch.setattr(tmod.TelegramClientAdapter, "_telegram_client_class", lambda self: Quiet)
+    new = paths.secrets_local() / "telegram.session"
+
+    tmod.TelegramClientAdapter().list_dialogs()
+    first = new.stat().st_mtime_ns
+    assert capsys.readouterr().err.count("session copied to") == 1
+
+    tmod.TelegramClientAdapter().list_dialogs()
+    assert new.stat().st_mtime_ns == first
+    assert "session copied" not in capsys.readouterr().err
+
+    assert old.read_bytes() == before
+    copy = sqlite3.connect(new)
+    try:
+        assert copy.execute("SELECT id, hash FROM entities").fetchall() == [(-1000000000010, 42)]
+    finally:
+        copy.close()
+
+
+def _media_client(name="report.pdf", payload=b"fake-pdf"):
+    file_obj = SimpleNamespace(name=name, size=len(payload), mime_type="application/pdf", ext=".pdf")
+    msg = SimpleNamespace(media=SimpleNamespace(), file=file_obj)
+
+    class FakeInner:
+        def get_messages(self, entity, ids=None):
+            return msg
+
+        def download_media(self, message, file=None):
+            file.write(payload)
+            return file
+
+    return FakeInner()
+
+
+def _set_inbox(path):
+    from h2t_ops.core import paths
+
+    path.mkdir(parents=True, exist_ok=True)
+    cfg = paths.paths_yaml()
+    cfg.parent.mkdir(parents=True, exist_ok=True)
+    cfg.write_text(f"version: 1\nplaces:\n  inbox: {path}\n", encoding="utf-8")
+
+
+def test_download_media_defaults_to_inbox(tmp_path, monkeypatch, capsys):
+    from h2t_ops.connectors.telegram import client as tmod
+    from h2t_ops.core import paths
+
+    _keys(monkeypatch)
+    monkeypatch.setattr(tmod.TelegramClientAdapter, "_client", lambda self: _CtxClient(_media_client()))
+
+    # inbox not set: data/inbox, a package place, written as data (R28), and said so
+    out = tmod.TelegramClientAdapter().download_media("chat", 55)
+    default = paths.data_dir() / "inbox" / "report.pdf"
+    assert out["path"] == str(default) and default.read_bytes() == b"fake-pdf"
+    assert f"saved to {default} (inbox not set: h2t-ops paths set inbox <path>)" in capsys.readouterr().err
+
+    inbox = tmp_path / "inbox"
+    _set_inbox(inbox)
+    out = tmod.TelegramClientAdapter().download_media("chat", 55)
+    assert out["path"] == str(inbox / "report.pdf")
+    assert (inbox / "report.pdf").read_bytes() == b"fake-pdf"
+    assert "inbox not set" not in capsys.readouterr().err
+
+
+def test_download_media_writes_through_a_store_handle(tmp_path, monkeypatch):
+    from h2t_ops.connectors.telegram import client as tmod
+    from tests.governance.test_sandbox import build_sandbox
+
+    with build_sandbox(tmp_path, monkeypatch) as sb:
+        _keys(monkeypatch)
+        monkeypatch.setattr(tmod.TelegramClientAdapter, "_client", lambda self: _CtxClient(_media_client()))
+        with sb.recorder.active():
+            out = tmod.TelegramClientAdapter().download_media("chat", 55)
+        assert sb.recorder.violations == []
+        assert out["path"] == str(sb.inbox / "report.pdf")
+        assert (sb.inbox / "report.pdf").read_bytes() == b"fake-pdf"
+
+
+def test_download_media_never_overwrites(tmp_path, monkeypatch):
+    from h2t_ops.connectors.telegram import client as tmod
+
+    _keys(monkeypatch)
+    inbox = tmp_path / "inbox"
+    _set_inbox(inbox)
+    (inbox / "report.pdf").write_bytes(b"theirs")
+    monkeypatch.setattr(tmod.TelegramClientAdapter, "_client", lambda self: _CtxClient(_media_client()))
+
+    out = tmod.TelegramClientAdapter().download_media("chat", 55)
+    assert out["path"] == str(inbox / "report-2.pdf")
+    assert (inbox / "report-2.pdf").read_bytes() == b"fake-pdf"
+    assert (inbox / "report.pdf").read_bytes() == b"theirs"
+
+
+def test_download_media_name_has_no_directories(tmp_path, monkeypatch):
+    from h2t_ops.connectors.telegram import client as tmod
+
+    _keys(monkeypatch)
+    inbox = tmp_path / "box" / "inbox"
+    _set_inbox(inbox)
+    monkeypatch.setattr(tmod.TelegramClientAdapter, "_client",
+                        lambda self: _CtxClient(_media_client(name="../../x.pdf")))
+
+    out = tmod.TelegramClientAdapter().download_media("chat", 55)
+    assert out["path"] == str(inbox / "x.pdf") and (inbox / "x.pdf").is_file()
+    assert not (tmp_path / "x.pdf").exists()
+
+
+def test_unnamed_media_is_named_entity_id_ext(tmp_path, monkeypatch):
+    from h2t_ops.connectors.telegram import client as tmod
+
+    _keys(monkeypatch)
+    out_dir = tmp_path / "out"
+    monkeypatch.setattr(tmod.TelegramClientAdapter, "_client",
+                        lambda self: _CtxClient(_media_client(name=None)))
+
+    out = tmod.TelegramClientAdapter().download_media("chat", 55, out_dir=str(out_dir))
+    assert out["path"] == str(out_dir / "chat-55.pdf")
+    assert (out_dir / "chat-55.pdf").read_bytes() == b"fake-pdf"
+
+
+def test_unnamed_media_with_a_windows_style_entity_stays_in_the_target(tmp_path, monkeypatch):
+    """`..\\..\\outside` is a path on Windows: the fallback name must carry no separator,
+    drive colon or leading dot, wherever the test runs."""
+    from h2t_ops.connectors.telegram import client as tmod
+
+    _keys(monkeypatch)
+    out_dir = tmp_path / "a" / "out"
+    monkeypatch.setattr(tmod.TelegramClientAdapter, "_client",
+                        lambda self: _CtxClient(_media_client(name=None)))
+
+    out = tmod.TelegramClientAdapter().download_media("..\\..\\C:outside", 55, out_dir=str(out_dir))
+    name = out["filename"]
+    assert not any(c in name for c in "/\\:") and not name.startswith(".")
+    assert Path(out["path"]).parent == out_dir and (out_dir / name).is_file()
+    assert sorted(p.name for p in tmp_path.rglob("*") if p.is_file()) == [name]
+
+
+def test_a_name_that_leaves_the_target_is_refused(tmp_path, monkeypatch):
+    from h2t_ops.connectors.telegram import client as tmod
+    from h2t_ops.core import store
+
+    _keys(monkeypatch)
+    out_dir = tmp_path / "out"
+    monkeypatch.setattr(tmod, "_media_filename", lambda *a: "../evil.pdf")
+    monkeypatch.setattr(tmod.TelegramClientAdapter, "_client", lambda self: _CtxClient(_media_client()))
+
+    with pytest.raises(store.WriteRefused):
+        tmod.TelegramClientAdapter().download_media("chat", 55, out_dir=str(out_dir))
+    assert not (tmp_path / "evil.pdf").exists()
+
+
+def test_bootstrap_honours_the_3x_marker(monkeypatch):
+    from h2t_ops.connectors.telegram import client as tmod
+    from h2t_ops.core import paths
+
+    _keys(monkeypatch)
+    old = paths.legacy("telegram") / "dialogs_bootstrapped"
+    old.parent.mkdir(parents=True)
+    old.write_text("1700000000.0")
+    monkeypatch.setattr(tmod.TelegramClientAdapter, "_client",
+                        lambda self: (_ for _ in ()).throw(AssertionError("must not connect")))
+
+    result = tmod.TelegramClientAdapter().bootstrap_dialogs()
+    assert result == {"refreshed": False, "count": 0, "timestamp_path": str(old)}
+    assert not (paths.state_dir() / "telegram" / "dialogs_bootstrapped").exists()
+    assert old.read_text() == "1700000000.0"
+
+
+def test_missing_config_touches_nothing(monkeypatch):
+    from h2t_ops.connectors.telegram import client as tmod
+    from h2t_ops.core import paths
+
+    for k in ("TELEGRAM_API_ID", "TELEGRAM_API_HASH"):
+        monkeypatch.delenv(k, raising=False)
+    with pytest.raises(ConfigError):
+        tmod.TelegramClientAdapter().list_dialogs()
+    assert not paths.secrets_local().exists()
+    assert not (paths.logs_dir() / "writes.jsonl").exists()

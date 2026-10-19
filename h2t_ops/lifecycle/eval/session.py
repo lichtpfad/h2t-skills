@@ -25,35 +25,6 @@ from .skill_class import eval_set_for
 
 _VALID_MODES = ("auto", "off", "local", "push")
 
-_DEFAULT_SECRETS = Path.home() / ".dor" / "secrets.env"
-
-
-def _load_secrets(secrets_path=None) -> dict:
-    """Merge ~/.dor/secrets.env under the process env for H2T_EVALS_* keys.
-
-    Mirrors lib/skill_graph/client.py _load_secrets: the file supplies values,
-    explicit environment variables win. Prefix-matched (never a hardcoded key
-    list) so SERVICE_URL/TOKEN/SPOOL/RUN_ENV cannot be silently dropped.
-    Self-contained (stdlib only) — the bundled plugin copy carries no
-    cross-package dependency. See #321.
-    """
-    path = Path(secrets_path) if secrets_path else _DEFAULT_SECRETS
-    result: dict = {}
-    if path.exists():
-        for line in path.read_text(encoding="utf-8").splitlines():
-            line = line.strip()
-            if line.startswith("#") or "=" not in line:
-                continue
-            key, _, val = line.partition("=")
-            key = key.strip()
-            if key.startswith("H2T_EVALS_"):
-                result[key] = val.strip()
-    for key, val in os.environ.items():
-        if key.startswith("H2T_EVALS_"):
-            result[key] = val
-    return result
-
-
 def _sdk_available() -> bool:
     """True if the h2t_evals SDK client is importable (cheap, no network)."""
     try:
@@ -90,7 +61,6 @@ class SkillEval:
         project: str,
         repo: str = "h2t-skills",
         plugin_version: str = "",
-        evals_root: str | None = None,
         skill_graph=None,
         score_before: float | None = None,
         secrets_path: str | None = None,
@@ -103,7 +73,6 @@ class SkillEval:
         # session/handoff/activity/lineage). See #305.
         self.repo = repo
         self.plugin_version = plugin_version
-        self.evals_root = evals_root
         self._skill_graph = skill_graph
         self._score_before = score_before
         self._score_after: float | None = None
@@ -113,9 +82,11 @@ class SkillEval:
         self._op_type_valid: bool | None = None
         self._fallback_used: bool = False
         self._error_class: str | None = None
-        # Credentials resolve from ~/.dor/secrets.env (env-wins); one merged env
-        # feeds both mode resolution and the central send path. See #321.
-        self._env = _load_secrets(secrets_path)
+        # H2T_EVALS_* through core.secrets (env wins, R33); one merged env feeds both mode
+        # resolution and the central send path. See #321. Imported here: the module's
+        # top-level imports stay stdlib (test_session_imports_only_stdlib).
+        from h2t_ops.core import secrets
+        self._env = secrets.evals_env(env_file=Path(secrets_path) if secrets_path else None)
         self._mode = resolve_mode(self._env)
         self._eval_set = eval_set_for(skill)
 
@@ -262,17 +233,15 @@ class SkillEval:
         extra = [c for c in auto if c["key"] not in caller_keys]
         return self._metrics + extra
 
-    def _write_local(self, status: str, ended_at: str, metrics: list[dict]) -> None:
-        root = Path(self.evals_root) if self.evals_root else Path.home() / ".h2t" / "evals"
-        sessions_dir = root / self.skill / "sessions"
-        try:
-            sessions_dir.mkdir(parents=True, exist_ok=True)
-        except OSError:
-            return
-
-        prefix = self.skill[:2]
+    def _run_name(self) -> str:
+        """The 3.x file name without .json: <prefix>-<stamp>-<uuid8>."""
         stamp = datetime.now(UTC).strftime("%Y-%m-%d-%H%M%S-%f")
-        filepath = sessions_dir / f"{prefix}-{stamp}-{uuid.uuid4().hex[:8]}.json"
+        return f"{self.skill[:2]}-{stamp}-{uuid.uuid4().hex[:8]}"
+
+    def _write_local(self, status: str, ended_at: str, metrics: list[dict]) -> None:
+        """records/evals/<machine>/<skill>/<run>.json, created and never replaced (§7.1):
+        a name already taken moves to <run>-2, -3."""
+        from h2t_ops.core import paths, store
 
         record = {
             "skill": self.skill,
@@ -283,9 +252,15 @@ class SkillEval:
             "ended_at": ended_at,
             "metrics": metrics,
         }
+        data = json.dumps(record, ensure_ascii=False, indent=2)
+        first = paths.records("evals", paths.machine_name()) / self.skill / f"{self._run_name()}.json"
         try:
-            with open(filepath, "w", encoding="utf-8") as f:
-                json.dump(record, f, ensure_ascii=False, indent=2)
+            for target in store.unique_name(first):
+                try:
+                    store.create(target, data, place="records.evals")
+                    return
+                except store.AlreadyExists:
+                    continue
         except OSError:
             pass
 
@@ -298,30 +273,30 @@ class SkillEval:
 
         service_url = self._env.get("H2T_EVALS_SERVICE_URL", "http://127.0.0.1:8088")
         token = self._env.get("H2T_EVALS_TOKEN", "")
-        spool = self._env.get(
-            "H2T_EVALS_SPOOL",
-            str(Path.home() / ".h2t" / "evals" / ".h2t_evals_spool.db"),
-        )
+        from h2t_ops.core import paths, store
         try:
-            client = EvalClient(service_url=service_url, token=token, spool_path=spool)
-            source = f"{self.skill}:v{self.plugin_version}" if self.plugin_version else self.skill
-            s = EvalSession(
-                client=client,
-                repo=self.repo,
-                framework="h2t-skill",
-                source=source,
-                eval_set_id=self._eval_set,
-                host=platform.node().lower().split(".")[0],
-                run_env=self._env.get("H2T_EVALS_RUN_ENV", "agent"),
-            )
-            s.start()
+            # The SDK opens the spool itself; store.managed resolves the path (always
+            # state/evals-spool.sqlite, never from the secrets file — Q8) and hands it over.
+            with store.managed(paths.evals_spool(), place="state", library="h2t_evals") as spool:
+                client = EvalClient(service_url=service_url, token=token, spool_path=str(spool))
+                source = f"{self.skill}:v{self.plugin_version}" if self.plugin_version else self.skill
+                s = EvalSession(
+                    client=client,
+                    repo=self.repo,
+                    framework="h2t-skill",
+                    source=source,
+                    eval_set_id=self._eval_set,
+                    host=platform.node().lower().split(".")[0],
+                    run_env=self._env.get("H2T_EVALS_RUN_ENV", "agent"),
+                )
+                s.start()
 
-            for m in metrics:
-                kwargs = {k: v for k, v in m.items() if k != "key"}
-                kwargs.setdefault("level", "unit")
-                s.metric(m["key"], **kwargs)
+                for m in metrics:
+                    kwargs = {k: v for k, v in m.items() if k != "key"}
+                    kwargs.setdefault("level", "unit")
+                    s.metric(m["key"], **kwargs)
 
-            s.finish(status=status)
-            client.flush(limit=200)
+                s.finish(status=status)
+                client.flush(limit=200)
         except Exception:
             pass  # never crash a skill for eval failure

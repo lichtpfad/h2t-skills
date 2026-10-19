@@ -185,9 +185,11 @@ Proceed immediately to Step 6 — do NOT ask for confirmation.
 ### Step 6: Write handoff
 
 Writer stores:
-- full archival markdown under `H2T_SESSION_ROOT` or `~/.h2t/sessions/<machine>/<project>/`;
-- compact `latest.json` for bounded `session-start` context;
-- activity stream spool.
+- full archival markdown as `<machine>/<project>/<session_id>.md` under
+  `h2t-ops paths get records.sessions`;
+- that markdown is the latest record too: `session-start` finds it through the index,
+  so no separate summary file is written;
+- one line in this machine's activity record (`h2t-ops paths get records.activity`).
 
 ```bash
 h2t-handoff write \
@@ -239,16 +241,9 @@ For each confirmed rule:
 ```
 ✓ Сессия <SESSION_NAME> сохранена
 ✓ Activity stream: {spool_path}
-✓ Markdown: {markdown_path}
-✓ Latest index: {latest_path}
+✓ Запись: {markdown_path}
 ✓ Артефактов: {N}
 ✓ Правил промотировано: {M} (или "Правил не промотировано" если 0)
 ```
 
-`{N}` — поле `artifacts` из ответа писателя: число записанных, а не поместившихся в
-индекс. Если ответ несёт `"index_truncated": true`, добавьте строку — иначе читатель
-решит, что запись потеряла хвост:
-
-```
-ℹ latest.json — ограниченный индекс: в нём первые 10; полный список в markdown
-```
+`{N}` — поле `artifacts` из ответа писателя: число записанных артефактов.

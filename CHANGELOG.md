@@ -6,8 +6,8 @@ One CHANGELOG for the whole pack from 4.0.0 on. The per-plugin files
 
 ## 4.0.0
 
-The pack is rebuilt around one package (#541). Nothing here moves your data; see
-"Известные ограничения" below.
+The pack is rebuilt around one package (#541), and its data moves to one root, `~/.h2t`
+(#548): see "One storage root" below.
 
 ### One version, one install
 
@@ -65,7 +65,7 @@ The pack is rebuilt around one package (#541). Nothing here moves your data; see
 
 ### Creative profiles
 
-- Profiles you create with `style-create` now live in `~/.h2t/creative/profiles/`
+- Profiles you create with `style-create` now live in `~/.h2t/data/creative/profiles/`
   (`h2t-creative profiles-dir`), outside every install, so an update cannot wipe them.
   `assemble` looks there first, then among the shipped profiles.
 - Profiles created under 3.x sit inside the plugin cache and are **not moved**; the cache
@@ -73,16 +73,74 @@ The pack is rebuilt around one package (#541). Nothing here moves your data; see
 
   ```bash
   ls ~/.claude/plugins/cache/lichtpfad/h2t-creative/*/profiles/
-  mkdir -p ~/.h2t/creative/profiles
-  cp -R ~/.claude/plugins/cache/lichtpfad/h2t-creative/<3.x version>/profiles/<your profile> ~/.h2t/creative/profiles/
+  mkdir -p "$(h2t-creative profiles-dir)"
+  cp -R ~/.claude/plugins/cache/lichtpfad/h2t-creative/<3.x version>/profiles/<your profile> "$(h2t-creative profiles-dir)"/
   ```
 
   The shipped profiles (`h2t-default`, `h2t-editorial`, `h2t-graphs`, `h2t-mono`,
   `h2t-pfad`, `h2t-terminal`) need no copy.
 
-### Известные ограничения
+### One storage root (#548)
 
-- 4.0.0 moves code, not data. The storage roots (`~/.h2t`, `~/.dor`, `~/.config`), the
-  order in which secrets are looked up and the author's literals in defaults are unchanged
-  in 4.0.0; there is no single paths file yet. That is the next subsystem:
-  [#548](https://github.com/lichtpfad/h2t-skills/issues/548).
+- **Everything lives under `~/.h2t`**, one directory per class: `config/`, `secrets/shared/`,
+  `secrets/local/`, `records/`, `data/`, `state/`, `logs/`, plus `run/` and `layout.json`.
+  The README section "Where Your Data Lives" has the tree and says which classes may be
+  synced. Places outside the root — `lake`, `inbox`, `kb` — are declared in
+  `config/paths.yaml` (`h2t-ops paths set <place> <path>`); the vault comes from
+  `H2T_PATH_VAULT`. Skills ask `h2t-ops paths get <id>` instead of spelling a path, and
+  `h2t-ops paths list` shows every place and why it is where it is.
+- **Migration: `h2t-setup layout migrate`**, run by `h2t-setup sync` after the CLI is
+  installed. It copies into the new layout: the 3.x `.env` keys and the Notion token
+  (`secrets/shared/<provider>.env`); the Google OAuth client (`secrets/shared`) and this
+  machine's Google token (`secrets/local`); Telegram's `api_id`/`api_hash`
+  (`secrets/shared/telegram.env`), its session and login state (`secrets/local`) and the
+  dialogs marker (`state/telegram`); this machine's sessions, activity and evals
+  (`records/`, the evals spool to `state/`); the Granola and MeetGeek cursors; the DOR
+  registry (`records/imports`); research and creative profiles (`data/`); and the
+  `config/*.yaml.bak*` copies (`state/backups`). Byte copies are checked by hash, converted
+  files by rule, secrets by the set of key/value hashes. The
+  old files stay, are read as a fallback through 4.0.x and get a `MOVED-TO.txt`. Where
+  sources disagree on a key, the senior value wins — a file already at the new address
+  first; for `H2T_EVALS_*` too, ahead of `~/.dor/secrets.env` — and the other is kept as
+  `<file>.from-<source>` (`<file>-2.from-<source>` on a repeat); `h2t-ops doctor` lists
+  them. `paths.yaml` is written only when there is a place to declare. When the machine
+  cannot be named, the migration stops and asks for `--machine <name>`.
+- **Rollback: `h2t-setup layout rollback --sync-paused`**, after pausing the sync of
+  `records/` and `secrets/shared/`. It removes only the files the migration created and
+  nobody changed since, restores what it added to, and lists the rest. If the migration's
+  check fails because an old file changed while it ran, roll back and migrate again.
+- **Downloads with no path go to the `inbox` place** (or `~/.h2t/data/inbox` while it is not
+  set) under a free name, and say where they went. `drive download` without `--dest` no
+  longer writes into the current directory.
+- **`latest.json` is no longer written.** A session record is
+  `records/sessions/<machine>/<project>/<session_id>.md` with frontmatter, and "the last
+  session of this project" is a query to `state/index.sqlite`, across every machine.
+- **Google:** the package's token file holds no access token; each command gets one from the
+  refresh token in memory. The token is per machine, in `secrets/local/google.token.json`
+  (`h2t-ops paths get secret:google.token`): each machine logs in itself, and the file is
+  not synced. A token without a `refresh_token` never wins a migration. The file is written
+  only at login and when Google issues a new refresh token. At those two moments, through
+  4.0.x, the full credentials — `token` and `expiry` of that moment included — are also
+  written into this machine's 3.x `tokens.json` while that file exists, for readers such as
+  POS; the access token there goes stale after an hour and is not refreshed on disk.
+- **`config/user.yaml`** is yours; the package only reads it: `timezone`,
+  `notion.tasks_database_id`, `domain_patterns`. The calendar zone is `--tz`, then
+  `H2T_CALENDAR_TZ`, then `timezone`, then the system zone (UTC on Windows). `notion search`
+  and `find-project-tasks` without a database id use `notion.tasks_database_id`, and exit 2
+  when it is not set.
+- **A Granola manifest under a `--to` other than `<lake>/granola` is not moved.** The next
+  `granola sync` without `--to` starts a new manifest in `<lake>/granola`; pass the old `--to`
+  to keep using the old one.
+
+**The 3.x path variables are no longer read.** `h2t-ops doctor` names any still set.
+
+| variable | what to do |
+|---|---|
+| `H2T_LAKE_ROOT` | when there is no `paths.yaml` yet, the migration creates it with this value as `lake`; when the file already exists it is left alone, so declare the lake yourself: `h2t-ops paths set lake <path>`. Then remove the variable |
+| `H2T_SECRETS_FILE` | nothing: the migration reads its file once as one more secrets source; then remove it |
+| `H2T_EVALS_SPOOL` | nothing: the migration copies that spool into `state/evals-spool.sqlite`; then remove it |
+| `H2T_CONFIG_ROOT`, `H2T_SESSION_ROOT`, `H2T_ACTIVITY_SPOOL`, `H2T_EVALS_ROOT` | the migration copies only from the 3.x default; set to another existing place, it stops and names the variable. Move what it names to the default (`~/.h2t/config`, `~/.h2t/sessions`, `~/.h2t/activity/spool.jsonl`, `~/.h2t/evals`), remove the variable, migrate. To move the whole root, use `H2T_PATH_ROOT` |
+
+Two path variables replace them: `H2T_PATH_ROOT` moves the whole `~/.h2t` except `run/`;
+`H2T_PATH_VAULT` (default `~/.dor/vault`) is the vault's address, shared with POS — set it
+in POS's environment too if the vault moves. `H2T_KB_ROOT` stays: `llm-kb-engine` reads it.

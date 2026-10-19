@@ -40,7 +40,8 @@ def register(subparsers: Any) -> None:
 
     dp = cmds.add_parser("download", help="Stream a file to disk, online-only placeholders included")
     dp.add_argument("path")
-    dp.add_argument("dest", help="destination file or directory")
+    dp.add_argument("dest", nargs="?", default=None,
+                    help="destination file or directory (default: a new file in the inbox place)")
     dp.add_argument("--gunzip", action="store_true",
                     help="decompress gzip content stored under a plain name (.prproj)")
     add_fmt(dp)

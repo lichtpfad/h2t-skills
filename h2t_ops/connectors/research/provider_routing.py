@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from h2t_ops.core import providers, secrets
 from h2t_ops.core.errors import UsageError
 
 CAPABILITIES = {
@@ -126,9 +127,10 @@ def select_route(capability: str, *, provider: str | None = None) -> dict[str, A
             }
         )
         hint = (
-            f"Set {', '.join(missing)} in env, H2T_SECRETS_FILE, "
-            "~/.h2t/config/secrets/secrets.env, ~/.dor/secrets/secrets.env, "
-            "or ~/.dor/secrets.env."
+            f"Set {', '.join(missing)} in the environment or in "
+            + ", ".join(str(secrets.provider_file(p)) for p in
+                        sorted({providers.provider_of_key(k) or "other" for k in missing}))
+            + "."
             if missing
             else "Enable or configure a provider for this capability."
         )

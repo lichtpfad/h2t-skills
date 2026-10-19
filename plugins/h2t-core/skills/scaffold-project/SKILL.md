@@ -50,7 +50,6 @@ Act on the result, in this order:
 for _cmd in h2t-scaffold-project h2t-project-register h2t-hook; do
     command -v "$_cmd" >/dev/null 2>&1 || { echo "ERROR: $_cmd not found. Run /h2t-core:setup"; exit 1; }
 done
-CONFIG_ROOT="$HOME/.h2t/config"
 ```
 
 ---
@@ -190,7 +189,7 @@ Run:
 h2t-project-register \
   --id "{id}" --domain "{domain}" --type "{reg_type}" \
   --label "{label}" --task-tracker "{tracker}" \
-  --cwd "{project_path}" --config-root "$CONFIG_ROOT" \
+  --cwd "{project_path}" \
   [--github "{github_slug}"] \
   [--stack "{stack}"]
 ```

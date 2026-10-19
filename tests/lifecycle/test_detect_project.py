@@ -47,6 +47,38 @@ def test_detect_domain_unknown():
     assert confidence == "low"
 
 
+def _user_yaml(text):
+    from h2t_ops.core import paths
+    f = paths.config_dir() / "user.yaml"
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_text(text, encoding="utf-8")
+
+
+def test_personal_paths_get_no_domain_without_user_yaml():
+    """The author's own repositories are no longer named in the code (#548 R45): without
+    domain_patterns they are new repositories like any other, and registration asks."""
+    domain, confidence, _ = _detect_domain("/Users/x/Projects/DOR")
+    assert (domain, confidence) == (None, "low")
+
+
+def test_domain_patterns_from_user_yaml():
+    _user_yaml("domain_patterns:\n  - pattern: Projects/DOR|Projects/newsengine\n"
+               "    domain: personal-os\n")
+    assert _detect_domain("/Users/x/Projects/DOR") == ("personal-os", "high", "user.yaml")
+    assert _detect_domain("/Users/x/Projects/elsewhere")[0] is None
+
+
+def test_a_broken_domain_pattern_names_the_file():
+    import pytest
+
+    from h2t_ops.core import user_config
+    from h2t_ops.core.errors import ConfigError
+    _user_yaml("domain_patterns:\n  - pattern: \"(unclosed\"\n    domain: x\n")
+    with pytest.raises(ConfigError) as exc:
+        _detect_domain("/Users/x/Projects/DOR")
+    assert str(user_config.path()) in str(exc.value)
+
+
 def test_humanize_id():
     assert _humanize_id("h2t-vision") == "H2T Vision"
     assert _humanize_id("crypto-etl") == "Crypto ETL"
@@ -97,3 +129,40 @@ def test_check_already_registered_cwd_pattern():
     result = _check_already_registered("E:/DROPBOX/Steuer/2026", None, mapping)
     assert result is not None
     assert result["domain"] == "admin"
+
+
+_TAXES = ("mappings: {}\ncwd_patterns:\n  /Steuer: admin/taxes\n",
+          "domains:\n  admin:\n    projects:\n      - id: taxes\n        label: Taxes Label\n")
+
+
+def _config(root, mapping, domains):
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "repo-mapping.yaml").write_text(mapping, encoding="utf-8")
+    (root / "domains.yaml").write_text(domains, encoding="utf-8")
+    return root
+
+
+def test_without_config_root_the_index_answers_and_the_old_env_is_ignored(tmp_path, monkeypatch):
+    """config/ under HOME through index.ontology(); H2T_CONFIG_ROOT is not read (#548 R5)."""
+    from h2t_ops.core import paths
+    from h2t_ops.lifecycle.detect_project import detect_project
+    _config(paths.config_dir(), *_TAXES)
+    monkeypatch.setenv("H2T_CONFIG_ROOT", str(_config(tmp_path / "decoy", "mappings: {}\n", "domains: {}\n")))
+    cwd = tmp_path / "Steuer"
+    cwd.mkdir()
+    got = detect_project(str(cwd))
+    assert got["already_registered"] is True
+    assert got["current"]["label"] == "Taxes Label"
+    assert (paths.state_dir() / "index.sqlite").is_file()
+
+
+def test_a_named_config_root_is_read_directly_without_the_index(tmp_path):
+    """An explicit --config-root never builds this machine's base: a caller may point at
+    any directory. The control is the test above, where the base is built."""
+    from h2t_ops.core import paths
+    from h2t_ops.lifecycle.detect_project import detect_project
+    cwd = tmp_path / "Steuer"
+    cwd.mkdir()
+    got = detect_project(str(cwd), config_root=str(_config(tmp_path / "named", *_TAXES)))
+    assert got["current"]["label"] == "Taxes Label"
+    assert not (paths.state_dir() / "index.sqlite").exists()

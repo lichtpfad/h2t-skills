@@ -7,8 +7,8 @@ use (tests/release/legacy_call_forms.json) must still parse: a 3.x session keeps
 the 4.x CLI until it reloads (spec §8).
 
 SAFETY RULE for everything in this file: no process may touch the real home. Each one runs
-with HOME, USERPROFILE, CLAUDE_CONFIG_DIR, CODEX_HOME, H2T_SESSION_ROOT and
-H2T_ACTIVITY_SPOOL inside tmp_path, and with eval telemetry off. The legacy forms are not
+with HOME, USERPROFILE, CLAUDE_CONFIG_DIR and CODEX_HOME inside tmp_path — the session
+records and the activity spool live under HOME's ~/.h2t/records — and with eval telemetry off. The legacy forms are not
 executed at all — they are parsed and the process stops before main() can act on them,
 because some of them create repositories (`h2t-scaffold-project github` calls `gh repo
 create`) or edit the h2t config. Do not "simplify" that into running them.
@@ -62,8 +62,6 @@ def _isolated_env(tmp_path: Path) -> dict[str, str]:
         USERPROFILE=str(home),
         CLAUDE_CONFIG_DIR=str(home / ".claude"),
         CODEX_HOME=str(home / ".codex"),
-        H2T_SESSION_ROOT=str(tmp_path / "sessions"),
-        H2T_ACTIVITY_SPOOL=str(tmp_path / "activity" / "spool.jsonl"),
         H2T_MACHINE_NAME="test-machine",
         H2T_EVALS_MODE="off",
         PYTHONIOENCODING="utf-8",
@@ -103,11 +101,38 @@ def test_gather_shows_the_handoff_just_written(tmp_path):
     assert written.returncode == 0, written.stderr
     record = json.loads(written.stdout)
     assert Path(record["spool"]).is_relative_to(tmp_path), record
+    records = tmp_path / "home" / ".h2t" / "records"
+    assert Path(record["spool"]) == records / "activity" / "test-machine.jsonl", record
+    assert Path(record["markdown"]).is_relative_to(records / "sessions" / "test-machine"), record
 
-    after, _ = _briefing(env, work)
-    assert "### Previous Session" in after, after[:600]
+    md = Path(record["markdown"])
+    assert Path(record["latest"]) == md and not (md.parent / "latest.json").exists()   # R10
+
+    after, meta = _briefing(env, work)
+    assert "### Previous Session  (test-machine, сегодня)" in after, after[:600]
     assert "wrote the round-trip test" in after, after[:600]
     assert "read it back" in after, after[:600]
+    assert meta["latest_session"]["markdown_path"] == str(md)
+
+
+def test_a_broken_record_beside_it_does_not_hide_the_session(tmp_path):
+    """Review Focus 3 end to end: a hand-edited md with broken frontmatter is skipped by
+    the index and session-start still shows the good record."""
+    env = _isolated_env(tmp_path)
+    work = tmp_path / "checkout"
+    work.mkdir()
+    _, meta = _briefing(env, work)
+    project = meta["project"]["id"]
+    written = _run([*_console_script("h2t-handoff"), "write", "--session-id", "good-one",
+                    "--project", project, "--domain", "dev", "--what-done", "the good record",
+                    "--what-remains", "- [ ] more"], env, work)
+    assert written.returncode == 0, written.stderr
+    md = Path(json.loads(written.stdout)["markdown"])
+    (md.parent / "edited-by-hand.md").write_bytes(b"---\nsession_id: [unclosed\n---\nbody\n")
+
+    after, meta = _briefing(env, work)
+    assert "the good record" in after, after[:600]
+    assert meta["sessions"] == [str(md)]
 
 
 # Values for the placeholders in the inventory. Only `--type` and `--stack` of

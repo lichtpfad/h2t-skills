@@ -2,6 +2,7 @@
 
 import pytest
 
+from h2t_ops.core import paths
 from h2t_ops.setup import legacy as setup_h2t
 
 REGISTRY = {
@@ -46,76 +47,122 @@ def test_load_known_secrets_starts_with_value(tmp_path):
 
 @pytest.fixture(autouse=True)
 def _no_real_secrets(tmp_path, monkeypatch):
-    """skeleton reads the connectors' sources since #524; keep the real ones out."""
+    """skeleton and preflight read through core.secrets, whose places hang off HOME (#548)."""
     monkeypatch.setattr(setup_h2t, "_home", lambda: tmp_path)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
+    monkeypatch.delenv("H2T_PATH_ROOT", raising=False)
     monkeypatch.delenv("H2T_SECRETS_FILE", raising=False)
-    for key in (*REGISTRY, "GRANOLA_API_KEY"):
+    for key in (*REGISTRY, "GRANOLA_API_KEY", "ZZZ_KEY"):
         monkeypatch.delenv(key, raising=False)
 
 
-def test_skeleton_skips_a_key_the_connectors_read_elsewhere(tmp_path):
-    """A key kept only in the documented per-provider file is not missing (#524)."""
-    documented = tmp_path / ".h2t" / "config" / "secrets"
-    documented.mkdir(parents=True)
-    (documented / "notion.env").write_text("NOTION_API_TOKEN=secret_x\n", encoding="utf-8")
-    secrets_file = tmp_path / ".dor" / "secrets" / "secrets.env"
+def _env_keys(path):
+    from h2t_ops.core import secrets
+    return secrets.parse_env(path.read_text(encoding="utf-8"))
 
-    result = setup_h2t.secrets_skeleton(secrets_file, REGISTRY)
+
+def test_skeleton_skips_a_key_the_connectors_read_elsewhere(tmp_path):
+    """A key kept only in the 3.x per-provider file is not missing (#524)."""
+    documented = paths.legacy("secrets.h2t")
+    documented.mkdir(parents=True)
+    (documented / "notion.env").write_text("NOTION_API_TOKEN=fake-secret_x\n", encoding="utf-8")
+    out = tmp_path / "sk"
+
+    result = setup_h2t.secrets_skeleton(REGISTRY, secrets_dir=out)
 
     assert "NOTION_API_TOKEN" not in result["added"]
     assert "NOTION_API_TOKEN" in result["skipped"]
-    assert "NOTION_API_TOKEN" not in secrets_file.read_text(encoding="utf-8")
+    assert not (out / "notion.env").exists()
 
 
 def test_skeleton_still_adds_a_key_set_nowhere(tmp_path):
-    result = setup_h2t.secrets_skeleton(tmp_path / ".dor" / "secrets" / "secrets.env", REGISTRY)
+    result = setup_h2t.secrets_skeleton(REGISTRY, secrets_dir=tmp_path / "sk")
 
     assert set(result["added"]) == set(REGISTRY)
 
 
-def test_skeleton_creates_file_when_absent(tmp_path):
-    secrets_file = tmp_path / "secrets.env"
-    result = setup_h2t.secrets_skeleton(secrets_file, REGISTRY)
+def test_skeleton_creates_files_when_absent(tmp_path):
+    out = tmp_path / "sk"
+    result = setup_h2t.secrets_skeleton(REGISTRY, secrets_dir=out)
     assert result["kind"] == "h2t_secrets_skeleton/v1"
     assert set(result["added"]) == {"EXA_API_KEY", "NOTION_API_TOKEN", "MEETGEEK_API_KEY"}
     assert result["skipped"] == []
-    assert secrets_file.is_file()
-    content = secrets_file.read_text()
-    assert "EXA_API_KEY=" in content
-    assert "NOTION_API_TOKEN=" in content
-    assert "MEETGEEK_API_KEY=" in content
+    assert _env_keys(out / "exa.env") == {"EXA_API_KEY": ""}
+    assert _env_keys(out / "notion.env") == {"NOTION_API_TOKEN": ""}
+    assert _env_keys(out / "meetgeek.env") == {"MEETGEEK_API_KEY": ""}
+
+
+def test_skeleton_writes_one_file_per_provider(tmp_path):
+    registry = {k: REGISTRY[k] for k in ("EXA_API_KEY", "NOTION_API_TOKEN")}
+    registry["ZZZ_KEY"] = {"description": "No provider", "url": "", "validator": "nonempty", "connector": ""}
+    out = tmp_path / "sk"
+
+    result = setup_h2t.secrets_skeleton(registry, secrets_dir=out)
+
+    assert sorted(p.name for p in out.iterdir()) == ["exa.env", "notion.env", "other.env"]
+    assert result["files"] == {
+        "exa.env": {"path": str(out / "exa.env"), "added": ["EXA_API_KEY"]},
+        "notion.env": {"path": str(out / "notion.env"), "added": ["NOTION_API_TOKEN"]},
+        "other.env": {"path": str(out / "other.env"), "added": ["ZZZ_KEY"]},
+    }
+    assert _env_keys(out / "other.env") == {"ZZZ_KEY": ""}
+    before = {p.name: p.read_bytes() for p in out.iterdir()}
+    again = setup_h2t.secrets_skeleton(registry, secrets_dir=out)
+    assert again["added"] == [] and again["files"] == {}
+    assert {p.name: p.read_bytes() for p in out.iterdir()} == before
+
+
+def test_skeleton_skips_a_key_in_the_old_dor_file(tmp_path):
+    old = paths.legacy("secrets.dor_old")
+    old.parent.mkdir(parents=True)
+    old.write_text("EXA_API_KEY=fake-old-exa\n", encoding="utf-8")
+    result = setup_h2t.secrets_skeleton(REGISTRY, secrets_dir=tmp_path / "sk")
+    assert "EXA_API_KEY" in result["skipped"] and "EXA_API_KEY" not in result["added"]
+
+
+def test_skeleton_defaults_to_secrets_shared():
+    result = setup_h2t.secrets_skeleton(REGISTRY)
+    assert result["path"] == str(paths.secrets_shared())
+    assert _env_keys(paths.secrets_shared() / "exa.env") == {"EXA_API_KEY": ""}
 
 
 def test_skeleton_values_are_empty(tmp_path):
-    secrets_file = tmp_path / "secrets.env"
-    setup_h2t.secrets_skeleton(secrets_file, REGISTRY)
-    for line in secrets_file.read_text().splitlines():
-        line = line.strip()
-        if line and not line.startswith("#") and "=" in line:
-            assert line.split("=", 1)[1] == "", f"Value should be empty: {line}"
+    out = tmp_path / "sk"
+    setup_h2t.secrets_skeleton(REGISTRY, secrets_dir=out)
+    for f in out.iterdir():
+        assert all(v == "" for v in _env_keys(f).values()), f.name
 
 
-def test_skeleton_skips_existing_keys(tmp_path):
-    secrets_file = tmp_path / "secrets.env"
-    secrets_file.write_text("EXA_API_KEY=some-existing-value\n")
-    result = setup_h2t.secrets_skeleton(secrets_file, REGISTRY)
-    assert "EXA_API_KEY" in result["skipped"]
+def test_skeleton_keeps_existing_lines_and_comments(tmp_path):
+    out = tmp_path / "sk"
+    out.mkdir()
+    (out / "notion.env").write_text("# mine\nNOTION_OTHER=fake-keep", encoding="utf-8")   # no final newline
+    result = setup_h2t.secrets_skeleton(REGISTRY, secrets_dir=out)
     assert "NOTION_API_TOKEN" in result["added"]
-    assert "MEETGEEK_API_KEY" in result["added"]
-    # Existing value must be preserved
-    assert "EXA_API_KEY=some-existing-value" in secrets_file.read_text()
+    text = (out / "notion.env").read_text(encoding="utf-8")
+    assert text.startswith("# mine\nNOTION_OTHER=fake-keep\n")
+    assert _env_keys(out / "notion.env") == {"NOTION_OTHER": "fake-keep", "NOTION_API_TOKEN": ""}
 
 
-def test_skeleton_creates_parent_dir(tmp_path):
-    secrets_file = tmp_path / "new_dir" / "secrets.env"
-    setup_h2t.secrets_skeleton(secrets_file, REGISTRY)
-    assert secrets_file.is_file()
+def test_skeleton_does_not_repeat_an_empty_line_already_there(tmp_path):
+    out = tmp_path / "sk"
+    out.mkdir()
+    (out / "exa.env").write_text("EXA_API_KEY=\n", encoding="utf-8")
+    result = setup_h2t.secrets_skeleton(REGISTRY, secrets_dir=out)
+    assert "EXA_API_KEY" not in result["added"]
+    assert (out / "exa.env").read_text(encoding="utf-8") == "EXA_API_KEY=\n"
 
 
 def test_skeleton_result_path_is_str(tmp_path):
-    secrets_file = tmp_path / "secrets.env"
-    result = setup_h2t.secrets_skeleton(secrets_file, REGISTRY)
+    result = setup_h2t.secrets_skeleton(REGISTRY, secrets_dir=tmp_path / "sk")
     assert isinstance(result["path"], str)
+
+
+def test_skeleton_refuses_a_directory_inside_a_package_place():
+    from h2t_ops.core import store
+    with pytest.raises(store.WriteRefused):
+        setup_h2t.secrets_skeleton(REGISTRY, secrets_dir=paths.state_dir() / "sk")
 
 
 # --- secrets_preflight tests ---

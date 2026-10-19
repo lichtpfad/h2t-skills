@@ -8,7 +8,7 @@ from h2t_ops.lifecycle.eval import report as rep
 
 
 def _write_session(root: Path, skill: str, name: str, payload) -> None:
-    d = root / skill / "sessions"
+    d = root / "mac" / skill
     d.mkdir(parents=True, exist_ok=True)
     if isinstance(payload, str):
         (d / name).write_text(payload, encoding="utf-8")

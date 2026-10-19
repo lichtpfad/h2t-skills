@@ -115,13 +115,63 @@ What a hook does in Claude Code, and what happens in Codex without it (spec §4)
 Measured on Codex 0.159.2, 2026-10-14: Codex reports `plugin_hooks: removed` (#452), and
 `h2t-creative` is listed twice, as `deck` and `source-command-deck` (#533).
 
-## Known Limitations (Известные ограничения)
+## Where Your Data Lives (Где хранятся данные)
 
-4.0.0 moves code, not data. Where things are stored stays as it was in 3.x: the storage
-roots (`~/.h2t`, `~/.dor`, `~/.config`), the order in which secrets are looked up, and the
-author's literal paths and names in defaults are unchanged in 4.0.0, and there is no single
-paths file yet. That is the next subsystem, tracked in
-[#548](https://github.com/lichtpfad/h2t-skills/issues/548).
+Everything the pack keeps lives under one root, `~/.h2t` (`H2T_PATH_ROOT` moves it, except
+`run/`). Each class has its own directory, so what may be synced and what must not are never
+in one folder:
+
+```text
+~/.h2t/
+├── run/          the install of this machine: install.json, install.env, rollback/ — fixed
+├── config/       yours to edit: domains.yaml, repo-mapping.yaml, paths.yaml, user.yaml
+├── secrets/
+│   ├── shared/   <provider>.env, google.client.json — may live on several machines
+│   └── local/    google.token.json, telegram.session — this machine only
+├── records/      one machine per file: sessions/<machine>/<project>/<session_id>.md,
+│                 activity/<machine>.jsonl, evals/<machine>/, imports/dor-registry.jsonl
+├── data/         what the pack made for you: research/, creative/profiles/
+├── state/        rebuilt or safe to lose: index.sqlite, cursors/, backups/
+├── logs/         hooks.jsonl, writes.jsonl, …
+└── layout.json   the layout version
+```
+
+| class | sync it? |
+|---|---|
+| `config/`, `secrets/shared/`, `records/` | yes — the pack does not sync; use your own tool |
+| `data/` | if you like |
+| `run/`, `secrets/local/`, `state/`, `logs/` | **never** |
+
+Places outside the root are declared in `config/paths.yaml` — `lake` (meetings and
+transcripts), `inbox` (single downloaded files), `kb` — and set with
+`h2t-ops paths set lake ~/somewhere`. A place not set falls back to `~/.h2t/data/<place>/`,
+and the command says where it wrote. The vault is not set there: it is shared with POS and
+comes from `H2T_PATH_VAULT` (default `~/.dor/vault`).
+
+`config/user.yaml` is yours; the pack only reads it: `timezone`, `notion.tasks_database_id`,
+`domain_patterns`.
+
+Ask the pack instead of spelling a path — the answer stays right when a place moves:
+
+```bash
+h2t-ops paths list                       # every place, its path, sync class, and why
+h2t-ops paths get secret:notion          # the file a key goes in
+h2t-ops paths get records.sessions
+```
+
+**From 3.x.** `h2t-setup sync` migrates after installing the CLI; on its own the step is
+`h2t-setup layout migrate` (`--machine <name>` when the machine cannot be named). It
+**copies**: the old files stay where they were, are read as a fallback through 4.0.x, and
+get a `MOVED-TO.txt`. Where sources disagree on a key — two old files, or a new file already
+there, which is senior — the senior value wins and the other is kept beside it as
+`<file>.from-<source>`; `h2t-ops doctor` lists those
+copies. Migrate one machine first, sync `secrets/shared/` and `records/` to the next, then
+migrate it.
+
+**Rollback.** Pause the sync of `records/` and `secrets/shared/`, then
+`h2t-setup layout rollback --sync-paused`. It removes only the files the migration created and
+nobody changed since, restores what it added to, and lists the rest. If the migration's check fails because an old file
+changed while it ran, close the program that writes that file, roll back, and migrate again.
 
 ## h2t-ops Connectors
 
@@ -153,29 +203,36 @@ h2t-ops granola list --limit 10 --format md
 
 - `h2t-core:setup` owns install, repair, doctor, and connector readiness checks.
 - POS/DOR configuration is optional for connector I/O.
-- Google connectors require a local OAuth token store — `credentials.json` (a Desktop OAuth
-  client) and `tokens.json` in `~/.config/google-calendar-mcp/`. `h2t-ops google auth`
-  creates the second from the first; see [First Google Login](#first-google-login) below.
+- Google connectors need two files: the OAuth client (`h2t-ops paths get secret:google.client`,
+  a Desktop OAuth client) and this machine's token (`h2t-ops paths get secret:google.token`).
+  `h2t-ops google auth` creates the second from the first; see
+  [First Google Login](#first-google-login) below.
 - Every connector is optional. Setup reports the ones you skip as `missing`; leave their
   `KEY=` lines empty and answer "no" to their auth prompts (#534).
-- Notion, MeetGeek, Granola, and Exa use API keys in `~/.dor/secrets/secrets.env` or environment variables.
-- Telegram requires `~/.config/telegram/config.json` with `api_id` / `api_hash`, then `h2t-ops telegram auth`.
+- Notion, MeetGeek, Granola, Exa and Dropbox use API keys from environment variables or from
+  one file per provider — `h2t-ops paths get secret:notion` names Notion's.
+- Telegram requires `TELEGRAM_API_ID` / `TELEGRAM_API_HASH` in `h2t-ops paths get secret:telegram`,
+  then `h2t-ops telegram auth`.
 
 ### First Google Login
 
 Two files are involved and they are not alike:
 
-- `credentials.json` identifies the **app** — a Desktop OAuth client. Create your own:
+- The OAuth client identifies the **app** — a Desktop OAuth client. Create your own:
   Google Cloud Console → a project with the Gmail, Calendar and Drive APIs enabled → APIs &
   Services → Credentials → Create credentials → OAuth client ID → Desktop app → Download
-  JSON, saved as `~/.config/google-calendar-mcp/credentials.json`. Add yourself under the
+  JSON, saved as the file `h2t-ops paths get secret:google.client` prints. Add yourself under the
   consent screen's *Test users* while the app is in Testing. Google's documented policy is
   that a Testing app's refresh token expires after 7 days; switching the consent screen to
   *In production* avoids that, and for your own account needs no verification — the
   consent shows an "unverified app" warning you click through. (Policy as documented by
   Google, not measured here.)
-- `tokens.json` is the **user's** access to their own account. Never copy it between
-  people — whoever holds it reads that mailbox.
+- The token (`h2t-ops paths get secret:google.token`) is the **user's** access to their own
+  account. It holds the refresh token and scopes, no access token: each command gets one in
+  memory. (Through 4.0.x the 3.x `tokens.json`, while it exists, also receives a copy with the
+  access token and expiry of that moment — at login and when Google issues a new refresh
+  token.) Each machine logs in itself and keeps its own token: do not sync it, and never copy
+  it between people — whoever holds it reads that mailbox.
 
 Then one consent covers all three connectors:
 
@@ -210,18 +267,19 @@ without it.
 
 | variable | default | moves |
 | --- | --- | --- |
-| `H2T_CONFIG_ROOT` | `~/.h2t/config` | `domains.yaml`, `repo-mapping.yaml`, `secrets/` |
-| `H2T_SESSION_ROOT` | `~/.h2t/sessions` | where handoff records are written and read |
-| `H2T_ACTIVITY_SPOOL` | `~/.h2t/activity/spool.jsonl` | the session activity spool |
+| `H2T_PATH_ROOT` | `~/.h2t` | the whole storage root except `run/` (see [Where Your Data Lives](#where-your-data-lives-где-хранятся-данные)) |
+| `H2T_PATH_VAULT` | `~/.dor/vault` | the vault shared with POS; set it in POS's environment too |
 | `H2T_MACHINE_NAME` | hostname (`DOR_MACHINE_NAME` is read as a fallback) | the machine segment in session paths |
 | `H2T_MACHINE_ID` | `platform.node()`, slugified | the machine key in the MeetGeek uploads journal |
 | `H2T_DEV_ROOT` | the checkout's parent, else `~/dev` | where sibling repositories are looked for |
-| `H2T_SECRETS_FILE` | first hit of `~/.h2t/config/secrets/secrets.env`, `~/.dor/secrets/secrets.env`, `~/.dor/secrets.env` | the secrets file, searched first |
-| `H2T_CALENDAR_TZ` | `Asia/Jerusalem` | the timezone calendar commands assume |
-| `H2T_EVALS_ROOT` | `~/.h2t/evals` | the eval telemetry tree |
-| `H2T_LAKE_ROOT` | `~/.dor/lake` | the MeetGeek media lake |
+| `H2T_CALENDAR_TZ` | `timezone` in `config/user.yaml`, else the system zone | the timezone calendar commands assume (`--tz` wins over it) |
 | `H2T_PYTHON` | resolved: `~/.h2t/venv` → the h2t-ops CLI's own venv → `py -3.11` → `python3` → `uv run` | the interpreter hooks use, tried first |
 | `H2T_KB_ROOT` | **none — required by `h2t-ops:kb`** | the knowledge base `llm-kb-engine` opens |
+
+Other places — `lake`, `inbox`, `kb` — are set in `config/paths.yaml`, not by variables.
+The 3.x path variables `H2T_CONFIG_ROOT`, `H2T_SESSION_ROOT`, `H2T_ACTIVITY_SPOOL`,
+`H2T_SECRETS_FILE`, `H2T_EVALS_ROOT`, `H2T_EVALS_SPOOL` and `H2T_LAKE_ROOT` are no longer read;
+`h2t-ops doctor` names any still set and what replaces it (see the 4.0.0 CHANGELOG).
 
 `H2T_OPS`, `H2T_PLUGIN_ROOT`, `H2T_DOCS_LINT_SCRIPT`, `H2T_LINT_HOOK_TIMEOUT` and the
 `H2T_DEPLOY_*` family are set by hooks and by the deploy executor for the process they

@@ -10,9 +10,10 @@ Drive upload is embedded — h2t-ops drive upload lacks recovery-compatible sema
 (no folder hierarchy, no public sharing, no usercontent URL).
 
 Package copy of plugins/h2t-ops/skills/meetgeek/scripts/recovery.py, so the `h2t-ops
-meetgeek` recovery verbs survive that script's deletion (#541). Behaviour and data paths
-are the script's, unchanged: the lake under ~/.dor/lake (H2T_LAKE_ROOT overrides) is
-subsystem 2's to move (#548), not this copy's.
+meetgeek` recovery verbs survive that script's deletion (#541). Behaviour is the script's;
+the upload journal lives in <lake>/meetgeek (the lake place of paths.yaml or its default
+data/lake), staged media in state/meetgeek/uploads-staging, and every write goes through
+core.store (#548).
 """
 from __future__ import annotations
 
@@ -22,8 +23,13 @@ import platform
 import re
 import subprocess
 import sys
+import uuid
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+
+from h2t_ops.core import google_auth, lake, store
+from h2t_ops.core import paths as _paths
+from h2t_ops.core.errors import H2TError
 
 try:
     import imageio_ffmpeg
@@ -33,9 +39,6 @@ except ImportError:
 
 # ─── Constants ────────────────────────────────────────────────────────────────
 
-DRIVE_CONFIG_DIR = Path.home() / ".config" / "google-calendar-mcp"
-DRIVE_TOKEN_FILE = DRIVE_CONFIG_DIR / "tokens.json"
-DRIVE_CREDENTIALS_FILE = DRIVE_CONFIG_DIR / "credentials.json"
 DRIVE_SCOPES = ["https://www.googleapis.com/auth/drive"]
 DRIVE_ROOT_FOLDER_NAME = "MeetGeek Uploads"
 
@@ -95,14 +98,12 @@ def age_cutoff_iso(min_age_hours: float) -> str:
 
 
 def lake_root() -> Path:
-    """Root of the local data lake, overridable by H2T_LAKE_ROOT.
+    """<lake>/meetgeek: the lake place of paths.yaml, or its default data/lake (#548).
 
-    Every lake path goes through here so a test run cannot reach the user's real
-    ~/.dor: four upload tests wrote mp4 stubs and submission artifacts into it,
-    and Syncthing carried them to the other machine (#386).
+    Every lake path goes through here. H2T_LAKE_ROOT is no longer read: four upload tests
+    once wrote mp4 stubs into the real lake (#386); tests now isolate HOME instead.
     """
-    override = os.environ.get("H2T_LAKE_ROOT")
-    return Path(override).expanduser() if override else Path.home() / ".dor" / "lake"
+    return _paths.place_or_default("lake")[0] / "meetgeek"
 
 
 def machine_id() -> str:
@@ -118,7 +119,19 @@ def machine_id() -> str:
 
 
 def uploads_staging_root() -> Path:
-    return lake_root() / "meetgeek" / "uploads-staging"
+    """Converted media and submission artifacts: machine-local and rebuildable, so state —
+    not the synced lake. The convert cache and the purge grace period live here."""
+    return _paths.state_dir() / "meetgeek" / "uploads-staging"
+
+
+def legacy_journal_dirs() -> list[Path]:
+    """Where 3.x kept the upload journal (<lake>/meetgeek/uploads-staging): read so the
+    double-submit guard survives the upgrade, never written."""
+    out: list[Path] = []
+    for d in (lake_root() / "uploads-staging", _paths.legacy("lake.dor") / "meetgeek" / "uploads-staging"):
+        if d not in out:
+            out.append(d)
+    return out
 
 
 def staging_dir() -> Path:
@@ -191,7 +204,7 @@ def build_convert_cmd(input_path: str, output_path: str, *,
     """Construct ffmpeg argv. Explicit -map required when any -map is given."""
     exe = ffmpeg_exe()
     if probe["audio_streams"] <= 1 or mix_mode == "first":
-        argv = [exe, "-y", "-hide_banner", "-i", input_path]
+        argv = [exe, "-n", "-hide_banner", "-i", input_path]
         if audio_only:
             argv += ["-vn", "-map", "0:a:0?"]
         else:
@@ -205,7 +218,7 @@ def build_convert_cmd(input_path: str, output_path: str, *,
                     argv.remove(k)
         return argv
     if mix_mode == "keep":
-        argv = [exe, "-y", "-hide_banner", "-i", input_path,
+        argv = [exe, "-n", "-hide_banner", "-i", input_path,
                 "-map", "0", "-c:v", "libx264", "-preset", "medium", "-crf", "23",
                 "-c:a", "aac", "-b:a", "192k", output_path]
         if audio_only:
@@ -218,7 +231,7 @@ def build_convert_cmd(input_path: str, output_path: str, *,
         f"{inputs}amix=inputs={n}:duration=longest:dropout_transition=0,"
         f"aresample=48000[a]"
     )
-    argv = [exe, "-y", "-hide_banner", "-i", input_path, "-filter_complex", filtergraph]
+    argv = [exe, "-n", "-hide_banner", "-i", input_path, "-filter_complex", filtergraph]
     if audio_only:
         argv += ["-map", "[a]", "-c:a", "aac", "-b:a", "192k", "-ac", "2", output_path]
     else:
@@ -240,69 +253,48 @@ def convert_media(src: Path, *, audio_only: bool, mix_mode: str,
     if output_path is None:
         suffix = ".m4a" if audio_only else ".mp4"
         output_path = staging_dir() / (src.stem + suffix)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
     if output_path.exists() and output_path.stat().st_size > 1024:
         print(f"INFO: cached {output_path} (skip)", file=sys.stderr)
         return output_path
+    staged = store.classify(output_path) == "state"
+    place, user = ("state", False) if staged else lake.origin(output_path)
+    if staged and output_path.exists():
+        store.remove(output_path, place="state")    # a stub from an interrupted run
     cmd = build_convert_cmd(str(src), str(output_path), probe=probe,
                             audio_only=audio_only, mix_mode=mix_mode)
     print(f"INFO: ffmpeg {len(cmd)} args (audio_streams={probe['audio_streams']})",
           file=sys.stderr)
-    r = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
-    if r.returncode != 0:
-        if output_path.exists():
-            output_path.unlink()
-        raise RecoveryError(f"ffmpeg encode failed: {r.stderr[:500]}", exit_code=1)
-    if not output_path.exists() or output_path.stat().st_size <= 1024:
-        if output_path.exists():
-            output_path.unlink()
-        raise RecoveryError(f"ffmpeg produced empty output: {output_path}", exit_code=1)
+    # ffmpeg opens the output itself: the path is checked and handed over (§7.2). It runs
+    # with -n, so a file already at a user-named output is never overwritten.
+    with store.managed(output_path, place=place, library="ffmpeg", dest=user):
+        r = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
+        if r.returncode != 0:
+            _drop_failed(output_path, staged)
+            raise RecoveryError(f"ffmpeg encode failed: {r.stderr[:500]}", exit_code=1)
+        if not output_path.exists() or output_path.stat().st_size <= 1024:
+            _drop_failed(output_path, staged)
+            raise RecoveryError(f"ffmpeg produced empty output: {output_path}", exit_code=1)
     return output_path
+
+
+def _drop_failed(output_path: Path, staged: bool) -> None:
+    """A failed encode is removed from staging; at a user-named path it is left and said."""
+    if not output_path.exists():
+        return
+    if staged:
+        store.remove(output_path, place="state")
+    else:
+        print(f"WARN: ffmpeg left {output_path}; not removed (a path you named)", file=sys.stderr)
 
 
 # ─── Drive ────────────────────────────────────────────────────────────────────
 
 def drive_service():
-    """Build Drive v3 service from shared OAuth token (~/.config/google-calendar-mcp/tokens.json)."""
-    if not DRIVE_TOKEN_FILE.exists():
-        raise RecoveryError(
-            f"Drive auth missing — token not at {DRIVE_TOKEN_FILE}. "
-            "Run `h2t-ops drive list` to trigger OAuth. "
-            "Use `/h2t-core:setup connectors-check` to verify connector readiness.",
-            exit_code=1,
-        )
-    try:
-        from google.auth.transport.requests import Request as _GReq
-        from google.oauth2.credentials import Credentials
-        from googleapiclient.discovery import build
-    except ImportError as e:
-        raise RecoveryError(
-            f"google-api-python-client not installed: {e}",
-            exit_code=2,
-        ) from e
-    with DRIVE_TOKEN_FILE.open(encoding="utf-8") as f:
-        token_data = json.load(f)
-    if "normal" in token_data:
-        token_data = token_data["normal"]
-    if "client_id" not in token_data:
-        if not DRIVE_CREDENTIALS_FILE.exists():
-            raise RecoveryError(f"Drive credentials missing: {DRIVE_CREDENTIALS_FILE}", exit_code=1)
-        with DRIVE_CREDENTIALS_FILE.open(encoding="utf-8") as f:
-            creds_data = json.load(f)
-        installed = creds_data.get("installed", creds_data)
-        token_data["client_id"] = installed.get("client_id")
-        token_data["client_secret"] = installed.get("client_secret")
-        token_data["token_uri"] = installed.get("token_uri", "https://oauth2.googleapis.com/token")
-    existing_scopes = token_data.get("scopes") or []
-    if isinstance(existing_scopes, str):
-        existing_scopes = existing_scopes.split()
-    creds = Credentials.from_authorized_user_info(
-        token_data, scopes=existing_scopes or DRIVE_SCOPES
-    )
-    if creds.expired and creds.refresh_token:
-        creds.refresh(_GReq())
-        DRIVE_TOKEN_FILE.write_text(creds.to_json())
-    return build("drive", "v3", credentials=creds)
+    """Build Drive v3 service from this machine's Google token, through core.google_auth (#548).
+
+    ConfigError / AuthError propagate typed, so the CLI exits 3 / 4 (Connector Standard)."""
+    creds = google_auth.resolve_google_credentials("drive", DRIVE_SCOPES)
+    return google_auth.build_google_service("drive", "v3", creds)
 
 
 def drive_download_url(file_id: str) -> str:
@@ -445,7 +437,7 @@ def drive_audit_public(*, svc=None, manifest_path: Path | None = None,
 def drive_upload_file(path: Path, *, folder: str | None = None,
                       make_public: bool = True) -> dict:
     """Upload to Drive. Idempotent by filename within folder. Returns {drive_id, web_url, download_url, created}."""
-    src = Path(path).expanduser().resolve()
+    src = _paths.expand_user_dest(str(path)).resolve()
     if not src.exists():
         raise RecoveryError(f"file not found: {src}", exit_code=1)
     svc = drive_service()
@@ -524,8 +516,9 @@ def submit_url_via_h2t_ops(download_url: str, title: str | None,
 # ─── Manifest ─────────────────────────────────────────────────────────────────
 
 def uploads_manifest_path() -> Path:
-    """The shard this machine appends to. Never the one it reads alone."""
-    return uploads_staging_root() / f"manifest.{machine_id()}.jsonl"
+    """The shard this machine appends to. Never the one it reads alone. It is in the lake,
+    not state: the other machine must see this one's submissions (#386)."""
+    return lake_root() / f"manifest.{machine_id()}.jsonl"
 
 
 def iter_manifest_shards(path: Path | None = None) -> list[Path]:
@@ -537,7 +530,10 @@ def iter_manifest_shards(path: Path | None = None) -> list[Path]:
     """
     if path is None:
         path = uploads_manifest_path()
-    shards = {p for p in path.parent.glob("manifest*.jsonl") if p.is_file()}
+    dirs = [path.parent]
+    if path.parent == lake_root():
+        dirs += legacy_journal_dirs()
+    shards = {p for d in dirs for p in d.glob("manifest*.jsonl") if p.is_file()}
     if path.is_file():
         shards.add(path)
     return sorted(shards)
@@ -569,6 +565,8 @@ def iter_manifest_records(path: Path | None = None) -> list[tuple[str, dict]]:
                     rec = json.loads(line)
                 except ValueError:
                     continue
+                if not isinstance(rec, dict) or ("op" in rec and "state" in rec):
+                    continue        # core.lake's manifest.jsonl sits beside the shards
                 entries.append((rec.get("ts") or "", rank, line_no, rec))
     entries.sort(key=lambda e: e[:3])
     return [(e[0], e[3]) for e in entries]
@@ -600,10 +598,21 @@ def read_uploads_manifest(path: Path | None = None) -> dict[str, dict]:
 def append_uploads_manifest(record: dict, path: Path | None = None) -> None:
     if path is None:
         path = uploads_manifest_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
     stamped = {**record, "ts": record.get("ts") or now_iso()}
-    with path.open("a", encoding="utf-8") as f:
-        f.write(json.dumps(stamped, ensure_ascii=False) + "\n")
+    if path.parent == lake_root():
+        _own_journal(path)
+    place, user = lake.origin(path)
+    store.append(path, lake.manifest_line(stamped), place=place, dest=user)
+
+
+def _own_journal(path: Path) -> None:
+    """The journal shard is the connector's file in the lake: registered in its manifest
+    before the first append, and never appended to if someone else's file is there."""
+    d = lake.ConnectorDir("meetgeek")
+    if path.name in d.owned():
+        return
+    if d.publish({path.name: b""}, op_id=uuid.uuid4().hex):
+        raise RecoveryError(f"{path} exists and is not the package's; not appending to it", exit_code=1)
 
 
 def submitted_record(state: dict[str, dict], source: str) -> dict | None:
@@ -721,7 +730,7 @@ def process_one(src_path: Path, *, language: str | None, title_override: str | N
                 "drive_web_url": drive_info.get("web_url"),
                 "status": "in-drive",
             }, manifest_path)
-        except RecoveryError as e:
+        except (RecoveryError, H2TError) as e:   # H2TError: Google auth/config, kept typed
             append_uploads_manifest({
                 **base_meta,
                 "mp4_path": str(mp4_path), "mp4_size_bytes": mp4_size,
@@ -771,9 +780,6 @@ def emit_submission_artifact(result: dict, *, artifact_dir: Path | None = None) 
     has not yet processed the recording. meeting_transcript_artifact is emitted
     separately after transcript fetch/sync.
     """
-    if artifact_dir is None:
-        artifact_dir = staging_dir()
-    artifact_dir.mkdir(parents=True, exist_ok=True)
     stem = Path(result.get("source_webm", "unknown")).stem
     artifact = {
         "schema_version": "0.1",
@@ -792,9 +798,14 @@ def emit_submission_artifact(result: dict, *, artifact_dir: Path | None = None) 
         "meetgeek_meeting_id": None,
         "notes": None,
     }
-    path = artifact_dir / f"{stem}.submission.json"
-    path.write_text(json.dumps(artifact, ensure_ascii=False, indent=2), encoding="utf-8")
-    return path
+    name = f"{stem}.submission.json"
+    data = json.dumps(artifact, ensure_ascii=False, indent=2).encode("utf-8")
+    if artifact_dir is None:
+        return store.replace(staging_dir() / name, data, place="state")
+    d, rel = lake.ConnectorDir("meetgeek", root=artifact_dir), name
+    if d.publish({rel: data}, op_id=uuid.uuid4().hex):
+        raise RecoveryError(f"{d.root / rel} exists and is not the package's; left as is", exit_code=1)
+    return d.root / rel
 
 
 # ─── Retention ────────────────────────────────────────────────────────────────
@@ -893,10 +904,14 @@ def purge_staging(*, manifest_path: Path | None = None, svc=None,
         if reason:
             kept.append({"mp4_path": str(path), "reason": reason})
             continue
+        if store.classify(path) != "state":
+            # 3.x staged into the lake; 4.0 removes only in state (R1).
+            kept.append({"mp4_path": str(path), "reason": "staged by 3.x in the lake; remove it by hand"})
+            continue
         size = path.stat().st_size
         if not dry_run:
             try:
-                path.unlink()
+                store.remove(path, place="state")
             except OSError as e:
                 errors.append({"mp4_path": str(path), "error": str(e)})
                 continue

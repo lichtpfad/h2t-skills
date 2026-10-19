@@ -47,7 +47,8 @@ h2t-ops notion get-database DATABASE_ID --limit 25 --json
 
 ## Auth
 
-Notion expects `NOTION_API_TOKEN` from environment, `H2T_SECRETS_FILE`, `~/.dor/secrets/secrets.env`, legacy `~/.dor/secrets.env`, or `~/.config/notion/token`.
+Notion expects `NOTION_API_TOKEN` from the environment or from the file
+`h2t-ops paths get secret:notion` prints.
 
 In Claude Code, check readiness through:
 

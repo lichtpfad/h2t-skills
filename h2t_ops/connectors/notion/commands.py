@@ -1,7 +1,6 @@
 """Notion CLI adapter. argparse only at module scope; client imported in handlers."""
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
 
 PROVIDER = "notion"
@@ -25,7 +24,8 @@ def register(subparsers: Any) -> None:
     b.add_argument("--limit", type=int)
     add_fmt(b)
     s = cmds.add_parser("search", help="Query a database")
-    s.add_argument("database_id")
+    s.add_argument("database_id", nargs="?", default=None,
+                   help="database id (default: notion.tasks_database_id in user.yaml)")
     s.add_argument("--filter")
     s.add_argument("--filter-json")
     s.add_argument("--limit", type=int)
@@ -61,9 +61,8 @@ def register(subparsers: Any) -> None:
     ft = cmds.add_parser("find-project-tasks",
                          help="List tasks whose Project relation points at <page_id>")
     ft.add_argument("project_page_id")
-    ft.add_argument("--database-id", dest="database_id",
-                    default="beabac7bf4314952a9327759c638d89f",
-                    help="tasks database id (default: legacy workspace tasks db)")
+    ft.add_argument("--database-id", dest="database_id", default=None,
+                    help="tasks database id (default: notion.tasks_database_id in user.yaml)")
     ft.add_argument("--limit", type=int)
     add_fmt(ft)
     c = cmds.add_parser("create", help="Create a page")
@@ -89,7 +88,8 @@ def register(subparsers: Any) -> None:
     add_fmt(ca)
     sy = cmds.add_parser("sync", help="Sync page to a markdown file")
     sy.add_argument("page_id")
-    sy.add_argument("output_file")
+    sy.add_argument("output_file", nargs="?", default=None,
+                    help="markdown file to write (default: a new file in the inbox place)")
     sy.add_argument("--preserve-metadata", action="store_true")
     sy.add_argument("--include-databases", action="store_true")
     sy.add_argument("--recursive", action="store_true")
@@ -200,6 +200,16 @@ def run(args) -> Any:
             return _P(path).read_text(encoding="utf-8")
         except FileNotFoundError as e:
             raise UsageError(f"file not found: {path}") from e
+
+    # The tasks database is the user's, not the code's: user.yaml (#548 R45).
+    if args.notion_cmd in ("find-project-tasks", "search") and not args.database_id:
+        from h2t_ops.core import user_config
+        args.database_id = user_config.get("notion.tasks_database_id")
+        if not args.database_id:
+            flag = "--database-id" if args.notion_cmd == "find-project-tasks" else "a DATABASE_ID"
+            raise UsageError(
+                f"notion {args.notion_cmd}: no tasks database",
+                hint=f"pass {flag} or set notion.tasks_database_id in {user_config.path()}")
 
     client = NotionClient()
     cmd = args.notion_cmd
@@ -315,13 +325,16 @@ def run(args) -> Any:
             raise UsageError("update: specify --title, --append, or --file")
         return out
     if cmd == "sync":
-        out_path = Path(args.output_file)
+        from h2t_ops.core import downloads, paths, store
+
+        # output_file: a path the user named, replaced. None: a new file in the inbox (§6 п. 1).
+        out_path = paths.expand_user_dest(args.output_file) if args.output_file else None
         sidecar = None
         if getattr(args, "databases_json", None):
             if not getattr(args, "include_databases", False):
                 raise UsageError("sync: --databases-json requires --include-databases")
-            sidecar = Path(args.databases_json)
-            if out_path.resolve() == sidecar.resolve():
+            sidecar = paths.expand_user_dest(args.databases_json)
+            if out_path is not None and out_path.resolve() == sidecar.resolve():
                 raise UsageError("sync: output_file and --databases-json must be different paths")
         md = client.blocks_to_markdown(client.get_blocks(args.page_id))
         if args.preserve_metadata:
@@ -346,16 +359,18 @@ def run(args) -> Any:
                     f"`{db.get('database_id', '')}` - rows: {db.get('row_count', 0)}\n"
                 )
             md += "".join(lines)
+        defaulted = False
+        if out_path is None:
+            name = downloads.plain_name(f"{args.page_id}.md")
+            out_path, defaulted = downloads.save_bytes_default(name, md.encode("utf-8"))
+        else:
+            store.replace(out_path, md, place="inbox", dest=True)
         if sidecar is not None:
             import json as _json
-            sidecar.parent.mkdir(parents=True, exist_ok=True)
-        out_path.parent.mkdir(parents=True, exist_ok=True)
-        out_path.write_text(md, encoding="utf-8")
-        if sidecar is not None:
-            sidecar.write_text(
-                _json.dumps(discovery, ensure_ascii=False, indent=2),
-                encoding="utf-8",
-            )
+            store.replace(sidecar, _json.dumps(discovery, ensure_ascii=False, indent=2),
+                          place="inbox", dest=True)
+        if getattr(args, "as_json", False):
+            return {"page_id": args.page_id, "path": str(out_path), "defaulted": defaulted}
         return f"Synced to {out_path}"
     if cmd == "create-db-item":
         return client.create_db_item(

@@ -1,35 +1,21 @@
 """Google OAuth substrate for h2t-ops connectors (non-interactive).
 
-Owns: credential discovery (service-aware token store paths), token load +
-"normal" wrap normalize + scope→scopes split, upfront scope validation,
-expired-token refresh (no browser), atomic token writeback, lazy import seams.
+Owns: token load + "normal" wrap normalize + scope→scopes split, upfront scope
+validation, in-memory refresh (no browser), the login write and the one-way 3.x mirror,
+lazy import seams. Files are read through core.secrets: the client from secrets/shared,
+this machine's token from secrets/local (#548 §4, R11, R19).
 
-Authority: docs/superpowers/specs/2026-05-20-h2t-ops-calendar-parity-design.md
+Authority: docs/superpowers/specs/2026-05-20-h2t-ops-calendar-parity-design.md,
+docs/superpowers/specs/2026-10-17-storage-and-governance.md
 """
 from __future__ import annotations
 
 import json
-import os
 from collections.abc import Iterable
 from datetime import datetime
-from pathlib import Path
 
+from h2t_ops.core import paths, secrets, store
 from h2t_ops.core.errors import AuthError, ConfigError, broken_install_hint
-
-
-def _oauth_store_dir() -> Path:
-    """Google OAuth token store path.
-
-    Legacy compat path — folder name `google-calendar-mcp` is kept for backward
-    compatibility with existing local installs. Comments/docs call this the
-    "Google OAuth token store" (the name is not a forward architectural
-    commitment).
-
-    Wrapped in a function so `Path.home()` is evaluated at call time, allowing
-    tests to `monkeypatch.setattr(Path, "home", ...)`.
-    """
-    return Path.home() / ".config" / "google-calendar-mcp"
-
 
 _BOOTSTRAP_HINT = (
     "Google OAuth bootstrap: run `h2t-ops google auth` once (opens a browser), then retry."
@@ -48,20 +34,11 @@ GOOGLE_SCOPES = [
 _CLIENT_HINT = (
     "Create a Desktop OAuth client: Google Cloud Console → a project with the Gmail, "
     "Calendar and Drive APIs enabled → APIs & Services → Credentials → Create credentials → "
-    "OAuth client ID → Desktop app → Download JSON. Save it at that path, then rerun "
+    "OAuth client ID → Desktop app → Download JSON. Save it as {path}, then rerun "
     "`h2t-ops google auth`."
 )
 
 _GOOGLE_HINT = broken_install_hint("google-api-python-client", "google-auth", "google-auth-oauthlib")
-
-
-def _load_dotenv() -> None:
-    """Optional dotenv merge — re-wrap of legacy module-level call."""
-    try:
-        from dotenv import load_dotenv
-    except ImportError:
-        return
-    load_dotenv(Path.home() / ".dor" / "secrets.env", override=False)
 
 
 def _import_google():
@@ -100,76 +77,95 @@ def _install_app_flow():
     return InstalledAppFlow
 
 
-def _candidate_paths(service_name: str) -> list[tuple[Path, Path]]:
-    """Return (token_path, creds_path) candidates by service.
-
-    Token fallback policy (per design doc):
-      - "gmail":    shared OAuth store → ~/.config/gmail/  fallback
-      - "calendar": shared OAuth store only (no calendar-specific fallback)
-      - "drive":    shared OAuth store only (no drive-specific fallback)
-    """
-    shared = (_oauth_store_dir() / "tokens.json",
-              _oauth_store_dir() / "credentials.json")
-    if service_name == "gmail":
-        gmail_dir = Path.home() / ".config" / "gmail"
-        return [shared, (gmail_dir / "token.json", gmail_dir / "credentials.json")]
-    if service_name == "calendar":
-        return [shared]
-    if service_name == "drive":
-        return [shared]
-    raise ConfigError(
-        f"google_auth: unknown service_name {service_name!r}",
-        hint="expected 'gmail', 'calendar', or 'drive'",
-    )
+_SERVICES = ("gmail", "calendar", "drive")
+_DURABLE = ("refresh_token", "scopes", "client_id", "client_secret", "token_uri")
 
 
-def _load_credentials(token_path: Path, creds_path: Path):
-    """Token-load + 'normal' wrap normalize + creds.json client-creds merge.
+def durable_token(data: dict) -> dict:
+    """The long-lived part of a token in any 3.x shape; no access token, no expiry (§4, R37)."""
+    d = dict(data.get("normal", data))
+    if "scope" in d and "scopes" not in d:
+        d["scopes"] = d.pop("scope")
+    if isinstance(d.get("scopes"), str):
+        d["scopes"] = d["scopes"].split()
+    return {k: d[k] for k in _DURABLE if k in d}
 
-    Returns a google.oauth2.credentials.Credentials instance, or None when the
-    token file is absent / unreadable. Behavior preserved from the previous
-    Gmail-inlined version of this helper (delta 2: silent on warnings).
 
-    Note: the exception catch list `(json.JSONDecodeError, KeyError, ValueError)`
-    is a DELIBERATE stricter-than-legacy choice. The legacy Gmail-inlined helper
-    used bare `except Exception`, which would also swallow unexpected runtime
-    bugs (e.g. AttributeError). The narrowed catch surfaces such bugs instead
-    of silently returning None — known token-parse failure modes (malformed
-    JSON, missing required fields, value-shape mismatches like the google-auth
-    "missing refresh_token" ValueError) remain caught.
+def _refresh_sha(data: dict | None) -> str:
+    # through durable_token: a 3.x token wrapped in {"normal": …} is the same refresh token,
+    # and treating it as rotated would write on every refresh (R11, round 5)
+    return store.sha256((durable_token(data or {}).get("refresh_token") or "").encode())
+
+
+def mirror_legacy(creds_json: dict) -> str:
+    """One-way copy of this machine's token to the 3.x path POS reads (§9), in the 3.x shape.
+    Removed in 4.1. Both copies belong to this machine, so there is nothing to compare."""
+    legacy = paths.legacy("google.store") / "tokens.json"
+    if not legacy.is_file():
+        return "absent"
+    store.replace(legacy, json.dumps(creds_json, ensure_ascii=False, indent=2),
+                  place="legacy", compat=True, mode=0o600, keys=tuple(creds_json))
+    return "written"
+
+
+def _save_login(creds) -> None:
+    new = json.loads(creds.to_json())
+    secrets.write_json("google.token", durable_token(new))
+    mirror_legacy(new)
+
+
+def _load_credentials(token_data: dict, client_data: dict | None):
+    """'normal' wrap normalize + scope→scopes split + client merge, on data core.secrets read.
+
+    Returns a google.oauth2.credentials.Credentials instance. Data of the wrong shape raises
+    (KeyError, ValueError, TypeError, AttributeError); _parse turns that into a ConfigError
+    naming the file, so a corrupt token never reads as a missing one.
     """
     Credentials, _ = _import_google()
-    if not token_path.exists():
+    token_data = dict(token_data)
+    if "normal" in token_data:
+        token_data = dict(token_data["normal"])
+        if "expiry_date" in token_data:
+            expiry_ms = token_data.pop("expiry_date")
+            expiry_dt = datetime.fromtimestamp(expiry_ms / 1000)
+            token_data["expiry"] = expiry_dt.isoformat() + "Z"
+        if "scope" in token_data:
+            token_data.setdefault("scopes", token_data.pop("scope").split())
+    if "scope" in token_data and "scopes" not in token_data:
+        token_data["scopes"] = token_data.pop("scope").split()
+    if isinstance(token_data.get("scopes"), str):
+        token_data["scopes"] = token_data["scopes"].split()
+    if "client_id" not in token_data and client_data is not None:
+        installed = client_data.get("installed", client_data)
+        token_data["client_id"] = installed.get("client_id")
+        token_data["client_secret"] = installed.get("client_secret")
+        token_data.setdefault(
+            "token_uri",
+            installed.get("token_uri", "https://oauth2.googleapis.com/token"),
+        )
+    scopes = token_data.get("scopes") or []
+    return Credentials.from_authorized_user_info(token_data, scopes)
+
+
+def _client_for(token_data: dict) -> dict | None:
+    """The client file is read only when the token does not carry its own client."""
+    if "client_id" in durable_token(token_data):
         return None
+    return secrets.read_json("google.client")[0]
+
+
+def _parse(token_data: dict, source, client_data: dict | None = None, *, lookup_client: bool = True):
+    """_load_credentials, with a corrupt token raised as a ConfigError naming the file.
+
+    Only the exception type is named: google-auth's messages are not checked for values."""
     try:
-        with open(token_path, encoding="utf-8-sig") as f:
-            token_data = json.load(f)
-        if "normal" in token_data:
-            token_data = token_data["normal"]
-            if "expiry_date" in token_data:
-                expiry_ms = token_data.pop("expiry_date")
-                expiry_dt = datetime.fromtimestamp(expiry_ms / 1000)
-                token_data["expiry"] = expiry_dt.isoformat() + "Z"
-            if "scope" in token_data:
-                token_data.setdefault("scopes", token_data.pop("scope").split())
-        if "scope" in token_data and "scopes" not in token_data:
-            token_data["scopes"] = token_data.pop("scope").split()
-        if isinstance(token_data.get("scopes"), str):
-            token_data["scopes"] = token_data["scopes"].split()
-        if "client_id" not in token_data and creds_path.exists():
-            with open(creds_path, encoding="utf-8-sig") as f:
-                creds_data = json.load(f)
-            installed = creds_data.get("installed", creds_data)
-            token_data["client_id"] = installed.get("client_id")
-            token_data["client_secret"] = installed.get("client_secret")
-            token_data.setdefault(
-                "token_uri",
-                installed.get("token_uri", "https://oauth2.googleapis.com/token"),
-            )
-        scopes = token_data.get("scopes") or []
-        return Credentials.from_authorized_user_info(token_data, scopes)
-    except (json.JSONDecodeError, KeyError, ValueError):
-        return None
+        client = _client_for(token_data) if lookup_client else client_data
+        return _load_credentials(token_data, client)
+    except (KeyError, ValueError, TypeError, AttributeError) as e:
+        raise ConfigError(
+            f"Google OAuth token at {source} is malformed ({type(e).__name__})",
+            hint=f"fix or delete {source}, then run `h2t-ops google auth --force`",
+        ) from e
 
 
 def _validate_scopes(token_scopes: Iterable[str], required: Iterable[str]) -> None:
@@ -190,18 +186,17 @@ def resolve_google_credentials(service_name: str,
                                required_scopes: list[str]):
     """Non-interactive resolution of Google OAuth credentials. Never opens a browser.
 
-    See module docstring + design 2026-05-20-h2t-ops-calendar-parity-design.md.
+    The token is this machine's (secrets/local, then its 3.x files — core.secrets owns the
+    order). An access token lives only in this process: a refresh writes nothing unless
+    Google rotated the refresh token (§4, R11).
     """
-    _load_dotenv()
-    candidates = _candidate_paths(service_name)
-    creds = None
-    found_token_path: Path | None = None
-    for token_path, creds_path in candidates:
-        loaded = _load_credentials(token_path, creds_path)
-        if loaded is not None:
-            creds = loaded
-            found_token_path = token_path
-            break
+    if service_name not in _SERVICES:
+        raise ConfigError(
+            f"google_auth: unknown service_name {service_name!r}",
+            hint="expected 'gmail', 'calendar', or 'drive'",
+        )
+    token_data, found = secrets.read_json("google.token")
+    creds = None if token_data is None else _parse(token_data, found)
     if creds is None:
         raise ConfigError(
             f"Google OAuth token not found for service {service_name!r}.",
@@ -209,20 +204,18 @@ def resolve_google_credentials(service_name: str,
         )
     _validate_scopes(getattr(creds, "scopes", None) or [], required_scopes)
     if not creds.valid:
+        # A durable token has no access token; from_authorized_user_info then sets expiry
+        # to "now", so it reads as expired and takes this branch (google-auth 2.62).
         if creds.expired and creds.refresh_token:
             try:
-                creds.refresh(_request())
+                creds.refresh(_request())          # in memory; nothing is cached on disk (R11)
             except Exception as e:
                 raise AuthError(
                     f"Google OAuth token refresh failed: {e}",
                     hint=_BOOTSTRAP_HINT,
                 ) from e
-            assert found_token_path is not None
-            found_token_path.parent.mkdir(parents=True, exist_ok=True)
-            tmp = found_token_path.with_suffix(found_token_path.suffix + ".tmp")
-            tmp.write_text(creds.to_json())
-            tmp.chmod(0o600)
-            os.replace(tmp, found_token_path)
+            if _refresh_sha(json.loads(creds.to_json())) != _refresh_sha(token_data):
+                _save_login(creds)                 # Google rotated the refresh token
         else:
             raise AuthError(
                 "Google OAuth token is invalid and no refresh token is available.",
@@ -232,31 +225,30 @@ def resolve_google_credentials(service_name: str,
 
 
 def bootstrap_google_token(*, force: bool = False, open_browser: bool = True) -> dict:
-    """Mint the shared token store once — the only path that reaches the browser flow.
+    """Mint this machine's token once — the only path that reaches the browser flow.
 
     A token that already carries every scope and can refresh itself is left alone unless
     `force`, so setup can call this on every run without a consent screen each time.
     """
-    store = _oauth_store_dir()
-    client_path = store / "credentials.json"
-    token_path = store / "tokens.json"
-    if not client_path.is_file():
-        raise ConfigError(f"Google OAuth client not found: {client_path}", hint=_CLIENT_HINT)
+    client, _ = secrets.read_json("google.client")
+    if client is None:
+        where = secrets.json_path("google.client")
+        raise ConfigError(f"Google OAuth client not found: {where}",
+                          hint=_CLIENT_HINT.format(path=where))
 
     if not force:
-        current = _load_credentials(token_path, client_path)
+        data, found = secrets.read_json("google.token")
+        current = None if data is None else _parse(data, found, client, lookup_client=False)
         have = set(getattr(current, "scopes", None) or [])
         if current is not None and set(GOOGLE_SCOPES) <= have and (current.valid or current.refresh_token):
-            return {"status": "already_authorized", "token_path": str(token_path),
+            return {"status": "already_authorized", "token_path": str(found),
                     "scopes": sorted(have)}
 
-    flow = _install_app_flow().from_client_secrets_file(str(client_path), GOOGLE_SCOPES)
+    # A dict, not a path: the library never opens the secret file itself.
+    flow = _install_app_flow().from_client_config(client, GOOGLE_SCOPES)
     creds = flow.run_local_server(port=0, open_browser=open_browser)
-    tmp = token_path.with_suffix(token_path.suffix + ".tmp")
-    tmp.write_text(creds.to_json(), encoding="utf-8")
-    tmp.chmod(0o600)
-    os.replace(tmp, token_path)
-    return {"status": "authorized", "token_path": str(token_path),
+    _save_login(creds)
+    return {"status": "authorized", "token_path": str(secrets.json_path("google.token")),
             "scopes": sorted(creds.scopes or GOOGLE_SCOPES)}
 
 

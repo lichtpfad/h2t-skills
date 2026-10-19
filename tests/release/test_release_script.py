@@ -18,6 +18,8 @@ from pathlib import Path
 
 import pytest
 
+from conftest import REAL_UV_CACHE
+
 ROOT = Path(__file__).resolve().parents[2]
 SHIPPED = ("pyproject.toml", "uv.lock", "README.md", ".claude-plugin/", "plugins/", "scripts/", "h2t_ops/")
 PY = "3.12.11"
@@ -119,7 +121,7 @@ def test_stamp_twice_sets_one_version_and_one_bootstrap_everywhere(repo, rel):
     assert expected[-1] == "h2t-setup"
     copies = _bootstrap_copies(repo)
     md_copies = [k for k in copies if k.startswith("plugins/") and k.endswith((".md#0", ".md#1"))]
-    assert len(md_copies) == 2 * 23  # 22 SKILL.md + the reference, two per block
+    assert len(md_copies) == 2 * 24  # 23 SKILL.md (dev-overview since #548) + the reference, two per block
     assert [k for k in copies if k.startswith("README.md#")] == ["README.md#0"]
     assert counts["README.md"] == 1
     assert {k: v for k, v in copies.items() if v != expected} == {}
@@ -264,7 +266,9 @@ def test_stamped_hooks_run_notice_is_valid_json(repo, rel, tmp_path):
 
 
 @pytest.mark.skipif(UV is None, reason="uv is not on PATH (CI installs with pip); prepare exports through uv")
-def test_prepare_cli_twice_exports_constraints_and_locks_the_version(repo):
+def test_prepare_cli_twice_exports_constraints_and_locks_the_version(repo, monkeypatch):
+    # uv lock --offline resolves from the real uv cache; the suite's HOME is a temp dir (#548 R5)
+    monkeypatch.setenv("UV_CACHE_DIR", REAL_UV_CACHE)
     for ver in ("4.0.0", "4.0.1"):
         result = subprocess.run([sys.executable, str(repo / "scripts/release.py"), "prepare", ver],
                                 capture_output=True, text=True, encoding="utf-8")

@@ -19,6 +19,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import h2t_ops
+from h2t_ops.core import paths, store
 from h2t_ops.core.errors import ConfigError, H2TError
 from h2t_ops.setup import harness_claude, manifest, state
 from h2t_ops.setup.manifest import render
@@ -244,7 +245,7 @@ def _last_install_json() -> dict | None:
     """install.json as written last, whatever install.env says: an interrupted run still
     knows what the user had chosen."""
     try:
-        data = json.loads((state.run_dir() / "install.json").read_text(encoding="utf-8"))
+        data = json.loads((paths.run_dir() / "install.json").read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return None
     return data if isinstance(data, dict) else None
@@ -257,16 +258,15 @@ def _utc_stamp() -> str:
 def _pending_path() -> Path:
     # The Claude Code part of a snapshot whose re-pin has not finished: a re-run after an
     # interruption must still restore the scopes and the disabled plugins it had.
-    return state.run_dir() / "rollback" / "claude-pending.json"
+    return paths.run_dir() / "rollback" / "claude-pending.json"
 
 
 def _snapshot(root: Path, claude) -> dict:
     """Step 3: what is there now, under ~/.h2t/run/rollback/<UTC>/."""
-    where = state.run_dir() / "rollback" / _utc_stamp()
-    where.mkdir(parents=True, exist_ok=True)
-    for src in (state.run_dir() / "install.json", root / "uv-receipt.toml"):
+    where = store.mkdir(paths.run_dir() / "rollback" / _utc_stamp(), place="run", mode=0o700)
+    for src in (paths.run_dir() / "install.json", root / "uv-receipt.toml"):
         if src.is_file():
-            shutil.copyfile(src, where / src.name)
+            store.replace(where / src.name, src.read_bytes(), place="run")
     harness: dict = {"found": claude.found()}
     if harness["found"]:
         try:
@@ -274,8 +274,8 @@ def _snapshot(root: Path, claude) -> dict:
             harness["plugins"] = claude.plugins()
         except harness_claude.HarnessError as exc:
             harness["error"] = str(exc)
-    (where / "claude.json").write_text(json.dumps(harness, ensure_ascii=False, indent=2),
-                                       encoding="utf-8")
+    store.replace(where / "claude.json", json.dumps(harness, ensure_ascii=False, indent=2),
+                  place="run")
     harness["path"] = str(where)
     return harness
 
@@ -496,8 +496,7 @@ def _plugins_step(mode: str, target: dict, names: list[str], harness: dict, clau
         # Before the first mutation: a crash anywhere after it (between an update and the
         # re-disable, mid re-pin) leaves the rerun the state to restore.
         if not pending.exists():
-            pending.parent.mkdir(parents=True, exist_ok=True)
-            pending.write_text(json.dumps(before, ensure_ascii=False), encoding="utf-8")
+            store.replace(pending, json.dumps(before, ensure_ascii=False), place="run")
 
     changed = False
     manual: list[str] = []
@@ -552,7 +551,7 @@ def _plugins_step(mode: str, target: dict, names: list[str], harness: dict, clau
                     report.failed.append((f"Claude Code: re-pin failed ({exc}) and the restore "
                                           f"failed too ({again})", shown))
                     return True
-                pending.unlink(missing_ok=True)
+                store.remove(pending, place="run")
                 report.failed.append((f"Claude Code: re-pin failed ({exc}); restored as it was "
                                       f"(pinned to {ref})", retry))
                 return True
@@ -593,7 +592,7 @@ def _plugins_step(mode: str, target: dict, names: list[str], harness: dict, clau
         _redisable(claude, before["plugins"], hold)
         # Everything the snapshot asked for has been applied: a later run must not replay an
         # old disabled state over a choice the user makes after this one.
-        pending.unlink(missing_ok=True)
+        store.remove(pending, place="run")
         final = [e for e in claude.plugins() if not _gone(_where(e))]
         wrong = []
         for n in names:
@@ -620,8 +619,9 @@ def _semver(name: str) -> tuple[int, int, int] | None:
     return (int(m[1]), int(m[2]), int(m[3])) if m else None
 
 
-# A seam for the interruption tests; deletion is the step there.
-_remove_tree = shutil.rmtree
+def _remove_tree(d: Path) -> None:
+    """A seam for the interruption tests; deletion is the step there."""
+    store.remove_tree(d, place="harness")
 
 
 def shipped_profiles() -> set[str]:
@@ -674,7 +674,8 @@ def clean_cache(config: Path, installed: list[dict], keep: int = KEEP_VERSIONS,
 
 
 def _profiles_note(where: Path, names: list[str]) -> str:
-    target = Path("~") / ".h2t" / "creative" / "profiles"
+    from h2t_ops.tools.creative.cli import user_profiles_dir
+    target = user_profiles_dir()
     return (f"plugin cache: kept {where}: it holds your creative profiles {', '.join(names)} "
             f"(3.x wrote them into the cache). Move each to {target}/<name>, where 4.x looks "
             "for them; once they are out, the next sync removes this directory.")
@@ -826,8 +827,8 @@ def dev_sync(uv, execute, claude, cwd: str | None = None, add_extras=()) -> Repo
     if not isinstance(version, str) or not version:
         raise ConfigError(f"{checkout / 'pyproject.toml'} has no static [project] version")
     root = _tool_dir(uv) / "h2t-ops"
-    constraints = state.run_dir() / "dev-constraints.txt"
-    constraints.parent.mkdir(parents=True, exist_ok=True)
+    constraints = paths.run_dir() / "dev-constraints.txt"
+    store.mkdir(constraints.parent, place="run")
     done = uv(["export", "--project", str(checkout), "--frozen", "--offline", "--no-dev",
                "--all-extras", "--no-emit-project", "--no-hashes", "-o", str(constraints)])
     if done.returncode != 0:
@@ -874,6 +875,17 @@ def dev_sync(uv, execute, claude, cwd: str | None = None, add_extras=()) -> Repo
                        "answers when run")
     report.notes.append(_plugins_note(checkout))
     return report
+
+
+def _layout_step(report: Report) -> None:
+    """Layout 1 after the CLI is in place (#548 §8, R13). A held lock or an unfinished
+    rollback is this step's outcome, not the end of sync; a phase that stops (the machine
+    name among them) is already in report.failed with its own command."""
+    from h2t_ops.setup.layout import engine
+    try:
+        engine.migrate(report, machine=None)
+    except ConfigError as exc:
+        report.failed.append(("layout 1: migrate", "\n".join(s for s in (str(exc), exc.hint) if s)))
 
 
 def run(mode: str, target: dict | None, argv: list[str], *, uv=None, claude=None,
@@ -941,6 +953,8 @@ def run(mode: str, target: dict | None, argv: list[str], *, uv=None, claude=None
                 report.done.append("plugin cache: removed " + ", ".join(
                     f"{d.parent.name} {d.name}" for d in removed))
             report.notes += [_profiles_note(d, names) for d, names in held_back]
+    if cli_ok:
+        _layout_step(report)
     report.reload_needed = changed                                            # 8
     if changed:
         report.notes.append("Open Claude Code sessions: run /reload-plugins or start a new "

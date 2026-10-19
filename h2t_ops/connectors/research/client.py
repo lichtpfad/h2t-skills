@@ -18,6 +18,9 @@ from typing import Any
 from urllib.parse import parse_qsl, quote, urlencode, urlsplit, urlunsplit
 
 from h2t_ops.connectors.research import maintenance, navigation, provider_routing, store
+from h2t_ops.core import paths as _paths
+from h2t_ops.core import providers
+from h2t_ops.core import secrets as core_secrets
 from h2t_ops.core.errors import (
     AuthError,
     ConfigError,
@@ -26,9 +29,7 @@ from h2t_ops.core.errors import (
     ProviderError,
     UsageError,
 )
-from h2t_ops.core.secrets import candidate_secret_files
 
-DEFAULT_OUTPUT_DIR = Path.home() / ".h2t" / "research"
 REDACTED = "[REDACTED]"
 
 _SENSITIVE_KEY_PARTS = (
@@ -64,49 +65,19 @@ _URL_RE = re.compile(r"https?://[^\s<>'\")]+", re.IGNORECASE)
 _SLUG_RE = re.compile(r"[^a-z0-9]+")
 
 
-def _read_env_file(path: Path) -> dict[str, str]:
-    """Parse simple KEY=VALUE env files without mutating os.environ."""
-    if not path.is_file():
-        return {}
-
-    values: dict[str, str] = {}
-    for raw in path.read_text(encoding="utf-8").splitlines():
-        line = raw.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, _, value = line.partition("=")
-        key = key.strip()
-        value = value.strip()
-        if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
-            value = value[1:-1]
-        if key:
-            values[key] = value
-    return values
-
-
 def resolve_secret(name: str) -> str:
-    """Resolve a secret from env, then the shared candidate files (#448).
+    """Resolve a secret through h2t_ops.core.secrets, the one reader (#448, #548 §7.2).
 
-    The list comes from h2t_ops.core.secrets so every connector answers for the same
-    locations. Keeping a second list here is what made ~/.h2t/config/secrets/secrets.env
-    invisible to research after #432 added it everywhere else.
+    A second list of files here is what made ~/.h2t/config/secrets/secrets.env invisible
+    to research after #432 added it everywhere else.
     """
-    env_value = os.getenv(name)
-    if env_value:
-        return env_value
-
-    for path in candidate_secret_files():
-        value = _read_env_file(path).get(name)
-        if value:
-            return value
-
+    value = core_secrets.get(name)
+    if value:
+        return value
+    where = core_secrets.provider_file(providers.provider_of_key(name) or "other")
     raise ConfigError(
         f"Research secret not found: {name}",
-        hint=(
-            f"Set {name} in the environment, H2T_SECRETS_FILE, "
-            "~/.h2t/config/secrets/secrets.env, ~/.dor/secrets/secrets.env, "
-            "or ~/.dor/secrets.env."
-        ),
+        hint=f"Set {name} in the environment or in {where}.",
     )
 
 
@@ -180,8 +151,7 @@ def artifact_paths(
     kind: str,
 ) -> dict[str, Path]:
     """Create artifact directory and return the canonical output paths."""
-    output_dir = Path(output_dir).expanduser()
-    output_dir.mkdir(parents=True, exist_ok=True)
+    output_dir = Path(output_dir)
     stamp = datetime.now(UTC).strftime("%Y-%m-%d-%H%M%S")
     nonce = uuid.uuid4().hex[:8]
     base = f"{slugify(project)}-{slugify(slug_source)}-{slugify(kind)}-{stamp}-{nonce}"
@@ -317,21 +287,16 @@ def _artifact_ref_for_path(
     if not path:
         return None
     try:
-        target = Path(path).expanduser().resolve()
-        base = Path(output_dir).expanduser().resolve()
+        target = _paths.expand_user_dest(str(path)).resolve()
+        base = _paths.expand_user_dest(str(output_dir)).resolve()
         return target.relative_to(base).as_posix()
     except (OSError, ValueError):
         return None
 
 
 def write_json(path: Path, payload: Any) -> None:
-    """Write UTF-8 JSON with deterministic formatting."""
-    target = Path(path)
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(
-        json.dumps(payload, indent=2, ensure_ascii=False) + "\n",
-        encoding="utf-8",
-    )
+    """Write UTF-8 JSON with deterministic formatting, through store."""
+    store.write_json(path, payload)
 
 
 def append_telemetry(path: Path, record: dict[str, Any]) -> bool:
@@ -340,11 +305,8 @@ def append_telemetry(path: Path, record: dict[str, Any]) -> bool:
         return False
 
     try:
-        target = Path(path)
-        target.parent.mkdir(parents=True, exist_ok=True)
-        with target.open("a", encoding="utf-8") as fh:
-            payload = _json_safe(sanitize_details(record))
-            fh.write(json.dumps(payload, ensure_ascii=False) + "\n")
+        payload = _json_safe(sanitize_details(record))
+        store.append_line(Path(path), json.dumps(payload, ensure_ascii=False))
         return True
     except (OSError, TypeError, ValueError):
         return False
@@ -379,10 +341,21 @@ class ResearchClient:
     """Facade for provider-backed research operations."""
 
     def __init__(self, *, output_dir: Path | None = None) -> None:
-        self.output_dir = output_dir or DEFAULT_OUTPUT_DIR
+        # --output-dir is a path the user named; without it, data/research (§6 п. 1).
+        self._named = output_dir is not None
+        self.output_dir = Path(output_dir) if output_dir is not None else store.default_root()
 
     def _research_root(self) -> Path:
         return self.output_dir
+
+    def _read_root(self) -> Path:
+        """Reads (index, show, resolve, doctor, cleanup) fall back to the 3.x store,
+        ~/.h2t/research, while data/research does not exist yet (4.0.x; the migration
+        moves it). Writes never do: 4.0 does not write into a legacy place (§7.3)."""
+        if self._named or self.output_dir.exists():
+            return self.output_dir
+        old = _paths.legacy("research")
+        return old if old.is_dir() else self.output_dir
 
     def _require_research_route(
         self,
@@ -746,10 +719,7 @@ class ResearchClient:
             results = []
 
         write_json(paths["sources_json"], results)
-        paths["partial_md"].write_text(
-            _render_partial_markdown(safe_provider_envelope),
-            encoding="utf-8",
-        )
+        store.save_text(paths["partial_md"], _render_partial_markdown(safe_provider_envelope))
         raw_html_ref = _artifact_ref_for_path(
             raw_html_path,
             output_dir=self.output_dir,
@@ -806,11 +776,8 @@ class ResearchClient:
         )
         safe_ocr_envelope = sanitize_details(ocr_envelope)
         write_json(paths["sources_json"], safe_ocr_envelope)
-        paths["partial_md"].parent.mkdir(parents=True, exist_ok=True)
-        paths["partial_md"].write_text(
-            _render_visual_ocr_partial_markdown(safe_ocr_envelope),
-            encoding="utf-8",
-        )
+        store.save_text(paths["partial_md"],
+                         _render_visual_ocr_partial_markdown(safe_ocr_envelope))
         artifact = build_research_artifact(
             artifact_id=artifact_id("research-visual-ocr"),
             provider_status=str(ocr_envelope.get("status", "FAILED")),
@@ -1472,11 +1439,11 @@ class ResearchClient:
 
     def list_research_index(self, index_name: str, *, project: str | None = None) -> dict[str, Any]:
         """List a research index through local navigation cache helpers."""
-        return navigation.list_index(self.output_dir, index_name, project=project)
+        return navigation.list_index(self._read_root(), index_name, project=project)
 
     def show_research_object(self, object_type: str, object_id: str) -> dict[str, Any]:
         """Load a canonical research object by object type and id."""
-        return navigation.show_object(self.output_dir, object_type, object_id)
+        return navigation.show_object(self._read_root(), object_type, object_id)
 
     def resolve_research_alias(
         self,
@@ -1486,7 +1453,7 @@ class ResearchClient:
     ) -> dict[str, Any]:
         """Resolve aliases through the local aliases index."""
         return navigation.resolve_alias(
-            self.output_dir,
+            self._read_root(),
             alias_value=alias_value,
             alias_type=alias_type,
         )
@@ -1510,7 +1477,7 @@ class ResearchClient:
 
     def research_doctor(self) -> dict[str, Any]:
         """Inspect local research store health without writing files."""
-        return maintenance.doctor(self.output_dir)
+        return maintenance.doctor(self._read_root())
 
     def rebuild_research_indexes(self) -> dict[str, Any]:
         """Rebuild research navigation indexes from canonical object JSON."""
@@ -1518,7 +1485,7 @@ class ResearchClient:
 
     def cleanup_research(self, *, dry_run: bool = True) -> dict[str, Any]:
         """Return a cleanup plan for non-canonical research artifacts."""
-        return maintenance.cleanup(self.output_dir, dry_run=dry_run)
+        return maintenance.cleanup(self._read_root(), dry_run=dry_run)
 
 
 def _artifact_telemetry(provider_envelope: dict[str, Any]) -> dict[str, Any]:

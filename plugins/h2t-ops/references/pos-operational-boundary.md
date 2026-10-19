@@ -26,7 +26,7 @@ how not to violate it.
 - Skills may call `h2t-ops` CLI for external reads.
 - Skills may call POS CLI/API for capture, decision, task, lesson, follow-up,
   and daily-loop writes once those commands exist.
-- Skills must not write directly to `~/.dor/pos.db`.
+- Skills must not write directly to POS's `pos.db`.
 - Skills must not use the existing `dor.db` for POS journal data.
 - Skills must not modify vault/lake directly except through an approved
   `pos_ingest` or coordinator workflow.

@@ -4,9 +4,15 @@ import hashlib
 import json
 import os
 import sys
-import tempfile
 from pathlib import Path
 from typing import Any
+
+from h2t_ops.core import paths
+from h2t_ops.core import store as core_store
+
+# Read at call time, so a test can take the Windows branch without changing os.name for
+# everyone (setup/sync.py does the same).
+OS_NAME = os.name
 
 
 def _sha(prefix: str, *parts: str) -> str:
@@ -68,24 +74,45 @@ def index_path(root: Path, index_name: str) -> Path:
     return Path(root) / "indexes" / f"{index_name}.index.json"
 
 
+def default_root() -> Path:
+    """Where research saves when no --output-dir is given (#548 §6 п. 1)."""
+    return paths.data_dir() / "research"
+
+
+def _where(path: Path) -> dict[str, Any]:
+    """data/research is the package's place (data); any other directory came from
+    --output-dir, a path the user named, and goes through store with dest=True (§7.2)."""
+    base = os.path.realpath(default_root())
+    real = os.path.realpath(path)
+    if real == base or real.startswith(base + os.sep):
+        return {"place": "data"}
+    return {"place": "data", "dest": True}
+
+
+def save_text(path: Path, text: str) -> None:
+    """Through store: a sibling temp file and os.replace, so readers never see a partial file."""
+    core_store.replace(Path(path), text, **_where(path))
+
+
+def append_line(path: Path, line: str) -> None:
+    core_store.append(Path(path), line, **_where(path))
+
+
+def copy_file(src: Path, dst: Path, *, exclusive: bool = False) -> None:
+    """Copy a file, streamed through a store handle; exclusive: dst must not exist yet."""
+    with open(src, "rb") as fh, \
+            core_store.writer(Path(dst), exclusive=exclusive, **_where(dst)) as out:
+        for chunk in iter(lambda: fh.read(1 << 20), b""):
+            out.write(chunk)
+
+
 def write_json(path: Path, payload: Any) -> None:
-    """Write via a sibling temp file and os.replace so readers never see a partial file."""
     path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
     text = json.dumps(payload, indent=2, ensure_ascii=False) + "\n"
-    if os.name == "nt" and ":" in path.name:
-        # On NTFS "id:x.json" is an alternate data stream (see maintenance), and a
-        # stream cannot be the target of os.replace; write it in place.
-        path.write_text(text, encoding="utf-8")
-        return
-    fd, tmp_name = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
-            handle.write(text)
-        os.replace(tmp_name, path)
-    except BaseException:
-        Path(tmp_name).unlink(missing_ok=True)
-        raise
+    # On NTFS "id:x.json" is an alternate data stream (see maintenance), and a stream
+    # cannot be the target of os.replace: store writes it in place, under the same name 3.x
+    # used, still checked and logged.
+    core_store.replace(path, text, in_place=OS_NAME == "nt" and ":" in path.name, **_where(path))
 
 
 class IndexUnreadable(Exception):

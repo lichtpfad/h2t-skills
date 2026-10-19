@@ -64,7 +64,6 @@ PLUGIN_BINS = {"h2t-dev": PLUGINS / "h2t-dev" / "bin" / "h2t-dev",
 # Skills that run no h2t command, so the version check has nothing to protect.
 NO_H2T_COMMAND = {
     "h2t-arch/diagram-node": "research prose for a subagent; no shell command at all",
-    "h2t-core/dev-overview": "reads GitHub through gh and sessions through ls; no h2t command",
     "h2t-core/snap": "runs only the external h2t-snap binary",
     "h2t-creative/design": "deprecated pointer to style-create; its blocks are HTML/CSS",
     "h2t-dev/github-issues": "gh only",
@@ -312,6 +311,8 @@ NO_JSON = {
     "h2t-docs-lint audit": "this mode ignores --json and prints the human audit",
     "h2t-docs-lint fix-safe": "this mode ignores --json and prints what it fixed",
     "h2t-docs-lint fix-index": "this mode ignores --json and prints the index diff",
+    # The bare path is the result: the skill substitutes it into a shell path with $(...).
+    "h2t-ops paths get": "the human output is the path itself, used inside $(...)",
 }
 # A deliberate human/markdown format on a call the skill does consume, with the reason the
 # skill gives for it.

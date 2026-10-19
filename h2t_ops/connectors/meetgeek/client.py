@@ -9,6 +9,7 @@ import os
 import time
 from typing import Any
 
+from h2t_ops.core import secrets
 from h2t_ops.core.errors import (
     AuthError,
     ConfigError,
@@ -35,19 +36,22 @@ def _raise_for_status(resp: Any, context: str) -> None:
         raise ProviderError(f"MeetGeek server error {status} ({context}): {resp.text[:200]}")
 
 
+def _api_key() -> str:
+    return (secrets.get("MEETGEEK_API_KEY") or "").strip()
+
+
 class MeetGeekClient:
     """MeetGeek API client — 10 pure-API verbs, no local state."""
 
     def __init__(self) -> None:
-        load_secrets()
-        api_key = os.environ.get("MEETGEEK_API_KEY", "").strip()
+        load_secrets()   # the tunables below (MEETGEEK_BASE_URL, …) may sit in the files too
+        api_key = _api_key()
         if not api_key:
             raise ConfigError(
                 "MEETGEEK_API_KEY not set.",
                 hint=(
-                    "Add MEETGEEK_API_KEY to ~/.dor/secrets/secrets.env "
-                    "(legacy fallback: ~/.dor/secrets.env) or set in environment. "
-                    "Registry: ~/.h2t/config/secrets/meetgeek.md"
+                    f"Add MEETGEEK_API_KEY to {secrets.provider_file('meetgeek')} or set it in the "
+                    "environment."
                 ),
             )
         self._api_key = api_key
@@ -245,31 +249,45 @@ class MeetGeekClient:
             raise ProviderError(f"No download URL in response for {meeting_id}: {info!r}")
         return {"meeting_id": meeting_id, "download_url": url}
 
-    def download_to(self, url: str, dest: Any) -> int:
-        """Stream a recording URL to dest; return bytes written (meetgeek_cli.py, #541).
+    def iter_download(self, url: str) -> Any:
+        """Yield a recording URL's bytes in chunks (meetgeek_cli.py, #541).
 
         A signed media URL carries its token, so the API key goes only to the API host.
+        Nothing is written here: the lake sync hands the chunks to core.lake.publish.
         """
-        from pathlib import Path
-
         import requests as _r  # lazy — module-scope import forbidden
 
-        dest = Path(dest)
         api_host = self._base_url.split("//", 1)[-1].split("/", 1)[0]
         headers = self._headers() if api_host in url else {}
-        written = 0
-        dest.parent.mkdir(parents=True, exist_ok=True)
         try:
             with _r.get(url, headers=headers, stream=True, timeout=self._timeout) as resp:
                 if resp.status_code >= 400:
                     raise ProviderError(f"download failed: {resp.status_code} {resp.text[:200]}")
-                with dest.open("wb") as f:
-                    for chunk in resp.iter_content(chunk_size=1 << 16):
-                        if chunk:
-                            f.write(chunk)
-                            written += len(chunk)
+                for chunk in resp.iter_content(chunk_size=1 << 16):
+                    if chunk:
+                        yield chunk
         except _r.RequestException as exc:
             raise NetworkError(f"MeetGeek recording download failed: {exc}") from exc
+
+    def download_to(self, url: str, dest: Any, *, exclusive: bool = False) -> int:
+        """Stream a recording URL to dest; return bytes written.
+
+        The file is published through store.writer in the place its path belongs to (R28):
+        with exclusive=True a file already at dest is refused (store.AlreadyExists), never
+        replaced (R47); a failed download leaves dest as it was (R29).
+        """
+        from pathlib import Path
+
+        from h2t_ops.core import lake, store
+
+        dest = Path(dest)
+        place, user = lake.origin(dest)
+        written = 0
+        # A failed request raises inside the writer, which then leaves dest untouched.
+        with store.writer(dest, place=place, dest=user, exclusive=exclusive) as f:
+            for chunk in self.iter_download(url):
+                f.write(chunk)
+                written += len(chunk)
         return written
 
     def action_items(self, meeting_id: str) -> dict[str, Any]:

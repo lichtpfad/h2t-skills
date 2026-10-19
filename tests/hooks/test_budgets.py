@@ -166,7 +166,7 @@ def test_user_prompt_submit_session_skill_slash_command(rig):
                "prompt": "/h2t-core:session-start"}
 
     def unlock():  # the 30 s per-cwd lock would turn every run after the first into a no-op
-        for lock in rig.tmp.glob("h2t_gather_*.lock"):
+        for lock in (rig.home / ".h2t" / "state" / "locks").glob("gather-*.lock"):
             lock.unlink()
 
     p95, last = _measure(rig, [("gather-on-prompt", payload)], before=unlock)

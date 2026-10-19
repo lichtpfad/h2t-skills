@@ -212,7 +212,6 @@ def register(subparsers: Any) -> None:
 def _register_pipeline(cmds: Any) -> None:
     """Verbs ported from meetgeek_cli.py with its flags (#541); handlers in pipeline.py."""
     import argparse
-    from pathlib import Path
 
     # recovery.HOUSEKEEPING_MIN_AGE_HOURS; repeated here so the parser imports nothing.
     housekeeping_hours = 24.0
@@ -230,7 +229,7 @@ def _register_pipeline(cmds: Any) -> None:
     s = cmds.add_parser("convert", help="Convert media file (webm→mp4 default)")
     s.add_argument("input")
     s.add_argument("-o", "--output", default=None,
-                   help="Output path; default: ~/.dor/lake/meetgeek/uploads-staging/{YYYY-MM-DD}/{name}.mp4")
+                   help="Output path; default: <lake>/meetgeek/uploads-staging/{YYYY-MM-DD}/{name}.mp4")
     s.add_argument("--audio-only", action="store_true", help="Strip video; output .m4a")
     s.add_argument("--mix-mode", choices=["amix", "first", "keep"], default="amix",
                    help="Multi-track audio strategy (default: amix — sums all tracks)")
@@ -282,7 +281,7 @@ def _register_pipeline(cmds: Any) -> None:
     add_json(s)
 
     s = cmds.add_parser("sync", help="Bulk pull to a lake folder (manifest.jsonl + per-asset folders)")
-    s.add_argument("--to", required=True, help="Lake destination (e.g. ~/.dor/lake/meetgeek/historical/)")
+    s.add_argument("--to", required=True, help="Lake destination (e.g. <lake>/meetgeek/historical/)")
     s.add_argument("--include", default="transcripts",
                    help="Comma-separated: transcripts,summaries,highlights,insights,recordings")
     s.add_argument("--since", default=None, help="ISO date YYYY-MM-DD")
@@ -291,7 +290,7 @@ def _register_pipeline(cmds: Any) -> None:
     s.add_argument("--to-date", dest="to_date", default=None)
     s.add_argument("--limit", type=int, default=None)
     s.add_argument("--cursor-file", dest="cursor_file", default=None,
-                   help="Default: ~/.dor/lake/_cursors/meetgeek.json")
+                   help="Default: state/cursors/meetgeek.json")
     s.add_argument("--watch", type=int, default=None, metavar="SECONDS",
                    help="Run sync in a loop every N seconds (min 30); Ctrl-C to stop")
     add_json(s)
@@ -299,8 +298,8 @@ def _register_pipeline(cmds: Any) -> None:
     s = cmds.add_parser("webhook-server", help="Receive MeetGeek webhook events to disk")
     s.add_argument("--port", type=int, default=8765)
     s.add_argument("--bind", default="127.0.0.1")
-    s.add_argument("--out", default=str(Path.home() / ".dor" / "lake" / "meetgeek" / "webhooks"),
-                   help="Directory to dump received events as JSON")
+    s.add_argument("--out", default=None,
+                   help="Directory to dump received events as JSON (default: <lake>/meetgeek/webhooks)")
     # Default resolved at run time from MEETGEEK_WEBHOOK_SECRET, never into the parser.
     s.add_argument("--secret", default=None,
                    help="Optional shared secret; if set, requests without matching "
@@ -310,11 +309,10 @@ def _register_pipeline(cmds: Any) -> None:
 
 def _write_output(payload: Any, path: str) -> str:
     """meetgeek_cli.py's -o: write the payload, print the path instead of it."""
-    from pathlib import Path
+    from h2t_ops.core import paths, store
 
     text = payload if isinstance(payload, str) else json.dumps(payload, ensure_ascii=False, indent=2)
-    Path(path).parent.mkdir(parents=True, exist_ok=True)
-    Path(path).write_text(text, encoding="utf-8")
+    store.replace(paths.expand_user_dest(path), text, place="lake", dest=True)   # a path you named
     return path
 
 

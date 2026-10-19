@@ -21,6 +21,9 @@ from pathlib import Path
 
 import pytest
 
+from h2t_ops.core import paths
+from h2t_ops.lifecycle import session_record
+
 ROOT = Path(__file__).resolve().parents[2]
 WRITER = "h2t_ops.lifecycle.handoff"
 # One copy since Task 12; the plugin's vendored lib, which the hook used to run, is gone.
@@ -42,9 +45,8 @@ def sessions(request, monkeypatch):
     return _load(LIB_COPIES[request.param], f"sessions_{request.param}")
 
 
-def _write_handoff(root: Path, project: str, session_id: str) -> None:
+def _write_handoff(project: str, session_id: str) -> None:
     env = dict(os.environ)
-    env["H2T_SESSION_ROOT"] = str(root)
     env["H2T_MACHINE_NAME"] = "test-machine"
     env["H2T_EVALS_MODE"] = "off"
     result = subprocess.run(
@@ -64,9 +66,7 @@ def _write_handoff(root: Path, project: str, session_id: str) -> None:
 
 def test_handoff_is_found_by_the_repo_name_of_the_next_session(tmp_path, monkeypatch, sessions):
     """h2t-skills -> agent-skills: write under project.id, read from the repo directory."""
-    root = tmp_path / "sessions"
-    _write_handoff(root, "agent-skills", "personal-os-h2t-skills-topic-2026-08-22")
-    monkeypatch.setenv("H2T_SESSION_ROOT", str(root))
+    _write_handoff("agent-skills", "personal-os-h2t-skills-topic-2026-08-22")
 
     latest = sessions.find_latest_session_index("h2t-skills", "agent-skills")
 
@@ -76,9 +76,7 @@ def test_handoff_is_found_by_the_repo_name_of_the_next_session(tmp_path, monkeyp
 
 def test_two_repos_of_one_project_share_history(tmp_path, monkeypatch, sessions):
     """DocGraph and SpecDesigner map onto docgraph; a session in one sees the other."""
-    root = tmp_path / "sessions"
-    _write_handoff(root, "docgraph", "dev-docgraph-topic-2026-08-22")
-    monkeypatch.setenv("H2T_SESSION_ROOT", str(root))
+    _write_handoff("docgraph", "dev-docgraph-topic-2026-08-22")
 
     latest = sessions.find_latest_session_index("SpecDesigner", "docgraph")
 
@@ -88,12 +86,14 @@ def test_two_repos_of_one_project_share_history(tmp_path, monkeypatch, sessions)
 
 def test_markdown_listing_spans_both_keys(tmp_path, monkeypatch, sessions):
     """find_session_files backs the handoff count; it must not miss the project dir."""
-    root = tmp_path / "sessions"
-    _write_handoff(root, "agent-skills", "personal-os-h2t-skills-new-2026-08-22")
+    root = paths.records("sessions")
+    _write_handoff("agent-skills", "personal-os-h2t-skills-new-2026-08-22")
     legacy = root / "test-machine" / "h2t-skills"
     legacy.mkdir(parents=True, exist_ok=True)
-    (legacy / "personal-os-h2t-skills-old-2026-08-20.md").write_text("older", encoding="utf-8")
-    monkeypatch.setenv("H2T_SESSION_ROOT", str(root))
+    # Recorded under the repo name before the project was mapped; the index reads frontmatter.
+    (legacy / "personal-os-h2t-skills-old-2026-08-20.md").write_bytes(session_record.render(
+        {"session_id": "personal-os-h2t-skills-old-2026-08-20", "machine": "test-machine",
+         "project": "h2t-skills", "updated_at": "2026-08-20T10:00:00Z"}, b"older\n"))
 
     files = sessions.find_session_files("h2t-skills", "agent-skills")
 
@@ -104,9 +104,7 @@ def test_markdown_listing_spans_both_keys(tmp_path, monkeypatch, sessions):
 
 def test_a_single_name_still_works(tmp_path, monkeypatch, sessions):
     """Callers passing one key (the pre-#377 signature) must keep working."""
-    root = tmp_path / "sessions"
-    _write_handoff(root, "dor-core", "personal-os-dor-core-topic-2026-08-22")
-    monkeypatch.setenv("H2T_SESSION_ROOT", str(root))
+    _write_handoff("dor-core", "personal-os-dor-core-topic-2026-08-22")
 
     assert sessions.find_latest_session_index("dor-core") is not None
     assert sessions.find_latest_session_index("unrelated-repo") is None

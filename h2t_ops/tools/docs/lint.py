@@ -16,12 +16,13 @@ Legacy flags (deprecated, use sub-commands instead):
 import argparse
 import datetime
 import json
-import os
 import re
 import shutil
 import subprocess
 import sys
 from pathlib import Path
+
+from h2t_ops.core import store
 
 from .common import (
     DEV_ROOT,
@@ -80,6 +81,9 @@ except ImportError:
 _SUBCOMMANDS = frozenset(
     {"audit", "plan", "fix-safe", "fix-index", "doctor", "new", "retire"}
 )
+# What each may write into the repository: h2t_ops/core/repo_writers.py (#548 §7.1).
+_FIX_SAFE = "h2t-docs-lint fix-safe"
+_FIX_INDEX = "h2t-docs-lint fix-index"
 
 _VENDOR_EXCLUDE = {
     ".venv", "venv", "node_modules", "__pycache__", "dist", "build",
@@ -524,9 +528,9 @@ def fix_structure(rp: Path) -> list[str]:
     Returns list of "created: <path>/" strings for newly created dirs only.
     """
     fixes = []
+    rw = store.repo(rp, _FIX_SAFE)
     for rel_dir in REQUIRED_CORE_DIRS:
-        d = rp / rel_dir
-        if ensure_dir(d):
+        if ensure_dir(rw, rel_dir):
             fixes.append(f"created: {rel_dir}/")
     cfg = load_config(rp)
     _raw = cfg.get("template")
@@ -540,7 +544,7 @@ def fix_structure(rp: Path) -> list[str]:
                     # File collision — skip silently (check_project_structure_typed reports it)
                     continue
                 already_exists = d.is_dir()
-                d.mkdir(parents=True, exist_ok=True)
+                rw.mkdir(rel_dir)
                 if not already_exists:
                     fixes.append(f"created: {rel_dir}/ (template: {template})")
     return fixes
@@ -643,21 +647,7 @@ def fix_frontmatter_action(rp: Path, exclude_dirs: list[str] | None = None) -> l
             body_text = text if not text.startswith("---") else text
             new_text = "\n".join(lines) + body_text
 
-        import tempfile as _tmpmod
-        dir_ = md_file.parent
-        with _tmpmod.NamedTemporaryFile(
-            mode="w", encoding="utf-8", dir=dir_, delete=False, suffix=".tmp"
-        ) as tf:
-            tf.write(new_text)
-            tmp = tf.name
-        try:
-            os.replace(tmp, md_file)
-        except Exception:
-            try:
-                Path(tmp).unlink(missing_ok=True)
-            except OSError:
-                pass
-            raise
+        store.repo(rp, _FIX_SAFE).replace(rel, new_text)
         fixes.append(f"added frontmatter fields {missing}: {rel}")
     return fixes
 
@@ -885,7 +875,7 @@ def _run_plan(
         plan = build_fix_plan(repo_root=str(rp), findings=all_findings)
         output = json.dumps(plan, indent=2)
         if save_file:
-            Path(save_file).write_text(output, encoding="utf-8")
+            store.replace(Path(save_file), output, place="repo", dest=True)   # the file you named
             print(f"Plan saved: {save_file}")
             return
         print(output)
@@ -952,6 +942,20 @@ def _run_plan(
         print("  Run 'docs-lint fix-index' for README/index rebuild.")
 
 
+def _deliverables_writer(rp: Path, cfg: dict):
+    """fix-safe's repo writer with the configured deliverables_dir as a rename target, or
+    None when the value is not a plain relative directory inside the repository."""
+    from pathlib import PurePosixPath
+    raw = str(cfg.get("deliverables_dir", "deliverables")).strip().replace("\\", "/").rstrip("/")
+    rel = PurePosixPath(raw)
+    # Data, not a pattern: a glob character would widen the rename rule ("*" is the whole
+    # repository); .git in any case is git's directory.
+    if (not rel.parts or ":" in raw or rel.is_absolute() or ".." in rel.parts
+            or set(raw) & set("*?[]") or any(p.casefold() == ".git" for p in rel.parts)):
+        return None
+    return store.repo(rp, _FIX_SAFE, extra_dirs={"rename": (rel.as_posix(),)})
+
+
 def _apply_misplaced_moves(rp: Path, cfg: dict) -> list[str]:
     """Detect misplaced deliverable files and git mv tracked ones."""
     if not _MISPLACED_FILES_AVAILABLE:
@@ -963,6 +967,9 @@ def _apply_misplaced_moves(rp: Path, cfg: dict) -> list[str]:
         rp, deliverables_dir, exclude_dirs=cfg.get("exclude_dirs") or [],
     )
     fixes: list[str] = []
+    rw = _deliverables_writer(rp, cfg)
+    if findings and rw is None:
+        return [f"SKIP: deliverables_dir {deliverables_dir!r} is not a directory inside the repository"]
     for f in findings:
         if not f.get("is_tracked"):
             fixes.append(f"SKIP: {f['path']} is untracked — move manually with: git mv")
@@ -972,18 +979,18 @@ def _apply_misplaced_moves(rp: Path, cfg: dict) -> list[str]:
         if not dst.parent.exists():
             fixes.append(f"SKIP: {f['path']} — target dir missing: {tgt_path.split('/')[0]}/")
             continue
-        src = rp / f["path"]
         if dst.exists():
             fixes.append(f"SKIP: {f['path']} — destination already exists: {tgt_path}")
             continue
-        result = subprocess.run(
-            ["git", "mv", str(src), str(dst)],
-            cwd=str(rp), capture_output=True, text=True,
-        )
-        if result.returncode == 0:
-            fixes.append(f"git mv {f['path']} -> {tgt_path}")
+        try:
+            rw.rename(f["path"], tgt_path, git=True)
+        except subprocess.CalledProcessError as exc:
+            err = (exc.stderr or b"").decode("utf-8", "replace")
+            fixes.append(f"FAILED: git mv {f['path']}: {err.strip()[:80]}")
+        except store.WriteRefused as exc:
+            fixes.append(f"FAILED: git mv {f['path']}: {exc}")
         else:
-            fixes.append(f"FAILED: git mv {f['path']}: {result.stderr.strip()[:80]}")
+            fixes.append(f"git mv {f['path']} -> {tgt_path}")
     return fixes
 
 
@@ -1014,11 +1021,9 @@ def _run_fix_safe(rp: Path, only: str = "all", plan_file: str | None = None) -> 
         report = build_apply_report(plan_id=plan["plan_id"],
                                     run_id=f"fix-safe-{int(time.time())}",
                                     actions=results)
-        report_dir = rp / ".h2t"
-        report_dir.mkdir(exist_ok=True)
         ts = int(time.time())
-        report_path = report_dir / f"lint-apply-{ts}.json"
-        report_path.write_text(json.dumps(report, indent=2))
+        report_path = store.repo(rp, _FIX_SAFE).replace(f".h2t/lint-apply-{ts}.json",
+                                                         json.dumps(report, indent=2))
         print(f"Apply report: {report_path}")
         return
 
@@ -1050,7 +1055,7 @@ def _apply_safe_action(rp: Path, act: dict) -> None:
     action_type = act.get("type", "")
     path = act.get("path", "")
     if action_type == "create_dir":
-        (rp / path).mkdir(parents=True, exist_ok=True)
+        store.repo(rp, _FIX_SAFE).mkdir(path)
     elif action_type == "add_frontmatter":
         target = rp / path
         if target.exists():
@@ -1059,10 +1064,11 @@ def _apply_safe_action(rp: Path, act: dict) -> None:
         src = rp / path
         dst = rp / (act.get("target_path") or "")
         if src.exists() and dst.parent.exists() and not dst.exists():
-            subprocess.run(
-                ["git", "mv", str(src), str(dst)],
-                cwd=str(rp), check=True, capture_output=True,
-            )
+            rw = _deliverables_writer(rp, load_config(rp))
+            if rw is None:
+                raise store.WriteRefused("deliverables_dir is not a directory inside the repository",
+                                         hint="set a relative path in .claude/rules/docs-lint.yaml")
+            rw.rename(path, act["target_path"], git=True)
 
 
 def fix_frontmatter_action_single(rp: Path, md_file: Path) -> None:
@@ -1094,17 +1100,7 @@ def fix_frontmatter_action_single(rp: Path, md_file: Path) -> None:
             lines += ["---", ""]
             body_text = text if not text.startswith("---") else text
             new_text = "\n".join(lines) + body_text
-        import tempfile as _tmpmod
-        with _tmpmod.NamedTemporaryFile(
-            mode="w", encoding="utf-8", dir=md_file.parent, delete=False, suffix=".tmp"
-        ) as tf:
-            tf.write(new_text)
-            tmp = tf.name
-        try:
-            os.replace(tmp, md_file)
-        except Exception:
-            Path(tmp).unlink(missing_ok=True)
-            raise
+        store.repo(rp, _FIX_SAFE).replace(rel, new_text)
         break
 
 
@@ -1141,10 +1137,9 @@ def _run_fix_index(rp: Path, apply: bool = False, plan_file: str | None = None) 
             run_id=f"fix-index-{int(time.time())}",
             actions=results,
         )
-        report_dir = rp / ".h2t"
-        report_dir.mkdir(exist_ok=True)
         ts = int(time.time())
-        (report_dir / f"lint-apply-{ts}.json").write_text(json.dumps(apply_report, indent=2))
+        store.repo(rp, _FIX_INDEX).replace(f".h2t/lint-apply-{ts}.json",
+                                          json.dumps(apply_report, indent=2))
         return
 
     repo_name = _repo_name_from_root(rp)

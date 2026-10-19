@@ -67,29 +67,47 @@ def test_clean_answer_has_no_warning():
     assert m.warning(m.check(SHORT)) is None
 
 
-def test_a_long_answer_is_logged_and_never_blocks(tmp_path, monkeypatch):
+def test_a_long_answer_is_logged_and_never_blocks(tmp_path):
     """Silent with a log row since Task 9b: the one-week trial's data is the log."""
     m = _load()
-    log = tmp_path / "log.jsonl"
-    monkeypatch.setattr(m, "LOG_PATH", log)
+    log = m.log_path()
     path = _transcript(tmp_path, LONG)
     assert m.handle({"transcript_path": path, "session_id": "s1"}) == Reply()
     row = json.loads(log.read_text(encoding="utf-8").splitlines()[-1])
     assert row["flagged"] is True and row["long"] == [30] and row["session_id"] == "s1"
 
 
-def test_clean_answer_is_logged_silently(tmp_path, monkeypatch):
+def test_clean_answer_is_logged_silently(tmp_path):
     m = _load()
-    log = tmp_path / "log.jsonl"
-    monkeypatch.setattr(m, "LOG_PATH", log)
+    log = m.log_path()
     path = _transcript(tmp_path, SHORT)
     assert m.handle({"transcript_path": path}) == Reply()
     assert json.loads(log.read_text(encoding="utf-8"))["flagged"] is False
 
 
-def test_stop_hook_active_is_silent(tmp_path, monkeypatch):
+def test_stop_hook_active_is_silent(tmp_path):
     m = _load()
-    monkeypatch.setattr(m, "LOG_PATH", tmp_path / "log.jsonl")
     path = _transcript(tmp_path, LONG)
     assert m.handle({"transcript_path": path, "stop_hook_active": True}) == Reply()
-    assert not (tmp_path / "log.jsonl").exists()
+    assert not m.log_path().exists()
+
+
+def test_the_log_follows_home_at_call_time(tmp_path, monkeypatch):
+    """Resolved per call, not at import: the HOME of the run is the one written (Task 18)."""
+    m = _load()
+    later = tmp_path / "later"
+    monkeypatch.setenv("HOME", str(later))
+    monkeypatch.setenv("USERPROFILE", str(later))
+    path = _transcript(tmp_path, LONG)
+    assert m.handle({"transcript_path": path, "session_id": "s1"}) == Reply()
+    assert (later / ".h2t" / "logs" / "plain-guard.jsonl").is_file()
+
+
+def test_a_log_row_that_cannot_be_written_is_said_not_raised(tmp_path, capsys):
+    """A silent hook is a failure (hooks.md): the Stop still passes, stderr says why."""
+    m = _load()
+    m.log_path().parent.parent.mkdir(parents=True, exist_ok=True)
+    m.log_path().parent.write_text("a file where logs/ should be")
+    path = _transcript(tmp_path, LONG)
+    assert m.handle({"transcript_path": path, "session_id": "s1"}) == Reply()
+    assert "plain-guard: log row not written" in capsys.readouterr().err

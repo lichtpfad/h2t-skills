@@ -14,6 +14,7 @@ from pathlib import Path
 
 import pytest
 
+from h2t_ops.core import paths, store
 from h2t_ops.core.errors import ConfigError, NetworkError
 from h2t_ops.setup import cli, harness_claude, manifest, state, sync
 from tests.setup.fake_claude import FakeClaude, Interrupted, Ticker
@@ -446,6 +447,48 @@ def test_the_report_asks_open_sessions_to_reload(tmp_path, monkeypatch):
     assert "/reload-plugins" in text and "two releases" in text
 
 
+# --- layout 1 (#548 §8, plan R13, R24) -----------------------------------------------------
+
+def test_sync_runs_the_layout_migration_once(tmp_path, monkeypatch):
+    m = Machine(tmp_path, monkeypatch)
+    report = m.run()
+    assert report.failed == []
+    assert "layout 1" in report.done
+    assert json.loads(paths.layout_file().read_text())["layout"] == 1
+    again = m.run()
+    assert again.failed == []
+    assert "layout 1: already" in again.notes
+
+
+def test_a_busy_layout_lock_is_a_step_outcome_not_a_crash(tmp_path, monkeypatch):
+    m = Machine(tmp_path, monkeypatch)
+    with store.locked(paths.run_dir() / "layout.lock", place="run"):
+        report = m.run()
+    assert [s for s, _ in report.failed] == ["layout 1: migrate"]
+    assert "another layout migration or rollback is running" in report.failed[0][1]
+    _converged(m)                                   # the steps before it still landed
+    assert not paths.layout_file().exists()
+
+
+def test_an_unknown_machine_name_tells_the_migrate_command(tmp_path, monkeypatch):
+    m = Machine(tmp_path, monkeypatch)
+    monkeypatch.setenv("H2T_MACHINE_NAME", "m")
+    monkeypatch.delenv("DOR_MACHINE_NAME", raising=False)
+    old = paths.legacy("sessions.dor") / "automata" / "p"
+    old.mkdir(parents=True)
+    (old / "s.md").write_text("fake session\n")
+    report = m.run()
+    assert [s for s, _ in report.failed] == ["layout 1: snapshot"]
+    assert "h2t-setup layout migrate --machine <name>" in report.failed[0][1]
+    assert not paths.layout_file().exists()
+
+
+def test_a_failed_cli_step_does_not_migrate(tmp_path, monkeypatch):
+    m = Machine(tmp_path, monkeypatch, fail_install=True)
+    m.run()
+    assert not paths.layout_file().exists()
+
+
 # --- cache ---------------------------------------------------------------------------------
 
 def _cache(config: Path, plugin: str, *versions: str) -> Path:
@@ -472,6 +515,7 @@ def test_the_cache_keeps_the_two_latest_versions_by_semver(tmp_path, monkeypatch
 
 def test_the_cache_never_deletes_the_installed_version(tmp_path, monkeypatch):
     config = tmp_path / "cfg"
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(config))   # deletion goes to the harness place
     core = _cache(config, "h2t-core", "3.2.3", "4.0.0", "4.1.0", "4.2.0", "notes")
     removed = sync.clean_cache(config, [{"id": "h2t-core@lichtpfad", "version": "3.2.3"}])
     assert sorted(p.name for p in core.iterdir()) == ["3.2.3", "4.1.0", "4.2.0", "notes"]
@@ -494,7 +538,8 @@ def test_the_cache_keeps_a_creative_version_that_holds_user_profiles(tmp_path, m
     assert (creative / "3.0.0" / "profiles" / "my-brand" / "DESIGN.md").read_text() == "mine"
     note = next(n for n in report.notes if "my-brand" in n)
     assert str(creative / "3.0.0") in note
-    assert str(Path("~/.h2t/creative/profiles")) in note or "~/.h2t/creative/profiles" in note
+    from h2t_ops.core import paths
+    assert str(paths.data_dir() / "creative" / "profiles") in note
     assert any("h2t-creative 3.1.0" in d for d in report.done)
 
 

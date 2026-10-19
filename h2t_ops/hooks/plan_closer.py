@@ -31,6 +31,8 @@ import re
 import subprocess
 from pathlib import Path
 
+from h2t_ops.core import store
+from h2t_ops.core.errors import H2TError
 from h2t_ops.hooks.emit import Reply
 
 # Only these carry a lifecycle. A report records a moment and is done when
@@ -101,8 +103,12 @@ def _implements_something(view: dict) -> bool:
     return False
 
 
-def close_plans_for_pr(repo_root: Path, pr_number: int, view: dict) -> list[dict]:
+def close_plans_for_pr(repo_root: Path, pr_number: int, view: dict,
+                       failed: list[dict] | None = None) -> list[dict]:
     """Stamp `status: done` and `pr: N` on every plan/spec the PR carried.
+
+    failed, when given, collects {"path", "error"} for every stamp the write refused or
+    could not make: the hook says so instead of dropping it.
 
     Returns what actually changed. An unmerged PR, a file the PR deleted, a doc
     with no frontmatter, and a doc already closed all yield nothing — this runs
@@ -145,8 +151,10 @@ def close_plans_for_pr(repo_root: Path, pr_number: int, view: dict) -> list[dict
         fm = _PR_LINE.sub("", fm)
         fm = fm.replace('status: "done"', f'status: "done"\npr: {pr_number}', 1)
         try:
-            path.write_text(fm + body, encoding="utf-8")
-        except OSError:
+            store.repo(repo_root, "plan-closer").replace(rel, fm + body)
+        except (OSError, H2TError) as exc:
+            if failed is not None:
+                failed.append({"path": rel, "error": str(exc)})
             continue
         changed.append({"path": rel, "was": current})
     return changed
@@ -178,25 +186,30 @@ def handle(event: dict) -> Reply:
         return Reply()
 
     repo_root = Path.cwd().resolve()
-    changed = close_plans_for_pr(repo_root, pr_number, _pr_view(repo_root, pr_number))
-    if not changed:
+    failed: list[dict] = []
+    changed = close_plans_for_pr(repo_root, pr_number, _pr_view(repo_root, pr_number), failed)
+    if not changed and not failed:
         return Reply()
-
-    # Last two segments, not the basename: a plan and its spec share a stem,
-    # so basenames alone print the same name twice.
-    names = ", ".join("/".join(Path(c["path"]).parts[-2:]) for c in changed)
-    lines = [f"  {c['path']}: {c['was']} → done" for c in changed]
+    text, notice = "", ""
+    if changed:
+        # Last two segments, not the basename: a plan and its spec share a stem,
+        # so basenames alone print the same name twice.
+        names = ", ".join("/".join(Path(c["path"]).parts[-2:]) for c in changed)
+        lines = [f"  {c['path']}: {c['was']} → done" for c in changed]
+        text = (f"PR #{pr_number} merged. Статус проставлен автоматически:\n"
+                + "\n".join(lines)
+                + "\nФайлы изменены локально и не закоммичены — включите их в "
+                  "следующий коммит или закоммитьте отдельно.")
+        notice = (f"PR #{pr_number}: проставлен status: done в {len(changed)} документ(ах): "
+                  f"{names}. Изменения не закоммичены.")
+    if failed:
+        # A refused write is said, not dropped (hooks.md: a silent hook is a failure).
+        text += ("\n" if text else "") + (
+            f"PR #{pr_number}: статус не проставлен — запись не прошла:\n"
+            + "\n".join(f"  {f['path']}: {f['error']}" for f in failed))
+        notice += (" " if notice else "") + (
+            f"PR #{pr_number}: не удалось проставить status: done в "
+            + ", ".join(f["path"] for f in failed) + ".")
     # Two channels, two readers: `text` (additionalContext) reaches the model, `notice`
     # (systemMessage) is the line the user sees in the TUI.
-    return Reply(
-        text=(
-            f"PR #{pr_number} merged. Статус проставлен автоматически:\n"
-            + "\n".join(lines)
-            + "\nФайлы изменены локально и не закоммичены — включите их в "
-              "следующий коммит или закоммитьте отдельно."
-        ),
-        notice=(
-            f"PR #{pr_number}: проставлен status: done в {len(changed)} документ(ах): "
-            f"{names}. Изменения не закоммичены."
-        ),
-    )
+    return Reply(text=text, notice=notice)

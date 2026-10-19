@@ -772,7 +772,8 @@ def rebuild_indexes(root: Path) -> dict[str, Any]:
     if any(finding["severity"] == "error" for finding in findings):
         return _rebuild_error_envelope(root, findings)
     if any(finding["code"] == "alias_index_unreadable" for finding in findings):
-        os.replace(store.index_path(root, "aliases"), _alias_backup_path(root))
+        # Copied aside, not moved: the index itself is rewritten from objects below.
+        store.copy_file(store.index_path(root, "aliases"), _alias_backup_path(root), exclusive=True)
 
     documents = [
         _document_index_row(document)

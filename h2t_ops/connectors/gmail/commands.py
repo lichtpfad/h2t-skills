@@ -39,7 +39,8 @@ def register(subparsers: Any) -> None:
     ap = cmds.add_parser("attachment", help="Download a message attachment")
     ap.add_argument("message_id")
     ap.add_argument("attachment_id")
-    ap.add_argument("--output", required=True)
+    ap.add_argument("--output", default=None,
+                    help="file to write (default: a new file in the inbox place)")
     add_fmt(ap)
 
     sp = cmds.add_parser("search", help="Search messages")

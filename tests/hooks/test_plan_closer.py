@@ -258,3 +258,20 @@ def test_the_message_states_what_it_did_not_what_is_true(tmp_path, monkeypatch):
     assert "проставлен status: done" in msg
     assert "закрыл" not in msg
 
+
+
+def test_a_refused_write_is_said_not_dropped(tmp_path, monkeypatch):
+    """hooks.md: a silent hook is a failure. The allow-list refusing the stamp leaves
+    the file as it was and names the path on both channels; the hook still exits 0."""
+    from h2t_ops.core import repo_writers
+    m = _load()
+    doc = _plan(tmp_path, "docs/superpowers/plans/2026-08-24-thing.md", '---\nstatus: "draft"\n---\nx\n')
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(m, "_pr_view", lambda root, n: {"state": "MERGED", "files": [
+        {"path": "docs/superpowers/plans/2026-08-24-thing.md"}, {"path": "lib/thing.py"}]})
+    monkeypatch.setitem(repo_writers.REPO_WRITERS, "plan-closer", {})
+    reply = m.handle({"tool_name": "Bash", "tool_input": {"command": "gh pr merge 408"}})
+    assert 'status: "draft"' in doc.read_text(encoding="utf-8")
+    assert "plans/2026-08-24-thing.md" in reply.notice and "не удалось" in reply.notice
+    assert "may not replace" in reply.text
+    assert reply.block is False

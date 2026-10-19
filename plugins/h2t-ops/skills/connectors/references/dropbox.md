@@ -54,9 +54,8 @@ and applies it only when it differs from `home_namespace_id`. Nothing is hardcod
 
 ## Token
 
-`DROPBOX_TOKEN` in `~/.h2t/config/secrets/secrets.env` — the file `load_secrets`
-reads. `~/.h2t/config/secrets/dropbox.env` is also read, for the per-provider file
-shape, but it is read by this connector alone.
+`DROPBOX_TOKEN` from the environment or from the file `h2t-ops paths get secret:dropbox`
+prints.
 
 A token from the app dashboard's **Generate** button is short-lived (~4 hours).
 For durable access set `DROPBOX_APP_KEY`, `DROPBOX_APP_SECRET` and

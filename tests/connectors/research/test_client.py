@@ -11,7 +11,7 @@ from unittest.mock import patch
 import pytest
 
 from h2t_ops.connectors.research import client, store
-from h2t_ops.core import secrets as core_secrets
+from h2t_ops.core import paths, secrets
 from h2t_ops.core.errors import (
     AuthError,
     ConfigError,
@@ -28,8 +28,15 @@ def _clear_sensitive_env(monkeypatch: pytest.MonkeyPatch) -> None:
         "JINA_API_KEY",
         "H2T_RESEARCH_TELEMETRY_DISABLE",
         "H2T_SECRETS_FILE",
+        "H2T_PATH_ROOT",
     ):
         monkeypatch.delenv(name, raising=False)
+
+
+def _tmp_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """core.secrets resolves its paths at call time, so a tmp HOME is the whole isolation."""
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
 
 
 def test_resolve_key_env_wins(tmp_path, monkeypatch):
@@ -42,9 +49,11 @@ def test_resolve_key_env_wins(tmp_path, monkeypatch):
     assert client.resolve_secret("EXA_API_KEY") == "env-value"
 
 
-def test_resolve_key_h2t_secrets_file(tmp_path, monkeypatch):
+def test_resolve_key_parses_a_ladder_file(tmp_path, monkeypatch):
     _clear_sensitive_env(monkeypatch)
-    secrets = tmp_path / "secrets.env"
+    _tmp_home(tmp_path, monkeypatch)
+    secrets = paths.legacy("secrets.dor")
+    secrets.parent.mkdir(parents=True)
     secrets.write_text(
         "\n"
         "        # comment\n"
@@ -52,26 +61,21 @@ def test_resolve_key_h2t_secrets_file(tmp_path, monkeypatch):
         "        JINA_API_KEY" + "='jina-value'\n",
         encoding="utf-8",
     )
-    monkeypatch.setenv("H2T_SECRETS_FILE", str(secrets))
-    monkeypatch.setattr(Path, "home", lambda: tmp_path)
 
     assert client.resolve_secret("EXA_API_KEY") == "file-value"
     assert client.resolve_secret("JINA_API_KEY") == "jina-value"
 
 
 def test_resolve_key_canonical_and_legacy_paths(tmp_path, monkeypatch):
-    # Redirect the shared candidate list, not Path.home (#448): resolve_secret now reads
-    # h2t_ops.core.secrets, whose paths resolve at import. Patching home left these tests
-    # reading the real ~/.dor and asserting against the author's live key.
+    # resolve_secret reads h2t_ops.core.secrets, whose paths resolve at call time through
+    # core.paths (#548): a tmp HOME is what keeps this off the author's real ~/.dor.
     _clear_sensitive_env(monkeypatch)
-    canonical = tmp_path / ".dor" / "secrets" / "secrets.env"
-    legacy = tmp_path / ".dor" / "secrets.env"
+    _tmp_home(tmp_path, monkeypatch)
+    canonical = paths.legacy("secrets.dor")
+    legacy = paths.legacy("secrets.dor_old")
     canonical.parent.mkdir(parents=True)
     canonical.write_text("EXA_API_KEY" + "=canonical-value\n", encoding="utf-8")
     legacy.write_text("EXA_API_KEY" + "=legacy-value\n", encoding="utf-8")
-    monkeypatch.setattr(core_secrets, "H2T_CONFIG_SECRETS", tmp_path / ".h2t" / "absent.env")
-    monkeypatch.setattr(core_secrets, "DEFAULT_SECRETS", canonical)
-    monkeypatch.setattr(core_secrets, "LEGACY_SECRETS", legacy)
 
     assert client.resolve_secret("EXA_API_KEY") == "canonical-value"
     canonical.unlink()
@@ -80,15 +84,14 @@ def test_resolve_key_canonical_and_legacy_paths(tmp_path, monkeypatch):
 
 def test_resolve_key_missing_raises_configerror(tmp_path, monkeypatch):
     _clear_sensitive_env(monkeypatch)
-    monkeypatch.setattr(core_secrets, "H2T_CONFIG_SECRETS", tmp_path / "absent-documented.env")
-    monkeypatch.setattr(core_secrets, "DEFAULT_SECRETS", tmp_path / "absent-dor.env")
-    monkeypatch.setattr(core_secrets, "LEGACY_SECRETS", tmp_path / "absent-legacy.env")
+    _tmp_home(tmp_path, monkeypatch)
 
     with pytest.raises(ConfigError) as ei:
         client.resolve_secret("EXA_API_KEY")
 
     assert "EXA_API_KEY" in str(ei.value)
-    assert "H2T_SECRETS_FILE" in (ei.value.hint or "")
+    assert str(secrets.provider_file("exa")) in (ei.value.hint or "")
+    assert "H2T_SECRETS_FILE" not in (ei.value.hint or "")   # 4.0 does not read it (R5)
 
 
 def test_artifact_paths_are_under_output_dir(tmp_path):
@@ -1984,3 +1987,45 @@ def test_client_research_get_not_found_raises(monkeypatch, tmp_path):
     client = client_mod.ResearchClient(output_dir=tmp_path)
     with pytest.raises(NotFoundError):
         client.research_get("r_x")
+
+
+# --- default place: data/research (#548 §6 п. 1) -----------------------------------------
+
+
+def test_research_without_output_dir_saves_into_data_research(monkeypatch):
+    _clear_sensitive_env(monkeypatch)
+    monkeypatch.setattr(client, "resolve_secret", lambda name: "exa-key")
+    _patch_exa_search(monkeypatch, provider_envelope=_provider_envelope("OK"), exit_code=0)
+    rc = client.ResearchClient()
+    result = rc.search(query="q", mode="generic", num_results=3, project="p", no_retry=True)
+    root = paths.data_dir() / "research"
+    assert rc.output_dir == root
+    assert (root / result["artifact"]["artifact_refs"]["artifact_json"]).is_file()
+    assert (root / "telemetry.jsonl").is_file()
+    assert Path(result["artifact"]["research_refs"]["thread_json"]).parent.parent.parent == root
+    assert not paths.legacy("research").exists()
+
+
+def test_research_list_reads_the_3x_store_until_it_moves():
+    """No data/research yet: index/show/doctor read ~/.h2t/research (4.0.x fallback)."""
+    old = paths.legacy("research")
+    row = {"document_id": "research-doc:1", "project_id": "p"}
+    index = store.index_path(old, "documents")
+    index.parent.mkdir(parents=True)
+    index.write_text(json.dumps([row]), encoding="utf-8")
+    listed = client.ResearchClient().list_research_index("documents")
+    assert listed["root"] == str(old) and listed["items"] == [row]
+    assert client.ResearchClient().research_doctor()["root"] == str(old)
+    (paths.data_dir() / "research").mkdir(parents=True)
+    assert client.ResearchClient().list_research_index("documents")["count"] == 0
+
+
+def test_research_output_dir_into_secrets_is_refused(monkeypatch):
+    from h2t_ops.core import store as core_store
+    _clear_sensitive_env(monkeypatch)
+    monkeypatch.setattr(client, "resolve_secret", lambda name: "exa-key")
+    _patch_exa_search(monkeypatch, provider_envelope=_provider_envelope("OK"), exit_code=0)
+    target = paths.secrets_shared() / "research"
+    with pytest.raises(core_store.WriteRefused):
+        client.ResearchClient(output_dir=target).search(query="q", project="p", no_retry=True)
+    assert not target.exists()

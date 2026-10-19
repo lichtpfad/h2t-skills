@@ -62,27 +62,27 @@ def test_module_has_no_module_level_requests_import():
             assert line[0] == " ", f"line {i}: module-scope 'requests' import forbidden: {line!r}"
 
 
-def test_init_without_token_raises_configerror(monkeypatch, tmp_path):
+def test_init_without_token_raises_configerror(monkeypatch):
     from h2t_ops.connectors.dropbox import client as dmod
+    from h2t_ops.core import secrets
 
     for key in ("DROPBOX_TOKEN", "DROPBOX_REFRESH_TOKEN", "DROPBOX_APP_KEY", "DROPBOX_APP_SECRET"):
         monkeypatch.delenv(key, raising=False)
-    monkeypatch.setattr(dmod, "load_secrets", lambda *a, **k: None)
-    monkeypatch.setattr(dmod, "PROVIDER_ENV_FILE", tmp_path / "absent.env")
     with pytest.raises(ConfigError) as exc:
         dmod.DropboxClient()
     assert "DROPBOX_TOKEN" in str(exc.value)
+    assert str(secrets.provider_file("dropbox")) in exc.value.hint
 
 
-def test_init_reads_the_provider_env_file_the_issue_names(monkeypatch, tmp_path):
+def test_init_reads_the_provider_env_file(monkeypatch):
     from h2t_ops.connectors.dropbox import client as dmod
+    from h2t_ops.core import secrets
 
     monkeypatch.delenv("DROPBOX_TOKEN", raising=False)
-    monkeypatch.setattr(dmod, "load_secrets", lambda *a, **k: None)
-    env = tmp_path / "dropbox.env"
-    env.write_text("DROPBOX_TOKEN=from-file\n", encoding="utf-8")
-    monkeypatch.setattr(dmod, "PROVIDER_ENV_FILE", env)
-    assert dmod.DropboxClient()._token == "from-file"
+    env = secrets.provider_file("dropbox")
+    env.parent.mkdir(parents=True, exist_ok=True)
+    env.write_text("DROPBOX_TOKEN=fake-from-file\n", encoding="utf-8")
+    assert dmod.DropboxClient()._token == "fake-from-file"
 
 
 # --- paths -------------------------------------------------------------------
@@ -259,6 +259,46 @@ def test_download_leaves_a_non_gzip_file_alone_under_gunzip(client_obj, monkeypa
     monkeypatch.setitem(sys.modules, "requests", fake)
     client_obj.download("/x/notes.txt", str(tmp_path / "notes.txt"), gunzip=True)
     assert (tmp_path / "notes.txt").read_bytes() == b"plain bytes"
+
+
+def test_download_without_dest_goes_to_the_inbox(client_obj, monkeypatch, inbox, capsys):
+    fake, _ = _fake_requests(lambda *a, **k: _Resp(200, chunks=[b"abc"]))
+    monkeypatch.setitem(sys.modules, "requests", fake)
+    out = client_obj.download("/HOU2TOUCH/takes/clip.wav")
+    assert out["saved_to"] == str(inbox / "clip.wav") and out["defaulted"] is False
+    assert (inbox / "clip.wav").read_bytes() == b"abc"
+    assert f"saved to {inbox / 'clip.wav'}" in capsys.readouterr().err
+
+
+def test_default_download_never_overwrites(client_obj, monkeypatch, inbox):
+    (inbox / "clip.wav").write_bytes(b"theirs")
+    fake, _ = _fake_requests(lambda *a, **k: _Resp(200, chunks=[b"abc"]))
+    monkeypatch.setitem(sys.modules, "requests", fake)
+    out = client_obj.download("/x/clip.wav")
+    assert out["saved_to"] == str(inbox / "clip-2.wav")
+    assert (inbox / "clip.wav").read_bytes() == b"theirs"
+    assert (inbox / "clip-2.wav").read_bytes() == b"abc"
+
+
+def test_download_without_dest_or_paths_yaml_goes_to_data_inbox(client_obj, monkeypatch):
+    from h2t_ops.core import paths
+    blob = gzip.compress(b"<PremiereData/>")
+    fake, _ = _fake_requests(lambda *a, **k: _Resp(200, chunks=[blob]))
+    monkeypatch.setitem(sys.modules, "requests", fake)
+    out = client_obj.download("/x/seq.prproj", gunzip=True)
+    target = paths.data_dir() / "inbox" / "seq.prproj"
+    assert out["saved_to"] == str(target) and out["defaulted"] is True
+    assert target.read_bytes() == b"<PremiereData/>"
+
+
+def test_download_dest_into_secrets_is_refused(client_obj, monkeypatch):
+    from h2t_ops.core import paths, store
+    fake, _ = _fake_requests(lambda *a, **k: _Resp(200, chunks=[b"abc"]))
+    monkeypatch.setitem(sys.modules, "requests", fake)
+    target = paths.secrets_shared() / "x.env"
+    with pytest.raises(store.WriteRefused):
+        client_obj.download("/x/clip.wav", str(target))
+    assert not target.exists()
 
 
 def test_download_rejects_the_root_path(client_obj):

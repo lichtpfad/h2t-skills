@@ -7,6 +7,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from h2t_ops.core import store
+
 from .common import (
     REPO_MANIFEST,
     excluded_predicate,
@@ -299,8 +301,7 @@ def main() -> None:
         print("--- Run with --apply to write docs/README.md ---")
         return
 
-    readme = rp / "docs" / "README.md"
-    readme.write_text(content, encoding="utf-8")
+    readme = store.repo(rp, "docs-index").replace("docs/README.md", content)
     print(f"Written: {readme}")
 
     if args.commit:

@@ -18,6 +18,8 @@ import subprocess
 from datetime import date
 from pathlib import Path
 
+from h2t_ops.core import store
+
 from .common import excluded_predicate, parse_frontmatter
 
 # Sections that describe intended work, and where each retires to. `adr` is
@@ -159,21 +161,18 @@ def retire_files(repo_root: Path | str, candidates: list[dict]) -> list[dict]:
     because they share a slug.
     """
     root = Path(repo_root)
+    rw = store.repo(root, "h2t-docs-lint retire")
     results: list[dict] = []
     for c in candidates:
-        src, dst = root / c["path"], root / c["target"]
-        if dst.exists():
+        if (root / c["target"]).exists():
             results.append({**c, "status": "skipped", "reason": "цель уже существует"})
             continue
-        dst.parent.mkdir(parents=True, exist_ok=True)
-        moved = subprocess.run(
-            ["git", "-C", str(root), "mv", c["path"], c["target"]],
-            capture_output=True, text=True,
-        )
-        if moved.returncode != 0:
+        try:
+            rw.rename(c["path"], c["target"], git=True)
+        except subprocess.CalledProcessError:
             # Untracked, or not a git repo — a plain rename still retires it.
             try:
-                src.rename(dst)
+                rw.rename(c["path"], c["target"], git=False)
             except OSError as exc:
                 results.append({**c, "status": "failed", "reason": str(exc)})
                 continue

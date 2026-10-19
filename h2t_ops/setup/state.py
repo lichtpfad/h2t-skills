@@ -5,13 +5,13 @@ from __future__ import annotations
 import dataclasses
 import json
 import os
-import tempfile
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
+from h2t_ops.core import paths, store
 
-def run_dir() -> Path:
-    return Path.home() / ".h2t" / "run"
+# Fixed by the 4.0 install contract: hooks/run reads $HOME/.h2t/run, whatever H2T_PATH_ROOT says.
+run_dir = paths.run_dir
 
 
 @dataclass
@@ -26,18 +26,8 @@ class Install:
 
 
 def _atomic_write(path: Path, data: bytes) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=path.name + ".")
-    try:
-        with os.fdopen(fd, "wb") as fh:
-            fh.write(data)
-        os.replace(tmp, path)
-    except BaseException:
-        try:
-            os.unlink(tmp)
-        except FileNotFoundError:
-            pass
-        raise
+    # 0600 as in 3.x, where mkstemp made both files: they name the user's tool paths.
+    store.replace(path, data, place="run", mode=0o600)
 
 
 def _fwd(p: str | None) -> str:

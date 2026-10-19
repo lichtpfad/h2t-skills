@@ -236,8 +236,8 @@ def test_connector_subcommand_help_exits_zero(capsys):
 
 
 def test_find_project_tasks_parser_registered():
-    """Audit #144: find-project-tasks must exist as a notion subcommand with the
-    legacy default database id."""
+    """Audit #144: find-project-tasks must exist as a notion subcommand. The database id
+    has no default in the code: it comes from user.yaml (#548 R45)."""
     import argparse
 
     from h2t_ops.connectors.notion.commands import register
@@ -247,8 +247,76 @@ def test_find_project_tasks_parser_registered():
     args = parser.parse_args(["notion", "find-project-tasks", "proj-page-id"])
     assert args.notion_cmd == "find-project-tasks"
     assert args.project_page_id == "proj-page-id"
-    assert args.database_id == "beabac7bf4314952a9327759c638d89f"  # legacy default
+    assert args.database_id is None
     assert args.limit is None
+
+
+def _find_tasks_args(**kw):
+    from types import SimpleNamespace
+    return SimpleNamespace(notion_cmd="find-project-tasks", project_page_id="proj-1",
+                           database_id=None, limit=None, as_json=True, fmt="human", **kw)
+
+
+def _stub_notion(monkeypatch, calls):
+    import h2t_ops.connectors.notion.client as client_mod
+
+    class _StubClient:
+        def query_database_page(self, db, *, filter_dict=None, limit=None, **_):
+            calls.append(db)
+            return {"items": [], "truncated": False}
+
+    monkeypatch.setattr(client_mod, "NotionClient", lambda: _StubClient())
+
+
+def test_find_project_tasks_without_id_reads_user_yaml(monkeypatch):
+    from h2t_ops.connectors.notion import commands as cmds_mod
+    from h2t_ops.core import paths
+
+    f = paths.config_dir() / "user.yaml"
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_text("notion:\n  tasks_database_id: fake-tasks-db\n", encoding="utf-8")
+    calls: list = []
+    _stub_notion(monkeypatch, calls)
+    cmds_mod.run(_find_tasks_args())
+    assert calls == ["fake-tasks-db"]
+
+
+def test_search_without_id_reads_user_yaml_and_without_key_is_a_usage_error(monkeypatch):
+    """daily-brief queries the tasks database by `search` with no id (#548 R45)."""
+    from types import SimpleNamespace
+
+    from h2t_ops.connectors.notion import commands as cmds_mod
+    from h2t_ops.core import paths
+    from h2t_ops.core.errors import UsageError, exit_code_for
+
+    calls: list = []
+    _stub_notion(monkeypatch, calls)
+    args = SimpleNamespace(notion_cmd="search", database_id=None, filter=None, filter_json=None,
+                           limit=None, resolve_relations=None, as_json=True, fmt="human")
+    with pytest.raises(UsageError) as exc:
+        cmds_mod.run(args)
+    assert exit_code_for(exc.value) == 2 and "notion.tasks_database_id" in exc.value.hint
+    f = paths.config_dir() / "user.yaml"
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_text("notion:\n  tasks_database_id: fake-tasks-db\n", encoding="utf-8")
+    cmds_mod.run(args)
+    assert calls == ["fake-tasks-db"]
+
+
+def test_find_project_tasks_without_id_or_key_is_a_usage_error(monkeypatch):
+    """Exit code 2, with the remedy naming the flag, the key and the file."""
+    from h2t_ops.connectors.notion import commands as cmds_mod
+    from h2t_ops.core import user_config
+    from h2t_ops.core.errors import UsageError, exit_code_for
+
+    calls: list = []
+    _stub_notion(monkeypatch, calls)
+    with pytest.raises(UsageError) as exc:
+        cmds_mod.run(_find_tasks_args())
+    assert exit_code_for(exc.value) == 2
+    assert "--database-id" in exc.value.hint and "notion.tasks_database_id" in exc.value.hint
+    assert str(user_config.path()) in exc.value.hint
+    assert calls == []
 
 
 def test_find_project_tasks_dispatch_uses_relation_filter(monkeypatch):
@@ -672,17 +740,19 @@ def test_sync_primary_markdown_write_failure_does_not_create_sidecar(tmp_path, m
                 ],
             }
 
-    original_write_text = Path.write_text
+    from h2t_ops.core import store
+
+    original_replace = store.replace
     md = tmp_path / "page.md"
     sidecar = tmp_path / "sidecar.json"
 
-    def fail_primary_write_only(self, *args, **kwargs):
-        if self == md:
+    def fail_primary_write_only(path, *args, **kwargs):
+        if Path(path) == md:
             raise OSError("deterministic primary write failure")
-        return original_write_text(self, *args, **kwargs)
+        return original_replace(path, *args, **kwargs)
 
     monkeypatch.setattr(client_mod, "NotionClient", lambda: _Stub())
-    monkeypatch.setattr(Path, "write_text", fail_primary_write_only)
+    monkeypatch.setattr(store, "replace", fail_primary_write_only)
 
     with pytest.raises(OSError, match="deterministic primary write failure"):
         cmds_mod.run(SimpleNamespace(
@@ -700,6 +770,58 @@ def test_sync_primary_markdown_write_failure_does_not_create_sidecar(tmp_path, m
         ))
 
     assert not sidecar.exists()
+
+
+def _sync_args(**kw):
+    from types import SimpleNamespace
+    base = dict(notion_cmd="sync", page_id="P-1", output_file=None, preserve_metadata=False,
+                include_databases=False, recursive=False, max_depth=3, row_limit=100,
+                databases_json=None, as_json=True, fmt="human")
+    base.update(kw)
+    return SimpleNamespace(**base)
+
+
+class _SyncStub:
+    def get_blocks(self, page_id):
+        return [{"id": "b1", "type": "paragraph"}]
+
+    def blocks_to_markdown(self, blocks):
+        return "Body\n"
+
+
+def test_sync_without_output_goes_to_the_inbox(inbox, monkeypatch, capsys):
+    import h2t_ops.connectors.notion.client as client_mod
+    from h2t_ops.connectors.notion import commands as cmds_mod
+
+    monkeypatch.setattr(client_mod, "NotionClient", lambda: _SyncStub())
+    out = cmds_mod.run(_sync_args())
+    assert out == {"page_id": "P-1", "path": str(inbox / "P-1.md"), "defaulted": False}
+    assert (inbox / "P-1.md").read_text(encoding="utf-8") == "Body\n"
+    assert f"saved to {inbox / 'P-1.md'}" in capsys.readouterr().err
+    # a second export of the same page is a new file, the first one stays (R47)
+    assert cmds_mod.run(_sync_args())["path"] == str(inbox / "P-1-2.md")
+
+
+def test_sync_without_output_or_paths_yaml_goes_to_data_inbox(monkeypatch):
+    import h2t_ops.connectors.notion.client as client_mod
+    from h2t_ops.connectors.notion import commands as cmds_mod
+    from h2t_ops.core import paths
+
+    monkeypatch.setattr(client_mod, "NotionClient", lambda: _SyncStub())
+    out = cmds_mod.run(_sync_args(as_json=False))
+    assert out == f"Synced to {paths.data_dir() / 'inbox' / 'P-1.md'}"
+
+
+def test_sync_output_into_secrets_is_refused(monkeypatch):
+    import h2t_ops.connectors.notion.client as client_mod
+    from h2t_ops.connectors.notion import commands as cmds_mod
+    from h2t_ops.core import paths, store
+
+    monkeypatch.setattr(client_mod, "NotionClient", lambda: _SyncStub())
+    target = paths.secrets_shared() / "notion.md"
+    with pytest.raises(store.WriteRefused):
+        cmds_mod.run(_sync_args(output_file=str(target)))
+    assert not target.exists()
 
 
 # --- P0 lifecycle command dispatch tests ---

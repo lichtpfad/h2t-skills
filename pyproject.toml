@@ -101,7 +101,10 @@ unfixable = ["F401"]
 pythonpath = ["."]
 # Slow tests build and install the wheel with uv (spec §2.6); the release workflow runs them.
 # A later `-m slow` on the command line, or PYTEST_ADDOPTS="-m slow", selects them.
-markers = ["slow: builds and installs the release wheel with uv; deselected unless -m slow"]
+markers = [
+    "slow: builds and installs the release wheel with uv; deselected unless -m slow",
+    "optional: exercises an optional extra (trafilatura) through a stand-in; runs by default",
+]
 addopts = "-m 'not slow'"
 
 # PEP 735 — provisioned by `uv run`/`uv sync`; ignored by bare `pip install`.

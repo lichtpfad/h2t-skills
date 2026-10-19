@@ -1,7 +1,8 @@
 """Detect project type, domain, tracker for init-project skill.
 
 Usage: h2t-detect-project --cwd <path> [--config-root <path>]
-Outputs JSON to stdout. Config root: --config-root, else $H2T_CONFIG_ROOT, else ~/.h2t/config.
+Outputs JSON to stdout. Config: --config-root read directly, else config/ through the index
+(index.ontology()); H2T_CONFIG_ROOT is not read (#548 R5).
 
 Moved here from plugins/h2t-core/skills/init-project/scripts/ in Task 12; the plugin copy
 is gone, so there is no drift guard — this is the only copy.
@@ -9,13 +10,15 @@ is gone, so there is no drift guard — this is the only copy.
 import argparse
 import io
 import json
-import os
 import re
 import subprocess
 import sys
 from pathlib import Path
 
+from h2t_ops.core import paths
+from h2t_ops.lifecycle import index
 from h2t_ops.lifecycle.gather.stack import detect_stack
+from h2t_ops.lifecycle.index import build
 
 # Domain patterns: (regex on the normalized forward-slash path, domain, confidence).
 #
@@ -25,14 +28,37 @@ from h2t_ops.lifecycle.gather.stack import detect_stack
 # repository's NAME, not where its parent directory happens to sit, so the patterns are
 # anchored to a path segment instead: `/h2t-vision` matches under any root.
 #
-# The two `Projects/` entries stay as they are: they name specific repositories rather
-# than a family, and a segment anchor would not make them more portable.
+# Patterns that name one user's own repositories are not here: they live in that user's
+# config/user.yaml as `domain_patterns: [{pattern, domain}]` (#548 R45).
 DOMAIN_PATTERNS = [
     (r"/(?:h2t-|hou2touch)", "hou2touch", "high", "repository named h2t-* matches hou2touch"),
     (r"/crypto-", "crypto", "high", "repository named crypto-* matches crypto"),
     (r"HOU2TOUCH", "hou2touch", "high", "path contains HOU2TOUCH"),
-    (r"Projects/DOR|Projects/newsengine", "personal-os", "high", "known personal-os project path"),
 ]
+
+
+def _user_patterns() -> list[tuple[str, str, str, str]]:
+    """`domain_patterns` from user.yaml; none when the file or the key is absent."""
+    from h2t_ops.core import user_config
+    from h2t_ops.core.errors import ConfigError
+
+    raw = user_config.get("domain_patterns") or []
+    hint = "domain_patterns:\n  - pattern: <regex on the path>\n    domain: <domain>"
+    if not isinstance(raw, list):
+        raise ConfigError(f"{user_config.path()}: domain_patterns must be a list", hint=hint)
+    out = []
+    for entry in raw:
+        if not (isinstance(entry, dict) and isinstance(entry.get("pattern"), str)
+                and isinstance(entry.get("domain"), str)):
+            raise ConfigError(f"{user_config.path()}: domain_patterns entry {entry!r} needs "
+                              "a pattern and a domain", hint=hint)
+        try:
+            re.compile(entry["pattern"])
+        except re.error as exc:
+            raise ConfigError(f"{user_config.path()}: domain_patterns {entry['pattern']!r} "
+                              f"is not a regex: {exc}", hint=hint) from exc
+        out.append((entry["pattern"], entry["domain"], "high", "user.yaml"))
+    return out
 
 # File extensions that hint at art domain
 ART_EXTENSIONS = {".toe", ".hip", ".hiplc", ".hipnc"}
@@ -74,7 +100,7 @@ def _detect_domain(cwd: str) -> tuple[str | None, str, str]:
     # Normalize to forward slashes
     normalized = cwd.replace("\\", "/")
 
-    for pattern, domain, confidence, reason in DOMAIN_PATTERNS:
+    for pattern, domain, confidence, reason in DOMAIN_PATTERNS + _user_patterns():
         if re.search(pattern, normalized):
             return domain, confidence, reason
 
@@ -182,18 +208,6 @@ def _find_label(domains_data: dict, domain: str, project_id: str) -> str | None:
     return None
 
 
-def _load_yaml(path: Path) -> dict:
-    """Load YAML file, return empty dict if missing or no yaml."""
-    try:
-        import yaml
-    except ImportError:
-        return {}
-    if not path.exists():
-        return {}
-    with open(path, encoding="utf-8") as f:
-        return yaml.safe_load(f) or {}
-
-
 def _build_confirm_message(detected: dict, already_registered: bool) -> str:
     """Build the confirm message shown to user."""
     if already_registered:
@@ -257,21 +271,17 @@ def _is_workspace(cwd: Path, mapping_data: dict) -> bool:
     return child_count >= 3  # arbitrary threshold: 3+ known children = workspace
 
 
-def _resolve_config_root(config_root: str | None = None) -> Path:
-    """Same precedence as gather's identify_project: explicit, env, default."""
+def _ontology(config_root: str | None) -> tuple[dict, dict]:
+    """A named --config-root is read directly, without the index, so a caller can point at
+    any directory without rebuilding this machine's base; otherwise the index answers."""
     if config_root:
-        return Path(config_root).expanduser()
-    env = os.environ.get("H2T_CONFIG_ROOT")
-    if env:
-        return Path(env).expanduser()
-    return Path.home() / ".h2t" / "config"
+        return build.load_ontology(paths.expand_user_dest(config_root))
+    return index.ontology()
 
 
 def detect_project(cwd: str, config_root: str | None = None) -> dict:
     """Main detection entry point. Returns full result dict."""
-    config_root = _resolve_config_root(config_root)
-    mapping_data = _load_yaml(config_root / "repo-mapping.yaml")
-    domains_data = _load_yaml(config_root / "domains.yaml")
+    mapping_data, domains_data = _ontology(config_root)
 
     cwd_path = Path(cwd).resolve()
     cwd_str = str(cwd_path)

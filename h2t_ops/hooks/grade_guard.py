@@ -17,9 +17,12 @@ from __future__ import annotations
 
 import json
 import re
+import sys
 import time
 from pathlib import Path
 
+from h2t_ops.core import paths, store
+from h2t_ops.core.errors import H2TError
 from h2t_ops.hooks.emit import Reply
 
 CLAIM_RE = re.compile(
@@ -31,7 +34,11 @@ CLAIM_RE = re.compile(
 )
 GRADE_RE = re.compile(r"\[(B|C|D)[:\]\s]")
 EVIDENCE_RE = re.compile(r"```")
-LOG_PATH = Path.home() / ".h2t" / "logs" / "grade-guard.jsonl"
+
+
+def log_path() -> Path:
+    """Resolved per call: the logs place follows HOME and H2T_PATH_ROOT as they are now."""
+    return paths.logs_dir() / "grade-guard.jsonl"
 
 
 def last_assistant_text(transcript_path: str) -> str:
@@ -70,19 +77,18 @@ def warning(word: str) -> str:
 
 
 def log(payload: dict, word: str | None) -> None:
+    row = {
+        "ts": time.strftime("%Y-%m-%dT%H:%M:%S"),
+        "session_id": payload.get("session_id"),
+        "cwd": payload.get("cwd"),
+        "flagged": word is not None,
+        "word": word,
+    }
     try:
-        LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
-        row = {
-            "ts": time.strftime("%Y-%m-%dT%H:%M:%S"),
-            "session_id": payload.get("session_id"),
-            "cwd": payload.get("cwd"),
-            "flagged": word is not None,
-            "word": word,
-        }
-        with LOG_PATH.open("a", encoding="utf-8") as fh:
-            fh.write(json.dumps(row, ensure_ascii=False) + "\n")
-    except OSError:
-        pass  # a missing log line must never break a stop
+        store.append(log_path(), json.dumps(row, ensure_ascii=False), place="logs")
+    except (OSError, H2TError) as exc:
+        # A missing log line must never break a stop; it is said, not swallowed (hooks.md).
+        print(f"h2t grade-guard: log row not written: {exc}", file=sys.stderr)
 
 
 def handle(event: dict) -> Reply:

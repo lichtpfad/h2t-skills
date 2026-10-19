@@ -1,11 +1,12 @@
 """Doctors report what they checked, the way the code they vouch for does (#451)."""
+import os
 import sys
 from pathlib import Path
 
 import pytest
 
 from h2t_ops import cli
-from h2t_ops.core import secrets as core_secrets
+from h2t_ops.core import paths
 from h2t_ops.lifecycle.activity import writer as activity_writer
 from h2t_ops.setup import legacy as setup_h2t
 
@@ -79,11 +80,12 @@ def _home(tmp_path, monkeypatch):
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     monkeypatch.delenv("NOTION_API_TOKEN", raising=False)
     monkeypatch.delenv("H2T_SECRETS_FILE", raising=False)
-    secrets_dir = tmp_path / ".h2t" / "config" / "secrets"
+    # core.secrets resolves its paths at call time: a tmp HOME is the whole isolation.
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
+    monkeypatch.delenv("H2T_PATH_ROOT", raising=False)
+    secrets_dir = paths.legacy("secrets.h2t")
     secrets_dir.mkdir(parents=True)
-    monkeypatch.setattr(core_secrets, "H2T_CONFIG_SECRETS", secrets_dir / "secrets.env")
-    monkeypatch.setattr(core_secrets, "DEFAULT_SECRETS", tmp_path / "absent-dor.env")
-    monkeypatch.setattr(core_secrets, "LEGACY_SECRETS", tmp_path / "absent-legacy.env")
     return secrets_dir
 
 
@@ -110,6 +112,39 @@ def test_doctor_does_not_take_client_credentials_for_a_gmail_token(tmp_path, mon
 
     assert "gmail token=MISSING" in out
     assert "not checked here:" in out and "telegram" in out
+
+
+def _google_token(tmp_path, monkeypatch, body: str):
+    _home(tmp_path, monkeypatch)
+    token = paths.secrets_local() / "google.token.json"
+    token.parent.mkdir(parents=True)
+    token.write_text(body, encoding="utf-8")
+    return token
+
+
+def test_doctor_sees_a_google_token_in_secrets_local(tmp_path, monkeypatch, capsys):
+    _google_token(tmp_path, monkeypatch, '{"refresh_token": "fake-r"}')
+    assert cli._doctor() == 0
+    assert "gmail token=present" in capsys.readouterr().out
+
+
+def test_doctor_reports_a_malformed_google_token_and_exits_0(tmp_path, monkeypatch, capsys):
+    _google_token(tmp_path, monkeypatch, "{not json")
+    assert cli._doctor() == 0
+    assert "gmail token=UNREADABLE" in capsys.readouterr().out
+
+
+@pytest.mark.skipif(sys.platform.startswith("win"), reason="POSIX permission bits")
+def test_doctor_reports_an_unreadable_google_token_and_exits_0(tmp_path, monkeypatch, capsys):
+    token = _google_token(tmp_path, monkeypatch, '{"refresh_token": "fake-r"}')
+    token.chmod(0)
+    try:
+        if os.access(token, os.R_OK):
+            pytest.skip("running as a user that reads 0000 files (root)")
+        assert cli._doctor() == 0
+    finally:
+        token.chmod(0o600)
+    assert "gmail token=UNREADABLE" in capsys.readouterr().out
 
 
 def test_plugin_cache_orders_non_semver_dirs_by_mtime(tmp_path, monkeypatch):
@@ -188,3 +223,77 @@ def test_doctor_is_quiet_when_the_legacy_h2t_still_resolves(tmp_path):
 
 def test_doctor_is_quiet_without_a_legacy_venv(tmp_path):
     assert setup_h2t.legacy_shim_status(tmp_path) == {"status": "ok"}
+
+
+def _matrix_row(tmp_path, monkeypatch, connector):
+    monkeypatch.setattr(setup_h2t, "resolve_h2t_ops", lambda home=None: {"status": "missing", "path": ""})
+    rows = setup_h2t.connector_matrix(tmp_path)["connectors"]
+    return next(r for r in rows if r["connector"] == connector)
+
+
+def _put(path, body):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(body, encoding="utf-8")
+
+
+def test_connectors_check_sees_google_files_in_the_4_0_places(tmp_path, monkeypatch):
+    """client in secrets/shared, this machine's token in secrets/local (§4, R19)."""
+    _home(tmp_path, monkeypatch)
+    _put(paths.secrets_shared() / "google.client.json", '{"installed": {}}')
+    _put(paths.secrets_local() / "google.token.json", '{"refresh_token": "fake-r"}')
+    row = _matrix_row(tmp_path, monkeypatch, "calendar")
+    assert row["status"] == "ready"
+    assert row["checks"]["tokens"] == {"path": str(paths.secrets_local() / "google.token.json"),
+                                       "status": "present"}
+
+
+def test_connectors_check_reports_a_corrupt_google_token_without_crashing(tmp_path, monkeypatch):
+    _home(tmp_path, monkeypatch)
+    _put(paths.secrets_local() / "google.token.json", "{not json")
+    row = _matrix_row(tmp_path, monkeypatch, "gmail")
+    assert row["status"] == "missing" and row["checks"]["tokens"]["status"] == "unreadable"
+
+
+def test_connectors_check_sees_a_key_only_in_secrets_shared(tmp_path, monkeypatch):
+    _home(tmp_path, monkeypatch)
+    monkeypatch.delenv("MEETGEEK_API_KEY", raising=False)
+    _put(paths.secrets_shared() / "meetgeek.env", "MEETGEEK_API_KEY=fake-mg\n")
+    assert _matrix_row(tmp_path, monkeypatch, "meetgeek")["status"] == "ready"
+
+
+def _no_telegram_env(monkeypatch):
+    for k in ("TELEGRAM_API_ID", "TELEGRAM_API_HASH"):
+        monkeypatch.delenv(k, raising=False)
+
+
+def test_connectors_check_sees_telegram_in_the_4_0_places(tmp_path, monkeypatch):
+    """A new user: keys in shared/telegram.env, session in local (§12 acceptance)."""
+    _home(tmp_path, monkeypatch)
+    _no_telegram_env(monkeypatch)
+    _put(paths.secrets_shared() / "telegram.env", "TELEGRAM_API_ID=1\nTELEGRAM_API_HASH=fake-hash\n")
+    _put(paths.secrets_local() / "telegram.session", "fake-session")
+    row = _matrix_row(tmp_path, monkeypatch, "telegram")
+    assert row["status"] == "ready"
+    assert row["checks"]["session"] == {"path": str(paths.secrets_local() / "telegram.session"),
+                                        "status": "present"}
+
+
+def test_connectors_check_telegram_falls_back_per_key_to_the_3x_files(tmp_path, monkeypatch):
+    _home(tmp_path, monkeypatch)
+    _no_telegram_env(monkeypatch)
+    _put(paths.secrets_shared() / "telegram.env", "TELEGRAM_API_ID=\nTELEGRAM_API_HASH=fake-new\n")
+    _put(paths.legacy("telegram") / "config.json", '{"api_id": 7, "api_hash": "fake-old"}')
+    _put(paths.legacy("telegram") / "session.session", "fake-old-session")
+    row = _matrix_row(tmp_path, monkeypatch, "telegram")
+    assert row["status"] == "ready"
+    assert row["checks"]["session"]["path"] == str(paths.legacy("telegram") / "session.session")
+
+
+def test_connectors_check_telegram_missing_and_unreadable(tmp_path, monkeypatch):
+    _home(tmp_path, monkeypatch)
+    _no_telegram_env(monkeypatch)
+    _put(paths.secrets_shared() / "telegram.env", "TELEGRAM_API_ID=1\n")
+    assert _matrix_row(tmp_path, monkeypatch, "telegram")["status"] == "missing"
+    _put(paths.legacy("telegram") / "config.json", "{not json")
+    row = _matrix_row(tmp_path, monkeypatch, "telegram")
+    assert row["status"] == "missing" and row["checks"]["config"]["status"] == "unreadable"

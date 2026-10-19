@@ -5,9 +5,9 @@
 | Intent | Command |
 | --- | --- |
 | list calendars | `h2t-ops calendar calendars --json` |
-| list events | `h2t-ops calendar list --days 1 --max 250 --json` — N календарных суток от сегодня в `--tz`, не скользящие N×24ч |
-| explicit date window | `h2t-ops calendar list --from 2026-05-23 --to 2026-05-23 --tz Asia/Jerusalem --max 250 --json` |
-| busy windows | `h2t-ops calendar freebusy --from 2026-05-23 --to 2026-05-23 --tz Asia/Jerusalem --json` |
+| list events | `h2t-ops calendar list --days 1 --max 250 --json` — N календарных суток от сегодня в `--tz`, не скользящие N×24ч; без `--tz` — `timezone` из `user.yaml` |
+| explicit date window | `h2t-ops calendar list --from 2026-05-23 --to 2026-05-23 --tz Europe/Paris --max 250 --json` |
+| busy windows | `h2t-ops calendar freebusy --from 2026-05-23 --to 2026-05-23 --tz Europe/Paris --json` |
 | search events | `h2t-ops calendar search "meeting" --max 20 --json` |
 | get event | `h2t-ops calendar get EVENT_ID_FROM_LIST --json` |
 | create timed event | `h2t-ops calendar create "Planning" 2026-05-23 14:00 --duration-min 60 --json` |
@@ -26,18 +26,22 @@
 
 ## Commands
 
-Use JSON for agent processing:
+Use JSON for agent processing. Without `--tz` the zone is `H2T_CALENDAR_TZ`, then
+`timezone` from `~/.h2t/config/user.yaml`, then the system zone; `list --json` reports which
+one in `tz_source`.
 
 ```bash
 h2t-ops calendar calendars --json
-h2t-ops calendar list --from 2026-05-23 --to 2026-05-23 --tz Asia/Jerusalem --max 250 --busy-only --json
-h2t-ops calendar freebusy --from 2026-05-23 --to 2026-05-23 --tz Asia/Jerusalem --json
+h2t-ops calendar list --from 2026-05-23 --to 2026-05-23 --tz Europe/Paris --max 250 --busy-only --json
+h2t-ops calendar freebusy --from 2026-05-23 --to 2026-05-23 --tz Europe/Paris --json
 h2t-ops calendar create "Planning" 2026-05-23 14:00 --duration-min 60 --meet --json
 ```
 
 ## Auth
 
-Google OAuth credentials and tokens are expected under `~/.config/google-calendar-mcp/`.
+Calendar shares one Google login with Gmail and Drive: the OAuth client is
+`h2t-ops paths get secret:google.client`, this machine's token is
+`h2t-ops paths get secret:google.token`. `h2t-ops google auth` creates the token.
 
 In Claude Code, check readiness through:
 

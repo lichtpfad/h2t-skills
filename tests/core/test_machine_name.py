@@ -12,6 +12,7 @@ from pathlib import Path
 
 import pytest
 
+from h2t_ops.core import paths
 from h2t_ops.lifecycle.activity import writer as activity_writer
 from h2t_ops.lifecycle.gather import sessions
 from h2t_ops.setup import legacy as setup_h2t
@@ -33,8 +34,8 @@ def renamed_host(monkeypatch, tmp_path):
     for var in ("H2T_MACHINE_NAME", "DOR_MACHINE_NAME"):
         monkeypatch.delenv(var, raising=False)
     monkeypatch.setattr(platform, "node", lambda: "Mac.local")
-    monkeypatch.setenv("H2T_SESSION_ROOT", str(tmp_path / "sessions"))
-    monkeypatch.setenv("H2T_ACTIVITY_SPOOL", str(tmp_path / "spool.jsonl"))
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
     return tmp_path
 
 
@@ -43,7 +44,7 @@ def test_machine_name_is_the_same_for_writer_reader_and_spool(renamed_host):
 
     written_under = handoff.default_markdown_dir("proj").parent.name
     activity_writer.log_session_start(session_id="s", domain="dev", project="proj")
-    spooled = json.loads((renamed_host / "spool.jsonl").read_text(encoding="utf-8"))["machine"]
+    spooled = json.loads(paths.activity_file("mac").read_text(encoding="utf-8"))["machine"]
 
     assert written_under == sessions.get_machine_name() == spooled == "mac"
 
@@ -58,7 +59,7 @@ def test_setup_writes_machine_name_and_keeps_the_rest(renamed_host, monkeypatch)
     settings.parent.mkdir(parents=True)
     settings.write_text(json.dumps({"model": "x", "env": {"OTHER": "1"}}), encoding="utf-8")
 
-    result = setup_h2t.ensure_machine_name(renamed_host)
+    result = setup_h2t.ensure_machine_name()
 
     assert result["status"] == "written"
     assert json.loads(settings.read_text(encoding="utf-8")) == {
@@ -74,7 +75,7 @@ def test_setup_keeps_an_existing_machine_name(renamed_host, monkeypatch):
     settings.write_text(json.dumps({"env": {"H2T_MACHINE_NAME": "macbook-pro-3"}}), encoding="utf-8")
     before = settings.read_text(encoding="utf-8")
 
-    result = setup_h2t.ensure_machine_name(renamed_host)
+    result = setup_h2t.ensure_machine_name()
 
     assert result == {"status": "unchanged", "path": str(settings), "value": "macbook-pro-3"}
     assert settings.read_text(encoding="utf-8") == before
@@ -86,7 +87,7 @@ def test_setup_leaves_an_invalid_settings_file_alone(renamed_host, monkeypatch):
     settings.parent.mkdir(parents=True)
     settings.write_text("{ not json", encoding="utf-8")
 
-    result = setup_h2t.ensure_machine_name(renamed_host)
+    result = setup_h2t.ensure_machine_name()
 
     assert result["status"] == "error"
     assert settings.read_text(encoding="utf-8") == "{ not json"
@@ -97,19 +98,20 @@ def test_setup_does_not_overwrite_a_preference_saved_meanwhile(renamed_host, mon
     settings = _settings(renamed_host)
     settings.parent.mkdir(parents=True)
     settings.write_text(json.dumps({"model": "x"}), encoding="utf-8")
-    real_mkstemp = setup_h2t.tempfile.mkstemp
+    real_name = sessions.get_machine_name
     calls = []
 
-    def claude_code_saves_meanwhile(*args, **kwargs):
+    def claude_code_saves_meanwhile():
+        # After the read, before the write: the window the stamp check closes.
         if not calls:
             settings.write_text(json.dumps({"model": "x", "theme": "dark"}), encoding="utf-8")
             os.utime(settings, ns=(1, 10**18))
         calls.append(1)
-        return real_mkstemp(*args, **kwargs)
+        return real_name()
 
-    monkeypatch.setattr(setup_h2t.tempfile, "mkstemp", claude_code_saves_meanwhile)
+    monkeypatch.setattr(sessions, "get_machine_name", claude_code_saves_meanwhile)
 
-    result = setup_h2t.ensure_machine_name(renamed_host)
+    result = setup_h2t.ensure_machine_name()
 
     assert result["status"] == "written"
     assert json.loads(settings.read_text(encoding="utf-8")) == {
@@ -120,9 +122,38 @@ def test_setup_does_not_overwrite_a_preference_saved_meanwhile(renamed_host, mon
     assert sorted(p.name for p in settings.parent.iterdir()) == ["settings.json"]
 
 
+def test_setup_does_not_overwrite_a_save_landing_while_it_publishes(renamed_host, monkeypatch):
+    """The save lands after the temp file is written, before publication: the stamp is
+    compared there (store.replace expect=), not before the temp file exists."""
+    from h2t_ops.core import store
+    monkeypatch.delenv("CLAUDE_CONFIG_DIR", raising=False)
+    settings = _settings(renamed_host)
+    settings.parent.mkdir(parents=True)
+    settings.write_text(json.dumps({"model": "x"}), encoding="utf-8")
+    real, calls = store._tmp_beside, []
+
+    def claude_code_saves_after_the_temp(path, payload, mode):
+        tmp = real(path, payload, mode)
+        if not calls:
+            settings.write_text(json.dumps({"model": "x", "theme": "dark"}), encoding="utf-8")
+            os.utime(settings, ns=(1, 10**18))
+        calls.append(1)
+        return tmp
+
+    monkeypatch.setattr(store, "_tmp_beside", claude_code_saves_after_the_temp)
+
+    result = setup_h2t.ensure_machine_name()
+
+    assert result["status"] == "written" and len(calls) == 2
+    assert json.loads(settings.read_text(encoding="utf-8")) == {
+        "model": "x", "theme": "dark", "env": {"H2T_MACHINE_NAME": "mac"}}
+    assert sorted(p.name for p in settings.parent.iterdir()) == ["settings.json"]
+
+
 def _history(renamed_host, *machines):
+    # The 3.x session root, which ensure_machine_name still lists (setup/legacy.py).
     for machine in machines:
-        (renamed_host / "sessions" / machine / "proj").mkdir(parents=True)
+        (renamed_host / ".h2t" / "sessions" / machine / "proj").mkdir(parents=True)
 
 
 def test_setup_does_not_pin_a_hostname_that_drifted_from_the_history(renamed_host, monkeypatch):
@@ -130,7 +161,7 @@ def test_setup_does_not_pin_a_hostname_that_drifted_from_the_history(renamed_hos
     monkeypatch.delenv("CLAUDE_CONFIG_DIR", raising=False)
     _history(renamed_host, "macbook-pro-3")
 
-    result = setup_h2t.ensure_machine_name(renamed_host)
+    result = setup_h2t.ensure_machine_name()
 
     assert result["status"] == "needs_choice"
     assert result["today"] == "mac"
@@ -138,11 +169,25 @@ def test_setup_does_not_pin_a_hostname_that_drifted_from_the_history(renamed_hos
     assert not _settings(renamed_host).exists()
 
 
+def test_setup_reads_the_records_root_and_not_the_3x_variable(renamed_host, monkeypatch, tmp_path):
+    """The 4.0 writer's root is records/sessions; H2T_SESSION_ROOT is not read (R5)."""
+    monkeypatch.delenv("CLAUDE_CONFIG_DIR", raising=False)
+    (paths.records("sessions", "macbook-pro-3") / "proj").mkdir(parents=True)
+    old = tmp_path / "old-root"
+    (old / "mac").mkdir(parents=True)
+    monkeypatch.setenv("H2T_SESSION_ROOT", str(old))
+
+    result = setup_h2t.ensure_machine_name()
+
+    assert result["status"] == "needs_choice"
+    assert result["candidates"] == ["macbook-pro-3"]
+
+
 def test_setup_pins_today_s_name_when_its_folder_exists(renamed_host, monkeypatch):
     monkeypatch.delenv("CLAUDE_CONFIG_DIR", raising=False)
     _history(renamed_host, "automata", "mac")
 
-    result = setup_h2t.ensure_machine_name(renamed_host)
+    result = setup_h2t.ensure_machine_name()
 
     assert result["status"] == "written"
     assert result["value"] == "mac"
@@ -152,7 +197,7 @@ def test_setup_pins_the_name_it_is_given(renamed_host, monkeypatch):
     monkeypatch.delenv("CLAUDE_CONFIG_DIR", raising=False)
     _history(renamed_host, "macbook-pro-3")
 
-    result = setup_h2t.ensure_machine_name(renamed_host, name="macbook-pro-3")
+    result = setup_h2t.ensure_machine_name(name="macbook-pro-3")
 
     assert result["status"] == "written"
     assert json.loads(_settings(renamed_host).read_text(encoding="utf-8")) == {

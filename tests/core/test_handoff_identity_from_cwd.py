@@ -20,19 +20,20 @@ WRITER = "h2t_ops.lifecycle.handoff"  # the plugin script, deleted in Task 12, r
 
 
 def _config_root(tmp_path, mapping_yaml):
-    config = tmp_path / "config"
-    config.mkdir()
+    """config/ under the suite's HOME, which the subprocess inherits; H2T_CONFIG_ROOT is
+    no longer read (#548 R5)."""
+    from h2t_ops.core import paths
+    config = paths.config_dir()
+    config.mkdir(parents=True)
     (config / "repo-mapping.yaml").write_text(mapping_yaml, encoding="utf-8")
     (config / "domains.yaml").write_text("domains: {}\n", encoding="utf-8")
     return config
 
 
-def _write(cwd, sessions_root, config_root, *extra):
+def _write(cwd, config_root, *extra):
     env = dict(os.environ)
-    env["H2T_SESSION_ROOT"] = str(sessions_root)
     env["H2T_MACHINE_NAME"] = "test-machine"
     env["H2T_EVALS_MODE"] = "off"
-    env["H2T_CONFIG_ROOT"] = str(config_root)
     result = subprocess.run(
         [sys.executable, "-m", WRITER, "write",
          "--session-id", "some-session-2026-08-23",
@@ -52,7 +53,7 @@ def test_project_comes_from_the_working_directory(tmp_path):
         f"cwd_patterns:\n  {Path(work).resolve()}: personal-os/derived-id\n"
         "default: dev/unknown\n"
     ))
-    out = _write(work, tmp_path / "sessions", config)
+    out = _write(work, config)
     assert Path(out["markdown"]).parent.name == "derived-id", out["markdown"]
     assert "**Domain:** personal-os" in Path(out["markdown"]).read_text(encoding="utf-8")
 
@@ -62,7 +63,7 @@ def test_unresolved_project_keeps_the_directory_name(tmp_path):
     work = tmp_path / "unmapped-checkout"
     work.mkdir()
     config = _config_root(tmp_path, "mappings: {}\ncwd_patterns: {}\ndefault: dev/unknown\n")
-    out = _write(work, tmp_path / "sessions", config)
+    out = _write(work, config)
     assert Path(out["markdown"]).parent.name == "unmapped-checkout", out["markdown"]
 
 
@@ -74,6 +75,6 @@ def test_explicit_project_still_wins(tmp_path):
         f"cwd_patterns:\n  {Path(work).resolve()}: personal-os/derived-id\n"
         "default: dev/unknown\n"
     ))
-    out = _write(work, tmp_path / "sessions", config,
+    out = _write(work, config,
                  "--project", "explicit-id", "--domain", "personal-os")
     assert Path(out["markdown"]).parent.name == "explicit-id", out["markdown"]

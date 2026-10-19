@@ -26,6 +26,8 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("version", help="Check the installed version and entry points (--expect V, --json); exit 3 if not ok")
     sub.add_parser("doctor", help="Report installed CLI state (version, path, connectors, secrets); always exits 0, connectors-check is the gate")
     sub.add_parser("setup", help="The h2t-core setup skill's backend: doctor, setup, install-h2t-ops, connectors-check, secrets")
+    sub.add_parser("paths", help="Where each place lives: list, get <id>, set <place> <path>")
+    sub.add_parser("index", help="The session index state/index.sqlite: rebuild, query --project <id>")
     for spec in discover():
         spec.register(sub)
     return p
@@ -47,7 +49,7 @@ def _doctor() -> int:
         print(f"  - {spec.name}: {spec.help}")
     # Ask the same code the connectors use (#451): the literals here missed a token kept in
     # a secrets file, and took gmail's client credentials for a signed-in token.
-    from h2t_ops.core import google_auth
+    from h2t_ops.core import secrets
     from h2t_ops.core.errors import ConfigError
     from h2t_ops.core.secrets import resolve_notion_token
     try:
@@ -58,8 +60,17 @@ def _doctor() -> int:
     except (OSError, UnicodeDecodeError) as exc:
         notion = f"UNREADABLE ({exc})"
     print(f"secrets: NOTION_API_TOKEN={notion}")
-    gmail_token = any(token.is_file() for token, _ in google_auth._candidate_paths("gmail"))
-    print(f"secrets: gmail token={'present' if gmail_token else 'MISSING'}")
+    try:
+        gmail_token = "present" if secrets.read_json("google.token")[1] is not None else "MISSING"
+    except (ConfigError, OSError) as exc:   # doctor always exits 0
+        gmail_token = f"UNREADABLE ({exc})"
+    print(f"secrets: gmail token={gmail_token}")
+    from h2t_ops.setup import storage_doctor
+    try:
+        storage = storage_doctor.report()
+    except (ConfigError, OSError, UnicodeDecodeError) as exc:   # doctor always exits 0
+        storage = [f"storage: UNREADABLE ({exc})"]
+    print("\n".join(storage))
     unchecked = [name for name in names if name not in ("notion", "gmail")]
     print(f"not checked here: {', '.join(unchecked)}; run the h2t-core setup skill's connectors-check")
     return 0
@@ -278,6 +289,9 @@ def dispatch(argv: list[str]) -> int:
         if gathered.briefing_only:
             forwarded.append("--briefing-only")
         return run_main(session_start.main, forwarded[0], forwarded[1:])
+    if argv and argv[0] in ("paths", "index"):
+        from h2t_ops.core import paths_cli
+        return paths_cli.main(argv[0], argv[1:])
     if argv and argv[0] in _MIGRATED:
         return _run_connector(argv)
     if not argv:

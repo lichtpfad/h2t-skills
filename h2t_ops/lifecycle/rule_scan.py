@@ -19,6 +19,8 @@ import re
 import sys
 from pathlib import Path
 
+from h2t_ops.core import paths
+
 TRIGGERS = re.compile(
     r"не делай|не используй|стоп|запомни|договорились|принято|всегда|никогда|правило:|"
     r"протокол:|важно:|запрет|нельзя|не надо", re.I)
@@ -71,7 +73,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--cwd", default=None, help="the session's directory (default: here)")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
-    result = scan(args.cwd or os.getcwd(), Path.home())
+    result = scan(args.cwd or os.getcwd(), paths.home())
     if args.json:
         print(json.dumps(result, ensure_ascii=False))
     elif result["ok"]:

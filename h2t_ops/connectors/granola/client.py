@@ -10,6 +10,7 @@ import os
 import time
 from typing import Any
 
+from h2t_ops.core import secrets
 from h2t_ops.core.errors import (
     AuthError,
     ConfigError,
@@ -47,19 +48,22 @@ def _raise_for_status(resp: Any, context: str) -> None:
         raise ProviderError(f"Granola server error {status} ({context}): {resp.text[:200]}")
 
 
+def _api_key() -> str:
+    return (secrets.get("GRANOLA_API_KEY") or "").strip()
+
+
 class GranolaClient:
     """Granola public API client."""
 
     def __init__(self) -> None:
-        load_secrets()
-        api_key = os.environ.get("GRANOLA_API_KEY", "").strip()
+        load_secrets()   # the tunables below (GRANOLA_BASE_URL, …) may sit in the files too
+        api_key = _api_key()
         if not api_key:
             raise ConfigError(
                 "GRANOLA_API_KEY not set.",
                 hint=(
-                    "Add GRANOLA_API_KEY to ~/.dor/secrets/secrets.env "
-                    "(legacy fallback: ~/.dor/secrets.env) or set in environment. "
-                    "Create a key in Granola: Settings -> API."
+                    f"Add GRANOLA_API_KEY to {secrets.provider_file('granola')} or set it in the "
+                    "environment. Create a key in Granola: Settings -> API."
                 ),
             )
         self._api_key = api_key

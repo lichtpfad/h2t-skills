@@ -12,7 +12,6 @@ import json
 import sys
 import time
 import traceback
-from pathlib import Path
 
 # Not 2: for a hook, 2 is the harness's block signal, and a usage error must never read as
 # a deliberate block (spec §6.1, ruling R8). 64 is EX_USAGE.
@@ -49,12 +48,13 @@ def _log_failure(name: str, exc: BaseException) -> None:
     row = {"ts": time.strftime("%Y-%m-%dT%H:%M:%S"), "hook": name, "rc": 1,
            "error": type(exc).__name__,
            "traceback": "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))}
+    # Imported here, not at the top: only a failing hook pays for the store (spec §2.7).
+    from h2t_ops.core import paths, store
+    from h2t_ops.core.errors import H2TError
+
     try:
-        path = Path.home() / ".h2t" / "logs" / "hooks.jsonl"
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with path.open("a", encoding="utf-8") as fh:
-            fh.write(json.dumps(row) + "\n")
-    except OSError:
+        store.append(paths.logs_dir() / "hooks.jsonl", json.dumps(row), place="logs")
+    except (OSError, H2TError):
         pass  # the stderr line is already the signal; a missing log row must not mask it
 
 

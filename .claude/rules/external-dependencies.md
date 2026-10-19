@@ -22,8 +22,8 @@ Measured 2026-08-28 across the 29 shipped `SKILL.md`.
 | `npx` + `@playwright/mcp` | `h2t-creative:browser-qa` | fetched on demand; Node is the prerequisite, first run pulls a Chromium build |
 | `mcp__anysite` | `h2t-ops:research` | MCP server, alternative path |
 
-Environment variables that gate behaviour: `H2T_KB_ROOT`, `H2T_SESSION_ROOT`,
-`H2T_ACTIVITY_SPOOL`, `H2T_SECRETS_FILE`.
+Environment variables that gate behaviour: `H2T_KB_ROOT` (read by `llm-kb-engine`, not the
+package), `H2T_PATH_ROOT`, `H2T_PATH_VAULT`. The 3.x path variables are not read since 4.0.
 
 ## h2t-snap
 

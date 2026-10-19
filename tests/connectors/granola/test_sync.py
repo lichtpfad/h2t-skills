@@ -28,6 +28,12 @@ def _client(notes=None, note=None, transcript=None):
     return c
 
 
+def _committed(root):
+    """The manifest rows a sync committed (each publish also writes a pending row first)."""
+    rows = [json.loads(x) for x in (root / "manifest.jsonl").read_text(encoding="utf-8").splitlines() if x.strip()]
+    return [r for r in rows if r.get("state") == "committed"]
+
+
 def test_sync_writes_markdown_and_raw_json_pairs(tmp_path):
     out = S.sync_notes(_client(), to=tmp_path, include={"summaries", "transcripts"},
                        cursor_file=tmp_path / "cursor.json")
@@ -68,7 +74,7 @@ def test_sync_manifest_records_every_version(tmp_path):
     S.sync_notes(_client(), **args)
     v2 = {**NOTE_V1, "updated_at": "2026-08-18T09:00:00.000Z"}
     S.sync_notes(_client(notes=[v2], note=v2), **args)
-    lines = [json.loads(x) for x in (tmp_path / "manifest.jsonl").read_text(encoding="utf-8").splitlines() if x.strip()]
+    lines = _committed(tmp_path)
     assert [x["updated_at"] for x in lines] == ["2026-08-17T16:00:00.000Z", "2026-08-18T09:00:00.000Z"]
 
 
@@ -159,7 +165,7 @@ def test_sync_skips_when_include_narrows(tmp_path):
 
 def test_sync_manifest_records_what_was_included(tmp_path):
     S.sync_notes(_client(), to=tmp_path, include={"summaries"}, cursor_file=tmp_path / "c.json")
-    rec = json.loads((tmp_path / "manifest.jsonl").read_text(encoding="utf-8").splitlines()[0])
+    rec = _committed(tmp_path)[0]
     assert rec["include"] == ["summaries"]
 
 
@@ -189,3 +195,34 @@ def test_sync_treats_legacy_manifest_record_without_include_as_complete(tmp_path
 
     assert out["synced"] == 0
     assert out["skipped"] == 1
+
+
+def test_sync_defaults_to_the_lake_and_keeps_the_cursor_in_state():
+    """No --to: <lake>/granola, here the default data/lake; the cursor in state/cursors."""
+    from h2t_ops.core import paths
+    out = S.sync_notes(_client(), include={"summaries"})
+    root = paths.data_dir() / "lake" / "granola"
+    assert out["lake"] == str(root) and (root / "summaries" / "not_1.md").is_file()
+    assert out["cursor_file"] == str(paths.state_dir() / "cursors" / "granola.json")
+
+
+def test_sync_leaves_a_foreign_file_and_retries_that_part(tmp_path):
+    (tmp_path / "summaries").mkdir()
+    (tmp_path / "summaries" / "not_1.md").write_text("mine, by hand", encoding="utf-8")
+    args = dict(to=tmp_path, include={"summaries"}, cursor_file=tmp_path / "c.json")
+    assert S.sync_notes(_client(), **args)["refused"] == 1
+    assert (tmp_path / "summaries" / "not_1.md").read_text(encoding="utf-8") == "mine, by hand"
+    assert json.loads((tmp_path / "c.json").read_text())["last_seen_ts"] is None   # cursor held
+    again = S.sync_notes(_client(), **args)
+    assert again["skipped"] == 0 and again["refused"] == 1   # not recorded as synced
+
+
+def test_sync_reads_the_3x_cursor_until_the_new_one_exists():
+    from h2t_ops.core import paths
+    old = paths.legacy("lake.dor") / "_cursors" / "granola.json"
+    old.parent.mkdir(parents=True)
+    old.write_text(json.dumps({"last_seen_ts": "2026-08-17T16:00:00.000Z"}), encoding="utf-8")
+    client = _client(notes=[])
+    S.sync_notes(client, include={"summaries"}, since_cursor=True)
+    assert client.list_notes.call_args.kwargs["updated_after"] == "2026-08-17T16:00:00.000Z"
+    assert (paths.state_dir() / "cursors" / "granola.json").is_file()

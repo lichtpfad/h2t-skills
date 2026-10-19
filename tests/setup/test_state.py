@@ -1,5 +1,7 @@
 # tests/setup/test_state.py
 import json
+import stat
+import sys
 
 import pytest
 
@@ -128,3 +130,11 @@ def test_editable_root_is_written_as_its_physical_path(home, tmp_path):
 def test_no_editable_root_stays_empty(home):
     state.commit(_install(editable=None))
     assert _env_line(home, "EDITABLE_ROOT") == "EDITABLE_ROOT="
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX mode bits")
+def test_install_files_are_0600(home):
+    state.commit(_install())
+    for name in ("install.json", "install.env"):
+        assert stat.S_IMODE((home / ".h2t/run" / name).stat().st_mode) == 0o600, name
+

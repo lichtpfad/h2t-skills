@@ -361,6 +361,14 @@ def test_download_media_parser_surface():
     assert ns2.as_json is True
 
 
+def test_download_media_help_names_the_inbox_place(capsys):
+    with pytest.raises(SystemExit):
+        _build_parser().parse_args(["telegram", "download-media", "--help"])
+    out = " ".join(capsys.readouterr().out.split())
+    assert "default: the inbox place" in out
+    assert "Downloads" not in out
+
+
 def test_download_media_dispatches_to_client(monkeypatch):
     import h2t_ops.connectors.telegram.client as client_mod
     from h2t_ops.connectors.telegram import commands as cmds

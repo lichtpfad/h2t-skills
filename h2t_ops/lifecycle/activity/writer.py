@@ -1,14 +1,16 @@
 """Activity stream writer — Phase 1: local JSONL spool.
 
-Each record is one JSON line in H2T_ACTIVITY_SPOOL (default: ~/.h2t/activity/spool.jsonl).
+Each record is one JSON line in records/activity/<machine>.jsonl (#548 §3): one file per
+machine, so two machines syncing records/ never append to the same file.
 Phase 2: replace _write() with POST to POS API; local spool becomes fallback.
 """
 
 import json
-import os
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
+
+from h2t_ops.core import paths, store
 
 
 def log_session_start(
@@ -59,11 +61,6 @@ def _machine_name() -> str:
     return get_machine_name()
 
 
-def _spool_path() -> Path:
-    default = Path.home() / ".h2t" / "activity" / "spool.jsonl"
-    return Path(os.environ.get("H2T_ACTIVITY_SPOOL", str(default)))
-
-
 def _write(
     session_id: str,
     action: str,
@@ -72,22 +69,21 @@ def _write(
     machine: str | None = None,
     artifacts: list | None = None,
 ) -> str:
-    path = _spool_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
+    machine = machine or _machine_name()
+    path = paths.activity_file(machine)
 
     record: dict = {
         "session_id": session_id,
         "action": action,
         "domain": domain,
         "project": project,
-        "machine": machine or _machine_name(),
+        "machine": machine,
         "timestamp": datetime.now(UTC).isoformat(),
     }
     if artifacts:
         record["artifacts"] = artifacts
 
-    with open(path, "a", encoding="utf-8") as f:
-        f.write(json.dumps(record, ensure_ascii=False) + "\n")
+    store.append(path, json.dumps(record, ensure_ascii=False), place="records.activity")
 
     return str(path)
 

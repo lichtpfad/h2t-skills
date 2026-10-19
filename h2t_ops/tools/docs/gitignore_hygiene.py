@@ -1,10 +1,10 @@
 """Gitignore hygiene checks: temp files at repo root not effectively git-ignored."""
 from __future__ import annotations
 
-import os
 import subprocess
-import tempfile
 from pathlib import Path
+
+from h2t_ops.core import store
 
 from .root_structure import TEMP_PATTERNS
 
@@ -45,7 +45,7 @@ def check_gitignore_hygiene(rp: Path) -> list[dict]:
 
 
 def fix_gitignore_hygiene(rp: Path) -> list[str]:
-    """Append missing temp patterns to .gitignore. Atomic write (temp + os.replace)."""
+    """Append missing temp patterns to .gitignore. Atomic write (store.repo replace)."""
     missing: list[str] = []
     for pat in TEMP_PATTERNS:
         matches = list(rp.glob(pat))
@@ -63,14 +63,5 @@ def fix_gitignore_hygiene(rp: Path) -> list[str]:
         text += "\n"
     text += "\n# docs-lint: temp files\n" + "\n".join(missing) + "\n"
 
-    with tempfile.NamedTemporaryFile(
-        mode="w", encoding="utf-8", dir=gi.parent, delete=False, suffix=".tmp"
-    ) as tf:
-        tf.write(text)
-        tmp_name = tf.name
-    try:
-        os.replace(tmp_name, gi)
-    except Exception:
-        Path(tmp_name).unlink(missing_ok=True)
-        raise
+    store.repo(rp, "h2t-docs-lint fix-safe").replace(".gitignore", text)   # only fix-safe runs this
     return [f"added to .gitignore: {p}" for p in missing]

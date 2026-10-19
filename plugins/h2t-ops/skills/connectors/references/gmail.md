@@ -30,7 +30,9 @@ h2t-ops gmail draft person@example.com "Follow-up" "Draft body" --json
 
 ## Auth
 
-Gmail reuses Google OAuth credentials under `~/.config/google-calendar-mcp/` or `~/.config/gmail/`.
+Gmail shares one Google login with Calendar and Drive: the OAuth client is
+`h2t-ops paths get secret:google.client`, this machine's token is
+`h2t-ops paths get secret:google.token`. `h2t-ops google auth` creates the token.
 
 In Claude Code, check readiness through:
 

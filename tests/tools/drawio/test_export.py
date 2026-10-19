@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 
+from conftest import REAL_HOME
 from h2t_ops.tools.drawio.export import export_diagram
 from h2t_ops.tools.drawio.generate import generate_diagram
 
@@ -32,7 +33,13 @@ def test_the_cli_path_this_test_probes_is_the_one_export_uses():
 
 
 @pytest.mark.skipif(not DRAWIO_CLI.exists(), reason=f"draw.io CLI absent at {DRAWIO_CLI}")
-def test_export_produces_a_png():
+def test_export_produces_a_png(monkeypatch, tmp_path):
+    # Electron hangs without its real profile under ~/Library, and no variable narrower
+    # than HOME moves that profile, so this test alone gets the real HOME back (#548 R5).
+    monkeypatch.setenv("HOME", str(REAL_HOME))
+    # The package code must not follow it: drawio writes through store, which journals into
+    # logs/ — with the real HOME that was the real ~/.h2t/logs/writes.jsonl (Task 18).
+    monkeypatch.setenv("H2T_PATH_ROOT", str(tmp_path / "h2t"))
     graph = {
         "nodes": [
             {"id": "a", "label": "Test Node", "type": "rounded_rect"},

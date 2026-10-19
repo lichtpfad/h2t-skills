@@ -139,3 +139,18 @@ def test_run_docs_lint_doctor_timeout(tmp_path):
         result = hook.run_docs_lint_doctor(tmp_path, [sys.executable, str(lint)], timeout=3)
     assert result["status"] == "error"
     assert result["message"] == "hook timeout"
+
+
+def test_a_refused_report_is_one_stderr_line_and_exit_0(tmp_path, monkeypatch, capsys):
+    """The write failure is expected and named (stderr, no traceback, stdout empty);
+    the hook stays non-blocking."""
+    from h2t_ops.core import repo_writers
+    monkeypatch.setattr(hook, "changed_docs_from_head", lambda _: [])
+    monkeypatch.setattr("sys.stdin", io.StringIO(""))
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setitem(repo_writers.REPO_WRITERS, "post-git-commit-docs-lint", {})
+    assert hook.main([]) == 0
+    out = capsys.readouterr()
+    assert out.out == ""
+    assert "report not written: WriteRefused" in out.err and "Traceback" not in out.err
+    assert not (tmp_path / ".h2t").exists()

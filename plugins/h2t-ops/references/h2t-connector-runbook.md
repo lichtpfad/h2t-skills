@@ -33,7 +33,7 @@ edited (routine code is path-only because line anchors drift).
 | Exit-code table | `h2t_ops/core/errors.py:39` |
 | `emit()` call site | `h2t_ops/core/output.py:61` |
 | Envelope builders | `h2t_ops/core/envelope.py:9` |
-| POS "no `~/.dor` write" rule | `plugins/h2t-ops/references/pos-operational-boundary.md:28` |
+| POS "no write to POS's files" rule | `plugins/h2t-ops/references/pos-operational-boundary.md:29` |
 | Proposed-capture contract | `plugins/h2t-ops/references/pos-operational-boundary.md:39` |
 
 Path-only reference implementations:
@@ -57,7 +57,8 @@ A connector is in scope only if it is pure provider I/O. The following are NOT
 connector work — they belong to a coordinator/POS layer, never inside the
 connector (authority: `plugins/h2t-ops/references/pos-operational-boundary.md`):
 
-- writing `~/.dor/**` (lake, context, journal), `pos.db`, `dor.db`, vault;
+- writing POS's files (context, journal, `pos.db`, `dor.db`) or the vault; the lake only
+  through `h2t_ops.core.lake`, which writes the connector's own files and manifest;
 - interpretation/summarisation that turns provider data into POS memory;
 - multi-step sync/cron/webhook workflows.
 
@@ -164,9 +165,10 @@ failures with the same shape as `_map_http_error`
 Authority: `plugins/h2t-ops/references/pos-operational-boundary.md`.
 
 - A connector imports no `pos`/`dor.db`/`vault`/`lake` and must run with POS
-  absent. It must not write `~/.dor/**` — see the rule at
-  `plugins/h2t-ops/references/pos-operational-boundary.md:28`.
-- Default any output path to stdout, not `~/.dor/`.
+  absent. It must not write POS's files or the vault — see the rule at
+  `plugins/h2t-ops/references/pos-operational-boundary.md:29`.
+- Default any output path to stdout, or to the place `h2t-ops paths get <id>` names
+  (`lake`, `inbox`, `data`) — never to a POS path.
 
 Provider write commands are allowed only as explicit CLI verbs with clear user
 intent (e.g. `send`, `label`, `create`, `delete`). They must be classified in
