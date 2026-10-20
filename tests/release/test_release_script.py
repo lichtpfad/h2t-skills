@@ -160,8 +160,12 @@ def test_marketplace_sync_hook_still_passes_after_stamp(repo, rel):
     sha = _git(repo, "rev-parse", "HEAD").strip()
     pointer = _load(repo / "scripts" / "release_pointer.py", "release_pointer_pin")
     market = repo / ".claude-plugin" / "marketplace.json"
-    market.write_text(json.dumps(pointer.set_pointer(json.loads(market.read_text()), "v3.9.0", sha),
-                                 indent=2) + "\n", encoding="utf-8")
+    data = json.loads(market.read_text())
+    # a real pointer move writes each label from plugin.json at the pinned commit, which on a
+    # stamped tree is already the new version
+    names = [e["name"] for e in data["plugins"]]
+    data = pointer.set_pointer(data, "v3.9.0", sha, pointer.versions_at(sha, names, repo))
+    market.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
     rel.stamp(repo, "4.0.0")
     result = subprocess.run([sys.executable, str(repo / "scripts/check_marketplace_sync.py")],
                             capture_output=True, text=True, encoding="utf-8")
@@ -170,8 +174,9 @@ def test_marketplace_sync_hook_still_passes_after_stamp(repo, rel):
 
 def test_a_slot_count_mismatch_fails_and_writes_nothing(repo, rel):
     skill = repo / "plugins/h2t-dev/skills/docs-lint/SKILL.md"
-    skill.write_text(skill.read_text(encoding="utf-8").replace("`@BOOTSTRAP@ sync`", "`it`", 1),
-                     encoding="utf-8")
+    text, n = rel.BOOTSTRAP_SLOT.subn("it", skill.read_text(encoding="utf-8"), count=1)
+    assert n == 1                            # the placeholder before a release, the command after
+    skill.write_text(text, encoding="utf-8")
     before = (repo / "pyproject.toml").read_text()
     with pytest.raises(rel.ReleaseError, match="docs-lint/SKILL.md"):
         rel.stamp(repo, "4.0.0")

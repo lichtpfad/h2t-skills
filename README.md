@@ -24,7 +24,7 @@ installed (`marketplace add` clones over HTTPS); without `claude` on PATH, `sync
 them. Then one command, the same for a person and for an agent:
 
 ```bash
-@BOOTSTRAP@ sync
+uvx --isolated --python 3.12.11 --managed-python -c "https://github.com/lichtpfad/h2t-skills/releases/download/v4.0.0/constraints.txt" --from "h2t-ops @ https://github.com/lichtpfad/h2t-skills/releases/download/v4.0.0/h2t_ops-4.0.0-py3-none-any.whl" h2t-setup sync
 ```
 
 The command is the bootstrap of the current release. `scripts/release.py prepare` writes it

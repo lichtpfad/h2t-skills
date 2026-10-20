@@ -109,6 +109,13 @@ The pack is rebuilt around one package (#541), and its data moves to one root, `
   `records/` and `secrets/shared/`. It removes only the files the migration created and
   nobody changed since, restores what it added to, and lists the rest. If the migration's
   check fails because an old file changed while it ran, roll back and migrate again.
+- **`h2t-ops doctor` checks the layout:** secrets tracked in git, `secrets/local` inside a
+  synced folder, sync conflict copies, leftover temp files, the index schema, places that
+  are declared but missing, and entries in `~/.h2t` that are not places of the package
+  (`.DS_Store` and h2t-transcription's `graphs/` are known). On macOS and Linux it reports a
+  directory under `secrets/` that is not 0700 and a file that is not 0600, except in
+  `secrets/shared/`: a sync tool sets the modes there, and a Windows peer sends 0644 with
+  every edit. It never prints a value.
 - **Downloads with no path go to the `inbox` place** (or `~/.h2t/data/inbox` while it is not
   set) under a free name, and say where they went. `drive download` without `--dest` no
   longer writes into the current directory.
