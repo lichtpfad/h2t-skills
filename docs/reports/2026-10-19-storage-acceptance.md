@@ -21,11 +21,11 @@ issue: "#556"
 ```text
 Using CPython 3.12.12
 Creating virtual environment at: .venv
-   Building h2t-ops @ file:///Users/stanislav_glazov/Projects/h2t-skills/.worktrees/rc-4.0.0
-      Built h2t-ops @ file:///Users/stanislav_glazov/Projects/h2t-skills/.worktrees/rc-4.0.0
+   Building h2t-ops @ file://~/Projects/h2t-skills/.worktrees/rc-4.0.0
+      Built h2t-ops @ file://~/Projects/h2t-skills/.worktrees/rc-4.0.0
 Installed 55 packages in 209ms
-done: CLI h2t-ops 4.0.0: installed editable from /Users/stanislav_glazov/Projects/h2t-skills/.worktrees/rc-4.0.0; answers when run
-Plugins: dev-sync does not touch the marketplace plugins. Load them from the checkout: claude --plugin-dir /Users/stanislav_glazov/Projects/h2t-skills/.worktrees/rc-4.0.0/plugins/<name> (or pwsh scripts/claude-dev.ps1). The checkout itself is not updated: git is yours to run.
+done: CLI h2t-ops 4.0.0: installed editable from ~/Projects/h2t-skills/.worktrees/rc-4.0.0; answers when run
+Plugins: dev-sync does not touch the marketplace plugins. Load them from the checkout: claude --plugin-dir ~/Projects/h2t-skills/.worktrees/rc-4.0.0/plugins/<name> (or pwsh scripts/claude-dev.ps1). The checkout itself is not updated: git is yours to run.
 ```
 
 Проверка по состоянию:
@@ -35,7 +35,7 @@ h2t-ops v4.0.0
 commands: 19
 {"ok": true, "provider": "version", "result": {"ok": true, "version": "4.0.0", "reason": null, "hint": null}}
 
-h2t-setup: /Users/stanislav_glazov/.local/bin/h2t-setup
+h2t-setup: ~/.local/bin/h2t-setup
 layout.json: absent
 ```
 
@@ -55,7 +55,7 @@ H2T_MACHINE_NAME
 
 ```text
 storage: layout none, root ~/.h2t
-storage: sync config = confirmed (.dropbox at /Users/stanislav_glazov), secrets.shared = confirmed (.dropbox at /Users/stanislav_glazov), secrets.local = confirmed (.dropbox at /Users/stanislav_glazov), records = confirmed (.dropbox at /Users/stanislav_glazov), data = confirmed (.dropbox at /Users/stanislav_glazov), state = confirmed (.dropbox at /Users/stanislav_glazov), logs = confirmed (.dropbox at /Users/stanislav_glazov)
+storage: sync config = confirmed (.dropbox at ~), secrets.shared = confirmed (.dropbox at ~), secrets.local = confirmed (.dropbox at ~), records = confirmed (.dropbox at ~), data = confirmed (.dropbox at ~), state = confirmed (.dropbox at ~), logs = confirmed (.dropbox at ~)
 storage: ERROR secret-tracked: ~/.h2t/config/domains.yaml holds a value for notion_db_id and is tracked by git
 storage: ERROR secret-tracked: ~/.h2t/config/rules/skills.md holds a value for NOTION_API_TOKEN and is tracked by git
 storage: ERROR local-in-sync: ~/.h2t/secrets/local lies inside a Dropbox folder (~/.dropbox)
@@ -96,7 +96,7 @@ storage: info place-unset: inbox is not set; the package uses ~/.h2t/data/inbox 
 ```text
 done: layout 1
 layout 1: activity: 1279 test rows skipped
-layout 1: journal /Users/stanislav_glazov/.h2t/run/rollback/layout1-20261019T005847060440Z
+layout 1: journal ~/.h2t/run/rollback/layout1-20261019T005847060440Z
 ```
 
 На имени машины не остановилась: `H2T_MACHINE_NAME` задан в окружении, `--machine` не понадобился. Повторов и других флагов не было.
@@ -109,7 +109,7 @@ layout 1: journal /Users/stanislav_glazov/.h2t/run/rollback/layout1-20261019T005
 
 ```text
 storage: layout 1, root ~/.h2t
-storage: sync config = confirmed (.dropbox at /Users/stanislav_glazov), secrets.shared = confirmed (.dropbox at /Users/stanislav_glazov), secrets.local = confirmed (.dropbox at /Users/stanislav_glazov), records = confirmed (.dropbox at /Users/stanislav_glazov), data = confirmed (.dropbox at /Users/stanislav_glazov), state = confirmed (.dropbox at /Users/stanislav_glazov), logs = confirmed (.dropbox at /Users/stanislav_glazov)
+storage: sync config = confirmed (.dropbox at ~), secrets.shared = confirmed (.dropbox at ~), secrets.local = confirmed (.dropbox at ~), records = confirmed (.dropbox at ~), data = confirmed (.dropbox at ~), state = confirmed (.dropbox at ~), logs = confirmed (.dropbox at ~)
 storage: ERROR secret-tracked: ~/.h2t/config/domains.yaml holds a value for notion_db_id and is tracked by git
 storage: ERROR secret-tracked: ~/.h2t/config/rules/skills.md holds a value for NOTION_API_TOKEN and is tracked by git
 storage: ERROR local-in-sync: ~/.h2t/secrets/local lies inside a Dropbox folder (~/.dropbox)
@@ -134,25 +134,25 @@ WARN (7): все `unknown-root-entry` (.DS_Store, .gather-active, deleted-branch
 exit 0:
 
 ```text
-run               /Users/stanislav_glazov/.h2t/run  [fixed, sync never, exists]  default (the install contract; H2T_PATH_ROOT does not move it)
-config            /Users/stanislav_glazov/.h2t/config  [class, sync user, exists]  default
-secrets.shared    /Users/stanislav_glazov/.h2t/secrets/shared  [class, sync user, exists]  default
-secrets.local     /Users/stanislav_glazov/.h2t/secrets/local  [class, sync never, exists]  default
-records.sessions  /Users/stanislav_glazov/.h2t/records/sessions  [class, sync user, exists]  default
-records.activity  /Users/stanislav_glazov/.h2t/records/activity  [class, sync user, exists]  default
-records.evals     /Users/stanislav_glazov/.h2t/records/evals  [class, sync user, exists]  default
-records.imports   /Users/stanislav_glazov/.h2t/records/imports  [class, sync user, exists]  default
-data              /Users/stanislav_glazov/.h2t/data  [class, sync user, exists]  default
-state             /Users/stanislav_glazov/.h2t/state  [class, sync never, exists]  default
-logs              /Users/stanislav_glazov/.h2t/logs  [class, sync never, exists]  default
-lake              /Users/stanislav_glazov/.dor/lake  [place, sync owner, exists]  paths.yaml
-inbox             /Users/stanislav_glazov/Downloads  [place, sync owner, exists]  paths.yaml
-vault             /Users/stanislav_glazov/.dor/vault  [place, sync owner, exists]  default
-kb                /Users/stanislav_glazov/.h2t/data/kb  [place, sync owner, missing]  default (not set)
+run               ~/.h2t/run  [fixed, sync never, exists]  default (the install contract; H2T_PATH_ROOT does not move it)
+config            ~/.h2t/config  [class, sync user, exists]  default
+secrets.shared    ~/.h2t/secrets/shared  [class, sync user, exists]  default
+secrets.local     ~/.h2t/secrets/local  [class, sync never, exists]  default
+records.sessions  ~/.h2t/records/sessions  [class, sync user, exists]  default
+records.activity  ~/.h2t/records/activity  [class, sync user, exists]  default
+records.evals     ~/.h2t/records/evals  [class, sync user, exists]  default
+records.imports   ~/.h2t/records/imports  [class, sync user, exists]  default
+data              ~/.h2t/data  [class, sync user, exists]  default
+state             ~/.h2t/state  [class, sync never, exists]  default
+logs              ~/.h2t/logs  [class, sync never, exists]  default
+lake              ~/.dor/lake  [place, sync owner, exists]  paths.yaml
+inbox             ~/Downloads  [place, sync owner, exists]  paths.yaml
+vault             ~/.dor/vault  [place, sync owner, exists]  default
+kb                ~/.h2t/data/kb  [place, sync owner, missing]  default (not set)
 repo              —  [place, sync owner, missing]  cwd or --repo-root of each command
-harness           /Users/stanislav_glazov/.claude  [place, sync owner, exists]  default
+harness           ~/.claude  [place, sync owner, exists]  default
 tmp               /var/folders/p8/lyzrdnys2x1043v70tx1j67w0000gn/T  [place, sync never, exists]  default
-layout            /Users/stanislav_glazov/.h2t/layout.json  [file, sync never, exists]  default
+layout            ~/.h2t/layout.json  [file, sync never, exists]  default
 ```
 
 ### 5.3 `h2t-ops index query --project h2t-skills`
@@ -160,7 +160,7 @@ layout            /Users/stanislav_glazov/.h2t/layout.json  [file, sync never, e
 exit 0, **1 строка** (с `--limit 50` тоже 1):
 
 ```text
-2026-08-20T12:54:14.092297+00:00  macbook-pro-3  personal-os-h2t-skills-plugin-delivery-2026-08-20  /Users/stanislav_glazov/.h2t/records/sessions/macbook-pro-3/h2t-skills/personal-os-h2t-skills-plugin-delivery-2026-08-20.md
+2026-08-20T12:54:14.092297+00:00  macbook-pro-3  personal-os-h2t-skills-plugin-delivery-2026-08-20  ~/.h2t/records/sessions/macbook-pro-3/h2t-skills/personal-os-h2t-skills-plugin-delivery-2026-08-20.md
 ```
 
 Сверка по диску: в `~/.h2t/records/sessions/macbook-pro-3/h2t-skills/` ровно 1 файл — индекс совпадает с тем, что перенесено. Почему markdown-записей по h2t-skills на этой машине одна, не проверялось.
