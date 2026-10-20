@@ -155,6 +155,8 @@ def test_unknown_root_entry_skips_places_layout_and_3x_dirs():
     _write(root / "layout.json", '{"layout": 1}')
     (root / ".git-backup").mkdir()
     _write(root / "manifest-2026-08-27.txt")
+    _write(root / ".DS_Store")               # Finder writes it into any folder it opens
+    (root / "graphs").mkdir()                # h2t-transcription keeps its graphs there
     assert _texts("unknown-root-entry") == [
         "~/.h2t/.git-backup is not a place of the package",
         "~/.h2t/manifest-2026-08-27.txt is not a place of the package"]
