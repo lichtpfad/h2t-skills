@@ -88,4 +88,5 @@ def test_scan_reports_a_missing_transcript_instead_of_silence(tmp_path):
 def test_the_skill_runs_the_command_not_a_program():
     text = SKILL.read_text(encoding="utf-8")
     assert "h2t-handoff rule-scan --json" in text
-    assert "python -c" not in text
+    # `--managed-python -c` in the stamped bootstrap is a uv flag, not a program
+    assert not re.search(r"(?<![\w-])python -c", text)
