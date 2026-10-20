@@ -254,7 +254,7 @@ def _sync_conflicts() -> list[Finding]:
 
 
 def _known_root_names() -> set[str]:
-    names = {"run", paths.layout_file().name, ".stignore", *_MARKERS, *paths.ROOT_3X}
+    names = {"run", paths.layout_file().name, ".stignore", ".DS_Store", *_MARKERS, *paths.ROOT_3X}
     names |= {p.id.split(".")[0] for p in paths.PLACES if p.kind == "class"}
     # 3.x directories inside ~/.h2t: legacy-only names them, not this check
     names |= {parts[1] for parts in paths.LEGACY.values() if parts[0] == ".h2t" and len(parts) > 1}
