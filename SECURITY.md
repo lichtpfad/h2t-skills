@@ -42,10 +42,24 @@ them. Installing them grants:
 
 ## Where credentials live, and where they must not
 
-Secrets are runtime machine state, never repository state. The loader reads, in
-order: `$H2T_SECRETS_FILE`, `~/.h2t/config/secrets/secrets.env`, then
-`~/.dor/secrets/secrets.env` and its legacy sibling. Nothing in this repository
-should ever contain a real credential value.
+Secrets are runtime machine state, never repository state. Since 4.0 they live in
+one place, `~/.h2t/secrets` (the root moves with `H2T_PATH_ROOT`):
+
+- `secrets/shared/` — one `<provider>.env` per provider, plus `google.client.json`.
+  Meant to be synced between your own machines.
+- `secrets/local/` — what must not leave the machine: `google.token.json`,
+  `telegram.auth-state.json`. Never sync it.
+
+On macOS and Linux, `h2t-ops doctor` reports a directory under `secrets/` that is not
+0700 and a file that is not 0600. It skips `secrets/shared/`: a sync tool sets the modes
+there, and a Windows peer sends 0644 with every edit.
+
+Through 4.0.x the loader still falls back, key by key, to the 3.x places:
+`~/.h2t/config/secrets/*.env`, `~/.dor/secrets/secrets.env`, `~/.dor/secrets.env`.
+A key that has a value in the new files is never read from them, so a stale copy
+cannot shadow it. `$H2T_SECRETS_FILE` is no longer read; `h2t-setup layout migrate`
+takes its file as one more source. 4.1 removes the fallback. Nothing in this
+repository should ever contain a real credential value.
 
 `.gitignore` covers the credential patterns, and a pre-commit hook checks
 `marketplace.json` against every `plugin.json`. Neither is a substitute for not
