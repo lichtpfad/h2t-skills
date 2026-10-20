@@ -375,7 +375,7 @@ wheels = [
 
 [[package]]
 name = "h2t-ops"
-version = "0.2.1"
+version = "4.0.0"
 source = { editable = "." }
 dependencies = [
     { name = "google-api-python-client" },

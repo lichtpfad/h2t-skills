@@ -17,7 +17,7 @@ Use `h2t-ops research` for provider-backed web research via Exa and the URL fetc
 Run this before any other command of this skill:
 
 ```bash
-h2t-ops version --expect @VERSION@ --json
+h2t-ops version --expect 4.0.0 --json
 ```
 
 Act on the result, in this order:
@@ -31,9 +31,9 @@ Act on the result, in this order:
    (`grep -E '^(STATE|H2T_HOOK)=' ~/.h2t/run/install.env`). With `STATE=ready` the install
    is fine and PATH does not reach it: show the directory of the `H2T_HOOK=` path, ask the
    user to restart the harness, and offer `uv tool update-shell` for them to run. Without
-   it there is no install: give the user `@BOOTSTRAP@ sync`.
+   it there is no install: give the user `uvx --isolated --python 3.12.11 --managed-python -c "https://github.com/lichtpfad/h2t-skills/releases/download/v4.0.0/constraints.txt" --from "h2t-ops @ https://github.com/lichtpfad/h2t-skills/releases/download/v4.0.0/h2t_ops-4.0.0-py3-none-any.whl" h2t-setup sync`.
 4. Anything else (a non-zero exit without JSON, the usage text of an older CLI) — give the
-   user `@BOOTSTRAP@ sync`.
+   user `uvx --isolated --python 3.12.11 --managed-python -c "https://github.com/lichtpfad/h2t-skills/releases/download/v4.0.0/constraints.txt" --from "h2t-ops @ https://github.com/lichtpfad/h2t-skills/releases/download/v4.0.0/h2t_ops-4.0.0-py3-none-any.whl" h2t-setup sync`.
 <!-- version-check:end -->
 
 ## Capability decision guide
