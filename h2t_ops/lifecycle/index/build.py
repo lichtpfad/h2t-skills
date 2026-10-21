@@ -28,7 +28,9 @@ from h2t_ops.lifecycle import session_record
 MAPPING, DOMAINS = "repo-mapping.yaml", "domains.yaml"
 REQUIRED = ("session_id", "machine", "project")
 _COLUMNS = ("path", "dir", "session_id", "machine", "project", "domain", "date", "updated_at",
-            "branch", "last_commit", "done", "remains", "artifacts", "conflict")
+            "branch", "last_commit", "done", "remains", "artifacts", "conflict",
+            "name", "tool", "origin", "cwd", "repo", "worktree", "started_at", "ended_at",
+            "user_msgs", "transcript", "summary", "summary_source", "summary_stamp")
 
 
 def _load_yaml(path: Path) -> dict:
@@ -69,6 +71,11 @@ def _text(value) -> str | None:
     if isinstance(value, (list, dict)):
         return json.dumps(value, ensure_ascii=False, default=str)
     return str(value)
+
+
+def _int(value) -> int | None:
+    """NULL for an absent or non-integer value, so `user_msgs > 0` filters in SQL."""
+    return value if isinstance(value, int) and not isinstance(value, bool) else None
 
 
 def _forget_problems(conn: sqlite3.Connection, keep) -> None:
@@ -118,7 +125,12 @@ def _session_row(f: Path, leaf: Path) -> tuple:
     return (str(f), str(leaf), *(_text(meta.get(k)) for k in
             ("session_id", "machine", "project", "domain", "date", "updated_at", "branch")),
             _text(last) or "", *(_text(meta.get(k)) for k in ("done", "remains", "artifacts")),
-            int(".sync-conflict-" in f.name))
+            int(".sync-conflict-" in f.name),
+            *(_text(meta.get(k)) for k in ("name", "tool", "origin", "cwd", "repo", "worktree",
+                                           "started_at", "ended_at")),
+            _int(meta.get("user_msgs")),
+            *(_text(meta.get(k)) for k in ("transcript", "summary", "summary_source",
+                                           "summary_stamp")))
 
 
 def _read_leaf(conn: sqlite3.Connection, leaf: Path) -> None:
