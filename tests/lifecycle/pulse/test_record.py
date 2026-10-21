@@ -153,3 +153,21 @@ def test_find_open_counts_drafts_and_a_draft_plus_record_once():
     record.write_draft("r", {"tool": "codex", "cwd": cwd})
     record.drop_draft("d")
     assert record.find_open("codex", cwd) == "r"    # draft + record of one id count once
+
+
+def test_unregistered_never_overwrites_a_project():
+    p = record.upsert("u1", {"project": "x", "domain": "dev"})
+    record.upsert("u1", {"project": "unregistered", "domain": ""})
+    meta = _meta(p)
+    assert meta["project"] == "x" and meta["domain"] == "dev"
+    record.upsert("u1", {"project": "y", "domain": "ops"})
+    meta = _meta(p)
+    assert meta["project"] == "y" and meta["domain"] == "ops"
+
+
+def test_unregistered_never_overwrites_a_project_in_a_draft():
+    record.write_draft("u1", {"project": "x", "domain": "dev"})
+    record.write_draft("u1", {"project": "unregistered", "domain": ""})
+    assert record.read_draft("u1")["project"] == "x"
+    record.write_draft("u1", {"project": "y"})
+    assert record.read_draft("u1")["project"] == "y"

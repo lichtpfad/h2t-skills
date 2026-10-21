@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import io
 import json
 import subprocess
 from pathlib import Path
 
 import pytest
 
-from h2t_ops import hooks
+from h2t_ops import hook_entry, hooks
 from h2t_ops.core import paths
 from h2t_ops.hooks import session_pulse
 from h2t_ops.hooks.emit import Reply
@@ -163,3 +164,26 @@ def test_git_branch_reaches_the_draft(tmp_path):
     draft = record.read_draft("u1")
     assert draft["branch"] == "main"
     assert Path(draft["repo"]).resolve() == tmp_path.resolve()
+
+
+def test_repeated_start_after_a_record_exists_keeps_one_record(tmp_path):
+    t = _codex(tmp_path / ".codex" / "s" / "r.jsonl", "codex-tui")
+    record.upsert("u1", {"project": "unregistered", "tool": "codex", "cwd": "C:/old", "branch": "old",
+                         "started_at": "2026-10-19T10:00:00Z"})
+    session_pulse.handle(_event("SessionStart", t, tmp_path))
+    files = _records()
+    assert len(files) == 1 and not record.draft_path("u1").exists()
+    meta = _meta(files[0])
+    assert meta["started_at"] == "2026-10-19T10:00:00Z"
+    assert meta["cwd"] == str(tmp_path)
+
+
+def test_a_failing_write_reaches_hooks_log_and_exits_1(tmp_path, monkeypatch):
+    t = _codex(tmp_path / ".codex" / "s" / "r.jsonl", "codex-tui")
+    bad = record.upsert("u1", {"project": "unregistered"})
+    bad.write_bytes(b"not a record")
+    monkeypatch.setattr("sys.stdin", io.TextIOWrapper(io.BytesIO(
+        json.dumps(_event("SessionEnd", t, tmp_path)).encode())))
+    assert hook_entry.run_handler("session-pulse", session_pulse.handle) == 1
+    rows = (paths.logs_dir() / "hooks.jsonl").read_text(encoding="utf-8").splitlines()
+    assert any(json.loads(r)["hook"] == "session-pulse" for r in rows)

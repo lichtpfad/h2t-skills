@@ -62,6 +62,8 @@ def _empty(value) -> bool:
 
 def _merge(old: dict, new: dict, keep_earliest: tuple[str, ...]) -> dict:
     merged = dict(old)
+    if new.get("project") == "unregistered" and old.get("project") not in (None, "", "unregistered"):
+        new = {k: v for k, v in new.items() if k not in ("project", "domain")}   # keep the known project
     for key, value in new.items():
         if _empty(value):
             continue
@@ -111,29 +113,43 @@ def drop_draft(session_id: str) -> None:
         _remove_draft(session_id)
 
 
-def upsert(session_id: str, fields: dict, *, body: bytes | None = None,
-           keep_earliest=("started_at",)) -> Path:
-    """Create or merge the record of this session; a draft is the base of a new record."""
+def _upsert_locked(session_id: str, fields: dict, body: bytes | None,
+                   keep_earliest: tuple[str, ...]) -> Path:
     machine = get_machine_name()
     now = datetime.now(UTC)
     stamps = {"date": now.strftime("%Y-%m-%d"), "updated_at": now.strftime("%Y-%m-%dT%H:%M:%SZ")}
-    with store.locked(_lock(session_id), place="state"):
-        existing = find(session_id, machine)
-        if existing is not None:
-            meta, old_body = session_record.parse(existing.read_bytes())
-            merged = _merge(meta, {**fields, **stamps}, keep_earliest)
-            data = session_record.render(merged, old_body if body is None else body)
-            written = store.replace(existing, data, place="records.sessions")
-        else:
-            merged = _merge(read_draft(session_id), {**fields, **stamps}, keep_earliest)
-            merged.update(session_id=session_id, machine=machine)
-            if not merged.get("project"):
-                raise ValueError(f"session {session_id}: no project to file the record under")
-            data = session_record.render(merged, body or b"")
-            target = session_record.session_path(machine, merged["project"], session_id)
-            written = store.create(target, data, place="records.sessions")
-        _remove_draft(session_id)
+    existing = find(session_id, machine)
+    if existing is not None:
+        meta, old_body = session_record.parse(existing.read_bytes())
+        merged = _merge(meta, {**fields, **stamps}, keep_earliest)
+        data = session_record.render(merged, old_body if body is None else body)
+        written = store.replace(existing, data, place="records.sessions")
+    else:
+        merged = _merge(read_draft(session_id), {**fields, **stamps}, keep_earliest)
+        merged.update(session_id=session_id, machine=machine)
+        if not merged.get("project"):
+            raise ValueError(f"session {session_id}: no project to file the record under")
+        data = session_record.render(merged, body or b"")
+        target = session_record.session_path(machine, merged["project"], session_id)
+        written = store.create(target, data, place="records.sessions")
+    _remove_draft(session_id)
     return written
+
+
+def upsert(session_id: str, fields: dict, *, body: bytes | None = None,
+           keep_earliest=("started_at",)) -> Path:
+    """Create or merge the record of this session; a draft is the base of a new record."""
+    with store.locked(_lock(session_id), place="state"):
+        return _upsert_locked(session_id, fields, body, keep_earliest)
+
+
+def note_start(session_id: str, fields: dict, *, keep_earliest=("started_at",)) -> Path:
+    """SessionStart: merge into the record when this session has one, else into its draft.
+    One lock covers the lookup and the write, so a record and a draft never both appear."""
+    with store.locked(_lock(session_id), place="state"):
+        if find(session_id, get_machine_name()) is not None:
+            return _upsert_locked(session_id, fields, None, keep_earliest)
+        return _store_draft(session_id, fields, keep_earliest)
 
 
 def _norm(cwd: str) -> str:

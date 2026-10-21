@@ -2,12 +2,11 @@
 
 SessionStart writes a draft under state/; SessionEnd promotes it to a record in `records`
 when the session had a user message. Machine sessions (headless Claude, `codex exec`) and
-subagents write nothing. The hook never fails a session: any error goes to stderr.
+subagents write nothing. A failure propagates to hook_entry, which logs it to hooks.jsonl.
 """
 from __future__ import annotations
 
 import os
-import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -51,19 +50,14 @@ def _run(event: dict) -> None:
         info = transcript.read(tool, path) if raw_path and path.is_file() else None
         fields.update(ended_at=_now(), user_msgs=info.user_msgs if info else 0)
         existing = record.find(session_id, get_machine_name())
-        if existing is not None and project == "unregistered":
-            del fields["project"], fields["domain"]   # never turn a known project back into none
         if fields["user_msgs"] or existing is not None:
             record.upsert(session_id, fields)
         else:
             record.drop_draft(session_id)
     else:
-        record.write_draft(session_id, {**fields, "started_at": _now()})
+        record.note_start(session_id, {**fields, "started_at": _now()})
 
 
 def handle(event: dict) -> Reply:
-    try:
-        _run(event)
-    except Exception as exc:  # a record is never worth a failed session
-        print(f"session-pulse: {type(exc).__name__}: {exc}", file=sys.stderr)
+    _run(event)   # a failure propagates: hook_entry logs it and exits 1, which does not block
     return Reply()
