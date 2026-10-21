@@ -132,10 +132,8 @@ def read(tool: str, path: Path) -> Info | None:
                 n += 1
         else:
             cwd = cwd or rec.get("cwd", "")
-            if origin != "machine":
-                decided = _claude_origin(rec)
-                if decided and (not origin or decided == "machine"):
-                    origin = decided
+            if not origin:  # first deciding record wins, as in origin_of
+                origin = _claude_origin(rec)
             if rec.get("type") == "user" and is_user_voice(claude_text(rec.get("message"))):
                 n += 1
     if not stamps:

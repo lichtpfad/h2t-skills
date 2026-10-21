@@ -111,3 +111,53 @@ def test_subagent_paths(tmp_path):
 def test_no_timestamps_is_none(tmp_path):
     path = _write(tmp_path / "s.jsonl", [{"type": "user", "message": {"content": "x"}}])
     assert transcript.read("claude", path) is None
+
+
+def test_sidechain_record_with_cli_entrypoint_is_machine(tmp_path):
+    path = _write(
+        tmp_path / "s.jsonl",
+        [_claude_user("2026-10-01T10:00:00Z", "hi", entrypoint="cli", isSidechain=True)],
+    )
+    assert transcript.origin_of("claude", path) == "machine"
+    assert transcript.read("claude", path).origin == "machine"
+
+
+def test_read_agrees_with_origin_of_at_first_deciding_record(tmp_path):
+    path = _write(
+        tmp_path / "s.jsonl",
+        [
+            _claude_user("2026-10-01T10:00:00Z", "a", entrypoint="cli"),
+            _claude_user("2026-10-01T10:01:00Z", "b", entrypoint="cli", isSidechain=True),
+        ],
+    )
+    assert transcript.read("claude", path).origin == transcript.origin_of("claude", path)
+
+
+def test_codex_origin_of_direct(tmp_path):
+    base = tmp_path / "a"
+    base.mkdir()
+    assert transcript.origin_of("codex", _codex(base, "Codex Desktop")) == "live"
+    other = tmp_path / "b"
+    other.mkdir()
+    assert transcript.origin_of("codex", _codex(other, "codex_sdk_ts")) == "machine"
+
+
+def test_last_assistant_text(tmp_path):
+    claude = _write(
+        tmp_path / "c.jsonl",
+        [
+            {"timestamp": "t1", "type": "assistant", "message": {"content": [{"type": "text", "text": "one"}]}},
+            {"timestamp": "t2", "type": "assistant", "message": {"content": [{"type": "text", "text": "two"}]}},
+        ],
+    )
+    assert transcript.last_assistant_text("claude", claude) == "two"
+    codex = _write(
+        tmp_path / "x.jsonl",
+        [
+            {"type": "response_item", "payload": {"type": "message", "role": "assistant",
+                                                  "content": [{"type": "output_text", "text": "first"}]}},
+            {"type": "response_item", "payload": {"type": "message", "role": "assistant",
+                                                  "content": [{"type": "output_text", "text": "last"}]}},
+        ],
+    )
+    assert transcript.last_assistant_text("codex", codex) == "last"
