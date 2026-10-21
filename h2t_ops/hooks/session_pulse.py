@@ -12,7 +12,7 @@ from pathlib import Path
 
 from h2t_ops.hooks.emit import Reply
 from h2t_ops.lifecycle.gather.sessions import get_machine_name
-from h2t_ops.lifecycle.pulse import record, transcript
+from h2t_ops.lifecycle.pulse import daily, record, transcript
 
 
 def _tool_of(transcript_path: str) -> str:
@@ -56,6 +56,7 @@ def _run(event: dict) -> None:
             record.drop_draft(session_id)
     else:
         record.note_start(session_id, {**fields, "started_at": _now()})
+        daily.maybe_spawn()   # after the record is written; a failure here is logged, not swallowed
 
 
 def handle(event: dict) -> Reply:

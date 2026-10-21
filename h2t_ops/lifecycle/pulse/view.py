@@ -9,7 +9,9 @@ import json
 from dataclasses import dataclass
 from datetime import datetime
 
+from h2t_ops.core import user_config
 from h2t_ops.lifecycle.index import query
+from h2t_ops.lifecycle.pulse import daily
 
 _DASH = "—"
 
@@ -147,3 +149,17 @@ def render(rows: list[dict], footer: str) -> str:
                         lines.append(f"        {resume_command(s['tool'], s['session_id'], s['cwd'] or s['worktree'] or '')}")
     lines.append(footer)
     return "\n".join(lines)
+
+
+def footer() -> str:
+    """The line about work outside sessions, from the daily pass's audit_map answer."""
+    prefix = "Работа без сессии:"
+    if not user_config.get("sessions.audit_map"):
+        return f"{prefix} audit_map не настроен (sessions.audit_map в config/user.yaml)"
+    found = daily.read_stamp().get("audit_map")
+    if not found:
+        return f"{prefix} ещё не считалось (h2t-ops sessions daily)"
+    if found.get("error"):
+        return f"{prefix} audit_map не отработал ({found['error']})"
+    return (f"{prefix} {found['branches']} веток, {found['stash']} stash — "
+            f"{found['report']} ({found['ran_at'][:10]})")

@@ -180,7 +180,13 @@ def test_session_start_session_pulse(rig):
     subprocess.run(["git", "-C", rig.work, "init", "-q"], check=True)
     payload = {"hook_event_name": "SessionStart", "source": "startup", "session_id": "s1",
                "cwd": rig.work, "transcript_path": rig.transcript}
+    state = rig.home / ".h2t" / "state"
+    state.mkdir(parents=True, exist_ok=True)
+    # a fresh daily stamp: the measured start must not spawn the real daily pass
+    (state / "pulse-daily.json").write_text(
+        json.dumps({"ran_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}), encoding="utf-8")
     p95, _ = _measure(rig, [("session-pulse", payload)])
     drafts = list((rig.home / ".h2t" / "state" / "pulse" / "open").glob("s1.json"))
     assert drafts, "session-pulse must have written its draft"
+    assert not (state / "pulse-daily.lock").exists(), "the measured start must not spawn the daily pass"
     _judge("SessionStart (session-pulse)", p95, 1.0)

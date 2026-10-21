@@ -8,9 +8,9 @@ from datetime import date
 from h2t_ops.core.errors import UsageError
 from h2t_ops.core.output import emit
 from h2t_ops.lifecycle.index import query
-from h2t_ops.lifecycle.pulse import backfill, record, status, view
+from h2t_ops.lifecycle.pulse import backfill, daily, record, status, view
 
-_COMMANDS = ("list", "status", "backfill")
+_COMMANDS = ("list", "status", "backfill", "daily")
 
 
 class _Parser(argparse.ArgumentParser):
@@ -47,6 +47,7 @@ def _parser() -> argparse.ArgumentParser:
         .set_defaults(fn=_status)
     sub.add_parser("backfill", help="Write records for sessions the hook missed") \
         .set_defaults(fn=_backfill)
+    sub.add_parser("daily", help="The daily pass: backfill, status, summaries, audit_map")         .set_defaults(fn=_daily)
     for s in sub.choices.values():
         s.add_argument("--json", dest="as_json", action="store_true")
     return p
@@ -64,7 +65,7 @@ def _list(args) -> dict | list | str:
     if not found:
         return "нет сессий"
     hidden = "" if args.all else "; пустые и машинные скрыты (--all)"
-    return view.render(found, f"сессий: {len(found)}{hidden}")
+    return view.render(found, f"сессий: {len(found)}{hidden}\n{view.footer()}")
 
 
 def _status(args) -> dict | str:
@@ -76,6 +77,10 @@ def _status(args) -> dict | str:
 def _backfill(args) -> dict | str:
     counts = backfill.run()
     return counts if args.as_json else ", ".join(f"{k}: {v}" for k, v in counts.items())
+
+
+def _daily(args) -> dict:
+    return daily.run()
 
 
 def main(argv: list[str]) -> int:

@@ -14,7 +14,7 @@ from h2t_ops.core import paths
 from h2t_ops.hooks import session_pulse
 from h2t_ops.hooks.emit import Reply
 from h2t_ops.lifecycle import session_record
-from h2t_ops.lifecycle.pulse import record
+from h2t_ops.lifecycle.pulse import daily, record
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -24,6 +24,14 @@ def _env(monkeypatch):
     monkeypatch.setenv("H2T_MACHINE_NAME", "test-machine")
     monkeypatch.delenv("H2T_PULSE_SKIP", raising=False)
     monkeypatch.delenv("CLAUDE_CODE_ENTRYPOINT", raising=False)
+
+
+@pytest.fixture(autouse=True)
+def _spawns(monkeypatch):
+    """No test starts the real daily pass: maybe_spawn is recorded, not run."""
+    calls: list = []
+    monkeypatch.setattr(daily, "maybe_spawn", lambda *a, **k: calls.append(1) or False)
+    return calls
 
 
 def _codex(path: Path, originator: str, user_msgs: int = 1) -> Path:
@@ -59,6 +67,14 @@ def test_start_writes_a_draft_not_a_record(tmp_path):
     draft = record.read_draft("u1")
     assert draft["tool"] == "codex" and draft["origin"] == "live" and draft["started_at"]
     assert draft["project"] == "unregistered" and draft["cwd"] == str(tmp_path)
+
+
+def test_start_calls_the_daily_spawn_after_the_draft(tmp_path, _spawns):
+    t = _codex(tmp_path / ".codex" / "s.jsonl", "codex_cli_rs")
+    session_pulse.handle(_event("SessionStart", t, tmp_path))
+    assert len(_spawns) == 1 and list(record.paths.state_dir().glob("pulse/open/*.json"))
+    session_pulse.handle(_event("SessionEnd", t, tmp_path))
+    assert len(_spawns) == 1
 
 
 def test_start_then_end_writes_one_record(tmp_path):

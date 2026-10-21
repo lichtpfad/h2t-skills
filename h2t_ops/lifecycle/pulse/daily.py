@@ -1,0 +1,137 @@
+"""The daily pass: backfill, index refresh, settle, branch status, model summaries, audit_map.
+
+The first SessionStart of a day starts it detached (`maybe_spawn`); `h2t-ops sessions daily`
+runs it. Its stamp holds the time of the last run, the backfill cut-off and the audit_map answer.
+"""
+from __future__ import annotations
+
+import contextlib
+import csv
+import json
+import os
+import subprocess
+import sys
+import time
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
+
+from h2t_ops.core import paths, store, user_config
+from h2t_ops.lifecycle.index import query
+from h2t_ops.lifecycle.pulse import backfill, record, status, summary
+
+_DAY_NS = 86400 * 10**9
+_STALE_LOCK_S = 2 * 3600
+_AUDIT_TIMEOUT_S = 300
+
+
+def stamp_path() -> Path:
+    return paths.state_dir() / "pulse-daily.json"
+
+
+def lock_path() -> Path:
+    return paths.state_dir() / "pulse-daily.lock"
+
+
+def _now() -> datetime:
+    return datetime.now(UTC)
+
+
+def read_stamp() -> dict:
+    try:
+        doc = json.loads(stamp_path().read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return doc if isinstance(doc, dict) else {}
+
+
+def _fresh(stamp: dict, now: datetime) -> bool:
+    try:
+        ran = datetime.fromisoformat(stamp["ran_at"].replace("Z", "+00:00"))
+    except (KeyError, AttributeError, ValueError):
+        return False
+    return now - ran < timedelta(hours=24)
+
+
+def maybe_spawn(now: datetime | None = None) -> bool:
+    """Start the daily pass detached when the stamp is older than 24 h. One run at a time:
+    the lock is created atomically; a lock younger than 2 h means a run is going."""
+    now = now or _now()
+    if _fresh(read_stamp(), now):
+        return False
+    lock = lock_path()
+    payload = f"{os.getpid()} {now.isoformat()}"
+    try:
+        store.create(lock, payload, place="state")
+    except store.AlreadyExists:
+        if time.time() - lock.stat().st_mtime < _STALE_LOCK_S:
+            return False
+        store.remove(lock, place="state")
+        try:
+            store.create(lock, payload, place="state")
+        except store.AlreadyExists:    # another session took it between the two calls
+            return False
+    flags: dict = {"start_new_session": True}
+    if sys.platform == "win32":
+        flags = {"creationflags": subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP}
+    try:
+        subprocess.Popen([sys.executable, "-m", "h2t_ops.cli", "sessions", "daily"],
+                         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                         stderr=subprocess.DEVNULL, **flags)
+    except BaseException:
+        store.remove(lock, place="state")
+        raise
+    return True
+
+
+def audit_map() -> dict:
+    """Run the external audit_map from `sessions.audit_map` (argv list in user.yaml).
+    {} when not configured; {"error": reason} on any failure; never raises."""
+    argv = user_config.get("sessions.audit_map")
+    if not argv:
+        return {}
+    if not isinstance(argv, list):
+        return {"error": "sessions.audit_map должен быть списком аргументов"}
+    out = store.mkdir(paths.state_dir(), place="state") / "audit-map.tsv"
+    store.remove(out, place="state")
+    try:
+        done = subprocess.run([*map(str, argv), "--out", str(out)], capture_output=True,
+                              timeout=_AUDIT_TIMEOUT_S, check=False)
+    except subprocess.TimeoutExpired:
+        return {"error": f"таймаут {_AUDIT_TIMEOUT_S} с"}
+    except OSError as exc:
+        return {"error": f"не запустился: {exc.strerror or exc}"}
+    if done.returncode != 0:
+        return {"error": f"код выхода {done.returncode}"}
+    try:
+        with out.open(encoding="utf-8", newline="") as f:
+            rows = list(csv.DictReader(f, delimiter="\t"))
+        branches = sum(max(int(r["branch_count"]) - 1, 0) for r in rows)
+        stash = sum(int(r["stash_count"]) for r in rows)
+    except (OSError, KeyError, ValueError):
+        return {"error": "нет отчёта audit-map.tsv или нет колонок branch_count, stash_count"}
+    if not rows:
+        return {"error": "отчёт пуст"}
+    return {"branches": branches, "stash": stash, "report": str(out),
+            "ran_at": _now().strftime("%Y-%m-%dT%H:%M:%SZ")}
+
+
+def run() -> dict:
+    """The whole pass; stamps it and releases the lock whatever happens."""
+    try:
+        previous = read_stamp()
+        started_ns = time.time_ns()
+        since = max(int(previous.get("backfill_since_ns") or 0) - _DAY_NS, 0)
+        counts = backfill.run(since_ns=since)
+        with query.connect():                    # opening refreshes the index from the new records
+            pass
+        record.settle_open()
+        with query.connect() as conn:            # a second open sees what settle changed
+            status.refresh(conn)
+            summaries = summary.run(conn)
+        result = {"ran_at": _now().strftime("%Y-%m-%dT%H:%M:%SZ"), "backfill_since_ns": started_ns,
+                  "audit_map": audit_map()}
+        store.replace(stamp_path(), json.dumps(result, ensure_ascii=False), place="state")
+        return {**result, "backfill": counts, "summary": summaries}
+    finally:
+        with contextlib.suppress(OSError):
+            store.remove(lock_path(), place="state")
