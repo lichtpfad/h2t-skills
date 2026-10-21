@@ -68,9 +68,17 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
+      - name: Git Bash on PATH (Windows self-hosted)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Add-Content $env:GITHUB_PATH "$env:ProgramFiles\Git\bin", "$env:ProgramFiles\Git\usr\bin"   # bash + grep/awk/sed
       - uses: actions/setup-python@v5
+        if: runner.os != 'Windows'
         with: { python-version: "${{ inputs.python-version }}" }
-      - run: pip install ruff
+      - uses: astral-sh/setup-uv@v6
+        if: runner.os == 'Windows'
+        with: { python-version: "${{ inputs.python-version }}", activate-environment: true }
+      - run: if command -v uv >/dev/null; then uv pip install ruff; else pip install ruff; fi
       - name: ruff check
         working-directory: ${{ inputs.working-dir }}
         run: ruff check ${{ inputs.ruff-paths }}
@@ -81,13 +89,21 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+      - name: Git Bash on PATH (Windows self-hosted)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Add-Content $env:GITHUB_PATH "$env:ProgramFiles\Git\bin", "$env:ProgramFiles\Git\usr\bin"   # bash + grep/awk/sed
       - uses: actions/setup-python@v5
+        if: runner.os != 'Windows'
         with: { python-version: "${{ inputs.python-version }}", cache: pip }
+      - uses: astral-sh/setup-uv@v6
+        if: runner.os == 'Windows'
+        with: { python-version: "${{ inputs.python-version }}", activate-environment: true }
       - name: install
         working-directory: ${{ inputs.working-dir }}
         shell: bash
         run: |
-          python -m pip install --upgrade pip pytest
+          if command -v uv >/dev/null; then uv pip install pytest; else python -m pip install --upgrade pip pytest; fi
           if [ -n "${{ inputs.install }}" ]; then
             ${{ inputs.install }}
           elif [ -f pyproject.toml ]; then
@@ -105,6 +121,10 @@ jobs:
     timeout-minutes: 2
     steps:
       - uses: actions/checkout@v4
+      - name: Git Bash on PATH (Windows self-hosted)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Add-Content $env:GITHUB_PATH "$env:ProgramFiles\Git\bin", "$env:ProgramFiles\Git\usr\bin"   # bash + grep/awk/sed
       - name: plans/specs contain plans only
         run: |
           bad=$(git ls-files docs/superpowers/plans docs/superpowers/specs \
@@ -129,6 +149,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
+      - name: Git Bash on PATH (Windows self-hosted)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Add-Content $env:GITHUB_PATH "$env:ProgramFiles\Git\bin", "$env:ProgramFiles\Git\usr\bin"   # bash + grep/awk/sed
       - name: closed issues have a commit
         env:
           GH_TOKEN: ${{ github.token }}
@@ -158,8 +182,16 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
+      - name: Git Bash on PATH (Windows self-hosted)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Add-Content $env:GITHUB_PATH "$env:ProgramFiles\Git\bin", "$env:ProgramFiles\Git\usr\bin"   # bash + grep/awk/sed
       - uses: actions/setup-python@v5
+        if: runner.os != 'Windows'
         with: { python-version: "${{ inputs.python-version }}" }
+      - uses: astral-sh/setup-uv@v6
+        if: runner.os == 'Windows'
+        with: { python-version: "${{ inputs.python-version }}", activate-environment: true }
       - name: run the truth gate commands
         shell: bash
         run: |
@@ -186,6 +218,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }   # history, not just the tip: a secret removed later is still a leak
+      - name: Git Bash on PATH (Windows self-hosted)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Add-Content $env:GITHUB_PATH "$env:ProgramFiles\Git\bin", "$env:ProgramFiles\Git\usr\bin"   # bash + grep/awk/sed
       - name: install gitleaks (binary from release, no license needed)
         if: runner.os != 'Windows'
         run: |
@@ -213,6 +249,10 @@ jobs:
       INFRA_TOKEN: ${{ secrets.INFRA_TOKEN }}
     steps:
       - uses: actions/checkout@v4
+      - name: Git Bash on PATH (Windows self-hosted)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Add-Content $env:GITHUB_PATH "$env:ProgramFiles\Git\bin", "$env:ProgramFiles\Git\usr\bin"   # bash + grep/awk/sed
       - name: token present?
         id: tok
         run: |
