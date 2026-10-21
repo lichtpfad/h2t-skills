@@ -10,6 +10,7 @@ project from the frontmatter.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
@@ -156,12 +157,12 @@ def _norm(cwd: str) -> str:
     return str(cwd).replace("\\", "/").rstrip("/").lower()
 
 
-def find_open(tool: str, cwd: str) -> str | None:
-    """The one session of this machine with this tool and cwd and no ended_at, in a draft or
-    a record; None when there are none or several. A draft and a record of one id count once."""
+def open_ids(tool: str, cwd: str) -> list[str]:
+    """Ids of this machine's sessions with this tool and cwd and no ended_at, in a draft or a
+    record, sorted. A draft and a record of one id count once."""
     machine = get_machine_name()
     wanted = _norm(cwd)
-    open_ids: set[str] = set()
+    found: set[str] = set()
     known: set[str] = set()
     for path in paths.records("sessions", machine).glob("*/*.md"):
         try:
@@ -170,14 +171,42 @@ def find_open(tool: str, cwd: str) -> str | None:
             continue
         sid = str(meta.get("session_id") or path.stem)
         known.add(sid)
-        if meta.get("tool") == tool and _norm(meta.get("cwd") or "") == wanted \
-                and not meta.get("ended_at"):
-            open_ids.add(sid)
+        if meta.get("tool") == tool and _norm(meta.get("cwd") or "") == wanted                 and not meta.get("ended_at"):
+            found.add(sid)
     for path in (paths.state_dir() / "pulse" / "open").glob("*.json"):
         if path.stem in known:
             continue
         draft = read_draft(path.stem)
-        if draft.get("tool") == tool and _norm(draft.get("cwd") or "") == wanted \
-                and not draft.get("ended_at"):
-            open_ids.add(path.stem)
-    return next(iter(open_ids)) if len(open_ids) == 1 else None
+        if draft.get("tool") == tool and _norm(draft.get("cwd") or "") == wanted                 and not draft.get("ended_at"):
+            found.add(path.stem)
+    return sorted(found)
+
+
+def find_open(tool: str, cwd: str) -> str | None:
+    """The one open session of this tool and cwd; None when there are none or several."""
+    ids = open_ids(tool, cwd)
+    return ids[0] if len(ids) == 1 else None
+
+
+# Filled by the Codex probe (Task 1 Step 2); while empty, a Codex handoff takes the slug path.
+CODEX_ID_VARS: tuple[str, ...] = ()        # env vars that carry a Codex session UUID
+CODEX_SHELL_MARKERS: tuple[str, ...] = ()  # env vars whose presence marks a Codex shell
+
+
+def in_codex_shell() -> bool:
+    return any(os.environ.get(name) for name in CODEX_SHELL_MARKERS)
+
+
+def program_session() -> tuple[str, str] | None:
+    """(tool, session id) of the program running this process, or None when it is unknown."""
+    claude = os.environ.get("CLAUDE_CODE_SESSION_ID", "")
+    if claude:
+        return "claude", claude
+    for name in CODEX_ID_VARS:
+        if os.environ.get(name):
+            return "codex", os.environ[name]
+    if in_codex_shell():
+        sid = find_open("codex", os.getcwd())
+        if sid:
+            return "codex", sid
+    return None

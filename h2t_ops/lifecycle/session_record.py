@@ -13,7 +13,7 @@ import yaml
 from h2t_ops.core import paths
 
 FIELDS = ("session_id", "name", "tool", "origin", "cwd", "repo", "worktree", "started_at",
-          "ended_at", "user_msgs", "transcript", "machine", "project", "domain", "date",
+          "ended_at", "user_msgs", "transcript", "candidates", "machine", "project", "domain", "date",
           "updated_at", "branch", "commits", "done", "remains", "artifacts", "summary",
           "summary_source", "summary_stamp", "migrated_from")
 
