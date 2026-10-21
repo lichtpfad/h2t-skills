@@ -115,3 +115,23 @@ def test_since_skips_old_files(tmp_path):
     assert out["seen"] == 1 and out["written"] == 1
     assert record.find("old-1", "test-machine") is None
     assert record.find("new-1", "test-machine") is not None
+
+
+def test_one_unreadable_transcript_does_not_stop_the_pass(tmp_path, monkeypatch):
+    cwd = str(tmp_path / "work")
+    claude_root = tmp_path / "claude"
+    _claude(claude_root, "bad-1", cwd)
+    _claude(claude_root, "good-1", cwd)
+    real_read = backfill.transcript.read
+
+    def flaky(tool, path):
+        if path.stem == "bad-1":
+            raise OSError("gone")
+        return real_read(tool, path)
+
+    monkeypatch.setattr(backfill.transcript, "read", flaky)
+    out = backfill.run(claude_root, tmp_path / "codex")
+    assert out["errors"] == 1
+    assert out["written"] == 1
+    assert record.find("good-1", "test-machine") is not None
+    assert record.find("bad-1", "test-machine") is None

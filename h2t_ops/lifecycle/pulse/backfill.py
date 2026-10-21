@@ -56,27 +56,35 @@ def run(claude_root: Path | None = None, codex_root: Path | None = None, since_n
     claude_root = claude_root if claude_root is not None else paths.home() / ".claude" / "projects"
     codex_root = codex_root if codex_root is not None else paths.home() / ".codex" / "sessions"
     machine = get_machine_name()
-    counts = {"seen": 0, "written": 0, "skipped_machine": 0, "skipped_empty": 0, "unknown": 0}
+    counts = {"seen": 0, "written": 0, "skipped_machine": 0, "skipped_empty": 0, "unknown": 0,
+              "errors": 0}
     sources = (("claude", _files(claude_root, "*/*.jsonl", since_ns)),
                ("codex", _files(codex_root, "**/*.jsonl", since_ns)))
     for tool, files in sources:
         for path in files:
-            info = transcript.read(tool, path)
-            if info is None:
-                continue
-            counts["seen"] += 1
-            if info.origin == "machine":
-                counts["skipped_machine"] += 1
-                continue
-            if info.user_msgs == 0:
-                counts["skipped_empty"] += 1
-                continue
-            if info.origin == "unknown":
-                counts["unknown"] += 1
-            existing = record.find(info.session_id, machine)
-            if existing is not None:
-                counts["written"] += _update_existing(existing, info)
-                continue
-            record.upsert(info.session_id, _new_fields(info))
-            counts["written"] += 1
+            try:
+                _one(tool, path, machine, counts)
+            except OSError:   # deleted or unreadable since it was listed
+                counts["errors"] += 1
     return counts
+
+
+def _one(tool: str, path: Path, machine: str, counts: dict) -> None:
+    info = transcript.read(tool, path)
+    if info is None:
+        return
+    counts["seen"] += 1
+    if info.origin == "machine":
+        counts["skipped_machine"] += 1
+        return
+    if info.user_msgs == 0:
+        counts["skipped_empty"] += 1
+        return
+    if info.origin == "unknown":
+        counts["unknown"] += 1
+    existing = record.find(info.session_id, machine)
+    if existing is not None:
+        counts["written"] += _update_existing(existing, info)
+        return
+    record.upsert(info.session_id, _new_fields(info))
+    counts["written"] += 1
