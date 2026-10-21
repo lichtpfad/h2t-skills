@@ -31,9 +31,13 @@ status and a resume command for each.
 The list and the page print one line per session:
 
 ```
-cd "<cwd>"; claude --resume <session-id>
-codex resume <session-id> -C "<cwd>"
+cd <cwd>; claude --resume <session-id>
+codex resume <session-id> -C <cwd>
 ```
+
+The `<cwd>` is quoted for the shell of the machine that renders the line: `shlex.quote` on
+POSIX (a plain path stays bare), PowerShell single quotes on Windows (`'C:\a b'`, a quote is
+doubled). Paste the line as shown.
 
 ## Claude
 

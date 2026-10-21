@@ -71,9 +71,20 @@ def _meta(sid: str) -> dict:
     return session_record.parse(found.read_bytes())[0]
 
 
-def test_resume_commands():
-    assert view.resume_command("codex", "u1", "C:/r") == 'codex resume u1 -C "C:/r"'
-    assert view.resume_command("claude", "u1", "C:/r") == 'cd "C:/r"; claude --resume u1'
+@pytest.mark.parametrize("windows, cwd, codex, claude", [
+    (False, "/home/a/r", "codex resume u1 -C /home/a/r", "cd /home/a/r; claude --resume u1"),
+    (False, "/home/my repo", "codex resume u1 -C '/home/my repo'", "cd '/home/my repo'; claude --resume u1"),
+    (False, '/h/a"b', "codex resume u1 -C '/h/a\"b'", "cd '/h/a\"b'; claude --resume u1"),
+    (False, "/h/a$(x)", "codex resume u1 -C '/h/a$(x)'", "cd '/h/a$(x)'; claude --resume u1"),
+    (True, "C:/r", "codex resume u1 -C 'C:/r'", "cd 'C:/r'; claude --resume u1"),
+    (True, "C:\a b\c", "codex resume u1 -C 'C:\a b\c'", "cd 'C:\a b\c'; claude --resume u1"),
+    (True, "C:\a'b", "codex resume u1 -C 'C:\a''b'", "cd 'C:\a''b'; claude --resume u1"),
+    (True, "C:\$x`y", "codex resume u1 -C 'C:\$x`y'", "cd 'C:\$x`y'; claude --resume u1"),
+])
+def test_resume_commands(monkeypatch, windows, cwd, codex, claude):
+    monkeypatch.setattr(view, "_is_windows", lambda: windows)
+    assert view.resume_command("codex", "u1", cwd) == codex
+    assert view.resume_command("claude", "u1", cwd) == claude
 
 
 @pytest.fixture
@@ -284,7 +295,8 @@ def test_render_groups_and_resume_lines(three):
     assert out.index("summary of C") < out.index("summary of B")
     # the resume command sits on the line right after its session line
     i = next(n for n, ln in enumerate(lines) if "summary of B" in ln)
-    assert lines[i + 1].strip() == view.resume_command("codex", "B", lines[i + 1].split('"')[1])
+    cwd_b = next(r["cwd"] for r in view.rows(view.Filters()) if r["session_id"] == "B")
+    assert lines[i + 1].strip() == view.resume_command("codex", "B", cwd_b)
 
 
 def test_render_issue_unknown_shows_question_mark(tmp_path):

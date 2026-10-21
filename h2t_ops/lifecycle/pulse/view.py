@@ -6,6 +6,8 @@ Reads the index only; `cli list` settles open sessions and local branch status f
 from __future__ import annotations
 
 import json
+import os
+import shlex
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -87,10 +89,22 @@ def rows(f: Filters) -> list[dict]:
     return out
 
 
+def _is_windows() -> bool:
+    return os.name == "nt"
+
+
+def _quote(cwd: str) -> str:
+    """The cwd as one shell word: POSIX quoting, or PowerShell single quotes on Windows
+    (a single quote is doubled; `$` and the backtick stay literal inside them)."""
+    if _is_windows():
+        return "'" + cwd.replace("'", "''") + "'"
+    return shlex.quote(cwd)
+
+
 def resume_command(tool: str, session_id: str, cwd: str) -> str:
     if tool == "codex":
-        return f'codex resume {session_id} -C "{cwd}"'
-    return f'cd "{cwd}"; claude --resume {session_id}'
+        return f"codex resume {session_id} -C {_quote(cwd)}"
+    return f"cd {_quote(cwd)}; claude --resume {session_id}"
 
 
 def _local_time(stamp: str | None) -> str:
