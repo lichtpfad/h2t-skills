@@ -78,6 +78,8 @@ the copies from drifting.
 
 ## Codex
 
-Codex runs no hooks (spec §4), so this check is also the only version check a Codex session
-gets: in Claude Code the `SessionStart` hook reports a mismatch once per session, in Codex
-nothing does. The outcomes above are the same in both.
+Codex runs hooks (Codex 0.153 or later, `hooks` stable), but this pack's Codex hook is
+installed by hand, per `session-pulse.md`, and it records sessions, not versions. So this
+check is still the only version check a Codex session gets: in Claude Code the `SessionStart`
+hook reports a mismatch once per session, in Codex nothing does. The outcomes above are the
+same in both.
