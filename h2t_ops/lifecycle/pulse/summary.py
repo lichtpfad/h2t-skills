@@ -30,7 +30,9 @@ def excerpt(tool: str, path: Path, limit: int = 12000) -> str:
     text = "\n\n".join(p for p in parts if p.strip())
     if len(text) <= limit:
         return text
-    keep = max(limit - len(_CUT), 0)
+    if limit <= len(_CUT):
+        return text[:max(limit, 0)]
+    keep = limit - len(_CUT)
     head = keep // 2
     return text[:head] + _CUT + text[len(text) - (keep - head):]
 
@@ -69,8 +71,9 @@ def run(conn: sqlite3.Connection, *, ask=_ask_claude, cap: int = 30) -> dict:
         if asked >= cap:
             break
         asked += 1
+        prompt = _PROMPT + excerpt(row["tool"] or "claude", path)
         try:
-            answer = (ask(_PROMPT + excerpt(row["tool"] or "claude", path)) or "").strip()
+            answer = (ask(prompt) or "").strip()
         except Exception:                     # the model is a helper; a session never fails the run
             answer = ""
         if not answer:

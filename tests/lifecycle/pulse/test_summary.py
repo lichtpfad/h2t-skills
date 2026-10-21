@@ -120,3 +120,20 @@ def test_excerpt_keeps_head_and_tail(tmp_path):
     assert len(out) <= 1000
     assert out.startswith("HEAD")
     assert out.endswith("TAIL")
+
+
+@pytest.mark.parametrize("limit", [0, 3, 5, 100])
+def test_excerpt_never_exceeds_its_limit(tmp_path, limit):
+    tr = _transcript(tmp_path / "t.jsonl", user="u" * 500, assistant="a" * 500)
+    assert len(summary.excerpt("claude", tr, limit=limit)) <= limit
+
+
+def test_a_defect_in_excerpt_building_is_not_a_skipped_answer(tmp_path, monkeypatch):
+    _session("s1", tmp_path)
+
+    def broken(*args, **kw):
+        raise ValueError("excerpt bug")
+
+    monkeypatch.setattr(summary, "excerpt", broken)
+    with pytest.raises(ValueError):
+        _run(lambda p: "x")
