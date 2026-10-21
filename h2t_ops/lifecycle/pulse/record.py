@@ -201,6 +201,10 @@ def _read(tool: str, raw_path: str) -> transcript.Info | None:
 
 def _settle_draft(session_id: str) -> bool:
     draft = read_draft(session_id)
+    raw = draft.get("transcript") or ""
+    if raw and transcript.is_subagent(Path(raw)):
+        drop_draft(session_id)          # a subagent never becomes a record
+        return True
     info = _read(draft.get("tool") or "", draft.get("transcript") or "")
     if info is None:
         return False
@@ -226,7 +230,10 @@ def _settle_record(path: Path) -> bool:
         return False
     if meta.get("ended_at") and meta.get("origin") not in (None, "", "unknown"):
         return False
-    info = _read(meta.get("tool") or "", meta.get("transcript") or "")
+    raw = meta.get("transcript") or ""
+    if raw and transcript.is_subagent(Path(raw)):
+        return False
+    info = _read(meta.get("tool") or "", raw)
     if info is None:
         return False
     fields: dict = {}

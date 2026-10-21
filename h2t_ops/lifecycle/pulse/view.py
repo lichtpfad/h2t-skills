@@ -23,7 +23,7 @@ class Filters:
     pr: str | None = None            # the PR label of the branch
     tool: str | None = None
     since: str | None = None         # YYYY-MM-DD: sessions started on or after it
-    all: bool = False                # also machine, unknown-origin and empty sessions
+    all: bool = False                # also unknown-origin and empty sessions (machine: never)
 
 
 _SQL = ("SELECT s.*, b.files AS b_files, b.branch_state AS b_state, b.pr AS b_pr, "
@@ -52,6 +52,8 @@ def _summary(row: dict) -> tuple[str, str]:
 
 
 def _keep(row: dict, f: Filters) -> bool:
+    if row["origin"] == "machine":       # never listed, with or without --all
+        return False
     if not f.all and (row["origin"] != "live" or not row["user_msgs"]):
         return False
     if f.domain and row["domain"] != f.domain:

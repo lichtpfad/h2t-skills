@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from datetime import date
 
 from h2t_ops.core.errors import UsageError
 from h2t_ops.core.output import emit
@@ -19,14 +20,28 @@ class _Parser(argparse.ArgumentParser):
         raise UsageError(message, hint=f"{self.prog} --help")
 
 
+def _since(value: str) -> str:
+    """`YYYY-MM-DD` or `today` (local date); anything else is a usage error."""
+    if value == "today":
+        return date.today().isoformat()
+    try:
+        return date.fromisoformat(value).isoformat() if len(value) == 10 else _bad(value)
+    except ValueError:
+        return _bad(value)
+
+
+def _bad(value: str):
+    raise argparse.ArgumentTypeError(f"{value!r} is not YYYY-MM-DD or today")
+
+
 def _parser() -> argparse.ArgumentParser:
     p = _Parser(prog="h2t-ops sessions")
     sub = p.add_subparsers(dest="cmd", required=True, parser_class=_Parser)
     ls = sub.add_parser("list", help="Sessions by domain, project, repo, branch (default)")
     for flag in ("domain", "project", "repo", "status", "pr", "tool"):
         ls.add_argument(f"--{flag}")
-    ls.add_argument("--since", help="YYYY-MM-DD: sessions started on or after it")
-    ls.add_argument("--all", action="store_true", help="Also machine, unknown and empty sessions")
+    ls.add_argument("--since", type=_since, help="YYYY-MM-DD or today: sessions started on or after it")
+    ls.add_argument("--all", action="store_true", help="Also unknown-origin and empty sessions")
     ls.set_defaults(fn=_list)
     sub.add_parser("status", help="Refresh PR and issue status of every branch (gh, network)") \
         .set_defaults(fn=_status)

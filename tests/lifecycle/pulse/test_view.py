@@ -109,7 +109,15 @@ def test_unknown_hidden_unless_all(tmp_path):
     _rec("U", tmp_path, origin="unknown")
     _rec("M", tmp_path, origin="machine")
     assert _ids(view.rows(view.Filters())) == {"L"}
-    assert _ids(view.rows(view.Filters(all=True))) == {"L", "U", "M"}
+    assert _ids(view.rows(view.Filters(all=True))) == {"L", "U"}
+
+
+def test_machine_never_listed_even_with_all(tmp_path, capsys):
+    _rec("L", tmp_path)
+    _rec("M", tmp_path, origin="machine")
+    assert _ids(view.rows(view.Filters(all=True))) == {"L"}
+    assert cli.main(["list", "--all", "--json"]) == 0
+    assert [r["session_id"] for r in json.loads(capsys.readouterr().out)["result"]] == ["L"]
 
 
 def test_empty_session_hidden(tmp_path):
@@ -156,7 +164,25 @@ def test_settle_open_hides_a_machine_session(tmp_path):
     assert _meta("cx-rec")["origin"] == "machine"                 # the file stays
     assert record.find("cx-rec", "test-machine").exists()
     assert _ids(view.rows(view.Filters())) == set()
-    assert _ids(view.rows(view.Filters(all=True))) == {"cx-rec"}
+    assert _ids(view.rows(view.Filters(all=True))) == set()       # machine is never listed
+
+
+def test_settle_open_never_promotes_a_subagent_draft(tmp_path):
+    cwd = str(tmp_path / "r1")
+    tr = _claude_tr(tmp_path / "t" / "subagents" / "agent-x.jsonl", cwd, users=1)
+    record.write_draft("sub", {"tool": "claude", "origin": "live", "cwd": cwd, "project": "p1",
+                               "transcript": str(tr)})
+    record.settle_open()
+    assert record.find("sub", "test-machine") is None
+    assert not record.draft_path("sub").exists()
+
+
+def test_settle_open_skips_a_subagent_record(tmp_path):
+    cwd = str(tmp_path / "r1")
+    tr = _claude_tr(tmp_path / "t" / "agent-y.jsonl", cwd, users=2)
+    _rec("subrec", tmp_path, transcript=str(tr), user_msgs=0)
+    assert record.settle_open() == 0
+    assert _meta("subrec")["user_msgs"] == 0
 
 
 def test_settle_open_skips_an_unreadable_transcript(tmp_path, monkeypatch):
@@ -296,6 +322,21 @@ def test_cli_status_refreshes_with_a_stub(tmp_path, monkeypatch, capsys):
     assert cli.main(["status"]) == 0
     assert called == [1]
     assert "4" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("bad", ["garbage", "2026-13-40", "10/10/2026", ""])
+def test_since_bad_value_is_a_usage_error(bad, capsys):
+    assert cli.main(["list", "--since", bad]) == 2
+    assert "--since" in capsys.readouterr().err
+
+
+def test_since_today_is_accepted(tmp_path, capsys):
+    _rec("old", tmp_path, started_at="2020-01-01T00:00:00Z")
+    from datetime import datetime
+    _rec("new", tmp_path, started_at=datetime.now().astimezone().strftime("%Y-%m-%dT12:00:00Z"))
+    assert cli.main(["list", "--since", "today"]) == 0
+    out = capsys.readouterr().out
+    assert "summary of new" in out and "summary of old" not in out
 
 
 def test_cli_unknown_subcommand_is_a_usage_error(capsys):
