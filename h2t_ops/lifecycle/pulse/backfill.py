@@ -1,7 +1,8 @@
 """Write records for sessions the hook missed, from the Claude and Codex transcripts.
 
-A session that already has a record changes only in `ended_at` and `origin`; a run where
-nothing changes writes nothing. Machine sessions, subagents and sessions without a user
+A session that already has a record changes only in `ended_at`, `origin` and fields the record
+lacks (`user_msgs` when missing or smaller, `transcript`, `tool`, `cwd`, `started_at`); a run
+where nothing changes writes nothing. Machine sessions, subagents and sessions without a user
 message get no record.
 """
 
@@ -28,13 +29,20 @@ def _files(root: Path, pattern: str, since_ns: int) -> Iterator[Path]:
 
 
 def _update_existing(existing: Path, info: transcript.Info) -> bool:
-    """Change `ended_at` / `origin` of a recorded session; True when something was written."""
+    """Change `ended_at`, `origin` and missing fields of a recorded session; True when written."""
     meta, _ = session_record.parse(existing.read_bytes())
     fields: dict = {}
     if info.end and info.end > str(meta.get("ended_at") or ""):
         fields["ended_at"] = info.end
     if meta.get("origin") in (None, "", "unknown") and info.origin != "unknown":
         fields["origin"] = info.origin
+    if info.user_msgs > int(meta.get("user_msgs") or 0):
+        fields["user_msgs"] = info.user_msgs
+    for key, value in (("transcript", info.path), ("tool", info.tool), ("cwd", info.cwd)):
+        if value and not meta.get(key):
+            fields[key] = value
+    if info.start and (not meta.get("started_at") or info.start < str(meta["started_at"])):
+        fields["started_at"] = info.start
     if not fields:
         return False
     record.upsert(info.session_id, fields)
@@ -45,7 +53,7 @@ def _new_fields(info: transcript.Info) -> dict:
     project, domain = record.project_of(info.cwd)
     fields = {
         "tool": info.tool, "origin": info.origin, "cwd": info.cwd, "transcript": info.path,
-        "started_at": info.start, "ended_at": info.end, "project": project, "domain": domain,
+        "started_at": info.start, "ended_at": info.end, "user_msgs": info.user_msgs, "project": project, "domain": domain,
     }
     if info.cwd and Path(info.cwd).is_dir():
         fields.update(record.git_facts(info.cwd))

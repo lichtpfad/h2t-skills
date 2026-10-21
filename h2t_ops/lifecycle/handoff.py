@@ -148,6 +148,17 @@ def _degraded(session_id: str, spool_path, distinct_artifacts: list, exc: Except
     }
 
 
+def _known_user_msgs(session_uuid: str) -> int:
+    existing = record.find(session_uuid, _machine())
+    if existing is None:
+        return 0
+    try:
+        meta, _ = session_record.parse(existing.read_bytes())
+        return int(meta.get("user_msgs") or 0)
+    except (OSError, ValueError, TypeError):
+        return 0
+
+
 def write_handoff(
     session_id: str,
     domain: str,
@@ -229,6 +240,7 @@ def write_handoff(
         session_uuid = program[1]
         meta.update(name=session_id, tool=program[0])
         meta.pop("session_id")
+        meta["user_msgs"] = max(_known_user_msgs(session_uuid), 1)   # a handoff means the session had work
         try:
             persisted_md_path = record.upsert(session_uuid, meta, body=md_content.encode("utf-8"))
         except (OSError, H2TError, ValueError) as exc:

@@ -147,3 +147,26 @@ def test_a_write_failure_is_not_counted_as_a_transcript_error(tmp_path, monkeypa
     monkeypatch.setattr(backfill.record, "upsert", boom)
     with pytest.raises(OSError, match="disk full"):
         backfill.run(claude_root, tmp_path / "codex")
+
+
+def test_missed_session_end_then_handoff_then_backfill_is_listed(tmp_path, monkeypatch):
+    """Draft only -> handoff writes the UUID record -> backfill repairs it from the transcript."""
+    from h2t_ops.lifecycle import handoff
+    from h2t_ops.lifecycle.pulse import view
+    cwd = str(tmp_path / "work")
+    claude_root = tmp_path / "claude"
+    tr = _claude(claude_root, "u-hole", cwd, texts=("a", "b", "c"))
+    record.write_draft("u-hole", {"project": "x", "tool": "claude",
+                                  "started_at": "2026-10-01T10:00:00Z"})
+    monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "u-hole")
+    monkeypatch.chdir(tmp_path)
+    handoff.write_handoff("dev-x-topic-2026-10-01", "dev", "x", "- did", "- [ ] next", [])
+    assert _meta("u-hole")["user_msgs"] >= 1
+    backfill.run(claude_root, tmp_path / "codex")
+    meta = _meta("u-hole")
+    assert meta["user_msgs"] == 3 and meta["transcript"] == str(tr)
+    assert meta["tool"] == "claude" and meta["cwd"] == cwd and meta["ended_at"]
+    assert [r["session_id"] for r in view.rows(view.Filters())] == ["u-hole"]
+    before = record.find("u-hole", "test-machine").read_bytes()
+    assert backfill.run(claude_root, tmp_path / "codex")["written"] == 0
+    assert record.find("u-hole", "test-machine").read_bytes() == before
