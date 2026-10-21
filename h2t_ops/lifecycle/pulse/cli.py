@@ -3,14 +3,16 @@
 from __future__ import annotations
 
 import argparse
+import webbrowser
 from datetime import date
+from pathlib import Path
 
 from h2t_ops.core.errors import UsageError
 from h2t_ops.core.output import emit
 from h2t_ops.lifecycle.index import query
-from h2t_ops.lifecycle.pulse import backfill, daily, record, status, view
+from h2t_ops.lifecycle.pulse import backfill, daily, page, record, status, view
 
-_COMMANDS = ("list", "status", "backfill", "daily")
+_COMMANDS = ("list", "status", "backfill", "daily", "page")
 
 
 class _Parser(argparse.ArgumentParser):
@@ -48,6 +50,10 @@ def _parser() -> argparse.ArgumentParser:
     sub.add_parser("backfill", help="Write records for sessions the hook missed") \
         .set_defaults(fn=_backfill)
     sub.add_parser("daily", help="The daily pass: backfill, status, summaries, audit_map")         .set_defaults(fn=_daily)
+    pg = sub.add_parser("page", help="Build the browser page state/sessions.html and open it")
+    pg.add_argument("--no-open", action="store_true", help="Build only")
+    pg.add_argument("--out", type=Path, help="Write the page here instead of state/sessions.html")
+    pg.set_defaults(fn=_page)
     for s in sub.choices.values():
         s.add_argument("--json", dest="as_json", action="store_true")
     return p
@@ -81,6 +87,16 @@ def _backfill(args) -> dict | str:
 
 def _daily(args) -> dict:
     return daily.run()
+
+
+def _page(args) -> dict | str:
+    record.settle_open()
+    with query.connect() as conn:
+        status.local_status(conn)
+    path = page.build(args.out)
+    if not args.no_open:
+        webbrowser.open(path.as_uri())
+    return {"path": str(path)} if args.as_json else str(path)
 
 
 def main(argv: list[str]) -> int:
