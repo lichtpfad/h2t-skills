@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import sys
@@ -48,6 +49,7 @@ def test_maybe_spawn_once_a_day(popen):
 
 
 def test_a_missing_stamp_spawns(popen):
+    daily.stamp_path().unlink(missing_ok=True)
     assert daily.maybe_spawn() is True and len(popen) == 1
 
 
@@ -131,3 +133,60 @@ def test_sessions_daily_prints_the_result_as_json(monkeypatch, capsys):
     monkeypatch.setattr(daily, "run", lambda: {"ran_at": "x", "audit_map": {}})
     assert cli.main(["daily", "--json"]) == 0
     assert '"ran_at": "x"' in capsys.readouterr().out
+
+
+def _stale_lock() -> None:
+    lock = daily.lock_path()
+    store.create(lock, "9999", place="state")
+    old = time.time() - 3 * 3600
+    os.utime(lock, (old, old))
+
+
+def test_two_sessions_on_a_stale_lock_spawn_once(popen, monkeypatch):
+    """The other session finishes its takeover while this one waits for the takeover lock."""
+    _stamp(timedelta(hours=30))
+    _stale_lock()
+    real = store.locked
+
+    @contextlib.contextmanager
+    def racing(path, **kw):
+        with real(path, **kw):
+            os.utime(daily.lock_path(), None)      # the peer already replaced the lock: it is fresh now
+            yield
+
+    monkeypatch.setattr(daily.store, "locked", racing)
+    assert daily.maybe_spawn() is False and popen == []
+
+
+def test_a_lock_that_vanishes_during_takeover_is_not_ours(popen, monkeypatch):
+    _stamp(timedelta(hours=30))
+
+    def exists(*a, **k):
+        raise store.AlreadyExists("lock")
+
+    monkeypatch.setattr(daily.store, "create", exists)
+    assert daily.maybe_spawn() is False and popen == []       # no lock file to stat
+
+
+@pytest.mark.parametrize("ran_at", ["2026-10-20T08:00:00", "garbage", None])
+def test_an_unusable_ran_at_is_stale(popen, ran_at):
+    store.replace(daily.stamp_path(), json.dumps({"ran_at": ran_at}), place="state")
+    assert daily.maybe_spawn() is True and len(popen) == 1
+
+
+def test_audit_map_contains_a_state_dir_error(tmp_path, monkeypatch):
+    _fake_script(tmp_path, _WRITE_TSV)
+
+    def broken(*a, **k):
+        raise OSError("disk")
+
+    monkeypatch.setattr(daily.store, "mkdir", broken)
+    assert daily.audit_map()["error"]
+
+
+def test_audit_map_contains_a_malformed_tsv(tmp_path):
+    _fake_script(tmp_path, r"""import sys
+out = sys.argv[sys.argv.index('--out') + 1]
+open(out, 'w').write('repo\tbranch_count\tstash_count\na\t3\n')
+""")
+    assert daily.audit_map()["error"]

@@ -49,7 +49,24 @@ def _fresh(stamp: dict, now: datetime) -> bool:
         ran = datetime.fromisoformat(stamp["ran_at"].replace("Z", "+00:00"))
     except (KeyError, AttributeError, ValueError):
         return False
+    if ran.tzinfo is None:          # a naive time cannot be compared with now: treat as stale
+        return False
     return now - ran < timedelta(hours=24)
+
+
+def _take_over(lock: Path, payload: str) -> bool:
+    """Replace a lock older than 2 h. Two sessions can see the same stale lock, so the
+    check-remove-create runs under one lock: the second one re-reads a fresh lock and yields."""
+    gate = paths.state_dir() / "locks" / "pulse-daily-takeover.lock"
+    with store.locked(gate, place="state"):
+        try:
+            if time.time() - lock.stat().st_mtime < _STALE_LOCK_S:
+                return False
+            store.remove(lock, place="state")
+            store.create(lock, payload, place="state")
+        except (FileNotFoundError, store.AlreadyExists):    # someone else has it
+            return False
+    return True
 
 
 def maybe_spawn(now: datetime | None = None) -> bool:
@@ -63,12 +80,7 @@ def maybe_spawn(now: datetime | None = None) -> bool:
     try:
         store.create(lock, payload, place="state")
     except store.AlreadyExists:
-        if time.time() - lock.stat().st_mtime < _STALE_LOCK_S:
-            return False
-        store.remove(lock, place="state")
-        try:
-            store.create(lock, payload, place="state")
-        except store.AlreadyExists:    # another session took it between the two calls
+        if not _take_over(lock, payload):
             return False
     flags: dict = {"start_new_session": True}
     if sys.platform == "win32":
@@ -91,6 +103,13 @@ def audit_map() -> dict:
         return {}
     if not isinstance(argv, list):
         return {"error": "sessions.audit_map должен быть списком аргументов"}
+    try:
+        return _audit(argv)
+    except Exception as exc:  # noqa: BLE001 - audit_map is a helper line; nothing in it may stop the pass
+        return {"error": f"{type(exc).__name__}: {exc}"}
+
+
+def _audit(argv: list) -> dict:
     out = store.mkdir(paths.state_dir(), place="state") / "audit-map.tsv"
     store.remove(out, place="state")
     try:
@@ -104,11 +123,11 @@ def audit_map() -> dict:
         return {"error": f"код выхода {done.returncode}"}
     try:
         with out.open(encoding="utf-8", newline="") as f:
-            rows = list(csv.DictReader(f, delimiter="\t"))
+            rows = list(csv.DictReader(f, delimiter="	"))
         branches = sum(max(int(r["branch_count"]) - 1, 0) for r in rows)
         stash = sum(int(r["stash_count"]) for r in rows)
-    except (OSError, KeyError, ValueError):
-        return {"error": "нет отчёта audit-map.tsv или нет колонок branch_count, stash_count"}
+    except (OSError, KeyError, ValueError, TypeError, csv.Error):
+        return {"error": "нет отчёта audit-map.tsv или в нём нет колонок branch_count, stash_count"}
     if not rows:
         return {"error": "отчёт пуст"}
     return {"branches": branches, "stash": stash, "report": str(out),
