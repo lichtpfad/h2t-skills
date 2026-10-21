@@ -19,6 +19,7 @@ from h2t_ops.core import paths, store
 from h2t_ops.lifecycle import session_record
 from h2t_ops.lifecycle.gather.project import identify_project
 from h2t_ops.lifecycle.gather.sessions import get_machine_name
+from h2t_ops.lifecycle.pulse import transcript
 
 _GIT_TIMEOUT = 5
 
@@ -186,6 +187,73 @@ def find_open(tool: str, cwd: str) -> str | None:
     """The one open session of this tool and cwd; None when there are none or several."""
     ids = open_ids(tool, cwd)
     return ids[0] if len(ids) == 1 else None
+
+
+def _read(tool: str, raw_path: str) -> transcript.Info | None:
+    """The transcript summarised; None when it is missing, empty or cannot be read."""
+    if not raw_path or not Path(raw_path).is_file():
+        return None
+    try:
+        return transcript.read(tool or "claude", Path(raw_path))
+    except OSError:
+        return None
+
+
+def _settle_draft(session_id: str) -> bool:
+    draft = read_draft(session_id)
+    info = _read(draft.get("tool") or "", draft.get("transcript") or "")
+    if info is None:
+        return False
+    if info.origin == "machine":
+        drop_draft(session_id)          # never becomes a record
+        return True
+    if info.user_msgs == 0:
+        return False
+    fields = {"user_msgs": info.user_msgs}
+    if info.origin != "unknown":
+        fields["origin"] = info.origin
+    try:
+        upsert(session_id, fields)
+    except ValueError:                  # a draft with no project cannot be filed
+        return False
+    return True
+
+
+def _settle_record(path: Path) -> bool:
+    try:
+        meta, _ = session_record.parse(path.read_bytes())
+    except (OSError, ValueError):
+        return False
+    if meta.get("ended_at") and meta.get("origin") not in (None, "", "unknown"):
+        return False
+    info = _read(meta.get("tool") or "", meta.get("transcript") or "")
+    if info is None:
+        return False
+    fields: dict = {}
+    if info.origin != "unknown" and info.origin != meta.get("origin"):
+        fields["origin"] = info.origin
+    if info.user_msgs != meta.get("user_msgs"):
+        fields["user_msgs"] = info.user_msgs
+    if not fields:
+        return False
+    upsert(str(meta.get("session_id") or path.stem), fields)
+    return True
+
+
+def settle_open() -> int:
+    """Bring this machine's open sessions up to date from their transcripts; count changed.
+
+    A draft whose transcript has a user message becomes a record; a draft of a machine
+    session is dropped. A record with no `ended_at`, or with an unknown origin, takes the
+    origin and user_msgs the transcript says now (a machine session stays as a record with
+    origin machine; records are never removed). An unreadable transcript is skipped."""
+    changed = 0
+    for path in sorted((paths.state_dir() / "pulse" / "open").glob("*.json")):
+        changed += _settle_draft(path.stem)
+    machine = get_machine_name()
+    for path in sorted(paths.records("sessions", machine).glob("*/*.md")):
+        changed += _settle_record(path)
+    return changed
 
 
 # Filled by the Codex probe (Task 1 Step 2); while empty, a Codex handoff takes the slug path.

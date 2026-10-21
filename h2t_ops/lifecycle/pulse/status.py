@@ -130,8 +130,8 @@ def _issue_states(gh: Callable, repo: str, nums: list[str]) -> dict[str, str]:
     return out
 
 
-def refresh(conn: sqlite3.Connection, *, gh: Callable = _gh) -> int:
-    """One `branch_status` row per distinct (repo, branch) of live sessions; rows written."""
+def _groups(conn: sqlite3.Connection) -> dict[tuple[str, str], dict]:
+    """Worktree and artifacts per distinct (repo, branch) of live sessions."""
     groups: dict[tuple[str, str], dict] = {}
     rows = conn.execute("SELECT repo, branch, worktree, artifacts FROM sessions "
                         "WHERE origin = 'live' AND repo <> '' AND branch <> '' "
@@ -140,15 +140,26 @@ def refresh(conn: sqlite3.Connection, *, gh: Callable = _gh) -> int:
         g = groups.setdefault((repo, branch), {"worktree": "", "artifacts": ""})
         g["worktree"] = worktree or g["worktree"]          # the newest session's copy wins
         g["artifacts"] += f" {artifacts or ''}"
+    return groups
+
+
+def _local(repo: str, branch: str, worktree: str, pr: dict | None = None) -> tuple[str, str, int]:
+    """(files, branch state, commits of the main branch not on origin): the git-only facts."""
+    base = default_base(repo)
+    state = branch_state(repo, branch, base, pr=pr)
+    return (files_state(worktree), state, _ahead(repo, base, branch) if state == "основная" else 0)
+
+
+def refresh(conn: sqlite3.Connection, *, gh: Callable = _gh) -> int:
+    """One `branch_status` row per distinct (repo, branch) of live sessions; rows written."""
+    groups = _groups(conn)
     now = datetime.now(UTC).isoformat(timespec="seconds")
     conn.execute("DELETE FROM branch_status")
     for (repo, branch), g in groups.items():
         base = default_base(repo)
         pr = _pr(gh, repo, branch)
-        files = files_state(g["worktree"])
-        state = branch_state(repo, branch, base, pr=pr)
+        files, state, ahead = _local(repo, branch, g["worktree"], pr)
         pr_label = _PR.get((pr or {}).get("state"), "нет")
-        ahead = _ahead(repo, base, branch) if state == "основная" else 0
         issues = _issue_states(gh, repo, _issue_numbers(repo, branch, base, g["artifacts"], pr))
         conn.execute("INSERT INTO branch_status VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                      (repo, branch, g["worktree"], files, state, pr_label,
@@ -156,3 +167,33 @@ def refresh(conn: sqlite3.Connection, *, gh: Callable = _gh) -> int:
                       verdict(files, state, pr_label, ahead=ahead), now))
     conn.commit()
     return len(groups)
+
+
+def local_status(conn: sqlite3.Connection, max_age_s: int = 600) -> int:
+    """The git-only part of `refresh` for branches of live sessions that have no row or a row
+    older than `max_age_s`: files, branch state, verdict. No gh, no network. The stored PR and
+    issues stay; a new row has an empty PR (unknown until the next `status` or daily run).
+    Returns rows written."""
+    now = datetime.now(UTC)
+    stored = {(r[0], r[1]): r for r in conn.execute(
+        "SELECT repo, branch, pr, pr_url, issues, checked_at FROM branch_status")}
+    written = 0
+    for (repo, branch), g in _groups(conn).items():
+        old = stored.get((repo, branch))
+        if old is not None:
+            try:
+                age = (now - datetime.fromisoformat(old[5])).total_seconds()
+            except (TypeError, ValueError):
+                age = max_age_s + 1
+            if age <= max_age_s:
+                continue
+        files, state, ahead = _local(repo, branch, g["worktree"])
+        pr_label = old[2] if old else ""
+        conn.execute("INSERT OR REPLACE INTO branch_status VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                     (repo, branch, g["worktree"], files, state, pr_label,
+                      old[3] if old else "", old[4] if old else "{}",
+                      verdict(files, state, pr_label, ahead=ahead),
+                      now.isoformat(timespec="seconds")))
+        written += 1
+    conn.commit()
+    return written
