@@ -12,8 +12,10 @@ import yaml
 
 from h2t_ops.core import paths
 
-FIELDS = ("session_id", "machine", "project", "domain", "date", "updated_at", "branch",
-          "commits", "done", "remains", "artifacts", "migrated_from")
+FIELDS = ("session_id", "name", "tool", "origin", "cwd", "repo", "worktree", "started_at",
+          "ended_at", "user_msgs", "transcript", "machine", "project", "domain", "date",
+          "updated_at", "branch", "commits", "done", "remains", "artifacts", "summary",
+          "summary_source", "summary_stamp", "migrated_from")
 
 _OPEN = b"---\n"
 # What parse accepts: a UTF-8 BOM before the opener, and CRLF fence lines — a Windows editor

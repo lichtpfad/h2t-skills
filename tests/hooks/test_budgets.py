@@ -173,3 +173,14 @@ def test_user_prompt_submit_session_skill_slash_command(rig):
     context = json.loads(last[0].stdout)["hookSpecificOutput"]["additionalContext"]
     assert context.startswith("BRIEFING:"), context[:200]
     _judge("UserPromptSubmit (slash, gather)", p95, 3.0)
+
+
+def test_session_start_session_pulse(rig):
+    """session-pulse beside inject-h2t-context, on a real git repo so the git calls run."""
+    subprocess.run(["git", "-C", rig.work, "init", "-q"], check=True)
+    payload = {"hook_event_name": "SessionStart", "source": "startup", "session_id": "s1",
+               "cwd": rig.work, "transcript_path": rig.transcript}
+    p95, _ = _measure(rig, [("session-pulse", payload)])
+    drafts = list((rig.home / ".h2t" / "state" / "pulse" / "open").glob("s1.json"))
+    assert drafts, "session-pulse must have written its draft"
+    _judge("SessionStart (session-pulse)", p95, 1.0)
