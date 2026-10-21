@@ -64,8 +64,13 @@ def test_repair_hint_in_a_checkout_is_dev_sync(in_checkout):
 
 
 def test_the_checkout_probe_sees_this_checkout():
-    """Control for the fixtures above: run from this repository, the probe is positive."""
-    assert hints.checkout() == Path(h2t_ops.__file__).resolve().parents[1]
+    """Control for the fixtures above: positive from this repository, negative from a wheel.
+
+    The release workflow runs tests/setup against the installed wheel with the source
+    package moved away, so there `import h2t_ops` is the wheel and the probe must say None.
+    """
+    from_checkout = Path(h2t_ops.__file__).resolve().is_relative_to(ROOT)
+    assert hints.checkout() == (ROOT if from_checkout else None)
 
 
 def test_drawio_generate_without_drawpyo_prints_the_setup_hint(released, monkeypatch, capsys):
