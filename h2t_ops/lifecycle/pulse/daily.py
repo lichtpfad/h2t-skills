@@ -12,6 +12,7 @@ import os
 import subprocess
 import sys
 import time
+import uuid
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -22,6 +23,7 @@ from h2t_ops.lifecycle.pulse import backfill, record, status, summary
 _DAY_NS = 86400 * 10**9
 _STALE_LOCK_S = 2 * 3600
 _AUDIT_TIMEOUT_S = 300
+TOKEN_ENV = "H2T_PULSE_DAILY_TOKEN"     # owner token of the lock: the lock file holds it, the child gets it
 
 
 def stamp_path() -> Path:
@@ -54,11 +56,14 @@ def _fresh(stamp: dict, now: datetime) -> bool:
     return now - ran < timedelta(hours=24)
 
 
+def _takeover_gate() -> Path:
+    return paths.state_dir() / "locks" / "pulse-daily-takeover.lock"
+
+
 def _take_over(lock: Path, payload: str) -> bool:
     """Replace a lock older than 2 h. Two sessions can see the same stale lock, so the
     check-remove-create runs under one lock: the second one re-reads a fresh lock and yields."""
-    gate = paths.state_dir() / "locks" / "pulse-daily-takeover.lock"
-    with store.locked(gate, place="state"):
+    with store.locked(_takeover_gate(), place="state"):
         try:
             if time.time() - lock.stat().st_mtime < _STALE_LOCK_S:
                 return False
@@ -76,7 +81,7 @@ def maybe_spawn(now: datetime | None = None) -> bool:
     if _fresh(read_stamp(), now):
         return False
     lock = lock_path()
-    payload = f"{os.getpid()} {now.isoformat()}"
+    payload = uuid.uuid4().hex          # owner token: only its holder may remove the lock
     try:
         store.create(lock, payload, place="state")
     except store.AlreadyExists:
@@ -88,7 +93,8 @@ def maybe_spawn(now: datetime | None = None) -> bool:
     try:
         subprocess.Popen([sys.executable, "-m", "h2t_ops.cli", "sessions", "daily"],
                          stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                         stderr=subprocess.DEVNULL, **flags)
+                         stderr=subprocess.DEVNULL,
+                         env={**os.environ, TOKEN_ENV: payload}, **flags)
     except BaseException:
         store.remove(lock, place="state")
         raise
@@ -134,8 +140,32 @@ def _audit(argv: list) -> dict:
             "ran_at": _now().strftime("%Y-%m-%dT%H:%M:%SZ")}
 
 
+def _own_lock() -> str:
+    """Token of the lock this pass owns: the spawner's (env), else a lock created now by a
+    manual run; "" when a manual run finds a lock that is not its own (it never touches it)."""
+    token = os.environ.get(TOKEN_ENV, "")
+    if token:
+        return token
+    token = uuid.uuid4().hex
+    try:
+        store.create(lock_path(), token, place="state")
+    except store.AlreadyExists:
+        return ""
+    return token
+
+
+def _release(token: str) -> None:
+    """Remove the lock only while it still holds our token (a takeover may have replaced it)."""
+    if not token:
+        return
+    with contextlib.suppress(OSError), store.locked(_takeover_gate(), place="state"):
+        if lock_path().read_text(encoding="utf-8") == token:
+            store.remove(lock_path(), place="state")
+
+
 def run() -> dict:
-    """The whole pass; stamps it and releases the lock whatever happens."""
+    """The whole pass; stamps it and releases its own lock whatever happens."""
+    token = _own_lock()
     try:
         previous = read_stamp()
         started_ns = time.time_ns()
@@ -152,5 +182,4 @@ def run() -> dict:
         store.replace(stamp_path(), json.dumps(result, ensure_ascii=False), place="state")
         return {**result, "backfill": counts, "summary": summaries}
     finally:
-        with contextlib.suppress(OSError):
-            store.remove(lock_path(), place="state")
+        _release(token)

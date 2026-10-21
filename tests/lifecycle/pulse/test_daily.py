@@ -70,7 +70,8 @@ def test_run_calls_stages_in_order(monkeypatch):
     monkeypatch.setattr(daily.status, "refresh", lambda conn: seen.append("status") or 0)
     monkeypatch.setattr(daily.summary, "run", lambda conn: seen.append("summary") or {})
     monkeypatch.setattr(daily, "audit_map", lambda: seen.append("audit") or {"branches": 1})
-    store.create(daily.lock_path(), "1", place="state")
+    store.create(daily.lock_path(), "tok", place="state")
+    monkeypatch.setenv(daily.TOKEN_ENV, "tok")
     _stamp(timedelta(hours=30))
     out = daily.run()
     assert seen == [f"backfill:{10**15 - 86400 * 10**9}", "settle", "status", "summary", "audit"]
@@ -190,3 +191,50 @@ out = sys.argv[sys.argv.index('--out') + 1]
 open(out, 'w').write('repo\tbranch_count\tstash_count\na\t3\n')
 """)
     assert daily.audit_map()["error"]
+
+
+def _stub_stages(monkeypatch, during=lambda: None):
+    monkeypatch.setattr(daily.backfill, "run", lambda since_ns=0: during() or {})
+    monkeypatch.setattr(daily.record, "settle_open", lambda: 0)
+    monkeypatch.setattr(daily.status, "refresh", lambda conn: 0)
+    monkeypatch.setattr(daily.summary, "run", lambda conn: {})
+    monkeypatch.setattr(daily, "audit_map", lambda: {})
+
+
+def test_an_old_pass_does_not_remove_the_successors_lock(monkeypatch):
+    store.create(daily.lock_path(), "A", place="state")
+    monkeypatch.setenv(daily.TOKEN_ENV, "A")
+    _stub_stages(monkeypatch, lambda: store.replace(daily.lock_path(), "B", place="state"))
+    daily.run()
+    assert daily.lock_path().read_text(encoding="utf-8") == "B"
+
+
+def test_maybe_spawn_hands_the_lock_token_to_the_child(popen):
+    daily.stamp_path().unlink(missing_ok=True)
+    assert daily.maybe_spawn() is True
+    token = daily.lock_path().read_text(encoding="utf-8")
+    assert popen[0][1]["env"][daily.TOKEN_ENV] == token
+
+
+def test_a_takeover_writes_a_token_the_child_gets(popen):
+    _stamp(timedelta(hours=30))
+    _stale_lock()
+    assert daily.maybe_spawn() is True
+    assert popen[0][1]["env"][daily.TOKEN_ENV] == daily.lock_path().read_text(encoding="utf-8")
+
+
+def test_a_manual_run_leaves_a_foreign_lock(monkeypatch):
+    monkeypatch.delenv(daily.TOKEN_ENV, raising=False)
+    store.create(daily.lock_path(), "other", place="state")
+    _stub_stages(monkeypatch)
+    daily.run()
+    assert daily.lock_path().read_text(encoding="utf-8") == "other"
+
+
+def test_a_manual_run_takes_and_releases_its_own_lock(monkeypatch):
+    monkeypatch.delenv(daily.TOKEN_ENV, raising=False)
+    seen: list[str] = []
+    _stub_stages(monkeypatch, lambda: seen.append(daily.lock_path().read_text(encoding="utf-8")))
+    daily.run()
+    assert len(seen) == 1 and seen[0]
+    assert not daily.lock_path().exists()

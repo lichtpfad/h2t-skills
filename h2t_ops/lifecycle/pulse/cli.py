@@ -49,7 +49,10 @@ def _parser() -> argparse.ArgumentParser:
         .set_defaults(fn=_status)
     sub.add_parser("backfill", help="Write records for sessions the hook missed") \
         .set_defaults(fn=_backfill)
-    sub.add_parser("daily", help="The daily pass: backfill, status, summaries, audit_map")         .set_defaults(fn=_daily)
+    sub.add_parser("daily", help="The daily pass: backfill, status, summaries, audit_map. "
+                    "The hook starts it with env H2T_PULSE_DAILY_TOKEN (owner of pulse-daily.lock); "
+                    "a manual run takes the lock itself, or leaves a foreign lock alone"
+                    ).set_defaults(fn=_daily)
     pg = sub.add_parser("page", help="Build the browser page state/sessions.html and open it")
     pg.add_argument("--no-open", action="store_true", help="Build only")
     pg.add_argument("--out", type=Path, help="Write the page here instead of state/sessions.html")
