@@ -125,3 +125,16 @@ def test_briefing_skips_hook_only_records():
     _seed("hook-two", "2026-10-19T11:00:00Z", "")
     assert sessions.find_latest_session_index("briefproj")["session_id"] == "handoff-one"
     assert len(sessions.find_session_files("briefproj")) == 1
+
+
+def test_explicit_markdown_dir_wins_over_the_uuid_record(monkeypatch, tmp_path):
+    monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "u1")
+    hook_path = record.upsert("u1", {"project": "unregistered", "started_at": "2026-10-19T10:00:00Z"})
+    before = hook_path.read_bytes()
+    target = tmp_path / "chosen"
+    res = handoff.write_handoff("dev-x-topic-2026-10-19", "dev", "x", "- did", "- [ ] next", [],
+                                markdown_dir=str(target))
+    assert "session_uuid" not in res
+    assert res["markdown"] == str(target / "dev-x-topic-2026-10-19.md")
+    assert (target / "dev-x-topic-2026-10-19.md").is_file()
+    assert hook_path.read_bytes() == before

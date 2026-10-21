@@ -222,6 +222,7 @@ def write_handoff(
     dest = markdown_dir is not None
     session_uuid = ""
     notes: list[str] = []
+    # An explicit --markdown-dir is the caller's chosen destination: it wins over the UUID record.
     program = None if dest else _program_session()
     if program is not None:
         # The program's own id is known: the handoff enriches the record the hook started.
