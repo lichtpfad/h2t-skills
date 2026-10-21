@@ -114,12 +114,13 @@ def origin_of(tool: str, path: Path) -> str:
 
 def read(tool: str, path: Path) -> Info | None:
     """Summarise one transcript; None when the file carries no timestamps."""
-    stamps: list[str] = []
+    first = last = ""
     sid, cwd, n = path.stem, "", 0
     origin = ""
     for rec in iter_json(path):
         if rec.get("timestamp"):
-            stamps.append(rec["timestamp"])
+            first = first or rec["timestamp"]
+            last = rec["timestamp"]
         if tool == "codex":
             if rec.get("type") == "session_meta":
                 p = rec.get("payload") or {}
@@ -136,9 +137,9 @@ def read(tool: str, path: Path) -> Info | None:
                 origin = _claude_origin(rec)
             if rec.get("type") == "user" and is_user_voice(claude_text(rec.get("message"))):
                 n += 1
-    if not stamps:
+    if not first:
         return None
-    return Info(tool, sid, cwd, origin or "unknown", stamps[0], stamps[-1], n, str(path))
+    return Info(tool, sid, cwd, origin or "unknown", first, last, n, str(path))
 
 
 def user_messages(tool: str, path: Path) -> list[str]:

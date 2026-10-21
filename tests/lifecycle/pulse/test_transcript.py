@@ -161,3 +161,22 @@ def test_last_assistant_text(tmp_path):
         ],
     )
     assert transcript.last_assistant_text("codex", codex) == "last"
+
+
+def test_read_keeps_only_the_first_and_last_timestamp(monkeypatch, tmp_path):
+    import tracemalloc
+    n = 200_000
+
+    def records(_path):
+        for i in range(n):
+            yield {"timestamp": f"2026-10-01T10:00:00.{i:06d}Z", "type": "assistant"}
+
+    monkeypatch.setattr(transcript, "iter_json", records)
+    tracemalloc.start()
+    try:
+        info = transcript.read("claude", tmp_path / "x.jsonl")
+        _, peak = tracemalloc.get_traced_memory()
+    finally:
+        tracemalloc.stop()
+    assert info.start.endswith(".000000Z") and info.end.endswith(f".{n - 1:06d}Z")
+    assert peak < 1_000_000
