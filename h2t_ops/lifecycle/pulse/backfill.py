@@ -63,16 +63,16 @@ def run(claude_root: Path | None = None, codex_root: Path | None = None, since_n
     for tool, files in sources:
         for path in files:
             try:
-                _one(tool, path, machine, counts)
+                info = transcript.read(tool, path)
             except OSError:   # deleted or unreadable since it was listed
                 counts["errors"] += 1
+                continue
+            if info is not None:
+                _one(info, machine, counts)
     return counts
 
 
-def _one(tool: str, path: Path, machine: str, counts: dict) -> None:
-    info = transcript.read(tool, path)
-    if info is None:
-        return
+def _one(info: transcript.Info, machine: str, counts: dict) -> None:
     counts["seen"] += 1
     if info.origin == "machine":
         counts["skipped_machine"] += 1

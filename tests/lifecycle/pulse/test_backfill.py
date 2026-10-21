@@ -135,3 +135,15 @@ def test_one_unreadable_transcript_does_not_stop_the_pass(tmp_path, monkeypatch)
     assert out["written"] == 1
     assert record.find("good-1", "test-machine") is not None
     assert record.find("bad-1", "test-machine") is None
+
+
+def test_a_write_failure_is_not_counted_as_a_transcript_error(tmp_path, monkeypatch):
+    claude_root = tmp_path / "claude"
+    _claude(claude_root, "u1", str(tmp_path / "work"))
+
+    def boom(*args, **kwargs):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(backfill.record, "upsert", boom)
+    with pytest.raises(OSError, match="disk full"):
+        backfill.run(claude_root, tmp_path / "codex")
