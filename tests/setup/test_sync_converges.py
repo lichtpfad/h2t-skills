@@ -555,12 +555,28 @@ def test_an_editable_install_never_reaches_the_steps(tmp_path, monkeypatch):
     m = Machine(tmp_path, monkeypatch)
     state.commit(state.Install(version=V, generation="g", tool_root=str(m.uv.root),
                                entrypoints={}, editable=str(tmp_path / "checkout")))
+    m.uv.root.mkdir(parents=True)
+    (m.uv.root / "uv-receipt.toml").write_text(
+        f'[tool]\nrequirements = [{{ name = "h2t-ops", editable = {json.dumps(str(tmp_path / "checkout"))} }}]\n')
     before = {p.name: p.read_bytes() for p in state.run_dir().iterdir()}
     with pytest.raises(ConfigError) as exc:
         m.run()
     assert str(tmp_path / "checkout") in str(exc.value)
     assert m.uv.installs == [] and m.claude.calls == []
     assert {p.name: p.read_bytes() for p in state.run_dir().iterdir()} == before
+
+
+def test_an_editable_record_of_an_uninstalled_tool_converges_and_is_cleared(tmp_path,
+                                                                              monkeypatch):
+    """dev-sync, then `uv tool uninstall h2t-ops`: install.json still names the checkout, the
+    receipt is gone with the tool, and sync installs the release (#579)."""
+    m = Machine(tmp_path, monkeypatch)
+    state.commit(state.Install(version=V, generation="g", tool_root=str(m.uv.root),
+                               entrypoints={}, editable=str(tmp_path / "checkout")))
+    report = m.run()
+    assert report.failed == []
+    _converged(m)
+    assert m.install_json()["editable"] is None
 
 
 def test_the_cli_renders_a_failed_report_as_an_error_with_the_retry(tmp_path, monkeypatch,

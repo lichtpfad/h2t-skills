@@ -272,9 +272,11 @@ def test_the_target_executor_reaches_run(monkeypatch, capsys):
     assert json.loads(capsys.readouterr().out)["result"] == {"mode": "sync"}
 
 
-def _editable(home):
+def _editable(home, *, installed=True):
     state.commit(state.Install(version="4.1.0", generation="g", tool_root=str(home / "t"),
                                entrypoints={}, editable=str(home / "checkout")))
+    if installed:
+        _receipt(home / "t", f'{{ name = "h2t-ops", editable = {json.dumps(str(home / "checkout"))} }}')
 
 
 @pytest.mark.parametrize("mode", ["sync", "update"])
@@ -292,6 +294,18 @@ def test_an_editable_install_stops_sync_and_update_before_anything(home, monkeyp
     assert "dev-sync" in err["hint"]
     assert err["details"]["reason"] == "editable"
     assert {p: p.read_bytes() for p in (home / ".h2t" / "run").iterdir()} == before
+
+
+def test_an_editable_record_without_the_installed_tool_does_not_stop_sync(home, monkeypatch,
+                                                                         capsys):
+    """`uv tool uninstall` removes the receipt and leaves install.json's record of the last
+    dev-sync; the receipt decides (#579)."""
+    _editable(home, installed=False)
+    _wire(monkeypatch)
+    seen = []
+    monkeypatch.setattr(sync, "run", lambda mode, target, argv: seen.append(mode) or {})
+    assert cli.main(["sync", "--json"]) == 0, capsys.readouterr().err
+    assert seen == ["sync"]
 
 
 def test_dev_sync_never_reads_the_network(home, monkeypatch):

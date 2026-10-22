@@ -17,7 +17,7 @@ import sys
 import h2t_ops
 from h2t_ops.core.errors import ConfigError, H2TError, ProviderError
 from h2t_ops.core.output import emit
-from h2t_ops.setup import manifest, state, sync
+from h2t_ops.setup import manifest, sync
 
 MODES = ("sync", "update", "dev-sync")
 
@@ -51,9 +51,9 @@ def build_parser() -> argparse.ArgumentParser:
 def _editable_stop(mode: str) -> None:
     if mode == "dev-sync":
         return
-    install = state.read()
-    # A 3.x install has no install.json; uv's receipt still says whether it is editable.
-    checkout = install.editable if install is not None else sync.receipt_editable()
+    # uv's receipt, not install.json: `uv tool uninstall` removes the receipt and leaves
+    # install.json's record of the last dev-sync behind (#579).
+    checkout = sync.receipt_editable(sync.installed_tool_root())
     if checkout:
         raise ConfigError(
             f"the CLI is installed editable from the checkout {checkout}; "
