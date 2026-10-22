@@ -911,8 +911,7 @@ def run(mode: str, target: dict | None, argv: list[str], *, uv=None, claude=None
     confirm = confirm or ask
     root = _tool_dir(uv) / "h2t-ops"
     # cli.main stops here first; this is the same stop for a caller that skips it.
-    install = state.read()
-    checkout = install.editable if install is not None else receipt_editable(str(root))
+    checkout = receipt_editable(str(root))
     if checkout:
         raise ConfigError(f"the CLI is installed editable from the checkout {checkout}; "
                           f"`h2t-setup {mode}` does not touch it",

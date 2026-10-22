@@ -14,6 +14,11 @@ def editable(monkeypatch, tmp_path):
     install = state.Install(version="4.0.0", generation="g", tool_root=str(tmp_path / "t"),
                             entrypoints={}, editable=str(tmp_path / "checkout"))
     monkeypatch.setattr(state, "read", lambda: install)
+    # The receipt, not install.json, says the tool is editable (#579).
+    (tmp_path / "t").mkdir()
+    (tmp_path / "t" / "uv-receipt.toml").write_text(
+        f'[tool]\nrequirements = [{{ name = "h2t-ops", editable = {json.dumps(install.editable)} }}]\n',
+        encoding="utf-8")
     monkeypatch.setattr(sync, "ensure_executor",
                         lambda *a, **k: pytest.fail("layout must not re-launch"))
     monkeypatch.setattr(manifest, "urllib_fetch",
