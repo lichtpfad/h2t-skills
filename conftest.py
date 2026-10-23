@@ -90,6 +90,9 @@ def _isolate_home_writes(monkeypatch, tmp_path_factory):
     for k in list(os.environ):
         if k.startswith("H2T_PATH_") or k in paths.OLD_ENV or k == "CLAUDE_CONFIG_DIR":
             monkeypatch.delenv(k, raising=False)
+    # The program's own session id: set when the suite runs inside a Claude session, and
+    # handoff would then write into that session's UUID record instead of the slug file.
+    monkeypatch.delenv("CLAUDE_CODE_SESSION_ID", raising=False)
 
 
 # What a live Claude session writes into ~/.h2t/logs while the suite runs: the hook logs

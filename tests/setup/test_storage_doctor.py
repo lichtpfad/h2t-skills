@@ -174,11 +174,11 @@ def _index(version: str) -> None:
 
 def test_index_schema_mismatch_is_a_warning():
     _index("0")
-    assert _texts("index-schema") == ["~/.h2t/state/index.sqlite has schema 0, expected 1 — h2t-ops index rebuild"]
+    assert _texts("index-schema") == ["~/.h2t/state/index.sqlite has schema 0, expected 2 — h2t-ops index rebuild"]
 
 
 def test_index_schema_current_is_quiet():
-    _index("1")
+    _index("2")
     assert _texts("index-schema") == []
 
 
