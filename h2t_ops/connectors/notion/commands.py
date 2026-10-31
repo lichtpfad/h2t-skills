@@ -164,6 +164,19 @@ def register(subparsers: Any) -> None:
     ab.add_argument("--content-file", required=True, help="Path to markdown file")
     add_fmt(ab)
 
+    db = cmds.add_parser("delete-blocks",
+                         help="Delete blocks of a page by id or a heading's section "
+                              "(dry run unless --yes)")
+    db.add_argument("page_id")
+    db.add_argument("block_ids", nargs="*", help="top-level block ids of the page")
+    db.add_argument("--from-heading", metavar="TEXT",
+                    help="the heading with this exact text and every block under it, up "
+                         "to the next heading of the same or a higher level")
+    db.add_argument("--allow-child-objects", action="store_true",
+                    help="also delete child_database / child_page blocks")
+    db.add_argument("--yes", action="store_true", help="delete; without it, only list")
+    add_fmt(db)
+
     rc = cmds.add_parser("replace-content",
                          help="Replace page blocks from file (title-verified, safe)")
     rc.add_argument("page_id")
@@ -395,6 +408,16 @@ def run(args) -> Any:
         return client.archive_page(args.page_id, confirm_title=args.confirm_title)
     if cmd == "append-blocks":
         return client.append_blocks_from_file(args.page_id, args.content_file)
+    if cmd == "delete-blocks":
+        result = client.delete_blocks(
+            args.page_id, block_ids=args.block_ids, from_heading=args.from_heading,
+            allow_child_objects=args.allow_child_objects, apply=args.yes)
+        if _fmt(args) == "json":
+            return result
+        head = ("Deleted" if result["applied"] else "Would delete (dry run, --yes to apply)")
+        lines = [f"{head}: {len(result['blocks'])} block(s) of {args.page_id}"]
+        lines += [f"- {b['type']} {b['id']}: {b['text']}" for b in result["blocks"]]
+        return "\n".join(lines)
     if cmd == "replace-content":
         client.replace_page_content_safe(
             args.page_id, args.content_file, confirm_title=args.confirm_title

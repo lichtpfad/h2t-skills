@@ -779,6 +779,76 @@ class NotionClient:
         except Exception as e:
             raise _map_sdk_exc(e, op=f"delete block {block_id}") from e
 
+    _HEADING_LEVEL = {"heading_1": 1, "heading_2": 2, "heading_3": 3}
+    _CHILD_OBJECTS = ("child_database", "child_page")
+
+    def _block_plain_text(self, block: dict[str, Any]) -> str:
+        body = block.get(block.get("type") or "", {}) or {}
+        if isinstance(body.get("title"), str):  # child_page / child_database
+            return body["title"]
+        return "".join(rt.get("plain_text") or rt.get("text", {}).get("content", "")
+                       for rt in body.get("rich_text") or [])
+
+    def delete_blocks(
+        self,
+        page_id: str,
+        *,
+        block_ids: list[str] | None = None,
+        from_heading: str | None = None,
+        allow_child_objects: bool = False,
+        apply: bool = False,
+    ) -> dict[str, Any]:
+        """Delete top-level blocks of a page, named by id or as a heading's section (#587).
+
+        Every target must be a direct child of `page_id`, child pages and databases are
+        refused unless allowed, and nothing is deleted unless `apply` — the default is the
+        list of what would go. All checks run before the first delete."""
+        if bool(block_ids) == bool(from_heading):
+            raise UsageError("delete-blocks: give block ids or --from-heading, not both")
+        children = self.get_blocks(page_id)
+
+        def norm(bid: str) -> str:
+            return bid.replace("-", "").lower()
+
+        if block_ids:
+            by_id = {norm(b["id"]): b for b in children}
+            missing = [bid for bid in block_ids if norm(bid) not in by_id]
+            if missing:
+                raise UsageError(f"delete-blocks: not a block of page {page_id}: "
+                                 f"{', '.join(missing)}",
+                                 hint=f"list them with `h2t-ops notion blocks {page_id}`")
+            targets = [by_id[norm(bid)] for bid in dict.fromkeys(block_ids)]
+        else:
+            want = from_heading.strip()
+            starts = [i for i, b in enumerate(children)
+                      if b.get("type") in self._HEADING_LEVEL
+                      and self._block_plain_text(b).strip() == want]
+            if len(starts) != 1:
+                raise UsageError(f'delete-blocks: {len(starts)} headings read "{want}" on '
+                                 f"page {page_id}; exactly one is needed")
+            start = starts[0]
+            level = self._HEADING_LEVEL[children[start]["type"]]
+            end = next((i for i in range(start + 1, len(children))
+                        if self._HEADING_LEVEL.get(children[i].get("type"), 99) <= level),
+                       len(children))
+            targets = children[start:end]
+        refused = [b for b in targets if b.get("type") in self._CHILD_OBJECTS]
+        if refused and not allow_child_objects:
+            raise UsageError("delete-blocks: refusing " + ", ".join(
+                f'{b["type"]} "{self._block_plain_text(b)}" ({b["id"]})' for b in refused),
+                hint="pass --allow-child-objects to delete them too")
+        listed = [{"id": b["id"], "type": b.get("type"),
+                   "text": self._block_plain_text(b)[:80]} for b in targets]
+        if not apply:
+            return {"applied": False, "page_id": page_id, "blocks": listed}
+        for n, b in enumerate(targets):
+            try:
+                self.client.blocks.delete(block_id=b["id"])
+            except Exception as e:
+                raise _map_sdk_exc(e, op=f"delete block {b['id']} "
+                                         f"({n} of {len(targets)} already deleted)") from e
+        return {"applied": True, "page_id": page_id, "blocks": listed}
+
     def replace_page_content(self, page_id: str, markdown: str) -> None:
         try:
             for block in self.get_blocks(page_id):

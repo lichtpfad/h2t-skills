@@ -1222,3 +1222,90 @@ def test_parse_inline_outer_link_target_wins_over_a_url_label(conv):
     spans = conv.parse_inline("[https://label.example](https://target.example)")
     assert spans[0]["text"]["link"] == {"url": "https://target.example"}
     assert spans[0]["text"]["content"] == "https://label.example"
+
+
+# --- delete_blocks (#587) ----------------------------------------------------------------
+
+def _blk(bid, btype, text=""):
+    body = {"rich_text": [{"type": "text", "plain_text": text, "text": {"content": text}}]}
+    if btype in ("child_database", "child_page"):
+        body = {"title": text}
+    return {"id": bid, "type": btype, btype: body}
+
+
+PAGE = [
+    _blk("aaaa-1", "heading_2", "Intro"),
+    _blk("aaaa-2", "paragraph", "intro text"),
+    _blk("bbbb-1", "heading_2", "References"),
+    _blk("bbbb-2", "paragraph", "hand-appended list follows"),
+    _blk("bbbb-3", "bulleted_list_item", "one"),
+    _blk("bbbb-4", "heading_3", "Sub"),
+    _blk("bbbb-5", "bulleted_list_item", "two"),
+    _blk("cccc-1", "heading_2", "Tasks"),
+    _blk("cccc-2", "child_database", "Task DB"),
+]
+
+
+@pytest.fixture
+def page(conv):
+    from unittest.mock import MagicMock
+    conv.client = MagicMock()
+    conv.client.blocks.children.list.return_value = {"results": PAGE, "has_more": False}
+    conv.client.blocks.delete.return_value = {}
+    return conv
+
+
+def _deleted(conv):
+    return [c.kwargs["block_id"] for c in conv.client.blocks.delete.call_args_list]
+
+
+def test_delete_blocks_is_a_dry_run_by_default(page):
+    out = page.delete_blocks("page1", block_ids=["bbbb-3", "bbbb-5"])
+    assert out["applied"] is False
+    assert [(b["id"], b["type"], b["text"]) for b in out["blocks"]] == [
+        ("bbbb-3", "bulleted_list_item", "one"), ("bbbb-5", "bulleted_list_item", "two")]
+    assert _deleted(page) == []
+
+
+def test_delete_blocks_applies_with_yes(page):
+    out = page.delete_blocks("page1", block_ids=["bbbb3"], apply=True)  # dashes optional
+    assert out["applied"] is True
+    assert _deleted(page) == ["bbbb-3"]
+
+
+def test_from_heading_takes_the_section_up_to_the_next_heading_of_its_level(page):
+    out = page.delete_blocks("page1", from_heading="References", apply=True)
+    assert [b["id"] for b in out["blocks"]] == ["bbbb-1", "bbbb-2", "bbbb-3", "bbbb-4", "bbbb-5"]
+    assert _deleted(page) == ["bbbb-1", "bbbb-2", "bbbb-3", "bbbb-4", "bbbb-5"]
+
+
+def test_a_block_not_on_the_page_refuses_everything(page):
+    from h2t_ops.core.errors import UsageError
+    with pytest.raises(UsageError, match="not a block of page"):
+        page.delete_blocks("page1", block_ids=["bbbb-3", "zzzz-9"], apply=True)
+    assert _deleted(page) == []
+
+
+def test_child_database_is_refused_unless_allowed(page):
+    from h2t_ops.core.errors import UsageError
+    with pytest.raises(UsageError, match="child_database"):
+        page.delete_blocks("page1", from_heading="Tasks", apply=True)
+    assert _deleted(page) == []
+    page.delete_blocks("page1", from_heading="Tasks", allow_child_objects=True, apply=True)
+    assert _deleted(page) == ["cccc-1", "cccc-2"]
+
+
+@pytest.mark.parametrize("heading", ["Missing", "intro text"])
+def test_from_heading_needs_one_heading_with_that_text(page, heading):
+    from h2t_ops.core.errors import UsageError
+    with pytest.raises(UsageError, match="heading"):
+        page.delete_blocks("page1", from_heading=heading, apply=True)
+    assert _deleted(page) == []
+
+
+def test_ids_and_heading_are_exclusive_and_one_is_required(page):
+    from h2t_ops.core.errors import UsageError
+    with pytest.raises(UsageError):
+        page.delete_blocks("page1")
+    with pytest.raises(UsageError):
+        page.delete_blocks("page1", block_ids=["bbbb-3"], from_heading="References")
