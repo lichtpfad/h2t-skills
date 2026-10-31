@@ -1033,3 +1033,55 @@ def test_duplicate_headers_keep_the_first_occurrence():
     })
     assert out["subject"] == "the real subject"
     assert out["from"] == "real@example.com"
+
+
+# --- draft_send (#531) -------------------------------------------------------------------
+
+class _DraftSvc:
+    """users().drafts() and users().messages(), recording every write."""
+
+    def __init__(self):
+        self.calls = []
+
+    def users(self): return self
+    def drafts(self):
+        self._res = "drafts"
+        return self
+
+    def messages(self):
+        self._res = "messages"
+        return self
+
+    def get(self, userId, id, format=None):
+        self.calls.append((self._res, "get", id))
+        return _Exec({"id": id, "message": {"id": "m-draft", "threadId": "t1", "payload": {
+            "headers": [{"name": "To", "value": "Ann <ann@example.com>"},
+                        {"name": "Subject", "value": "Re: Questions"}]}}})
+
+    def send(self, userId, body):
+        self.calls.append((self._res, "send", body))
+        return _Exec({"id": "m-sent", "threadId": "t1", "labelIds": ["SENT"]})
+
+    def create(self, userId, body):
+        self.calls.append((self._res, "create", body))
+        return _Exec({"id": "d-new"})
+
+
+def test_draft_send_sends_that_draft_by_id():
+    svc = _DraftSvc()
+    c, _ = _client_with(svc)
+    out = c.send_draft("r2711", confirm_send=True)
+    assert ("drafts", "send", {"id": "r2711"}) in svc.calls
+    assert [x for x in svc.calls if x[1] in ("send", "create") and x[0] != "drafts"] == []
+    assert not any(x[1] == "create" for x in svc.calls)
+    assert out == {"id": "m-sent", "thread_id": "t1", "draft_id": "r2711",
+                   "to": "Ann <ann@example.com>", "subject": "Re: Questions"}
+
+
+def test_draft_send_without_confirm_touches_nothing():
+    from h2t_ops.core.errors import UsageError
+    svc = _DraftSvc()
+    c, _ = _client_with(svc)
+    with pytest.raises(UsageError, match="--confirm-send"):
+        c.send_draft("r2711", confirm_send=False)
+    assert svc.calls == []
