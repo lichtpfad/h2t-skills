@@ -61,6 +61,19 @@ h2t-ops gmail label-create "Project X" --json
 h2t-ops gmail label-delete LABEL_ID --confirm-name "Project X" --json
 ```
 
+## Signature
+
+`draft`, `send`, `reply` and `forward` take `--signature <variant>`: the ```` ```text ```` block
+under that heading in `~/.h2t/config/about-me/signatures.md` is appended to the body (for
+`forward`, before the forwarded message). Name a variant by its letter (`А`) or the full
+heading. Gmail does not add the account signature to API drafts, and `sendAs` is never read.
+An unknown variant or a missing file fails with `ok: false` and creates nothing (#585).
+Choosing the variant for an addressee is the caller's job; no flag means no signature.
+
+```bash
+h2t-ops gmail draft person@example.com "Subject" "Body" --signature А --json
+```
+
 ## Safety (P0 additions)
 
 - `reply` and `forward` always default to draft — real send requires both `--send` AND `--confirm-send`.

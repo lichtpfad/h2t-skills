@@ -448,3 +448,142 @@ def test_draft_send_cli_passes_the_id_and_the_confirmation(monkeypatch):
     assert seen == {"draft_id": "r2711", "confirm_send": True}
     assert out == "✓ Draft r2711 sent to ann@example.com (message ID: m-sent)"
     assert _parser().parse_args(["gmail", "draft-send", "r2711"]).confirm_send is False
+
+
+# --- --signature (#585) ------------------------------------------------------------------
+
+SIGNATURES = """# Подписи
+
+## Полная (факт)
+
+```text
+Full Name
+full line
+```
+
+## Варианты по контексту
+
+### А. Hou2Touch
+
+```text
+Name A
+school line
+```
+
+### Адреса владельца
+
+| a | b |
+
+### Г. Ведомства и финансы
+
+Адрес подставляется по таблице выше.
+
+```text
+Name G
+<адрес>
+```
+"""
+
+
+@pytest.fixture
+def signatures(tmp_path, monkeypatch):
+    from h2t_ops.core import paths
+    about = tmp_path / "about-me"
+    about.mkdir()
+    f = about / "signatures.md"
+    f.write_text(SIGNATURES, encoding="utf-8")
+    monkeypatch.setattr(paths, "config_dir", lambda: tmp_path)
+    return f
+
+
+class _Recorder(_FakeClient):
+    def __init__(self):
+        self.calls = []
+
+    def send_message(self, **k):
+        self.calls.append(("send_message", k["body"]))
+        return {"id": "m1"}
+
+    def reply_to_thread(self, thread_id, *, body, body_file=None, send=False, confirm_send=False):
+        self.calls.append(("reply_to_thread", body))
+        return {"id": "r1", "to": "x@y"}
+
+    def forward_message(self, message_id, *, to, body=None, send=False, confirm_send=False):
+        self.calls.append(("forward_message", body))
+        return {"id": "f1"}
+
+
+def _recorder(monkeypatch):
+    import h2t_ops.connectors.gmail.client as m
+    rec = _Recorder()
+    monkeypatch.setattr(m, "GmailClient", lambda *a, **k: rec)
+    return rec
+
+
+def _draft(signature, body="Hello"):
+    return _ns(gmail_cmd="draft", to="a@x", subject="S", body=body, file=None, attach=None,
+               thread_id=None, reply_to=None, signature=signature, as_json=True, fmt="human")
+
+
+def test_signature_flag_is_on_draft_send_reply_forward():
+    p = _parser()
+    assert p.parse_args(["gmail", "draft", "a", "s", "b", "--signature", "А"]).signature == "А"
+    assert p.parse_args(["gmail", "send", "a", "s", "b", "--signature", "А"]).signature == "А"
+    assert p.parse_args(["gmail", "reply", "T", "--body", "b", "--signature", "А"]).signature == "А"
+    assert p.parse_args(["gmail", "forward", "M", "--to", "a", "--signature", "А"]).signature == "А"
+    assert p.parse_args(["gmail", "draft", "a", "s", "b"]).signature is None
+
+
+def test_draft_signature_ends_the_body_with_the_variant_block(signatures, monkeypatch):
+    rec = _recorder(monkeypatch)
+    gc.run(_draft("А"))
+    assert rec.calls == [("send_message", "Hello\n\nName A\nschool line")]
+
+
+def test_signature_is_matched_by_full_heading_and_case(signatures, monkeypatch):
+    rec = _recorder(monkeypatch)
+    gc.run(_draft("а. hou2touch"))
+    gc.run(_draft("Полная"))
+    assert [b for _, b in rec.calls] == ["Hello\n\nName A\nschool line",
+                                         "Hello\n\nFull Name\nfull line"]
+
+
+def test_signature_block_after_prose_is_taken_as_is(signatures, monkeypatch):
+    rec = _recorder(monkeypatch)
+    gc.run(_draft("Г"))
+    assert rec.calls == [("send_message", "Hello\n\nName G\n<адрес>")]
+
+
+@pytest.mark.parametrize("name", ["Д", "Адреса владельца", "Варианты по контексту"])
+def test_unknown_variant_fails_and_creates_no_draft(signatures, monkeypatch, name):
+    rec = _recorder(monkeypatch)
+    with pytest.raises(UsageError) as exc:
+        gc.run(_draft(name))
+    assert "А. Hou2Touch" in str(exc.value.hint)
+    assert rec.calls == []
+
+
+def test_missing_signatures_file_fails_and_creates_no_draft(signatures, monkeypatch):
+    from h2t_ops.core.errors import ConfigError
+    signatures.unlink()
+    rec = _recorder(monkeypatch)
+    with pytest.raises(ConfigError) as exc:
+        gc.run(_draft("А"))
+    assert str(signatures) in str(exc.value)
+    assert rec.calls == []
+
+
+def test_reply_and_forward_carry_the_signature(signatures, monkeypatch):
+    rec = _recorder(monkeypatch)
+    gc.run(_ns(gmail_cmd="reply", thread_id="T", body="Ok", file=None, send=False,
+               confirm_send=False, signature="А", as_json=True, fmt="human"))
+    gc.run(_ns(gmail_cmd="forward", message_id="M", to="a@x", body=None, send=False,
+               confirm_send=False, signature="А", as_json=True, fmt="human"))
+    assert rec.calls == [("reply_to_thread", "Ok\n\nName A\nschool line"),
+                         ("forward_message", "Name A\nschool line")]
+
+
+def test_no_signature_flag_leaves_the_body_alone(monkeypatch):
+    rec = _recorder(monkeypatch)
+    gc.run(_draft(None))
+    assert rec.calls == [("send_message", "Hello")]

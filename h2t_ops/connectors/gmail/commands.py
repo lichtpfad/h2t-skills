@@ -10,6 +10,11 @@ def register(subparsers: Any) -> None:
     p = subparsers.add_parser("gmail", help="Work with Gmail messages and labels")
     cmds = p.add_subparsers(dest="gmail_cmd", required=True)
 
+    def add_signature(sp):
+        sp.add_argument("--signature", default=None, metavar="VARIANT",
+                        help="append this variant from about-me/signatures.md "
+                             "(e.g. А, or the full heading)")
+
     def add_fmt(sp):
         sp.add_argument("--json", dest="as_json", action="store_true",
                         help="raw machine-readable envelope")
@@ -57,6 +62,7 @@ def register(subparsers: Any) -> None:
     snp.add_argument("--thread-id", dest="thread_id")
     snp.add_argument("--reply-to", dest="reply_to")
     snp.add_argument("--draft", action="store_true")
+    add_signature(snp)
     add_fmt(snp)
 
     dp = cmds.add_parser("draft", help="Create a draft")
@@ -67,6 +73,7 @@ def register(subparsers: Any) -> None:
     dp.add_argument("--attach", nargs="+")
     dp.add_argument("--thread-id", dest="thread_id")
     dp.add_argument("--reply-to", dest="reply_to")
+    add_signature(dp)
     add_fmt(dp)
 
     dsp = cmds.add_parser("draft-send",
@@ -82,6 +89,7 @@ def register(subparsers: Any) -> None:
     rep.add_argument("--file", dest="file", default=None)
     rep.add_argument("--send", dest="send", action="store_true")
     rep.add_argument("--confirm-send", dest="confirm_send", action="store_true")
+    add_signature(rep)
     add_fmt(rep)
 
     fwp = cmds.add_parser("forward", help="Forward a message (draft by default)")
@@ -90,6 +98,7 @@ def register(subparsers: Any) -> None:
     fwp.add_argument("--body", dest="body", default=None)
     fwp.add_argument("--send", dest="send", action="store_true")
     fwp.add_argument("--confirm-send", dest="confirm_send", action="store_true")
+    add_signature(fwp)
     add_fmt(fwp)
 
     lcp = cmds.add_parser("label-create", help="Create a new Gmail label")
@@ -149,6 +158,7 @@ def _paged(page: dict, args, rendered: str | None = None) -> Any:
 
 def run(args) -> Any:
     """Dispatch a gmail subcommand. Returns a result or raises core.errors."""
+    from h2t_ops.connectors.gmail import signature
     from h2t_ops.connectors.gmail.client import (  # lazy (spec §4.1)
         GmailClient,
         format_message_detail,
@@ -195,6 +205,7 @@ def run(args) -> Any:
         body = _read_file(args.file) if args.file else args.body
         if not body:
             raise UsageError(f"{cmd}: provide body arg or --file")
+        body = signature.append(body, getattr(args, "signature", None))
         as_draft = cmd == "draft" or getattr(args, "draft", False)
         result = client.send_message(
             to=args.to,
@@ -219,6 +230,7 @@ def run(args) -> Any:
         body = _read_file(args.file) if args.file else args.body
         if not body:
             raise UsageError("gmail reply: provide --body or --file")
+        body = signature.append(body, getattr(args, "signature", None))
         result = client.reply_to_thread(
             args.thread_id,
             body=body,
@@ -236,7 +248,7 @@ def run(args) -> Any:
         result = client.forward_message(
             args.message_id,
             to=args.to,
-            body=getattr(args, "body", None),
+            body=signature.append(getattr(args, "body", None), getattr(args, "signature", None)),
             send=getattr(args, "send", False),
             confirm_send=getattr(args, "confirm_send", False),
         )
