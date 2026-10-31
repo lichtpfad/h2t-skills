@@ -1073,3 +1073,42 @@ def test_find_project_tasks_returns_an_envelope(monkeypatch):
                            as_json=True, fmt="human")
     out = cmds_mod.run(args)
     assert out.meta() == {"count": 0, "truncated": False, "limit": 100}
+
+
+# --- delete-blocks (#587): the CLI against the real client method, SDK faked ------------
+
+def _real_client(monkeypatch, blocks):
+    from unittest.mock import MagicMock
+
+    import h2t_ops.connectors.notion.client as _client_mod
+    c = object.__new__(_client_mod.NotionClient)
+    c.token = "fake"
+    c.client = MagicMock()
+    c.client.blocks.children.list.return_value = {"results": blocks, "has_more": False}
+    monkeypatch.setattr(_client_mod, "NotionClient", lambda *a, **k: c)
+    return c
+
+
+def _heading(bid, text):
+    return {"id": bid, "type": "heading_2",
+            "heading_2": {"rich_text": [{"plain_text": text, "text": {"content": text}}]}}
+
+
+def test_delete_blocks_cli_lists_without_yes_and_deletes_with_it(monkeypatch):
+    c = _real_client(monkeypatch, [_heading("h1", "Refs"), _heading("h2", "Keep")])
+    argv = ["notion", "delete-blocks", "P", "--from-heading", "Refs"]
+    out = notion_cmds.run(_parser().parse_args(argv))
+    assert out.startswith("Would delete (dry run, --yes to apply): 1 block(s) of P")
+    assert "heading_2 h1: Refs" in out
+    assert not c.client.blocks.delete.called
+    res = notion_cmds.run(_parser().parse_args(argv + ["--yes", "--json"]))
+    assert res["applied"] is True and [b["id"] for b in res["blocks"]] == ["h1"]
+    assert [k.kwargs["block_id"] for k in c.client.blocks.delete.call_args_list] == ["h1"]
+
+
+def test_delete_blocks_cli_takes_ids_positionally(monkeypatch):
+    c = _real_client(monkeypatch, [_heading("h1", "Refs"), _heading("h2", "Keep")])
+    res = notion_cmds.run(_parser().parse_args(
+        ["notion", "delete-blocks", "P", "h2", "--yes", "--json"]))
+    assert [k.kwargs["block_id"] for k in c.client.blocks.delete.call_args_list] == ["h2"]
+    assert res["applied"] is True

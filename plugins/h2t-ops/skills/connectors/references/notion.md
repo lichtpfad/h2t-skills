@@ -26,6 +26,7 @@
 | archive page (safe, title-verified) | `h2t-ops notion archive PAGE_ID --confirm-title "Exact Title" --json` |
 | append markdown file as blocks | `h2t-ops notion append-blocks PAGE_ID --content-file ./content.md --json` |
 | replace page content (safe, title-verified) | `h2t-ops notion replace-content PAGE_ID --content-file ./content.md --confirm-title "Exact Title" --json` |
+| delete a section or some blocks (dry run by default) | `h2t-ops notion delete-blocks PAGE_ID --from-heading "Exact heading" --json`, then the same with `--yes` |
 
 ## Safety
 
@@ -34,6 +35,7 @@
 - Create and update are Notion provider writes and require explicit user intent.
 - Notion provider writes execute provider-specific writes only; POS/coordinator owns the decision to accept tasks, journal entries, or KB promotions.
 - Do not include private Notion page bodies in GitHub issues.
+- `delete-blocks` removes blocks without rewriting the page, so inline databases survive. Name the blocks by id (`notion blocks PAGE_ID --json` lists them) or with `--from-heading`: that heading and everything under it up to the next heading of the same or a higher level. It only lists unless `--yes` is given: run it without first, show the list to the user, then repeat with `--yes`. Each block must be a direct child of the page, and `child_database` / `child_page` blocks are refused without `--allow-child-objects`. Every check runs before the first delete (#587).
 
 ## Commands
 
