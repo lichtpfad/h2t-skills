@@ -10,6 +10,7 @@
 | list labels | `h2t-ops gmail labels --json` |
 | create draft | `h2t-ops gmail draft person@example.com "Subject" "Body" --json` |
 | send email | `h2t-ops gmail send person@example.com "Subject" "Body" --json` |
+| send an approved draft as it stands | `h2t-ops gmail draft-send DRAFT_ID --confirm-send --json` |
 | modify labels | `h2t-ops gmail label MESSAGE_ID_FROM_SEARCH --add LabelName --json` |
 
 ## Safety
@@ -63,6 +64,7 @@ h2t-ops gmail label-delete LABEL_ID --confirm-name "Project X" --json
 ## Safety (P0 additions)
 
 - `reply` and `forward` always default to draft — real send requires both `--send` AND `--confirm-send`.
+- **Sending what the owner approved: `draft-send`, never a second `reply --send`.** `h2t-ops gmail draft-send DRAFT_ID --confirm-send` sends that draft through `drafts.send`: the text is the approved text, and Gmail removes the draft, so no approved copy is left to be sent twice. `DRAFT_ID` is the id `draft`/`reply`/`forward` printed, not a message id from `search`. It prints the `to` it went to. Without `--confirm-send` nothing is read or sent (#531).
 - `label-delete` requires `--confirm-name` with the exact label name (case-insensitive match).
 - **Verify the recipient after every `draft`, `reply`, `forward` and `send`.** Find the created message (`gmail search "in:drafts newer_than:1d" --json` for drafts) and run `h2t-ops gmail read <message_id> --json`; compare `to` with the intended person. Do not report the draft as ready until `to` matches, and show the `to` line to the user. `reply` and `forward` print the resolved `to` (also in `--json`). `reply` follows Gmail's own Reply: own drafts are skipped; if the newest message is your own, it goes to that message's other recipients, else to the last other sender; a thread of only your own messages fails loud (#498, fixed in 1.6.19). Negative case: 2026-09-28 a reply with delivery questions for an exhibition curator was sent to the owner's own address and went unnoticed for six days.
 

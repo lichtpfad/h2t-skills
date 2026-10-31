@@ -284,6 +284,28 @@ class GmailClient:
                 e, op="create draft" if as_draft else "send message"
             ) from e
 
+    def send_draft(self, draft_id: str, *, confirm_send: bool = False) -> dict[str, Any]:
+        """Send an existing draft as it stands; Gmail removes it from Drafts (#531).
+
+        `drafts.send`, never a new message: the text sent is the text the owner approved,
+        and no approved copy is left behind to be sent a second time."""
+        if not confirm_send:
+            raise UsageError("gmail draft-send: --confirm-send is required")
+        try:
+            draft = self.service.users().drafts().get(
+                userId="me", id=draft_id, format="metadata").execute()
+        except HttpError as e:
+            raise _map_http_error(e, op=f"get draft {draft_id}") from e
+        headers = {h.get("name", "").lower(): h.get("value", "")
+                   for h in (draft.get("message") or {}).get("payload", {}).get("headers", [])}
+        try:
+            sent = self.service.users().drafts().send(
+                userId="me", body={"id": draft_id}).execute()
+        except HttpError as e:
+            raise _map_http_error(e, op=f"send draft {draft_id}") from e
+        return {"id": sent.get("id"), "thread_id": sent.get("threadId"), "draft_id": draft_id,
+                "to": headers.get("to", ""), "subject": headers.get("subject", "")}
+
     def modify_labels(
         self,
         message_id: str,

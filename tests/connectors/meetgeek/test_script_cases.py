@@ -97,6 +97,13 @@ class _ScriptSurface:
             raise AttributeError(f"the script surface does not patch {name}")
         setattr(recovery, _RECOVERY_ALIASES[name], value)
 
+    def __delattr__(self, name):
+        # pytest 9.2 reads the old value past __getattr__, sees none, and undoes a patch by
+        # deleting it. The `cli` fixture already restores recovery itself, so there is
+        # nothing to delete here.
+        if name not in _RECOVERY_ALIASES:
+            raise AttributeError(name)
+
     @staticmethod
     def build_parser():
         return _Parser()
@@ -153,6 +160,10 @@ def cli(monkeypatch):
     monkeypatch.setenv("MEETGEEK_API_KEY", "test-key")
     monkeypatch.setenv("MEETGEEK_BASE_URL", "https://api.test")
     monkeypatch.setitem(sys.modules, "recovery", recovery)
+    # Patches made through the surface land on recovery; register its originals here so
+    # teardown restores them on the module, whatever the surface's own undo does.
+    for real in _RECOVERY_ALIASES.values():
+        monkeypatch.setattr(recovery, real, getattr(recovery, real))
     monkeypatch.setattr(recovery, "ffmpeg_exe", lambda: "ffmpeg")
     return _ScriptSurface()
 
