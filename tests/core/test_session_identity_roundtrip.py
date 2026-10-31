@@ -93,7 +93,8 @@ def test_markdown_listing_spans_both_keys(tmp_path, monkeypatch, sessions):
     # Recorded under the repo name before the project was mapped; the index reads frontmatter.
     (legacy / "personal-os-h2t-skills-old-2026-08-20.md").write_bytes(session_record.render(
         {"session_id": "personal-os-h2t-skills-old-2026-08-20", "machine": "test-machine",
-         "project": "h2t-skills", "updated_at": "2026-08-20T10:00:00Z"}, b"older\n"))
+         "project": "h2t-skills", "updated_at": "2026-08-20T10:00:00Z", "done": "older"},
+        b"older\n"))
 
     files = sessions.find_session_files("h2t-skills", "agent-skills")
 

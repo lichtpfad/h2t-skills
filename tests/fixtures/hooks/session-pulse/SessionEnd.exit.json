@@ -1,0 +1,14 @@
+{
+  "event": {
+    "hook_event_name": "SessionEnd",
+    "reason": "exit",
+    "session_id": "case-session",
+    "cwd": "{tmp}",
+    "transcript_path": "{transcript}"
+  },
+  "expect": {
+    "text": "",
+    "block": false,
+    "notice": ""
+  }
+}

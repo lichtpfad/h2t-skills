@@ -52,6 +52,9 @@ TIMEOUTS = {
     # timeout (max(1.5 s, min(t, 60 s)) in 2.1.301), so 3.x had 1.5 s. 15 s bounds the exit
     # delay while giving a PowerShell listing room.
     "session-end-reap-codex": 15,
+    # SessionStart and SessionEnd: a draft or a record write and up to four git calls (5 s cap
+    # each, normally 10 ms); budget in tests/hooks/test_budgets.py.
+    "session-pulse": 10,
 }
 
 

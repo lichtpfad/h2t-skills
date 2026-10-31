@@ -28,6 +28,7 @@ from h2t_ops.lifecycle import session_record
 from h2t_ops.lifecycle.activity.writer import log_session_end
 from h2t_ops.lifecycle.eval.session import SkillEval
 from h2t_ops.lifecycle.gather.runner import _run_one
+from h2t_ops.lifecycle.pulse import record
 
 
 def resolve_identity(project: str = "", domain: str = "", cwd: str = "") -> tuple[str, str]:
@@ -110,6 +111,25 @@ def _write_record(md_path: Path, meta: dict, body: bytes, *, dest: bool) -> tupl
                      f"the record is {written}" for f in foreign]
 
 
+def _program_session() -> tuple[str, str] | None:
+    """record.program_session, but a failing lookup means "unknown": the handoff still writes."""
+    try:
+        return record.program_session()
+    except Exception:  # noqa: BLE001 - nothing may stand between the session and its record
+        return None
+
+
+def _in_codex_shell() -> bool:
+    return record.in_codex_shell()
+
+
+def _open_codex_ids(cwd: str) -> list[str]:
+    try:
+        return record.open_ids("codex", cwd)
+    except Exception:  # noqa: BLE001 - candidates are a hint, never a reason to drop the record
+        return []
+
+
 def _degraded(session_id: str, spool_path, distinct_artifacts: list, exc: Exception) -> dict:
     """The record is written; the configured mirror is not usable.
 
@@ -126,6 +146,17 @@ def _degraded(session_id: str, spool_path, distinct_artifacts: list, exc: Except
         "mirror_write_failed": True,
         "mirror_error": f"{type(exc).__name__}: {exc}",
     }
+
+
+def _known_user_msgs(session_uuid: str) -> int:
+    existing = record.find(session_uuid, _machine())
+    if existing is None:
+        return 0
+    try:
+        meta, _ = session_record.parse(existing.read_bytes())
+        return int(meta.get("user_msgs") or 0)
+    except (OSError, ValueError, TypeError):
+        return 0
 
 
 def write_handoff(
@@ -165,16 +196,6 @@ def write_handoff(
         machine=machine,
     )
 
-    dest = markdown_dir is not None
-    md_dir = Path(markdown_dir) if markdown_dir else default_markdown_dir(project, machine)
-    try:
-        # The first operation on this path: a --markdown-dir into a package place (secrets,
-        # say) is refused here, after the spool, so it degrades like any other mirror failure.
-        store.mkdir(md_dir, place="records.sessions", dest=dest)
-    except (OSError, H2TError) as exc:
-        return _degraded(session_id, spool_path, distinct_artifacts, exc)
-    md_path = md_dir / f"{session_id}.md"
-
     now = datetime.now(UTC)
     branch, commits = _git_context()
     artifacts_md = "\n".join(
@@ -209,11 +230,44 @@ def write_handoff(
         "remains": what_remains,
         "artifacts": distinct_artifacts,
     }
-    # No latest.json (R10): the index answers "the last session of this project".
-    try:
-        persisted_md_path, notes = _write_record(md_path, meta, md_content.encode("utf-8"), dest=dest)
-    except (OSError, H2TError) as exc:
-        return _degraded(session_id, spool_path, distinct_artifacts, exc)
+    dest = markdown_dir is not None
+    session_uuid = ""
+    notes: list[str] = []
+    # An explicit --markdown-dir is the caller's chosen destination: it wins over the UUID record.
+    program = None if dest else _program_session()
+    if program is not None:
+        # The program's own id is known: the handoff enriches the record the hook started.
+        session_uuid = program[1]
+        meta.update(name=session_id, tool=program[0])
+        meta.pop("session_id")
+        meta["user_msgs"] = max(_known_user_msgs(session_uuid), 1)   # a handoff means the session had work
+        try:
+            persisted_md_path = record.upsert(session_uuid, meta, body=md_content.encode("utf-8"))
+        except (OSError, H2TError, ValueError) as exc:
+            return _degraded(session_id, spool_path, distinct_artifacts, exc)
+    else:
+        if not dest and _in_codex_shell():
+            # A Codex shell with no unique open session: keep the slug record, marked so the
+            # view can place it; the open ids are the candidates it may belong to.
+            cwd = os.getcwd()
+            meta.update(tool="codex", cwd=cwd, origin="live", user_msgs=1)
+            candidates = _open_codex_ids(cwd)
+            if candidates:
+                meta["candidates"] = candidates
+        md_dir = Path(markdown_dir) if markdown_dir else default_markdown_dir(project, machine)
+        try:
+            # The first operation on this path: a --markdown-dir into a package place (secrets,
+            # say) is refused here, after the spool, so it degrades like any other mirror failure.
+            store.mkdir(md_dir, place="records.sessions", dest=dest)
+        except (OSError, H2TError) as exc:
+            return _degraded(session_id, spool_path, distinct_artifacts, exc)
+        md_path = md_dir / f"{session_id}.md"
+
+        # No latest.json (R10): the index answers "the last session of this project".
+        try:
+            persisted_md_path, notes = _write_record(md_path, meta, md_content.encode("utf-8"), dest=dest)
+        except (OSError, H2TError) as exc:
+            return _degraded(session_id, spool_path, distinct_artifacts, exc)
 
     try:
         with SkillEval("handoff", domain=domain, project=project):
@@ -232,6 +286,8 @@ def write_handoff(
         "artifacts": len(distinct_artifacts),
         "mirror_write_failed": False,
     }
+    if session_uuid:
+        result["session_uuid"] = session_uuid
     if notes:
         result["notes"] = notes
     return result

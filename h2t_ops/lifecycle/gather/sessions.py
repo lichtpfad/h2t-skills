@@ -40,7 +40,10 @@ def _identity_keys(names: tuple[str, ...]) -> list[str]:
 def _rows(keys: list[str], *, machine: str | None = None, limit: int | None = None) -> list[dict]:
     """Sessions of these projects, newest first by updated_at, from the index."""
     marks = ",".join("?" * len(keys))
-    sql = f"SELECT * FROM sessions WHERE project IN ({marks})"
+    # A record with no `done` is a hook-only record (it has no briefing content); it is left out
+    # here for every caller, find_session_files included. Intended: the current, empty session
+    # must not be shown as the previous one.
+    sql = f"SELECT * FROM sessions WHERE project IN ({marks}) AND COALESCE(done, '') <> ''"
     args: list = list(keys)
     if machine is not None:
         sql += " AND machine = ?"

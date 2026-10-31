@@ -124,6 +124,38 @@ def test_schema_mismatch_rebuilds():
     assert [r["session_id"] for r in _rows("SELECT session_id FROM sessions")] == ["s1"]
 
 
+def test_v2_columns_are_filled_from_the_record():
+    _md("mac", "p", "s1", tool="claude", origin="live", cwd="/w/p", user_msgs=3,
+        summary="did it", candidates=["a", "b"])
+    _md("mac", "p", "s2")                                   # none of the new fields
+    index.rebuild()
+    got = {r["session_id"]: r for r in _rows("SELECT * FROM sessions")}
+    assert got["s1"]["tool"] == "claude" and got["s1"]["origin"] == "live"
+    assert got["s1"]["cwd"] == "/w/p" and got["s1"]["summary"] == "did it"
+    assert got["s1"]["user_msgs"] == 3 and got["s2"]["user_msgs"] is None
+    assert got["s2"]["tool"] is None
+    assert "candidates" not in got["s1"]
+
+
+def test_v1_base_is_rebuilt():
+    _md("mac", "p", "s1", tool="claude")
+    index.rebuild()
+    db = sqlite3.connect(query.index_path())
+    db.execute("UPDATE meta SET value='1' WHERE key='schema_version'")
+    db.commit()
+    db.close()
+    assert [s["tool"] for s in index.latest_sessions(["p"])] == ["claude"]
+    assert _rows("SELECT value FROM meta WHERE key='schema_version'") == [{"value": "2"}]
+
+
+def test_branch_status_table_exists():
+    index.rebuild()
+    cols = [r["name"] for r in _rows("PRAGMA table_info(branch_status)")]
+    assert cols == ["repo", "branch", "worktree", "files", "branch_state", "pr", "pr_url",
+                    "issues", "verdict", "checked_at"]
+    assert index.SCHEMA_VERSION == 2
+
+
 def test_corrupt_db_rebuilds():
     _md("mac", "p", "s1")
     index.rebuild()

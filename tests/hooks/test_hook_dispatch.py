@@ -32,10 +32,12 @@ NAMES_3X = {"gather-on-skill", "gather-on-prompt", "inject-h2t-context", "struct
             "grade-guard", "plain-guard", "plan-closer", "new-repo-hint",
             "session-end-reap-codex", "layout-precommit", "bulk-precommit",
             "secrets-precommit", "on-stop", "post-git-commit-docs-lint"}
+# Hooks added after 3.x (#566); no 3.x caller, so no name to keep.
+NEW_NAMES = {"session-pulse"}
 
 
 def test_handlers_are_keyed_by_the_3x_handler_names():
-    assert set(hooks.HANDLERS) == NAMES_3X
+    assert set(hooks.HANDLERS) == NAMES_3X | NEW_NAMES
     for name, handle in hooks.HANDLERS.items():
         assert callable(handle), name
 
