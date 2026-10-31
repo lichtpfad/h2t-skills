@@ -69,6 +69,13 @@ def register(subparsers: Any) -> None:
     dp.add_argument("--reply-to", dest="reply_to")
     add_fmt(dp)
 
+    dsp = cmds.add_parser("draft-send",
+                          help="Send an existing draft by id; Gmail removes it from Drafts")
+    dsp.add_argument("draft_id", help="the draft id `draft`/`reply`/`forward` printed")
+    dsp.add_argument("--confirm-send", dest="confirm_send", action="store_true",
+                     help="required — nothing is sent without it")
+    add_fmt(dsp)
+
     rep = cmds.add_parser("reply", help="Reply to a thread (draft by default)")
     rep.add_argument("thread_id")
     rep.add_argument("--body", dest="body", default=None)
@@ -202,6 +209,12 @@ def run(args) -> Any:
             return {"id": result["id"], "draft": as_draft}
         return (f"✓ {'Draft created' if as_draft else 'Message sent'} "
                 f"(ID: {result['id']})")
+    if cmd == "draft-send":
+        result = client.send_draft(args.draft_id, confirm_send=args.confirm_send)
+        if _fmt(args) == "json":
+            return result
+        return (f"✓ Draft {result['draft_id']} sent to {result.get('to')} "
+                f"(message ID: {result.get('id')})")
     if cmd == "reply":
         body = _read_file(args.file) if args.file else args.body
         if not body:

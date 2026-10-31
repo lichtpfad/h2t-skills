@@ -14,7 +14,7 @@ Provider I/O router for `h2t-ops`.
 Use this skill for:
 
 - Google Calendar events, availability, and event writes;
-- Gmail search, read, draft, send, and labels;
+- Gmail search, read, draft, send, labels, and sending an approved draft by id (`gmail draft-send DRAFT_ID --confirm-send`);
 - Google Drive list, search, download, export, upload, and upload-folder;
 - Notion pages, blocks, databases, workspace search, graph, and sync;
 - Telegram auth, dialogs, messages, saved messages, mentions, and bootstrap;

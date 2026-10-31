@@ -429,3 +429,22 @@ def test_label_delete_parser_requires_confirm_name():
     p = _parser()
     with pytest.raises(SystemExit):
         p.parse_args(["gmail", "label-delete", "Label_1"])  # missing --confirm-name
+
+
+# --- draft-send (#531) -------------------------------------------------------------------
+
+def test_draft_send_cli_passes_the_id_and_the_confirmation(monkeypatch):
+    seen = {}
+
+    class _Stub(_FakeClient):
+        def send_draft(self, draft_id, *, confirm_send=False):
+            seen.update(draft_id=draft_id, confirm_send=confirm_send)
+            return {"id": "m-sent", "thread_id": "t1", "draft_id": draft_id,
+                    "to": "ann@example.com", "subject": "S"}
+
+    import h2t_ops.connectors.gmail.client as client_mod
+    monkeypatch.setattr(client_mod, "GmailClient", lambda: _Stub())
+    out = gc.run(_parser().parse_args(["gmail", "draft-send", "r2711", "--confirm-send"]))
+    assert seen == {"draft_id": "r2711", "confirm_send": True}
+    assert out == "✓ Draft r2711 sent to ann@example.com (message ID: m-sent)"
+    assert _parser().parse_args(["gmail", "draft-send", "r2711"]).confirm_send is False
