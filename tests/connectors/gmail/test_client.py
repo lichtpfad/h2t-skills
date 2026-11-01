@@ -1090,18 +1090,18 @@ def test_draft_send_without_confirm_touches_nothing():
 @pytest.mark.parametrize("name", [
     "rider.pdf",
     "QATAL YIQTOL Technical Rider.pdf",
-    "QATAL YIQTOL — Technical Rider.pdf",
+    "QATAL YIQTOL \u2014 Technical Rider.pdf",
     "Правила упоминания программы.pdf",
 ])
 def test_attachment_keeps_disposition_and_name(tmp_path, name):
     """A non-ASCII name must not drag `attachment;` into an RFC 2047 encoded-word (#594)."""
     import email
     from email.mime.multipart import MIMEMultipart
-    from h2t_ops.connectors.gmail.client import GmailClient
+    c, _ = _client_with(_FakeService())
     f = tmp_path / name
     f.write_bytes(b"%PDF-1.4")
     msg = MIMEMultipart()
-    GmailClient._attach_file(None, msg, str(f))
+    c._attach_file(msg, str(f))
     part = email.message_from_bytes(msg.as_bytes()).get_payload()[0]
     assert part.get_content_disposition() == "attachment"
     assert part.get_filename() == name
