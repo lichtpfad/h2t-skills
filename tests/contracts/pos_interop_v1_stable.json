@@ -1,0 +1,56 @@
+[
+  {
+    "name": "H2T_PATH_VAULT",
+    "kind": "env",
+    "owner": "pack",
+    "reader": "POS",
+    "status": "stable",
+    "meaning": "The vault root both sides read. Unset: ~/.dor/vault. Resolved by the pack, never spelled by POS.",
+    "resolved_by": "h2t-ops paths get vault"
+  },
+  {
+    "name": "h2t-ops paths get",
+    "kind": "cli",
+    "owner": "pack",
+    "reader": "POS",
+    "status": "stable",
+    "argv": [
+      "h2t-ops",
+      "paths",
+      "get",
+      "<place>",
+      "--json"
+    ],
+    "places": [
+      "vault",
+      "lake",
+      "inbox",
+      "kb"
+    ],
+    "envelope": {
+      "ok": true,
+      "provider": "paths",
+      "result": "<absolute path>"
+    },
+    "meaning": "One path per place, so POS asks instead of spelling it. secret:* ids are outside this contract until #584."
+  },
+  {
+    "name": "lake",
+    "kind": "path",
+    "place": "lake",
+    "owner": "pack connectors",
+    "reader": "POS",
+    "status": "stable",
+    "meaning": "Each connector writes only its own files under lake/<provider>/ and lists them in manifest.jsonl. POS reads; POS does not write there."
+  },
+  {
+    "name": "connector cursors",
+    "kind": "path",
+    "place": "state",
+    "path": "cursors/<provider>.json",
+    "owner": "pack connectors",
+    "reader": "none",
+    "status": "stable",
+    "meaning": "Sync position of granola and meetgeek. Pack-private: POS neither reads nor writes it, and asks the connector for messages since a cursor instead."
+  }
+]

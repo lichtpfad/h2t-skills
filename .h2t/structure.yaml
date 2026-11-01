@@ -18,6 +18,7 @@ allowed_root_dirs:
   - .claude/
   - .claude-plugin/
   - .github/
+  - contracts/
 
 # Sections under docs/. Deliberately short: an existing directory is allowed by
 # existing, so none of the twelve legacy sections needs listing here. This list
