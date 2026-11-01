@@ -65,6 +65,12 @@ def register(subparsers: Any) -> None:
                     help="tasks database id (default: notion.tasks_database_id in user.yaml)")
     ft.add_argument("--limit", type=int)
     add_fmt(ft)
+    bt = cmds.add_parser("brief-tasks",
+                         help="Open tasks in daily-brief sections, by deadline type (notion.tasks_schema)")
+    bt.add_argument("database_id", nargs="?", default=None,
+                    help="database id (default: notion.tasks_database_id in user.yaml)")
+    bt.add_argument("--today", default=None, help="YYYY-MM-DD (default: today in user.yaml timezone)")
+    add_fmt(bt)
     c = cmds.add_parser("create", help="Create a page")
     c.add_argument("parent_id")
     c.add_argument("title")
@@ -198,6 +204,31 @@ def _paged(page: dict, args, relations: dict | None = None,
                  limit=getattr(args, "limit", None), extra=extra, rendered=rendered)
 
 
+def _brief_tasks(args, client_cls) -> Any:
+    """Schema first, so a missing one is exit 3 before any request (#507)."""
+    from datetime import date, datetime
+    from zoneinfo import ZoneInfo
+
+    from h2t_ops.connectors.notion import brief
+    from h2t_ops.core import user_config
+    from h2t_ops.core.errors import UsageError
+
+    schema = brief.schema(user_config.get(brief.SCHEMA_KEY), str(user_config.path()))
+    if args.today:
+        try:
+            today = date.fromisoformat(args.today)
+        except ValueError as e:
+            raise UsageError(f"--today {args.today!r} is not YYYY-MM-DD") from e
+    else:
+        tz = user_config.get("timezone")
+        today = datetime.now(ZoneInfo(str(tz))).date() if tz else date.today()
+    page = client_cls().query_database_page(args.database_id, filter_dict=brief.done_filter(schema))
+    out = brief.sections([brief.task(r, schema) for r in page["items"]], today)
+    if _fmt(args) == "json":
+        return brief.to_json(out, today)
+    return brief.render(out, today)
+
+
 def _fmt(args) -> str:
     return "json" if getattr(args, "as_json", False) else getattr(args, "fmt", "human")
 
@@ -215,7 +246,7 @@ def run(args) -> Any:
             raise UsageError(f"file not found: {path}") from e
 
     # The tasks database is the user's, not the code's: user.yaml (#548 R45).
-    if args.notion_cmd in ("find-project-tasks", "search") and not args.database_id:
+    if args.notion_cmd in ("find-project-tasks", "search", "brief-tasks") and not args.database_id:
         from h2t_ops.core import user_config
         args.database_id = user_config.get("notion.tasks_database_id")
         if not args.database_id:
@@ -223,6 +254,9 @@ def run(args) -> Any:
             raise UsageError(
                 f"notion {args.notion_cmd}: no tasks database",
                 hint=f"pass {flag} or set notion.tasks_database_id in {user_config.path()}")
+
+    if args.notion_cmd == "brief-tasks":
+        return _brief_tasks(args, NotionClient)
 
     client = NotionClient()
     cmd = args.notion_cmd
