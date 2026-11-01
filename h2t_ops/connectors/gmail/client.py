@@ -592,7 +592,10 @@ class GmailClient:
             part = MIMEBase("application", "octet-stream")
             part.set_payload(f.read())
         encoders.encode_base64(part)
-        part.add_header("Content-Disposition", f"attachment; filename={path.name}")
+        # filename as a parameter: email encodes only it (RFC 2231). Inlined into the
+        # value, a non-ASCII name made the whole header an encoded-word and Gmail
+        # dropped the attachment (#594).
+        part.add_header("Content-Disposition", "attachment", filename=path.name)
         message.attach(part)
 
 
