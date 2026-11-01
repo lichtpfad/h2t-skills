@@ -172,3 +172,69 @@ def test_the_hint_on_a_missing_token_names_the_command(home):
     with pytest.raises(ConfigError) as ei:
         mod.resolve_google_credentials("calendar", ["https://www.googleapis.com/auth/calendar"])
     assert "h2t-ops google auth" in ei.value.hint
+
+
+# --- google token (#584) ------------------------------------------------------------------
+
+def _store(token_path, **extra):
+    """A durable token as `google auth` leaves it: no access token, so reading it refreshes."""
+    token_path.parent.mkdir(parents=True, exist_ok=True)
+    durable = mod.durable_token(json.loads(_creds(mod.GOOGLE_SCOPES).to_json()))
+    token_path.write_text(json.dumps({**durable, **extra}), encoding="utf-8")
+
+
+def _token(capsys):
+    from h2t_ops.cli import dispatch
+
+    rc = dispatch(["google", "token", "--json"])
+    out, err = capsys.readouterr()
+    return rc, (json.loads(out) if out.strip() else None), err
+
+
+@pytest.fixture
+def refresh_gives(monkeypatch):
+    """Google answers a refresh with this access token, one hour long."""
+    from google.oauth2.credentials import Credentials
+
+    def fake(self, request):
+        self.token, self.expiry = "fake-fresh-access", datetime(2030, 1, 1, 13, 0, 0)
+
+    monkeypatch.setattr(Credentials, "refresh", fake)
+    monkeypatch.setattr(mod, "_request", lambda: object())
+
+
+def test_token_refreshes_and_prints_the_access_token(token, capsys, refresh_gives):
+    _store(token)
+    rc, env, err = _token(capsys)
+    assert rc == 0, err
+    assert env["ok"] is True and env["provider"] == "google"
+    assert env["result"] == {"access_token": "fake-fresh-access", "expiry": "2030-01-01T13:00:00Z",
+                             "scopes": sorted(mod.GOOGLE_SCOPES)}
+
+
+def test_token_reads_a_3x_token_on_an_unmigrated_machine(client, capsys, refresh_gives):
+    _store(paths.legacy("google.store") / "tokens.json")
+    assert not secrets.json_path("google.token").exists()
+    rc, env, err = _token(capsys)
+    assert rc == 0, err
+    assert env["result"]["access_token"] == "fake-fresh-access"
+
+
+def test_token_without_a_store_is_exit_3_naming_the_command(home, capsys):
+    rc, env, err = _token(capsys)
+    assert rc == 3
+    assert "h2t-ops google auth" in err + json.dumps(env or {})
+
+
+def test_token_whose_refresh_fails_is_exit_4(token, capsys, monkeypatch):
+    from google.oauth2.credentials import Credentials
+
+    def boom(self, request):
+        raise RuntimeError("invalid_grant")
+
+    monkeypatch.setattr(Credentials, "refresh", boom)
+    monkeypatch.setattr(mod, "_request", lambda: object())
+    _store(token)
+    rc, env, err = _token(capsys)
+    assert rc == 4
+    assert "fake-refresh" not in err + json.dumps(env or {})   # the error carries no secret

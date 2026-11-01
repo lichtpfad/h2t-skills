@@ -15,14 +15,21 @@ def register(subparsers: Any) -> None:
     ap.add_argument("--json", dest="as_json", action="store_true",
                     help="raw machine-readable envelope")
     ap.add_argument("--format", dest="fmt", choices=["md", "human"], default="human")
+
+    tp = cmds.add_parser("token", help="Print a valid access token for another program (refreshes if needed)")
+    tp.add_argument("--json", dest="as_json", action="store_true",
+                    help="raw machine-readable envelope")
+    tp.add_argument("--format", dest="fmt", choices=["md", "human"], default="human")
     p.set_defaults(_handler=run)
 
 
 def run(args: Any) -> Any:
     """Dispatch a google subcommand. Returns result or raises core.errors."""
     from h2t_ops.core.errors import UsageError
-    from h2t_ops.core.google_auth import bootstrap_google_token  # lazy
+    from h2t_ops.core.google_auth import access_token, bootstrap_google_token  # lazy
 
     if args.google_cmd == "auth":
         return bootstrap_google_token(force=args.force, open_browser=not args.no_browser)
+    if args.google_cmd == "token":
+        return access_token()
     raise UsageError(f"unknown google subcommand: {args.google_cmd!r}")

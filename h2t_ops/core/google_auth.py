@@ -99,7 +99,8 @@ def _refresh_sha(data: dict | None) -> str:
 
 def mirror_legacy(creds_json: dict) -> str:
     """One-way copy of this machine's token to the 3.x path POS reads (§9), in the 3.x shape.
-    Removed in 4.1. Both copies belong to this machine, so there is nothing to compare."""
+    Removed once lichtpfad/POS#174 is closed (#584), not at a version. Both copies belong
+    to this machine, so there is nothing to compare."""
     legacy = paths.legacy("google.store") / "tokens.json"
     if not legacy.is_file():
         return "absent"
@@ -195,14 +196,22 @@ def resolve_google_credentials(service_name: str,
             f"google_auth: unknown service_name {service_name!r}",
             hint="expected 'gmail', 'calendar', or 'drive'",
         )
+    creds, token_data = _stored_credentials(f" for service {service_name!r}")
+    _validate_scopes(getattr(creds, "scopes", None) or [], required_scopes)
+    return _refreshed(creds, token_data)
+
+
+def _stored_credentials(for_what: str = ""):
+    """This machine's token as credentials, and the data it was read from."""
     token_data, found = secrets.read_json("google.token")
     creds = None if token_data is None else _parse(token_data, found)
     if creds is None:
-        raise ConfigError(
-            f"Google OAuth token not found for service {service_name!r}.",
-            hint=_BOOTSTRAP_HINT,
-        )
-    _validate_scopes(getattr(creds, "scopes", None) or [], required_scopes)
+        raise ConfigError(f"Google OAuth token not found{for_what}.", hint=_BOOTSTRAP_HINT)
+    return creds, token_data
+
+
+def _refreshed(creds, token_data: dict):
+    """Refresh in memory when needed; a rotated refresh token is the only write (R11)."""
     if not creds.valid:
         # A durable token has no access token; from_authorized_user_info then sets expiry
         # to "now", so it reads as expired and takes this branch (google-auth 2.62).
@@ -222,6 +231,14 @@ def resolve_google_credentials(service_name: str,
                 hint=_BOOTSTRAP_HINT,
             )
     return creds
+
+
+def access_token() -> dict:
+    """A valid access token for another program (#584): it asks the pack, it does not read
+    the pack's files. No scope check — the caller gets whatever this machine consented to."""
+    creds = _refreshed(*_stored_credentials())
+    expiry = creds.expiry.isoformat(timespec="seconds") + "Z" if creds.expiry else None
+    return {"access_token": creds.token, "expiry": expiry, "scopes": sorted(creds.scopes or [])}
 
 
 def bootstrap_google_token(*, force: bool = False, open_browser: bool = True) -> dict:

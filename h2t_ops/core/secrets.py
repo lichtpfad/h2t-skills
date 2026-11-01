@@ -134,6 +134,11 @@ def json_path(name: str) -> Path:
     return paths.dir_of(place) / file
 
 
+def found_json(name: str) -> Path | None:
+    """The file read_json would read: the 4.0 one, else the first 3.x one; None if neither."""
+    return next((p for p in (json_path(name), *_legacy_json(name)) if p.is_file()), None)
+
+
 def read_json(name: str) -> tuple[dict | None, Path | None]:
     for path in (json_path(name), *_legacy_json(name)):
         if path.is_file():

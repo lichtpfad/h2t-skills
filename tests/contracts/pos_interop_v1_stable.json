@@ -32,7 +32,37 @@
       "provider": "paths",
       "result": "<absolute path>"
     },
-    "meaning": "One path per place, so POS asks instead of spelling it. secret:* ids are outside this contract until #584."
+    "meaning": "One path per place, so POS asks instead of spelling it. secret:google.token is outside this entry: POS asks `h2t-ops google token` for the token itself."
+  },
+  {
+    "name": "h2t-ops google token",
+    "kind": "cli",
+    "owner": "pack",
+    "reader": "POS",
+    "status": "stable",
+    "argv": [
+      "h2t-ops",
+      "google",
+      "token",
+      "--json"
+    ],
+    "envelope": {
+      "ok": true,
+      "provider": "google",
+      "result": {
+        "access_token": "<string>",
+        "expiry": "<ISO 8601 UTC, Z>",
+        "scopes": [
+          "<scope>"
+        ]
+      }
+    },
+    "exit_codes": {
+      "0": "token printed",
+      "3": "no token store on this machine",
+      "4": "refresh failed"
+    },
+    "meaning": "A valid access token, refreshed if needed, from this machine's token (4.0 store, else its 3.x files). POS asks; it does not read the pack's files (#584)."
   },
   {
     "name": "lake",

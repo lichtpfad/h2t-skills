@@ -16,6 +16,10 @@ from h2t_ops.core.output import emit
 
 _NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 _REPO = "cwd or --repo-root of each command"
+# What writes each JSON secret, for the error when it is missing (#584).
+_CREATED_BY = {"google.token": "run `h2t-ops google auth`",
+               "google.client": "save the Desktop OAuth client JSON there (`h2t-ops google auth` says how)",
+               "telegram.auth-state": "run `h2t-ops telegram auth`"}
 
 
 class _Parser(argparse.ArgumentParser):
@@ -75,9 +79,14 @@ def _get(args) -> str:
         if kind == "secret":
             from h2t_ops.core import secrets
             try:
-                return str(secrets.json_path(name))     # google.token, google.client, …
+                found = secrets.found_json(name)        # google.token, google.client, …
             except KeyError:
                 pass
+            else:
+                if found is None:
+                    raise ConfigError(f"{key}: no file at {secrets.json_path(name)} or its 3.x places",
+                                      hint=_CREATED_BY.get(name, "h2t-ops doctor"))
+                return str(found)
             if _NAME.match(name) and ".." not in name:
                 return str(secrets.provider_file(name))
         elif all(_NAME.match(part) and part != ".." for part in name.split("/")):

@@ -41,7 +41,9 @@ h2t-ops calendar create "Planning" 2026-05-23 14:00 --duration-min 60 --meet --j
 
 Calendar shares one Google login with Gmail and Drive: the OAuth client is
 `h2t-ops paths get secret:google.client`, this machine's token is
-`h2t-ops paths get secret:google.token`. `h2t-ops google auth` creates the token.
+`h2t-ops paths get secret:google.token` (exit 3: no token on this machine).
+`h2t-ops google auth` creates the token. Another program that needs an access token
+asks `h2t-ops google token --json` instead of reading the file.
 
 In Claude Code, check readiness through:
 
