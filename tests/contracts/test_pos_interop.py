@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 from h2t_ops.cli import dispatch
-from h2t_ops.core import google_auth, lake, paths
+from h2t_ops.core import google_auth, lake, paths, secrets
 
 ROOT = Path(__file__).resolve().parents[2]
 CONTRACT = json.loads((ROOT / "contracts/pos-interop.json").read_text(encoding="utf-8"))
@@ -45,13 +45,18 @@ def test_every_entry_says_who_owns_it_and_how_long_it_lives(name):
         assert e.get("removal_condition"), "a deprecated entry names what removes it"
 
 
+def _normative(entry):
+    """What a reader relies on; `meaning` is prose and may be reworded within a major."""
+    return None if entry is None else {k: v for k, v in entry.items() if k != "meaning"}
+
+
 def test_stable_entries_of_this_major_are_unchanged():
     """Adding an entry is fine; changing or dropping a stable one is a new major version,
     with a new snapshot beside this test."""
     assert SNAPSHOT.is_file(), f"version {CONTRACT['version']}: add {SNAPSHOT.name}"
     frozen = json.loads(SNAPSHOT.read_text(encoding="utf-8"))
     for old in frozen:
-        assert ENTRIES.get(old["name"]) == old, (
+        assert _normative(ENTRIES.get(old["name"])) == _normative(old), (
             f"stable entry {old['name']!r} changed within major {MAJOR}: bump the major "
             "and snapshot the new stable entries")
 
@@ -101,3 +106,37 @@ def test_token_mirror_is_written_where_the_contract_says():
     mirror.write_text("{}", encoding="utf-8")
     assert google_auth.mirror_legacy({"token": "t"}) == "written"
     assert json.loads(mirror.read_text(encoding="utf-8")) == {"token": "t"}
+
+
+def test_google_token_keeps_its_envelope_and_exit_codes(capsys, monkeypatch):
+    from google.oauth2.credentials import Credentials
+
+    entry = ENTRIES["h2t-ops google token"]
+    assert dispatch(entry["argv"][1:]) == 3                    # no store yet
+    capsys.readouterr()
+
+    f = secrets.json_path("google.token")
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_text(json.dumps({"refresh_token": "fake-refresh", "client_id": "fake-id",
+                             "client_secret": "fake-secret", "scopes": google_auth.GOOGLE_SCOPES,
+                             "token_uri": "https://oauth2.googleapis.com/token"}), encoding="utf-8")
+    monkeypatch.setattr(google_auth, "_request", lambda: object())
+
+    def boom(self, request):
+        raise RuntimeError("invalid_grant")
+
+    monkeypatch.setattr(Credentials, "refresh", boom)
+    assert dispatch(entry["argv"][1:]) == 4
+    capsys.readouterr()
+
+    def fresh(self, request):
+        from datetime import datetime
+        self.token, self.expiry = "fake-access", datetime(2030, 1, 1)
+
+    monkeypatch.setattr(Credentials, "refresh", fresh)
+    assert dispatch(entry["argv"][1:]) == 0
+    got = json.loads(capsys.readouterr().out)
+    assert set(got) == set(entry["envelope"]) and got["provider"] == entry["envelope"]["provider"]
+    assert set(got["result"]) == set(entry["envelope"]["result"])
+    assert got["result"]["expiry"].endswith("Z")
+    assert set(entry["exit_codes"]) == {"0", "3", "4"}

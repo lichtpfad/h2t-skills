@@ -187,8 +187,8 @@ h2t-ops notion search \
 
 - **`h2t-ops` не найден**: исход 3 проверки версии в начале скилла — он различает PATH и
   отсутствие установки и даёт команду бутстрапа
-- **Calendar/Gmail**: проверь токен этой машины — файл `h2t-ops paths get secret:google.token`;
-  нет файла — `h2t-ops google auth`
+- **Calendar/Gmail**: проверь токен этой машины — `h2t-ops paths get secret:google.token`;
+  выход 3 (файла нет) — `h2t-ops google auth`
 - **Notion**: проверь `NOTION_API_TOKEN` в файле `h2t-ops paths get secret:notion`
 - Диагностика разом: `h2t-ops doctor`
 - Если источник недоступен — пропусти его и укажи в брифинге `⚠️ <source> unavailable`

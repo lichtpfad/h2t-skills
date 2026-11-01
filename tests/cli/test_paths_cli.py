@@ -89,8 +89,6 @@ def test_list_shows_a_broken_paths_yaml_instead_of_failing(capsys):
     ("lake", lambda: paths.data_dir() / "lake"),            # not set: where the package writes
     ("secret:notion", lambda: paths.secrets_shared() / "notion.env"),
     ("secret:getcourse", lambda: paths.secrets_shared() / "getcourse.env"),
-    ("secret:google.token", lambda: paths.secrets_local() / "google.token.json"),
-    ("secret:google.client", lambda: paths.secrets_shared() / "google.client.json"),
     ("data:research", lambda: paths.data_dir() / "research"),
     ("data:creative/profiles", lambda: paths.data_dir() / "creative" / "profiles"),
 ])
@@ -98,6 +96,33 @@ def test_get_prints_only_the_path(capsys, key, expected):
     rc, out, _ = _run(capsys, "paths", "get", key)
     assert rc == 0
     assert out == f"{expected()}\n"
+
+
+@pytest.mark.parametrize("name, hint", [
+    ("google.token", "h2t-ops google auth"),
+    ("google.client", "Desktop OAuth client"),
+    ("telegram.auth-state", "h2t-ops telegram auth"),
+])
+def test_get_a_missing_json_secret_is_exit_3_not_a_path(capsys, name, hint):
+    """A path to a file that is not there reads as an answer, and the caller loses Google on
+    a machine that still has only its 3.x files (#584)."""
+    rc, out, err = _run(capsys, "paths", "get", f"secret:{name}")
+    assert rc == 3 and out == ""
+    assert hint in err
+
+
+def test_get_a_json_secret_names_the_file_that_is_read(capsys):
+    from h2t_ops.core import secrets
+
+    old = paths.legacy("google.store") / "tokens.json"
+    old.parent.mkdir(parents=True)
+    old.write_text("{}", encoding="utf-8")
+    assert _run(capsys, "paths", "get", "secret:google.token")[1] == f"{old}\n"   # unmigrated
+
+    new = secrets.json_path("google.token")
+    new.parent.mkdir(parents=True, exist_ok=True)
+    new.write_text("{}", encoding="utf-8")
+    assert _run(capsys, "paths", "get", "secret:google.token")[1] == f"{new}\n"   # 4.0 first
 
 
 def test_get_lake_from_paths_yaml(capsys, tmp_path):
