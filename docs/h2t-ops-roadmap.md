@@ -27,6 +27,35 @@ Skills and agents should call `h2t-ops <connector> ...` directly. A future
 `h2t-ai` umbrella bridge may delegate `h2t <connector> ...` to `h2t-ops`, but
 that bridge belongs outside this repo.
 
+## Current Priorities
+
+The list of open work lives in the GitHub milestone
+[M8: 4.1 POS interop](https://github.com/lichtpfad/h2t-skills/milestone/14), not
+here, so it cannot go stale in this file:
+
+```bash
+gh issue list --milestone "M8: 4.1 POS interop" --state open
+```
+
+This section keeps only what the milestone does not show: the order, and why.
+Set 2026-11-01.
+
+1. **#582** — the versioned pack–POS contract (`contracts/pos-interop.json`).
+   Both #583 and #584 test against it.
+2. **#584** — Google access tokens through `h2t-ops google token --json`.
+   Unblocks POS#174; the 3.x token mirror is retired after it.
+3. **#507** — daily-brief ranks by `Тип срока` and shows the `На день` plan.
+   Independent of the rest; daily value on its own.
+4. **#583** — release gates (green CI on the tagged commit, empty-HOME install,
+   contract check). Lands before 4.1 is tagged, so 4.1 is the first gated release.
+5. **#581** with **#566 / PR #578** — author values out of the release, and the
+   session pulse. They overlap: #578 needs consent for its haiku pass and a
+   non-Russian output path, which #581 lists.
+
+The POS side of the seam is lichtpfad/POS#173, #174 and tracker #175.
+
+Everything below this section is the connector-migration record up to 2026-05-28.
+
 ## Current State
 
 ### Completed Connector Migration
