@@ -91,7 +91,15 @@ h2t-ops calendar list --from today --to +2d --max 50 --json
 # письма (~5 KB), 40 писем это ~300 KB в контекст. human даёт ~13 KB с ID.
 h2t-ops gmail list --unread --query "is:important" --max 40 --format human
 
-# Задачи: --format md отдаёт свойства, Link и резолвленный проект
+# Задачи: открытые, уже разложенные по секциям по типу срока (#507)
+h2t-ops notion brief-tasks --format human
+```
+
+`brief-tasks` читает схему базы из `notion.tasks_schema` в `~/.h2t/config/user.yaml`
+(имена свойств и значения `Тип срока`). Без схемы он выходит с кодом 3 и показывает,
+какой блок вписать. Тогда задачи берутся старой командой и раскладываются по Step 2b:
+
+```bash
 h2t-ops notion search \
   --filter-json '{"property":"Status","status":{"does_not_equal":"Done"}}' \
   --limit 200 --format md --resolve-relations Project
@@ -103,14 +111,31 @@ h2t-ops notion search \
 |---|---|
 | `calendar list` | `ongoing` (идёт **прямо сейчас**: по часам для событий со временем, весь день для all-day), `day_index`/`days_total` у многодневных, `html_link` |
 | `gmail list` | отправитель, дата, `ID` (ссылка: `https://mail.google.com/mail/u/0/#all/<ID>`), snippet |
-| `notion search` | `Status`, `Priority`, `Due`, `Link`, `Project` со ссылкой |
+| `notion brief-tasks` | секции с задачами: заголовок-ссылка, срок, тип срока, `на день` |
+| `notion search` (запасной путь) | `Status`, `Priority`, `Due`, `Link`, `Project` со ссылкой |
 
 `--resolve-relations Project` обязателен: без него проект придёт как
 `(unresolved)`, и подставлять его по памяти нельзя.
 
 ### Step 2: Приоритизация
 
-Реальная схема базы задач: `Status` = `Not started` | `In progress` | `Done`,
+**2a. Есть `brief-tasks`.** Порядок и состав секций задаёт команда, не модель. Выводить
+секции как пришли, ничего не перекладывать между ними:
+
+1. **Решил сделать сегодня** — `На день` = сегодня
+2. **Не сделано из плана** — `На день` в прошлом, не готово
+3. **HIGH** — тип `Внешний`, срок просрочен или ≤ +3 дня
+4. **Проверить** — тип `Контроль`, срок наступил
+5. **Сроки без основания** — срок есть, тип пуст: счётчик и список по дате, в HIGH не поднимать
+6. **MED / LOW** — `Внешний` дальше трёх дней
+7. **Остальное** — `Намерение`, будущий `Контроль`, без даты: одной строкой со счётчиком
+
+Тип срока ставит владелец; срок без типа приоритета не даёт, кто бы его ни поставил.
+
+**2b. Запасной путь (схемы нет).** Написать в брифинге
+`⚠️ notion.tasks_schema не задан — ранжирую по старым правилам` и дальше по этому разделу.
+
+Реальная схема старой базы задач: `Status` = `Not started` | `In progress` | `Done`,
 плюс `Priority` = `High` | `Medium` | `Low` и `Due`. Часть задач не имеет ни
 `Priority`, ни `Due`.
 
@@ -172,12 +197,16 @@ h2t-ops notion search \
 ## 📧 Gmail (показаны M из ~N важных непрочитанных)
 - [Тема](https://mail.google.com/mail/u/0/#all/<ID>) — отправитель, дата
 
-## ✅ Tasks (N активных)
-- [Задача](notion_url) — Status · Priority · Due · [Проект](project_url)
-⚠️ N задач с дедлайнами старше 90 дней, нужна ревизия
-🗑 N шаблонных задач Notion
+## ✅ Задачи (brief-tasks)
+### Решил сделать сегодня (N)
+### Не сделано из плана (N)
+### HIGH (N)
+### Проверить (N)
+### Сроки без основания (N)
+### MED / LOW (N)
+Остальное: N
 
-## ⚡ Priority Actions
+## ⚡ Priority Actions          ← только на запасном пути (2b)
 ### HIGH
 ### MED
 ### LOW

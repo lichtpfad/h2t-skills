@@ -321,6 +321,8 @@ FORMAT_CHOSEN = {
                           "~300 KB for 40 messages; --format human is ~13 KB with the ids",
     "h2t-ops notion search": "daily-brief: --format md resolves the Project relation and the "
                              "page link, which the brief prints",
+    "h2t-ops notion brief-tasks": "daily-brief: the human output is the sections in rule order "
+                                  "with links, which the brief prints as they come (#507)",
     **{form: "the markdown is the content itself — a note or transcript the user reads or "
              "keeps — not a result the skill parses"
        for form in ("h2t-ops granola get", "h2t-ops granola transcript",
