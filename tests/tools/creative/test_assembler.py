@@ -107,7 +107,7 @@ def test_assemble_landing_interpolates_content(tmp_path):
     out_dir = tmp_path / "dist"
     assembler.assemble_landing(recipe, profile_dir, out_dir, base_dir=base_dir)
 
-    html_content = (out_dir / "index.html").read_text()
+    html_content = (out_dir / "index.html").read_text(encoding="utf-8")
     assert "Welcome &lt;World&gt;" in html_content
     assert "My Page" in html_content
 
@@ -122,7 +122,7 @@ def test_assemble_landing_profile_css_contains_tokens_and_component(tmp_path):
     out_dir = tmp_path / "dist"
     assembler.assemble_landing(recipe, profile_dir, out_dir, base_dir=base_dir)
 
-    profile_css = (out_dir / "profile.css").read_text()
+    profile_css = (out_dir / "profile.css").read_text(encoding="utf-8")
     assert "--color-bg" in profile_css
     assert ".hero" in profile_css
 
@@ -135,7 +135,7 @@ def test_assemble_landing_no_fx_if_fx_dir_absent(tmp_path):
     out_dir = tmp_path / "dist"
     assembler.assemble_landing(recipe, profile_dir, out_dir, base_dir=base_dir)
 
-    content = (out_dir / "index.html").read_text()
+    content = (out_dir / "index.html").read_text(encoding="utf-8")
     assert "bg-canvas" not in content
     assert not (out_dir / "fx.js").exists()
 
@@ -173,7 +173,7 @@ def test_assemble_deck_contains_slides_and_menu(tmp_path):
     out_dir = tmp_path / "deck_dist"
     assembler.assemble_deck(recipe, profile_dir, out_dir, base_dir=base_dir)
 
-    content = (out_dir / "index.html").read_text()
+    content = (out_dir / "index.html").read_text(encoding="utf-8")
     assert 'class="slide"' in content
     assert "slide-menu" in content
     assert "#slide-1" in content
@@ -193,7 +193,7 @@ def test_assemble_deck_speaker_note_as_html_comment(tmp_path):
     }
     out_dir = tmp_path / "deck_dist"
     assembler.assemble_deck(recipe, profile_dir, out_dir, base_dir=base_dir)
-    content = (out_dir / "index.html").read_text()
+    content = (out_dir / "index.html").read_text(encoding="utf-8")
     assert "<!-- SPEAKER NOTE:" in content
     assert "Remember to pause here" in content
 
@@ -239,7 +239,7 @@ def test_fx_present_injects_canvas(tmp_path):
     out_dir = tmp_path / "dist"
     assembler.assemble_landing(recipe, profile_dir, out_dir, base_dir=base_dir)
 
-    content = (out_dir / "index.html").read_text()
+    content = (out_dir / "index.html").read_text(encoding="utf-8")
     assert 'id="bg-canvas"' in content
     assert (out_dir / "fx.js").exists()
 
@@ -337,7 +337,7 @@ def test_assemble_landing_with_blue_palette(tmp_path):
     }
     out_dir = tmp_path / "dist"
     assembler.assemble_landing(recipe, profile_dir, out_dir, base_dir=base_dir, palette="blue")
-    assert "--color-bg: #001" in (out_dir / "profile.css").read_text()
+    assert "--color-bg: #001" in (out_dir / "profile.css").read_text(encoding="utf-8")
 
 
 def test_assemble_deck_uses_build_profile_css_not_raw_tokens(tmp_path):
@@ -349,6 +349,6 @@ def test_assemble_deck_uses_build_profile_css_not_raw_tokens(tmp_path):
     }
     out_dir = tmp_path / "deck_dist"
     assembler.assemble_deck(recipe, profile_dir, out_dir, base_dir=base_dir, palette="blue")
-    css = (out_dir / "profile.css").read_text()
+    css = (out_dir / "profile.css").read_text(encoding="utf-8")
     assert "--color-bg: #001" in css
     assert "--font-body" in css
