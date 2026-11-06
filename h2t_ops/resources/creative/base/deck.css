@@ -1,2 +1,115 @@
 .slide { display: none; }
 .slide--active { display: block; }
+
+/* Deck frame and block roles, the same for every profile.
+   Profiles name their tokens differently (--color-text / --color-fg, --font-display /
+   --font-sans / --font): the aliases below read whichever the profile defines, and every
+   rule in this file uses only the aliases. A profile's own look goes in profiles/<name>/deck.css.
+   tests/tools/creative/test_deck_roles.py checks that each alias resolves in every profile. */
+.deck {
+  --role-bg: var(--color-bg);
+  --role-text: var(--color-text, var(--color-fg));
+  --role-muted: var(--color-text-dim, var(--color-muted, var(--color-fg-dim, var(--color-fg-muted))));
+  --role-surface: var(--color-bg-card, var(--color-surface, var(--color-bg2, var(--color-bg))));
+  --role-surface-alt: var(--color-bg-light, var(--color-bg2, var(--color-surface, var(--color-bg-card, var(--color-bg)))));
+  --role-border: var(--color-border);
+  --role-accent: var(--color-accent);
+  --role-on-accent: var(--color-on-accent, var(--color-bg));
+  --role-display: var(--font-display, var(--font-sans, var(--font)));
+  --role-body: var(--font-body, var(--font-sans, var(--font)));
+}
+
+html:has(body.deck), body.deck { margin: 0; height: 100%; }
+body.deck { font-family: var(--role-body); font-size: 16px; line-height: 1.6; color: var(--role-text); background: var(--role-bg); }
+.deck .slides { min-height: 100vh; }
+.deck .slide { min-height: 100vh; box-sizing: border-box; padding: 48px 72px 80px; }
+.deck .slide--active { display: flex; align-items: center; }
+.deck .slide-inner { max-width: 1080px; width: 100%; min-width: 0; margin: 0 auto; }
+.deck .slide-headline { font-family: var(--role-display); font-weight: 600; font-size: 40px; line-height: 1.15;
+  margin: 0 0 28px; padding-bottom: 14px; border-bottom: 2px solid var(--role-accent); }
+.deck .slide-body { font-size: 17px; }
+.deck .slide-body p { margin: 0 0 14px; max-width: 70ch; }
+.deck .slide-body ul, .deck .slide-body ol { margin: 0 0 16px; padding-left: 22px; max-width: 80ch; }
+.deck .slide-body li { margin: 0 0 10px; }
+.deck .slide-body li::marker { color: var(--role-accent); }
+.deck .slide-body strong { font-weight: 600; }
+.deck .slide--cover .slide-headline { font-size: 64px; border: 0; padding: 0; margin-bottom: 18px; }
+.deck .slide--cover .slide-body p { color: var(--role-muted); font-size: 18px; }
+
+/* menu and touch navigation */
+.deck .slide-menu { position: fixed; left: 0; right: 0; bottom: 0; display: flex; gap: 4px; justify-content: center;
+  flex-wrap: wrap; padding: 10px 12px; background: var(--role-bg); border-top: 1px solid var(--role-border); z-index: 10; }
+.deck .slide-menu__link { font-size: 12px; color: var(--role-muted); text-decoration: none; padding: 4px 9px;
+  border-radius: var(--radius-sm); min-width: 12px; text-align: center; }
+.deck .slide-menu__link--active { color: var(--role-on-accent); background: var(--role-accent); }
+.deck .deck-nav { position: fixed; right: 16px; top: 16px; display: flex; gap: 6px; z-index: 11; }
+.deck .deck-nav button { font: 500 14px var(--role-body); border: 1px solid var(--role-border); background: var(--role-surface);
+  color: var(--role-text); width: 40px; height: 40px; cursor: pointer; }
+
+/* roles */
+.deck .kicker { font-size: 12.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--role-accent); margin: 0 0 10px; }
+.deck .kicker p { margin: 0; max-width: none; }
+.deck .kicker p + p { text-transform: none; letter-spacing: 0; font-size: 15px; color: var(--role-muted); margin-top: 4px; }
+.deck .thesis { margin: 4px 0 22px; }
+.deck .slide-body .thesis p { font-family: var(--role-display); font-size: 27px; line-height: 1.35; margin: 0 0 18px; max-width: 40ch; }
+.deck .slide-body > p + .thesis { margin-top: 14px; }
+.deck .slide-body .block-label { font-size: 13px; letter-spacing: .1em; text-transform: uppercase; color: var(--role-muted); margin: 0 0 10px; }
+.deck .cards { display: grid; gap: 14px; margin: 0 0 20px; grid-template-columns: repeat(3, 1fr); }
+.deck .cards.n2, .deck .cards.n4.cards--wide { grid-template-columns: repeat(2, 1fr); }
+.deck .cards.n4 { grid-template-columns: repeat(4, 1fr); }
+.deck .card { background: var(--role-surface); border: 1px solid var(--role-border); border-top: 3px solid var(--role-accent);
+  padding: 16px 18px; font-size: 15.5px; line-height: 1.5; }
+.deck .card b { display: block; font-family: var(--role-display); font-weight: 600; font-size: 19px; margin-bottom: 6px; }
+.deck .cards--short .card { font-family: var(--role-display); font-size: 21px; line-height: 1.35; }
+.deck .slide-body .steps { list-style: none; counter-reset: st; padding: 0; display: grid; gap: 12px; margin: 0 0 18px;
+  max-width: none; grid-template-columns: repeat(3, 1fr); }
+.deck .slide-body .steps.n4, .deck .slide-body .steps.n8 { grid-template-columns: repeat(4, 1fr); }
+.deck .steps li { counter-increment: st; background: var(--role-surface); border: 1px solid var(--role-border);
+  padding: 14px 16px; margin: 0; font-size: 15px; line-height: 1.45; }
+.deck .steps li::before { content: counter(st); display: block; font-family: var(--role-display); font-size: 24px;
+  color: var(--role-accent); margin-bottom: 4px; }
+.deck .figures { display: flex; gap: 40px; flex-wrap: wrap; margin: 6px 0 22px; }
+.deck .figures div { flex: 1 1 200px; }
+.deck .figures b, .deck .figure-one__figs b { display: block; font-family: var(--role-display); font-weight: 600;
+  font-size: 64px; line-height: 1; color: var(--role-accent); }
+.deck .figures span { display: block; color: var(--role-muted); font-size: 15px; margin-top: 8px; max-width: 34ch; }
+.deck .figure-one { display: flex; gap: 28px; align-items: center; margin: 4px 0 20px; }
+.deck .figure-one__figs { display: flex; gap: 28px; flex: 0 0 auto; }
+.deck .slide-body .figure-one__caption p { color: var(--role-muted); margin: 0 0 6px; max-width: 52ch; }
+.deck .quote-group { margin: 0 0 14px; }
+.deck .quote-row { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.deck .quote { background: var(--role-surface); border: 1px solid var(--role-border); border-left: 3px solid var(--role-accent);
+  padding: 16px 20px; margin: 0 0 12px; max-width: 70ch; }
+.deck .quote blockquote { margin: 0 0 6px; font-family: var(--role-display); font-size: 19px; line-height: 1.45; }
+.deck .quote figcaption { color: var(--role-muted); font-size: 13px; }
+.deck .conclusion { background: var(--role-surface-alt); border-left: 3px solid var(--role-accent); padding: 16px 22px; margin: 8px 0 20px; }
+.deck .slide-body .conclusion p { margin: 0; font-size: 18px; line-height: 1.5; max-width: 70ch; }
+.deck .slide-body .note p { font-size: 13.5px; color: var(--role-muted); margin: 0 0 8px; }
+.deck .table-wrap { overflow-x: auto; margin: 0 0 14px; }
+.deck .slide-body table { border-collapse: collapse; width: 100%; background: var(--role-surface);
+  border: 1px solid var(--role-border); font-size: 14.5px; }
+.deck .slide-body th, .deck .slide-body td { text-align: left; vertical-align: top; padding: 8px 14px; border-bottom: 1px solid var(--role-border); }
+.deck .slide-body th { font-weight: 600; background: var(--role-surface-alt); }
+.deck .deck-figure { background: var(--role-surface); border: 1px solid var(--role-border); margin: 0 0 14px; max-width: 820px; }
+.deck .deck-figure svg, .deck .deck-figure img { display: block; width: 100%; height: auto; }
+
+/* phone: a long slide scrolls from its top instead of being cut at both ends */
+@media (max-width: 760px) {
+  .deck .slide { padding: 64px 16px 120px; }
+  .deck .slide--active { align-items: flex-start; }
+  .deck .slide-headline { font-size: 28px; }
+  .deck .slide--cover .slide-headline { font-size: 40px; }
+  .deck .slide-body { font-size: 15px; }
+  .deck .slide-body .thesis p { font-size: 20px; }
+  .deck .cards, .deck .cards.n2, .deck .cards.n4, .deck .cards.n4.cards--wide,
+  .deck .slide-body .steps, .deck .slide-body .steps.n4, .deck .slide-body .steps.n8 { grid-template-columns: 1fr; }
+  .deck .cards--short .card { font-size: 18px; }
+  .deck .quote-row { grid-template-columns: 1fr; }
+  .deck .figures b, .deck .figure-one__figs b { font-size: 44px; }
+  .deck .figure-one { flex-direction: column; align-items: flex-start; gap: 8px; }
+  .deck .slide-body .conclusion p { font-size: 16px; }
+  .deck .slide-body table { font-size: 13px; }
+  .deck .slide-body th, .deck .slide-body td { padding: 6px 8px; hyphens: auto; overflow-wrap: anywhere; }
+  .deck .deck-figure { overflow-x: auto; max-width: 100%; }
+  .deck .slide-menu__link { font-size: 11px; padding: 3px 6px; }
+}
