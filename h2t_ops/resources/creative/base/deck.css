@@ -111,5 +111,6 @@ body.deck { font-family: var(--role-body); font-size: 16px; line-height: 1.6; co
   .deck .slide-body table { font-size: 13px; }
   .deck .slide-body th, .deck .slide-body td { padding: 6px 8px; hyphens: auto; overflow-wrap: anywhere; }
   .deck .deck-figure { overflow-x: auto; max-width: 100%; }
+  .deck .deck-figure svg { width: 760px; max-width: none; }  /* a chart stays legible and scrolls sideways */
   .deck .slide-menu__link { font-size: 11px; padding: 3px 6px; }
 }
