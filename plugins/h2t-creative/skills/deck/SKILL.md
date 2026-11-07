@@ -6,7 +6,7 @@ compatibility: "Assembly needs the h2t-ops CLI (h2t-creative). The QA step runs 
   the result unverified rather than stopping delivery."
 metadata:
   author: lichtpfad
-  version: 1.0.1
+  version: 1.1.0
 ---
 
 # h2t-creative: deck
@@ -72,6 +72,14 @@ Three states:
 - **Two or more `*.css` files**: List names and ask user: "Which palette? (Enter to use default)"
   Write `palette: <name>` to recipe only if user chooses a non-default palette.
 
+## Step 1c: Content source
+
+If the deck is built from text the user has already approved, the text is content and
+stays word for word; only layout is yours. Read `references/from-approved-text.md` before
+Step 2: write the deck markdown with `verbatim_source`, split the text into blocks by its
+two passes, propose cuts and emphasis and wait for the user's choice, then build the recipe
+from that markdown. Step 3b checks the result.
+
 ## Step 2: Build recipe.yaml
 
 Deck schema uses `slides:` key (NOT `sections:`):
@@ -110,6 +118,16 @@ h2t-creative assemble --profile <name> --type deck --recipe recipe.yaml --out ./
 ```
 
 On error: print assembler's stderr and stop.
+
+## Step 3b: Verify the content (deck from approved text)
+
+```bash
+h2t-creative verify --deck deck.md --page ./dist/index.html --json
+```
+
+Exit 1: `missing`, `misplaced` and `stale_omit` in the JSON say what is wrong; `omitted`
+and `renamed` are the decisions to show the user. Fix the deck markdown and repeat from
+Step 2; do not go on to QA with a failing verify.
 
 ## Step 4: Playwright QA
 
