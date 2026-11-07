@@ -112,7 +112,7 @@ button { font: inherit; font-size: 12px; color: var(--acc); background: none;
       if (state[k] && r[k] !== state[k]) return false;
     }
     if (state.repo && (r.repo || "").toLowerCase().indexOf(state.repo) < 0) return false;
-    return !(state.since && (r.started_at || "") < state.since);
+    return !(state.since && (r.started_at ? r.time.slice(0, 10) : "") < state.since);
   }
 
   function nest(rows, keys) {

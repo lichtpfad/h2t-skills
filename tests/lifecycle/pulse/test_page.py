@@ -74,3 +74,9 @@ def test_page_row_without_tool_has_no_resume(tmp_path):
                                          "updated_at": "2026-10-10T00:00:00Z"}, b""))
     row = _data(_build(tmp_path))["rows"][0]
     assert (row["tool"], row["resume"]) == (view._DASH, "")
+
+
+def test_page_since_filter_uses_the_local_date():
+    """The page filters on the same local date the row shows, not on the UTC stamp."""
+    assert "(r.started_at ? r.time.slice(0, 10) : \"\") < state.since" in page._TEMPLATE
+    assert "(r.started_at || \"\") < state.since" not in page._TEMPLATE

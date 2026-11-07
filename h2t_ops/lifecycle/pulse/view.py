@@ -72,7 +72,8 @@ def _keep(row: dict, f: Filters) -> bool:
         return False
     if f.tool and row["tool"] != f.tool:
         return False
-    return not (f.since and (row["started_at"] or "") < f.since)
+    started = _local_time(row["started_at"])[:10] if row["started_at"] else ""   # the date the row shows
+    return not (f.since and started < f.since)
 
 
 def rows(f: Filters) -> list[dict]:
