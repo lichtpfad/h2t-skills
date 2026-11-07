@@ -56,6 +56,7 @@ HANDLERS: dict[str, Callable[[dict], Reply] | Command] = {
     "plan-closer": _lazy("plan_closer"),
     "new-repo-hint": _lazy("new_repo_hint"),
     "session-end-reap-codex": _lazy("reap_codex"),
+    "session-pulse": _lazy("session_pulse"),
     "layout-precommit": Command("layout_precommit"),
     "bulk-precommit": Command("bulk_precommit"),
     "secrets-precommit": Command("secrets_precommit"),

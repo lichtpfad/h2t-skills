@@ -1,0 +1,14 @@
+{
+  "event": {
+    "hook_event_name": "SessionStart",
+    "source": "startup",
+    "session_id": "case-session",
+    "cwd": "{tmp}",
+    "transcript_path": "{transcript}"
+  },
+  "expect": {
+    "text": "",
+    "block": false,
+    "notice": ""
+  }
+}

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import sqlite3
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 DDL = """
 CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY, value TEXT);
@@ -12,11 +12,17 @@ CREATE TABLE IF NOT EXISTS projects(id TEXT PRIMARY KEY, domain TEXT, label TEXT
 CREATE TABLE IF NOT EXISTS repos(pattern TEXT, kind TEXT, project TEXT, domain TEXT);
 CREATE TABLE IF NOT EXISTS sessions(path TEXT PRIMARY KEY, dir TEXT, session_id TEXT, machine TEXT,
                       project TEXT, domain TEXT, date TEXT, updated_at TEXT, branch TEXT,
-                      last_commit TEXT, done TEXT, remains TEXT, artifacts TEXT, conflict INTEGER);
+                      last_commit TEXT, done TEXT, remains TEXT, artifacts TEXT, conflict INTEGER,
+                      name TEXT, tool TEXT, origin TEXT, cwd TEXT, repo TEXT, worktree TEXT,
+                      started_at TEXT, ended_at TEXT, user_msgs INTEGER, transcript TEXT,
+                      summary TEXT, summary_source TEXT, summary_stamp TEXT);
 CREATE INDEX IF NOT EXISTS sessions_project ON sessions(project, updated_at);
 CREATE TABLE IF NOT EXISTS registry_history(line INTEGER PRIMARY KEY, ts TEXT, machine TEXT, project TEXT,
                               status TEXT, raw TEXT);
 CREATE TABLE IF NOT EXISTS problems(path TEXT PRIMARY KEY, error TEXT);
+CREATE TABLE IF NOT EXISTS branch_status(repo TEXT, branch TEXT, worktree TEXT, files TEXT,
+                      branch_state TEXT, pr TEXT, pr_url TEXT, issues TEXT, verdict TEXT,
+                      checked_at TEXT, PRIMARY KEY(repo, branch));
 """
 
 
