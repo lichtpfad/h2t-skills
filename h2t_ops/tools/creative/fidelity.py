@@ -18,7 +18,8 @@ Inputs are the deck markdown, whose frontmatter names the source, and the built 
 Units of the source: headings, paragraphs, list items, table cells, and marker lines
 (`[+ Label] text`). A marker line with quotes (`«…» — I3`) splits into the quotes and the
 lead-in around them; one without quotes splits into sentences; the label itself is not
-checked. Only the `---` separator is skipped. Matching is against the visible text of the
+checked. Only the `---` separator is skipped; `**` and link markup are dropped, the page
+shows them as formatting. Matching is against the visible text of the
 page, whitespace collapsed, so a line break or a tag inside a fragment does not matter.
 A unit counts as present when it occurs anywhere in that text: a one-word table cell can be
 satisfied by the same word elsewhere on the page.
@@ -41,6 +42,11 @@ SLIDE_HEADING = re.compile(r"^## (?:Слайд|Slide) \d+\..*$", flags=re.M)
 
 def _flat(text: str) -> str:
     return " ".join(text.split())
+
+
+def _unmark(text: str) -> str:
+    """Inline markdown a page shows as formatting, not as text: `**bold**`, `[text](url)`."""
+    return re.sub(r"(?<!!)\[([^\]]+)\]\([^)\s]+\)", r"\1", text).replace("**", "")
 
 
 def _body(md_text: str) -> str:
@@ -88,7 +94,7 @@ def source_units(md_text: str) -> list[str]:
             units += [_flat(i) for i in re.split(r"^- ", block, flags=re.M) if i.strip()]
         else:
             units.append(_flat(block))
-    return units
+    return [_unmark(u) for u in units]
 
 
 def _attribute(text: str, attribution: dict) -> str:
@@ -108,8 +114,15 @@ def expected_units(source_md: str, omit=(), rename=None, attribution=None) -> tu
     return out, stale
 
 
+INLINE_TAG = re.compile(r"</?(?:a|strong|em|i|code|small|sup|sub)\b[^>]*>")
+
+
 def visible_text(page_html: str) -> str:
-    body = page_html.split("<main", 1)[-1]
+    """Page text after `<main`: inline tags vanish, any other tag is a word break.
+
+    `<b>` and `<span>` stay word breaks: deck figures use them as separate lines
+    (`<b>44%</b><span>of revenue</span>`)."""
+    body = INLINE_TAG.sub("", page_html.split("<main", 1)[-1])
     return _flat(html.unescape(re.sub(r"<[^>]+>", " ", body)))
 
 
@@ -121,11 +134,11 @@ def markdown_text(deck_md: str) -> str:
             continue
         line = re.sub(r"^## (?:Слайд|Slide) \d+\.\s*", "", line)
         line = re.sub(r"\s*\{\.[\w-]+\}\s*$", "", line)
-        line = re.sub(r"^- ", "", line).replace("**", "")
+        line = _unmark(re.sub(r"^- ", "", line))
         if line.startswith("|"):
             line = " ".join(line.strip().strip("|").split("|"))
         lines.append(line)
-    return _flat(re.sub(r"<[^>]+>", " ", "\n".join(lines)))
+    return _flat(re.sub(r"<[^>]+>", " ", INLINE_TAG.sub("", "\n".join(lines))))
 
 
 def missing_units(source_md: str, page_html: str, omit=(), rename=None, attribution=None) -> list[str]:

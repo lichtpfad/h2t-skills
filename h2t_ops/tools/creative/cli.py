@@ -6,7 +6,8 @@ install, so an update cannot wipe them — the plugin bin this replaces answered
 directory, and style-create wrote new profiles into the plugin cache. `assemble` looks a
 profile up there first, then in the 3.x directory `~/.h2t/creative/profiles/` (read only,
 until the migration moves it), then among the shipped ones. `verify` checks a built deck
-against the approved text its markdown names (`h2t_ops.tools.creative.fidelity`).
+against the approved text its markdown names (`h2t_ops.tools.creative.fidelity`). `recipe` turns
+that deck markdown into the recipe `assemble` reads (`h2t_ops.tools.creative.deckmd`).
 """
 from __future__ import annotations
 
@@ -15,10 +16,10 @@ import json
 import sys
 from pathlib import Path
 
-from h2t_ops.core import paths
+from h2t_ops.core import paths, store
 from h2t_ops.resources import resource_dir
 
-USAGE = "usage: h2t-creative {root,profiles-dir,assemble,verify} [args]"
+USAGE = "usage: h2t-creative {root,profiles-dir,assemble,recipe,verify} [args]"
 
 
 def user_profiles_dir() -> Path:
@@ -90,6 +91,30 @@ def verify(args: list[str]) -> int:
     return 0 if report["ok"] else 1
 
 
+def recipe(args: list[str]) -> int:
+    import yaml
+
+    from h2t_ops.tools.creative import deckmd
+
+    ap = argparse.ArgumentParser(prog="h2t-creative recipe",
+                                 description="Turn a deck markdown into a deck recipe with block roles.")
+    ap.add_argument("--deck", required=True, help="deck markdown: `## Slide N.` headings, `::: role` blocks")
+    ap.add_argument("--out", required=True, help="recipe file to write, e.g. recipe.yaml")
+    ap.add_argument("--assets", action="append", default=[],
+                    help="directory an `![…](file.svg)` is inlined from; the deck's own directory is searched first")
+    ap.add_argument("--profile", help="overrides `profile` in the frontmatter")
+    a = ap.parse_args(args)
+    deck = Path(a.deck)
+    data = deckmd.to_recipe(deck.read_text(encoding="utf-8"), [deck.parent, *map(Path, a.assets)])
+    if a.profile:
+        data["profile"] = a.profile
+    # --out is a file the user named, like assemble's --out directory (plan R7)
+    store.replace(Path(a.out), yaml.safe_dump(data, allow_unicode=True, sort_keys=False, width=1000),
+                  place="repo", dest=True)
+    print(f"{a.out}: {len(data['slides'])} slides")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     args = sys.argv[1:] if argv is None else list(argv)
     command = args[0] if args else ""
@@ -112,6 +137,8 @@ def main(argv: list[str] | None = None) -> int:
         sys.argv = ["h2t-creative assemble", *args[1:]]
         assembler.main()
         return 0
+    if command == "recipe":
+        return recipe(args[1:])
     if command == "verify":
         return verify(args[1:])
     if command in {"-h", "--help"}:

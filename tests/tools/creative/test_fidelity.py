@@ -112,3 +112,10 @@ def test_cli_verify_exit_codes(tmp_path, capsys):
     assert "PASS" in capsys.readouterr().out
     assert cli.main(["verify", "--deck", str(deck), "--page", str(bad), "--json"]) == 1
     assert '"missing": [\n    "Only paragraph."' in capsys.readouterr().out
+
+
+def test_inline_markup_in_the_source_is_formatting_not_text():
+    src = "A **bold** claim, see [the site](https://example.org).\n"
+    assert f.source_units(src) == ["A bold claim, see the site."]
+    page = '<main><p>A <strong>bold</strong> claim, see <a href="https://example.org">the site</a>.</p></main>'
+    assert f.missing_units(src, page) == []

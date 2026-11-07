@@ -42,10 +42,16 @@ The one sentence this slide exists to say.
 Supporting paragraph, unchanged.
 ```
 
-`## Slide N.` (or `## Слайд N.`) starts a slide. `::: role` … `:::` marks a block's role;
-`verify` ignores the markup lines and checks the text inside. Each slide becomes one recipe
-slide, each marked block one entry of its `blocks` (SKILL.md, "Blocks"), unmarked text a
-`text` block; `::: kicker` goes to the slide's `kicker`.
+`## Slide N.` (or `## Слайд N.`) starts a slide; `{.cover}` after its title makes it the
+cover. `::: role` … `:::` marks a block's role; `verify` ignores the markup lines and checks
+the text inside. `h2t-creative recipe --deck deck.md --out recipe.yaml` turns this into the
+recipe: each slide one recipe slide, each marked block one entry of its `blocks` (SKILL.md,
+"Blocks"), unmarked text a `text` block, a table a `table`, an image a `figure`. A
+`::: kicker` that opens the slide stands above the headline; one later on stays where it is.
+Figures go after the role name, in order: `::: number 44% | 72%`. In `::: quote`, a line
+`«…» — I3` is a quote captioned with `attribution[I3]`, any other line the group label.
+`profile`, `palette`, `lang`, `menu`, `stylesheets` and `deck_title` in the frontmatter
+carry into the recipe.
 
 ## Splitting the text into blocks
 

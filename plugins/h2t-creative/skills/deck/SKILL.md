@@ -6,7 +6,7 @@ compatibility: "Assembly needs the h2t-ops CLI (h2t-creative). The QA step runs 
   the result unverified rather than stopping delivery."
 metadata:
   author: lichtpfad
-  version: 1.2.0
+  version: 1.3.0
 ---
 
 # h2t-creative: deck
@@ -77,8 +77,15 @@ Three states:
 If the deck is built from text the user has already approved, the text is content and
 stays word for word; only layout is yours. Read `references/from-approved-text.md` before
 Step 2: write the deck markdown with `verbatim_source`, split the text into blocks by its
-two passes, propose cuts and emphasis and wait for the user's choice, then build the recipe
-from that markdown. Step 3b checks the result.
+two passes, propose cuts and emphasis and wait for the user's choice. Then let the CLI
+build the recipe from that markdown instead of writing it by hand:
+
+```bash
+h2t-creative recipe --deck deck.md --out recipe.yaml [--profile <name>] [--assets <dir>]
+```
+
+`--assets` is where `![…](file.svg)` is inlined from, beside the deck's own directory.
+Step 2 below is then the reference for what the recipe holds; Step 3b checks the result.
 
 ## Step 2: Build recipe.yaml
 
