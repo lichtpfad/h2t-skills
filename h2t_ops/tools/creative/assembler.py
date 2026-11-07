@@ -15,7 +15,7 @@ PLUGIN_ROOT = resource_dir("creative")
 BASE_DIR = PLUGIN_ROOT / "base"
 PROFILES_DIR = PLUGIN_ROOT / "profiles"
 SHARED_DIR = PLUGIN_ROOT / "shared"
-DECK_LAYOUTS = {"title-only", "title-body", "title-media", "blank"}
+DECK_LAYOUTS = {"cover", "title-only", "title-body", "title-media", "blank"}
 FX_SIZE_WARN_BYTES = 50 * 1024
 
 _PLACEHOLDER_RE = re.compile(r'\{\{\s*(\w+)(?:\s*\|\s*safe)?\s*\}\}')
@@ -205,6 +205,12 @@ def assemble_landing(
 # --- Deck ---
 
 _DECK_LAYOUT_HTML = {
+    "cover": (
+        '<div class="slide-inner">'
+        '<h1 class="slide-headline">{{ headline }}</h1>'
+        '<div class="slide-body">{{ body | safe }}</div>'
+        '</div>'
+    ),
     "title-only": '<div class="slide-inner"><h1 class="slide-headline">{{ headline }}</h1></div>',
     "title-body": (
         '<div class="slide-inner">'
@@ -236,21 +242,24 @@ _DECK_NAV_JS = """\
     if(e.key==='ArrowLeft'){if(cur>0)show(cur-1);}
   });
   links.forEach(function(a,i){a.addEventListener('click',function(e){e.preventDefault();show(i);});});
+  document.querySelectorAll('[data-deck-step]').forEach(function(b){b.addEventListener('click',function(){
+    var i=cur+parseInt(b.getAttribute('data-deck-step'));if(i>=0&&i<slides.length)show(i);});});
   var h=window.location.hash;
   show(h?Math.max(0,Math.min(parseInt(h.replace('#slide-',''))-1,slides.length-1)):0);
 })();"""
 
 _HTML_DECK = """\
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{lang}">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{title}</title>
-  <link rel="stylesheet" href="base.css">
+{stylesheets}  <link rel="stylesheet" href="base.css">
   <link rel="stylesheet" href="profile.css">
 </head>
 <body class="deck">
+<div class="deck-nav"><button type="button" data-deck-step="-1" aria-label="Previous">←</button><button type="button" data-deck-step="1" aria-label="Next">→</button></div>
 <nav class="slide-menu">
 {menu_links}
 </nav>
@@ -267,6 +276,88 @@ _HTML_DECK = """\
 """
 
 
+# Blocks: the role of each piece of text on a slide (thesis, cards, number, quote …).
+# Values are inline HTML, as `body` is; the assembler decides only the markup and the
+# layout classes. Styles live in base/deck.css and read the profile's tokens through
+# `--role-*` aliases, so every profile renders every role.
+BLOCK_ROLES = {"text", "thesis", "cards", "steps", "number", "quote", "conclusion", "note",
+               "table", "figure", "html"}
+
+
+def _label(block: dict, cls: str) -> str:
+    return f'<p class="{cls}">{block["label"]}</p>' if block.get("label") else ""
+
+
+def _card(item) -> str:
+    if isinstance(item, dict):
+        title = f'<b>{item["title"]}</b> ' if item.get("title") else ""
+        return f'<div class="card">{title}{item.get("text", "")}</div>'
+    return f'<div class="card">{item}</div>'
+
+
+def _block_html(block: dict) -> str:
+    role = block.get("role")
+    if role not in BLOCK_ROLES:
+        raise ValueError(f"Unknown block role: '{role}'. Valid: {sorted(BLOCK_ROLES)}")
+    if role in ("text", "thesis", "conclusion", "note"):
+        paras = block["text"] if isinstance(block["text"], list) else [block["text"]]
+        inner = "".join(f"<p>{t}</p>" for t in paras)
+        return inner if role == "text" else f'<div class="{role}">{inner}</div>'
+    if role == "cards":
+        items = block["items"]
+        texts = [i if isinstance(i, str) else f'{i.get("title", "")} {i.get("text", "")}' for i in items]
+        mods = []
+        if all(len(t) <= 70 for t in texts):
+            mods.append("cards--short")
+        elif sum(map(len, texts)) / len(texts) > 110:
+            mods.append("cards--wide")
+        cls = " ".join(["cards", f"n{len(items)}", *mods])
+        return _label(block, "block-label") + f'<div class="{cls}">{"".join(_card(i) for i in items)}</div>'
+    if role == "steps":
+        cells = "".join(f"<li>{i}</li>" for i in block["items"])
+        return _label(block, "block-label") + f'<ol class="steps n{len(block["items"])}">{cells}</ol>'
+    if role == "number":
+        figs, items = block["figures"], block.get("items") or []
+        if items and len(items) == len(figs):
+            cells = "".join(f"<div><b>{f}</b><span>{t}</span></div>" for f, t in zip(figs, items))
+            return f'<div class="figures n{len(figs)}">{cells}</div>'
+        caption = items or ([block["text"]] if block.get("text") else [])
+        row = "".join(f"<b>{f}</b>" for f in figs)
+        caps = "".join(f"<p>{t}</p>" for t in caption)
+        return f'<div class="figure-one"><div class="figure-one__figs">{row}</div><div class="figure-one__caption">{caps}</div></div>'
+    if role == "quote":
+        quotes = "".join(
+            f'<figure class="quote"><blockquote>{q["text"]}</blockquote>'
+            + (f'<figcaption>— {q["by"]}</figcaption>' if q.get("by") else "")
+            + "</figure>"
+            for q in block["quotes"]
+        )
+        return f'<div class="quote-group">{_label(block, "block-label")}{quotes}</div>'
+    if role == "table":
+        head = "".join(f"<th>{c}</th>" for c in block.get("header") or [])
+        rows = "".join("<tr>" + "".join(f"<td>{c}</td>" for c in r) + "</tr>" for r in block["rows"])
+        thead = f"<thead><tr>{head}</tr></thead>" if head else ""
+        return f'<div class="table-wrap"><table>{thead}<tbody>{rows}</tbody></table></div>'
+    if role == "figure":
+        inner = block["svg"] if block.get("svg") else f'<img src="{html.escape(block["src"])}" alt="{html.escape(block.get("alt", ""))}">'
+        return f'<div class="deck-figure">{inner}</div>'
+    return block["html"]
+
+
+def _blocks_html(blocks: list) -> str:
+    out = [_block_html(b) for b in blocks]
+    # two quote groups in a row share a line
+    merged, i = [], 0
+    while i < len(blocks):
+        if blocks[i].get("role") == "quote" and i + 1 < len(blocks) and blocks[i + 1].get("role") == "quote":
+            merged.append(f'<div class="quote-row">{out[i]}{out[i + 1]}</div>')
+            i += 2
+        else:
+            merged.append(out[i])
+            i += 1
+    return "".join(merged)
+
+
 def _build_deck_slide_html(slide: dict) -> str:
     layout = slide.get("layout", "title-body")
     if layout not in DECK_LAYOUTS:
@@ -274,9 +365,20 @@ def _build_deck_slide_html(slide: dict) -> str:
     template = _DECK_LAYOUT_HTML[layout]
     content = dict(slide.get("content", {}))
     note = content.pop("note", None)
+    kicker = content.pop("kicker", None)
+    blocks = content.pop("blocks", None)
+    if blocks is not None:
+        if "{{ body" not in template:
+            raise ValueError(f"Layout '{layout}' has no body for blocks; use title-body or cover")
+        content["body"] = content.get("body", "") + _blocks_html(blocks)
     inner = interpolate(template, content) if template else ""
+    if kicker:
+        lines = kicker if isinstance(kicker, list) else [kicker]
+        kicker_html = '<div class="kicker">' + "".join(f"<p>{k}</p>" for k in lines) + "</div>"
+        inner = inner.replace('<h1 class="slide-headline">', kicker_html + '<h1 class="slide-headline">', 1)
     note_comment = f"\n<!-- SPEAKER NOTE: {html.escape(str(note))} -->" if note else ""
-    return f'<section class="slide">{inner}{note_comment}\n</section>'
+    cls = "slide slide--cover" if layout == "cover" else "slide"
+    return f'<section class="{cls}">{inner}{note_comment}\n</section>'
 
 
 def assemble_deck(
@@ -290,11 +392,13 @@ def assemble_deck(
         base_dir = BASE_DIR
     slides_data = recipe.get("slides", [])
     slides_html = "\n".join(_build_deck_slide_html(s) for s in slides_data)
+    numbers = recipe.get("menu") == "numbers"  # long decks: numbers, the title on hover
     menu_links = "\n".join(
-        f'  <a href="#slide-{i+1}" class="slide-menu__link">'
-        f'{html.escape(str(s.get("title", f"Slide {i+1}")))}</a>'
+        f'  <a href="#slide-{i+1}" class="slide-menu__link" title="{html.escape(str(s.get("title", f"Slide {i+1}")))}">'
+        f'{i + 1 if numbers else html.escape(str(s.get("title", f"Slide {i+1}")))}</a>'
         for i, s in enumerate(slides_data)
     )
+    stylesheets = "".join(f'  <link rel="stylesheet" href="{html.escape(u)}">\n' for u in recipe.get("stylesheets") or [])
     has_fx = _has_fx(profile_dir)
     fx_canvas = '<canvas id="bg-canvas"></canvas>' if has_fx else ""
     fx_script = (
@@ -302,6 +406,8 @@ def assemble_deck(
         'import("./fx.js").then(function(m){m.init(c);});</script>'
     ) if has_fx else ""
     index_html = _HTML_DECK.format(
+        lang=html.escape(str(recipe.get("lang", "en"))),
+        stylesheets=stylesheets,
         title=html.escape(str(recipe.get("title", ""))),
         menu_links=menu_links,
         slides_html=slides_html,
@@ -311,7 +417,10 @@ def assemble_deck(
     )
     _write(out_dir, "index.html", index_html)
     _write(out_dir, "base.css", _build_base_css(base_dir))
-    _write(out_dir, "profile.css", _build_profile_css(profile_dir, [], palette=palette))
+    profile_css = _build_profile_css(profile_dir, [], palette=palette)
+    if (profile_dir / "deck.css").exists():  # a profile's own look for deck roles, optional
+        profile_css += "\n" + (profile_dir / "deck.css").read_text(encoding="utf-8")
+    _write(out_dir, "profile.css", profile_css)
     if has_fx:
         _write(out_dir, "fx.js", (profile_dir / "fx" / "background.js").read_bytes())
 

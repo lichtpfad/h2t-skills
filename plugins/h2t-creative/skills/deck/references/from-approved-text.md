@@ -43,7 +43,9 @@ Supporting paragraph, unchanged.
 ```
 
 `## Slide N.` (or `## Слайд N.`) starts a slide. `::: role` … `:::` marks a block's role;
-`verify` ignores the markup lines and checks the text inside.
+`verify` ignores the markup lines and checks the text inside. Each slide becomes one recipe
+slide, each marked block one entry of its `blocks` (SKILL.md, "Blocks"), unmarked text a
+`text` block; `::: kicker` goes to the slide's `kicker`.
 
 ## Splitting the text into blocks
 

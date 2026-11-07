@@ -6,7 +6,7 @@ compatibility: "Assembly needs the h2t-ops CLI (h2t-creative). The QA step runs 
   the result unverified rather than stopping delivery."
 metadata:
   author: lichtpfad
-  version: 1.1.0
+  version: 1.2.0
 ---
 
 # h2t-creative: deck
@@ -109,7 +109,43 @@ slides:
     content: {}
 ```
 
-Available layouts: `title-only`, `title-body`, `title-media`, `blank`.
+Available layouts: `cover`, `title-only`, `title-body`, `title-media`, `blank`.
+
+Recipe options: `lang` (the page's `<html lang>`, default `en`), `menu: numbers` (slide
+numbers in the menu with the title on hover — for long decks), `stylesheets` (URLs added to
+`<head>`, e.g. the profile's web fonts).
+
+### Blocks: the role of each piece of text
+
+Instead of one HTML `body`, a `title-body` or `cover` slide can carry `blocks` — a list in
+reading order, each with a `role`. The assembler writes the markup; `base/deck.css` styles
+every role in every profile through `--role-*` aliases of the profile's tokens, and a
+profile may add its own look in `profiles/<name>/deck.css`. Values are inline HTML.
+
+```yaml
+  - title: "Market"
+    layout: title-body
+    content:
+      headline: "Market"
+      kicker: ["1. Market and competitors", "Question: what is taken?"]   # above the headline
+      blocks:
+        - {role: thesis, text: "The one sentence this slide exists to say."}
+        - {role: text, text: "A paragraph that explains it."}             # text: a string or a list
+        - {role: cards, label: "Neighbours", items: ["Spa — a long ritual.", {title: "Doctor.", text: "When it hurts."}]}
+        - {role: steps, items: ["Try.", "Talk to the expert.", "Choose."]}
+        - {role: number, figures: ["44%", "72%"], items: ["Caption for 44%.", "Caption for 72%."]}
+        - {role: number, figures: ["13 of 35"], text: "One figure, one caption: 13 of 35."}
+        - {role: quote, label: "Came without a problem:", quotes: [{text: "«…»", by: "from a client interview"}]}
+        - {role: table, header: ["Competitor", "Frame"], rows: [["North", "Premium"]]}
+        - {role: figure, svg: "<svg …>"}                                  # or src + alt
+        - {role: conclusion, text: "Conclusion: …"}
+        - {role: note, text: "A caveat about the data."}
+        - {role: html, html: "<div>…</div>"}                              # escape hatch
+```
+
+Two `quote` blocks in a row share a line. Which role a fragment gets is a decision about
+the text, not the look: for a deck from approved text follow
+`references/from-approved-text.md`.
 
 ## Step 3: Run assembler
 
