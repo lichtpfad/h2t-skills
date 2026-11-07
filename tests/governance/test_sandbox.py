@@ -8,6 +8,7 @@ from types import SimpleNamespace
 import pytest
 
 from h2t_ops.core import paths
+from h2t_ops.lifecycle.pulse import record
 from tests.governance import audit
 from tests.governance.sandbox_cases import CASES
 
@@ -33,6 +34,9 @@ def build_sandbox(tmp_path, monkeypatch):
     for k in list(os.environ):
         if k.startswith("H2T_PATH_") or k in paths.OLD_ENV:
             monkeypatch.delenv(k, raising=False)
+    # Run from inside Claude Code or Codex, handoff would key the record by that live session.
+    for k in ("CLAUDE_CODE_SESSION_ID", *record.CODEX_ID_VARS, *record.CODEX_SHELL_MARKERS):
+        monkeypatch.delenv(k, raising=False)
     lake, inbox, vault = (tmp_path / n for n in ("lake", "inbox", "vault"))
     for d in (lake, inbox, vault):
         d.mkdir()
