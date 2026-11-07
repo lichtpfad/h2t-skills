@@ -63,3 +63,14 @@ def test_sessions_page_builds_without_opening(tmp_path, capsys):
     out = tmp_path / "p.html"
     assert cli.main(["page", "--no-open", "--out", str(out)]) == 0
     assert out.is_file() and str(out) in capsys.readouterr().out
+
+
+def test_page_row_without_tool_has_no_resume(tmp_path):
+    from h2t_ops.lifecycle import session_record
+    f = session_record.session_path("test-machine", "p1", "dev-p1-slug-2026-10-10")
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_bytes(session_record.render({"session_id": "dev-p1-slug-2026-10-10",
+                                         "machine": "test-machine", "project": "p1",
+                                         "updated_at": "2026-10-10T00:00:00Z"}, b""))
+    row = _data(_build(tmp_path))["rows"][0]
+    assert (row["tool"], row["resume"]) == (view._DASH, "")

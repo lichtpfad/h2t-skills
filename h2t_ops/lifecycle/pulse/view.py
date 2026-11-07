@@ -101,7 +101,10 @@ def _quote(cwd: str) -> str:
     return shlex.quote(cwd)
 
 
-def resume_command(tool: str, session_id: str, cwd: str) -> str:
+def resume_command(tool: str | None, session_id: str, cwd: str) -> str:
+    """Empty for a record no program wrote (a handoff slug): there is nothing to resume."""
+    if tool not in ("claude", "codex"):
+        return ""
     if tool == "codex":
         return f"codex resume {session_id} -C {_quote(cwd)}"
     return f"cd {_quote(cwd)}; claude --resume {session_id}"
@@ -159,8 +162,10 @@ def render(rows: list[dict], footer: str) -> str:
                     lines.append(f"      {_branch_line(group)}")
                     for s in group:
                         summary = " ".join((s["summary"] or _DASH).split())
-                        lines.append(f"        {_local_time(s['started_at'])}  {s['tool']}  {summary}")
-                        lines.append(f"        {resume_command(s['tool'], s['session_id'], s['cwd'] or s['worktree'] or '')}")
+                        lines.append(f"        {_local_time(s['started_at'])}  {s['tool'] or _DASH}  {summary}")
+                        resume = resume_command(s["tool"], s["session_id"], s["cwd"] or s["worktree"] or "")
+                        if resume:
+                            lines.append(f"        {resume}")
     lines.append(footer)
     return "\n".join(lines)
 

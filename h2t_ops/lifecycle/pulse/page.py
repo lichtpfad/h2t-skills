@@ -154,10 +154,12 @@ button { font: inherit; font-size: 12px; color: var(--acc); background: none;
     var d = el("div", "sess");
     d.appendChild(el("div", "meta", s.time + "  " + s.tool + (s.summary_source ? "  (" + s.summary_source + ")" : "")));
     d.appendChild(el("div", "summary", s.summary || DASH));
-    var c = el("div", "cmd");
-    c.appendChild(el("code", "", s.resume));
-    c.appendChild(copyButton(s.resume));
-    d.appendChild(c);
+    if (s.resume) {
+      var c = el("div", "cmd");
+      c.appendChild(el("code", "", s.resume));
+      c.appendChild(copyButton(s.resume));
+      d.appendChild(c);
+    }
     return d;
   }
 
@@ -199,7 +201,7 @@ button { font: inherit; font-size: 12px; color: var(--acc); background: none;
 def _row(r: dict) -> dict:
     cwd = r["cwd"] or r["worktree"] or ""
     return {
-        "session_id": r["session_id"], "tool": r["tool"], "domain": r["domain"],
+        "session_id": r["session_id"], "tool": r["tool"] or view._DASH, "domain": r["domain"],
         "project": r["project"], "repo": r["repo"], "branch": r["branch"],
         "started_at": r["started_at"], "time": view._local_time(r["started_at"]),
         "verdict": r["verdict"], "pr": r["pr"], "pr_url": r["pr_url"], "files": r["files"],

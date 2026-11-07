@@ -353,3 +353,19 @@ def test_since_today_is_accepted(tmp_path, capsys):
 
 def test_cli_unknown_subcommand_is_a_usage_error(capsys):
     assert cli.main(["nope"]) == 2
+
+
+def test_handoff_record_without_tool_gets_no_resume_line(tmp_path):
+    """A 4.0 handoff record has no tool and a slug for an id: no program can resume it."""
+    from h2t_ops.lifecycle import session_record
+    f = session_record.session_path("test-machine", "p1", "dev-p1-slug-2026-10-10")
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_bytes(session_record.render({"session_id": "dev-p1-slug-2026-10-10",
+                                         "machine": "test-machine", "project": "p1",
+                                         "updated_at": "2026-10-10T00:00:00Z",
+                                         "done": "- shipped"}, b""))
+    rows = view.rows(view.Filters(all=True))
+    assert [r["session_id"] for r in rows] == ["dev-p1-slug-2026-10-10"]
+    assert view.resume_command(rows[0]["tool"], rows[0]["session_id"], "") == ""
+    out = view.render(rows, "")
+    assert "None" not in out and "--resume" not in out and "codex resume" not in out
