@@ -386,6 +386,7 @@ def helsinki():
     time.tzset()
 
 
+@pytest.mark.skipif(not hasattr(__import__("time"), "tzset"), reason="TZ switch needs POSIX tzset")
 def test_since_compares_the_local_start_date(tmp_path, helsinki):
     """00:30 local on the 11th is 22:30Z on the 10th: `--since` the 11th must keep it."""
     _rec("N", tmp_path, started_at="2026-10-10T22:30:00Z")
