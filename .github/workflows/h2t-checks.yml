@@ -31,6 +31,12 @@
 # ruff: the caller's own config applies (pyproject/ruff.toml). Without one, ruff ≥0.16
 # defaults to a broad rule set (FURB, PLW, BLE…) — h2t-infra hit 38 findings that way.
 # Pin `select` explicitly in every repo.
+#
+# docs-paths: a regex over changed file paths. When every changed file matches it, ruff and
+# pytest are skipped and the rest runs — layout and standards are about docs, so a caller's
+# `paths-ignore` would switch off the wrong half. Empty (the default) means always run. Which
+# paths are docs only the caller knows: h2t-skills tests read docs/ (test_places_table.py),
+# h2t-daw loads src/knowledge/**/*.md as data. Name a path only after reading the tests.
 
 name: h2t-checks
 
@@ -48,6 +54,7 @@ on:
       standards:      { type: boolean, default: true }
       soft:           { type: boolean, default: true }  # standards tier: continue-on-error
       runner:         { type: string,  default: "\"ubuntu-latest\"" }  # JSON: "ubuntu-latest" or ["self-hosted","h2t-automata"]
+      docs-paths:     { type: string,  default: "" }   # e.g. '^(docs/|[^/]+\.md$)'; empty → ruff and pytest always run
     secrets:
       INFRA_TOKEN:
         required: false
@@ -62,8 +69,42 @@ defaults:
     shell: bash -e {0}
 
 jobs:
+  changes:
+    # Did the change touch anything outside docs-paths? Unknown base (first push of a branch,
+    # manual run) or a failure here leaves `code` empty, and empty means run.
+    if: ${{ inputs.docs-paths != '' }}
+    runs-on: ${{ fromJSON(inputs.runner) }}
+    timeout-minutes: 2
+    outputs:
+      code: ${{ steps.diff.outputs.code }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - name: Git Bash on PATH (Windows self-hosted)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Add-Content $env:GITHUB_PATH "$env:ProgramFiles\Git\bin", "$env:ProgramFiles\Git\usr\bin"   # bash + grep/awk/sed
+      - name: changed files outside docs-paths
+        id: diff
+        env:
+          DOCS: ${{ inputs.docs-paths }}
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          if [ -z "$BASE" ] || ! git cat-file -e "$BASE^{commit}" 2>/dev/null; then
+            echo "code=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          files=$(git diff --name-only "$BASE" HEAD)
+          if [ -n "$files" ] && ! printf '%s\n' "$files" | grep -qvE "$DOCS"; then
+            echo "::notice title=h2t-checks::only docs changed — ruff and pytest skipped"
+            echo "code=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "code=true" >> "$GITHUB_OUTPUT"
+          fi
+
   ruff:
-    if: ${{ inputs.ruff }}
+    needs: changes
+    # !cancelled(): a skipped `changes` (no docs-paths) must not skip this job with it.
+    if: ${{ !cancelled() && inputs.ruff && needs.changes.outputs.code != 'false' }}
     runs-on: ${{ fromJSON(inputs.runner) }}
     timeout-minutes: 5
     steps:
@@ -84,7 +125,8 @@ jobs:
         run: ruff check ${{ inputs.ruff-paths }}
 
   pytest:
-    if: ${{ inputs.pytest }}
+    needs: changes
+    if: ${{ !cancelled() && inputs.pytest && needs.changes.outputs.code != 'false' }}
     runs-on: ${{ fromJSON(inputs.runner) }}
     timeout-minutes: 20
     steps:
