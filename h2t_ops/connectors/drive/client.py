@@ -362,6 +362,34 @@ def _find_tab_end_index(doc: dict[str, Any], tab_id: str) -> int | None:
 _TABLE_SEPARATOR_RE = re.compile(r'^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$')
 
 
+def _content_text(content: list[dict[str, Any]]) -> str:
+    """Text of a Docs body: paragraphs as they are, a table as a GFM table (#598).
+
+    The GFM shape is the one `docs-tab write` turns into a table, so write → read keeps it.
+    """
+    parts: list[str] = []
+    for block in content:
+        if "paragraph" in block:
+            for elem in block["paragraph"].get("elements", []) or []:
+                run = elem.get("textRun")
+                if run:
+                    parts.append(run.get("content", ""))
+        elif "table" in block:
+            parts.append(_table_gfm(block["table"]))
+    return "".join(parts)
+
+
+def _table_gfm(table: dict[str, Any]) -> str:
+    rows = [[" ".join(_content_text(cell.get("content", []) or []).split()).replace("|", "\\|")
+             for cell in row.get("tableCells", []) or []]
+            for row in table.get("tableRows", []) or []]
+    if not rows:
+        return ""
+    lines = ["| " + " | ".join(row) + " |" for row in rows]
+    lines.insert(1, "| " + " | ".join("---" for _ in rows[0]) + " |")
+    return "\n".join(lines) + "\n"
+
+
 def _table_cells(line: str) -> list[str]:
     """Split a GFM table row into plain cell texts; inline markup is dropped (#493)."""
     inner = line.strip()
@@ -1275,16 +1303,7 @@ class DriveClient:
             from h2t_ops.core.errors import NotFoundError
             raise NotFoundError(f"tab {tab_id!r} not found in document {document_id}")
 
-        text_parts: list[str] = []
-        for block in body.get("content", []) or []:
-            para = block.get("paragraph")
-            if not para:
-                continue
-            for elem in para.get("elements", []) or []:
-                run = elem.get("textRun")
-                if run:
-                    text_parts.append(run.get("content", ""))
-        text = "".join(text_parts)
+        text = _content_text(body.get("content", []) or [])
 
         return {
             "kind": "google_docs_tab_read/v1",
