@@ -49,6 +49,11 @@ h2t-ops notion search DATABASE_ID --limit 25 --json
 h2t-ops notion get-database DATABASE_ID --limit 25 --json
 ```
 
+Wherever a command takes `DATABASE_ID`, a name from `~/.h2t/config/user.yaml` works too:
+`notion.databases.<name>: <id>`, and `tasks` for `notion.tasks_database_id`. A skill names
+the database (`h2t-ops notion search evening_journal --json`) instead of carrying the user's
+id. A value that names no database is passed to Notion as an id (#597).
+
 ## Auth
 
 Notion expects `NOTION_API_TOKEN` from the environment or from the file
