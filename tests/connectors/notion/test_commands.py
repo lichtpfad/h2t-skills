@@ -1112,3 +1112,20 @@ def test_delete_blocks_cli_takes_ids_positionally(monkeypatch):
         ["notion", "delete-blocks", "P", "h2", "--yes", "--json"]))
     assert [k.kwargs["block_id"] for k in c.client.blocks.delete.call_args_list] == ["h2"]
     assert res["applied"] is True
+
+
+# --- update-block (#603) ------------------------------------------------------------------
+
+def test_update_block_cli_dry_run_then_yes(monkeypatch):
+    c = _real_client(monkeypatch, [])
+    c.client.blocks.retrieve.return_value = {
+        "id": "p1", "type": "paragraph",
+        "paragraph": {"rich_text": [{"plain_text": "old", "text": {"content": "old"}}]}}
+    argv = ["notion", "update-block", "p1", "--text", "new"]
+    out = notion_cmds.run(_parser().parse_args(argv))
+    assert out.startswith("Would update (dry run, --yes to apply): paragraph p1")
+    assert "- old" in out and "+ new" in out
+    assert not c.client.blocks.update.called
+    res = notion_cmds.run(_parser().parse_args(argv + ["--yes", "--json"]))
+    assert res["applied"] is True
+    assert c.client.blocks.update.call_args.kwargs["block_id"] == "p1"

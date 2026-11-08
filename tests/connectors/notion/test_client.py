@@ -1309,3 +1309,56 @@ def test_ids_and_heading_are_exclusive_and_one_is_required(page):
         page.delete_blocks("page1")
     with pytest.raises(UsageError):
         page.delete_blocks("page1", block_ids=["bbbb-3"], from_heading="References")
+
+
+# --- update_block_text (#603) -------------------------------------------------------------
+
+def _para_block(bid, text, kind="paragraph", **extra):
+    return {"id": bid, "type": kind,
+            kind: {"rich_text": [{"plain_text": text, "text": {"content": text}}], **extra}}
+
+
+@pytest.fixture
+def one_block(conv):
+    from unittest.mock import MagicMock
+    conv.client = MagicMock()
+    conv.client.blocks.update.return_value = {}
+    return conv
+
+
+def test_update_block_is_a_dry_run_by_default(one_block):
+    one_block.client.blocks.retrieve.return_value = _para_block("p-1", "old sentence")
+    out = one_block.update_block_text("p-1", "new **sentence**")
+    assert (out["applied"], out["type"], out["old"], out["new"]) == (
+        False, "paragraph", "old sentence", "new sentence")
+    assert not one_block.client.blocks.update.called
+
+
+def test_update_block_patches_only_the_rich_text(one_block):
+    one_block.client.blocks.retrieve.return_value = _para_block("t-1", "buy", "to_do",
+                                                                checked=True)
+    out = one_block.update_block_text("t-1", "buy milk", apply=True)
+    assert out["applied"] is True
+    kwargs = one_block.client.blocks.update.call_args.kwargs
+    assert kwargs["block_id"] == "t-1" and set(kwargs) == {"block_id", "to_do"}
+    assert set(kwargs["to_do"]) == {"rich_text"}          # `checked` is left as it is
+    assert kwargs["to_do"]["rich_text"][0]["text"]["content"] == "buy milk"
+
+
+@pytest.mark.parametrize("block", [
+    {"id": "d-1", "type": "child_database", "child_database": {"title": "Tasks"}},
+    {"id": "x-1", "type": "divider", "divider": {}},
+])
+def test_update_block_refuses_a_block_without_text(one_block, block):
+    from h2t_ops.core.errors import UsageError
+    one_block.client.blocks.retrieve.return_value = block
+    with pytest.raises(UsageError, match="no editable text"):
+        one_block.update_block_text(block["id"], "x", apply=True)
+    assert not one_block.client.blocks.update.called
+
+
+def test_update_block_refuses_empty_text(one_block):
+    from h2t_ops.core.errors import UsageError
+    one_block.client.blocks.retrieve.return_value = _para_block("p-1", "old")
+    with pytest.raises(UsageError, match="empty"):
+        one_block.update_block_text("p-1", "  ", apply=True)

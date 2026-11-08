@@ -27,6 +27,7 @@
 | append markdown file as blocks | `h2t-ops notion append-blocks PAGE_ID --content-file ./content.md --json` |
 | replace page content (safe, title-verified) | `h2t-ops notion replace-content PAGE_ID --content-file ./content.md --confirm-title "Exact Title" --json` |
 | delete a section or some blocks (dry run by default) | `h2t-ops notion delete-blocks PAGE_ID --from-heading "Exact heading" --json`, then the same with `--yes` |
+| change the text of one block in place (dry run by default) | `h2t-ops notion update-block BLOCK_ID --text "New text" --json`, then the same with `--yes` |
 
 ## Safety
 
@@ -36,6 +37,7 @@
 - Notion provider writes execute provider-specific writes only; POS/coordinator owns the decision to accept tasks, journal entries, or KB promotions.
 - Do not include private Notion page bodies in GitHub issues.
 - `delete-blocks` removes blocks without rewriting the page, so inline databases survive. Name the blocks by id (`notion blocks PAGE_ID --json` lists them) or with `--from-heading`: that heading and everything under it up to the next heading of the same or a higher level. It only lists unless `--yes` is given: run it without first, show the list to the user, then repeat with `--yes`. Each block must be a direct child of the page, and `child_database` / `child_page` blocks are refused without `--allow-child-objects`. Every check runs before the first delete (#587).
+- `update-block` replaces the text of one paragraph, heading, list item, to-do, quote, callout or toggle and leaves it where it is; the rest of the page is not touched. `--text` takes the inline markdown of `append-blocks`; only the text is sent, so a to-do's checkbox and a callout's icon stay. Without `--yes` it prints the old and the new text: show them to the user, then repeat with `--yes` (#603).
 
 ## Commands
 
