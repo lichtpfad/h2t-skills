@@ -21,6 +21,7 @@ import re
 from pathlib import Path
 
 from h2t_ops.hooks.emit import Reply
+from h2t_ops.hooks.switch import guard_enabled
 
 _STRUCTURE_FILE = ".h2t/structure.yaml"
 _WRITE_TOOLS = {"Write", "Edit", "MultiEdit"}
@@ -362,6 +363,8 @@ def check_issue_link(file_path: str, content: str, config: dict) -> tuple[int, s
 
 
 def handle(event: dict) -> Reply:
+    if not guard_enabled("structure"):       # opt-in: `guards: [structure]` in user.yaml
+        return Reply()
     tool_name = event.get("tool_name", "")
     if not _is_write_tool(tool_name):
         return Reply()

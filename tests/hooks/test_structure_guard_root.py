@@ -4,6 +4,8 @@ from __future__ import annotations
 import importlib.util
 from pathlib import Path
 
+import pytest
+
 
 def _load():
     path = Path(__file__).parents[2] / "h2t_ops" / "hooks" / "structure_guard.py"
@@ -12,6 +14,11 @@ def _load():
     assert spec and spec.loader
     spec.loader.exec_module(module)
     return module
+
+
+@pytest.fixture(autouse=True)
+def _guard_on(enable_guards):
+    enable_guards("structure")   # off by default (§15 rule 5); these tests are about what it does
 
 
 def test_root_scratch_blocked(tmp_path):

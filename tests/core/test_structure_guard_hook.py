@@ -69,6 +69,8 @@ def posix_box(tmp_path):
     version = (PLUGIN / "release.env").read_text(encoding="utf-8").split("=", 1)[1].strip()
     (home / ".h2t" / "run" / "install.env").write_text(
         f"STATE=ready\nVERSION={version}\nH2T_HOOK={hook}\n", encoding="utf-8")
+    (home / ".h2t" / "config").mkdir()       # the guard is off by default (§15 rule 5)
+    (home / ".h2t" / "config" / "user.yaml").write_text("guards: [structure]\n", encoding="utf-8")
     env.update(PATH=str(bin_dir), HOME=str(home), CLAUDE_PLUGIN_ROOT=str(PLUGIN))
     env.pop("H2T_PYTHON", None)
     return env

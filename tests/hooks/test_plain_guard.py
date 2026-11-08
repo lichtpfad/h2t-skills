@@ -5,6 +5,8 @@ import importlib.util
 import json
 from pathlib import Path
 
+import pytest
+
 from h2t_ops.hooks.emit import Reply
 
 
@@ -15,6 +17,11 @@ def _load():
     assert spec and spec.loader
     spec.loader.exec_module(module)
     return module
+
+
+@pytest.fixture(autouse=True)
+def _guard_on(enable_guards):
+    enable_guards("plain")   # off by default (§15 rule 5); these tests are about what it does
 
 
 LONG = " ".join(["слово"] * 30) + "."
@@ -92,12 +99,13 @@ def test_stop_hook_active_is_silent(tmp_path):
     assert not m.log_path().exists()
 
 
-def test_the_log_follows_home_at_call_time(tmp_path, monkeypatch):
+def test_the_log_follows_home_at_call_time(tmp_path, monkeypatch, enable_guards):
     """Resolved per call, not at import: the HOME of the run is the one written (Task 18)."""
     m = _load()
     later = tmp_path / "later"
     monkeypatch.setenv("HOME", str(later))
     monkeypatch.setenv("USERPROFILE", str(later))
+    enable_guards("plain")      # the switch lives in the new home too
     path = _transcript(tmp_path, LONG)
     assert m.handle({"transcript_path": path, "session_id": "s1"}) == Reply()
     assert (later / ".h2t" / "logs" / "plain-guard.jsonl").is_file()

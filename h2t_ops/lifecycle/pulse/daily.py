@@ -16,7 +16,8 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from h2t_ops.core import paths, store, user_config
+from h2t_ops.core import paths, settings, store, user_config
+from h2t_ops.core.errors import ConfigError
 from h2t_ops.lifecycle.index import query
 from h2t_ops.lifecycle.pulse import backfill, record, status, summary
 
@@ -163,6 +164,15 @@ def _release(token: str) -> None:
             store.remove(lock_path(), place="state")
 
 
+def _summaries_on() -> bool:
+    """The model call spends the user's money and sends transcript text out: `sessions.summaries`
+    in user.yaml turns it on (§15 rule 5). A user.yaml that cannot be read leaves it off."""
+    try:
+        return settings.resolve("sessions.summaries").value is True
+    except ConfigError:
+        return False
+
+
 def run() -> dict:
     """The whole pass; stamps it and releases its own lock whatever happens."""
     token = _own_lock()
@@ -176,7 +186,7 @@ def run() -> dict:
         record.settle_open()
         with query.connect() as conn:            # a second open sees what settle changed
             status.refresh(conn)
-            summaries = summary.run(conn)
+            summaries = summary.run(conn) if _summaries_on() else {}
         result = {"ran_at": _now().strftime("%Y-%m-%dT%H:%M:%SZ"), "backfill_since_ns": started_ns,
                   "audit_map": audit_map()}
         store.replace(stamp_path(), json.dumps(result, ensure_ascii=False), place="state")

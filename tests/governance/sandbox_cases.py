@@ -1040,6 +1040,9 @@ def _guard_transcript(sb, mp):
     import json
     (sb.home.parent / "t.jsonl").write_text(json.dumps({"type": "assistant", "message": {
         "content": [{"type": "text", "text": "Готово. " + "слово " * 30}]}}, ensure_ascii=False), encoding="utf-8")
+    from h2t_ops.core import paths  # the guards log only once switched on (§15 rule 5)
+    (paths.config_dir()).mkdir(parents=True, exist_ok=True)
+    (paths.config_dir() / "user.yaml").write_text("guards: [grade, plain]\n", encoding="utf-8")
 
 
 def _gather_lock(sb, mp):

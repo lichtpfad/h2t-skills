@@ -25,6 +25,10 @@ def box(tmp_path, monkeypatch):
     monkeypatch.setenv("USERPROFILE", str(home))
     for name in hc.ISOLATED_ENV:
         monkeypatch.delenv(name, raising=False)
+    # the answer guards are off by default; the recorded cases are about what they do when on
+    (home / ".h2t" / "config").mkdir(parents=True)
+    (home / ".h2t" / "config" / "user.yaml").write_text(
+        "guards: [grade, plain, structure]\n", encoding="utf-8")
     tmpdir = tmp_path / "tmpdir"
     tmpdir.mkdir()
     monkeypatch.setattr(tempfile, "tempdir", str(tmpdir))  # temp files stay in the test tree

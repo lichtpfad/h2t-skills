@@ -51,7 +51,7 @@ def test_squash_merged_branch_is_merged(repo):
     commit(repo, "a.txt", "same", "squash of feat/x")      # different commit, same content
     git(repo, "push", "origin", "main")
     assert status.branch_state(str(repo), "feat/x", "main") == "влита"
-    assert status.verdict("чисто", "влита", "нет") == "готово"
+    assert status.verdict(0, "влита", "нет") == "готово"
 
 
 def test_unpushed_branch(repo):
@@ -59,7 +59,7 @@ def test_unpushed_branch(repo):
     commit(repo, "b.txt", "work")
     state = status.branch_state(str(repo), "feat/y", "main")
     assert state == "не отправлена"
-    assert status.verdict("чисто", state, "нет") == "не отправлено"
+    assert status.verdict(0, state, "нет") == "не отправлено"
 
 
 def test_pushed_without_pr_waits(repo):
@@ -68,7 +68,7 @@ def test_pushed_without_pr_waits(repo):
     git(repo, "push", "-u", "origin", "feat/z")
     state = status.branch_state(str(repo), "feat/z", "main")
     assert state == "отправлена"
-    assert status.verdict("чисто", state, "нет") == "ждёт PR"
+    assert status.verdict(0, state, "нет") == "ждёт PR"
 
 
 def test_dirty_tree_is_abandoned_with_changes(repo):
@@ -78,13 +78,13 @@ def test_dirty_tree_is_abandoned_with_changes(repo):
     (repo / "new.txt").write_text("x", encoding="utf-8")
     files = status.files_state(str(repo))
     assert files == "1 незакоммиченных"
-    assert status.verdict(files, "влита", "влит") == "брошено с изменениями"
+    assert status.verdict(status.dirty_count(str(repo)), "влита", "влит") == "брошено с изменениями"
 
 
 def test_missing_worktree_does_not_crash(tmp_path, repo):
     assert status.files_state(str(tmp_path / "gone")) == "нет копии"
     assert status.files_state("") == "нет копии"
-    assert status.verdict("нет копии", "не отправлена", "нет") == "не отправлено"
+    assert status.verdict(0, "не отправлена", "нет") == "не отправлено"
 
 
 def test_commits_after_merged_pr_are_not_merged(repo):
@@ -123,3 +123,23 @@ def test_issue_numbers_from_branch_and_commits(tmp_path, repo):
     issues = json.loads(row["issues"])
     assert set(issues) == {"123", "7", "9"}
     assert issues["7"] == "closed" and issues["123"] == "open"
+
+
+def test_verdict_from_counts_not_text(repo, monkeypatch):
+    """The display strings are free to change (#436); the verdict follows the facts."""
+    for name, english in (("MAIN", "main"), ("MERGED", "merged"), ("PUSHED", "pushed"),
+                          ("LOCAL_ONLY", "local only"), ("NO_COPY", "no copy"),
+                          ("CLEAN", "clean"), ("DIRTY", "{n} uncommitted")):
+        monkeypatch.setattr(status, name, english)
+    git(repo, "checkout", "-b", "feat/e")
+    commit(repo, "e.txt", "work")
+    git(repo, "push", "-u", "origin", "feat/e")
+    (repo / "new.txt").write_text("x", encoding="utf-8")
+    assert status.files_state(str(repo)) == "1 uncommitted"
+    dirty = status.dirty_count(str(repo))
+    assert status.verdict(dirty, status.MERGED, "merged") == "брошено с изменениями"
+    assert status.verdict(0, status.MERGED, "merged") == "готово"
+    assert status.verdict(0, status.PUSHED, "") == "ждёт PR"
+    assert status.verdict(0, status.LOCAL_ONLY, "") == "не отправлено"
+    assert status.verdict(0, status.MAIN, "", ahead=1) == "не отправлено"
+    assert status.branch_state(str(repo), "feat/e", "main") == "pushed"

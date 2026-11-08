@@ -33,6 +33,7 @@ from h2t_ops.core import paths, store
 from h2t_ops.core.errors import H2TError
 from h2t_ops.hooks.emit import Reply
 from h2t_ops.hooks.grade_guard import last_assistant_text
+from h2t_ops.hooks.switch import guard_enabled
 
 MAX_WORDS = 25
 
@@ -131,6 +132,8 @@ def handle(event: dict) -> Reply:
     # promoting it to systemMessage would put a new line under one stop in ten. Turning
     # the line on is a decision for after the trial, not a side effect of the port.
     # Decision recorded in the Task 9b report.
+    if not guard_enabled("plain"):          # opt-in: `guards: [plain]` in user.yaml
+        return Reply()
     if event.get("stop_hook_active"):
         return Reply()
     text = last_assistant_text(event.get("transcript_path", ""))

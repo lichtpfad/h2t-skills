@@ -17,6 +17,11 @@ from pathlib import Path
 
 TIMEOUT_S = 20
 
+# Display strings stored in `branch_status`. The verdict is decided from counts and these
+# constants, never from matching rendered text; translating them is #436.
+MAIN, MERGED, PUSHED, LOCAL_ONLY = "основная", "влита", "отправлена", "не отправлена"
+NO_COPY, CLEAN, DIRTY = "нет копии", "чисто", "{n} незакоммиченных"
+
 _PR = {"OPEN": "открыт", "MERGED": "влит", "CLOSED": "закрыт"}
 _CLOSES = re.compile(r"(?i)\b(?:fixes|closes)\s+#(\d+)")
 _ARTIFACT = re.compile(r"issue:(\d+)")
@@ -56,11 +61,18 @@ def default_base(repo: str) -> str:
     return ref.removeprefix("origin/") if ref else "main"
 
 
+def dirty_count(worktree: str) -> int:
+    """Uncommitted files in the worktree; 0 when there is no copy."""
+    if not worktree or not Path(worktree).is_dir():
+        return 0
+    return len([x for x in _git(worktree, "status", "--porcelain").splitlines() if x.strip()])
+
+
 def files_state(worktree: str) -> str:
     if not worktree or not Path(worktree).is_dir():
-        return "нет копии"
-    lines = [x for x in _git(worktree, "status", "--porcelain").splitlines() if x.strip()]
-    return f"{len(lines)} незакоммиченных" if lines else "чисто"
+        return NO_COPY
+    n = dirty_count(worktree)
+    return DIRTY.format(n=n) if n else CLEAN
 
 
 def _base_ref(repo: str, base: str) -> str:
@@ -83,26 +95,27 @@ def _content_merged(repo: str, branch: str, base: str) -> bool:
 
 def branch_state(repo: str, branch: str, base: str, *, pr: dict | None = None) -> str:
     if branch == base:
-        return "основная"
+        return MAIN
     pr = pr or {}
     sha = pr.get("headRefOid")
     after = _git(repo, "rev-list", "--count", f"{sha}..{branch}") if sha else ""
     later_commits = after.isdigit() and int(after) > 0
     if not later_commits:
         if pr.get("state") == "MERGED" or _content_merged(repo, branch, base):
-            return "влита"
+            return MERGED
     if not _ok(repo, "rev-parse", "--verify", "-q", f"origin/{branch}"):
-        return "не отправлена"
-    return "отправлена"
+        return LOCAL_ONLY
+    return PUSHED
 
 
-def verdict(files: str, state: str, pr: str, *, ahead: int = 0) -> str:
-    """`ahead`: commits of the main branch not yet on origin; they keep it from "готово"."""
-    if files.endswith("незакоммиченных"):
+def verdict(dirty: int, state: str, pr: str, *, ahead: int = 0) -> str:
+    """`dirty`: uncommitted files; `ahead`: commits of the main branch not yet on origin,
+    which keep it from "готово". Decided from the count and the state value, not from text."""
+    if dirty:
         return "брошено с изменениями"
-    if state == "влита" or (state == "основная" and not ahead):
+    if state == MERGED or (state == MAIN and not ahead):
         return "готово"
-    if state == "отправлена":
+    if state == PUSHED:
         return "ждёт PR"
     return "не отправлено"
 
@@ -143,11 +156,14 @@ def _groups(conn: sqlite3.Connection) -> dict[tuple[str, str], dict]:
     return groups
 
 
-def _local(repo: str, branch: str, worktree: str, pr: dict | None = None) -> tuple[str, str, int]:
-    """(files, branch state, commits of the main branch not on origin): the git-only facts."""
+def _local(repo: str, branch: str, worktree: str,
+           pr: dict | None = None) -> tuple[str, str, int, int]:
+    """(files, branch state, commits of the main branch not on origin, uncommitted files):
+    the git-only facts."""
     base = default_base(repo)
     state = branch_state(repo, branch, base, pr=pr)
-    return (files_state(worktree), state, _ahead(repo, base, branch) if state == "основная" else 0)
+    return (files_state(worktree), state, _ahead(repo, base, branch) if state == MAIN else 0,
+            dirty_count(worktree))
 
 
 def refresh(conn: sqlite3.Connection, *, gh: Callable = _gh) -> int:
@@ -158,13 +174,13 @@ def refresh(conn: sqlite3.Connection, *, gh: Callable = _gh) -> int:
     for (repo, branch), g in groups.items():
         base = default_base(repo)
         pr = _pr(gh, repo, branch)
-        files, state, ahead = _local(repo, branch, g["worktree"], pr)
+        files, state, ahead, dirty = _local(repo, branch, g["worktree"], pr)
         pr_label = _PR.get((pr or {}).get("state"), "нет")
         issues = _issue_states(gh, repo, _issue_numbers(repo, branch, base, g["artifacts"], pr))
         conn.execute("INSERT INTO branch_status VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                      (repo, branch, g["worktree"], files, state, pr_label,
                       (pr or {}).get("url") or "", json.dumps(issues),
-                      verdict(files, state, pr_label, ahead=ahead), now))
+                      verdict(dirty, state, pr_label, ahead=ahead), now))
     conn.commit()
     return len(groups)
 
@@ -187,12 +203,12 @@ def local_status(conn: sqlite3.Connection, max_age_s: int = 600) -> int:
                 age = max_age_s + 1
             if age <= max_age_s:
                 continue
-        files, state, ahead = _local(repo, branch, g["worktree"])
+        files, state, ahead, dirty = _local(repo, branch, g["worktree"])
         pr_label = old[2] if old else ""
         conn.execute("INSERT OR REPLACE INTO branch_status VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                      (repo, branch, g["worktree"], files, state, pr_label,
                       old[3] if old else "", old[4] if old else "{}",
-                      verdict(files, state, pr_label, ahead=ahead),
+                      verdict(dirty, state, pr_label, ahead=ahead),
                       now.isoformat(timespec="seconds")))
         written += 1
     conn.commit()
