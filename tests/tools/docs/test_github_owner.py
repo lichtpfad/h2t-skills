@@ -49,6 +49,14 @@ def test_bare_name_without_owner_is_exit_3_even_inside_a_checkout_with_a_remote(
     assert "other" not in str(e.value) + (e.value.hint or "")
 
 
+def test_bare_name_with_an_empty_owner_in_user_yaml_is_exit_3(tmp_path):
+    f = paths.config_dir() / "user.yaml"
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_text('github:\n  owner: ""\n', encoding="utf-8")
+    with pytest.raises(ConfigError):
+        common.target("widget", tmp_path)
+
+
 @pytest.mark.parametrize("remote", [
     "https://github.com/acme/widget.git", "https://github.com/acme/widget",
     "git@github.com:acme/widget.git", "git@github.com:acme/widget",

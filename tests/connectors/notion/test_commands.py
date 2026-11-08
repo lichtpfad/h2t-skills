@@ -1157,6 +1157,27 @@ def test_a_database_name_resolves_through_user_yaml(monkeypatch):
     assert calls == ["journal-id", "tasks-id", "0123456789abcdef0123456789abcdef"]
 
 
+def test_tasks_alias_reads_the_env_var_alone(monkeypatch):
+    """daily-brief runs `create-db-item tasks`; with only H2T_NOTION_TASKS_DB set it sent the
+    literal "tasks" (final review, I5)."""
+    from h2t_ops.connectors.notion import commands as cmds_mod
+    monkeypatch.setenv("H2T_NOTION_TASKS_DB", "env-tasks-id")
+    calls: list = []
+    _stub_notion(monkeypatch, calls)
+    cmds_mod.run(_search_args("tasks"))
+    assert calls == ["env-tasks-id"]
+
+
+def test_no_tasks_database_hint_names_the_env_var_and_the_file(monkeypatch):
+    from h2t_ops.connectors.notion import commands as cmds_mod
+    from h2t_ops.core import user_config
+    monkeypatch.delenv("H2T_NOTION_TASKS_DB", raising=False)
+    with pytest.raises(UsageError) as e:
+        cmds_mod.run(_search_args(None))
+    assert "H2T_NOTION_TASKS_DB" in e.value.hint
+    assert f"notion.tasks_database_id in {user_config.path()}" in e.value.hint
+
+
 def test_a_value_that_names_no_database_passes_as_an_id(monkeypatch):
     """Unknown names are not guessed at: Notion gets the value and judges it, as before."""
     from h2t_ops.connectors.notion import commands as cmds_mod

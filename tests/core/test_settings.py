@@ -82,6 +82,23 @@ def test_empty_env_string_is_unset(monkeypatch):
     assert settings.resolve("machine.name").source == "default"
 
 
+@pytest.mark.parametrize("blank", ['""', '"   "'], ids=["empty", "spaces"])
+def test_blank_file_string_is_unset(blank, capsys):
+    """An empty value in a file is not a value: `/widget` was the result (final review, I3)."""
+    _write(paths.config_dir() / "user.yaml",
+           f"github:\n  owner: {blank}\nnotion:\n  tasks_database_id: {blank}\nlanguage: {blank}\n")
+    assert settings.resolve("github.owner") == settings.Resolved(None, "unset")
+    assert settings.resolve("language") == settings.Resolved("en", "default")
+    with pytest.raises(ConfigError):
+        settings.require("github.owner")
+    assert _cli(capsys, "get", "notion.tasks_database_id")[0] == 3
+
+
+def test_blank_env_string_is_unset(monkeypatch):
+    monkeypatch.setenv("H2T_GITHUB_OWNER", "   ")
+    assert settings.resolve("github.owner").source == "unset"
+
+
 def test_lake_from_the_3x_fallback_is_a_default_not_unset():
     """paths.place answers ~/.dor/lake before layout 1; the resolver must not say unset."""
     lake = paths.legacy("lake.dor")

@@ -94,9 +94,17 @@ def _from_file(key: Key) -> object:
     return doc or None
 
 
+def _blank(value: object) -> bool:
+    """An empty or all-space string is no value, from the environment or a file: `owner: ""`
+    made `/widget` a repository name (#581)."""
+    return isinstance(value, str) and not value.strip()
+
+
 def resolve(name: str) -> Resolved:
     key = _key(name)
     raw = os.environ.get(key.env) if key.env else None
+    if _blank(raw):
+        raw = None
     if name in ("path.lake", "path.inbox", "path.kb"):
         # what the code uses is what paths.place answers; the source says who decided it
         place = name.removeprefix("path.")
@@ -115,7 +123,7 @@ def resolve(name: str) -> Resolved:
         return Resolved(raw, "env")
     if key.file:
         found = _from_file(key)
-        if found is not None:
+        if found is not None and not _blank(found):
             return Resolved(str(found) if key.file == "paths.yaml" else found, "file")
     if callable(key.default):
         return Resolved(str(key.default()), "default")
