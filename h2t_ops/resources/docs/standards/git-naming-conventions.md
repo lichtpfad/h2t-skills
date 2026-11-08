@@ -65,24 +65,19 @@ The repo prefix is **required** — without it, issues are unidentifiable in the
 
 | Pattern | Example | When |
 | --- | --- | --- |
-| `{repo-short}: [MN] verb noun` | `transcription: [M3] Fix SRT timestamp drift` | **Default** (issue in milestone) |
-| `{repo-short}({scope}): [MN] verb noun` | `ai(houdini): [M14] Add node layout` | Multi-module + milestone |
-| `{repo-short}: verb noun` | `graphs: Fix typo in README` | Backlog (no milestone) |
+| `{repo-short}: [MN] verb noun` | `api: [M3] Fix timestamp drift` | **Default** (issue in milestone) |
+| `{repo-short}({scope}): [MN] verb noun` | `web(editor): [M14] Add node layout` | Multi-module + milestone |
+| `{repo-short}: verb noun` | `docs: Fix typo in README` | Backlog (no milestone) |
 
-**Repo short names** (drop `h2t-` prefix):
+**Repo short names** (drop the shared repo-name prefix). Example table; use your own repos:
 
-| Repo | Short | Repo | Short |
-| --- | --- | --- | --- |
-| h2t-ai | `ai` | h2t-landings | `landings` |
-| h2t-business | `business` | h2t-skills | `skills` |
-| h2t-client | `client` | h2t-snap | `snap` |
-| h2t-content | `content` | h2t-staging | `staging` |
-| h2t-dcc | `dcc` | h2t-tools | `tools` |
-| h2t-evals | `evals` | h2t-transcription | `transcription` |
-| h2t-factory | `factory` | h2t-vision | `vision` |
-| h2t-graphs | `graphs` | h2t-voice | `voice` |
+| Repo | Short |
+| --- | --- |
+| my-project-api | `api` |
+| my-project-web | `web` |
+| my-project-docs | `docs` |
 
-**Non-h2t repos:** use full name (`depthkit:`, `creative-thinking:`, `SpecDesigner:`)
+**Repos without the shared prefix:** use the full name (`my-tool:`, `my-library:`)
 
 **Rules:**
 - Imperative mood: "Add", "Fix", "Refactor" (not "Added", "Fixes")

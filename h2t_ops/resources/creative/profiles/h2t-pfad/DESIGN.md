@@ -1,7 +1,7 @@
 # h2t-pfad
 
 ## Brand Intent
-Elegant tactical dashboard aesthetic — small, monospace, red accent. Extracted from PFAD design system (lichtpfad internal dashboard). Corner bracket tags, `// SECTION` labels, micro-type scale at 12px base. Canvas2D dot-field particle network as background fx.
+Elegant tactical dashboard aesthetic — small, monospace, red accent. An example profile extracted from an internal dashboard design system. Corner bracket tags, `// SECTION` labels, micro-type scale at 12px base. Canvas2D dot-field particle network as background fx.
 
 ## Color Tokens
 
@@ -17,7 +17,7 @@ Elegant tactical dashboard aesthetic — small, monospace, red accent. Extracted
 - `--color-border`: `rgba(255,255,255,0.10)`
 
 ## Available Palettes
-- `default` — red accent (original PFAD)
+- `default` — red accent (original)
 
 ## Typography
 - `--font`: JetBrains Mono, IBM Plex Mono, monospace

@@ -8,7 +8,7 @@ Standard for repos that expose a public API.
 
 ## Applicability
 
-Only applies to repos where `projects.yaml` indicates API exposure (i.e. `docs.agent_docs = true` or repo has `api/openapi.yaml`). Currently: `h2t-graphs`, `h2t-evals`.
+Only applies to repos where `projects.yaml` indicates API exposure (i.e. `docs.agent_docs = true` or repo has `api/openapi.yaml`). Example: a service repo that publishes an OpenAPI spec.
 
 ## File Locations
 

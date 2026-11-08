@@ -251,22 +251,6 @@ AUTHOR_DEBT: dict[str, tuple[dict[str, int], str]] = {
         ({"h2t-landings": 2}, "#632"),
     "h2t_ops/resources/agent_profile/agent-profiles.json":
         ({"h2t-dcc": 13}, "#614"),
-    "h2t_ops/resources/creative/profiles/h2t-default/DESIGN.md":
-        ({"hou2touch": 1}, "PR 7"),
-    "h2t_ops/resources/creative/profiles/h2t-graphs/DESIGN.md":
-        ({"lichtpfad": 1}, "PR 7"),
-    "h2t_ops/resources/creative/profiles/h2t-pfad/DESIGN.md":
-        ({"lichtpfad": 1}, "PR 7"),
-    "h2t_ops/resources/docs/standards/api-contracts.md":
-        ({"h2t-evals": 1}, "PR 7"),
-    "h2t_ops/resources/docs/standards/code-organization.md":
-        ({"h2t-ai": 1}, "PR 7"),
-    "h2t_ops/resources/docs/standards/documentation-structure.md":
-        ({"crypto-regime": 1, "h2t-ai": 4, "h2t-evals": 2, "h2t-transcription": 2, "h2t-vision": 1, "rejuve": 1}, "PR 7"),
-    "h2t_ops/resources/docs/standards/git-naming-conventions.md":
-        ({"h2t-ai": 1, "h2t-business": 1, "h2t-client": 1, "h2t-dcc": 1, "h2t-evals": 1, "h2t-factory": 1, "h2t-landings": 1, "h2t-tools": 1, "h2t-transcription": 1, "h2t-vision": 1, "h2t-voice": 1}, "PR 7"),
-    "h2t_ops/resources/docs/standards/naming-conventions.md":
-        ({"crypto-regime": 1, "quant-kb": 1}, "PR 7"),
     "h2t_ops/setup/harness_claude.py":
         ({"lichtpfad": 3}, "upstream"),
     "h2t_ops/setup/layout/phases.py":
@@ -317,16 +301,6 @@ AUTHOR_DEBT: dict[str, tuple[dict[str, int], str]] = {
         ({"lichtpfad": 1}, "upstream"),
     "plugins/h2t-creative/.claude-plugin/plugin.json":
         ({"lichtpfad": 1}, "upstream"),
-    "plugins/h2t-creative/agents/browser-qa.md":
-        ({"h2t-tools": 1}, "PR 7"),
-    "plugins/h2t-creative/profiles/h2t-default/DESIGN.md":
-        ({"hou2touch": 1}, "PR 7"),
-    "plugins/h2t-creative/profiles/h2t-graphs/DESIGN.md":
-        ({"lichtpfad": 1}, "PR 7"),
-    "plugins/h2t-creative/profiles/h2t-pfad/DESIGN.md":
-        ({"lichtpfad": 1}, "PR 7"),
-    "plugins/h2t-creative/recipes/landing-course.yaml":
-        ({"motion designer, berlin": 1}, "PR 7"),
     "plugins/h2t-creative/skills/deck/SKILL.md":
         ({"lichtpfad": 1}, "upstream"),
     "plugins/h2t-creative/skills/design/SKILL.md":
@@ -339,16 +313,6 @@ AUTHOR_DEBT: dict[str, tuple[dict[str, int], str]] = {
         ({"lichtpfad": 1}, "upstream"),
     "plugins/h2t-dev/.claude-plugin/plugin.json":
         ({"lichtpfad": 1}, "upstream"),
-    "plugins/h2t-dev/references/standards/api-contracts.md":
-        ({"h2t-evals": 1}, "PR 7"),
-    "plugins/h2t-dev/references/standards/code-organization.md":
-        ({"h2t-ai": 1}, "PR 7"),
-    "plugins/h2t-dev/references/standards/documentation-structure.md":
-        ({"crypto-regime": 1, "h2t-ai": 4, "h2t-evals": 2, "h2t-transcription": 2, "h2t-vision": 1, "rejuve": 1}, "PR 7"),
-    "plugins/h2t-dev/references/standards/git-naming-conventions.md":
-        ({"h2t-ai": 1, "h2t-business": 1, "h2t-client": 1, "h2t-dcc": 1, "h2t-evals": 1, "h2t-factory": 1, "h2t-landings": 1, "h2t-tools": 1, "h2t-transcription": 1, "h2t-vision": 1, "h2t-voice": 1}, "PR 7"),
-    "plugins/h2t-dev/references/standards/naming-conventions.md":
-        ({"crypto-regime": 1, "quant-kb": 1}, "PR 7"),
     "plugins/h2t-dev/skills/docs-lint/SKILL.md":
         ({"lichtpfad": 1}, "upstream"),
     "plugins/h2t-dev/skills/docs-sync-labels/SKILL.md":

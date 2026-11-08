@@ -67,7 +67,7 @@ Standalone utility scripts. Not importable packages.
 
 Reference data and JSON registries that belong to the domain but are not code.
 
-- Operator registries (h2t-ai)
+- Operator registries
 - Static lookup tables
 - Configuration templates
 
