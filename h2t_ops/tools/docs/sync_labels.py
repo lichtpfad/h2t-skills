@@ -5,18 +5,25 @@ import argparse
 import json
 import subprocess
 import sys
+from pathlib import Path
 
-from .common import GH, REPO_MANIFEST, print_header, standards_dir
+from .common import (
+    GH,
+    REPO_MANIFEST,
+    exits_on_config_error,
+    print_header,
+    standards_dir,
+    target,
+)
 
 # One copy, resolved the same way every other standard is (#439). This file used to keep
 # its own bundled/canonical pair, which was right — it was the only consumer that worked
 # on a machine without the author's sibling repositories — but it left two truths about
 # where labels.json lives.
 LABELS_FILE = standards_dir() / "labels.json"
-ORG = "lichtpfad"
 
 
-def sync_repo(repo_name: str, labels: dict, *, dry_run: bool = True) -> int:
+def sync_repo(repo: str, labels: dict, *, dry_run: bool = True) -> int:
     errors = 0
     for category, label_list in labels.items():
         for label in label_list:
@@ -24,7 +31,7 @@ def sync_repo(repo_name: str, labels: dict, *, dry_run: bool = True) -> int:
                 GH, "label", "create", label["name"],
                 "--color", label["color"],
                 "--description", label["description"],
-                "--repo", f"{ORG}/{repo_name}",
+                "--repo", repo,
                 "--force",
             ]
             if dry_run:
@@ -39,13 +46,15 @@ def sync_repo(repo_name: str, labels: dict, *, dry_run: bool = True) -> int:
     return errors
 
 
+@exits_on_config_error
 def main() -> None:
     parser = argparse.ArgumentParser(description="Sync labels to GitHub repos")
-    parser.add_argument("repos", nargs="*", help="Repos (default: all 16)")
+    parser.add_argument("repos", nargs="*", help="owner/repo, or a bare name under github.owner (default: the repos in your repo mapping)")
     parser.add_argument("--apply", action="store_true", help="Actually sync (default: dry-run)")
     args = parser.parse_args()
 
-    targets = args.repos or REPO_MANIFEST
+    root = Path.cwd()
+    targets = [target(r, root) for r in (args.repos or REPO_MANIFEST)]
     mode = "APPLY" if args.apply else "DRY-RUN"
     print_header(f"docs-sync-labels [{mode}]: {len(targets)} repos")
 

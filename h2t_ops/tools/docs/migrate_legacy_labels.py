@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
-"""Migrate legacy flat labels to namespaced-v1 schema across h2t-* repos.
+"""Migrate legacy flat labels to namespaced-v1 schema in one repository.
 
 Usage:
-    python migrate_legacy_labels.py [--apply] [--repos REPO [REPO ...]]
+    python migrate_legacy_labels.py --repo OWNER/NAME [--apply]
 
-Default is --dry-run. Pass --apply to execute changes.
+Default is --dry-run. Pass --apply to execute changes. The repository is always named: this
+tool deletes labels, and no list of repositories is assumed on the caller's behalf.
 """
 import argparse
 import json
 import subprocess
 
-from .common import GH, REPO_MANIFEST
+from .common import GH
 
 # Mapping: legacy label -> canonical label (None = remove without replacement)
 LABEL_MAP: dict[str, str | None] = {
@@ -63,7 +64,7 @@ def run(cmd: list[str]) -> str:
 
 
 def get_issues_with_label(repo: str, label: str) -> list[int]:
-    out = run([GH, "issue", "list", "--repo", f"lichtpfad/{repo}",
+    out = run([GH, "issue", "list", "--repo", repo,
                "--label", label, "--state", "all",
                "--json", "number", "--limit", "200"])
     if not out:
@@ -75,7 +76,7 @@ def get_issues_with_label(repo: str, label: str) -> list[int]:
 
 
 def get_repo_labels(repo: str) -> list[str]:
-    out = run([GH, "label", "list", "--repo", f"lichtpfad/{repo}",
+    out = run([GH, "label", "list", "--repo", repo,
                "--json", "name", "--limit", "200"])
     if not out:
         return []
@@ -86,7 +87,7 @@ def get_repo_labels(repo: str) -> list[str]:
 
 
 def relabel_issue(repo: str, issue: int, remove: str, add: str | None, dry_run: bool) -> None:
-    cmd = [GH, "issue", "edit", str(issue), "--repo", f"lichtpfad/{repo}",
+    cmd = [GH, "issue", "edit", str(issue), "--repo", repo,
            "--remove-label", remove]
     if add:
         cmd += ["--add-label", add]
@@ -106,7 +107,7 @@ def delete_label(repo: str, label: str, dry_run: bool) -> None:
         print(f"  [DRY] delete label: {label}")
     else:
         r = subprocess.run(
-            [GH, "label", "delete", label, "--repo", f"lichtpfad/{repo}", "--yes"],
+            [GH, "label", "delete", label, "--repo", repo, "--yes"],
             capture_output=True, text=True, encoding="utf-8",
         )
         if r.returncode == 0:
@@ -147,13 +148,13 @@ def migrate_repo(repo: str, dry_run: bool) -> dict:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Migrate legacy labels to namespaced-v1")
     parser.add_argument("--apply", action="store_true", help="Apply changes (default: dry-run)")
-    parser.add_argument("--repos", nargs="*", help="Repos to process (default: all 16)")
+    parser.add_argument("--repo", required=True, metavar="OWNER/NAME", help="repository to migrate")
     args = parser.parse_args()
 
     dry_run = not args.apply
-    repos = args.repos or REPO_MANIFEST
+    repos = [args.repo]
     mode = "DRY RUN" if dry_run else "APPLY"
-    print(f"migrate_legacy_labels — {mode} — {len(repos)} repos")
+    print(f"migrate_legacy_labels — {mode} — {args.repo}")
 
     totals = {"issues_relabelled": 0, "labels_deleted": 0}
     for repo in repos:

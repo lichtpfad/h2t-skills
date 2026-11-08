@@ -289,18 +289,10 @@ AUTHOR_DEBT: dict[str, tuple[dict[str, int], str]] = {
         ({"h2t-transcription": 1}, "PR 6"),
     "h2t_ops/setup/sync.py":
         ({"lichtpfad": 7}, "upstream"),
-    "h2t_ops/tools/docs/common.py":
-        ({"h2t-ai": 1, "h2t-business": 1, "h2t-client": 1, "h2t-dcc": 1, "h2t-evals": 2, "h2t-factory": 1, "h2t-landings": 1, "h2t-tools": 1, "h2t-transcription": 2, "h2t-vision": 2, "h2t-voice": 1}, "PR 2"),
     "h2t_ops/tools/docs/docs_init.py":
         ({"h2t-landings": 1}, "PR 2"),
     "h2t_ops/tools/docs/lint.py":
-        ({"h2t-landings": 2, "lichtpfad": 1}, "PR 2"),
-    "h2t_ops/tools/docs/migrate_legacy_labels.py":
-        ({"lichtpfad": 4}, "PR 2"),
-    "h2t_ops/tools/docs/new_doc.py":
-        ({"lichtpfad": 1}, "PR 2"),
-    "h2t_ops/tools/docs/sync_labels.py":
-        ({"lichtpfad": 1}, "PR 2"),
+        ({"h2t-landings": 2}, "PR 2"),
     "lib/practice_harvest/lineage.py":
         ({"crypto-regime": 3}, "PR 6"),
     "plugins/h2t-arch/.claude-plugin/plugin.json":
@@ -365,8 +357,6 @@ AUTHOR_DEBT: dict[str, tuple[dict[str, int], str]] = {
         ({"lichtpfad": 1}, "upstream"),
     "plugins/h2t-dev/.claude-plugin/plugin.json":
         ({"lichtpfad": 1}, "upstream"),
-    "plugins/h2t-dev/README.md":
-        ({"h2t-ai": 1}, "PR 7"),
     "plugins/h2t-dev/references/standards/api-contracts.md":
         ({"h2t-evals": 1}, "PR 7"),
     "plugins/h2t-dev/references/standards/code-organization.md":
@@ -380,7 +370,7 @@ AUTHOR_DEBT: dict[str, tuple[dict[str, int], str]] = {
     "plugins/h2t-dev/skills/docs-lint/SKILL.md":
         ({"lichtpfad": 1}, "upstream"),
     "plugins/h2t-dev/skills/docs-sync-labels/SKILL.md":
-        ({"h2t-ai": 2, "lichtpfad": 3}, "PR 2"),
+        ({"lichtpfad": 1}, "upstream"),
     "plugins/h2t-dev/skills/github-issues/SKILL.md":
         ({"lichtpfad": 1}, "upstream"),
     "plugins/h2t-dev/skills/milestone-closure/SKILL.md":

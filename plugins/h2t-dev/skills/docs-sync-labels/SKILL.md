@@ -9,7 +9,7 @@ metadata:
 
 # Instructions
 
-Sync canonical labels defined in `references/standards/labels.json` to GitHub repos under the `lichtpfad` org using the `gh` CLI.
+Sync canonical labels defined in `references/standards/labels.json` to GitHub repos using the `gh` CLI. The owner is never assumed: name `owner/repo`, or set `H2T_GITHUB_OWNER` (or `github.owner` in `user.yaml`) to use bare repo names.
 
 **Default behaviour:** dry-run (preview only). Use `--apply` to actually write labels.
 
@@ -44,16 +44,16 @@ The sync is the `h2t-docs-sync-labels` command; the label set it applies ships w
 
 ### 1. Identify target repos
 
-- If the user named specific repos, use those.
-- Otherwise the script defaults to all 16 repos from `REPO_MANIFEST` (defined in the package, `h2t_ops/tools/docs/common.py`).
+- If the user named specific repos, use those as `owner/repo`. A bare name needs `github.owner`; without it the command exits 3 and names the setting.
+- Otherwise the script defaults to the repos in your repo mapping, as bare names under `github.owner`. An empty mapping exits 3: register repos, or pass `owner/repo`.
 
 ### 2. Dry-run preview
 
 Run without `--apply` to preview every label that would be created/updated:
 
 ```bash
-h2t-docs-sync-labels                    # all repos
-h2t-docs-sync-labels h2t-ai h2t-skills  # specific repos
+h2t-docs-sync-labels                          # the repos in your repo mapping
+h2t-docs-sync-labels <owner>/<repo> <owner>/<repo>  # specific repos
 ```
 
 Output shows `label-name (category)` per repo. No GitHub API calls are made.
@@ -63,8 +63,8 @@ Output shows `label-name (category)` per repo. No GitHub API calls are made.
 After confirming the dry-run output looks correct, run with `--apply`:
 
 ```bash
-h2t-docs-sync-labels --apply                    # all repos
-h2t-docs-sync-labels h2t-ai h2t-skills --apply  # specific repos
+h2t-docs-sync-labels --apply                          # the repos in your repo mapping
+h2t-docs-sync-labels <owner>/<repo> <owner>/<repo> --apply  # specific repos
 ```
 
 The script calls `gh label create --force` for each label. `--force` updates existing labels.
@@ -80,5 +80,5 @@ Report count of repos synced and whether any errors occurred.
 |-------|-------|-----|
 | `labels.json not found` | The package's bundled standards are missing `labels.json` | Reinstall the CLI, or point `H2T_DEV_ROOT` at your own `docs/standards/` |
 | `gh CLI not found` | `gh` not on PATH or wrong path in `docs/common.py` | Install `gh` or fix `GH` constant |
-| `FAIL: <label>` per label | GitHub API error (auth, rate-limit, repo not found) | Check `gh auth status`, verify repo name in `lichtpfad` org |
+| `FAIL: <label>` per label | GitHub API error (auth, rate-limit, repo not found) | Check `gh auth status`, verify the `owner/repo` you passed |
 | `h2t-docs-sync-labels: command not found` | The CLI is not installed or not on PATH | Follow the version check at the top of this skill |
