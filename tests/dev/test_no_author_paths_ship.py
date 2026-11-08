@@ -217,8 +217,6 @@ AUTHOR_DEBT: dict[str, tuple[dict[str, int], str]] = {
         ({"hou2touch": 1}, "PR 6"),
     "h2t_ops/connectors/meetgeek/recovery.py":
         ({"dor-key": 1}, "PR 9"),
-    "h2t_ops/connectors/research/visual_ocr.py":
-        ({"h2t-tools": 2}, "PR 6"),
     "h2t_ops/core/google_auth.py":
         ({"lichtpfad": 1}, "PR 9"),
     "h2t_ops/core/lake.py":
@@ -245,18 +243,12 @@ AUTHOR_DEBT: dict[str, tuple[dict[str, int], str]] = {
         ({"h2t-ai": 1, "h2t-evals": 2}, "PR 4"),
     "h2t_ops/lifecycle/eval/status.py":
         ({"h2t-evals": 1}, "PR 4"),
-    "h2t_ops/lifecycle/gather/README.md":
-        ({"personal-os": 1}, "PR 3"),
     "h2t_ops/lifecycle/gather/sessions_legacy.py":
         ({"dor-key": 1, "~/.dor": 1}, "PR 9"),
     "h2t_ops/lifecycle/project_audit_report.py":
         ({"h2t-landings": 1}, "#632"),
     "h2t_ops/lifecycle/project_audit_scan.py":
         ({"h2t-landings": 2}, "#632"),
-    "h2t_ops/lifecycle/pulse/transcript.py":
-        ({"h2t-infra": 1, "lichtpfad": 1}, "PR 4"),
-    "h2t_ops/lifecycle/scaffold_project.py":
-        ({"h2t-infra": 1}, "PR 3"),
     "h2t_ops/resources/agent_profile/agent-profiles.json":
         ({"h2t-dcc": 13}, "#614"),
     "h2t_ops/resources/creative/profiles/h2t-default/DESIGN.md":
@@ -305,14 +297,10 @@ AUTHOR_DEBT: dict[str, tuple[dict[str, int], str]] = {
         ({"h2t-dcc": 13}, "#614"),
     "plugins/h2t-core/skills/autonomous-run/SKILL.md":
         ({"lichtpfad": 1}, "upstream"),
-    "plugins/h2t-core/skills/autonomous-run/references/gates.md":
-        ({"crypto-regime": 1}, "PR 6"),
     "plugins/h2t-core/skills/dev-overview/SKILL.md":
         ({"h2t-ai": 1, "hou2touch": 1, "lichtpfad": 2}, "#612"),
     "plugins/h2t-core/skills/handoff/SKILL.md":
         ({"lichtpfad": 1}, "upstream"),
-    "plugins/h2t-core/skills/handoff/references/handoff-example.md":
-        ({"h2t-evals": 2, "h2t-transcription": 3, "hou2touch": 1}, "PR 6"),
     "plugins/h2t-core/skills/init-project/SKILL.md":
         ({"lichtpfad": 1}, "upstream"),
     "plugins/h2t-core/skills/project-audit/SKILL.md":
@@ -322,7 +310,7 @@ AUTHOR_DEBT: dict[str, tuple[dict[str, int], str]] = {
     "plugins/h2t-core/skills/scaffold-project/SKILL.md":
         ({"lichtpfad": 1}, "upstream"),
     "plugins/h2t-core/skills/session-start/SKILL.md":
-        ({"h2t-ai": 1, "lichtpfad": 1}, "PR 3"),
+        ({"lichtpfad": 1}, "upstream"),
     "plugins/h2t-core/skills/setup/SKILL.md":
         ({"lichtpfad": 2}, "upstream"),
     "plugins/h2t-core/skills/snap/SKILL.md":
@@ -375,24 +363,14 @@ AUTHOR_DEBT: dict[str, tuple[dict[str, int], str]] = {
         ({"lichtpfad": 1}, "upstream"),
     "plugins/h2t-ops/skills/connectors/SKILL.md":
         ({"lichtpfad": 1}, "upstream"),
-    "plugins/h2t-ops/skills/connectors/references/dropbox.md":
-        ({"hou2touch": 11, "lichtpfad": 1}, "PR 6"),
-    "plugins/h2t-ops/skills/connectors/references/meetgeek.md":
-        ({"h2t-transcription": 1}, "PR 6"),
-    "plugins/h2t-ops/skills/connectors/references/notion.md":
-        ({"h2t-business": 1, "lichtpfad": 1}, "PR 6"),
     "plugins/h2t-ops/skills/daily-brief/SKILL.md":
         ({"lichtpfad": 1}, "upstream"),
     "plugins/h2t-ops/skills/deploy/SKILL.md":
         ({"lichtpfad": 1}, "upstream"),
     "plugins/h2t-ops/skills/kb/SKILL.md":
         ({"lichtpfad": 1}, "upstream"),
-    "plugins/h2t-ops/skills/research/REPORT-SPEC.md":
-        ({"h2t-evals": 1, "rejuve": 1}, "PR 6"),
     "plugins/h2t-ops/skills/research/SKILL.md":
-        ({"crypto-orchestrator": 1, "lichtpfad": 1, "rejuve": 1}, "PR 6"),
-    "plugins/h2t-ops/skills/research/examples.md":
-        ({"rejuve": 21}, "PR 6"),
+        ({"lichtpfad": 1}, "upstream"),
 }
 
 

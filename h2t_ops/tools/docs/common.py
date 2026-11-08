@@ -16,7 +16,7 @@ def _dev_root() -> Path:
     """Where sibling h2t repositories live (#434).
 
     The default was a drive-letter dev root, right on exactly one machine and wrong everywhere
-    else — including the author's Mac, where checkouts are under ~/Projects. Resolution
+    else — including a Mac, where checkouts are under ~/Projects. Resolution
     order, each step failing over to the next:
 
     1. `H2T_DEV_ROOT` — the explicit answer, unchanged and still first.
@@ -46,7 +46,7 @@ def standards_dir() -> Path:
     """Where the eight STANDARDS_FILES live (#439).
 
     Bundled first. Until this change the only answer was `DEV_ROOT/docs/standards`, a
-    directory that exists on exactly one machine — and not the author's Mac, where
+    directory that exists on exactly one machine — and not on a Mac, where
     `lint.py h2t-skills` printed eight `FAIL: missing ...` lines while all eight files sat
     in a sibling repository. On a stranger's machine nothing of that constellation exists,
     so the skill reported their tree as violating standards they could not read.
@@ -72,7 +72,7 @@ def _manifest() -> list[str]:
     The mapping lists every repository this user has, keyed by repository name, which is
     exactly what the manifest is. It is asked of the index, the one parser of the ontology.
 
-    There is no fallback list. The one that stood here named the author's sixteen
+    There is no fallback list. The one that stood here named sixteen fixed
     repositories, so a stranger's `docs-sync-labels --apply` wrote into repositories that
     were never theirs. Without a mapping the answer is a ConfigError that says how to give
     one — or to name `owner/repo` on the command line instead.
@@ -245,7 +245,7 @@ def git_repo_root(start: Path | None = None) -> Path | None:
     """The repository containing `start`, from git rather than from a list of names.
 
     Callers used to walk up looking for a directory whose *name* appears in
-    REPO_MANIFEST — sixteen of the author's repositories. Measured 2026-08-27: inside a
+    REPO_MANIFEST — sixteen fixed repository names. Measured 2026-08-27: inside a
     repository that is not on that list, running from `docs/sub` resolved the repo root
     to `docs/sub`, so the linter treated a subdirectory as the whole repository. Not
     "some checks are off" — the wrong root, silently.

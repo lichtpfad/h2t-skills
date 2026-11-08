@@ -1,7 +1,7 @@
 # Gates (autonomous-run)
 
 Canonical, portable gate definitions the generator stamps into every runbook artifact.
-Referenced by `.claude/rules/autonomous-execution.md`. Promoted from the crypto-regime-spike
+Referenced by `.claude/rules/autonomous-execution.md`. Promoted from a spike
 `execution-protocols.md` (which becomes a thin pointer here).
 
 ## Codex review-gate

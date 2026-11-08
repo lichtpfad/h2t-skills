@@ -26,7 +26,7 @@
 | # | Tool | Args | HTTP | Latency | Cost | Results |
 |---|---|---|---|---|---|---|
 | 1 | `h2t-ops research search` | `type=auto,category=company,numResults=10` | 200 | 2100ms | $0.012 | 10 |
-| 2 | `h2t-ops research crawl` | `url=rejuve.bio/about` | 200 | 1300ms | $0.002 | 1 |
+| 2 | `h2t-ops research crawl` | `url=example.com/about` | 200 | 1300ms | $0.002 | 1 |
 | **Totals** | | | **0 errors** | **3400ms** | **$0.014** | **11 items** |
 
 > **Integrity check:** 2/2 calls used Exa API. 0 fallbacks to WebSearch.
@@ -81,7 +81,7 @@ Line `Integrity check: N/N calls used Exa API. M fallbacks to WebSearch.` is **m
 
 | Status | When |
 |---|---|
-| `✅ sent to h2t-evals` | HTTP 2xx from `$H2T_EVALS_URL` |
+| `✅ sent to the eval service` | HTTP 2xx from `$H2T_EVALS_URL` |
 | `⏳ buffered locally at $(h2t-ops paths get data:research)/.pending_telemetry.jsonl` | Network error or non-2xx |
 | `⊘ disabled` | `$H2T_EVALS_DISABLE=1` explicitly set (user opt-out) |
 | `🚧 awaiting endpoint` | MVP default — `$H2T_EVALS_URL` not set |

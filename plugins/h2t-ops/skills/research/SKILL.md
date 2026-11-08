@@ -215,7 +215,7 @@ Retention policy:
 
 ```bash
 # From session-start output (preferred):
-RESEARCH_PROJECT="<GATHER_RESULT.project.id>"   # e.g. "rejuve", "h2t-skills", "crypto-orchestrator"
+RESEARCH_PROJECT="<GATHER_RESULT.project.id>"   # e.g. "my-project", "my-other-project"
 
 # Fallback if no session context:
 RESEARCH_PROJECT=$(git remote get-url origin 2>/dev/null | sed 's|.*/||;s|\.git$||')

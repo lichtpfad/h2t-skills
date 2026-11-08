@@ -10,14 +10,14 @@ streams the content fine (~11 MB/s measured).
 | intent | command |
 | --- | --- |
 | who am I, which namespace | `h2t-ops dropbox account --json` |
-| list a folder | `h2t-ops dropbox list /HOU2TOUCH --json` |
-| walk a tree | `h2t-ops dropbox list /HOU2TOUCH --recursive --limit 500 --json` |
-| metadata for one path | `h2t-ops dropbox meta /HOU2TOUCH/clip.wav --json` |
-| stream a file to disk | `h2t-ops dropbox download /HOU2TOUCH/clip.wav ~/Downloads --json` |
+| list a folder | `h2t-ops dropbox list /MyFolder --json` |
+| walk a tree | `h2t-ops dropbox list /MyFolder --recursive --limit 500 --json` |
+| metadata for one path | `h2t-ops dropbox meta /MyFolder/clip.wav --json` |
+| stream a file to disk | `h2t-ops dropbox download /MyFolder/clip.wav ~/Downloads --json` |
 | gzip content under a plain name | `h2t-ops dropbox download /x/seq.prproj ./seq.prproj --gunzip --json` |
-| upload a file (write) | `h2t-ops dropbox upload ./a.py "/HOU2TOUCH/X/a.py" --confirm-write --json` |
-| upload a folder (write) | `h2t-ops dropbox upload ./dir "/HOU2TOUCH/X" --confirm-write --json` |
-| public link (write) | `h2t-ops dropbox link "/HOU2TOUCH/X/a.py" --confirm-public --json` |
+| upload a file (write) | `h2t-ops dropbox upload ./a.py "/MyFolder/X/a.py" --confirm-write --json` |
+| upload a folder (write) | `h2t-ops dropbox upload ./dir "/MyFolder/X" --confirm-write --json` |
+| public link (write) | `h2t-ops dropbox link "/MyFolder/X/a.py" --confirm-public --json` |
 
 ## Writes
 
@@ -31,15 +31,15 @@ streams the content fine (~11 MB/s measured).
   public one.
 - Both refuse without their flag (`--confirm-write`, `--confirm-public`) before any token
   is read. Restate the target and get the user's yes before running them.
-- Run them from PowerShell or cmd, not Git Bash: MSYS rewrites `/HOU2TOUCH/...` into
-  `C:/Program Files/Git/HOU2TOUCH/...` and the write lands on a wrong path or is refused.
+- Run them from PowerShell or cmd, not Git Bash: MSYS rewrites `/MyFolder/...` into
+  `C:/Program Files/Git/MyFolder/...` and the write lands on a wrong path or is refused.
 
 ## Paths are from the Dropbox root, not from the disk
 
 ```text
-E:\DROPBOX\LichtPfad Dropbox\HOU2TOUCH\COURSES_DEVELOPMENT\LISBON\x.wav
+E:\Dropbox\MyFolder\Projects\Area\x.wav
                              └────────────── API path ──────────────┘
-                             /HOU2TOUCH/COURSES_DEVELOPMENT/LISBON/x.wav
+                             /MyFolder/Projects/Area/x.wav
 ```
 
 The root itself is `""` or `/`, never a drive letter.

@@ -237,7 +237,7 @@ def capture_and_ocr(
     if not shutil.which("h2t-screenshot"):
         raise ConfigError(
             "h2t-screenshot not found on PATH",
-            hint="Install it from the h2t-tools checkout: uv tool install --editable <h2t-tools>",
+            hint="auto-capture needs an `h2t-screenshot` command on PATH; pass a screenshot instead",
         )
 
     # Build stable artifact paths — screenshot persists here alongside other artifacts

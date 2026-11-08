@@ -62,8 +62,8 @@ Deploy registry lives in:
 
 Current local bootstrap example:
 
-- service: `h2t-graphs`
-- target: `github-actions-main`
+- service: `<service>`
+- target: `<target>`
 - profile: `github-actions-dispatch`
 
 V1 profile scripts are repo-local only:
@@ -142,8 +142,8 @@ h2t-ops deploy status <service> --json
 
 ```bash
 h2t-ops deploy list --json
-h2t-ops deploy h2t-graphs --dry-run --json
-h2t-ops deploy status h2t-graphs --json
+h2t-ops deploy <service> --dry-run --json
+h2t-ops deploy status <service> --json
 ```
 
 ## Output Policy

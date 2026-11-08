@@ -21,7 +21,7 @@ Descend only as far as the question needs. ~95% of queries resolve by **L2** —
 A KB may hold several domains, each with its own index (`$KB/index.<domain>.md`) under a root `$KB/index.md`. Classify the question → pick the domain → read that domain's index.
 - Unambiguous → route silently.
 - Ambiguous / low-confidence / no matching domain → **propose** the best-fit domain(s) and ask (AskUserQuestion). **Never** silently invent a new domain; **never** decline to answer — propose and confirm.
-- Federation across *separate* KB instances (e.g. a crypto or agentic KB) is a manual pointer today (`$KB/.claude/rules/kb-lookup.md`) — same classify→route logic, followed by hand.
+- Federation across *separate* KB instances (e.g. a KB at `<path-to-your-kb>`) is a manual pointer today (`$KB/.claude/rules/kb-lookup.md`) — same classify→route logic, followed by hand.
 
 ### L1 — Find the cluster
 

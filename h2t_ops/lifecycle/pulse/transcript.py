@@ -1,6 +1,5 @@
 """Read Claude Code and Codex transcripts (.jsonl) without changing them.
 
-Parsing ported from session_catalog.py (lichtpfad/h2t-infra, commit 104fb24).
 Broken lines (truncated writes, bad bytes) are skipped, never raised.
 """
 

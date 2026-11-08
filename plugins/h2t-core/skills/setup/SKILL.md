@@ -228,7 +228,7 @@ Step 2 says, including the `plugin_cache` remedy. Then read `machine_name.status
   ```
 
   If the user says the machine is new, pin the value of the `today` field
-  (`--machine-name <today>`). `today` is `H2T_MACHINE_NAME`, else `DOR_MACHINE_NAME`, else
+  (`--machine-name <today>`). `today` is `H2T_MACHINE_NAME`, else the legacy `DOR_MACHINE_NAME` (read only), else
   the hostname lowercased up to the first dot.
 - `error` — report it; the settings file was left untouched.
 

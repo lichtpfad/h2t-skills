@@ -173,5 +173,5 @@ Three things that cost time when you meet them for the first time:
 ours. `delete` requires `--confirm-name` matching the view's actual name, like
 `archive` does for pages.
 
-Reference implementation of a full declarative sync (spec by names, dry-run diff,
-idempotent): `lichtpfad/h2t-business@a2c1af8` — `scripts/notion_sync_course_views.py`.
+A full declarative sync (spec by names, dry-run diff, idempotent) is a script of your
+own: resolve names to ids, diff against the live state, apply only with a flag.
