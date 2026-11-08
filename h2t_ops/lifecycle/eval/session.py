@@ -3,11 +3,11 @@
 Write behavior is gated by the resolved H2T_EVALS_MODE (see resolve_mode):
   - off   → no local JSON, no SDK send (default when SDK/token absent)
   - local → local JSON only
-  - push  → local JSON + h2t-evals SDK send
+  - push  → local JSON + evals SDK send
 Mode is resolved once at construction. SkillEval never crashes its caller.
 
 Usage:
-    with SkillEval("session-start", domain="dev", project="h2t-ai") as ev:
+    with SkillEval("session-start", domain="dev", project="my-project") as ev:
         ev.metric("skills.gather_source_success_rate", value_num=0.95)
     # on __exit__: writes per resolved mode (nothing when off)
 
@@ -265,7 +265,7 @@ class SkillEval:
             pass
 
     def _send_central(self, status: str, metrics: list[dict]) -> None:
-        """Send to h2t-evals SDK. Silent on any failure."""
+        """Send to the evals SDK. Silent on any failure."""
         try:
             from h2t_evals.sdk import EvalClient, EvalSession
         except ImportError:

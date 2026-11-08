@@ -206,43 +206,23 @@ def _all_tokens() -> dict[str, Counter]:
     return found
 
 
-# path -> (token -> count, reason). A reason of "upstream" is permanent; every other reason
-# names the PR or issue that removes the entry.
+# path -> (token -> count, reason). Every reason is one of: "upstream" (this pack's own
+# repository, permanent); a provider or file contract name the code must spell; "data: …"
+# (a table the code reads, with what it is); the LEGACY .dor table; or the issue or PR that
+# removes the entry (#463, #612, #614, #632).
 AUTHOR_DEBT: dict[str, tuple[dict[str, int], str]] = {
-    "h2t_ops/connectors/dropbox/client.py":
-        ({"hou2touch": 2, "lichtpfad": 1}, "PR 6"),
     "h2t_ops/connectors/evals/commands.py":
         ({"lichtpfad": 1}, "upstream"),
-    "h2t_ops/connectors/gmail/signature.py":
-        ({"hou2touch": 1}, "PR 6"),
-    "h2t_ops/core/google_auth.py":
-        ({"lichtpfad": 1}, "PR 9"),
-    "h2t_ops/core/lake.py":
-        ({"~/.dor": 2}, "PR 9"),
     "h2t_ops/core/paths.py":
         ({"\".dor\"": 7, "dor-key": 12, "~/.dor": 7}, "LEGACY table; vault default (D1)"),
     "h2t_ops/core/providers.py":
-        ({"h2t-evals": 2}, "PR 9"),
+        ({"h2t-evals": 2}, "provider/file contract name (h2t-evals.env)"),
     "h2t_ops/core/secrets.py":
-        ({"h2t-evals": 3, "~/.dor": 2}, "PR 9"),
+        ({"h2t-evals": 3}, "provider/file contract name (h2t-evals.env)"),
     "h2t_ops/core/settings.py":
-        ({"h2t-evals": 1}, "upstream"),
-    "h2t_ops/core/store.py":
-        ({"~/.dor": 1}, "PR 9"),
-    "h2t_ops/hooks/layout_precommit.py":
-        ({"h2t-transcription": 1}, "PR 4"),
-    "h2t_ops/hooks/plan_closer.py":
-        ({"h2t-business": 1}, "PR 4"),
-    "h2t_ops/hooks/secrets_precommit.py":
-        ({"h2t-transcription": 1}, "PR 4"),
-    "h2t_ops/hooks/structure_guard.py":
-        ({"h2t-transcription": 1}, "PR 4"),
-    "h2t_ops/lifecycle/eval/session.py":
-        ({"h2t-ai": 1, "h2t-evals": 2}, "PR 4"),
+        ({"h2t-evals": 1}, "provider/file contract name (h2t-evals.env)"),
     "h2t_ops/lifecycle/eval/status.py":
-        ({"h2t-evals": 1}, "PR 4"),
-    "h2t_ops/lifecycle/gather/sessions_legacy.py":
-        ({"~/.dor": 1}, "PR 9"),
+        ({"h2t-evals": 1}, "provider/file contract name (the evals SDK's repo, h2t-evals#99)"),
     "h2t_ops/lifecycle/project_audit_report.py":
         ({"h2t-landings": 1}, "#632"),
     "h2t_ops/lifecycle/project_audit_scan.py":
@@ -255,16 +235,14 @@ AUTHOR_DEBT: dict[str, tuple[dict[str, int], str]] = {
         ({"personal-os": 3}, "data: leaked pytest session ids the migrator filters"),
     "h2t_ops/setup/legacy.py":
         ({"lichtpfad": 1}, "upstream"),
-    "h2t_ops/setup/storage_doctor.py":
-        ({"h2t-transcription": 1}, "PR 6"),
     "h2t_ops/setup/sync.py":
         ({"lichtpfad": 7}, "upstream"),
     "h2t_ops/tools/docs/docs_init.py":
-        ({"h2t-landings": 1}, "PR 2"),
+        ({"h2t-landings": 1}, "#632"),
     "h2t_ops/tools/docs/lint.py":
-        ({"h2t-landings": 2}, "PR 2"),
+        ({"h2t-landings": 1}, "#632"),
     "lib/practice_harvest/lineage.py":
-        ({"crypto-regime": 3}, "PR 6"),
+        ({"crypto-regime": 3}, "data: author lineage table, follow-up"),
     "plugins/h2t-arch/.claude-plugin/plugin.json":
         ({"lichtpfad": 1}, "upstream"),
     "plugins/h2t-arch/skills/diagram-node/SKILL.md":

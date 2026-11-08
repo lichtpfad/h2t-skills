@@ -1,7 +1,7 @@
 """The 3.x session roots, read until `h2t-setup sync` moves them into records/ (#548 §5).
 
 3.x wrote `~/.h2t/sessions/<machine>/<key>/` — markdown plus a bounded latest.json — and
-DOR before it wrote markdown under `~/.dor/sessions/`. A 4.0.x install that has not
+DOR before it wrote markdown under its own sessions root. A 4.0.x install that has not
 migrated yet has an empty index and its whole history here, so session-start reads it
 the way 3.x did. Read only: nothing is ever written to either root.
 """

@@ -207,7 +207,7 @@ def _load_projects_yaml() -> dict:
     if not PROJECTS_YAML_PATH.exists():
         # Say it. An empty dict here turns off every cross-repo check, and the caller
         # cannot tell that from "the registry says nothing about this repo". A stranger
-        # has no h2t-landings at all, so this is their normal state, not an error — but
+        # has no projects.yaml at all, so this is their normal state, not an error — but
         # a check that is off must not read as a check that passed.
         _note_cross_repo_disabled()
         return {}

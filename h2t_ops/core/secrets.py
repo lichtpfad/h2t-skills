@@ -51,7 +51,7 @@ def provider_file(provider: str, *, local: bool = False) -> Path:
 
 
 def legacy_sources() -> list[tuple[str, Path]]:
-    """The 3.x ladder, in its order (core/secrets.py of 3.3.0 — #432, #483). The two ~/.dor
+    """The 3.x ladder, in its order (core/secrets.py of 3.3.0 — #432, #483). The two 3.x DOR
     files are left out on a migrated machine (#581); migration_sources adds them back.
 
     H2T_SECRETS_FILE is not read any more (plan R5); the migration takes its file as one more
@@ -209,7 +209,7 @@ def evals_env(env_file: Path | None = None) -> dict[str, str]:
     """Every H2T_EVALS_* key, by prefix as in 3.x — no list of keys to drop one silently —
     except the 3.x path variables, which the package does not read (Q8).
 
-    Per key: environment, then h2t-evals.env, then ~/.dor/secrets.env (where 3.x read them),
+    Per key: environment, then h2t-evals.env, then the 3.x DOR secrets.env (where 3.x read them),
     then the rest of the ladder. env_file: only that file and the environment."""
     prefix = providers.key_prefix("h2t-evals")
     if env_file is not None:

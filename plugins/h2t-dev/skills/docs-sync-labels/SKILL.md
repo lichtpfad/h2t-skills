@@ -1,6 +1,6 @@
 ---
 name: docs-sync-labels
-description: Sync canonical GitHub labels (from references/standards/labels.json) to all h2t repos via gh CLI. Triggers on "sync labels", "update labels", "apply labels to repos", "docs-sync-labels".
+description: Sync canonical GitHub labels (from references/standards/labels.json) to the repositories you name, or those in your repo mapping, via gh CLI. Triggers on "sync labels", "update labels", "apply labels to repos", "docs-sync-labels".
 compatibility: "Claude Code"
 metadata:
   author: lichtpfad

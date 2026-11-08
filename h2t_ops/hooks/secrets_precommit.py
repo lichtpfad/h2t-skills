@@ -1,7 +1,7 @@
 """git pre-commit: a secret is caught in the staged diff, before it has a commit hash.
 
 The CI gitleaks job scans history and fails the run — after the secret is already in a
-pushed commit and must be rotated. h2t-transcription's HuggingFace token
+pushed commit and must be rotated. One repository's HuggingFace token
 (realtime_subtitles.bat, 2026-07-19) sat there for seven weeks before anything ran. Needs
 the gitleaks binary on PATH (brew/winget/scoop, or the release tarball); when it is absent
 this prints one line and exits 0 — a missing tool must not block commits, but it must not
