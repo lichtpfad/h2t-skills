@@ -359,6 +359,18 @@ def _layout() -> object:
     return doc.get("layout") if isinstance(doc, dict) else None
 
 
+# The LEGACY entries that name a 3.x DOR place; doctor and the migration iterate this
+# set rather than spelling the keys.
+DOR_KEYS = frozenset({"secrets.dor", "secrets.dor_old", "google.dor", "sessions.dor",
+                      "registry.dor", "lake.dor"})
+
+
+def migrated() -> bool:
+    """The machine is on layout 1 or later. bool is an int in Python and is not a layout."""
+    layout = _layout()
+    return isinstance(layout, int) and not isinstance(layout, bool) and layout >= 1
+
+
 def _fallback(name: str) -> Path | None:
     """Before layout 1 the 3.x lake is the lake (§8: 4.0.x works on the old places until the
     machine migrates). A default of data/lake there would take granola and meetgeek sync

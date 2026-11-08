@@ -112,7 +112,11 @@ Report:
 - `h2t-ops` status, path, version;
 - `entry_points` status — all four CLIs (`h2t-ops`, `h2t-gather`, `h2t-activity-log`, `h2t-handoff`);
 - optional POS/DOR status;
-- whether plugin cache is visible.
+- whether plugin cache is visible;
+- `settings_gaps`: settings this machine relied on by default and has not set. Each item has
+  `kind`, `key`, `evidence`, `suggestion`. A `gap` must be applied: show the suggested line
+  and, once the user agrees, write it to the file it names. `info` is shown, not demanded.
+  `manual` is listed with its key, for the user to set if wanted.
 
 `plugin_cache.status: missing` means no installed h2t-core was found under Claude Code's or
 Codex's plugin cache (`CLAUDE_CONFIG_DIR` / `CODEX_HOME` when set). The skill still runs — it

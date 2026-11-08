@@ -22,10 +22,12 @@ import shutil
 import subprocess
 import sys
 from collections.abc import Callable
+from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
 from h2t_ops.core import paths, settings, store
+from h2t_ops.setup import settings_gaps
 
 KIND_DOCTOR = "h2t_setup_doctor/v1"
 KIND_CONNECTORS = "h2t_connectors_check/v1"
@@ -339,6 +341,7 @@ def doctor(runner: Runner = _run) -> dict[str, Any]:
         "optional_pos": optional_pos_status(),
         "legacy_shims": legacy_shim_status(),
         "settings": settings.rows(),
+        "settings_gaps": [asdict(g) for g in settings_gaps.gaps(runner)],
         "boundaries": {
             "root_h2t_touched": False,
             "pos_required": False,
