@@ -76,17 +76,16 @@ PRs 2–8 are independent of each other.
 | `design` skill (PFAD, `src/pfad-extension`, domain colours) | #463 |
 | `project-audit/SKILL.md:47-55` sibling repo `h2t-landings` | #632 (same file, bookkeeping through commands) |
 | renaming the built-in profile ids `h2t-graphs`, `h2t-pfad` | #614 decides; here only their descriptions |
-| **runtime `~/.dor` reads** (`core/secrets.py:63,124,209-215,249`, `core/lake.py:53,250`, `meetgeek/recovery.py:131`, `index/build.py:9,211`, `paths.py:359-366` lake fallback) | **owner decision needed** — see "Open decision" |
-
-## Open decision
+## Decision: runtime `~/.dor` reads (owner, 2026-11-08)
 
 #581 says `.dor` reads go "only through an explicit migrate step". The lake fallback in
 `paths.py:355-366` is deliberate: before layout 1, a default of `data/lake` would advance the
 granola/meetgeek cursors while POS reads the old lake, and the notes synced in that window are
-never fetched again. Gating it behind `--from-dor` reintroduces that loss on a non-migrated
-machine. Proposal: keep every runtime `.dor` read behind `layout < 1` (as the lake fallback
-already is) and list them in the ratchet as debt with that reason. Until the owner answers, the
-ratchet records them as debt and no task changes them.
+never fetched again. Gating it behind `--from-dor` would reintroduce that loss on a non-migrated
+machine.
+
+Decided: **every runtime `.dor` read happens only while `layout < 1`**, as the lake fallback
+already does; after migration nothing reads `.dor` except the migration code. PR 9 does it.
 
 ## Review Focus
 
@@ -161,7 +160,7 @@ def test_probe_sees_a_planted_value(tmp_path):   # positive control
 Run: `.venv/bin/pytest tests/dev/test_no_author_paths_ship.py -v`
 
 - [ ] **Step 4: Fill `AUTHOR_DEBT` from that output**, one reason per entry naming the PR or
-  out-of-scope row that removes it (`"PR 2"`, `"#436"`, `"open decision: runtime .dor"`).
+  out-of-scope row that removes it (`"PR 2"`, `"#436"`, `"PR 9"`).
   Run again → PASS.
 
 - [ ] **Step 5: Commit** `test: ratchet author values in shipped code (#581)`
@@ -398,6 +397,31 @@ Replace with neutral examples (`my-project`, `example.com`, `<service>`, `/Proje
   → one phrasing: "a POS-compatible consumer, if configured (contract: #582)"; no dead ADR path,
   no "once available" instruction.
 - [ ] **Step 3:** `tests/skills/`, `tests/contracts/` — PASS. **Commit** `docs: POS boundary lives in POS; the pack links it (#581)`
+
+---
+
+## PR 9 — `.dor` reads only before migration
+
+### Task 10
+
+**Files:** `h2t_ops/core/secrets.py:63,124,209-215,249`, `h2t_ops/core/lake.py:53,250`,
+`h2t_ops/connectors/meetgeek/recovery.py:131`, `h2t_ops/lifecycle/index/build.py:9,211`,
+`h2t_ops/setup/layout/secrets_phase.py:30-31` (orders `dor` first); test
+`tests/core/test_dor_reads_before_layout.py` (new).
+
+**Interfaces:**
+- Consumes: `paths._layout()` (`paths.py:347`) — the same check the lake fallback uses.
+- Produces: `paths.reads_legacy() -> bool` — `True` only while `_layout() != 1`; every runtime
+  `.dor` read asks it first.
+
+- [ ] **Step 1: Failing test** — `test_no_dor_read_after_layout_1[secrets|lake|meetgeek|index]`:
+  a fixture `~/.dor` holding a secret, a lake dir, a registry; `layout: 1` declared → each reader
+  ignores it. `layout` absent → today's behaviour (control).
+- [ ] **Step 2: Run** — RED on the `layout: 1` cases.
+- [ ] **Step 3: Implement** the guard in each reader; `secrets_phase.py` puts `.dor` last.
+- [ ] **Step 4: Run** `tests/core/ tests/setup/ tests/connectors/meetgeek/` — PASS; in
+  `AUTHOR_DEBT` the `.dor` entries keep their counts with the reason "read only before layout 1".
+- [ ] **Step 5: Commit** `fix: read ~/.dor only on a machine not yet migrated (#581)`
 
 ---
 
