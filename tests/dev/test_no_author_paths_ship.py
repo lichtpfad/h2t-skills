@@ -241,8 +241,6 @@ AUTHOR_DEBT: dict[str, tuple[dict[str, int], str]] = {
         ({"h2t-transcription": 1}, "PR 4"),
     "h2t_ops/hooks/structure_guard.py":
         ({"h2t-transcription": 1}, "PR 4"),
-    "h2t_ops/lifecycle/detect_project.py":
-        ({"h2t-vision": 2, "hou2touch": 8, "personal-os": 1}, "PR 3"),
     "h2t_ops/lifecycle/eval/session.py":
         ({"h2t-ai": 1, "h2t-evals": 2}, "PR 4"),
     "h2t_ops/lifecycle/eval/status.py":
@@ -251,8 +249,6 @@ AUTHOR_DEBT: dict[str, tuple[dict[str, int], str]] = {
         ({"personal-os": 1}, "PR 3"),
     "h2t_ops/lifecycle/gather/sessions_legacy.py":
         ({"dor-key": 1, "~/.dor": 1}, "PR 9"),
-    "h2t_ops/lifecycle/gather/user.py":
-        ({"hou2touch": 1, "personal-os": 1}, "PR 3"),
     "h2t_ops/lifecycle/project_audit_report.py":
         ({"h2t-landings": 1}, "#632"),
     "h2t_ops/lifecycle/project_audit_scan.py":
@@ -318,15 +314,13 @@ AUTHOR_DEBT: dict[str, tuple[dict[str, int], str]] = {
     "plugins/h2t-core/skills/handoff/references/handoff-example.md":
         ({"h2t-evals": 2, "h2t-transcription": 3, "hou2touch": 1}, "PR 6"),
     "plugins/h2t-core/skills/init-project/SKILL.md":
-        ({"h2t-factory": 1, "hou2touch": 1, "lichtpfad": 1}, "PR 3"),
-    "plugins/h2t-core/skills/init-project/references/truth-gate.md":
-        ({"crypto-machine": 1, "h2t-infra": 1}, "PR 6"),
+        ({"lichtpfad": 1}, "upstream"),
     "plugins/h2t-core/skills/project-audit/SKILL.md":
         ({"h2t-landings": 4, "lichtpfad": 1}, "#632"),
     "plugins/h2t-core/skills/report-issue/SKILL.md":
         ({"lichtpfad": 1}, "upstream"),
     "plugins/h2t-core/skills/scaffold-project/SKILL.md":
-        ({"h2t-voice": 1, "hou2touch": 1, "lichtpfad": 2, "personal-os": 1}, "PR 3"),
+        ({"lichtpfad": 1}, "upstream"),
     "plugins/h2t-core/skills/session-start/SKILL.md":
         ({"h2t-ai": 1, "lichtpfad": 1}, "PR 3"),
     "plugins/h2t-core/skills/setup/SKILL.md":

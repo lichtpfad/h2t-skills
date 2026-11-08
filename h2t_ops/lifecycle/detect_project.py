@@ -23,18 +23,13 @@ from h2t_ops.lifecycle.index import build
 # Domain patterns: (regex on the normalized forward-slash path, domain, confidence).
 #
 # These used to be anchored to `C:/dev/` — one machine's checkout root — so the same
-# repository detected as `hou2touch` there and as nothing at all anywhere else, including
-# the author's own Mac under ~/Projects. What actually carries the signal is the
-# repository's NAME, not where its parent directory happens to sit, so the patterns are
-# anchored to a path segment instead: `/h2t-vision` matches under any root.
+# repository detected on one machine and as nothing at all on another. What carries the
+# signal is the repository's NAME, not where its parent directory sits: a user pattern
+# anchors to a path segment (`/my-prefix`) and matches under any root.
 #
-# Patterns that name one user's own repositories are not here: they live in that user's
+# No pattern ships: every one names somebody's own repositories. They live in the user's
 # config/user.yaml as `domain_patterns: [{pattern, domain}]` (#548 R45).
-DOMAIN_PATTERNS = [
-    (r"/(?:h2t-|hou2touch)", "hou2touch", "high", "repository named h2t-* matches hou2touch"),
-    (r"/crypto-", "crypto", "high", "repository named crypto-* matches crypto"),
-    (r"HOU2TOUCH", "hou2touch", "high", "path contains HOU2TOUCH"),
-]
+DOMAIN_PATTERNS: list[tuple[str, str, str, str]] = []
 
 
 def _user_patterns() -> list[tuple[str, str, str, str]]:
@@ -150,7 +145,7 @@ def _detect_tracker(
 
 
 def _humanize_id(project_id: str) -> str:
-    """Convert kebab-case id to human label: 'h2t-vision' -> 'H2T Vision'."""
+    """Convert kebab-case id to human label: 'my-tool' -> 'My Tool'."""
     # Known acronyms to always uppercase
     ACRONYMS = {"h2t", "etl", "api", "cli", "dcc", "lms", "mcp", "ai", "td", "os", "db", "ui", "ux", "ci", "cd"}
     parts = project_id.split("-")
@@ -208,7 +203,7 @@ def _find_label(domains_data: dict, domain: str, project_id: str) -> str | None:
     return None
 
 
-def _build_confirm_message(detected: dict, already_registered: bool) -> str:
+def _build_confirm_message(detected: dict, already_registered: bool, domains: list[str]) -> str:
     """Build the confirm message shown to user."""
     if already_registered:
         cur = detected
@@ -248,14 +243,10 @@ def _build_confirm_message(detected: dict, already_registered: bool) -> str:
     else:
         # Domain unknown — need to ask
         lines.append("\nНе могу определить домен. Варианты:")
-        # List available domains
-        lines.append("1. dev")
-        lines.append("2. hou2touch")
-        lines.append("3. crypto")
-        lines.append("4. art")
-        lines.append("5. personal-os")
-        lines.append("6. admin")
-        lines.append("7. другой")
+        if domains:
+            for i, name in enumerate(domains, 1):
+                lines.append(f"{i}. {name}")
+            lines.append(f"{len(domains) + 1}. другой")
         lines.append("\nКакой домен?")
 
     return "\n".join(lines)
@@ -304,7 +295,8 @@ def detect_project(cwd: str, config_root: str | None = None) -> dict:
         return {
             "already_registered": True,
             "current": current,
-            "confirm_message": _build_confirm_message(current, already_registered=True),
+            "confirm_message": _build_confirm_message(
+                current, True, sorted(domains_data.get("domains", {}))),
         }
 
     # Reject workspace
@@ -359,7 +351,8 @@ def detect_project(cwd: str, config_root: str | None = None) -> dict:
         "already_registered": False,
         "needs_input": bool(input_fields),
         "input_fields": input_fields,
-        "confirm_message": _build_confirm_message(detected, already_registered=False),
+        "confirm_message": _build_confirm_message(
+            detected, False, sorted(domains_data.get("domains", {}))),
     }
 
 

@@ -1,6 +1,6 @@
 ---
 name: init-project
-description: Register existing repo or directory in h2t ecosystem. Triggers on "/init-project", "register project", or actionable hint from session-start when project.id == "unknown". NOT for creating new repos (use /h2t-factory:scaffold-project or similar).
+description: Register existing repo or directory in h2t ecosystem. Triggers on "/init-project", "register project", or actionable hint from session-start when project.id == "unknown". NOT for creating new repos (use /h2t-core:scaffold-project).
 compatibility: "Claude Code"
 metadata:
   author: lichtpfad
@@ -78,7 +78,7 @@ If `needs_input` is true:
 - Show confirm_message (it already contains the question)
 - Collect user's answer for each field in `input_fields`
 - If `domain` was collected and `tracker_confidence` == `"deferred"`:
-  - Check if the chosen domain is `hou2touch` (has Notion) AND `detected.github` exists → ask: "GitHub и Notion оба доступны. Task tracker: github или notion?"
+  - Check if `h2t-ops settings get notion.tasks_database_id` exits 0 (a Notion tracker is configured) AND `detected.github` exists → ask: "GitHub и Notion оба доступны. Task tracker: github или notion?"
   - Otherwise resolve automatically: github if `detected.github`, else none
 
 If `needs_input` is false — wait for "ок" or corrections from user.
