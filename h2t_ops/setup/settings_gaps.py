@@ -15,7 +15,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Literal
 
-from h2t_ops.core import paths, secrets, settings, store
+from h2t_ops.core import paths, secrets, settings, store, user_config
 from h2t_ops.core.errors import ConfigError
 
 Runner = Callable[[list[str], int], dict[str, Any]]
@@ -68,7 +68,7 @@ def _model_summaries() -> bool:
 def _summaries() -> list[Gap]:
     if _unset("sessions.summaries") and _model_summaries():
         return [Gap("gap", "sessions.summaries", "the index holds session summaries written by the model",
-                    "sessions.summaries: true")]
+                    f"sessions.summaries: true in {user_config.path()}")]
     return []
 
 
@@ -77,7 +77,7 @@ def _guards() -> list[Gap]:
              if (log := paths.logs_dir() / f"{name}-guard.jsonl").is_file() and log.stat().st_size > 0]
     if found and _unset("guards"):
         return [Gap("gap", "guards", f"guard logs exist for: {', '.join(found)}",
-                    f"guards: [{', '.join(found)}]")]
+                    f"guards: [{', '.join(found)}] in {user_config.path()}")]
     return []
 
 
@@ -86,7 +86,7 @@ def _evals_url() -> list[Gap]:
         env_file = secrets.provider_file(settings.EVALS_ENV.removesuffix(".env"))
         return [Gap("gap", "evals.service_url",
                     "an evals token is set and was sent to the built-in service address",
-                    f"H2T_EVALS_SERVICE_URL=<your service> in {env_file}")]
+                    f"add the line H2T_EVALS_SERVICE_URL=<your service> to {env_file}")]
     return []
 
 
@@ -111,13 +111,13 @@ def _dor_after_migration() -> list[Gap]:
     if missing:
         out.append(Gap("gap", "secrets", f"the 3.x secrets files hold {len(missing)} key(s) the new "
                        f"store lacks: {', '.join(missing)}",
-                       f"add them to a file in {paths.secrets_shared()} "
-                       f"(h2t-ops setup secrets skeleton shows the layout)"))
+                       f"add them as KEY=value lines to a file in {paths.secrets_shared()} "
+                       f"(run `h2t-ops setup secrets skeleton` to see the layout)"))
     lake_key = next(k for k in sorted(paths.DOR_KEYS) if k.startswith("lake."))
     old = paths.legacy(lake_key)
     if old.is_dir() and _unset("path.lake"):
         out.append(Gap("gap", "path.lake", f"{old} exists and no lake place is declared",
-                       f"h2t-ops paths set lake {old}"))
+                       f"run: h2t-ops paths set lake {old}"))
     return out
 
 

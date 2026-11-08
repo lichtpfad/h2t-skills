@@ -224,7 +224,7 @@ AUTHOR_DEBT: dict[str, tuple[dict[str, int], str]] = {
     "h2t_ops/core/lake.py":
         ({"dor-key": 2, "~/.dor": 2}, "PR 9"),
     "h2t_ops/core/paths.py":
-        ({"\".dor\"": 7, "dor-key": 17, "~/.dor": 7}, "LEGACY table; vault default (D1)"),
+        ({"\".dor\"": 7, "dor-key": 11, "~/.dor": 7}, "LEGACY table; vault default (D1)"),
     "h2t_ops/core/providers.py":
         ({"h2t-evals": 2}, "PR 9"),
     "h2t_ops/core/secrets.py":

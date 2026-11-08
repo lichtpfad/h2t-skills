@@ -4,7 +4,7 @@ import sqlite3
 
 import pytest
 
-from h2t_ops.core import paths, settings
+from h2t_ops.core import paths, settings, user_config
 from h2t_ops.lifecycle.index import schema
 from h2t_ops.setup import legacy, settings_gaps
 
@@ -75,7 +75,7 @@ def test_model_summary_row_and_key_unset_is_a_gap():
     _index("handoff", "model")
     found = [g for g in _of("gap") if g.key == "sessions.summaries"]
     assert len(found) == 1
-    assert found[0].suggestion == "sessions.summaries: true"
+    assert found[0].suggestion == f"sessions.summaries: true in {user_config.path()}"
 
 
 def test_summaries_key_set_is_no_gap():
@@ -120,13 +120,14 @@ def test_guard_logs_found_are_named_in_the_suggestion():
     _write(paths.logs_dir() / "grade-guard.jsonl", '{"a": 1}\n')
     found = [g for g in _of("gap") if g.key == "guards"]
     assert len(found) == 1
-    assert found[0].suggestion == "guards: [grade]"
+    assert found[0].suggestion == f"guards: [grade] in {user_config.path()}"
 
 
 def test_both_guard_logs():
     for name in ("grade", "plain"):
         _write(paths.logs_dir() / f"{name}-guard.jsonl", "x\n")
-    assert [g for g in _of("gap") if g.key == "guards"][0].suggestion == "guards: [grade, plain]"
+    assert [g for g in _of("gap") if g.key == "guards"][0].suggestion == (
+        f"guards: [grade, plain] in {user_config.path()}")
 
 
 def test_empty_guard_log_is_no_evidence():
@@ -146,7 +147,7 @@ def test_evals_token_without_url_is_a_gap(monkeypatch):
     monkeypatch.setenv("H2T_EVALS_TOKEN", "t0ken-value")
     found = [g for g in _of("gap") if g.key == "evals.service_url"]
     assert len(found) == 1
-    assert found[0].suggestion.startswith("H2T_EVALS_SERVICE_URL=")
+    assert found[0].suggestion.startswith("add the line H2T_EVALS_SERVICE_URL=")
     assert "h2t-evals.env" in found[0].suggestion
     assert "t0ken-value" not in repr(found)
 
@@ -206,7 +207,7 @@ def test_dor_lake_without_a_declared_place_is_a_gap():
     paths.legacy("lake.dor").mkdir(parents=True)
     found = [g for g in _of("gap") if g.key == "path.lake"]
     assert len(found) == 1
-    assert found[0].suggestion.startswith("h2t-ops paths set lake ")
+    assert found[0].suggestion.startswith("run: h2t-ops paths set lake ")
 
 
 def test_dor_lake_with_a_declared_place_is_no_gap(tmp_path):

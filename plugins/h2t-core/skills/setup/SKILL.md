@@ -114,8 +114,9 @@ Report:
 - optional POS/DOR status;
 - whether plugin cache is visible;
 - `settings_gaps`: settings this machine relied on by default and has not set. Each item has
-  `kind`, `key`, `evidence`, `suggestion`. A `gap` must be applied: show the suggested line
-  and, once the user agrees, write it to the file it names. `info` is shown, not demanded.
+  `kind`, `key`, `evidence`, `suggestion`. A `gap` must be applied: show the suggestion.
+  If it is "a line to add to <file>" (it names the file), write that line there once the user
+  agrees; if it starts with `run:` it is a command, run it once the user agrees. `info` is shown, not demanded.
   `manual` is listed with its key, for the user to set if wanted.
 
 `plugin_cache.status: missing` means no installed h2t-core was found under Claude Code's or

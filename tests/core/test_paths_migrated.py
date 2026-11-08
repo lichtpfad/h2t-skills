@@ -31,6 +31,7 @@ def test_migrated_false_without_the_file():
 
 
 def test_dor_keys_are_legacy_entries():
-    assert len(paths.DOR_KEYS) == 6
+    assert paths.DOR_KEYS == {"secrets.dor", "secrets.dor_old", "google.dor", "sessions.dor",
+                              "registry.dor", "lake.dor"}
     assert paths.DOR_KEYS <= set(paths.LEGACY)
     assert all(".dor" in k for k in paths.DOR_KEYS)

@@ -361,8 +361,7 @@ def _layout() -> object:
 
 # The LEGACY entries that name a 3.x DOR place; doctor and the migration iterate this
 # set rather than spelling the keys.
-DOR_KEYS = frozenset({"secrets.dor", "secrets.dor_old", "google.dor", "sessions.dor",
-                      "registry.dor", "lake.dor"})
+DOR_KEYS = frozenset(k for k, parts in LEGACY.items() if parts[0].lstrip(".") == "dor")
 
 
 def migrated() -> bool:
