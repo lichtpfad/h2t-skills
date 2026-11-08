@@ -1358,6 +1358,41 @@ def test_docs_tab_read_extracts_text(client_obj):
     assert result["tab_id"] == "tab1"
 
 
+def _cell(text):
+    return {"content": [{"paragraph": {"elements": [{"textRun": {"content": text + "\n"}}]}}]}
+
+
+def _para(text):
+    return {"paragraph": {"elements": [{"textRun": {"content": text}}]}}
+
+
+def test_docs_tab_read_returns_tables_as_gfm(client_obj):
+    """#598: a table between two paragraphs came back as nothing at all."""
+    from h2t_ops.connectors.drive.client import _table_cells
+    client_obj.service.files.return_value.get.return_value.execute.return_value = {
+        "id": "doc1", "name": "Doc", "mimeType": "application/vnd.google-apps.document",
+    }
+    table = {"table": {"tableRows": [
+        {"tableCells": [_cell("A"), _cell("B")]},
+        {"tableCells": [_cell("cell-a"), _cell("x|y\nz")]},
+    ]}}
+    client_obj._docs_service.documents.return_value.get.return_value.execute.return_value = {
+        "tabs": [{"tabProperties": {"tabId": "tab1"}, "documentTab": {"body": {"content": [
+            _para("Before\n"), table, _para("After\n"),
+        ]}}}]
+    }
+
+    text = client_obj.read_tab("doc1", "tab1")["text"]
+    assert text == ("Before\n"
+                    "| A | B |\n"
+                    "| --- | --- |\n"
+                    "| cell-a | x\\|y z |\n"
+                    "After\n")
+    rows = text.splitlines()[1:4]
+    assert _table_cells(rows[0]) == ["A", "B"]          # docs-tab write reads the same rows back
+    assert _table_cells(rows[2])[0] == "cell-a"
+
+
 def test_docs_tab_read_tab_not_found_raises(client_obj):
     from h2t_ops.core.errors import NotFoundError
     client_obj.service.files.return_value.get.return_value.execute.return_value = {
