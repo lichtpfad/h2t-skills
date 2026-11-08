@@ -96,6 +96,7 @@ def _legacy_secret_names() -> set[str]:
     names: set[str] = set()
     for key in sorted(k for k in paths.DOR_KEYS if k.startswith("secrets.")):
         try:
+            # diagnostic: reads .dor after migration on purpose, to report what it would lose
             text = paths.legacy(key).read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError):
             continue

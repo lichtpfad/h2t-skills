@@ -50,7 +50,7 @@ def origin(path) -> tuple[str, bool]:
         return "lake", False
     if _inside(real, _real(paths.data_dir() / "lake")):
         return "data", False
-    old = paths.legacy("lake.dor")
+    old = paths.undeclared_old_lake()
     if _inside(real, _real(old)):
         raise store.WriteRefused(f"{path} is in the 3.x lake {old}, which paths.yaml does not declare",
                                  hint=f"h2t-ops paths set lake {old}")
@@ -247,7 +247,8 @@ def read_cursor(provider: str, path: Path | None = None) -> dict:
     new = cursor_path(provider)
     if new.is_file():
         return _load(new)
-    return _load(paths.legacy("lake.dor") / "_cursors" / f"{provider}.json")
+    old = paths.legacy_read("lake.dor")
+    return _load(old / "_cursors" / f"{provider}.json") if old is not None else {}
 
 
 def write_cursor(provider: str, data: dict, path: Path | None = None) -> Path:

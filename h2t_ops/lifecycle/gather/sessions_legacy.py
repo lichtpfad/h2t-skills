@@ -13,12 +13,11 @@ from pathlib import Path
 
 from h2t_ops.core import paths
 
-ROOTS = ("sessions.h2t", "sessions.dor")
-
 
 def roots() -> list[Path]:
-    """The legacy roots that exist; the h2t one first."""
-    return [p for p in (paths.legacy(n) for n in ROOTS) if p.is_dir()]
+    """The legacy roots that exist; the h2t one first. The DOR one only before migration."""
+    return [p for p in (paths.legacy_read("sessions.h2t"), paths.legacy_read("sessions.dor"))
+            if p is not None and p.is_dir()]
 
 
 def _leaves(keys: list[str]) -> list[tuple[Path, Path]]:

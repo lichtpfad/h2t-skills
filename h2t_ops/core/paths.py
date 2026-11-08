@@ -377,7 +377,7 @@ def _fallback(name: str) -> Path | None:
     window would never be fetched again. A 3.x lake variable wins over ~/.dor/lake: that is
     where 3.x wrote and what the migration declares. After layout 1 only paths.yaml declares
     it (R2)."""
-    if name != "lake" or _layout() == 1:
+    if name != "lake" or migrated():
         return None
     if moved := old_env_by_use("lake"):
         return next(iter(moved.values()))
@@ -401,6 +401,19 @@ def place_or_default(name: str) -> tuple[Path, bool]:
 
 def legacy(name: str) -> Path:
     return home().joinpath(*LEGACY[name])
+
+
+def undeclared_old_lake() -> Path:
+    """The 3.x lake, for the write guard in lake.origin: after layout 1 a write into it is
+    refused until paths.yaml declares it. A guard, not a read, so it ignores migrated()."""
+    return legacy("lake.dor")
+
+
+def legacy_read(name: str) -> Path | None:
+    """legacy(), for runtime readers: a 3.x .dor place is read only on a machine that has
+    not migrated (#581); after it the answer is None and the reader treats it as absent.
+    Migration code and the doctor keep legacy(). The vault default is not a LEGACY key."""
+    return None if name in DOR_KEYS and migrated() else legacy(name)
 
 
 LEGACY_FILES = frozenset({"secrets.dor", "secrets.dor_old", "notion.token", "google.dor", "registry.dor"})

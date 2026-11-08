@@ -128,7 +128,9 @@ def legacy_journal_dirs() -> list[Path]:
     """Where 3.x kept the upload journal (<lake>/meetgeek/uploads-staging): read so the
     double-submit guard survives the upgrade, never written."""
     out: list[Path] = []
-    for d in (lake_root() / "uploads-staging", _paths.legacy("lake.dor") / "meetgeek" / "uploads-staging"):
+    old = _paths.legacy_read("lake.dor")
+    for d in (lake_root() / "uploads-staging",
+              *([old / "meetgeek" / "uploads-staging"] if old is not None else [])):
         if d not in out:
             out.append(d)
     return out

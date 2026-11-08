@@ -45,6 +45,13 @@ SECRET_KEYS = {
 Runner = Callable[[list[str], int], dict[str, Any]]
 
 
+def dor_secret_sources() -> list[tuple[str, Path]]:
+    """The two 3.x ~/.dor secrets files, whatever the layout file says: the migration and its
+    verification read them after layout 1 too (#581). core.secrets.legacy_sources leaves them
+    out on a migrated machine."""
+    return [("dor-secrets", paths.legacy("secrets.dor")), ("dor", paths.legacy("secrets.dor_old"))]
+
+
 def _semver_key(name: str) -> tuple[int, int, int]:
     parts = name.split(".")
     try:

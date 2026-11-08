@@ -215,18 +215,16 @@ AUTHOR_DEBT: dict[str, tuple[dict[str, int], str]] = {
         ({"lichtpfad": 1}, "upstream"),
     "h2t_ops/connectors/gmail/signature.py":
         ({"hou2touch": 1}, "PR 6"),
-    "h2t_ops/connectors/meetgeek/recovery.py":
-        ({"dor-key": 1}, "PR 9"),
     "h2t_ops/core/google_auth.py":
         ({"lichtpfad": 1}, "PR 9"),
     "h2t_ops/core/lake.py":
-        ({"dor-key": 2, "~/.dor": 2}, "PR 9"),
+        ({"~/.dor": 2}, "PR 9"),
     "h2t_ops/core/paths.py":
-        ({"\".dor\"": 7, "dor-key": 11, "~/.dor": 7}, "LEGACY table; vault default (D1)"),
+        ({"\".dor\"": 7, "dor-key": 12, "~/.dor": 7}, "LEGACY table; vault default (D1)"),
     "h2t_ops/core/providers.py":
         ({"h2t-evals": 2}, "PR 9"),
     "h2t_ops/core/secrets.py":
-        ({"dor-key": 7, "h2t-evals": 3, "~/.dor": 1}, "PR 9"),
+        ({"h2t-evals": 3, "~/.dor": 2}, "PR 9"),
     "h2t_ops/core/settings.py":
         ({"h2t-evals": 1}, "upstream"),
     "h2t_ops/core/store.py":
@@ -244,7 +242,7 @@ AUTHOR_DEBT: dict[str, tuple[dict[str, int], str]] = {
     "h2t_ops/lifecycle/eval/status.py":
         ({"h2t-evals": 1}, "PR 4"),
     "h2t_ops/lifecycle/gather/sessions_legacy.py":
-        ({"dor-key": 1, "~/.dor": 1}, "PR 9"),
+        ({"~/.dor": 1}, "PR 9"),
     "h2t_ops/lifecycle/project_audit_report.py":
         ({"h2t-landings": 1}, "#632"),
     "h2t_ops/lifecycle/project_audit_scan.py":
@@ -254,7 +252,7 @@ AUTHOR_DEBT: dict[str, tuple[dict[str, int], str]] = {
     "h2t_ops/setup/harness_claude.py":
         ({"lichtpfad": 3}, "upstream"),
     "h2t_ops/setup/layout/phases.py":
-        ({"personal-os": 3}, "PR 9"),
+        ({"personal-os": 3}, "data: leaked pytest session ids the migrator filters"),
     "h2t_ops/setup/legacy.py":
         ({"lichtpfad": 1}, "upstream"),
     "h2t_ops/setup/storage_doctor.py":
