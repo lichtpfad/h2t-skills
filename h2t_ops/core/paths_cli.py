@@ -41,7 +41,9 @@ def _rows() -> tuple[list[dict], str | None]:
         if p.id == "repo":
             where, source = None, _REPO
         elif p.id in paths.YAML_PLACES:
-            if p.id in declared:
+            if (moved := paths.source(p.id)) != "default":   # the variable wins over the file
+                where, source = paths.place(p.id), moved
+            elif p.id in declared:
                 where, source = declared[p.id], "paths.yaml"
             elif broken:
                 where, source = None, "paths.yaml (broken)"

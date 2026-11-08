@@ -153,6 +153,8 @@ def source(place_id: str) -> str:
         return "default (the install contract; H2T_PATH_ROOT does not move it)"
     name = "H2T_PATH_ROOT" if p.kind in ("class", "file") else \
         {"vault": "H2T_PATH_VAULT", "harness": "CLAUDE_CONFIG_DIR"}.get(place_id)
+    if place_id in YAML_PLACES:
+        name = f"H2T_PATH_{place_id.upper()}"
     return name if name and os.environ.get(name) else "default"
 
 
@@ -370,6 +372,8 @@ def _fallback(name: str) -> Path | None:
 def place(name: str) -> Path | None:
     if name == "vault":
         return vault()
+    if name in YAML_PLACES and (moved := _env(f"H2T_PATH_{name.upper()}")):
+        return moved   # a variable moves a place before paths.yaml does (#581)
     found = paths_config().places.get(name)
     return found if found is not None else _fallback(name)
 

@@ -59,7 +59,7 @@ def get_status(env=None, evals_root=None) -> dict:
         "source": _mode_source(env),
         "sdk_available": sdk,
         "token_present": token,
-        "service_url": env.get("H2T_EVALS_SERVICE_URL", "http://127.0.0.1:8088"),
+        "service_url": env.get("H2T_EVALS_SERVICE_URL") or None,
         "local_dir": str(root),
         "session_count": count,
         "hint": _hint(mode, sdk, token),

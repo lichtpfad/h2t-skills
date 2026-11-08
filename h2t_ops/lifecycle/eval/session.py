@@ -271,7 +271,9 @@ class SkillEval:
         except ImportError:
             return
 
-        service_url = self._env.get("H2T_EVALS_SERVICE_URL", "http://127.0.0.1:8088")
+        service_url = self._env.get("H2T_EVALS_SERVICE_URL")
+        if not service_url:   # no URL, no service: nothing to send to (#581)
+            return
         token = self._env.get("H2T_EVALS_TOKEN", "")
         from h2t_ops.core import paths, store
         try:
