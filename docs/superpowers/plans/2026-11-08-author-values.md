@@ -12,12 +12,14 @@ issue: "581"
 
 **Goal:** The release carries no author values: every path and infrastructure interface is read
 env → file → neutral default, everything that spends money, logs answers or imposes rules is off
-until the user turns it on, and a ratchet fails when an author value comes back (#581).
+until the user turns it on, setup tells a machine which settings it relied on and has not set,
+and a ratchet fails when an author value comes back (#581).
 
-**Architecture:** One resolver module (`h2t_ops/core/settings.py`) owns the §15 key table and
+**Architecture:** One resolver module (`h2t_ops/core/settings.py`) owns the key table and
 answers value + source for each key; `h2t-ops settings` and `setup doctor` print it. Consumers
-switch from literals to the resolver PR by PR. A per-file debt ratchet in
-`tests/dev/test_no_author_paths_ship.py` lands first and every later PR lowers its counts.
+switch from literals to the resolver PR by PR. `setup doctor` gains an upgrade check that finds,
+from evidence on the machine, every removed default the machine was using. A per-token debt
+ratchet in `tests/dev/test_no_author_paths_ship.py` lands first; every later PR lowers it.
 
 **Tech Stack:** Python 3.11+, stdlib + PyYAML, pytest. No new dependencies.
 
@@ -27,12 +29,16 @@ switch from literals to the resolver PR by PR. A per-file debt ratchet in
 
 ## Place in M8
 
-Re-verified 2026-11-08 against `origin/main` 84dfe600 by reading every cited line: of ~59 audit
+Re-verified 2026-11-08 against `origin/main` 84dfe600 by reading the cited lines: of ~59 audit
 rows in scope, **52 still present, 7 changed, 0 fixed**; ~30 further hits found (listed in the
 tasks below). The 2026-10-22 plan on `refactor/author-values` was never pushed and is not used.
+Reviewed by Codex 2026-11-08 (round 1: 10 P1, 6 P2 — all addressed below).
 
 Critical path: **PR 1 → #583** (#583 §1 runs "the author-values test from #581"). PR 1 holds
-both Done-when tests, so #583 can start as soon as PR 1 merges; PRs 2–8 only lower the ratchet.
+the ratchet and the settings test, so #583 can start as soon as PR 1 merges.
+
+**PR 10 (upgrade check) merges before PRs 3, 4, 5 and 9** — each of those removes a default a
+machine may be using, and PR 10 is what tells the machine. PR 2 needs only PR 1.
 
 Order against the other M8 branches — the #581 slice goes first in each shared file, the other
 issue rebases on it:
@@ -45,24 +51,28 @@ issue rebases on it:
 | 6 skill text | #619, #624, #631 | `meetgeek.md`, `handoff-example.md`, `session-start/SKILL.md`, research refs |
 | 7 standards/creative | #614 → #615 → #629 | creative profiles, `style-validate/SKILL.md` |
 
-PRs 2–8 are independent of each other.
+PR 8 depends on an outward step (an issue in `lichtpfad/POS`, owner confirms); #582 is closed.
+Otherwise PRs 2–9 do not depend on each other.
 
 ## Global Constraints
 
 - §15 rule 1: no author value in code. Missing value → `ConfigError` (exit 3) naming the key and
-  where to set it. No silent substitution.
-- §15 rule 2: one order for every key — environment variable → file (`user.yaml`, `paths.yaml`)
-  → default; a default is neutral (empty, off) or absent.
-- §15 rule 3: env vars exist for paths and interfaces only: `H2T_PATH_ROOT`, `H2T_PATH_VAULT`,
+  the file to set it in. No silent substitution.
+- §15 rule 2: env var → file → default; a default is neutral (empty, off) or absent. Two keys
+  have no file source, by construction: `path.root` (the files live under it) and
+  `machine.name` (config syncs between machines; a file value would give every machine one name).
+  Both are env → computed default, and `settings list` says so.
+- §15 rule 3: env vars for paths and interfaces only: `H2T_PATH_ROOT`, `H2T_PATH_VAULT`,
   `H2T_PATH_LAKE`, `H2T_PATH_INBOX`, `H2T_PATH_KB`, `H2T_MACHINE_NAME`, `H2T_GITHUB_OWNER`,
-  `H2T_NOTION_TASKS_DB`, `H2T_EVALS_SERVICE_URL`. Preferences and switches (language, guards,
-  session summaries, timezone) are `user.yaml` keys with no env var (owner comment 2026-10-22).
+  `H2T_NOTION_TASKS_DB`, `H2T_EVALS_SERVICE_URL`. Preferences and switches are file keys with no
+  env var (owner comment 2026-10-22).
 - §15 rule 5: spending, answer-logging and rule-imposing features default off.
 - §15 rule 6: doctor shows value and source (`env`, `file`, `default`, `unset`) per key.
 - Owner decision 2026-10-22 #1: the vault default `~/.dor/vault` is **not** changed here
-  (waits for lichtpfad/POS#173).
+  (waits for lichtpfad/POS#173). It is the one `.dor` read that survives migration.
 - Hooks stay registered; a switch is checked inside the handler (`.claude/rules/hooks.md`).
-- Every new test is seen red on the tree before its fix (`.claude/rules/verification.md`).
+- Every new test is seen red on the tree before its fix (`.claude/rules/verification.md`); a
+  test that can only fail on ImportError has not been seen red.
 - `plugins/h2t-dev/references/standards/*` and `h2t_ops/resources/docs/standards/*` are edited
   together; `tests/tools/test_resource_copies.py` holds them equal.
 
@@ -76,30 +86,32 @@ PRs 2–8 are independent of each other.
 | `design` skill (PFAD, `src/pfad-extension`, domain colours) | #463 |
 | `project-audit/SKILL.md:47-55` sibling repo `h2t-landings` | #632 (same file, bookkeeping through commands) |
 | renaming the built-in profile ids `h2t-graphs`, `h2t-pfad` | #614 decides; here only their descriptions |
+
 ## Decision: runtime `~/.dor` reads (owner, 2026-11-08)
 
 #581 says `.dor` reads go "only through an explicit migrate step". The lake fallback in
-`paths.py:355-366` is deliberate: before layout 1, a default of `data/lake` would advance the
+`paths.py:355-366` is deliberate: before migration, a default of `data/lake` would advance the
 granola/meetgeek cursors while POS reads the old lake, and the notes synced in that window are
-never fetched again. Gating it behind `--from-dor` would reintroduce that loss on a non-migrated
-machine.
+never fetched again. Gating it behind `--from-dor` would reintroduce that loss.
 
-Decided: **every runtime `.dor` read happens only while `layout < 1`**, as the lake fallback
-already does; after migration nothing reads `.dor` except the migration code. PR 9 does it.
+Decided: **runtime code reads `.dor` only on a machine that has not migrated** — one gate,
+`paths.legacy_read()`, which every runtime reader goes through (PR 9). Migration code keeps
+`paths.legacy()`. The vault default is the stated exception (Global Constraints).
 
 ## Review Focus
 
 1. A user with **no `user.yaml` at all** runs `h2t-ops setup doctor`, `h2t-docs-sync-labels`,
-   `detect_project` and the daily pass — each gives a neutral result or exit 3 with a hint, never
-   a traceback and never the author's value. Test: Task 2 `test_empty_environment_*` and the
-   empty-config case in Tasks 3–5.
-2. **The author after upgrading** behaves as before — only if O1 (his `user.yaml`) is written
-   before installing a build with PRs 3–5. Check: O1 step 3.
-3. **An env var set to an empty string** (`H2T_GITHUB_OWNER=`) is "unset", not the value `""`.
-   Test: Task 2 `test_empty_env_string_is_unset`.
-4. **A target repo with no `origin` remote** and no owner configured: label tools exit 3 and
-   name `H2T_GITHUB_OWNER`; they never fall back to any org. Test: Task 3.
-5. **`migrate_legacy_labels` without `--repo`** must not run `label delete` anywhere. Test: Task 3.
+   `detect_project` and the daily pass — neutral result or exit 3 with a hint, never a
+   traceback, never the author's value. Tests: Task 2 `test_empty_environment_*`, empty-config
+   cases in Tasks 3–5.
+2. **The author after upgrading** behaves as before — only if the PR 10 findings are applied
+   on both machines before a build with PRs 3–5, 9 is installed. Test: Task 11 detectors; check:
+   Task 12.
+3. **An env var set to an empty string** (`H2T_GITHUB_OWNER=`) is unset. Test: Task 2.
+4. **A bare repo name with no owner configured**: label tools exit 3 naming `H2T_GITHUB_OWNER`;
+   they never use another checkout's remote and never fall back to an org. Test: Task 3.
+5. **A migrated machine whose `~/.dor/secrets.env` still holds a key the new store lacks**: PR 9
+   stops reading it, so PR 10 must report it first. Test: Task 11 `dor_secrets_not_moved`.
 
 ---
 
@@ -111,117 +123,191 @@ already does; after migration nothing reads `.dor` except the migration code. PR
 - Modify: `tests/dev/test_no_author_paths_ship.py`
 
 **Interfaces:**
-- Produces: `AUTHOR_DEBT: dict[str, tuple[int, str]]` — path → (hit count, reason). Later
-  PRs lower counts or delete entries; nothing may add one without the owner.
+- Produces: `AUTHOR_DEBT: dict[str, tuple[dict[str, int], str]]` — path → (token → count,
+  reason). Counted per token, not per line: replacing one author value with another, or adding a
+  second on a line that already had one, both change the dict and go red. Later PRs lower or
+  delete entries; an entry with reason `"upstream"` is permanent.
 
-- [ ] **Step 1: Add three patterns and the legitimate-use filter**
+- [ ] **Step 1: Patterns**
 
 ```python
-# `lichtpfad` is the upstream and the marketplace; everything else is the author.
-LEGIT_LICHTPFAD = re.compile(
-    r"lichtpfad/h2t-(?:skills|snap)\b|@lichtpfad\b|cache/lichtpfad/|marketplace[^\n]*lichtpfad"
-    r"|\"name\": \"lichtpfad\"|^author: lichtpfad$")
-AUTHOR_OWNER = re.compile(r"\blichtpfad\b")
-AUTHOR_NAMES = re.compile(
-    r"hou2touch|personal-os|crypto-(?:regime|orchestrator|machine)|rejuve|quant-kb"
+# Always upstream, wherever they appear.
+UPSTREAM = re.compile(r"lichtpfad/h2t-(?:skills|snap)\b|@lichtpfad\b|cache/lichtpfad/")
+TOKENS = re.compile(
+    r"\blichtpfad\b|hou2touch|personal-os|crypto-(?:regime|orchestrator|machine)|rejuve|quant-kb"
     r"|QATAL|Mamuta|Zilberman|Bezalel|AICF|Motion Designer, Berlin|pfad-extension"
     r"|\bh2t-(?:ai|business|client|dcc|evals|factory|infra|landings|tools|transcription"
-    r"|vision|voice)\b", re.IGNORECASE)
-DOR_HOME = re.compile(r"~/\.dor\b|[\"'/]\.dor[\"'/]|\"\.dor\"")
-# Migration code is where `.dor` belongs (§15 rule 4).
-DOR_MIGRATION = {"h2t_ops/setup/legacy.py", "h2t_ops/setup/storage_doctor.py",
-                 "h2t_ops/core/paths.py", "scripts/storage_map.py"}  # + h2t_ops/setup/layout/*
+    r"|vision|voice)\b|~/\.dor\b|[\"']\.dor[\"']", re.IGNORECASE)
+# A runtime read of a 3.x .dor place through the paths API (PR 9 moves these to legacy_read).
+DOR_CALL = re.compile(r"\blegacy\(\s*[\"'](?:secrets\.dor|secrets\.dor_old|google\.dor|"
+                      r"sessions\.dor|registry\.dor|lake\.dor)[\"']")
+# Migration code is where .dor belongs (§15 rule 4): exact files and one prefix.
+MIGRATION_FILES = {"h2t_ops/setup/legacy.py", "h2t_ops/setup/storage_doctor.py", "scripts/storage_map.py"}
+MIGRATION_PREFIXES = ("h2t_ops/setup/layout/",)
 ```
 
-A line counts for `AUTHOR_OWNER` only if `LEGIT_LICHTPFAD` does not match it. Scope:
-`CODE_ROOTS`, `SKIP_NAMES` as today.
+`_tokens(path) -> Counter[str]`: per line, strip `UPSTREAM` spans, then count `TOKENS` matches
+(lower-cased) and `DOR_CALL` matches (token `"legacy-dor-call"`). `.dor` tokens and
+`legacy-dor-call` are not counted in migration files. `core/paths.py` is **not** exempt: its
+`LEGACY` table and vault default are debt with reason `"LEGACY table; vault default (D1)"`.
+Scope `CODE_ROOTS`, `SKIP_NAMES` as today.
 
-- [ ] **Step 2: Write the tests with `AUTHOR_DEBT = {}`**
+- [ ] **Step 2: Tests with `AUTHOR_DEBT = {}`**
 
 ```python
-def test_author_values_do_not_grow():
-    found = _author_counts()          # path -> hits over the three patterns
-    grown = {p: n for p, n in found.items() if n > AUTHOR_DEBT.get(p, (0, ""))[0]}
-    assert not grown, ...             # print path, count, first three lines
+def test_author_values_match_the_debt():
+    found = _all_tokens()                         # path -> Counter
+    diff = {p: (dict(c), AUTHOR_DEBT.get(p, ({}, ""))[0]) for p, c in found.items()
+            if dict(c) != AUTHOR_DEBT.get(p, ({}, ""))[0]}
+    gone = [p for p in AUTHOR_DEBT if p not in found]
+    assert not diff and not gone, ...             # grown → offending lines; shrunk → "lower AUTHOR_DEBT"
 
-def test_author_debt_is_not_stale():
-    found = _author_counts()
-    stale = {p: (n, found.get(p, 0)) for p, (n, _) in AUTHOR_DEBT.items() if found.get(p, 0) < n}
-    assert not stale, "lower AUTHOR_DEBT to the new count: ..."
-
-def test_probe_sees_a_planted_value(tmp_path):   # positive control
-    (tmp_path / "x.py").write_text('ORG = "lichtpfad"\nURL = "lichtpfad/h2t-skills"\n')
-    assert _count_file(tmp_path / "x.py") == 1
+def test_probe_counts_tokens_not_lines(tmp_path):  # positive control
+    f = tmp_path / "x.py"
+    f.write_text('A = "lichtpfad"; B = "hou2touch"\nURL = "lichtpfad/h2t-skills"\n'
+                 'p = paths.legacy("lake.dor")\n')
+    assert _tokens(f) == Counter({"lichtpfad": 1, "hou2touch": 1, "legacy-dor-call": 1})
 ```
 
-- [ ] **Step 3: Run — expected RED**, listing the files of the 2026-11-08 recheck
-  (`sync_labels.py`, `migrate_legacy_labels.py`, `detect_project.py`, `scaffold-project/SKILL.md`, …).
+- [ ] **Step 3: Run — expected RED**, listing the files of the 2026-11-08 recheck.
+  Run: `.venv/bin/pytest tests/dev/test_no_author_paths_ship.py -v`
+- [ ] **Step 4: Fill `AUTHOR_DEBT` from that output.** Each entry's reason names the PR or the
+  out-of-scope row that removes it (`"PR 2"`, `"#436"`, `"PR 9"`), or `"upstream"` for
+  marketplace and plugin identity (`plugin.json` author fields, `setup/{manifest,harness_claude,
+  sync,_release}.py`, `scripts/release.py`, `research/fetch.py` User-Agent) — read each of those
+  lines before marking it upstream. Run again → PASS.
+- [ ] **Step 5: Commit** `test: ratchet author values in shipped code, per token (#581)`
 
-Run: `.venv/bin/pytest tests/dev/test_no_author_paths_ship.py -v`
-
-- [ ] **Step 4: Fill `AUTHOR_DEBT` from that output**, one reason per entry naming the PR or
-  out-of-scope row that removes it (`"PR 2"`, `"#436"`, `"PR 9"`).
-  Run again → PASS.
-
-- [ ] **Step 5: Commit** `test: ratchet author values in shipped code (#581)`
-
-### Task 2: Settings resolver, `h2t-ops settings`, doctor
+### Task 2: Settings resolver, `h2t-ops settings`, doctor field
 
 **Files:**
-- Create: `h2t_ops/core/settings.py`, `tests/core/test_settings.py`
-- Modify: `h2t_ops/core/paths.py:148-156,370-375` (env for lake/inbox/kb), `h2t_ops/connectors/notion/commands.py:260-273`,
-  `h2t_ops/lifecycle/eval/session.py:274`, `h2t_ops/lifecycle/eval/status.py:62`,
-  `h2t_ops/setup/legacy.py:329` (doctor), `h2t_ops/cli.py` (subcommand)
+- Create: `h2t_ops/core/settings.py`, `tests/core/test_settings.py`, `tests/core/test_settings_consumers.py`
+- Modify: `h2t_ops/core/paths.py:148-156` (`source`), `:370-375` (`place`),
+  `h2t_ops/connectors/notion/commands.py:260-273`, `h2t_ops/lifecycle/eval/status.py:62`,
+  `h2t_ops/lifecycle/eval/session.py:274`, `h2t_ops/setup/legacy.py:329` (doctor), `h2t_ops/cli.py`
 
 **Interfaces:**
 - Produces:
-  - `Key(name: str, env: str | None, file_key: str | None, default: object)` (frozen dataclass)
-  - `KEYS: tuple[Key, ...]` — exactly the §15 tables: `path.root`, `path.vault`, `path.lake`,
-    `path.inbox`, `path.kb`, `machine.name`, `github.owner`, `notion.tasks_database_id`,
-    `evals.service_url`, `language` (default `"en"`), `guards` (default `[]`),
-    `sessions.summaries` (default `False`), `timezone` (default `None` = system)
-  - `resolve(name: str) -> Resolved(value: object, source: Literal["env","file","default","unset"])`
-  - `require(name: str) -> object` — `ConfigError` (exit 3), hint names env var and `user.yaml` key
-  - CLI: `h2t-ops settings list [--json]`, `h2t-ops settings get <name> [--json]`
-    (`get` on an unset key exits 3); doctor dict gains `"settings": [{"key","value","source"}]`
+  - `Key(name: str, env: str | None, file: str | None, file_key: str | None, default: object)`
+    (frozen dataclass); `file` is one of `"user.yaml"`, `"paths.yaml"`, `"repo-mapping.yaml"`,
+    `"domains.yaml"`, `None`
+  - `KEYS: tuple[Key, ...]`:
 
-Path keys delegate to `paths` (`root()`, `vault()`, `place()`), so `paths.py` stays the one
-reader of path env vars; `paths.place(name)` reads `H2T_PATH_<NAME>` before `paths.yaml` for
-`lake`, `inbox`, `kb`, and `paths.source()` reports that variable.
+    | name | env | file / key | default |
+    |---|---|---|---|
+    | `path.root` | `H2T_PATH_ROOT` | — | `~/.h2t` |
+    | `path.vault` | `H2T_PATH_VAULT` | — | `~/.dor/vault` (D1, unchanged) |
+    | `path.lake`, `path.inbox`, `path.kb` | `H2T_PATH_LAKE` / `_INBOX` / `_KB` | `paths.yaml` place | unset (feature off) |
+    | `machine.name` | `H2T_MACHINE_NAME` | — | hostname |
+    | `github.owner` | `H2T_GITHUB_OWNER` | `user.yaml` `github.owner` | unset |
+    | `notion.tasks_database_id` | `H2T_NOTION_TASKS_DB` | `user.yaml` same key | unset |
+    | `notion.tasks_schema` | — | `user.yaml` same key | unset (brief without tasks) |
+    | `evals.service_url` | `H2T_EVALS_SERVICE_URL` | — | unset (off, no probe) |
+    | `repos` | — | `repo-mapping.yaml` | `[]` |
+    | `domains` | — | `domains.yaml` | `{}` |
+    | `language` | — | `user.yaml` | `"en"` |
+    | `timezone` | — | `user.yaml` | unset (system) |
+    | `guards` | — | `user.yaml` | `[]` |
+    | `sessions.summaries` | — | `user.yaml` | `False` |
+    | `domain_patterns`, `context.by_domain`, `context.strategy`, `daily_brief.domains` | — | `user.yaml` | `[]` / `{}` / unset / `{}` |
 
-- [ ] **Step 1: Failing tests against the consumers, not only the new module**
+    The last row's names are new and approved here (§15: "имя утверждается в плане").
+  - `resolve(name: str) -> Resolved(value: object, source: Literal["env","file","default","unset"])`;
+    an env var set to `""` counts as unset
+  - `require(name: str) -> object` — `ConfigError` (exit 3); hint built from the key: the env var
+    if any, and `<file_key> in <full path of file>`
+  - CLI: `h2t-ops settings list [--json]`, `h2t-ops settings get <name> [--json]` (unset → exit 3);
+    doctor dict gains `"settings": [{"key","value","source"}]`
+- Path keys delegate to `paths` (`root()`, `vault()`, `place()`), so `paths.py` stays the one
+  reader of path env vars: `place(name)` reads `H2T_PATH_<NAME>` before `paths.yaml` for `lake`,
+  `inbox`, `kb`; `source()` reports that variable.
+
+- [ ] **Step 1: Consumer tests (existing APIs only — no import of `settings`)** in
+  `tests/core/test_settings_consumers.py`:
 
 ```python
-@pytest.mark.parametrize("key", [k for k in settings.KEYS if k.env])
-def test_each_interface_key_reads_its_env_var(key, monkeypatch, tmp_path): ...
-    # set env → resolve(key.name).source == "env"
-
-def test_lake_place_reads_env(monkeypatch, tmp_path):        # red today: paths.yaml only
+def test_lake_place_reads_env(monkeypatch, tmp_path):          # paths.yaml only today
     monkeypatch.setenv("H2T_PATH_LAKE", str(tmp_path / "lk"))
     assert paths.place("lake") == tmp_path / "lk"
     assert paths.source("lake") == "H2T_PATH_LAKE"
 
-def test_notion_tasks_db_reads_env(...)                      # red today
-def test_evals_url_unset_is_off(...)                         # red today: probes 127.0.0.1:8088
-    assert eval_status.service_url({}) is None
+def test_notion_tasks_db_reads_env(capsys, monkeypatch):       # exit 3 today
+    # modelled on tests/skills/daily_brief/test_sections.py:121 (Fake NotionClient):
+    # no user.yaml db id, H2T_NOTION_TASKS_DB=db1 → the fake sees a query on db1
 
-def test_empty_environment_gives_neutral_or_config_error(monkeypatch, tmp_path):
-    # HOME=tmp, H2T_PATH_ROOT=tmp, no user.yaml, every H2T_* unset
-    # value in (None, [], False, "en", <hostname>, tmp root)  — or require() raises exit 3
-def test_empty_env_string_is_unset(...)
-def test_settings_list_json_names_every_key(...)              # CLI round trip
+def test_evals_status_without_url_is_unconfigured():           # 127.0.0.1:8088 today
+    assert get_status(env={})["service_url"] is None
+
+def test_evals_session_without_url_does_not_probe(...)         # session.py:274, pattern of tests/lifecycle/eval/test_session.py
 ```
 
-- [ ] **Step 2: Run** `.venv/bin/pytest tests/core/test_settings.py -v` — RED; read that the
-  lake/notion/evals tests fail on the value, not on ImportError (import `settings` lazily inside
-  the parametrized test only).
-- [ ] **Step 3: Implement** `settings.py`; switch the four consumers; add the CLI and the doctor
-  field. Evals: unset URL → the eval session/status treat the service as not configured (no probe).
-- [ ] **Step 4: Run** `tests/core/ tests/lifecycle/eval/ tests/connectors/notion/ tests/cli/` — PASS.
-  Lower `AUTHOR_DEBT` only if it moved (8088 is not in its patterns).
-- [ ] **Step 5: Commit** `feat(settings): §15 key table with env → file → default and its source (#581)`
+- [ ] **Step 2: Run** `.venv/bin/pytest tests/core/test_settings_consumers.py -v` — RED on the
+  value in each test (read the four failure lines).
+- [ ] **Step 3: Implement** `paths.place/source` env, the notion and evals consumers (evals: no
+  URL → service not configured). Run → PASS.
+- [ ] **Step 4: Resolver tests** in `tests/core/test_settings.py` — `test_each_env_key_reads_its_var`
+  (parametrized over `KEYS` with `env`), `test_file_key_reads_its_file` (each `file` kind, fixture
+  under `H2T_PATH_ROOT=tmp`), `test_empty_environment_gives_neutral_or_config_error` (every value
+  in the table's default column, or `require` → exit 3), `test_empty_env_string_is_unset`,
+  `test_require_hint_names_the_right_file` (`path.lake` → `paths.yaml`, `github.owner` →
+  `user.yaml`), `test_settings_list_json_names_every_key` (CLI round trip). Write them against a
+  `settings.py` holding only `Key`, `KEYS` and stubs raising `NotImplementedError`; run → RED on
+  the stubs, not on import.
+- [ ] **Step 5: Implement** `resolve`, `require`, the CLI and the doctor field. Run
+  `tests/core/ tests/lifecycle/eval/ tests/skills/daily_brief/ tests/cli/` — PASS.
+- [ ] **Step 6: Commit** `feat(settings): key table with env → file → default and its source (#581)`
 
 **PR 1 gate:** full suite + `uvx ruff check plugins/ lib/ h2t_ops/ tests/ scripts/`.
+
+---
+
+## PR 10 — upgrade check in `setup doctor` (before PRs 3, 4, 5, 9)
+
+### Task 11
+
+**Files:** Create `h2t_ops/setup/settings_gaps.py`, `tests/setup/test_settings_gaps.py`; modify
+`h2t_ops/setup/legacy.py:329` (doctor), `plugins/h2t-core/skills/setup/SKILL.md` (doctor section:
+show the gaps, offer each suggested line).
+
+**Interfaces:**
+- Consumes: `settings.resolve`, `paths`, `user_config.path()`
+- Produces: `gaps() -> list[Gap]`, `Gap(key: str, evidence: str, suggestion: str | None)`;
+  doctor dict gains `"settings_gaps"`. A gap is reported only when the key is unset **and** the
+  machine shows it relied on the removed default. The suggestion is derived from the machine,
+  never from a literal in code (the ratchet holds this).
+
+Detectors — one per removed default that leaves a trace:
+
+| removed default (PR) | evidence on the machine | suggestion |
+|---|---|---|
+| org / 16 repos (2) | `repo-mapping.yaml` empty or absent | `h2t-ops paths` hint to register repos |
+| `github.owner` (2, 3) | unset, `gh auth status` logged in | `github.owner: <gh api user --jq .login>` |
+| doc owner fallback (2) | `git config user.name` empty | `git config --global user.name …` |
+| `DOMAIN_CONTEXT_MAP` (3) | files under `config/about-me/`, `context.by_domain` unset | list the files, ask for the mapping |
+| `DOMAIN_PATTERNS` (3) | `domains.yaml` non-empty, `domain_patterns` unset | info: new repos will ask for a domain |
+| summaries (4) | the session index holds model summaries | `sessions.summaries: true` |
+| guards (4) | non-empty `logs/{grade,plain}-guard.jsonl`; any `.h2t/structure.yaml` in a mapped repo | `guards: [<those found>]` |
+| evals URL (2) | an `H2T_EVALS_TOKEN` present, URL unset | `H2T_EVALS_SERVICE_URL=<your service>` |
+| `.dor` after migration (9) | migrated, and `~/.dor/secrets.env` holds a key the new store lacks (names only, never values); `~/.dor/lake` exists, no `lake` place | `h2t-ops setup secrets …` / `h2t-ops paths set lake …` |
+
+No trace exists for the language (`ru`), the daily-brief keyword groups and `REPO_EXTRA_DIRS`;
+doctor lists them as "check by hand" with the key to set.
+
+- [ ] **Step 1: Failing tests** — per detector: evidence + key unset → one gap; key set → none;
+  no evidence → none. `test_secret_gap_names_keys_never_values`. `test_doctor_json_has_settings_gaps`.
+- [ ] **Step 2: Run** — RED (module stubs, not ImportError).
+- [ ] **Step 3: Implement**; skill text shows each gap and its suggested line.
+- [ ] **Step 4: Run** `tests/setup/` + ratchet — PASS.
+- [ ] **Step 5: Commit** `feat(setup): doctor reports settings a machine relied on and has not set (#581)`
+
+### Task 12: Owner check on both machines (Done-when 3)
+
+- [ ] On Mac and Windows, with the PR 10 build: `h2t-ops setup doctor --json` → apply every
+  `settings_gaps` suggestion and every "check by hand" item to `~/.h2t/config/user.yaml`
+  (or the named file). Re-run → `settings_gaps` empty.
+- [ ] Only then install a build with PRs 3–5 or 9; after it, one session start shows the guards
+  logging and the daily pass summarising as before; `h2t-ops settings list` shows `file` for the
+  keys just set.
 
 ---
 
@@ -231,62 +317,66 @@ def test_settings_list_json_names_every_key(...)              # CLI round trip
 
 **Files:** `h2t_ops/tools/docs/{common.py,sync_labels.py,migrate_legacy_labels.py,lint.py,new_doc.py}`,
 `plugins/h2t-dev/skills/docs-sync-labels/SKILL.md:12,48,56,67,83`, `plugins/h2t-dev/README.md:57-58`;
-tests `tests/tools/docs/test_github_owner.py` (new), `tests/tools/docs/test_repo_manifest.py` (changes:
-it pins the bundled fallback today).
+tests `tests/tools/docs/test_github_owner.py` (new), `tests/tools/docs/test_repo_manifest.py`
+(its bundled-fallback assertion pins the defect and changes).
 
 **Interfaces:**
 - Consumes: `settings.resolve("github.owner")`
-- Produces: `common.github_owner(repo_root: Path | None) -> str` — setting, else owner parsed
-  from `git remote get-url origin` of `repo_root`, else `ConfigError` naming `H2T_GITHUB_OWNER`.
+- Produces: `common.target(arg: str | None, repo_root: Path) -> str` returning `owner/repo`:
+  - `arg` is `owner/repo` → as given;
+  - `arg` is a bare name → `<github.owner>/<arg>`; owner unset → `ConfigError` naming
+    `H2T_GITHUB_OWNER` (never the remote of `repo_root`: that is another repository);
+  - `arg` is `None` (the current checkout) → owner and name from `git remote get-url origin` of
+    `repo_root`; no remote → `ConfigError`.
 
-- [ ] **Step 1: Failing tests**
-  - `test_owner_from_setting`, `test_owner_from_origin_remote` (https and ssh URLs),
-    `test_no_owner_is_exit_3` (repo without remote, no setting)
-  - `test_sync_labels_targets_derived_owner` — `--dry-run` prints `<owner>/<repo>`, never `lichtpfad/`
-  - `test_manifest_without_mapping_is_config_error` — replaces the bundled-fallback assertion
-  - `test_migrate_requires_repo` — no `--repo owner/name` → exit 2, no `gh` call recorded
-  - `test_doc_owner_without_git_user_is_exit_3` for `lint.py:579` and `new_doc.py:65`
-- [ ] **Step 2: Run** — RED on each, for the stated reason.
+- [ ] **Step 1: Failing tests** — `test_target_owner_repo_as_given`, `test_bare_name_uses_setting`,
+  `test_bare_name_without_owner_is_exit_3_even_inside_a_checkout_with_a_remote`,
+  `test_current_repo_from_origin` (https and ssh), `test_sync_labels_dry_run_never_prints_lichtpfad`,
+  `test_manifest_without_mapping_is_config_error`, `test_migrate_requires_repo` (no `--repo` →
+  exit 2, no `gh` call recorded), `test_doc_owner_without_git_user_is_exit_3` (`lint.py:579`,
+  `new_doc.py:65`).
+- [ ] **Step 2: Run** — RED, each on its value.
 - [ ] **Step 3: Implement.** Delete `ORG`, `_BUNDLED_MANIFEST`, `REPO_EXTRA_DIRS` (per-repo
-  `extra_doc_dirs`, `tools/docs/config.py:30`, replaces it). `migrate_legacy_labels` takes
-  `--repo owner/name` (required). Skill text: org and "all 16 repos" replaced by "the repos in
-  your repo mapping, or the ones you pass"; examples `<repo>`.
-- [ ] **Step 4: Run** `tests/tools/` + ratchet — PASS; lower `AUTHOR_DEBT` for every touched file.
-- [ ] **Step 5: Commit** `fix(docs-tools): no default org or repo list; owner from setting or remote (#581)`
+  `extra_doc_dirs`, `tools/docs/config.py:30`, replaces it). `migrate_legacy_labels` requires
+  `--repo owner/name`. Skill text: "the repos in your repo mapping, or `owner/repo` you pass";
+  examples `<owner>/<repo>`.
+- [ ] **Step 4: Run** `tests/tools/` + ratchet — PASS; lower `AUTHOR_DEBT`.
+- [ ] **Step 5: Commit** `fix(docs-tools): no default org or repo list; explicit owner/repo (#581)`
 
 ---
 
-## PR 3 — domains and project registration (before #611)
+## PR 3 — domains and project registration (before #611; after PR 10)
 
 ### Task 4
 
-**Files:** `h2t_ops/lifecycle/detect_project.py:33-37,250-259`, `h2t_ops/lifecycle/gather/user.py:7-13,35,47`,
-`plugins/h2t-core/skills/scaffold-project/SKILL.md:64,66,183`, `plugins/h2t-core/skills/init-project/SKILL.md:3,81`,
-`plugins/h2t-core/skills/init-project/references/truth-gate.md:3,6`; tests in
-`tests/lifecycle/test_detect_project.py`, `tests/lifecycle/gather/test_user.py`.
+**Files:** `h2t_ops/lifecycle/detect_project.py:33-37,211,250-259,307,362`,
+`h2t_ops/lifecycle/gather/user.py:7-13,35,47`, `plugins/h2t-core/skills/scaffold-project/SKILL.md:64,66,183`,
+`plugins/h2t-core/skills/init-project/SKILL.md:3,81`, `plugins/h2t-core/skills/init-project/references/truth-gate.md:3,6`;
+tests `tests/lifecycle/test_detect_project.py`, `tests/lifecycle/gather/test_user.py`.
 
 **Interfaces:**
-- Consumes: `settings.resolve("language")`; `_ontology()` (`detect_project.py:274`) for `domains.yaml`
-- Produces: `user.yaml` keys `context.by_domain: {domain: [file, ...]}` (default `{}`) and
-  `context.strategy: <file>` (default none), read in `gather/user.py`.
+- Consumes: `settings.resolve("language" | "context.by_domain" | "context.strategy")`; `_ontology()`
+  (`detect_project.py:274`) for `domains.yaml`
+- Changes: `_build_confirm_message(detected: dict, already_registered: bool, domains: list[str])`
+  — both callers (`:307`, `:362`, inside `detect_project()`, which holds `domains_data` from
+  `:284`) pass `sorted(domains_data.get("domains", {}))` — the same shape `:128` and `:204` read. Empty list → free-text prompt. A malformed `domains.yaml` keeps today's behaviour
+  of `_ontology()`.
 
-- [ ] **Step 1: Failing tests**
-  - `test_no_builtin_domain_patterns` — repo path `/x/h2t-foo` with empty `user.yaml` → domain unknown
-  - `test_domain_menu_from_domains_yaml` — menu lists the keys of the fixture `domains.yaml`;
-    empty file → free-text prompt, and the strings `hou2touch`, `crypto`, `personal-os` absent
-  - `test_context_files_from_user_yaml`, `test_language_default_en`
+- [ ] **Step 1: Failing tests** — `test_no_builtin_domain_patterns` (`/x/h2t-foo`, empty config →
+  domain unknown); `test_menu_lists_domains_yaml_keys`; `test_empty_domains_gives_free_text`
+  (and `hou2touch`, `crypto`, `personal-os` absent from the message);
+  `test_context_files_from_user_yaml`; `test_language_default_en`.
 - [ ] **Step 2: Run** — RED.
-- [ ] **Step 3: Implement.** `DOMAIN_PATTERNS = []`. Skill text: domains "from your
-  `domains.yaml`"; owner default from `gh api user --jq .login`; init-project offers the Notion
-  tracker when `h2t-ops settings get notion.tasks_database_id` exits 0 (not on domain name);
-  `h2t-factory` → `h2t-core:scaffold-project`; truth-gate private references removed; example
-  `h2t-voice` → `my-tool`.
+- [ ] **Step 3: Implement.** `DOMAIN_PATTERNS = []`. Skill text: domains from your
+  `domains.yaml`; owner default `gh api user --jq .login`; init-project offers the Notion tracker
+  when `h2t-ops settings get notion.tasks_database_id` exits 0; `h2t-factory` →
+  `h2t-core:scaffold-project`; truth-gate private references removed; `h2t-voice` → `my-tool`.
 - [ ] **Step 4: Run** `tests/lifecycle/ tests/skills/` + ratchet — PASS, debt lowered.
-- [ ] **Step 5: Commit** `fix(projects): domains and owner from the user's config, not the author's (#581)`
+- [ ] **Step 5: Commit** `fix(projects): domains and owner from the user's config (#581)`
 
 ---
 
-## PR 4 — off by default: summaries, guards, string logic
+## PR 4 — off by default: summaries, guards, string logic (after PR 10)
 
 ### Task 5
 
@@ -300,41 +390,46 @@ tests `tests/lifecycle/pulse/test_daily.py`, `tests/lifecycle/pulse/test_status.
   `grade`, `plain`, `structure`.
 
 - [ ] **Step 1: Failing tests**
-  - `test_daily_skips_summaries_by_default` — fake `ask` records zero calls with no `user.yaml`;
-    `sessions.summaries: true` → called
-  - `test_guard_silent_unless_enabled[grade|plain|structure]` — empty config: no log line, exit 0,
-    including structure-guard's `plan_dirs` rule (`structure_guard.py:210`); `guards: [<name>]` → today's behaviour
+  - `test_daily_skips_summaries_by_default` — `monkeypatch.setattr(daily.summary, "run", spy)`
+    (daily calls it through the module attribute, `daily.py:179`); no `user.yaml` → spy not
+    called; `sessions.summaries: true` → called once
+  - `test_guard_silent_unless_enabled[grade|plain|structure]` — empty config: no log line, exit
+    0, including structure-guard's universal rule (`structure_guard.py:207-210`, which applies
+    with no `.h2t/structure.yaml`); `guards: [<name>]` → today's behaviour
   - `test_verdict_from_counts_not_text` — monkeypatch the display strings to English; `verdict()`
-    still classifies "dirty" (today it matches `"незакоммиченных"`, `status.py:101`)
+    still classifies dirty (today it matches `"незакоммиченных"`, `status.py:101`)
 - [ ] **Step 2: Run** — RED.
-- [ ] **Step 3: Implement.** The session record and the daily pass stay on: both are local
-  and free (backfill, branch status). Only the model call is gated — that is what spends the
-  user's money and sends transcript text out. Handlers return early; hooks.json unchanged. `status.py` computes
-  the verdict from the counts and states, then renders. Drop "(Approach §1)".
+- [ ] **Step 3: Implement.** The session record and the daily pass stay on: both are local and
+  free. Only the model call is gated — it spends the user's money and sends transcript text out.
+  Handlers return early; hooks.json unchanged. `status.py` computes the verdict from counts and
+  states, then renders. Drop "(Approach §1)".
 - [ ] **Step 4: Run** `tests/hooks/ tests/lifecycle/pulse/` — PASS.
 - [ ] **Step 5: Commit** `fix: model summaries and answer guards are opt-in (#581)`
 
 ---
 
-## PR 5 — daily-brief (before #627)
+## PR 5 — daily-brief (before #627; after PR 10)
 
 ### Task 6
 
 **Files:** `plugins/h2t-ops/skills/daily-brief/SKILL.md:102-118,186-230`,
-`h2t_ops/connectors/notion/brief.py`; test `tests/connectors/notion/test_brief.py`.
+`h2t_ops/connectors/notion/brief.py:60` (`task`), `:109` (`to_json`); test
+`tests/skills/daily_brief/test_sections.py`.
 
 **Interfaces:**
-- Produces: `brief-tasks` JSON gains `domain: str | None` per task, from `user.yaml`
-  `daily_brief.domains: {name: [keyword, ...]}` matched case-insensitively against title and
-  project; no map → `null` everywhere.
+- Produces: each task in `brief-tasks` JSON gains `domain: str | None` — the first name in
+  `user.yaml` `daily_brief.domains: {name: [keyword, ...]}` whose keyword occurs
+  case-insensitively in the task **title** (the schema has no project field; adding one is not
+  in this issue); no map → `null`.
 
-- [ ] **Step 1: Failing tests** — `test_domain_from_user_map`, `test_no_map_gives_null_domain`.
+- [ ] **Step 1: Failing tests** — `test_domain_from_title_keyword`, `test_first_matching_domain_wins`,
+  `test_no_map_gives_null_domain`.
 - [ ] **Step 2: Run** — RED.
 - [ ] **Step 3: Implement**; in SKILL.md delete both fallbacks (`notion search` with
-  `Status`/`Project`, and the old-schema ranking with `Sample Project` and 90/30/3) — `brief-tasks`
-  already exits 3 with the schema example (`brief.py:42`); the skill shows that output. Replace the
-  keyword list at :223-230 with "group by `domain`".
-- [ ] **Step 4: Run** `tests/connectors/notion/ tests/skills/` + ratchet — PASS.
+  `Status`/`Project`; the old-schema ranking with `Sample Project` and 90/30/3) — `brief-tasks`
+  already exits 3 with the schema example (`brief.py:42`) and the skill shows that output.
+  Replace the keyword list at :223-230 with "group by `domain`".
+- [ ] **Step 4: Run** `tests/skills/` + ratchet — PASS.
 - [ ] **Step 5: Commit** `fix(daily-brief): no author schema or domain words; domain from the command (#581)`
 
 ---
@@ -359,7 +454,7 @@ Replace with neutral examples (`my-project`, `example.com`, `<service>`, `/Proje
 - comments: `pulse/transcript.py:3`, `hooks/reap_codex.py:4`, `tools/docs/common.py:18,48,68,84,201`,
   `lifecycle/scaffold_project.py:30`, `setup/layout/phases.py:24` (fixture ids → describe, not list)
 
-- [ ] **Step 1:** edit; **Step 2:** ratchet — counts drop, lower `AUTHOR_DEBT`; `tests/skills/` PASS
+- [ ] **Step 1:** edit; **Step 2:** ratchet — lower `AUTHOR_DEBT`; `tests/skills/` PASS
 - [ ] **Step 3: Commit** `docs: neutral examples in shipped skills (#581)`
 
 ---
@@ -387,61 +482,54 @@ Replace with neutral examples (`my-project`, `example.com`, `<service>`, `/Proje
 
 ### Task 9
 
-- [ ] **Step 1 (outward, confirm with owner first):** issue in `lichtpfad/POS` carrying
+- [ ] **Step 1 (outward, owner confirms first):** issue in `lichtpfad/POS` carrying
   `plugins/h2t-ops/references/pos-operational-boundary.md` as its body — the doc moves there.
 - [ ] **Step 2:** delete that file; `h2t-connector-runbook.md:36,60,163-181` → one line linking the
-  POS issue/doc. POS lines in skills (`connectors/SKILL.md:29,30,65,161`, `notion.md:37,90`,
+  POS issue. POS lines in skills (`connectors/SKILL.md:29,30,65,161`, `notion.md:37,90`,
   `telegram.md:82`, `meetgeek.md:106`, `research/SKILL.md:146,301,310`,
   `research-artifact-contract.md:36,42`, `templates/{market-research.md:12,technical-decision.md:18}`,
   `traceability-policy.md:13`, `setup/SKILL.md:114,130,134,238,260`, `daily-brief/SKILL.md:37-42`)
-  → one phrasing: "a POS-compatible consumer, if configured (contract: #582)"; no dead ADR path,
+  → one phrasing: "a POS-compatible consumer, if configured (contract #582)"; no dead ADR path,
   no "once available" instruction.
 - [ ] **Step 3:** `tests/skills/`, `tests/contracts/` — PASS. **Commit** `docs: POS boundary lives in POS; the pack links it (#581)`
 
 ---
 
-## PR 9 — `.dor` reads only before migration
+## PR 9 — `.dor` reads only before migration (after PR 10)
 
 ### Task 10
 
-**Files:** `h2t_ops/core/secrets.py:63,124,209-215,249`, `h2t_ops/core/lake.py:53,250`,
-`h2t_ops/connectors/meetgeek/recovery.py:131`, `h2t_ops/lifecycle/index/build.py:9,211`,
-`h2t_ops/setup/layout/secrets_phase.py:30-31` (orders `dor` first); test
-`tests/core/test_dor_reads_before_layout.py` (new).
+**Files:** `h2t_ops/core/paths.py:347-366`, runtime readers `h2t_ops/core/secrets.py:63,124,215`,
+`h2t_ops/core/lake.py:53,250`, `h2t_ops/connectors/meetgeek/recovery.py:131`,
+`h2t_ops/lifecycle/gather/sessions_legacy.py:21`; `h2t_ops/setup/layout/secrets_phase.py:30-31`
+(orders `dor` first); test `tests/core/test_dor_reads_before_migration.py` (new).
+Not touched: `lifecycle/index/build.py:211` reads `records/imports/dor-registry.jsonl`, a new
+place — not `.dor`. Migration code (`setup/layout/*`, `setup/legacy.py`) keeps `paths.legacy()`.
 
 **Interfaces:**
-- Consumes: `paths._layout()` (`paths.py:347`) — the same check the lake fallback uses.
-- Produces: `paths.reads_legacy() -> bool` — `True` only while `_layout() != 1`; every runtime
-  `.dor` read asks it first.
+- Produces:
+  - `paths.migrated() -> bool` — `True` when `layout_file()` exists. A malformed or future
+    layout counts as migrated (only migration writes the file); doctor already reports a
+    malformed one. `_fallback()` (`paths.py:355`) switches from `_layout() == 1` to `migrated()`.
+  - `paths.DOR_KEYS = frozenset({"secrets.dor", "secrets.dor_old", "google.dor", "sessions.dor", "registry.dor", "lake.dor"})`
+  - `paths.legacy_read(name: str) -> Path | None` — `None` for a `DOR_KEYS` name on a migrated
+    machine, else `legacy(name)`. Every runtime reader above calls it and treats `None` as absent.
 
-- [ ] **Step 1: Failing test** — `test_no_dor_read_after_layout_1[secrets|lake|meetgeek|index]`:
-  a fixture `~/.dor` holding a secret, a lake dir, a registry; `layout: 1` declared → each reader
-  ignores it. `layout` absent → today's behaviour (control).
-- [ ] **Step 2: Run** — RED on the `layout: 1` cases.
-- [ ] **Step 3: Implement** the guard in each reader; `secrets_phase.py` puts `.dor` last.
-- [ ] **Step 4: Run** `tests/core/ tests/setup/ tests/connectors/meetgeek/` — PASS; in
-  `AUTHOR_DEBT` the `.dor` entries keep their counts with the reason "read only before layout 1".
+- [ ] **Step 1: Failing test** — `test_no_dor_read_after_migration[secrets|google|lake|meetgeek|sessions]`:
+  fixture `~/.dor` with a secret, a google credentials file, a lake dir with a cursor, a meetgeek
+  staging dir, a sessions dir; layout file present → each reader ignores `.dor`; layout file
+  absent → today's behaviour (control, must pass before and after).
+  `test_future_layout_counts_as_migrated` (`{"layout": 2}`), `test_malformed_layout_counts_as_migrated`.
+- [ ] **Step 2: Run** — RED on the migrated cases only.
+- [ ] **Step 3: Implement**; `secrets_phase.py` puts `.dor` last.
+- [ ] **Step 4: Run** `tests/core/ tests/setup/ tests/connectors/meetgeek/ tests/lifecycle/gather/` —
+  PASS; ratchet: `legacy-dor-call` debt → 0 outside migration files; lower `AUTHOR_DEBT`.
 - [ ] **Step 5: Commit** `fix: read ~/.dor only on a machine not yet migrated (#581)`
 
 ---
 
-## O1 — owner step: the author's values into his `user.yaml` (Done-when 3)
-
-Not code: §15 rule 1 forbids a migration that carries the author's values. On **both** machines
-(Mac, Windows), **before** installing a build with PRs 3–5:
-
-- [ ] **Step 1:** `h2t-ops settings list --json` (PR 1) — record today's sources.
-- [ ] **Step 2:** add to `~/.h2t/config/user.yaml`: `github.owner`, `domain_patterns` (the three
-  rules from `detect_project.py:33-37`), `context.by_domain` (`gather/user.py:7-13`),
-  `context.strategy`, `language: ru`, `guards: [grade, plain, structure]`,
-  `sessions.summaries: true`, `daily_brief.domains` (`daily-brief/SKILL.md:225-228`),
-  `evals.service_url` if the evals service is used. Per-repo `extra_doc_dirs` in the docs-lint
-  config of the three repos that `REPO_EXTRA_DIRS` named — the owner's repos, his commit.
-- [ ] **Step 3:** after install: `h2t-ops settings list` shows `file` for each; one session start
-  shows the guards logging and the daily pass summarising, as before.
-
 ## Done when (from #581)
 
-- [ ] `AUTHOR_DEBT` holds only out-of-scope rows, each with its reason — Task 1 + PRs 2–8
-- [ ] `test_settings.py` green, seen red first — Task 2
-- [ ] O1 done on both machines; behaviour unchanged
+- [ ] `AUTHOR_DEBT` holds only out-of-scope and `"upstream"` entries, each with its reason — Task 1 + PRs 2–9
+- [ ] `test_settings.py` and `test_settings_consumers.py` green, each seen red first — Task 2
+- [ ] Task 12 done on both machines; behaviour unchanged
