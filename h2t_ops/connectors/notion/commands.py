@@ -183,6 +183,14 @@ def register(subparsers: Any) -> None:
     db.add_argument("--yes", action="store_true", help="delete; without it, only list")
     add_fmt(db)
 
+    ub = cmds.add_parser("update-block",
+                         help="Replace the text of one block in place (dry run unless --yes)")
+    ub.add_argument("block_id")
+    ub.add_argument("--text", required=True,
+                    help="new text; inline markdown as in append-blocks (**bold**, links)")
+    ub.add_argument("--yes", action="store_true", help="write; without it, only show old and new")
+    add_fmt(ub)
+
     rc = cmds.add_parser("replace-content",
                          help="Replace page blocks from file (title-verified, safe)")
     rc.add_argument("page_id")
@@ -452,6 +460,13 @@ def run(args) -> Any:
         lines = [f"{head}: {len(result['blocks'])} block(s) of {args.page_id}"]
         lines += [f"- {b['type']} {b['id']}: {b['text']}" for b in result["blocks"]]
         return "\n".join(lines)
+    if cmd == "update-block":
+        result = client.update_block_text(args.block_id, args.text, apply=args.yes)
+        if _fmt(args) == "json":
+            return result
+        head = "Updated" if result["applied"] else "Would update (dry run, --yes to apply)"
+        return "\n".join([f"{head}: {result['type']} {result['block_id']}",
+                          f"- {result['old']}", f"+ {result['new']}"])
     if cmd == "replace-content":
         client.replace_page_content_safe(
             args.page_id, args.content_file, confirm_title=args.confirm_title

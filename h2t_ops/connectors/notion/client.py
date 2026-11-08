@@ -849,6 +849,33 @@ class NotionClient:
                                          f"({n} of {len(targets)} already deleted)") from e
         return {"applied": True, "page_id": page_id, "blocks": listed}
 
+    _TEXT_BLOCKS = ("paragraph", "heading_1", "heading_2", "heading_3", "bulleted_list_item",
+                    "numbered_list_item", "to_do", "quote", "callout", "toggle")
+
+    def update_block_text(self, block_id: str, text: str, *, apply: bool = False) -> dict[str, Any]:
+        """Replace the text of one block in place, keeping its position and other fields (#603).
+
+        `text` takes the inline markdown of `append-blocks`. Only `rich_text` is sent, so a
+        to-do's `checked` or a callout's icon stay. Nothing is written unless `apply`."""
+        if not text.strip():
+            raise UsageError("update-block: the new text is empty",
+                             hint="to remove the block use `h2t-ops notion delete-blocks`")
+        block = self.get_block(block_id)
+        kind = block.get("type")
+        if kind not in self._TEXT_BLOCKS:
+            raise UsageError(f"update-block: a {kind} block has no editable text ({block_id})",
+                             hint="editable: " + ", ".join(self._TEXT_BLOCKS))
+        rich = self.parse_inline(text)
+        result = {"applied": False, "block_id": block.get("id", block_id), "type": kind,
+                  "old": self._block_plain_text(block), "new": self._rich_text_to_plain(rich)}
+        if not apply:
+            return result
+        try:
+            self.client.blocks.update(block_id=block_id, **{kind: {"rich_text": rich}})
+        except Exception as e:
+            raise _map_sdk_exc(e, op=f"update block {block_id}") from e
+        return {**result, "applied": True}
+
     def replace_page_content(self, page_id: str, markdown: str) -> None:
         try:
             for block in self.get_blocks(page_id):
