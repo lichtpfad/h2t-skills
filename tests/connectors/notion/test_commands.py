@@ -1129,3 +1129,39 @@ def test_update_block_cli_dry_run_then_yes(monkeypatch):
     res = notion_cmds.run(_parser().parse_args(argv + ["--yes", "--json"]))
     assert res["applied"] is True
     assert c.client.blocks.update.call_args.kwargs["block_id"] == "p1"
+
+
+# --- named databases (#597): a skill names a database, user.yaml gives its id -------------
+
+def _search_args(db):
+    from types import SimpleNamespace
+    return SimpleNamespace(notion_cmd="search", database_id=db, filter=None, filter_json=None,
+                           limit=None, resolve_relations=None, as_json=True, fmt="human")
+
+
+def _user_yaml(text):
+    from h2t_ops.core import paths
+    f = paths.config_dir() / "user.yaml"
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_text(text, encoding="utf-8")
+
+
+def test_a_database_name_resolves_through_user_yaml(monkeypatch):
+    from h2t_ops.connectors.notion import commands as cmds_mod
+    _user_yaml("notion:\n  tasks_database_id: tasks-id\n  databases:\n    evening_journal: journal-id\n")
+    calls: list = []
+    _stub_notion(monkeypatch, calls)
+    cmds_mod.run(_search_args("evening_journal"))
+    cmds_mod.run(_search_args("tasks"))                      # `tasks` names notion.tasks_database_id
+    cmds_mod.run(_search_args("0123456789abcdef0123456789abcdef"))   # an id passes as it is
+    assert calls == ["journal-id", "tasks-id", "0123456789abcdef0123456789abcdef"]
+
+
+def test_a_value_that_names_no_database_passes_as_an_id(monkeypatch):
+    """Unknown names are not guessed at: Notion gets the value and judges it, as before."""
+    from h2t_ops.connectors.notion import commands as cmds_mod
+    _user_yaml("notion:\n  databases:\n    evening_journal: journal-id\n")
+    calls: list = []
+    _stub_notion(monkeypatch, calls)
+    cmds_mod.run(_search_args("db-1"))
+    assert calls == ["db-1"]

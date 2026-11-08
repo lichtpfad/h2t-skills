@@ -232,8 +232,9 @@ def _brief_tasks(args, client_cls) -> Any:
         today = datetime.now(ZoneInfo(str(tz))).date() if tz else date.today()
     page = client_cls().query_database_page(args.database_id, filter_dict=brief.done_filter(schema))
     out = brief.sections([brief.task(r, schema) for r in page["items"]], today)
-    if _fmt(args) == "json":
-        return brief.to_json(out, today)
+    if _fmt(args) == "json":   # `properties`: the names a skill writes the day plan with (#597)
+        return {**brief.to_json(out, today),
+                "properties": {"title": schema["title"], "day": schema["day"]}}
     return brief.render(out, today)
 
 
@@ -262,6 +263,16 @@ def run(args) -> Any:
             raise UsageError(
                 f"notion {args.notion_cmd}: no tasks database",
                 hint=f"pass {flag} or set notion.tasks_database_id in {user_config.path()}")
+
+    # A skill names a database instead of knowing its id (#597): notion.databases.<name>,
+    # and `tasks` for notion.tasks_database_id. Any other value is an id, as before.
+    if getattr(args, "database_id", None):
+        from h2t_ops.core import user_config
+        named = user_config.get("notion.databases")
+        if args.database_id == "tasks" and user_config.get("notion.tasks_database_id"):
+            args.database_id = user_config.get("notion.tasks_database_id")
+        elif isinstance(named, dict) and named.get(args.database_id):
+            args.database_id = str(named[args.database_id])
 
     if args.notion_cmd == "brief-tasks":
         return _brief_tasks(args, NotionClient)

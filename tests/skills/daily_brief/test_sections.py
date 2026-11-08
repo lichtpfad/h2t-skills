@@ -143,3 +143,34 @@ def test_cli_human_output_lists_sections_in_order(capsys, monkeypatch):
     assert rc == 0, err
     assert out.index("Решил сделать сегодня") < out.index("HIGH (1)") < out.index("Сроки без основания")
     assert "[late](https://notion.so/late)" in out
+
+
+def test_cli_json_names_the_properties_a_skill_writes(capsys, monkeypatch):
+    """#597: the skill sets the day plan by the user's property name, never a guessed one."""
+    _user_yaml(SCHEMA_YAML)
+    rc, out, err, _ = _cli(capsys, monkeypatch, [], "--json")
+    assert rc == 0, err
+    assert json.loads(out)["result"]["properties"] == {"title": "Задача", "day": "На день"}
+
+
+# --- Step 1b of the skill text (#597) -----------------------------------------------------
+
+def _skill_step_1b() -> str:
+    from pathlib import Path
+    text = (Path(__file__).resolve().parents[3]
+            / "plugins/h2t-ops/skills/daily-brief/SKILL.md").read_text(encoding="utf-8")
+    return text.split("### Step 1b", 1)[1].split("\n### ", 1)[0]
+
+
+def test_step_1b_stops_for_the_owner_before_any_write():
+    step = _skill_step_1b()
+    stop = step.index("⛔ Стоп: ждать ответа владельца")
+    writes = [step.index(w) for w in ("update-db-item", "create-db-item")]
+    assert all(stop < w for w in writes)
+
+
+def test_step_1b_names_no_property_of_the_author():
+    """Field names come from the schema and `brief-tasks --json`, not from the skill text."""
+    code = "".join(part.split("```", 1)[0] for part in _skill_step_1b().split("```bash")[1:])
+    for author_value in ("Дата", "Завтра", "На день", "Задача"):
+        assert author_value not in code
