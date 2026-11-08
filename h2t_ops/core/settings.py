@@ -12,7 +12,7 @@ from typing import Literal
 
 from h2t_ops.core import paths, secrets, user_config
 from h2t_ops.core.errors import ConfigError, UsageError
-from h2t_ops.lifecycle import index
+from h2t_ops.lifecycle.index import build
 
 Source = Literal["env", "file", "default", "unset"]
 
@@ -47,7 +47,7 @@ KEYS: tuple[Key, ...] = (
     Key("notion.tasks_database_id", "H2T_NOTION_TASKS_DB", "user.yaml", "notion.tasks_database_id"),
     Key("notion.tasks_schema", None, "user.yaml", "notion.tasks_schema"),
     Key("evals.service_url", "H2T_EVALS_SERVICE_URL", EVALS_ENV, "H2T_EVALS_SERVICE_URL"),
-    Key("repos", None, "repo-mapping.yaml", None, []),
+    Key("repos", None, "repo-mapping.yaml", None, {}),
     Key("domains", None, "domains.yaml", "domains", {}),
     Key("language", None, "user.yaml", "language", "en"),
     Key("timezone", None, "user.yaml", "timezone"),
@@ -86,7 +86,10 @@ def _from_file(key: Key) -> object:
         return secrets.evals_env().get(key.file_key) or None
     if not _file_path(key.file).is_file():
         return None
-    repo_mapping, domains = index.ontology()   # the one parser of these two files
+    try:   # build's own read-only parser: no index is opened, nothing is written
+        repo_mapping, domains = build.load_ontology(paths.config_dir())
+    except ValueError as exc:
+        raise ConfigError(f"{_file_path(key.file)} {exc}", hint="fix the file or remove it") from exc
     doc = repo_mapping if key.name == "repos" else domains.get(key.file_key)
     return doc or None
 
@@ -94,14 +97,21 @@ def _from_file(key: Key) -> object:
 def resolve(name: str) -> Resolved:
     key = _key(name)
     raw = os.environ.get(key.env) if key.env else None
+    if name in ("path.lake", "path.inbox", "path.kb"):
+        # what the code uses is what paths.place answers; the source says who decided it
+        place = name.removeprefix("path.")
+        found = paths.place(place)
+        if raw:
+            return Resolved(str(found), "env")
+        if place in paths.paths_config().places:
+            return Resolved(str(found), "file")
+        return Resolved(str(found), "default") if found is not None else Resolved(None, "unset")
     if raw:
         # a path variable is read by paths, the one reader of them; the rest as written
         if name == "path.root":
             return Resolved(str(paths.root()), "env")
         if name == "path.vault":
             return Resolved(str(paths.vault()), "env")
-        if name in ("path.lake", "path.inbox", "path.kb"):
-            return Resolved(str(paths.place(name.removeprefix("path."))), "env")
         return Resolved(raw, "env")
     if key.file:
         found = _from_file(key)

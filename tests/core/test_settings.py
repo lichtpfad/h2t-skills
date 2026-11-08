@@ -82,6 +82,30 @@ def test_empty_env_string_is_unset(monkeypatch):
     assert settings.resolve("machine.name").source == "default"
 
 
+def test_lake_from_the_3x_fallback_is_a_default_not_unset():
+    """paths.place answers ~/.dor/lake before layout 1; the resolver must not say unset."""
+    lake = paths.legacy("lake.dor")
+    lake.mkdir(parents=True)
+    assert paths.place("lake") == lake
+    assert settings.resolve("path.lake") == settings.Resolved(str(lake), "default")
+
+
+def test_broken_repo_mapping_is_an_error_row_not_a_default():
+    _write(paths.config_dir() / "repo-mapping.yaml", "mappings: [unclosed\n")
+    row = next(r for r in settings.rows() if r["key"] == "repos")
+    assert row["source"] == "error" and "repo-mapping.yaml" in row["error"]
+    with pytest.raises(ConfigError):
+        settings.resolve("repos")
+
+
+def test_listing_settings_writes_no_index(capsys):
+    _write(paths.config_dir() / "repo-mapping.yaml", "mappings: {pat: r}\n")
+    _write(paths.config_dir() / "domains.yaml", "domains: {work: {}}\n")
+    assert _cli(capsys, "list")[0] == 0
+    assert not (paths.state_dir() / "index.sqlite").exists()
+    assert not (paths.state_dir() / "index.lock").exists()
+
+
 def test_env_wins_over_file(monkeypatch):
     _write(paths.config_dir() / "user.yaml", "github: {owner: from-file}\n")
     monkeypatch.setenv("H2T_GITHUB_OWNER", "from-env")

@@ -47,3 +47,14 @@ def test_status_counts_local_sessions(tmp_path, monkeypatch):
     st = get_status(env={}, evals_root=str(tmp_path))
     assert st["session_count"] == 1
     assert st["local_dir"] == str(tmp_path)
+
+
+def test_push_without_a_service_url_says_nothing_is_sent(monkeypatch):
+    from h2t_ops.lifecycle.eval import session as sess
+    monkeypatch.setattr(sess, "_sdk_available", lambda: True)
+    st = get_status(env={"H2T_EVALS_MODE": "push", "H2T_EVALS_TOKEN": "t"}, evals_root="/nonexistent")
+    assert st["mode"] == "push" and st["service_url"] is None
+    assert "H2T_EVALS_SERVICE_URL" in st["hint"] and "nothing is sent" in st["hint"]
+    ok = get_status(env={"H2T_EVALS_MODE": "push", "H2T_EVALS_TOKEN": "t",
+                         "H2T_EVALS_SERVICE_URL": "https://e.example.test"}, evals_root="/nonexistent")
+    assert ok["hint"] == "push active"
