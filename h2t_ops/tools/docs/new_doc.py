@@ -12,6 +12,7 @@ import subprocess
 from pathlib import Path
 
 from h2t_ops.core import store
+from h2t_ops.core.errors import ConfigError
 
 from .common import FRONTMATTER_RULES
 
@@ -52,6 +53,8 @@ def next_adr_number(adr_dir: Path) -> str:
 
 
 def _git_user(rp: Path) -> str:
+    """The git user.name, or a ConfigError: an owner this tool made up would be a false
+    attribution written into a document (#581)."""
     try:
         r = subprocess.run(
             ["git", "-C", str(rp), "config", "user.name"],
@@ -62,7 +65,10 @@ def _git_user(rp: Path) -> str:
             return name
     except Exception:
         pass
-    return "lichtpfad"
+    raise ConfigError(
+        "git has no user.name, so the document has no owner to record",
+        hint='git config --global user.name "Your Name"',
+    )
 
 
 def create_doc(
@@ -103,7 +109,7 @@ def create_doc(
     values = {
         "title": doc_title,
         "status": "proposed" if kind == "adr" else "draft",
-        "owner": author or _git_user(rp),
+        "owner": author or (_git_user(rp) if "owner" in FRONTMATTER_RULES[_KIND_RULE[kind]] else ""),
         "date": today,
         "milestone": milestone,
         "issue": issue,

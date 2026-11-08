@@ -61,9 +61,9 @@ Ask in a single prompt (user can answer inline or line-by-line):
 ```
 Создаём новый проект. Ответь на несколько вопросов:
 
-1. **ID проекта** — kebab-case, станет именем директории (напр. h2t-voice, my-tool)
+1. **ID проекта** — kebab-case, станет именем директории (напр. my-tool)
 2. **Домен** — в каком домене живёт проект?
-   Доступные: personal-os | dev | hou2touch | crypto | life
+   Доступные: ключи из твоего `domains.yaml` (`h2t-ops settings get domains`)
 3. **Тип:**
    - `code-github` — Git-репо + GitHub
    - `code-local` — Git-репо, без GitHub
@@ -180,7 +180,7 @@ Determine task tracker:
 - `dcc` → tracker = "none"
 
 Determine `--github` arg:
-- `code-github` → set `github_slug = "{github_owner}/{id}"`. Ask: "GitHub owner? (по умолчанию: lichtpfad)"
+- `code-github` → set `github_slug = "{github_owner}/{id}"`. Ask: "GitHub owner? (по умолчанию: вывод `gh api user --jq .login`)"
 - All others → omit `--github`
 
 Run:

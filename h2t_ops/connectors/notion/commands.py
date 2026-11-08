@@ -256,21 +256,23 @@ def run(args) -> Any:
 
     # The tasks database is the user's, not the code's: user.yaml (#548 R45).
     if args.notion_cmd in ("find-project-tasks", "search", "brief-tasks") and not args.database_id:
-        from h2t_ops.core import user_config
-        args.database_id = user_config.get("notion.tasks_database_id")
+        from h2t_ops.core import settings, user_config
+        args.database_id = settings.resolve("notion.tasks_database_id").value
         if not args.database_id:
             flag = "--database-id" if args.notion_cmd == "find-project-tasks" else "a DATABASE_ID"
             raise UsageError(
                 f"notion {args.notion_cmd}: no tasks database",
-                hint=f"pass {flag} or set notion.tasks_database_id in {user_config.path()}")
+                hint=f"pass {flag}, set H2T_NOTION_TASKS_DB, or set notion.tasks_database_id "
+                     f"in {user_config.path()}")
 
     # A skill names a database instead of knowing its id (#597): notion.databases.<name>,
     # and `tasks` for notion.tasks_database_id. Any other value is an id, as before.
     if getattr(args, "database_id", None):
-        from h2t_ops.core import user_config
+        from h2t_ops.core import settings, user_config
         named = user_config.get("notion.databases")
-        if args.database_id == "tasks" and user_config.get("notion.tasks_database_id"):
-            args.database_id = user_config.get("notion.tasks_database_id")
+        tasks_id = settings.resolve("notion.tasks_database_id").value if args.database_id == "tasks" else None
+        if tasks_id:
+            args.database_id = str(tasks_id)
         elif isinstance(named, dict) and named.get(args.database_id):
             args.database_id = str(named[args.database_id])
 

@@ -24,6 +24,7 @@ from pathlib import Path
 from h2t_ops.core import paths, store
 from h2t_ops.core.errors import H2TError
 from h2t_ops.hooks.emit import Reply
+from h2t_ops.hooks.switch import guard_enabled
 
 CLAIM_RE = re.compile(
     r"(?<![\w-])("
@@ -72,7 +73,7 @@ def claim_without_evidence(text: str) -> str | None:
 def warning(word: str) -> str:
     return (
         f"[h2t] «{word}» без вывода команды и без грейда [B]/[C]/[D] — "
-        "утверждение о состоянии не проверено (Approach §1)."
+        "утверждение о состоянии не проверено."
     )
 
 
@@ -96,6 +97,8 @@ def handle(event: dict) -> Reply:
     # shows on Stop in transcript mode only, so in the TUI it was never seen, and its firing
     # rate is unmeasured (spec §2.4: never noisy). Once the log gives that rate, a TUI line is
     # a one-line switch: `return Reply(warning(word) if word else "")`.
+    if not guard_enabled("grade"):          # opt-in: `guards: [grade]` in user.yaml
+        return Reply()
     if event.get("stop_hook_active"):
         return Reply()
     text = last_assistant_text(event.get("transcript_path", ""))

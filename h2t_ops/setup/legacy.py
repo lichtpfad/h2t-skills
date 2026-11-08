@@ -22,10 +22,12 @@ import shutil
 import subprocess
 import sys
 from collections.abc import Callable
+from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
-from h2t_ops.core import paths, store
+from h2t_ops.core import paths, settings, store
+from h2t_ops.setup import settings_gaps
 
 KIND_DOCTOR = "h2t_setup_doctor/v1"
 KIND_CONNECTORS = "h2t_connectors_check/v1"
@@ -41,6 +43,13 @@ SECRET_KEYS = {
 }
 
 Runner = Callable[[list[str], int], dict[str, Any]]
+
+
+def dor_secret_sources() -> list[tuple[str, Path]]:
+    """The two 3.x ~/.dor secrets files, whatever the layout file says: the migration and its
+    verification read them after layout 1 too (#581). core.secrets.legacy_sources leaves them
+    out on a migrated machine."""
+    return [("dor-secrets", paths.legacy("secrets.dor")), ("dor", paths.legacy("secrets.dor_old"))]
 
 
 def _semver_key(name: str) -> tuple[int, int, int]:
@@ -338,6 +347,8 @@ def doctor(runner: Runner = _run) -> dict[str, Any]:
         "plugin_cache": plugin_cache_status(),
         "optional_pos": optional_pos_status(),
         "legacy_shims": legacy_shim_status(),
+        "settings": settings.rows(),
+        "settings_gaps": [asdict(g) for g in settings_gaps.gaps(runner)],
         "boundaries": {
             "root_h2t_touched": False,
             "pos_required": False,

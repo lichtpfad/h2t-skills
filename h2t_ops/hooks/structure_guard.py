@@ -21,6 +21,7 @@ import re
 from pathlib import Path
 
 from h2t_ops.hooks.emit import Reply
+from h2t_ops.hooks.switch import guard_enabled
 
 _STRUCTURE_FILE = ".h2t/structure.yaml"
 _WRITE_TOOLS = {"Write", "Edit", "MultiEdit"}
@@ -209,7 +210,7 @@ def check_plan_dirs_universal(norm: str) -> tuple[int, str]:
 
     Unconditional — applies with no `.h2t/structure.yaml` at all. The per-repo
     `plan_dirs` rule was opt-in, and the repo that needed it most had never opted in:
-    h2t-transcription's docs/superpowers/plans/ held 200 non-plan files at the 2026-09
+    one repository's docs/superpowers/plans/ held 200 non-plan files at the 2026-09
     audit — 54 json, 32 jsonl capture dumps (with Dropbox share keys in them), 24 srt
     transcripts, 21 scripts, 3 logs — every one of them a scratch file that found the
     nearest directory. Scripts belong in scripts/, run evidence in docs/.artifacts/,
@@ -362,6 +363,8 @@ def check_issue_link(file_path: str, content: str, config: dict) -> tuple[int, s
 
 
 def handle(event: dict) -> Reply:
+    if not guard_enabled("structure"):       # opt-in: `guards: [structure]` in user.yaml
+        return Reply()
     tool_name = event.get("tool_name", "")
     if not _is_write_tool(tool_name):
         return Reply()

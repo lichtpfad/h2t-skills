@@ -21,7 +21,9 @@ def _mode_source(env) -> str:
     return "default"
 
 
-def _hint(mode: str, sdk: bool, token: bool) -> str:
+def _hint(mode: str, sdk: bool, token: bool, url: bool = True) -> str:
+    if mode == "push" and not url:
+        return "push configured but H2T_EVALS_SERVICE_URL is not set — nothing is sent"
     if mode == "push":
         return "push active"
     if mode == "local":
@@ -59,8 +61,8 @@ def get_status(env=None, evals_root=None) -> dict:
         "source": _mode_source(env),
         "sdk_available": sdk,
         "token_present": token,
-        "service_url": env.get("H2T_EVALS_SERVICE_URL", "http://127.0.0.1:8088"),
+        "service_url": env.get("H2T_EVALS_SERVICE_URL") or None,
         "local_dir": str(root),
         "session_count": count,
-        "hint": _hint(mode, sdk, token),
+        "hint": _hint(mode, sdk, token, bool(env.get("H2T_EVALS_SERVICE_URL"))),
     }

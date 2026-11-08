@@ -42,7 +42,7 @@ def _inside(a: Path, b: Path) -> bool:
 def origin(path) -> tuple[str, bool]:
     """(place, dest) for a write at path (R28): inside the lake set in paths.yaml → "lake";
     inside the default data/lake → "data"; anywhere else → dest=True, a path the user named.
-    The 3.x lake (~/.dor/lake) is the lake until layout 1 (paths.place); after it, only
+    The 3.x lake (the legacy lake place) is the lake until layout 1 (paths.place); after it, only
     once paths.yaml declares it (R2)."""
     real = _real(path)
     configured = paths.place("lake")
@@ -50,7 +50,7 @@ def origin(path) -> tuple[str, bool]:
         return "lake", False
     if _inside(real, _real(paths.data_dir() / "lake")):
         return "data", False
-    old = paths.legacy("lake.dor")
+    old = paths.undeclared_old_lake()
     if _inside(real, _real(old)):
         raise store.WriteRefused(f"{path} is in the 3.x lake {old}, which paths.yaml does not declare",
                                  hint=f"h2t-ops paths set lake {old}")
@@ -241,13 +241,14 @@ def _load(path: Path) -> dict:
 
 def read_cursor(provider: str, path: Path | None = None) -> dict:
     """The cursor at path, or state/cursors/<provider>.json; while that does not exist, the
-    3.x one in ~/.dor/lake/_cursors (4.0.x fallback read — it is never written)."""
+    3.x one in _cursors/ of the legacy lake (4.0.x fallback read — it is never written)."""
     if path is not None:
         return _load(path)
     new = cursor_path(provider)
     if new.is_file():
         return _load(new)
-    return _load(paths.legacy("lake.dor") / "_cursors" / f"{provider}.json")
+    old = paths.legacy_read("lake.dor")
+    return _load(old / "_cursors" / f"{provider}.json") if old is not None else {}
 
 
 def write_cursor(provider: str, data: dict, path: Path | None = None) -> Path:

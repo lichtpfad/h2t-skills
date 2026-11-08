@@ -69,6 +69,7 @@ def test_run_calls_stages_in_order(monkeypatch):
     monkeypatch.setattr(daily.record, "settle_open", lambda: seen.append("settle") or 0)
     monkeypatch.setattr(daily.status, "refresh", lambda conn: seen.append("status") or 0)
     monkeypatch.setattr(daily.summary, "run", lambda conn: seen.append("summary") or {})
+    _user_yaml("sessions:\n  summaries: true\n")
     monkeypatch.setattr(daily, "audit_map", lambda: seen.append("audit") or {"branches": 1})
     store.create(daily.lock_path(), "tok", place="state")
     monkeypatch.setenv(daily.TOKEN_ENV, "tok")
@@ -238,3 +239,38 @@ def test_a_manual_run_takes_and_releases_its_own_lock(monkeypatch):
     daily.run()
     assert len(seen) == 1 and seen[0]
     assert not daily.lock_path().exists()
+
+
+def _spy_run(monkeypatch):
+    calls: list = []
+    monkeypatch.setattr(daily.backfill, "run", lambda since_ns=0: {})
+    monkeypatch.setattr(daily.record, "settle_open", lambda: calls.append("settle") or 0)
+    monkeypatch.setattr(daily.status, "refresh", lambda conn: calls.append("status") or 0)
+    monkeypatch.setattr(daily.summary, "run", lambda conn: calls.append("summary") or {})
+    monkeypatch.setattr(daily, "audit_map", lambda: calls.append("audit") or {})
+    store.create(daily.lock_path(), "tok", place="state")
+    monkeypatch.setenv(daily.TOKEN_ENV, "tok")
+    return calls
+
+
+def test_daily_skips_summaries_by_default(monkeypatch):
+    """The model call spends the user's money and sends transcript text out: off until asked.
+    Everything local and free stays on."""
+    calls = _spy_run(monkeypatch)
+    out = daily.run()
+    assert calls == ["settle", "status", "audit"]
+    assert out["summary"] == {}
+
+
+def test_daily_runs_summaries_when_enabled(monkeypatch):
+    _user_yaml("sessions:\n  summaries: true\n")
+    calls = _spy_run(monkeypatch)
+    daily.run()
+    assert calls == ["settle", "status", "summary", "audit"]
+
+
+def test_daily_with_a_broken_user_yaml_skips_summaries_and_finishes(monkeypatch):
+    _user_yaml("sessions: [unclosed\n")
+    calls = _spy_run(monkeypatch)
+    daily.run()
+    assert "summary" not in calls and "audit" in calls

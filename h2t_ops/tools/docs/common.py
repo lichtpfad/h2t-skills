@@ -4,6 +4,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -15,7 +16,7 @@ def _dev_root() -> Path:
     """Where sibling h2t repositories live (#434).
 
     The default was a drive-letter dev root, right on exactly one machine and wrong everywhere
-    else — including the author's Mac, where checkouts are under ~/Projects. Resolution
+    else — including a Mac, where checkouts are under ~/Projects. Resolution
     order, each step failing over to the next:
 
     1. `H2T_DEV_ROOT` — the explicit answer, unchanged and still first.
@@ -45,7 +46,7 @@ def standards_dir() -> Path:
     """Where the eight STANDARDS_FILES live (#439).
 
     Bundled first. Until this change the only answer was `DEV_ROOT/docs/standards`, a
-    directory that exists on exactly one machine — and not the author's Mac, where
+    directory that exists on exactly one machine — and not on a Mac, where
     `lint.py h2t-skills` printed eight `FAIL: missing ...` lines while all eight files sat
     in a sibling repository. On a stranger's machine nothing of that constellation exists,
     so the skill reported their tree as violating standards they could not read.
@@ -65,40 +66,85 @@ def standards_dir() -> Path:
             return candidate
     return resource_dir("docs") / "standards"
 
-# The author's sixteen, kept only as the answer when the operator has no registry of
-# their own. Nothing here should depend on a stranger having these repositories.
-_BUNDLED_MANIFEST = [
-    "h2t-ai", "h2t-business", "h2t-client", "h2t-content", "h2t-dcc",
-    "h2t-evals", "h2t-factory", "h2t-graphs", "h2t-landings", "h2t-skills",
-    "h2t-snap", "h2t-staging", "h2t-tools", "h2t-transcription",
-    "h2t-vision", "h2t-voice",
-]
-
-
 def _manifest() -> list[str]:
-    """Repository names, from the operator's registry when there is one.
+    """Repository names from the operator's repo mapping (#548 Task 15, #581).
 
-    The repo mapping in config/ already lists every repository this user has — 31 entries
-    here against the bundled 16 — and it is keyed by repository name, which is exactly what
-    the manifest is. It is asked of the index, the one parser of the ontology (#548 Task 15).
-    Reading it means a stranger's repositories are known to the tooling and the author's are
-    not assumed.
+    The mapping lists every repository this user has, keyed by repository name, which is
+    exactly what the manifest is. It is asked of the index, the one parser of the ontology.
 
-    The bundled list remains the fallback rather than an empty one: dropping to nothing
-    would silently turn off cross-repo behaviour for the machine that has the file
-    missing, or an index it cannot open, for an unrelated reason.
+    There is no fallback list. The one that stood here named sixteen fixed
+    repositories, so a stranger's `docs-sync-labels --apply` wrote into repositories that
+    were never theirs. Without a mapping the answer is a ConfigError that says how to give
+    one — or to name `owner/repo` on the command line instead.
     """
     import sqlite3
 
-    from h2t_ops.core.errors import H2TError
+    from h2t_ops.core.errors import ConfigError, H2TError
     from h2t_ops.lifecycle import index
+    hint = "register repositories in your repo mapping (see `h2t-ops settings list`, key repos), or pass owner/repo"
     try:
         mappings = index.ontology()[0].get("mappings")
-    except (H2TError, OSError, sqlite3.Error):
-        return list(_BUNDLED_MANIFEST)
+    except (H2TError, OSError, sqlite3.Error) as exc:
+        raise ConfigError(f"the repo mapping cannot be read: {exc}", hint=hint) from exc
     if not isinstance(mappings, dict) or not mappings:
-        return list(_BUNDLED_MANIFEST)
+        raise ConfigError("no repositories are registered in the repo mapping", hint=hint)
     return sorted(str(k) for k in mappings)
+
+
+_REMOTE = re.compile(r"^(?:https?://[^/]+/|git@[^:]+:|ssh://git@[^/]+/)([^/]+)/(.+?)(?:\.git)?/?$")
+
+
+def target(arg: str | None, repo_root: Path) -> str:
+    """`owner/repo` for a GitHub call, without ever naming an owner of our own (#581).
+
+    `owner/repo` is taken as given. A bare name needs `github.owner`; the remote of
+    `repo_root` is deliberately not consulted for it, because that checkout is another
+    repository and its owner is not the answer for a name. `None` means the current
+    checkout, which is the one case its own origin is right.
+    """
+    from h2t_ops.core import settings
+    from h2t_ops.core.errors import ConfigError
+
+    if arg and "/" in arg:
+        return arg
+    if arg:
+        owner = settings.resolve("github.owner").value
+        if not owner:
+            settings.require("github.owner")  # raises ConfigError naming the env var and file
+        return f"{owner}/{arg}"
+    try:
+        out = subprocess.run(
+            ["git", "-C", str(repo_root), "remote", "get-url", "origin"],
+            capture_output=True, text=True, timeout=10,
+        )
+    except (OSError, subprocess.SubprocessError):
+        out = None
+    m = _REMOTE.match(out.stdout.strip()) if out is not None and out.returncode == 0 else None
+    if not m:
+        raise ConfigError(
+            f"{repo_root} has no GitHub remote named origin",
+            hint="pass owner/repo, or add the remote: git remote add origin <url>",
+        )
+    return f"{m.group(1)}/{m.group(2)}"
+
+
+def exits_on_config_error(fn):
+    """Entry-point guard: a typed error leaves as its exit code with the hint, not a traceback."""
+    import functools
+
+    from h2t_ops.core.errors import H2TError, exit_code_for
+
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        try:
+            return fn(*args, **kwargs)
+        except H2TError as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            if exc.hint:
+                print(f"  hint: {exc.hint}", file=sys.stderr)
+            sys.exit(exit_code_for(exc))
+
+    return wrapper
 
 
 class _Manifest(Sequence):
@@ -120,6 +166,16 @@ class _Manifest(Sequence):
     def __len__(self) -> int:
         return len(self._get())
 
+    def __contains__(self, name) -> bool:
+        """Membership is a question about names, and "no mapping" answers it: not known.
+        The walks that ask it (which directory is a repository?) must not die on a
+        machine that has registered nothing."""
+        from h2t_ops.core.errors import ConfigError
+        try:
+            return name in self._get()
+        except ConfigError:
+            return False
+
 
 REPO_MANIFEST = _Manifest()
 
@@ -129,15 +185,6 @@ REQUIRED_CORE_DIRS = [
     "docs/adr",
     "docs/reports",
 ]
-
-# Extra dirs allowed per repo. Superseded by the `extra_doc_dirs` key in a repository's
-# own docs-lint config, which is where a repository can answer for itself; this dict is
-# the answer for the three that predate the key.
-REPO_EXTRA_DIRS: dict[str, list[str]] = {
-    "h2t-evals":         ["ops", "contracts"],
-    "h2t-transcription": ["methodology", "diagrams"],
-    "h2t-vision":        ["presentation"],
-}
 
 STANDARDS_FILES = [
     "naming-conventions.md", "git-naming-conventions.md",
@@ -198,7 +245,7 @@ def git_repo_root(start: Path | None = None) -> Path | None:
     """The repository containing `start`, from git rather than from a list of names.
 
     Callers used to walk up looking for a directory whose *name* appears in
-    REPO_MANIFEST — sixteen of the author's repositories. Measured 2026-08-27: inside a
+    REPO_MANIFEST — sixteen fixed repository names. Measured 2026-08-27: inside a
     repository that is not on that list, running from `docs/sub` resolved the repo root
     to `docs/sub`, so the linter treated a subdirectory as the whole repository. Not
     "some checks are off" — the wrong root, silently.

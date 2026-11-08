@@ -23,4 +23,4 @@ Suited for technical product landing pages and educational course presentations.
 - Links must meet WCAG AA contrast ratio
 
 ## Usage Examples
-Use for: Hou2Touch course landing pages, workshop announcements, tool documentation pages.
+Use for: course landing pages, workshop announcements, tool documentation pages.

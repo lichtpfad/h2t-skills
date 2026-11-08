@@ -112,7 +112,22 @@ Report:
 - `h2t-ops` status, path, version;
 - `entry_points` status — all four CLIs (`h2t-ops`, `h2t-gather`, `h2t-activity-log`, `h2t-handoff`);
 - optional POS/DOR status;
-- whether plugin cache is visible.
+- whether plugin cache is visible;
+- `settings_gaps`: settings this machine relied on by default and has not set. Each item has
+  `kind`, `key`, `evidence`, `suggestion`, `value`. A `gap` must be applied: show the suggestion.
+  `info` is shown, not demanded. `manual` is listed with its key, for the user to set if wanted.
+  How to apply one, once the user agrees:
+  - `value` is not null: the item sets `key` in user.yaml (the suggestion shows it as nested
+    YAML). **Merge** `value` at that dotted path into the file's existing mapping — load,
+    set, write once. Never append the suggested lines: a second top-level `sessions:` or
+    `guards:` is silently dropped by YAML, which keeps only the last. Combine every `guards`
+    item (gap and manual) into one list. Replace each `<placeholder>` with the user's answer
+    first.
+  - the suggestion starts with `run:`: it is a command, run it.
+  - `key` is `secrets`: the user moves these by hand. Show the key names and the target
+    directory from the suggestion and ask the user to copy them. Never open, read or print
+    the 3.x secrets files or any value, and do not offer to do the move.
+  - any other suggestion names a line and the file it goes in: add that line there.
 
 `plugin_cache.status: missing` means no installed h2t-core was found under Claude Code's or
 Codex's plugin cache (`CLAUDE_CONFIG_DIR` / `CODEX_HOME` when set). The skill still runs — it
@@ -223,7 +238,7 @@ Step 2 says, including the `plugin_cache` remedy. Then read `machine_name.status
   ```
 
   If the user says the machine is new, pin the value of the `today` field
-  (`--machine-name <today>`). `today` is `H2T_MACHINE_NAME`, else `DOR_MACHINE_NAME`, else
+  (`--machine-name <today>`). `today` is `H2T_MACHINE_NAME`, else the legacy `DOR_MACHINE_NAME` (read only), else
   the hostname lowercased up to the first dot.
 - `error` — report it; the settings file was left untouched.
 

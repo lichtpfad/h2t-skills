@@ -12,6 +12,7 @@ otherwise the list outlives the problem and the next reader trusts it.
 """
 
 import re
+from collections import Counter
 from pathlib import Path, PurePath, PureWindowsPath
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -139,3 +140,198 @@ def test_offender_keys_are_posix_on_any_platform():
     """
     win = PureWindowsPath(r"C:\\repo\\plugins\\h2t-core\\skills\\x\\scripts\\y.py")
     assert _rel_key(win, PureWindowsPath(r"C:\\repo")) == "plugins/h2t-core/skills/x/scripts/y.py"
+
+
+# --- Author values (#581) -------------------------------------------------------------
+# Always upstream, wherever they appear.
+UPSTREAM = re.compile(r"lichtpfad/h2t-(?:skills|snap)\b|@lichtpfad\b|cache/lichtpfad/")
+TOKENS = re.compile(
+    r"\blichtpfad\b|hou2touch|personal-os|crypto-(?:regime|orchestrator|machine)|rejuve|quant-kb"
+    r"|QATAL|Mamuta|Zilberman|Bezalel|AICF|Motion Designer, Berlin|pfad-extension"
+    r"|\bh2t-(?:ai|business|client|dcc|evals|factory|infra|landings|tools|transcription"
+    r"|vision|voice)\b|~/\.dor\b|[\"']\.dor[\"']", re.IGNORECASE)
+# A 3.x .dor place named outside migration code, as a call argument or in a tuple that is
+# iterated into legacy(). Not counted when it is the argument of the gated legacy_read().
+DOR_KEY = re.compile(r"(?<!legacy_read\()[\"'](?:secrets\.dor|secrets\.dor_old|google\.dor|"
+                     r"sessions\.dor|registry\.dor|lake\.dor)[\"']")
+# Migration code is where .dor belongs: exact files and one prefix.
+MIGRATION_FILES = {"h2t_ops/setup/legacy.py", "h2t_ops/setup/storage_doctor.py",
+                   "scripts/storage_map.py"}
+MIGRATION_PREFIXES = ("h2t_ops/setup/layout/",)
+_DOR_TOKEN = re.compile(r"~/\.dor\b|[\"']\.dor[\"']", re.IGNORECASE)
+
+
+def _is_migration(rel: str) -> bool:
+    return rel in MIGRATION_FILES or rel.startswith(MIGRATION_PREFIXES)
+
+
+def _tokens(path: Path, rel: str | None = None) -> Counter:
+    """Author-value tokens in one file, counted per token, not per line."""
+    if rel is None:
+        try:
+            rel = _rel_key(path, ROOT)
+        except ValueError:
+            rel = path.name
+    migration = _is_migration(rel)
+    counts: Counter = Counter()
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = UPSTREAM.sub("", line)
+        for m in TOKENS.finditer(line):
+            if migration and _DOR_TOKEN.fullmatch(m.group(0)):
+                continue
+            counts[m.group(0).lower()] += 1
+        if not migration:
+            counts["dor-key"] += len(DOR_KEY.findall(line))
+    return +counts
+
+
+def _all_tokens() -> dict[str, Counter]:
+    found: dict[str, Counter] = {}
+    for root in CODE_ROOTS:
+        if not root.is_dir():
+            continue
+        for path in sorted(root.rglob("*")):
+            if not path.is_file() or path.name in SKIP_NAMES:
+                continue
+            if path.suffix.lower() not in SCANNED_SUFFIXES:
+                continue
+            if path.lstat().st_mode & 0o170000 == 0o120000:
+                continue
+            try:
+                counts = _tokens(path)
+            except (OSError, UnicodeDecodeError):
+                continue
+            if counts:
+                found[_rel_key(path, ROOT)] = counts
+    return found
+
+
+# path -> (token -> count, reason). Every reason is one of: "upstream" (this pack's own
+# repository, permanent); a provider or file contract name the code must spell; "data: …"
+# (a table the code reads, with what it is); the LEGACY .dor table; or the issue or PR that
+# removes the entry (#463, #612, #614, #632).
+AUTHOR_DEBT: dict[str, tuple[dict[str, int], str]] = {
+    "h2t_ops/connectors/evals/commands.py":
+        ({"lichtpfad": 1}, "upstream"),
+    "h2t_ops/core/paths.py":
+        ({"\".dor\"": 7, "dor-key": 12, "~/.dor": 7}, "LEGACY table; vault default (D1)"),
+    "h2t_ops/core/providers.py":
+        ({"h2t-evals": 2}, "provider/file contract name (h2t-evals.env)"),
+    "h2t_ops/core/secrets.py":
+        ({"h2t-evals": 3}, "provider/file contract name (h2t-evals.env)"),
+    "h2t_ops/core/settings.py":
+        ({"h2t-evals": 1}, "provider/file contract name (h2t-evals.env)"),
+    "h2t_ops/lifecycle/eval/status.py":
+        ({"h2t-evals": 1}, "provider/file contract name (the evals SDK's repo, h2t-evals#99)"),
+    "h2t_ops/lifecycle/project_audit_report.py":
+        ({"h2t-landings": 1}, "#632"),
+    "h2t_ops/lifecycle/project_audit_scan.py":
+        ({"h2t-landings": 2}, "#632"),
+    "h2t_ops/resources/agent_profile/agent-profiles.json":
+        ({"h2t-dcc": 13}, "#614"),
+    "h2t_ops/setup/harness_claude.py":
+        ({"lichtpfad": 3}, "upstream"),
+    "h2t_ops/setup/layout/phases.py":
+        ({"personal-os": 3}, "data: leaked pytest session ids the migrator filters"),
+    "h2t_ops/setup/legacy.py":
+        ({"lichtpfad": 1}, "upstream"),
+    "h2t_ops/setup/sync.py":
+        ({"lichtpfad": 7}, "upstream"),
+    "h2t_ops/tools/docs/docs_init.py":
+        ({"h2t-landings": 1}, "#632"),
+    "h2t_ops/tools/docs/lint.py":
+        ({"h2t-landings": 1}, "#632"),
+    "lib/practice_harvest/lineage.py":
+        ({"crypto-regime": 3}, "data: author lineage table, follow-up"),
+    "plugins/h2t-arch/.claude-plugin/plugin.json":
+        ({"lichtpfad": 1}, "upstream"),
+    "plugins/h2t-arch/skills/diagram-node/SKILL.md":
+        ({"lichtpfad": 1}, "upstream"),
+    "plugins/h2t-arch/skills/drawio/SKILL.md":
+        ({"lichtpfad": 1}, "upstream"),
+    "plugins/h2t-core/.claude-plugin/plugin.json":
+        ({"lichtpfad": 1}, "upstream"),
+    "plugins/h2t-core/skills/agent-profile/SKILL.md":
+        ({"lichtpfad": 1}, "upstream"),
+    "plugins/h2t-core/skills/agent-profile/references/agent-profiles.json":
+        ({"h2t-dcc": 13}, "#614"),
+    "plugins/h2t-core/skills/autonomous-run/SKILL.md":
+        ({"lichtpfad": 1}, "upstream"),
+    "plugins/h2t-core/skills/dev-overview/SKILL.md":
+        ({"h2t-ai": 1, "hou2touch": 1, "lichtpfad": 2}, "#612"),
+    "plugins/h2t-core/skills/handoff/SKILL.md":
+        ({"lichtpfad": 1}, "upstream"),
+    "plugins/h2t-core/skills/init-project/SKILL.md":
+        ({"lichtpfad": 1}, "upstream"),
+    "plugins/h2t-core/skills/project-audit/SKILL.md":
+        ({"h2t-landings": 4, "lichtpfad": 1}, "#632"),
+    "plugins/h2t-core/skills/report-issue/SKILL.md":
+        ({"lichtpfad": 1}, "upstream"),
+    "plugins/h2t-core/skills/scaffold-project/SKILL.md":
+        ({"lichtpfad": 1}, "upstream"),
+    "plugins/h2t-core/skills/session-start/SKILL.md":
+        ({"lichtpfad": 1}, "upstream"),
+    "plugins/h2t-core/skills/setup/SKILL.md":
+        ({"lichtpfad": 2}, "upstream"),
+    "plugins/h2t-core/skills/snap/SKILL.md":
+        ({"lichtpfad": 1}, "upstream"),
+    "plugins/h2t-creative/.claude-plugin/plugin.json":
+        ({"lichtpfad": 1}, "upstream"),
+    "plugins/h2t-creative/skills/deck/SKILL.md":
+        ({"lichtpfad": 1}, "upstream"),
+    "plugins/h2t-creative/skills/design/SKILL.md":
+        ({"lichtpfad": 1, "pfad-extension": 2}, "#463"),
+    "plugins/h2t-creative/skills/landing/SKILL.md":
+        ({"lichtpfad": 1}, "upstream"),
+    "plugins/h2t-creative/skills/style-create/SKILL.md":
+        ({"lichtpfad": 1}, "upstream"),
+    "plugins/h2t-creative/skills/style-validate/SKILL.md":
+        ({"lichtpfad": 1}, "upstream"),
+    "plugins/h2t-dev/.claude-plugin/plugin.json":
+        ({"lichtpfad": 1}, "upstream"),
+    "plugins/h2t-dev/skills/docs-lint/SKILL.md":
+        ({"lichtpfad": 1}, "upstream"),
+    "plugins/h2t-dev/skills/docs-sync-labels/SKILL.md":
+        ({"lichtpfad": 1}, "upstream"),
+    "plugins/h2t-dev/skills/github-issues/SKILL.md":
+        ({"lichtpfad": 1}, "upstream"),
+    "plugins/h2t-dev/skills/milestone-closure/SKILL.md":
+        ({"lichtpfad": 1}, "upstream"),
+    "plugins/h2t-dev/skills/pre-merge-check/SKILL.md":
+        ({"lichtpfad": 1}, "upstream"),
+    "plugins/h2t-ops/.claude-plugin/plugin.json":
+        ({"lichtpfad": 1}, "upstream"),
+    "plugins/h2t-ops/skills/connectors/SKILL.md":
+        ({"lichtpfad": 1}, "upstream"),
+    "plugins/h2t-ops/skills/daily-brief/SKILL.md":
+        ({"lichtpfad": 1}, "upstream"),
+    "plugins/h2t-ops/skills/deploy/SKILL.md":
+        ({"lichtpfad": 1}, "upstream"),
+    "plugins/h2t-ops/skills/kb/SKILL.md":
+        ({"lichtpfad": 1}, "upstream"),
+    "plugins/h2t-ops/skills/research/SKILL.md":
+        ({"lichtpfad": 1}, "upstream"),
+}
+
+
+def test_author_values_match_the_debt():
+    found = _all_tokens()
+    expected = lambda p: AUTHOR_DEBT.get(p, ({}, ""))[0]  # noqa: E731
+    diff = {p: (dict(c), expected(p)) for p, c in found.items() if dict(c) != expected(p)}
+    gone = [p for p in AUTHOR_DEBT if p not in found]
+    msg = ""
+    if diff:
+        msg += "author values differ from AUTHOR_DEBT (found vs recorded):\n" + "\n".join(
+            f"  {p}\n    found    {f}\n    recorded {r}" for p, (f, r) in sorted(diff.items()))
+    if gone:
+        msg += "\nAUTHOR_DEBT names files that are now clean, lower AUTHOR_DEBT: " + str(sorted(gone))
+    assert not diff and not gone, msg
+
+
+def test_probe_counts_tokens_not_lines(tmp_path):
+    """Positive control: two tokens on one line count twice; upstream spans count zero."""
+    f = tmp_path / "x.py"
+    f.write_text('A = "lichtpfad"; B = "hou2touch"\nURL = "lichtpfad/h2t-skills"\n'
+                 'p = paths.legacy("lake.dor")\nROOTS = ("sessions.h2t", "sessions.dor")\n'
+                 'q = paths.legacy_read("lake.dor")\n')
+    assert _tokens(f) == Counter({"lichtpfad": 1, "hou2touch": 1, "dor-key": 2})

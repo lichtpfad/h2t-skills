@@ -79,17 +79,14 @@ Create only when applicable. The flag source is `projects.yaml` per repo.
 
 Repos MAY have additional directories in `docs/` for domain-specific content.
 
+Example table; the repos and directories are illustrative:
+
 | Repo | Extension | Purpose |
 | --- | --- | --- |
-| h2t-ai | `context7-cache/` | Cached code patterns |
-| h2t-ai | `eval/` | Eval contracts, prompts, sessions |
-| h2t-ai | `registry/` | Operator registries (reference data) |
-| h2t-ai | `handoff/` | Session handoff snapshots |
-| h2t-evals | `ops/` | Operational runbooks, evidence |
-| h2t-evals | `contracts/` | LLM judge contracts |
-| h2t-transcription | `methodology/` | Course spec templates |
-| h2t-transcription | `diagrams/` | Pipeline diagrams |
-| h2t-vision | `presentation/` | Presentation materials |
+| my-project-api | `ops/` | Operational runbooks, evidence |
+| my-project-api | `contracts/` | Interface contracts |
+| my-project-web | `diagrams/` | Architecture diagrams |
+| my-project-web | `presentation/` | Presentation materials |
 
 **Rules for extensions:**
 - Directory name: lowercase kebab-case
@@ -126,7 +123,7 @@ Repos MAY have additional directories in `docs/` for domain-specific content.
 
 ## Pre-Write Checklist (SSOT boundary)
 
-> Promoted из cross-repo practice-harvest, PR #293 · lineages POS, rejuve, crypto-regime-spike · recurrence 3.
+> Promoted из cross-repo practice-harvest, PR #293 · three independent projects · recurrence 3.
 
 Before creating **or moving** any file, answer three questions — only then proceed:
 

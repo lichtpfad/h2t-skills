@@ -174,3 +174,36 @@ def test_step_1b_names_no_property_of_the_author():
     code = "".join(part.split("```", 1)[0] for part in _skill_step_1b().split("```bash")[1:])
     for author_value in ("Дата", "Завтра", "На день", "Задача"):
         assert author_value not in code
+
+
+# --- domain from the title (#581) -------------------------------------------------------------
+
+def _titles_by_domain(capsys, monkeypatch, titles, yaml_extra=""):
+    _user_yaml(SCHEMA_YAML + yaml_extra)
+    rc, out, err, _ = _cli(capsys, monkeypatch, [row(t, day=0) for t in titles], "--json")
+    assert rc == 0, err
+    items = json.loads(out)["result"]["sections"]["planned_today"]
+    return {t["title"]: t["domain"] for t in items}
+
+
+def test_domain_from_title_keyword(capsys, monkeypatch):
+    extra = "daily_brief:\n  domains:\n    Art: [gallery, Museum]\n    Dev: [deploy]\n"
+    got = _titles_by_domain(capsys, monkeypatch, ["Call the MUSEUM", "deploy it", "buy milk"], extra)
+    assert got == {"Call the MUSEUM": "Art", "deploy it": "Dev", "buy milk": None}
+
+
+def test_first_matching_domain_wins(capsys, monkeypatch):
+    extra = "daily_brief:\n  domains:\n    Dev: [deploy]\n    Art: [gallery]\n"
+    got = _titles_by_domain(capsys, monkeypatch, ["deploy the gallery site"], extra)
+    assert got == {"deploy the gallery site": "Dev"}
+
+
+def test_no_map_gives_null_domain(capsys, monkeypatch):
+    assert _titles_by_domain(capsys, monkeypatch, ["deploy"]) == {"deploy": None}
+
+
+@pytest.mark.parametrize("bad", ["domains: [a, b]", "domains: {Art: gallery}", "domains: {Art: [1, 2]}",
+                                 "domains: {Art: [gallery], Dev: null}"])
+def test_wrong_typed_domains_is_no_map(capsys, monkeypatch, bad):
+    got = _titles_by_domain(capsys, monkeypatch, ["gallery"], f"daily_brief:\n  {bad}\n")
+    assert got == {"gallery": None}

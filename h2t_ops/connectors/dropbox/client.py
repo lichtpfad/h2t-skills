@@ -31,7 +31,7 @@ def normalize_path(path: str) -> str:
     """Dropbox addresses the root as "" and everything else as "/a/b".
 
     The path is the one from the Dropbox root, never from a local drive:
-    E:/DROPBOX/LichtPfad Dropbox/HOU2TOUCH/X is /HOU2TOUCH/X here.
+    E:/DROPBOX/Team Dropbox/Projects/X is /Projects/X here.
     """
     p = (path or "").strip()
     if p in ("", "/"):

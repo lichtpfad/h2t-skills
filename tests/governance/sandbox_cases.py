@@ -492,6 +492,7 @@ def _evals_spool(sb, mp):
     mp.setitem(sys.modules, "h2t_evals", types.ModuleType("h2t_evals"))
     mp.setitem(sys.modules, "h2t_evals.sdk", sdk)
     mp.setenv("H2T_EVALS_MODE", "push")
+    mp.setenv("H2T_EVALS_SERVICE_URL", "https://evals.example.test")   # no default URL (#581)
     with SkillEval("research", domain="ops", project="p"):
         pass
     assert paths.evals_spool().is_file()
@@ -1039,6 +1040,9 @@ def _guard_transcript(sb, mp):
     import json
     (sb.home.parent / "t.jsonl").write_text(json.dumps({"type": "assistant", "message": {
         "content": [{"type": "text", "text": "Готово. " + "слово " * 30}]}}, ensure_ascii=False), encoding="utf-8")
+    from h2t_ops.core import paths  # the guards log only once switched on (§15 rule 5)
+    (paths.config_dir()).mkdir(parents=True, exist_ok=True)
+    (paths.config_dir() / "user.yaml").write_text("guards: [grade, plain]\n", encoding="utf-8")
 
 
 def _gather_lock(sb, mp):

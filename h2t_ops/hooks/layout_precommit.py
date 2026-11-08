@@ -2,7 +2,7 @@
 
 Third layer of the same rule (structure-guard catches Claude's writes, the CI layout job
 catches what is already committed); this one catches files written by scripts — the
-_gc_capture_*.jsonl dumps in h2t-transcription came from a Python script, and no
+_gc_capture_*.jsonl dumps in one repository came from a Python script, and no
 PreToolUse hook ever saw them. Install once per machine:
 
   mkdir -p ~/.h2t/git-hooks

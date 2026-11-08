@@ -78,7 +78,7 @@ MeetGeek API accepts only **public URLs** — not local files. For local `.webm`
 
 **Do NOT** use `https://drive.google.com/file/d/FILE_ID/view` — that is a viewer URL, not a download URL.
 
-**Do NOT** route local recording files to `h2t-transcription` — that pipeline is for Vimeo/course content, not meeting recordings.
+**Do NOT** route local recording files to a separate transcription pipeline — meeting recordings go through MeetGeek.
 
 ## Retention (the recovery verbs)
 

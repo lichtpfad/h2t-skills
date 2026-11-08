@@ -1,8 +1,8 @@
 """SessionEnd hook: reap the Codex app-server broker this session leaked (Windows only).
 
 On Windows the Codex CLI (`@openai/codex`) leaves its `app-server-broker.mjs`
-process running after the chat that spawned it ends. Measured on AUTOMATA
-2026-09-04: nine broker processes had accumulated over eight days — one per
+process running after the chat that spawned it ends. Measured on one Windows
+machine 2026-09-04: nine broker processes had accumulated over eight days — one per
 session — and the oldest was 7.8 days old. One of them held its `--cwd` — a git
 worktree that had since been removed — open, so the directory could not be
 deleted ("Device or resource busy") until the broker was

@@ -1,7 +1,7 @@
 """The 3.x session roots, read until `h2t-setup sync` moves them into records/ (#548 §5).
 
 3.x wrote `~/.h2t/sessions/<machine>/<key>/` — markdown plus a bounded latest.json — and
-DOR before it wrote markdown under `~/.dor/sessions/`. A 4.0.x install that has not
+DOR before it wrote markdown under its own sessions root. A 4.0.x install that has not
 migrated yet has an empty index and its whole history here, so session-start reads it
 the way 3.x did. Read only: nothing is ever written to either root.
 """
@@ -13,12 +13,11 @@ from pathlib import Path
 
 from h2t_ops.core import paths
 
-ROOTS = ("sessions.h2t", "sessions.dor")
-
 
 def roots() -> list[Path]:
-    """The legacy roots that exist; the h2t one first."""
-    return [p for p in (paths.legacy(n) for n in ROOTS) if p.is_dir()]
+    """The legacy roots that exist; the h2t one first. The DOR one only before migration."""
+    return [p for p in (paths.legacy_read("sessions.h2t"), paths.legacy_read("sessions.dor"))
+            if p is not None and p.is_dir()]
 
 
 def _leaves(keys: list[str]) -> list[tuple[Path, Path]]:

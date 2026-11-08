@@ -53,9 +53,9 @@ Only additive — never deletes custom labels.
 
 **Usage:**
 ```bash
-docs-sync-labels                    # Dry-run on all repos
-docs-sync-labels h2t-graphs h2t-ai # Check specific repos
-docs-sync-labels h2t-graphs --apply # Create missing labels
+docs-sync-labels                          # Dry-run on the repos in your repo mapping
+docs-sync-labels <owner>/<repo>          # Check a specific repo
+docs-sync-labels <owner>/<repo> --apply  # Create missing labels
 ```
 
 ## Other Skills

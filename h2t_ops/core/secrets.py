@@ -51,7 +51,8 @@ def provider_file(provider: str, *, local: bool = False) -> Path:
 
 
 def legacy_sources() -> list[tuple[str, Path]]:
-    """The 3.x ladder, in its order (core/secrets.py of 3.3.0 — #432, #483).
+    """The 3.x ladder, in its order (core/secrets.py of 3.3.0 — #432, #483). The two 3.x DOR
+    files are left out on a migrated machine (#581); migration_sources adds them back.
 
     H2T_SECRETS_FILE is not read any more (plan R5); the migration takes its file as one more
     source through paths.old_env_by_use("secrets-source") (Task 22)."""
@@ -60,7 +61,8 @@ def legacy_sources() -> list[tuple[str, Path]]:
     if d.is_dir():
         out += [(f"h2t-config-{p.stem}", p) for p in sorted(d.glob("*.env"), key=lambda p: p.name)
                 if p.name != "secrets.env"]
-    return out + [("dor-secrets", paths.legacy("secrets.dor")), ("dor", paths.legacy("secrets.dor_old"))]
+    dor = [("dor-secrets", paths.legacy_read("secrets.dor")), ("dor", paths.legacy_read("secrets.dor_old"))]
+    return out + [(name, p) for name, p in dor if p is not None]
 
 
 def candidate_secret_files(env_file: Path | None = None) -> list[Path]:
@@ -120,8 +122,9 @@ def load_secrets(env_file: Path | None = None) -> None:
 
 def _legacy_json(name: str) -> list[Path]:
     if name == "google.client":
+        dor = paths.legacy_read("google.dor")
         return [paths.legacy("google.store") / "credentials.json",
-                paths.legacy("google.gmail") / "credentials.json", paths.legacy("google.dor")]
+                paths.legacy("google.gmail") / "credentials.json", *([dor] if dor else [])]
     if name == "google.token":
         return [paths.legacy("google.store") / "tokens.json", paths.legacy("google.gmail") / "token.json"]
     if name == "telegram.auth-state":
@@ -206,13 +209,14 @@ def evals_env(env_file: Path | None = None) -> dict[str, str]:
     """Every H2T_EVALS_* key, by prefix as in 3.x — no list of keys to drop one silently —
     except the 3.x path variables, which the package does not read (Q8).
 
-    Per key: environment, then h2t-evals.env, then ~/.dor/secrets.env (where 3.x read them),
+    Per key: environment, then h2t-evals.env, then the 3.x DOR secrets.env (where 3.x read them),
     then the rest of the ladder. env_file: only that file and the environment."""
     prefix = providers.key_prefix("h2t-evals")
     if env_file is not None:
         layers = [_read_env(Path(env_file))]
     else:
-        layers = [_read_env(provider_file("h2t-evals")), _read_env(paths.legacy("secrets.dor_old")),
+        old = paths.legacy_read("secrets.dor_old")
+        layers = [_read_env(provider_file("h2t-evals")), *([_read_env(old)] if old else []),
                   *(_read_env(p) for name, p in legacy_sources() if name != "dor")]
     merged = _merged([dict(os.environ), *layers])
     return {k: v for k, v in merged.items() if k.startswith(prefix) and k not in paths.OLD_ENV}
@@ -245,15 +249,16 @@ def _read_env_named(path: Path) -> dict[str, str]:
                           hint="re-save it as UTF-8 and run `h2t-setup layout migrate` again") from exc
 
 
-_SECRET_LEGACY = ("secrets.h2t", "secrets.dor", "secrets.dor_old", "notion.token",
-                  "google.store", "google.gmail", "google.dor", "telegram")
+_SECRET_LEGACY = ("secrets.h2t", "notion.token", "google.store", "google.gmail", "telegram")
 
 
 def migration_sources() -> list[tuple[str, Path, dict[str, str]]]:
     """Senior first: the 3.x H2T_SECRETS_FILE file once, then the 3.x ladder. A file that
     appears twice (the variable pointing at a ladder file) counts once, at its senior place."""
     out = [("secretsfile", p) for p in paths.old_env_by_use("secrets-source").values()]
-    out += legacy_sources()
+    from h2t_ops.setup import legacy
+    senior = legacy_sources()
+    out += senior + [x for x in legacy.dor_secret_sources() if x not in senior]
     seen: set[str] = set()
     result = []
     for name, p in out:
@@ -282,7 +287,9 @@ def read_secret_bytes(path: Path, *, root: Path | None = None) -> bytes:
     other place a secret may be read from; without it, secrets/ and the 3.x secret places."""
     real = Path(os.path.realpath(path))
     roots = ([Path(root)] if root is not None
-             else [paths.root() / "secrets", *(paths.legacy(n) for n in _SECRET_LEGACY)])
+             else [paths.root() / "secrets", *(paths.legacy(n) for n in _SECRET_LEGACY),
+                   *filter(None, [paths.legacy_read("secrets.dor"), paths.legacy_read("secrets.dor_old"),
+                                  paths.legacy_read("google.dor")])])
     if not any(real == Path(os.path.realpath(r)) or Path(os.path.realpath(r)) in real.parents
                for r in roots):
         raise ConfigError(f"{path} is not a secrets location", hint="read it through its own module")

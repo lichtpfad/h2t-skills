@@ -7,21 +7,6 @@ from h2t_ops.lifecycle.detect_project import (
 )
 
 
-def test_detect_domain_h2t_prefix():
-    """The signal is the repository name, so the answer must not depend on the root."""
-    for path in ("C:/dev/h2t-vision", "/Users/x/Projects/h2t-vision", "/home/y/src/h2t-vision"):
-        assert _detect_domain(path) == (
-            "hou2touch", "high", "repository named h2t-* matches hou2touch"
-        ), path
-
-
-def test_detect_domain_crypto_prefix():
-    for path in ("C:/dev/crypto-etl", "/Users/x/Projects/crypto-etl"):
-        assert _detect_domain(path) == (
-            "crypto", "high", "repository named crypto-* matches crypto"
-        ), path
-
-
 def test_an_unrecognised_repository_gets_no_domain():
     """The catch-all this replaces answered `dev` for anything under `C:/dev/`.
 
@@ -33,12 +18,6 @@ def test_an_unrecognised_repository_gets_no_domain():
     assert domain is None
     assert confidence == "low"
     assert "no pattern match" in reason
-
-
-def test_detect_domain_dropbox_h2t():
-    domain, confidence, reason = _detect_domain("E:/DROPBOX/LichtPfad Dropbox/HOU2TOUCH/COURSES")
-    assert domain == "hou2touch"
-    assert confidence == "high"
 
 
 def test_detect_domain_unknown():
@@ -166,3 +145,41 @@ def test_a_named_config_root_is_read_directly_without_the_index(tmp_path):
     got = detect_project(str(cwd), config_root=str(_config(tmp_path / "named", *_TAXES)))
     assert got["current"]["label"] == "Taxes Label"
     assert not (paths.state_dir() / "index.sqlite").exists()
+
+
+def test_no_builtin_domain_patterns():
+    """No repository name decides a domain without the user's own domain_patterns (#581)."""
+    from h2t_ops.lifecycle import detect_project as dp
+    assert dp.DOMAIN_PATTERNS == []
+    assert _detect_domain("/x/h2t-foo")[0] is None
+    assert _detect_domain("/x/crypto-etl")[0] is None
+
+
+def _detected():
+    return {"id": "p", "label": "P", "type": "directory", "github": None, "stack": "none",
+            "domain": None, "tracker_confidence": "deferred"}
+
+
+def test_menu_lists_domains_yaml_keys():
+    from h2t_ops.lifecycle.detect_project import _build_confirm_message
+    msg = _build_confirm_message(_detected(), False, ["alpha", "beta"])
+    assert "1. alpha" in msg
+    assert "2. beta" in msg
+
+
+def test_empty_domains_gives_free_text():
+    from h2t_ops.lifecycle.detect_project import _build_confirm_message
+    msg = _build_confirm_message(_detected(), False, [])
+    for name in ("hou2touch", "crypto", "personal-os"):
+        assert name not in msg
+    assert "Какой домен?" in msg
+    assert "1." not in msg
+
+
+def test_detect_project_menu_comes_from_domains_yaml(tmp_path):
+    from h2t_ops.lifecycle.detect_project import detect_project
+    root = _config(tmp_path / "cfg", "mappings: {}\n", "domains:\n  zeta: {}\n  alpha: {}\n")
+    cwd = tmp_path / "newproj"
+    cwd.mkdir()
+    msg = detect_project(str(cwd), config_root=str(root))["confirm_message"]
+    assert "1. alpha" in msg and "2. zeta" in msg

@@ -127,6 +127,9 @@ def _judge(event: str, p95: float, budget: float) -> None:
 
 
 def test_stop_both_guards(rig):
+    (rig.home / ".h2t" / "config").mkdir(parents=True)     # off by default (§15 rule 5)
+    (rig.home / ".h2t" / "config" / "user.yaml").write_text("guards: [grade, plain]\n",
+                                                            encoding="utf-8")
     payload = {"hook_event_name": "Stop", "session_id": "s1", "cwd": rig.work,
                "transcript_path": rig.transcript, "stop_hook_active": False}
     p95, last = _measure(rig, [("grade-guard", payload), ("plain-guard", payload)])

@@ -18,23 +18,23 @@ $EXA_CLI search \
 
 ```bash
 $EXA_CLI search \
-  --query "Rejuve.bio longevity research DAO governance" \
+  --query "Example Corp longevity research DAO governance" \
   --mode generic \
   --depth standard \
   --num-results 10 \
-  --project rejuve
+  --project my-project
 ```
 
 ### 3. News with date + domain filters
 
 ```bash
 $EXA_CLI search \
-  --query "Rejuve.bio Switzerland press coverage" \
+  --query "Example Corp Switzerland press coverage" \
   --mode news \
   --start-date 2025-10-01 --end-date 2026-04-18 \
   --include-domains "techcrunch.com,swissbiotech.ch" \
   --num-results 10 \
-  --project rejuve
+  --project my-project
 ```
 
 ### 4. Academic papers
@@ -56,7 +56,7 @@ $EXA_CLI search \
   --mode competitor \
   --country CH \
   --num-results 10 \
-  --project rejuve
+  --project my-project
 ```
 
 ### 6. People research
@@ -66,7 +66,7 @@ $EXA_CLI search \
   --query "Alex Zhavoronkov Insilico Medicine" \
   --mode people \
   --num-results 5 \
-  --project rejuve
+  --project my-project
 ```
 
 ### 7. Deep synthesis with query variations
@@ -84,8 +84,8 @@ $EXA_CLI search \
 
 ```bash
 $EXA_CLI crawl \
-  --url "https://rejuve.bio/about" \
-  --project rejuve
+  --url "https://example.com/about" \
+  --project my-project
 ```
 
 ## Output Format
@@ -100,17 +100,17 @@ The agent reads `.partial.md`, adds Sources / Key Findings / Grounding / Limitat
 ## Sample Output (stdout)
 
 ```
-## Exa Search: 'Rejuve.bio longevity research DAO governance'
+## Exa Search: 'Example Corp longevity research DAO governance'
 **Mode:** generic | **Results:** 8 | **Cost:** $0.008 | **Latency:** 1040ms
 
-1. [Rejuve.bio — About](https://rejuve.bio/about)
-   Rejuve.bio operates as a decentralized autonomous organization (DAO) focused on longevity research...
+1. [Example Corp — About](https://example.com/about)
+   Example Corp operates as a decentralized autonomous organization (DAO) focused on longevity research...
 2. [SingularityNET Longevity Initiative](https://singularitynet.io/longevity)
-   Partner organization powering the Rejuve.bio protocol infrastructure...
+   Partner organization powering the Example Corp protocol infrastructure...
 ...
 
-Saved: .../research/rejuve-rejuve-bio-longevity-research-dao-governance-2026-04-18.partial.md
-JSON:  .../research/rejuve-rejuve-bio-longevity-research-dao-governance-2026-04-18.sources.json
+Saved: .../research/example-example-com-longevity-research-dao-governance-2026-04-18.partial.md
+JSON:  .../research/example-example-com-longevity-research-dao-governance-2026-04-18.sources.json
 ```
 
 ## Cross-Engine Recipe (manual)
@@ -118,12 +118,12 @@ JSON:  .../research/rejuve-rejuve-bio-longevity-research-dao-governance-2026-04-
 Research a company end-to-end requires two skills:
 
 ```
-User: "Research Rejuve.bio — company + people + news."
+User: "Research Example Corp — company + people + news."
 
 Agent plan:
-1. /research --mode competitor --query "Rejuve.bio about product team"     (company pages)
-2. /research --mode news --query "Rejuve.bio" --start-date 2025-10-01     (recent coverage)
-3. /search-leads (Bayram plugin) — "Rejuve.bio founders and core team"    (LinkedIn)
+1. /research --mode competitor --query "Example Corp about product team"     (company pages)
+2. /research --mode news --query "Example Corp" --start-date 2025-10-01     (recent coverage)
+3. /search-leads (Bayram plugin) — "Example Corp founders and core team"    (LinkedIn)
 
 Agent synthesises manually across the three outputs in conversation.
 ```

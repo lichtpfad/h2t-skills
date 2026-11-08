@@ -9,7 +9,7 @@ inferred: `gh pr view` lists the PR's own files.
 That is where this hook first went wrong. "The PR listed the document" was read
 as "the document is finished", and the two are not the same claim: a PR may
 carry a plan because it implemented it, or because it edited it. Measured
-2026-08-27 on h2t-business — PRs #58, #59 and #60, three documentation edits in
+2026-08-27 in one repository — PRs #58, #59 and #60, three documentation edits in
 a row, each stamping `done` on a 2300-line decision map with four open questions
 in section A alone.
 

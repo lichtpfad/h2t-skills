@@ -113,6 +113,11 @@ def _env(name: str) -> Path | None:
     return Path(value).expanduser() if value else None
 
 
+def env_var(name: str) -> str:
+    """The variable that moves a place: root, vault, lake, inbox or kb."""
+    return f"H2T_PATH_{name.upper()}"
+
+
 def root() -> Path:
     return _env("H2T_PATH_ROOT") or home() / ".h2t"
 
@@ -153,6 +158,8 @@ def source(place_id: str) -> str:
         return "default (the install contract; H2T_PATH_ROOT does not move it)"
     name = "H2T_PATH_ROOT" if p.kind in ("class", "file") else \
         {"vault": "H2T_PATH_VAULT", "harness": "CLAUDE_CONFIG_DIR"}.get(place_id)
+    if place_id in YAML_PLACES:
+        name = env_var(place_id)
     return name if name and os.environ.get(name) else "default"
 
 
@@ -352,6 +359,17 @@ def _layout() -> object:
     return doc.get("layout") if isinstance(doc, dict) else None
 
 
+# The LEGACY entries that name a 3.x DOR place; doctor and the migration iterate this
+# set rather than spelling the keys.
+DOR_KEYS = frozenset(k for k, parts in LEGACY.items() if parts[0].lstrip(".") == "dor")
+
+
+def migrated() -> bool:
+    """The machine is on layout 1 or later. bool is an int in Python and is not a layout."""
+    layout = _layout()
+    return isinstance(layout, int) and not isinstance(layout, bool) and layout >= 1
+
+
 def _fallback(name: str) -> Path | None:
     """Before layout 1 the 3.x lake is the lake (§8: 4.0.x works on the old places until the
     machine migrates). A default of data/lake there would take granola and meetgeek sync
@@ -359,7 +377,7 @@ def _fallback(name: str) -> Path | None:
     window would never be fetched again. A 3.x lake variable wins over ~/.dor/lake: that is
     where 3.x wrote and what the migration declares. After layout 1 only paths.yaml declares
     it (R2)."""
-    if name != "lake" or _layout() == 1:
+    if name != "lake" or migrated():
         return None
     if moved := old_env_by_use("lake"):
         return next(iter(moved.values()))
@@ -370,6 +388,8 @@ def _fallback(name: str) -> Path | None:
 def place(name: str) -> Path | None:
     if name == "vault":
         return vault()
+    if name in YAML_PLACES and (moved := _env(env_var(name))):
+        return moved   # a variable moves a place before paths.yaml does (#581)
     found = paths_config().places.get(name)
     return found if found is not None else _fallback(name)
 
@@ -381,6 +401,19 @@ def place_or_default(name: str) -> tuple[Path, bool]:
 
 def legacy(name: str) -> Path:
     return home().joinpath(*LEGACY[name])
+
+
+def undeclared_old_lake() -> Path:
+    """The 3.x lake, for the write guard in lake.origin: after layout 1 a write into it is
+    refused until paths.yaml declares it. A guard, not a read, so it ignores migrated()."""
+    return legacy("lake.dor")
+
+
+def legacy_read(name: str) -> Path | None:
+    """legacy(), for runtime readers: a 3.x .dor place is read only on a machine that has
+    not migrated (#581); after it the answer is None and the reader treats it as absent.
+    Migration code and the doctor keep legacy(). The vault default is not a LEGACY key."""
+    return None if name in DOR_KEYS and migrated() else legacy(name)
 
 
 LEGACY_FILES = frozenset({"secrets.dor", "secrets.dor_old", "notion.token", "google.dor", "registry.dor"})

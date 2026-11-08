@@ -1,8 +1,12 @@
 """REPO_MANIFEST comes from the repo mapping through the index (#548 Task 15), read on first
-use, with the bundled list as the answer whenever the index cannot give one."""
+use. There is no bundled list: without a mapping, or with an index that cannot open, the answer
+is a ConfigError (#581)."""
 import sqlite3
 
+import pytest
+
 from h2t_ops.core import paths
+from h2t_ops.core.errors import ConfigError
 from h2t_ops.lifecycle import index
 from h2t_ops.tools.docs import common
 
@@ -15,15 +19,17 @@ def test_the_mapping_is_read_through_the_index():
     assert (paths.state_dir() / "index.sqlite").is_file()
 
 
-def test_no_mapping_gives_the_bundled_list():
-    assert common._manifest() == common._BUNDLED_MANIFEST
+def test_no_mapping_is_a_config_error_not_a_list():
+    with pytest.raises(ConfigError):
+        common._manifest()
 
 
-def test_an_index_that_cannot_open_gives_the_bundled_list(monkeypatch):
+def test_an_index_that_cannot_open_is_a_config_error(monkeypatch):
     def broken():
         raise sqlite3.OperationalError("unable to open database file")
     monkeypatch.setattr(index, "ontology", broken)
-    assert common._manifest() == common._BUNDLED_MANIFEST
+    with pytest.raises(ConfigError):
+        common._manifest()
 
 
 def test_the_manifest_is_read_on_first_use_not_at_import(monkeypatch):

@@ -152,8 +152,8 @@ Resolve project identity from any directory.
 
 ```python
 project = identify_project(".")
-# {"id": "agent-skills", "domain": "personal-os", "type": "git",
-#  "github": "lichtpfad/h2t-skills", "config_root": "~/.h2t/config"}
+# {"id": "agent-skills", "domain": "my-domain", "type": "git",
+#  "github": "<owner>/<repo>", "config_root": "~/.h2t/config"}
 ```
 
 Resolution: git remote → repo-mapping.yaml → cwd_patterns → default.

@@ -41,7 +41,7 @@ Act on the result, in this order:
 ```bash
 if [ -z "${H2T_KB_ROOT:-}" ]; then
   echo "ERROR: set H2T_KB_ROOT to your knowledge-base directory." >&2
-  echo "  export H2T_KB_ROOT=\"$HOME/research-kb\"" >&2
+  echo "  export H2T_KB_ROOT=\"<path-to-your-kb>\"" >&2
   exit 3
 fi
 KB="$H2T_KB_ROOT"

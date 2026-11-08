@@ -1,9 +1,8 @@
 # Truth gate — three answers by command before the first line of code
 
-Origin: cross-repo audit 2026-09 (h2t-infra repo, `research/2026-09-repo-audit/summary.md`).
-Root finding: "flag says done, content missing" in 11 of 21 repos; a project that cannot
-answer the three questions below by command has not started, whatever its docs say
-(crypto-machine: 1541 lines of rules, 0 code).
+Origin: a cross-repo audit (2026-09). Root finding: "flag says done, content missing" in
+11 of 21 repos; a project that cannot answer the three questions below by command has not
+started, whatever its docs say (one repo held 1541 lines of rules and 0 code).
 
 A rule without a mechanism is a note. This gate is the mechanism: every answer is a
 command, every command is run, empty output is red.

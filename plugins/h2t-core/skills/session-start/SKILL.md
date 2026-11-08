@@ -142,7 +142,7 @@ Propose session name in this exact format:
 ```
 Имя сессии: `{domain}-{project}-{topic}-YYYY-MM-DD`
 
-Пример: `dev-h2t-ai-skill-refactor-2026-04-03`
+Пример: `dev-my-project-skill-refactor-2026-04-03`
 ```
 
 Replace `{topic}` with 1-2 word summary of most likely work direction from context.

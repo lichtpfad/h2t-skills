@@ -297,6 +297,7 @@ def test_metric_level_unit_propagate_to_central(tmp_path, monkeypatch):
     monkeypatch.setitem(sys.modules, "h2t_evals", types.ModuleType("h2t_evals"))
     monkeypatch.setitem(sys.modules, "h2t_evals.sdk", fake)
     monkeypatch.setenv("H2T_EVALS_MODE", "push")
+    monkeypatch.setenv("H2T_EVALS_SERVICE_URL", "https://evals.example.test")  # no default URL (#581)
     with SkillEval("research", domain="d", project="p") as ev:
         ev.metric("skills.research_cost_usd", value_num=0.4, level="business", unit="usd")
     biz = [kw for key, kw in captured if key == "skills.research_cost_usd"]

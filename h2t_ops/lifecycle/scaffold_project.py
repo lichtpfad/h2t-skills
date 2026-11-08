@@ -27,7 +27,7 @@ _H2T_LINT_ENTRIES = """\
 .h2t/lint-before.json
 .h2t/lint-after.json
 # scratch: probes, dumps, drafts — per task, never committed. Run EVIDENCE goes to
-# docs/.artifacts/<run_id>/ and IS committed. Standard: h2t-infra standards/scratch-and-run-records.md
+# docs/.artifacts/<run_id>/ and IS committed. Scratch vs run-record split.
 /.scratch/
 """
 

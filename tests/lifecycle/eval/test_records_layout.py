@@ -71,6 +71,7 @@ def test_spool_is_handed_to_the_sdk_through_store(monkeypatch):
     monkeypatch.setitem(sys.modules, "h2t_evals", types.ModuleType("h2t_evals"))
     monkeypatch.setitem(sys.modules, "h2t_evals.sdk", fake)
     monkeypatch.setenv("H2T_EVALS_MODE", "push")
+    monkeypatch.setenv("H2T_EVALS_SERVICE_URL", "https://evals.example.test")  # no default URL (#581)
     with SkillEval("research", domain="d", project="p"):
         pass
     assert seen == {"spool": str(paths.state_dir() / "evals-spool.sqlite"), "delegated": "h2t_evals"}

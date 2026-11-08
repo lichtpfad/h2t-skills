@@ -139,7 +139,7 @@ def _check(path: Path, place: str, *, dest: bool = False, compat: bool = False) 
         raise WriteRefused(f"{path} is inside vault {vault}, though it classifies as {got}",
                            hint="vault and the package places must not overlap: move the "
                                 "vault or the h2t root apart (h2t-ops paths list)")
-    # A place paths.yaml would declare may sit inside a legacy root or tmp (lake: ~/.dor/lake,
+    # A place paths.yaml would declare may sit inside a legacy root or tmp (lake: the 3.x lake,
     # R2): while the file is broken it classifies as that, and the refusal must name the file.
     if broken is not None and (got == "elsewhere" or place in paths.YAML_PLACES):
         if isinstance(broken, paths.VaultUnresolvable):

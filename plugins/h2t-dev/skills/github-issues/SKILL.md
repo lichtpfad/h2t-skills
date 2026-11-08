@@ -57,13 +57,10 @@ via `/docs-sync-labels` after adding it.
 
 ## Milestone
 
-| Phase | Milestone |
-|-------|-----------|
-| Phase 5 | `Phase 5: Knowledge Model + Context Engine` |
-| Phase 6 | `Phase 6: Safe Copilot` |
-| Phase 7 | `Phase 7: Power UX` |
+Milestones are those of the target repo: `gh api repos/<owner>/<repo>/milestones`. Pick the one
+the issue belongs to.
 
-No matching phase → omit `--milestone`.
+No matching milestone → omit `--milestone`.
 
 ## gh pattern
 

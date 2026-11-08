@@ -1,6 +1,6 @@
 ---
 name: browser-qa
-description: "Renders a built page in a real browser and reports what is wrong with it. Use for the mandatory QA step of h2t-creative:landing and h2t-creative:deck — screenshots at three widths, horizontal-overflow measurement, console errors, keyboard navigation. Absorbed from h2t-tools:playwright-agent so the pack does not depend on a plugin nobody installs."
+description: "Renders a built page in a real browser and reports what is wrong with it. Use for the mandatory QA step of h2t-creative:landing and h2t-creative:deck — screenshots at three widths, horizontal-overflow measurement, console errors, keyboard navigation. Absorbed from a standalone playwright agent so the pack does not depend on a plugin nobody installs."
 mcpServers:
   - playwright:
       command: npx

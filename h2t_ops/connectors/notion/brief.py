@@ -14,6 +14,7 @@ from __future__ import annotations
 from datetime import date, timedelta
 from typing import Any
 
+from h2t_ops.core import settings
 from h2t_ops.core.errors import ConfigError
 
 SCHEMA_KEY = "notion.tasks_schema"
@@ -106,8 +107,31 @@ def render(out: dict, today: date) -> str:
     return "\n".join(lines)
 
 
+def domains() -> dict[str, list[str]]:
+    """`daily_brief.domains` as {name: [keyword, ...]}; anything else is no map, not a crash."""
+    raw = settings.resolve("daily_brief.domains").value
+    if not isinstance(raw, dict):
+        return {}
+    if not all(isinstance(k, str) and isinstance(v, list) and all(isinstance(w, str) for w in v)
+               for k, v in raw.items()):
+        return {}
+    return raw
+
+
+def domain_of(title: str, mapping: dict[str, list[str]]) -> str | None:
+    """The first domain, in the mapping's order, with a keyword in the title (case-insensitive)."""
+    low = title.lower()
+    for name, words in mapping.items():
+        if any(w and w.lower() in low for w in words):
+            return name
+    return None
+
+
 def to_json(out: dict, today: date) -> dict:
+    mapping = domains()
+
     def j(t):
-        return {**t, "due": t["due"] and t["due"].isoformat(), "day": t["day"] and t["day"].isoformat()}
+        return {**t, "due": t["due"] and t["due"].isoformat(), "day": t["day"] and t["day"].isoformat(),
+                "domain": domain_of(t["title"], mapping)}
     return {"today": today.isoformat(), "order": [k for k, _ in SECTIONS],
             "sections": {k: [j(t) for t in v] for k, v in out.items()}}

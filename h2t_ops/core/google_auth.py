@@ -99,7 +99,7 @@ def _refresh_sha(data: dict | None) -> str:
 
 def mirror_legacy(creds_json: dict) -> str:
     """One-way copy of this machine's token to the 3.x path POS reads (§9), in the 3.x shape.
-    Removed once lichtpfad/POS#174 is closed (#584), not at a version. Both copies belong
+    Removed once the POS side stops reading it (#584), not at a version. Both copies belong
     to this machine, so there is nothing to compare."""
     legacy = paths.legacy("google.store") / "tokens.json"
     if not legacy.is_file():

@@ -1,7 +1,7 @@
 # h2t-graphs
 
 ## Brand Intent
-Bold typographic hierarchy with mono labels. Data-rich product landing aesthetic — extracted from lichtpfad graphs landing page. Inter for headlines (700–800 weight), JetBrains Mono for nav/labels/captions.
+Bold typographic hierarchy with mono labels. Data-rich product landing aesthetic — an example profile extracted from a product landing page. Inter for headlines (700–800 weight), JetBrains Mono for nav/labels/captions.
 
 ## Color Tokens
 

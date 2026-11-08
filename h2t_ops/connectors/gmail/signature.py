@@ -39,7 +39,7 @@ def variants(text: str) -> dict[str, str]:
 
 
 def _matches(name: str, heading: str) -> bool:
-    # "А" names "А. Hou2Touch"; "Полная" names "Полная (факт: …)".
+    # "А" names "А. Studio"; "Полная" names "Полная (факт: …)".
     n, h = name.strip().casefold(), heading.casefold()
     return h == n or h.startswith(n + ".") or h.startswith(n + " ")
 

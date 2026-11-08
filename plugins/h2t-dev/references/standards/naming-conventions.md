@@ -76,8 +76,8 @@ the foreign word into h2t plans/issues (mixing methodologies is what causes the 
 - One **roadmap table** — SSOT in the repo `docs/README.md` or `docs/roadmap.md` — maps each
   increment (Epic → Increment N) to its plan filename and its GitHub issue.
 
-> Lineages: quant-kb (roadmap-slot numbering), crypto-regime-spike (increment-label drift),
-> agentic-kb epic (A1/A2/A3) — recurrence 3, domain-independent. Promoted 2026-07-11.
+> Lineages: three independent projects (roadmap-slot numbering, increment-label drift,
+> epic labels A1/A2/A3) — recurrence 3, domain-independent. Promoted 2026-07-11.
 
 ## General Rules
 

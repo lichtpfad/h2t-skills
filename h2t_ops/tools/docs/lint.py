@@ -29,12 +29,12 @@ from .common import (
     FRONTMATTER_RULES,
     GH,
     LINKED_DOC_DIRS,
-    REPO_EXTRA_DIRS,
     REPO_MANIFEST,
     REQUIRED_CORE_DIRS,
     STANDARDS_FILES,
     ensure_dir,
     excluded_predicate,
+    exits_on_config_error,
     git_repo_root,
     issue_link_problem,
     parse_frontmatter,
@@ -207,7 +207,7 @@ def _load_projects_yaml() -> dict:
     if not PROJECTS_YAML_PATH.exists():
         # Say it. An empty dict here turns off every cross-repo check, and the caller
         # cannot tell that from "the registry says nothing about this repo". A stranger
-        # has no h2t-landings at all, so this is their normal state, not an error — but
+        # has no projects.yaml at all, so this is their normal state, not an error — but
         # a check that is off must not read as a check that passed.
         _note_cross_repo_disabled()
         return {}
@@ -576,7 +576,10 @@ def _git_author(rp: Path, filepath: Path) -> str:
         capture_output=True, text=True,
     )
     lines = [line.strip() for line in result.stdout.splitlines() if line.strip()]
-    return lines[0] if lines else "lichtpfad"
+    if lines:
+        return lines[0]
+    from .new_doc import _git_user
+    return _git_user(rp)
 
 
 def _frontmatter_value(field: str, md_file: Path, text: str, rp: Path) -> str:
@@ -698,15 +701,10 @@ def _repo_name_from_root(rp: Path) -> str:
 def _extra_doc_dirs(rp: Path, cfg: dict) -> list[str]:
     """Doc directories this repository is allowed beyond the required set.
 
-    The repository answers first, through `extra_doc_dirs` in its own docs-lint config.
-    The bundled table is consulted only for the three private repositories that predate
-    the key — a stranger's repository could not appear in it at any value, so the table
-    alone made the question unanswerable for everyone else.
+    The repository answers, through `extra_doc_dirs` in its own docs-lint config. A table
+    keyed by the author's repository names stood here until #581.
     """
-    declared = cfg.get("extra_doc_dirs") or []
-    if declared:
-        return [str(d) for d in declared]
-    return REPO_EXTRA_DIRS.get(_repo_name_from_root(rp), [])
+    return [str(d) for d in (cfg.get("extra_doc_dirs") or [])]
 
 
 def _collect_all_findings(rp: Path, no_pymarkdown: bool = False) -> list[dict]:
@@ -1463,6 +1461,7 @@ def _run_retire(
         print("docs/README.md ссылается на старые пути: docs-lint fix-index --apply")
 
 
+@exits_on_config_error
 def main() -> None:
     # Windows encodes a piped stdout with the ANSI codepage, whatever chcp says, so
     # a non-ASCII payload reaches the caller as cp1252 — or kills the write outright
