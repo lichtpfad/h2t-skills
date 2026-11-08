@@ -7,6 +7,11 @@ changes nothing; suggestions are built from what was found, never from a literal
 gap     the key is unset and the machine holds a trace of using the removed default
 info    normal on a fresh install; shown, never demanded
 manual  a removed default that leaves no trace; shown with the key to set
+
+An item that sets a user.yaml key carries `value`, and its suggestion is that key as nested
+YAML: `sessions.summaries: true` written flat is a different key, which nothing reads. A
+consumer merges `key` + `value` into the existing mapping (never appends a second top-level
+key, which YAML resolves by silently keeping the last). `value` is None for every other item.
 """
 from __future__ import annotations
 
@@ -14,6 +19,8 @@ import sqlite3
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Literal
+
+import yaml
 
 from h2t_ops.core import paths, secrets, settings, store, user_config
 from h2t_ops.core.errors import ConfigError
@@ -23,6 +30,8 @@ Kind = Literal["gap", "info", "manual"]
 
 GUARDS_WITH_LOG = ("grade", "plain")   # structure guard writes no log (structure_guard.py:364)
 BOUND = 10   # seconds for one gh or git call
+# The strategy summary 3.x surfaced by default, relative to the config dir (#581).
+STRATEGY_FILE = "docs/strategy-summary.md"
 
 
 @dataclass(frozen=True)
@@ -31,6 +40,16 @@ class Gap:
     key: str
     evidence: str
     suggestion: str | None
+    value: object = None   # the user.yaml value to merge at `key`; None when not a user.yaml key
+
+
+def _user_yaml(kind: Kind, key: str, evidence: str, value: object) -> Gap:
+    """An item that sets `key` in user.yaml: the suggestion is the nested YAML of the value."""
+    nested: object = value
+    for part in reversed(key.split(".")):
+        nested = {part: nested}
+    block = yaml.safe_dump(nested, sort_keys=False, allow_unicode=True).rstrip()
+    return Gap(kind, key, evidence, f"merge into {user_config.path()}:\n{block}", value)
 
 
 def _unset(name: str) -> bool:
@@ -67,8 +86,8 @@ def _model_summaries() -> bool:
 
 def _summaries() -> list[Gap]:
     if _unset("sessions.summaries") and _model_summaries():
-        return [Gap("gap", "sessions.summaries", "the index holds session summaries written by the model",
-                    f"sessions.summaries: true in {user_config.path()}")]
+        return [_user_yaml("gap", "sessions.summaries",
+                           "the index holds session summaries written by the model", True)]
     return []
 
 
@@ -76,8 +95,7 @@ def _guards() -> list[Gap]:
     found = [name for name in GUARDS_WITH_LOG
              if (log := paths.logs_dir() / f"{name}-guard.jsonl").is_file() and log.stat().st_size > 0]
     if found and _unset("guards"):
-        return [Gap("gap", "guards", f"guard logs exist for: {', '.join(found)}",
-                    f"guards: [{', '.join(found)}] in {user_config.path()}")]
+        return [_user_yaml("gap", "guards", f"guard logs exist for: {', '.join(found)}", found)]
     return []
 
 
@@ -110,10 +128,13 @@ def _dor_after_migration() -> list[Gap]:
     out: list[Gap] = []
     missing = sorted(_legacy_secret_names() - set(secrets._new_values()))
     if missing:
+        # The user moves them by hand: an agent applying this would carry the values through
+        # its transcript. Names and the target only, never a value.
         out.append(Gap("gap", "secrets", f"the 3.x secrets files hold {len(missing)} key(s) the new "
                        f"store lacks: {', '.join(missing)}",
-                       f"add them as KEY=value lines to a file in {paths.secrets_shared()} "
-                       f"(run `h2t-ops setup secrets skeleton` to see the layout)"))
+                       f"for the user to move by hand, outside the agent: copy {', '.join(missing)} "
+                       f"from the 3.x secrets files into a file in {paths.secrets_shared()} "
+                       f"(`h2t-ops setup secrets skeleton` shows the layout)"))
     lake_key = next(k for k in sorted(paths.DOR_KEYS) if k.startswith("lake."))
     old = paths.legacy(lake_key)
     if old.is_dir() and _unset("path.lake"):
@@ -143,7 +164,7 @@ def _github_owner(runner: Runner) -> list[Gap]:
     evidence = "gh is logged in"
     if accounts > 1:
         evidence += f" ({accounts} accounts; the active one is suggested)"
-    return [Gap("info", "github.owner", evidence, f"github.owner: {name}")]
+    return [_user_yaml("info", "github.owner", evidence, name)]
 
 
 def _git_user_name(runner: Runner) -> list[Gap]:
@@ -159,15 +180,28 @@ def _context_files() -> list[Gap]:
     about = paths.config_dir() / "about-me"
     files = sorted(p.name for p in about.iterdir() if p.is_file()) if about.is_dir() else []
     if files and _unset("context.by_domain"):
-        return [Gap("info", "context.by_domain", f"{about} holds: {', '.join(files)}",
-                    "context.by_domain: {<domain>: about-me/<file>} in user.yaml")]
+        # the reader's shape (gather/user.py): bare file names under about-me/, a list per domain
+        return [_user_yaml("info", "context.by_domain", f"{about} holds: {', '.join(files)}",
+                           {"<domain>": files})]
+    return []
+
+
+def _strategy() -> list[Gap]:
+    found = paths.config_dir() / STRATEGY_FILE
+    if found.is_file() and _unset("context.strategy"):
+        return [_user_yaml("gap", "context.strategy",
+                           f"{found} exists and was read by default before 4.0", STRATEGY_FILE)]
     return []
 
 
 def _domain_patterns() -> list[Gap]:
-    if _value("domains") and _unset("domain_patterns"):
-        return [Gap("info", "domain_patterns", "domains.yaml declares domains and no patterns map repos to them",
-                    "new repos will ask for a domain; domain_patterns: [...] in user.yaml maps them by name")]
+    domains = _value("domains")
+    if domains and _unset("domain_patterns"):
+        domain = next(iter(domains)) if isinstance(domains, dict) else "<domain>"
+        return [_user_yaml("info", "domain_patterns",
+                           "domains.yaml declares domains and no patterns map repos to them; "
+                           "new repos will ask for a domain",
+                           [{"pattern": "<regex on the path>", "domain": str(domain)}])]
     return []
 
 
@@ -175,14 +209,16 @@ def _manual() -> list[Gap]:
     chosen = _value("guards")
     out: list[Gap] = []
     if not (isinstance(chosen, list) and "structure" in chosen):
-        out.append(Gap("manual", "guards", "the structure guard writes no log, so nothing shows it was on",
-                       "guards: [structure]"))
+        out.append(_user_yaml("manual", "guards",
+                              "the structure guard writes no log, so nothing shows it was on",
+                              ["structure"]))
     if _unset("language"):
-        out.append(Gap("manual", "language", "the session language is no longer assumed",
-                       "language: <code> in user.yaml"))
+        out.append(_user_yaml("manual", "language", "the session language is no longer assumed",
+                              "<code>"))
     if _unset("daily_brief.domains"):
-        out.append(Gap("manual", "daily_brief.domains", "the daily brief has no built-in keyword groups",
-                       "daily_brief: {domains: {<domain>: [<keyword>]}} in user.yaml"))
+        out.append(_user_yaml("manual", "daily_brief.domains",
+                              "the daily brief has no built-in keyword groups",
+                              {"<domain>": ["<keyword>"]}))
     out.append(Gap("manual", "REPO_EXTRA_DIRS", "extra directories per repository are no longer built in",
                    "declare them for the repositories that need them in repo-mapping.yaml"))
     return out
@@ -194,7 +230,7 @@ def gaps(runner: Runner | None = None) -> list[Gap]:
     detectors: list[Callable[[], list[Gap]]] = [
         _summaries, _guards, _evals_url, _dor_after_migration, _repos,
         lambda: _github_owner(runner), lambda: _git_user_name(runner),
-        _context_files, _domain_patterns, _manual,
+        _context_files, _strategy, _domain_patterns, _manual,
     ]
     out: list[Gap] = []
     for detect in detectors:

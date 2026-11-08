@@ -3,6 +3,7 @@ import json
 import sqlite3
 
 import pytest
+import yaml
 
 from h2t_ops.core import paths, settings, user_config
 from h2t_ops.lifecycle.index import schema
@@ -75,7 +76,8 @@ def test_model_summary_row_and_key_unset_is_a_gap():
     _index("handoff", "model")
     found = [g for g in _of("gap") if g.key == "sessions.summaries"]
     assert len(found) == 1
-    assert found[0].suggestion == f"sessions.summaries: true in {user_config.path()}"
+    assert found[0].value is True
+    assert found[0].suggestion == f"merge into {user_config.path()}:\nsessions:\n  summaries: true"
 
 
 def test_summaries_key_set_is_no_gap():
@@ -120,14 +122,14 @@ def test_guard_logs_found_are_named_in_the_suggestion():
     _write(paths.logs_dir() / "grade-guard.jsonl", '{"a": 1}\n')
     found = [g for g in _of("gap") if g.key == "guards"]
     assert len(found) == 1
-    assert found[0].suggestion == f"guards: [grade] in {user_config.path()}"
+    assert found[0].value == ["grade"]
+    assert found[0].suggestion == f"merge into {user_config.path()}:\nguards:\n- grade"
 
 
 def test_both_guard_logs():
     for name in ("grade", "plain"):
         _write(paths.logs_dir() / f"{name}-guard.jsonl", "x\n")
-    assert [g for g in _of("gap") if g.key == "guards"][0].suggestion == (
-        f"guards: [grade, plain] in {user_config.path()}")
+    assert [g for g in _of("gap") if g.key == "guards"][0].value == ["grade", "plain"]
 
 
 def test_empty_guard_log_is_no_evidence():
@@ -240,7 +242,8 @@ def test_github_owner_from_a_logged_in_gh():
                                               GH_USER: _ok("octo\n")}))
              if g.key == "github.owner"]
     assert len(found) == 1
-    assert found[0].suggestion == "github.owner: octo"
+    assert found[0].value == "octo"
+    assert found[0].suggestion.endswith(":\ngithub:\n  owner: octo")
 
 
 def test_two_accounts_suggest_the_active_login_and_say_so():
@@ -248,7 +251,7 @@ def test_two_accounts_suggest_the_active_login_and_say_so():
                  "Logged in to github.com account other (keyring)\n")
     found = [g for g in _of("info", _runner({GH: status, GH_USER: _ok("other\n")}))
              if g.key == "github.owner"]
-    assert found[0].suggestion == "github.owner: other"
+    assert found[0].value == "other"
     assert "2 accounts" in found[0].evidence
 
 
@@ -288,7 +291,7 @@ def test_about_me_files_without_the_key_is_info():
     found = [g for g in _of("info") if g.key == "context.by_domain"]
     assert len(found) == 1
     assert "core.md" in found[0].evidence
-    _user("context: {by_domain: {work: about-me/core.md}}\n")
+    _user("context: {by_domain: {work: [core.md]}}\n")
     assert "context.by_domain" not in _keys("info")
 
 
@@ -304,7 +307,7 @@ def test_domains_without_domain_patterns_is_info():
 def test_manual_items_name_their_keys():
     assert {"guards", "language", "daily_brief.domains"} <= set(_keys("manual"))
     structure = [g for g in _of("manual") if g.key == "guards"][0]
-    assert structure.suggestion == "guards: [structure]"
+    assert structure.value == ["structure"]
 
 
 def test_fresh_install_has_no_gap_only_info_and_manual():
@@ -330,5 +333,106 @@ def test_doctor_json_has_settings_gaps(monkeypatch):
     assert report["settings"]
     items = report["settings_gaps"]
     assert any(i["kind"] == "gap" and i["key"] == "sessions.summaries" for i in items)
-    assert set(items[0]) == {"kind", "key", "evidence", "suggestion"}
+    assert set(items[0]) == {"kind", "key", "evidence", "suggestion", "value"}
     json.dumps(report["settings_gaps"])
+
+
+# a suggestion takes effect when merged as instructed (final review, Critical 1)
+
+def _merge(items):
+    """What the setup skill tells the agent to do: merge each item's key and value into
+    the existing user.yaml mapping, one list for every `guards` item."""
+    f = user_config.path()
+    doc = (yaml.safe_load(f.read_text(encoding="utf-8")) if f.is_file() else None) or {}
+    for g in items:
+        *parents, last = g.key.split(".")
+        node = doc
+        for part in parents:
+            node = node.setdefault(part, {})
+        old = node.get(last)
+        if isinstance(old, list) and isinstance(g.value, list):
+            node[last] = old + [v for v in g.value if v not in old]
+        else:
+            node[last] = g.value
+    _write(f, yaml.safe_dump(doc, sort_keys=False))
+
+
+def _user_yaml_items(found):
+    return [g for g in found if g.kind in ("gap", "info") and "user.yaml" in (g.suggestion or "")]
+
+
+def _every_trace():
+    _index("model")
+    _write(paths.logs_dir() / "grade-guard.jsonl", "x\n")
+    _write(paths.logs_dir() / "plain-guard.jsonl", "x\n")
+    _write(paths.config_dir() / "about-me" / "core.md", "x")
+    _write(paths.config_dir() / "domains.yaml", "domains: {work: {}}\n")
+    _write(paths.config_dir() / settings_gaps.STRATEGY_FILE, "x")
+    # a file that already holds the parent mappings: an appended second `sessions:` would
+    # silently replace this one
+    _user("sessions:\n  keep: 1\ncontext:\n  keep: 2\n")
+    return _runner({GH: _ok("Logged in to github.com account octo"), GH_USER: _ok("octo\n")})
+
+
+def test_every_user_yaml_suggestion_takes_effect_when_merged():
+    runner = _every_trace()
+    items = _user_yaml_items(settings_gaps.gaps(runner))
+    assert {g.key for g in items} >= {"sessions.summaries", "guards", "github.owner",
+                                      "context.by_domain", "context.strategy", "domain_patterns"}
+    assert all(g.value is not None for g in items), [g.key for g in items if g.value is None]
+    _merge(items + [g for g in settings_gaps.gaps(runner) if g.kind == "manual" and g.key == "guards"])
+    for g in items:
+        got = settings.resolve(g.key)
+        assert got.source == "file", g.key
+        if g.key != "guards":
+            assert got.value == g.value, g.key
+    assert settings.resolve("guards").value == ["grade", "plain", "structure"]
+    assert user_config.get("sessions.keep") == 1 and user_config.get("context.keep") == 2
+    left = {g.key for g in settings_gaps.gaps(runner) if g.kind in ("gap", "info")}
+    assert not left & {g.key for g in items}, left
+    assert "guards" not in {g.key for g in settings_gaps.gaps(runner) if g.kind == "manual"}
+
+
+def test_suggestion_text_is_the_nested_yaml_of_its_value():
+    """The text a person reads and the value an agent merges say the same thing."""
+    for g in _user_yaml_items(settings_gaps.gaps(_every_trace())):
+        block = g.suggestion.split("\n", 1)[1]
+        nested = g.value
+        for part in reversed(g.key.split(".")):
+            nested = {part: nested}
+        assert yaml.safe_load(block) == nested, g.key
+
+
+def test_by_domain_suggestion_has_the_shape_the_reader_reads():
+    from h2t_ops.lifecycle.gather.user import gather_user_context
+    _write(paths.config_dir() / "about-me" / "core.md", "x")
+    _write(paths.config_dir() / "about-me" / "work.md", "x")
+    found = [g for g in _of("info") if g.key == "context.by_domain"][0]
+    assert found.value == {"<domain>": ["core.md", "work.md"]}
+    _merge([found])
+    got = gather_user_context(domain="<domain>")
+    about = paths.config_dir() / "about-me"
+    assert got["deep_paths"] == [str(about / "core.md"), str(about / "work.md")]
+
+
+def test_strategy_file_without_the_key_is_a_gap():
+    _write(paths.config_dir() / settings_gaps.STRATEGY_FILE, "x")
+    found = [g for g in _of("gap") if g.key == "context.strategy"]
+    assert len(found) == 1 and found[0].value == settings_gaps.STRATEGY_FILE
+    _user(f"context:\n  strategy: {settings_gaps.STRATEGY_FILE}\n")
+    assert "context.strategy" not in _keys("gap")
+
+
+def test_no_strategy_file_is_no_gap():
+    assert "context.strategy" not in _keys("gap")
+
+
+def test_secret_gap_is_a_move_for_the_user_naming_keys_and_the_target():
+    _layout(1)
+    _dor_secrets("SOME_API_KEY=sekret-value-1\n")
+    found = [g for g in _of("gap") if g.key == "secrets"][0]
+    assert found.value is None
+    assert "by hand" in found.suggestion
+    assert str(paths.secrets_shared()) in found.suggestion
+    assert "SOME_API_KEY" in found.suggestion
+    assert "KEY=value" not in found.suggestion and "sekret" not in found.suggestion

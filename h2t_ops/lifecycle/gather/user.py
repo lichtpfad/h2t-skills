@@ -30,7 +30,10 @@ def gather_user_context(
     }
 
     if domain:
-        extra_files = (settings.resolve("context.by_domain").value or {}).get(domain, [])
+        by_domain = settings.resolve("context.by_domain").value
+        extra_files = by_domain.get(domain, []) if isinstance(by_domain, dict) else []
+        if not (isinstance(extra_files, list) and all(isinstance(f, str) for f in extra_files)):
+            extra_files = []   # bare file names under about-me/, a list per domain; else none
         for filename in extra_files:
             path = about_me / filename
             if path.exists():

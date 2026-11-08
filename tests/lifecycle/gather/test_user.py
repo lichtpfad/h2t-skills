@@ -1,5 +1,7 @@
 import os
 
+import pytest
+
 from h2t_ops.lifecycle.gather.user import gather_user_context
 
 
@@ -75,3 +77,18 @@ def test_language_default_en():
 def test_language_from_user_yaml():
     _user_yaml("language: de\n")
     assert gather_user_context()["language"] == "de"
+
+
+@pytest.mark.parametrize("by_domain", [
+    "work: about-me/notes.md",            # a string, the shape doctor used to suggest
+    "work: notes.md",
+    "work: [notes.md, 3]",
+    "[notes.md]",
+], ids=["prefixed-string", "string", "non-string-item", "not-a-mapping"])
+def test_by_domain_of_the_wrong_shape_gives_no_deep_paths(tmp_path, by_domain):
+    about = tmp_path / "about-me"
+    about.mkdir()
+    (about / "notes.md").write_text("x", encoding="utf-8")
+    _user_yaml(f"context:\n  by_domain: {{{by_domain}}}\n" if not by_domain.startswith("[")
+               else f"context:\n  by_domain: {by_domain}\n")
+    assert gather_user_context(domain="work", config_root=str(tmp_path))["deep_paths"] == []
