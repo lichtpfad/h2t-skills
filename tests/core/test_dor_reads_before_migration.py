@@ -14,6 +14,7 @@ KEY = "ZZ_DOR_ONLY_KEY"
 @pytest.fixture(autouse=True)
 def _home(monkeypatch, tmp_path):
     monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))  # Path.home() on Windows
     monkeypatch.setenv("H2T_PATH_ROOT", str(tmp_path / "root"))
     monkeypatch.delenv(KEY, raising=False)
     dor = tmp_path / ".dor"
