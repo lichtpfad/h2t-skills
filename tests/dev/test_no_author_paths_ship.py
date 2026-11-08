@@ -382,7 +382,7 @@ AUTHOR_DEBT: dict[str, tuple[dict[str, int], str]] = {
     "plugins/h2t-ops/skills/connectors/references/notion.md":
         ({"h2t-business": 1, "lichtpfad": 1}, "PR 6"),
     "plugins/h2t-ops/skills/daily-brief/SKILL.md":
-        ({"aicf": 1, "bezalel": 1, "lichtpfad": 1, "mamuta": 1, "qatal": 1, "zilberman": 1}, "PR 5"),
+        ({"lichtpfad": 1}, "upstream"),
     "plugins/h2t-ops/skills/deploy/SKILL.md":
         ({"lichtpfad": 1}, "upstream"),
     "plugins/h2t-ops/skills/kb/SKILL.md":
