@@ -113,6 +113,11 @@ def _env(name: str) -> Path | None:
     return Path(value).expanduser() if value else None
 
 
+def env_var(name: str) -> str:
+    """The variable that moves a place: root, vault, lake, inbox or kb."""
+    return f"H2T_PATH_{name.upper()}"
+
+
 def root() -> Path:
     return _env("H2T_PATH_ROOT") or home() / ".h2t"
 
@@ -154,7 +159,7 @@ def source(place_id: str) -> str:
     name = "H2T_PATH_ROOT" if p.kind in ("class", "file") else \
         {"vault": "H2T_PATH_VAULT", "harness": "CLAUDE_CONFIG_DIR"}.get(place_id)
     if place_id in YAML_PLACES:
-        name = f"H2T_PATH_{place_id.upper()}"
+        name = env_var(place_id)
     return name if name and os.environ.get(name) else "default"
 
 
@@ -372,7 +377,7 @@ def _fallback(name: str) -> Path | None:
 def place(name: str) -> Path | None:
     if name == "vault":
         return vault()
-    if name in YAML_PLACES and (moved := _env(f"H2T_PATH_{name.upper()}")):
+    if name in YAML_PLACES and (moved := _env(env_var(name))):
         return moved   # a variable moves a place before paths.yaml does (#581)
     found = paths_config().places.get(name)
     return found if found is not None else _fallback(name)

@@ -27,6 +27,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("doctor", help="Report installed CLI state (version, path, connectors, secrets); always exits 0, connectors-check is the gate")
     sub.add_parser("setup", help="The h2t-core setup skill's backend: doctor, setup, install-h2t-ops, connectors-check, secrets")
     sub.add_parser("paths", help="Where each place lives: list, get <id>, set <place> <path>")
+    sub.add_parser("settings", help="Every path and interface setting, with its source: list, get <name>")
     sub.add_parser("index", help="The session index state/index.sqlite: rebuild, query --project <id>")
     sub.add_parser("sessions", help="Sessions by domain, project, repo, branch: list (default), status, backfill")
     for spec in discover():
@@ -293,6 +294,9 @@ def dispatch(argv: list[str]) -> int:
     if argv and argv[0] in ("paths", "index"):
         from h2t_ops.core import paths_cli
         return paths_cli.main(argv[0], argv[1:])
+    if argv and argv[0] == "settings":
+        from h2t_ops.core import settings_cli
+        return settings_cli.main(argv[1:])
     if argv and argv[0] == "sessions":
         from h2t_ops.lifecycle.pulse import cli as pulse_cli
         return pulse_cli.main(argv[1:])

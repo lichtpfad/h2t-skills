@@ -256,11 +256,8 @@ def run(args) -> Any:
 
     # The tasks database is the user's, not the code's: user.yaml (#548 R45).
     if args.notion_cmd in ("find-project-tasks", "search", "brief-tasks") and not args.database_id:
-        import os
-
-        from h2t_ops.core import user_config
-        args.database_id = (os.environ.get("H2T_NOTION_TASKS_DB")
-                            or user_config.get("notion.tasks_database_id"))
+        from h2t_ops.core import settings, user_config
+        args.database_id = settings.resolve("notion.tasks_database_id").value
         if not args.database_id:
             flag = "--database-id" if args.notion_cmd == "find-project-tasks" else "a DATABASE_ID"
             raise UsageError(

@@ -492,6 +492,7 @@ def _evals_spool(sb, mp):
     mp.setitem(sys.modules, "h2t_evals", types.ModuleType("h2t_evals"))
     mp.setitem(sys.modules, "h2t_evals.sdk", sdk)
     mp.setenv("H2T_EVALS_MODE", "push")
+    mp.setenv("H2T_EVALS_SERVICE_URL", "https://evals.example.test")   # no default URL (#581)
     with SkillEval("research", domain="ops", project="p"):
         pass
     assert paths.evals_spool().is_file()

@@ -229,6 +229,8 @@ AUTHOR_DEBT: dict[str, tuple[dict[str, int], str]] = {
         ({"h2t-evals": 2}, "PR 9"),
     "h2t_ops/core/secrets.py":
         ({"dor-key": 7, "h2t-evals": 3, "~/.dor": 1}, "PR 9"),
+    "h2t_ops/core/settings.py":
+        ({"h2t-evals": 1}, "upstream"),
     "h2t_ops/core/store.py":
         ({"~/.dor": 1}, "PR 9"),
     "h2t_ops/hooks/layout_precommit.py":
