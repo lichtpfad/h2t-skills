@@ -105,7 +105,7 @@ h2t-ops notion brief-tasks --json
 |---|---|
 | `calendar list` | `ongoing` (идёт **прямо сейчас**: по часам для событий со временем, весь день для all-day), `day_index`/`days_total` у многодневных, `html_link` |
 | `gmail list` | отправитель, дата, `ID` (ссылка: `https://mail.google.com/mail/u/0/#all/<ID>`), snippet |
-| `notion brief-tasks` | секции с задачами: заголовок-ссылка, срок, тип срока, `на день`, `domain` (группа по ключевым словам заголовка или `null`) |
+| `notion brief-tasks` | секции с задачами: заголовок-ссылка, срок, тип срока, `на день`, `domain` (значение колонки `notion.tasks_schema.area`; без неё группа по ключевым словам заголовка; `null`, если ни то ни другое) |
 
 ### Step 1b: План из вечернего журнала (#597)
 

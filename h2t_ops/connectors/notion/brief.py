@@ -11,6 +11,7 @@ named instead of guessed.
 """
 from __future__ import annotations
 
+import re
 from datetime import date, timedelta
 from typing import Any
 
@@ -34,6 +35,7 @@ SECTIONS = (
 
 _EXAMPLE = ("notion:\n  tasks_schema:\n    title: <title property>\n    due: <deadline date>\n"
             "    due_kind: <deadline type select>\n    day: <day-plan date>\n    done: <done checkbox>\n"
+            "    area: <area select, optional>\n"
             "    kinds: {external: <option>, check: <option>, intent: <option>}")
 
 
@@ -46,7 +48,10 @@ def schema(raw: Any, source: str) -> dict:
     if missing:
         raise ConfigError(f"{SCHEMA_KEY} in {source} lacks {', '.join(missing)}",
                           hint=f"expected shape:\n{_EXAMPLE}")
-    return {**{f: str(raw[f]) for f in _FIELDS}, "kinds": {str(kinds[k]): k for k in _KINDS}}
+    out = {**{f: str(raw[f]) for f in _FIELDS}, "kinds": {str(kinds[k]): k for k in _KINDS}}
+    if raw.get("area"):
+        out["area"] = str(raw["area"])
+    return out
 
 
 def done_filter(s: dict) -> dict:
@@ -63,10 +68,13 @@ def task(row: dict, s: dict) -> dict:
     props = row.get("properties", {})
     title = "".join(t.get("plain_text", "") for t in (props.get(s["title"]) or {}).get("title", []))
     kind_name = ((props.get(s["due_kind"]) or {}).get("select") or {}).get("name")
-    return {"id": row.get("id"), "title": title, "url": row.get("url"),
-            "due": _date(props.get(s["due"])), "day": _date(props.get(s["day"])),
-            "kind": s["kinds"].get(kind_name) if kind_name else None, "kind_name": kind_name,
-            "done": bool((props.get(s["done"]) or {}).get("checkbox"))}
+    out = {"id": row.get("id"), "title": title, "url": row.get("url"),
+           "due": _date(props.get(s["due"])), "day": _date(props.get(s["day"])),
+           "kind": s["kinds"].get(kind_name) if kind_name else None, "kind_name": kind_name,
+           "done": bool((props.get(s["done"]) or {}).get("checkbox"))}
+    if "area" in s:
+        out["area"] = ((props.get(s["area"]) or {}).get("select") or {}).get("name")
+    return out
 
 
 def _section(t: dict, today: date) -> str:
@@ -119,10 +127,13 @@ def domains() -> dict[str, list[str]]:
 
 
 def domain_of(title: str, mapping: dict[str, list[str]]) -> str | None:
-    """The first domain, in the mapping's order, with a keyword in the title (case-insensitive)."""
-    low = title.lower()
+    """The first domain, in the mapping's order, with a keyword as a whole word in the title.
+
+    Case-insensitive. A keyword inside a longer word is no match: "PR" in "Prüfungsbericht" put
+    a tax task under Dev (#650).
+    """
     for name, words in mapping.items():
-        if any(w and w.lower() in low for w in words):
+        if any(w and re.search(rf"(?<!\w){re.escape(w)}(?!\w)", title, re.IGNORECASE) for w in words):
             return name
     return None
 
@@ -131,7 +142,11 @@ def to_json(out: dict, today: date) -> dict:
     mapping = domains()
 
     def j(t):
-        return {**t, "due": t["due"] and t["due"].isoformat(), "day": t["day"] and t["day"].isoformat(),
-                "domain": domain_of(t["title"], mapping)}
+        # The area column, when the schema names one, is the user's own answer; the title is
+        # then not read, and an empty area stays null rather than guessed (#650).
+        domain = t["area"] if "area" in t else domain_of(t["title"], mapping)
+        rest = {k: v for k, v in t.items() if k != "area"}
+        return {**rest, "due": t["due"] and t["due"].isoformat(), "day": t["day"] and t["day"].isoformat(),
+                "domain": domain}
     return {"today": today.isoformat(), "order": [k for k, _ in SECTIONS],
             "sections": {k: [j(t) for t in v] for k, v in out.items()}}

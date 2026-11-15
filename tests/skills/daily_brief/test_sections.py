@@ -18,11 +18,12 @@ def _d(days):
     return {"date": {"start": (TODAY + timedelta(days=days)).isoformat()}} if days is not None else {"date": None}
 
 
-def row(title, *, due=None, kind=None, day=None, done=False):
+def row(title, *, due=None, kind=None, day=None, done=False, area=None):
     return {"id": title, "url": f"https://notion.so/{title}", "properties": {
         "Задача": {"title": [{"plain_text": title}]},
         "Срок": _d(due), "На день": _d(day), "Готово": {"checkbox": done},
-        "Тип срока": {"select": {"name": kind} if kind else None}}}
+        "Тип срока": {"select": {"name": kind} if kind else None},
+        "Область": {"select": {"name": area} if area else None}}}
 
 
 def placed(*rows):
@@ -178,9 +179,10 @@ def test_step_1b_names_no_property_of_the_author():
 
 # --- domain from the title (#581) -------------------------------------------------------------
 
-def _titles_by_domain(capsys, monkeypatch, titles, yaml_extra=""):
-    _user_yaml(SCHEMA_YAML + yaml_extra)
-    rc, out, err, _ = _cli(capsys, monkeypatch, [row(t, day=0) for t in titles], "--json")
+def _titles_by_domain(capsys, monkeypatch, titles, yaml_extra="", schema=SCHEMA_YAML, areas=None):
+    _user_yaml(schema + yaml_extra)
+    areas = areas or {}
+    rc, out, err, _ = _cli(capsys, monkeypatch, [row(t, day=0, area=areas.get(t)) for t in titles], "--json")
     assert rc == 0, err
     items = json.loads(out)["result"]["sections"]["planned_today"]
     return {t["title"]: t["domain"] for t in items}
@@ -207,3 +209,31 @@ def test_no_map_gives_null_domain(capsys, monkeypatch):
 def test_wrong_typed_domains_is_no_map(capsys, monkeypatch, bad):
     got = _titles_by_domain(capsys, monkeypatch, ["gallery"], f"daily_brief:\n  {bad}\n")
     assert got == {"gallery": None}
+
+
+def test_keyword_matches_a_whole_word_only(capsys, monkeypatch):
+    """#650: a short keyword inside a longer word is not a match ("PR" in "Prüfungsbericht")."""
+    extra = "daily_brief:\n  domains:\n    Dev: [PR, API]\n    Art: [art]\n"
+    titles = ["Prüfungsbericht от Valerio", "Wertpapierabrechnung", "Martin-Luther 44",
+              "review the PR", "API key", "art-corpus RU"]
+    got = _titles_by_domain(capsys, monkeypatch, titles, extra)
+    assert got == {"Prüfungsbericht от Valerio": None, "Wertpapierabrechnung": None,
+                   "Martin-Luther 44": None, "review the PR": "Dev", "API key": "Dev",
+                   "art-corpus RU": "Art"}
+
+
+# --- domain from the area column (#650) -----------------------------------------------------
+
+AREA_SCHEMA_YAML = SCHEMA_YAML.replace("    done: Готово\n", "    done: Готово\n    area: Область\n")
+
+
+def test_area_column_gives_the_domain_and_the_title_is_not_read(capsys, monkeypatch):
+    extra = "daily_brief:\n  domains:\n    Dev: [deploy]\n"
+    got = _titles_by_domain(capsys, monkeypatch, ["deploy the gallery site", "без области deploy"], extra,
+                            schema=AREA_SCHEMA_YAML, areas={"deploy the gallery site": "Арт"})
+    assert got == {"deploy the gallery site": "Арт", "без области deploy": None}
+
+
+def test_area_is_optional_in_the_schema():
+    assert "area" not in S
+    assert brief.schema({**RAW, "area": "Область"}, "user.yaml")["area"] == "Область"
