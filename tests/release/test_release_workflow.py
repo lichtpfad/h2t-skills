@@ -46,9 +46,10 @@ def test_releases_never_run_in_parallel(wf):
 
 def test_write_permission_only_where_it_is_used(wf):
     assert wf["permissions"] == {"contents": "read"}
+    expected = {"build": {"contents": "read", "checks": "read"},  # the CI gate (#583)
+                "release": {"contents": "write"}, "pointer": {"contents": "write"}}
     for name in JOBS:
-        expected = {"contents": "write"} if name in ("release", "pointer") else None
-        assert wf["jobs"][name].get("permissions") == expected, name
+        assert wf["jobs"][name].get("permissions") == expected.get(name), name
 
 
 def test_jobs_form_one_chain_in_release_order(wf):
@@ -126,3 +127,29 @@ def test_the_workflow_never_prepares_a_release(wf):
     assert "release.py prepare" not in steps
     assert "release.py" in steps, "the guard reads nothing: no step names release.py at all"
     assert "release.json" in _script(wf["jobs"]["build"])
+
+
+# --- release gates (#583) -------------------------------------------------------------------
+
+def test_green_ci_on_the_tagged_commit_gates_the_build(wf):
+    build = _script(wf["jobs"]["build"])
+    guard, gate, upload = _order(build, 'release_guard.py "v$VER"',
+                                 'release_ci_gate.py "$GITHUB_SHA"', "uv build")
+    assert guard < gate < upload, "a tag on a red commit must publish nothing"
+    step = next(s for s in wf["jobs"]["build"]["steps"] if "release_ci_gate.py" in s.get("run", ""))
+    assert step.get("env", {}).get("GH_TOKEN"), "gh api needs a token"
+
+
+def test_the_installed_wheel_runs_in_an_empty_home_and_meets_the_contract(wf):
+    script = _script(wf["jobs"]["test-installed"])
+    assert 'release_empty_home.py "$RUNNER_TEMP/venv/bin/h2t-ops"' in script
+    move, contract = _order(script, 'mv h2t_ops "$RUNNER_TEMP/h2t_ops-source"', "tests/contracts")
+    assert move < contract, "the contract must be checked against the wheel, not the checkout"
+
+
+def test_the_notes_record_tag_commit_and_wheel_digest(wf):
+    script = _script(wf["jobs"]["release"])
+    notes, create = _order(script, ">> \"$RUNNER_TEMP/notes.md\"", "gh release create")
+    assert notes < create
+    for needle in ("tag: `v%s`", "commit: `%s`", "wheel sha256: `%s`", "sha256sum", "git rev-parse HEAD"):
+        assert needle in script, needle

@@ -47,6 +47,10 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # release_ci_gate.py reads the tagged commit's check runs.
+      checks: read
     steps:
       - uses: actions/checkout@v4
         with:
@@ -59,6 +63,14 @@ jobs:
         run: |
           VER="${GITHUB_REF_NAME#v}"
           python3 scripts/release_guard.py "v$VER"
+
+      - name: CI is green on the tagged commit (#583)
+        # evals.yml runs the whole suite (ratchets, the author-values test, the POS contract)
+        # on Linux and Windows for every push to main. A tag pushed right after the prepared
+        # commit waits here for that run instead of racing it; a red run refuses the tag.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/release_ci_gate.py "$GITHUB_SHA"
 
       - uses: astral-sh/setup-uv@v6
         with:
@@ -171,7 +183,12 @@ jobs:
           "$RUNNER_TEMP/venv/bin/python" -m pytest -p no:cacheprovider \
             tests/tools/test_resources_from_wheel.py -q
 
-      - name: tests/setup against the installed wheel
+      - name: The installed wheel in an empty HOME (#583)
+        # A stranger's first run: nothing configured, no H2T_ variable, no secret. No
+        # traceback anywhere, and a missing install is exit 3 with a hint.
+        run: python3 scripts/release_empty_home.py "$RUNNER_TEMP/venv/bin/h2t-ops"
+
+      - name: tests/setup and the POS contract against the installed wheel
         # The source package leaves the checkout first, so nothing but the installed wheel
         # can answer `import h2t_ops` (pytest's rootdir insertion and pythonpath = ["."]
         # would otherwise put the checkout first). The probe proves it before the suite runs.
@@ -182,7 +199,7 @@ jobs:
           "$PY" -c 'import h2t_ops, sys; from pathlib import Path; f = Path(h2t_ops.__file__).resolve()
           assert f.is_relative_to(Path(sys.prefix).resolve()), f
           assert h2t_ops.__version__ == sys.argv[1], h2t_ops.__version__; print("h2t_ops from", f)' "$VER"
-          "$PY" -m pytest -p no:cacheprovider tests/setup -q
+          "$PY" -m pytest -p no:cacheprovider tests/setup tests/contracts -q
 
   release:
     needs: test-installed
@@ -210,6 +227,12 @@ jobs:
             echo "::error::CHANGELOG.md has no notes under '## $VER'"
             exit 1
           fi
+          # Tag, commit and wheel digest together (#583): a tag moved later, or a wheel
+          # swapped on the Release, no longer matches what these notes recorded.
+          WHEEL="$REL/dist/h2t_ops-$VER-py3-none-any.whl"
+          printf '\n---\n\n- tag: `v%s`\n- commit: `%s`\n- wheel sha256: `%s`\n' \
+            "$VER" "$(git rev-parse HEAD)" "$(sha256sum "$WHEEL" | cut -d' ' -f1)" \
+            >> "$RUNNER_TEMP/notes.md"
           gh release create "v$VER" "$REL/dist/h2t_ops-$VER-py3-none-any.whl" "$REL/constraints.txt" \
             --verify-tag --title "v$VER" --notes-file "$RUNNER_TEMP/notes.md"
 
