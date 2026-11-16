@@ -436,3 +436,22 @@ def test_secret_gap_is_a_move_for_the_user_naming_keys_and_the_target():
     assert str(paths.secrets_shared()) in found.suggestion
     assert "SOME_API_KEY" in found.suggestion
     assert "KEY=value" not in found.suggestion and "sekret" not in found.suggestion
+
+
+# #656: hints that point where the reader actually reads
+
+def test_extra_dirs_hint_names_the_key_and_the_files_docs_lint_reads():
+    from h2t_ops.tools.docs import config as docs_config
+
+    hint = [g for g in _of("manual") if g.key == "REPO_EXTRA_DIRS"][0].suggestion
+    assert "repo-mapping.yaml" not in hint, "nothing reads extra dirs from repo-mapping.yaml"
+    assert "extra_doc_dirs" in hint
+    for path in docs_config.CONFIG_PATHS:
+        assert path in hint, path
+
+
+def test_keyword_groups_are_not_asked_for_when_the_schema_names_an_area():
+    """With `area` the brief takes the domain from the column and never reads keywords (#650)."""
+    assert "daily_brief.domains" in _keys("manual")
+    _user("notion: {tasks_schema: {area: Область}}\n")
+    assert "daily_brief.domains" not in _keys("manual")
