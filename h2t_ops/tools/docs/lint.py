@@ -330,7 +330,14 @@ def check_repo_root(rp: Path) -> list[str]:
     return failures
 
 
-def check_project_structure_typed(rp: Path, template: str) -> list[str]:
+def _normalized_dirs(dirs: object) -> set[str]:
+    """Config dir names as PROJECT_TYPES spells them: POSIX, no trailing slash; junk ignored."""
+    if not isinstance(dirs, list):
+        return set()
+    return {str(d).replace("\\", "/").strip().rstrip("/") for d in dirs if str(d).strip()}
+
+
+def check_project_structure_typed(rp: Path, template: str, exclude: list[str] | None = None) -> list[str]:
     """Check type-specific root + docs dirs from PROJECT_TYPES (dirs only).
 
     Scope: directory existence only. root_files_required is not checked here.
@@ -346,14 +353,19 @@ def check_project_structure_typed(rp: Path, template: str) -> list[str]:
     a duplicate. Fix: dedup by message in _collect_all_findings() at that time.
 
     Assumes PROJECT_TYPES entries contain trusted internal POSIX relative paths.
+
+    exclude: template dirs this repository dropped on purpose (`template_dirs_exclude` in its
+    docs-lint config). Without it a repo that moved docs/ops away had to keep an empty stub,
+    and agents filed documents into it again (#645).
     """
     spec = PROJECT_TYPES.get(template)
     if spec is None:
         return []
+    skip = _normalized_dirs(exclude)
     failures = []
     for d in spec.get("root_dirs", []):
         p = rp / d
-        if p.is_dir():
+        if p.is_dir() or d in skip:
             continue
         if p.exists():
             failures.append(f"path exists but is not a dir: {d}/ (template: {template})")
@@ -361,12 +373,13 @@ def check_project_structure_typed(rp: Path, template: str) -> list[str]:
             failures.append(f"missing required dir: {d}/ (template: {template})")
     for d in spec.get("docs_dirs", []):
         p = rp / d
-        if p.is_dir():
+        if p.is_dir() or d in skip:
             continue
         if p.exists():
             failures.append(f"path exists but is not a dir: {d}/ (template: {template})")
         else:
-            failures.append(f"missing template dir: {d}/ (template: {template})")
+            failures.append(f"missing template dir: {d}/ (template: {template})"
+                            " — dropped on purpose? list it in template_dirs_exclude")
     return failures
 
 
@@ -538,7 +551,10 @@ def fix_structure(rp: Path) -> list[str]:
     if template:
         spec = PROJECT_TYPES.get(template)
         if spec:
+            skip = _normalized_dirs(cfg.get("template_dirs_exclude"))
             for rel_dir in spec.get("root_dirs", []) + spec.get("docs_dirs", []):
+                if rel_dir in skip:
+                    continue  # dropped on purpose; recreating it brings the tree back (#645)
                 d = rp / rel_dir
                 if d.exists() and not d.is_dir():
                     # File collision — skip silently (check_project_structure_typed reports it)
@@ -719,7 +735,8 @@ def _collect_all_findings(rp: Path, no_pymarkdown: bool = False) -> list[dict]:
     # Coerce to str | None — YAML could set template to a non-string value
     _raw = cfg.get("template")
     template = _raw if isinstance(_raw, str) and _raw.strip() else None
-    typed_msgs = check_project_structure_typed(rp, template) if template else []
+    typed_msgs = (check_project_structure_typed(rp, template, cfg.get("template_dirs_exclude"))
+                  if template else [])
     for msg in (
         check_structure(rp)
         + typed_msgs

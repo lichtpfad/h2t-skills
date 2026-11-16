@@ -26,6 +26,8 @@ _DEFAULTS: dict[str, Any] = {
     "naming_exceptions": [],
     "template": None,       # internal key; set from 'project_type' or 'template'
     "custom_root_dirs": [],
+    # Template dirs this repository dropped on purpose: neither required nor recreated (#645).
+    "template_dirs_exclude": [],
     # Directories under docs/ this repository is allowed to have beyond the required
     # set. It used to live in the plugin as REPO_EXTRA_DIRS, keyed by the names of
     # three private repositories — a repo could not answer for itself.
