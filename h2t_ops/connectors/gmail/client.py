@@ -246,6 +246,8 @@ class GmailClient:
         reply_to_message_id: str | None = None,
         references: str | None = None,
     ) -> dict[str, Any]:
+        if thread_id and reply_to_message_id:
+            self._refuse_draft_reply_target(thread_id, reply_to_message_id)
         try:
             message = MIMEMultipart() if attachments else MIMEText(body)
             # Encode each display name on its own (#504). Assigned raw, a non-ASCII name
@@ -283,6 +285,40 @@ class GmailClient:
             raise _map_http_error(
                 e, op="create draft" if as_draft else "send message"
             ) from e
+
+    def _refuse_draft_reply_target(self, thread_id: str, message_id: str) -> None:
+        """--reply-to must name a sent or received message, never an unsent draft (#647).
+
+        A draft's Message-ID is known to nobody but this mailbox. A reply threaded on it is
+        listed in the thread by the API and does not show in Gmail's conversation view.
+        `gmail read` returns `message_id` for a draft as for any message, so the newest id
+        of a thread is easily a draft's. `reply` already skips drafts (_reply_target).
+        """
+        try:
+            thread = self.service.users().threads().get(
+                userId="me", id=thread_id, format="metadata", metadataHeaders=["Message-ID"]
+            ).execute()
+        except HttpError as e:
+            raise _map_http_error(e, op=f"get thread {thread_id}") from e
+
+        def mid(m: dict[str, Any]) -> str:
+            for h in (m.get("payload") or {}).get("headers") or []:
+                if h.get("name", "").lower() == "message-id":
+                    return h.get("value", "").strip()
+            return ""
+
+        messages = thread.get("messages") or []
+        if not any(mid(m) == message_id.strip() and "DRAFT" in (m.get("labelIds") or [])
+                   for m in messages):
+            return
+        real = [mid(m) for m in messages if "DRAFT" not in (m.get("labelIds") or []) and mid(m)]
+        raise UsageError(
+            f"gmail: --reply-to {message_id} is an unsent draft in thread {thread_id}; "
+            "a reply must point at a sent or received message",
+            hint=f"--reply-to {real[-1]} (the newest message in the thread that is not a draft), "
+                 f"or `h2t-ops gmail reply {thread_id}`" if real
+            else f"the thread holds only drafts; there is nothing to reply to in {thread_id}",
+        )
 
     def send_draft(self, draft_id: str, *, confirm_send: bool = False) -> dict[str, Any]:
         """Send an existing draft as it stands; Gmail removes it from Drafts (#531).
