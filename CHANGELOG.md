@@ -4,6 +4,98 @@ One CHANGELOG for the whole pack from 4.0.0 on. The per-plugin files
 (`plugins/*/CHANGELOG.md`) are the history up to 3.x; their `Unreleased` entries ship in
 4.0.0.
 
+## 4.1.0
+
+The pack no longer carries its author's values: everything that was one person's setup is
+now a setting you give it (#581). Run `h2t-ops setup doctor` after updating: see
+"Before you update" below.
+
+### Before you update
+
+- **Values that were built in are now settings.** Each key resolves environment variable →
+  `~/.h2t/config/user.yaml` → a neutral default (empty or off), and `h2t-ops settings
+  list|get` shows where each value came from. New variables: `H2T_PATH_LAKE`,
+  `H2T_PATH_INBOX`, `H2T_PATH_KB`, `H2T_GITHUB_OWNER`, `H2T_NOTION_TASKS_DB`. An empty
+  string counts as unset.
+- **`h2t-ops setup doctor` lists what to set** under `settings_gaps`, each with its
+  evidence and a `user.yaml` snippet: `gap` (you had it before: set it), `info` (decide),
+  `manual` (doctor cannot see it). Run it before installing this release, from the release
+  wheel or a checkout, and clear every `gap`.
+- What used to be assumed and now has to be said:
+  - `language` (the session language);
+  - `github.owner` (labels and repositories default to no organisation);
+  - `guards`: grade-guard, plain-guard and structure-guard run only when listed;
+  - `sessions.summaries`: the daily pass summarises sessions with a model, which costs money
+    and sends transcript text out, only when this is `true` (nested under `sessions:`);
+  - `context.strategy` and `context.by_domain` (which `about-me/` files a session gathers);
+  - `domain_patterns` (path → domain for repositories not yet registered); none ship;
+  - `notion.tasks_database_id` and `notion.tasks_schema` for the daily brief.
+- `~/.dor` is read only until a machine has migrated.
+
+### Daily brief
+
+- **Tasks ranked by what a date means** (#507): `h2t-ops notion brief-tasks` puts each open
+  task in one section: the day's plan, the plan not done, external deadlines, checks due,
+  dates without a reason, the rest. A date nobody gave a reason for never reaches HIGH.
+  Property names come from `notion.tasks_schema`; nothing is assumed.
+- **Yesterday's "Tomorrow"** from the evening journal is offered as today's plan when the
+  plan is empty, and written only after you say yes (#597).
+- **The task's area comes from your tasks database** (#650): set `notion.tasks_schema.area`
+  to the select column, and each task's `domain` is that column's value. Without it, the
+  `daily_brief.domains` keyword groups are used, and a keyword now matches only as a whole
+  word ("PR" no longer matches inside "Prüfungsbericht").
+- The fallback ranking on the author's old schema (`Status`, `Priority`, `Due`) is gone.
+
+### Gmail
+
+- `--signature <variant>` on `draft`, `send`, `reply` and `forward` appends the block under
+  that heading in `about-me/signatures.md` (#585).
+- `gmail draft-send DRAFT_ID --confirm-send` sends an approved draft as it stands and prints
+  its `to` (#531).
+- Attachments with non-ASCII file names arrive as attachments (#594).
+- `draft` and `send` with `--thread-id` refuse a `--reply-to` that names an unsent draft;
+  the hint names the newest real message (#647). A reply threaded on a draft did not show
+  in Gmail's conversation view.
+
+### Notion, Drive, Telegram, Google
+
+- `notion update-block` changes one block's text in place; `notion delete-blocks` removes
+  blocks or a heading's section. Both are a dry run without `--yes` (#603, #587).
+- `drive docs-tab read` returns tables as GFM instead of dropping them (#598).
+- `telegram send-file` and `forward-message` resolve a numeric user id as `send` does. An
+  id cached as more than one peer is refused (`PEER_AMBIGUOUS`) rather than guessed, and an
+  unresolvable peer is `PEER_UNRESOLVED`, no longer a session error telling you to log in
+  again (#646).
+- `h2t-ops google token --json` hands out a fresh access token for other tools (#584).
+- `contracts/pos-interop.json` 1.0.0 records the interfaces the pack shares with POS, and a
+  test holds them (#582).
+
+### Sessions
+
+- **Session pulse** (#566): every session with a user message is recorded, listed and
+  resumable; an empty one never reaches the synced records.
+
+### h2t-creative
+
+- `h2t-creative verify` checks that a deck built from approved text keeps it word for word
+  and on the right slide (#600).
+- Deck block roles and one deck frame every profile renders (#601).
+- `h2t-creative recipe` turns deck markdown into a recipe (#602).
+
+### Setup and docs-lint
+
+- `h2t-setup sync` reads uv's receipt, not `install.json`, for the editable stop (#579).
+- docs-lint: `template_dirs_exclude` lets a repository drop a template directory; the check
+  stops requiring it and `fix` stops recreating it (#645). Extra `docs/` directories are
+  declared per repository as `extra_doc_dirs` in its own docs-lint config, and doctor's
+  hint now says so (#656).
+
+### Release
+
+- A tag publishes only when CI is green on its commit, the installed wheel runs in an empty
+  HOME without a traceback, and the POS contract holds against the wheel. The notes of
+  every release record the tag, its commit and the wheel's sha256 (#583).
+
 ## 4.0.0
 
 The pack is rebuilt around one package (#541), and its data moves to one root, `~/.h2t`
