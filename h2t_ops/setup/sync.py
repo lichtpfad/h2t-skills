@@ -850,8 +850,13 @@ def dev_sync(uv, execute, claude, cwd: str | None = None, add_extras=()) -> Repo
         args += ["--with", w]
     if OS_NAME == "nt" and inside(sys.prefix, str(root)):
         # The same lock as the repair from inside the tool (ensure_executor): the reinstall
-        # deletes the environment this process runs from, and Windows holds it.
-        command = ["uv", *args]
+        # deletes the environment this process runs from, and Windows holds it. The hint is
+        # dev-sync itself from the checkout's environment, which the reinstall does not
+        # touch; a bare `uv tool install` would skip the commit below and leave install.json
+        # on the previous version (#663).
+        command = ["uv", "run", "--directory", str(checkout), "h2t-setup", "dev-sync"]
+        for extra in add_extras:
+            command += ["--extra", extra]
         raise ConfigError(
             f"h2t-setup runs from the installed tool {root}, which dev-sync replaces and "
             "Windows keeps locked while this process lives; run the command in the hint "
