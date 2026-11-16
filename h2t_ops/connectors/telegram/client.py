@@ -15,7 +15,13 @@ from pathlib import Path
 from typing import Any
 
 from h2t_ops.core import downloads, paths, secrets, store
-from h2t_ops.core.errors import AuthError, ConfigError, NotFoundError, ProviderError
+from h2t_ops.core.errors import (
+    AuthError,
+    ConfigError,
+    NotFoundError,
+    ProviderError,
+    UsageError,
+)
 
 
 def _session_incompatible_error(exc: BaseException) -> AuthError:
@@ -107,6 +113,20 @@ def _iso(dt: Any) -> str:
 _CHANNEL_OFFSET = 10 ** 12
 
 
+def _peer_errors() -> tuple[type[BaseException], ...]:
+    """What one wrong peer candidate raises, so the next one is tried.
+
+    ValueError is Telethon's "Cannot find any entity". A numeric id tried in the wrong
+    form reaches Telegram and comes back as an RPC error instead: -id as a basic group
+    gives ChatIdInvalidError, a BadRequestError (#646).
+    """
+    try:
+        from telethon.errors import ChatIdInvalidError, PeerIdInvalidError
+    except ImportError:
+        return (ValueError,)
+    return (ValueError, ChatIdInvalidError, PeerIdInvalidError)
+
+
 def _peer_candidates(entity: str) -> list[Any]:
     """Return int candidates for a numeric peer ID string.
 
@@ -130,7 +150,7 @@ def _input_peer_from_sqlite(session_file: Path, peer_id: int, dest: bool = False
     if not session_file.exists():
         return None
     try:
-        from telethon.tl.types import InputPeerChannel, InputPeerChat
+        from telethon.tl.types import InputPeerChannel, InputPeerChat, InputPeerUser
     except ImportError:
         return None
     n = abs(peer_id)
@@ -138,22 +158,42 @@ def _input_peer_from_sqlite(session_file: Path, peer_id: int, dest: bool = False
         -(_CHANNEL_OFFSET + n),  # channel: stored as -(10^12 + peer_id)
         -n,                       # legacy group: stored as -peer_id
     ]
+    if peer_id > 0:
+        # A user is stored as +peer_id, and `dialogs` prints a user's id positive. Without
+        # this a private user with no username had no cached form at all, and send-file
+        # fell through to -id, which Telegram rejects as a chat id (#646).
+        candidates.insert(0, n)
     try:
         with store.connect_sqlite(session_file, place="secrets.local", library="telethon",
                                   dest=dest) as conn:
-            for stored_id in candidates:
-                row = conn.execute(
-                    "SELECT id, hash FROM entities WHERE id=?", (stored_id,)
-                ).fetchone()
-                if row is not None:
-                    entity_id, access_hash = row
-                    if abs(entity_id) > _CHANNEL_OFFSET:
-                        channel_id = abs(entity_id) - _CHANNEL_OFFSET
-                        return InputPeerChannel(channel_id=channel_id, access_hash=access_hash)
-                    return InputPeerChat(chat_id=abs(entity_id))
+            rows = [row for stored_id in candidates
+                    if (row := conn.execute("SELECT id, hash FROM entities WHERE id=?",
+                                            (stored_id,)).fetchone()) is not None]
     except sqlite3.Error:
         return None
-    return None
+    if not rows:
+        return None
+    if len(rows) > 1:
+        # `dialogs` prints every id positive, and user ids and chat ids are separate
+        # spaces that can hold the same number. Guessing here sends to the wrong peer.
+        raise UsageError(
+            f"PEER_AMBIGUOUS: telegram id {peer_id} is cached as more than one peer "
+            f"({', '.join(_stored_kind(r[0]) for r in rows)})",
+            hint="Pass the chat title or @username, or the marked id: -<id> for a group, "
+                 "-100<id> for a channel.",
+        )
+    entity_id, access_hash = rows[0]
+    if entity_id > 0:
+        return InputPeerUser(user_id=entity_id, access_hash=access_hash)
+    if abs(entity_id) > _CHANNEL_OFFSET:
+        return InputPeerChannel(channel_id=abs(entity_id) - _CHANNEL_OFFSET, access_hash=access_hash)
+    return InputPeerChat(chat_id=abs(entity_id))
+
+
+def _stored_kind(stored_id: int) -> str:
+    if stored_id > 0:
+        return "user"
+    return "channel" if abs(stored_id) > _CHANNEL_OFFSET else "group"
 
 
 def _dialog_kind(entity: Any) -> str:
@@ -756,7 +796,7 @@ class TelegramClientAdapter:
                         msg = client.send_file(candidate, path, caption=caption)
                         last_exc = None
                         break
-                    except ValueError as exc:
+                    except _peer_errors() as exc:
                         last_exc = exc
                 if last_exc is not None:
                     raise _peer_unresolved_error(entity, last_exc) from last_exc
@@ -842,9 +882,27 @@ class TelegramClientAdapter:
         from_entity: str,
         message_id: int,
     ) -> dict[str, Any]:
+        # Both peers resolve as send_file's does. Passed as text, a numeric id was looked up
+        # as a username, and its "Cannot find any entity" came back as a session error whose
+        # hint was to throw away a working login (#646).
+        to_candidates = self._entity_candidates(to_entity)
+        from_candidates = self._entity_candidates(from_entity)
+        result: Any = None
         try:
             with self._connected_client() as client:
-                result = client.forward_messages(to_entity, message_id, from_peer=from_entity)
+                last_exc: Exception | None = None
+                for to_peer in to_candidates:
+                    for from_peer in from_candidates:
+                        try:
+                            result = client.forward_messages(to_peer, message_id, from_peer=from_peer)
+                            last_exc = None
+                            break
+                        except _peer_errors() as exc:
+                            last_exc = exc
+                    if last_exc is None:
+                        break
+                if last_exc is not None:
+                    raise _peer_unresolved_error(f"{from_entity} -> {to_entity}", last_exc) from last_exc
         except (ValueError, sqlite3.OperationalError) as exc:
             raise _session_incompatible_error(exc) from exc
         # Telethon may return a list; normalise to a single message

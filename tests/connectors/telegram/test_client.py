@@ -1262,3 +1262,119 @@ def test_missing_config_touches_nothing(monkeypatch):
         tmod.TelegramClientAdapter().list_dialogs()
     assert not paths.secrets_local().exists()
     assert not (paths.logs_dir() / "writes.jsonl").exists()
+
+
+# ── #646: a private user given by numeric id ──────────────────────────────
+
+def _session_with(path: Path, rows: list[tuple[int, int]]) -> Path:
+    """A Telethon-shaped session file: entities(id, hash) is all the lookup reads."""
+    with sqlite3.connect(path) as conn:
+        conn.execute("CREATE TABLE entities (id INTEGER PRIMARY KEY, hash INTEGER NOT NULL)")
+        conn.executemany("INSERT INTO entities VALUES (?, ?)", rows)
+    return path
+
+
+def test_sqlite_resolves_a_positive_id_as_a_cached_user(tmp_path):
+    """Telethon stores a user as +id; the lookup knew only channels and legacy groups."""
+    from telethon.tl.types import InputPeerUser
+
+    from h2t_ops.connectors.telegram import client as tmod
+
+    session = _session_with(tmp_path / "t.session", [(5550001, 987)])
+    assert tmod._input_peer_from_sqlite(session, 5550001, dest=True) == InputPeerUser(5550001, 987)
+
+
+def test_sqlite_negative_id_is_never_read_as_a_user(tmp_path):
+    from telethon.tl.types import InputPeerChat
+
+    from h2t_ops.connectors.telegram import client as tmod
+
+    session = _session_with(tmp_path / "t.session", [(5550001, 987), (-5550001, 0)])
+    assert tmod._input_peer_from_sqlite(session, -5550001, dest=True) == InputPeerChat(5550001)
+
+
+def test_send_file_moves_past_a_chat_id_telegram_rejects(tmp_path, monkeypatch):
+    """The issue's own error: -id tried as a basic group gets ChatIdInvalidError, a
+    BadRequestError and not a ValueError, so the loop stopped before trying the user."""
+    from telethon.errors import ChatIdInvalidError
+
+    from h2t_ops.connectors.telegram import client as tmod
+
+    (tmp_path / "config.json").write_text(json.dumps({"api_id": 1, "api_hash": "h"}), encoding="utf-8")
+    monkeypatch.setattr(tmod, "_input_peer_from_sqlite", lambda *_: None)
+    sent = SimpleNamespace(id=40, chat_id=5550001, date=None, sender_id=None, sender=None,
+                           text="", entities=[], reply_to_msg_id=None)
+    tried = []
+
+    class FakeInner:
+        def send_file(self, entity, path, caption=None):
+            tried.append(entity)
+            if entity != 5550001:
+                raise ChatIdInvalidError(request=None)
+            return sent
+
+    monkeypatch.setattr(tmod.TelegramClientAdapter, "_client", lambda self: _CtxClient(FakeInner()))
+    out = tmod.TelegramClientAdapter(config_dir=tmp_path).send_file("5550001", "a.pdf")
+    assert out["message_id"] == 40 and tried == [-5550001, 5550001]
+
+
+def test_forward_message_resolves_numeric_peers(tmp_path, monkeypatch):
+    from h2t_ops.connectors.telegram import client as tmod
+
+    (tmp_path / "config.json").write_text(json.dumps({"api_id": 1, "api_hash": "h"}), encoding="utf-8")
+    monkeypatch.setattr(tmod, "_input_peer_from_sqlite", lambda *_: None)
+    fwd = SimpleNamespace(id=41, chat_id=5550001, date=None, sender_id=None, sender=None,
+                          text="f", entities=[], reply_to_msg_id=None)
+    calls = []
+
+    class FakeInner:
+        def forward_messages(self, to_entity, message_id, from_peer=None):
+            calls.append((to_entity, from_peer))
+            if (to_entity, from_peer) != (5550001, -1002670981496):
+                raise ValueError(f'Cannot find any entity corresponding to "{to_entity}"')
+            return fwd
+
+    monkeypatch.setattr(tmod.TelegramClientAdapter, "_client", lambda self: _CtxClient(FakeInner()))
+    out = tmod.TelegramClientAdapter(config_dir=tmp_path).forward_message(
+        "5550001", from_entity="-1002670981496", message_id=7)
+    assert out["message_id"] == 41
+    assert all(isinstance(t, int) and isinstance(f, int) for t, f in calls)
+
+
+def test_forward_message_unresolvable_peer_is_not_a_session_error(tmp_path, monkeypatch):
+    """The hint of a session error tells the user to throw away a working login."""
+    from h2t_ops.connectors.telegram import client as tmod
+
+    (tmp_path / "config.json").write_text(json.dumps({"api_id": 1, "api_hash": "h"}), encoding="utf-8")
+    monkeypatch.setattr(tmod, "_input_peer_from_sqlite", lambda *_: None)
+
+    class FakeInner:
+        def forward_messages(self, to_entity, message_id, from_peer=None):
+            raise ValueError(f'Cannot find any entity corresponding to "{to_entity}"')
+
+    monkeypatch.setattr(tmod.TelegramClientAdapter, "_client", lambda self: _CtxClient(FakeInner()))
+    with pytest.raises(NotFoundError) as exc:
+        tmod.TelegramClientAdapter(config_dir=tmp_path).forward_message(
+            "5550001", from_entity="chat", message_id=7)
+    assert "PEER_UNRESOLVED" in str(exc.value)
+
+
+def test_an_id_cached_as_both_a_user_and_a_group_is_refused(tmp_path):
+    """A wrong guess here sends a file to the wrong person; ask for the marked id instead."""
+    from h2t_ops.connectors.telegram import client as tmod
+    from h2t_ops.core.errors import UsageError
+
+    session = _session_with(tmp_path / "t.session", [(5550001, 987), (-5550001, 0)])
+    with pytest.raises(UsageError) as exc:
+        tmod._input_peer_from_sqlite(session, 5550001, dest=True)
+    assert "PEER_AMBIGUOUS" in str(exc.value) and "user" in str(exc.value) and "group" in str(exc.value)
+
+
+def test_a_positive_id_of_a_cached_group_still_resolves_to_the_group(tmp_path):
+    """`dialogs` prints groups positive too; with no user of that number it stays a group."""
+    from telethon.tl.types import InputPeerChannel
+
+    from h2t_ops.connectors.telegram import client as tmod
+
+    session = _session_with(tmp_path / "t.session", [(-(tmod._CHANNEL_OFFSET + 777), 55)])
+    assert tmod._input_peer_from_sqlite(session, 777, dest=True) == InputPeerChannel(777, 55)
