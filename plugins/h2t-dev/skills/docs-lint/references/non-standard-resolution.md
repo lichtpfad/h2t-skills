@@ -67,6 +67,20 @@ exceptions:
 
 ---
 
+## DROPPED TEMPLATE DIR
+
+A template dir the repository removed on purpose (`docs/ops` moved to `docs/internal`)
+is not an exception: `exceptions` match a finding's path, and a missing dir has none.
+List it instead, in the same config:
+
+```yaml
+template_dirs_exclude: [docs/ops]
+```
+
+The check stops requiring it and `fix` stops recreating it (#645).
+
+---
+
 ## ADD PROJECT TYPE
 
 1. Document the pattern in the conversation

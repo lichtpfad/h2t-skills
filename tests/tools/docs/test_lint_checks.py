@@ -914,3 +914,48 @@ def test_doctor_counts_misplaced_deliverable(tmp_path, capsys):
     ]
     assert len(project_findings) == 1
     assert "1 project issue" in report["summary"]
+
+
+# --- #645: a repo can drop a template's docs dir ---------------------------------------------
+
+def _client_repo(tmp_path, extra_cfg=""):
+    for d in ["docs", "data", "deliverables", "scripts", "docs/research", "docs/internal"]:
+        (tmp_path / d).mkdir(parents=True, exist_ok=True)
+    (tmp_path / ".claude" / "rules").mkdir(parents=True)
+    (tmp_path / ".claude" / "rules" / "docs-lint.yaml").write_text(
+        "schema: h2t_docs_lint_config/v0.1\ntemplate: client_project\n" + extra_cfg, encoding="utf-8")
+    return tmp_path
+
+
+def test_template_dirs_exclude_silences_the_dropped_dir(tmp_path):
+    rp = _client_repo(tmp_path)
+    assert any("docs/ops" in m for m in check_project_structure_typed(rp, "client_project"))
+    assert not any("docs/ops" in m for m in
+                   check_project_structure_typed(rp, "client_project", exclude=["docs/ops"]))
+
+
+def test_template_dirs_exclude_keeps_every_other_template_dir(tmp_path):
+    rp = _client_repo(tmp_path)
+    (rp / "docs" / "research").rmdir()
+    got = check_project_structure_typed(rp, "client_project", exclude=["docs/ops/"])
+    assert any("docs/research" in m for m in got), got
+
+
+def test_fix_does_not_recreate_an_excluded_template_dir(tmp_path):
+    """Recreating it brings back the parallel tree the repo removed, and agents file into it."""
+    rp = _client_repo(tmp_path, "template_dirs_exclude: [docs/ops]\n")
+    fix_structure(rp)
+    assert not (rp / "docs" / "ops").exists()
+
+
+def test_doctor_end_to_end_reports_no_dropped_template_dir(tmp_path):
+    """The issue's own steps: config key set, doctor says nothing about docs/ops."""
+    from h2t_ops.tools.docs.lint import _collect_all_findings
+
+    rp = _client_repo(tmp_path)
+    assert any("docs/ops" in f.get("message", "") for f in _collect_all_findings(rp, no_pymarkdown=True))
+    (rp / ".claude" / "rules" / "docs-lint.yaml").write_text(
+        "schema: h2t_docs_lint_config/v0.1\ntemplate: client_project\ntemplate_dirs_exclude: [docs/ops]\n",
+        encoding="utf-8")
+    found = _collect_all_findings(rp, no_pymarkdown=True)
+    assert not any("docs/ops" in f.get("message", "") for f in found), found
