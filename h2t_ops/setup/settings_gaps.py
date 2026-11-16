@@ -215,12 +215,17 @@ def _manual() -> list[Gap]:
     if _unset("language"):
         out.append(_user_yaml("manual", "language", "the session language is no longer assumed",
                               "<code>"))
-    if _unset("daily_brief.domains"):
+    schema = _value("notion.tasks_schema")
+    # With an area column the brief takes the domain from it and reads no keywords (#650).
+    if _unset("daily_brief.domains") and not (isinstance(schema, dict) and schema.get("area")):
         out.append(_user_yaml("manual", "daily_brief.domains",
                               "the daily brief has no built-in keyword groups",
                               {"<domain>": ["<keyword>"]}))
+    # docs-lint reads them from the repository's own config, never from repo-mapping.yaml (#656).
+    from h2t_ops.tools.docs.config import CONFIG_PATHS
     out.append(Gap("manual", "REPO_EXTRA_DIRS", "extra directories per repository are no longer built in",
-                   "declare them for the repositories that need them in repo-mapping.yaml"))
+                   "in each repository that needs them, set `extra_doc_dirs: [<dir>, ...]` in its "
+                   f"docs-lint config ({' or '.join(CONFIG_PATHS)})"))
     return out
 
 
