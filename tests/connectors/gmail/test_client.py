@@ -1105,3 +1105,59 @@ def test_attachment_keeps_disposition_and_name(tmp_path, name):
     part = email.message_from_bytes(msg.as_bytes()).get_payload()[0]
     assert part.get_content_disposition() == "attachment"
     assert part.get_filename() == name
+
+
+# --- #647: --reply-to must name a real message, never an unsent draft ------------------------
+
+from h2t_ops.core.errors import UsageError  # noqa: E402
+
+
+def _draft_into(*messages):
+    """A service whose thread holds `messages`; records whether a draft got created."""
+    created = []
+
+    class _Svc(_FakeService):
+        def get(self, **k):
+            return _Exec({"id": "t1", "messages": list(messages)})
+
+        def drafts(self):
+            return self
+
+        def create(self, userId, body):
+            created.append(body)
+            return _Exec({"id": "d9"})
+
+    c, _ = _client_with(_Svc())
+    return c, created
+
+
+def test_reply_to_an_unsent_draft_is_refused_before_any_draft_exists():
+    c, created = _draft_into(
+        _thread_msg("m1", from_addr="p@x.com", to_addr="me@x.com", labels=["INBOX"], message_id="<real@x>"),
+        _thread_msg("m2", from_addr="me@x.com", to_addr="p@x.com", labels=["DRAFT"], message_id="<draft@x>"),
+    )
+    with pytest.raises(UsageError) as exc:
+        c.send_message(to="p@x.com", subject="Re: Q", body="B", as_draft=True,
+                       thread_id="t1", reply_to_message_id="<draft@x>")
+    assert "draft" in str(exc.value).lower()
+    assert "<real@x>" in (exc.value.hint or ""), "the hint names the message to answer instead"
+    assert created == []
+
+
+def test_reply_to_a_received_message_still_drafts():
+    c, created = _draft_into(
+        _thread_msg("m1", from_addr="p@x.com", to_addr="me@x.com", labels=["INBOX"], message_id="<real@x>"),
+        _thread_msg("m2", from_addr="me@x.com", to_addr="p@x.com", labels=["DRAFT"], message_id="<draft@x>"),
+    )
+    out = c.send_message(to="p@x.com", subject="Re: Q", body="B", as_draft=True,
+                         thread_id="t1", reply_to_message_id="<real@x>")
+    assert out["id"] == "d9" and len(created) == 1
+
+
+def test_reply_to_a_draft_is_refused_for_send_too():
+    c, _ = _draft_into(
+        _thread_msg("m2", from_addr="me@x.com", to_addr="p@x.com", labels=["DRAFT"], message_id="<draft@x>"),
+    )
+    with pytest.raises(UsageError):
+        c.send_message(to="p@x.com", subject="Re: Q", body="B", thread_id="t1",
+                       reply_to_message_id="<draft@x>")
