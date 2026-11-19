@@ -100,6 +100,16 @@ is made.
 | Insights | schedule | account and media metrics | compare, report | none; sending a report to a client is outward |
 | Research | request | competitor profiles, tags/keywords, Ad Library | synthesis | none; result to the existing research store |
 | Ads | schedule or request | campaign metrics | recommendations | budget change or launch — default `ask` |
+| Onboarding (setup) | user request | current app state, granted permissions, token validity | gap list: what is missing for the wanted capabilities | change app settings, issue/exchange tokens — see §4.5 |
+
+Cross-cutting uses of these processes, done by skills on top of the pipeline, not by the
+connector:
+- **Repurposing.** One source item becomes several per-channel versions (reel, IG post,
+  Threads text, LinkedIn post); each version links back to the source item.
+- **Regular reports.** Insights summaries on a schedule for the author or a client; sending
+  one to a client is an outward action through the door.
+- **Brand monitoring.** Mentions and tags of the author's accounts collected by the
+  communication process and summarized for the author.
 
 ### 4.4 Capability map
 
@@ -121,6 +131,29 @@ Where a cell says "manual", step 5 creates a task for the author.
 Media for Instagram publishing must be reachable by a public URL; a local file is not
 accepted. The content layer therefore needs a public staging place (Google Drive for now, §9).
 
+Not available through any official API (checked 2026-11-18): Instagram broadcast channels,
+Facebook Groups, LinkedIn direct messages, music in Reels. For these, step 5 is always a
+manual task.
+
+### 4.5 Onboarding process (future plan)
+
+The tool both sets up access and then operates it. Setup is a process of its own, planned
+after the operating processes; this section records what the exploration session proved.
+
+| Step | Automatable | How it was done on 2026-11-18/19 |
+|---|---|---|
+| Create Meta app, add use cases, link business | yes | Meta Social Technologies MCP (`devtools_app_create`, `devtools_app_use_cases_manage`, `devtools_app_business_manage`); its confirmation dialogs time out — retry once, then browser |
+| Add permissions to a use case | browser only | no MCP tool; agent browser (`gstack browse`) on the "Customize" page, each "will affect other use cases" dialog confirmed |
+| Issue a user token | human | Graph API Explorer: agent pre-selects permissions; the author logs in and consents |
+| Exchange for a long-lived token, fetch Page tokens | yes | `oauth/access_token?grant_type=fb_exchange_token` with the app secret; `/me/accounts` |
+| Create a Facebook Page for an IG account | human | agent attempt hit a Meta rate limit; Pages are created by hand |
+| Threads: add tester, accept invite | agent adds, human accepts | App roles → Threads Tester; acceptance on threads.com → Settings → Account → Website permissions, logged in as that profile |
+| Threads: issue token | agent clicks, human consents | Threads use case → Settings → User Token Generator; needs a browser where that profile is logged in |
+| Verify | yes | read profile + last posts per account |
+
+Human-only steps are always: logins, 2FA codes, consent screens, legal terms. Facts here
+are dated; Meta changes its dashboards, so the onboarding plan re-verifies them first.
+
 ## 5. Configuration (no hardcode)
 
 All paths resolve through `h2t_ops/core/paths.py` (the only module that knows where data
@@ -128,7 +161,7 @@ lives; ratchets in `tests/governance` hold that line). New code adds no `Path.ho
 
 | File | Holds | Notes |
 |---|---|---|
-| `<config>/social/accounts.yaml` | per account: network, handle, remote ids, project id (from `domains.yaml`), secret reference as `file + variable` | never a token value |
+| `<config>/social/accounts.yaml` | per account: network, handle, remote ids, project id (from `domains.yaml`), secret reference as the **key name** only (e.g. `THREADS_TOKEN_ACME`; the package resolves the file) | never a token value; Page tokens are not stored — fetched each run from `/me/accounts` with the user token |
 | `<config>/social/rules.yaml` | approval rules: match (process, action, account, content kind), verdict `auto/ask/deny`, added-on date, origin example | default for every action is `ask` |
 | `<config>/paths.yaml` | external places this work needs (content store, public staging) if they are outside `~/.h2t` | via `h2t-ops paths set` |
 | `<data>/social/` | raw zone (append-only), journal, queue | class `data` |
@@ -176,7 +209,8 @@ of scope here.
   it). Date: as soon as possible, no fixed deadline. Consequence: nothing author-specific in
   code or shipped defaults — accounts, places and rules come only from the user's config.
 - **Order of processes.** All of them, one after another. First: insights (read-only),
-  then communication, content, research, ads.
+  then communication, content, research, ads; onboarding (§4.5) after the operating
+  processes.
 - **Approval (`ask`).** When a skill drives the run, the author answers in the chat. Approval
   inside unattended automation is designed separately later; until then an unattended run
   never executes an `ask` action — it leaves it `pending`.
@@ -200,8 +234,9 @@ of scope here.
   (Instagram publishes at most 100 posts per 24 h `[B: Meta docs]`). No call-budget planner.
 - **Secrets migration:** files move to `secrets.shared` (they sync between the author's
   machines). During the transition the loader reads `secrets.shared` first, then the 3.x
-  place, and `doctor` reports which one answered. A reference into a JSON secret is
-  `file + key path` (e.g. `meta-h2t-social-pages.json:pages[page_id=…].page_token`).
+  place, and `doctor` reports which one answered. Superseded by the plan
+  (2026-11-19): no JSON secret is referenced; Page tokens are fetched per run, so
+  `meta-h2t-social-pages.json` is retired after the migration.
 - **Accounts file:** generated by `h2t-ops social accounts discover`, then edited by the
   author. The three Page-visible IG profiles outside the five working ones are listed with
   `enabled: false`.
