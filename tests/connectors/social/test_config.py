@@ -77,7 +77,7 @@ def test_rule_verdict_must_be_known(social_config):
         config.load_rules()
 
 
-def test_api_base_default_and_override(social_config):
+def test_api_base_override(social_config):
     social_config()
     assert config.api_base("meta") == "https://graph.facebook.com/v27.0"
     assert config.api_base("threads") == "https://graph.threads.net/v1.0"
@@ -149,3 +149,37 @@ def test_token_in_rules_is_refused(social_config, field):
     social_config(rules={"rules": [{**RULE, field: TOKEN}]})
     with pytest.raises(ConfigError, match="r1"):
         config.load_rules()
+
+
+@pytest.mark.parametrize("url", [
+    "https://host.test/v27?access_token=" + "EAA" + "c" * 30,
+    "https://host.test/v27?x=1",
+    "https://host.test/v27#frag",
+    "https://user:pw@host.test/v27",
+    "http://host.test/v27",
+    "host.test/v27",
+])
+def test_api_override_must_be_a_plain_https_url(social_config, url):
+    social_config(accounts={"api": {"meta_graph": url}, "accounts": [ACCOUNT]})
+    with pytest.raises(ConfigError) as e:
+        config.api_base("meta")
+    assert "EAA" + "c" * 30 not in str(e.value)
+    with pytest.raises(ConfigError):
+        config.load_accounts()
+
+
+def test_token_shaped_value_is_found_inside_a_string(social_config):
+    social_config(accounts={"accounts": [{**ACCOUNT, "handle": "x?t=" + "EAA" + "d" * 30}]})
+    with pytest.raises(ConfigError) as e:
+        config.load_accounts()
+    assert "d" * 30 not in str(e.value)
+
+
+@pytest.mark.parametrize("network,key", [
+    ("instagram", "THREADS_TOKEN_ACME"), ("facebook", "THREADS_TOKEN_ACME"),
+    ("threads", "META_USER_TOKEN"),
+])
+def test_token_key_provider_must_match_network(social_config, network, key):
+    social_config(accounts={"accounts": [{**ACCOUNT, "network": network, "token_key": key}]})
+    with pytest.raises(ConfigError, match=f"{network}:acme"):
+        config.load_accounts()

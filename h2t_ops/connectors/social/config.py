@@ -5,6 +5,7 @@ import re
 from dataclasses import dataclass
 from importlib import resources
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import yaml
 
@@ -15,7 +16,7 @@ NETWORKS = ("instagram", "facebook", "threads")
 VERDICTS = ("auto", "ask", "deny")
 _API_KEY = {"meta": "meta_graph", "instagram": "meta_graph", "facebook": "meta_graph",
             "threads": "threads_graph"}
-_TOKEN_VALUE = re.compile(r"^(EAA|THAA|IGAA)[A-Za-z0-9]{20,}")
+_TOKEN_VALUE = re.compile(r"(EAA|THAA|IGAA)[A-Za-z0-9]{20,}")
 _TOKEN_NAMES = ("token", "access_token")
 
 
@@ -62,7 +63,7 @@ def _scan(node, f: Path, where: str) -> None:
     elif isinstance(node, list):
         for i, v in enumerate(node):
             _scan(v, f, f"{where}[{i}]")
-    elif isinstance(node, str) and _TOKEN_VALUE.match(node):
+    elif isinstance(node, str) and _TOKEN_VALUE.search(node):
         raise ConfigError(f"{f}: {where}: a token value is written in the file; keep only the "
                           "secret key name in `token_key`")
 
@@ -80,8 +81,11 @@ def _read(f: Path, entries_key: str, label) -> dict | None:
         raise ConfigError(f"{f}: top level must be a mapping")
     for k, v in doc.items():
         if k == entries_key and isinstance(v, list):
-            for e in v:
-                _scan(e, f, label(e) if isinstance(e, dict) else entries_key)
+            for i, e in enumerate(v):
+                where = label(e) if isinstance(e, dict) else entries_key
+                if _TOKEN_VALUE.search(where):   # the label is built from the entry's own fields
+                    where = f"{entries_key}[{i}]"
+                _scan(e, f, where)
         else:
             _scan(v, f, k)
     return doc
@@ -104,11 +108,30 @@ def _project_ids() -> set[str]:
     return ids
 
 
+def _api_overrides(doc: dict, f: Path) -> dict:
+    """The `api` mapping of accounts.yaml; every override must be a plain https URL."""
+    api = doc.get("api") or {}
+    if not isinstance(api, dict):
+        raise ConfigError(f"{f}: `api` must be a mapping")
+    for key, url in api.items():
+        if key not in _API_KEY.values() or url is None:
+            continue
+        if not isinstance(url, str) or not url:
+            raise ConfigError(f"{f}: api.{key} must be a non-empty string")
+        parts = urlsplit(url)
+        if (parts.scheme != "https" or not parts.netloc or parts.query or parts.fragment
+                or parts.username is not None or parts.password is not None):
+            raise ConfigError(f"{f}: api.{key} must be a plain https URL "
+                              "(no query, fragment or user info)")
+    return api
+
+
 def load_accounts() -> list[Account]:
     f = accounts_path()
     doc = _read(f, "accounts", lambda e: f"account {e.get('network')}:{e.get('handle')}")
     if doc is None:
         raise ConfigError(f"no accounts file: {f}", hint="run `h2t-ops social accounts discover`")
+    _api_overrides(doc, f)
     known = _project_ids()
     out = []
     for e in _entries(doc, "accounts", f):
@@ -118,9 +141,13 @@ def load_accounts() -> list[Account]:
         for k in ("handle", "remote_id", "token_key"):
             if not e.get(k):
                 raise ConfigError(f"{f}: account {who}: `{k}` is required")
-        if providers.provider_of_key(str(e["token_key"])) not in ("meta", "threads"):
+        provider = providers.provider_of_key(str(e["token_key"]))
+        if provider not in ("meta", "threads"):
             raise ConfigError(f"{f}: account {who}: token_key {e['token_key']!r} has no META_ or "
                               "THREADS_ prefix")
+        if provider != ("threads" if e["network"] == "threads" else "meta"):
+            raise ConfigError(f"{f}: account {who}: token_key {e['token_key']!r} is a {provider} "
+                              f"key, wrong for a {e['network']} account")
         project = e.get("project")
         if project and known and project not in known:
             raise ConfigError(f"{f}: account {who}: unknown project {project!r}")
@@ -159,13 +186,8 @@ def api_base(network: str) -> str:
     if key is None:
         raise ConfigError(f"unknown network {network!r}; expected one of {', '.join(_API_KEY)}")
     f = accounts_path()
-    api = (_read(f, "accounts", lambda e: "account") or {}).get("api") or {}
-    if not isinstance(api, dict):
-        raise ConfigError(f"{f}: `api` must be a mapping")
-    override = api.get(key)
-    if override is not None:
-        if not isinstance(override, str) or not override:
-            raise ConfigError(f"{f}: api.{key} must be a non-empty string")
-        return override
+    api = _api_overrides(_read(f, "accounts", lambda e: "account") or {}, f)
+    if api.get(key) is not None:
+        return api[key]
     text = (resources.files("h2t_ops.resources") / "social" / "defaults.yaml").read_text(encoding="utf-8-sig")
     return yaml.safe_load(text)["api"][key]

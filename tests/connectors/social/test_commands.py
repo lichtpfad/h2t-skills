@@ -275,3 +275,11 @@ def test_discover_keeps_project_exactly_and_drops_unknown_fields(env, social_con
     doc = yaml.safe_load(_file(social_config).read_text(encoding="utf-8"))
     acme = next(a for a in doc["accounts"] if a["handle"] == "acme" and a["network"] == "instagram")
     assert acme["project"] == "" and "legacy_note" not in acme
+
+
+def test_discover_never_echoes_a_token_in_an_api_override(env, social_config, capsys):
+    social_config(accounts={"api": {"meta_graph": "https://host.test/v27?access_token=" + PAGE1},
+                            "accounts": []})
+    code, out, err = run(capsys, "accounts", "discover", "--json")
+    assert code == 3 and not env.calls
+    assert PAGE1 not in out + err
