@@ -13,7 +13,7 @@ _META_KEY = "META_USER_TOKEN"
 
 
 def register(subparsers: Any) -> None:
-    p = subparsers.add_parser("social", help="Instagram, Facebook and Threads analytics (read-only)")
+    p = subparsers.add_parser("social", help="Instagram and Threads insights, Facebook Page check (read-only)")
     cmds = p.add_subparsers(dest="social_cmd", required=True)
 
     def add_fmt(sp):
