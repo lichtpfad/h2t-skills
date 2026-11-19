@@ -31,6 +31,10 @@ RESOURCE_TREES = {
         "plugins/h2t-core/skills/autonomous-run/references/runbook-template.md",
 }
 
+# Package-only data: read by the code, with no plugin text to drift from. Named one by one,
+# so a new resource file still has to be either mirrored above or listed here.
+PACKAGE_ONLY = ("h2t_ops/resources/social/defaults.yaml",)
+
 
 def _files(path: Path) -> dict[str, bytes]:
     if path.is_file():
@@ -49,9 +53,9 @@ def test_resource_copy_is_identical(copy):
 
 
 def test_every_resource_file_is_covered():
-    """Only the package markers sit outside a compared tree."""
+    """Only the package markers and the named PACKAGE_ONLY files sit outside a compared tree."""
     resources = ROOT / "h2t_ops" / "resources"
-    covered = [ROOT / c for c in RESOURCE_TREES]
+    covered = [ROOT / c for c in (*RESOURCE_TREES, *PACKAGE_ONLY)]
     loose = sorted(p.relative_to(ROOT).as_posix() for p in resources.rglob("*")
                    if p.is_file() and "__pycache__" not in p.parts and p.name != "__init__.py"
                    and not any(p == c or c in p.parents for c in covered))
