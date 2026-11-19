@@ -1,0 +1,3 @@
+api:
+  meta_graph: https://graph.facebook.com/v27.0
+  threads_graph: https://graph.threads.net/v1.0

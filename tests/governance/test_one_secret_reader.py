@@ -54,6 +54,16 @@ def _telegram():
     return TelegramClientAdapter()._load_config()["api_hash"]
 
 
+def _meta():
+    from h2t_ops.core import secrets
+    return secrets.get("META_USER_TOKEN")
+
+
+def _threads():
+    from h2t_ops.core import secrets
+    return secrets.get(secrets.keys_with_prefix("THREADS_TOKEN_")[0])
+
+
 # provider -> (lines of <provider>.env, expected value, the connector's reader)
 READERS = {
     "exa": ("EXA_API_KEY=fake-exa\n", "fake-exa", _research),
@@ -64,6 +74,8 @@ READERS = {
     "notion": ("NOTION_API_TOKEN=fake-notion\n", "fake-notion", _notion),
     "h2t-evals": ("H2T_EVALS_TOKEN=fake-evals\n", "fake-evals", _evals),
     "telegram": ("TELEGRAM_API_ID=1\nTELEGRAM_API_HASH=fake-telegram\n", "fake-telegram", _telegram),
+    "meta": ("META_USER_TOKEN=fake-meta\n", "fake-meta", _meta),
+    "threads": ("THREADS_TOKEN_ACME=fake-threads\n", "fake-threads", _threads),
 }
 
 
