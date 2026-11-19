@@ -6,10 +6,7 @@ so the caller can journal them. Transport, error mapping and token hygiene live 
 from __future__ import annotations
 
 from h2t_ops.connectors.social import journal
-from h2t_ops.connectors.social._graph import GraphClient
-
-_UNAVAILABLE_CODES = {100, 10}
-_PAGE_SIZE = 100
+from h2t_ops.connectors.social._graph import PAGE_SIZE, UNAVAILABLE_CODES, GraphClient
 
 
 class MetaClient(GraphClient):
@@ -47,12 +44,12 @@ class MetaClient(GraphClient):
     def ig_media(self, ig_id: str, page_token: str, limit: int) -> tuple[list[dict], list[dict]]:
         return self._paged(f"{ig_id}/media", page_token, {
             "fields": "id,timestamp,media_product_type,media_type,like_count,comments_count,permalink",
-            "limit": min(limit, _PAGE_SIZE)}, limit)
+            "limit": min(limit, PAGE_SIZE)}, limit)
 
     def ig_media_insights(self, media_id: str, page_token: str) -> tuple[dict | None, list[dict]]:
         body, raw = self._single(f"{media_id}/insights", page_token,
                                  {"metric": "reach,views,total_interactions"},
-                                 soft=_UNAVAILABLE_CODES)
+                                 soft=UNAVAILABLE_CODES)
         if body.get("error"):
             return None, raw
         return {m["name"]: (m.get("values") or [{}])[0].get("value")

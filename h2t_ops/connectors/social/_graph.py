@@ -16,6 +16,8 @@ from h2t_ops.core import secrets
 from h2t_ops.core.errors import AuthError, NetworkError, ProviderError
 
 _RATE_CODES = {4, 17, 32, 613}
+UNAVAILABLE_CODES = {100, 10}
+PAGE_SIZE = 100
 _SECRET_PARAMS = ("access_token", "appsecret_proof", "client_secret", "token")
 
 

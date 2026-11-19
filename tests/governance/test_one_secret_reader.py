@@ -60,8 +60,8 @@ def _meta():
 
 
 def _threads():
-    from h2t_ops.core import secrets
-    return secrets.get(secrets.keys_with_prefix("THREADS_TOKEN_")[0])
+    from h2t_ops.connectors.social.threads import ThreadsClient
+    return ThreadsClient("THREADS_TOKEN_ACME")._token()
 
 
 # provider -> (lines of <provider>.env, expected value, the connector's reader)

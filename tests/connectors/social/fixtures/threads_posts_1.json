@@ -1,0 +1,1 @@
+{"data":[{"id":"t1","timestamp":"2026-11-01T10:00:00+0000","media_type":"TEXT_POST","permalink":"https://www.threads.net/@acme/post/t1"},{"id":"t2","timestamp":"2026-11-02T10:00:00+0000","media_type":"IMAGE","permalink":"https://www.threads.net/@acme/post/t2"}],"paging":{"cursors":{"after":"A"},"next":"https://graph.threads.net/v1.0/th_111/threads?after=A&access_token=@TOK@"}}
