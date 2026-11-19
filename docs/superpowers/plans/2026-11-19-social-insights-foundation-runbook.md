@@ -1,3 +1,10 @@
+---
+title: "Autonomous run — Social insights foundation"
+status: "draft"
+date: "2026-11-19"
+milestone: ""
+issue: ""
+---
 # Autonomous run — Social insights foundation
 
 > **Durable spine (autonomous run, 2026-11-19).** Survives context compaction / blocker.
