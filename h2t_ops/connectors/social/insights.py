@@ -17,14 +17,14 @@ _PROCESS = "insights"
 
 
 def _metric(post: dict):
-    m = post.get("metrics") or {}
-    return m.get("reach") if m.get("reach") is not None else m.get("views")
+    return (post.get("metrics") or {}).get("views" if post.get("network") == "threads" else "reach")
 
 
-def _group(values: dict[str, list], overall: float) -> dict:
-    return {k: {"n": len(v), "median": statistics.median(v),
-                "ratio": round(statistics.median(v) / overall, 2) if overall else None}
-            for k, v in values.items()}
+def _group(keys, values: dict[str, list], overall: float) -> dict:
+    return {k: {"n": len(values[k]), "median": statistics.median(values[k]),
+                "ratio": round(statistics.median(values[k]) / overall, 2) if overall else None}
+            if k in values else {"n": 0, "median": None, "ratio": None}
+            for k in keys}
 
 
 def summarize(posts: list[dict], tz: str) -> dict:
@@ -45,7 +45,8 @@ def summarize(posts: list[dict], tz: str) -> dict:
         bands.setdefault(f"{lo:02d}-{hi:02d}", []).append(value)
     top = sorted(used, key=lambda t: t[1], reverse=True)[:5]
     return {"posts": len(used), "skipped": skipped, "median_reach": overall,
-            "by_weekday": _group(days, overall), "by_hour_band": _group(bands, overall),
+            "by_weekday": _group(_WEEKDAYS, days, overall),
+            "by_hour_band": _group([f"{lo:02d}-{hi:02d}" for lo, hi in _BANDS], bands, overall),
             "top": [{"reach": v, "permalink": p.get("permalink")} for _, v, p in top]}
 
 
@@ -87,7 +88,7 @@ def _collect(run_id: str, account: Account, limit: int, client) -> tuple[list[di
         media = keep("media", client.ig_media(account.remote_id, token, limit))
         fetch = lambda m: keep("media_insights", client.ig_media_insights(m["id"], token))  # noqa: E731
     posts = [{"id": m["id"], "timestamp": m["timestamp"], "permalink": m.get("permalink"),
-              "metrics": fetch(m)} for m in media]
+              "network": account.network, "metrics": fetch(m)} for m in media]
     if account.network != "threads":
         extra["online_followers_hour_as_reported"] = keep(
             "online_followers", client.ig_online_followers(account.remote_id, token))
@@ -108,13 +109,15 @@ def run(account_ids: list[str] | None, limit: int, client_factory=None, trigger:
             continue
         posts, extra, ids = _collect(run_id, account, limit, factory(account.network, account))
         summary = summarize(posts, tz)
-        if not summary["posts"]:
+        no_data = not summary["posts"]
+        journal.record(run_id, 3, process=_PROCESS, account=account.id, source_ids=ids,
+                       **({"finding": "no data"} if no_data else {}))
+        journal.decide(run_id, _PROCESS, "none", account.id)
+        if no_data:
             journal.record(run_id, 6, process=_PROCESS, account=account.id, error="no data")
             raise ProviderError(f"no data for {account.id}: no posts with metrics",
                                 hint="check the account has posts and the token has insights access")
         report = {**summary, **extra}
-        journal.record(run_id, 3, process=_PROCESS, account=account.id, source_ids=ids)
-        journal.decide(run_id, _PROCESS, "none", account.id)
         target = paths.data_dir() / "social" / "insights" / account.id.replace(":", "_") / f"{today}.json"
         store.replace(target, json.dumps(report, ensure_ascii=False, indent=2), place="data")
         journal.record(run_id, 6, process=_PROCESS, account=account.id, report=str(target))
