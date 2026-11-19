@@ -30,12 +30,13 @@ issues. Spec: `docs/superpowers/specs/2026-11-19-social-pipeline-design.md`.
   refresh, schedule, account-level metrics, audience, stories, comments text, captions, snapshot
   file (#670); every write process.
 
-## Decisions first (irreversible, `decision.yml`)
+## Decisions
 
-| id | question | blocks |
+| id | question | outcome (owner, 2026-11-19) |
 |---|---|---|
-| D1 | Snapshot file schema: folder layout, file per data group, columns, format (CSV or JSON), manifest of unavailable metrics. External contract: rejuve scripts read it. | #670 item 6 |
-| D2 | Approval flow for outward actions: journal states (spec §9a `pending → approved/denied/expired → done/failed`), the `h2t-ops social approve` surface, what an unattended run does with `ask` (spec §9: stays `pending`), expiry. Lifecycle and failure semantics. | phases 2, 3, 5 |
+| D1 | Snapshot file schema (#672) | Outside the connector's boundary; closed. The connector gives an output contract (`run insights --json` with `schema_version`); consumers store it in their own database. #670 item 6 rewritten. |
+| D2 | Approval flow (#673) | Chat run: the chat asks, the skill passes an explicit consent flag, step 4 records `approved_by`. No `approve` command, no queue. Unattended (server) runs: designed at the VPS stage; until then no outward action, record stays `pending`. Closed. |
+| D3 | Database for the journal and raw data (#686) | Open. The author decided "a database, not JSONL"; the engine (SQLite now → Postgres later, or Postgres from the start) is the open question. Blocks phase 2 code that writes new record kinds. |
 
 ## Phase 1 — insights complete (read-only)
 
@@ -54,13 +55,13 @@ issues. Spec: `docs/superpowers/specs/2026-11-19-social-pipeline-design.md`.
 | id | type | title | acceptance | not in it |
 |---|---|---|---|---|
 | S7 | feature | Collect comments, DMs and mentions into the journal | `h2t-ops social run communication --collect` → raw zone + step-2 records per item, no network write (test asserts no POST) | replies |
-| S8 | feature | Reply to a comment after approval | needs D2; `run communication` drafts → `pending`; `social approve <id>` → reply posted, remote id in step 5; unattended run leaves it `pending` | DMs reply (separate step issue at phase plan), hiding comments |
+| S8 | feature | Reply to a comment after approval | the skill asks in the chat; with the consent flag the reply is posted, remote id in step 5, `approved_by` in step 4; without it no outward call; unattended run leaves `pending` | DMs reply (separate step issue at phase plan), hiding comments |
 
 ## Phase 3 — content
 
 | id | type | title | acceptance | not in it |
 |---|---|---|---|---|
-| S9 | feature | Publish a post, carousel or reel from Drive staging after approval | needs D2; `run content` for one plan item → `pending`; approve → Instagram media id in step 5; media reached by public Drive URL (spec §4.4) | Threads/FB publishing (step issues at phase plan), scheduling queue |
+| S9 | feature | Publish a post, carousel or reel from Drive staging after approval | `run content` for one plan item; with the consent flag → Instagram media id in step 5; media reached by public Drive URL (spec §4.4) | Threads/FB publishing (step issues at phase plan), scheduling queue |
 
 ## Phase 4 — research
 
@@ -72,12 +73,12 @@ issues. Spec: `docs/superpowers/specs/2026-11-19-social-pipeline-design.md`.
 
 | id | type | title | acceptance | not in it |
 |---|---|---|---|---|
-| S11 | feature | Read campaign metrics and record recommendations | `run ads` → campaign metrics per account, report; no write call; any budget change is a step-5 `ask` (needs D2) | launching or editing campaigns |
+| S11 | feature | Read campaign metrics and record recommendations | `run ads` → campaign metrics per account, report; no write call; any budget change needs the consent flag (D2) | launching or editing campaigns |
 
 ## Order
 
-D1 and D2 go to the owner first (they block code). Phase 1 runs in parallel with D2: it needs
-neither. Phases 2-5 in spec order after D2. Each phase: own TDD plan → issues → Codex review
+D1 and D2 are decided. D3 (database) goes to the owner before phase 2; phase 1 can start
+now, and its journal code moves to the chosen database once D3 lands. Phases 2-5 in spec order after D2. Each phase: own TDD plan → issues → Codex review
 per task → live run → 4.1.x patch.
 
 ## Issue map
@@ -86,8 +87,9 @@ All in milestone M9: 4.2 (created 2026-11-19).
 
 | id | issue | phase |
 |---|---|---|
-| D1 | #672 decision: snapshot file schema | decision |
-| D2 | #673 decision: approval flow for outward actions | decision |
+| D1 | #672 decision: snapshot file schema — closed, outside the boundary | decision |
+| D2 | #673 decision: approval flow for outward actions — closed, decided | decision |
+| D3 | #686 decision: database for journal and raw data — open | decision |
 | — | #670 dated Instagram snapshot | 1 |
 | S1 | #674 run insights on Threads accounts | 1 |
 | S2 | #675 Facebook Page insights | 1 |

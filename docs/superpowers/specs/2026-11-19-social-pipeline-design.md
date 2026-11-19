@@ -219,6 +219,17 @@ of scope here.
   pushed to a task system.
 - **Media staging.** Google Drive public links through `h2t-ops drive` for now.
 - **Client approval (REjuve).** No such request from the client; out of scope.
+- **Approval, refined (2026-11-19, #673).** A skill run from a chat asks the author in the
+  chat; after "yes" it calls the connector with an explicit consent flag (the pattern of
+  `h2t-ops gmail draft-send --confirm-send`). The connector records `approved_by` and the
+  time in the step-4 record. No `approve` command and no queue. Unattended runs on a server
+  follow a different principle, designed at the VPS stage; until then they perform no
+  outward action and leave the record `pending`.
+- **Storage (2026-11-19).** Social data on the author's side lives in a database, not in
+  JSONL files; which database is decision #686. Consumers (the rejuve project) store what
+  they take in their own database; the connector's side of that seam is an output contract
+  (`run insights --json` with `schema_version`), not a file layout (#672 closed as outside
+  the boundary).
 - **Content store.** Google Drive for now, accessed only through `h2t-ops drive`; the folder
   is a config value, not code. The same place serves as media staging.
 
@@ -227,7 +238,9 @@ of scope here.
 - **Door interface:** a Python API inside `h2t_ops` plus a thin CLI over it
   (`h2t-ops social journal|approve|run …`). The door writes journal records for every step,
   including steps with no network call; skills call the CLI.
-- **Journal states:** `pending → approved | denied | expired → done | failed`.
+- **Journal states:** `pending → approved | denied | expired → done | failed`. Superseded in
+  part by §9 "Approval, refined": approval in a chat run is a consent flag recorded in
+  step 4; `expired` belongs to the unattended (VPS) design.
 - **Runtime:** one-shot commands (`h2t-ops social run <process>`), started by Windows Task
   Scheduler locally and cron on the VPS. No long-lived daemon in v1.
 - **Rate limits in v1:** back-off on API rate errors, plus one rule-level cap per account
@@ -244,6 +257,7 @@ of scope here.
 ## 10. Left to the builder
 
 - Module layout inside `h2t_ops/connectors/social/` and the door core.
-- Journal storage format (JSONL or SQLite) as long as the invariants hold and the schema moves
-  to Postgres on the VPS unchanged.
+- ~~Journal storage format (JSONL or SQLite)~~ — taken back by the author 2026-11-19: a
+  database (§9 "Storage"); the engine is decision #686. The schema still moves to
+  Postgres on the VPS unchanged.
 - Token refresh mechanics (Threads `th_refresh_token`, LinkedIn later).
