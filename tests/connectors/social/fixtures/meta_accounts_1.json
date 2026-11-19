@@ -1,0 +1,1 @@
+{"data":[{"id":"page_222","name":"Acme One","access_token":"PGTOK1","instagram_business_account":{"id":"ig_111","username":"acme"}},{"id":"page_223","name":"Acme Two","access_token":"PGTOK2"}],"paging":{"cursors":{"after":"A"},"next":"https://graph.facebook.com/v27.0/me/accounts?after=A"}}

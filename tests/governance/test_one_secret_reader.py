@@ -55,8 +55,8 @@ def _telegram():
 
 
 def _meta():
-    from h2t_ops.core import secrets
-    return secrets.get("META_USER_TOKEN")
+    from h2t_ops.connectors.social.meta import MetaClient
+    return MetaClient()._user_token()
 
 
 def _threads():
