@@ -24,7 +24,7 @@ Decision-protocol). Verify the branch before every commit.
 - [x] **review-spec** — skill: `codex review (embedded)` · input: previous session (two Codex passes, findings closed per handoff 8cde21ba) · done: no [P1] · failure: fix P1 then re-run (<=N) · re-entry: idempotent: re-review
 - [x] **write-plan** — skill: `superpowers:writing-plans` · input: `docs/superpowers/plans/2026-11-19-social-insights-foundation.md` (9a586f2c) · done: plan file exists · failure: escalate · re-entry: idempotent: overwrite plan
 - [x] **plan-gate** — skill: `codex review (embedded)` · input: previous session (two Codex passes on the plan, closed) · done: no [P1] · failure: fix P1 then re-run (<=N) · re-entry: idempotent: re-review
-- [ ] **subagent-driven-dev** — skill: `superpowers:subagent-driven-development` · input: `<fill>` · done: all tasks green · failure: per-task gate; escalate on repeated fail · re-entry: continue from first unchecked task
+- [x] **subagent-driven-dev** — skill: `superpowers:subagent-driven-development` · input: plan Tasks 1-8 (Task 9 manual, needs the author), commits 5b0ce166..3408408d, per-task Codex review clean · done: all tasks green · failure: per-task gate; escalate on repeated fail · re-entry: continue from first unchecked task
 - [ ] **gates** — skill: `codex + pre-merge-check` · input: `<fill>` · done: no [P1]; suite green · failure: fix then re-run (<=N) · re-entry: idempotent: re-run gate
 - [ ] **e2e** — skill: `real entrypoint run` · input: `<fill>` · done: DONE / N/A / BLOCKED-DEFERRED · failure: BLOCKED->handoff; behavioral fail->fix · re-entry: idempotent: re-run
 - [ ] **PR** — skill: `superpowers:finishing-a-development-branch` · input: `<fill>` · done: PR opened · failure: escalate · re-entry: continue: reuse branch
