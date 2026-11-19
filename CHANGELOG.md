@@ -4,6 +4,26 @@ One CHANGELOG for the whole pack from 4.0.0 on. The per-plugin files
 (`plugins/*/CHANGELOG.md`) are the history up to 3.x; their `Unreleased` entries ship in
 4.0.0.
 
+## 4.1.1
+
+### Security
+
+- Eight pinned dependencies upgraded past their known vulnerabilities (#668): pillow 13.0.0,
+  cryptography 50.0.2, oauthlib 4.0.1, pyasn1 0.6.5, urllib3 2.8.0, anyio 4.16.0, certifi
+  2026.10.23, httplib2 0.32.1. `pip-audit` on the release `constraints.txt` reports none.
+
+### Social (first part)
+
+- `h2t-ops social`: a read-only connector for Instagram and Threads (#667). `accounts
+  discover|list`, `check`, `run insights` and `journal`; every run is recorded in an
+  append-only journal with its raw API bodies. Reference: `references/social.md`.
+- Secret key names come from config: defaults in the package's `social/defaults.yaml`,
+  overridable with a `secrets:` block in `accounts.yaml`.
+- `run insights` needs the `timezone` setting.
+- Not built yet: Facebook Page insights, account-level insights, audience, stories,
+  comments in the insights run, writes to a network, Threads token refresh. Instagram
+  `online_followers` comes back empty from Meta.
+
 ## 4.1.0
 
 The pack no longer carries its author's values: everything that was one person's setup is

@@ -109,6 +109,13 @@ def get(key: str) -> str | None:
     return None
 
 
+def keys_with_prefix(prefix: str) -> list[str]:
+    """Sorted names (never values) of the keys with a non-empty value under `prefix`, from the
+    same sources and in the same order as get()."""
+    merged = _merged([dict(os.environ), _new_values(), *(_read_env(p) for _, p in legacy_sources())])
+    return sorted(k for k in merged if k.startswith(prefix))
+
+
 def load_secrets(env_file: Path | None = None) -> None:
     """Merge every known key into os.environ without overriding (3.x contract kept)."""
     if env_file is not None:

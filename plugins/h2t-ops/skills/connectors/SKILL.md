@@ -35,7 +35,7 @@ Do not use this skill for:
 Run this before any other command of this skill:
 
 ```bash
-h2t-ops version --expect 4.1.0 --json
+h2t-ops version --expect 4.1.1 --json
 ```
 
 Act on the result, in this order:
@@ -49,9 +49,9 @@ Act on the result, in this order:
    (`grep -E '^(STATE|H2T_HOOK)=' ~/.h2t/run/install.env`). With `STATE=ready` the install
    is fine and PATH does not reach it: show the directory of the `H2T_HOOK=` path, ask the
    user to restart the harness, and offer `uv tool update-shell` for them to run. Without
-   it there is no install: give the user `uvx --isolated --python 3.12.11 --managed-python -c "https://github.com/lichtpfad/h2t-skills/releases/download/v4.1.0/constraints.txt" --from "h2t-ops @ https://github.com/lichtpfad/h2t-skills/releases/download/v4.1.0/h2t_ops-4.1.0-py3-none-any.whl" h2t-setup sync`.
+   it there is no install: give the user `uvx --isolated --python 3.12.11 --managed-python -c "https://github.com/lichtpfad/h2t-skills/releases/download/v4.1.1/constraints.txt" --from "h2t-ops @ https://github.com/lichtpfad/h2t-skills/releases/download/v4.1.1/h2t_ops-4.1.1-py3-none-any.whl" h2t-setup sync`.
 4. Anything else (a non-zero exit without JSON, the usage text of an older CLI) — give the
-   user `uvx --isolated --python 3.12.11 --managed-python -c "https://github.com/lichtpfad/h2t-skills/releases/download/v4.1.0/constraints.txt" --from "h2t-ops @ https://github.com/lichtpfad/h2t-skills/releases/download/v4.1.0/h2t_ops-4.1.0-py3-none-any.whl" h2t-setup sync`.
+   user `uvx --isolated --python 3.12.11 --managed-python -c "https://github.com/lichtpfad/h2t-skills/releases/download/v4.1.1/constraints.txt" --from "h2t-ops @ https://github.com/lichtpfad/h2t-skills/releases/download/v4.1.1/h2t_ops-4.1.1-py3-none-any.whl" h2t-setup sync`.
 <!-- version-check:end -->
 
 ## Safety Boundary
@@ -94,6 +94,7 @@ Do not use Fetch/WebFetch/Playwright as the primary path for these URLs when an 
 | local .webm / .mp4 recording files to upload to MeetGeek | MeetGeek + Drive | `references/meetgeek.md` → "Local File Upload Flow" | `h2t-ops drive upload` then `h2t-ops meetgeek submit-url` |
 | Granola notes, AI summaries, verbatim transcripts, folders, sync to disk | Granola | `references/granola.md` | `h2t-ops granola` |
 | Dropbox folders and files, online-only placeholders the desktop client cannot read; upload, public link | Dropbox | `references/dropbox.md` | `h2t-ops dropbox` |
+| Instagram and Threads accounts, post metrics, insights runs (read-only), the social journal | Social | `references/social.md` | `h2t-ops social` |
 
 ### Drive-specific intent routing (important)
 
@@ -170,6 +171,7 @@ For credential readiness, prefer the installed setup skill:
 - `references/meetgeek.md`
 - `references/granola.md`
 - `references/dropbox.md`
+- `references/social.md`
 - `references/issue-policy.md`
 
 ## Codex / AGENTS Adapter

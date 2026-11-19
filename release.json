@@ -1,10 +1,10 @@
 {
   "format": 1,
-  "version": "4.1.0",
-  "previous": "4.0.0",
+  "version": "4.1.1",
+  "previous": "4.1.0",
   "python": "3.12.11",
-  "wheel": "https://github.com/lichtpfad/h2t-skills/releases/download/v4.1.0/h2t_ops-4.1.0-py3-none-any.whl",
-  "constraints": "https://github.com/lichtpfad/h2t-skills/releases/download/v4.1.0/constraints.txt",
+  "wheel": "https://github.com/lichtpfad/h2t-skills/releases/download/v4.1.1/h2t_ops-4.1.1-py3-none-any.whl",
+  "constraints": "https://github.com/lichtpfad/h2t-skills/releases/download/v4.1.1/constraints.txt",
   "bootstrap": [
     "uvx",
     "--isolated",
@@ -12,9 +12,9 @@
     "3.12.11",
     "--managed-python",
     "-c",
-    "https://github.com/lichtpfad/h2t-skills/releases/download/v4.1.0/constraints.txt",
+    "https://github.com/lichtpfad/h2t-skills/releases/download/v4.1.1/constraints.txt",
     "--from",
-    "h2t-ops @ https://github.com/lichtpfad/h2t-skills/releases/download/v4.1.0/h2t_ops-4.1.0-py3-none-any.whl",
+    "h2t-ops @ https://github.com/lichtpfad/h2t-skills/releases/download/v4.1.1/h2t_ops-4.1.1-py3-none-any.whl",
     "h2t-setup"
   ]
 }

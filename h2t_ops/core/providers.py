@@ -10,11 +10,12 @@ CONNECTOR_PROVIDERS: dict[str, tuple[str, ...]] = {
     "notion": ("notion",), "gmail": ("google",), "calendar": ("google",), "drive": ("google",),
     "google": ("google",), "telegram": ("telegram",), "meetgeek": ("meetgeek",),
     "granola": ("granola",), "dropbox": ("dropbox",), "research": ("exa", "jina"),
-    "evals": ("h2t-evals",),
+    "evals": ("h2t-evals",), "social": ("meta", "threads"),
 }
 KEY_PREFIX: dict[str, str] = {
     "notion": "NOTION_", "telegram": "TELEGRAM_", "meetgeek": "MEETGEEK_", "granola": "GRANOLA_",
     "dropbox": "DROPBOX_", "exa": "EXA_", "jina": "JINA_", "h2t-evals": "H2T_EVALS_",
+    "meta": "META_", "threads": "THREADS_",
 }
 PROVIDERS = frozenset(p for ps in CONNECTOR_PROVIDERS.values() for p in ps)
 FILE_NAME = re.compile(r"^(?P<provider>[a-z0-9-]+)\.(env|client\.json|token\.json|session|auth-state\.json)$")
