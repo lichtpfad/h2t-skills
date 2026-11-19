@@ -94,6 +94,23 @@ def write_raw(run_id: str, process: str, account_id: str, endpoint: str, payload
     return rid
 
 
+def keep(run_id: str, process: str, account_id: str, endpoint: str, value_raw, ids: list | None = None):
+    """Journal every raw body of a client call `(value, raw)`; return the value. Ids go into `ids`."""
+    value, raw = value_raw
+    for body in raw:
+        rid = write_raw(run_id, process, account_id, endpoint, body)
+        if ids is not None:
+            ids.append(rid)
+    return value
+
+
+def record_failure(run_id: str, process: str, exc: BaseException, account_id: str | None = None) -> None:
+    """Journal the bodies an error carried, then the step-6 failure outcome."""
+    keep(run_id, process, account_id, "error", (None, getattr(exc, "raw", [])))
+    record(run_id, 6, process=process, account=account_id,
+           result={"error": f"{type(exc).__name__}: {exc}"})
+
+
 def decide(run_id: str, process: str, action: str, account_id: str, kind: str = "*") -> str:
     if action == "none":
         record(run_id, 4, process=process, action=action, account=account_id, rule_id=None,

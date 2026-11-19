@@ -52,15 +52,6 @@ def _slug(name: str) -> str:
     return re.sub(r"[^a-z0-9]+", "_", (name or "").lower())
 
 
-def _record_raw(run_id: str, process: str, account: str, endpoint: str, value_raw):
-    from h2t_ops.connectors.social import journal
-
-    value, raw = value_raw
-    for body in raw:
-        journal.write_raw(run_id, process, account, endpoint, body)
-    return value
-
-
 def _journaled(process: str, work):
     """Open a run, call work(run_id) -> (result, ids); close with a step-6 outcome either way."""
     from h2t_ops.connectors.social import journal
@@ -69,7 +60,7 @@ def _journaled(process: str, work):
     try:
         result = work(run_id)
     except BaseException as exc:
-        journal.record(run_id, 6, process=process, result={"error": f"{type(exc).__name__}: {exc}"})
+        journal.record_failure(run_id, process, exc)
         raise
     journal.record(run_id, 6, process=process, accounts=sorted(
         r["id"] for r in (result if isinstance(result, list) else result["accounts"])))
@@ -77,6 +68,7 @@ def _journaled(process: str, work):
 
 
 def _discovered(run_id: str) -> tuple[list[dict], list[str]]:
+    from h2t_ops.connectors.social import journal
     from h2t_ops.connectors.social.meta import MetaClient
     from h2t_ops.connectors.social.threads import ThreadsClient
     from h2t_ops.core import secrets
@@ -85,7 +77,7 @@ def _discovered(run_id: str) -> tuple[list[dict], list[str]]:
     rows: list[dict] = []
     notes: list[str] = []
     if secrets.get(_META_KEY):
-        pages = _record_raw(run_id, "accounts", "*", "me/accounts", MetaClient().pages())
+        pages = journal.keep(run_id, "accounts", "*", "me/accounts", MetaClient().pages())
         for pg in pages:
             if pg.get("ig_id"):
                 rows.append({"network": "instagram", "handle": pg["ig_username"], "remote_id": pg["ig_id"],
@@ -95,7 +87,7 @@ def _discovered(run_id: str) -> tuple[list[dict], list[str]]:
     else:
         notes.append(f"{_META_KEY} is not set: Instagram and Facebook skipped")
     for key in secrets.keys_with_prefix("THREADS_TOKEN_"):
-        me = _record_raw(run_id, "accounts", key, "me", ThreadsClient(key).me())
+        me = journal.keep(run_id, "accounts", key, "me", ThreadsClient(key).me())
         rows.append({"network": "threads", "handle": me["username"], "remote_id": me["id"],
                      "token_key": key})
     if not rows:
@@ -160,6 +152,7 @@ def _list() -> list[dict]:
 
 
 def _check(account_id: str | None) -> list[dict]:
+    from h2t_ops.connectors.social import journal
     from h2t_ops.connectors.social.config import load_accounts
     from h2t_ops.connectors.social.meta import MetaClient
     from h2t_ops.connectors.social.threads import ThreadsClient
@@ -176,11 +169,11 @@ def _check(account_id: str | None) -> list[dict]:
             row = {"id": a.id}
             if a.network == "threads":
                 client = ThreadsClient(a.token_key)
-                row["profile"] = _record_raw(run_id, "check", a.id, "me", client.me())
-                row["posts"] = len(_record_raw(run_id, "check", a.id, "posts", client.posts(3)))
+                row["profile"] = journal.keep(run_id, "check", a.id, "me", client.me())
+                row["posts"] = len(journal.keep(run_id, "check", a.id, "posts", client.posts(3)))
             else:
                 meta = meta or MetaClient()
-                pages = pages if pages is not None else _record_raw(
+                pages = pages if pages is not None else journal.keep(
                     run_id, "check", a.id, "me/accounts", meta.pages())
                 page = next((p for p in pages if p["page_id"] == a.page_id or p["ig_id"] == a.remote_id), None)
                 if page is None:
@@ -190,10 +183,10 @@ def _check(account_id: str | None) -> list[dict]:
                     row["profile"] = {"name": page["name"], "page_id": page["page_id"]}
                     row["note"] = "Facebook: profile only; post reading is not built"
                 else:
-                    row["profile"] = _record_raw(run_id, "check", a.id, "profile",
-                                                 meta.ig_profile(a.remote_id, page["page_token"]))
-                    row["posts"] = len(_record_raw(run_id, "check", a.id, "media",
-                                                   meta.ig_media(a.remote_id, page["page_token"], 3)))
+                    row["profile"] = journal.keep(run_id, "check", a.id, "profile",
+                                                  meta.ig_profile(a.remote_id, page["page_token"]))
+                    row["posts"] = len(journal.keep(run_id, "check", a.id, "media",
+                                                    meta.ig_media(a.remote_id, page["page_token"], 3)))
             out.append(row)
         return out
 

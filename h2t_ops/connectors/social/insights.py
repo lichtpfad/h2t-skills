@@ -70,9 +70,7 @@ def _collect(run_id: str, account: Account, limit: int, client) -> tuple[list[di
     ids: list[str] = []
 
     def keep(endpoint: str, value_raw):
-        value, raw = value_raw
-        ids.extend(journal.write_raw(run_id, _PROCESS, account.id, endpoint, body) for body in raw)
-        return value
+        return journal.keep(run_id, _PROCESS, account.id, endpoint, value_raw, ids)
 
     extra: dict = {}
     if account.network == "threads":
@@ -103,25 +101,29 @@ def run(account_ids: list[str] | None, limit: int, client_factory=None, trigger:
     reports: dict[str, dict] = {}
     skipped_accounts: dict[str, str] = {}
     today = datetime.now(ZoneInfo(tz)).strftime("%Y-%m-%d")
-    for account in chosen:
-        if account.network == "facebook":
-            skipped_accounts[account.id] = "Facebook Page insights are not supported yet"
-            continue
-        posts, extra, ids = _collect(run_id, account, limit, factory(account.network, account))
-        summary = summarize(posts, tz)
-        no_data = not summary["posts"]
-        journal.record(run_id, 3, process=_PROCESS, account=account.id, source_ids=ids,
-                       **({"finding": "no data"} if no_data else {}))
-        journal.decide(run_id, _PROCESS, "none", account.id)
-        if no_data:
-            err = ProviderError(f"no data for {account.id}: no posts with metrics",
-                                hint="check the account has posts and the token has insights access")
-            journal.record(run_id, 6, process=_PROCESS, account=account.id,
-                           result={"error": f"{type(err).__name__}: {err}"})
-            raise err
-        report = {**summary, **extra}
-        target = paths.data_dir() / "social" / "insights" / account.id.replace(":", "_") / f"{today}.json"
-        store.replace(target, json.dumps(report, ensure_ascii=False, indent=2), place="data")
-        journal.record(run_id, 6, process=_PROCESS, account=account.id, report=str(target))
-        reports[account.id] = report
+    current = None
+    try:
+        for account in chosen:
+            current = account.id
+            if account.network == "facebook":
+                skipped_accounts[account.id] = "Facebook Page insights are not supported yet"
+                continue
+            posts, extra, ids = _collect(run_id, account, limit, factory(account.network, account))
+            summary = summarize(posts, tz)
+            no_data = not summary["posts"]
+            journal.record(run_id, 3, process=_PROCESS, account=account.id, source_ids=ids,
+                           **({"finding": "no data"} if no_data else {}))
+            journal.decide(run_id, _PROCESS, "none", account.id)
+            if no_data:
+                raise ProviderError(f"no data for {account.id}: no posts with metrics",
+                                    hint="check the account has posts and the token has insights access")
+            report = {**summary, **extra}
+            target = (paths.data_dir() / "social" / "insights" / account.id.replace(":", "_")
+                      / f"{today}.json")
+            store.replace(target, json.dumps(report, ensure_ascii=False, indent=2), place="data")
+            journal.record(run_id, 6, process=_PROCESS, account=account.id, report=str(target))
+            reports[account.id] = report
+    except BaseException as exc:
+        journal.record_failure(run_id, _PROCESS, exc, current)
+        raise
     return {"run_id": run_id, "reports": reports, "skipped_accounts": skipped_accounts}

@@ -283,3 +283,23 @@ def test_discover_never_echoes_a_token_in_an_api_override(env, social_config, ca
     code, out, err = run(capsys, "accounts", "discover", "--json")
     assert code == 3 and not env.calls
     assert PAGE1 not in out + err
+
+
+_META_IG = {"network": "instagram", "handle": "acme", "remote_id": "ig_111", "page_id": "page_222",
+            "token_key": "META_USER_TOKEN", "enabled": True}
+
+
+@pytest.mark.parametrize("argv", [("check",), ("run", "insights"), ("accounts", "discover")])
+def test_error_body_is_journaled_before_the_failure_outcome(env, social_config, capsys, argv):
+    social_config(accounts={"accounts": [_META_IG]})
+    env.routes["me/accounts"] = _routes(expired=True)["me/accounts"]   # HTTP 400, code 190
+    code, out, err = run(capsys, *argv, "--json")
+    assert code == 4
+    recs = _journal()
+    bodies = [r for r in recs if r["step"] == 2]
+    assert len(bodies) == 1
+    raw = "".join(p.read_text(encoding="utf-8") for p in (journal_path().parent / "raw").rglob("*.jsonl"))
+    assert "Session has expired" in raw
+    assert all(tok not in raw for tok in TOKENS)
+    assert [r["step"] for r in recs] == [1, 2, 6]
+    assert recs[-1]["result"]["error"].startswith("AuthError")

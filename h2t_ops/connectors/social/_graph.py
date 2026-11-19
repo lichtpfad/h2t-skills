@@ -13,7 +13,7 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from h2t_ops.connectors.social.config import api_base
 from h2t_ops.core import secrets
-from h2t_ops.core.errors import AuthError, NetworkError, ProviderError
+from h2t_ops.core.errors import AuthError, H2TError, NetworkError, ProviderError
 
 _RATE_CODES = {4, 17, 32, 613}
 UNAVAILABLE_CODES = {100, 10}
@@ -87,7 +87,17 @@ class GraphClient:
         return resp.status_code, body
 
     def _call(self, url: str, params: dict | None, raw: list[dict], token: str, soft=()) -> dict:
-        """One GET with a single retry on a rate limit. Appends every body to `raw`."""
+        """One GET with a single retry on a rate limit. Appends every body to `raw`.
+
+        A raised error carries the bodies collected so far in `.raw`, so the caller can journal them.
+        """
+        try:
+            return self._request(url, params, raw, token, soft)
+        except H2TError as exc:
+            exc.raw = raw
+            raise
+
+    def _request(self, url: str, params: dict | None, raw: list[dict], token: str, soft=()) -> dict:
         self._secrets.add(token)
         for attempt in (0, 1):
             status, body = self._get_once(url, params)

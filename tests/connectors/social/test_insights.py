@@ -4,7 +4,7 @@ import pytest
 
 from h2t_ops.connectors.social import insights
 from h2t_ops.connectors.social.journal import journal_path
-from h2t_ops.core.errors import ConfigError, ProviderError
+from h2t_ops.core.errors import AuthError, ConfigError, NetworkError, ProviderError
 
 
 def _post(ts, reach, link="https://x/p"):
@@ -186,3 +186,44 @@ def test_facebook_account_is_skipped_with_note(social_config, social_data, tz):
     client = FakeMeta(_media(1), {"m1": {"reach": 5}})
     out = insights.run(None, 10, client_factory=lambda n, a: client)
     assert "facebook:acme" not in out["reports"] and "facebook:acme" in out["skipped_accounts"]
+
+
+class BoomMeta(FakeMeta):
+    def __init__(self, exc, **kw):
+        super().__init__(_media(2), **kw)
+        self.exc = exc
+
+    def ig_media_insights(self, media_id, page_token):
+        raise self.exc
+
+
+@pytest.mark.parametrize("exc", [AuthError("token rejected"), NetworkError("down"),
+                                 ProviderError("rate limited, retry later")])
+def test_failure_mid_run_ends_with_one_step6_record(social_config, social_data, tz, exc):
+    social_config(accounts=_accounts())
+    with pytest.raises(type(exc)):
+        insights.run(None, 10, client_factory=lambda n, a: BoomMeta(exc))
+    recs = _journal()
+    assert [r["step"] for r in recs] == [1, 2, 2, 6]   # run, pages, media, then the failure
+    assert recs[-1]["result"]["error"] == f"{type(exc).__name__}: {exc}"
+    assert recs[-1]["account"] == "instagram:acme"
+
+
+def test_report_write_failure_ends_with_one_step6_record(social_config, social_data, tz, monkeypatch):
+    social_config(accounts=_accounts())
+    def boom(*a, **k):
+        raise OSError("disk full")
+    monkeypatch.setattr("h2t_ops.core.store.replace", boom)
+    with pytest.raises(OSError):
+        insights.run(None, 10, client_factory=lambda n, a: FakeMeta(_media(1), {"m1": {"reach": 5}}))
+    recs = _journal()
+    assert [r["step"] for r in recs][-1] == 6
+    assert sum(r["step"] == 6 for r in recs) == 1
+    assert recs[-1]["result"]["error"] == "OSError: disk full"
+
+
+def test_no_data_failure_has_exactly_one_step6(social_config, social_data, tz):
+    social_config(accounts=_accounts())
+    with pytest.raises(ProviderError):
+        insights.run(None, 10, client_factory=lambda n, a: FakeMeta([]))
+    assert sum(r["step"] == 6 for r in _journal()) == 1
