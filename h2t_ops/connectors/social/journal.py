@@ -48,12 +48,15 @@ def _redact(node):
 
 
 def _secret_values() -> list[tuple[str, str]]:
+    # journaling must not depend on a valid accounts.yaml: each part falls back on its own
     try:
         keys = [secret_key(n) for n in _FIXED_SECRETS]
+    except ConfigError:
+        keys = [secret_key(n, overrides=False) for n in _FIXED_SECRETS]
+    try:
         keys += [a.token_key for a in load_accounts()]
     except ConfigError:
-        # no or invalid accounts.yaml: journaling must not depend on it
-        keys = [secret_key(n, overrides=False) for n in _FIXED_SECRETS]
+        pass
     out = [(k, v) for k in keys if (v := secrets.get(k))]
     return out + [("a registered runtime secret", v) for v in _runtime_secrets]
 

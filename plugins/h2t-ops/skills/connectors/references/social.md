@@ -49,7 +49,7 @@ accounts:
     handle: acme
     remote_id: "456"      # the Instagram account id
     page_id: "789"        # the linked Facebook Page
-    token_key: META_USER_TOKEN
+    token_key: META_H2T_SOCIAL_USER_TOKEN
 ```
 
 `rules.yaml` (hand-written; read by the decision step, see "Journal"):
@@ -86,8 +86,8 @@ Only through the package, never in a config file, a command line or the output.
 | `threads.env` | `THREADS_TOKEN_<HANDLE>`, one per Threads profile (handle upper-case) |
 
 The key names come from config, not code: defaults in the package's `social/defaults.yaml`
-(`secrets:`), overridable in `accounts.yaml` with the same block. The names below
-(`META_USER_TOKEN`, `META_APP_SECRET`, `THREADS_TOKEN_*`) mean the configured ones.
+(`secrets:`), overridable in `accounts.yaml` with the same block. Below, each key is
+named by its default; an override replaces it everywhere.
 
 ```yaml
 secrets:                    # optional; key NAMES only, each must keep its META_/THREADS_ prefix
@@ -98,11 +98,11 @@ secrets:                    # optional; key NAMES only, each must keep its META_
 
 An empty value, a key of the wrong provider or an unknown name is a config error.
 
-`discover` reads `META_USER_TOKEN` and every `THREADS_TOKEN_*`. With neither set it exits
+`discover` reads `META_H2T_SOCIAL_USER_TOKEN` and every `THREADS_TOKEN_*`. With neither set it exits
 3 (config); with tokens set but no account found it exits 1. A Facebook Page gets the
 handle `<page name as lower-case words joined by _>`; two Pages with the same handle both
 get `_<page_id>` added. Page tokens are not
-stored: they are fetched at run time from `me/accounts` with `META_USER_TOKEN`.
+stored: they are fetched at run time from `me/accounts` with `META_H2T_SOCIAL_USER_TOKEN`.
 
 ## Getting the tokens
 
@@ -111,8 +111,9 @@ Meta (Instagram and Facebook), once per app:
 1. In your Meta app, open the Graph API Explorer, pick the app and a User token, and
    grant the Instagram and Page read permissions the app has.
 2. Exchange that short-lived token for a long-lived one: `GET /oauth/access_token` with
-   `grant_type=fb_exchange_token`, the app id, `META_APP_SECRET` and the short token.
-3. Put the result in `meta.env` as `META_USER_TOKEN`, with `META_APP_SECRET`. Do not
+   `grant_type=fb_exchange_token`, the app id, `META_H2T_SOCIAL_APP_SECRET` and the short token.
+3. Put the result in `meta.env` as `META_H2T_SOCIAL_USER_TOKEN`, with
+   `META_H2T_SOCIAL_APP_SECRET`. Do not
    paste either value into a chat, a command line or a file in a repo.
 
 Threads, per profile:

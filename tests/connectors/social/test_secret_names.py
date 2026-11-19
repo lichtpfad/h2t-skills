@@ -31,7 +31,7 @@ def test_secret_key_override_wins(social_config):
 
 @pytest.mark.parametrize("secrets_doc", [
     {"meta_user_token": ""}, {"meta_user_token": 5}, {"meta_user_token": "THREADS_TOKEN_X"},
-    {"threads_token_prefix": "META_X_"}, {"nope": "META_X"}, "bad",
+    {"threads_token_prefix": "META_X_"}, {"nope": "META_X"}, "bad", "", [], 0,
 ])
 def test_bad_secret_override_is_config_error(social_config, secrets_doc):
     social_config(accounts={"secrets": secrets_doc, "accounts": [ACCOUNT]})
@@ -62,6 +62,18 @@ def test_default_meta_keys_still_redacted_when_accounts_file_is_invalid(social_d
     social_config(accounts={"secrets": {"meta_user_token": ""}, "accounts": []})
     monkeypatch.setattr("h2t_ops.core.secrets.get",
                         lambda key: SECRET if key == "META_H2T_SOCIAL_APP_SECRET" else None)
+    run = journal.new_run("insights", "manual")
+    with pytest.raises(journal.SecretInRecord):
+        journal.record(run, 6, note=f"leak {SECRET}")
+
+
+def test_configured_meta_key_redacted_when_an_account_entry_is_invalid(social_data, social_config,
+                                                                       monkeypatch):
+    bad_account = {**ACCOUNT, "network": "myspace"}
+    social_config(accounts={"secrets": {"meta_user_token": "META_OTHER_USER"},
+                            "accounts": [bad_account]})
+    monkeypatch.setattr("h2t_ops.core.secrets.get",
+                        lambda key: SECRET if key == "META_OTHER_USER" else None)
     run = journal.new_run("insights", "manual")
     with pytest.raises(journal.SecretInRecord):
         journal.record(run, 6, note=f"leak {SECRET}")

@@ -132,7 +132,9 @@ _SECRET_PROVIDER = {"meta_user_token": "meta", "meta_app_secret": "meta",
 
 def _secret_overrides(doc: dict, f: Path) -> dict:
     """The `secrets` mapping of accounts.yaml: secret key NAMES only, checked against the provider."""
-    sec = doc.get("secrets") or {}
+    sec = doc.get("secrets")
+    if sec is None:
+        return {}
     if not isinstance(sec, dict):
         raise ConfigError(f"{f}: `secrets` must be a mapping")
     for name, key in sec.items():
