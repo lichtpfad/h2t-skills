@@ -102,3 +102,12 @@ def test_remove():
     out = schedule.remove("insights", runner=fake, platform="win32")
     assert fake.calls == [["schtasks", "/Delete", "/TN", "h2t-social-insights", "/F"]]
     assert out["task"] == "h2t-social-insights"
+
+
+def test_schtasks_output_is_decoded_with_the_oem_code_page():
+    fake = FakeRunner()
+    schedule.add("insights", "07:00", runner=fake, platform="win32")
+    schedule.remove("insights", runner=fake, platform="win32")
+    for kwargs in fake.kwargs:
+        assert kwargs["encoding"] == "oem" and kwargs["errors"] == "replace"
+        assert kwargs["capture_output"] is True and kwargs["text"] is True

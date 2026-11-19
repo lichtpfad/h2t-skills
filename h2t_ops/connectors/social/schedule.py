@@ -27,7 +27,8 @@ def _check(process: str, platform: str) -> str:
 
 
 def _call(runner, argv: list[str]) -> None:
-    result = runner(argv, capture_output=True, text=True)
+    # schtasks writes in the console (OEM) code page; the locale default would garble non-ASCII messages
+    result = runner(argv, capture_output=True, text=True, encoding="oem", errors="replace")
     if result.returncode != 0:
         raise ProviderError(f"schtasks failed ({result.returncode}): {(result.stderr or '').strip()}")
 
