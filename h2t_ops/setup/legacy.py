@@ -473,6 +473,7 @@ def _social_check() -> dict[str, Any]:
     try:
         user, app = secret_key("meta_user_token"), secret_key("meta_app_secret")
         threads = secrets.keys_with_prefix(secret_key("threads_token_prefix"))
+        checks = {k: secrets.source(k) or "missing" for k in [user, app, *threads]}
     except ConfigError:     # a bad social config must not take the whole matrix down; the message
         # may echo what the user typed into secrets:, so none of its text is reported
         from h2t_ops.connectors.social.config import accounts_path
@@ -480,7 +481,11 @@ def _social_check() -> dict[str, Any]:
                 "checks": {"error": f"{accounts_path()} is invalid; "
                                     "run `h2t-ops social accounts list` to see why"},
                 "live": "skipped"}
-    checks = {k: secrets.source(k) or "missing" for k in [user, app, *threads]}
+    except (OSError, UnicodeDecodeError):   # one corrupt secrets file must not crash the matrix
+        return {"connector": "social", "status": "error",
+                "checks": {"error": "a social secrets file could not be read; run "
+                                    "`h2t-ops setup connectors-check` after fixing its encoding"},
+                "live": "skipped"}
     ready = checks[user] != "missing" or bool(threads)
     return {"connector": "social", "status": "ready" if ready else "missing", "checks": checks,
             "live": "skipped"}

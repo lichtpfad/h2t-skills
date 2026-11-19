@@ -273,6 +273,25 @@ def test_connectors_check_survives_a_broken_social_config(tmp_path, monkeypatch)
     assert {"calendar", "notion", "meetgeek", "research"} <= set(by_name)
 
 
+def test_connectors_check_survives_an_unreadable_social_secrets_file(tmp_path, monkeypatch):
+    _home(tmp_path, monkeypatch)
+    # the corrupt file is a 3.x one: it is read only when a key is not in env or shared, so the
+    # other connectors (whose keys are set here) still resolve and the row under test is social
+    for k in ("NOTION_API_TOKEN", "TELEGRAM_API_ID", "TELEGRAM_API_HASH", "MEETGEEK_API_KEY",
+              "GRANOLA_API_KEY", "EXA_API_KEY"):
+        monkeypatch.setenv(k, "fake")
+    legacy = paths.legacy("secrets.h2t") / "secrets.env"
+    legacy.parent.mkdir(parents=True, exist_ok=True)
+    legacy.write_bytes(b"THREADS_TOKEN_X=\xff\xfe\xfa\n")
+    monkeypatch.setattr(setup_h2t, "resolve_h2t_ops", lambda home=None: {"status": "missing", "path": ""})
+    matrix = setup_h2t.connector_matrix(tmp_path)
+    by_name = {r["connector"]: r for r in matrix["connectors"]}
+    assert by_name["social"]["status"] == "error"
+    assert by_name["social"]["checks"]["error"]
+    assert "UnicodeDecodeError" not in json.dumps(matrix)
+    assert {"calendar", "notion", "meetgeek", "research"} <= set(by_name)
+
+
 def test_connectors_check_sees_google_files_in_the_4_0_places(tmp_path, monkeypatch):
     """client in secrets/shared, this machine's token in secrets/local (§4, R19)."""
     _home(tmp_path, monkeypatch)
