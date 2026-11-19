@@ -56,6 +56,10 @@ def register(subparsers: Any) -> None:
     sr.add_argument("process")
     add_fmt(sr)
 
+    tp = cmds.add_parser("tokens", help="Threads token upkeep")
+    tps = tp.add_subparsers(dest="tokens_cmd", required=True)
+    add_fmt(tps.add_parser("refresh", help="Refresh Threads tokens that expire within 7 days"))
+
     p.set_defaults(_handler=run)
 
 
@@ -266,6 +270,10 @@ def run(args: Any) -> Any:
         if args.schedule_cmd == "add":
             return schedule.add(args.process, args.daily)
         return schedule.remove(args.process)
+    if cmd == "tokens":
+        from h2t_ops.connectors.social import tokens
+
+        return tokens.refresh()
     if cmd == "journal":
         return _journal(args.run_id, args.last)
     raise UsageError(f"unknown social subcommand: {cmd!r}")

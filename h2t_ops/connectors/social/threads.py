@@ -9,6 +9,8 @@ import time
 
 from h2t_ops.connectors.social import journal
 from h2t_ops.connectors.social._graph import PAGE_SIZE, UNAVAILABLE_CODES, GraphClient
+from h2t_ops.connectors.social.config import api_base
+from h2t_ops.core.errors import ProviderError
 
 _POST_METRICS = "views,likes,replies,reposts,quotes"
 
@@ -28,6 +30,23 @@ class ThreadsClient(GraphClient):
         self._secrets.add(token)
         journal.register_secret(token)
         return token
+
+    def refresh(self) -> tuple[dict, list[dict]]:
+        """Exchange the current token for a fresh one. The new token is registered as a secret
+        before this returns, so the caller's journaling can catch a leak of it."""
+        from urllib.parse import urlsplit
+
+        token = self._resolve()
+        base = urlsplit(api_base("threads"))
+        url = f"{base.scheme}://{base.netloc}/refresh_access_token"
+        raw: list[dict] = []
+        body = self._call(url, {"grant_type": "th_refresh_token", "access_token": token}, raw, token)
+        new = body.get("access_token")
+        if not new:
+            raise ProviderError("Threads refresh returned no access_token")
+        self._secrets.add(new)
+        journal.register_secret(new)
+        return {"access_token": new, "expires_in": body.get("expires_in")}, raw
 
     def me(self) -> tuple[dict, list[dict]]:
         return self._single("me", self._resolve(), {"fields": "id,username"})
