@@ -13,7 +13,8 @@ on clean Windows + macOS user runtimes and evidence is attached.
 ## North Star
 
 `h2t-ops` owns operational provider connectors only: Notion, Gmail, Calendar,
-Drive, MeetGeek, Granola, Telegram, and Research.
+Drive, MeetGeek, Granola, Telegram, Research, and Social (Instagram, Facebook Pages,
+Threads).
 
 It does not own:
 
@@ -29,16 +30,33 @@ that bridge belongs outside this repo.
 
 ## Current Priorities
 
-The list of open work lives in the GitHub milestone
-[M8: 4.1 POS interop](https://github.com/lichtpfad/h2t-skills/milestone/14), not
-here, so it cannot go stale in this file:
+The list of open work lives in GitHub milestones, not here, so it cannot go stale in
+this file. This section keeps only what a milestone does not show: the order, and why.
+
+### Next release: 4.2.0 — milestone [M9: 4.2](https://github.com/lichtpfad/h2t-skills/milestone/15)
 
 ```bash
-gh issue list --milestone "M8: 4.1 POS interop" --state open
+gh issue list --milestone "M9: 4.2" --state open
 ```
 
-This section keeps only what the milestone does not show: the order, and why.
-Set 2026-11-01.
+Set 2026-11-19. 4.2.0 ships when all five social processes work live (owner's call);
+finished phases ship earlier as 4.1.x patches. The phases, the two decisions that block
+code, and the issue map: `docs/superpowers/plans/2026-11-19-social-processes-to-4-2.md`.
+
+1. **Decisions** — #672 snapshot file schema (blocks #670 item 6) and #673 the approval
+   flow for outward actions (blocks #681, #682, #684).
+2. **Insights complete** — #670 snapshot, #674 Threads and #675 Facebook Page insights,
+   #676 Threads token refresh, #677 the schedule, #678 secrets out of the 3.x place,
+   #679 a format bug. Read-only; needs no decision but the snapshot schema.
+3. **Communication (#680, #681) → content (#682) → research (#683) → ads (#684)**, in the
+   spec's order, each with its own TDD plan when it starts.
+
+Also in M9, not social: #652, #653, #654.
+
+### Shipped: 4.1.0 / 4.1.1 — milestone [M8: 4.1 POS interop](https://github.com/lichtpfad/h2t-skills/milestone/14)
+
+The order below was set 2026-11-01 for 4.1.0. Issues still open in M8 after the release
+are listed by `gh issue list --milestone "M8: 4.1 POS interop" --state open`.
 
 1. **#582** — the versioned pack–POS contract (`contracts/pos-interop.json`).
    Both #583 and #584 test against it.
@@ -433,6 +451,7 @@ Recommended triage:
 | MeetGeek | `h2t-ops meetgeek ...` | Done | #156 fixed; local recording recovery remains skill-layer (#149) |
 | Telegram | `h2t-ops telegram ...` | Done | Live auth verified; #121 closed |
 | Research | `h2t-ops research ...` | Done | URL fetch ladder + YouTube provider + Exa similar/answer + author resolve + visual-ocr --url |
+| Social | `h2t-ops social ...` | In progress | Read-only insights shipped in 4.1.1 (#667); the other processes are milestone M9: 4.2 |
 
 ## Boundaries
 
