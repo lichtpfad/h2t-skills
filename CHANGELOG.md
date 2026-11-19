@@ -4,6 +4,15 @@ One CHANGELOG for the whole pack from 4.0.0 on. The per-plugin files
 (`plugins/*/CHANGELOG.md`) are the history up to 3.x; their `Unreleased` entries ship in
 4.0.0.
 
+## Unreleased
+
+### Social
+
+- `h2t-ops social`: a read-only connector for Instagram and Threads. `accounts discover|list`,
+  `check`, `run insights` and `journal`; every run is recorded in an append-only journal
+  with its raw API bodies. Reference: `references/social.md`. Facebook Page insights,
+  writes to a network and Threads token refresh are not built yet.
+
 ## 4.1.0
 
 The pack no longer carries its author's values: everything that was one person's setup is

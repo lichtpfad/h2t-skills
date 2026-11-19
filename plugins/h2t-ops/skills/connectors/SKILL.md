@@ -94,6 +94,7 @@ Do not use Fetch/WebFetch/Playwright as the primary path for these URLs when an 
 | local .webm / .mp4 recording files to upload to MeetGeek | MeetGeek + Drive | `references/meetgeek.md` → "Local File Upload Flow" | `h2t-ops drive upload` then `h2t-ops meetgeek submit-url` |
 | Granola notes, AI summaries, verbatim transcripts, folders, sync to disk | Granola | `references/granola.md` | `h2t-ops granola` |
 | Dropbox folders and files, online-only placeholders the desktop client cannot read; upload, public link | Dropbox | `references/dropbox.md` | `h2t-ops dropbox` |
+| Instagram and Threads accounts, post metrics, insights runs (read-only), the social journal | Social | `references/social.md` | `h2t-ops social` |
 
 ### Drive-specific intent routing (important)
 
@@ -170,6 +171,7 @@ For credential readiness, prefer the installed setup skill:
 - `references/meetgeek.md`
 - `references/granola.md`
 - `references/dropbox.md`
+- `references/social.md`
 - `references/issue-policy.md`
 
 ## Codex / AGENTS Adapter
