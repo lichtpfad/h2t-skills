@@ -152,6 +152,20 @@ def _discover(write: bool) -> dict:
     return {"written": write, "path": str(path), "yaml": text, "notes": found["notes"]}
 
 
+def _discover_table(result: dict) -> str:
+    import yaml
+
+    rows = [(f"{a['network']}:{a['handle']}", str(a.get("enabled")), str(a.get("token_key")))
+            for a in yaml.safe_load(result["yaml"])["accounts"]]
+    rows.insert(0, ("id", "enabled", "token_key"))
+    widths = [max(len(r[i]) for r in rows) for i in range(3)]
+    lines = ["  ".join(c.ljust(w) for c, w in zip(r, widths)).rstrip() for r in rows]
+    lines += result["notes"]
+    lines.append(f"written: {result['path']}" if result["written"]
+                 else f"not written: pass --write to save {result['path']}")
+    return "\n".join(lines)
+
+
 def _list() -> list[dict]:
     from h2t_ops.connectors.social.config import load_accounts
 
@@ -224,7 +238,10 @@ def run(args: Any) -> Any:
 
     cmd = args.social_cmd
     if cmd == "accounts":
-        return _discover(args.write) if args.accounts_cmd == "discover" else _list()
+        if args.accounts_cmd != "discover":
+            return _list()
+        result = _discover(args.write)
+        return result if args.as_json or args.fmt != "human" else _discover_table(result)
     if cmd == "check":
         return _check(args.account_id)
     if cmd == "run":

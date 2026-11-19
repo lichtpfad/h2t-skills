@@ -105,6 +105,17 @@ def test_discover_without_write_changes_nothing(env, social_config, capsys):
     assert f.read_text(encoding="utf-8") == before
 
 
+def test_discover_human_is_a_table(env, social_config, capsys):
+    social_config(accounts={"accounts": []})
+    code, out, _ = run(capsys, "accounts", "discover")
+    assert code == 0
+    lines = out.strip().splitlines()
+    assert not out.lstrip().startswith("{")
+    assert all(w in lines[0] for w in ("id", "enabled", "token_key"))
+    assert len([x for x in lines if "instagram:acme" in x]) == 1
+    assert "not written" in lines[-1] and "--write" in lines[-1]
+
+
 def test_discover_merges_and_keeps_enabled(env, social_config, capsys):
     social_config(
         accounts={"api": {"meta_graph": "https://graph.facebook.com/v27.0"},
