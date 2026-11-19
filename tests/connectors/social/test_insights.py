@@ -4,7 +4,7 @@ import pytest
 
 from h2t_ops.connectors.social import insights
 from h2t_ops.connectors.social.journal import journal_path
-from h2t_ops.core.errors import AuthError, ConfigError, NetworkError, ProviderError
+from h2t_ops.core.errors import AuthError, ConfigError, NetworkError, ProviderError, UsageError
 
 
 def _post(ts, reach, link="https://x/p"):
@@ -227,3 +227,22 @@ def test_no_data_failure_has_exactly_one_step6(social_config, social_data, tz):
     with pytest.raises(ProviderError):
         insights.run(None, 10, client_factory=lambda n, a: FakeMeta([]))
     assert sum(r["step"] == 6 for r in _journal()) == 1
+
+
+@pytest.mark.parametrize("limit", [0, -1])
+def test_non_positive_limit_is_a_usage_error_before_any_call(social_config, social_data, tz, limit):
+    social_config(accounts=_accounts())
+    def factory(n, a):
+        raise AssertionError("no client may be built")
+    with pytest.raises(UsageError):
+        insights.run(None, limit, client_factory=factory)
+    assert not journal_path().exists()
+
+
+def test_unmatched_page_hint_names_a_real_command(social_config, social_data, tz):
+    social_config(accounts={"accounts": [{**_accounts()["accounts"][0], "remote_id": "ig_other",
+                                          "page_id": "page_other"}]})
+    with pytest.raises(ProviderError) as e:
+        insights.run(None, 10, client_factory=lambda n, a: FakeMeta(_media(1)))
+    assert "h2t-ops social accounts discover" in e.value.hint
+    assert "accounts check" not in e.value.hint

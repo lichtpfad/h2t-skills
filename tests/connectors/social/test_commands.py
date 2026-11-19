@@ -101,7 +101,7 @@ def test_discover_without_write_changes_nothing(env, social_config, capsys):
     assert code == 0
     doc = yaml.safe_load(json.loads(out)["result"]["yaml"])
     ids = {f"{a['network']}:{a['handle']}" for a in doc["accounts"]}
-    assert ids == {"instagram:acme", "facebook:acme_one", "facebook:acme_two_", "threads:acme"}
+    assert ids == {"instagram:acme", "facebook:acme_one", "facebook:acme_two", "threads:acme"}
     assert f.read_text(encoding="utf-8") == before
 
 
@@ -120,7 +120,7 @@ def test_discover_merges_and_keeps_enabled(env, social_config, capsys):
     assert doc["api"] == {"meta_graph": "https://graph.facebook.com/v27.0"}
     assert by_id["instagram:acme"]["enabled"] is True and by_id["instagram:acme"]["project"] == "proj_x"
     assert by_id["instagram:acme"]["remote_id"] == "ig_111" and by_id["instagram:acme"]["page_id"] == "page_222"
-    assert by_id["facebook:acme_two_"]["enabled"] is False and "project" not in by_id["facebook:acme_two_"]
+    assert by_id["facebook:acme_two"]["enabled"] is False and "project" not in by_id["facebook:acme_two"]
     assert by_id["threads:acme"]["token_key"] == "THREADS_TOKEN_ACME"
     assert "instagram:gone" in by_id   # unseen accounts stay
     from h2t_ops.connectors.social.config import load_accounts
@@ -178,14 +178,14 @@ def test_run_insights_envelope_json(env, social_config, capsys):
 
 def test_journal_reads_and_fails_loud_when_empty(env, social_config, capsys):
     code, out, err = run(capsys, "journal", "--json")
-    assert code == 1 and "no journal records" in out + err
+    assert code == 5 and "no journal records" in out + err
     social_config(accounts={"accounts": []})
     run(capsys, "accounts", "discover", "--json")
     run_id = _journal()[0]["run_id"]
     code, out, _ = run(capsys, "journal", "--run", run_id, "--json")
     assert code == 0 and all(r["run_id"] == run_id for r in json.loads(out)["result"])
     code, out, _ = run(capsys, "journal", "--run", "nope", "--json")
-    assert code == 1
+    assert code == 5
 
 
 @pytest.mark.parametrize("fmt", ["--json", "--format=human"])
@@ -244,7 +244,7 @@ def test_discover_with_no_token_at_all_fails_loud(env, social_config, capsys, mo
     _only_secrets(monkeypatch, {})
     social_config(accounts={"accounts": []})
     code, out, err = run(capsys, "accounts", "discover", "--json")
-    assert code == 1 and "no accounts found" in out + err
+    assert code == 3 and "no accounts found" in out + err
 
 
 def test_discover_with_expired_meta_token_still_fails_auth(env, social_config, capsys):
@@ -303,3 +303,36 @@ def test_error_body_is_journaled_before_the_failure_outcome(env, social_config, 
     assert all(tok not in raw for tok in TOKENS)
     assert [r["step"] for r in recs] == [1, 2, 6]
     assert recs[-1]["result"]["error"].startswith("AuthError")
+
+
+def test_discover_with_tokens_but_no_pages_is_a_provider_error(env, social_config, capsys, monkeypatch):
+    _only_secrets(monkeypatch, {"META_USER_TOKEN": USER})
+    env.routes["me/accounts"] = (200, {"data": []})
+    social_config(accounts={"accounts": []})
+    code, out, err = run(capsys, "accounts", "discover", "--json")
+    assert code == 1 and "no accounts found" in out + err
+
+
+@pytest.mark.parametrize("limit", ["0", "-5"])
+def test_non_positive_limit_is_a_usage_error_before_any_call(env, social_config, capsys, limit):
+    social_config(accounts={"accounts": [_META_IG]})
+    code, out, err = run(capsys, "run", "insights", "--limit", limit, "--json")
+    assert code == 2 and not env.calls and not journal_path().exists()
+
+
+def test_facebook_handle_has_no_edge_underscores(env, social_config, capsys):
+    social_config(accounts={"accounts": []})
+    code, out, _ = run(capsys, "accounts", "discover", "--json")
+    ids = {f"{a['network']}:{a['handle']}" for a in yaml.safe_load(json.loads(out)["result"]["yaml"])["accounts"]}
+    assert "facebook:acme_two" in ids and not any(i.endswith("_") for i in ids)
+
+
+def test_colliding_facebook_handles_get_the_page_id(env, social_config, capsys):
+    body = {"data": [{"id": "page_1", "name": "Acme One"}, {"id": "page_2", "name": "acme-one!"},
+                     {"id": "page_3", "name": "Other"}]}
+    env.routes["me/accounts"] = (200, body)
+    social_config(accounts={"accounts": []})
+    code, out, _ = run(capsys, "accounts", "discover", "--json")
+    accounts = yaml.safe_load(json.loads(out)["result"]["yaml"])["accounts"]
+    fb = {a["remote_id"]: a["handle"] for a in accounts if a["network"] == "facebook"}
+    assert fb == {"page_1": "acme_one_page_1", "page_2": "acme_one_page_2", "page_3": "other"}

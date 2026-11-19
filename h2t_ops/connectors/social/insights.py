@@ -9,7 +9,8 @@ from zoneinfo import ZoneInfo
 from h2t_ops.connectors.social import journal
 from h2t_ops.connectors.social.config import Account, load_accounts
 from h2t_ops.core import paths, store, user_config
-from h2t_ops.core.errors import ConfigError, ProviderError
+from h2t_ops.connectors.social.meta import find_page
+from h2t_ops.core.errors import ConfigError, ProviderError, UsageError
 
 _WEEKDAYS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
 _BANDS = ((0, 10), (10, 13), (13, 16), (16, 19), (19, 22), (22, 24))
@@ -78,10 +79,10 @@ def _collect(run_id: str, account: Account, limit: int, client) -> tuple[list[di
         fetch = lambda m: keep("post_insights", client.post_insights(m["id"]))  # noqa: E731
     else:
         pages = keep("me/accounts", client.pages())
-        page = next((p for p in pages if p.get("ig_id") == account.remote_id
-                     or (account.page_id and p.get("page_id") == account.page_id)), None)
+        page = find_page(pages, account)
         if page is None:
-            raise ProviderError(f"{account.id}: no page matches this account", hint="run `social accounts check`")
+            raise ProviderError(f"{account.id}: no page matches this account",
+                                hint="run `h2t-ops social accounts discover`")
         token = page["page_token"]
         media = keep("media", client.ig_media(account.remote_id, token, limit))
         fetch = lambda m: keep("media_insights", client.ig_media_insights(m["id"], token))  # noqa: E731
@@ -94,6 +95,8 @@ def _collect(run_id: str, account: Account, limit: int, client) -> tuple[list[di
 
 
 def run(account_ids: list[str] | None, limit: int, client_factory=None, trigger: str = "cli") -> dict:
+    if limit < 1:
+        raise UsageError(f"--limit must be a positive number, got {limit}")
     tz = _timezone()
     factory = client_factory or _default_factory
     chosen = [a for a in load_accounts() if a.enabled and (not account_ids or a.id in account_ids)]

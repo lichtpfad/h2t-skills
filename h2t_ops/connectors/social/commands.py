@@ -49,7 +49,7 @@ def register(subparsers: Any) -> None:
 
 
 def _slug(name: str) -> str:
-    return re.sub(r"[^a-z0-9]+", "_", (name or "").lower())
+    return re.sub(r"[^a-z0-9]+", "_", (name or "").lower()).strip("_")
 
 
 def _journaled(process: str, work):
@@ -72,7 +72,7 @@ def _discovered(run_id: str) -> tuple[list[dict], list[str]]:
     from h2t_ops.connectors.social.meta import MetaClient
     from h2t_ops.connectors.social.threads import ThreadsClient
     from h2t_ops.core import secrets
-    from h2t_ops.core.errors import ProviderError
+    from h2t_ops.core.errors import ConfigError, ProviderError
 
     rows: list[dict] = []
     notes: list[str] = []
@@ -86,12 +86,18 @@ def _discovered(run_id: str) -> tuple[list[dict], list[str]]:
                          "page_id": pg["page_id"], "token_key": _META_KEY})
     else:
         notes.append(f"{_META_KEY} is not set: Instagram and Facebook skipped")
-    for key in secrets.keys_with_prefix("THREADS_TOKEN_"):
+    threads_keys = secrets.keys_with_prefix("THREADS_TOKEN_")
+    for key in threads_keys:
         me = journal.keep(run_id, "accounts", key, "me", ThreadsClient(key).me())
         rows.append({"network": "threads", "handle": me["username"], "remote_id": me["id"],
                      "token_key": key})
     if not rows:
-        raise ProviderError("no accounts found", hint="set META_USER_TOKEN or THREADS_TOKEN_*")
+        error = ConfigError if not (secrets.get(_META_KEY) or threads_keys) else ProviderError
+        raise error("no accounts found", hint="set META_USER_TOKEN or THREADS_TOKEN_*")
+    handles = [r["handle"] for r in rows if r["network"] == "facebook"]
+    for r in rows:
+        if r["network"] == "facebook" and handles.count(r["handle"]) > 1:
+            r["handle"] += f"_{r['page_id']}"
     for r in rows:
         r["id"] = f"{r['network']}:{r['handle']}"
     return rows, notes
@@ -154,7 +160,7 @@ def _list() -> list[dict]:
 def _check(account_id: str | None) -> list[dict]:
     from h2t_ops.connectors.social import journal
     from h2t_ops.connectors.social.config import load_accounts
-    from h2t_ops.connectors.social.meta import MetaClient
+    from h2t_ops.connectors.social.meta import MetaClient, find_page
     from h2t_ops.connectors.social.threads import ThreadsClient
     from h2t_ops.core.errors import NotFoundError, ProviderError
 
@@ -175,7 +181,7 @@ def _check(account_id: str | None) -> list[dict]:
                 meta = meta or MetaClient()
                 pages = pages if pages is not None else journal.keep(
                     run_id, "check", a.id, "me/accounts", meta.pages())
-                page = next((p for p in pages if p["page_id"] == a.page_id or p["ig_id"] == a.remote_id), None)
+                page = find_page(pages, a)
                 if page is None:
                     raise ProviderError(f"{a.id}: no page matches this account",
                                         hint="run `h2t-ops social accounts discover`")
@@ -197,7 +203,7 @@ def _journal(run_id: str | None, last: int) -> list[dict]:
     import json
 
     from h2t_ops.connectors.social.journal import journal_path
-    from h2t_ops.core.errors import ProviderError
+    from h2t_ops.core.errors import NotFoundError
 
     path = journal_path()
     lines = path.read_text(encoding="utf-8").splitlines() if path.exists() else []
@@ -205,7 +211,7 @@ def _journal(run_id: str | None, last: int) -> list[dict]:
     if run_id:
         recs = [r for r in recs if r.get("run_id") == run_id]
     if not recs:
-        raise ProviderError(f"no journal records in {path}" + (f" for run {run_id}" if run_id else ""),
+        raise NotFoundError(f"no journal records in {path}" + (f" for run {run_id}" if run_id else ""),
                             hint="run `h2t-ops social check` or `run insights` first")
     return recs[-last:] if last > 0 else recs
 

@@ -147,3 +147,17 @@ def test_tokenized_raw_body_is_journalled(social_data):
     journal.write_raw("run1", "insights", "instagram:acme", "me/accounts", raw[0])
     text = journal.raw_path("insights", datetime.now(UTC).strftime("%Y-%m-%d")).read_text(encoding="utf-8")
     assert USER_TOKEN not in text and "PGTOK1" not in text
+
+
+def test_find_page_matches_by_instagram_id_or_page_id():
+    from h2t_ops.connectors.social.config import Account
+    from h2t_ops.connectors.social.meta import find_page
+
+    pages = [{"page_id": "page_1", "ig_id": None}, {"page_id": "page_2", "ig_id": "ig_2"}]
+
+    def acc(remote_id, page_id):
+        return Account("instagram:x", "instagram", "x", remote_id, page_id, "META_USER_TOKEN", None, True)
+
+    assert find_page(pages, acc("ig_2", None)) is pages[1]
+    assert find_page(pages, acc("ig_9", "page_1")) is pages[0]
+    assert find_page(pages, acc("ig_9", None)) is None

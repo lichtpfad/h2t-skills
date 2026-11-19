@@ -9,6 +9,12 @@ from h2t_ops.connectors.social import journal
 from h2t_ops.connectors.social._graph import PAGE_SIZE, UNAVAILABLE_CODES, GraphClient
 
 
+def find_page(pages: list[dict], account):
+    """The row of `MetaClient.pages()` behind an account: by its Instagram id or its Page id."""
+    return next((p for p in pages if p.get("ig_id") == account.remote_id
+                 or (account.page_id and p.get("page_id") == account.page_id)), None)
+
+
 class MetaClient(GraphClient):
     _provider = "meta"
     _label = "Meta"
