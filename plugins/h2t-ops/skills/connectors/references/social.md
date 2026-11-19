@@ -15,7 +15,7 @@ network.
 | smoke test: profile and last 3 posts per enabled account | `h2t-ops social check --json` |
 | the same for one account | `h2t-ops social check instagram:acme --json` |
 | collect metrics and summarize | `h2t-ops social run insights --json` |
-| one account, N posts | `h2t-ops social run insights --account threads:acme --limit 25 --json` |
+| one account, N posts (`--limit` must be 1 or more; default 120) | `h2t-ops social run insights --account threads:acme --limit 25 --json` |
 | show journal records | `h2t-ops social journal --last 20 --json` |
 | the records of one run | `h2t-ops social journal --run <run_id> --json` |
 
@@ -41,7 +41,8 @@ accounts:
   - network: threads      # instagram | facebook | threads
     handle: acme
     remote_id: "123"
-    token_key: THREADS_TOKEN_ACME   # the secret's key name, never its value
+    token_key: THREADS_TOKEN_ACME   # the secret's key name, never its value;
+                                    # THREADS_* for threads, META_* for instagram/facebook
     project: null         # optional project id from your domains
     enabled: true
   - network: instagram
@@ -65,7 +66,12 @@ rules:
     origin: <the example this rule came from>   # required
 ```
 
-Without a matching rule the verdict is `ask`; the more specific rule wins.
+Without a matching rule the verdict is `ask`; the more specific rule wins (an exact
+account counts before an exact kind).
+
+An `api` override must be a plain `https://` URL: a query, fragment or user info is a
+config error. A `token_key` of the wrong provider for its network (a `THREADS_*` key on
+an Instagram account, or the reverse) is a config error too.
 
 `run insights` also needs a `timezone` setting (`h2t-ops settings get timezone`); posts
 are grouped by weekday and hour band in that zone.
@@ -79,7 +85,10 @@ Only through the package, never in a config file, a command line or the output.
 | `meta.env` | `META_USER_TOKEN`, `META_APP_SECRET` |
 | `threads.env` | `THREADS_TOKEN_<HANDLE>`, one per Threads profile (handle upper-case) |
 
-`discover` reads `META_USER_TOKEN` and every `THREADS_TOKEN_*`. Page tokens are not
+`discover` reads `META_USER_TOKEN` and every `THREADS_TOKEN_*`. With neither set it exits
+3 (config); with tokens set but no account found it exits 1. A Facebook Page gets the
+handle `<page name as lower-case words joined by _>`; two Pages with the same handle both
+get `_<page_id>` added. Page tokens are not
 stored: they are fetched at run time from `me/accounts` with `META_USER_TOKEN`.
 
 ## Getting the tokens
@@ -103,7 +112,10 @@ Threads, per profile:
 ## Journal
 
 Every run is recorded in an append-only JSONL journal (`social/journal.jsonl` under the
-data dir). Each record carries `run_id`, `ts` and a `step`:
+data dir). Every record carries all of: `id`, `ts`, `run_id`, `process`, `step`, `channel`,
+`account`, `action`, `source_ids`, `context_refs`, `rule_id`, `decision`, `approved_by`,
+`result` (`remote_id`, `url`, `error`) and `task_id`; a value that does not apply is `null`
+or `[]`. The `step` says what the record is:
 
 | step | meaning |
 | --- | --- |
@@ -112,7 +124,12 @@ data dir). Each record carries `run_id`, `ts` and a `step`:
 | 3 | the finding for an account; `source_ids` of the bodies it rests on |
 | 4 | the decision: `rule_id` and `noop`/`auto`/`ask`/`deny` |
 | 5 | a claim; it must name at least one source id |
-| 6 | the outcome: the report path, or `error` |
+| 6 | the outcome: the `report` path, or the failure in `result.error` |
+
+A run that fails (bad token, network, rate limit, no data, a write error) ends with exactly
+one step-6 record whose `result.error` is `<ErrorClass>: <message>`; the error bodies the
+API returned are journaled as step 2 before it. `social journal` exits 5 when there is
+nothing to show.
 
 Raw API bodies are kept in `social/raw/<process>/<YYYY-MM-DD>.jsonl`, also append-only.
 Token fields are stripped from them, and a record containing a secret value is refused.

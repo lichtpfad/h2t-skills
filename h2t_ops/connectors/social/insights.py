@@ -8,8 +8,8 @@ from zoneinfo import ZoneInfo
 
 from h2t_ops.connectors.social import journal
 from h2t_ops.connectors.social.config import Account, load_accounts
-from h2t_ops.core import paths, store, user_config
 from h2t_ops.connectors.social.meta import find_page
+from h2t_ops.core import paths, store, user_config
 from h2t_ops.core.errors import ConfigError, ProviderError, UsageError
 
 _WEEKDAYS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")

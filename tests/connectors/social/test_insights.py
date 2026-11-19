@@ -4,7 +4,13 @@ import pytest
 
 from h2t_ops.connectors.social import insights
 from h2t_ops.connectors.social.journal import journal_path
-from h2t_ops.core.errors import AuthError, ConfigError, NetworkError, ProviderError, UsageError
+from h2t_ops.core.errors import (
+    AuthError,
+    ConfigError,
+    NetworkError,
+    ProviderError,
+    UsageError,
+)
 
 
 def _post(ts, reach, link="https://x/p"):
