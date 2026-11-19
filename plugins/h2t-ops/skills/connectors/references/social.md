@@ -82,8 +82,21 @@ Only through the package, never in a config file, a command line or the output.
 
 | file (under `secrets/shared/`) | keys |
 | --- | --- |
-| `meta.env` | `META_USER_TOKEN`, `META_APP_SECRET` |
+| `meta.env` | `META_H2T_SOCIAL_USER_TOKEN`, `META_H2T_SOCIAL_APP_SECRET` |
 | `threads.env` | `THREADS_TOKEN_<HANDLE>`, one per Threads profile (handle upper-case) |
+
+The key names come from config, not code: defaults in the package's `social/defaults.yaml`
+(`secrets:`), overridable in `accounts.yaml` with the same block. The names below
+(`META_USER_TOKEN`, `META_APP_SECRET`, `THREADS_TOKEN_*`) mean the configured ones.
+
+```yaml
+secrets:                    # optional; key NAMES only, each must keep its META_/THREADS_ prefix
+  meta_user_token: META_H2T_SOCIAL_USER_TOKEN
+  meta_app_secret: META_H2T_SOCIAL_APP_SECRET
+  threads_token_prefix: THREADS_TOKEN_
+```
+
+An empty value, a key of the wrong provider or an unknown name is a config error.
 
 `discover` reads `META_USER_TOKEN` and every `THREADS_TOKEN_*`. With neither set it exits
 3 (config); with tokens set but no account found it exits 1. A Facebook Page gets the
