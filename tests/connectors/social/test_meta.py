@@ -1,4 +1,5 @@
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -125,3 +126,24 @@ def test_only_get_is_used():
     c = client((200, fx("profile")))
     c.ig_profile("ig_111", "PGTOK1")
     assert c._session.calls[0][1]["access_token"] == "PGTOK1"
+
+
+def _tokenized():
+    text = (FIX / "meta_accounts_tokenized.json").read_text(encoding="utf-8")
+    return json.loads(text.replace("@TOK@", USER_TOKEN))
+
+
+def test_raw_strips_tokens_from_paging_urls_but_next_request_uses_original():
+    c = client((200, _tokenized()), (200, fx("accounts_2")))
+    rows, raw = c.pages()
+    assert len(rows) == 2
+    assert USER_TOKEN not in json.dumps(raw) and "deadbeef" not in json.dumps(raw)
+    assert "after=A" in raw[0]["paging"]["next"]
+    assert USER_TOKEN in c._session.calls[1][0]     # the original URL still carries the token
+
+
+def test_tokenized_raw_body_is_journalled(social_data):
+    _, raw = client((200, _tokenized()), (200, fx("accounts_2"))).pages()
+    journal.write_raw("run1", "insights", "instagram:acme", "me/accounts", raw[0])
+    text = journal.raw_path("insights", datetime.now(UTC).strftime("%Y-%m-%d")).read_text(encoding="utf-8")
+    assert USER_TOKEN not in text and "PGTOK1" not in text

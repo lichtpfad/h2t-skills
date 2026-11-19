@@ -9,6 +9,7 @@ requests is imported lazily so registry/help paths stay lightweight.
 from __future__ import annotations
 
 import time
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from h2t_ops.connectors.social import journal
 from h2t_ops.connectors.social.config import api_base
@@ -18,6 +19,21 @@ from h2t_ops.core.errors import AuthError, NetworkError, ProviderError
 _RATE_CODES = {4, 17, 32, 613}
 _UNAVAILABLE_CODES = {100, 10}
 _PAGE_SIZE = 100
+_SECRET_PARAMS = ("access_token", "appsecret_proof", "client_secret", "token")
+
+
+def _clean(node):
+    """A copy of a decoded body with token query params removed from every URL string in it."""
+    if isinstance(node, dict):
+        return {k: _clean(v) for k, v in node.items()}
+    if isinstance(node, list):
+        return [_clean(v) for v in node]
+    if isinstance(node, str) and node.startswith(("http://", "https://")) and "?" in node:
+        parts = urlsplit(node)
+        keep = [(k, v) for k, v in parse_qsl(parts.query, keep_blank_values=True)
+                if k not in _SECRET_PARAMS]
+        return urlunsplit(parts._replace(query=urlencode(keep)))
+    return node
 
 
 class MetaClient:
@@ -74,7 +90,7 @@ class MetaClient:
         for attempt in (0, 1):
             status, body = self._get_once(url, params)
             if isinstance(body, dict):
-                raw.append(body)
+                raw.append(_clean(body))
             err = body.get("error") if isinstance(body, dict) else None
             code = err.get("code") if isinstance(err, dict) else None
             if status < 400 and not err:
