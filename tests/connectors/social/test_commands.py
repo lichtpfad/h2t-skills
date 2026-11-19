@@ -173,7 +173,7 @@ def test_run_insights_envelope_json(env, social_config, capsys):
     assert code == 0, out + err
     env_ = json.loads(out)
     assert env_["ok"] is True and env_["provider"] == "social"
-    assert env_["result"]["reports"]["instagram:acme"]["posts"] == 2
+    assert env_["result"]["accounts"]["instagram:acme"]["summary"]["posts"] == 2
 
 
 def test_journal_reads_and_fails_loud_when_empty(env, social_config, capsys):

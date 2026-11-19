@@ -1,7 +1,6 @@
 """Insights process: collect metrics per account through the journal, summarize, record a noop decision."""
 from __future__ import annotations
 
-import json
 import statistics
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -9,12 +8,13 @@ from zoneinfo import ZoneInfo
 from h2t_ops.connectors.social import journal
 from h2t_ops.connectors.social.config import Account, load_accounts
 from h2t_ops.connectors.social.meta import find_page
-from h2t_ops.core import paths, store, user_config
-from h2t_ops.core.errors import ConfigError, ProviderError, UsageError
+from h2t_ops.core import user_config
+from h2t_ops.core.errors import ConfigError, NotFoundError, ProviderError, UsageError
 
 _WEEKDAYS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
 _BANDS = ((0, 10), (10, 13), (13, 16), (16, 19), (19, 22), (22, 24))
 _PROCESS = "insights"
+SCHEMA_VERSION = "h2t_social_insights/v1"
 
 
 def _metric(post: dict):
@@ -94,16 +94,20 @@ def _collect(run_id: str, account: Account, limit: int, client) -> tuple[list[di
     return posts, extra, ids
 
 
-def run(account_ids: list[str] | None, limit: int, client_factory=None, trigger: str = "cli") -> dict:
+def run(account_ids: list[str] | None, limit: int, client_factory=None, trigger: str = "cli", store: bool = False) -> dict:
     if limit < 1:
         raise UsageError(f"--limit must be a positive number, got {limit}")
     tz = _timezone()
     factory = client_factory or _default_factory
-    chosen = [a for a in load_accounts() if a.enabled and (not account_ids or a.id in account_ids)]
+    enabled = [a for a in load_accounts() if a.enabled]
+    unknown = [i for i in account_ids or [] if i not in {a.id for a in enabled}]
+    if unknown:
+        raise NotFoundError(f"no enabled account: {', '.join(unknown)}",
+                            hint="run `h2t-ops social accounts list`")
+    chosen = [a for a in enabled if not account_ids or a.id in account_ids]
     run_id = journal.new_run(_PROCESS, trigger)
-    reports: dict[str, dict] = {}
+    accounts: dict[str, dict] = {}
     skipped_accounts: dict[str, str] = {}
-    today = datetime.now(ZoneInfo(tz)).strftime("%Y-%m-%d")
     current = None
     try:
         for account in chosen:
@@ -118,15 +122,13 @@ def run(account_ids: list[str] | None, limit: int, client_factory=None, trigger:
                            **({"finding": "no data"} if no_data else {}))
             journal.decide(run_id, _PROCESS, "none", account.id)
             if no_data:
-                raise ProviderError(f"no data for {account.id}: no posts with metrics",
+                raise NotFoundError(f"no data for {account.id}: no posts with metrics",
                                     hint="check the account has posts and the token has insights access")
-            report = {**summary, **extra}
-            target = (paths.data_dir() / "social" / "insights" / account.id.replace(":", "_")
-                      / f"{today}.json")
-            store.replace(target, json.dumps(report, ensure_ascii=False, indent=2), place="data")
-            journal.record(run_id, 6, process=_PROCESS, account=account.id, report=str(target))
-            reports[account.id] = report
+            accounts[account.id] = {"network": account.network, "summary": summary, "posts": posts, **extra}
+            journal.record(run_id, 6, process=_PROCESS, account=account.id,
+                           schema_version=SCHEMA_VERSION, posts=summary["posts"])
     except BaseException as exc:
         journal.record_failure(run_id, _PROCESS, exc, current)
         raise
-    return {"run_id": run_id, "reports": reports, "skipped_accounts": skipped_accounts}
+    return {"schema_version": SCHEMA_VERSION, "run_id": run_id, "accounts": accounts,
+            "skipped_accounts": skipped_accounts}

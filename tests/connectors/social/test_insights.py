@@ -8,6 +8,7 @@ from h2t_ops.core.errors import (
     AuthError,
     ConfigError,
     NetworkError,
+    NotFoundError,
     ProviderError,
     UsageError,
 )
@@ -120,7 +121,7 @@ def _journal():
 
 def test_empty_media_fails_loud(social_config, social_data, tz):
     social_config(accounts=_accounts())
-    with pytest.raises(ProviderError, match="no data.*instagram:acme"):
+    with pytest.raises(NotFoundError, match="no data.*instagram:acme"):
         insights.run(None, 10, client_factory=lambda n, a: FakeMeta([]))
     recs = _journal()
     assert [r["step"] for r in recs if r["step"] != 2] == [1, 3, 4, 6]
@@ -128,12 +129,12 @@ def test_empty_media_fails_loud(social_config, social_data, tz):
     step3 = next(r for r in recs if r["step"] == 3)
     assert step3["source_ids"] == raw_ids and step3["finding"] == "no data"
     assert next(r for r in recs if r["step"] == 4)["decision"] == "noop"
-    assert next(r for r in recs if r["step"] == 6)["result"]["error"] == "ProviderError: no data for instagram:acme: no posts with metrics"
+    assert next(r for r in recs if r["step"] == 6)["result"]["error"] == "NotFoundError: no data for instagram:acme: no posts with metrics"
 
 
 def test_all_posts_without_metrics_fails_loud(social_config, social_data, tz):
     social_config(accounts=_accounts())
-    with pytest.raises(ProviderError, match="no data"):
+    with pytest.raises(NotFoundError, match="no data"):
         insights.run(None, 10, client_factory=lambda n, a: FakeMeta(_media(2)))
 
 
@@ -149,7 +150,7 @@ def test_online_followers_hours_are_not_converted(social_config, social_data, tz
     social_config(accounts=_accounts())
     client = FakeMeta(_media(1), {"m1": {"reach": 5}}, online={"0": 5, "13": 9})
     out = insights.run(None, 10, client_factory=lambda n, a: client)
-    assert out["reports"]["instagram:acme"]["online_followers_hour_as_reported"] == {"0": 5, "13": 9}
+    assert out["accounts"]["instagram:acme"]["online_followers_hour_as_reported"] == {"0": 5, "13": 9}
 
 
 def test_run_writes_provenance_chain(social_config, social_data, tz):
@@ -164,17 +165,69 @@ def test_run_writes_provenance_chain(social_config, social_data, tz):
     assert step3["source_ids"] == raw_ids
     assert next(r for r in recs if r["step"] == 4)["decision"] == "noop"
     step6 = next(r for r in recs if r["step"] == 6)
-    report = social_data / "social" / "insights" / "instagram_acme"
-    assert step6["report"].startswith(str(report))
-    assert json.loads(open(step6["report"], encoding="utf-8").read())["posts"] == 2
+    assert step6["schema_version"] == "h2t_social_insights/v1" and step6["posts"] == 2
+
+
+def test_run_writes_no_report_file(social_config, social_data, tz):
+    social_config(accounts=_accounts())
+    client = FakeMeta(_media(2), {"m1": {"reach": 5}, "m2": {"reach": 9}})
+    out = insights.run(None, 10, client_factory=lambda n, a: client)
+    assert not (social_data / "social" / "insights").exists()
+    step6 = next(r for r in _journal() if r["step"] == 6 and r["run_id"] == out["run_id"])
+    assert step6["schema_version"] == "h2t_social_insights/v1" and step6["posts"] == 2
+    assert "report" not in step6
+
+
+def test_result_is_versioned(social_config, social_data, tz):
+    social_config(accounts=_accounts())
+    client = FakeMeta(_media(2), {"m1": {"reach": 5}, "m2": {"reach": 9}})
+    out = insights.run(None, 10, client_factory=lambda n, a: client)
+    assert out["schema_version"] == "h2t_social_insights/v1"
+    assert out["run_id"] == _journal()[0]["run_id"]
+    acc = out["accounts"]["instagram:acme"]
+    assert acc["network"] == "instagram"
+    assert acc["summary"]["posts"] == 2 and len(acc["posts"]) == 2
+    assert out["skipped_accounts"] == {}
+
+
+def test_unknown_account_is_not_found(social_config, social_data, tz):
+    social_config(accounts=_accounts())
+    with pytest.raises(NotFoundError, match="instagram:nope"):
+        insights.run(["instagram:nope"], 5, client_factory=lambda n, a: FakeMeta([]))
+    assert not journal_path().exists()
+
+
+def test_disabled_account_is_not_found(social_config, social_data, tz):
+    off = {"network": "instagram", "handle": "off", "remote_id": "ig_9", "token_key": "META_USER_TOKEN",
+           "enabled": False}
+    social_config(accounts=_accounts(off))
+    with pytest.raises(NotFoundError, match="instagram:off"):
+        insights.run(["instagram:off"], 5, client_factory=lambda n, a: FakeMeta([]))
+
+
+def test_no_posts_with_metrics_is_not_found(social_config, social_data, tz):
+    social_config(accounts=_accounts())
+    with pytest.raises(NotFoundError):
+        insights.run(None, 5, client_factory=lambda n, a: FakeMeta(_media(2)))
+
+
+def test_second_account_failure_fails_the_run(social_config, social_data, tz):
+    second = {"network": "instagram", "handle": "two", "remote_id": "ig_2", "page_id": "page_2",
+              "token_key": "META_USER_TOKEN"}
+    social_config(accounts=_accounts(second))
+    clients = iter([FakeMeta(_media(1), {"m1": {"reach": 5}}), BoomMeta(ProviderError("rate limited"))])
+    with pytest.raises(ProviderError):
+        insights.run(None, 10, client_factory=lambda n, a: next(clients))
+    failures = [r for r in _journal() if r["step"] == 6 and r["result"]["error"]]
+    assert len(failures) == 1 and failures[0]["account"] == "instagram:two"
 
 
 def test_threads_account_report_has_no_online_followers(social_config, social_data, tz):
     acc = {"network": "threads", "handle": "acme", "remote_id": "t_1", "token_key": "THREADS_TOKEN_ACME"}
     social_config(accounts={"accounts": [acc]})
     out = insights.run(None, 10, client_factory=lambda n, a: FakeThreads())
-    r = out["reports"]["threads:acme"]
-    assert r["median_reach"] == 7 and "online_followers_hour_as_reported" not in r
+    r = out["accounts"]["threads:acme"]
+    assert r["summary"]["median_reach"] == 7 and "online_followers_hour_as_reported" not in r
 
 
 def test_disabled_accounts_are_skipped(social_config, social_data, tz):
@@ -183,7 +236,7 @@ def test_disabled_accounts_are_skipped(social_config, social_data, tz):
     social_config(accounts=_accounts(off))
     client = FakeMeta(_media(1), {"m1": {"reach": 5}})
     out = insights.run(None, 10, client_factory=lambda n, a: client)
-    assert list(out["reports"]) == ["instagram:acme"]
+    assert list(out["accounts"]) == ["instagram:acme"]
 
 
 def test_facebook_account_is_skipped_with_note(social_config, social_data, tz):
@@ -191,7 +244,7 @@ def test_facebook_account_is_skipped_with_note(social_config, social_data, tz):
     social_config(accounts=_accounts(fb))
     client = FakeMeta(_media(1), {"m1": {"reach": 5}})
     out = insights.run(None, 10, client_factory=lambda n, a: client)
-    assert "facebook:acme" not in out["reports"] and "facebook:acme" in out["skipped_accounts"]
+    assert "facebook:acme" not in out["accounts"] and "facebook:acme" in out["skipped_accounts"]
 
 
 class BoomMeta(FakeMeta):
@@ -215,22 +268,9 @@ def test_failure_mid_run_ends_with_one_step6_record(social_config, social_data, 
     assert recs[-1]["account"] == "instagram:acme"
 
 
-def test_report_write_failure_ends_with_one_step6_record(social_config, social_data, tz, monkeypatch):
-    social_config(accounts=_accounts())
-    def boom(*a, **k):
-        raise OSError("disk full")
-    monkeypatch.setattr("h2t_ops.core.store.replace", boom)
-    with pytest.raises(OSError):
-        insights.run(None, 10, client_factory=lambda n, a: FakeMeta(_media(1), {"m1": {"reach": 5}}))
-    recs = _journal()
-    assert [r["step"] for r in recs][-1] == 6
-    assert sum(r["step"] == 6 for r in recs) == 1
-    assert recs[-1]["result"]["error"] == "OSError: disk full"
-
-
 def test_no_data_failure_has_exactly_one_step6(social_config, social_data, tz):
     social_config(accounts=_accounts())
-    with pytest.raises(ProviderError):
+    with pytest.raises(NotFoundError):
         insights.run(None, 10, client_factory=lambda n, a: FakeMeta([]))
     assert sum(r["step"] == 6 for r in _journal()) == 1
 
