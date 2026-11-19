@@ -126,12 +126,33 @@ def _api_overrides(doc: dict, f: Path) -> dict:
     return api
 
 
+_SECRET_PROVIDER = {"meta_user_token": "meta", "meta_app_secret": "meta",
+                    "threads_token_prefix": "threads"}
+
+
+def _secret_overrides(doc: dict, f: Path) -> dict:
+    """The `secrets` mapping of accounts.yaml: secret key NAMES only, checked against the provider."""
+    sec = doc.get("secrets") or {}
+    if not isinstance(sec, dict):
+        raise ConfigError(f"{f}: `secrets` must be a mapping")
+    for name, key in sec.items():
+        if name not in _SECRET_PROVIDER:
+            raise ConfigError(f"{f}: secrets.{name} is unknown; expected one of "
+                              f"{', '.join(_SECRET_PROVIDER)}")
+        if not isinstance(key, str) or not key:
+            raise ConfigError(f"{f}: secrets.{name} must be a non-empty string")
+        if providers.provider_of_key(key) != _SECRET_PROVIDER[name]:
+            raise ConfigError(f"{f}: secrets.{name} {key!r} must be a {_SECRET_PROVIDER[name]} key")
+    return sec
+
+
 def load_accounts() -> list[Account]:
     f = accounts_path()
     doc = _read(f, "accounts", lambda e: f"account {e.get('network')}:{e.get('handle')}")
     if doc is None:
         raise ConfigError(f"no accounts file: {f}", hint="run `h2t-ops social accounts discover`")
     _api_overrides(doc, f)
+    _secret_overrides(doc, f)
     known = _project_ids()
     out = []
     for e in _entries(doc, "accounts", f):
@@ -189,5 +210,22 @@ def api_base(network: str) -> str:
     api = _api_overrides(_read(f, "accounts", lambda e: "account") or {}, f)
     if api.get(key) is not None:
         return api[key]
+    return _defaults()["api"][key]
+
+
+def _defaults() -> dict:
     text = (resources.files("h2t_ops.resources") / "social" / "defaults.yaml").read_text(encoding="utf-8-sig")
-    return yaml.safe_load(text)["api"][key]
+    return yaml.safe_load(text)
+
+
+def secret_key(name: str, *, overrides: bool = True) -> str:
+    """The secret key NAME for `name` (meta_user_token, meta_app_secret, threads_token_prefix):
+    accounts.yaml `secrets:` first, then defaults.yaml. `overrides=False` skips the file."""
+    if name not in _SECRET_PROVIDER:
+        raise ConfigError(f"unknown secret name {name!r}; expected one of {', '.join(_SECRET_PROVIDER)}")
+    if overrides:
+        f = accounts_path()
+        sec = _secret_overrides(_read(f, "accounts", lambda e: "account") or {}, f)
+        if sec.get(name) is not None:
+            return sec[name]
+    return _defaults()["secrets"][name]

@@ -9,7 +9,6 @@ import re
 from typing import Any
 
 PROVIDER = "social"
-_META_KEY = "META_USER_TOKEN"
 
 
 def register(subparsers: Any) -> None:
@@ -69,31 +68,34 @@ def _journaled(process: str, work):
 
 def _discovered(run_id: str) -> tuple[list[dict], list[str]]:
     from h2t_ops.connectors.social import journal
+    from h2t_ops.connectors.social.config import secret_key
     from h2t_ops.connectors.social.meta import MetaClient
     from h2t_ops.connectors.social.threads import ThreadsClient
     from h2t_ops.core import secrets
     from h2t_ops.core.errors import ConfigError, ProviderError
 
+    meta_key = secret_key("meta_user_token")
+    prefix = secret_key("threads_token_prefix")
     rows: list[dict] = []
     notes: list[str] = []
-    if secrets.get(_META_KEY):
+    if secrets.get(meta_key):
         pages = journal.keep(run_id, "accounts", "*", "me/accounts", MetaClient().pages())
         for pg in pages:
             if pg.get("ig_id"):
                 rows.append({"network": "instagram", "handle": pg["ig_username"], "remote_id": pg["ig_id"],
-                             "page_id": pg["page_id"], "token_key": _META_KEY})
+                             "page_id": pg["page_id"], "token_key": meta_key})
             rows.append({"network": "facebook", "handle": _slug(pg["name"]), "remote_id": pg["page_id"],
-                         "page_id": pg["page_id"], "token_key": _META_KEY})
+                         "page_id": pg["page_id"], "token_key": meta_key})
     else:
-        notes.append(f"{_META_KEY} is not set: Instagram and Facebook skipped")
-    threads_keys = secrets.keys_with_prefix("THREADS_TOKEN_")
+        notes.append(f"{meta_key} is not set: Instagram and Facebook skipped")
+    threads_keys = secrets.keys_with_prefix(prefix)
     for key in threads_keys:
         me = journal.keep(run_id, "accounts", key, "me", ThreadsClient(key).me())
         rows.append({"network": "threads", "handle": me["username"], "remote_id": me["id"],
                      "token_key": key})
     if not rows:
-        error = ConfigError if not (secrets.get(_META_KEY) or threads_keys) else ProviderError
-        raise error("no accounts found", hint="set META_USER_TOKEN or THREADS_TOKEN_*")
+        error = ConfigError if not (secrets.get(meta_key) or threads_keys) else ProviderError
+        raise error("no accounts found", hint=f"set {meta_key} or {prefix}*")
     handles = [r["handle"] for r in rows if r["network"] == "facebook"]
     for r in rows:
         if r["network"] == "facebook" and handles.count(r["handle"]) > 1:

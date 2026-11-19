@@ -61,7 +61,7 @@ def _routes(expired=False):
 @pytest.fixture
 def env(social_config, social_data, monkeypatch):
     """Fake secrets, fake HTTP at the client session seam, timezone UTC. Returns the session."""
-    values = {"META_USER_TOKEN": USER, "THREADS_TOKEN_ACME": THR}
+    values = {"META_H2T_SOCIAL_USER_TOKEN": USER, "THREADS_TOKEN_ACME": THR}
     monkeypatch.setattr("h2t_ops.core.secrets.get", values.get)
     monkeypatch.setattr("h2t_ops.core.secrets.keys_with_prefix",
                         lambda p: sorted(k for k in values if k.startswith(p)))
@@ -109,9 +109,9 @@ def test_discover_merges_and_keeps_enabled(env, social_config, capsys):
     social_config(
         accounts={"api": {"meta_graph": "https://graph.facebook.com/v27.0"},
                   "accounts": [{"network": "instagram", "handle": "acme", "remote_id": "old",
-                                "token_key": "META_USER_TOKEN", "enabled": True, "project": "proj_x"},
+                                "token_key": "META_H2T_SOCIAL_USER_TOKEN", "enabled": True, "project": "proj_x"},
                                 {"network": "instagram", "handle": "gone", "remote_id": "ig_9",
-                                 "token_key": "META_USER_TOKEN"}]},
+                                 "token_key": "META_H2T_SOCIAL_USER_TOKEN"}]},
         domains={"d": {"projects": [{"id": "proj_x"}]}})
     code, out, err = run(capsys, "accounts", "discover", "--write", "--json")
     assert code == 0, out + err
@@ -132,7 +132,7 @@ def test_discover_and_check_are_journaled(env, social_config, capsys, cmd):
     if cmd == "check":
         social_config(accounts={"accounts": [
             {"network": "instagram", "handle": "acme", "remote_id": "ig_111", "page_id": "page_222",
-             "token_key": "META_USER_TOKEN", "enabled": True},
+             "token_key": "META_H2T_SOCIAL_USER_TOKEN", "enabled": True},
             {"network": "threads", "handle": "acme", "remote_id": "th_111",
              "token_key": "THREADS_TOKEN_ACME", "enabled": True}]})
         argv = ("check", "--json")
@@ -159,7 +159,7 @@ def test_check_names_a_missing_account(env, social_config, capsys):
 def test_check_facebook_prints_note(env, social_config, capsys):
     social_config(accounts={"accounts": [{"network": "facebook", "handle": "acme_two_",
                                           "remote_id": "page_223", "page_id": "page_223",
-                                          "token_key": "META_USER_TOKEN", "enabled": True}]})
+                                          "token_key": "META_H2T_SOCIAL_USER_TOKEN", "enabled": True}]})
     code, out, _ = run(capsys, "check", "--json")
     row = json.loads(out)["result"][0]
     assert code == 0 and "profile only" in row["note"] and "posts" not in row
@@ -168,7 +168,7 @@ def test_check_facebook_prints_note(env, social_config, capsys):
 def test_run_insights_envelope_json(env, social_config, capsys):
     social_config(accounts={"accounts": [
         {"network": "instagram", "handle": "acme", "remote_id": "ig_111", "page_id": "page_222",
-         "token_key": "META_USER_TOKEN", "enabled": True}]})
+         "token_key": "META_H2T_SOCIAL_USER_TOKEN", "enabled": True}]})
     code, out, err = run(capsys, "run", "insights", "--account", "instagram:acme", "--limit", "5", "--json")
     assert code == 0, out + err
     env_ = json.loads(out)
@@ -192,7 +192,7 @@ def test_journal_reads_and_fails_loud_when_empty(env, social_config, capsys):
 def test_cli_output_and_errors_never_show_tokens(env, social_config, capsys, fmt):
     social_config(accounts={"accounts": [
         {"network": "instagram", "handle": "acme", "remote_id": "ig_111", "page_id": "page_222",
-         "token_key": "META_USER_TOKEN", "enabled": True},
+         "token_key": "META_H2T_SOCIAL_USER_TOKEN", "enabled": True},
         {"network": "threads", "handle": "acme", "remote_id": "th_111",
          "token_key": "THREADS_TOKEN_ACME", "enabled": True}]})
     seen = []
@@ -228,6 +228,24 @@ def _only_secrets(monkeypatch, values):
                         lambda p: sorted(k for k in values if k.startswith(p)))
 
 
+def test_discover_uses_the_configured_meta_key(env, social_config, capsys, monkeypatch):
+    _only_secrets(monkeypatch, {"META_OTHER_USER": USER})
+    social_config(accounts={"secrets": {"meta_user_token": "META_OTHER_USER"}, "accounts": []})
+    code, out, err = run(capsys, "accounts", "discover", "--json")
+    assert code == 0, out + err
+    doc = yaml.safe_load(json.loads(out)["result"]["yaml"])
+    assert {a["token_key"] for a in doc["accounts"]} == {"META_OTHER_USER"}
+
+
+def test_discover_uses_the_configured_threads_prefix(env, social_config, capsys, monkeypatch):
+    _only_secrets(monkeypatch, {"THREADS_MY_ACME": THR, "THREADS_TOKEN_ACME": THR})
+    social_config(accounts={"secrets": {"threads_token_prefix": "THREADS_MY_"}, "accounts": []})
+    code, out, err = run(capsys, "accounts", "discover", "--json")
+    assert code == 0, out + err
+    doc = yaml.safe_load(json.loads(out)["result"]["yaml"])
+    assert {a["token_key"] for a in doc["accounts"]} == {"THREADS_MY_ACME"}
+
+
 def test_threads_only_discover_skips_meta_and_says_so(env, social_config, capsys, monkeypatch):
     _only_secrets(monkeypatch, {"THREADS_TOKEN_ACME": THR})
     social_config(accounts={"accounts": []})
@@ -236,7 +254,7 @@ def test_threads_only_discover_skips_meta_and_says_so(env, social_config, capsys
     result = json.loads(out)["result"]
     doc = yaml.safe_load(result["yaml"])
     assert [f"{a['network']}:{a['handle']}" for a in doc["accounts"]] == ["threads:acme"]
-    assert any("META_USER_TOKEN" in n for n in result["notes"])
+    assert any("META_H2T_SOCIAL_USER_TOKEN" in n for n in result["notes"])
     assert not any("me/accounts" in c for c in env.calls)
 
 
@@ -257,7 +275,7 @@ def test_discover_with_expired_meta_token_still_fails_auth(env, social_config, c
 def test_discover_refuses_an_existing_file_with_a_token(env, social_config, capsys):
     social_config(accounts={"accounts": [
         {"network": "instagram", "handle": "acme", "remote_id": "ig_111",
-         "token_key": "META_USER_TOKEN", "token": "legacy-" + "s" * 12}]})
+         "token_key": "META_H2T_SOCIAL_USER_TOKEN", "token": "legacy-" + "s" * 12}]})
     f = _file(social_config)
     before = f.read_text(encoding="utf-8")
     code, out, err = run(capsys, "accounts", "discover", "--write", "--json")
@@ -269,7 +287,7 @@ def test_discover_refuses_an_existing_file_with_a_token(env, social_config, caps
 def test_discover_keeps_project_exactly_and_drops_unknown_fields(env, social_config, capsys):
     social_config(accounts={"accounts": [
         {"network": "instagram", "handle": "acme", "remote_id": "ig_111",
-         "token_key": "META_USER_TOKEN", "project": "", "legacy_note": "x"}]})
+         "token_key": "META_H2T_SOCIAL_USER_TOKEN", "project": "", "legacy_note": "x"}]})
     code, out, err = run(capsys, "accounts", "discover", "--write", "--json")
     assert code == 0, out + err
     doc = yaml.safe_load(_file(social_config).read_text(encoding="utf-8"))
@@ -286,7 +304,7 @@ def test_discover_never_echoes_a_token_in_an_api_override(env, social_config, ca
 
 
 _META_IG = {"network": "instagram", "handle": "acme", "remote_id": "ig_111", "page_id": "page_222",
-            "token_key": "META_USER_TOKEN", "enabled": True}
+            "token_key": "META_H2T_SOCIAL_USER_TOKEN", "enabled": True}
 
 
 @pytest.mark.parametrize("argv", [("check",), ("run", "insights"), ("accounts", "discover")])
@@ -306,7 +324,7 @@ def test_error_body_is_journaled_before_the_failure_outcome(env, social_config, 
 
 
 def test_discover_with_tokens_but_no_pages_is_a_provider_error(env, social_config, capsys, monkeypatch):
-    _only_secrets(monkeypatch, {"META_USER_TOKEN": USER})
+    _only_secrets(monkeypatch, {"META_H2T_SOCIAL_USER_TOKEN": USER})
     env.routes["me/accounts"] = (200, {"data": []})
     social_config(accounts={"accounts": []})
     code, out, err = run(capsys, "accounts", "discover", "--json")

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from h2t_ops.connectors.social import journal
 from h2t_ops.connectors.social._graph import PAGE_SIZE, UNAVAILABLE_CODES, GraphClient
+from h2t_ops.connectors.social.config import secret_key
 
 
 def find_page(pages: list[dict], account):
@@ -19,8 +20,8 @@ class MetaClient(GraphClient):
     _provider = "meta"
     _label = "Meta"
 
-    def __init__(self, user_token_key: str = "META_USER_TOKEN", **kw) -> None:
-        super().__init__(user_token_key, **kw)
+    def __init__(self, user_token_key: str | None = None, **kw) -> None:
+        super().__init__(user_token_key or secret_key("meta_user_token"), **kw)
 
     def _user_token(self) -> str:
         return self._token()

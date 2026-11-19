@@ -1,3 +1,7 @@
 api:
   meta_graph: https://graph.facebook.com/v27.0
   threads_graph: https://graph.threads.net/v1.0
+secrets:
+  meta_user_token: META_H2T_SOCIAL_USER_TOKEN
+  meta_app_secret: META_H2T_SOCIAL_APP_SECRET
+  threads_token_prefix: THREADS_TOKEN_

@@ -9,12 +9,12 @@ import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 
-from h2t_ops.connectors.social.config import load_accounts, load_rules
+from h2t_ops.connectors.social.config import load_accounts, load_rules, secret_key
 from h2t_ops.core import paths, secrets, store
 from h2t_ops.core.errors import ConfigError, UsageError
 
 REDACT_FIELDS = ("access_token", "page_token", "token")
-_FIXED_SECRET_KEYS = ("META_USER_TOKEN", "META_APP_SECRET")
+_FIXED_SECRETS = ("meta_user_token", "meta_app_secret")   # names in config; key names resolve there
 _runtime_secrets: set[str] = set()
 
 
@@ -48,11 +48,12 @@ def _redact(node):
 
 
 def _secret_values() -> list[tuple[str, str]]:
-    keys = list(_FIXED_SECRET_KEYS)
     try:
+        keys = [secret_key(n) for n in _FIXED_SECRETS]
         keys += [a.token_key for a in load_accounts()]
     except ConfigError:
-        pass   # no or invalid accounts.yaml: journaling must not depend on it
+        # no or invalid accounts.yaml: journaling must not depend on it
+        keys = [secret_key(n, overrides=False) for n in _FIXED_SECRETS]
     out = [(k, v) for k in keys if (v := secrets.get(k))]
     return out + [("a registered runtime secret", v) for v in _runtime_secrets]
 

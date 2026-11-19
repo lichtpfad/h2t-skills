@@ -74,7 +74,7 @@ READERS = {
     "notion": ("NOTION_API_TOKEN=fake-notion\n", "fake-notion", _notion),
     "h2t-evals": ("H2T_EVALS_TOKEN=fake-evals\n", "fake-evals", _evals),
     "telegram": ("TELEGRAM_API_ID=1\nTELEGRAM_API_HASH=fake-telegram\n", "fake-telegram", _telegram),
-    "meta": ("META_USER_TOKEN=fake-meta\n", "fake-meta", _meta),
+    "meta": ("META_H2T_SOCIAL_USER_TOKEN=fake-meta\n", "fake-meta", _meta),
     "threads": ("THREADS_TOKEN_ACME=fake-threads\n", "fake-threads", _threads),
 }
 

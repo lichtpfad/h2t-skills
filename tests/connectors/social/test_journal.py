@@ -70,7 +70,7 @@ def test_step5_without_source_ids_is_refused(social_data):
 
 def test_secret_value_never_written(social_data, monkeypatch):
     monkeypatch.setattr("h2t_ops.core.secrets.get",
-                        lambda key: SECRET if key == "META_USER_TOKEN" else None)
+                        lambda key: SECRET if key == "META_H2T_SOCIAL_USER_TOKEN" else None)
     run = journal.new_run("insights", "manual")
     before = _lines(journal.journal_path())
     with pytest.raises(journal.SecretInRecord) as exc:

@@ -35,7 +35,7 @@ class FakeSession:
 @pytest.fixture(autouse=True)
 def _secret(monkeypatch, social_data):
     monkeypatch.setattr("h2t_ops.core.secrets.get",
-                        lambda key: USER_TOKEN if key == "META_USER_TOKEN" else None)
+                        lambda key: USER_TOKEN if key == "META_H2T_SOCIAL_USER_TOKEN" else None)
     monkeypatch.setattr(journal, "_runtime_secrets", set())
 
 
@@ -79,7 +79,7 @@ def test_expired_token_is_auth_error():
     with pytest.raises(AuthError) as e:
         client((400, fx("error_190"))).ig_profile("ig_111", "PGTOK1")
     assert exit_code_for(e.value) == 4
-    assert "META_USER_TOKEN" in str(e.value) + e.value.hint and "renew the token" in e.value.hint
+    assert "META_H2T_SOCIAL_USER_TOKEN" in str(e.value) + e.value.hint and "renew the token" in e.value.hint
     assert "PGTOK1" not in str(e.value) and USER_TOKEN not in str(e.value) + e.value.hint
 
 
@@ -87,7 +87,7 @@ def test_missing_user_token_is_auth_error(monkeypatch):
     monkeypatch.setattr("h2t_ops.core.secrets.get", lambda key: None)
     with pytest.raises(AuthError) as e:
         client().pages()
-    assert exit_code_for(e.value) == 4 and "META_USER_TOKEN" in str(e.value)
+    assert exit_code_for(e.value) == 4 and "META_H2T_SOCIAL_USER_TOKEN" in str(e.value)
 
 
 def test_raw_has_one_body_per_call():
@@ -156,7 +156,7 @@ def test_find_page_matches_by_instagram_id_or_page_id():
     pages = [{"page_id": "page_1", "ig_id": None}, {"page_id": "page_2", "ig_id": "ig_2"}]
 
     def acc(remote_id, page_id):
-        return Account("instagram:x", "instagram", "x", remote_id, page_id, "META_USER_TOKEN", None, True)
+        return Account("instagram:x", "instagram", "x", remote_id, page_id, "META_H2T_SOCIAL_USER_TOKEN", None, True)
 
     assert find_page(pages, acc("ig_2", None)) is pages[1]
     assert find_page(pages, acc("ig_9", "page_1")) is pages[0]
