@@ -47,11 +47,15 @@ code, and the issue map: `docs/superpowers/plans/2026-11-19-social-processes-to-
    database; the connector gives an output contract), #673 (chat runs ask in the chat and
    pass a consent flag), #686 (a database only for pipelines or on request: SQLite, later
    Postgres; the journal stays JSONL until #677).
-2. **Insights complete** — #670 snapshot, #674 Threads and #675 Facebook Page insights,
-   #676 Threads token refresh, #677 the schedule, #678 secrets out of the 3.x place,
-   #679 a format bug. Read-only; needs no decision but the snapshot schema.
-3. **Communication (#680, #681) → content (#682) → research (#683) → ads (#684)**, in the
-   spec's order, each with its own TDD plan when it starts.
+2. **Insights complete** (read-only) — #689 JSON output first, then #670, #674, #675,
+   #676, #677, #694, #678, #679.
+3. **Shared door for every outward action** — #690 rules and consent flag, #691 nothing
+   outward in unattended runs, #692 rate limits, #693 manual tasks.
+4. **Communication** (#680, #696, #695, #697, #681, #698, #699) → **content** (#682,
+   #700–#707) → **research** (#683, #708, #709, #710) → **ads** (#684, #711, #712), in the
+   spec's order, each with its own TDD plan and Codex plan gate when it starts.
+
+The row-by-row map with acceptance and red cases is the stage plan's "Issue map".
 
 Also in M9, not social:
 - #652, #653, #654;

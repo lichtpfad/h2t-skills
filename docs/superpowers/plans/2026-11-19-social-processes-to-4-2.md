@@ -135,22 +135,47 @@ Each phase: own TDD plan with a Codex plan gate → tasks with a Codex review ea
 
 ## Issue map
 
-All in milestone M9: 4.2 (created 2026-11-19).
+All in milestone M9: 4.2 (2026-11-19). The plan was reviewed by Codex in six rounds
+against the spec and the issue standard; the issues mirror the rows.
 
 | id | issue | phase |
 |---|---|---|
 | D1 | #672 decision: snapshot file schema — closed, outside the boundary | decision |
-| D2 | #673 decision: approval flow for outward actions — closed, decided | decision |
-| D3 | #686 decision: database for journal and raw data — closed, decided | decision |
-| — | #670 dated Instagram snapshot | 1 |
-| S1 | #674 run insights on Threads accounts | 1 |
+| D2 | #673 decision: approval flow — closed, decided | decision |
+| D3 | #686 decision: database — closed, decided | decision |
+| — | #670 account, post, audience data as versioned JSON | 1 |
+| S12 | #689 return insights as JSON, write no report file | 1 |
+| S1 | #674 insights on Threads accounts | 1 |
 | S2 | #675 Facebook Page insights | 1 |
 | S3 | #676 refresh Threads tokens | 1 |
-| S4 | #677 run insights on a schedule | 1 |
+| S4a | #677 schedule a process with Task Scheduler | 1 |
+| S4b | #694 store scheduled runs into SQLite | 1 |
 | S5 | #678 secrets to secrets/shared | 1 |
 | S6 | #679 bug: discover human format prints JSON | 1 |
-| S7 | #680 collect comments, DMs, mentions | 2 |
-| S8 | #681 reply to a comment after approval | 2 |
-| S9 | #682 publish a post after approval | 3 |
-| S10 | #683 competitor profiles via business discovery | 4 |
-| S11 | #684 ad campaign metrics and recommendations | 5 |
+| S13a | #690 rule check and consent flag | door |
+| S13b | #691 no outward action in unattended runs | door |
+| S14 | #692 rate limits and per-account cap | door |
+| S26 | #693 manual task when the API cannot | door |
+| S7a | #680 Instagram and Facebook comments and mentions | 2 |
+| S7c | #696 Threads replies and mentions | 2 |
+| S7b | #695 Instagram and Facebook DMs | 2 |
+| S7d | #697 poll communication on a schedule | 2 |
+| S8 | #681 reply to a comment | 2 |
+| S15 | #698 hide a comment | 2 |
+| S16 | #699 reply to a DM within 7 days | 2 |
+| S9 | #682 one Instagram image post | 3 |
+| S17a | #700 Instagram carousel | 3 |
+| S17b | #701 Instagram reel | 3 |
+| S25 | #702 Instagram story; Facebook Page story checked | 3 |
+| S18a | #703 Threads text and image | 3 |
+| S18b | #704 Threads carousel and video | 3 |
+| S19a | #705 Facebook Page text, photos, links | 3 |
+| S19b | #706 Facebook Page video and reel | 3 |
+| S20 | #707 publish at the planned time | 3 |
+| S10 | #683 Instagram competitor profiles | 4 |
+| S27 | #708 Threads competitor profiles | 4 |
+| S21 | #709 hashtags, keywords, trends | 4 |
+| S22 | #710 Meta Ad Library | 4 |
+| S11 | #684 read campaign metrics | 5 |
+| S23 | #711 change a campaign budget | 5 |
+| S24 | #712 launch or pause a campaign | 5 |
