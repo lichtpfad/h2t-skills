@@ -209,3 +209,24 @@ def test_json_escaped_secret_is_refused_in_raw(social_data, secret):
         journal.write_raw(run, "insights", "instagram:acme", "/x", {"x": secret})
     assert _lines(journal.journal_path()) == before
     assert not list((social_data / "social").glob("raw/**/*.jsonl"))
+
+
+def test_decide_rule_of_another_process_does_not_apply(social_data, social_config):
+    social_config(rules=_rules([
+        {"id": "r-comm", "process": "communication", "action": "reply", "account": "*", "verdict": "auto"},
+        {"id": "r-any", "process": "*", "action": "pin", "account": "*", "verdict": "deny"}]))
+    run = journal.new_run("content", "manual")
+    assert journal.decide(run, "content", "reply", "instagram:acme") == "ask"
+    assert json.loads(_lines(journal.journal_path())[-1])["rule_id"] is None
+    assert journal.decide(run, "communication", "reply", "instagram:acme") == "auto"
+    assert journal.decide(run, "content", "pin", "instagram:acme") == "deny"
+
+
+def test_decide_account_match_beats_kind_match(social_data, social_config):
+    social_config(rules=_rules([
+        {"id": "r-kind", "process": "p", "action": "a", "account": "*", "kind": "reel", "verdict": "deny"},
+        {"id": "r-acct", "process": "p", "action": "a", "account": "instagram:acme", "kind": "*",
+         "verdict": "auto"}]))
+    run = journal.new_run("p", "manual")
+    assert journal.decide(run, "p", "a", "instagram:acme", "reel") == "auto"
+    assert json.loads(_lines(journal.journal_path())[-1])["rule_id"] == "r-acct"
