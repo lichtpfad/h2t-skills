@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 import pytest
 
@@ -308,3 +309,58 @@ def test_only_facebook_accounts_is_not_found_naming_the_skip(social_config, soci
     social_config(accounts={"accounts": [fb]})
     with pytest.raises(NotFoundError, match="facebook:acme.*not supported"):
         insights.run(None, 5, client_factory=lambda n, a: FakeMeta([]))
+
+
+_FIXTURES = Path(__file__).parent / "fixtures"
+
+
+def _fixture(name):
+    return json.loads((_FIXTURES / name).read_text(encoding="utf-8"))
+
+
+class _Session:
+    """Fake HTTP session: routes a GET by the last path segments of the URL."""
+
+    def __init__(self, routes):
+        self.routes = routes
+
+    def get(self, url, params=None, timeout=None):
+        body = self.routes[url.split("/v1.0/")[-1]]
+        return type("R", (), {"status_code": 200, "json": lambda self: body})()
+
+
+def test_threads_run_links_journal_chain(social_config, social_data, tz, monkeypatch):
+    from h2t_ops.connectors.social.threads import ThreadsClient
+    monkeypatch.setattr("h2t_ops.core.secrets.get", lambda key, *a: "THAA" + "t" * 12 + "-thr")
+    session = _Session({"me/threads": _fixture("threads_posts_1.json"),
+                        "t1/insights": _fixture("threads_insights.json"),
+                        "t2/insights": _fixture("threads_insights.json")})
+    acc = {"network": "threads", "handle": "acme", "remote_id": "th_111", "token_key": "THREADS_TOKEN_ACME"}
+    social_config(accounts={"accounts": [acc]})
+    out = insights.run(None, 2, client_factory=lambda n, a: ThreadsClient(a.token_key, session=session))
+    recs = [r for r in _journal() if r["run_id"] == out["run_id"]]
+    steps = [r["step"] for r in recs]
+    assert steps == [1, 2, 2, 2, 3, 4, 6]
+    raw_ids = [r["source_ids"][0] for r in recs if r["step"] == 2]
+    assert next(r for r in recs if r["step"] == 3)["source_ids"] == raw_ids
+    views = next(m["values"][0]["value"] for m in _fixture("threads_insights.json")["data"]
+                 if m["name"] == "views")
+    assert out["accounts"]["threads:acme"]["summary"]["median_reach"] == views
+
+
+@pytest.mark.parametrize("field", ["id", "timestamp"])
+@pytest.mark.parametrize("network", ["instagram", "threads"])
+def test_post_without_field_is_provider_error(social_config, social_data, tz, network, field):
+    post = {"id": "m1", "timestamp": "2026-11-01T09:00:00+0000", "permalink": "p1"}
+    del post[field]
+    if network == "threads":
+        acc = {"network": "threads", "handle": "acme", "remote_id": "th_111", "token_key": "THREADS_TOKEN_ACME"}
+        social_config(accounts={"accounts": [acc]})
+        client = FakeThreads()
+        client.posts = lambda limit: ([post], [{"data": ["posts"]}])
+    else:
+        social_config(accounts=_accounts())
+        client = FakeMeta([post], {"m1": {"reach": 5}})
+    with pytest.raises(ProviderError) as e:
+        insights.run(None, 5, client_factory=lambda n, a: client)
+    assert f"{network}:acme" in str(e.value) and field in str(e.value)
