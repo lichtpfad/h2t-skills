@@ -9,7 +9,7 @@
     {
       "name": "h2t-core",
       "description": "H2T Core — session lifecycle: session-start, handoff, scaffold-project, init-project, setup, agent-profile",
-      "version": "4.1.0",
+      "version": "4.1.1",
       "author": {
         "name": "lichtpfad"
       },
@@ -17,8 +17,8 @@
         "source": "git-subdir",
         "url": "https://github.com/lichtpfad/h2t-skills.git",
         "path": "plugins/h2t-core",
-        "ref": "v4.1.0",
-        "sha": "2d5bdbf8261d28842957f3267e7faec67c71c6c5"
+        "ref": "v4.1.1",
+        "sha": "4b8df577b33ae39272a51a2473fa894e468cc23b"
       },
       "category": "development",
       "strict": false
@@ -26,7 +26,7 @@
     {
       "name": "h2t-ops",
       "description": "H2T Ops — provider I/O connectors, daily-brief, research (Exa), and the Ecosystem Research KB skill (ingest/query/lint).",
-      "version": "4.1.0",
+      "version": "4.1.1",
       "author": {
         "name": "lichtpfad"
       },
@@ -34,8 +34,8 @@
         "source": "git-subdir",
         "url": "https://github.com/lichtpfad/h2t-skills.git",
         "path": "plugins/h2t-ops",
-        "ref": "v4.1.0",
-        "sha": "2d5bdbf8261d28842957f3267e7faec67c71c6c5"
+        "ref": "v4.1.1",
+        "sha": "4b8df577b33ae39272a51a2473fa894e468cc23b"
       },
       "category": "productivity",
       "strict": false
@@ -43,7 +43,7 @@
     {
       "name": "h2t-dev",
       "description": "H2T Dev — development workflow: docs-lint, github-issues, pre-merge-check, milestone-closure",
-      "version": "4.1.0",
+      "version": "4.1.1",
       "author": {
         "name": "lichtpfad"
       },
@@ -51,8 +51,8 @@
         "source": "git-subdir",
         "url": "https://github.com/lichtpfad/h2t-skills.git",
         "path": "plugins/h2t-dev",
-        "ref": "v4.1.0",
-        "sha": "2d5bdbf8261d28842957f3267e7faec67c71c6c5"
+        "ref": "v4.1.1",
+        "sha": "4b8df577b33ae39272a51a2473fa894e468cc23b"
       },
       "category": "development",
       "strict": false
@@ -60,7 +60,7 @@
     {
       "name": "h2t-arch",
       "description": "H2T Arch — architecture and diagram tools: drawio, diagram-node",
-      "version": "4.1.0",
+      "version": "4.1.1",
       "author": {
         "name": "lichtpfad"
       },
@@ -68,8 +68,8 @@
         "source": "git-subdir",
         "url": "https://github.com/lichtpfad/h2t-skills.git",
         "path": "plugins/h2t-arch",
-        "ref": "v4.1.0",
-        "sha": "2d5bdbf8261d28842957f3267e7faec67c71c6c5"
+        "ref": "v4.1.1",
+        "sha": "4b8df577b33ae39272a51a2473fa894e468cc23b"
       },
       "category": "productivity",
       "strict": false
@@ -77,7 +77,7 @@
     {
       "name": "h2t-creative",
       "description": "H2T Creative v2 — modular landing pages and decks: Swiss grid base, swappable profiles, Python assembler, Playwright QA.",
-      "version": "4.1.0",
+      "version": "4.1.1",
       "author": {
         "name": "lichtpfad"
       },
@@ -85,8 +85,8 @@
         "source": "git-subdir",
         "url": "https://github.com/lichtpfad/h2t-skills.git",
         "path": "plugins/h2t-creative",
-        "ref": "v4.1.0",
-        "sha": "2d5bdbf8261d28842957f3267e7faec67c71c6c5"
+        "ref": "v4.1.1",
+        "sha": "4b8df577b33ae39272a51a2473fa894e468cc23b"
       },
       "category": "productivity",
       "strict": false
