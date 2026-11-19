@@ -62,7 +62,7 @@ Human-gated steps (Task 9): every live run, registering a real scheduled task, w
   - Versioning rule: adding a key keeps v1; removing or renaming one needs v2. #670 adds the groups `account_daily`, `audience`, `stories`, `comments` and the list `unavailable` (`{account, group, metric, code, message}`) as additions to v1.
   - Storage: no report files; `--store` writes rows to `<data>/social/social.db` (Task 5).
 - [ ] **Step 2: Verify.** `uv run h2t-docs-lint doctor` reports no new finding for the spec file.
-- [ ] **Step 3: Commit.** `git add docs/superpowers/specs/2026-11-19-social-pipeline-design.md docs/superpowers/plans/2026-11-19-social-phase1-insights.md` → `docs(social): insights output contract v1 in the spec (#670)`
+- [ ] **Step 3: Commit.** `git add docs/superpowers/specs/2026-11-19-social-pipeline-design.md docs/superpowers/plans/2026-11-19-social-insights-complete.md` → `docs(social): insights output contract v1 in the spec (#670)`
 
 ### Task 2: Insights return versioned JSON, no report file (S12 #689)
 
