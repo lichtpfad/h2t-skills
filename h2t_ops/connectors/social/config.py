@@ -13,7 +13,8 @@ from h2t_ops.core.errors import ConfigError
 
 NETWORKS = ("instagram", "facebook", "threads")
 VERDICTS = ("auto", "ask", "deny")
-_API_KEY = {"meta": "meta_graph", "threads": "threads_graph"}
+_API_KEY = {"meta": "meta_graph", "instagram": "meta_graph", "facebook": "meta_graph",
+            "threads": "threads_graph"}
 _TOKEN_VALUE = re.compile(r"^(EAA|THAA|IGAA)[A-Za-z0-9]{20,}")
 _TOKEN_NAMES = ("token", "access_token")
 
@@ -50,7 +51,23 @@ def rules_path() -> Path:
     return paths.config_dir() / "social" / "rules.yaml"
 
 
-def _read(f: Path) -> dict | None:
+def _scan(node, f: Path, where: str) -> None:
+    """Refuse a token key or a token-shaped value anywhere inside `node`."""
+    if isinstance(node, dict):
+        for k, v in node.items():
+            if k in _TOKEN_NAMES:
+                raise ConfigError(f"{f}: {where}: `{k}` holds a token; keep only the secret key name "
+                                  "in `token_key`")
+            _scan(v, f, f"{where}.{k}")
+    elif isinstance(node, list):
+        for i, v in enumerate(node):
+            _scan(v, f, f"{where}[{i}]")
+    elif isinstance(node, str) and _TOKEN_VALUE.match(node):
+        raise ConfigError(f"{f}: {where}: a token value is written in the file; keep only the "
+                          "secret key name in `token_key`")
+
+
+def _read(f: Path, entries_key: str, label) -> dict | None:
     try:
         text = f.read_text(encoding="utf-8-sig")
     except FileNotFoundError:
@@ -61,6 +78,12 @@ def _read(f: Path) -> dict | None:
         raise ConfigError(f"{f}: not valid YAML: {e}") from e
     if not isinstance(doc, dict):
         raise ConfigError(f"{f}: top level must be a mapping")
+    for k, v in doc.items():
+        if k == entries_key and isinstance(v, list):
+            for e in v:
+                _scan(e, f, label(e) if isinstance(e, dict) else entries_key)
+        else:
+            _scan(v, f, k)
     return doc
 
 
@@ -83,17 +106,13 @@ def _project_ids() -> set[str]:
 
 def load_accounts() -> list[Account]:
     f = accounts_path()
-    doc = _read(f)
+    doc = _read(f, "accounts", lambda e: f"account {e.get('network')}:{e.get('handle')}")
     if doc is None:
         raise ConfigError(f"no accounts file: {f}", hint="run `h2t-ops social accounts discover`")
     known = _project_ids()
     out = []
     for e in _entries(doc, "accounts", f):
         who = f"{e.get('network')}:{e.get('handle')}"
-        for k, v in e.items():
-            if k in _TOKEN_NAMES or (isinstance(v, str) and _TOKEN_VALUE.match(v)):
-                raise ConfigError(f"{f}: account {who} holds a token value in `{k}`; "
-                                  "keep only the secret key name in `token_key`")
         if e.get("network") not in NETWORKS:
             raise ConfigError(f"{f}: account {who}: network must be one of {', '.join(NETWORKS)}")
         for k in ("handle", "remote_id", "token_key"):
@@ -105,16 +124,19 @@ def load_accounts() -> list[Account]:
         project = e.get("project")
         if project and known and project not in known:
             raise ConfigError(f"{f}: account {who}: unknown project {project!r}")
+        enabled = e.get("enabled", True)
+        if not isinstance(enabled, bool):
+            raise ConfigError(f"{f}: account {who}: `enabled` must be true or false, got {enabled!r}")
         out.append(Account(
             id=who, network=e["network"], handle=str(e["handle"]), remote_id=str(e["remote_id"]),
             page_id=str(e["page_id"]) if e.get("page_id") else None, token_key=str(e["token_key"]),
-            project=project or None, enabled=bool(e.get("enabled", True))))
+            project=project or None, enabled=enabled))
     return out
 
 
 def load_rules() -> list[Rule]:
     f = rules_path()
-    doc = _read(f)
+    doc = _read(f, "rules", lambda e: f"rule {e.get('id') or '?'}")
     if doc is None:
         return []
     out = []
@@ -136,8 +158,14 @@ def api_base(network: str) -> str:
     key = _API_KEY.get(network)
     if key is None:
         raise ConfigError(f"unknown network {network!r}; expected one of {', '.join(_API_KEY)}")
-    override = ((_read(accounts_path()) or {}).get("api") or {}).get(key)
-    if override:
-        return str(override)
+    f = accounts_path()
+    api = (_read(f, "accounts", lambda e: "account") or {}).get("api") or {}
+    if not isinstance(api, dict):
+        raise ConfigError(f"{f}: `api` must be a mapping")
+    override = api.get(key)
+    if override is not None:
+        if not isinstance(override, str) or not override:
+            raise ConfigError(f"{f}: api.{key} must be a non-empty string")
+        return override
     text = (resources.files("h2t_ops.resources") / "social" / "defaults.yaml").read_text(encoding="utf-8-sig")
     return yaml.safe_load(text)["api"][key]

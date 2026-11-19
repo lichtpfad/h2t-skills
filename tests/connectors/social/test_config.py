@@ -83,4 +83,69 @@ def test_api_base_default_and_override(social_config):
     assert config.api_base("threads") == "https://graph.threads.net/v1.0"
     social_config(accounts={"api": {"meta_graph": "https://example.test/v1"}, "accounts": [ACCOUNT]})
     assert config.api_base("meta") == "https://example.test/v1"
+    assert config.api_base("instagram") == "https://example.test/v1"
     assert config.api_base("threads") == "https://graph.threads.net/v1.0"
+
+
+@pytest.mark.parametrize("network,url", [
+    ("meta", "https://graph.facebook.com/v27.0"), ("instagram", "https://graph.facebook.com/v27.0"),
+    ("facebook", "https://graph.facebook.com/v27.0"), ("threads", "https://graph.threads.net/v1.0"),
+])
+def test_api_base_per_network(social_config, network, url):
+    social_config()
+    assert config.api_base(network) == url
+
+
+def test_api_base_unknown_network(social_config):
+    social_config()
+    with pytest.raises(ConfigError):
+        config.api_base("tiktok")
+
+
+@pytest.mark.parametrize("api", ["bad", ["x"], {"meta_graph": 5}, {"meta_graph": ""}])
+def test_api_must_be_mapping_of_strings(social_config, api):
+    social_config(accounts={"api": api, "accounts": [ACCOUNT]})
+    with pytest.raises(ConfigError):
+        config.api_base("meta")
+
+
+@pytest.mark.parametrize("enabled", ["false", "no", 0, None])
+def test_enabled_must_be_boolean(social_config, enabled):
+    social_config(accounts={"accounts": [{**ACCOUNT, "enabled": enabled}]})
+    with pytest.raises(ConfigError, match="instagram:acme"):
+        config.load_accounts()
+
+
+def test_enabled_false_is_kept(social_config):
+    social_config(accounts={"accounts": [{**ACCOUNT, "enabled": False}]})
+    assert config.load_accounts()[0].enabled is False
+
+
+TOKEN = "EAA" + "b" * 30
+
+
+@pytest.mark.parametrize("where", ["nested_value", "nested_key", "list", "api"])
+def test_token_anywhere_in_accounts_file_is_refused(social_config, where):
+    acc = dict(ACCOUNT)
+    doc = {"accounts": [acc]}
+    if where == "nested_value":
+        acc["extra"] = {"deep": TOKEN}
+    elif where == "nested_key":
+        acc["extra"] = [{"access_token": "x"}]
+    elif where == "list":
+        acc["tags"] = ["ok", TOKEN]
+    else:
+        doc["api"] = {"meta_graph": "https://x.test", "note": TOKEN}
+    social_config(accounts=doc)
+    with pytest.raises(ConfigError) as e:
+        config.load_accounts()
+    assert TOKEN not in str(e.value)
+    if where != "api":
+        assert "instagram:acme" in str(e.value)
+
+
+@pytest.mark.parametrize("field", ["origin", "note", "account"])
+def test_token_in_rules_is_refused(social_config, field):
+    social_config(rules={"rules": [{**RULE, field: TOKEN}]})
+    with pytest.raises(ConfigError, match="r1"):
+        config.load_rules()
