@@ -52,12 +52,15 @@ code, and the issue map: `docs/superpowers/plans/2026-11-19-social-processes-to-
 3. **Communication (#680, #681) → content (#682) → research (#683) → ads (#684)**, in the
    spec's order, each with its own TDD plan when it starts.
 
-Also in M9, not social: #652, #653, #654.
+Also in M9, not social:
+- #652, #653, #654;
+- the "skills call commands, not prose" wave moved from M8 on 2026-11-19 after a check
+  against the code found none of it done: #611–#615, #619–#627, #629–#632.
 
 ### Shipped: 4.1.0 / 4.1.1 — milestone [M8: 4.1 POS interop](https://github.com/lichtpfad/h2t-skills/milestone/14)
 
-The order below was set 2026-11-01 for 4.1.0. Issues still open in M8 after the release
-are listed by `gh issue list --milestone "M8: 4.1 POS interop" --state open`.
+Closed 2026-11-19; its 18 open issues moved to M9. The order below was set 2026-11-01
+for 4.1.0 and is kept as the record.
 
 1. **#582** — the versioned pack–POS contract (`contracts/pos-interop.json`).
    Both #583 and #584 test against it.
