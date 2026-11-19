@@ -3,7 +3,8 @@ title: "Autonomous run — Social insights foundation"
 status: "draft"
 date: "2026-11-19"
 milestone: ""
-issue: ""
+issue: "none"
+reason: "run record of the social insights plan, which has no issue either"
 ---
 # Autonomous run — Social insights foundation
 
