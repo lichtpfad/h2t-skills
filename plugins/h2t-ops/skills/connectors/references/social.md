@@ -11,7 +11,7 @@ network.
 | --- | --- |
 | find the accounts the tokens can reach | `h2t-ops social accounts discover --json` |
 | save them to `accounts.yaml` (merge) | `h2t-ops social accounts discover --write --json` |
-| show `accounts.yaml` | `h2t-ops social accounts list --json` |
+| list the accounts (id, enabled, project, token_key) | `h2t-ops social accounts list --json` |
 | smoke test: profile and last 3 posts per enabled account | `h2t-ops social check --json` |
 | the same for one account | `h2t-ops social check instagram:acme --json` |
 | collect metrics and summarize | `h2t-ops social run insights --json` |
@@ -20,8 +20,10 @@ network.
 | the records of one run | `h2t-ops social journal --run <run_id> --json` |
 
 An account id is `<network>:<handle>`, for example `instagram:acme`. `discover --write`
-keeps the `enabled` and `project` values already in the file. Run `social check` before
-the first `run insights`.
+writes new accounts as `enabled: false` and keeps the `enabled` and `project` values
+already in the file. After it, edit `accounts.yaml`: set `enabled: true` (and optionally
+`project`) on the accounts to use. Then run `social check`, and only then the first
+`run insights`; `check` fails with "no enabled accounts" until one is enabled.
 
 ## Config files
 
@@ -96,7 +98,7 @@ Threads, per profile:
 1. In the app's Threads use case, open **User Token Generator**, add the profile as a
    tester if needed, and generate a token for it.
 2. Put it in `threads.env` as `THREADS_TOKEN_<HANDLE>`.
-3. Run `social accounts discover --write`.
+3. Run `social accounts discover --write`, then set `enabled: true` on the account.
 
 ## Journal
 
