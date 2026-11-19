@@ -292,3 +292,19 @@ def test_unmatched_page_hint_names_a_real_command(social_config, social_data, tz
         insights.run(None, 10, client_factory=lambda n, a: FakeMeta(_media(1)))
     assert "h2t-ops social accounts discover" in e.value.hint
     assert "accounts check" not in e.value.hint
+
+
+def test_all_accounts_disabled_is_not_found_and_opens_no_run(social_config, social_data, tz):
+    off = {"network": "instagram", "handle": "acme", "remote_id": "ig_111", "token_key": "META_USER_TOKEN",
+           "enabled": False}
+    social_config(accounts={"accounts": [off]})
+    with pytest.raises(NotFoundError, match="no enabled accounts"):
+        insights.run(None, 5, client_factory=lambda n, a: FakeMeta([]))
+    assert not journal_path().exists()
+
+
+def test_only_facebook_accounts_is_not_found_naming_the_skip(social_config, social_data, tz):
+    fb = {"network": "facebook", "handle": "acme", "remote_id": "page_222", "token_key": "META_USER_TOKEN"}
+    social_config(accounts={"accounts": [fb]})
+    with pytest.raises(NotFoundError, match="facebook:acme.*not supported"):
+        insights.run(None, 5, client_factory=lambda n, a: FakeMeta([]))

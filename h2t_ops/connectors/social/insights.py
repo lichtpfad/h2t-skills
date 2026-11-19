@@ -100,6 +100,8 @@ def run(account_ids: list[str] | None, limit: int, client_factory=None, trigger:
     tz = _timezone()
     factory = client_factory or _default_factory
     enabled = [a for a in load_accounts() if a.enabled]
+    if not enabled:
+        raise NotFoundError("no enabled accounts", hint="run `h2t-ops social accounts list`")
     unknown = [i for i in account_ids or [] if i not in {a.id for a in enabled}]
     if unknown:
         raise NotFoundError(f"no enabled account: {', '.join(unknown)}",
@@ -127,6 +129,10 @@ def run(account_ids: list[str] | None, limit: int, client_factory=None, trigger:
             accounts[account.id] = {"network": account.network, "summary": summary, "posts": posts, **extra}
             journal.record(run_id, 6, process=_PROCESS, account=account.id,
                            schema_version=SCHEMA_VERSION, posts=summary["posts"])
+        if not accounts:
+            reasons = "; ".join(f"{k}: {v}" for k, v in skipped_accounts.items())
+            raise NotFoundError(f"no account produced insights ({reasons})",
+                                hint="run `h2t-ops social accounts list`")
     except BaseException as exc:
         journal.record_failure(run_id, _PROCESS, exc, current)
         raise
