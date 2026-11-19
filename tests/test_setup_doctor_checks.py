@@ -257,6 +257,8 @@ def test_connectors_check_social_missing_without_tokens(tmp_path, monkeypatch):
     _home(tmp_path, monkeypatch)
     for k in (secret_key("meta_user_token"), secret_key("meta_app_secret")):
         monkeypatch.delenv(k, raising=False)
+    for k in [k for k in os.environ if k.startswith("THREADS_TOKEN_")]:
+        monkeypatch.delenv(k)
     assert _matrix_row(tmp_path, monkeypatch, "social")["status"] == "missing"
 
 
