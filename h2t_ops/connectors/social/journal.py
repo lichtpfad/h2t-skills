@@ -62,12 +62,17 @@ def _secret_values() -> list[tuple[str, str]]:
     return out + [("a registered runtime secret", v) for v in _runtime_secrets]
 
 
+def check_no_secret(text: str, what: str) -> None:
+    """Raise SecretInRecord if `text` (serialized JSON) holds a secret value. Names the secret, never the value."""
+    for name, value in _secret_values():
+        if value in text or json.dumps(value, ensure_ascii=False)[1:-1] in text:   # raw and JSON-escaped
+            raise SecretInRecord(f"{what} contains the value of {name}; not written",
+                                 hint="remove the value from the record")
+
+
 def _append(path: Path, rec: dict) -> None:
     line = json.dumps(rec, ensure_ascii=False)
-    for name, value in _secret_values():
-        if value in line or json.dumps(value, ensure_ascii=False)[1:-1] in line:   # raw and JSON-escaped
-            raise SecretInRecord(f"record {rec.get('id')} contains the value of {name}; not written",
-                                 hint="remove the value from the record")
+    check_no_secret(line, f"record {rec.get('id')}")
     store.append(path, line, place="data")
 
 

@@ -1,4 +1,15 @@
-from h2t_ops.connectors.social import db
+import pytest
+
+from h2t_ops.connectors.social import db, journal
+
+
+def test_result_with_a_secret_value_is_refused_and_not_stored(social_data):
+    secret = "EAAsecretvalue123456"
+    journal.register_secret(secret)
+    with pytest.raises(journal.SecretInRecord) as e:
+        db.put_result("r1", "instagram:acme", {"posts": [{"note": f"x {secret} y"}]})
+    assert secret not in str(e.value)
+    assert db.read_results("r1") == []
 
 
 def test_journal_round_trip(social_data):

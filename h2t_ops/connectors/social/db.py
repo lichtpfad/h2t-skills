@@ -61,11 +61,14 @@ def put_raw(rec: dict) -> None:
 
 
 def put_result(run_id: str, account: str, body: dict) -> None:
+    from h2t_ops.connectors.social import journal
     from h2t_ops.connectors.social.insights import SCHEMA_VERSION
 
+    text = _dump(body)
+    journal.check_no_secret(text, f"result {run_id}/{account}")
     with _conn() as conn:
         conn.execute("INSERT OR REPLACE INTO results (run_id, account, schema_version, body) "
-                     "VALUES (?, ?, ?, ?)", (run_id, account, SCHEMA_VERSION, _dump(body)))
+                     "VALUES (?, ?, ?, ?)", (run_id, account, SCHEMA_VERSION, text))
 
 
 def read_journal(run_id: str) -> list[dict]:
