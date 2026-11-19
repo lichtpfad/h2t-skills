@@ -388,3 +388,42 @@ def test_post_without_field_is_provider_error(social_config, social_data, tz, ne
     with pytest.raises(ProviderError) as e:
         insights.run(None, 5, client_factory=lambda n, a: client)
     assert f"{network}:acme" in str(e.value) and field in str(e.value)
+
+
+class MirrorBoom(Exception):
+    pass
+
+
+@pytest.mark.parametrize("fail_on", [1, 3])
+def test_mirror_failure_ends_run_with_step6_and_original_error(social_config, social_data, tz, monkeypatch, fail_on):
+    from h2t_ops.connectors.social import db
+    social_config(accounts=_accounts())
+    real, calls = db.put_journal, []
+
+    def flaky(rec):
+        calls.append(rec["step"])
+        if len(calls) == fail_on:
+            raise MirrorBoom("disk full")
+        real(rec)
+
+    monkeypatch.setattr(db, "put_journal", flaky)
+    client = FakeMeta(_media(2), {"m1": {"reach": 5}, "m2": {"reach": 9}})
+    with pytest.raises(MirrorBoom):
+        insights.run(None, 10, client_factory=lambda n, a: client, store=True)
+    rows = _journal()
+    rid = rows[0]["run_id"]
+    mine = [r for r in rows if r["run_id"] == rid]
+    assert mine[-1]["step"] == 6 and "MirrorBoom" in mine[-1]["result"]["error"]
+    assert len(calls) == fail_on     # mirroring stopped for the run after the first failure
+
+
+def test_second_account_failure_leaves_no_result_rows(social_config, social_data, tz):
+    from h2t_ops.connectors.social import db
+    second = {"network": "instagram", "handle": "two", "remote_id": "ig_2", "page_id": "page_2",
+              "token_key": "META_USER_TOKEN"}
+    social_config(accounts=_accounts(second))
+    clients = iter([FakeMeta(_media(1), {"m1": {"reach": 5}}), BoomMeta(ProviderError("rate limited"))])
+    with pytest.raises(ProviderError):
+        insights.run(None, 10, client_factory=lambda n, a: next(clients), store=True)
+    rid = _journal()[0]["run_id"]
+    assert db.read_results(rid) == []

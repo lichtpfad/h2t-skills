@@ -133,10 +133,11 @@ def run(account_ids: list[str] | None, limit: int, client_factory=None, trigger:
                 raise NotFoundError(f"no data for {account.id}: no posts with metrics",
                                     hint="check the account has posts and the token has insights access")
             accounts[account.id] = {"network": account.network, "summary": summary, "posts": posts, **extra}
-            if store:
-                db.put_result(run_id, account.id, accounts[account.id])
             journal.record(run_id, 6, process=_PROCESS, account=account.id,
                            schema_version=SCHEMA_VERSION, posts=summary["posts"])
+        if store:   # only after the whole run succeeded: a failed run leaves no results rows
+            for account_id, body in accounts.items():
+                db.put_result(run_id, account_id, body)
         if not accounts:
             reasons = "; ".join(f"{k}: {v}" for k, v in skipped_accounts.items())
             raise NotFoundError(f"no account produced insights ({reasons})",
