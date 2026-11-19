@@ -22,11 +22,22 @@ def expiry_path() -> Path:
     return paths.state_dir() / "social" / "token-expiry.json"
 
 
-def _read_expiry() -> dict[str, str]:
+def _read_expiry() -> dict[str, str | None]:
     path = expiry_path()
     if not path.exists():
         return {}
-    return json.loads(path.read_text(encoding="utf-8-sig"))
+    bad = ConfigError(f"{path} is not a valid expiry file (key names and timezone-aware ISO dates)",
+                      hint="fix or delete the file; the next refresh records fresh expiry dates")
+    try:
+        data = json.loads(path.read_text(encoding="utf-8-sig"))
+        if not isinstance(data, dict):
+            raise bad
+        for value in data.values():
+            if value is not None and datetime.fromisoformat(value).tzinfo is None:
+                raise bad
+    except (ValueError, TypeError) as exc:    # JSONDecodeError and a bad date are ValueError
+        raise bad from exc
+    return data
 
 
 def refresh(now: datetime | None = None, client_factory=None) -> dict:
@@ -51,8 +62,8 @@ def refresh(now: datetime | None = None, client_factory=None) -> dict:
                  "secrets threads.env")
     run_id = journal.new_run(PROCESS, "cli")
     out: dict = {"refreshed": [], "skipped": []}
-    values = dict(secrets.shared_env_values().get("threads.env", {}))
     try:
+        values = dict(secrets.shared_env_values().get("threads.env", {}))
         for key in keys:
             known = expiry.get(key)
             if known and datetime.fromisoformat(known) - now > timedelta(days=THRESHOLD_DAYS):
@@ -61,12 +72,17 @@ def refresh(now: datetime | None = None, client_factory=None) -> dict:
                 continue
             result = journal.keep(run_id, PROCESS, key, "refresh_access_token", factory(key).refresh())
             values[key] = result["access_token"]
-            expires_at = (now + timedelta(seconds=int(result["expires_in"]))).isoformat()
-            expiry[key] = expires_at
-            # persist per key: a later failure must not lose a token the API has already rotated
+            # persist the token first: a later failure must not lose a token the API has already rotated
             secrets.write_env("threads", values)
+            try:
+                expires_at = (now + timedelta(seconds=int(result["expires_in"]))).isoformat()
+                note = None
+            except (KeyError, TypeError, ValueError):
+                expires_at, note = None, "expiry unknown: the API gave no usable expires_in; refreshed again next run"
+            expiry[key] = expires_at
             store.replace(expiry_path(), json.dumps(expiry, indent=2), place="state")
-            out["refreshed"].append({"key": key, "expires_at": expires_at})
+            entry = {"key": key, "expires_at": expires_at, **({"note": note} if note else {})}
+            out["refreshed"].append(entry)
             journal.record(run_id, 6, process=PROCESS, key=key, expires_at=expires_at, action="refreshed")
     except BaseException as exc:
         journal.record_failure(run_id, PROCESS, exc)

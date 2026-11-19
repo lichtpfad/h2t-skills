@@ -142,3 +142,56 @@ def test_env_sourced_key_far_from_expiry_is_not_refused(env, monkeypatch):
     monkeypatch.setattr("h2t_ops.core.secrets.source", lambda key: "env")
     out = tokens.refresh(now=NOW, client_factory=FakeClient)
     assert out["refreshed"] == []
+
+
+def _step6_failures():
+    rows = [json.loads(line) for line in journal.journal_path().read_text(encoding="utf-8").splitlines()]
+    return [r for r in rows if r["step"] == 6 and r["result"]["error"]]
+
+
+def test_unreadable_shared_file_ends_run_with_step6_failure(env, monkeypatch):
+    def boom():
+        raise ConfigError("shared secrets file unreadable")
+
+    monkeypatch.setattr("h2t_ops.core.secrets.shared_env_values", boom)
+    with pytest.raises(ConfigError):
+        tokens.refresh(now=NOW, client_factory=FakeClient)
+    assert len(_step6_failures()) == 1 and FakeClient.calls == []
+
+
+class NoExpiryClient(FakeClient):
+    body = {"access_token": NEW}
+
+    def refresh(self):
+        FakeClient.calls.append(self.key)
+        journal.register_secret(NEW)
+        return dict(self.body), [dict(self.body)]
+
+
+@pytest.mark.parametrize("bad", [{"access_token": NEW}, {"access_token": NEW, "expires_in": "soon"}])
+def test_missing_or_bad_expires_in_keeps_token_and_records_unknown_expiry(env, bad):
+    NoExpiryClient.body = bad
+    out = tokens.refresh(now=NOW, client_factory=NoExpiryClient)
+    assert env[0][1]["THREADS_TOKEN_A"] == NEW        # the new token was written
+    entry = out["refreshed"][0]
+    assert entry["expires_at"] is None and "unknown" in entry["note"]
+    recorded = json.loads(tokens.expiry_path().read_text(encoding="utf-8"))
+    assert recorded["THREADS_TOKEN_A"] is None
+
+
+def test_unknown_expiry_is_refreshed_again_next_run(env):
+    seed({"THREADS_TOKEN_A": None, "THREADS_TOKEN_B": None})
+    out = tokens.refresh(now=NOW, client_factory=FakeClient)
+    assert [r["key"] for r in out["refreshed"]] == ["THREADS_TOKEN_A", "THREADS_TOKEN_B"]
+
+
+@pytest.mark.parametrize("content", ["{not json", "[1, 2]", '{"THREADS_TOKEN_A": "2026-12-01T00:00:00"}',
+                                     '{"THREADS_TOKEN_A": "garbage"}'])
+def test_corrupt_expiry_file_is_config_error_naming_the_file(env, content):
+    path = tokens.expiry_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+    with pytest.raises(ConfigError) as info:
+        tokens.refresh(now=NOW, client_factory=FakeClient)
+    assert "token-expiry.json" in str(info.value)
+    assert "garbage" not in str(info.value) and "not json" not in str(info.value)
