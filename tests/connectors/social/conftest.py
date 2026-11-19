@@ -19,3 +19,12 @@ def social_config(tmp_path, monkeypatch):
         return cfg
 
     return write
+
+
+@pytest.fixture
+def social_data(tmp_path, monkeypatch):
+    """Points H2T_PATH_ROOT at tmp_path and hides every real secret; returns the data dir."""
+    monkeypatch.setenv("H2T_PATH_ROOT", str(tmp_path))
+    monkeypatch.setattr("h2t_ops.core.secrets.get", lambda key: None)
+    monkeypatch.setattr("h2t_ops.connectors.social.journal._runtime_secrets", set())
+    return tmp_path / "data"
