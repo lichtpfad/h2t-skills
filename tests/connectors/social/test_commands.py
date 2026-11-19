@@ -220,3 +220,58 @@ def test_no_client_import_outside_run_modules():
             if any(call.search(line) for line in p.read_text(encoding="utf-8").splitlines()
                    if not line.startswith("class "))}
     assert hits == {"connectors/social/commands.py", "connectors/social/insights.py"}
+
+
+def _only_secrets(monkeypatch, values):
+    monkeypatch.setattr("h2t_ops.core.secrets.get", values.get)
+    monkeypatch.setattr("h2t_ops.core.secrets.keys_with_prefix",
+                        lambda p: sorted(k for k in values if k.startswith(p)))
+
+
+def test_threads_only_discover_skips_meta_and_says_so(env, social_config, capsys, monkeypatch):
+    _only_secrets(monkeypatch, {"THREADS_TOKEN_ACME": THR})
+    social_config(accounts={"accounts": []})
+    code, out, err = run(capsys, "accounts", "discover", "--json")
+    assert code == 0, out + err
+    result = json.loads(out)["result"]
+    doc = yaml.safe_load(result["yaml"])
+    assert [f"{a['network']}:{a['handle']}" for a in doc["accounts"]] == ["threads:acme"]
+    assert any("META_USER_TOKEN" in n for n in result["notes"])
+    assert not any("me/accounts" in c for c in env.calls)
+
+
+def test_discover_with_no_token_at_all_fails_loud(env, social_config, capsys, monkeypatch):
+    _only_secrets(monkeypatch, {})
+    social_config(accounts={"accounts": []})
+    code, out, err = run(capsys, "accounts", "discover", "--json")
+    assert code == 1 and "no accounts found" in out + err
+
+
+def test_discover_with_expired_meta_token_still_fails_auth(env, social_config, capsys):
+    env.routes["me/accounts"] = _routes(expired=True)["me/accounts"]
+    social_config(accounts={"accounts": []})
+    code, out, err = run(capsys, "accounts", "discover", "--json")
+    assert code == 4
+
+
+def test_discover_refuses_an_existing_file_with_a_token(env, social_config, capsys):
+    social_config(accounts={"accounts": [
+        {"network": "instagram", "handle": "acme", "remote_id": "ig_111",
+         "token_key": "META_USER_TOKEN", "token": "legacy-" + "s" * 12}]})
+    f = _file(social_config)
+    before = f.read_text(encoding="utf-8")
+    code, out, err = run(capsys, "accounts", "discover", "--write", "--json")
+    assert code == 3 and not env.calls and not journal_path().exists()   # refused before a run opens
+    assert "legacy-" not in out + err
+    assert f.read_text(encoding="utf-8") == before
+
+
+def test_discover_keeps_project_exactly_and_drops_unknown_fields(env, social_config, capsys):
+    social_config(accounts={"accounts": [
+        {"network": "instagram", "handle": "acme", "remote_id": "ig_111",
+         "token_key": "META_USER_TOKEN", "project": "", "legacy_note": "x"}]})
+    code, out, err = run(capsys, "accounts", "discover", "--write", "--json")
+    assert code == 0, out + err
+    doc = yaml.safe_load(_file(social_config).read_text(encoding="utf-8"))
+    acme = next(a for a in doc["accounts"] if a["handle"] == "acme" and a["network"] == "instagram")
+    assert acme["project"] == "" and "legacy_note" not in acme

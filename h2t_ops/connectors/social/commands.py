@@ -76,39 +76,62 @@ def _journaled(process: str, work):
     return result
 
 
-def _discovered(run_id: str) -> list[dict]:
+def _discovered(run_id: str) -> tuple[list[dict], list[str]]:
     from h2t_ops.connectors.social.meta import MetaClient
     from h2t_ops.connectors.social.threads import ThreadsClient
     from h2t_ops.core import secrets
     from h2t_ops.core.errors import ProviderError
 
     rows: list[dict] = []
-    pages = _record_raw(run_id, "accounts", "*", "me/accounts", MetaClient().pages())
-    for pg in pages:
-        if pg.get("ig_id"):
-            rows.append({"network": "instagram", "handle": pg["ig_username"], "remote_id": pg["ig_id"],
+    notes: list[str] = []
+    if secrets.get(_META_KEY):
+        pages = _record_raw(run_id, "accounts", "*", "me/accounts", MetaClient().pages())
+        for pg in pages:
+            if pg.get("ig_id"):
+                rows.append({"network": "instagram", "handle": pg["ig_username"], "remote_id": pg["ig_id"],
+                             "page_id": pg["page_id"], "token_key": _META_KEY})
+            rows.append({"network": "facebook", "handle": _slug(pg["name"]), "remote_id": pg["page_id"],
                          "page_id": pg["page_id"], "token_key": _META_KEY})
-        rows.append({"network": "facebook", "handle": _slug(pg["name"]), "remote_id": pg["page_id"],
-                     "page_id": pg["page_id"], "token_key": _META_KEY})
+    else:
+        notes.append(f"{_META_KEY} is not set: Instagram and Facebook skipped")
     for key in secrets.keys_with_prefix("THREADS_TOKEN_"):
         me = _record_raw(run_id, "accounts", key, "me", ThreadsClient(key).me())
         rows.append({"network": "threads", "handle": me["username"], "remote_id": me["id"],
                      "token_key": key})
     if not rows:
-        raise ProviderError("no accounts found", hint="check META_USER_TOKEN and THREADS_TOKEN_* are set")
+        raise ProviderError("no accounts found", hint="set META_USER_TOKEN or THREADS_TOKEN_*")
     for r in rows:
         r["id"] = f"{r['network']}:{r['handle']}"
-    return rows
+    return rows, notes
+
+
+_KEPT = ("network", "handle", "remote_id", "page_id", "token_key", "enabled", "project")
+
+
+def _existing(path) -> dict:
+    """The current file as a plain doc, validated first (token scan, field checks) by config."""
+    import yaml
+
+    from h2t_ops.connectors.social.config import load_accounts
+
+    if not path.exists():
+        return {}
+    load_accounts()   # raises ConfigError on a token or an invalid entry
+    doc = yaml.safe_load(path.read_text(encoding="utf-8-sig")) or {}
+    out = {"accounts": [{k: e[k] for k in _KEPT if k in e} for e in doc.get("accounts") or []]}
+    if "api" in doc:
+        out = {"api": doc["api"], **out}
+    return out
 
 
 def _merge(existing: dict, rows: list[dict]) -> dict:
     """Existing entries keep enabled/project; new ones are disabled. Unseen entries stay."""
-    by_id = {f"{e.get('network')}:{e.get('handle')}": e for e in existing.get("accounts") or []}
+    by_id = {f"{e['network']}:{e['handle']}": e for e in existing.get("accounts") or []}
     for r in rows:
         entry = {k: v for k, v in r.items() if k != "id" and v is not None}
-        old = by_id.get(r["id"], {})
-        entry["enabled"] = old.get("enabled", False)
-        if old.get("project"):
+        old = by_id.get(r["id"])
+        entry["enabled"] = old.get("enabled", True) if old else False
+        if old and "project" in old:
             entry["project"] = old["project"]
         by_id[r["id"]] = entry
     return {**existing, "accounts": list(by_id.values())}
@@ -120,13 +143,13 @@ def _discover(write: bool) -> dict:
     from h2t_ops.connectors.social.config import accounts_path
     from h2t_ops.core import store
 
-    rows = _journaled("accounts", lambda run_id: {"accounts": _discovered(run_id)})["accounts"]
     path = accounts_path()
-    existing = yaml.safe_load(path.read_text(encoding="utf-8-sig")) or {} if path.exists() else {}
-    text = yaml.safe_dump(_merge(existing, rows), sort_keys=False, allow_unicode=True)
+    existing = _existing(path)   # refused before a run opens or a request is sent
+    found = _journaled("accounts", lambda run_id: dict(zip(("accounts", "notes"), _discovered(run_id))))
+    text = yaml.safe_dump(_merge(existing, found["accounts"]), sort_keys=False, allow_unicode=True)
     if write:
         store.replace(path, text, place="config")
-    return {"written": write, "path": str(path), "yaml": text}
+    return {"written": write, "path": str(path), "yaml": text, "notes": found["notes"]}
 
 
 def _list() -> list[dict]:
