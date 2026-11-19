@@ -1,4 +1,5 @@
 """Doctors report what they checked, the way the code they vouch for does (#451)."""
+import json
 import os
 import sys
 from pathlib import Path
@@ -262,12 +263,13 @@ def test_connectors_check_social_missing_without_tokens(tmp_path, monkeypatch):
 def test_connectors_check_survives_a_broken_social_config(tmp_path, monkeypatch):
     from h2t_ops.connectors.social import config as social_config
     _home(tmp_path, monkeypatch)
-    _put(social_config.accounts_path(), "secrets:\n  meta_user_token: 42\n")
+    _put(social_config.accounts_path(), "secrets:\n  meta_app_secret: s3cr3t-app-value-1234\n")
     monkeypatch.setattr(setup_h2t, "resolve_h2t_ops", lambda home=None: {"status": "missing", "path": ""})
-    rows = setup_h2t.connector_matrix(tmp_path)["connectors"]
-    by_name = {r["connector"]: r for r in rows}
+    matrix = setup_h2t.connector_matrix(tmp_path)
+    by_name = {r["connector"]: r for r in matrix["connectors"]}
     assert by_name["social"]["status"] == "error"
     assert by_name["social"]["checks"]["error"]
+    assert "s3cr3t-app-value-1234" not in json.dumps(matrix)
     assert {"calendar", "notion", "meetgeek", "research"} <= set(by_name)
 
 
