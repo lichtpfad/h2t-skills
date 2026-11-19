@@ -34,7 +34,7 @@ Decision-protocol). Verify the branch before every commit.
 - [x] **subagent-driven-dev** — skill: `superpowers:subagent-driven-development` · input: plan Tasks 1-8 (Task 9 manual, needs the author), commits 5b0ce166..3408408d, per-task Codex review clean · done: all tasks green · failure: per-task gate; escalate on repeated fail · re-entry: continue from first unchecked task
 - [x] **gates** — skill: `codex + pre-merge-check` · input: final Codex gate + Opus standards/spec reviews, fix wave c9eab57f..c5b43e49, verdict `docs/reports/2026-11-19-council-validation-social-insights.md` · done: no [P1]; suite green · failure: fix then re-run (<=N) · re-entry: idempotent: re-run gate
 - [x] **e2e** — skill: `real entrypoint run` · input: BLOCKED-DEFERRED — needs plan Task 9 (author's tokens); offline CLI smoke (`social --help`, `accounts list` → exit 3) done in Task 7 · done: DONE / N/A / BLOCKED-DEFERRED · failure: BLOCKED->handoff; behavioral fail->fix · re-entry: idempotent: re-run
-- [ ] **PR** — skill: `superpowers:finishing-a-development-branch` · input: `<fill>` · done: PR opened · failure: escalate · re-entry: continue: reuse branch
+- [x] **PR** — skill: `superpowers:finishing-a-development-branch` · input: https://github.com/lichtpfad/h2t-skills/pull/667 (not merged; merge is the author's call) · done: PR opened · failure: escalate · re-entry: continue: reuse branch
 - [ ] **handoff** — skill: `h2t-core:handoff` · input: `<fill>` · done: session record written · failure: n/a (terminal) · re-entry: idempotent: re-run handoff
 
 ## Gates
