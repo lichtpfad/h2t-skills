@@ -191,6 +191,30 @@ def test_result_is_versioned(social_config, social_data, tz):
     assert out["skipped_accounts"] == {}
 
 
+def test_store_run_leaves_rows(social_config, social_data, tz):
+    from h2t_ops.connectors.social import db
+    social_config(accounts=_accounts())
+    client = FakeMeta(_media(2), {"m1": {"reach": 5}, "m2": {"reach": 9}})
+    out = insights.run(None, 10, client_factory=lambda n, a: client, trigger="schedule", store=True)
+    rid = out["run_id"]
+    rows = db.read_journal(rid)
+    assert {r["step"] for r in rows} == {1, 2, 3, 4, 6}
+    assert rows == [r for r in _journal() if r["run_id"] == rid]
+    assert next(r for r in rows if r["step"] == 1)["trigger"] == "schedule"
+    assert db.read_raw(rid)
+    results = db.read_results(rid)
+    assert len(results) == 1 and results[0]["schema_version"] == "h2t_social_insights/v1"
+    assert results[0]["body"] == out["accounts"]["instagram:acme"]
+
+
+def test_chat_run_writes_no_db(social_config, social_data, tz):
+    from h2t_ops.connectors.social import db
+    social_config(accounts=_accounts())
+    client = FakeMeta(_media(2), {"m1": {"reach": 5}, "m2": {"reach": 9}})
+    insights.run(None, 10, client_factory=lambda n, a: client)
+    assert not db.db_path().exists()
+
+
 def test_unknown_account_is_not_found(social_config, social_data, tz):
     social_config(accounts=_accounts())
     with pytest.raises(NotFoundError, match="instagram:nope"):

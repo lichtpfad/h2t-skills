@@ -342,6 +342,27 @@ def test_discover_with_tokens_but_no_pages_is_a_provider_error(env, social_confi
     assert code == 1 and "no accounts found" in out + err
 
 
+def test_run_insights_store_and_trigger(env, social_config, capsys):
+    from h2t_ops.connectors.social import db
+    social_config(accounts={"accounts": [_META_IG]})
+    code, out, err = run(capsys, "run", "insights", "--trigger", "schedule", "--store", "--json")
+    assert code == 0, out + err
+    rid = json.loads(out)["result"]["run_id"]
+    step1 = next(r for r in db.read_journal(rid) if r["step"] == 1)
+    assert step1["trigger"] == "schedule"
+    assert len(db.read_results(rid)) == 1 and db.read_raw(rid)
+
+
+def test_run_insights_default_is_cli_and_no_db(env, social_config, capsys):
+    from h2t_ops.connectors.social import db
+    social_config(accounts={"accounts": [_META_IG]})
+    code, out, err = run(capsys, "run", "insights", "--json")
+    assert code == 0, out + err
+    recs = [json.loads(line) for line in journal_path().read_text(encoding="utf-8").splitlines()]
+    assert next(r for r in recs if r["step"] == 1)["trigger"] == "cli"
+    assert not db.db_path().exists()
+
+
 @pytest.mark.parametrize("limit", ["0", "-5"])
 def test_non_positive_limit_is_a_usage_error_before_any_call(env, social_config, capsys, limit):
     social_config(accounts={"accounts": [_META_IG]})

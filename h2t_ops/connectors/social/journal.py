@@ -16,6 +16,7 @@ from h2t_ops.core.errors import ConfigError, UsageError
 REDACT_FIELDS = ("access_token", "page_token", "token")
 _FIXED_SECRETS = ("meta_user_token", "meta_app_secret")   # names in config; key names resolve there
 _runtime_secrets: set[str] = set()
+_stored_runs: set[str] = set()   # runs opened with store=True: their records are also mirrored to SQLite
 
 
 class SecretInRecord(ConfigError):
@@ -79,11 +80,17 @@ def record(run_id: str, step: int, **fields) -> dict:
            "task_id": None, **fields}
     rec["result"] = {"remote_id": None, "url": None, "error": None, **(fields.get("result") or {})}
     _append(journal_path(), rec)
+    if run_id in _stored_runs:
+        from h2t_ops.connectors.social import db
+
+        db.put_journal(rec)
     return rec
 
 
-def new_run(process: str, trigger: str) -> str:
+def new_run(process: str, trigger: str, store: bool = False) -> str:
     run_id = uuid.uuid4().hex
+    if store:
+        _stored_runs.add(run_id)
     record(run_id, 1, process=process, trigger=trigger)
     return run_id
 
@@ -91,9 +98,13 @@ def new_run(process: str, trigger: str) -> str:
 def write_raw(run_id: str, process: str, account_id: str, endpoint: str, payload: dict) -> str:
     now = _now()
     rid = uuid.uuid4().hex
-    _append(raw_path(process, now.strftime("%Y-%m-%d")),
-            {"id": rid, "ts": now.isoformat(), "run_id": run_id, "process": process,
-             "account": account_id, "endpoint": endpoint, "payload": _redact(payload)})
+    raw = {"id": rid, "ts": now.isoformat(), "run_id": run_id, "process": process,
+           "account": account_id, "endpoint": endpoint, "payload": _redact(payload)}
+    _append(raw_path(process, now.strftime("%Y-%m-%d")), raw)
+    if run_id in _stored_runs:
+        from h2t_ops.connectors.social import db
+
+        db.put_raw(raw)
     record(run_id, 2, process=process, account=account_id, endpoint=endpoint, source_ids=[rid])
     return rid
 

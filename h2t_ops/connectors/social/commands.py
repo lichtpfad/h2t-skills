@@ -37,6 +37,8 @@ def register(subparsers: Any) -> None:
     ip = rps.add_parser("insights", help="Collect metrics, summarize, journal the run")
     ip.add_argument("--account", action="append", dest="accounts", default=None, metavar="ID")
     ip.add_argument("--limit", type=int, default=120)
+    ip.add_argument("--trigger", choices=("cli", "schedule"), default="cli")
+    ip.add_argument("--store", action="store_true", help="also mirror the run into SQLite")
     add_fmt(ip)
 
     jp = cmds.add_parser("journal", help="Show journal records")
@@ -247,7 +249,7 @@ def run(args: Any) -> Any:
     if cmd == "run":
         from h2t_ops.connectors.social import insights
 
-        return insights.run(args.accounts, args.limit)
+        return insights.run(args.accounts, args.limit, trigger=args.trigger, store=args.store)
     if cmd == "journal":
         return _journal(args.run_id, args.last)
     raise UsageError(f"unknown social subcommand: {cmd!r}")

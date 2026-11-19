@@ -5,7 +5,7 @@ import statistics
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from h2t_ops.connectors.social import journal
+from h2t_ops.connectors.social import db, journal
 from h2t_ops.connectors.social.config import Account, load_accounts
 from h2t_ops.connectors.social.meta import find_page
 from h2t_ops.core import user_config
@@ -111,7 +111,7 @@ def run(account_ids: list[str] | None, limit: int, client_factory=None, trigger:
         raise NotFoundError(f"no enabled account: {', '.join(unknown)}",
                             hint="run `h2t-ops social accounts list`")
     chosen = [a for a in enabled if not account_ids or a.id in account_ids]
-    run_id = journal.new_run(_PROCESS, trigger)
+    run_id = journal.new_run(_PROCESS, trigger, store=store)
     accounts: dict[str, dict] = {}
     skipped_accounts: dict[str, str] = {}
     current = None
@@ -131,6 +131,8 @@ def run(account_ids: list[str] | None, limit: int, client_factory=None, trigger:
                 raise NotFoundError(f"no data for {account.id}: no posts with metrics",
                                     hint="check the account has posts and the token has insights access")
             accounts[account.id] = {"network": account.network, "summary": summary, "posts": posts, **extra}
+            if store:
+                db.put_result(run_id, account.id, accounts[account.id])
             journal.record(run_id, 6, process=_PROCESS, account=account.id,
                            schema_version=SCHEMA_VERSION, posts=summary["posts"])
         if not accounts:
