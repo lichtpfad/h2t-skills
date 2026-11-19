@@ -256,6 +256,32 @@ of scope here.
   author. The three Page-visible IG profiles outside the five working ones are listed with
   `enabled: false`.
 
+## 9b. Insights output contract (v1)
+
+`h2t-ops social run insights` returns JSON. It writes no report files. The JSON sits in the
+envelope's `result` key.
+
+| Key | Content |
+|---|---|
+| `result.schema_version` | `"h2t_social_insights/v1"`. It lives inside `result`, not in the envelope. |
+| `result.run_id` | The journal run id. |
+| `result.accounts` | Mapping `<network>:<handle>` → `{network, summary, posts}`. Instagram accounts also carry `online_followers_hour_as_reported`. |
+| `result.skipped_accounts` | Mapping account id → reason it was skipped. |
+
+`summary` is the output of `insights.summarize`. Its keys are `posts`, `skipped`,
+`median_reach`, `by_weekday`, `by_hour_band` and `top`.
+
+`posts` is a list of `{id, timestamp, permalink, network, metrics}`. `metrics` is `null`
+when Meta gave no insights for the post.
+
+**Versioning rule.** Adding a key keeps v1. Removing or renaming a key needs v2. Issue #670
+adds the groups `account_daily`, `audience`, `stories` and `comments`, and the list
+`unavailable` (items `{account, group, metric, code, message}`). These are additions, so
+they stay in v1.
+
+**Storage.** No report files. `--store` writes rows to `<data>/social/social.db` (plan
+Task 5).
+
 ## 10. Left to the builder
 
 - Module layout inside `h2t_ops/connectors/social/` and the door core.
