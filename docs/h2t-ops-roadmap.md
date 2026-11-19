@@ -43,9 +43,10 @@ Set 2026-11-19. 4.2.0 ships when all five social processes work live (owner's ca
 finished phases ship earlier as 4.1.x patches. The phases, the two decisions that block
 code, and the issue map: `docs/superpowers/plans/2026-11-19-social-processes-to-4-2.md`.
 
-1. **Decisions** — #686 the database for the journal and raw data (open, before phase 2).
-   Decided 2026-11-19: #672 (consumers store data in their own database; the connector
-   gives an output contract) and #673 (chat runs ask in the chat and pass a consent flag).
+1. **Decisions** — all decided 2026-11-19: #672 (consumers store data in their own
+   database; the connector gives an output contract), #673 (chat runs ask in the chat and
+   pass a consent flag), #686 (a database only for pipelines or on request: SQLite, later
+   Postgres; the journal stays JSONL until #677).
 2. **Insights complete** — #670 snapshot, #674 Threads and #675 Facebook Page insights,
    #676 Threads token refresh, #677 the schedule, #678 secrets out of the 3.x place,
    #679 a format bug. Read-only; needs no decision but the snapshot schema.

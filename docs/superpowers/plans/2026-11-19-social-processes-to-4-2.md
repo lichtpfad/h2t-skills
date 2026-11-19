@@ -36,7 +36,7 @@ issues. Spec: `docs/superpowers/specs/2026-11-19-social-pipeline-design.md`.
 |---|---|---|
 | D1 | Snapshot file schema (#672) | Outside the connector's boundary; closed. The connector gives an output contract (`run insights --json` with `schema_version`); consumers store it in their own database. #670 item 6 rewritten. |
 | D2 | Approval flow (#673) | Chat run: the chat asks, the skill passes an explicit consent flag, step 4 records `approved_by`. No `approve` command, no queue. Unattended (server) runs: designed at the VPS stage; until then no outward action, record stays `pending`. Closed. |
-| D3 | Database for the journal and raw data (#686) | Open. The author decided "a database, not JSONL"; the engine (SQLite now → Postgres later, or Postgres from the start) is the open question. Blocks phase 2 code that writes new record kinds. |
+| D3 | Database for the journal and raw data (#686) | A chat run returns data to the chat; a database only when a pipeline or the user stores data: SQLite locally, Postgres at the VPS stage. Journal stays JSONL until the first pipeline run (#677). Blocks nothing. Closed. |
 
 ## Phase 1 — insights complete (read-only)
 
@@ -77,8 +77,8 @@ issues. Spec: `docs/superpowers/specs/2026-11-19-social-pipeline-design.md`.
 
 ## Order
 
-D1 and D2 are decided. D3 (database) goes to the owner before phase 2; phase 1 can start
-now, and its journal code moves to the chosen database once D3 lands. Phases 2-5 in spec order after D2. Each phase: own TDD plan → issues → Codex review
+D1, D2 and D3 are decided; nothing blocks code. Phase 1 starts now; the journal moves to
+SQLite together with the scheduled run (#677). Phases 2-5 in spec order after D2. Each phase: own TDD plan → issues → Codex review
 per task → live run → 4.1.x patch.
 
 ## Issue map
@@ -89,7 +89,7 @@ All in milestone M9: 4.2 (created 2026-11-19).
 |---|---|---|
 | D1 | #672 decision: snapshot file schema — closed, outside the boundary | decision |
 | D2 | #673 decision: approval flow for outward actions — closed, decided | decision |
-| D3 | #686 decision: database for journal and raw data — open | decision |
+| D3 | #686 decision: database for journal and raw data — closed, decided | decision |
 | — | #670 dated Instagram snapshot | 1 |
 | S1 | #674 run insights on Threads accounts | 1 |
 | S2 | #675 Facebook Page insights | 1 |

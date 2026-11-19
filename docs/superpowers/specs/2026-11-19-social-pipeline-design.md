@@ -225,8 +225,10 @@ of scope here.
   time in the step-4 record. No `approve` command and no queue. Unattended runs on a server
   follow a different principle, designed at the VPS stage; until then they perform no
   outward action and leave the record `pending`.
-- **Storage (2026-11-19).** Social data on the author's side lives in a database, not in
-  JSONL files; which database is decision #686. Consumers (the rejuve project) store what
+- **Storage (2026-11-19, #686).** A skill run from a chat returns data to the chat as
+  context; no database. Data goes to a database only when a pipeline (scheduled run) or the
+  user asks to store it: SQLite on the machine, Postgres with the VPS stage. The journal is
+  written on every run regardless; it stays JSONL until the first pipeline run (#677). Consumers (the rejuve project) store what
   they take in their own database; the connector's side of that seam is an output contract
   (`run insights --json` with `schema_version`), not a file layout (#672 closed as outside
   the boundary).
@@ -257,7 +259,7 @@ of scope here.
 ## 10. Left to the builder
 
 - Module layout inside `h2t_ops/connectors/social/` and the door core.
-- ~~Journal storage format (JSONL or SQLite)~~ — taken back by the author 2026-11-19: a
-  database (§9 "Storage"); the engine is decision #686. The schema still moves to
-  Postgres on the VPS unchanged.
+- ~~Journal storage format (JSONL or SQLite)~~ — decided by the author 2026-11-19 (§9
+  "Storage", #686): JSONL until the first pipeline run, then SQLite; the schema still moves
+  to Postgres on the VPS unchanged.
 - Token refresh mechanics (Threads `th_refresh_token`, LinkedIn later).
