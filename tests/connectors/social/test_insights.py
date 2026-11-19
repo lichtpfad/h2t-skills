@@ -122,7 +122,7 @@ def test_empty_media_fails_loud(social_config, social_data, tz):
     step3 = next(r for r in recs if r["step"] == 3)
     assert step3["source_ids"] == raw_ids and step3["finding"] == "no data"
     assert next(r for r in recs if r["step"] == 4)["decision"] == "noop"
-    assert next(r for r in recs if r["step"] == 6)["error"] == "no data"
+    assert next(r for r in recs if r["step"] == 6)["result"]["error"] == "ProviderError: no data for instagram:acme: no posts with metrics"
 
 
 def test_all_posts_without_metrics_fails_loud(social_config, social_data, tz):

@@ -25,6 +25,38 @@ def test_records_are_appended_never_rewritten(social_data):
     assert lines[0] == first
 
 
+def test_raw_zone_is_appended_never_rewritten(social_data):
+    run = journal.new_run("insights", "manual")
+    journal.write_raw(run, "insights", "instagram:acme", "/a", {"n": 1})
+    raw_file = next((social_data / "social" / "raw" / "insights").glob("*.jsonl"))
+    first = _lines(raw_file)[0]
+    journal.write_raw(run, "insights", "instagram:acme", "/b", {"n": 2})
+    lines = _lines(raw_file)
+    assert len(lines) == 2
+    assert lines[0] == first
+
+
+SPEC_FIELDS = {"id", "ts", "run_id", "process", "step", "channel", "account", "action", "source_ids",
+               "context_refs", "rule_id", "decision", "approved_by", "result", "task_id"}
+
+
+def test_every_record_carries_the_spec_minimum(social_data):
+    run = journal.new_run("insights", "manual")
+    journal.write_raw(run, "insights", "instagram:acme", "/x", {"a": 1})
+    journal.decide(run, "insights", "none", "instagram:acme")
+    journal.record(run, 6, process="insights", result={"error": "boom"})
+    recs = [json.loads(x) for x in _lines(journal.journal_path())]
+    assert len(recs) == 4
+    for rec in recs:
+        assert SPEC_FIELDS <= set(rec), SPEC_FIELDS - set(rec)
+        assert set(rec["result"]) == {"remote_id", "url", "error"}
+        assert "error" not in rec
+    first = recs[0]
+    assert (first["source_ids"], first["context_refs"], first["rule_id"], first["task_id"]) == ([], [], None, None)
+    assert first["result"] == {"remote_id": None, "url": None, "error": None}
+    assert recs[-1]["result"] == {"remote_id": None, "url": None, "error": "boom"}
+
+
 def test_step5_without_source_ids_is_refused(social_data):
     run = journal.new_run("communication", "manual")
     with pytest.raises(ValueError):

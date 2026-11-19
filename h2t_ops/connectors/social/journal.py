@@ -69,7 +69,11 @@ def _append(path: Path, rec: dict) -> None:
 def record(run_id: str, step: int, **fields) -> dict:
     if step == 5 and not fields.get("source_ids"):
         raise ValueError("a step-5 record must name at least one source id")
-    rec = {"id": uuid.uuid4().hex, "ts": _now().isoformat(), "run_id": run_id, "step": step, **fields}
+    rec = {"id": uuid.uuid4().hex, "ts": _now().isoformat(), "run_id": run_id, "process": None,
+           "step": step, "channel": None, "account": None, "action": None, "source_ids": [],
+           "context_refs": [], "rule_id": None, "decision": None, "approved_by": None,
+           "task_id": None, **fields}
+    rec["result"] = {"remote_id": None, "url": None, "error": None, **(fields.get("result") or {})}
     _append(journal_path(), rec)
     return rec
 

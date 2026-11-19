@@ -114,9 +114,11 @@ def run(account_ids: list[str] | None, limit: int, client_factory=None, trigger:
                        **({"finding": "no data"} if no_data else {}))
         journal.decide(run_id, _PROCESS, "none", account.id)
         if no_data:
-            journal.record(run_id, 6, process=_PROCESS, account=account.id, error="no data")
-            raise ProviderError(f"no data for {account.id}: no posts with metrics",
+            err = ProviderError(f"no data for {account.id}: no posts with metrics",
                                 hint="check the account has posts and the token has insights access")
+            journal.record(run_id, 6, process=_PROCESS, account=account.id,
+                           result={"error": f"{type(err).__name__}: {err}"})
+            raise err
         report = {**summary, **extra}
         target = paths.data_dir() / "social" / "insights" / account.id.replace(":", "_") / f"{today}.json"
         store.replace(target, json.dumps(report, ensure_ascii=False, indent=2), place="data")

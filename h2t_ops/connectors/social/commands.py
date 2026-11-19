@@ -69,7 +69,7 @@ def _journaled(process: str, work):
     try:
         result = work(run_id)
     except BaseException as exc:
-        journal.record(run_id, 6, process=process, error=type(exc).__name__)
+        journal.record(run_id, 6, process=process, result={"error": f"{type(exc).__name__}: {exc}"})
         raise
     journal.record(run_id, 6, process=process, accounts=sorted(
         r["id"] for r in (result if isinstance(result, list) else result["accounts"])))
