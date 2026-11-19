@@ -96,17 +96,29 @@ def _merged(layers) -> dict[str, str]:
     return out
 
 
-def get(key: str) -> str | None:
+def _lookup(key: str) -> tuple[str, str] | None:
+    """(layer, value) of the first layer holding the key: env, shared, legacy."""
     if os.environ.get(key):
-        return os.environ[key]
+        return "env", os.environ[key]
     new = _new_values()
     if key in new:
-        return new[key]
+        return "shared", new[key]
     for _, path in legacy_sources():
         val = _read_env(path).get(key)
         if val:
-            return val
+            return "legacy", val
     return None
+
+
+def get(key: str) -> str | None:
+    found = _lookup(key)
+    return found[1] if found else None
+
+
+def source(key: str) -> str | None:
+    """Which layer get() reads the key from: "env", "shared", "legacy", or None. Never a value."""
+    found = _lookup(key)
+    return found[0] if found else None
 
 
 def keys_with_prefix(prefix: str) -> list[str]:

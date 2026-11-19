@@ -465,6 +465,18 @@ def _google_oauth_status(home: Path) -> dict[str, Any]:
     }
 
 
+def _social_check() -> dict[str, Any]:
+    """Each social secret key with the layer it is read from (env, shared, legacy) or missing."""
+    from h2t_ops.connectors.social.config import secret_key
+    from h2t_ops.core import secrets
+    user, app = secret_key("meta_user_token"), secret_key("meta_app_secret")
+    threads = secrets.keys_with_prefix(secret_key("threads_token_prefix"))
+    checks = {k: secrets.source(k) or "missing" for k in [user, app, *threads]}
+    ready = checks[user] != "missing" or bool(threads)
+    return {"connector": "social", "status": "ready" if ready else "missing", "checks": checks,
+            "live": "skipped"}
+
+
 def connector_matrix(home: Path | None = None, *, live: bool = False, include_paid: bool = False,
                      runner: Runner = _run) -> dict[str, Any]:
     home = home or _home()
@@ -500,6 +512,7 @@ def connector_matrix(home: Path | None = None, *, live: bool = False, include_pa
             "checks": {"GRANOLA_API_KEY": "present" if _secret_present("GRANOLA_API_KEY", home) else "missing"},
             "live": "skipped",
         },
+        _social_check(),
         {
             "connector": "research",
             "status": "ready" if _secret_present("EXA_API_KEY", home) else "missing",

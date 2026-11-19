@@ -236,6 +236,29 @@ def _put(path, body):
     path.write_text(body, encoding="utf-8")
 
 
+def test_connectors_check_social_names_the_source_of_each_secret(tmp_path, monkeypatch):
+    from h2t_ops.connectors.social.config import secret_key
+    _home(tmp_path, monkeypatch)
+    user_key, app_key = secret_key("meta_user_token"), secret_key("meta_app_secret")
+    prefix = secret_key("threads_token_prefix")
+    for k in (user_key, app_key, prefix + "ACC1"):
+        monkeypatch.delenv(k, raising=False)
+    _put(paths.secrets_shared() / "meta.env", f"{user_key}=fake-shared\n")
+    _put(paths.legacy("secrets.h2t") / "secrets.env", f"{prefix}ACC1=fake-legacy\n")
+    row = _matrix_row(tmp_path, monkeypatch, "social")
+    assert row["status"] == "ready"
+    assert row["checks"] == {user_key: "shared", app_key: "missing", prefix + "ACC1": "legacy"}
+    assert "fake-" not in repr(row)
+
+
+def test_connectors_check_social_missing_without_tokens(tmp_path, monkeypatch):
+    from h2t_ops.connectors.social.config import secret_key
+    _home(tmp_path, monkeypatch)
+    for k in (secret_key("meta_user_token"), secret_key("meta_app_secret")):
+        monkeypatch.delenv(k, raising=False)
+    assert _matrix_row(tmp_path, monkeypatch, "social")["status"] == "missing"
+
+
 def test_connectors_check_sees_google_files_in_the_4_0_places(tmp_path, monkeypatch):
     """client in secrets/shared, this machine's token in secrets/local (§4, R19)."""
     _home(tmp_path, monkeypatch)
