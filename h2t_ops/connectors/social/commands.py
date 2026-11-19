@@ -46,6 +46,16 @@ def register(subparsers: Any) -> None:
     jp.add_argument("--last", type=int, default=20)
     add_fmt(jp)
 
+    sp = cmds.add_parser("schedule", help="Register a process in Windows Task Scheduler")
+    sps = sp.add_subparsers(dest="schedule_cmd", required=True)
+    sa = sps.add_parser("add", help="Run the process daily at HH:MM")
+    sa.add_argument("process")
+    sa.add_argument("--daily", required=True, metavar="HH:MM")
+    add_fmt(sa)
+    sr = sps.add_parser("remove", help="Remove the scheduled task")
+    sr.add_argument("process")
+    add_fmt(sr)
+
     p.set_defaults(_handler=run)
 
 
@@ -250,6 +260,12 @@ def run(args: Any) -> Any:
         from h2t_ops.connectors.social import insights
 
         return insights.run(args.accounts, args.limit, trigger=args.trigger, store=args.store)
+    if cmd == "schedule":
+        from h2t_ops.connectors.social import schedule
+
+        if args.schedule_cmd == "add":
+            return schedule.add(args.process, args.daily)
+        return schedule.remove(args.process)
     if cmd == "journal":
         return _journal(args.run_id, args.last)
     raise UsageError(f"unknown social subcommand: {cmd!r}")
