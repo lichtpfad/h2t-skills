@@ -5,7 +5,7 @@ import pytest
 
 from h2t_ops.connectors.social import journal, tokens
 from h2t_ops.connectors.social.threads import ThreadsClient
-from h2t_ops.core.errors import NotFoundError
+from h2t_ops.core.errors import ConfigError, NotFoundError
 
 NOW = datetime(2026, 11, 19, 12, 0, tzinfo=UTC)
 OLD_A, OLD_B, NEW = "OLDA-fake-token-aaaa", "OLDB-fake-token-bbbb", "NEWT-fake-token-cccc"
@@ -124,3 +124,21 @@ def test_threads_refresh_url(social_data, monkeypatch):
     assert result == {"access_token": NEW, "expires_in": 5184000}
     assert NEW in c._secrets and NEW in journal._runtime_secrets
     assert len(raw) == 1
+
+
+def test_env_sourced_key_refuses_before_any_call(env, monkeypatch):
+    monkeypatch.setattr("h2t_ops.core.secrets.source",
+                        lambda key: "env" if key == "THREADS_TOKEN_A" else "shared")
+    with pytest.raises(ConfigError) as info:
+        tokens.refresh(now=NOW, client_factory=FakeClient)
+    assert "THREADS_TOKEN_A" in str(info.value)
+    assert OLD_A not in str(info.value)
+    assert FakeClient.calls == [] and env == []
+
+
+def test_env_sourced_key_far_from_expiry_is_not_refused(env, monkeypatch):
+    far = (NOW + timedelta(days=50)).isoformat()
+    seed({"THREADS_TOKEN_A": far, "THREADS_TOKEN_B": far})
+    monkeypatch.setattr("h2t_ops.core.secrets.source", lambda key: "env")
+    out = tokens.refresh(now=NOW, client_factory=FakeClient)
+    assert out["refreshed"] == []
