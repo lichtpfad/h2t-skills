@@ -259,6 +259,18 @@ def test_connectors_check_social_missing_without_tokens(tmp_path, monkeypatch):
     assert _matrix_row(tmp_path, monkeypatch, "social")["status"] == "missing"
 
 
+def test_connectors_check_survives_a_broken_social_config(tmp_path, monkeypatch):
+    from h2t_ops.connectors.social import config as social_config
+    _home(tmp_path, monkeypatch)
+    _put(social_config.accounts_path(), "secrets:\n  meta_user_token: 42\n")
+    monkeypatch.setattr(setup_h2t, "resolve_h2t_ops", lambda home=None: {"status": "missing", "path": ""})
+    rows = setup_h2t.connector_matrix(tmp_path)["connectors"]
+    by_name = {r["connector"]: r for r in rows}
+    assert by_name["social"]["status"] == "error"
+    assert by_name["social"]["checks"]["error"]
+    assert {"calendar", "notion", "meetgeek", "research"} <= set(by_name)
+
+
 def test_connectors_check_sees_google_files_in_the_4_0_places(tmp_path, monkeypatch):
     """client in secrets/shared, this machine's token in secrets/local (§4, R19)."""
     _home(tmp_path, monkeypatch)
