@@ -5,7 +5,7 @@ import statistics
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from h2t_ops.connectors.social import db, journal
+from h2t_ops.connectors.social import journal
 from h2t_ops.connectors.social.config import Account, load_accounts
 from h2t_ops.connectors.social.meta import find_page
 from h2t_ops.core import user_config
@@ -135,9 +135,8 @@ def run(account_ids: list[str] | None, limit: int, client_factory=None, trigger:
             accounts[account.id] = {"network": account.network, "summary": summary, "posts": posts, **extra}
             journal.record(run_id, 6, process=_PROCESS, account=account.id,
                            schema_version=SCHEMA_VERSION, posts=summary["posts"])
-        if store:   # only after the whole run succeeded: a failed run leaves no results rows
-            for account_id, body in accounts.items():
-                db.put_result(run_id, account_id, body)
+        for account_id, body in accounts.items():   # only after the whole run succeeded; no-op unless stored
+            journal.mirror_result(run_id, account_id, body)
         if not accounts:
             reasons = "; ".join(f"{k}: {v}" for k, v in skipped_accounts.items())
             raise NotFoundError(f"no account produced insights ({reasons})",

@@ -427,3 +427,22 @@ def test_second_account_failure_leaves_no_result_rows(social_config, social_data
         insights.run(None, 10, client_factory=lambda n, a: next(clients), store=True)
     rid = _journal()[0]["run_id"]
     assert db.read_results(rid) == []
+
+
+def test_result_mirror_failure_stops_mirroring_for_the_run(social_config, social_data, tz, monkeypatch):
+    from h2t_ops.connectors.social import db, journal
+    social_config(accounts=_accounts())
+
+    def boom(run_id, account, body):
+        raise MirrorBoom("disk full")
+
+    monkeypatch.setattr(db, "put_result", boom)
+    client = FakeMeta(_media(2), {"m1": {"reach": 5}, "m2": {"reach": 9}})
+    with pytest.raises(MirrorBoom):
+        insights.run(None, 10, client_factory=lambda n, a: client, store=True)
+    rows = _journal()
+    rid = rows[0]["run_id"]
+    mine = [r for r in rows if r["run_id"] == rid]
+    assert mine[-1]["step"] == 6 and "MirrorBoom" in mine[-1]["result"]["error"]
+    assert rid not in journal._stored_runs
+    assert not [r for r in db.read_journal(rid) if r["step"] == 6 and r["result"]["error"]]

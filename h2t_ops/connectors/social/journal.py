@@ -76,7 +76,7 @@ def _append(path: Path, rec: dict) -> None:
     store.append(path, line, place="data")
 
 
-def _mirror(run_id: str, put, rec: dict, swallow: bool = False) -> None:
+def _mirror(run_id: str, put: str, *args, swallow: bool = False) -> None:
     """Copy a written record to SQLite. A failure stops mirroring for the run (JSONL stays whole).
 
     `swallow` is for the failure path: an original error is already on its way, so it must not be replaced.
@@ -86,11 +86,16 @@ def _mirror(run_id: str, put, rec: dict, swallow: bool = False) -> None:
     from h2t_ops.connectors.social import db
 
     try:
-        getattr(db, put)(rec)
+        getattr(db, put)(*args)
     except Exception:
         _stored_runs.discard(run_id)
         if not swallow:
             raise
+
+
+def mirror_result(run_id: str, account: str, body: dict) -> None:
+    """Mirror an account result to SQLite for a stored run; a failure stops mirroring for the run."""
+    _mirror(run_id, "put_result", run_id, account, body)
 
 
 def record(run_id: str, step: int, _swallow: bool = False, **fields) -> dict:
@@ -102,7 +107,7 @@ def record(run_id: str, step: int, _swallow: bool = False, **fields) -> dict:
            "task_id": None, **fields}
     rec["result"] = {"remote_id": None, "url": None, "error": None, **(fields.get("result") or {})}
     _append(journal_path(), rec)
-    _mirror(run_id, "put_journal", rec, _swallow)
+    _mirror(run_id, "put_journal", rec, swallow=_swallow)
     return rec
 
 
@@ -125,7 +130,7 @@ def write_raw(run_id: str, process: str, account_id: str, endpoint: str, payload
     raw = {"id": rid, "ts": now.isoformat(), "run_id": run_id, "process": process,
            "account": account_id, "endpoint": endpoint, "payload": _redact(payload)}
     _append(raw_path(process, now.strftime("%Y-%m-%d")), raw)
-    _mirror(run_id, "put_raw", raw, _swallow)
+    _mirror(run_id, "put_raw", raw, swallow=_swallow)
     record(run_id, 2, _swallow, process=process, account=account_id, endpoint=endpoint, source_ids=[rid])
     return rid
 
