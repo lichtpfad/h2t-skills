@@ -4,6 +4,18 @@ One CHANGELOG for the whole pack from 4.0.0 on. The per-plugin files
 (`plugins/*/CHANGELOG.md`) are the history up to 3.x; their `Unreleased` entries ship in
 4.0.0.
 
+## Unreleased
+
+### Social
+
+- `run insights` JSON output v1 (`schema_version` `h2t_social_insights/v1`), no report files (#689).
+- Threads insights in `run insights` (#674).
+- `accounts discover` table output (#679).
+- `run insights --store`: mirror the run into SQLite (#694).
+- `schedule add|remove`: daily insights run in Windows Task Scheduler (#677).
+- `tokens refresh`: Threads long-lived token refresh (#676).
+- `setup connectors-check`: the social row shows which layer each secret is read from (#678).
+
 ## 4.1.1
 
 ### Security

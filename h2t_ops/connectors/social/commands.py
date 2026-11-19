@@ -1,7 +1,7 @@
 """social CLI adapter. argparse only at module scope; clients and yaml imported in the handlers.
 
 Every command that touches a network opens a journal run first; every HTTP body goes through
-journal.write_raw. This and insights.py are the only modules that construct a client.
+journal.write_raw. This module, insights.py and tokens.py are the modules that construct a client.
 """
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ PROVIDER = "social"
 
 
 def register(subparsers: Any) -> None:
-    p = subparsers.add_parser("social", help="Instagram and Threads insights, Facebook Page check (read-only)")
+    p = subparsers.add_parser("social", help="Instagram and Threads insights, Facebook Page check (read-only Graph reads; local schedule and token upkeep)")
     cmds = p.add_subparsers(dest="social_cmd", required=True)
 
     def add_fmt(sp):

@@ -89,7 +89,8 @@ author's confirmation.
 | 6 Record | outcome back to the journal and, where useful, to context | link to the produced context note |
 
 Steps 2 and 5 are the only ones that touch a network. Step 4 is the only place a decision
-is made.
+is made. A maintenance run (Threads token refresh) makes no decision: it records steps 1, 2
+and 6 only.
 
 ### 4.3 Processes mapped onto the pipeline
 
