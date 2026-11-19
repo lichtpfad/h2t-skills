@@ -447,16 +447,22 @@ def test_a_failed_export_installs_nothing(dev):
     assert dev.uv.installs == [] and state.read() is None
 
 
-def test_dev_sync_on_windows_inside_the_tool_hands_the_uv_command_back(dev, monkeypatch):
+def test_dev_sync_on_windows_inside_the_tool_hands_back_dev_sync_from_the_checkout(
+        dev, monkeypatch):
+    """#663: the hint relaunches dev-sync itself, from the checkout's environment. A bare
+    `uv tool install` installed the CLI and skipped the commit, leaving install.json on the
+    previous version, and running dev-sync again met the same lock."""
     dev.uv.write_env("4.0.0")
     monkeypatch.setattr(sync, "OS_NAME", "nt")
     monkeypatch.setattr(sync.sys, "prefix", str(dev.uv.root))
     with pytest.raises(ConfigError) as exc:
-        _devsync(dev)
+        sync.run("dev-sync", None, ["--extra", "drawio"], uv=dev.uv, execute=dev.uv.run,
+                 claude=harness_claude.Claude(exe="claude", run=dev.claude))
     assert exit_code_for(exc.value) == 3
     command = exc.value.details["command"]
     assert exc.value.details["reason"] == "relaunch_required"
-    assert command[:4] == ["uv", "tool", "install", "--editable"]
+    assert command == ["uv", "run", "--directory", os.path.realpath(dev.checkout),
+                       "h2t-setup", "dev-sync", "--extra", "drawio"]
     assert exc.value.hint == manifest.render(command)
     assert dev.uv.installs == [] and state.read() is None
 
