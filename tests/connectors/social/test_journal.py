@@ -98,9 +98,10 @@ def test_decide_kind_matches(social_data, social_config):
     assert journal.decide(run, "content", "publish", "instagram:acme", "dm") == "ask"
 
 
-def test_action_none_is_noop(social_data, social_config):
-    social_config(rules=_rules([
-        {"id": "r", "process": "insights", "action": "none", "account": "*", "verdict": "deny"}]))
+def test_action_none_is_noop(social_data, monkeypatch):
+    def boom():
+        raise AssertionError("load_rules must not be called for action none")
+    monkeypatch.setattr(journal, "load_rules", boom)
     run = journal.new_run("insights", "manual")
     assert journal.decide(run, "insights", "none", "instagram:acme") == "noop"
     rec = json.loads(_lines(journal.journal_path())[-1])
@@ -154,4 +155,25 @@ def test_registered_runtime_secret_is_refused(social_data):
     with pytest.raises(journal.SecretInRecord):
         journal.write_raw(run, "insights", "instagram:acme", "/x", {"x": "PAGETOK"})
     assert _lines(journal.journal_path()) == jl_before
+    assert not list((social_data / "social").glob("raw/**/*.jsonl"))
+
+
+@pytest.mark.parametrize("secret", ['a"b-secret', "a\\b-secret"])
+def test_json_escaped_secret_is_refused_in_journal(social_data, secret):
+    journal.register_secret(secret)
+    run = journal.new_run("insights", "manual")
+    before = _lines(journal.journal_path())
+    with pytest.raises(journal.SecretInRecord):
+        journal.record(run, 6, note=secret)
+    assert _lines(journal.journal_path()) == before
+
+
+@pytest.mark.parametrize("secret", ['a"b-secret', "a\\b-secret"])
+def test_json_escaped_secret_is_refused_in_raw(social_data, secret):
+    journal.register_secret(secret)
+    run = journal.new_run("insights", "manual")
+    before = _lines(journal.journal_path())
+    with pytest.raises(journal.SecretInRecord):
+        journal.write_raw(run, "insights", "instagram:acme", "/x", {"x": secret})
+    assert _lines(journal.journal_path()) == before
     assert not list((social_data / "social").glob("raw/**/*.jsonl"))

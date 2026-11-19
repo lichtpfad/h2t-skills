@@ -60,7 +60,7 @@ def _secret_values() -> list[tuple[str, str]]:
 def _append(path: Path, rec: dict) -> None:
     line = json.dumps(rec, ensure_ascii=False)
     for name, value in _secret_values():
-        if value in line:
+        if value in line or json.dumps(value, ensure_ascii=False)[1:-1] in line:   # raw and JSON-escaped
             raise SecretInRecord(f"record {rec.get('id')} contains the value of {name}; not written",
                                  hint="remove the value from the record")
     store.append(path, line, place="data")
