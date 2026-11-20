@@ -1,9 +1,10 @@
 # Social Connector
 
 Instagram and Threads accounts over the Meta Graph API and the Threads API. This version
-is **read-only**: it reads profiles, posts and per-post metrics, summarizes them, and
-records every run in a journal. It never posts, replies, deletes or changes anything on a
-network.
+reads profiles, posts and per-post metrics, summarizes them, and records every run in a
+journal. Its Graph calls are read-only: it never posts, replies, deletes or changes anything
+on a network. Two local maintenance commands exist besides the reads: `schedule` (Windows
+Task Scheduler) and `tokens refresh` (Threads token upkeep).
 
 ## Command Map
 
@@ -15,6 +16,10 @@ network.
 | smoke test: profile and last 3 posts per enabled account | `h2t-ops social check --json` |
 | the same for one account | `h2t-ops social check instagram:acme --json` |
 | collect metrics and summarize | `h2t-ops social run insights --json` |
+| the same, mirrored into SQLite (`<data>/social/social.db`); `--trigger cli\|schedule` labels step 1 | `h2t-ops social run insights --store --trigger schedule --json` |
+| run insights daily at HH:MM in Windows Task Scheduler | `h2t-ops social schedule add insights --daily 07:00` |
+| remove that task | `h2t-ops social schedule remove insights` |
+| refresh Threads tokens that expire within 7 days | `h2t-ops social tokens refresh --json` |
 | one account, N posts (`--limit` must be 1 or more; default 120) | `h2t-ops social run insights --account threads:acme --limit 25 --json` |
 | show journal records | `h2t-ops social journal --last 20 --json` |
 | the records of one run | `h2t-ops social journal --run <run_id> --json` |
@@ -75,6 +80,13 @@ an Instagram account, or the reverse) is a config error too.
 
 `run insights` also needs a `timezone` setting (`h2t-ops settings get timezone`); posts
 are grouped by weekday and hour band in that zone.
+
+A `facebook` account gets Page insights: for each metric in `facebook_page_metrics`
+(`defaults.yaml`) one daily series over the last 28 days. Its entry is
+`{network: "facebook", page: {<metric>: [{date, value}, ...]}}` and holds only metrics that
+returned values. A metric Meta refuses (code 100 or 10) is listed in `result.unavailable` as
+`{account, group: "page", metric, code, message}`; that list is always present and is `[]`
+when nothing was refused. If no metric returns values, the run exits 5.
 
 ## Secrets
 
@@ -138,7 +150,7 @@ or `[]`. The `step` says what the record is:
 | 3 | the finding for an account; `source_ids` of the bodies it rests on |
 | 4 | the decision: `rule_id` and `noop`/`auto`/`ask`/`deny` |
 | 5 | a claim; it must name at least one source id |
-| 6 | the outcome: the `report` path, or the failure in `result.error` |
+| 6 | the outcome: the per-account result (`schema_version`, `posts`), or the failure in `result.error` |
 
 A run that fails (bad token, network, rate limit, no data, a write error) ends with exactly
 one step-6 record whose `result.error` is `<ErrorClass>: <message>`; the error bodies the
@@ -148,15 +160,33 @@ nothing to show.
 Raw API bodies are kept in `social/raw/<process>/<YYYY-MM-DD>.jsonl`, also append-only.
 Token fields are stripped from them, and a record containing a secret value is refused.
 `discover` and `check` write steps 1, 2 and 6 only. `run insights` writes 1 to 4 and 6;
-its step 4 is always `noop` because this version takes no action. The report is saved as
-`social/insights/<account>/<date>.json`.
+its step 4 is always `noop` because this version takes no action. `tokens refresh` is a
+maintenance run: it makes no decision, so it writes steps 1, 2 and 6 only. `run insights`
+returns its result as JSON (`result.schema_version` is `h2t_social_insights/v1`) and writes
+no report file. With `--store` the run is also mirrored into SQLite: journal, raw bodies and
+one `results` row per account, written after the whole run succeeded. If the SQLite mirror
+fails, mirroring stops for that run, the JSONL journal still ends with a step-6 failure, and
+the original error is raised.
+
+## Schedule and token upkeep
+
+`schedule add insights --daily HH:MM` registers the task `h2t-social-insights` in Windows
+Task Scheduler; it runs `h2t-ops social run insights --trigger schedule --store`. `h2t-ops`
+must be on PATH. Other platforms get a usage error until the VPS stage.
+
+`tokens refresh` refreshes every Threads token that expires within 7 days or has no recorded
+expiry. Expiry dates live in `state/social/token-expiry.json` (key names and ISO dates, no
+token values). If the API gives no usable `expires_in`, the new token is still saved, the
+expiry is recorded as unknown (`null`) and the next run refreshes it again. A token key set in the process
+environment makes the command refuse (config error): the environment would override the
+refreshed value. A corrupt expiry file is a config error naming the file.
+
+`h2t-ops setup connectors-check` has a `social` row: each social secret key with the layer it
+is read from (`env`, `shared`, `legacy`) or `missing`. No secret value is printed.
 
 ## Not built yet
 
-- Facebook Page insights: a `facebook` account is skipped by `run insights` and the
-  skip is reported.
 - Any write to a network (posting, replying, deleting).
-- Threads token refresh: a Threads token lasts about 60 days; generate a new one.
 - A command to add a rule: edit `rules.yaml` by hand.
 
 ## Common Failures

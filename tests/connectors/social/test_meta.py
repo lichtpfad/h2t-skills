@@ -161,3 +161,32 @@ def test_find_page_matches_by_instagram_id_or_page_id():
     assert find_page(pages, acc("ig_2", None)) is pages[1]
     assert find_page(pages, acc("ig_9", "page_1")) is pages[0]
     assert find_page(pages, acc("ig_9", None)) is None
+
+
+def test_page_insights_parses_dates_and_values():
+    c = client((200, fx("page_insights")))
+    body, raw = c.page_insights("page_222", "PGTOK1", "page_post_engagements", 1000, 2000)
+    assert body == {"values": [{"date": "2026-11-18", "value": 12}, {"date": "2026-11-19", "value": 30}]}
+    assert len(raw) == 1
+
+
+def test_page_insights_sends_metric_period_and_window():
+    c = client((200, fx("page_insights")))
+    c.page_insights("page_222", "PGTOK1", "page_post_engagements", 1000, 2000)
+    url, params = c._session.calls[0]
+    assert url.endswith("/page_222/insights")
+    assert params["metric"] == "page_post_engagements" and params["period"] == "day"
+    assert params["since"] == 1000 and params["until"] == 2000 and params["access_token"] == "PGTOK1"
+
+
+@pytest.mark.parametrize("name,code", [("error_10", 10), ("error_100", 100)])
+def test_page_insights_soft_errors_return_the_error_not_raise(name, code):
+    body, raw = client((400, fx(name))).page_insights("page_222", "PGTOK1", "page_fans", 1, 2)
+    assert body["error"]["code"] == code and body["error"]["message"] and "values" not in body
+    assert raw[0]["error"]["code"] == code
+
+
+def test_page_insights_error_message_never_holds_a_token():
+    leaked = {"error": {"message": "bad token PGTOK1 here", "code": 10}}
+    body, _ = client((400, leaked)).page_insights("page_222", "PGTOK1", "m", 1, 2)
+    assert "PGTOK1" not in body["error"]["message"]

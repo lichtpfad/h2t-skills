@@ -1,4 +1,5 @@
 """Doctors report what they checked, the way the code they vouch for does (#451)."""
+import json
 import os
 import sys
 from pathlib import Path
@@ -234,6 +235,63 @@ def _matrix_row(tmp_path, monkeypatch, connector):
 def _put(path, body):
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(body, encoding="utf-8")
+
+
+def test_connectors_check_social_names_the_source_of_each_secret(tmp_path, monkeypatch):
+    from h2t_ops.connectors.social.config import secret_key
+    _home(tmp_path, monkeypatch)
+    user_key, app_key = secret_key("meta_user_token"), secret_key("meta_app_secret")
+    prefix = secret_key("threads_token_prefix")
+    for k in (user_key, app_key, prefix + "ACC1"):
+        monkeypatch.delenv(k, raising=False)
+    _put(paths.secrets_shared() / "meta.env", f"{user_key}=fake-shared\n")
+    _put(paths.legacy("secrets.h2t") / "secrets.env", f"{prefix}ACC1=fake-legacy\n")
+    row = _matrix_row(tmp_path, monkeypatch, "social")
+    assert row["status"] == "ready"
+    assert row["checks"] == {user_key: "shared", app_key: "missing", prefix + "ACC1": "legacy"}
+    assert "fake-" not in repr(row)
+
+
+def test_connectors_check_social_missing_without_tokens(tmp_path, monkeypatch):
+    from h2t_ops.connectors.social.config import secret_key
+    _home(tmp_path, monkeypatch)
+    for k in (secret_key("meta_user_token"), secret_key("meta_app_secret")):
+        monkeypatch.delenv(k, raising=False)
+    for k in [k for k in os.environ if k.startswith("THREADS_TOKEN_")]:
+        monkeypatch.delenv(k)
+    assert _matrix_row(tmp_path, monkeypatch, "social")["status"] == "missing"
+
+
+def test_connectors_check_survives_a_broken_social_config(tmp_path, monkeypatch):
+    from h2t_ops.connectors.social import config as social_config
+    _home(tmp_path, monkeypatch)
+    _put(social_config.accounts_path(), "secrets:\n  meta_app_secret: s3cr3t-app-value-1234\n")
+    monkeypatch.setattr(setup_h2t, "resolve_h2t_ops", lambda home=None: {"status": "missing", "path": ""})
+    matrix = setup_h2t.connector_matrix(tmp_path)
+    by_name = {r["connector"]: r for r in matrix["connectors"]}
+    assert by_name["social"]["status"] == "error"
+    assert by_name["social"]["checks"]["error"]
+    assert "s3cr3t-app-value-1234" not in json.dumps(matrix)
+    assert {"calendar", "notion", "meetgeek", "research"} <= set(by_name)
+
+
+def test_connectors_check_survives_an_unreadable_social_secrets_file(tmp_path, monkeypatch):
+    _home(tmp_path, monkeypatch)
+    # the corrupt file is a 3.x one: it is read only when a key is not in env or shared, so the
+    # other connectors (whose keys are set here) still resolve and the row under test is social
+    for k in ("NOTION_API_TOKEN", "TELEGRAM_API_ID", "TELEGRAM_API_HASH", "MEETGEEK_API_KEY",
+              "GRANOLA_API_KEY", "EXA_API_KEY"):
+        monkeypatch.setenv(k, "fake")
+    legacy = paths.legacy("secrets.h2t") / "secrets.env"
+    legacy.parent.mkdir(parents=True, exist_ok=True)
+    legacy.write_bytes(b"THREADS_TOKEN_X=\xff\xfe\xfa\n")
+    monkeypatch.setattr(setup_h2t, "resolve_h2t_ops", lambda home=None: {"status": "missing", "path": ""})
+    matrix = setup_h2t.connector_matrix(tmp_path)
+    by_name = {r["connector"]: r for r in matrix["connectors"]}
+    assert by_name["social"]["status"] == "error"
+    assert by_name["social"]["checks"]["error"]
+    assert "UnicodeDecodeError" not in json.dumps(matrix)
+    assert {"calendar", "notion", "meetgeek", "research"} <= set(by_name)
 
 
 def test_connectors_check_sees_google_files_in_the_4_0_places(tmp_path, monkeypatch):

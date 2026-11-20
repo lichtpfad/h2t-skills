@@ -16,6 +16,7 @@ from h2t_ops.core.errors import ConfigError, UsageError
 REDACT_FIELDS = ("access_token", "page_token", "token")
 _FIXED_SECRETS = ("meta_user_token", "meta_app_secret")   # names in config; key names resolve there
 _runtime_secrets: set[str] = set()
+_stored_runs: set[str] = set()   # runs opened with store=True: their records are also mirrored to SQLite
 
 
 class SecretInRecord(ConfigError):
@@ -61,16 +62,43 @@ def _secret_values() -> list[tuple[str, str]]:
     return out + [("a registered runtime secret", v) for v in _runtime_secrets]
 
 
+def check_no_secret(text: str, what: str) -> None:
+    """Raise SecretInRecord if `text` (serialized JSON) holds a secret value. Names the secret, never the value."""
+    for name, value in _secret_values():
+        if value in text or json.dumps(value, ensure_ascii=False)[1:-1] in text:   # raw and JSON-escaped
+            raise SecretInRecord(f"{what} contains the value of {name}; not written",
+                                 hint="remove the value from the record")
+
+
 def _append(path: Path, rec: dict) -> None:
     line = json.dumps(rec, ensure_ascii=False)
-    for name, value in _secret_values():
-        if value in line or json.dumps(value, ensure_ascii=False)[1:-1] in line:   # raw and JSON-escaped
-            raise SecretInRecord(f"record {rec.get('id')} contains the value of {name}; not written",
-                                 hint="remove the value from the record")
+    check_no_secret(line, f"record {rec.get('id')}")
     store.append(path, line, place="data")
 
 
-def record(run_id: str, step: int, **fields) -> dict:
+def _mirror(run_id: str, put: str, *args, swallow: bool = False) -> None:
+    """Copy a written record to SQLite. A failure stops mirroring for the run (JSONL stays whole).
+
+    `swallow` is for the failure path: an original error is already on its way, so it must not be replaced.
+    """
+    if run_id not in _stored_runs:
+        return
+    from h2t_ops.connectors.social import db
+
+    try:
+        getattr(db, put)(*args)
+    except Exception:
+        _stored_runs.discard(run_id)
+        if not swallow:
+            raise
+
+
+def mirror_result(run_id: str, account: str, body: dict) -> None:
+    """Mirror an account result to SQLite for a stored run; a failure stops mirroring for the run."""
+    _mirror(run_id, "put_result", run_id, account, body)
+
+
+def record(run_id: str, step: int, _swallow: bool = False, **fields) -> dict:
     if step == 5 and not fields.get("source_ids"):
         raise ValueError("a step-5 record must name at least one source id")
     rec = {"id": uuid.uuid4().hex, "ts": _now().isoformat(), "run_id": run_id, "process": None,
@@ -79,30 +107,40 @@ def record(run_id: str, step: int, **fields) -> dict:
            "task_id": None, **fields}
     rec["result"] = {"remote_id": None, "url": None, "error": None, **(fields.get("result") or {})}
     _append(journal_path(), rec)
+    _mirror(run_id, "put_journal", rec, swallow=_swallow)
     return rec
 
 
-def new_run(process: str, trigger: str) -> str:
+def new_run(process: str, trigger: str, store: bool = False) -> str:
     run_id = uuid.uuid4().hex
-    record(run_id, 1, process=process, trigger=trigger)
+    if store:
+        _stored_runs.add(run_id)
+    try:
+        record(run_id, 1, process=process, trigger=trigger)
+    except Exception as exc:
+        record_failure(run_id, process, exc)   # the run is never returned, so its JSONL must end here
+        raise
     return run_id
 
 
-def write_raw(run_id: str, process: str, account_id: str, endpoint: str, payload: dict) -> str:
+def write_raw(run_id: str, process: str, account_id: str, endpoint: str, payload: dict,
+              _swallow: bool = False) -> str:
     now = _now()
     rid = uuid.uuid4().hex
-    _append(raw_path(process, now.strftime("%Y-%m-%d")),
-            {"id": rid, "ts": now.isoformat(), "run_id": run_id, "process": process,
-             "account": account_id, "endpoint": endpoint, "payload": _redact(payload)})
-    record(run_id, 2, process=process, account=account_id, endpoint=endpoint, source_ids=[rid])
+    raw = {"id": rid, "ts": now.isoformat(), "run_id": run_id, "process": process,
+           "account": account_id, "endpoint": endpoint, "payload": _redact(payload)}
+    _append(raw_path(process, now.strftime("%Y-%m-%d")), raw)
+    _mirror(run_id, "put_raw", raw, swallow=_swallow)
+    record(run_id, 2, _swallow, process=process, account=account_id, endpoint=endpoint, source_ids=[rid])
     return rid
 
 
-def keep(run_id: str, process: str, account_id: str, endpoint: str, value_raw, ids: list | None = None):
+def keep(run_id: str, process: str, account_id: str, endpoint: str, value_raw, ids: list | None = None,
+         _swallow: bool = False):
     """Journal every raw body of a client call `(value, raw)`; return the value. Ids go into `ids`."""
     value, raw = value_raw
     for body in raw:
-        rid = write_raw(run_id, process, account_id, endpoint, body)
+        rid = write_raw(run_id, process, account_id, endpoint, body, _swallow)
         if ids is not None:
             ids.append(rid)
     return value
@@ -110,8 +148,8 @@ def keep(run_id: str, process: str, account_id: str, endpoint: str, value_raw, i
 
 def record_failure(run_id: str, process: str, exc: BaseException, account_id: str | None = None) -> None:
     """Journal the bodies an error carried, then the step-6 failure outcome."""
-    keep(run_id, process, account_id, "error", (None, getattr(exc, "raw", [])))
-    record(run_id, 6, process=process, account=account_id,
+    keep(run_id, process, account_id, "error", (None, getattr(exc, "raw", [])), _swallow=True)
+    record(run_id, 6, True, process=process, account=account_id,
            result={"error": f"{type(exc).__name__}: {exc}"})
 
 

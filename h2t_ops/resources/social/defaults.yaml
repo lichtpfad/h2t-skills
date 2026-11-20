@@ -5,3 +5,10 @@ secrets:
   meta_user_token: META_H2T_SOCIAL_USER_TOKEN
   meta_app_secret: META_H2T_SOCIAL_APP_SECRET
   threads_token_prefix: THREADS_TOKEN_
+facebook_page_metrics:      # Page insights read per run, in this order (reach, engagement, ...)
+  - page_total_media_view_unique
+  - page_post_engagements
+  - page_media_view
+  - page_views_total
+  - page_daily_follows_unique
+  - page_actions_post_reactions_total

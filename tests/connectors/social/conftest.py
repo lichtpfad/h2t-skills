@@ -27,4 +27,5 @@ def social_data(tmp_path, monkeypatch):
     monkeypatch.setenv("H2T_PATH_ROOT", str(tmp_path))
     monkeypatch.setattr("h2t_ops.core.secrets.get", lambda key: None)
     monkeypatch.setattr("h2t_ops.connectors.social.journal._runtime_secrets", set())
+    monkeypatch.setattr("h2t_ops.connectors.social.journal._stored_runs", set())
     return tmp_path / "data"

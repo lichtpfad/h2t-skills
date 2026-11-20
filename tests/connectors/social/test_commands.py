@@ -105,6 +105,17 @@ def test_discover_without_write_changes_nothing(env, social_config, capsys):
     assert f.read_text(encoding="utf-8") == before
 
 
+def test_discover_human_is_a_table(env, social_config, capsys):
+    social_config(accounts={"accounts": []})
+    code, out, _ = run(capsys, "accounts", "discover")
+    assert code == 0
+    lines = out.strip().splitlines()
+    assert not out.lstrip().startswith("{")
+    assert all(w in lines[0] for w in ("id", "enabled", "token_key"))
+    assert len([x for x in lines if "instagram:acme" in x]) == 1
+    assert "not written" in lines[-1] and "--write" in lines[-1]
+
+
 def test_discover_merges_and_keeps_enabled(env, social_config, capsys):
     social_config(
         accounts={"api": {"meta_graph": "https://graph.facebook.com/v27.0"},
@@ -173,7 +184,7 @@ def test_run_insights_envelope_json(env, social_config, capsys):
     assert code == 0, out + err
     env_ = json.loads(out)
     assert env_["ok"] is True and env_["provider"] == "social"
-    assert env_["result"]["reports"]["instagram:acme"]["posts"] == 2
+    assert env_["result"]["accounts"]["instagram:acme"]["summary"]["posts"] == 2
 
 
 def test_journal_reads_and_fails_loud_when_empty(env, social_config, capsys):
@@ -329,6 +340,27 @@ def test_discover_with_tokens_but_no_pages_is_a_provider_error(env, social_confi
     social_config(accounts={"accounts": []})
     code, out, err = run(capsys, "accounts", "discover", "--json")
     assert code == 1 and "no accounts found" in out + err
+
+
+def test_run_insights_store_and_trigger(env, social_config, capsys):
+    from h2t_ops.connectors.social import db
+    social_config(accounts={"accounts": [_META_IG]})
+    code, out, err = run(capsys, "run", "insights", "--trigger", "schedule", "--store", "--json")
+    assert code == 0, out + err
+    rid = json.loads(out)["result"]["run_id"]
+    step1 = next(r for r in db.read_journal(rid) if r["step"] == 1)
+    assert step1["trigger"] == "schedule"
+    assert len(db.read_results(rid)) == 1 and db.read_raw(rid)
+
+
+def test_run_insights_default_is_cli_and_no_db(env, social_config, capsys):
+    from h2t_ops.connectors.social import db
+    social_config(accounts={"accounts": [_META_IG]})
+    code, out, err = run(capsys, "run", "insights", "--json")
+    assert code == 0, out + err
+    recs = [json.loads(line) for line in journal_path().read_text(encoding="utf-8").splitlines()]
+    assert next(r for r in recs if r["step"] == 1)["trigger"] == "cli"
+    assert not db.db_path().exists()
 
 
 @pytest.mark.parametrize("limit", ["0", "-5"])

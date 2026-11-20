@@ -1,7 +1,7 @@
 """social CLI adapter. argparse only at module scope; clients and yaml imported in the handlers.
 
 Every command that touches a network opens a journal run first; every HTTP body goes through
-journal.write_raw. This and insights.py are the only modules that construct a client.
+journal.write_raw. This module, insights.py and tokens.py are the modules that construct a client.
 """
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ PROVIDER = "social"
 
 
 def register(subparsers: Any) -> None:
-    p = subparsers.add_parser("social", help="Instagram and Threads insights, Facebook Page check (read-only)")
+    p = subparsers.add_parser("social", help="Instagram and Threads insights, Facebook Page check (read-only Graph reads; local schedule and token upkeep)")
     cmds = p.add_subparsers(dest="social_cmd", required=True)
 
     def add_fmt(sp):
@@ -37,12 +37,28 @@ def register(subparsers: Any) -> None:
     ip = rps.add_parser("insights", help="Collect metrics, summarize, journal the run")
     ip.add_argument("--account", action="append", dest="accounts", default=None, metavar="ID")
     ip.add_argument("--limit", type=int, default=120)
+    ip.add_argument("--trigger", choices=("cli", "schedule"), default="cli")
+    ip.add_argument("--store", action="store_true", help="also mirror the run into SQLite")
     add_fmt(ip)
 
     jp = cmds.add_parser("journal", help="Show journal records")
     jp.add_argument("--run", dest="run_id", default=None)
     jp.add_argument("--last", type=int, default=20)
     add_fmt(jp)
+
+    sp = cmds.add_parser("schedule", help="Register a process in Windows Task Scheduler")
+    sps = sp.add_subparsers(dest="schedule_cmd", required=True)
+    sa = sps.add_parser("add", help="Run the process daily at HH:MM")
+    sa.add_argument("process")
+    sa.add_argument("--daily", required=True, metavar="HH:MM")
+    add_fmt(sa)
+    sr = sps.add_parser("remove", help="Remove the scheduled task")
+    sr.add_argument("process")
+    add_fmt(sr)
+
+    tp = cmds.add_parser("tokens", help="Threads token upkeep")
+    tps = tp.add_subparsers(dest="tokens_cmd", required=True)
+    add_fmt(tps.add_parser("refresh", help="Refresh Threads tokens that expire within 7 days"))
 
     p.set_defaults(_handler=run)
 
@@ -152,6 +168,20 @@ def _discover(write: bool) -> dict:
     return {"written": write, "path": str(path), "yaml": text, "notes": found["notes"]}
 
 
+def _discover_table(result: dict) -> str:
+    import yaml
+
+    rows = [(f"{a['network']}:{a['handle']}", str(a.get("enabled")), str(a.get("token_key")))
+            for a in yaml.safe_load(result["yaml"])["accounts"]]
+    rows.insert(0, ("id", "enabled", "token_key"))
+    widths = [max(len(r[i]) for r in rows) for i in range(3)]
+    lines = ["  ".join(c.ljust(w) for c, w in zip(r, widths)).rstrip() for r in rows]
+    lines += result["notes"]
+    lines.append(f"written: {result['path']}" if result["written"]
+                 else f"not written: pass --write to save {result['path']}")
+    return "\n".join(lines)
+
+
 def _list() -> list[dict]:
     from h2t_ops.connectors.social.config import load_accounts
 
@@ -224,13 +254,26 @@ def run(args: Any) -> Any:
 
     cmd = args.social_cmd
     if cmd == "accounts":
-        return _discover(args.write) if args.accounts_cmd == "discover" else _list()
+        if args.accounts_cmd != "discover":
+            return _list()
+        result = _discover(args.write)
+        return result if args.as_json or args.fmt != "human" else _discover_table(result)
     if cmd == "check":
         return _check(args.account_id)
     if cmd == "run":
         from h2t_ops.connectors.social import insights
 
-        return insights.run(args.accounts, args.limit)
+        return insights.run(args.accounts, args.limit, trigger=args.trigger, store=args.store)
+    if cmd == "schedule":
+        from h2t_ops.connectors.social import schedule
+
+        if args.schedule_cmd == "add":
+            return schedule.add(args.process, args.daily)
+        return schedule.remove(args.process)
+    if cmd == "tokens":
+        from h2t_ops.connectors.social import tokens
+
+        return tokens.refresh()
     if cmd == "journal":
         return _journal(args.run_id, args.last)
     raise UsageError(f"unknown social subcommand: {cmd!r}")
