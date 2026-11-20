@@ -107,7 +107,7 @@ Example table; the repos and directories are illustrative:
 | `guides/` | Practical how-to | Developers, new team members | Living docs |
 | `research/` | Exploratory research | Internal team | Snapshot (date-prefixed) |
 | `reports/` | Milestone completion reports | Stakeholders, internal | Snapshot (immutable) |
-| `.artifacts/` | Run evidence, `<run_id>/` per run | Reviewers, truth-gate CI | Committed, immutable (was "ephemeral, gitignored" until 2026-09-09 — crypto-regime-spike had already been using it as the durable evidence store, the audit adopted that) |
+| `.artifacts/` | Run evidence, `<run_id>/` per run | Reviewers, truth-gate CI | Committed, immutable (was "ephemeral, gitignored" until 2026-09-09) |
 
 ## What Does NOT Go in docs/
 
