@@ -10,6 +10,7 @@ One CHANGELOG for the whole pack from 4.0.0 on. The per-plugin files
 
 - `run insights` JSON output v1 (`schema_version` `h2t_social_insights/v1`), no report files (#689).
 - Threads insights in `run insights` (#674).
+- Facebook Page insights in `run insights`: reach and engagement per day, refused metrics listed in `unavailable` (#675).
 - `accounts discover` table output (#679).
 - `run insights --store`: mirror the run into SQLite (#694).
 - `schedule add|remove`: daily insights run in Windows Task Scheduler (#677).

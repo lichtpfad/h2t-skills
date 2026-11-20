@@ -268,6 +268,13 @@ envelope's `result` key.
 | `result.run_id` | The journal run id. |
 | `result.accounts` | Mapping `<network>:<handle>` → `{network, summary, posts}`. Instagram accounts also carry `online_followers_hour_as_reported`. |
 | `result.skipped_accounts` | Mapping account id → reason it was skipped. |
+| `result.unavailable` | List of `{account, group, metric, code, message}`: metrics Meta refused (code 100 or 10). Always present; `[]` when nothing is unavailable. |
+
+A Facebook account entry is `{network: "facebook", page: {<metric>: [{date, value}, ...]}}`.
+`page` holds only the metrics that returned values (last 28 days, one value per day). The
+metric list is `facebook_page_metrics` in `defaults.yaml`. A refused metric goes to
+`result.unavailable` with `group: "page"`. If no metric returns values, the run fails with
+exit 5.
 
 `summary` is the output of `insights.summarize`. Its keys are `posts`, `skipped`,
 `median_reach`, `by_weekday`, `by_hour_band` and `top`.
@@ -276,9 +283,8 @@ envelope's `result` key.
 when Meta gave no insights for the post.
 
 **Versioning rule.** Adding a key keeps v1. Removing or renaming a key needs v2. Issue #670
-adds the groups `account_daily`, `audience`, `stories` and `comments`, and the list
-`unavailable` (items `{account, group, metric, code, message}`). These are additions, so
-they stay in v1.
+adds the groups `account_daily`, `audience`, `stories` and `comments`, and fills the list
+`unavailable` (filled since #675). These are additions, so they stay in v1.
 
 **Storage.** No report files. `--store` writes rows to `<data>/social/social.db` (plan
 Task 5).

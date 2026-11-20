@@ -81,6 +81,13 @@ an Instagram account, or the reverse) is a config error too.
 `run insights` also needs a `timezone` setting (`h2t-ops settings get timezone`); posts
 are grouped by weekday and hour band in that zone.
 
+A `facebook` account gets Page insights: for each metric in `facebook_page_metrics`
+(`defaults.yaml`) one daily series over the last 28 days. Its entry is
+`{network: "facebook", page: {<metric>: [{date, value}, ...]}}` and holds only metrics that
+returned values. A metric Meta refuses (code 100 or 10) is listed in `result.unavailable` as
+`{account, group: "page", metric, code, message}`; that list is always present and is `[]`
+when nothing was refused. If no metric returns values, the run exits 5.
+
 ## Secrets
 
 Only through the package, never in a config file, a command line or the output.
@@ -179,8 +186,6 @@ is read from (`env`, `shared`, `legacy`) or `missing`. No secret value is printe
 
 ## Not built yet
 
-- Facebook Page insights: a `facebook` account is skipped by `run insights` and the
-  skip is reported.
 - Any write to a network (posting, replying, deleting).
 - A command to add a rule: edit `rules.yaml` by hand.
 
