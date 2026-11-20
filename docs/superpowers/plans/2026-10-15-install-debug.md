@@ -72,15 +72,15 @@ reason: "verification plan for the install path; each defect it finds gets its o
 
 | # | Слой | Платформа | Наблюдение | Доказательство | Статус |
 |---|---|---|---|---|---|
-| D1 | L3 | Windows | `gather-on-prompt`, `gather-on-skill`, `on-stop` вызывают `jq`; в Git Bash его нет. Ошибка на каждом сообщении, `gather` молча не работает | транскрипт 10-15; `grep -c jq` по обработчикам | открыт |
-| D2 | L5 | Windows | `config.json` Telegram из Блокнота (BOM) → `Unexpected UTF-8 BOM`, тип `provider`, без подсказки | воспроизведено в пустом HOME 10-15 | открыт |
+| D1 | L3 | Windows | `gather-on-prompt` и `gather-on-skill` вызывают `jq`; в Git Bash его нет. Ошибка на каждом сообщении, `gather` молча не работает. (`on-stop` — Python, его `--jq` — флаг `gh`, не утилита) | транскрипт 10-15; `grep -c jq` по обработчикам | закрыт, #543 |
+| D2 | L5 | Windows | `config.json` Telegram из Блокнота (BOM) → `Unexpected UTF-8 BOM`, тип `provider`, без подсказки | воспроизведено в пустом HOME 10-15 | закрыт, #544 |
 | D3 | L5 | все | секреты читаются из 8 мест; три закрытые задачи (#432, #107, #483) не перенесли ключи | `grep Path.home()` по `h2t_ops/` | открыт, нужно решение (`decision.yml`) |
 | D4 | L5 | все | `secrets skeleton` пишет в наследный `~/.dor/secrets/secrets.env` | транскрипт 10-15, Лидия 10-14 | открыт, зависит от D3 |
 | D5 | L2/L7 | все | editable-установка не подтягивает новую зависимость (`qrcode` после #538) | `import qrcode` → ModuleNotFoundError, 10-14 | открыт |
 | D6 | L2 | все | версия CLI всегда `0.2.1` — по ней не видно, что окружение устарело | `h2t-ops --version` до и после #535/#538 | открыт |
 | D7 | L1 | P2/P4 | `h2t-core:setup` вызывает `scripts/setup_h2t.py` по относительному пути; в Codex не проверено | проба отклонена классификатором 10-14 | нужна проба |
-| D8 | L3 | P3 | `PostToolUse:Bash — Python was not found … Microsoft Store` на каждом Bash; наши PostToolUse-хуки выходят раньше вызова Python | чтение `plan-closer`, `new-repo-hint` | нужна проба: чей хук |
-| D9 | L3 | Windows | Stop-хуки (`grade-guard`, `plain-guard`) без Python на машине падают в `uv run --python 3.11` — возможно, секунды на каждой остановке | чтение `resolve-h2t-python.sh` | нужен замер |
+| D8 | L3 | P3 | `PostToolUse:Bash — Python was not found … Microsoft Store` на каждом Bash; наши PostToolUse-хуки выходят раньше вызова Python | чтение `plan-closer`, `new-repo-hint` | найден: хук h2t-dcc зовёт голый `python` (заглушка Store, rc=49); вынесено в lichtpfad/h2t-dcc#4 |
+| D9 | L3 | Windows | Stop-хуки (`grade-guard`, `plain-guard`) без Python на машине падают в `uv run --python 3.11` — возможно, секунды на каждой остановке | чтение `resolve-h2t-python.sh` | 0,91 и 0,93 с через `uv run`; исправлено в #545 (Python из venv CLI), ждёт замера на Windows |
 | D10 | L1 | P2/P4 | плагинные хуки в Codex не запускаются (`plugin_hooks: removed`, 0.159.2) | `codex features list` | принято, #452 |
 | D11 | L1 | P2/P4 | дубли `h2t-creative:source-command-*` | живая сессия Codex | открыт, #533 |
 | D12 | L5 | все | Dropbox: setup о нём не знает, refresh-токен выпускается руками | пустой HOME | открыт, #536 |
@@ -91,7 +91,10 @@ reason: "verification plan for the install path; each defect it finds gets its o
 | D17 | L5 | все | вход в Google на свежей машине был невозможен | пустой HOME 10-14 | **исправлено** #532/#535 |
 | D18 | L5 | все | `request-code` скрывал канал доставки; QR-входа не было | Лидия 10-14 | **исправлено** #538, проверено живьём на P3 |
 | D19 | L5 | все | тесты коннекторов ходили в живой API с токеном разработчика | 14 тестов, 10-14 | **исправлено** #535/#537 |
-| D20 | L1/L2 | все | агент при установке клонирует репозиторий и, остановленный, клонирует снова ради `uv install`. Причина в документации: плагины даны только слэш-командами (агент их не выполняет, CLI-формы `claude plugin …` в README нет), а для CLI первым вариантом стоит «from a checkout `uv tool install --editable .`» | наблюдение 10-15; `README.md:26-31`, `README.md:57-58` | открыт |
+| D20 | L1/L2 | все | агент при установке клонирует репозиторий и, остановленный, клонирует снова ради `uv install`. Причина в документации: плагины даны только слэш-командами (агент их не выполняет, CLI-формы `claude plugin …` в README нет), а для CLI первым вариантом стоит «from a checkout `uv tool install --editable .`» | наблюдение 10-15; `README.md:26-31`, `README.md:57-58` | закрыт, #542 |
+| D21 | L6 | все | `h2t-ops:daily-brief` захардкожен на базу задач автора (`TASKS_DB=beabac7b…`) и подсказывает `~/.dor/secrets.env`: у другого человека ищет задачи в чужом Notion | `daily-brief/SKILL.md:28` | открыт, нужна спека «система управления» |
+| D22 | L4/L6 | P1 | корни хранения разъехались: handoff пишет в `~/.h2t/sessions` (не синхронизируется), история машин — в `~/.dor/sessions` (Syncthing); с 2026-10-01 в `~/.dor/sessions` 0 новых файлов. Записи между машинами не ходят | `find -newermt`, конфиг Syncthing, 10-16 | открыт, спека §14 |
+| D23 | L4 | все | значение по умолчанию `H2T_CALENDAR_TZ` — `Asia/Jerusalem`, пояс автора | `README.md` Configuration | открыт, спека §14 |
 
 ## 4. Правила дебага
 
