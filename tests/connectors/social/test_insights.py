@@ -264,12 +264,10 @@ def test_disabled_accounts_are_skipped(social_config, social_data, tz):
     assert list(out["accounts"]) == ["instagram:acme"]
 
 
-def test_facebook_account_is_skipped_with_note(social_config, social_data, tz):
-    fb = {"network": "facebook", "handle": "acme", "remote_id": "page_222", "token_key": "META_USER_TOKEN"}
-    social_config(accounts=_accounts(fb))
-    client = FakeMeta(_media(1), {"m1": {"reach": 5}})
-    out = insights.run(None, 10, client_factory=lambda n, a: client)
-    assert "facebook:acme" not in out["accounts"] and "facebook:acme" in out["skipped_accounts"]
+def test_instagram_only_run_has_empty_unavailable(social_config, social_data, tz):
+    social_config(accounts=_accounts())
+    out = insights.run(None, 10, client_factory=lambda n, a: FakeMeta(_media(1), {"m1": {"reach": 5}}))
+    assert out["unavailable"] == [] and out["skipped_accounts"] == {}
 
 
 class BoomMeta(FakeMeta):
@@ -328,11 +326,116 @@ def test_all_accounts_disabled_is_not_found_and_opens_no_run(social_config, soci
     assert not journal_path().exists()
 
 
-def test_only_facebook_accounts_is_not_found_naming_the_skip(social_config, social_data, tz):
-    fb = {"network": "facebook", "handle": "acme", "remote_id": "page_222", "token_key": "META_USER_TOKEN"}
-    social_config(accounts={"accounts": [fb]})
-    with pytest.raises(NotFoundError, match="facebook:acme.*not supported"):
-        insights.run(None, 5, client_factory=lambda n, a: FakeMeta([]))
+_FB = {"network": "facebook", "handle": "acme", "remote_id": "page_222", "token_key": "META_USER_TOKEN"}
+
+
+class FakePage:
+    """Facebook side of the Meta client: `results` maps a metric to a list of values or an error code."""
+
+    def __init__(self, results, pages=None):
+        self.results, self.calls = results, []
+        self._pages = pages if pages is not None else [
+            {"page_id": "page_222", "page_token": "PT", "ig_id": None}]
+
+    def pages(self):
+        return self._pages, [{"data": ["pages"]}]
+
+    def page_insights(self, page_id, page_token, metric, since, until):
+        assert page_id == "page_222" and page_token == "PT"
+        self.calls.append((metric, since, until))
+        got = self.results.get(metric, 100)
+        if isinstance(got, int):
+            return {"error": {"code": got, "message": f"(#{got}) refused {metric}"}}, [{"error": {"code": got}}]
+        return {"values": [{"date": d, "value": v} for d, v in got]}, [{"data": [metric]}]
+
+
+_DAYS = [("2026-11-18", 4), ("2026-11-19", 6)]
+
+
+def _fb_run(client):
+    return insights.run(None, 10, client_factory=lambda n, a: client)
+
+
+def test_facebook_page_metrics_land_in_the_account(social_config, social_data, tz):
+    social_config(accounts={"accounts": [_FB]})
+    out = _fb_run(FakePage({"page_total_media_view_unique": _DAYS, "page_post_engagements": _DAYS}))
+    acct = out["accounts"]["facebook:acme"]
+    assert acct["network"] == "facebook"
+    assert acct["page"] == {m: [{"date": d, "value": v} for d, v in _DAYS]
+                            for m in ("page_total_media_view_unique", "page_post_engagements")}
+    assert out["skipped_accounts"] == {}
+
+
+def test_facebook_reads_the_configured_metrics_in_order_over_28_days(social_config, social_data, tz):
+    from h2t_ops.connectors.social.config import facebook_page_metrics
+    social_config(accounts={"accounts": [_FB]})
+    client = FakePage({"page_post_engagements": _DAYS})
+    _fb_run(client)
+    assert [c[0] for c in client.calls] == facebook_page_metrics()
+    assert facebook_page_metrics()[:2] == ["page_total_media_view_unique", "page_post_engagements"]
+    since, until = client.calls[0][1:]
+    assert until - since == 28 * 86400
+
+
+def test_facebook_code_10_metric_is_unavailable_not_in_page(social_config, social_data, tz):
+    social_config(accounts={"accounts": [_FB]})
+    out = _fb_run(FakePage({"page_total_media_view_unique": 10, "page_post_engagements": _DAYS}))
+    assert "page_total_media_view_unique" not in out["accounts"]["facebook:acme"]["page"]
+    hit = next(u for u in out["unavailable"] if u["metric"] == "page_total_media_view_unique")
+    assert hit == {"account": "facebook:acme", "group": "page", "metric": "page_total_media_view_unique",
+                   "code": 10, "message": "(#10) refused page_total_media_view_unique"}
+
+
+def test_facebook_all_metrics_unavailable_is_not_found(social_config, social_data, tz):
+    social_config(accounts={"accounts": [_FB]})
+    with pytest.raises(NotFoundError, match=r"facebook:acme.*10"):
+        _fb_run(FakePage({m: 10 for m in ("page_total_media_view_unique", "page_post_engagements",
+                                          "page_media_view", "page_views_total",
+                                          "page_daily_follows_unique",
+                                          "page_actions_post_reactions_total")}))
+    assert sum(r["step"] == 6 for r in _journal()) == 1
+
+
+def test_facebook_journal_chain_links_every_body(social_config, social_data, tz):
+    social_config(accounts={"accounts": [_FB]})
+    out = _fb_run(FakePage({"page_total_media_view_unique": _DAYS, "page_post_engagements": 10}))
+    recs = [r for r in _journal() if r["run_id"] == out["run_id"]]
+    assert [r["step"] for r in recs if r["step"] != 2] == [1, 3, 4, 6]
+    raw_ids = [r["source_ids"][0] for r in recs if r["step"] == 2]
+    assert len(raw_ids) == 7   # pages + 6 metrics
+    assert next(r for r in recs if r["step"] == 3)["source_ids"] == raw_ids
+    assert next(r for r in recs if r["step"] == 4)["decision"] == "noop"
+    step6 = next(r for r in recs if r["step"] == 6)
+    assert step6["schema_version"] == "h2t_social_insights/v1" and step6["metrics"] == 1
+
+
+def test_facebook_page_not_matched_is_provider_error(social_config, social_data, tz):
+    social_config(accounts={"accounts": [_FB]})
+    with pytest.raises(ProviderError, match="no page matches"):
+        _fb_run(FakePage({}, pages=[{"page_id": "other", "page_token": "PT", "ig_id": None}]))
+
+
+def test_facebook_and_instagram_in_one_run(social_config, social_data, tz):
+    social_config(accounts=_accounts(_FB))
+    class Both(FakeMeta, FakePage):
+        def __init__(self):
+            FakeMeta.__init__(self, _media(1), {"m1": {"reach": 5}})
+            FakePage.__init__(self, {"page_post_engagements": _DAYS})
+        def pages(self):
+            return ([{"page_id": "page_222", "page_token": "PT", "ig_id": "ig_111"}], [{"data": ["pages"]}])
+    out = _fb_run(Both())
+    assert set(out["accounts"]) == {"instagram:acme", "facebook:acme"}
+    assert any(u["account"] == "facebook:acme" for u in out["unavailable"])
+
+
+def test_facebook_store_run_mirrors_the_account_body(social_config, social_data, tz, monkeypatch):
+    seen = []
+    monkeypatch.setattr("h2t_ops.connectors.social.journal.mirror_result",
+                        lambda run_id, account_id, body: seen.append((account_id, body)))
+    social_config(accounts={"accounts": [_FB]})
+    out = insights.run(None, 10, client_factory=lambda n, a: FakePage({"page_post_engagements": _DAYS}),
+                       store=True)
+    assert seen == [("facebook:acme", out["accounts"]["facebook:acme"])]
 
 
 _FIXTURES = Path(__file__).parent / "fixtures"

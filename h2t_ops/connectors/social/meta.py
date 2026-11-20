@@ -5,6 +5,8 @@ so the caller can journal them. Transport, error mapping and token hygiene live 
 """
 from __future__ import annotations
 
+from datetime import datetime
+
 from h2t_ops.connectors.social import journal
 from h2t_ops.connectors.social._graph import PAGE_SIZE, UNAVAILABLE_CODES, GraphClient
 from h2t_ops.connectors.social.config import secret_key
@@ -74,3 +76,22 @@ class MetaClient(GraphClient):
                     sums[int(hour)] = sums.get(int(hour), 0) + n
                     counts[int(hour)] = counts.get(int(hour), 0) + 1
         return {h: sums[h] / counts[h] for h in sums}, raw
+
+    def page_insights(self, page_id: str, page_token: str, metric: str,
+                      since: int, until: int) -> tuple[dict, list[dict]]:
+        """One daily Page metric over [since, until] (unix seconds).
+
+        `({"values": [{"date", "value"}, ...]}, raw)`, or `({"error": {"code", "message"}}, raw)`
+        when Meta refuses the metric (code 100, 10)."""
+        body, raw = self._single(f"{page_id}/insights", page_token,
+                                 {"metric": metric, "period": "day", "since": since, "until": until},
+                                 soft=UNAVAILABLE_CODES)
+        err = body.get("error")
+        if err:
+            return {"error": {"code": err.get("code"),
+                              "message": self._scrub(str(err.get("message", "")))}}, raw
+        values = [{"date": datetime.strptime(v["end_time"][:10], "%Y-%m-%d").date().isoformat(),
+                   "value": v.get("value")}
+                  for m in body.get("data") or [] for v in m.get("values") or []
+                  if v.get("end_time")]
+        return {"values": values}, raw

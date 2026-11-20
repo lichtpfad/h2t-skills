@@ -220,6 +220,11 @@ def _defaults() -> dict:
     return yaml.safe_load(text)
 
 
+def facebook_page_metrics() -> list[str]:
+    """The Page insight metric names `run insights` reads for a Facebook account, in order."""
+    return list(_defaults()["facebook_page_metrics"])
+
+
 def secret_key(name: str, *, overrides: bool = True) -> str:
     """The secret key NAME for `name` (meta_user_token, meta_app_secret, threads_token_prefix):
     accounts.yaml `secrets:` first, then defaults.yaml. `overrides=False` skips the file."""

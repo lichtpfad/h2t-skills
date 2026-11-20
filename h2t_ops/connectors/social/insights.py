@@ -2,11 +2,15 @@
 from __future__ import annotations
 
 import statistics
-from datetime import datetime
+from datetime import UTC, datetime
 from zoneinfo import ZoneInfo
 
 from h2t_ops.connectors.social import journal
-from h2t_ops.connectors.social.config import Account, load_accounts
+from h2t_ops.connectors.social.config import (
+    Account,
+    facebook_page_metrics,
+    load_accounts,
+)
 from h2t_ops.connectors.social.meta import find_page
 from h2t_ops.core import user_config
 from h2t_ops.core.errors import ConfigError, NotFoundError, ProviderError, UsageError
@@ -14,6 +18,7 @@ from h2t_ops.core.errors import ConfigError, NotFoundError, ProviderError, Usage
 _WEEKDAYS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
 _BANDS = ((0, 10), (10, 13), (13, 16), (16, 19), (19, 22), (22, 24))
 _PROCESS = "insights"
+_PAGE_DAYS = 28
 SCHEMA_VERSION = "h2t_social_insights/v1"
 
 
@@ -100,6 +105,29 @@ def _collect(run_id: str, account: Account, limit: int, client) -> tuple[list[di
     return posts, extra, ids
 
 
+def _collect_page(run_id: str, account: Account, client) -> tuple[dict, list[dict], list[str]]:
+    """(metric -> daily values, unavailable entries, raw ids) of a Facebook Page, last 28 days."""
+    ids: list[str] = []
+    pages = journal.keep(run_id, _PROCESS, account.id, "me/accounts", client.pages(), ids)
+    page = next((p for p in pages if p.get("page_id") == (account.page_id or account.remote_id)), None)
+    if page is None:
+        raise ProviderError(f"{account.id}: no page matches this account",
+                            hint="run `h2t-ops social accounts discover`")
+    until = int(datetime.now(UTC).timestamp())
+    since = until - _PAGE_DAYS * 86400
+    values: dict[str, list] = {}
+    unavailable: list[dict] = []
+    for metric in facebook_page_metrics():
+        body = journal.keep(run_id, _PROCESS, account.id, f"page_insights/{metric}", client.page_insights(
+            page["page_id"], page["page_token"], metric, since, until), ids)
+        if body.get("error"):
+            unavailable.append({"account": account.id, "group": "page", "metric": metric,
+                                "code": body["error"].get("code"), "message": body["error"].get("message")})
+        elif body.get("values"):
+            values[metric] = body["values"]
+    return values, unavailable, ids
+
+
 def run(account_ids: list[str] | None, limit: int, client_factory=None, trigger: str = "cli", store: bool = False) -> dict:
     if limit < 1:
         raise UsageError(f"--limit must be a positive number, got {limit}")
@@ -116,12 +144,26 @@ def run(account_ids: list[str] | None, limit: int, client_factory=None, trigger:
     run_id = journal.new_run(_PROCESS, trigger, store=store)
     accounts: dict[str, dict] = {}
     skipped_accounts: dict[str, str] = {}
+    unavailable: list[dict] = []
     current = None
     try:
         for account in chosen:
             current = account.id
             if account.network == "facebook":
-                skipped_accounts[account.id] = "Facebook Page insights are not supported yet"
+                page, missing, ids = _collect_page(run_id, account, factory(account.network, account))
+                unavailable += missing
+                no_data = not page
+                journal.record(run_id, 3, process=_PROCESS, account=account.id, source_ids=ids,
+                               **({"finding": "no data"} if no_data else {}))
+                journal.decide(run_id, _PROCESS, "none", account.id)
+                if no_data:
+                    codes = ", ".join(sorted({str(u["code"]) for u in missing})) or "none"
+                    raise NotFoundError(f"no data for {account.id}: no Page metric returned values "
+                                        f"(unavailable codes: {codes})",
+                                        hint="check the Page token has read_insights access")
+                accounts[account.id] = {"network": "facebook", "page": page}
+                journal.record(run_id, 6, process=_PROCESS, account=account.id,
+                               schema_version=SCHEMA_VERSION, metrics=len(page))
                 continue
             posts, extra, ids = _collect(run_id, account, limit, factory(account.network, account))
             summary = summarize(posts, tz)
@@ -145,4 +187,4 @@ def run(account_ids: list[str] | None, limit: int, client_factory=None, trigger:
         journal.record_failure(run_id, _PROCESS, exc, current)
         raise
     return {"schema_version": SCHEMA_VERSION, "run_id": run_id, "accounts": accounts,
-            "skipped_accounts": skipped_accounts}
+            "skipped_accounts": skipped_accounts, "unavailable": unavailable}
