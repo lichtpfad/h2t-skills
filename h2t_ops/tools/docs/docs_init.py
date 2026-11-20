@@ -213,8 +213,8 @@ def init_repo(
     # .gitignore — create if missing, append missing entries
     gi = rp / ".gitignore"
     gi_content = gi.read_text(encoding="utf-8") if gi.exists() else ""
+    # docs/.artifacts/<run_id>/ is committed run evidence (scratch-and-run-records standard): not ignored.
     _gi_entries = [
-        ("docs/.artifacts/", "# Documentation artifacts"),
         (".h2t/lint-before.json", "# docs-lint temp files"),
         (".h2t/lint-after.json", None),
     ]

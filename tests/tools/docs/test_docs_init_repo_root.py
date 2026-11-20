@@ -75,6 +75,18 @@ def test_init_repo_adds_lint_temp_files_to_gitignore(tmp_path):
     assert ".h2t/lint-after.json" in gi
 
 
+def test_init_repo_keeps_run_evidence_tracked(tmp_path):
+    """docs/.artifacts/<run_id>/ is committed run evidence (docs/standards/scratch-and-run-records.md);
+    docs-init must not gitignore it."""
+    repo = tmp_path / "my-repo"
+    repo.mkdir()
+
+    init_repo("my-repo", repo_root=repo, dry_run=False, commit=False)
+
+    gi = (repo / ".gitignore").read_text(encoding="utf-8")
+    assert "docs/.artifacts" not in gi
+
+
 def test_init_repo_creates_h2t_lint_state(tmp_path):
     """docs-init creates .h2t/lint-state.jsonl so it's tracked from day 0."""
     repo = tmp_path / "my-repo"
