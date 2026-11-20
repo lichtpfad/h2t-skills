@@ -1,0 +1,22 @@
+{
+  "run_id": "01a1f67f-7b2f-7d7c-8f0e-b68b7b784257",
+  "stage": "social-insights-complete (subagent-driven plan execution + live checks)",
+  "entity": "docs/superpowers/plans/2026-11-19-social-insights-complete.md",
+  "started_at": "2026-11-19T21:18:00Z",
+  "ended_at": "2026-11-20T01:08:12Z",
+  "time_note": "started_at from the session-start gather slug (22:18 Europe/Berlin), ended_at = last PR merge (#546); approximate to the minute",
+  "status": "FINISHED",
+  "source": "dcdf2e43",
+  "parent_run": null,
+  "params": {
+    "issues": [689, 674, 675, 676, 677, 678, 679, 694],
+    "reviewer": "codex gpt-5.6-terra per task + whole branch; Claude Opus + Codex compliance audit"
+  },
+  "metrics": {
+    "full_suite_last": "4763 passed, 55 skipped, 2 deselected (8bc08f03)",
+    "issues_closed": 7,
+    "live_checks": "insights instagram/threads/facebook hou2touch, discover, --store (11 accounts), secrets to shared, social check (11 accounts)"
+  },
+  "artifacts": "docs/.artifacts/01a1f67f-7b2f-7d7c-8f0e-b68b7b784257/",
+  "error": null
+}

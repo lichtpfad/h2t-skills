@@ -59,7 +59,7 @@ Create only when applicable. The flag source is `projects.yaml` per repo.
 ├── research/                              # When exploratory work exists
 │   └── YYYY-MM-DD-topic.md
 │
-└── .artifacts/                            # When repo generates temp operational data
+└── .artifacts/                            # Committed run EVIDENCE, one folder per run_id
     ├── logs/
     ├── operational/
     └── test-results/
@@ -107,7 +107,7 @@ Example table; the repos and directories are illustrative:
 | `guides/` | Practical how-to | Developers, new team members | Living docs |
 | `research/` | Exploratory research | Internal team | Snapshot (date-prefixed) |
 | `reports/` | Milestone completion reports | Stakeholders, internal | Snapshot (immutable) |
-| `.artifacts/` | Temp operational files | CI/CD, monitoring | Ephemeral (.gitignored) |
+| `.artifacts/` | Run evidence, `<run_id>/` per run | Reviewers, truth-gate CI | Committed, immutable (was "ephemeral, gitignored" until 2026-09-09) |
 
 ## What Does NOT Go in docs/
 
@@ -117,7 +117,7 @@ Example table; the repos and directories are illustrative:
 | JSON Schema definitions | `api/schemas/` | Part of API contract |
 | OpenAPI specs | `api/openapi.yaml` | Part of API contract |
 | Test fixtures | `tests/fixtures/` | Part of test suite |
-| Operational JSON logs | `docs/.artifacts/` | Ephemeral, gitignored |
+| Operational logs, dumps, probe output | `/.scratch/<task>/` (ignored) or the session scratchpad | Ephemeral; only the evidence tail of a run goes to `docs/.artifacts/<run_id>/` |
 | PowerShell/Python scripts | `scripts/` or `tools/` | Code, not documentation |
 | PNG mockups | `docs/superpowers/specs/` (inline) or `docs/architecture/` | Alongside relevant docs |
 
