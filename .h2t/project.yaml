@@ -1,0 +1,8 @@
+# What this repo is (T14, lichtpfad/h2t-infra#43). Values: h2t-infra standards/project-kinds.yaml;
+# domain/project: ~/.h2t/config/domains.yaml.
+contains: [code, content]
+tier: A
+lifecycle: active
+origin: own
+domain: personal-os
+project: h2t-skills
