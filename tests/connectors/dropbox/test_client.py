@@ -31,8 +31,9 @@ def client_obj():
 
 
 class _Resp:
-    def __init__(self, status=200, payload=None, text=None, chunks=None):
+    def __init__(self, status=200, payload=None, text=None, chunks=None, headers=None):
         self.status_code = status
+        self.headers = headers or {}
         self._payload = payload if payload is not None else {}
         self.text = text if text is not None else json.dumps(self._payload)
         self._chunks = chunks or []
@@ -281,7 +282,46 @@ def test_other_409_is_a_usage_error(client_obj, monkeypatch):
         client_obj._rpc("files/get_metadata", {"path": "bad"})
 
 
+def test_rate_limit_waits_retry_after_and_resends(client_obj, monkeypatch):
+    from h2t_ops.connectors.dropbox import client as dmod
+
+    answers = [_Resp(429, text="too_many", headers={"Retry-After": "2"}),
+               _Resp(429, text="too_many"),
+               _Resp(200, payload={"entries": []})]
+    fake, _ = _fake_requests(lambda *a, **k: answers.pop(0))
+    monkeypatch.setitem(sys.modules, "requests", fake)
+    waits = []
+    monkeypatch.setattr(dmod.time, "sleep", waits.append)
+    assert client_obj._rpc("files/list_folder", {"path": ""}) == {"entries": []}
+    assert waits == [2.0, 1.0]  # Retry-After when given, else one second
+
+
+def test_rate_limit_gives_up_after_the_retries(client_obj, monkeypatch):
+    from h2t_ops.connectors.dropbox import client as dmod
+
+    sent = []
+    fake, _ = _fake_requests(lambda *a, **k: sent.append(1) or _Resp(429, text="too_many"))
+    monkeypatch.setitem(sys.modules, "requests", fake)
+    monkeypatch.setattr(dmod.time, "sleep", lambda s: None)
+    with pytest.raises(ProviderError):
+        client_obj._rpc("files/list_folder", {"path": ""})
+    assert len(sent) == dmod.RATE_LIMIT_RETRIES + 1
+
+
+def test_shared_link_access_denied_is_an_auth_error(client_obj, monkeypatch):
+    """A password-protected or team-only link: say so, not a raw JSON body."""
+    fake, _ = _fake_requests(lambda *a, **k: _Resp(
+        409, text='{"error_summary": "shared_link_access_denied/.."}'))
+    monkeypatch.setitem(sys.modules, "requests", fake)
+    with pytest.raises(AuthError) as exc:
+        client_obj.link_meta(LINK)
+    assert "access denied" in str(exc.value)
+
+
 def test_rate_limit_and_server_errors_are_provider_errors(client_obj, monkeypatch):
+    from h2t_ops.connectors.dropbox import client as dmod
+
+    monkeypatch.setattr(dmod.time, "sleep", lambda s: None)
     for status in (429, 503):
         fake, _ = _fake_requests(lambda *a, s=status, **k: _Resp(s, text="boom"))
         monkeypatch.setitem(sys.modules, "requests", fake)

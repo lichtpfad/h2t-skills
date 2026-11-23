@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import gzip
 import json
+import time
 from pathlib import Path
 from typing import Any
 
@@ -25,6 +26,7 @@ from h2t_ops.core.errors import (
 RPC_BASE = "https://api.dropboxapi.com/2"
 CONTENT_BASE = "https://content.dropboxapi.com/2"
 UPLOAD_LIMIT = 150 * 1024 * 1024  # files/upload takes at most 150 MB in one request
+RATE_LIMIT_RETRIES = 3  # a 429 is resent this many times, after the wait Dropbox names
 
 
 def normalize_path(path: str) -> str:
@@ -83,6 +85,11 @@ def _raise_for_status(resp: Any, context: str) -> None:
                  "with DROPBOX_APP_KEY and DROPBOX_APP_SECRET for durable access.",
         )
     if status == 409:
+        if "shared_link_access_denied" in body:
+            raise AuthError(
+                f"Shared link access denied ({context}): the link has a password, has "
+                "expired, or is open only to its team",
+            )
         if "not_found" in body:
             raise NotFoundError(f"Not found: {context}")
         raise UsageError(f"Dropbox rejected the request ({context}): {body}")
@@ -187,17 +194,22 @@ class DropboxClient:
     def _rpc(self, endpoint: str, arg: Any, _retried: bool = False) -> Any:
         import requests as _r  # lazy — module-scope import forbidden
 
-        try:
-            resp = _r.post(
-                f"{RPC_BASE}/{endpoint}",
-                # A no-argument endpoint still needs a JSON body: `null`, not an empty one,
-                # which users/get_current_account answers with a 500.
-                data=json.dumps(arg).encode("utf-8"),
-                headers=self._headers({"Content-Type": "application/json"}),
-                timeout=self._timeout,
-            )
-        except _r.RequestException as exc:
-            raise NetworkError(f"Dropbox request to {endpoint} failed: {exc}") from exc
+        for attempt in range(RATE_LIMIT_RETRIES + 1):
+            try:
+                resp = _r.post(
+                    f"{RPC_BASE}/{endpoint}",
+                    # A no-argument endpoint still needs a JSON body: `null`, not an empty
+                    # one, which users/get_current_account answers with a 500.
+                    data=json.dumps(arg).encode("utf-8"),
+                    headers=self._headers({"Content-Type": "application/json"}),
+                    timeout=self._timeout,
+                )
+            except _r.RequestException as exc:
+                raise NetworkError(f"Dropbox request to {endpoint} failed: {exc}") from exc
+            if resp.status_code != 429 or attempt == RATE_LIMIT_RETRIES:
+                break
+            # a recursive link walk sends one request per subfolder and can hit the limit
+            time.sleep(float((getattr(resp, "headers", None) or {}).get("Retry-After") or 1))
         if self._should_refresh(resp, _retried):
             self._token = self._refresh_access_token()
             return self._rpc(endpoint, arg, _retried=True)
