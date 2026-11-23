@@ -13,6 +13,8 @@ streams the content fine (~11 MB/s measured).
 | list a folder | `h2t-ops dropbox list /MyFolder --json` |
 | walk a tree | `h2t-ops dropbox list /MyFolder --recursive --limit 500 --json` |
 | metadata for one path | `h2t-ops dropbox meta /MyFolder/clip.wav --json` |
+| what a shared link points at | `h2t-ops dropbox meta --link "<url>" --json` |
+| list a shared folder link | `h2t-ops dropbox list --link "<url>" --recursive --json` |
 | stream a file to disk | `h2t-ops dropbox download /MyFolder/clip.wav ~/Downloads --json` |
 | gzip content under a plain name | `h2t-ops dropbox download /x/seq.prproj ./seq.prproj --gunzip --json` |
 | upload a file (write) | `h2t-ops dropbox upload ./a.py "/MyFolder/X/a.py" --confirm-write --json` |
@@ -66,7 +68,7 @@ For durable access set `DROPBOX_APP_KEY`, `DROPBOX_APP_SECRET` and
 `DROPBOX_TOKEN` is absent.
 
 Scopes: `account_info.read`, `files.metadata.read`, `files.content.read`; for writes also
-`files.content.write` (upload) and `sharing.write` (link).
+`files.content.write` (upload) and `sharing.write` (link); `--link` reads need `sharing.read`.
 
 To get the refresh token once: open
 `https://www.dropbox.com/oauth2/authorize?client_id=<APP_KEY>&response_type=code&token_access_type=offline`,
