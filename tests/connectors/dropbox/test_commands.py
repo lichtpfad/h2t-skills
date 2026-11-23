@@ -154,6 +154,50 @@ def test_list_rows_are_normalized(fake_client):
     assert rows[1]["kind"] == "folder" and rows[1]["size"] is None
 
 
+LINK = "https://www.dropbox.com/scl/fo/abc/def?rlkey=k&dl=0"
+
+
+def test_parser_takes_a_shared_link_on_list_and_meta():
+    from h2t_ops.cli import build_parser
+
+    ns = build_parser().parse_args(["dropbox", "list", "--link", LINK, "--recursive"])
+    assert (ns.link, ns.path, ns.recursive) == (LINK, "", True)
+    ns = build_parser().parse_args(["dropbox", "meta", "--link", LINK])
+    assert (ns.link, ns.path) == (LINK, "")
+    assert build_parser().parse_args(["dropbox", "list", "/H"]).link is None
+
+
+def test_list_link_rows_carry_the_path_inside_the_link_and_the_hash(fake_client):
+    fake_client.list_link.return_value = [
+        {".tag": "file", "name": "v.mp4", "link_path": "/L01/v.mp4", "size": 9,
+         "client_modified": "2020-01-01T00:00:00Z", "content_hash": "ab12"},
+        {".tag": "folder", "name": "L01", "link_path": "/L01"},
+    ]
+    rows = cmds.run(_args(dropbox_cmd="list", path="", link=LINK, recursive=True, limit=None))
+    assert fake_client.list_link.call_args.args == (LINK, "")
+    assert fake_client.list_link.call_args.kwargs == {"recursive": True, "limit": None}
+    assert rows[0] == {"kind": "file", "path": "/L01/v.mp4", "name": "v.mp4", "size": 9,
+                       "modified": "2020-01-01T00:00:00Z", "content_hash": "ab12"}
+    assert rows[1]["kind"] == "folder" and rows[1]["content_hash"] is None
+    fake_client.list_folder.assert_not_called()
+
+
+def test_meta_link_reports_name_kind_and_the_account_path(fake_client):
+    fake_client.link_meta.return_value = {".tag": "folder", "name": "Lesson 01",
+                                          "path_lower": "/hou2touch/lesson 01"}
+    row = cmds.run(_args(dropbox_cmd="meta", path="", link=LINK))
+    assert fake_client.link_meta.call_args.args == (LINK, "")
+    assert (row["kind"], row["name"], row["path"]) == ("folder", "Lesson 01",
+                                                       "/hou2touch/lesson 01")
+
+
+def test_meta_without_path_or_link_is_a_usage_error(fake_client):
+    from h2t_ops.core.errors import UsageError
+
+    with pytest.raises(UsageError):
+        cmds.run(_args(dropbox_cmd="meta", path="", link=None))
+
+
 def test_download_passes_gunzip_through(fake_client):
     fake_client.download.return_value = {"path": "/x", "saved_to": "/tmp/x", "bytes": 3}
     cmds.run(_args(dropbox_cmd="download", path="/x", dest="/tmp/x", gunzip=True))
