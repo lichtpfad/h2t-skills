@@ -28,14 +28,19 @@ def register(subparsers: Any) -> None:
     ap = cmds.add_parser("account", help="Show the account and its namespace ids")
     add_fmt(ap)
 
+    link_help = ("a shared link (/sh/ or /scl/fo/); the path is then inside the linked "
+                 "folder. Read-only")
+
     lp = cmds.add_parser("list", help="List a folder (path is from the Dropbox root)")
     lp.add_argument("path", nargs="?", default="", help='folder path, "" or "/" for the root')
+    lp.add_argument("--link", default=None, help=link_help)
     lp.add_argument("--recursive", action="store_true")
     lp.add_argument("--limit", type=int, default=None)
     add_fmt(lp)
 
-    mp = cmds.add_parser("meta", help="Show metadata for one path")
-    mp.add_argument("path")
+    mp = cmds.add_parser("meta", help="Show metadata for one path or shared link")
+    mp.add_argument("path", nargs="?", default="")
+    mp.add_argument("--link", default=None, help=link_help)
     add_fmt(mp)
 
     dp = cmds.add_parser("download", help="Stream a file to disk, online-only placeholders included")
@@ -100,6 +105,9 @@ def run(args: Any) -> Any:
     if cmd == "link" and not getattr(args, "confirm_public", False):
         raise UsageError("dropbox link opens the path to anyone with the link: "
                          "--confirm-public is required")
+    link = getattr(args, "link", None)
+    if cmd == "meta" and not (link or args.path):
+        raise UsageError("dropbox meta: a path or --link is required")
     client = DropboxClient()
 
     if cmd == "account":
@@ -113,9 +121,16 @@ def run(args: Any) -> Any:
             "home_namespace_id": root_info.get("home_namespace_id", ""),
             "path_root_applied": client.path_root(),
         }
+    if cmd == "list" and link:
+        entries = client.list_link(link, args.path, recursive=args.recursive,
+                                   limit=args.limit)
+        return [{**_entry_row(e), "path": e["link_path"],
+                 "content_hash": e.get("content_hash")} for e in entries]
     if cmd == "list":
         entries = client.list_folder(args.path, recursive=args.recursive, limit=args.limit)
         return [_entry_row(e) for e in entries]
+    if cmd == "meta" and link:
+        return _entry_row(client.link_meta(link, args.path))
     if cmd == "meta":
         return _entry_row(client.meta(args.path))
     if cmd == "download":

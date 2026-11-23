@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import gzip
 import json
+import time
 from pathlib import Path
 from typing import Any
 
@@ -25,6 +26,7 @@ from h2t_ops.core.errors import (
 RPC_BASE = "https://api.dropboxapi.com/2"
 CONTENT_BASE = "https://content.dropboxapi.com/2"
 UPLOAD_LIMIT = 150 * 1024 * 1024  # files/upload takes at most 150 MB in one request
+RATE_LIMIT_RETRIES = 3  # a 429 is resent this many times, after the wait Dropbox names
 
 
 def normalize_path(path: str) -> str:
@@ -72,7 +74,8 @@ def _raise_for_status(resp: Any, context: str) -> None:
                     "on the app, then generate a NEW token — a token issued before a scope "
                     "was added keeps the scopes it was born with. account_info.read is not "
                     "optional: every command resolves the team namespace through "
-                    "users/get_current_account before it touches a file. Writes need more: "
+                    "users/get_current_account before it touches a file. A shared link "
+                    "(--link) also needs sharing.read. Writes need more: "
                     "upload needs files.content.write, link needs sharing.write."
                 ),
             )
@@ -82,6 +85,11 @@ def _raise_for_status(resp: Any, context: str) -> None:
                  "with DROPBOX_APP_KEY and DROPBOX_APP_SECRET for durable access.",
         )
     if status == 409:
+        if "shared_link_access_denied" in body:
+            raise AuthError(
+                f"Shared link access denied ({context}): the link has a password, has "
+                "expired, or is open only to its team",
+            )
         if "not_found" in body:
             raise NotFoundError(f"Not found: {context}")
         raise UsageError(f"Dropbox rejected the request ({context}): {body}")
@@ -186,17 +194,22 @@ class DropboxClient:
     def _rpc(self, endpoint: str, arg: Any, _retried: bool = False) -> Any:
         import requests as _r  # lazy — module-scope import forbidden
 
-        try:
-            resp = _r.post(
-                f"{RPC_BASE}/{endpoint}",
-                # A no-argument endpoint still needs a JSON body: `null`, not an empty one,
-                # which users/get_current_account answers with a 500.
-                data=json.dumps(arg).encode("utf-8"),
-                headers=self._headers({"Content-Type": "application/json"}),
-                timeout=self._timeout,
-            )
-        except _r.RequestException as exc:
-            raise NetworkError(f"Dropbox request to {endpoint} failed: {exc}") from exc
+        for attempt in range(RATE_LIMIT_RETRIES + 1):
+            try:
+                resp = _r.post(
+                    f"{RPC_BASE}/{endpoint}",
+                    # A no-argument endpoint still needs a JSON body: `null`, not an empty
+                    # one, which users/get_current_account answers with a 500.
+                    data=json.dumps(arg).encode("utf-8"),
+                    headers=self._headers({"Content-Type": "application/json"}),
+                    timeout=self._timeout,
+                )
+            except _r.RequestException as exc:
+                raise NetworkError(f"Dropbox request to {endpoint} failed: {exc}") from exc
+            if resp.status_code != 429 or attempt == RATE_LIMIT_RETRIES:
+                break
+            # a recursive link walk sends one request per subfolder and can hit the limit
+            time.sleep(float((getattr(resp, "headers", None) or {}).get("Retry-After") or 1))
         if self._should_refresh(resp, _retried):
             self._token = self._refresh_access_token()
             return self._rpc(endpoint, arg, _retried=True)
@@ -220,6 +233,36 @@ class DropboxClient:
         while page.get("has_more") and (limit is None or len(entries) < limit):
             page = self._rpc("files/list_folder/continue", {"cursor": page["cursor"]})
             entries.extend(page.get("entries", []))
+        return entries[:limit] if limit is not None else entries
+
+    def link_meta(self, url: str, path: str = "") -> dict[str, Any]:
+        """What a shared link points at; `path` is inside the linked folder."""
+        arg = {"url": url}
+        if normalize_path(path):
+            arg["path"] = normalize_path(path)
+        return self._rpc("sharing/get_shared_link_metadata", arg)
+
+    def list_link(
+        self, url: str, path: str = "", *, recursive: bool = False, limit: int | None = None
+    ) -> list[dict[str, Any]]:
+        """Entries behind a shared folder link, each with `link_path` inside the link.
+
+        Dropbox lists a shared link only non-recursively, so --recursive descends here.
+        """
+        entries: list[dict[str, Any]] = []
+        folders = [normalize_path(path)]
+        while folders and (limit is None or len(entries) < limit):
+            rel = folders.pop(0)
+            page = self._rpc("files/list_folder", {"path": rel, "shared_link": {"url": url}})
+            while True:
+                for e in page.get("entries", []):
+                    child = f"{rel}/{e.get('name', '')}"
+                    entries.append({**e, "link_path": child})
+                    if recursive and e.get(".tag") == "folder":
+                        folders.append(child)
+                if not page.get("has_more") or (limit is not None and len(entries) >= limit):
+                    break
+                page = self._rpc("files/list_folder/continue", {"cursor": page["cursor"]})
         return entries[:limit] if limit is not None else entries
 
     def _download_response(self, api_path: str) -> Any:

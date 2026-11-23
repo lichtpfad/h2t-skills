@@ -31,8 +31,9 @@ def client_obj():
 
 
 class _Resp:
-    def __init__(self, status=200, payload=None, text=None, chunks=None):
+    def __init__(self, status=200, payload=None, text=None, chunks=None, headers=None):
         self.status_code = status
+        self.headers = headers or {}
         self._payload = payload if payload is not None else {}
         self.text = text if text is not None else json.dumps(self._payload)
         self._chunks = chunks or []
@@ -174,6 +175,80 @@ def test_list_folder_stops_at_limit(client_obj):
     assert len(client_obj.list_folder("/x", limit=2)) == 2
 
 
+LINK = "https://www.dropbox.com/sh/abc123/XYZ?dl=0"
+
+
+def test_list_link_sends_the_link_and_follows_the_cursor(client_obj):
+    pages = [
+        {"entries": [{".tag": "file", "name": "a.mp4"}], "has_more": True, "cursor": "c1"},
+        {"entries": [{".tag": "file", "name": "b.mp4"}], "has_more": False},
+    ]
+    calls = []
+
+    def rpc(endpoint, arg):
+        calls.append((endpoint, arg))
+        return pages[len(calls) - 1]
+
+    client_obj._rpc = rpc
+    out = client_obj.list_link(LINK)
+    assert calls[0] == ("files/list_folder", {"path": "", "shared_link": {"url": LINK}})
+    assert calls[1] == ("files/list_folder/continue", {"cursor": "c1"})
+    # the path is the one inside the link: an outsider's link has no account path
+    assert [e["link_path"] for e in out] == ["/a.mp4", "/b.mp4"]
+
+
+def test_list_link_recursive_walks_subfolders_itself(client_obj):
+    """Dropbox lists a shared link only non-recursively: the client descends."""
+    tree = {
+        "": [{".tag": "folder", "name": "L01"}, {".tag": "file", "name": "readme.txt"}],
+        "/L01": [{".tag": "file", "name": "v.mp4"}, {".tag": "folder", "name": "src"}],
+        "/L01/src": [{".tag": "file", "name": "a.toe"}],
+    }
+    calls = []
+
+    def rpc(endpoint, arg):
+        calls.append(arg)
+        assert "recursive" not in arg or arg["recursive"] is False
+        return {"entries": tree[arg["path"]], "has_more": False}
+
+    client_obj._rpc = rpc
+    out = client_obj.list_link(LINK, recursive=True)
+    assert sorted(e["link_path"] for e in out) == [
+        "/L01", "/L01/src", "/L01/src/a.toe", "/L01/v.mp4", "/readme.txt"]
+    assert all(a["shared_link"] == {"url": LINK} for a in calls)
+
+
+def test_list_link_starts_at_a_path_inside_the_link(client_obj):
+    client_obj._rpc = MagicMock(return_value={"entries": [{".tag": "file", "name": "v.mp4"}],
+                                              "has_more": False})
+    out = client_obj.list_link(LINK, "L01/")
+    assert client_obj._rpc.call_args.args[1]["path"] == "/L01"
+    assert out[0]["link_path"] == "/L01/v.mp4"
+
+
+def test_list_link_recursive_stops_at_limit(client_obj):
+    client_obj._rpc = MagicMock(return_value={
+        "entries": [{".tag": "folder", "name": n} for n in "abc"], "has_more": False})
+    assert len(client_obj.list_link(LINK, recursive=True, limit=2)) == 2
+    assert client_obj._rpc.call_count == 1
+
+
+def test_link_meta_asks_the_sharing_endpoint(client_obj):
+    client_obj._rpc = MagicMock(return_value={".tag": "folder", "name": "Lesson 01"})
+    assert client_obj.link_meta(LINK)["name"] == "Lesson 01"
+    assert client_obj._rpc.call_args.args == ("sharing/get_shared_link_metadata", {"url": LINK})
+    client_obj.link_meta(LINK, "/L01/v.mp4")
+    assert client_obj._rpc.call_args.args[1] == {"url": LINK, "path": "/L01/v.mp4"}
+
+
+def test_unknown_shared_link_409_is_a_notfound_error(client_obj, monkeypatch):
+    fake, _ = _fake_requests(lambda *a, **k: _Resp(
+        409, text='{"error_summary": "shared_link_not_found/.."}'))
+    monkeypatch.setitem(sys.modules, "requests", fake)
+    with pytest.raises(NotFoundError):
+        client_obj.link_meta(LINK)
+
+
 # --- errors ------------------------------------------------------------------
 
 
@@ -207,7 +282,46 @@ def test_other_409_is_a_usage_error(client_obj, monkeypatch):
         client_obj._rpc("files/get_metadata", {"path": "bad"})
 
 
+def test_rate_limit_waits_retry_after_and_resends(client_obj, monkeypatch):
+    from h2t_ops.connectors.dropbox import client as dmod
+
+    answers = [_Resp(429, text="too_many", headers={"Retry-After": "2"}),
+               _Resp(429, text="too_many"),
+               _Resp(200, payload={"entries": []})]
+    fake, _ = _fake_requests(lambda *a, **k: answers.pop(0))
+    monkeypatch.setitem(sys.modules, "requests", fake)
+    waits = []
+    monkeypatch.setattr(dmod.time, "sleep", waits.append)
+    assert client_obj._rpc("files/list_folder", {"path": ""}) == {"entries": []}
+    assert waits == [2.0, 1.0]  # Retry-After when given, else one second
+
+
+def test_rate_limit_gives_up_after_the_retries(client_obj, monkeypatch):
+    from h2t_ops.connectors.dropbox import client as dmod
+
+    sent = []
+    fake, _ = _fake_requests(lambda *a, **k: sent.append(1) or _Resp(429, text="too_many"))
+    monkeypatch.setitem(sys.modules, "requests", fake)
+    monkeypatch.setattr(dmod.time, "sleep", lambda s: None)
+    with pytest.raises(ProviderError):
+        client_obj._rpc("files/list_folder", {"path": ""})
+    assert len(sent) == dmod.RATE_LIMIT_RETRIES + 1
+
+
+def test_shared_link_access_denied_is_an_auth_error(client_obj, monkeypatch):
+    """A password-protected or team-only link: say so, not a raw JSON body."""
+    fake, _ = _fake_requests(lambda *a, **k: _Resp(
+        409, text='{"error_summary": "shared_link_access_denied/.."}'))
+    monkeypatch.setitem(sys.modules, "requests", fake)
+    with pytest.raises(AuthError) as exc:
+        client_obj.link_meta(LINK)
+    assert "access denied" in str(exc.value)
+
+
 def test_rate_limit_and_server_errors_are_provider_errors(client_obj, monkeypatch):
+    from h2t_ops.connectors.dropbox import client as dmod
+
+    monkeypatch.setattr(dmod.time, "sleep", lambda s: None)
     for status in (429, 503):
         fake, _ = _fake_requests(lambda *a, s=status, **k: _Resp(s, text="boom"))
         monkeypatch.setitem(sys.modules, "requests", fake)
@@ -530,5 +644,6 @@ def test_missing_scope_hint_names_every_scope_the_connector_calls(client_obj, mo
     with pytest.raises(AuthError) as exc:
         client_obj._rpc("files/list_folder", {"path": ""})
     hint = exc.value.hint or ""
-    for scope in ("account_info.read", "files.metadata.read", "files.content.read"):
+    for scope in ("account_info.read", "files.metadata.read", "files.content.read",
+                  "sharing.read"):
         assert scope in hint, f"hint does not name {scope}"
