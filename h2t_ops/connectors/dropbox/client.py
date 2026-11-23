@@ -36,10 +36,18 @@ def normalize_path(path: str) -> str:
     E:/DROPBOX/Team Dropbox/Projects/X is /Projects/X here.
     """
     p = (path or "").strip()
-    if p in ("", "/"):
-        return ""
-    p = p.rstrip("/")
-    return p if p.startswith("/") else f"/{p}"
+    if len(p) >= 3 and p[0].isalpha() and p[1] == ":" and p[2] in "/\\":
+        # Git Bash rewrites an argument that starts with "/" into its own install
+        # directory before the program sees it: "/MyFolder" arrives as
+        # "C:/Program Files/Git/MyFolder", and Dropbox answers not_found (#725).
+        raise UsageError(
+            f"dropbox: {p!r} is a local drive path, not a path from the Dropbox root",
+            hint=('From Git Bash, run MSYS_NO_PATHCONV=1 h2t-ops dropbox ... or write '
+                  'the path with a double slash: "//MyFolder". A local Dropbox folder '
+                  "such as E:/DROPBOX/Team Dropbox/Projects/X is /Projects/X here."),
+        )
+    p = p.strip("/")  # "//X", the Git Bash escape, arrives as typed outside Git Bash
+    return f"/{p}" if p else ""
 
 
 _TOKEN_KEYS = ("DROPBOX_TOKEN", "DROPBOX_REFRESH_TOKEN", "DROPBOX_APP_KEY", "DROPBOX_APP_SECRET")

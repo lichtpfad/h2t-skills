@@ -92,10 +92,24 @@ def test_init_reads_the_provider_env_file(monkeypatch):
 @pytest.mark.parametrize("given,expected", [
     ("", ""), ("/", ""), ("HOU2TOUCH", "/HOU2TOUCH"),
     ("/HOU2TOUCH/", "/HOU2TOUCH"), ("/a/b", "/a/b"),
+    # the Git Bash escape typed in PowerShell arrives unchanged: "//" is the root
+    ("//", ""), ("//HOU2TOUCH", "/HOU2TOUCH"),
 ])
 def test_normalize_path(given, expected):
     from h2t_ops.connectors.dropbox.client import normalize_path
     assert normalize_path(given) == expected
+
+
+@pytest.mark.parametrize("given", [
+    "C:/Program Files/Git/HOU2TOUCH",  # what Git Bash makes of "/HOU2TOUCH" (#725)
+    "C:/Program Files/Git/",           # ... and of "/"
+    "E:\\DROPBOX\\Team Dropbox\\Projects",
+])
+def test_a_drive_letter_path_is_refused_with_the_git_bash_remedy(given):
+    from h2t_ops.connectors.dropbox.client import normalize_path
+    with pytest.raises(UsageError) as exc:
+        normalize_path(given)
+    assert "MSYS_NO_PATHCONV=1" in exc.value.hint and "//" in exc.value.hint
 
 
 # --- namespace ---------------------------------------------------------------

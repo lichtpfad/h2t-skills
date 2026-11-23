@@ -31,10 +31,13 @@ streams the content fine (~11 MB/s measured).
   public one.
 - Both refuse without their flag (`--confirm-write`, `--confirm-public`) before any token
   is read. Restate the target and get the user's yes before running them.
-- Run them from PowerShell or cmd, not Git Bash: MSYS rewrites `/MyFolder/...` into
-  `C:/Program Files/Git/MyFolder/...` and the write lands on a wrong path or is refused.
 
 ## Paths are from the Dropbox root, not from the disk
+
+From Git Bash, MSYS rewrites an argument that starts with `/` before the program sees it:
+`/MyFolder` arrives as `C:/Program Files/Git/MyFolder`. Every command refuses a drive-letter
+path with a usage error (exit 2) instead of sending it (#725). Prefix the command with
+`MSYS_NO_PATHCONV=1`, write `//MyFolder`, or run from PowerShell or cmd.
 
 ```text
 E:\Dropbox\MyFolder\Projects\Area\x.wav
