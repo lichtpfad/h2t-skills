@@ -1,4 +1,5 @@
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -88,7 +89,8 @@ class FakeMeta:
     def ig_media_insights(self, media_id, page_token):
         return self.metrics.get(media_id), [{"data": [media_id]}]
 
-    def ig_online_followers(self, ig_id, page_token, days=29):
+    def ig_online_followers(self, ig_id, page_token, since, until):
+        self.online_window = (since, until)
         return self.online, [{"data": ["online"]}]
 
 
@@ -147,11 +149,21 @@ def test_missing_timezone_is_config_error(social_config, social_data, monkeypatc
     assert "user.yaml" in (e.value.hint or "")
 
 
-def test_online_followers_hours_are_not_converted(social_config, social_data, tz):
+def test_online_followers_keep_each_day_and_its_hours_as_reported(social_config, social_data, tz):
     social_config(accounts=_accounts())
-    client = FakeMeta(_media(1), {"m1": {"reach": 5}}, online={"0": 5, "13": 9})
+    days = {"2026-11-16": {"0": 5, "13": 9}, "2026-11-17": {"0": 7}}
+    client = FakeMeta(_media(1), {"m1": {"reach": 5}}, online=days)
     out = insights.run(None, 10, client_factory=lambda n, a: client)
-    assert out["accounts"]["instagram:acme"]["online_followers_hour_as_reported"] == {"0": 5, "13": 9}
+    assert out["accounts"]["instagram:acme"]["online_followers_by_date"] == days
+
+
+def test_online_followers_are_asked_for_29_days_ending_now(social_config, social_data, tz):
+    social_config(accounts=_accounts())
+    client = FakeMeta(_media(1), {"m1": {"reach": 5}})
+    before = int(datetime.now(UTC).timestamp())
+    insights.run(None, 10, client_factory=lambda n, a: client)
+    since, until = client.online_window
+    assert until - since == 29 * 86400 and before <= until <= before + 60
 
 
 def test_run_writes_provenance_chain(social_config, social_data, tz):
@@ -252,7 +264,7 @@ def test_threads_account_report_has_no_online_followers(social_config, social_da
     social_config(accounts={"accounts": [acc]})
     out = insights.run(None, 10, client_factory=lambda n, a: FakeThreads())
     r = out["accounts"]["threads:acme"]
-    assert r["summary"]["median_reach"] == 7 and "online_followers_hour_as_reported" not in r
+    assert r["summary"]["median_reach"] == 7 and "online_followers_by_date" not in r
 
 
 def test_disabled_accounts_are_skipped(social_config, social_data, tz):
