@@ -1005,6 +1005,13 @@ def _machine_name(sb, mp):
     assert legacy.ensure_machine_name(name="sandbox")["status"] == "written"
 
 
+def _machine_name_state_pin(sb, mp):
+    from h2t_ops.core import paths
+    from h2t_ops.setup import legacy
+    assert legacy.pin_machine_name(name="sandbox")["state_pin"]["status"] == "written"
+    assert paths.machine_name_pin().read_text(encoding="utf-8") == "sandbox\n"
+
+
 def _plugin_cache_dir(sb, mp):
     from h2t_ops.core import paths
     (paths.dir_of("harness") / "plugins" / "cache" / "lichtpfad" / "h2t-core" / "4.0.0").mkdir(parents=True)
@@ -1158,6 +1165,7 @@ CASES: list[Case] = [
     Case("setup.sync.snapshot", _sync_snapshot, setup=_sync_tools),
     Case("setup.sync.clean-cache", _sync_clean_cache, setup=_sync_tools),
     Case("setup.machine-name", _machine_name),
+    Case("setup.machine-name.state-pin", _machine_name_state_pin),
     Case("setup.install-h2t-ops.versions", _install_versions_file, setup=_plugin_cache_dir),
     Case("hook.log-failure", _hook_log_failure),
     Case("hook.grade-guard.log", _guard_log("grade_guard"), setup=_guard_transcript),

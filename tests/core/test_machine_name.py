@@ -316,6 +316,15 @@ def test_the_setup_command_writes_the_state_pin(renamed_host, monkeypatch, capsy
     assert _state_pin(renamed_host).read_text(encoding="utf-8") == "mac\n"
 
 
+def test_what_setup_pins_is_what_machine_name_reads_without_the_env(renamed_host, monkeypatch):
+    """The invariant of #606, as a round trip: writer and reader share no hand-built path."""
+    monkeypatch.delenv("CLAUDE_CONFIG_DIR", raising=False)
+
+    assert setup_h2t.pin_machine_name(name="macbook-pro-3")["state_pin"]["status"] == "written"
+    assert "H2T_MACHINE_NAME" not in os.environ and "DOR_MACHINE_NAME" not in os.environ
+    assert paths.machine_name() == "macbook-pro-3"
+
+
 def test_the_setup_command_fails_when_the_state_pin_cannot_be_written(
         renamed_host, monkeypatch, capsys):
     """A pin that did not land leaves Codex on the hostname: setup must not say ok."""
