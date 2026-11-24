@@ -297,6 +297,38 @@ def test_setup_never_changes_an_existing_state_pin(renamed_host, monkeypatch):
     assert result["state_pin"] == {"status": "differs", "path": str(pin), "value": "other"}
 
 
+def test_a_pin_landing_between_the_check_and_the_write_is_kept(renamed_host, monkeypatch):
+    """Another setup on this machine wins the race: its name stays, ours is reported."""
+    from h2t_ops.core import store
+
+    monkeypatch.delenv("CLAUDE_CONFIG_DIR", raising=False)
+    pin = _state_pin(renamed_host)
+    real_mkdir = store.mkdir
+
+    def the_other_setup_writes_first(path, **kw):
+        out = real_mkdir(path, **kw)
+        if kw.get("place") == "state" and not pin.exists():
+            pin.write_text("other\n", encoding="utf-8")
+        return out
+
+    monkeypatch.setattr(store, "mkdir", the_other_setup_writes_first)
+
+    result = setup_h2t.pin_machine_name(name="mac")
+
+    assert pin.read_text(encoding="utf-8") == "other\n"
+    assert result["state_pin"] == {"status": "differs", "path": str(pin), "value": "other"}
+
+
+def test_an_empty_state_pin_is_filled(renamed_host, monkeypatch):
+    monkeypatch.delenv("CLAUDE_CONFIG_DIR", raising=False)
+    pin = _state_pin(renamed_host)
+    pin.parent.mkdir(parents=True)
+    pin.write_text("\n", encoding="utf-8")
+
+    assert setup_h2t.pin_machine_name(name="mac")["state_pin"]["status"] == "written"
+    assert pin.read_text(encoding="utf-8") == "mac\n"
+
+
 def test_setup_writes_no_state_pin_while_the_name_is_undecided(renamed_host, monkeypatch):
     monkeypatch.delenv("CLAUDE_CONFIG_DIR", raising=False)
     _history(renamed_host, "macbook-pro-3")
@@ -333,14 +365,14 @@ def test_the_setup_command_fails_when_the_state_pin_cannot_be_written(
     monkeypatch.delenv("CLAUDE_CONFIG_DIR", raising=False)
     monkeypatch.setattr(setup_h2t, "_home", lambda: renamed_host)
     monkeypatch.setattr(setup_h2t, "doctor", lambda: {"status": "ok"})
-    real = store.replace
+    real = store.create
 
     def refuse_the_pin(path, data, **kw):
         if kw.get("place") == "state":
             raise OSError("read-only state")
         return real(path, data, **kw)
 
-    monkeypatch.setattr(store, "replace", refuse_the_pin)
+    monkeypatch.setattr(store, "create", refuse_the_pin)
 
     assert setup_h2t.main(["setup", "--json"]) == 1
     out = json.loads(capsys.readouterr().out)
@@ -348,7 +380,7 @@ def test_the_setup_command_fails_when_the_state_pin_cannot_be_written(
     assert out["machine_name"]["state_pin"]["status"] == "error"
 
 
-def test_the_layout_migration_s_pin_leaves_no_state_file(renamed_host, monkeypatch):
+def test_the_layout_migration_pin_leaves_no_state_file(renamed_host, monkeypatch):
     """ensure_machine_name alone is what the layout migration calls: its rollback removes
     only journaled files, so the state pin must not come from there."""
     monkeypatch.delenv("CLAUDE_CONFIG_DIR", raising=False)

@@ -439,19 +439,27 @@ def _pin_state(name: str) -> dict[str, Any]:
     is reported as `differs` and left for the user.
     """
     pin = paths.machine_name_pin()
-    try:
-        existing = pin.read_text(encoding="utf-8").strip() if pin.exists() else ""
-    except (OSError, ValueError) as exc:
-        return {"status": "error", "path": str(pin), "error": f"unreadable, left untouched: {exc}"}
-    if existing:
-        status = "unchanged" if existing == name else "differs"
-        return {"status": status, "path": str(pin), "value": existing}
-    try:
-        store.mkdir(pin.parent, place="state")
-        store.replace(pin, name + "\n", place="state")
-    except (OSError, H2TError) as exc:
-        return {"status": "error", "path": str(pin), "error": str(exc)}
-    return {"status": "written", "path": str(pin), "value": name}
+    for _ in range(2):
+        try:
+            present = pin.exists()
+            existing = pin.read_text(encoding="utf-8").strip() if present else ""
+        except (OSError, ValueError) as exc:
+            return {"status": "error", "path": str(pin), "error": f"unreadable, left untouched: {exc}"}
+        if existing:
+            status = "unchanged" if existing == name else "differs"
+            return {"status": status, "path": str(pin), "value": existing}
+        try:
+            store.mkdir(pin.parent, place="state")
+            if present:   # an empty file holds no decision
+                store.replace(pin, name + "\n", place="state")
+            else:         # create never overwrites a pin another setup wrote meanwhile
+                store.create(pin, name + "\n", place="state")
+        except store.AlreadyExists:
+            continue      # read what won the race and report it
+        except (OSError, H2TError) as exc:
+            return {"status": "error", "path": str(pin), "error": str(exc)}
+        return {"status": "written", "path": str(pin), "value": name}
+    return {"status": "error", "path": str(pin), "error": "kept changing while being written"}
 
 
 def _google_json_status(name: str) -> dict[str, str]:
