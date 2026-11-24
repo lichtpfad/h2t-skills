@@ -82,6 +82,21 @@ def test_session_incompatible_errors_include_marker(exc):
     assert "auth request-code" in (err.hint or "")
 
 
+def test_a_locked_session_db_is_not_reported_as_incompatible():
+    """Another h2t-ops telegram process holds the session (#688). Moving the file aside,
+    the incompatible-session remedy, would destroy a working login."""
+    from h2t_ops.connectors.telegram.client import _session_incompatible_error
+    from h2t_ops.core.errors import exit_code_for
+
+    err = _session_incompatible_error(sqlite3.OperationalError("database is locked"))
+    assert "SESSION_LOCKED" in str(err)
+    assert "SESSION_INCOMPATIBLE" not in str(err)
+    assert not isinstance(err, AuthError)  # "auth" reads as "log in again"
+    hint = (err.hint or "").lower()
+    assert "retry" in hint and "aside" not in hint and "request-code" not in hint
+    assert exit_code_for(err) == 1
+
+
 def test_auth_status_without_session_reports_configured_not_authorized(tmp_path):
     from h2t_ops.connectors.telegram.client import TelegramClientAdapter
 
