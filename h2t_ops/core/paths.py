@@ -471,8 +471,31 @@ def expand_user_dest(value: str) -> Path:
     return Path(value).expanduser().absolute()
 
 
+MACHINE_NAME_FILE = "machine-name"
+
+
+def machine_name_pin() -> Path:
+    """Where setup pins the machine name for processes Claude Code did not start (#606).
+
+    `state`, not `config`: config syncs between machines, and one synced name would put
+    every machine's sessions in one folder.
+    """
+    return state_dir() / MACHINE_NAME_FILE
+
+
 def machine_name() -> str:
     """H2T_MACHINE_NAME (pinned in Claude settings by setup, ADR 0003) → DOR_MACHINE_NAME →
-    hostname. No file pins it (plan R4)."""
+    the state pin setup writes beside it → hostname.
+
+    The file exists for Codex and any other process Claude Code did not start: they never
+    see Claude's settings env (#606, amends plan R4). An empty or unreadable pin reads as
+    absent; hooks call this, so it never raises.
+    """
     name = os.environ.get("H2T_MACHINE_NAME") or os.environ.get("DOR_MACHINE_NAME", "")
+    if name:
+        return name
+    try:
+        name = machine_name_pin().read_text(encoding="utf-8").strip()
+    except (OSError, ValueError):
+        name = ""
     return name or platform.node().lower().split(".")[0]

@@ -223,11 +223,14 @@ For first setup and repair, after Step 3:
 h2t-ops setup setup --json
 ```
 
-It is `doctor` plus one write: `env.H2T_MACHINE_NAME` in `~/.claude/settings.json`, so
-session records stop following a macOS hostname (ADR 0003). Report the doctor part as
-Step 2 says, including the `plugin_cache` remedy. Then read `machine_name.status`:
+It is `doctor` plus two writes: `env.H2T_MACHINE_NAME` in `~/.claude/settings.json`, so
+session records stop following a macOS hostname (ADR 0003), and the same name in
+`~/.h2t/state/machine-name` for processes Claude Code did not start, such as Codex hooks
+(#606). Report the doctor part as Step 2 says, including the `plugin_cache` remedy. Then
+read `machine_name.status`:
 
-- `unchanged` / `written` — report the value.
+- `unchanged` / `written` — report the value, and `machine_name.state_pin.status`:
+  `differs` means the file holds another name and was left as it is; show both and ask.
 - `needs_choice` — nothing was written: today's name (`today`) has no folder in the
   session root, while other folders (`candidates`) do. One of them may be this machine
   under an older hostname; another may belong to a different machine. Show both and ask
