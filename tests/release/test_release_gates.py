@@ -70,7 +70,7 @@ def test_checks_outside_the_list_do_not_count():
 
 def test_the_gate_reads_what_ci_names_its_checks():
     """REQUIRED must match job names CI actually produces, or the gate waits on a name nobody emits."""
-    evals = (ROOT / ".github/workflows/evals.yml").read_text(encoding="utf-8")
+    evals = (ROOT / ".github/workflows/tests.yml").read_text(encoding="utf-8")
     assert "name: lib/ unit tests (${{ matrix.os }})" in evals
     assert "os: [ubuntu-latest, windows-latest]" in evals
     checks = (ROOT / ".github/workflows/checks.yml").read_text(encoding="utf-8")
