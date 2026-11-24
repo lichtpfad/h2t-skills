@@ -631,6 +631,20 @@ def _make_adapter_with_fake_connection(tmp_path, monkeypatch, fake_client):
     return adapter
 
 
+def test_send_on_a_locked_session_says_locked(tmp_path, monkeypatch):
+    """#688 was seen on `send`: the same lock must surface there as SESSION_LOCKED."""
+    from h2t_ops.core.errors import ProviderError
+
+    class Locked:
+        def send_message(self, *a, **k):
+            raise sqlite3.OperationalError("database is locked")
+
+    adapter = _make_adapter_with_fake_connection(tmp_path, monkeypatch, Locked())
+    with pytest.raises(ProviderError) as exc:
+        adapter.send_message("@someone", "hi")
+    assert "SESSION_LOCKED" in str(exc.value) and "aside" not in (exc.value.hint or "")
+
+
 def test_search_channels_returns_shaped_rows(tmp_path, monkeypatch):
     chan = SimpleNamespace(
         id=100, username="testchan", title="Test Channel",
