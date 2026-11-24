@@ -53,3 +53,25 @@ move the directory once on some machines and works on macOS only.
 - Machines that never run `setup` behave as before.
 - Directories already split are not merged; on the MacBook that was done by hand on
   2026-09-19.
+
+## Amendment 2026-11-24 (#606)
+
+"Claude Code passes `env` to every process it starts" stopped covering every h2t process
+once Codex ran `h2t-hook session-pulse` (#566). Codex does not pass its own environment to
+hooks either (measured 2026-11-08), so a Codex session on the MacBook wrote to
+`macbook-pro-4/` while its history sat in `macbook-pro-3/`.
+
+Option B of #606, chosen by the owner on 2026-11-24, replaces plan R4 ("no file pins it"):
+
+- `h2t-ops setup setup` also writes the pinned name to `~/.h2t/state/machine-name`, once,
+  never changing a value already there (a different one is reported as `differs`).
+- `paths.machine_name()` reads `H2T_MACHINE_NAME` → `DOR_MACHINE_NAME` → that file →
+  the hostname. An empty or unreadable file reads as absent.
+- The file is in `state`, not `config`: `config` syncs between machines, and one synced
+  name would put every machine's sessions in one folder.
+- The layout migration does not write it: its rollback removes only journaled files.
+
+Rejected: writing the name into the Codex hook command (closes only that hook), and
+exporting it from the shell profile (Codex does not pass it on to hooks).
+
+Machines pinned before this amendment get the file when `h2t-ops setup setup` runs again.

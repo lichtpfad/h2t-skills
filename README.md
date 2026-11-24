@@ -269,7 +269,7 @@ without it.
 | --- | --- | --- |
 | `H2T_PATH_ROOT` | `~/.h2t` | the whole storage root except `run/` (see [Where Your Data Lives](#where-your-data-lives-где-хранятся-данные)) |
 | `H2T_PATH_VAULT` | `~/.dor/vault` | the vault shared with POS; set it in POS's environment too |
-| `H2T_MACHINE_NAME` | hostname (`DOR_MACHINE_NAME` is read as a fallback) | the machine segment in session paths |
+| `H2T_MACHINE_NAME` | `DOR_MACHINE_NAME`, then `~/.h2t/state/machine-name` (written by setup), then the hostname | the machine segment in session paths |
 | `H2T_MACHINE_ID` | `platform.node()`, slugified | the machine key in the MeetGeek uploads journal |
 | `H2T_DEV_ROOT` | the checkout's parent, else `~/dev` | where sibling repositories are looked for |
 | `H2T_CALENDAR_TZ` | `timezone` in `config/user.yaml`, else the system zone | the timezone calendar commands assume (`--tz` wins over it) |

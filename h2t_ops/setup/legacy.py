@@ -27,6 +27,7 @@ from pathlib import Path
 from typing import Any
 
 from h2t_ops.core import paths, settings, store
+from h2t_ops.core.errors import H2TError
 from h2t_ops.setup import settings_gaps
 
 KIND_DOCTOR = "h2t_setup_doctor/v1"
@@ -419,6 +420,40 @@ def ensure_machine_name(*, name: str = "") -> dict[str, Any]:
     return {"status": "error", "path": str(settings), "error": "kept changing while being updated, left untouched"}
 
 
+def pin_machine_name(*, name: str = "") -> dict[str, Any]:
+    """ensure_machine_name, then the same name in the state pin (#606).
+
+    `h2t-ops setup setup` calls this. The layout migration calls ensure_machine_name alone:
+    its rollback removes only what its journal recorded, and the pin is not journaled.
+    """
+    got = ensure_machine_name(name=name)
+    if got["status"] in ("written", "unchanged"):
+        got["state_pin"] = _pin_state(got["value"])
+    return got
+
+
+def _pin_state(name: str) -> dict[str, Any]:
+    """The pin paths.machine_name() reads where Claude settings' env does not reach.
+
+    Written once, never changed, like the settings pin: a different value already there
+    is reported as `differs` and left for the user.
+    """
+    pin = paths.machine_name_pin()
+    try:
+        existing = pin.read_text(encoding="utf-8").strip() if pin.exists() else ""
+    except (OSError, ValueError) as exc:
+        return {"status": "error", "path": str(pin), "error": f"unreadable, left untouched: {exc}"}
+    if existing:
+        status = "unchanged" if existing == name else "differs"
+        return {"status": status, "path": str(pin), "value": existing}
+    try:
+        store.mkdir(pin.parent, place="state")
+        store.replace(pin, name + "\n", place="state")
+    except (OSError, H2TError) as exc:
+        return {"status": "error", "path": str(pin), "error": str(exc)}
+    return {"status": "written", "path": str(pin), "value": name}
+
+
 def _google_json_status(name: str) -> dict[str, str]:
     from h2t_ops.core import secrets
     from h2t_ops.core.errors import ConfigError
@@ -619,7 +654,12 @@ def _machine_name_line(info: dict[str, Any] | None) -> str:
     if not info:
         return ""
     detail = info.get("value") or info.get("error", "")
-    return f"- machine name: {info['status']} {detail} ({info['path']})\n"
+    line = f"- machine name: {info['status']} {detail} ({info['path']})\n"
+    pin = info.get("state_pin")
+    if pin:
+        pin_detail = pin.get("value") or pin.get("error", "")
+        line += f"- machine name pin: {pin['status']} {pin_detail} ({pin['path']})\n"
+    return line
 
 
 def _legacy_shim_line(info: dict[str, Any] | None) -> str:
@@ -828,7 +868,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.command in {"doctor", "setup", "repair", "update"}:
             result = doctor()
             if args.command == "setup":
-                result["machine_name"] = ensure_machine_name(name=args.machine_name)
+                result["machine_name"] = pin_machine_name(name=args.machine_name)
                 if result["machine_name"]["status"] == "error":
                     result["status"] = "error"
         elif args.command == "connectors-check":
