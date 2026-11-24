@@ -820,7 +820,7 @@ def _plan_closer_setup(repo, mp):
 def _plan_closer(repo, mp):
     from h2t_ops.hooks import plan_closer
     mp.chdir(repo)
-    mp.setattr(plan_closer, "_pr_view", lambda root, n: {"state": "MERGED", "files": [
+    mp.setattr(plan_closer, "_pr_view", lambda root, n, repo=None: {"state": "MERGED", "files": [
         {"path": "src/a.py"}, {"path": "docs/superpowers/plans/2026-01-01-x.md"}]})
     plan_closer.handle({"tool_name": "Bash", "tool_input": {"command": "gh pr merge 7 --squash"}})
     assert 'status: "done"' in (repo / "docs/superpowers/plans/2026-01-01-x.md").read_text(encoding="utf-8")

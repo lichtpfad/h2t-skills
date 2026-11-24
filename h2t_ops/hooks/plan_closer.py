@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import json
 import re
+import shlex
 import subprocess
 from pathlib import Path
 
@@ -45,7 +46,13 @@ _CLOSED = {
 }
 
 # `gh pr merge 408 ...` — the number is the first bare argument after `merge`.
-_MERGE = re.compile(r"(?:^|[;&|]\s*)gh\s+pr\s+merge\b(?P<rest>[^;&|]*)")
+# `env` is a run of VAR=value assignments that prefix the command (GH_REPO=o/r gh ...).
+_MERGE = re.compile(r"(?:^|[;&|]\s*)(?P<env>(?:\w+=\S*\s+)*)(?P<gh>gh\s+pr\s+merge\b)"
+                    r"(?P<rest>[^;&|]*)")
+# Flags of `gh pr merge` that take a value (gh pr merge --help): the value is never the
+# number, and `--repo` names the repository the merge went to.
+_VALUE_FLAGS = {"-A", "--author-email", "-b", "--body", "-F", "--body-file",
+                "--match-head-commit", "-t", "--subject", "-R", "--repo"}
 _STATUS_LINE = re.compile(r"^status:\s*.*$", re.MULTILINE)
 # A document whose author declared it has no finished state. A decision map is the
 # case that forced this: it lives exactly as long as its open questions do, so every
@@ -63,16 +70,84 @@ def extract_pr_number(command: str) -> int | None:
     resolving that after the merge is a guess, and the branch may already be
     deleted. A guess here would stamp `status: done` on the wrong plan.
     """
+    target = merge_target(command)
+    return target[0] if target else None
+
+
+def merge_target(command: str) -> tuple[int, str | None, str | None] | None:
+    """(PR number, --repo value, directory of a leading `cd`) of a `gh pr merge`, or None.
+
+    gh resolves the PR in the repository of its working directory unless `--repo`, `-R`
+    or GH_REPO names another (#662). None whenever the repository is not certain: no
+    number, a URL or branch, an unparseable line, more than one `cd`, `cd -`, `pushd`,
+    a subshell. Each of those would make the hook stamp documents of a repository the
+    merge never touched.
+    """
     m = _MERGE.search(command)
     if not m:
         return None
-    for token in m.group("rest").split():
-        if token.startswith("-"):
-            continue
-        if token.isdigit():
-            return int(token)
+    try:
+        tokens = shlex.split(m.group("rest"))
+    except ValueError:
         return None
-    return None
+    number: int | None = None
+    repo: str | None = None
+    it = iter(tokens)
+    for token in it:
+        if token.startswith("--repo="):
+            repo = token.split("=", 1)[1]
+        elif token.startswith("-R") and len(token) > 2:
+            repo = token[2:]
+        elif token in _VALUE_FLAGS:
+            value = next(it, None)
+            if token in ("-R", "--repo"):
+                repo = value
+        elif token.startswith("-"):
+            continue
+        elif number is None and token.isdigit():
+            number = int(token)
+        else:
+            return None  # a URL, a branch, or a second positional: no guess
+    if number is None:
+        return None
+    for assignment in m.group("env").split():
+        name, _, value = assignment.partition("=")
+        if name == "GH_REPO" and repo is None:
+            repo = value
+
+    prefix = command[: m.start("gh")]
+    if any(mark in prefix for mark in ("(", "`", "$(")):
+        return None
+    cd_dir: str | None = None
+    for part in re.split(r"&&|\|\||[;|]", prefix):
+        try:
+            words = shlex.split(part)
+        except ValueError:
+            return None
+        if not words or words[0] not in ("cd", "pushd", "popd"):
+            continue
+        if words[0] != "cd" or cd_dir is not None or len(words) != 2 or words[1] == "-":
+            return None
+        cd_dir = words[1]
+    return number, repo, cd_dir
+
+
+def _slug(ref: str) -> str:
+    """owner/repo, lowercased, from [HOST/]OWNER/REPO, an https URL or a git@host:o/r remote."""
+    ref = ref.strip().removesuffix("/").removesuffix(".git")
+    parts = re.split(r"[/:]", ref)
+    return "/".join(parts[-2:]).lower() if len(parts) >= 2 else ""
+
+
+def _remote_slugs(root: Path) -> set[str]:
+    try:
+        out = subprocess.run(["git", "-C", str(root), "remote", "-v"],
+                             capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        return set()
+    if out.returncode != 0:
+        return set()
+    return {_slug(line.split()[1]) for line in out.stdout.splitlines() if len(line.split()) > 1}
 
 
 def _split_frontmatter(text: str) -> tuple[str, str] | None:
@@ -160,10 +235,11 @@ def close_plans_for_pr(repo_root: Path, pr_number: int, view: dict,
     return changed
 
 
-def _pr_view(repo_root: Path, pr_number: int) -> dict:
+def _pr_view(repo_root: Path, pr_number: int, repo: str | None = None) -> dict:
     try:
         out = subprocess.run(
-            ["gh", "pr", "view", str(pr_number), "--json", "state,files"],
+            ["gh", "pr", "view", str(pr_number), "--json", "state,files",
+             *(["--repo", repo] if repo else [])],
             capture_output=True, text=True, timeout=30, cwd=str(repo_root),
         )
     except (OSError, subprocess.SubprocessError):
@@ -181,13 +257,25 @@ def handle(event: dict) -> Reply:
         return Reply()
 
     command = (event.get("tool_input") or {}).get("command", "")
-    pr_number = extract_pr_number(command)
-    if pr_number is None:
+    target = merge_target(command)
+    if target is None:
         return Reply()
+    pr_number, repo, cd_dir = target
 
     repo_root = Path.cwd().resolve()
+    if cd_dir is not None:
+        repo_root = (repo_root / Path(cd_dir).expanduser()).resolve()
+        if not repo_root.is_dir():
+            return Reply()
+    slug = None
+    if repo is not None:
+        slug = _slug(repo)
+        # the merge went to a named repository: act only on a clone of that one
+        if not slug or slug not in _remote_slugs(repo_root):
+            return Reply()
     failed: list[dict] = []
-    changed = close_plans_for_pr(repo_root, pr_number, _pr_view(repo_root, pr_number), failed)
+    changed = close_plans_for_pr(repo_root, pr_number,
+                                 _pr_view(repo_root, pr_number, repo=slug), failed)
     if not changed and not failed:
         return Reply()
     text, notice = "", ""

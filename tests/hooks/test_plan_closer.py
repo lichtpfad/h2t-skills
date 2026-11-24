@@ -9,7 +9,10 @@ just never written down while it was still free.
 from __future__ import annotations
 
 import importlib.util
+import subprocess
 from pathlib import Path
+
+import pytest
 
 
 def _load():
@@ -138,7 +141,7 @@ def test_hook_reports_on_both_channels(tmp_path, monkeypatch):
     _plan(tmp_path, "docs/superpowers/plans/2026-08-24-thing.md",
           '---\nstatus: "draft"\n---\nx\n')
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(m, "_pr_view", lambda root, n: _VIEW)
+    monkeypatch.setattr(m, "_pr_view", lambda root, n, repo=None: _VIEW)
     reply = m.handle({"tool_name": "Bash", "tool_input": {"command": "gh pr merge 408 --squash"}})
     assert "408" in reply.notice
     assert "2026-08-24-thing.md" in reply.text
@@ -158,7 +161,7 @@ def test_message_distinguishes_a_plan_from_its_spec(tmp_path, monkeypatch):
     _plan(tmp_path, "docs/superpowers/specs/2026-08-24-thing.md",
           '---\nstatus: "draft"\n---\nx\n')
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(m, "_pr_view", lambda root, n: {
+    monkeypatch.setattr(m, "_pr_view", lambda root, n, repo=None: {
         "state": "MERGED",
         # `lib/thing.py` is what makes this a PR that implemented something. Without
         # a code file the hook is silent by design, and this test is about naming.
@@ -249,7 +252,7 @@ def test_the_message_states_what_it_did_not_what_is_true(tmp_path, monkeypatch):
     _plan(tmp_path, "docs/superpowers/plans/2026-08-24-thing.md",
           '---\nstatus: "draft"\n---\nx\n')
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(m, "_pr_view", lambda root, n: {
+    monkeypatch.setattr(m, "_pr_view", lambda root, n, repo=None: {
         "state": "MERGED",
         "files": [{"path": "docs/superpowers/plans/2026-08-24-thing.md"},
                   {"path": "lib/thing.py"}],
@@ -267,7 +270,7 @@ def test_a_refused_write_is_said_not_dropped(tmp_path, monkeypatch):
     m = _load()
     doc = _plan(tmp_path, "docs/superpowers/plans/2026-08-24-thing.md", '---\nstatus: "draft"\n---\nx\n')
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(m, "_pr_view", lambda root, n: {"state": "MERGED", "files": [
+    monkeypatch.setattr(m, "_pr_view", lambda root, n, repo=None: {"state": "MERGED", "files": [
         {"path": "docs/superpowers/plans/2026-08-24-thing.md"}, {"path": "lib/thing.py"}]})
     monkeypatch.setitem(repo_writers.REPO_WRITERS, "plan-closer", {})
     reply = m.handle({"tool_name": "Bash", "tool_input": {"command": "gh pr merge 408"}})
@@ -275,3 +278,107 @@ def test_a_refused_write_is_said_not_dropped(tmp_path, monkeypatch):
     assert "plans/2026-08-24-thing.md" in reply.notice and "не удалось" in reply.notice
     assert "may not replace" in reply.text
     assert reply.block is False
+
+
+# ── which repository the merge targeted (#662) ──────────────────────────────
+
+
+@pytest.mark.parametrize("command, expected", [
+    ("gh pr merge 25 --squash", (25, None, None)),
+    ("gh pr merge 25 --repo owner/B --squash", (25, "owner/B", None)),
+    ("gh pr merge --repo owner/B 25", (25, "owner/B", None)),
+    ("gh pr merge 25 --repo=owner/B", (25, "owner/B", None)),
+    ("gh pr merge 25 -R owner/B", (25, "owner/B", None)),
+    ("gh pr merge 25 -Rowner/B", (25, "owner/B", None)),
+    ("GH_REPO=owner/B gh pr merge 25", (25, "owner/B", None)),
+    ("cd ~/B && gh pr merge 25 --squash", (25, None, "~/B")),
+    ('cd "/x/my B"; gh pr merge 25', (25, None, "/x/my B")),
+    ("git fetch && gh pr merge 25", (25, None, None)),
+    # a flag value is never the number, quoted or not
+    ("gh pr merge 25 --subject 'fix 7 things' --squash", (25, None, None)),
+    ("gh pr merge -t 7 25", (25, None, None)),
+])
+def test_merge_target_reads_the_repository_the_merge_went_to(command, expected):
+    m = _load()
+    assert m.merge_target(command) == expected
+
+
+@pytest.mark.parametrize("command", [
+    "gh pr merge --squash",                       # current branch: a guess
+    "gh pr merge https://github.com/o/r/pull/25",  # a URL or branch is not a number
+    "cd A && cd B && gh pr merge 25",             # two cds
+    "cd - && gh pr merge 25",
+    "cd && gh pr merge 25",
+    "pushd B && gh pr merge 25",
+    "(cd B && gh pr merge 25)",
+    "gh pr merge 25 --subject 'unclosed",         # unparseable
+])
+def test_merge_target_is_none_when_the_repository_is_uncertain(command):
+    m = _load()
+    assert m.merge_target(command) is None
+
+
+def _git_repo(root: Path, slug: str) -> Path:
+    root.mkdir(parents=True, exist_ok=True)
+    subprocess.run(["git", "init", "-q", str(root)], check=True)
+    subprocess.run(["git", "-C", str(root), "remote", "add", "origin",
+                    f"git@github.com:{slug}.git"], check=True)
+    return root
+
+
+_SPEC = "docs/superpowers/specs/2026-08-24-thing-design.md"
+
+
+def _a_with_its_own_pr_25(tmp_path, monkeypatch, m):
+    """Repo A, whose own PR #25 was merged long ago and carried a draft spec. The fake gh
+    answers for A's PR whatever repository is asked: that is what gh did without --repo."""
+    a = _git_repo(tmp_path / "A", "owner/A")
+    spec = _plan(a, _SPEC, '---\nstatus: "draft"\n---\nx\n')
+    asked = []
+
+    def view(root, n, repo=None):
+        asked.append((Path(root), n, repo))
+        return {"state": "MERGED", "files": [{"path": _SPEC}, {"path": "lib/thing.py"}]}
+
+    monkeypatch.setattr(m, "_pr_view", view)
+    monkeypatch.chdir(a)
+    return a, spec, asked
+
+
+def test_a_merge_in_another_repository_stamps_nothing_here(tmp_path, monkeypatch):
+    m = _load()
+    _a, spec, _asked = _a_with_its_own_pr_25(tmp_path, monkeypatch, m)
+    reply = m.handle({"tool_name": "Bash", "tool_input": {
+        "command": "gh pr merge 25 --repo owner/B --squash"}})
+    assert 'status: "draft"' in spec.read_text(encoding="utf-8")
+    assert (reply.text, reply.notice) == ("", "")
+
+
+def test_a_merge_named_for_this_repository_still_closes_and_asks_gh_for_it(
+        tmp_path, monkeypatch):
+    m = _load()
+    a, spec, asked = _a_with_its_own_pr_25(tmp_path, monkeypatch, m)
+    m.handle({"tool_name": "Bash", "tool_input": {
+        "command": "gh pr merge 25 -R https://github.com/Owner/A.git --squash"}})
+    assert 'status: "done"' in spec.read_text(encoding="utf-8")
+    assert asked[0][2] == "owner/a"
+
+
+def test_a_leading_cd_moves_the_repository_root(tmp_path, monkeypatch):
+    m = _load()
+    a, spec_a, asked = _a_with_its_own_pr_25(tmp_path, monkeypatch, m)
+    b = _git_repo(tmp_path / "B", "owner/B")
+    spec_b = _plan(b, _SPEC, '---\nstatus: "draft"\n---\nx\n')
+    m.handle({"tool_name": "Bash", "tool_input": {"command": f'cd "{b}" && gh pr merge 25'}})
+    assert 'status: "draft"' in spec_a.read_text(encoding="utf-8")
+    assert 'status: "done"' in spec_b.read_text(encoding="utf-8")
+    assert asked[0][0] == b.resolve()
+
+
+def test_a_cd_to_a_missing_directory_does_nothing(tmp_path, monkeypatch):
+    m = _load()
+    _a, spec, asked = _a_with_its_own_pr_25(tmp_path, monkeypatch, m)
+    m.handle({"tool_name": "Bash", "tool_input": {
+        "command": f'cd "{tmp_path / "nowhere"}" && gh pr merge 25'}})
+    assert 'status: "draft"' in spec.read_text(encoding="utf-8")
+    assert asked == []
