@@ -869,7 +869,8 @@ def main(argv: list[str] | None = None) -> int:
             result = doctor()
             if args.command == "setup":
                 result["machine_name"] = pin_machine_name(name=args.machine_name)
-                if result["machine_name"]["status"] == "error":
+                pin = result["machine_name"].get("state_pin") or {}
+                if "error" in (result["machine_name"]["status"], pin.get("status")):
                     result["status"] = "error"
         elif args.command == "connectors-check":
             result = connector_matrix(live=args.live, include_paid=args.include_paid)

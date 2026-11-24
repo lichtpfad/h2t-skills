@@ -316,6 +316,29 @@ def test_the_setup_command_writes_the_state_pin(renamed_host, monkeypatch, capsy
     assert _state_pin(renamed_host).read_text(encoding="utf-8") == "mac\n"
 
 
+def test_the_setup_command_fails_when_the_state_pin_cannot_be_written(
+        renamed_host, monkeypatch, capsys):
+    """A pin that did not land leaves Codex on the hostname: setup must not say ok."""
+    from h2t_ops.core import store
+
+    monkeypatch.delenv("CLAUDE_CONFIG_DIR", raising=False)
+    monkeypatch.setattr(setup_h2t, "_home", lambda: renamed_host)
+    monkeypatch.setattr(setup_h2t, "doctor", lambda: {"status": "ok"})
+    real = store.replace
+
+    def refuse_the_pin(path, data, **kw):
+        if kw.get("place") == "state":
+            raise OSError("read-only state")
+        return real(path, data, **kw)
+
+    monkeypatch.setattr(store, "replace", refuse_the_pin)
+
+    assert setup_h2t.main(["setup", "--json"]) == 1
+    out = json.loads(capsys.readouterr().out)
+    assert out["status"] == "error"
+    assert out["machine_name"]["state_pin"]["status"] == "error"
+
+
 def test_the_layout_migration_s_pin_leaves_no_state_file(renamed_host, monkeypatch):
     """ensure_machine_name alone is what the layout migration calls: its rollback removes
     only journaled files, so the state pin must not come from there."""
