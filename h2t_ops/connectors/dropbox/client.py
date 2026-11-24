@@ -87,7 +87,7 @@ def _raise_for_status(resp: Any, context: str) -> None:
                     "optional: every command resolves the team namespace through "
                     "users/get_current_account before it touches a file. A shared link "
                     "(--link) also needs sharing.read. Writes need more: "
-                    "upload needs files.content.write, link needs sharing.write."
+                    "upload and delete need files.content.write, link needs sharing.write."
                 ),
             )
         raise AuthError(
@@ -112,7 +112,7 @@ def _raise_for_status(resp: Any, context: str) -> None:
 
 
 class DropboxClient:
-    """Dropbox adapter: account, meta, list, download; writes: upload, link."""
+    """Dropbox adapter: account, meta, list, download; writes: upload, link, delete."""
 
     def __init__(self) -> None:
         self._timeout = int(secrets.get("DROPBOX_TIMEOUT") or "60")
@@ -343,7 +343,14 @@ class DropboxClient:
                 "bytes": written}
 
     def _post_upload(self, endpoint: str, arg: dict[str, Any], body: Any, context: str) -> Any:
-        """POST to a content upload endpoint; resent after a connection reset or a 429.
+        """POST to a content upload endpoint; resent after a connection reset or a 429."""
+        # The header must be ASCII: json.dumps escapes non-ASCII names as \uXXXX.
+        return self._post_retrying(f"{CONTENT_BASE}/{endpoint}", body,
+                                   {"Content-Type": "application/octet-stream",
+                                    "Dropbox-API-Arg": json.dumps(arg)}, context)
+
+    def _post_retrying(self, url: str, body: Any, extra: dict[str, str], context: str) -> Any:
+        """POST `body` to `url`; resent after a connection reset or a 429.
 
         body: bytes, or a callable that opens the file again for each try. The number of
         tries is bounded: the last failure is raised (reset) or returned (429) as it is.
@@ -356,14 +363,8 @@ class DropboxClient:
             try:
                 data = body() if callable(body) else body
                 try:
-                    resp = _r.post(
-                        f"{CONTENT_BASE}/{endpoint}",
-                        data=data,
-                        # The header must be ASCII: json.dumps escapes non-ASCII names as \uXXXX.
-                        headers=self._headers({"Content-Type": "application/octet-stream",
-                                               "Dropbox-API-Arg": json.dumps(arg)}),
-                        timeout=self._timeout,
-                    )
+                    resp = _r.post(url, data=data, headers=self._headers(extra),
+                                   timeout=self._timeout)
                 finally:
                     if hasattr(data, "close"):
                         data.close()
@@ -470,6 +471,35 @@ class DropboxClient:
         made = self._rpc("sharing/create_shared_link_with_settings",
                          {"path": api_path, "settings": {"requested_visibility": "public"}})
         return {"path": api_path, "url": made["url"], "created": True, "visibility": "public"}
+
+    def folder_count(self, path: str) -> dict[str, Any]:
+        """Entries under a folder from one recursive list page; the cursor is not followed.
+        complete is False when Dropbox has more pages, and the numbers are then a floor."""
+        api_path = normalize_path(path)
+        page = self._rpc("files/list_folder", {"path": api_path, "recursive": True})
+        entries = [e for e in page.get("entries", [])
+                   if (e.get("path_lower") or "") != api_path.lower()]
+        return {"entries": len(entries),
+                "bytes": sum(e.get("size") or 0 for e in entries if e.get(".tag") == "file"),
+                "complete": not page.get("has_more")}
+
+    def delete(self, path: str) -> dict[str, Any]:
+        """files/delete_v2: a file, or a folder with everything in it. Dropbox keeps the
+        item in its deleted files, where it can be restored. Resent after a connection
+        reset or a 429. Not found at this point is "gone", not an error: a resent request
+        that had landed, or a parent folder deleted first, leaves the same answer."""
+        api_path = normalize_path(path)
+        if not api_path:
+            raise UsageError("dropbox delete: a path is required; the root is never deleted")
+        context = f"delete {api_path}"
+        resp = self._post_retrying(f"{RPC_BASE}/files/delete_v2",
+                                   json.dumps({"path": api_path}).encode("utf-8"),
+                                   {"Content-Type": "application/json"}, context)
+        if resp.status_code == 409 and "not_found" in (getattr(resp, "text", "") or ""):
+            return {"path": api_path, "status": "gone"}
+        _raise_for_status(resp, context)
+        md = (resp.json() or {}).get("metadata") or {}
+        return {"path": md.get("path_display") or api_path, "status": "deleted"}
 
     @staticmethod
     def _gunzip_into(raw: Path, dst: Any, name: str) -> int:
