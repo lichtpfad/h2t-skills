@@ -75,6 +75,8 @@ In Claude Code, check readiness through:
 ## Common Failures
 
 - `SESSION_INCOMPATIBLE`: move the old Telethon session aside and re-authenticate.
+- `SESSION_LOCKED` (exit 1): another `h2t-ops telegram` command holds the session. Retry
+  when it ends; do not move the session file.
 - `PEER_UNRESOLVED`: the peer, not the session. `ENTITY` and `--chat-id` resolve a
   chat title or `@username` directly; a numeric `id` from `dialogs` carries no
   access hash, so it works only once `bootstrap --force` has cached that peer.

@@ -82,6 +82,21 @@ def test_session_incompatible_errors_include_marker(exc):
     assert "auth request-code" in (err.hint or "")
 
 
+def test_a_locked_session_db_is_not_reported_as_incompatible():
+    """Another h2t-ops telegram process holds the session (#688). Moving the file aside,
+    the incompatible-session remedy, would destroy a working login."""
+    from h2t_ops.connectors.telegram.client import _session_incompatible_error
+    from h2t_ops.core.errors import exit_code_for
+
+    err = _session_incompatible_error(sqlite3.OperationalError("database is locked"))
+    assert "SESSION_LOCKED" in str(err)
+    assert "SESSION_INCOMPATIBLE" not in str(err)
+    assert not isinstance(err, AuthError)  # "auth" reads as "log in again"
+    hint = (err.hint or "").lower()
+    assert "retry" in hint and "aside" not in hint and "request-code" not in hint
+    assert exit_code_for(err) == 1
+
+
 def test_auth_status_without_session_reports_configured_not_authorized(tmp_path):
     from h2t_ops.connectors.telegram.client import TelegramClientAdapter
 
@@ -614,6 +629,20 @@ def _make_adapter_with_fake_connection(tmp_path, monkeypatch, fake_client):
 
     monkeypatch.setattr(adapter, "_connected_client", fake_connected)
     return adapter
+
+
+def test_send_on_a_locked_session_says_locked(tmp_path, monkeypatch):
+    """#688 was seen on `send`: the same lock must surface there as SESSION_LOCKED."""
+    from h2t_ops.core.errors import ProviderError
+
+    class Locked:
+        def send_message(self, *a, **k):
+            raise sqlite3.OperationalError("database is locked")
+
+    adapter = _make_adapter_with_fake_connection(tmp_path, monkeypatch, Locked())
+    with pytest.raises(ProviderError) as exc:
+        adapter.send_message("@someone", "hi")
+    assert "SESSION_LOCKED" in str(exc.value) and "aside" not in (exc.value.hint or "")
 
 
 def test_search_channels_returns_shaped_rows(tmp_path, monkeypatch):

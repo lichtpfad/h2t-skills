@@ -18,13 +18,22 @@ from h2t_ops.core import downloads, paths, secrets, store
 from h2t_ops.core.errors import (
     AuthError,
     ConfigError,
+    H2TError,
     NotFoundError,
     ProviderError,
     UsageError,
 )
 
 
-def _session_incompatible_error(exc: BaseException) -> AuthError:
+def _session_incompatible_error(exc: BaseException) -> H2TError:
+    if isinstance(exc, sqlite3.OperationalError) and "locked" in str(exc).lower():
+        # Another process holds the session DB (#688). Not an auth problem: the
+        # incompatible-session remedy below would move a working login aside.
+        return ProviderError(
+            f"SESSION_LOCKED: another process is using the Telegram session ({exc})",
+            hint="Retry when the other h2t-ops telegram command has finished; "
+                 "the session file is fine, leave it where it is.",
+        )
     return AuthError(
         "SESSION_INCOMPATIBLE: Telethon session file is incompatible with this "
         f"Telethon version: {exc}",
