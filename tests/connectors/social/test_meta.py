@@ -116,9 +116,20 @@ def test_network_error_hides_the_token_url():
     assert USER_TOKEN not in str(e.value) and e.value.__suppress_context__
 
 
-def test_online_followers_mean_per_hour():
-    means, _ = client((200, fx("online_followers"))).ig_online_followers("ig_111", "PGTOK1")
-    assert means == {0: 20.0, 1: 30.0}
+def test_online_followers_keep_every_day_apart():
+    days, _ = client((200, fx("online_followers"))).ig_online_followers("ig_111", "PGTOK1", 1000, 2000)
+    assert days == {"2026-11-17T08:00:00+0000": {"0": 10, "1": 20},
+                    "2026-11-18T08:00:00+0000": {"0": 30, "1": 40},
+                    "2026-11-19T08:00:00+0000": {"0": 50, "1": 60}}
+
+
+def test_online_followers_sends_the_window():
+    c = client((200, fx("online_followers")))
+    c.ig_online_followers("ig_111", "PGTOK1", 1000, 2000)
+    url, params = c._session.calls[0]
+    assert url.endswith("/ig_111/insights")
+    assert params["metric"] == "online_followers" and params["period"] == "lifetime"
+    assert params["since"] == 1000 and params["until"] == 2000
 
 
 def test_only_get_is_used():

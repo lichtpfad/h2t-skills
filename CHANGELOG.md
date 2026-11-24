@@ -16,6 +16,7 @@ One CHANGELOG for the whole pack from 4.0.0 on. The per-plugin files
 - `schedule add|remove`: daily insights run in Windows Task Scheduler (#677).
 - `tokens refresh`: Threads long-lived token refresh (#676).
 - `setup connectors-check`: the social row shows which layer each secret is read from (#678).
+- `run insights`: Instagram online followers per day for the last 29 days, in `online_followers_by_end_time`; it replaces `online_followers_hour_as_reported`, which averaged the 24 hours Meta returns without a date range (#737).
 
 ## 4.1.1
 

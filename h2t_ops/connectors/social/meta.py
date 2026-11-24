@@ -64,18 +64,18 @@ class MetaClient(GraphClient):
         return {m["name"]: (m.get("values") or [{}])[0].get("value")
                 for m in body.get("data") or []}, raw
 
-    def ig_online_followers(self, ig_id: str, page_token: str,
-                            days: int = 29) -> tuple[dict[int, float], list[dict]]:
+    def ig_online_followers(self, ig_id: str, page_token: str, since: int,
+                            until: int) -> tuple[dict[str, dict], list[dict]]:
+        """Followers online per hour, one entry per day Meta returns over [since, until].
+
+        Keyed by Meta's `end_time` as sent; hours as sent. Meta documents no timezone for
+        either, so neither is converted. Without since/until Meta looks back 24 hours only."""
         body, raw = self._single(f"{ig_id}/insights", page_token,
-                                 {"metric": "online_followers", "period": "lifetime"})
-        sums: dict[int, float] = {}
-        counts: dict[int, int] = {}
-        for metric in body.get("data") or []:
-            for day in (metric.get("values") or [])[-days:]:
-                for hour, n in (day.get("value") or {}).items():
-                    sums[int(hour)] = sums.get(int(hour), 0) + n
-                    counts[int(hour)] = counts.get(int(hour), 0) + 1
-        return {h: sums[h] / counts[h] for h in sums}, raw
+                                 {"metric": "online_followers", "period": "lifetime",
+                                  "since": since, "until": until})
+        return {day["end_time"]: day.get("value") or {}
+                for metric in body.get("data") or []
+                for day in metric.get("values") or [] if day.get("end_time")}, raw
 
     def page_insights(self, page_id: str, page_token: str, metric: str,
                       since: int, until: int) -> tuple[dict, list[dict]]:

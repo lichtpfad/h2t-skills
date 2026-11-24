@@ -266,7 +266,7 @@ envelope's `result` key.
 |---|---|
 | `result.schema_version` | `"h2t_social_insights/v1"`. It lives inside `result`, not in the envelope. |
 | `result.run_id` | The journal run id. |
-| `result.accounts` | Mapping `<network>:<handle>` → `{network, summary, posts}`. Instagram accounts also carry `online_followers_hour_as_reported`. |
+| `result.accounts` | Mapping `<network>:<handle>` → `{network, summary, posts}`. Instagram accounts also carry `online_followers_by_end_time`: Meta's `end_time` → hour → followers online, for the last 29 days, keys and hours as Meta sends them (#737). |
 | `result.skipped_accounts` | Mapping account id → reason it was skipped. |
 | `result.unavailable` | List of `{account, group, metric, code, message}`: metrics Meta refused (code 100 or 10). Always present; `[]` when nothing is unavailable. |
 
