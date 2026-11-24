@@ -151,10 +151,10 @@ def test_missing_timezone_is_config_error(social_config, social_data, monkeypatc
 
 def test_online_followers_keep_each_day_and_its_hours_as_reported(social_config, social_data, tz):
     social_config(accounts=_accounts())
-    days = {"2026-11-17T08:00:00+0000": {"0": 5, "13": 9}, "2026-11-18T08:00:00+0000": {"0": 7}}
+    days = {"2026-11-16": {"0": 5, "13": 9}, "2026-11-17": {"0": 7}}
     client = FakeMeta(_media(1), {"m1": {"reach": 5}}, online=days)
     out = insights.run(None, 10, client_factory=lambda n, a: client)
-    assert out["accounts"]["instagram:acme"]["online_followers_by_end_time"] == days
+    assert out["accounts"]["instagram:acme"]["online_followers_by_date"] == days
 
 
 def test_online_followers_are_asked_for_29_days_ending_now(social_config, social_data, tz):
@@ -264,7 +264,7 @@ def test_threads_account_report_has_no_online_followers(social_config, social_da
     social_config(accounts={"accounts": [acc]})
     out = insights.run(None, 10, client_factory=lambda n, a: FakeThreads())
     r = out["accounts"]["threads:acme"]
-    assert r["summary"]["median_reach"] == 7 and "online_followers_by_end_time" not in r
+    assert r["summary"]["median_reach"] == 7 and "online_followers_by_date" not in r
 
 
 def test_disabled_accounts_are_skipped(social_config, social_data, tz):

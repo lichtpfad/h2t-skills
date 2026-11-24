@@ -266,11 +266,16 @@ envelope's `result` key.
 |---|---|
 | `result.schema_version` | `"h2t_social_insights/v1"`. It lives inside `result`, not in the envelope. |
 | `result.run_id` | The journal run id. |
-| `result.accounts` | Mapping `<network>:<handle>` → `{network, summary, posts}`. Instagram accounts also carry `online_followers_by_end_time`: Meta's `end_time` → hour → followers online, for the last 29 days, keys and hours as Meta sends them. Measured 2026-11-24, not documented by Meta: an `end_time` closes a day that runs midnight to midnight US Pacific, so its date is the day after the data (#737). |
+| `result.accounts` | Mapping `<network>:<handle>` → `{network, summary, posts}`. Instagram accounts also carry `online_followers_by_date`: date → hour → followers online, for the last 29 days; hours as Meta sends them. |
 | `result.skipped_accounts` | Mapping account id → reason it was skipped. |
 | `result.unavailable` | List of `{account, group, metric, code, message}`: metrics Meta refused (code 100 or 10). Always present; `[]` when nothing is unavailable. |
 
 A Facebook account entry is `{network: "facebook", page: {<metric>: [{date, value}, ...]}}`.
+
+A `date` here and in `online_followers_by_date` is the day the value covers. Meta sends
+`end_time`, the END of that day; measured 2026-11-24, not documented by Meta, days run
+midnight to midnight US Pacific (the boundary is 07:00 UTC in summer, 08:00 in winter). The
+date is taken from the start, 24 hours before `end_time` (`meta.day_of`, #737).
 `page` holds only the metrics that returned values (last 28 days, one value per day). The
 metric list is `facebook_page_metrics` in `defaults.yaml`. A refused metric goes to
 `result.unavailable` with `group: "page"`. If no metric returns values, the run fails with

@@ -88,6 +88,13 @@ returned values. A metric Meta refuses (code 100 or 10) is listed in `result.una
 `{account, group: "page", metric, code, message}`; that list is always present and is `[]`
 when nothing was refused. If no metric returns values, the run exits 5.
 
+An `instagram` account also carries `online_followers_by_date`: date → hour → followers
+online, over the last 29 days. Hours are as Meta sends them. The newest day may be empty:
+Meta delays the data up to 48 hours.
+
+Every `date` is the day the value covers, midnight to midnight US Pacific (measured, not
+documented by Meta). Meta's own `end_time` is the end of that day, one date later.
+
 ## Secrets
 
 Only through the package, never in a config file, a command line or the output.

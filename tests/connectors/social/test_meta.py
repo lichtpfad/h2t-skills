@@ -118,9 +118,19 @@ def test_network_error_hides_the_token_url():
 
 def test_online_followers_keep_every_day_apart():
     days, _ = client((200, fx("online_followers"))).ig_online_followers("ig_111", "PGTOK1", 1000, 2000)
-    assert days == {"2026-11-17T08:00:00+0000": {"0": 10, "1": 20},
-                    "2026-11-18T08:00:00+0000": {"0": 30, "1": 40},
-                    "2026-11-19T08:00:00+0000": {"0": 50, "1": 60}}
+    assert days == {"2026-11-16": {"0": 10, "1": 20},
+                    "2026-11-17": {"0": 30, "1": 40},
+                    "2026-11-18": {"0": 50, "1": 60}}
+
+
+@pytest.mark.parametrize("end_time,day", [
+    ("2026-11-23T08:00:00+0000", "2026-11-22"),   # winter: Pacific midnight is 08:00 UTC
+    ("2026-11-01T07:00:00+0000", "2026-10-31"),   # summer: 07:00 UTC
+    ("2026-11-02T08:00:00+0000", "2026-11-01"),   # the 25-hour day DST ends on
+])
+def test_a_day_is_named_by_its_start_not_by_end_time(end_time, day):
+    from h2t_ops.connectors.social.meta import day_of
+    assert day_of(end_time) == day
 
 
 def test_online_followers_sends_the_window():
@@ -177,7 +187,7 @@ def test_find_page_matches_by_instagram_id_or_page_id():
 def test_page_insights_parses_dates_and_values():
     c = client((200, fx("page_insights")))
     body, raw = c.page_insights("page_222", "PGTOK1", "page_post_engagements", 1000, 2000)
-    assert body == {"values": [{"date": "2026-11-18", "value": 12}, {"date": "2026-11-19", "value": 30}]}
+    assert body == {"values": [{"date": "2026-11-17", "value": 12}, {"date": "2026-11-18", "value": 30}]}
     assert len(raw) == 1
 
 

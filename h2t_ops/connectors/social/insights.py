@@ -94,7 +94,7 @@ def _collect(run_id: str, account: Account, limit: int, client) -> tuple[list[di
         media = keep("media", client.ig_media(account.remote_id, token, limit))
         fetch = lambda m: keep("media_insights", client.ig_media_insights(m["id"], token))  # noqa: E731
         until = int(datetime.now(UTC).timestamp())
-        after = lambda: extra.update(online_followers_by_end_time=keep(  # noqa: E731
+        after = lambda: extra.update(online_followers_by_date=keep(  # noqa: E731
             "online_followers", client.ig_online_followers(
                 account.remote_id, token, until - _ONLINE_DAYS * 86400, until)))
     for m in media:
