@@ -32,7 +32,7 @@ import shlex
 import subprocess
 from pathlib import Path
 
-from h2t_ops.core import store
+from h2t_ops.core import paths, store
 from h2t_ops.core.errors import H2TError
 from h2t_ops.hooks.emit import Reply
 
@@ -268,7 +268,7 @@ def handle(event: dict) -> Reply:
 
     repo_root = Path.cwd().resolve()
     if cd_dir is not None:
-        repo_root = (repo_root / Path(cd_dir).expanduser()).resolve()
+        repo_root = paths.expand_user_dest(cd_dir).resolve()  # relative to the same cwd
         if not repo_root.is_dir():
             return Reply()
     slug = None
