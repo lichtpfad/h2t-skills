@@ -567,7 +567,7 @@ def test_upload_reports_an_existing_path_and_leaves_it(client_obj, monkeypatch, 
 def test_upload_other_409_is_an_error_not_exists(client_obj, monkeypatch, tmp_path):
     src = tmp_path / "a.py"
     src.write_bytes(b"1")
-    other = '{"error_summary": "path/disallowed_name/.. conflict-free"}'
+    other = '{"error_summary": "path/no_write_permission/.."}'
     fake, _ = _fake_requests(_upload_post([], lambda n: _Resp(409, text=other)))
     monkeypatch.setitem(sys.modules, "requests", fake)
     with pytest.raises(UsageError):
@@ -583,17 +583,201 @@ def test_upload_size_mismatch_is_a_provider_error(client_obj, monkeypatch, tmp_p
         client_obj.upload(str(src), "/x/a.py")
 
 
-def test_upload_over_the_single_request_limit_is_refused_before_sending(
-        client_obj, monkeypatch, tmp_path):
+def _session_post(seen, answer=None):
+    """Records each content call; answers start/append/finish like Dropbox does."""
+    def post(url, data=None, headers=None, timeout=None, **kw):
+        body = data.read() if hasattr(data, "read") else data
+        seen.append({"url": url, "body": body,
+                     "arg": json.loads(headers.get("Dropbox-API-Arg", "null"))})
+        if answer is not None:
+            got = answer(len(seen), seen[-1])
+            if got is not None:
+                return got
+        if url.endswith("/upload_session/start"):
+            return _Resp(200, payload={"session_id": "S1"})
+        if url.endswith("/upload_session/append_v2"):
+            return _Resp(200, text="", payload={})
+        if url.endswith("/upload_session/finish"):
+            return _Resp(200, payload={"size": seen[-1]["arg"]["cursor"]["offset"]})
+        return _Resp(200, payload={"size": len(body or b"")})
+    return post
+
+
+def _small_limits(monkeypatch, limit=4, chunk=4):
     from h2t_ops.connectors.dropbox import client as dmod
 
+    monkeypatch.setattr(dmod, "UPLOAD_LIMIT", limit)
+    monkeypatch.setattr(dmod, "CHUNK_SIZE", chunk)
+    monkeypatch.setattr(dmod.time, "sleep", lambda s: None)
+    return dmod
+
+
+def test_upload_over_the_single_request_limit_goes_through_a_session(
+        client_obj, monkeypatch, tmp_path, capsys):
+    _small_limits(monkeypatch)
     src = tmp_path / "big.bin"
-    src.write_bytes(b"123")
-    monkeypatch.setattr(dmod, "UPLOAD_LIMIT", 2)
-    fake, _ = _fake_requests(lambda *a, **k: pytest.fail("nothing may be sent"))
+    src.write_bytes(b"0123456789")
+    seen = []
+    fake, _ = _fake_requests(_session_post(seen))
+    monkeypatch.setitem(sys.modules, "requests", fake)
+    out = client_obj.upload(str(src), "/x/big.bin")
+    assert out == {"path": "/x/big.bin", "bytes": 10, "status": "uploaded"}
+    steps = [c["url"].rsplit("/2/", 1)[1] for c in seen]
+    assert steps == ["files/upload_session/start", "files/upload_session/append_v2",
+                     "files/upload_session/append_v2", "files/upload_session/finish"]
+    assert [c["body"] for c in seen] == [b"0123", b"4567", b"89", b""]
+    assert [c["arg"]["cursor"]["offset"] for c in seen[1:]] == [4, 8, 10]
+    assert all(c["arg"]["cursor"]["session_id"] == "S1" for c in seen[1:])
+    commit = seen[-1]["arg"]["commit"]
+    assert commit["path"] == "/x/big.bin"
+    assert commit["mode"] == "add" and commit["autorename"] is False
+    err = capsys.readouterr().err
+    assert "chunk 3/3" in err  # progress per chunk, on stderr
+
+
+def test_session_finish_path_conflict_is_exists_not_overwrite(client_obj, monkeypatch, tmp_path):
+    _small_limits(monkeypatch)
+    src = tmp_path / "big.bin"
+    src.write_bytes(b"0123456789")
+    conflict = '{"error_summary": "path/conflict/file/.."}'
+
+    def answer(n, call):
+        if call["url"].endswith("/finish"):
+            return _Resp(409, text=conflict)
+        return None
+
+    fake, _ = _fake_requests(_session_post([], answer))
+    monkeypatch.setitem(sys.modules, "requests", fake)
+    assert client_obj.upload(str(src), "/x/big.bin")["status"] == "exists"
+
+
+def test_session_append_resent_after_a_reset_that_landed_is_accepted(
+        client_obj, monkeypatch, tmp_path):
+    """The reset came after Dropbox took the chunk: it answers incorrect_offset with
+    the offset we expected next, and the upload goes on instead of failing."""
+    _small_limits(monkeypatch)
+    src = tmp_path / "big.bin"
+    src.write_bytes(b"0123456789")
+    seen = []
+    box = []
+
+    def answer(n, call):
+        if n == 2:
+            raise box[0]("connection reset")
+        if n == 3:
+            return _Resp(409, payload={"error_summary": "incorrect_offset/..",
+                                       "error": {".tag": "incorrect_offset",
+                                                 "correct_offset": 8}})
+        return None
+
+    fake, exc_cls = _fake_requests(_session_post(seen, answer))
+    box.append(exc_cls)
+    monkeypatch.setitem(sys.modules, "requests", fake)
+    assert client_obj.upload(str(src), "/x/big.bin")["status"] == "uploaded"
+    assert seen[-1]["arg"]["cursor"]["offset"] == 10
+
+
+def test_session_incorrect_offset_elsewhere_fails_loud(client_obj, monkeypatch, tmp_path):
+    _small_limits(monkeypatch)
+    src = tmp_path / "big.bin"
+    src.write_bytes(b"0123456789")
+
+    def answer(n, call):
+        if n == 2:
+            return _Resp(409, payload={"error_summary": "incorrect_offset/..",
+                                       "error": {".tag": "incorrect_offset",
+                                                 "correct_offset": 2}})
+        return None
+
+    fake, _ = _fake_requests(_session_post([], answer))
     monkeypatch.setitem(sys.modules, "requests", fake)
     with pytest.raises(UsageError):
         client_obj.upload(str(src), "/x/big.bin")
+
+
+def test_upload_retries_a_connection_reset_then_succeeds(client_obj, monkeypatch, tmp_path):
+    from h2t_ops.connectors.dropbox import client as dmod
+
+    monkeypatch.setattr(dmod.time, "sleep", lambda s: None)
+    src = tmp_path / "a.mp4"
+    src.write_bytes(b"12345")
+    bodies = []
+
+    def post(url, data=None, headers=None, timeout=None, **kw):
+        bodies.append(data.read())
+        if len(bodies) == 1:
+            raise exc_cls("ConnectionResetError(10054)")
+        return _Resp(200, payload={"size": 5})
+
+    fake, exc_cls = _fake_requests(post)
+    monkeypatch.setitem(sys.modules, "requests", fake)
+    assert client_obj.upload(str(src), "/x/a.mp4")["status"] == "uploaded"
+    assert bodies == [b"12345", b"12345"]  # the file is read again from the start
+
+
+def test_upload_gives_up_after_the_retries_and_fails(client_obj, monkeypatch, tmp_path):
+    from h2t_ops.connectors.dropbox import client as dmod
+
+    monkeypatch.setattr(dmod.time, "sleep", lambda s: None)
+    src = tmp_path / "a.mp4"
+    src.write_bytes(b"1")
+    sent = []
+
+    def post(*a, **k):
+        sent.append(1)
+        raise exc_cls("connection reset")
+
+    fake, exc_cls = _fake_requests(post)
+    monkeypatch.setitem(sys.modules, "requests", fake)
+    with pytest.raises(NetworkError):
+        client_obj.upload(str(src), "/x/a.mp4")
+    assert len(sent) == dmod.UPLOAD_RETRIES + 1
+
+
+def test_upload_rate_limit_waits_retry_after(client_obj, monkeypatch, tmp_path):
+    from h2t_ops.connectors.dropbox import client as dmod
+
+    waits = []
+    monkeypatch.setattr(dmod.time, "sleep", waits.append)
+    src = tmp_path / "a.mp4"
+    src.write_bytes(b"12")
+    answers = [_Resp(429, text="too_many_write_operations", headers={"Retry-After": "7"}),
+               _Resp(200, payload={"size": 2})]
+    fake, _ = _fake_requests(lambda *a, **k: answers.pop(0))
+    monkeypatch.setitem(sys.modules, "requests", fake)
+    assert client_obj.upload(str(src), "/x/a.mp4")["status"] == "uploaded"
+    assert waits == [7.0]
+
+
+def test_session_chunk_rate_limit_waits_retry_after(client_obj, monkeypatch, tmp_path):
+    dmod = _small_limits(monkeypatch)
+    waits = []
+    monkeypatch.setattr(dmod.time, "sleep", waits.append)
+    src = tmp_path / "big.bin"
+    src.write_bytes(b"0123456789")
+    seen = []
+
+    def answer(n, call):
+        if n == 2:
+            return _Resp(429, text="too_many_requests", headers={"Retry-After": "3"})
+        return None
+
+    fake, _ = _fake_requests(_session_post(seen, answer))
+    monkeypatch.setitem(sys.modules, "requests", fake)
+    assert client_obj.upload(str(src), "/x/big.bin")["status"] == "uploaded"
+    assert waits == [3.0]
+    assert [c["arg"]["cursor"]["offset"] for c in seen[1:]] == [4, 4, 8, 10]
+
+
+def test_a_name_dropbox_refuses_is_skipped_not_an_error(client_obj, monkeypatch, tmp_path):
+    src = tmp_path / "desktop.ini"
+    src.write_bytes(b"[x]")
+    refused = '{"error_summary": "path/disallowed_name/.."}'
+    fake, _ = _fake_requests(_upload_post([], lambda n: _Resp(409, text=refused)))
+    monkeypatch.setitem(sys.modules, "requests", fake)
+    out = client_obj.upload(str(src), "/x/desktop.ini")
+    assert out == {"path": "/x/desktop.ini", "bytes": None,
+                   "status": "skipped: rejected by Dropbox"}
 
 
 def test_upload_header_is_ascii_for_a_non_ascii_name(client_obj, monkeypatch, tmp_path):

@@ -68,7 +68,9 @@ def register(subparsers: Any) -> None:
 
 
 def _upload(client: Any, local: str, dest: str) -> list[dict]:
-    """A file goes to `dest`; a folder's files go under `dest` keeping their sub-paths."""
+    """A file goes to `dest`; a folder's files go under `dest` keeping their sub-paths.
+    Progress goes to stderr, one line per file, so --json on stdout stays clean."""
+    import sys
     from pathlib import Path
 
     from h2t_ops.core.errors import H2TError, ProviderError, UsageError
@@ -82,12 +84,22 @@ def _upload(client: Any, local: str, dest: str) -> list[dict]:
     if not files:
         raise UsageError(f"dropbox upload: {local} has no files")
     rows, failed = [], []
-    for f in files:
+    for i, f in enumerate(files, 1):
         target = dest.rstrip("/") + "/" + f.relative_to(src).as_posix()
+        print(f"[{i}/{len(files)}] {target}", file=sys.stderr)
         try:
-            rows.append(client.upload(str(f), target))
+            row = client.upload(str(f), target)
         except H2TError as exc:  # network, auth, size too: keep going; the summary fails loud
             failed.append(f"{target}: {exc}")
+            print(f"  failed: {exc}", file=sys.stderr)
+            continue
+        rows.append(row)
+        if str(row.get("status", "")).startswith("skipped"):
+            print(f"{row['status']}: {target}", file=sys.stderr)
+    counts = {k: sum(1 for r in rows if str(r.get("status", "")).startswith(k))
+              for k in ("uploaded", "exists", "skipped")}
+    print(f"{counts['uploaded']} uploaded, {counts['exists']} exists, "
+          f"{counts['skipped']} skipped, {len(failed)} failed", file=sys.stderr)
     if failed:
         raise ProviderError(f"{len(failed)} of {len(files)} uploads failed: " + "; ".join(failed))
     return rows
