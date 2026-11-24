@@ -43,7 +43,7 @@ def _patch_providers(monkeypatch, name: str, body: dict, home):
     if name == "plan-closer":
         from h2t_ops.hooks import plan_closer
         view = body.get("gh_view") or {}
-        monkeypatch.setattr(plan_closer, "_pr_view", lambda root, number: view)
+        monkeypatch.setattr(plan_closer, "_pr_view", lambda root, number, repo=None: view)
     if name == "session-end-reap-codex":
         from h2t_ops.hooks import reap_codex
         # Never enumerate, let alone kill, the real processes of the machine running tests.
