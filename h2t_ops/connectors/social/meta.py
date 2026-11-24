@@ -69,7 +69,11 @@ class MetaClient(GraphClient):
         """Followers online per hour, one entry per day Meta returns over [since, until].
 
         Keyed by Meta's `end_time` as sent; hours as sent. Meta documents no timezone for
-        either, so neither is converted. Without since/until Meta looks back 24 hours only."""
+        either, so neither is converted. Without since/until Meta looks back 24 hours only.
+
+        Measured 2026-11-24, not documented: `end_time` is the END of the day it covers, and
+        the boundary moved 07:00 -> 08:00 UTC when US Pacific DST ended, so days run midnight
+        to midnight Pacific. `end_time[:10]` is therefore the day after the data (#737)."""
         body, raw = self._single(f"{ig_id}/insights", page_token,
                                  {"metric": "online_followers", "period": "lifetime",
                                   "since": since, "until": until})
