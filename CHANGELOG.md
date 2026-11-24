@@ -4,7 +4,7 @@ One CHANGELOG for the whole pack from 4.0.0 on. The per-plugin files
 (`plugins/*/CHANGELOG.md`) are the history up to 3.x; their `Unreleased` entries ship in
 4.0.0.
 
-## Unreleased
+## 4.1.2
 
 ### Social
 
@@ -18,6 +18,41 @@ One CHANGELOG for the whole pack from 4.0.0 on. The per-plugin files
 - `setup connectors-check`: the social row shows which layer each secret is read from (#678).
 - `run insights`: Instagram online followers per day for the last 29 days, in `online_followers_by_date`; it replaces `online_followers_hour_as_reported`, which averaged the 24 hours Meta returns without a date range (#737).
 - `run insights`: a Facebook Page `date` is now the day the value covers. It was the day after: Meta's `end_time` closes the day. Runs stored before this keep the old dates (#737).
+
+### Dropbox
+
+- `dropbox list --link <url>` and `dropbox meta --link <url>` read a shared folder link,
+  read-only (#729).
+- A Windows drive-letter path (`C:/...`) is refused with the Git Bash fix in the hint:
+  Git Bash rewrites a `/path` argument into one (#725).
+
+### Telegram
+
+- A session database another h2t-ops command holds open is reported as `SESSION_LOCKED`
+  (exit 1, retry later), no longer as an incompatible session that needs a new login (#688).
+
+### Machine name
+
+- `h2t-ops setup setup` pins the machine name in `state/machine-name`, so a process Claude Code
+  did not start (a scheduled task, another terminal) records sessions under the same
+  machine. `H2T_MACHINE_NAME` still wins (#606).
+
+### Hooks
+
+- The plan closer acts only on the repository a `gh pr merge` targeted: `--repo`/`-R`,
+  `GH_REPO` or a leading `cd` are honoured, and a merge in another repository no longer
+  marks this one's plans done (#662).
+
+### Setup
+
+- On Windows, `dev-sync` run from the installed tool stops with `relaunch_required`; its hint
+  is now `uv run --directory <checkout> h2t-setup dev-sync`, which reaches the commit. The
+  old hint reinstalled the CLI and left the version check red (#663).
+
+### CI
+
+- The test workflow is named `tests` (was `h2t-evals gate`); the dormant `h2t-evals
+  validate-repo` job is gone (#735).
 
 ## 4.1.1
 
