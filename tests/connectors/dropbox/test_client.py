@@ -845,3 +845,96 @@ def test_missing_scope_hint_names_every_scope_the_connector_calls(client_obj, mo
     for scope in ("account_info.read", "files.metadata.read", "files.content.read",
                   "sharing.read"):
         assert scope in hint, f"hint does not name {scope}"
+    assert "upload and delete need files.content.write" in hint
+
+
+# --- delete ------------------------------------------------------------------
+
+
+def test_delete_calls_delete_v2_on_the_rpc_host_with_the_team_root(client_obj, monkeypatch):
+    from h2t_ops.connectors.dropbox import client as dmod
+
+    client_obj._path_root = "9001"
+    seen = []
+
+    def post(url, data=None, headers=None, timeout=None, **kw):
+        seen.append({"url": url, "body": json.loads(data), "headers": headers})
+        return _Resp(200, payload={"metadata": {".tag": "file", "path_display": "/X/a.exe"}})
+
+    fake, _ = _fake_requests(post)
+    monkeypatch.setitem(sys.modules, "requests", fake)
+    assert client_obj.delete("/X/a.exe") == {"path": "/X/a.exe", "status": "deleted"}
+    assert seen[0]["url"] == f"{dmod.RPC_BASE}/files/delete_v2"
+    assert seen[0]["body"] == {"path": "/X/a.exe"}
+    assert seen[0]["headers"]["Content-Type"] == "application/json"
+    assert "Dropbox-API-Arg" not in seen[0]["headers"]
+    assert json.loads(seen[0]["headers"]["Dropbox-API-Path-Root"]) == {".tag": "root",
+                                                                     "root": "9001"}
+
+
+def test_delete_retries_a_connection_reset_then_succeeds(client_obj, monkeypatch):
+    from h2t_ops.connectors.dropbox import client as dmod
+
+    waits = []
+    monkeypatch.setattr(dmod.time, "sleep", waits.append)
+    sent = []
+
+    def post(*a, **k):
+        sent.append(1)
+        if len(sent) == 1:
+            raise exc_cls("ConnectionResetError(10054)")
+        return _Resp(200, payload={"metadata": {}})
+
+    fake, exc_cls = _fake_requests(post)
+    monkeypatch.setitem(sys.modules, "requests", fake)
+    assert client_obj.delete("/X/a.exe")["status"] == "deleted"
+    assert len(sent) == 2 and waits == [1.0]
+
+
+def test_delete_rate_limit_waits_retry_after(client_obj, monkeypatch):
+    from h2t_ops.connectors.dropbox import client as dmod
+
+    waits = []
+    monkeypatch.setattr(dmod.time, "sleep", waits.append)
+    answers = [_Resp(429, text="too_many_write_operations", headers={"Retry-After": "5"}),
+               _Resp(200, payload={"metadata": {}})]
+    fake, _ = _fake_requests(lambda *a, **k: answers.pop(0))
+    monkeypatch.setitem(sys.modules, "requests", fake)
+    assert client_obj.delete("/X/a.exe")["status"] == "deleted"
+    assert waits == [5.0]
+
+
+def test_delete_not_found_is_reported_as_gone(client_obj, monkeypatch):
+    fake, _ = _fake_requests(lambda *a, **k: _Resp(
+        409, text='{"error_summary": "path_lookup/not_found/.."}'))
+    monkeypatch.setitem(sys.modules, "requests", fake)
+    assert client_obj.delete("/X/a.exe") == {"path": "/X/a.exe", "status": "gone"}
+
+
+def test_delete_other_409_is_an_error(client_obj, monkeypatch):
+    fake, _ = _fake_requests(lambda *a, **k: _Resp(
+        409, text='{"error_summary": "path_write/no_write_permission/.."}'))
+    monkeypatch.setitem(sys.modules, "requests", fake)
+    with pytest.raises(UsageError):
+        client_obj.delete("/X/a.exe")
+
+
+def test_delete_refuses_the_root(client_obj):
+    client_obj._rpc = MagicMock()
+    with pytest.raises(UsageError):
+        client_obj.delete("/")
+    client_obj._rpc.assert_not_called()
+
+
+def test_folder_count_reads_one_page_and_leaves_out_the_folder_itself(client_obj):
+    client_obj._rpc = MagicMock(return_value={"has_more": True, "entries": [
+        {".tag": "folder", "path_lower": "/x/b.vst3"},
+        {".tag": "folder", "path_lower": "/x/b.vst3/contents"},
+        {".tag": "file", "path_lower": "/x/b.vst3/contents/a.dll", "size": 10},
+        {".tag": "file", "path_lower": "/x/b.vst3/contents/b.plist", "size": 5},
+    ]})
+    out = client_obj.folder_count("/X/b.vst3")
+    assert out == {"entries": 3, "bytes": 15, "complete": False}
+    endpoint, arg = client_obj._rpc.call_args.args
+    assert endpoint == "files/list_folder" and arg == {"path": "/X/b.vst3", "recursive": True}
+    assert client_obj._rpc.call_count == 1  # the cursor is not followed

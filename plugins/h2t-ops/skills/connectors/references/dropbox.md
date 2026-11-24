@@ -1,6 +1,6 @@
 # Dropbox Connector
 
-Dropbox over HTTP API v2: reads, plus two writes (`upload`, `link`). Its reason to exist is the case the desktop
+Dropbox over HTTP API v2: reads, plus three writes (`upload`, `link`, `delete`). Its reason to exist is the case the desktop
 client cannot serve: an **online-only placeholder** has no bytes on disk, so
 `ffmpeg` and ordinary reads fail on it with `Invalid argument` while the API
 streams the content fine (~11 MB/s measured).
@@ -20,6 +20,8 @@ streams the content fine (~11 MB/s measured).
 | upload a file (write) | `h2t-ops dropbox upload ./a.py "/MyFolder/X/a.py" --confirm-write --json` |
 | upload a folder (write) | `h2t-ops dropbox upload ./dir "/MyFolder/X" --confirm-write --json` |
 | public link (write) | `h2t-ops dropbox link "/MyFolder/X/a.py" --confirm-public --json` |
+| what a delete would remove | `h2t-ops dropbox delete "/MyFolder/X/a.exe" "/MyFolder/X/b.vst3" --confirm-delete --dry-run --json` |
+| delete files or folders (write) | `h2t-ops dropbox delete "/MyFolder/X/a.exe" "/MyFolder/X/b.vst3" --confirm-delete --json` |
 
 ## Writes
 
@@ -35,8 +37,16 @@ streams the content fine (~11 MB/s measured).
   and the like) is reported as `skipped: rejected by Dropbox`, not as a failure.
 - `link` returns the path's existing shared link (with its visibility) or creates a
   public one.
-- Both refuse without their flag (`--confirm-write`, `--confirm-public`) before any token
-  is read. Restate the target and get the user's yes before running them.
+- `delete` removes files and folders through `files/delete_v2`: Dropbox keeps them in its
+  deleted files, where they can be restored (dropbox.com, Deleted files). It first reads
+  each path's metadata and prints what goes: file or folder, size, and for a folder the
+  entry count from one listing page (`+` when Dropbox has more pages). `--dry-run` stops
+  there. Every path is checked before any request; a missing or failing path is reported
+  in its row, the rest go on, and the command then exits non-zero with every row in the
+  error details. A path gone by the time delete runs (its parent went first) is
+  `already gone`, not a failure. Resets and rate limits are retried as for upload.
+- All three refuse without their flag (`--confirm-write`, `--confirm-public`,
+  `--confirm-delete`, the last one for `--dry-run` too) before any token is read. Restate the target and get the user's yes before running them.
 
 ## Paths are from the Dropbox root, not from the disk
 
@@ -72,7 +82,7 @@ For durable access set `DROPBOX_APP_KEY`, `DROPBOX_APP_SECRET` and
 `DROPBOX_TOKEN` is absent.
 
 Scopes: `account_info.read`, `files.metadata.read`, `files.content.read`; for writes also
-`files.content.write` (upload) and `sharing.write` (link); `--link` reads need `sharing.read`.
+`files.content.write` (upload, delete) and `sharing.write` (link); `--link` reads need `sharing.read`.
 
 To get the refresh token once: open
 `https://www.dropbox.com/oauth2/authorize?client_id=<APP_KEY>&response_type=code&token_access_type=offline`,

@@ -17,7 +17,7 @@ def _entry_row(entry: dict) -> dict:
 
 
 def register(subparsers: Any) -> None:
-    p = subparsers.add_parser("dropbox", help="Dropbox folders and files over HTTP API v2 (read; upload, link)")
+    p = subparsers.add_parser("dropbox", help="Dropbox folders and files over HTTP API v2 (read; upload, link, delete)")
     cmds = p.add_subparsers(dest="dropbox_cmd", required=True)
 
     def add_fmt(sp):
@@ -64,7 +64,92 @@ def register(subparsers: Any) -> None:
                     help="required: the link opens the file to anyone who has it")
     add_fmt(kp)
 
+    xp = cmds.add_parser("delete", help=("Delete files or folders; Dropbox keeps them in its "
+                                         "deleted files, where they can be restored"))
+    xp.add_argument("paths", nargs="+", help="paths from the Dropbox root")
+    xp.add_argument("--confirm-delete", dest="confirm_delete", action="store_true",
+                    help="required: acknowledge a delete in Dropbox (files/delete_v2)")
+    xp.add_argument("--dry-run", dest="dry_run", action="store_true",
+                    help="show what would be deleted and stop")
+    add_fmt(xp)
+
     p.set_defaults(_handler=run)
+
+
+RESTORE_NOTE = ("Dropbox keeps deleted items in its deleted files; restore them from there "
+                "(dropbox.com, Deleted files).")
+
+
+def _mb(n: int) -> str:
+    return f"{n / (1 << 20):.1f} MB"
+
+
+def _delete(client: Any, paths: list[str], dry_run: bool) -> dict:
+    """Read every path's metadata and print the plan to stderr; --dry-run stops there.
+    A path that is missing or fails is reported in its row and the rest go on; the
+    command then fails with every row in the error details."""
+    import sys
+
+    from h2t_ops.connectors.dropbox.client import normalize_path
+    from h2t_ops.core.errors import H2TError, NotFoundError, ProviderError, UsageError
+
+    api_paths = [normalize_path(p) for p in paths]  # a bad argument stops before any request
+    if not all(api_paths):
+        raise UsageError("dropbox delete: the Dropbox root cannot be deleted; name a path")
+    rows = []
+    for api_path in api_paths:
+        row: dict[str, Any] = {"path": api_path, "kind": None, "size": None}
+        try:
+            md = client.meta(api_path)
+        except NotFoundError:
+            row["status"] = "not found"
+        except H2TError as exc:
+            row["status"] = f"failed: {exc}"
+        else:
+            row.update(kind=md.get(".tag", ""), status="would delete", size=md.get("size"))
+            if row["kind"] == "folder":
+                try:
+                    count = client.folder_count(api_path)
+                except H2TError:
+                    count = {"entries": None, "bytes": None, "complete": False}
+                row.update(size=count["bytes"], entries=count["entries"],
+                           entries_complete=count["complete"])
+        rows.append(row)
+        if row["status"] != "would delete":
+            what = row["status"]
+        elif row["kind"] == "folder" and row["entries"] is not None:
+            more = "" if row["entries_complete"] else "+"
+            what = f"folder, {row['entries']}{more} entries, {_mb(row['size'])}{more}"
+        elif row["kind"] == "folder":
+            what = "folder, entries not counted"
+        else:
+            what = f"{row['kind']}, {_mb(row['size'] or 0)}"
+        print(f"{what}: {row['path']}", file=sys.stderr)
+
+    if not dry_run:
+        for row in rows:
+            if row["status"] != "would delete":
+                continue
+            try:
+                done = client.delete(row["path"])
+            except H2TError as exc:
+                row["status"] = f"failed: {exc}"
+            else:
+                row["status"] = ("deleted" if done.get("status") == "deleted"
+                                 else "already gone (removed after it was listed)")
+            print(f"{row['status']}: {row['path']}", file=sys.stderr)
+
+    result = {"dry_run": dry_run, "items": rows, "restore": RESTORE_NOTE}
+    bad = [r for r in rows if r["status"] == "not found" or r["status"].startswith("failed")]
+    deleted = sum(1 for r in rows if r["status"] == "deleted")
+    print(f"{deleted} deleted, {len(bad)} failed of {len(rows)}"
+          f"{' (dry run)' if dry_run else ''}. {RESTORE_NOTE}", file=sys.stderr)
+    if bad:
+        msg = f"{len(bad)} of {len(rows)} paths failed: " + "; ".join(
+            f"{r['path']}: {r['status']}" for r in bad)
+        kind = NotFoundError if all(r["status"] == "not found" for r in bad) else ProviderError
+        raise kind(msg, details=result)
+    return result
 
 
 def _upload(client: Any, local: str, dest: str) -> list[dict]:
@@ -117,6 +202,9 @@ def run(args: Any) -> Any:
     if cmd == "link" and not getattr(args, "confirm_public", False):
         raise UsageError("dropbox link opens the path to anyone with the link: "
                          "--confirm-public is required")
+    if cmd == "delete" and not getattr(args, "confirm_delete", False):
+        raise UsageError("dropbox delete removes paths from Dropbox: --confirm-delete is "
+                         "required, --dry-run included")
     link = getattr(args, "link", None)
     if cmd == "meta" and not (link or args.path):
         raise UsageError("dropbox meta: a path or --link is required")
@@ -151,5 +239,7 @@ def run(args: Any) -> Any:
         return _upload(client, args.local, args.dest)
     if cmd == "link":
         return client.link(args.path)
+    if cmd == "delete":
+        return _delete(client, args.paths, args.dry_run)
 
     raise UsageError(f"unknown dropbox subcommand: {cmd!r}")
