@@ -291,6 +291,8 @@ def test_a_refused_write_is_said_not_dropped(tmp_path, monkeypatch):
     ("gh pr merge 25 -R owner/B", (25, "owner/B", None)),
     ("gh pr merge 25 -Rowner/B", (25, "owner/B", None)),
     ("GH_REPO=owner/B gh pr merge 25", (25, "owner/B", None)),
+    ('GH_REPO="owner/B" gh pr merge 25', (25, "owner/B", None)),
+    ("x && GH_REPO='owner/B' gh pr merge 25", (25, "owner/B", None)),
     ("cd ~/B && gh pr merge 25 --squash", (25, None, "~/B")),
     ('cd "/x/my B"; gh pr merge 25', (25, None, "/x/my B")),
     ("git fetch && gh pr merge 25", (25, None, None)),

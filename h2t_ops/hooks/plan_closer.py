@@ -110,7 +110,11 @@ def merge_target(command: str) -> tuple[int, str | None, str | None] | None:
             return None  # a URL, a branch, or a second positional: no guess
     if number is None:
         return None
-    for assignment in m.group("env").split():
+    try:
+        assignments = shlex.split(m.group("env"))  # GH_REPO="o/r" is shell-quoted too
+    except ValueError:
+        return None
+    for assignment in assignments:
         name, _, value = assignment.partition("=")
         if name == "GH_REPO" and repo is None:
             repo = value
