@@ -122,6 +122,26 @@ def test_upload_folder_does_not_abort_on_a_network_or_auth_error(fake_client, tm
     assert fake_client.upload.call_count == 2
 
 
+def test_upload_folder_reports_a_refused_name_as_skipped_not_failed(
+        fake_client, tmp_path, capsys):
+    (tmp_path / "a.mp4").write_bytes(b"1")
+    (tmp_path / "desktop.ini").write_bytes(b"2")
+
+    def up(local, dest):
+        if dest.endswith("desktop.ini"):
+            return {"path": dest, "bytes": None, "status": "skipped: rejected by Dropbox"}
+        return {"path": dest, "bytes": 1, "status": "uploaded"}
+
+    fake_client.upload.side_effect = up
+    out = cmds.run(_args(dropbox_cmd="upload", local=str(tmp_path), dest="/X",
+                         confirm_write=True))  # no error raised
+    assert [r["status"] for r in out] == ["uploaded", "skipped: rejected by Dropbox"]
+    err = capsys.readouterr().err
+    assert "skipped: rejected by Dropbox: /X/desktop.ini" in err
+    assert "[1/2] /X/a.mp4" in err  # progress per file
+    assert "1 uploaded, 0 exists, 1 skipped, 0 failed" in err
+
+
 def test_list_path_defaults_to_the_root():
     from h2t_ops.cli import build_parser
 

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import gzip
 import json
+import sys
 import time
 from pathlib import Path
 from typing import Any
@@ -26,7 +27,9 @@ from h2t_ops.core.errors import (
 RPC_BASE = "https://api.dropboxapi.com/2"
 CONTENT_BASE = "https://content.dropboxapi.com/2"
 UPLOAD_LIMIT = 150 * 1024 * 1024  # files/upload takes at most 150 MB in one request
+CHUNK_SIZE = 32 * 1024 * 1024  # a larger file goes in parts of this size (upload session)
 RATE_LIMIT_RETRIES = 3  # a 429 is resent this many times, after the wait Dropbox names
+UPLOAD_RETRIES = 4  # an upload request is resent this many times after a reset or a 429
 
 
 def normalize_path(path: str) -> str:
@@ -339,11 +342,92 @@ class DropboxClient:
         return {"path": api_path, "saved_to": str(target), "defaulted": defaulted,
                 "bytes": written}
 
-    def upload(self, local: str, dest: str, *, _retried: bool = False) -> dict[str, Any]:
-        """Send one local file to `dest`. Never overwrites: an existing path is reported
-        as "exists" and left alone. The stored size is read back from the answer."""
+    def _post_upload(self, endpoint: str, arg: dict[str, Any], body: Any, context: str) -> Any:
+        """POST to a content upload endpoint; resent after a connection reset or a 429.
+
+        body: bytes, or a callable that opens the file again for each try. The number of
+        tries is bounded: the last failure is raised (reset) or returned (429) as it is.
+        """
         import requests as _r  # lazy — module-scope import forbidden
 
+        refreshed = False
+        attempt = 0
+        while True:
+            try:
+                data = body() if callable(body) else body
+                try:
+                    resp = _r.post(
+                        f"{CONTENT_BASE}/{endpoint}",
+                        data=data,
+                        # The header must be ASCII: json.dumps escapes non-ASCII names as \uXXXX.
+                        headers=self._headers({"Content-Type": "application/octet-stream",
+                                               "Dropbox-API-Arg": json.dumps(arg)}),
+                        timeout=self._timeout,
+                    )
+                finally:
+                    if hasattr(data, "close"):
+                        data.close()
+            except _r.RequestException as exc:
+                if attempt >= UPLOAD_RETRIES:
+                    raise NetworkError(
+                        f"Dropbox {context} failed after {attempt + 1} tries: {exc}") from exc
+                wait, why = float(2 ** attempt), str(exc)
+            else:
+                if self._should_refresh(resp, refreshed):
+                    self._token = self._refresh_access_token()
+                    refreshed = True
+                    continue
+                if resp.status_code != 429 or attempt >= UPLOAD_RETRIES:
+                    return resp
+                headers = getattr(resp, "headers", None) or {}
+                wait, why = float(headers.get("Retry-After") or 2 ** attempt), "rate limit"
+            attempt += 1
+            print(f"  retry {attempt}/{UPLOAD_RETRIES} in {wait:g}s ({why}): {context}",
+                  file=sys.stderr)
+            time.sleep(wait)
+
+    @staticmethod
+    def _chunk_landed(resp: Any, expected: int) -> bool:
+        """A resent part after a reset Dropbox had already taken: it answers
+        incorrect_offset and names the offset it expects next, which is ours."""
+        if resp.status_code != 409 or "incorrect_offset" not in (getattr(resp, "text", "") or ""):
+            return False
+        return ((resp.json() or {}).get("error") or {}).get("correct_offset") == expected
+
+    def _upload_session(self, src: Path, size: int, commit: dict[str, Any]) -> Any:
+        """files/upload_session start → append_v2 → finish, CHUNK_SIZE bytes per part.
+        Returns the finish response; the commit carries the same no-overwrite mode."""
+        api_path = commit["path"]
+        total = -(-size // CHUNK_SIZE)
+        session_id, offset = "", 0
+        with open(src, "rb") as fh:
+            for n in range(1, total + 1):
+                chunk = fh.read(CHUNK_SIZE)
+                if n == 1:
+                    context = f"upload session start {api_path}"
+                    resp = self._post_upload("files/upload_session/start", {"close": False},
+                                             chunk, context)
+                    _raise_for_status(resp, context)
+                    session_id = (resp.json() or {})["session_id"]
+                else:
+                    context = f"upload part {n}/{total} {api_path}"
+                    arg = {"cursor": {"session_id": session_id, "offset": offset},
+                           "close": False}
+                    resp = self._post_upload("files/upload_session/append_v2", arg, chunk,
+                                             context)
+                    if not self._chunk_landed(resp, offset + len(chunk)):
+                        _raise_for_status(resp, context)
+                offset += len(chunk)
+                print(f"  chunk {n}/{total}: {offset >> 20}/{size >> 20} MB {api_path}",
+                      file=sys.stderr)
+        arg = {"cursor": {"session_id": session_id, "offset": offset}, "commit": commit}
+        return self._post_upload("files/upload_session/finish", arg, b"",
+                                 f"upload session finish {api_path}")
+
+    def upload(self, local: str, dest: str) -> dict[str, Any]:
+        """Send one local file to `dest`. Never overwrites: an existing path is reported
+        as "exists" and left alone. The stored size is read back from the answer.
+        A file over UPLOAD_LIMIT goes in parts through an upload session."""
         src = Path(local)
         if not src.is_file():
             raise UsageError(f"dropbox upload: not a file: {local}")
@@ -351,30 +435,19 @@ class DropboxClient:
         if not api_path:
             raise UsageError("dropbox upload: a destination path is required")
         size = src.stat().st_size
+        commit = {"path": api_path, "mode": "add", "autorename": False, "mute": True}
         if size > UPLOAD_LIMIT:
-            raise UsageError(
-                f"dropbox upload: {src.name} is {size} bytes, over the 150 MB single-request "
-                "limit; upload sessions are not implemented"
-            )
-        # The header must be ASCII: json.dumps escapes non-ASCII names as \uXXXX.
-        arg = json.dumps({"path": api_path, "mode": "add", "autorename": False, "mute": True})
-        try:
-            with open(src, "rb") as fh:
-                resp = _r.post(
-                    f"{CONTENT_BASE}/files/upload",
-                    data=fh,
-                    headers=self._headers({"Content-Type": "application/octet-stream",
-                                           "Dropbox-API-Arg": arg}),
-                    timeout=self._timeout,
-                )
-        except _r.RequestException as exc:
-            raise NetworkError(f"Dropbox upload of {api_path} failed: {exc}") from exc
-        if self._should_refresh(resp, _retried):
-            self._token = self._refresh_access_token()
-            return self.upload(local, dest, _retried=True)
+            resp = self._upload_session(src, size, commit)
+        else:
+            resp = self._post_upload("files/upload", commit, lambda: open(src, "rb"),
+                                     f"upload {api_path}")
+        text = getattr(resp, "text", "") or ""
         # only the path conflict means "something is already there"; any other 409 is an error
-        if resp.status_code == 409 and "path/conflict" in (getattr(resp, "text", "") or ""):
+        if resp.status_code == 409 and "path/conflict" in text:
             return {"path": api_path, "bytes": None, "status": "exists"}
+        # Dropbox refuses some names outright (desktop.ini and the like): not a failure
+        if resp.status_code == 409 and "disallowed_name" in text:
+            return {"path": api_path, "bytes": None, "status": "skipped: rejected by Dropbox"}
         _raise_for_status(resp, f"upload {api_path}")
         stored = (resp.json() or {}).get("size")
         if stored != size:

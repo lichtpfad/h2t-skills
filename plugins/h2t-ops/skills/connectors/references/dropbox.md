@@ -28,7 +28,11 @@ streams the content fine (~11 MB/s measured).
   content** is accepted by Dropbox as a no-op and reported as `uploaded`; no copy is made.
   The stored size is read back and must equal the local size. A folder's files go under
   `dest` with their sub-paths; one failure does not stop the rest, and the command then
-  fails with the list. Files over 150 MB are refused (upload sessions not implemented).
+  fails with the list. A file over 150 MB goes in 32 MB parts through an upload session,
+  with the same no-overwrite mode. A connection reset or a rate limit is retried a few
+  times (Dropbox's `Retry-After` is honoured); the last failure stays a failure. Progress
+  goes to stderr: one line per file, one per part. A name Dropbox refuses (`desktop.ini`
+  and the like) is reported as `skipped: rejected by Dropbox`, not as a failure.
 - `link` returns the path's existing shared link (with its visibility) or creates a
   public one.
 - Both refuse without their flag (`--confirm-write`, `--confirm-public`) before any token
