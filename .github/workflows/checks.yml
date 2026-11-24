@@ -1,5 +1,5 @@
 # Shared h2t checks (ruff, gitleaks, standards tier), called locally — the reusable
-# workflow lives in this repo. Unit tests stay in evals.yml, which already runs them on
+# workflow lives in this repo. Unit tests stay in tests.yml, which already runs them on
 # both Linux and Windows; pytest here would be a duplicate.
 name: checks
 

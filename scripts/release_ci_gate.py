@@ -7,7 +7,7 @@ Reads the commit's check runs through `gh api` and waits while a required check 
 finished. Prints `green` and exits 0 when every required check's latest run succeeded; exits 1
 with the reason when one did not, or when they are still unfinished after --timeout.
 
-The suite itself runs in evals.yml on every push to main, on Linux and Windows, ratchets and
+The suite itself runs in tests.yml on every push to main, on Linux and Windows, ratchets and
 the POS contract test included. Running it again here would only add a second suite that can
 disagree with the first; the release asks the first one instead.
 

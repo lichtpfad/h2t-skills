@@ -65,7 +65,7 @@ jobs:
           python3 scripts/release_guard.py "v$VER"
 
       - name: CI is green on the tagged commit (#583)
-        # evals.yml runs the whole suite (ratchets, the author-values test, the POS contract)
+        # tests.yml runs the whole suite (ratchets, the author-values test, the POS contract)
         # on Linux and Windows for every push to main. A tag pushed right after the prepared
         # commit waits here for that run instead of racing it; a red run refuses the tag.
         env:
@@ -244,7 +244,7 @@ jobs:
     steps:
       # main has no branch protection and no rulesets (checked 2026-10-17), so the default
       # GITHUB_TOKEN may push the pointer commit. A push made with GITHUB_TOKEN triggers no
-      # other workflow, so evals.yml does not run on it; the commit changes marketplace.json
+      # other workflow, so tests.yml does not run on it; the commit changes marketplace.json
       # only, and the next push to main runs the gate over it.
       - uses: actions/checkout@v4
         with:
