@@ -282,7 +282,8 @@ exit 5.
 `posts` is a list of `{id, timestamp, permalink, network, metrics}`. `metrics` is `null`
 when Meta gave no insights for the post.
 
-**Versioning rule.** Adding a key keeps v1. Removing or renaming a key needs v2. Issue #670
+**Versioning rule.** Adding a key keeps v1. Removing or renaming a key needs v2, once v1 has
+shipped in a release; before that, v1 changes in place (owner's call 2026-11-24, #737). Issue #670
 adds the groups `account_daily`, `audience`, `stories` and `comments`, and fills the list
 `unavailable` (filled since #675). These are additions, so they stay in v1.
 
