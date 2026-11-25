@@ -125,4 +125,5 @@ jobs:
               });
             }
 
-            core.setFailed(`Не хватает: ${problems.join('; ')}`);
+            // Замок — метка, а не красный запуск: setFailed слал письмо на каждую правку задачи.
+            core.warning(`Не хватает: ${problems.join('; ')}`);
