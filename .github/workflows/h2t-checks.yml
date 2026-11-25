@@ -138,7 +138,8 @@ jobs:
 
   closed-without-trace:
     # An issue closed in the last 7 days must have a commit that names it (#N) — anywhere in
-    # history — unless it was closed as not planned. "closes #N" is written in CLAUDE.md;
+    # history — unless it was closed as not planned. A `type:decision` issue resolves in the
+    # tracker, not in code: a comment on it (the resolution) is its trace. "closes #N" is written in CLAUDE.md;
     # this is the mechanism. Self-contained: GITHUB_TOKEN reads issues of the calling repo.
     # Needs `issues: read` on the token. A called workflow may only DOWNGRADE the caller's
     # permissions; asking for more here is a startup_failure ("nested job is requesting
@@ -159,17 +160,18 @@ jobs:
         run: |
           since=$(date -u -d '7 days ago' +%Y-%m-%d)
           bad=""
-          while IFS=$'\t' read -r num reason; do
+          while IFS=$'\t' read -r num reason decision comments; do
             [ -z "$num" ] && continue
             [ "$reason" = "NOT_PLANNED" ] && continue
+            if [ "$decision" = "true" ] && [ "$comments" -gt 0 ]; then continue; fi
             # `#394` (closing keywords) or `[394]` (h2t-transcription titles its commits that way)
             if ! git log --all --oneline -E --grep="(#|\[)${num}([^0-9]|$)" | grep -q .; then
               bad="$bad #$num"
             fi
-          done < <(gh issue list --state closed --search "closed:>=$since" --limit 100 --json number,stateReason --jq '.[] | "\(.number)\t\(.stateReason)"')
+          done < <(gh issue list --state closed --search "closed:>=$since" --limit 100 --json number,stateReason,labels,comments --jq '.[] | "\(.number)\t\(.stateReason)\t\(any(.labels[]; .name == "type:decision"))\t\(.comments | length)"')
           if [ -n "$bad" ]; then
             echo "::error title=closed-without-trace::issues closed since $since with no commit naming them:$bad"
-            echo "Reopen, or close as 'not planned', or push the commit with 'closes #N'."
+            echo "Reopen, or close as 'not planned', or push the commit with 'closes #N' (a type:decision issue: post its resolution comment)."
             exit 1
           fi
           echo "every issue closed since $since has a commit"
