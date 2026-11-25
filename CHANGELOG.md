@@ -4,6 +4,19 @@ One CHANGELOG for the whole pack from 4.0.0 on. The per-plugin files
 (`plugins/*/CHANGELOG.md`) are the history up to 3.x; their `Unreleased` entries ship in
 4.0.0.
 
+## 4.1.3
+
+### Dropbox
+
+- `dropbox upload` sends a file over 150 MB in 32 MB parts through an upload session,
+  still without overwriting. Every upload request is resent after a connection reset or a
+  429, at most 4 times. Progress goes to stderr; a name Dropbox refuses (`desktop.ini`) is
+  reported as skipped, not failed (#740).
+- `dropbox delete <path> [<path> ...] --confirm-delete [--dry-run]` removes files and
+  folders through `files/delete_v2`, so Dropbox keeps them in its deleted files, where they
+  can be restored. It shows the plan first; `--dry-run` stops there. A path already gone is
+  `already gone`, not a failure (#742).
+
 ## 4.1.2
 
 ### Social
